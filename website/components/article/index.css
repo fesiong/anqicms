@@ -1,0 +1,41 @@
+.article-item{
+  padding: 5px 0;
+}
+.article-link .link-title{
+  font-size: 16px;
+  font-weight: normal;
+}
+
+.article-link-detail{
+  box-shadow: 0px 1px 5px rgba(0,0,0,0.1);
+  padding: 10px;
+}
+.detail-title{
+  position: relative;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+}
+.detail-title::after{
+  content: " ";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 200px;
+  height: 1px;
+  border-bottom: 2px solid #eee;
+}
+.detail-link{
+  display: inline-block;
+  padding: 10px 20px;
+  border: 1px solid #ddd;
+}
+.detail-content{
+  margin-bottom: 10px;
+}
+.detail-footer{
+  float: right;
+  text-align: right;
+}
+.detail-footer-item{
+  margin-left: 20px;
+}

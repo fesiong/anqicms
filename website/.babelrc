@@ -1,0 +1,17 @@
+{
+  "plugins": [
+    [
+      "import",
+      {
+        "libraryName": "antd-mobile",
+        "style": "css"
+      }
+    ]
+  ],
+  "presets": [
+    [
+      "next/babel"
+    ]
+  ],
+  "ignore": []
+}

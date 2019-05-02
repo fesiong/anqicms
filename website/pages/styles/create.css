@@ -1,0 +1,19 @@
+.create-container{
+  margin: 0 auto;
+  max-width: 850px;
+}
+.category-dropdown{
+  position: relative;
+  border: 1px solid #eee;
+  font-size: 0.85;
+}
+.category-dropdown .dropdown-item{
+  padding: 5px 10px;
+}
+.category-dropdown .dropdown-item:hover{
+  background: #f1f1f1;
+}
+.category-tag{
+  margin-left:10px;
+  margin-right: 10px;
+}

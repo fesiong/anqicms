@@ -1,0 +1,15 @@
+*.log
+.idea
+*.swp
+.DS_Store
+
+debug
+goblog
+config.json
+node_modules
+npm-debug.log
+website/.next
+website/config.js
+website/uploads/*
+logs/*
+vendor/

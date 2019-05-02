@@ -1,0 +1,10 @@
+.category-detail{
+  display: flex;
+  padding: 20px 10px;
+}
+.category-logo{
+  margin-right: 10px;
+}
+.category-logo img{
+  width: 100px;
+}

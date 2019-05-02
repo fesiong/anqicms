@@ -1,0 +1,56 @@
+{
+  "name": "my-blog",
+  "version": "0.1.0",
+  "description": "我的golang博客",
+  "main": "index.js",
+  "scripts": {
+    "dev": "rm -rf .next && node server/server.js",
+    "build": "rm -rf .next && next build",
+    "start": "NODE_ENV=production pm2 start server/server.js",
+    "stop": "pm2 stop server/server.js",
+    "build-analyze": "BUNDLE_ANALYZE=both yarn build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/fesiong/golangblog.git"
+  },
+  "keywords": [
+    "golang",
+    "react",
+    "next"
+  ],
+  "author": "fesion",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/fesiong/golangblog/issues"
+  },
+  "homepage": "https://github.com/fesiong/golangblog#readme",
+  "dependencies": {
+    "@zeit/next-css": "^1.0.1",
+    "@zeit/next-source-maps": "0.0.3",
+    "antd-mobile": "^2.2.11",
+    "autoprefixer": "^9.4.10",
+    "axios": "^0.18.0",
+    "babel-plugin-import": "^1.11.0",
+    "babel-plugin-module-resolver": "^3.2.0",
+    "compression": "^1.7.1",
+    "express": "^4.16.3",
+    "file-loader": "^3.0.1",
+    "glob": "^7.1.2",
+    "highlight.js": "^9.15.6",
+    "lru-cache": "^5.1.1",
+    "module-alias": "^2.0.1",
+    "moment": "^2.24.0",
+    "next": "^8.0.3",
+    "next-routes": "^1.1.0",
+    "nodemon": "^1.17.3",
+    "normalize.css": "^8.0.1",
+    "path": "^0.12.7",
+    "pm2": "^3.5.0",
+    "raw-loader": "^1.0.0",
+    "react": "latest",
+    "react-dom": "latest",
+    "showdown": "^1.9.0",
+    "simplemde": "^1.11.2"
+  }
+}

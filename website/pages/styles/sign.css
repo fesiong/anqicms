@@ -1,0 +1,15 @@
+.sign-container{
+  margin: 100px auto;
+  max-width: 450px;
+}
+.sign-header{
+  text-align: center;
+}
+.sign-title{
+  font-size: 22px;
+  margin: 20px 0;
+}
+.sign-tips{
+  display: inline-block;
+  margin-bottom: 30px;
+}

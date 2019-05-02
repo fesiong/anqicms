@@ -1,0 +1,13 @@
+.category-list-box{
+  padding: 0 10px;
+}
+.category-list-box .category-header{
+  font-size: 16px;
+  font-weight: bold;
+  color: #666;
+  border-bottom: 1px solid #eee;
+  padding: 6px 0;
+}
+.category-list{
+  padding: 5px 0;
+}

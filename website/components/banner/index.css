@@ -1,0 +1,14 @@
+.branding{
+  padding: 50px 10px;
+  text-align: center;
+  background: linear-gradient(45deg, #86b6d6, #ffd98c);
+  box-sizing: border-box;
+  height: 160px;
+  overflow: hidden;
+}
+.primary-text{
+  font-size: 22px;
+}
+.scrondary-text{
+  color: #888;
+}

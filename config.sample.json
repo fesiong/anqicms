@@ -1,0 +1,28 @@
+{
+	"database": {
+		"Dialect"      : "mysql",
+		"Database"     : "goblog",
+		"User"	       : "root",
+		"Password"     : "123456",
+		"Charset"      : "utf8mb4",
+		"Host"         : "127.0.0.1",
+		"TablePrefix"  : "fe_",
+		"Port"         : 3306,
+		"MaxIdleConns" : 5,
+		"MaxOpenConns" : 10
+	},
+	"go": {
+		"SiteName"    : "我的博客",
+		"Host"        : "dev.goblog.com",
+		"StaticHost"  : "",
+		"Env"         : "development",
+		"LogDir"      : "",
+		"UploadDir"   : "",
+		"UploadPath"  : "/uploads",
+		"APIPrefix"   : "/api",
+		"Port"        : 8001,
+		"TokenSecret" : "tTxA0eE02Mox5KxTqN5BirBi",
+		"TokenMaxAge" : 86400,
+		"MaxMultipartMemory"  : 3
+	}
+}
