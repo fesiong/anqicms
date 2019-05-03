@@ -1,10 +1,10 @@
 package article
 
 import (
+	"fmt"
 	"goblog/config"
 	"goblog/model"
 	"goblog/utils"
-	"fmt"
 
 	//	"html"
 	"math"
@@ -161,6 +161,19 @@ func Detail(c *gin.Context) {
 		fmt.Println(err.Error())
 		SendErrJSON("error", c)
 		return
+	}
+
+	//获取上一篇
+	var prevArticle model.Article
+	if err := model.DB.Where("id < ?", article.ID).Order("id desc").First(&prevArticle).Error; err == nil {
+		//fmt.Println(err.Error())
+		article.PrevArticle = &prevArticle
+	}
+	//获取下一篇
+	var nextArticle model.Article
+	if err := model.DB.Where("id > ?", article.ID).Order("id asc").First(&nextArticle).Error; err == nil {
+		//fmt.Println(err.Error())
+		article.NextArticle = &nextArticle
 	}
 
 	//获取评论

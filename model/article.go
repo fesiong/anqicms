@@ -15,4 +15,6 @@ type Article struct {
 	IsRecommend  int        `json:"isRecommend"`
 	Categories   []Category `gorm:"many2many:relation;ForeignKey:ID;AssociationForeignKey:ID" json:"categories"`
 	Comments     []Comment  `gorm:"ForeignKey:ID" json:"comments"`
+	PrevArticle  *Article
+	NextArticle  *Article
 }

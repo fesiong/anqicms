@@ -39,31 +39,33 @@ class CagetoryPage extends React.Component {
   }
 
   render() {
-    const { id, page, category, categories, articles, user ,err } = this.props
-    if(err){
+    const { id, page, category, categories, articles, user, err } = this.props
+    if (err) {
       return <Error statusCode='404' />
     }
-    
-    return (
-      <Main user={user} title={category.title} keywords={category.title} description={category.description}>
-        {id && !category &&
-          <div>404</div>
-        }
-        {category && <Banner primary={category.title} secondary={category.description} />}
-        <div className='container'>
-          {category &&
-            <div className='main-content'>
-              <Articles detail articles={articles} />
-              <Link href='/category'><a className='paginator'>查看更多</a></Link>
-            </div>
-          }
-          {!category &&
+
+    if (!category) {
+      return (
+        <Main user={user} title='所有分类'>
+          <div className='container'>
             <div className='main-content'>
               <Categories detail categories={categories} />
             </div>
-          }
+          </div>
+        </Main>
+      )
+    }
 
-          {category && <Aside categories={categories} />}
+    return (
+      <Main user={user} title={category.title} keywords={category.title} description={category.description}>
+        <Banner primary={category.title} secondary={category.description} />
+        <div className='container'>
+          <div className='main-content'>
+            <Articles detail articles={articles} />
+            <Link href='/category'><a className='paginator'>查看更多</a></Link>
+          </div>
+
+          <Aside categories={categories} />
         </div>
       </Main>
     )

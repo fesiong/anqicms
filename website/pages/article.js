@@ -81,8 +81,8 @@ class ArticlePage extends React.Component {
           <div className='article-content' dangerouslySetInnerHTML={{ __html: messageHtml }}>
           </div>
           <div className='article-footer'>
-            <Link href={'/category/'}><a className='article-footer-item'>上一篇</a></Link>
-            <Link href={'/category/'}><a className='article-footer-item text-right'>下一篇</a></Link>
+            {article.PrevArticle && <Link href={'/article/' + article.PrevArticle.id}><a className='article-footer-item'>上一篇</a></Link>}
+            {article.NextArticle && <Link href={'/article/' + article.NextArticle.id}><a className='article-footer-item text-right'>下一篇</a></Link>}
           </div>
           <Articles title='相关阅读' detail={false} articles={relatedArticles} nopadding />
         </div>
