@@ -61,7 +61,7 @@ func Upload(c *gin.Context) (model.Attachment, error) {
 	}
 
 	attachment = model.Attachment{
-		Title:    imgUploadedInfo.Filename,
+		Title:    filename,
 		Location: imgUploadedInfo.ImgURL,
 		FileSize: 0,
 		Width:    0,

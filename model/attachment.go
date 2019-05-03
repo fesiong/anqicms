@@ -48,8 +48,13 @@ func GenerateImgUploadedInfo(ext string) ImageUploadedInfo {
 	uuidName := uuid.NewV4().String()
 	filename := uuidName + ext
 	uploadFilePath := uploadDir + sep + filename
+
+	uploadUrl := config.ServerConfig.UploadPath
+	if config.ServerConfig.StaticHost != "" {
+		uploadUrl = "http://" + config.ServerConfig.StaticHost + config.ServerConfig.UploadPath
+	}
 	imgURL := strings.Join([]string{
-		"http://" + config.ServerConfig.StaticHost + config.ServerConfig.UploadPath,
+		uploadUrl,
 		ymStr,
 		filename,
 	}, "/")
