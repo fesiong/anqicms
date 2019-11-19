@@ -30,7 +30,7 @@
     "@zeit/next-source-maps": "0.0.3",
     "antd-mobile": "^2.3.1",
     "autoprefixer": "^9.7.2",
-    "axios": "^0.19.0",
+    "axios": "^0.18.1",
     "babel-plugin-import": "^1.12.2",
     "babel-plugin-module-resolver": "^3.2.0",
     "compression": "^1.7.4",
