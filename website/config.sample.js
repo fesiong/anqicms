@@ -1,6 +1,6 @@
 var config = {
   apiURL: '/api/',
-  backApiURL: 'http://127.0.0.1:8001/api/',
+  backApiURL: 'http://127.0.0.1:8101/api/',
   siteName: '梁松远的博客',//网站名称后缀
   seoTitle: '看到你,梁松远的博客',//首页标题
   keywords: '梁松远的博客,看到你,一起发现,一起分享',//首页关键词

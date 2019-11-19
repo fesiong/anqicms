@@ -20,7 +20,7 @@
 		"UploadDir"   : "",
 		"UploadPath"  : "/uploads",
 		"APIPrefix"   : "/api",
-		"Port"        : 8001,
+		"Port"        : 8101,
 		"TokenSecret" : "tTxA0eE02Mox5KxTqN5BirBi",
 		"TokenMaxAge" : 86400,
 		"MaxMultipartMemory"  : 3
