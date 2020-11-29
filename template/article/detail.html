@@ -1,0 +1,67 @@
+{% include "partial/header.html" %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-card article-detail">
+                <div class="layui-card-body">
+                    <h1 class="title">{{article.Title}}</h1>
+                    <div class="meta">
+                        {% if article.Category %}<span><a href="/?category_id={{article.CategoryId}}">{{article.Category.Title}}</a></span>{% endif %}
+                        <span>{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
+                        <span>{{article.Views}} 阅读</span>
+                    </div>
+                    <div class="article-body">
+                        {{article.ArticleData.Content|safe}}
+                    </div>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-body">
+                    <div class="article-prev-next">
+                        {% if prev %}
+                        <li class="article-prev">上一新闻：<a href="/article/{{prev.Id}}">{{prev.Title}}</a></li>
+                        {% endif %}
+                        {% if next %}
+                        <li class="article-next">下一新闻：<a href="/article/{{next.Id}}">{{next.Title}}</a></li>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            {% include "partial/author.html" %}
+            <div class="layui-card">
+                <div class="layui-card-header">最新文章</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in newest %}
+                        <li class="item">
+                            <a href="/article/{{item.Id}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">相关文章</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in relationList %}
+                        <li class="item">
+                            <a href="/article/{{item.Id}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{item.Views}}阅读</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% include "partial/footer.html" %}

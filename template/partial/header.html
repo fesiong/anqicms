@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charSet="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1"/>
+    <meta name="applicable-device" content="mobile">
+    <title>{% if webInfo.Title %}{{webInfo.Title}} - {% endif %}{{SiteName}}</title>
+    <link href="https://www.layuicdn.com/layui/css/layui.css" rel="stylesheet">
+    <link href="/static/css/app.css" rel="stylesheet">
+</head>
+<body>
+<div class="layui-header">
+    <div class="layui-container">
+        <a href="/"><div class="layui-logo">{{SiteName}}</div></a>
+        <ul class="layui-nav layui-layout-left nav-list">
+            <li class="layui-nav-item{% if !webInfo.NavBar %} layui-this{% endif %}"><a href="/">博客首页</a></li>
+            {% for item in categories %}
+                <li class="layui-nav-item{% if webInfo.NavBar == item.Id %} layui-this{% endif %}"><a href="/?category_id={{item.Id}}">{{item.Title}}</a></li>
+            {% endfor %}
+        </ul>
+        <ul class="layui-nav layui-layout-right">
+            {% if hasLogin %}
+            <li class="layui-nav-item"><a href="/article/publish">发布文章</a></li>
+            <li class="layui-nav-item"><a href="/account/logout">退出</a></li>
+            {% else %}
+                <li class="layui-nav-item"><a href="/account/login">登录</a></li>
+            {% endif %}
+        </ul>
+    </div>
+</div>

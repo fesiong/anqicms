@@ -1,0 +1,64 @@
+{% include "partial/header.html" %}
+<div class="layui-container">
+    <div class="install">
+        <div class="layui-card">
+            <div class="layui-card-header">{{SiteName}}初始化</div>
+            <div class="layui-card-body">
+                <form class="layui-form" onsubmit="return false;">
+                    <div id="mysql-config" style="display: block;">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">数据库地址</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="host" required  lay-verify="required" placeholder="一般是localhost" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">数据库端口</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="port" required  lay-verify="required" placeholder="一般是3306" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">数据库名称</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="database" required  lay-verify="required" placeholder="安装到哪个数据库" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">数据库用户</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="user" required  lay-verify="required" placeholder="填写数据库用户名" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">数据库密码</label>
+                            <div class="layui-input-inline">
+                                <input type="password" name="password" required  lay-verify="required" placeholder="填写数据库密码" autocomplete="off" class="layui-input">
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">后台用户名</label>
+                        <div class="layui-input-inline">
+                            <input type="text" name="admin_user" required  lay-verify="required" placeholder="用于登录管理博客" autocomplete="off" class="layui-input">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <label class="layui-form-label">后台密码</label>
+                        <div class="layui-input-inline">
+                            <input type="password" name="admin_password" required  lay-verify="required" placeholder="登录密码" autocomplete="off" class="layui-input">
+                        </div>
+                    </div>
+                    <div class="layui-form-item">
+                        <div class="layui-input-block">
+                            <button class="layui-btn" lay-submit lay-filter="install">确认初始化</button>
+                            <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% include "partial/footer.html" %}

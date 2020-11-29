@@ -1,0 +1,24 @@
+{% include "partial/header.html" %}
+<div class="account-login">
+    <div class="login-main">
+        <div class="login-box login-header">
+            <h2>{{SiteName}}</h2>
+            <p>一个由irisweb框架编写的简单的博客系统</p>
+        </div>
+        <div class="login-box login-body layui-form">
+            <div class="layui-form-item">
+                <label class="login-icon layui-icon layui-icon-username" for="login-username"></label>
+                <input type="text" name="user_name" id="login-username" lay-verify="required" placeholder="用户名" class="layui-input">
+            </div>
+            <div class="layui-form-item">
+                <label class="login-icon layui-icon layui-icon-password" for="login-password"></label>
+                <input type="password" name="password" id="login-password" lay-verify="required" placeholder="密码" class="layui-input">
+            </div>
+            <div class="layui-form-item">
+                <button class="layui-btn layui-btn-fluid" lay-submit lay-filter="login-submit">登 录</button>
+            </div>
+        </div>
+    </div>
+
+    {% include "partial/footer.html" %}
+</div>
