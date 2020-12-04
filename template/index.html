@@ -24,7 +24,7 @@
                 <div class="layui-card-body text-center">
                     <div class="layui-box layui-laypage">
                         <a href="{{prevPage}}" class="layui-laypage-prev{% if !prevPage %} layui-disabled{% endif %}">上一页</a>
-                        <a href="{{nextPage}}" class="layui-laypage-next{% if nextPage %} layui-disabled{% endif %}">下一页</a>
+                        <a href="{{nextPage}}" class="layui-laypage-next{% if !nextPage %} layui-disabled{% endif %}">下一页</a>
                     </div>
                 </div>
                 {% endif %}

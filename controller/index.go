@@ -15,7 +15,7 @@ func IndexPage(ctx iris.Context) {
 	//一页显示20条
 	pageSize := 20
 	//文章列表
-	articles, total, _ := provider.GetArticleList(categoryId, "id desc", 1, 20)
+	articles, total, _ := provider.GetArticleList(categoryId, "id desc", 1, pageSize)
 	//读取列表的分类
 	categories, _ := provider.GetCategories()
 	for i, v := range articles {
@@ -34,7 +34,7 @@ func IndexPage(ctx iris.Context) {
 
 	prevPage := ""
 	nextPage := ""
-	urlPfx := "/policy?"
+	urlPfx := "/?"
 	var category *model.Category
 	if categoryId > 0 {
 		urlPfx += fmt.Sprintf("category_id=%d&", categoryId)
