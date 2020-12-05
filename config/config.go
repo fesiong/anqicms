@@ -14,12 +14,24 @@ import (
 )
 
 type configData struct {
-	DB     dbConfig     `json:"mysql"`
+	DB     mysqlConfig  `json:"mysql"`
 	Server serverConfig `json:"server"`
 }
 
+func initPath() {
+	sep := string(os.PathSeparator)
+	//root := filepath.Dir(os.Args[0])
+	//ExecPath, _ = filepath.Abs(root
+	ExecPath, _ = os.Getwd()
+	length := utf8.RuneCountInString(ExecPath)
+	lastChar := ExecPath[length-1:]
+	if lastChar != sep {
+		ExecPath = ExecPath + sep
+	}
+}
+
 func initJSON() {
-	rawConfig, err := ioutil.ReadFile("./config.json")
+	rawConfig, err := ioutil.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
 		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"irisweb 博客\",\"env\": \"development\",\"port\": 8001,\"log_level\":\"debug\"}}")
@@ -29,18 +41,9 @@ func initJSON() {
 		fmt.Println("Invalid Config: ", err.Error())
 		os.Exit(-1)
 	}
-
-	initServer()
-	if JsonData.DB.Database != "" {
-		err = InitDB(&JsonData.DB)
-		if err != nil {
-			fmt.Println("Failed To Connect Database: ", err.Error())
-			os.Exit(-1)
-		}
-	}
 }
 
-func InitDB(setting *dbConfig) error {
+func InitDB(setting *mysqlConfig) error {
 	var db *gorm.DB
 	var err error
 	url := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
@@ -53,8 +56,7 @@ func InitDB(setting *dbConfig) error {
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		fmt.Println(setting, err.Error())
-		os.Exit(-1)
+		return err
 	}
 
 	sqlDB.SetMaxIdleConns(1000)
@@ -88,7 +90,16 @@ var ServerConfig serverConfig
 var DB *gorm.DB
 
 func init() {
+	initPath()
 	initJSON()
+	initServer()
+	if JsonData.DB.Database != "" {
+		err := InitDB(&JsonData.DB)
+		if err != nil {
+			fmt.Println("Failed To Connect Database: ", err.Error())
+			os.Exit(-1)
+		}
+	}
 }
 
 func WriteConfig() error {

@@ -1,6 +1,6 @@
 package config
 
-type dbConfig struct {
+type mysqlConfig struct {
 	Database string `json:"database"`
 	User     string `json:"user"`
 	Password string `json:"password"`
