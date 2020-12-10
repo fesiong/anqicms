@@ -20,6 +20,11 @@ func NotFound(ctx iris.Context) {
 }
 
 func InternalServerError(ctx iris.Context) {
+	errMessage := ctx.Values().GetString("error")
+	if errMessage == "" {
+		errMessage = "(Unexpected) internal server error"
+	}
+	ctx.ViewData("errMessage", errMessage)
 	ctx.View("errors/500.html")
 }
 
