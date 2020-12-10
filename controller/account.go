@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
+	"irisweb/middleware"
 	"irisweb/provider"
 	"irisweb/request"
 )
@@ -40,7 +41,7 @@ func AccountLoginForm(ctx iris.Context) {
 		return
 	}
 
-	session := sess.Start(ctx)
+	session := middleware.Sess.Start(ctx)
 	session.Set("hasLogin", true)
 
 	ctx.JSON(iris.Map{
@@ -51,7 +52,7 @@ func AccountLoginForm(ctx iris.Context) {
 }
 
 func AccountLogout(ctx iris.Context) {
-	session := sess.Start(ctx)
+	session := middleware.Sess.Start(ctx)
 	session.Delete("hasLogin")
 
 	ctx.Redirect("/")

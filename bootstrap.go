@@ -32,6 +32,7 @@ func New(port int, loggerLevel string) *Bootstrap {
 func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 	bootstrap.Application.Use(recover.New())
 	bootstrap.Application.Use(middleware.Cors)
+	bootstrap.Application.Use(middleware.Auth)
 }
 
 func (bootstrap *Bootstrap) LoadRoutes() {

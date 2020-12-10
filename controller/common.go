@@ -2,7 +2,6 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/sessions"
 	"irisweb/config"
 	"irisweb/provider"
 )
@@ -16,8 +15,6 @@ type WebInfo struct {
 
 var webInfo WebInfo
 
-var sess = sessions.New(sessions.Config{Cookie: "irisweb"})
-
 func NotFound(ctx iris.Context) {
 	ctx.View("errors/404.html")
 }
@@ -28,11 +25,6 @@ func InternalServerError(ctx iris.Context) {
 
 func Common(ctx iris.Context) {
 	ctx.ViewData("SiteName", config.ServerConfig.SiteName)
-	//检查登录状态
-	session := sess.Start(ctx)
-	hasLogin := session.GetBooleanDefault("hasLogin", false)
-	ctx.Values().Set("hasLogin", hasLogin)
-	ctx.ViewData("hasLogin", hasLogin)
 	if config.DB != nil {
 		//全局分类
 		categories, _ := provider.GetCategories()
