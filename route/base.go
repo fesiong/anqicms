@@ -30,10 +30,10 @@ func Register(app *iris.Application) {
 		attachment.Post("/upload", controller.AttachmentUpload)
 	}
 
-	account := app.Party("/account", controller.Inspect)
+	admin := app.Party("/admin", controller.Inspect)
 	{
-		account.Get("/login", controller.AccountLogin)
-		account.Post("/login", controller.AccountLoginForm)
-		account.Get("/logout", controller.AccountLogout)
+		admin.Get("/login", controller.AdminLogin)
+		admin.Post("/login", controller.AdminLoginForm)
+		admin.Get("/logout", controller.AdminLogout)
 	}
 }

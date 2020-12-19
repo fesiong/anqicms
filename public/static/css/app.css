@@ -219,7 +219,7 @@ body{
     text-align: right;
 }
 /* login */
-.account-login {
+.admin-login {
     padding: 110px 0;
     min-height: 100%;
     box-sizing: border-box;
@@ -260,7 +260,7 @@ body{
 .login-body .layui-form-item .layui-input {
     padding-left: 38px;
 }
-.account-login .layui-footer {
+.admin-login .layui-footer {
     position: absolute;
     width: 100%;
     left: 0;

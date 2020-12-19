@@ -16,7 +16,7 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
         });
     }
     form.on('submit(login-submit)', function(obj){
-        $.post('/account/login', obj.field, function(res) {
+        $.post('/admin/login', obj.field, function(res) {
             if(res.code === 0) {
                 layer.msg('登录成功', {
                     offset: '15px'
@@ -29,13 +29,6 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
                 layer.msg(res.msg);
             }
         });
-    });
-    form.on('radio(db_type)', function(data){
-        if(data.value === 'mysql') {
-            $('#mysql-config').fadeIn();
-        } else {
-            $('#mysql-config').fadeOut();
-        }
     });
     //监听提交
     form.on('submit(install)', function(data){
@@ -62,6 +55,7 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
         }
         //同步编辑器内容
         layedit.sync(editorIndex);
+		postData.content = $('#text-editor').val();
         $.post("/article/publish", postData, function (res) {
             if(res.code === 0) {
                 layer.alert(res.msg, function(){

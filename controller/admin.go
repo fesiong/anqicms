@@ -8,13 +8,17 @@ import (
 	"irisweb/request"
 )
 
-func AccountLogin(ctx iris.Context) {
+func AdminLogin(ctx iris.Context) {
 	webInfo.Title = "登录"
 	ctx.ViewData("webInfo", webInfo)
-	ctx.View("account/login.html")
+	ctx.View("admin/login.html")
+	type ListNode struct {
+		     Val int
+		     Next *ListNode
+	}
 }
 
-func AccountLoginForm(ctx iris.Context) {
+func AdminLoginForm(ctx iris.Context) {
 	var req request.Admin
 	if err := ctx.ReadForm(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -51,7 +55,7 @@ func AccountLoginForm(ctx iris.Context) {
 	})
 }
 
-func AccountLogout(ctx iris.Context) {
+func AdminLogout(ctx iris.Context) {
 	session := middleware.Sess.Start(ctx)
 	session.Delete("hasLogin")
 
