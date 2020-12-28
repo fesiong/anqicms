@@ -12,7 +12,7 @@
                                 <div class="description">{{item.Description}}</div>
                                 <div class="meta">
                                     {% if item.Category %}<span>{{item.Category.Title}}</span>{% endif %}
-                                    <span>2020-12-12</span>
+                                    <span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
                                     <span>{{item.Views}} 阅读</span>
                                 </div>
                             </a>

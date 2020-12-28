@@ -21,7 +21,7 @@ type configData struct {
 func initPath() {
 	sep := string(os.PathSeparator)
 	//root := filepath.Dir(os.Args[0])
-	//ExecPath, _ = filepath.Abs(root
+	//ExecPath, _ = filepath.Abs(root)
 	ExecPath, _ = os.Getwd()
 	length := utf8.RuneCountInString(ExecPath)
 	lastChar := ExecPath[length-1:]
