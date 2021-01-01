@@ -49,7 +49,9 @@ func InitDB(setting *mysqlConfig) error {
 	url := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		setting.User, setting.Password, setting.Host, setting.Port, setting.Database)
 	setting.Url = url
-	db, err = gorm.Open(mysql.Open(url), &gorm.Config{})
+	db, err = gorm.Open(mysql.Open(url), &gorm.Config{
+		DisableForeignKeyConstraintWhenMigrating: true,
+	})
 	if err != nil {
 		return err
 	}
@@ -63,10 +65,9 @@ func InitDB(setting *mysqlConfig) error {
 	sqlDB.SetMaxOpenConns(100000)
 	sqlDB.SetConnMaxLifetime(-1)
 
-	//创建表
-	db.AutoMigrate(&model.Admin{}, &model.Article{}, &model.ArticleData{}, &model.Attachment{}, &model.Category{})
-
 	DB = db
+	//创建表
+	DB.AutoMigrate(&model.Admin{}, &model.Article{}, &model.ArticleData{}, &model.Attachment{}, &model.Category{})
 
 	return nil
 }

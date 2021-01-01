@@ -17,13 +17,13 @@ type Article struct {
 	CreatedTime int64       `json:"created_time" gorm:"column:created_time;type:int(11) not null;default:0;index:idx_created_time"`
 	UpdatedTime int64       `json:"updated_time" gorm:"column:updated_time;type:int(11) not null;default:0;index:idx_updated_time"`
 	DeletedTime int64       `json:"-" gorm:"column:deleted_time;type:int(11) not null;default:0"`
-	Category    Category    `json:"category" gorm:"-"`
-	ArticleData ArticleData `json:"data"`
+	Category    *Category    `json:"category" gorm:"-"`
+	ArticleData *ArticleData `json:"data" gorm:"-"`
 }
 
 type ArticleData struct {
 	Model
-	ArticleId uint   `json:"article_id" gorm:"column:article_id;type:int(10) unsigned not null;primary_key"`
+	Id uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null;primary_key"`
 	Content   string `json:"content" gorm:"column:content;type:longtext default null"`
 }
 
@@ -38,8 +38,14 @@ func (article *Article) Save(db *gorm.DB) error {
 		article.CreatedTime = time.Now().Unix()
 	}
 
-	if err := db.Save(article).Error; err != nil {
+	if err := db.Debug().Save(article).Error; err != nil {
 		return err
+	}
+	if article.ArticleData != nil {
+		article.ArticleData.Id = article.Id
+		if err := db.Debug().Save(article.ArticleData).Error; err != nil {
+			return err
+		}
 	}
 
 	return nil

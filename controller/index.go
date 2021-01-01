@@ -22,7 +22,7 @@ func IndexPage(ctx iris.Context) {
 		if v.CategoryId > 0 {
 			for _, c := range categories {
 				if c.Id == v.CategoryId {
-					articles[i].Category = *c
+					articles[i].Category = c
 				}
 			}
 		}

@@ -202,6 +202,9 @@ body{
 .article-detail .article-body h2, .article-detail .article-body h3, .article-detail .article-body h4, .article-detail .article-body h5 {
     padding: 20px 15px 12px;
 }
+.article-detail .article-body img {
+    max-width: 100%;
+}
 .article-prev-next {
     display: flex;
     justify-content: space-between;

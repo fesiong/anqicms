@@ -8,12 +8,16 @@ import (
 func GetArticleById(id uint) (*model.Article, error) {
 	var article model.Article
 	db := config.DB
-	err := db.Where("`id` = ?", id).Preload("ArticleData").First(&article).Error
+	err := db.Where("`id` = ?", id).First(&article).Error
 	if err != nil {
 		return nil, err
 	}
+	//加载内容
+	article.ArticleData = &model.ArticleData{}
+	db.Where("`id` = ?", article.Id).First(article.ArticleData)
 	//加载分类
-	db.Where("`id` = ?", article.CategoryId).First(&article.Category)
+	article.Category = &model.Category{}
+	db.Where("`id` = ?", article.CategoryId).First(article.Category)
 
 	return &article, nil
 }

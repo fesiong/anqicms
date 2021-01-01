@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
@@ -17,6 +18,7 @@ func ArticleDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	fmt.Println(article)
 	_ = article.AddViews(config.DB)
 	//最新
 	newest, _, _ := provider.GetArticleList(article.CategoryId, "id desc", 1, 10)
@@ -107,13 +109,17 @@ func ArticlePublishForm(ctx iris.Context) {
 			})
 			return
 		}
+		if article.ArticleData == nil {
+			article.ArticleData = &model.ArticleData{}
+		}
+		article.ArticleData.Content = req.Content
 	} else {
 		article = &model.Article{
 			Title:       req.Title,
 			Keywords:    req.Keywords,
 			Description: req.Description,
 			Status:      1,
-			ArticleData: model.ArticleData{
+			ArticleData: &model.ArticleData{
 				Content: req.Content,
 			},
 		}
