@@ -53,7 +53,7 @@ func IndexPage(ctx iris.Context) {
 	}
 	webTitle := config.ServerConfig.Title
 	if category != nil {
-		webTitle += category.Title
+		webTitle += "_" + category.Title
 		webInfo.NavBar = category.Id
 	}
 	webInfo.Title = webTitle
