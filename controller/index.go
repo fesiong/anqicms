@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"irisweb/config"
 	"irisweb/model"
 	"irisweb/provider"
 	"math"
@@ -50,12 +51,14 @@ func IndexPage(ctx iris.Context) {
 	if currentPage == 2 {
 		prevPage = strings.TrimRight(prevPage, "page=1")
 	}
-	webTitle := ""
+	webTitle := config.ServerConfig.Title
 	if category != nil {
-		webTitle = category.Title
+		webTitle += category.Title
 		webInfo.NavBar = category.Id
 	}
 	webInfo.Title = webTitle
+	webInfo.Keywords = config.ServerConfig.Keywords
+	webInfo.Description = config.ServerConfig.Description
 	ctx.ViewData("webInfo", webInfo)
 
 	ctx.ViewData("total", total)
