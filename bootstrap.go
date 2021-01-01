@@ -35,14 +35,11 @@ func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 	bootstrap.Application.Use(middleware.Auth)
 }
 
-func (bootstrap *Bootstrap) LoadRoutes() {
-	route.Register(bootstrap.Application)
-}
-
 func (bootstrap *Bootstrap) Serve() {
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
-	bootstrap.LoadRoutes()
+	route.Register(bootstrap.Application)
+
 	pugEngine := iris.Django("./template", ".html")
 	if config.ServerConfig.Env == "development" {
 		//测试环境下动态加载
