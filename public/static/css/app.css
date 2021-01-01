@@ -206,7 +206,7 @@ body{
     max-width: 100%;
 }
 .article-detail .article-body pre {
-    margin: 10px 0;
+    margin: 10px 15px;
     padding: 10px;
     line-height: 20px;
     border: 1px solid #ddd;
