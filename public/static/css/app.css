@@ -205,6 +205,18 @@ body{
 .article-detail .article-body img {
     max-width: 100%;
 }
+.article-detail .article-body pre {
+    margin: 10px 0;
+    padding: 10px;
+    line-height: 20px;
+    border: 1px solid #ddd;
+    border-left-width: 6px;
+    background-color: #F2F2F2;
+    color: #333;
+    font-family: Courier New;
+    font-size: 12px;
+    tab-size: 4;
+}
 .article-prev-next {
     display: flex;
     justify-content: space-between;
