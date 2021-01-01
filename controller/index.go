@@ -12,10 +12,10 @@ import (
 func IndexPage(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
-	//一页显示20条
-	pageSize := 20
+	//一页显示10条
+	pageSize := 10
 	//文章列表
-	articles, total, _ := provider.GetArticleList(categoryId, "id desc", 1, pageSize)
+	articles, total, _ := provider.GetArticleList(categoryId, "id desc", currentPage, pageSize)
 	//读取列表的分类
 	categories, _ := provider.GetCategories()
 	for i, v := range articles {
