@@ -218,20 +218,11 @@ body{
     tab-size: 4;
 }
 .article-prev-next {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
     line-height: 40px;
+    padding: 0 15px;
 }
 .article-prev-next a{
     color: #163868;
-}
-.article-prev {
-    flex: 1;
-}
-.article-next {
-    flex: 1;
-    text-align: right;
 }
 /* login */
 .admin-login {
