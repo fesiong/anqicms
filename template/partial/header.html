@@ -6,6 +6,8 @@
     <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1"/>
     <meta name="applicable-device" content="mobile">
     <title>{% if webInfo.Title %}{{webInfo.Title}} - {% endif %}{{SiteName}}</title>
+    {% if webInfo.Keywords %}<meta name="keywords" content="{{webInfo.Keywords}}">{% endif %}
+    {% if webInfo.Description %}<meta name="description" content="{{webInfo.Description}}">{% endif %}
     <link href="https://www.layuicdn.com/layui/css/layui.css" rel="stylesheet">
     <link href="/static/css/app.css" rel="stylesheet">
 </head>

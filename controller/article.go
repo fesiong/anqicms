@@ -22,7 +22,7 @@ func ArticleDetail(ctx iris.Context) {
 	_ = article.AddViews(config.DB)
 	//最新
 	newest, _, _ := provider.GetArticleList(article.CategoryId, "id desc", 1, 10)
-	//相邻政策
+	//相邻相关文章
 	relationList, _ := provider.GetRelationArticleList(article.CategoryId, id, 10)
 	//获取上一篇
 	prev, _ := provider.GetPrevArticleById(article.CategoryId, id)
