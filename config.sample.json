@@ -1,0 +1,19 @@
+{
+	"mysql": {
+		"database": "irisweb",
+		"user": "root",
+		"password": "root",
+		"host": "localhost",
+		"port": 3306
+	},
+	"server": {
+		"site_name": "看到你博客",
+		"env": "development",
+		"port": 8001,
+		"log_level": "debug",
+		"title": "看到你博客：Golang实战开发入门图文教程、Golang实战技术在线学习网站",
+		"keywords": "golang,golang实战开发,golang实战学习",
+		"description": "网上有很多的golang开发教程，他们都是从最基础的安装环境、golang语法开始的，对于一个小白，他是有帮助的。然而大家都知道，一味地接受学习，是一个枯燥到让人窒息的过程。更多的时候是，学完就完了，该忘的、不该忘的大部分都忘记了，没有根据自己的实际需求学习，大多都记忆不够深刻。为了打破这种低效率的学习过程，我将从这里开始，介绍一种带着需求学习的golang实战学习方式。",
+		"icp": "粤ICP备19130249号-2"
+	}
+}
