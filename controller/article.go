@@ -109,6 +109,10 @@ func ArticlePublishForm(ctx iris.Context) {
 			})
 			return
 		}
+		article.Title = req.Title
+		article.Keywords = req.Keywords
+		article.Description = req.Description
+
 		if article.ArticleData == nil {
 			article.ArticleData = &model.ArticleData{}
 		}
