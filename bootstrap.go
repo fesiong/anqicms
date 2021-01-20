@@ -5,12 +5,9 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/middleware/recover"
-	"github.com/rrylee/go-graceful"
 	"irisweb/config"
 	"irisweb/middleware"
 	"irisweb/route"
-	"log"
-	"net"
 	"time"
 )
 
@@ -49,20 +46,26 @@ func (bootstrap *Bootstrap) Serve() {
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
 	bootstrap.Application.RegisterView(pugEngine)
 
-	grace := graceful.New()
-	grace.RegisterService(graceful.NewAddress(fmt.Sprintf("127.0.0.1:%d", bootstrap.Port), "tcp"), func(ln net.Listener) error {
-		return bootstrap.Application.Run(
-			iris.Listener(ln),
-			iris.WithoutServerError(iris.ErrServerClosed),
-			iris.WithoutBodyConsumptionOnUnmarshal,
-		)
-	}, func() error {
-		return bootstrap.Application.Shutdown(context.Background())
-	})
-	err := grace.Run()
-	if err != nil {
-		log.Fatal(err)
-	}
+	bootstrap.Application.Run(
+		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
+		iris.WithoutServerError(iris.ErrServerClosed),
+		iris.WithoutBodyConsumptionOnUnmarshal,
+	)
+
+	//grace := graceful.New()
+	//grace.RegisterService(graceful.NewAddress(fmt.Sprintf("127.0.0.1:%d", bootstrap.Port), "tcp"), func(ln net.Listener) error {
+	//	return bootstrap.Application.Run(
+	//		iris.Listener(ln),
+	//		iris.WithoutServerError(iris.ErrServerClosed),
+	//		iris.WithoutBodyConsumptionOnUnmarshal,
+	//	)
+	//}, func() error {
+	//	return bootstrap.Application.Shutdown(context.Background())
+	//})
+	//err := grace.Run()
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
 }
 
 func TimestampToDate(in int64, layout string) string {
