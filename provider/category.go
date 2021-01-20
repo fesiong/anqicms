@@ -2,16 +2,20 @@ package provider
 
 import (
 	"irisweb/config"
+	"irisweb/library"
 	"irisweb/model"
 )
 
 func GetCategories() ([]*model.Category, error) {
 	var categories []*model.Category
 	db := config.DB
-	err := db.Where("`status` = ?", 1).Find(&categories).Error
+	err := db.Where("`status` = ?", 1).Order("sort asc").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
+
+	categoryTree := library.NewCategoryTree(categories)
+	categories = categoryTree.GetTree(0, "")
 
 	return categories, nil
 }

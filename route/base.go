@@ -13,21 +13,33 @@ func Register(app *iris.Application) {
 
 	app.Use(controller.Common)
 	app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath))
-	app.Get("/", controller.Inspect, controller.IndexPage)
+	app.Get("/", controller.Inspect, controller.CheckCloseSite, controller.IndexPage)
 
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
 
-	article := app.Party("/article", controller.Inspect)
+	article := app.Party("/article", controller.Inspect, controller.CheckCloseSite)
 	{
 		article.Get("/{id:uint}", controller.ArticleDetail)
 		article.Get("/publish", controller.ArticlePublish)
 		article.Post("/publish", controller.ArticlePublishForm)
 	}
 
-	attachment := app.Party("/attachment", controller.Inspect)
+	category := app.Party("/category", controller.Inspect, controller.CheckCloseSite)
+	{
+		category.Get("/{id:uint}", controller.CategoryPage)
+	}
+
+	attachment := app.Party("/attachment", controller.Inspect, controller.CheckCloseSite)
 	{
 		attachment.Post("/upload", controller.AttachmentUpload)
+	}
+
+	comment := app.Party("/comment", controller.Inspect, controller.CheckCloseSite)
+	{
+		comment.Post("/publish", controller.CommentPublish)
+		comment.Post("/praise", controller.CommentPraise)
+		comment.Get("/article/{id:uint}", controller.ArticleCommentList)
 	}
 
 	admin := app.Party("/admin", controller.Inspect)
@@ -36,4 +48,7 @@ func Register(app *iris.Application) {
 		admin.Post("/login", controller.AdminLoginForm)
 		admin.Get("/logout", controller.AdminLogout)
 	}
+
+	//后台管理路由相关
+	manageRoute(app)
 }

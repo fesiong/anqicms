@@ -1,49 +1,58 @@
-body{
+body {
     box-sizing: border-box;
     background-color: #f5f6f7;
     font-size: 17px;
     color: #091c2e;
 }
 
-.container{
+.container {
     background-color: #ffffff;
-    box-shadow: 0 1px 5px 0 rgba(0,0,0, 0.1);
+    box-shadow: 0 1px 5px 0 rgba(0, 0, 0, 0.1);
     margin: 0 auto;
 }
+
 .text-center {
     text-align: center;
 }
+
 .layui-card-header {
     font-size: 18px;
     font-weight: bold;
     height: 60px;
     line-height: 60px;
 }
+
 .layui-form-label {
     width: 100px;
 }
+
 .layui-input-block {
     margin-left: 130px;
 }
+
 .layui-form-item .layui-input-inline {
     width: 300px;
 }
+
 /* error page */
 .ErrorPage-container {
     display: flex;
     justify-content: center;
     padding: 180px 0;
 }
+
 .ErrorPage-title {
     font-size: 40px;
     font-synthesis: style;
     font-weight: 600;
 }
+
 .ErrorPage-title,
 .ErrorPage-subtitle {
     color: #646464;
     line-height: 1.4;
 }
+
 .ErrorPage-subtitle {
     font-size: 18px;
     margin-top: 10px;
@@ -67,6 +76,7 @@ body{
     font-size: 14px;
     text-align: center;
 }
+
 .ErrorPage-errorImageContainer {
     align-items: center;
     display: flex;
@@ -77,14 +87,25 @@ body{
 }
 
 /* header */
-.layui-header{
+.layui-header {
     background-color: #393D49;
 }
+
 .layui-logo {
     height: 60px;
     line-height: 60px;
     font-size: 28px;
-    color: rgba(255,255,255,.7);
+    color: rgba(255, 255, 255, .7);
+    width: 184px;
+    position: relative;
+}
+.layui-logo .logo {
+    position: absolute;
+    width: 184px;
+    height: 46px;
+    padding-top: 7px;
+    object-fit: cover;
+    z-index: 1;
 }
 
 /* footer */
@@ -94,35 +115,41 @@ body{
     background-color: #e9edf1;
     line-height: 30px;
 }
+
 /* index */
 .index {
     margin-top: 15px;
 }
-.article-list {
 
-}
+.article-list {}
+
 .article-list .item {
     padding: 24px 20px;
     position: relative;
 }
+
 .article-list .item:not(:last-of-type) {
     border-bottom: 1px dotted #ebedf0;
 }
+
 .article-list .item .link {
     display: block;
 }
+
 .article-list .item .title {
     font-size: 18px;
     line-height: 26px;
     color: #163868;
     font-weight: bold;
 }
+
 .article-list .item .meta {
     color: #848d97;
     font-size: 14px;
     font-weight: 300;
     margin-top: 8px;
 }
+
 .article-list .item .description {
     overflow: hidden;
     text-overflow: ellipsis;
@@ -131,48 +158,57 @@ body{
     -webkit-box-orient: vertical;
     margin-top: 15px;
 }
+
 .article-list .item .meta span {
     margin-right: 8px;
 }
-.layui-laypage a,.layui-laypage span {
+
+.layui-laypage a,
+.layui-laypage span {
     font-size: 16px;
     padding: 5px 20px;
 }
+
 /* aside */
 .aside-list .item {
     position: relative;
 }
+
 .aside-list .item:not(:last-of-type) {
     border-bottom: 1px dotted #ebedf0;
 }
-.aside-list .item .link{
+
+.aside-list .item .link {
     padding: 10px 0;
     display: flex;
     justify-content: space-between;
     align-items: center;
 }
-.aside-list .item .link .title{
+
+.aside-list .item .link .title {
     flex: 1;
     color: #163868;
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
+
 .aside-list .item .link .extra {
     font-size: 14px;
     color: #848d97;
 }
-/* detail */
-.article-detail {
 
-}
-.article-detail .title{
+/* detail */
+.article-detail {}
+
+.article-detail .title {
     padding: 20px 15px 0;
     font-size: 32px;
     line-height: 46px;
     color: #091c2e;
     font-weight: bold;
 }
+
 .article-detail .meta {
     padding: 0 15px;
     font-size: 14px;
@@ -181,30 +217,43 @@ body{
     margin-top: 8px;
     margin-bottom: 30px;
 }
+
 .article-detail .meta span {
     display: inline-block;
     padding-right: 30px;
     position: relative;
 }
+
 .article-detail .meta span:not(:last-of-type):after {
     content: "/";
     position: absolute;
     right: 10px;
     opacity: 0.2;
 }
+
 .article-detail .article-body {
     padding-bottom: 32px;
     line-height: 28px;
 }
-.article-detail .article-body p, .article-detail .article-body ul, .article-detail .article-body ol, .article-detail .article-body div {
+
+.article-detail .article-body p,
+.article-detail .article-body ul,
+.article-detail .article-body ol,
+.article-detail .article-body div {
     padding: 12px 15px;
 }
-.article-detail .article-body h2, .article-detail .article-body h3, .article-detail .article-body h4, .article-detail .article-body h5 {
+
+.article-detail .article-body h2,
+.article-detail .article-body h3,
+.article-detail .article-body h4,
+.article-detail .article-body h5 {
     padding: 20px 15px 12px;
 }
+
 .article-detail .article-body img {
     max-width: 100%;
 }
+
 .article-detail .article-body pre {
     margin: 10px 15px;
     padding: 10px;
@@ -217,40 +266,49 @@ body{
     font-size: 12px;
     tab-size: 4;
 }
+
 .article-prev-next {
     line-height: 40px;
     padding: 0 15px;
 }
-.article-prev-next a{
+
+.article-prev-next a {
     color: #163868;
 }
+
 /* login */
 .admin-login {
     padding: 110px 0;
     min-height: 100%;
     box-sizing: border-box;
 }
+
 .login-main {
     width: 375px;
     margin: 0 auto;
     box-sizing: border-box;
 }
+
 .login-box {
     padding: 20px;
 }
+
 .login-header {
     text-align: center;
 }
+
 .login-header h2 {
     margin-bottom: 10px;
     font-weight: 300;
     font-size: 30px;
     color: #000;
 }
+
 .login-header p {
     font-weight: 300;
     color: #999;
 }
+
 .login-icon {
     position: absolute;
     left: 1px;
@@ -260,31 +318,101 @@ body{
     text-align: center;
     color: #d2d2d2;
 }
+
 .login-body .layui-form-item {
     position: relative;
 }
+
 .login-body .layui-form-item .layui-input {
     padding-left: 38px;
 }
+
 .admin-login .layui-footer {
     position: absolute;
     width: 100%;
     left: 0;
     bottom: 0;
 }
+
 /* publish */
 #text-editor {
-    display:none;
+    display: none;
 }
+
 .publish {
     margin-top: 15px;
     background-color: #fff;
     padding: 15px;
 }
+
 /* install */
 .install {
     margin-top: 15px;
 }
+
+/* friend-links */
+.friend-links {
+    margin-top: 40px;
+}
+
+.friend-links .title {
+    color: #999;
+}
+
+.friend-links .item {
+    padding: 0 5px;
+    color: #666;
+}
+
+/* comment */
+.more-text {
+    float: right;
+    font-size: 14px;
+    color: #666;
+}
+.comment-list {
+    padding: 15px 0;
+}
+.comment-list .comment-item {
+    padding-bottom: 20px;
+    border-bottom: 1px solid #f1f1f1;
+    margin-bottom: 20px;
+}
+.comment-list .comment-item .item-user {
+    color: #666;
+    padding-bottom: 10px;
+}
+.comment-list .comment-item .item-user .user-name {
+    font-weight: bold;
+    color: #333;
+}
+.comment-list .comment-item .publish-time {
+    font-size: 14px;
+    float: right;
+}
+.comment-list .comment-item .comment-content {
+    padding-bottom: 10px;
+}
+.comment-list .comment-item .comment-content .layui-elem-quote{
+    font-size: 14px;
+    color: #777;
+}
+.comment-list .comment-item .comment-control {
+    font-size: 14px;
+    color: #163868;
+}
+.comment-list .comment-item .comment-control .item {
+    margin-right: 15px;
+    cursor: pointer;
+}
+.comment-list .comment-item .comment-control .item.active {
+    color: #163868;
+}
+.comment-list .comment-item .comment-control .layui-icon{
+    padding-right:5px;
+    vertical-align: middle;
+}
+
 /* 手机端 */
 @media (max-width: 690px) {
     .ErrorPage-container {
@@ -292,19 +420,24 @@ body{
         flex-direction: column-reverse;
         padding-top: 60px;
     }
+
     .ErrorPage-text {
         align-items: center;
         min-width: auto;
     }
+
     .ErrorPage-errorImageContainer {
         margin-left: 0;
     }
+
     .layui-container {
         padding: 0;
     }
+
     .article-list .item {
         padding: 12px 0;
     }
+
     .layui-header .nav-list {
         position: fixed !important;
         left: 0;
@@ -313,20 +446,25 @@ body{
         top: inherit;
         display: flex;
     }
+
     .layui-header .nav-list .layui-nav-item {
         flex: 1;
         text-align: center;
     }
+
     .layui-header .nav-list .layui-nav-item a {
         padding: 0 5px;
         white-space: nowrap;
     }
+
     .layui-logo {
         padding: 0 15px;
     }
+
     .article-detail .layui-card-body {
         padding: 0;
     }
+
     .layui-footer {
         margin-bottom: 60px;
         padding-left: 15px;

@@ -8,6 +8,7 @@ import (
 	"github.com/rrylee/go-graceful"
 	"irisweb/config"
 	"irisweb/middleware"
+	"irisweb/model"
 	"irisweb/route"
 	"log"
 	"net"
@@ -36,6 +37,11 @@ func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 }
 
 func (bootstrap *Bootstrap) Serve() {
+	//自动迁移表
+	if config.DB != nil {
+		_ = model.AutoMigrateDB(config.DB)
+	}
+
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)

@@ -1,14 +1,11 @@
 package controller
 
 import (
-	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/model"
 	"irisweb/provider"
 	"irisweb/request"
-	"strings"
 )
 
 func ArticleDetail(ctx iris.Context) {
@@ -18,7 +15,6 @@ func ArticleDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
-	fmt.Println(article)
 	_ = article.AddViews(config.DB)
 	//最新
 	newest, _, _ := provider.GetArticleList(article.CategoryId, "id desc", 1, 10)
@@ -28,6 +24,8 @@ func ArticleDetail(ctx iris.Context) {
 	prev, _ := provider.GetPrevArticleById(article.CategoryId, id)
 	//获取下一篇
 	next, _ := provider.GetNextArticleById(article.CategoryId, id)
+	//获取评论内容
+	comments, _, _ := provider.GetCommentList(model.ItemTypeArticle, article.Id, "id desc", 1, 10)
 
 	webInfo.Title = article.Title
 	webInfo.Keywords = article.Keywords
@@ -38,13 +36,14 @@ func ArticleDetail(ctx iris.Context) {
 	ctx.ViewData("relationList", relationList)
 	ctx.ViewData("prev", prev)
 	ctx.ViewData("next", next)
+	ctx.ViewData("comments", comments)
 
 	ctx.View("article/detail.html")
 }
 
 func ArticlePublish(ctx iris.Context) {
 	//发布必须登录
-	if !ctx.Values().GetBoolDefault("hasLogin", false) {
+	if ctx.Values().GetIntDefault("adminId", 0) == 0 {
 		InternalServerError(ctx)
 		return
 	}
@@ -62,15 +61,15 @@ func ArticlePublish(ctx iris.Context) {
 
 func ArticlePublishForm(ctx iris.Context) {
 	//发布必须登录
-	if !ctx.Values().GetBoolDefault("hasLogin", false) {
+	if ctx.Values().GetIntDefault("adminId", 0) == 0 {
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusNoLogin,
 			"msg":  "登录后方可操作",
 		})
 		return
 	}
 	var req request.Article
-	if err := ctx.ReadForm(&req); err != nil {
+	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -78,73 +77,7 @@ func ArticlePublishForm(ctx iris.Context) {
 		return
 	}
 
-	var category *model.Category
-	var err error
-	//检查分类
-	if req.CategoryName != "" {
-		category, err = provider.GetCategoryByTitle(req.CategoryName)
-		if err != nil {
-			category = &model.Category{
-				Title:       req.CategoryName,
-				Status:      1,
-			}
-			err = category.Save(config.DB)
-			if err != nil {
-				ctx.JSON(iris.Map{
-					"code": config.StatusFailed,
-					"msg":  err.Error(),
-				})
-				return
-			}
-		}
-	}
-
-	var article *model.Article
-	if req.Id > 0 {
-		article, err = provider.GetArticleById(req.Id)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  err.Error(),
-			})
-			return
-		}
-		article.Title = req.Title
-		article.Keywords = req.Keywords
-		article.Description = req.Description
-
-		if article.ArticleData == nil {
-			article.ArticleData = &model.ArticleData{}
-		}
-		article.ArticleData.Content = req.Content
-	} else {
-		article = &model.Article{
-			Title:       req.Title,
-			Keywords:    req.Keywords,
-			Description: req.Description,
-			Status:      1,
-			ArticleData: &model.ArticleData{
-				Content: req.Content,
-			},
-		}
-	}
-	//提取描述
-	if req.Description == "" {
-		htmlR := strings.NewReader(req.Content)
-		doc, err := goquery.NewDocumentFromReader(htmlR)
-		if err == nil {
-			textRune := []rune(strings.TrimSpace(doc.Text()))
-			if len(textRune) > 150 {
-				article.Description = string(textRune[:150])
-			} else {
-				article.Description = string(textRune)
-			}
-		}
-	}
-	if category != nil {
-		article.CategoryId = category.Id
-	}
-	err = article.Save(config.DB)
+	article, err := provider.SaveArticle(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

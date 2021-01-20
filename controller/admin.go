@@ -20,7 +20,7 @@ func AdminLogin(ctx iris.Context) {
 
 func AdminLoginForm(ctx iris.Context) {
 	var req request.Admin
-	if err := ctx.ReadForm(&req); err != nil {
+	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -46,18 +46,17 @@ func AdminLoginForm(ctx iris.Context) {
 	}
 
 	session := middleware.Sess.Start(ctx)
-	session.Set("hasLogin", true)
-
+	session.Set("adminId", int(admin.Id))
 	ctx.JSON(iris.Map{
-		"code": 0,
+		"code": config.StatusOK,
 		"msg":  "登录成功",
-		"data": 1,
+		"data": admin,
 	})
 }
 
 func AdminLogout(ctx iris.Context) {
 	session := middleware.Sess.Start(ctx)
-	session.Delete("hasLogin")
+	session.Delete("adminId")
 
 	ctx.Redirect("/")
 }

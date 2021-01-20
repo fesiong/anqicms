@@ -1,7 +1,9 @@
 package model
 
 import (
+	"fmt"
 	"gorm.io/gorm"
+	"irisweb/config"
 	"path/filepath"
 	"strings"
 	"time"
@@ -14,8 +16,8 @@ type Attachment struct {
 	FileLocation string `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
 	FileSize     int64  `json:"file_size" gorm:"column:file_size;type:bigint(20) unsigned not null;default:0"`
 	FileMd5      string `json:"file_md5" gorm:"column:file_md5;type:varchar(32) unique not null;default:''"`
-	Width        uint   `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
-	Height       uint   `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
+	Width        int   `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
+	Height       int   `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	CreatedTime  int64    `json:"created_time" gorm:"column:created_time;type:int(11) not null;default:0;index:idx_created_time"`
 	UpdatedTime  int64    `json:"updated_time" gorm:"column:updated_time;type:int(11) not null;default:0;index:idx_updated_time"`
@@ -30,7 +32,7 @@ func (attachment *Attachment) GetThumb() {
 		attachment.Logo = attachment.FileLocation
 		attachment.Thumb = attachment.FileLocation
 	} else {
-		pfx := "/uploads/"
+		pfx := fmt.Sprintf("%s/uploads/", config.JsonData.System.BaseUrl)
 		attachment.Logo = pfx + attachment.FileLocation
 		paths, fileName := filepath.Split(attachment.FileLocation)
 		attachment.Thumb = pfx + paths + "thumb_" + fileName
@@ -41,12 +43,21 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 	if attachment.Id == 0 {
 		attachment.CreatedTime = time.Now().Unix()
 	}
+	attachment.UpdatedTime = time.Now().Unix()
 
 	if err := db.Save(attachment).Error; err != nil {
 		return err
 	}
 
 	attachment.GetThumb()
+
+	return nil
+}
+
+func (attachment *Attachment) Delete(db *gorm.DB) error {
+	if err := db.Model(attachment).Updates(Attachment{Status: 99, DeletedTime: time.Now().Unix()}).Error; err != nil {
+		return err
+	}
 
 	return nil
 }

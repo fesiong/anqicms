@@ -1,0 +1,59 @@
+<title>Sitemap管理</title>
+
+<div class="layui-card layadmin-header">
+  <div class="layui-breadcrumb" lay-filter="breadcrumb">
+    <a lay-href="">后台首页</a>
+    <a><cite>功能管理</cite></a>
+    <a><cite>Sitemap管理</cite></a>
+  </div>
+</div>
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">Sitemap管理</div>
+        <div class="layui-card-body" pad15>
+          <blockquote class="layui-elem-quote">由于现在各大搜索引擎的sitemap提交，都已支持txt格式的sitemap，并且txt的sitemap文件大小相比于xml的sitemap文件更小，因此本sitemap功能，只支持txt格式的sitemap文件生成。<br>
+          由于各个搜索引擎的sitemap提交，都限制了5万条或10M大小，因此本sitemap功能，将按照5万条一个sitemap文件的数量生成。
+          </blockquote>
+          <script type="text/html" template lay-url="/plugin/sitemap" lay-done="layui.form.render();">
+            <div class="layui-form" style="padding: 20px 0 0 0;">
+          <div class="layui-form-item">
+            <label class="layui-form-label">Sitemap生成</label>
+            <div class="layui-input-inline">
+              <input type="radio" name="auto_build" value="0" title="手动" {{ d.data.auto_build != 1 ? 'checked' : '' }}>
+              <input type="radio" name="auto_build" value="1" title="自动" {{ d.data.auto_build == 1 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label"></label>
+            <div class="layui-input-inline">
+              <input type="button" lay-submit lay-filter="sitemap-submit" value="确认" class="layui-btn">
+            </div>
+          </div>
+          <hr>
+          <div class="layui-form-item">
+            <label class="layui-form-label">上次更新</label>
+            <div class="layui-input-inline">
+              <input type="text" id="updated-time-field" value="{{d.data.updated_time ? layui.util.toDateString(d.data.updated_time*1000, "yyyy-MM-dd HH:mm") : '未更新' }}" class="layui-input" disabled>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">生成</label>
+            <div class="layui-input-inline">
+              <input type="button" lay-submit lay-filter="sitemap-build-submit" value="手动生成" class="layui-btn">
+              <a href="/sitemap.txt" class="layui-btn layui-btn-primary" target="_blank">查看Sitemap</a>
+            </div>
+          </div>
+        </div>
+        </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.use('plugin', layui.factory('plugin'));
+</script>

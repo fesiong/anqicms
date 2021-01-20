@@ -51,15 +51,18 @@ func IndexPage(ctx iris.Context) {
 	if currentPage == 2 {
 		prevPage = strings.TrimRight(prevPage, "page=1")
 	}
-	webTitle := config.ServerConfig.Title
+	webTitle := config.JsonData.Index.SeoTitle
 	if category != nil {
 		webTitle += "_" + category.Title
 		webInfo.NavBar = category.Id
 	}
 	webInfo.Title = webTitle
-	webInfo.Keywords = config.ServerConfig.Keywords
-	webInfo.Description = config.ServerConfig.Description
+	webInfo.Keywords = config.JsonData.Index.SeoKeywords
+	webInfo.Description = config.JsonData.Index.SeoDescription
 	ctx.ViewData("webInfo", webInfo)
+
+	//首页显示友情链接
+	links, _ := provider.GetLinkList()
 
 	ctx.ViewData("total", total)
 	ctx.ViewData("articles", articles)
@@ -68,6 +71,7 @@ func IndexPage(ctx iris.Context) {
 	ctx.ViewData("prevPage", prevPage)
 	ctx.ViewData("nextPage", nextPage)
 	ctx.ViewData("category", category)
+	ctx.ViewData("links", links)
 
 	ctx.View("index.html")
 }

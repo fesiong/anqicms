@@ -1,0 +1,91 @@
+{
+  "code": 0,
+  "msg": "",
+  "data": [
+    {
+      "title": "后台首页",
+      "icon": "layui-icon-home",
+      "jump": "/"
+    },
+    {
+      "name": "setting",
+      "title": "后台设置",
+      "icon": "layui-icon-set",
+      "list": [
+        {
+          "name": "system",
+          "title": "全局设置",
+          "jump": "/setting/system"
+        },
+        {
+          "name": "content",
+          "title": "内容设置",
+          "jump": "/setting/content"
+        },
+        {
+          "name": "index",
+          "title": "首页TDK设置",
+          "jump": "/setting/index"
+        },
+        {
+          "name": "nav",
+          "title": "导航设置",
+          "jump": "/setting/nav"
+        }
+      ]
+    },
+    {
+      "name": "content",
+      "title": "内容管理",
+      "icon": "layui-icon-template",
+      "spread": true,
+      "list": [
+        {
+          "name": "article",
+          "title": "文章管理"
+        },
+        {
+          "name": "category",
+          "title": "分类管理"
+        },
+        {
+          "name": "attachment",
+          "title": "图片资源管理"
+        }
+      ]
+    },
+    {
+      "name": "plugin",
+      "title": "功能管理",
+      "icon": "layui-icon-app",
+      "list": [
+        {
+          "name": "push",
+          "title": "搜索引擎推送管理"
+        },
+        {
+          "name": "sitemap",
+          "title": "Sitemap管理"
+        },
+        {
+          "name": "robots",
+          "title": "Robots管理"
+        },
+        {
+          "name": "link",
+          "title": "友情链接管理"
+        },
+        {
+          "name": "comment",
+          "title": "评论管理"
+        }
+      ]
+    },
+    {
+      "name": "user",
+      "title": "管理员",
+      "icon": "layui-icon-user",
+      "jump": "/user/detail"
+    }
+  ]
+}

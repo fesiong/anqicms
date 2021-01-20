@@ -1,0 +1,34 @@
+<title>文章管理</title>
+
+<div class="layui-card layadmin-header">
+  <div class="layui-breadcrumb" lay-filter="breadcrumb">
+    <a lay-href="">后台首页</a>
+    <a><cite>内容管理</cite></a>
+    <a><cite>文章管理</cite></a>
+  </div>
+</div>
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">文章管理</div>
+        <div class="layui-card-body" pad15>
+          <div style="padding-bottom: 10px;">
+            <button class="layui-btn article-control-btn" data-type="add">添加</button>
+          </div>
+          
+          <table id="article-manage" lay-filter="article-manage" data-type="default"></table>
+          <script type="text/html" id="table-article-toolbar">
+            <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="edit"><i class="layui-icon layui-icon-edit"></i>编辑</a>
+            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del"><i class="layui-icon layui-icon-delete"></i>删除</a>
+          </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.use('article', layui.factory('article'));
+</script>

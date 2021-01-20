@@ -16,17 +16,27 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
         });
     }
     form.on('submit(login-submit)', function(obj){
-        $.post('/admin/login', obj.field, function(res) {
-            if(res.code === 0) {
-                layer.msg('登录成功', {
-                    offset: '15px'
-                    ,icon: 1
-                    ,time: 1000
-                }, function(){
-                    window.location.href = '/';
-                });
-            } else {
-                layer.msg(res.msg);
+        $.ajax({
+            url: '/admin/login',
+            method: "post",
+            data: JSON.stringify(obj.field),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (res) {
+                if(res.code === 0) {
+                    layer.msg('登录成功', {
+                        offset: '15px'
+                        ,icon: 1
+                        ,time: 1000
+                    }, function(){
+                        window.location.href = '/';
+                    });
+                } else {
+                    layer.msg(res.msg);
+                }
+            },
+            error: function (err) {
+                layer.msg(err);
             }
         });
     });
@@ -34,16 +44,25 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
     form.on('submit(install)', function(data){
         let postData = data.field;
         postData.port = Number(postData.port)
-        console.log(postData)
-        $.post("/install", postData, function (res) {
-            if(res.code === 0) {
-                layer.alert(res.msg, function(){
-                    window.location.href = "/";
-                });
-            } else {
-                layer.msg(res.msg);
+        $.ajax({
+            url: "/install",
+            method: "post",
+            data: JSON.stringify(postData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (res) {
+                if(res.code === 0) {
+                    layer.alert(res.msg, function(){
+                        window.location.href = "/";
+                    });
+                } else {
+                    layer.msg(res.msg);
+                }
+            },
+            error: function (err) {
+                layer.msg(err);
             }
-        }, 'json');
+        });
         return false;
     });
     //发布文章
@@ -56,15 +75,94 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
         //同步编辑器内容
         layedit.sync(editorIndex);
 		postData.content = $('#text-editor').val();
-        $.post("/article/publish", postData, function (res) {
-            if(res.code === 0) {
-                layer.alert(res.msg, function(){
-                    window.location.href = "/article/" + res.data.id;
-                });
-            } else {
-                layer.msg(res.msg);
+        $.ajax({
+            url: "/article/publish",
+            method: "post",
+            data: JSON.stringify(postData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (res) {
+                if(res.code === 0) {
+                    layer.alert(res.msg, function(){
+                        window.location.href = "/article/" + res.data.id;
+                    });
+                } else {
+                    layer.msg(res.msg);
+                }
+            },
+            error: function (err) {
+                layer.msg(err);
             }
-        }, 'json');
+        });
+        return false;
+    });
+    //评论
+    $('.comment-control .item').click(function(e) {
+        let that = $(this);
+        let parentId = $(this).parent().data('id');
+        let parentUser = $(this).parent().data('user');
+        let eventType = $(this).data('id');
+        if (eventType == 'praise') {
+            //赞
+            $.ajax({
+                url: '/comment/praise',
+                method: "post",
+                data: JSON.stringify({id: parentId}),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function (res) {
+                    if(res.code === 0) {
+                        layer.msg(res.msg, {
+                            offset: '15px'
+                            ,icon: 1
+                            ,time: 1000
+                        }, function(){
+                            that.find('.vote-count').text(res.data.vote_count)
+                            if (res.data.active) {
+                                that.addClass('active');
+                            } else {
+                                that.removeClass('active');
+                            }
+                        });
+                    } else {
+                        layer.msg(res.msg);
+                    }
+                },
+                error: function (err) {
+                    layer.msg(err);
+                }
+            });
+        } else if (eventType == 'reply') {
+            //回复
+            $('#parent-id-field').val(parentId);
+            $('#comment-content-field').prop('placeholder', '回复：' + parentUser).focus();
+        }
+    });
+    form.on('submit(comment-submit)', function(data){
+        let postData = data.field;
+        postData.id = Number(postData.id)
+        postData.item_id = Number(postData.item_id)
+        postData.parent_id = Number(postData.parent_id)
+        if(!postData.content) {
+            return layer.msg("请填写评论内容");
+        }
+        $.ajax({
+            url: "/comment/publish",
+            method: "post",
+            data: JSON.stringify(postData),
+            contentType: "application/json; charset=utf-8",
+            dataType: "json",
+            success: function (res) {
+                if(res.code === 0) {
+                    window.location.reload();
+                } else {
+                    layer.msg(res.msg);
+                }
+            },
+            error: function (err) {
+                layer.msg(err);
+            }
+        });
         return false;
     });
 });

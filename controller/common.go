@@ -4,6 +4,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/provider"
+	"net/url"
 )
 
 type WebInfo struct {
@@ -28,9 +29,34 @@ func InternalServerError(ctx iris.Context) {
 	ctx.View("errors/500.html")
 }
 
+func CheckCloseSite(ctx iris.Context) {
+	if config.JsonData.System.SiteClose == 1 {
+		closeTips := config.JsonData.System.SiteCloseTips
+		ctx.ViewData("closeTips", closeTips)
+		ctx.View("errors/close.html")
+		return
+	}
+
+	ctx.Next()
+}
+
 func Common(ctx iris.Context) {
-	ctx.ViewData("SiteName", config.ServerConfig.SiteName)
-	ctx.ViewData("SiteIcp", config.ServerConfig.Icp)
+	//version
+	ctx.ViewData("version", config.Version)
+	//修正baseUrl
+	if config.JsonData.System.BaseUrl == "" {
+		urlPath, err := url.Parse(ctx.FullRequestURI())
+		if err == nil {
+			config.JsonData.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+		}
+	}
+	//读取导航
+	navList, _ := provider.GetNavList(true)
+	ctx.ViewData("navList", navList)
+	//核心配置
+	ctx.ViewData("settingSystem", config.JsonData.System)
+	//js code
+	ctx.ViewData("pluginJsCode", config.JsonData.PluginPush.JsCode)
 	if config.DB != nil {
 		//全局分类
 		categories, _ := provider.GetCategories()

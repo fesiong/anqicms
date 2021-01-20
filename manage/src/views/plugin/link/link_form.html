@@ -1,0 +1,100 @@
+<div class="layui-form" style="padding: 20px 0 0 0;">
+  <script type="text/html" template>
+    <input type="hidden" name="id" value="{{ d.params.id || 0 }}">
+    </script>
+  <div class="layui-form-item">
+    <label class="layui-form-label">对方关键词</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+      <input type="text" name="title" value="{{ d.params.title || '' }}" lay-verify="required" placeholder="请输入...(必填)" autocomplete="off" class="layui-input">
+    </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">建议品牌名+关键词</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">对方链接</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+      <input type="text" name="link" value="{{ d.params.link || '' }}" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">如：https://www.kandaoni.com/</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">NOF</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+      <input type="radio" name="nofollow" value="0" lay-filter="link-type" title="不添加" {{# if(d.params.nofollow == 0){ }}checked{{# } }}>
+      <input type="radio" name="nofollow" value="1" lay-filter="link-type" title="添加" {{# if(d.params.nofollow == 1){ }}checked{{# } }}>
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">是否添加nofollow标签</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">排序</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+      <input type="number" name="sort" value="{{ d.params.sort || '' }}" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">值越小，排序越靠前，默认99</div>
+  </div>
+  <div class="layui-collapse">
+    <div class="layui-colla-item">
+      <h2 class="layui-colla-title">更多选项</h2>
+      <div class="layui-colla-content">
+        <div class="layui-form-item">
+          <label class="layui-form-label">对方反链页</label>
+          <div class="layui-input-inline">
+            <script type="text/html" template>
+              <input type="text" name="back_link" value="{{ d.params.back_link || '' }}" autocomplete="off" class="layui-input">
+            </script>
+          </div>
+          <div class="layui-form-mid layui-word-aux">对方放置本站链接的页面URL。</div>
+        </div>
+        <div class="layui-form-item">
+          <label class="layui-form-label">我的关键词</label>
+          <div class="layui-input-inline">
+            <script type="text/html" template>
+              <input type="text" name="my_title" value="{{ d.params.my_title || '' }}" autocomplete="off" class="layui-input">
+            </script>
+          </div>
+          <div class="layui-form-mid layui-word-aux">我放在对方页面的关键词</div>
+        </div>
+        <div class="layui-form-item">
+          <label class="layui-form-label">我的链接</label>
+          <div class="layui-input-inline">
+            <script type="text/html" template>
+              <input type="text" name="my_link" value="{{ d.params.my_link || '' }}" autocomplete="off" class="layui-input">
+            </script>
+          </div>
+          <div class="layui-form-mid layui-word-aux">我放在对方页面的链接</div>
+        </div>
+        <div class="layui-form-item">
+          <label class="layui-form-label">对方联系方式</label>
+          <div class="layui-input-inline">
+            <script type="text/html" template>
+              <input type="text" name="contact" value="{{ d.params.contact || '' }}" autocomplete="off" class="layui-input">
+            </script>
+          </div>
+          <div class="layui-form-mid layui-word-aux">填写QQ、微信、电话等，方便后续联系</div>
+        </div>
+        <div class="layui-form-item">
+          <label class="layui-form-label">备注</label>
+          <div class="layui-input-inline">
+            <script type="text/html" template>
+            <textarea class="layui-textarea" name="remark" rows="3">{{ d.params.remark || '' }}</textarea>
+            </script>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <br>
+  <div class="layui-form-item">
+    <label class="layui-form-label"></label>
+    <div class="layui-input-inline">
+      <input type="button" lay-submit lay-filter="link-submit" value="确认" class="layui-btn">
+    </div>
+  </div>
+</div>

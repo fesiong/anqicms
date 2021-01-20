@@ -8,14 +8,21 @@ import (
 	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
-	"irisweb/model"
 	"os"
+	"strings"
 	"unicode/utf8"
 )
 
 type configData struct {
 	DB     mysqlConfig  `json:"mysql"`
 	Server serverConfig `json:"server"`
+	//setting
+	System  systemConfig  `json:"system"`
+	Content contentConfig `json:"content"`
+	Index   indexConfig   `json:"index"`
+	//plugin
+	PluginPush    pluginPushConfig    `json:"plugin_push"`
+	PluginSitemap pluginSitemapConfig `json:"plugin_sitemap"`
 }
 
 func initPath() {
@@ -41,6 +48,10 @@ func initJSON() {
 		fmt.Println("Invalid Config: ", err.Error())
 		os.Exit(-1)
 	}
+	//给后台添加默认值
+	if JsonData.System.AdminUri == "" {
+		JsonData.System.AdminUri = "/manage"
+	}
 }
 
 func InitDB(setting *mysqlConfig) error {
@@ -53,21 +64,40 @@ func InitDB(setting *mysqlConfig) error {
 		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {
-		return err
+		if strings.Contains(err.Error(), "1049") {
+			url2 := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
+				setting.User, setting.Password, setting.Host, setting.Port)
+			db, err = gorm.Open(mysql.Open(url2), &gorm.Config{
+				DisableForeignKeyConstraintWhenMigrating: true,
+			})
+			if err != nil {
+				return err
+			}
+			err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", setting.Database)).Error
+			if err != nil {
+				return err
+			}
+			//重新连接db
+			db, err = gorm.Open(mysql.Open(url), &gorm.Config{
+				DisableForeignKeyConstraintWhenMigrating: true,
+			})
+			if err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
 		return err
 	}
-
 	sqlDB.SetMaxIdleConns(1000)
 	sqlDB.SetMaxOpenConns(100000)
 	sqlDB.SetConnMaxLifetime(-1)
 
 	DB = db
-	//创建表
-	DB.AutoMigrate(&model.Admin{}, &model.Article{}, &model.ArticleData{}, &model.Attachment{}, &model.Category{})
 
 	return nil
 }

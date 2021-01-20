@@ -1,0 +1,54 @@
+<title>首页TDK设置</title>
+
+<div class="layui-card layadmin-header">
+  <div class="layui-breadcrumb" lay-filter="breadcrumb">
+    <a lay-href="">后台首页</a>
+    <a><cite>后台设置</cite></a>
+    <a><cite>首页TDK设置</cite></a>
+  </div>
+</div>
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">首页TDK设置</div>
+        <div class="layui-card-body" pad15>
+          <script type="text/html" template lay-url="/setting/index">
+            <div class="layui-form" style="padding: 20px 0 0 0;">
+          <div class="layui-form-item">
+            <label class="layui-form-label">首页标题</label>
+            <div class="layui-input-medium">
+              <input type="text" name="seo_title" value="{{ d.data.seo_title || '' }}"  lay-verify="required" placeholder="请输入...(必填)" autocomplete="off" class="layui-input">
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">首页关键词</label>
+            <div class="layui-input-medium">
+              <input type="text" name="seo_keywords" value="{{ d.data.seo_keywords || '' }}" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-word-aux">多个关键词请用<cite>,<cite>隔开</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">首页描述</label>
+            <div class="layui-input-medium">
+              <textarea class="layui-textarea" name="seo_description" rows="3">{{ d.data.seo_description || '' }}</textarea>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label"></label>
+            <div class="layui-input-inline">
+              <input type="button" lay-submit lay-filter="index-submit" value="确认" class="layui-btn">
+            </div>
+          </div>
+        </div>
+        </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.use('setting', layui.factory('setting'));
+</script>

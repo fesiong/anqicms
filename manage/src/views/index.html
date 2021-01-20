@@ -1,0 +1,213 @@
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md8">
+      <div class="layui-row layui-col-space15">
+        <div class="layui-col-md6">
+          <div class="layui-card">
+            <div class="layui-card-header">快捷操作</div>
+            <div class="layui-card-body">
+              
+              <div class="layadmin-shortcut">
+                <ul class="layui-row layui-col-space10">
+                  <li class="layui-col-xs3">
+                    <a lay-href="content/article/">
+                      <i class="layui-icon layui-icon-list"></i>
+                      <cite>文章管理</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="content/category/">
+                      <i class="layui-icon layui-icon-menu-fill"></i>
+                      <cite>分类管理</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="content/attachment/">
+                      <i class="layui-icon layui-icon-picture"></i>
+                      <cite>图片管理</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="plugin/link/">
+                      <i class="layui-icon layui-icon-website"></i>
+                      <cite>友情链接</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="plugin/sitemap/">
+                      <i class="layui-icon layui-icon-form"></i>
+                      <cite>Sitemap</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="plugin/robots/">
+                      <i class="layui-icon layui-icon-auz"></i>
+                      <cite>Robots</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="setting/nav">
+                      <i class="layui-icon layui-icon-layer"></i>
+                      <cite>导航</cite>
+                    </a>
+                  </li>
+                  <li class="layui-col-xs3">
+                    <a lay-href="setting/index">
+                      <i class="layui-icon layui-icon-set"></i>
+                      <cite>首页TDK</cite>
+                    </a>
+                  </li>
+                </ul>
+                </ul>
+              </div>
+              
+            </div>
+          </div>
+        </div>
+        <div class="layui-col-md6">
+          <div class="layui-card">
+            <div class="layui-card-header">数据统计</div>
+            <div class="layui-card-body">
+
+              <div class="layadmin-backlog">
+                <ul class="layui-row layui-col-space10">
+                  <script type="text/html" template lay-url="/statistics">
+                    <li class="layui-col-xs6">
+                      <a lay-href="content/article/" class="layadmin-backlog-body">
+                        <h3>文章数量</h3>
+                        <p><cite>{{d.data.article_count}}</cite></p>
+                      </a>
+                    </li>
+                    <li class="layui-col-xs6">
+                      <a lay-href="content/category/" class="layadmin-backlog-body">
+                        <h3>分类数量</h3>
+                        <p><cite>{{d.data.category_count}}</cite></p>
+                      </a>
+                    </li>
+                    <li class="layui-col-xs6">
+                      <a lay-href="plugin/link/" class="layadmin-backlog-body">
+                        <h3>友情链接</h3>
+                        <p><cite>{{d.data.link_count}}</cite></p>
+                      </a>
+                    </li>
+                    <li class="layui-col-xs6">
+                      <a lay-href="plugin/comment/" class="layadmin-backlog-body">
+                        <h3>评论数量</h3>
+                        <p><cite>{{d.data.comment_count}}</cite></p>
+                      </a>
+                    </li>
+                  </script>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="layui-col-md12">
+          <div class="layui-card">
+            <div class="layui-card-header">数据概览 -- 该区域为演示数据，并没有实际的调用。预留位置给以后使用</div>
+            <div class="layui-card-body">
+              
+              <div class="layui-carousel layadmin-carousel layadmin-dataview" data-anim="fade" lay-filter="LAY-index-dataview">
+                <div carousel-item id="LAY-index-dataview">
+                  <div><i class="layui-icon layui-icon-loading1 layadmin-loading"></i></div>
+                  <div></div>
+                  <div></div>
+                </div>
+              </div>
+              
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="layui-col-md4">
+      <div class="layui-card">
+        <div class="layui-card-header">版本信息</div>
+        <div class="layui-card-body layui-text">
+          <table class="layui-table">
+            <colgroup>
+              <col width="100">
+              <col>
+          </colgroup>
+          <tbody>
+          <tr>
+              <td>当前版本</td>
+              <td>
+                <script type="text/html" template lay-url="/version">
+                  irisweb-v{{d.data.version}}
+                </script>
+              </td>
+          </tr>
+          <tr>
+              <td>开发者</td>
+              <td>
+                  Sinclair Liang
+              </td>
+          </tr>
+          <tr>
+              <td>主要特色</td>
+              <td>简单易用的irisweb框架开发的golang版本博客，同时支持企业站使用，支持微信小程序、百度智能小程序等多端小程序接入</td>
+          </tr>
+          <tr>
+              <td>GitHub</td>
+              <td style="padding-bottom: 0;">
+                  <a href="https://github.com/fesiong/goblog" target="_blank">https://github.com/fesiong/goblog</a>
+              </td>
+          </tr>
+          </tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="layui-card">
+        <div class="layui-card-header">使用帮助</div>
+        <div class="layui-card-body">
+          <div><a href="https://www.kandaoni.com/" target="_blank" class=" layui-btn layui-btn-lg layui-btn-fluid layui-bg-red">实战学习Golang教程</a></div>
+        </div>
+      </div>
+
+      <div class="layui-card">
+        <div class="layui-card-header">关于本系统</div>
+        <div class="layui-card-body layui-text layadmin-text">
+          <p>GoBlog是一个开源的个人博客系统，界面优雅，小巧、执行速度飞快，并且对seo友好，可以满足日常博客需求。你完全可以用它来搭建自己的博客。它的使用很简单，部署非常方便。</p>
+          <p>GoBlog同时支持小程序接口，小程序端使用Taro跨平台框架开发，将同时支持微信小程序、百度智能小程序、QQ小程序、支付宝小程序，字节跳动小程序等。</p>
+        </div>
+      </div>
+
+      <div class="layui-card">
+        <div class="layui-card-header">
+          关于后台模板
+          <i class="layui-icon layui-icon-tips" lay-tips="要支持的噢" lay-offset="5"></i>
+        </div>
+        <div class="layui-card-body layui-text layadmin-text">
+          <p>后台管理前端使用layuiAdmin 来实现，相关文档，可以查阅 <a href="http://fly.layui.com/docs/2/" target="_blank">layuiAdmin 快速上手文档</a>。</p>
+          <p>如果你对layuiAdmin感兴趣，并希望使用它来开发产品，请通过正规渠道获得  <a href="http://www.layui.com/admin/" target="_blank">layuiAdmin</a>！</p>
+        </div>
+      </div>
+    </div>
+    
+  </div>
+</div>
+
+
+<script>
+//加载 controller 目录下的对应模块
+/*
+
+  小贴士：
+    这里 console 模块对应 的 console.js 并不会重复加载，
+    然而该页面的视图则是重新插入到容器，那如何保证能重新来控制视图？有两种方式：
+      1): 借助 layui.factory 方法获取 console 模块的工厂（回调函数）给 layui.use
+      2): 直接在 layui.use 方法的回调中书写业务代码，即:
+          layui.use('console', function(){ 
+            //同 console.js 中的 layui.define 回调中的代码 
+          });
+          
+  这里我们采用的是方式1。其它很多视图中采用的其实都是方式2，因为更简单些，也减少了一个请求数。
+  
+*/
+layui.use('console', layui.factory('console'));
+</script>
+

@@ -1,0 +1,62 @@
+<title>搜索引擎推送管理</title>
+
+<div class="layui-card layadmin-header">
+  <div class="layui-breadcrumb" lay-filter="breadcrumb">
+    <a lay-href="">后台首页</a>
+    <a><cite>功能管理</cite></a>
+    <a><cite>搜索引擎推送管理</cite></a>
+  </div>
+</div>
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">搜索引擎推送管理</div>
+        <div class="layui-card-body" pad15>
+          <blockquote class="layui-elem-quote">搜索引擎推送功能支持百度搜索、必应搜索的主动推送，其他搜索引擎虽然没有主动推送功能，但部分搜索引擎依然可以使用JS推送。</blockquote>
+          <script type="text/html" template lay-url="/plugin/push">
+            <div class="layui-form" style="padding: 20px 0 0 0;">
+          百度搜索主动推送
+          <hr>
+          <div class="layui-form-item">
+            <label class="layui-form-label">推送接口地址</label>
+            <div class="layui-input-medium">
+              <input type="text" name="baidu_api" value="{{ d.data.baidu_api || '' }}" placeholder="请填写百度推送接口调用地址" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-word-aux">如：http://data.zz.baidu.com/urls?site=https://www.kandaoni.com&token=DTHpH8Xn99BrJLBY</div>
+          </div>
+          必应搜索主动推送
+          <hr>
+          <div class="layui-form-item">
+            <label class="layui-form-label">推送接口地址</label>
+            <div class="layui-input-medium">
+              <input type="text" name="bing_api" value="{{ d.data.bing_api || '' }}" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-word-aux">如：https://ssl.bing.com​/webmaster/api.svc/json/SubmitUrlbatch?​apikey=sampleapikeyEDECC1EA4AE341CC8B6</div>
+          </div>
+          360/头条等JS自动提交
+          <div class="layui-form-item">
+            <label class="layui-form-label">JS提交代码</label>
+            <div class="layui-input-medium">
+              <textarea class="layui-textarea" name="js_code" rows="15">{{ d.data.js_code || '' }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-word-aux">可以放置百度JS自动提交、360自动收录、头条自动收录等JS代码。</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label"></label>
+            <div class="layui-input-inline">
+              <input type="button" lay-submit lay-filter="push-submit" value="确认" class="layui-btn">
+            </div>
+          </div>
+        </div>
+        </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.use('plugin', layui.factory('plugin'));
+</script>

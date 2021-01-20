@@ -6,10 +6,10 @@
                 <div class="layui-card-body">
                     <h1 class="title">{{article.Title}}</h1>
                     <div class="meta">
-                        {% if article.Category %}<span><a href="/?category_id={{article.CategoryId}}">{{article.Category.Title}}</a></span>{% endif %}
+                        {% if article.Category %}<span><a href="/category/{{article.CategoryId}}">{{article.Category.Title}}</a></span>{% endif %}
                         <span>{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
                         <span>{{article.Views}} 阅读</span>
-                        {% if hasLogin %}<span><a href="/article/publish?id={{article.Id}}">编辑</a></span>{% endif %}
+                        {% if adminId > 0 %}<span><a href="/article/publish?id={{article.Id}}">编辑</a></span>{% endif %}
                     </div>
                     <div class="article-body">
                         {{article.ArticleData.Content|safe}}
@@ -19,15 +19,26 @@
             <div class="layui-card">
                 <div class="layui-card-body">
                     <div class="article-prev-next">
-                        {% if prev %}
-                        <li>上一篇：<a href="/article/{{prev.Id}}">{{prev.Title}}</a></li>
-                        {% endif %}
-                        {% if next %}
-                        <li>下一篇：<a href="/article/{{next.Id}}">{{next.Title}}</a></li>
-                        {% endif %}
+                        <li>
+                            上一篇：
+                            {% if prev %}
+                              <a href="/article/{{prev.Id}}">{{prev.Title}}</a>
+                            {% else %}
+                              没有了
+                            {% endif %}
+                          </li>
+                          <li>
+                            下一篇：
+                            {% if next %}
+                              <a href="/article/{{next.Id}}">{{next.Title}}</a>
+                            {% else %}
+                              没有了
+                            {% endif %}
+                          </li>
                     </div>
                 </div>
             </div>
+            {% include "partial/comment.html" with itemType="article" itemId=article.Id %}
         </div>
 
         <div class="layui-col-md4">

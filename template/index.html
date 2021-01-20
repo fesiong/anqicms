@@ -17,6 +17,10 @@
                                 </div>
                             </a>
                         </li>
+                        {% empty %}
+                        <li class="item empty">
+                            该列表没有任何内容
+                        </li>
                         {% endfor %}
                     </ul>
                 </div>
@@ -39,7 +43,7 @@
                     <ul class="aside-list">
                         {% for item in categories %}
                         <li class="item">
-                            <a href="/?category_id={{item.Id}}" class="link">
+                            <a href="/category/{{item.Id}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
                             </a>
                         </li>
@@ -64,5 +68,13 @@
             </div>
         </div>
     </div>
+    {% if links %}
+    <div class="friend-links">
+        <span class="title">友情链接：</span>
+        {% for item in links %}
+        <a class="item" href="{{item.Link}}" {% if item.Nofollow == 1 %} rel="nofollow"{% endif %} target="_blank">{{item.Title}}</a>
+        {% endfor %}
+    </div>
+    {% endif %}
 </div>
 {% include "partial/footer.html" %}

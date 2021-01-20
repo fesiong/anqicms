@@ -1,0 +1,98 @@
+<title>内容设置</title>
+
+<div class="layui-card layadmin-header">
+  <div class="layui-breadcrumb" lay-filter="breadcrumb">
+    <a lay-href="">后台首页</a>
+    <a><cite>后台设置</cite></a>
+    <a><cite>内容设置</cite></a>
+  </div>
+</div>
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">内容设置</div>
+        <div class="layui-card-body" pad15>
+          <script type="text/html" template lay-url="/setting/content" lay-done="layui.form.render();">
+            <div class="layui-form" style="padding: 20px 0 0 0;">
+          <div class="layui-form-item">
+            <label class="layui-form-label">下载远程图片</label>
+            <div class="layui-input-inline">
+              <input type="radio" name="remote_download" value="0" title="不下载" {{ d.data.remote_download != 1 ? 'checked' : '' }}>
+              <input type="radio" name="remote_download" value="1" title="下载" {{ d.data.remote_download == 1 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">自动过滤外链</label>
+            <div class="layui-input-inline">
+              <input type="radio" name="filter_outlink" value="0" title="不过滤" {{ d.data.filter_outlink != 1 ? 'checked' : '' }}>
+              <input type="radio" name="filter_outlink" value="1" title="过滤" {{ d.data.filter_outlink == 1 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">自动压缩大图</label>
+            <div class="layui-input-inline">
+              <input type="radio" name="resize_image" value="0" title="不压缩" {{ d.data.resize_image != 1 ? 'checked' : '' }}>
+              <input type="radio" name="resize_image" value="1" title="压缩" {{ d.data.resize_image == 1 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">压缩到指定宽度</label>
+            <div class="layui-input-inline" style="width: 100px;">
+              <input type="number" name="resize_width" value="{{ d.data.resize_width || '' }}" placeholder="默认：800" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid">PX</div>
+          </div>
+          <hr>
+          <div class="layui-form-item">
+            <label class="layui-form-label">缩略图方式</label>
+            <div class="layui-input-medium">
+              <input type="radio" name="thumb_crop" value="0" title="按最长边等比缩放" {{ d.data.thumb_crop == 0 ? 'checked' : '' }}>
+              <input type="radio" name="thumb_crop" value="1" title="按最长边补白" {{ d.data.thumb_crop == 1 ? 'checked' : '' }}>
+              <input type="radio" name="thumb_crop" value="2" title="按最短边裁剪" {{ d.data.thumb_crop == 2 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">缩略图尺寸</label>
+            <div class="layui-input-inline" style="width: 100px;">
+              <input type="number" name="thumb_width" value="{{ d.data.thumb_width || '' }}" placeholder="默认：250" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid">PX宽 - </div>
+            <div class="layui-input-inline" style="width: 100px;">
+              <input type="number" name="thumb_height" value="{{ d.data.thumb_height || '' }}" placeholder="默认：250" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid">PX高</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">默认缩略图</label>
+            <div class="layui-input-inline">
+              <button type="button" class="layui-btn" id="default-thumb">
+                <i class="layui-icon">&#xe67c;</i>上传图片
+              </button>
+            </div>
+            <div class="layui-form-mid">
+              <input type="hidden" name="default_thumb" value="{{ d.data.default_thumb || '' }}" id="default-thumb-input">
+              <img src="{{ d.data.default_thumb || '' }}" class="default-thumb-img" id="default-thumb-img"/>
+            </div>
+            <div class="layui-form-mid layui-word-aux">如果文章没有缩略图，继续调用将会使用默认缩略图代替</div>
+          </div>
+          
+          <div class="layui-form-item">
+            <label class="layui-form-label"></label>
+            <div class="layui-input-block">
+              <button type="button" lay-submit lay-filter="content-submit" class="layui-btn">确认</button>
+              <a href="javascript:;" lay-submit lay-filter="rebuild-thumb" class="layui-btn layui-btn-primary">重新生成所有缩略图</a>
+            </div>
+          </div>
+        </div>
+        </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.use('setting', layui.factory('setting'));
+</script>

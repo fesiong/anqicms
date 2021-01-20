@@ -1,11 +1,12 @@
 package request
 
 type Install struct {
-	Database      string `form:"database" validate:"required"`
-	User          string `form:"user" validate:"required"`
-	Password      string `form:"password" validate:"required"`
-	Host          string `form:"host" validate:"required"`
-	Port          int    `form:"port" validate:"required"`
-	AdminUser     string `form:"admin_user" validate:"required"`
-	AdminPassword string `form:"admin_password" validate:"required"`
+	Database      string `json:"database" validate:"required"`
+	User          string `json:"user" validate:"required"`
+	Password      string `json:"password" validate:"required"`
+	Host          string `json:"host" validate:"required"`
+	Port          int    `json:"port" validate:"required"`
+	AdminUser     string `json:"admin_user" validate:"required"`
+	AdminPassword string `json:"admin_password" validate:"required"`
+	BaseUrl       string `json:"base_url"`
 }
