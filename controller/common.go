@@ -29,6 +29,8 @@ func InternalServerError(ctx iris.Context) {
 }
 
 func Common(ctx iris.Context) {
+	ctx.ViewData("version", config.Version)
+
 	ctx.ViewData("SiteName", config.ServerConfig.SiteName)
 	ctx.ViewData("SiteIcp", config.ServerConfig.Icp)
 	if config.DB != nil {
