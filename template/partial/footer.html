@@ -1,6 +1,6 @@
 <div class="layui-trans layui-footer">
     <div class="layui-container">
-        {% if settingSystem.SiteCopyright %}<div class="layout">{{settingSystem.SiteCopyright}}</div>{% endif %}
+        {% if settingSystem.SiteCopyright %}<div class="layout">{{settingSystem.SiteCopyright|safe}}</div>{% endif %}
         <p>{% if settingSystem.SiteIcp %}<a href="https://beian.miit.gov.cn/" rel="nofollow" target="_blank">{{settingSystem.SiteIcp}}</a>{% endif %} &copy;2020 Fesion. All Rights Reserved</p>
     </div>
 </div>
