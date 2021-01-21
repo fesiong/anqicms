@@ -71,7 +71,7 @@ nginx代理代码如下：
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
     }
     location / {
-       try_files $uri $uri/index.html @go;
+       try_files $uri $uri/index.html @GoBlog;
     }
 ```
 ## 👥问题反馈    
