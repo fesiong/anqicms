@@ -302,9 +302,9 @@ func AddonSitemap(itemType string, item interface{}) error {
 		defer sitemapFile.Close()
 		//开始追加写入
 		if itemType == "category" {
-			_, err = sitemapFile.WriteString(fmt.Sprintf("%s/category/%d\n", baseUrl, item.(model.Category).Id))
+			_, err = sitemapFile.WriteString(fmt.Sprintf("%s/category/%d\n", baseUrl, item.(*model.Category).Id))
 		} else if itemType == "article" {
-			_, err = sitemapFile.WriteString(fmt.Sprintf("%s/article/%d\n", baseUrl, item.(model.Article).Id))
+			_, err = sitemapFile.WriteString(fmt.Sprintf("%s/article/%d\n", baseUrl, item.(*model.Article).Id))
 		}
 
 		if err == nil {

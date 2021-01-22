@@ -1,4 +1,0 @@
-User-agent: Baiduspider
-Disallow: /baidu
-Disallow: /s?
-Disallow: /ulink?
