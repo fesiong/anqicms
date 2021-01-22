@@ -99,6 +99,7 @@ body {
     width: 184px;
     position: relative;
 }
+
 .layui-logo .logo {
     position: absolute;
     width: 184px;
@@ -232,22 +233,16 @@ body {
 }
 
 .article-detail .article-body {
-    padding-bottom: 32px;
     line-height: 28px;
+    padding: 0 15px 32px;
 }
 
-.article-detail .article-body p,
-.article-detail .article-body ul,
-.article-detail .article-body ol,
-.article-detail .article-body div {
-    padding: 12px 15px;
-}
-
+.article-detail .article-body h1,
 .article-detail .article-body h2,
 .article-detail .article-body h3,
 .article-detail .article-body h4,
 .article-detail .article-body h5 {
-    padding: 20px 15px 12px;
+    padding: 20px 0 12px;
 }
 
 .article-detail .article-body img {
@@ -255,7 +250,7 @@ body {
 }
 
 .article-detail .article-body pre {
-    margin: 10px 15px;
+    margin: 10px 0;
     padding: 10px;
     line-height: 20px;
     border: 1px solid #ddd;
@@ -370,46 +365,57 @@ body {
     font-size: 14px;
     color: #666;
 }
+
 .comment-list {
     padding: 15px 0;
 }
+
 .comment-list .comment-item {
     padding-bottom: 20px;
     border-bottom: 1px solid #f1f1f1;
     margin-bottom: 20px;
 }
+
 .comment-list .comment-item .item-user {
     color: #666;
     padding-bottom: 10px;
 }
+
 .comment-list .comment-item .item-user .user-name {
     font-weight: bold;
     color: #333;
 }
+
 .comment-list .comment-item .publish-time {
     font-size: 14px;
     float: right;
 }
+
 .comment-list .comment-item .comment-content {
     padding-bottom: 10px;
 }
-.comment-list .comment-item .comment-content .layui-elem-quote{
+
+.comment-list .comment-item .comment-content .layui-elem-quote {
     font-size: 14px;
     color: #777;
 }
+
 .comment-list .comment-item .comment-control {
     font-size: 14px;
     color: #163868;
 }
+
 .comment-list .comment-item .comment-control .item {
     margin-right: 15px;
     cursor: pointer;
 }
+
 .comment-list .comment-item .comment-control .item.active {
     color: #163868;
 }
-.comment-list .comment-item .comment-control .layui-icon{
-    padding-right:5px;
+
+.comment-list .comment-item .comment-control .layui-icon {
+    padding-right: 5px;
     vertical-align: middle;
 }
 
