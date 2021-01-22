@@ -1,9 +1,9 @@
 package provider
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/parnurzeal/gorequest"
 	"io/ioutil"
 	"irisweb/config"
 	"irisweb/library"
@@ -36,7 +36,7 @@ func PushArticle(article *model.Article) {
 }
 
 func PushBaidu(list []string) error {
-	baiduApi := config.JsonData.PluginPush.BingApi
+	baiduApi := config.JsonData.PluginPush.BaiduApi
 	if baiduApi == "" {
 		return errors.New("没有配置百度主动推送")
 	}
@@ -60,23 +60,17 @@ func PushBing(list []string) error {
 		return errors.New("没有配置必应主动推送")
 	}
 	postData := bingData{
-		SiteUrl: config.JsonData.System.BaseUrl,
+		SiteUrl:  config.JsonData.System.BaseUrl,
 		UrlList: list,
 	}
-	buf, err := json.MarshalIndent(postData, "", "\t")
-	if err != nil {
-		return err
+
+	_, body, errs := gorequest.New().Timeout(10 * time.Second).Set("Content-Type", "application/json; charset=utf-8​").Post(bingApi).Send(postData).End()
+	if errs != nil {
+		fmt.Println(errs)
+		return errs[0]
 	}
 
-	resp, err := http.Post(bingApi, "application/json; charset=utf-8​", strings.NewReader(string(buf)))
-	if err != nil {
-		fmt.Println(err)
-		return err
-	}
-	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
-
-	library.DebugLog("push-bing", string(body))
+	library.DebugLog("push-bing", body)
 	return nil
 }
 

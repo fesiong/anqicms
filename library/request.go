@@ -23,7 +23,7 @@ type RequestData struct {
  */
 func Request(urlPath string) (*RequestData, error) {
 	resp, body, errs := gorequest.New().Timeout(30 * time.Second).Get(urlPath).End()
-	if len(errs) > 0 {
+	if errs != nil {
 		//如果是https,则尝试退回http请求
 		if strings.HasPrefix(urlPath, "https") {
 			urlPath = strings.Replace(urlPath, "https://", "http://", 1)
@@ -31,7 +31,6 @@ func Request(urlPath string) (*RequestData, error) {
 		}
 		return nil, errs[0]
 	}
-	defer resp.Body.Close()
 	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
 	var htmlEncode string
 
