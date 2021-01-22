@@ -193,20 +193,18 @@ body{
     opacity: 0.2;
 }
 .article-detail .article-body {
-    padding-bottom: 32px;
     line-height: 28px;
+    padding: 0 15px 32px;
 }
-.article-detail .article-body p, .article-detail .article-body ul, .article-detail .article-body ol, .article-detail .article-body div {
-    padding: 12px 15px;
-}
-.article-detail .article-body h2, .article-detail .article-body h3, .article-detail .article-body h4, .article-detail .article-body h5 {
-    padding: 20px 15px 12px;
+
+.article-detail .article-body h1, .article-detail .article-body h2, .article-detail .article-body h3, .article-detail .article-body h4, .article-detail .article-body h5 {
+    padding: 20px 0 12px;
 }
 .article-detail .article-body img {
     max-width: 100%;
 }
 .article-detail .article-body pre {
-    margin: 10px 15px;
+    margin: 10px 0;
     padding: 10px;
     line-height: 20px;
     border: 1px solid #ddd;
