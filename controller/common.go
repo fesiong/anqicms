@@ -50,9 +50,6 @@ func Common(ctx iris.Context) {
 			config.JsonData.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
-	//读取导航
-	navList, _ := provider.GetNavList(true)
-	ctx.ViewData("navList", navList)
 	//核心配置
 	ctx.ViewData("settingSystem", config.JsonData.System)
 	//js code
@@ -61,6 +58,9 @@ func Common(ctx iris.Context) {
 		//全局分类
 		categories, _ := provider.GetCategories()
 		ctx.ViewData("categories", categories)
+		//读取导航
+		navList, _ := provider.GetNavList(true)
+		ctx.ViewData("navList", navList)
 	}
 	webInfo.NavBar = 0
 	ctx.Next()

@@ -8,6 +8,7 @@ import (
 	"irisweb/config"
 	"irisweb/middleware"
 	"irisweb/model"
+	"irisweb/provider"
 	"irisweb/route"
 	"time"
 )
@@ -37,6 +38,8 @@ func (bootstrap *Bootstrap) Serve() {
 	//自动迁移表
 	if config.DB != nil {
 		_ = model.AutoMigrateDB(config.DB)
+		//创建管理员，会先判断有没有的。不用担心重复
+		_ = provider.InitAdmin("admin", "123456")
 	}
 
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
