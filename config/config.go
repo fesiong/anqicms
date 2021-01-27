@@ -52,6 +52,10 @@ func initJSON() {
 	if JsonData.System.AdminUri == "" {
 		JsonData.System.AdminUri = "/manage"
 	}
+	//如果没有设置模板，则默认是default
+	if JsonData.System.TemplateName == "" {
+		JsonData.System.TemplateName = "/default"
+	}
 }
 
 func InitDB(setting *mysqlConfig) error {

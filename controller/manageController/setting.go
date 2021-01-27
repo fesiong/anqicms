@@ -1,7 +1,9 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
+	"io/ioutil"
 	"irisweb/config"
 	"irisweb/model"
 	"irisweb/provider"
@@ -11,11 +13,26 @@ import (
 
 func SettingSystem(ctx iris.Context) {
 	system := config.JsonData.System
+	var templateNames []string
+	//读取目录
+	readerInfos ,err := ioutil.ReadDir(fmt.Sprintf("%stemplate", config.ExecPath))
+	if err != nil {
+		fmt.Println(err)
+		//怎么会不存在？
+	}
+	for _, info := range readerInfos {
+		if info.IsDir() {
+			templateNames = append(templateNames, info.Name())
+		}
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": system,
+		"data": iris.Map{
+			"system": system,
+			"template_names": templateNames,
+		},
 	})
 }
 
@@ -44,6 +61,7 @@ func SettingSystemForm(ctx iris.Context) {
 	config.JsonData.System.AdminUri = req.AdminUri
 	config.JsonData.System.SiteClose = req.SiteClose
 	config.JsonData.System.SiteCloseTips = req.SiteCloseTips
+	config.JsonData.System.TemplateName  = req.TemplateName
 
 	err := config.WriteConfig()
 	if err != nil {

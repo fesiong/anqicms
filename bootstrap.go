@@ -46,7 +46,7 @@ func (bootstrap *Bootstrap) Serve() {
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
 
-	pugEngine := iris.Django("./template", ".html")
+	pugEngine := iris.Django(fmt.Sprintf("%stemplate/%s", config.ExecPath, config.JsonData.System.TemplateName), ".html")
 	if config.ServerConfig.Env == "development" {
 		//测试环境下动态加载
 		pugEngine.Reload(true)
@@ -54,6 +54,7 @@ func (bootstrap *Bootstrap) Serve() {
 
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
 	bootstrap.Application.RegisterView(pugEngine)
+
 
 	bootstrap.Application.Run(
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),

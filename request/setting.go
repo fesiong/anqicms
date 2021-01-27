@@ -8,6 +8,7 @@ type SystemConfig struct {
 	AdminUri      string `json:"admin_uri"`
 	SiteClose     int    `json:"site_close"`
 	SiteCloseTips string `json:"site_close_tips"`
+	TemplateName  string `json:"template_name"`
 }
 
 type ContentConfig struct {
