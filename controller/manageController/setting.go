@@ -15,7 +15,7 @@ func SettingSystem(ctx iris.Context) {
 	system := config.JsonData.System
 	var templateNames []string
 	//读取目录
-	readerInfos ,err := ioutil.ReadDir(fmt.Sprintf("%stemplate", config.ExecPath))
+	readerInfos, err := ioutil.ReadDir(fmt.Sprintf("%stemplate", config.ExecPath))
 	if err != nil {
 		fmt.Println(err)
 		//怎么会不存在？
@@ -30,7 +30,7 @@ func SettingSystem(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"system": system,
+			"system":         system,
 			"template_names": templateNames,
 		},
 	})
@@ -54,6 +54,8 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
+	req.SiteLogo = strings.Replace(req.SiteLogo, config.JsonData.System.BaseUrl, "", -1)
+
 	config.JsonData.System.SiteName = req.SiteName
 	config.JsonData.System.SiteLogo = req.SiteLogo
 	config.JsonData.System.SiteIcp = req.SiteIcp
@@ -61,7 +63,8 @@ func SettingSystemForm(ctx iris.Context) {
 	config.JsonData.System.AdminUri = req.AdminUri
 	config.JsonData.System.SiteClose = req.SiteClose
 	config.JsonData.System.SiteCloseTips = req.SiteCloseTips
-	config.JsonData.System.TemplateName  = req.TemplateName
+	config.JsonData.System.TemplateName = req.TemplateName
+	config.JsonData.System.BaseUrl = req.BaseUrl
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -97,6 +100,8 @@ func SettingContentForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	req.DefaultThumb = strings.Replace(req.DefaultThumb, config.JsonData.System.BaseUrl, "", -1)
 
 	config.JsonData.Content.RemoteDownload = req.RemoteDownload
 	config.JsonData.Content.FilterOutlink = req.FilterOutlink
@@ -262,5 +267,49 @@ func SettingNavDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "导航已删除",
+	})
+}
+
+func SettingContact(ctx iris.Context) {
+	system := config.JsonData.Contact
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": system,
+	})
+}
+
+func SettingContactForm(ctx iris.Context) {
+	var req request.ContactConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	req.Qrcode = strings.Replace(req.Qrcode, config.JsonData.System.BaseUrl, "", -1)
+
+	config.JsonData.Contact.UserName = req.UserName
+	config.JsonData.Contact.Cellphone = req.Cellphone
+	config.JsonData.Contact.Address = req.Address
+	config.JsonData.Contact.Email = req.Email
+	config.JsonData.Contact.Wechat = req.Wechat
+	config.JsonData.Contact.Qrcode = req.Qrcode
+
+	err := config.WriteConfig()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
 	})
 }

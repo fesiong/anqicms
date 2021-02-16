@@ -53,6 +53,7 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 	article.Keywords = req.Keywords
 	article.Description = req.Description
 	article.CategoryId = req.CategoryId
+	article.Images = req.Images
 
 	//goquery
 	htmlR := strings.NewReader(req.Content)
@@ -93,13 +94,17 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 			})
 		}
 		//提取缩略图
-		if article.Logo == "" {
+		if len(article.Images) == 0 {
 			imgSections := doc.Find("img")
 			if imgSections.Length() > 0 {
 				//获取第一条
-				article.Logo = imgSections.Eq(0).AttrOr("src", "")
+				article.Images = append(article.Images, imgSections.Eq(0).AttrOr("src", ""))
 			}
 		}
+		for i, v := range article.Images {
+			article.Images[i] = strings.Replace(v, config.JsonData.System.BaseUrl, "", -1)
+		}
+
 		//过滤外链
 		doc.Find("a").Each(func(i int, s *goquery.Selection) {
 			href, exists := s.Attr("href")
@@ -145,8 +150,31 @@ func GetArticleById(id uint) (*model.Article, error) {
 	article.ArticleData = &model.ArticleData{}
 	db.Where("`id` = ?", article.Id).First(article.ArticleData)
 	//加载分类
-	article.Category = &model.Category{}
-	db.Where("`id` = ?", article.CategoryId).First(article.Category)
+	var category model.Category
+	err = db.Where("`id` = ?", article.CategoryId).First(category).Error
+	if err == nil {
+		article.Category = &category
+	}
+
+	return &article, nil
+}
+
+func GetArticleByUrlToken(urlToken string) (*model.Article, error) {
+	var article model.Article
+	db := config.DB
+	err := db.Where("`url_token` = ?", urlToken).First(&article).Error
+	if err != nil {
+		return nil, err
+	}
+	//加载内容
+	article.ArticleData = &model.ArticleData{}
+	db.Where("`id` = ?", article.Id).First(article.ArticleData)
+	//加载分类
+	var category model.Category
+	err = db.Where("`id` = ?", article.CategoryId).First(category).Error
+	if err == nil {
+		article.Category = &category
+	}
 
 	return &article, nil
 }
@@ -170,9 +198,9 @@ func GetArticleList(categoryId uint, order string, currentPage int, pageSize int
 	return articles, total, nil
 }
 
-func GetRelationArticleList(categoryId uint, id uint, limit int) ([]model.Article, error) {
-	var articles []model.Article
-	var articles2 []model.Article
+func GetRelationArticleList(categoryId uint, id uint, limit int) ([]*model.Article, error) {
+	var articles []*model.Article
+	var articles2 []*model.Article
 	db := config.DB
 	if err := db.Model(&model.Article{}).Where("`status` = 1").Where("`id` > ?", id).Where("`category_id` = ?", categoryId).Order("id ASC").Limit(limit/2).Find(&articles).Error; err != nil {
 		//no

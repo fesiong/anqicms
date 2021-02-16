@@ -51,9 +51,30 @@
                 e.data[n.tokenName] = n.tokenName in d ? e.data[n.tokenName] : layui.data(r.tableName)[n.tokenName] || "",
                     e.headers[n.tokenName] = n.tokenName in e.headers ? e.headers[n.tokenName] : layui.data(r.tableName)[n.tokenName] || ""
             }
+            
             if (e.method == 'post' || e.type == 'post') {
                 e.contentType = 'application/json; charset=utf-8';
-                e.data = JSON.stringify(e.data);
+
+                //对data值的[]改成多维数组
+                let newData = {}
+                layui.each(e.data, function(i, item){
+                    if(/^.*\[\d*\]$/.test(i)){
+                        let ii = i.replace(/\[\d*\]/, '', i);
+                        if(typeof newData[ii] === 'undefined') {
+                            newData[ii] = [];
+                        }
+                        newData[ii].push(item);
+                    } else if(n = i.match(/^(.*)\[(\s*)\]$/gi), n){
+                        if(typeof newData[n[0]] === 'undefined') {
+                            newData[n[0]] = {};
+                        }
+                        newData[n[0]][n[1]] = item;
+                    } else {
+                        newData[i] = item
+                    }
+                });
+
+                e.data = JSON.stringify(newData);
             }
             return delete e.success,
                 delete e.error,

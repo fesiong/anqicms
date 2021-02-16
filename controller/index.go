@@ -18,16 +18,19 @@ func IndexPage(ctx iris.Context) {
 	//文章列表
 	articles, total, _ := provider.GetArticleList(categoryId, "id desc", currentPage, pageSize)
 	//读取列表的分类
-	categories, _ := provider.GetCategories()
+	articleCategories, _ := provider.GetCategories(model.CategoryTypeArticle)
 	for i, v := range articles {
 		if v.CategoryId > 0 {
-			for _, c := range categories {
+			for _, c := range articleCategories {
 				if c.Id == v.CategoryId {
 					articles[i].Category = c
 				}
 			}
 		}
 	}
+	//产品分类
+	productCategories, _ := provider.GetCategories(model.CategoryTypeProduct)
+
 	//热门文章
 	populars, _, _ := provider.GetArticleList(categoryId, "views desc", 1, 10)
 
@@ -72,6 +75,8 @@ func IndexPage(ctx iris.Context) {
 	ctx.ViewData("nextPage", nextPage)
 	ctx.ViewData("category", category)
 	ctx.ViewData("links", links)
+	ctx.ViewData("articleCategories", articleCategories)
+	ctx.ViewData("productCategories", productCategories)
 
 	ctx.View("index.html")
 }

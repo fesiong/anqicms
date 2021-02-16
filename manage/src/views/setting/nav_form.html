@@ -46,7 +46,7 @@
     <div class="layui-input-inline">
       <script type="text/html" template>
       <input type="radio" name="nav_type" value="0" lay-filter="nav-type" title="内置" {{# if(d.params.nav_type == 0){ }}checked{{# } }}>
-      <input type="radio" name="nav_type" value="1" lay-filter="nav-type" title="分类" {{# if(d.params.nav_type == 1){ }}checked{{# } }}>
+      <input type="radio" name="nav_type" value="1" lay-filter="nav-type" title="分类/页面" {{# if(d.params.nav_type == 1){ }}checked{{# } }}>
       <input type="radio" name="nav_type" value="2" lay-filter="nav-type" title="外链" {{# if(d.params.nav_type == 2){ }}checked{{# } }}>
       </script>
     </div>
@@ -56,15 +56,17 @@
     <div class="layui-input-inline">
       <select name="page_id">
         <option value="0" selected>首页</option>
+        <option value="1" selected>文章首页</option>
+        <option value="2" selected>产品首页</option>
       </select>
     </div>
   </div>
   <div class="layui-form-item nav-type-item" data-id="1">
-    <label class="layui-form-label">选择分类</label>
+    <label class="layui-form-label">选择分类/页面</label>
     <div class="layui-input-inline">
       <script type="text/html" template lay-url="/category/list" lay-done="layui.form.render();">
         <select name="page_id">
-          <option value="">请选择分类</option>
+          <option value="">请选择分类/页面</option>
           {{#  layui.each(d.data, function(index, item){ }}
           <option value="{{ item.id }}" {{# if(d.params.page_id == item.id){ }}selected{{# } }}>{{ item.spacer }}{{ item.title }}</option>
           {{# }) }}

@@ -143,6 +143,55 @@ layui.define(['form', 'upload', 'table'], function(exports){
       }
     });
   });
+  //默认缩略图
+  var uploadInst = upload.render({
+    elem: '#default-thumb' //绑定元素
+    ,url: '/attachment/upload' //上传接口
+    ,done: function(res){
+      //上传完毕回调
+      $('#default-thumb-input').val(res.data.thumb);
+      $('#default-thumb-img').prop('src', res.data.thumb);
+    }
+    ,error: function(){
+      //请求异常回调
+      layer.msg("上传出错");
+    }
+  });
+  
+  //contact
+  form.on('submit(contact-submit)', function(obj){
+    admin.req({
+      url: '/setting/contact'
+      ,data: obj.field
+      ,type: 'post'
+      ,done: function(res){
+        layer.msg(res.msg, {
+          offset: '15px'
+          ,icon: 1
+        });
+      }
+      ,fail: function(res){
+        layer.msg(res.msg, {
+          offset: '15px'
+          ,icon: 2
+        });
+      }
+    });
+  });
+  //二维码上传
+  var uploadInst = upload.render({
+    elem: '#contact-qrcode' //绑定元素
+    ,url: '/attachment/upload' //上传接口
+    ,done: function(res){
+      //上传完毕回调
+      $('#contact-qrcode-input').val(res.data.src);
+      $('#contact-qrcode-img').prop('src', res.data.src);
+    }
+    ,error: function(){
+      //请求异常回调
+      layer.msg("上传出错");
+    }
+  });
 
   //对外暴露的接口
   exports('setting', {});

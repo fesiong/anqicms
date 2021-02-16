@@ -20,7 +20,6 @@ func DebugLog(name string, v ...interface{}) {
 	gRWLock.Lock()
 	logFile.WriteString(fmt.Sprintln(v...))
 	gRWLock.Unlock()
-
 }
 
 func init() {

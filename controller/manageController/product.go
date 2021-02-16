@@ -8,11 +8,11 @@ import (
 	"irisweb/request"
 )
 
-func ArticleList(ctx iris.Context) {
+func ProductList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	pageSize := ctx.URLParamIntDefault("limit", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
-	articles, total, err := provider.GetArticleList(categoryId, "id desc", currentPage, pageSize)
+	products, total, err := provider.GetProductList(categoryId, "id desc", currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -21,12 +21,12 @@ func ArticleList(ctx iris.Context) {
 		return
 	}
 	//读取列表的分类
-	categories, _ := provider.GetCategories(model.CategoryTypeArticle)
-	for i, v := range articles {
+	categories, _ := provider.GetCategories(model.CategoryTypeProduct)
+	for i, v := range products {
 		if v.CategoryId > 0 {
 			for _, c := range categories {
 				if c.Id == v.CategoryId {
-					articles[i].Category = c
+					products[i].Category = c
 				}
 			}
 		}
@@ -36,14 +36,14 @@ func ArticleList(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"count": total,
-		"data": articles,
+		"data": products,
 	})
 }
 
-func ArticleDetail(ctx iris.Context) {
+func ProductDetail(ctx iris.Context) {
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	article, err := provider.GetArticleById(id)
+	product, err := provider.GetProductById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -55,12 +55,12 @@ func ArticleDetail(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": article,
+		"data": product,
 	})
 }
 
-func ArticleDetailForm(ctx iris.Context) {
-	var req request.Article
+func ProductDetailForm(ctx iris.Context) {
+	var req request.Product
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -69,7 +69,7 @@ func ArticleDetailForm(ctx iris.Context) {
 		return
 	}
 
-	article, err := provider.SaveArticle(&req)
+	product, err := provider.SaveProduct(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -80,13 +80,13 @@ func ArticleDetailForm(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "文章已更新",
-		"data": article,
+		"msg":  "产品已更新",
+		"data": product,
 	})
 }
 
-func ArticleDelete(ctx iris.Context) {
-	var req request.Article
+func ProductDelete(ctx iris.Context) {
+	var req request.Product
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -94,7 +94,7 @@ func ArticleDelete(ctx iris.Context) {
 		})
 		return
 	}
-	article, err := provider.GetArticleById(req.Id)
+	product, err := provider.GetProductById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -103,7 +103,7 @@ func ArticleDelete(ctx iris.Context) {
 		return
 	}
 
-	err = article.Delete(config.DB)
+	err = product.Delete(config.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -114,6 +114,6 @@ func ArticleDelete(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "文章已删除",
+		"msg":  "产品已删除",
 	})
 }

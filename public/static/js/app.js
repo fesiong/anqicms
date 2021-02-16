@@ -1,10 +1,11 @@
-layui.use(['element', 'layedit', 'form', 'layer'], function(){
+layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
     var $ = layui.$;
     var element = layui.element;
     var layedit = layui.layedit;
     var form = layui.form;
     let layer = layui.layer;
     var editorIndex = null;
+    var carousel = layui.carousel;
 
     if($('#text-editor').length) {
         editorIndex = layedit.build('text-editor', {
@@ -165,4 +166,16 @@ layui.use(['element', 'layedit', 'form', 'layer'], function(){
         });
         return false;
     });
+
+    //产品图片轮播
+    carousel.render({
+        elem: '#product-photos'
+        ,width: '100%'
+    });
+
+    //展示电话
+    $('#show-cellphone').click(function(){
+        let cellphone = $(this).data('id')
+        layer.alert('电话：'+cellphone);
+    })
 });

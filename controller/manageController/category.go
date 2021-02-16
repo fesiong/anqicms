@@ -3,13 +3,13 @@ package manageController
 import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
-	"irisweb/model"
 	"irisweb/provider"
 	"irisweb/request"
 )
 
 func CategoryList(ctx iris.Context) {
-	categories, err := provider.GetCategories()
+	categoryType := uint(ctx.URLParamIntDefault("type", 0))
+	categories, err := provider.GetCategories(categoryType)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -54,32 +54,7 @@ func CategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	var category *model.Category
-	var err error
-	if req.Id > 0 {
-		category, err = provider.GetCategoryById(req.Id)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  err.Error(),
-			})
-			return
-		}
-	} else {
-		category = &model.Category{
-			Status: 1,
-		}
-	}
-
-	category.Title = req.Title
-	category.Description = req.Description
-	category.Content = req.Content
-	category.Type = req.Type
-	category.ParentId = req.ParentId
-	category.Sort = req.Sort
-	category.Status = 1
-
-	err = category.Save(config.DB)
+	category, err := provider.SaveCategory(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -91,6 +66,7 @@ func CategoryDetailForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "分类已更新",
+		"data": category,
 	})
 }
 

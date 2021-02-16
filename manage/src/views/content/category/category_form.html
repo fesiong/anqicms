@@ -29,9 +29,9 @@
     <label class="layui-form-label">类型</label>
     <div class="layui-input-inline">
       <script type="text/html" template>
-      <input type="radio" name="type" value="1" title="文章" {{# if(d.params.type == 1){ }}checked{{# } }}>
+      <input type="radio" name="type" value="1" title="文章" {{# if(d.params.type || d.params.type == 1){ }}checked{{# } }}>
       <input type="radio" name="type" value="2" title="产品" {{# if(d.params.type == 2){ }}checked{{# } }}>
-      <input type="radio" name="type" value="0" title="页面" {{# if(d.params.type == 0){ }}checked{{# } }}>
+      <input type="radio" name="type" value="3" title="页面" {{# if(d.params.type == 3){ }}checked{{# } }}>
       </script>
     </div>
   </div>

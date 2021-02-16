@@ -94,26 +94,12 @@
     <div class="layui-col-md4">
       {% include "partial/author.html" %}
       <div class="layui-card">
-        <div class="layui-card-header">文章分类</div>
-        <div class="layui-card-body">
-          <ul class="aside-list">
-            {% for item in categories %}
-            <li class="item">
-              <a href="/category/{{item.Id}}" class="link">
-                <h5 class="title">{{item.Title}}</h5>
-              </a>
-            </li>
-            {% endfor %}
-          </ul>
-        </div>
-      </div>
-      <div class="layui-card">
         <div class="layui-card-header">热门文章</div>
         <div class="layui-card-body">
           <ul class="aside-list">
             {% for item in populars %}
             <li class="item">
-              <a href="/article/{{item.Id}}" class="link">
+              <a href="{{getUrl("article", item, 0)}}" class="link">
                 <h5 class="title">{{item.Title}}</h5>
                 <span class="extra">{{item.Views}}阅读</span>
               </a>

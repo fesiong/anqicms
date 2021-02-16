@@ -30,14 +30,14 @@ func GetNavList(nest bool) ([]*model.Nav, error) {
 	var navList []*model.Nav
 	for _, v := range tmpList {
 		if v.ParentId == 0 {
-			v.Link = v.GetLink()
+			v.Link = GetUrl("nav", v, 0)
 			//先获取顶层的
 			//再获取是否有下一层的
 			if nest {
 				//嵌套，前台使用
 				for _, nv := range tmpList {
 					if nv.ParentId == v.Id {
-						nv.Link = nv.GetLink()
+						nv.Link = GetUrl("nav", nv, 0)
 						v.NavList = append(v.NavList, nv)
 					}
 				}
@@ -47,7 +47,7 @@ func GetNavList(nest bool) ([]*model.Nav, error) {
 				navList = append(navList, v)
 				for _, nv := range tmpList {
 					if nv.ParentId == v.Id {
-						nv.Link = nv.GetLink()
+						nv.Link = GetUrl("nav", nv, 0)
 						navList = append(navList, nv)
 					}
 				}

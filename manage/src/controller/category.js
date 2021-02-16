@@ -28,7 +28,7 @@ layui.define(['form', 'table', 'layedit'], function(exports){
       {field: 'id', width: 60,title: 'ID'}
       ,{field: 'sort', title: '排序',width:80, edit: 'text'}
       ,{field: 'title', title: '分类名称',width:200, edit: 'text',templet: '<div>{{d.spacer}}{{d.title}}</div>'}
-      ,{field: 'type', title: '类型', width: 60,templet: '<div>{{# if(d.type == 1){ }}文章{{# } else if(d.type == 2) { }}产品{{# }else if(d.type == 0){ }}页面{{# } }} </div>'}
+      ,{field: 'type', title: '类型', width: 60,templet: '<div>{{# if(d.type == 1){ }}文章{{# } else if(d.type == 2) { }}产品{{# }else if(d.type == 3){ }}页面{{# } }} </div>'}
       ,{field: 'description',minWidth: 100, title: '描述', edit: 'text'}
       ,{title: '操作', width: 150, align:'center', fixed: 'right', toolbar: '#table-category-toolbar'}
     ]]

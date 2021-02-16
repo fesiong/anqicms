@@ -53,6 +53,7 @@ func (bootstrap *Bootstrap) Serve() {
 	}
 
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
+	pugEngine.AddFunc("getUrl", provider.GetUrl)
 	bootstrap.Application.RegisterView(pugEngine)
 
 

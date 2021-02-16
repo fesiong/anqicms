@@ -101,6 +101,36 @@ layui.define(['form', 'upload', 'table'], function(exports){
       }
     });
   });
+  //rewrite管理
+  form.on('submit(rewrite-submit)', function(obj){
+    obj.field.mode = Number(obj.field.mode)
+    admin.req({
+      url: '/plugin/rewrite'
+      ,data: obj.field
+      ,type: 'post'
+      ,done: function(res){
+        layer.msg(res.msg, {
+          offset: '15px'
+          ,icon: 1
+        });
+      }
+      ,fail: function(res){
+        layer.msg(res.msg, {
+          offset: '15px'
+          ,icon: 2
+        });
+      }
+    });
+  });
+  //rewrite-radio监听
+  form.on('radio(rewrite-radio)', function(d){
+    if(d.value == 3) {
+      //自定义模式
+      $('#rewrite-patten-field').removeClass('layui-hide');
+    } else {
+      $('#rewrite-patten-field').addClass('layui-hide');
+    }
+  });
 
   //对外暴露的接口
   exports('plugin', {});

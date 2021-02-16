@@ -3,15 +3,45 @@ package manageController
 import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
-	"irisweb/controller"
 	"irisweb/middleware"
 	"irisweb/provider"
 	"irisweb/request"
 )
 
 func UserLogin(ctx iris.Context) {
-	//复用 AdminLoginForm
-	controller.AdminLoginForm(ctx)
+	var req request.Admin
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	admin, err := provider.GetAdminByUserName(req.UserName)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if !admin.CheckPassword(req.Password) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "登录失败",
+		})
+		return
+	}
+
+	session := middleware.Sess.Start(ctx)
+	session.Set("adminId", int(admin.Id))
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "登录成功",
+		"data": admin,
+	})
 }
 
 func UserLogout(ctx iris.Context) {

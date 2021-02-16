@@ -23,6 +23,11 @@
           "jump": "/setting/content"
         },
         {
+          "name": "contact",
+          "title": "联系方式设置",
+          "jump": "/setting/contact"
+        },
+        {
           "name": "index",
           "title": "首页TDK设置",
           "jump": "/setting/index"
@@ -45,6 +50,10 @@
           "title": "文章管理"
         },
         {
+          "name": "product",
+          "title": "产品管理"
+        },
+        {
           "name": "category",
           "title": "分类管理"
         },
@@ -59,6 +68,10 @@
       "title": "功能管理",
       "icon": "layui-icon-app",
       "list": [
+        {
+          "name": "rewrite",
+          "title": "伪静态规则管理"
+        },
         {
           "name": "push",
           "title": "搜索引擎推送管理"

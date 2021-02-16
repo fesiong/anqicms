@@ -13,14 +13,12 @@ require (
 	github.com/imkira/go-interpol v1.1.0 // indirect
 	github.com/k0kubun/colorstring v0.0.0-20150214042306-9440f1994b88 // indirect
 	github.com/kataras/iris/v12 v12.1.8
+	github.com/lib/pq v1.9.0
 	github.com/mattn/go-colorable v0.1.8 // indirect
 	github.com/moul/http2curl v1.0.0 // indirect
-	github.com/nfnt/resize v0.0.0-20180221191011-83c6a9932646
-	github.com/oliamb/cutter v0.2.2
 	github.com/onsi/ginkgo v1.14.2 // indirect
 	github.com/onsi/gomega v1.10.3 // indirect
 	github.com/parnurzeal/gorequest v0.2.16
-	github.com/rrylee/go-graceful v1.0.1
 	github.com/sergi/go-diff v1.1.0 // indirect
 	github.com/shurcooL/sanitized_anchor_name v1.0.0 // indirect
 	github.com/smartystreets/goconvey v1.6.4 // indirect

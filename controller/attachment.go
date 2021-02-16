@@ -30,6 +30,7 @@ func AttachmentUpload(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
+			"thumb": attachment.Thumb,
 			"src": attachment.Logo,
 			"title": attachment.FileName,
 		},

@@ -5,16 +5,24 @@ import (
 	"irisweb/config"
 	"irisweb/model"
 	"irisweb/provider"
-	"irisweb/request"
 )
 
 func ArticleDetail(ctx iris.Context) {
 	id := ctx.Params().GetUintDefault("id", 0)
-	article, err := provider.GetArticleById(id)
+	urlToken := ctx.Params().GetString("filename")
+	var article *model.Article
+	var err error
+	if urlToken != "" {
+		//优先使用urlToken
+		article, err = provider.GetArticleByUrlToken(urlToken)
+	} else {
+		article, err = provider.GetArticleById(id)
+	}
 	if err != nil {
 		NotFound(ctx)
 		return
 	}
+
 	_ = article.AddViews(config.DB)
 	//最新
 	newest, _, _ := provider.GetArticleList(article.CategoryId, "id desc", 1, 10)
@@ -39,56 +47,4 @@ func ArticleDetail(ctx iris.Context) {
 	ctx.ViewData("comments", comments)
 
 	ctx.View("article/detail.html")
-}
-
-func ArticlePublish(ctx iris.Context) {
-	//发布必须登录
-	if ctx.Values().GetIntDefault("adminId", 0) == 0 {
-		InternalServerError(ctx)
-		return
-	}
-
-	id := uint(ctx.URLParamIntDefault("id", 0))
-	if id > 0 {
-		article, _ := provider.GetArticleById(id)
-
-		ctx.ViewData("article", article)
-	}
-	webInfo.Title = "发布文章"
-	ctx.ViewData("webInfo", webInfo)
-	ctx.View("article/publish.html")
-}
-
-func ArticlePublishForm(ctx iris.Context) {
-	//发布必须登录
-	if ctx.Values().GetIntDefault("adminId", 0) == 0 {
-		ctx.JSON(iris.Map{
-			"code": config.StatusNoLogin,
-			"msg":  "登录后方可操作",
-		})
-		return
-	}
-	var req request.Article
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	article, err := provider.SaveArticle(&req)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "发布成功",
-		"data": article,
-	})
 }

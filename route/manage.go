@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
-	"irisweb/controller"
 	"irisweb/controller/manageController"
 	"irisweb/middleware"
 )
 
 func manageRoute(app *iris.Application) {
-	manage := app.Party(config.JsonData.System.AdminUri, controller.Inspect)
+	manage := app.Party(config.JsonData.System.AdminUri)
 	{
 		manage.HandleDir("/", fmt.Sprintf("%smanage", config.ExecPath))
 		manage.Post("/user/login", manageController.UserLogin)
@@ -30,6 +29,7 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/content", manageController.SettingContent)
 			setting.Get("/index", manageController.SettingIndex)
 			setting.Get("/nav", manageController.SettingNav)
+			setting.Get("/contact", manageController.SettingContact)
 
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
@@ -37,6 +37,7 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/index", manageController.SettingIndexForm)
 			setting.Post("/nav", manageController.SettingNavForm)
 			setting.Post("/nav/delete", manageController.SettingNavDelete)
+			setting.Post("/contact", manageController.SettingContactForm)
 
 		}
 
@@ -63,6 +64,14 @@ func manageRoute(app *iris.Application) {
 			article.Post("/delete", manageController.ArticleDelete)
 		}
 
+		product := manage.Party("/product", middleware.ManageAuth)
+		{
+			product.Get("/list", manageController.ProductList)
+			product.Get("/detail", manageController.ProductDetail)
+			product.Post("/detail", manageController.ProductDetailForm)
+			product.Post("/delete", manageController.ProductDelete)
+		}
+
 		plugin := manage.Party("/plugin", middleware.ManageAuth)
 		{
 			plugin.Get("/push", manageController.PluginPush)
@@ -74,6 +83,9 @@ func manageRoute(app *iris.Application) {
 			plugin.Get("/sitemap", manageController.PluginSitemap)
 			plugin.Post("/sitemap", manageController.PluginSitemapForm)
 			plugin.Post("/sitemap/build", manageController.PluginSitemapBuild)
+
+			plugin.Get("/rewrite", manageController.PluginRewrite)
+			plugin.Post("/rewrite", manageController.PluginRewriteForm)
 
 			link := plugin.Party("/link")
 			{

@@ -28,3 +28,12 @@ type indexConfig struct {
 	SeoKeywords    string `json:"seo_keywords"`
 	SeoDescription string `json:"seo_description"`
 }
+
+type contactConfig struct {
+	UserName  string `json:"user_name"`
+	Cellphone string `json:"cellphone"`
+	Address   string `json:"address"`
+	Email     string `json:"email"`
+	Wechat    string `json:"wechat"`
+	Qrcode    string `json:"qrcode"`
+}

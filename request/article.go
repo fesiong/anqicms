@@ -8,4 +8,5 @@ type Article struct {
 	Keywords     string `json:"keywords"`
 	Description  string `json:"description"`
 	Content      string `json:"content"`
+	Images       []string `json:"images"`
 }

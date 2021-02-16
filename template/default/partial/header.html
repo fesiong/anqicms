@@ -21,26 +21,18 @@
         <ul class="layui-nav layui-layout-left nav-list">
             {%- for item in navList %}
                 <li class="layui-nav-item{% if webInfo.NavBar == item.PageId %} layui-this{% endif %}">
-                    <a href="{{ item.GetLink() }}">{{item.Title}}</a>
+                    <a href="{{ item.Link }}">{{item.Title}}</a>
                     {%- if item.NavList %}
                     <dl class="layui-nav-child">
                         {%- for inner in item.NavList %}
                             <dd class="{% if webInfo.NavBar == inner.PageId %} layui-this{% endif %}">
-                                <a href="{{ inner.GetLink() }}">{{inner.Title}}</a>
+                                <a href="{{ inner.Link }}">{{inner.Title}}</a>
                             </dd>
                         {% endfor %}
                     </dl>
                     {% endif %}
                 </li>
             {% endfor %}
-        </ul>
-        <ul class="layui-nav layui-layout-right">
-            {% if adminId > 0 %}
-            <li class="layui-nav-item"><a href="/article/publish">发布文章</a></li>
-            <li class="layui-nav-item"><a href="/admin/logout">退出</a></li>
-            {% else %}
-                <li class="layui-nav-item"><a href="/admin/login">登录</a></li>
-            {% endif %}
         </ul>
     </div>
 </div>

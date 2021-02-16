@@ -4,13 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 	"io"
 	"io/ioutil"
 	"os"
 	"strings"
 	"unicode/utf8"
+
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
 type configData struct {
@@ -20,9 +21,11 @@ type configData struct {
 	System  systemConfig  `json:"system"`
 	Content contentConfig `json:"content"`
 	Index   indexConfig   `json:"index"`
+	Contact contactConfig `json:"contact"`
 	//plugin
 	PluginPush    pluginPushConfig    `json:"plugin_push"`
 	PluginSitemap pluginSitemapConfig `json:"plugin_sitemap"`
+	PluginRewrite PluginRewriteConfig `json:"plugin_rewrite"`
 }
 
 func initPath() {

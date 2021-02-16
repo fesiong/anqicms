@@ -14,6 +14,11 @@ type PluginSitemapConfig struct {
 	AutoBuild int `json:"auto_build"`
 }
 
+type PluginRewriteConfig struct {
+	Mode   int    `json:"mode"`
+	Patten string `json:"patten"`
+}
+
 type PluginLink struct {
 	Id       uint   `json:"id"`
 	Title    string `json:"title"`

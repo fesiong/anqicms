@@ -7,7 +7,7 @@
                     <ul class="article-list">
                         {% for item in articles %}
                         <li class="item">
-                            <a href="/article/{{item.Id}}" class="link">
+                            <a href="{{getUrl("article", item, 0)}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
                                 <div class="description">{{item.Description}}</div>
                                 <div class="meta">
@@ -41,9 +41,23 @@
                 <div class="layui-card-header">文章分类</div>
                 <div class="layui-card-body">
                     <ul class="aside-list">
-                        {% for item in categories %}
+                        {% for item in articleCategories %}
                         <li class="item">
-                            <a href="/category/{{item.Id}}" class="link">
+                            <a href="{{getUrl("category", item, 0)}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">产品分类</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in productCategories %}
+                        <li class="item">
+                            <a href="{{getUrl("category", item, 0)}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
                             </a>
                         </li>
@@ -57,7 +71,7 @@
                     <ul class="aside-list">
                         {% for item in populars %}
                         <li class="item">
-                            <a href="/article/{{item.Id}}" class="link">
+                            <a href="{{getUrl("article", item, 0)}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
                                 <span class="extra">{{item.Views}}阅读</span>
                             </a>

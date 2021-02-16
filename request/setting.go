@@ -9,6 +9,7 @@ type SystemConfig struct {
 	SiteClose     int    `json:"site_close"`
 	SiteCloseTips string `json:"site_close_tips"`
 	TemplateName  string `json:"template_name"`
+	BaseUrl       string `json:"base_url"`
 }
 
 type ContentConfig struct {
@@ -39,4 +40,13 @@ type NavConfig struct {
 	Link        string `json:"link"`
 	Sort        uint   `json:"sort"`
 	Status      uint   `json:"status"`
+}
+
+type ContactConfig struct {
+	UserName  string `json:"user_name"`
+	Cellphone string `json:"cellphone"`
+	Address   string `json:"address"`
+	Email     string `json:"email"`
+	Wechat    string `json:"wechat"`
+	Qrcode    string `json:"qrcode"`
 }

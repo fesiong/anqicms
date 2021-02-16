@@ -35,6 +35,13 @@ func PushArticle(article *model.Article) {
 	_ = PushBing([]string{link})
 }
 
+func PushProduct(product *model.Product) {
+	link := fmt.Sprintf("%s/product/%d", config.JsonData.System.BaseUrl, product.Id)
+
+	_ = PushBaidu([]string{link})
+	_ = PushBing([]string{link})
+}
+
 func PushBaidu(list []string) error {
 	baiduApi := config.JsonData.PluginPush.BaiduApi
 	if baiduApi == "" {

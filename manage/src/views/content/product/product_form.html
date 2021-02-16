@@ -5,7 +5,7 @@
   <div class="layui-form-item">
     <label class="layui-form-label">所属分类</label>
     <div class="layui-input-inline">
-      <script type="text/html" template lay-url="/category/list?type=1" lay-done="layui.form.render();">
+      <script type="text/html" template lay-url="/category/list?type=2" lay-done="layui.form.render();">
         <select name="category_id">
           <option value="0" {{# if(d.params.category_id == 0){ }}selected{{# } }}>无分类</option>
           {{#  layui.each(d.data, function(index, item){ }}
@@ -16,7 +16,7 @@
     </div>
   </div>
   <div class="layui-form-item">
-    <label class="layui-form-label">文章标题</label>
+    <label class="layui-form-label">产品标题</label>
     <div class="layui-input-block">
       <script type="text/html" template>
       <input type="text" name="title" value="{{ d.params.title || '' }}"  lay-verify="required" placeholder="请输入...(必填)" autocomplete="off" class="layui-input">
@@ -24,7 +24,22 @@
     </div>
   </div>
   <div class="layui-form-item">
-    <label class="layui-form-label">文章关键词</label>
+    <label class="layui-form-label">产品价格</label>
+    <div class="layui-input-inline" style="width: 200px;">
+      <script type="text/html" template>
+        <input type="text" name="price" value="{{ d.params.price || '' }}" placeholder="如：0.00" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid">元，</div>
+    <div class="layui-form-mid">产品库存</div>
+    <div class="layui-input-inline" style="width: 200px;">
+      <script type="text/html" template>
+        <input type="text" name="stock" value="{{ d.params.stock || '' }}" placeholder="如：100" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">产品关键词</label>
     <div class="layui-input-block">
       <script type="text/html" template>
       <input type="text" name="keywords" value="{{ d.params.keywords || '' }}" autocomplete="off" class="layui-input">
@@ -32,12 +47,31 @@
     </div>
   </div>
   <div class="layui-form-item">
-    <label class="layui-form-label">文章描述</label>
+    <label class="layui-form-label">产品描述</label>
     <div class="layui-input-block">
       <script type="text/html" template>
       <textarea class="layui-textarea" name="description" rows="3">{{ d.params.description || '' }}</textarea>
       </script>
     </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">产品组图</label>
+    <script type="text/html" template>
+      <div class="layui-input-block">
+        <div class="thumb-images">
+          <div class="thumb-item upload-item" id="thumb-upload">
+            <i class="layui-icon layui-icon-addition"></i>
+          </div>
+          {{# layui.each(d.params.images, function(i, item){ }}
+          <div class="thumb-item">
+            <input type="hidden" name="images[]" value="{{item}}">
+            <img src="{{item}}" />
+            <a href="javascript:;" class="remove-item" data-id="{{d.params.id}}"><i class="layui-icon layui-icon-close"></i></a>
+          </div>
+          {{# }); }}
+        </div>
+      </div>
+    </script>
   </div>
   <div class="layui-form-item">
     <script type="text/html" template>
@@ -47,7 +81,7 @@
   <div class="layui-form-item">
     <label class="layui-form-label"></label>
     <div class="layui-input-inline">
-      <input type="button" lay-submit lay-filter="article-submit" value="确认" class="layui-btn">
+      <input type="button" lay-submit lay-filter="product-submit" value="确认" class="layui-btn">
     </div>
   </div>
 </div>
