@@ -127,7 +127,9 @@ nginx代理代码如下：
 密码：123456
 
 ## 👥问题反馈    
-遇到问题, 请在Github上开issue。
+遇到问题, 请在Github上开issue。  
+也可以加我的微信：no_reg
+
 ## License
 The MIT License (MIT)
 
