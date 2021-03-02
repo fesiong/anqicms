@@ -1,0 +1,38 @@
+<div class="layui-form" style="padding: 20px 0 0 0;">
+  <script type="text/html" template>
+      <input type="hidden" name="id" value="{{ d.params.id || 0 }}">
+      </script>
+  <div class="layui-form-item">
+    <label class="layui-form-label">锚文本名称</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="title" value="{{ d.params.title || '' }}" lay-verify="required" placeholder="请输入...(必填)" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux"></div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">Link</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="link" value="{{ d.params.link || '' }}" autocomplete="off" class="layui-input">
+        </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">支持相对链接和绝对连接，如：/a/123.html 或 https://www.kandaoni.com/</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">锚文本权重</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+          <input type="number" name="weight" value="{{ d.params.weight || '' }}" autocomplete="off" class="layui-input">
+          </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">请输入数字，0-9，数字越大，权重越高，高权重拥有优先替换权</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label"></label>
+    <div class="layui-input-inline">
+      <input type="button" lay-submit lay-filter="anchor-submit" value="确认" class="layui-btn">
+    </div>
+  </div>
+</div>

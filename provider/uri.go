@@ -11,7 +11,7 @@ import (
 //生成url
 //支持的规则：getUrl("article"|"product"|"category"|"page"|"nav"|"articleIndex"|"productIndex", item, int)
 func GetUrl(match string, data interface{}, page int) string {
-    rewritePattern := config.GetRewritePatten()
+    rewritePattern := config.ParsePatten()
     uri := ""
     switch match {
     case "article":

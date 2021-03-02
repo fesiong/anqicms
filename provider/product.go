@@ -3,6 +3,7 @@ package provider
 import (
 	"github.com/PuerkitoBio/goquery"
 	"irisweb/config"
+	"irisweb/library"
 	"irisweb/model"
 	"irisweb/request"
 	"net/url"
@@ -42,8 +43,16 @@ func SaveProduct(req *request.Product) (product *model.Product, err error) {
 		product.ProductData.Content = req.Content
 	} else {
 		newPost = true
+		newToken := library.GetPinyin(req.Title)
+		_, err := CheckProductByUrlToken(newToken)
+		if err == nil {
+			//增加随机
+			newToken += library.GenerateRandString(3)
+		}
+
 		product = &model.Product{
-			Status: 1,
+			Status:   1,
+			UrlToken: newToken,
 			ProductData: &model.ProductData{
 				Content: req.Content,
 			},
@@ -131,11 +140,22 @@ func SaveProduct(req *request.Product) (product *model.Product, err error) {
 	}
 
 	err = product.Save(config.DB)
+	link := GetUrl("product", product, 0)
+
+	//添加锚文本
+	if config.JsonData.PluginAnchor.ReplaceWay == 1 {
+		go ReplaceContent(nil, "product", product.Id, link)
+	}
+	//提取锚文本
+	if config.JsonData.PluginAnchor.KeywordWay == 1 {
+		go AutoInsertAnchor(product.Keywords, link)
+	}
+
 	//新发布的产品，执行推送
 	if newPost {
-		go PushProduct(product)
+		go PushProduct(link)
 		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("product", product)
+			_ = AddonSitemap("product", link)
 		}
 	}
 	return
@@ -156,6 +176,27 @@ func GetProductById(id uint) (*model.Product, error) {
 	err = db.Where("`id` = ?", product.CategoryId).First(category).Error
 	if err == nil {
 		product.Category = &category
+	}
+
+	return &product, nil
+}
+
+func GetProductDataById(id uint) (*model.ProductData, error) {
+	var data model.ProductData
+	err := config.DB.Where("`id` = ?", id).First(&data).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &data, nil
+}
+
+func CheckProductByUrlToken(urlToken string) (*model.Product, error) {
+	var product model.Product
+	db := config.DB
+	err := db.Where("`url_token` = ?", urlToken).First(&product).Error
+	if err != nil {
+		return nil, err
 	}
 
 	return &product, nil

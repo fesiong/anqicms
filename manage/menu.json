@@ -91,6 +91,10 @@
         {
           "name": "comment",
           "title": "评论管理"
+        },
+        {
+          "name": "anchor",
+          "title": "锚文本管理"
         }
       ]
     },

@@ -36,7 +36,7 @@ func GetCommentList(itemType string, itemId uint, order string, currentPage int,
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := config.DB.Model(&model.Comment{}).Where("`status` != 99")
+	builder := config.DB.Model(&model.Comment{})
 	if itemType != "" {
 		builder = builder.Where("`item_type` = ? and item_id = ?", itemType, itemId)
 	}

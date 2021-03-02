@@ -26,6 +26,7 @@ type configData struct {
 	PluginPush    pluginPushConfig    `json:"plugin_push"`
 	PluginSitemap pluginSitemapConfig `json:"plugin_sitemap"`
 	PluginRewrite PluginRewriteConfig `json:"plugin_rewrite"`
+	PluginAnchor  pluginAnchorConfig  `json:"plugin_anchor"`
 }
 
 func initPath() {

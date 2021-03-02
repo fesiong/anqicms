@@ -17,7 +17,6 @@ func GetNavList(nest bool) ([]*model.Nav, error) {
 	if len(tmpList) == 0 {
 		return []*model.Nav{
 			{
-				Id:     0,
 				Title:  "首页",
 				Status: 1,
 				NavType: model.NavTypeSystem,

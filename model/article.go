@@ -6,12 +6,10 @@ import (
 	"irisweb/config"
 	"path/filepath"
 	"strings"
-	"time"
 )
 
 type Article struct {
 	Model
-	Id          uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primary_key"`
 	Title       string         `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	UrlToken    string         `json:"url_token" gorm:"column:url_token;type:varchar(250) not null;default:'';index"`
 	Keywords    string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
@@ -20,9 +18,6 @@ type Article struct {
 	Views       uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	Images      pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Status      uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
-	CreatedTime int64          `json:"created_time" gorm:"column:created_time;type:int(11) not null;default:0;index:idx_created_time"`
-	UpdatedTime int64          `json:"updated_time" gorm:"column:updated_time;type:int(11) not null;default:0;index:idx_updated_time"`
-	DeletedTime int64          `json:"-" gorm:"column:deleted_time;type:int(11) not null;default:0"`
 	Category    *Category      `json:"category" gorm:"-"`
 	ArticleData *ArticleData   `json:"data" gorm:"-"`
 	Logo        string         `json:"logo" gorm:"-"`
@@ -31,7 +26,6 @@ type Article struct {
 
 type ArticleData struct {
 	Model
-	Id      uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null;primary_key"`
 	Content string `json:"content" gorm:"column:content;type:longtext default null"`
 }
 
@@ -42,11 +36,6 @@ func (article *Article) AddViews(db *gorm.DB) error {
 }
 
 func (article *Article) Save(db *gorm.DB) error {
-	if article.Id == 0 {
-		article.CreatedTime = time.Now().Unix()
-	}
-	article.UpdatedTime = time.Now().Unix()
-
 	if err := db.Save(article).Error; err != nil {
 		return err
 	}
@@ -61,7 +50,7 @@ func (article *Article) Save(db *gorm.DB) error {
 }
 
 func (article *Article) Delete(db *gorm.DB) error {
-	if err := db.Model(article).Updates(Article{Status: 99, DeletedTime: time.Now().Unix()}).Error; err != nil {
+	if err := db.Delete(article).Error; err != nil {
 		return err
 	}
 

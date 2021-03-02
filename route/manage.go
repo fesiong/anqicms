@@ -103,6 +103,19 @@ func manageRoute(app *iris.Application) {
 				comment.Post("/delete", manageController.PluginCommentDelete)
 				comment.Post("/check", manageController.PluginCommentCheck)
 			}
+
+			anchor := plugin.Party("/anchor")
+			{
+				anchor.Get("/list", manageController.PluginAnchorList)
+				anchor.Get("/detail", manageController.PluginAnchorDetail)
+				anchor.Post("/detail", manageController.PluginAnchorDetailForm)
+				anchor.Post("/replace", manageController.PluginAnchorReplace)
+				anchor.Post("/delete", manageController.PluginAnchorDelete)
+				anchor.Post("/export", manageController.PluginAnchorExport)
+				anchor.Post("/import", manageController.PluginAnchorImport)
+				anchor.Get("/setting", manageController.PluginAnchorSetting)
+				anchor.Post("/setting", manageController.PluginAnchorSettingForm)
+			}
 		}
 	}
 }

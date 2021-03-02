@@ -28,16 +28,12 @@ type sitemapData struct {
 	Id          uint64
 }
 
-func PushArticle(article *model.Article) {
-	link := fmt.Sprintf("%s/article/%d", config.JsonData.System.BaseUrl, article.Id)
-
+func PushArticle(link string) {
 	_ = PushBaidu([]string{link})
 	_ = PushBing([]string{link})
 }
 
-func PushProduct(product *model.Product) {
-	link := fmt.Sprintf("%s/product/%d", config.JsonData.System.BaseUrl, product.Id)
-
+func PushProduct(link string) {
 	_ = PushBaidu([]string{link})
 	_ = PushBing([]string{link})
 }
@@ -230,9 +226,8 @@ func BuildSitemap() error {
 }
 
 //追加sitemap
-func AddonSitemap(itemType string, item interface{}) error {
+func AddonSitemap(itemType string, link string) error {
 	basePath := fmt.Sprintf("%spublic/", config.ExecPath)
-	baseUrl := config.JsonData.System.BaseUrl
 	totalCount := int64(1)
 	var categoryCount int64
 	var articleCount int64
@@ -260,7 +255,7 @@ func AddonSitemap(itemType string, item interface{}) error {
 			}
 			defer categoryFile.Close()
 			//写入分类页
-			_, err = categoryFile.WriteString(fmt.Sprintf("%s/category/%d\n", baseUrl, item.(model.Category).Id))
+			_, err = categoryFile.WriteString(link)
 
 			if err == nil {
 				_ = UpdateSitemapTime()
@@ -282,7 +277,7 @@ func AddonSitemap(itemType string, item interface{}) error {
 				return err
 			}
 			defer articleFile.Close()
-			_, err = articleFile.WriteString(fmt.Sprintf("%s/article/%d\n", baseUrl, item.(model.Article).Id))
+			_, err = articleFile.WriteString(link)
 
 			if err == nil {
 				_ = UpdateSitemapTime()
@@ -309,9 +304,9 @@ func AddonSitemap(itemType string, item interface{}) error {
 		defer sitemapFile.Close()
 		//开始追加写入
 		if itemType == "category" {
-			_, err = sitemapFile.WriteString(fmt.Sprintf("%s/category/%d\n", baseUrl, item.(*model.Category).Id))
+			_, err = sitemapFile.WriteString(link)
 		} else if itemType == "article" {
-			_, err = sitemapFile.WriteString(fmt.Sprintf("%s/article/%d\n", baseUrl, item.(*model.Article).Id))
+			_, err = sitemapFile.WriteString(link)
 		}
 
 		if err == nil {

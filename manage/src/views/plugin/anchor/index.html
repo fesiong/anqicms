@@ -1,0 +1,39 @@
+<title>锚文本管理</title>
+
+<div class="layui-card layadmin-header">
+    <div class="layui-breadcrumb" lay-filter="breadcrumb">
+        <a lay-href="">后台首页</a>
+        <a><cite>功能管理</cite></a>
+        <a><cite>锚文本管理</cite></a>
+    </div>
+</div>
+
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md12">
+            <div class="layui-card">
+                <div class="layui-card-header">锚文本管理 <a lay-href="/plugin/anchor/setting"><i class="layui-icon layui-icon-set-fill"></i></a></div>
+                <div class="layui-card-body" pad15>
+                    <div style="padding-bottom: 10px;">
+                        <button class="layui-btn layui-btn-primary anchor-control-btn" data-type="delete">删除选中</button>
+                        <button class="layui-btn anchor-control-btn" data-type="add">添加锚文本</button>
+                        <button class="layui-btn anchor-control-btn" data-type="replace">批量更新锚文本</button>
+                        <button class="layui-btn anchor-control-btn" data-type="export">导出锚文本</button>
+                        <button class="layui-btn anchor-control-btn" data-type="import">导入锚文本</button>
+                    </div>
+
+                    <table id="anchor-manage" lay-filter="anchor-manage" data-type="default"></table>
+                    <script type="text/html" id="table-anchor-toolbar">
+                        <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="replace"><i class="layui-icon layui-icon-refresh"></i>替换</a>
+                        <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="edit"><i class="layui-icon layui-icon-edit"></i>编辑</a>
+                        <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del"><i class="layui-icon layui-icon-delete"></i>删除</a>
+                    </script>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    layui.use('anchor', layui.factory('anchor'));
+</script>

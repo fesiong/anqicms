@@ -12,7 +12,7 @@ import (
 func GetLinkList() ([]*model.Link, error) {
 	var links []*model.Link
 	db := config.DB
-	err := db.Where("`status` != ?", 99).Order("sort asc").Find(&links).Error
+	err := db.Order("sort asc").Find(&links).Error
 	if err != nil {
 		return nil, err
 	}

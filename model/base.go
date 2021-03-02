@@ -2,29 +2,23 @@ package model
 
 import (
 	"gorm.io/gorm"
-	"time"
 )
 
 const (
-	StatusWait   = uint(0)
-	StatusOk     = uint(1)
-	StatusDelete = uint(99)
+	StatusWait = uint(0)
+	StatusOk   = uint(1)
 )
 
 /**
- * 说明 所有status = 99 的表示删除
+ * 说明 改用soft delete
  */
 type Model struct {
-}
-
-func (m *Model) SoftDelete(db *gorm.DB, model interface{}, query interface{}, args ...interface{}) error {
-	err := db.Model(&model).Where(query, args...).Updates(map[string]interface{}{"status": StatusDelete, "deleted_time": uint(time.Now().Unix())}).Error
-	return err
-}
-
-func (m *Model) DeleteSoft(db *gorm.DB) error {
-	err := db.Model(&m).Updates(map[string]interface{}{"status": StatusDelete, "deleted_time": uint(time.Now().Unix())}).Error
-	return err
+	//默认字段
+	Id          uint `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64 `json:"created_time" gorm:"column:created_time;type:int(11) default 0;autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64 `json:"updated_time" gorm:"column:updated_time;type:int(11) default 0;autoUpdateTime;index:idx_updated_time"`
+	//删除字段不包含在json中
+	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
 }
 
 func AutoMigrateDB(db *gorm.DB) error {
@@ -40,6 +34,8 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&Comment{},
 		&Product{},
 		&ProductData{},
+		&Anchor{},
+		&AnchorData{},
 	)
 
 	return err

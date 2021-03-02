@@ -46,3 +46,21 @@ type PluginComment struct {
 	ToUid     uint   `json:"to_uid"`
 	Status    uint   `json:"status"`
 }
+
+type PluginAnchor struct {
+	Id     uint   `json:"id"`
+	Title  string `json:"title"`
+	Link   string `json:"link"`
+	Weight int    `json:"weight"`
+}
+
+type PluginAnchorDelete struct {
+	Id  uint   `json:"id"`
+	Ids []uint `json:"ids"`
+}
+
+type PluginAnchorSetting struct {
+	AnchorDensity int `json:"anchor_density"`
+	ReplaceWay    int `json:"replace_way"`
+	KeywordWay    int `json:"keyword_way"`
+}

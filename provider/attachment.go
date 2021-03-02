@@ -68,10 +68,9 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.A
 
 	attachment, err := GetAttachmentByMd5(md5Str)
 	if err == nil {
-		if attachment.Status != 1 {
-			//更新status
-			attachment.Status = 1
-			err = attachment.Save(db)
+		if attachment.DeletedAt.Valid {
+			//更新
+			err = db.Model(attachment).Update("deleted_at", nil).Error
 			if err != nil {
 				return nil, err
 			}
@@ -159,7 +158,6 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.A
 
 	//文件上传完成
 	attachment = &model.Attachment{
-		Id:           0,
 		FileName:     fileName,
 		FileLocation: filePath + tmpName,
 		FileSize:     int64(info.Size),
@@ -314,7 +312,6 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 
 			//文件上传完成
 			attachment = &model.Attachment{
-				Id:           0,
 				FileName:     fileName,
 				FileLocation: filePath + tmpName,
 				FileSize:     int64(len(body)),
@@ -343,7 +340,7 @@ func GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
 	db := config.DB
 	var attach model.Attachment
 
-	if err := db.Where("`status` != 99").Where("`file_md5` = ?", md5).First(&attach).Error; err != nil {
+	if err := db.Unscoped().Where("`file_md5` = ?", md5).First(&attach).Error; err != nil {
 		return nil, err
 	}
 
@@ -356,7 +353,7 @@ func GetAttachmentById(id uint) (*model.Attachment, error) {
 	db := config.DB
 	var attach model.Attachment
 
-	if err := db.Where("`status` != 99").Where("`id` = ?", id).First(&attach).Error; err != nil {
+	if err := db.Where("`id` = ?", id).First(&attach).Error; err != nil {
 		return nil, err
 	}
 

@@ -1,0 +1,59 @@
+<title>锚文本管理</title>
+
+<div class="layui-card layadmin-header">
+    <div class="layui-breadcrumb" lay-filter="breadcrumb">
+        <a lay-href="">后台首页</a>
+        <a><cite>功能管理</cite></a>
+        <a lay-href="/plugin/anchor"><cite>锚文本管理</cite></a>
+        <a><cite>功能设置</cite></a>
+    </div>
+</div>
+
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md12">
+            <div class="layui-card">
+                <div class="layui-card-header">锚文本功能设置</div>
+                <div class="layui-card-body" pad15>
+                    <script type="text/html" template lay-url="/plugin/anchor/setting" lay-done="layui.form.render();">
+                    <div class="layui-form" style="padding: 20px 0 0 0;">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">锚文本密度</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="anchor_density" value="{{ d.data.anchor_density || '' }}" lay-verify="required" placeholder="如：100" autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">例如：每100字替换一个锚文本，就填写100，默认100</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">替换方式</label>
+                            <div class="layui-input-inline">
+                                <input type="radio" name="replace_way" value="1" lay-filter="link-type" title="自动替换" {{# if(d.data.replace_way == 1){ }}checked{{# } }}>
+                                <input type="radio" name="replace_way" value="0" lay-filter="link-type" title="手动替换" {{# if(d.data.replace_way == 0){ }}checked{{# } }}>
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">内容替换锚文本的方式</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">关键词提取方式</label>
+                            <div class="layui-input-inline">
+                                <input type="radio" name="keyword_way" value="1" lay-filter="link-type" title="自动提取" {{# if(d.data.keyword_way == 1){ }}checked{{# } }}>
+                                <input type="radio" name="keyword_way" value="0" lay-filter="link-type" title="手动提取" {{# if(d.data.keyword_way == 0){ }}checked{{# } }}>
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">选择从内容的关键词标签里提取锚文本关键词的方式</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label"></label>
+                            <div class="layui-input-inline">
+                                <input type="button" lay-submit lay-filter="anchor-setting-submit" value="确认" class="layui-btn">
+                            </div>
+                        </div>
+                    </div>
+    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    layui.use('anchor', layui.factory('anchor'));
+</script>

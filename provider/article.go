@@ -3,6 +3,7 @@ package provider
 import (
 	"github.com/PuerkitoBio/goquery"
 	"irisweb/config"
+	"irisweb/library"
 	"irisweb/model"
 	"irisweb/request"
 	"net/url"
@@ -16,8 +17,8 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 		category, err = GetCategoryByTitle(req.CategoryName)
 		if err != nil {
 			category = &model.Category{
-				Title:       req.CategoryName,
-				Status:      1,
+				Title:  req.CategoryName,
+				Status: 1,
 			}
 			err = category.Save(config.DB)
 			if err != nil {
@@ -42,8 +43,16 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 		article.ArticleData.Content = req.Content
 	} else {
 		newPost = true
+		newToken := library.GetPinyin(req.Title)
+		_, err := CheckArticleByUrlToken(newToken)
+		if err == nil {
+			//增加随机
+			newToken += library.GenerateRandString(3)
+		}
+
 		article = &model.Article{
-			Status:      1,
+			Status:   1,
+			UrlToken: newToken,
 			ArticleData: &model.ArticleData{
 				Content: req.Content,
 			},
@@ -129,11 +138,24 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 	}
 
 	err = article.Save(config.DB)
+
+	link := GetUrl("article", article, 0)
+
+	//添加锚文本
+	if config.JsonData.PluginAnchor.ReplaceWay == 1 {
+		go ReplaceContent(nil, "article", article.Id, link)
+	}
+	//提取锚文本
+	if config.JsonData.PluginAnchor.KeywordWay == 1 {
+
+		go AutoInsertAnchor(article.Keywords, link)
+	}
+
 	//新发布的文章，执行推送
 	if newPost {
-		go PushArticle(article)
+		go PushArticle(link)
 		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("article", article)
+			_ = AddonSitemap("article", link)
 		}
 	}
 	return
@@ -151,9 +173,30 @@ func GetArticleById(id uint) (*model.Article, error) {
 	db.Where("`id` = ?", article.Id).First(article.ArticleData)
 	//加载分类
 	var category model.Category
-	err = db.Where("`id` = ?", article.CategoryId).First(category).Error
+	err = db.Where("`id` = ?", article.CategoryId).First(&category).Error
 	if err == nil {
 		article.Category = &category
+	}
+
+	return &article, nil
+}
+
+func GetArticleDataById(id uint) (*model.ArticleData, error) {
+	var data model.ArticleData
+	err := config.DB.Where("`id` = ?", id).First(&data).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &data, nil
+}
+
+func CheckArticleByUrlToken(urlToken string) (*model.Article, error) {
+	var article model.Article
+	db := config.DB
+	err := db.Where("`url_token` = ?", urlToken).First(&article).Error
+	if err != nil {
+		return nil, err
 	}
 
 	return &article, nil
@@ -202,10 +245,10 @@ func GetRelationArticleList(categoryId uint, id uint, limit int) ([]*model.Artic
 	var articles []*model.Article
 	var articles2 []*model.Article
 	db := config.DB
-	if err := db.Model(&model.Article{}).Where("`status` = 1").Where("`id` > ?", id).Where("`category_id` = ?", categoryId).Order("id ASC").Limit(limit/2).Find(&articles).Error; err != nil {
+	if err := db.Model(&model.Article{}).Where("`status` = 1").Where("`id` > ?", id).Where("`category_id` = ?", categoryId).Order("id ASC").Limit(limit / 2).Find(&articles).Error; err != nil {
 		//no
 	}
-	if err := db.Model(&model.Article{}).Where("`status` = 1").Where("`id` < ?", id).Where("`category_id` = ?", categoryId).Order("id DESC").Limit(limit/2).Find(&articles2).Error; err != nil {
+	if err := db.Model(&model.Article{}).Where("`status` = 1").Where("`id` < ?", id).Where("`category_id` = ?", categoryId).Order("id DESC").Limit(limit / 2).Find(&articles2).Error; err != nil {
 		//no
 	}
 	//列表不返回content
