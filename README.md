@@ -126,9 +126,19 @@ nginx代理代码如下：
 
 密码：123456
 
+## 示例网站 & 开发文档 & golang实战学习教程
+[示例网站 - https://www.kandaoni.com/](https://www.kandaoni.com/)  
+
+[实战学习教程](https://www.kandaoni.com/category/1)  
+
+
 ## 👥问题反馈    
 遇到问题, 请在Github上开issue。  
 也可以加我的微信：no_reg
+
+扫码加入golang开发学习群
+
+![扫码入群讨论](https://www.kandaoni.com/uploads/20213/3/thumb_1525154eb779f3c7.png)
 
 ## License
 The MIT License (MIT)
