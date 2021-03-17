@@ -23,7 +23,8 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
         elem: '#anchor-manage'
         , url: setter.baseApi + 'plugin/anchor/list'
         , cols: [[
-            { field: 'id', width: 60, title: 'ID' }
+            {checkbox: true}
+            , { field: 'id', width: 60, title: 'ID' }
             , { field: 'title', title: '锚文本', width: 150, edit: 'text' }
             , { field: 'link', minWidth: 200, title: '锚文本连接', edit: 'text' }
             , { field: 'weight', width: 100, title: '权重', edit: 'text' }
@@ -217,7 +218,7 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
             admin.req({
                 url: '/plugin/anchor/export'
                 , data: {}
-                , type: 'get'
+                , type: 'post'
                 , done: function (res) {
                     table.exportFile(res.data.header, res.data.content, 'csv');
                 }

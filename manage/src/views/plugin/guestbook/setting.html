@@ -1,0 +1,59 @@
+<title>留言管理</title>
+
+<div class="layui-card layadmin-header">
+    <div class="layui-breadcrumb" lay-filter="breadcrumb">
+        <a lay-href="">后台首页</a>
+        <a><cite>功能管理</cite></a>
+        <a lay-href="/plugin/guestbook/"><cite>留言管理</cite></a>
+        <a><cite>功能设置</cite></a>
+    </div>
+</div>
+
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md12">
+            <div class="layui-card">
+                <div class="layui-card-header">留言功能设置</div>
+                <div class="layui-card-body" pad15>
+                    <div class="layui-form" style="padding: 20px 0 0 0;" lay-filter="setting-form" id="setting-form">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">留言成功提示</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="return_message" value="" placeholder="默认：感谢您的留言！"
+                                       autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">用户提交留言后看到的提示。例如：感谢您的留言！</div>
+                        </div>
+                        <div>字段设置
+                            <hr>
+                        </div>
+                        <div style="padding-bottom: 10px;">
+                            <button class="layui-btn layui-btn-primary setting-control-btn" data-type="add">添加字段
+                            </button>
+                        </div>
+                        <table id="guestbook-setting" lay-filter="guestbook-setting" data-type="default"></table>
+                        <script type="text/html" id="table-setting-toolbar">
+                            {{# if(!d.is_system){ }}
+                            <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="edit"><i
+                                        class="layui-icon layui-icon-edit"></i>编辑</a>
+                            <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del"><i
+                                        class="layui-icon layui-icon-delete"></i>删除</a>
+                            {{# } }}
+                        </script>
+                        <div class="layui-form-item" style="margin-top: 20px;">
+                            <label class="layui-form-label"></label>
+                            <div class="layui-input-inline">
+                                <input type="button" lay-submit lay-filter="setting-submit" value="确认"
+                                       class="layui-btn">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    layui.use('guestbook', layui.factory('guestbook'));
+</script>

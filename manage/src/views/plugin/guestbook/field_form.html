@@ -1,0 +1,58 @@
+<div class="layui-form" style="padding: 20px 0 0 0;">
+  <script type="text/html" template>
+    <input type="hidden" name="index" value="{{ d.params.index || 0 }}">
+    </script>
+  <div class="layui-form-item">
+    <label class="layui-form-label">名称</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="name" value="{{ d.params.name || '' }}" lay-verify="required" placeholder="请输入...(必填)" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">字段名称</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="field_name" value="{{ d.params.field_name || '' }}" lay-verify="required" placeholder="英文字母开头" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">是否必填</label>
+    <div class="layui-input-block">
+      <script type="text/html" template>
+        <input type="radio" name="required" value="1" title="必填" {{# if(d.params.required == 1){ }}checked{{# } }}>
+        <input type="radio" name="required" value="0" title="选填" {{# if(d.params.required == 0){ }}checked{{# } }}>
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">字段类型</label>
+    <div class="layui-input-block">
+      <script type="text/html" template>
+        <input type="radio" name="type" value="text" title="单行文本" {{# if(d.params.type == "text"){ }}checked{{# } }}>
+        <input type="radio" name="type" value="number" title="数字" {{# if(d.params.type == "number"){ }}checked{{# } }}>
+        <input type="radio" name="type" value="textarea" title="多行文本" {{# if(d.params.type == "textarea"){ }}checked{{# } }}>
+        <input type="radio" name="type" value="radio" title="单项选择" {{# if(d.params.type == "radio"){ }}checked{{# } }}>
+        <input type="radio" name="type" value="checkbox" title="多项选择" {{# if(d.params.type == "checkbox"){ }}checked{{# } }}>
+        <input type="radio" name="type" value="select" title="下拉选择" {{# if(d.params.type == "select"){ }}checked{{# } }}>
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">默认值</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+      <textarea class="layui-textarea" name="content" rows="5">{{ d.params.content || '' }}</textarea>
+      </script>
+    </div>
+    <div class="layui-form-mid">单选、多选、下拉的多个值，一行一个。</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label"></label>
+    <div class="layui-input-inline">
+      <input type="button" lay-submit lay-filter="field-submit" value="确认" class="layui-btn">
+    </div>
+  </div>
+</div>

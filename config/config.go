@@ -23,10 +23,11 @@ type configData struct {
 	Index   indexConfig   `json:"index"`
 	Contact contactConfig `json:"contact"`
 	//plugin
-	PluginPush    pluginPushConfig    `json:"plugin_push"`
-	PluginSitemap pluginSitemapConfig `json:"plugin_sitemap"`
-	PluginRewrite PluginRewriteConfig `json:"plugin_rewrite"`
-	PluginAnchor  pluginAnchorConfig  `json:"plugin_anchor"`
+	PluginPush      pluginPushConfig      `json:"plugin_push"`
+	PluginSitemap   pluginSitemapConfig   `json:"plugin_sitemap"`
+	PluginRewrite   PluginRewriteConfig   `json:"plugin_rewrite"`
+	PluginAnchor    pluginAnchorConfig    `json:"plugin_anchor"`
+	PluginGuestbook pluginGuestbookConfig `json:"plugin_guestbook"`
 }
 
 func initPath() {

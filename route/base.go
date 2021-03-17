@@ -5,6 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/controller"
+	"irisweb/middleware"
 	"irisweb/model"
 	"irisweb/provider"
 	"regexp"
@@ -17,6 +18,7 @@ func Register(app *iris.Application) {
 	//设置错误
 	app.OnErrorCode(iris.StatusNotFound, controller.NotFound)
 	app.OnErrorCode(iris.StatusInternalServerError, controller.InternalServerError)
+	app.Options("*", middleware.Cors)
 	app.Use(controller.Inspect)
 	app.Use(controller.CheckCloseSite)
 	app.Use(controller.Common)
@@ -39,6 +41,9 @@ func Register(app *iris.Application) {
 		comment.Post("/praise", controller.CommentPraise)
 		comment.Get("/article/{id:uint}", controller.ArticleCommentList)
 	}
+
+	app.Get("/guestbook.html", controller.GuestbookPage)
+	app.Post("/guestbook.html", controller.GuestbookForm)
 
 	//后台管理路由相关
 	manageRoute(app)

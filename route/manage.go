@@ -116,6 +116,15 @@ func manageRoute(app *iris.Application) {
 				anchor.Get("/setting", manageController.PluginAnchorSetting)
 				anchor.Post("/setting", manageController.PluginAnchorSettingForm)
 			}
+
+			guestbook := plugin.Party("/guestbook")
+			{
+				guestbook.Get("/list", manageController.PluginGuestbookList)
+				guestbook.Post("/delete", manageController.PluginGuestbookDelete)
+				guestbook.Post("/export", manageController.PluginGuestbookExport)
+				guestbook.Get("/setting", manageController.PluginGuestbookSetting)
+				guestbook.Post("/setting", manageController.PluginGuestbookSettingForm)
+			}
 		}
 	}
 }

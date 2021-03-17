@@ -1,5 +1,7 @@
 package request
 
+import "irisweb/config"
+
 type PluginPushConfig struct {
 	BaiduApi string `json:"baidu_api"`
 	BingApi  string `json:"bing_api"`
@@ -63,4 +65,14 @@ type PluginAnchorSetting struct {
 	AnchorDensity int `json:"anchor_density"`
 	ReplaceWay    int `json:"replace_way"`
 	KeywordWay    int `json:"keyword_way"`
+}
+
+type PluginGuestbookSetting struct {
+	ReturnMessage string                  `json:"return_message"`
+	Fields        []*config.GuestbookField `json:"fields"`
+}
+
+type PluginGuestbookDelete struct {
+	Id  uint   `json:"id"`
+	Ids []uint `json:"ids"`
 }

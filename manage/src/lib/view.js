@@ -133,7 +133,52 @@
                 anim: 6,
                 id: "LAY_adminError"
             }, a))
-        }
+        },
+        i.exportFile = function(titles, data, type, fileName){
+            
+            type = type || 'csv';
+            
+            var textType = ({
+              csv: 'text/csv'
+              ,xls: 'application/vnd.ms-excel'
+            })[type]
+            ,alink = document.createElement("a");
+            
+            if(layui.device.ie) return n.msg('IE_NOT_SUPPORT_EXPORTS');
+            
+            alink.href = 'data:'+ textType +';charset=utf-8,\ufeff'+ encodeURIComponent(function(){
+              let content = "";
+                
+                if (type == "csv") {
+                  content = titles.join(',') + '\r\n' + data.join('\r\n');
+                } else {
+                    content += '<table border=1><thead><tr>';
+                    //表头
+                    layui.each(titles, function(i, item){
+                        content += '<th>'+item+'</th>';
+                    });
+                    content += '</tr></thead>';
+                    //表体
+                    content += '<tbody>';
+                    layui.each(data, function(i, item){
+                        content += '<tr>';
+                            layui.each(item, function(j, val){
+                                content += '<td>'+val+'</td>';
+                            });
+                        content += '</tr>';
+                    });
+                    content += '</tbody>';
+                    content += '<table>';
+                }
+
+                return content;
+            }());
+            
+            alink.download = (fileName || 'table_'+ (new Date).getTime()) + '.' + type; 
+            document.body.appendChild(alink);
+            alink.click();
+            document.body.removeChild(alink); 
+          }
         ,
         d.prototype.render = function(e, a) {
             var n = this;
