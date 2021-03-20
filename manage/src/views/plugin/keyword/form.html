@@ -1,0 +1,24 @@
+<div class="layui-form" style="padding: 20px 0 0 0;">
+  <script type="text/html" template>
+      <input type="hidden" name="id" value="{{ d.params.id || 0 }}">
+      </script>
+  <div class="layui-form-item">
+    <label class="layui-form-label">关键词名称</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        {{#  if(d.params.id) { }}
+        <input type="text" name="title" value="{{ d.params.title || '' }}" lay-verify="required" placeholder="请输入...(必填)" autocomplete="off" class="layui-input">
+        {{# }else{ }}
+        <textarea class="layui-textarea" rows="5" placeholder="支持批量插入，一行一个关键词" lay-verify="required" name="title"></textarea>
+        {{# } }}
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux"></div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label"></label>
+    <div class="layui-input-inline">
+      <input type="button" lay-submit lay-filter="keyword-submit" value="确认" class="layui-btn">
+    </div>
+  </div>
+</div>

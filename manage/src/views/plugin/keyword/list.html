@@ -1,0 +1,17 @@
+<div style="padding: 20px 0 0 0;">
+    <div class="search-box layui-form layui-flex">
+        <input type="text" name="keyword" placeholder="请输入关键词" autocomplete="off" class="layui-input flex-item">
+        <a href="javascript:;" class="layui-btn layui-btn-primary" lay-submit lay-filter="search-keyword">搜索</a>
+        <a lay-href="/plugin/keyword/" class="layui-btn layui-btn-primary" target="_blank">词库管理</a>
+    </div>
+    <div class="layui-form">
+        <div class="keyword-result"></div>
+        <div id="keyword-page"></div>
+        <div class="layui-form-item" style="margin-top: 20px;">
+            <label class="layui-form-label"></label>
+            <div class="layui-input-inline">
+                <input type="button" lay-submit lay-filter="selected-keyword-submit" value="确认" class="layui-btn">
+            </div>
+        </div>
+    </div>
+</div>

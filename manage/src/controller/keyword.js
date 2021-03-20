@@ -19,32 +19,29 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
         , upload = layui.upload
         , table = layui.table;
 
-    //锚文本管理
-    let anchorTable = table.render({
-        elem: '#anchor-manage'
-        , url: setter.baseApi + 'plugin/anchor/list'
+    //关键词库管理
+    let keywordTable = table.render({
+        elem: '#keyword-manage'
+        , url: setter.baseApi + 'plugin/keyword/list'
         , cols: [[
             {checkbox: true}
             , { field: 'id', width: 60, title: 'ID' }
-            , { field: 'title', title: '锚文本', width: 150, edit: 'text' }
-            , { field: 'link', minWidth: 200, title: '锚文本连接', edit: 'text' }
-            , { field: 'weight', width: 100, title: '权重', edit: 'text' }
-            , { field: 'replace_count', width: 100, title: '替换次数' }
-            , { title: '操作', width: 220, align: 'center', fixed: 'right', toolbar: '#table-anchor-toolbar' }
+            , { field: 'title', title: '关键词', minWidth: 200, edit: 'text' }
+            , { title: '操作', width: 220, align: 'center', fixed: 'right', toolbar: '#table-keyword-toolbar' }
         ]]
         , page: true
         , limit: 20
         , text: '对不起，加载出现异常！'
     });
     //修改
-    table.on('edit(anchor-manage)', function (obj) {
+    table.on('edit(keyword-manage)', function (obj) {
         obj.data.weight = Number(obj.data.weight);
         admin.req({
-            url: '/plugin/anchor/detail'
+            url: '/plugin/keyword/detail'
             , data: obj.data
             , type: 'post'
             , done: function (res) {
-                anchorTable.reload();
+                keywordTable.reload();
                 layer.msg(res.msg, {
                     offset: '15px'
                     , icon: 1
@@ -60,12 +57,12 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
     });
 
     //工具条操作
-    form.on('submit(anchor-submit)', function (obj) {
+    form.on('submit(keyword-submit)', function (obj) {
         let data = obj.field;
         data.id = Number(data.id);
         data.weight = Number(data.weight);
         admin.req({
-            url: '/plugin/anchor/detail'
+            url: '/plugin/keyword/detail'
             , data: data
             , type: 'post'
             , done: function (res) {
@@ -75,7 +72,7 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
                         , icon: 1
                         , time: 1000
                     }, function () {
-                        anchorTable.reload(); //重载表格
+                        keywordTable.reload(); //重载表格
                         layer.closeAll(); //执行关闭
                     });
                 } else {
@@ -90,18 +87,18 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
             }
         });
     });
-    table.on('tool(anchor-manage)', function (obj) {
+    table.on('tool(keyword-manage)', function (obj) {
         let data = obj.data; //获得当前行数据
         let layEvent = obj.event; //获得 lay-event 对应的值（也可以是表头的 event 参数对应的值）
 
         if (layEvent === 'del') { //删除
-            layer.confirm('真的删除这个锚文本吗？', function (index) {
+            layer.confirm('真的删除这个关键词吗？', function (index) {
                 admin.req({
-                    url: '/plugin/anchor/delete'
+                    url: '/plugin/keyword/delete'
                     , data: data
                     , type: 'post'
                     , done: function (res) {
-                        anchorTable.reload();//重载表格
+                        keywordTable.reload();//重载表格
                         layer.close(index);
                     }
                     , fail: function (res) {
@@ -115,32 +112,12 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
         } else if (layEvent === 'edit') {
             //编辑
             admin.popup({
-                title: '修改锚文本'
+                title: '修改关键词'
                 , area: ['600px', '400px']
-                , id: 'LAY-popup-anchor-edit'
+                , id: 'LAY-popup-keyword-edit'
                 , success: function (layero, index) {
-                    view(this.id).render('plugin/anchor/form', data).done(function () {
+                    view(this.id).render('plugin/keyword/form', data).done(function () {
                         form.render();
-                    });
-                }
-            });
-        } else if (layEvent === 'replace') {
-            admin.req({
-                url: '/plugin/anchor/replace'
-                , data: { id: data.id }
-                , type: 'post'
-                , done: function (res) {
-                    anchorTable.reload();//重载表格
-                    layer.close(index);
-                    layer.msg(res.msg, {
-                        offset: '15px'
-                        , icon: 2
-                    });
-                }
-                , fail: function (res) {
-                    layer.msg(res.msg, {
-                        offset: '15px'
-                        , icon: 2
                     });
                 }
             });
@@ -148,21 +125,21 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
     });
 
     //控制菜单操作
-    let anchorActive = {
+    let keywordActive = {
         add: function () {
             admin.popup({
-                title: '添加锚文本'
+                title: '添加关键词'
                 , area: ['600px', '400px']
-                , id: 'LAY-popup-anchor-add'
+                , id: 'LAY-popup-keyword-add'
                 , success: function (layero, index) {
-                    view(this.id).render('plugin/anchor/form').done(function () {
+                    view(this.id).render('plugin/keyword/form').done(function () {
                         form.render();
                     });
                 }
             });
         },
         delete: function () {
-            let checkStatus = table.checkStatus('anchor-manage');
+            let checkStatus = table.checkStatus('keyword-manage');
             if (checkStatus.data.length === 0) {
                 layer.msg('请选择需要操作的数据', {
                     offset: '15px'
@@ -174,13 +151,13 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
             layui.each(checkStatus.data, function (i, item) {
                 ids.push(item.id);
             });
-            layer.confirm('真的删除选中的锚文本吗？', function (index) {
+            layer.confirm('真的删除选中的关键词吗？', function (index) {
                 admin.req({
-                    url: '/plugin/anchor/delete'
+                    url: '/plugin/keyword/delete'
                     , data: { ids: ids }
                     , type: 'post'
                     , done: function (res) {
-                        anchorTable.reload();//重载表格
+                        keywordTable.reload();//重载表格
                         layer.close(index);
                     }
                     , fail: function (res) {
@@ -192,32 +169,10 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
                 });
             });
         },
-        replace: function () {
-            //替换操作, 批量执行
-            admin.req({
-                url: '/plugin/anchor/replace'
-                , data: {}
-                , type: 'post'
-                , done: function (res) {
-                    anchorTable.reload();//重载表格
-                    layer.close(index);
-                    layer.msg(res.msg, {
-                        offset: '15px'
-                        , icon: 2
-                    });
-                }
-                , fail: function (res) {
-                    layer.msg(res.msg, {
-                        offset: '15px'
-                        , icon: 2
-                    });
-                }
-            });
-        },
         export: function () {
             //导出数据
             admin.req({
-                url: '/plugin/anchor/export'
+                url: '/plugin/keyword/export'
                 , data: {}
                 , type: 'post'
                 , done: function (res) {
@@ -234,27 +189,26 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
         import: function () {
             //导入数据
             admin.popup({
-                title: '导入锚文本'
+                title: '导入关键词'
                 , area: ['600px', '400px']
-                , id: 'LAY-popup-anchor-import'
+                , id: 'LAY-popup-keyword-import'
                 , success: function (layero, index) {
-                    view(this.id).render('plugin/anchor/import').done(function () {
+                    view(this.id).render('plugin/keyword/import').done(function () {
                         form.render();
                         //下载
-                        $('#download-anchor-template').off('click').on('click', function () {
-                            console.log(123);
-                            table.exportFile(['title', 'link', 'weight'], [['SEO','/a/123.html', 9]], 'csv');
+                        $('#download-keyword-template').off('click').on('click', function () {
+                            table.exportFile(['title'], [['SEO']], 'csv');
                         });
                         //导入
                         let uploadInst = upload.render({
-                            elem: '#upload-anchor' //绑定元素
-                            ,url: setter.baseApi + 'plugin/anchor/import' //上传接口
+                            elem: '#upload-keyword' //绑定元素
+                            ,url: setter.baseApi + 'plugin/keyword/import' //上传接口
                             ,accept: 'file'
                             ,acceptMime: 'text/csv'
                             ,exts: 'csv'
                             ,done: function(res){
                             if(res.code === 0) {
-                                anchorTable.reload();//重载表格
+                                keywordTable.reload();//重载表格
                                 layer.alert(res.msg, function() {
                                     layer.closeAll();
                                 });
@@ -271,46 +225,17 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
                             }
                         });
                     });
+                    
                 }
             });
         },
     };
 
-    $('.anchor-control-btn').off('click').on('click', function () {
+    $('.keyword-control-btn').off('click').on('click', function () {
         var type = $(this).data('type');
-        anchorActive[type] ? anchorActive[type].call(this) : '';
-    });
-
-    //setting
-    form.on('submit(anchor-setting-submit)', function (obj) {
-        let data = obj.field;
-        data.anchor_density = Number(data.anchor_density);
-        data.replace_way = Number(data.replace_way);
-        data.keyword_way = Number(data.keyword_way);
-        admin.req({
-            url: '/plugin/anchor/setting'
-            , data: data
-            , type: 'post'
-            , done: function (res) {
-                if (res.code === 0) {
-                    layer.msg(res.msg, {
-                        offset: '15px'
-                        , icon: 1
-                        , time: 1000
-                    });
-                } else {
-                    layer.msg(res.msg);
-                }
-            }
-            , fail: function (res) {
-                layer.msg(res.msg, {
-                    offset: '15px'
-                    , icon: 2
-                });
-            }
-        });
+        keywordActive[type] ? keywordActive[type].call(this) : '';
     });
 
     //对外暴露的接口
-    exports('anchor', {});
+    exports('keyword', {});
 });

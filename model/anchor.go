@@ -6,7 +6,7 @@ import (
 
 type Anchor struct {
 	Model
-	Title        string `json:"title" gorm:"column:title;type:varchar(250) not null;default:'';index"`
+	Title        string `json:"title" gorm:"column:title;type:varchar(250) unique not null;default:'';index"`
 	Link         string `json:"link" gorm:"column:link;type:varchar(250) not null;default:'';index"`
 	Weight       int    `json:"weight" gorm:"column:weight;type:int(10) not null;default:0;index:idx_weight"`
 	ReplaceCount int64  `json:"replace_count" gorm:"column:replace_count;type:int(10) not null;default:0"`

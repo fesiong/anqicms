@@ -21,7 +21,7 @@ layui.define(['form', 'upload', 'table'], function(exports){
   //logo上传
   var uploadInst = upload.render({
     elem: '#site-logo' //绑定元素
-    ,url: '/attachment/upload' //上传接口
+    ,url: setter.baseApi + 'attachment/upload' //上传接口
     ,done: function(res){
       //上传完毕回调
       $('#site-logo-input').val(res.data.src);
@@ -146,7 +146,7 @@ layui.define(['form', 'upload', 'table'], function(exports){
   //默认缩略图
   var uploadInst = upload.render({
     elem: '#default-thumb' //绑定元素
-    ,url: '/attachment/upload' //上传接口
+    ,url: setter.baseApi + 'attachment/upload' //上传接口
     ,done: function(res){
       //上传完毕回调
       $('#default-thumb-input').val(res.data.thumb);
@@ -181,7 +181,7 @@ layui.define(['form', 'upload', 'table'], function(exports){
   //二维码上传
   var uploadInst = upload.render({
     elem: '#contact-qrcode' //绑定元素
-    ,url: '/attachment/upload' //上传接口
+    ,url: setter.baseApi + 'attachment/upload' //上传接口
     ,done: function(res){
       //上传完毕回调
       $('#contact-qrcode-input').val(res.data.src);

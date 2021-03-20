@@ -140,7 +140,7 @@ layui.define(['form', 'table', 'layedit','upload'], function(exports){
                   //图片上传
                   var uploadInst = upload.render({
                     elem: '#thumb-upload' //绑定元素
-                    ,url: '/attachment/upload' //上传接口
+                    ,url: setter.baseApi + 'attachment/upload' //上传接口
                     ,done: function(res){
                       if(res.code == 0) {
                         //上传完毕回调
@@ -200,7 +200,7 @@ layui.define(['form', 'table', 'layedit','upload'], function(exports){
             //图片上传
             var uploadInst = upload.render({
               elem: '#thumb-upload' //绑定元素
-              ,url: '/attachment/upload' //上传接口
+              ,url: setter.baseApi + 'attachment/upload' //上传接口
               ,done: function(res){
                 //上传完毕回调
                 $('.thumb-images').append(laytpl('<div class="thumb-item">\

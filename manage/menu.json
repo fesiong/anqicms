@@ -99,6 +99,10 @@
         {
           "name": "guestbook",
           "title": "留言管理"
+        },
+        {
+          "name": "keyword",
+          "title": "关键词库管理"
         }
       ]
     },

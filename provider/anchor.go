@@ -94,7 +94,7 @@ func ImportAnchors(file multipart.File, info *multipart.FileHeader) (string, err
 		anchor.Save(config.DB)
 	}
 
-	return fmt.Sprintf("成功导入了%s个锚文本", total), nil
+	return fmt.Sprintf("成功导入了%d个锚文本", total), nil
 }
 
 func DeleteAnchor(anchor *model.Anchor) error {

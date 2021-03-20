@@ -32,8 +32,8 @@ layui.define(['form', 'table', 'element'], function (exports) {
             ,{field: 'created_time',width: 150, title: '时间', templet: '<div>{{layui.util.toDateString(d.created_time*1000, "yyyy-MM-dd HH:mm")}}</div>'}
             , { title: '操作', width: 220, align: 'center', fixed: 'right', toolbar: '#table-guestbook-toolbar' }
         ]]
-        , page: false
-        , limit: 100
+        , page: true
+        , limit: 20
         , text: '对不起，加载出现异常！'
     });
 

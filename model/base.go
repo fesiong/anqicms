@@ -37,6 +37,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&Anchor{},
 		&AnchorData{},
 		&Guestbook{},
+		&Keyword{},
 	)
 
 	return err

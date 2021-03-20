@@ -114,3 +114,19 @@
 .thumb-item.upload-item .layui-icon{
     font-size: 32px;
 }
+
+.layui-flex{
+    display: flex;
+}
+
+.flex-item{
+    flex: 1;
+}
+.keyword-result {
+    padding: 10px 0;
+}
+
+.keyword-item{
+    display: inline-block;
+    padding: 5px;
+}

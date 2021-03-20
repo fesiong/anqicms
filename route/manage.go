@@ -125,6 +125,15 @@ func manageRoute(app *iris.Application) {
 				guestbook.Get("/setting", manageController.PluginGuestbookSetting)
 				guestbook.Post("/setting", manageController.PluginGuestbookSettingForm)
 			}
+
+			keyword := plugin.Party("/keyword")
+			{
+				keyword.Get("/list", manageController.PluginKeywordList)
+				keyword.Post("/detail", manageController.PluginKeywordDetailForm)
+				keyword.Post("/delete", manageController.PluginKeywordDelete)
+				keyword.Post("/export", manageController.PluginKeywordExport)
+				keyword.Post("/import", manageController.PluginKeywordImport)
+			}
 		}
 	}
 }

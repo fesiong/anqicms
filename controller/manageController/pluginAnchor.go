@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/model"
@@ -75,6 +76,15 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 			})
 			return
 		}
+		//去重
+		exists, err := provider.GetAnchorByTitle(req.Title)
+		if err == nil && exists.Id != anchor.Id {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  fmt.Errorf("已存在锚文本关键词%s，修改失败", req.Title),
+			})
+			return
+		}
 		//只有旧的才需要处理
 		if anchor.Title != req.Title {
 			changeTitle = true
@@ -84,8 +94,12 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		}
 
 	} else {
-		anchor = &model.Anchor{
-			Status: 1,
+		anchor, err = provider.GetAnchorByTitle(req.Title)
+		if err != nil {
+			//不存在，则创建它
+			anchor = &model.Anchor{
+				Status: 1,
+			}
 		}
 	}
 

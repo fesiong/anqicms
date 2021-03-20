@@ -25,10 +25,11 @@
   </div>
   <div class="layui-form-item">
     <label class="layui-form-label">文章关键词</label>
-    <div class="layui-input-block">
+    <div class="layui-input-block layui-flex">
       <script type="text/html" template>
-      <input type="text" name="keywords" value="{{ d.params.keywords || '' }}" autocomplete="off" class="layui-input">
-    </script>
+        <input type="text" name="keywords" value="{{ d.params.keywords || '' }}" id="keywords" autocomplete="off" class="layui-input flex-item">
+      </script>
+      <a href="javascript:;" class="layui-btn layui-btn-primary" id="select-keywords" data-for="keywords">选择关键词</a>
     </div>
   </div>
   <div class="layui-form-item">
