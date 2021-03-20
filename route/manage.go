@@ -134,6 +134,13 @@ func manageRoute(app *iris.Application) {
 				keyword.Post("/export", manageController.PluginKeywordExport)
 				keyword.Post("/import", manageController.PluginKeywordImport)
 			}
+
+			fileUpload := plugin.Party("/fileupload")
+			{
+				fileUpload.Get("/list", manageController.PluginFileUploadList)
+				fileUpload.Post("/upload", manageController.PluginFileUploadUpload)
+				fileUpload.Post("/delete", manageController.PluginFileUploadDelete)
+			}
 		}
 	}
 }

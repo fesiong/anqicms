@@ -86,3 +86,7 @@ type PluginKeywordDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
 }
+
+type PluginFileUploadDelete struct {
+	Hash string `json:"hash"`
+}

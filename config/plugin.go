@@ -35,6 +35,12 @@ type GuestbookField struct {
 	Content   string `json:"content"`
 }
 
+type PluginUploadFile struct {
+	Hash        string `json:"hash"`
+	FileName    string `json:"file_name"`
+	CreatedTime int64  `json:"created_time"`
+}
+
 func (g *GuestbookField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

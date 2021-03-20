@@ -23,11 +23,12 @@ type configData struct {
 	Index   indexConfig   `json:"index"`
 	Contact contactConfig `json:"contact"`
 	//plugin
-	PluginPush      pluginPushConfig      `json:"plugin_push"`
-	PluginSitemap   pluginSitemapConfig   `json:"plugin_sitemap"`
-	PluginRewrite   PluginRewriteConfig   `json:"plugin_rewrite"`
-	PluginAnchor    pluginAnchorConfig    `json:"plugin_anchor"`
-	PluginGuestbook pluginGuestbookConfig `json:"plugin_guestbook"`
+	PluginPush        pluginPushConfig      `json:"plugin_push"`
+	PluginSitemap     pluginSitemapConfig   `json:"plugin_sitemap"`
+	PluginRewrite     PluginRewriteConfig   `json:"plugin_rewrite"`
+	PluginAnchor      pluginAnchorConfig    `json:"plugin_anchor"`
+	PluginGuestbook   pluginGuestbookConfig `json:"plugin_guestbook"`
+	PluginUploadFiles []PluginUploadFile    `json:"plugin_upload_file"`
 }
 
 func initPath() {
