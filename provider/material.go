@@ -177,6 +177,8 @@ func SaveMaterialCategory(req *request.PluginMaterialCategory) (category *model.
 }
 
 func LogMaterialData(materialIds []uint, itemType string, itemId uint) {
+	//清理不存在的
+	config.DB.Unscoped().Model(&model.MaterialData{}).Where("`material_id` not in(?) and `item_type` = ? and `item_id` = ?", materialIds, itemType, itemId).Delete(model.MaterialData{})
 	//先检查是否存在
 	var dataCount int64
 	for _, materialId := range materialIds {
@@ -197,9 +199,12 @@ func LogMaterialData(materialIds []uint, itemType string, itemId uint) {
 		}
 
 		config.DB.Save(&data)
+
+		//更新素材使用计数
+		var useCount int64
+		config.DB.Model(&model.MaterialData{}).Where("`material_id` = ?", material.Id).Count(&useCount)
+		config.DB.Model(&model.Material{}).Where("`id` = ?", material.Id).Update("use_count", useCount)
 	}
-	//清理不存在的
-	config.DB.Unscoped().Model(&model.MaterialData{}).Where("`material_id` not in(?) and `item_type` = ? and `item_id` = ?", materialIds, itemType, itemId).Delete(model.MaterialData{})
 }
 
 //自动更新素材
