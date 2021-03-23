@@ -38,6 +38,9 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&AnchorData{},
 		&Guestbook{},
 		&Keyword{},
+		&Material{},
+		&MaterialCategory{},
+		&MaterialData{},
 	)
 
 	return err

@@ -90,3 +90,17 @@ type PluginKeywordDelete struct {
 type PluginFileUploadDelete struct {
 	Hash string `json:"hash"`
 }
+
+type PluginMaterial struct {
+	Id         uint   `json:"id"`
+	Title      string `json:"title"`
+	CategoryId uint   `json:"category_id"`
+	Content    string `json:"content"`
+	Status     uint   `json:"status"`
+	AutoUpdate uint   `json:"auto_update"`
+}
+
+type PluginMaterialCategory struct {
+	Id    uint   `json:"id"`
+	Title string `json:"title"`
+}

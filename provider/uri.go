@@ -16,44 +16,49 @@ func GetUrl(match string, data interface{}, page int) string {
     switch match {
     case "article":
         uri = rewritePattern.Article
-        item := data.(*model.Article)
-        catName := ""
-        if strings.Contains(rewritePattern.Article, "catname") {
-            category, err := GetCategoryById(item.CategoryId)
-            if err == nil {
-                catName = category.UrlToken
+        item, ok := data.(*model.Article)
+        if ok {
+            //拿到值
+            catName := ""
+            if strings.Contains(rewritePattern.Article, "catname") {
+                category, err := GetCategoryById(item.CategoryId)
+                if err == nil {
+                    catName = category.UrlToken
+                }
             }
-        }
-        for _, v := range rewritePattern.ArticleTags {
-            if v == "id" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-            } else if v == "catid" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.CategoryId))
-            } else if v == "filename" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-            } else if v == "catname" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
+            for _, v := range rewritePattern.ArticleTags {
+                if v == "id" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+                } else if v == "catid" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.CategoryId))
+                } else if v == "filename" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                } else if v == "catname" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
+                }
             }
         }
     case "product":
         uri = rewritePattern.Product
-        item := data.(*model.Product)
-        catName := ""
-        if strings.Contains(rewritePattern.Article, "catname") {
-            category, err := GetCategoryById(item.CategoryId)
-            if err == nil {
-                catName = category.UrlToken
+        item, ok := data.(*model.Product)
+        if ok {
+            catName := ""
+            if strings.Contains(rewritePattern.Article, "catname") {
+                category, err := GetCategoryById(item.CategoryId)
+                if err == nil {
+                    catName = category.UrlToken
+                }
             }
-        }
-        for _, v := range rewritePattern.ProductTags {
-            if v == "id" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-            } else if v == "catid" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.CategoryId))
-            } else if v == "filename" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-            } else if v == "catname" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
+            for _, v := range rewritePattern.ProductTags {
+                if v == "id" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+                } else if v == "catid" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.CategoryId))
+                } else if v == "filename" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                } else if v == "catname" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
+                }
             }
         }
     case "articleIndex":
@@ -62,12 +67,30 @@ func GetUrl(match string, data interface{}, page int) string {
         uri = rewritePattern.ProductIndex
     case "category":
         uri = rewritePattern.Category
-        item := data.(*model.Category)
-        //自动修正
-        if item.Type == model.CategoryTypePage {
-            uri = GetUrl("page", item, 0)
-        } else {
-            for _, v := range rewritePattern.CategoryTags {
+        item, ok := data.(*model.Category)
+        if ok {
+            //自动修正
+            if item.Type == model.CategoryTypePage {
+                uri = GetUrl("page", item, 0)
+            } else {
+                for _, v := range rewritePattern.CategoryTags {
+                    if v == "id" {
+                        uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+                    } else if v == "catid" {
+                        uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+                    } else if v == "filename" {
+                        uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                    } else if v == "catname" {
+                        uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                    }
+                }
+            }
+        }
+    case "page":
+        uri = rewritePattern.Page
+        item, ok := data.(*model.Category)
+        if ok {
+            for _, v := range rewritePattern.PageTags {
                 if v == "id" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
                 } else if v == "catid" {
@@ -79,42 +102,30 @@ func GetUrl(match string, data interface{}, page int) string {
                 }
             }
         }
-    case "page":
-        uri = rewritePattern.Page
-        item := data.(*model.Category)
-        for _, v := range rewritePattern.PageTags {
-            if v == "id" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-            } else if v == "catid" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-            } else if v == "filename" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-            } else if v == "catname" {
-                uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-            }
-        }
     case "nav":
         uri = ""
-        item := data.(*model.Nav)
-        if item.NavType == model.NavTypeSystem {
-            if item.PageId == 0 {
-                //首页
-                uri = "/"
-            } else if item.PageId == 1 {
-                //文章首页
-                uri = GetUrl("articleIndex", nil, 0)
-            } else if item.PageId == 2 {
-                //产品首页
-                uri = GetUrl("productIndex", nil, 0)
+        item, ok := data.(*model.Nav)
+        if ok {
+            if item.NavType == model.NavTypeSystem {
+                if item.PageId == 0 {
+                    //首页
+                    uri = "/"
+                } else if item.PageId == 1 {
+                    //文章首页
+                    uri = GetUrl("articleIndex", nil, 0)
+                } else if item.PageId == 2 {
+                    //产品首页
+                    uri = GetUrl("productIndex", nil, 0)
+                }
+            } else if item.NavType == model.NavTypeCategory {
+                category, err := GetCategoryById(item.PageId)
+                if err == nil {
+                    uri = GetUrl("category", category, 0)
+                }
+            } else if item.NavType == model.NavTypeOutlink {
+                //外链
+                uri = item.Link
             }
-        } else if item.NavType == model.NavTypeCategory {
-            category, err := GetCategoryById(item.PageId)
-            if err == nil {
-                uri = GetUrl("category", category, 0)
-            }
-        } else if item.NavType == model.NavTypeOutlink {
-            //外链
-            uri = item.Link
         }
     }
     //处理分页问题

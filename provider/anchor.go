@@ -79,6 +79,10 @@ func ImportAnchors(file multipart.File, info *multipart.FileHeader) (string, err
 
 	total := 0
 	for _, item := range anchors {
+		item.Title = strings.TrimSpace(item.Title)
+		if item.Title == "" {
+			continue
+		}
 		anchor, err := GetAnchorByTitle(item.Title)
 		if err != nil {
 			//表示不存在
@@ -287,7 +291,7 @@ func ReplaceAnchors(anchors []*model.Anchor) {
 		offset += limit
 		for _, v := range articles {
 			//执行替换
-			link := GetUrl("product", v, 0)
+			link := GetUrl("article", v, 0)
 			ReplaceContent(anchors, "article", v.Id, link)
 		}
 	}
@@ -414,6 +418,9 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 	if len(existsLinks) < maxAnchorNum {
 		//开始替换关键词
 		for _, anchor := range anchors {
+			if anchor.Title == "" {
+				continue
+			}
 			if anchor.Link == link {
 				//当前url，跳过
 				continue
@@ -507,6 +514,10 @@ func AutoInsertAnchor(keywords, link string) {
 
 	keywordArr := strings.Split(keywords, ",")
 	for _, v := range keywordArr {
+		v = strings.TrimSpace(v)
+		if v == "" {
+			continue
+		}
 		_, err := GetAnchorByTitle(v)
 		if err != nil {
 			//插入新的

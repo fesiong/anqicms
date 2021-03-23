@@ -60,7 +60,7 @@ func CategoryArticlePage(ctx iris.Context) {
 	if categoryVal == nil {
 		categoryId = 0
 	} else {
-		category = categoryVal.(*model.Category)
+		category, _ = categoryVal.(*model.Category)
 	}
 
 
@@ -129,7 +129,7 @@ func CategoryProductPage(ctx iris.Context) {
 	if categoryVal == nil {
 		categoryId = 0
 	} else {
-		category = categoryVal.(*model.Category)
+		category, _ = categoryVal.(*model.Category)
 	}
 
 

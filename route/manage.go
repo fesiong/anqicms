@@ -141,6 +141,17 @@ func manageRoute(app *iris.Application) {
 				fileUpload.Post("/upload", manageController.PluginFileUploadUpload)
 				fileUpload.Post("/delete", manageController.PluginFileUploadDelete)
 			}
+
+			material := plugin.Party("/material")
+			{
+				material.Get("/list", manageController.PluginMaterialList)
+				material.Post("/detail", manageController.PluginMaterialDetailForm)
+				material.Post("/delete", manageController.PluginMaterialDelete)
+
+				material.Get("/category/list", manageController.PluginMaterialCategoryList)
+				material.Post("/category/detail", manageController.PluginMaterialCategoryDetailForm)
+				material.Post("/category/delete", manageController.PluginMaterialCategoryDelete)
+			}
 		}
 	}
 }

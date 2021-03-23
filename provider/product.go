@@ -7,6 +7,7 @@ import (
 	"irisweb/model"
 	"irisweb/request"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -135,6 +136,20 @@ func SaveProduct(req *request.Product) (product *model.Product, err error) {
 				}
 			}
 		})
+
+		//检查有多少个material
+		var materialIds []uint
+		doc.Find("div[data-material]").Each(func(i int, s *goquery.Selection) {
+			tmpId, exists := s.Attr("data-material")
+			if exists {
+				//记录material
+				materialId, err := strconv.Atoi(tmpId)
+				if err == nil {
+					materialIds = append(materialIds, uint(materialId))
+				}
+			}
+		})
+		go LogMaterialData(materialIds, "product", product.Id)
 		//返回最终可用的内容
 		product.ProductData.Content, _ = doc.Find("body").Html()
 	}
@@ -173,7 +188,7 @@ func GetProductById(id uint) (*model.Product, error) {
 	db.Where("`id` = ?", product.Id).First(product.ProductData)
 	//加载分类
 	var category model.Category
-	err = db.Where("`id` = ?", product.CategoryId).First(category).Error
+	err = db.Where("`id` = ?", product.CategoryId).First(&category).Error
 	if err == nil {
 		product.Category = &category
 	}
@@ -214,7 +229,7 @@ func GetProductByUrlToken(urlToken string) (*model.Product, error) {
 	db.Where("`id` = ?", product.Id).First(product.ProductData)
 	//加载分类
 	var category model.Category
-	err = db.Where("`id` = ?", product.CategoryId).First(category).Error
+	err = db.Where("`id` = ?", product.CategoryId).First(&category).Error
 	if err == nil {
 		product.Category = &category
 	}

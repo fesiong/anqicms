@@ -1,0 +1,42 @@
+<div class="layui-form" style="padding: 20px 0 0 0;">
+  <div class="layui-form-item">
+    <label class="layui-form-label">ID</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+      <input type="text" name="id" value="{{d.params.id}}" class="layui-input" readonly>
+    </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">素材名称</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="id" value="{{d.params.title}}" class="layui-input" disabled>
+    </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">素材分类</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" value="{{d.params.category_title}}" class="layui-input" disabled>
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">素材内容</label>
+    <div class="layui-input-block">
+      <script type="text/html" template>
+        {{d.params.content}}
+      </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">添加时间</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" value="{{layui.util.toDateString(d.params.created_time*1000, "yyyy-MM-dd HH:mm")}}" class="layui-input" disabled>
+      </script>
+    </div>
+  </div>
+</div>

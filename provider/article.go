@@ -7,6 +7,7 @@ import (
 	"irisweb/model"
 	"irisweb/request"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -133,6 +134,20 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 				}
 			}
 		})
+		//检查有多少个material
+		var materialIds []uint
+		doc.Find("div[data-material]").Each(func(i int, s *goquery.Selection) {
+			tmpId, exists := s.Attr("data-material")
+			if exists {
+				//记录material
+				materialId, err := strconv.Atoi(tmpId)
+				if err == nil {
+					materialIds = append(materialIds, uint(materialId))
+				}
+			}
+		})
+		go LogMaterialData(materialIds, "article", article.Id)
+
 		//返回最终可用的内容
 		article.ArticleData.Content, _ = doc.Find("body").Html()
 	}
@@ -214,7 +229,7 @@ func GetArticleByUrlToken(urlToken string) (*model.Article, error) {
 	db.Where("`id` = ?", article.Id).First(article.ArticleData)
 	//加载分类
 	var category model.Category
-	err = db.Where("`id` = ?", article.CategoryId).First(category).Error
+	err = db.Where("`id` = ?", article.CategoryId).First(&category).Error
 	if err == nil {
 		article.Category = &category
 	}

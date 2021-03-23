@@ -45,6 +45,21 @@
       <textarea class="layui-textarea" id="text-editor" name="content" rows="30">{{ d.params.data && d.params.data.content || '' }}</textarea>
     </script>
   </div>
+  <div class="layui-collapse" style="margin-bottom: 20px;">
+    <div class="layui-colla-item">
+      <h2 class="layui-colla-title">添加素材 <small style="padding-left: 20px;color: #b58500">使用说明：点击素材内容即可进入编辑器。</small></h2>
+      <div class="layui-colla-content">
+        <div class="material-categories"></div>
+        <div class="material-list">
+          <table id="material-list" lay-filter="material-list" data-type="default"></table>
+          <script type="text/html" id="table-material-toolbar">
+            <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="use"><i class="layui-icon layui-icon-addition"></i>使用</a>
+            <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="view"><i class="layui-icon layui-icon-search"></i>预览</a>
+          </script>
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="layui-form-item">
     <label class="layui-form-label"></label>
     <div class="layui-input-inline">

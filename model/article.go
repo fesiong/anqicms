@@ -30,8 +30,7 @@ type ArticleData struct {
 }
 
 func (article *Article) AddViews(db *gorm.DB) error {
-	article.Views = article.Views + 1
-	db.Model(Article{}).Where("`id` = ?", article.Id).Update("views", article.Views)
+	db.Model(&Article{}).Where("`id` = ?", article.Id).UpdateColumn("views", gorm.Expr("`views` + 1"))
 	return nil
 }
 

@@ -105,6 +105,10 @@
           "title": "关键词库管理"
         },
         {
+          "name": "material",
+          "title": "内容素材管理"
+        },
+        {
           "name": "fileupload",
           "title": "验证文件上传"
         }

@@ -32,8 +32,7 @@ type ProductData struct {
 }
 
 func (product *Product) AddViews(db *gorm.DB) error {
-	product.Views = product.Views + 1
-	db.Model(Product{}).Where("`id` = ?", product.Id).Update("views", product.Views)
+	db.Model(&Product{}).Where("`id` = ?", product.Id).UpdateColumn("views", gorm.Expr("`views` + 1"))
 	return nil
 }
 

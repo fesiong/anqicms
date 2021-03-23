@@ -17,6 +17,7 @@ layui.define(['form', 'table', 'layedit'], function(exports){
   ,form = layui.form
   ,table = layui.table
   ,layedit = layui.layedit
+  ,element = layui.element
   ,upload = layui.upload;
   var editorIndex = null;
 
@@ -136,6 +137,9 @@ layui.define(['form', 'table', 'layedit'], function(exports){
                 view(viewId).render('content/article/article_form', res.data).done(function(){
                   //
                   form.render();
+                  element.render();
+                  renderMaterial();
+
                   editorIndex = layedit.build('text-editor', {
                     height: 450,
                     uploadImage: {
@@ -172,6 +176,9 @@ layui.define(['form', 'table', 'layedit'], function(exports){
           view(this.id).render('content/article/article_form').done(function(){
             //
             form.render();
+            element.render();
+            renderMaterial();
+            
             editorIndex = layedit.build('text-editor', {
               height: 450,
               uploadImage: {
@@ -189,6 +196,88 @@ layui.define(['form', 'table', 'layedit'], function(exports){
     var type = $(this).data('type');
     articleActive[type] ? articleActive[type].call(this) : '';
   });
+
+  function renderMaterial(){
+    let materialCategoryId = 0;
+    let materialTable = null;
+    //请求category
+    admin.req({
+      url: '/plugin/material/category/list'
+      ,data: {}
+      ,type: 'get'
+      ,done: function(res){
+        layui.each(res.data, function(i, item){
+          if (materialCategoryId == 0) {
+            materialCategoryId = item.id;
+            //拉取一遍
+            renderMaterialList();
+          }
+        });
+        laytpl('{{# layui.each(d.list, function(i, item){ }}<a href="javascript:;" class="layui-btn {{# if(d.category_id != item.id){ }}layui-btn-primary{{# } }} material-category-item" data-id="{{item.id}}">{{item.title}}({{item.material_count}})</a>{{# }); }}')
+          .render({ list: res.data, category_id: materialCategoryId }, function (html) {
+            $('.material-categories').html(html);
+          });
+
+          $(document).off('click', '.material-category-item').on('click', '.material-category-item', function(){
+            $(this).removeClass('layui-btn-primary').siblings().addClass('layui-btn-primary');
+            materialCategoryId = $(this).data('id');
+            renderMaterialList();
+          });
+      }
+      ,fail: function(res){
+        // layer.msg(res.msg, {
+        //   offset: '15px'
+        //   ,icon: 2
+        // });
+      }
+    });
+
+    function renderMaterialList(){
+      if(materialTable != null) {
+        materialTable.reload({
+          where: {
+            category_id: materialCategoryId
+          }
+        });
+      } else {
+        materialTable = table.render({
+          elem: '#material-list'
+          , url: setter.baseApi + 'plugin/material/list'
+          , where: {
+            category_id: materialCategoryId
+          }
+          , cols: [[
+            { field: 'id', width: 60, title: 'ID' }
+            , { field: 'title', title: '素材名称', minWidth: 100 }
+            , { field: 'use_count', title: '引用数量', width: 100}
+            , { title: '操作', width: 220, align: 'center', fixed: 'right', toolbar: '#table-material-toolbar' }
+          ]]
+          , page: true
+          , limit: 20
+          , text: '对不起，加载出现异常！'
+        });
+        table.on('tool(material-list)', function (obj) {
+          let data = obj.data; //获得当前行数据
+          let layEvent = obj.event; //获得 lay-event 对应的值（也可以是表头的 event 参数对应的值）
+          if (layEvent === 'view') {
+            admin.popup({
+              title: '查看内容素材'
+              , area: ['800px', '600px']
+              , id: 'LAY-popup-material-edit'
+              , success: function (layero, index) {
+                  view(this.id).render('plugin/material/detail', data).done(function () {
+                      form.render();
+                  });
+              }
+            });
+          } else if (layEvent === 'use') {
+            content = '<div data-material="'+data.id+'">'+data.content+'</div><p><br></p>';
+            layedit.setContent(editorIndex, content, true);
+          }
+        });
+      }
+    }
+  }
 
   //对外暴露的接口
   exports('article', {});
