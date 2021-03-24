@@ -7,6 +7,7 @@ import (
 	"irisweb/config"
 	"irisweb/library"
 	"irisweb/model"
+	"log"
 	"math"
 	"mime/multipart"
 	"regexp"
@@ -264,7 +265,11 @@ func ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 //单个替换
 func ReplaceAnchor(anchor *model.Anchor) {
 	//交由下方执行
-	ReplaceAnchors([]*model.Anchor{anchor})
+	if anchor == nil {
+		ReplaceAnchors(nil)
+	} else {
+		ReplaceAnchors([]*model.Anchor{anchor})
+	}
 }
 
 //批量替换
@@ -417,7 +422,9 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 
 	if len(existsLinks) < maxAnchorNum {
 		//开始替换关键词
+		log.Println(len(anchors), anchors)
 		for _, anchor := range anchors {
+			log.Println(anchor)
 			if anchor.Title == "" {
 				continue
 			}
