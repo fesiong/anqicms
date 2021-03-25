@@ -152,6 +152,15 @@ func manageRoute(app *iris.Application) {
 				material.Post("/category/detail", manageController.PluginMaterialCategoryDetailForm)
 				material.Post("/category/delete", manageController.PluginMaterialCategoryDelete)
 			}
+
+			sendmail := plugin.Party("/sendmail")
+			{
+				sendmail.Get("/list", manageController.PluginSendmailList)
+				sendmail.Get("/setting", manageController.PluginSendmailSetting)
+				sendmail.Post("/setting", manageController.PluginSendmailSettingForm)
+				sendmail.Post("/test", manageController.PluginSendmailTest)
+			}
+
 		}
 	}
 }

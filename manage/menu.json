@@ -111,6 +111,10 @@
         {
           "name": "fileupload",
           "title": "验证文件上传"
+        },
+        {
+          "name": "sendmail",
+          "title": "留言邮件提醒"
         }
       ]
     },

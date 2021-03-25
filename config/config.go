@@ -29,6 +29,7 @@ type configData struct {
 	PluginAnchor      pluginAnchorConfig    `json:"plugin_anchor"`
 	PluginGuestbook   pluginGuestbookConfig `json:"plugin_guestbook"`
 	PluginUploadFiles []PluginUploadFile    `json:"plugin_upload_file"`
+	PluginSendmail    pluginSendmail        `json:"plugin_sendmail"`
 }
 
 func initPath() {
@@ -36,6 +37,15 @@ func initPath() {
 	//root := filepath.Dir(os.Args[0])
 	//ExecPath, _ = filepath.Abs(root)
 	ExecPath, _ = os.Getwd()
+	//如果是测试目录，则保留到根目录。这定义根目录为：GuoBaServer
+	pathArray := strings.Split(ExecPath, "/")
+	for i, v := range pathArray {
+		if v == "irisweb" {
+			ExecPath = strings.Join(pathArray[:i+1], "/")
+			break
+		}
+	}
+
 	length := utf8.RuneCountInString(ExecPath)
 	lastChar := ExecPath[length-1:]
 	if lastChar != sep {

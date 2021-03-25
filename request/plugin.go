@@ -104,3 +104,12 @@ type PluginMaterialCategory struct {
 	Id    uint   `json:"id"`
 	Title string `json:"title"`
 }
+
+type PluginSendmail struct {
+	Server    string `json:"server"`
+	UseSSL    int    `json:"use_ssl"`
+	Port      int    `json:"port"`
+	Account   string `json:"account"`
+	Password  string `json:"password"`
+	Recipient string `json:"recipient"`
+}

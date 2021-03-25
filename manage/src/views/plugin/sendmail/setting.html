@@ -1,0 +1,79 @@
+<title>留言邮件提醒</title>
+
+<div class="layui-card layadmin-header">
+    <div class="layui-breadcrumb" lay-filter="breadcrumb">
+        <a lay-href="">后台首页</a>
+        <a><cite>功能管理</cite></a>
+        <a lay-href="/plugin/sendmail/"><cite>留言邮件提醒</cite></a>
+        <a><cite>功能设置</cite></a>
+    </div>
+</div>
+
+<div class="layui-fluid">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md12">
+            <div class="layui-card">
+                <div class="layui-card-header">留言邮件提醒设置</div>
+                <div class="layui-card-body" pad15>
+                    <script type="text/html" template lay-url="/plugin/sendmail/setting" lay-done="layui.form.render();">
+                    <div class="layui-form" style="padding: 20px 0 0 0;">
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">SMTP服务器</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="server" value="{{ d.data.server || '' }}" lay-verify="required" autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">如QQ邮箱,为smtp.qq.com</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">使用SSL</label>
+                            <div class="layui-input-inline">
+                                <input type="radio" name="use_ssl" value="0" lay-filter="use-ssl" title="否" {{# if(d.data.use_ssl == 0){ }}checked{{# } }}>
+                                <input type="radio" name="use_ssl" value="1" lay-filter="use-ssl" title="是" {{# if(d.data.use_ssl == 1){ }}checked{{# } }}>
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">默认不使用</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">SMTP端口</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="port" value="{{ d.data.port || '' }}" autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">默认服务器端口为 25，使用 SSL 协议默认端口为 465，详细参数请询问邮箱服务商</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">SMTP帐户</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="account" value="{{ d.data.account || '' }}" lay-verify="required" autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">默认是邮箱账号，如您的QQ邮箱，如123456@qq.com</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">SMTP密码</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="password" value="{{ d.data.password || '' }}" lay-verify="required" autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">在邮箱设置中生成的授权码。</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">收件人邮箱</label>
+                            <div class="layui-input-inline">
+                                <input type="text" name="recipient" value="{{ d.data.recipient || '' }}" autocomplete="off" class="layui-input">
+                            </div>
+                            <div class="layui-form-mid layui-word-aux">默认发送给发件人，如果需要发送给其他人，请在这里填写，多个收件人请使用英文逗号","分开。</div>
+                        </div>
+                        <div class="layui-form-item">
+                            <label class="layui-form-label"></label>
+                            <div class="layui-input-inline">
+                                <input type="button" lay-submit lay-filter="sendmail-setting-submit" value="确认" class="layui-btn">
+                            </div>
+                        </div>
+                    </div>
+                </script>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    layui.use('sendmail', layui.factory('sendmail'));
+</script>

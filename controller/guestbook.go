@@ -6,6 +6,7 @@ import (
 	"irisweb/config"
 	"irisweb/model"
 	"irisweb/provider"
+	"strings"
 )
 
 func GuestbookPage(ctx iris.Context) {
@@ -63,6 +64,16 @@ func GuestbookForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	//发送邮件
+	subject := fmt.Sprintf("%s有来自%s的新留言", config.JsonData.System.SiteName, guestbook.UserName)
+	var contents []string
+	for _, item := range fields {
+		content := fmt.Sprintf("%s：%s\n", item.Name, req[item.FieldName])
+
+		contents = append(contents, content)
+	}
+	_ = provider.SendMail(subject, strings.Join(contents, ""))
 
 	msg := config.JsonData.PluginGuestbook.ReturnMessage
 	if msg == "" {

@@ -41,6 +41,15 @@ type PluginUploadFile struct {
 	CreatedTime int64  `json:"created_time"`
 }
 
+type pluginSendmail struct {
+	Server    string `json:"server"`
+	UseSSL    int    `json:"use_ssl"`
+	Port      int    `json:"port"`
+	Account   string `json:"account"`
+	Password  string `json:"password"`
+	Recipient string `json:"recipient"`
+}
+
 func (g *GuestbookField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

@@ -27,16 +27,16 @@
                         <div class="layui-form-item">
                             <label class="layui-form-label">替换方式</label>
                             <div class="layui-input-inline">
-                                <input type="radio" name="replace_way" value="1" lay-filter="link-type" title="自动替换" {{# if(d.data.replace_way == 1){ }}checked{{# } }}>
-                                <input type="radio" name="replace_way" value="0" lay-filter="link-type" title="手动替换" {{# if(d.data.replace_way == 0){ }}checked{{# } }}>
+                                <input type="radio" name="replace_way" value="1" title="自动替换" {{# if(d.data.replace_way == 1){ }}checked{{# } }}>
+                                <input type="radio" name="replace_way" value="0" title="手动替换" {{# if(d.data.replace_way == 0){ }}checked{{# } }}>
                             </div>
                             <div class="layui-form-mid layui-word-aux">内容替换锚文本的方式</div>
                         </div>
                         <div class="layui-form-item">
                             <label class="layui-form-label">关键词提取方式</label>
                             <div class="layui-input-inline">
-                                <input type="radio" name="keyword_way" value="1" lay-filter="link-type" title="自动提取" {{# if(d.data.keyword_way == 1){ }}checked{{# } }}>
-                                <input type="radio" name="keyword_way" value="0" lay-filter="link-type" title="手动提取" {{# if(d.data.keyword_way == 0){ }}checked{{# } }}>
+                                <input type="radio" name="keyword_way" value="1" title="自动提取" {{# if(d.data.keyword_way == 1){ }}checked{{# } }}>
+                                <input type="radio" name="keyword_way" value="0" title="手动提取" {{# if(d.data.keyword_way == 0){ }}checked{{# } }}>
                             </div>
                             <div class="layui-form-mid layui-word-aux">选择从内容的关键词标签里提取锚文本关键词的方式</div>
                         </div>

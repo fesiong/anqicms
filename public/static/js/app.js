@@ -208,6 +208,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
         if(!postData.user_name || !postData.contact) {
             return layer.msg("请填写联系方式");
         }
+        let index = layer.load();
         $.ajax({
             url: "/guestbook.html",
             method: "post",
@@ -215,6 +216,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
             contentType: "application/json; charset=utf-8",
             dataType: "json",
             success: function (res) {
+                layer.close(index);
                 if(res.code === 0) {
                     layer.alert(res.msg, function(){
                         window.location.reload();
@@ -224,6 +226,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
                 }
             },
             error: function (err) {
+                layer.close(index);
                 layer.msg(err);
             }
         });
