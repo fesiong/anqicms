@@ -46,5 +46,5 @@ func ArticleDetail(ctx iris.Context) {
 	ctx.ViewData("next", next)
 	ctx.ViewData("comments", comments)
 
-	ctx.View("article/detail.html")
+	ctx.View(GetViewPath(ctx, "article/detail.html"))
 }

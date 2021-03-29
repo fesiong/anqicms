@@ -1,15 +1,26 @@
 package config
 
+const (
+	//自适应
+	TemplateTypeAuto = 0
+	//代码适配
+	TemplateTypeAdapt = 1
+	//电脑+手机
+	TemplateTypeSeparate = 2
+)
+
 type systemConfig struct {
 	SiteName      string `json:"site_name"`
 	SiteLogo      string `json:"site_logo"`
 	SiteIcp       string `json:"site_icp"`
 	SiteCopyright string `json:"site_copyright"`
 	BaseUrl       string `json:"base_url"`
+	MobileUrl     string `json:"mobile_url"`
 	AdminUri      string `json:"admin_uri"`
 	SiteClose     int    `json:"site_close"`
 	SiteCloseTips string `json:"site_close_tips"`
 	TemplateName  string `json:"template_name"`
+	TemplateType  int    `json:"template_type"`
 }
 
 type contentConfig struct {

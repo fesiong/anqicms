@@ -1,8 +1,10 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
+	"irisweb/library"
 	"irisweb/provider"
 	"net/url"
 	"strings"
@@ -18,7 +20,7 @@ type WebInfo struct {
 var webInfo WebInfo
 
 func NotFound(ctx iris.Context) {
-	ctx.View("errors/404.html")
+	ctx.View(GetViewPath(ctx, "errors/404.html"))
 }
 
 func InternalServerError(ctx iris.Context) {
@@ -27,14 +29,14 @@ func InternalServerError(ctx iris.Context) {
 		errMessage = "(Unexpected) internal server error"
 	}
 	ctx.ViewData("errMessage", errMessage)
-	ctx.View("errors/500.html")
+	ctx.View(GetViewPath(ctx, "errors/500.html"))
 }
 
 func CheckCloseSite(ctx iris.Context) {
 	if config.JsonData.System.SiteClose == 1 && !strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
 		closeTips := config.JsonData.System.SiteCloseTips
 		ctx.ViewData("closeTips", closeTips)
-		ctx.View("errors/close.html")
+		ctx.View(GetViewPath(ctx, "errors/close.html"))
 		return
 	}
 
@@ -104,4 +106,63 @@ func ReRouteContext(ctx iris.Context) {
 
 	//如果没有合适的路由，则报错
 	NotFound(ctx)
+}
+
+// 区分mobile的模板和pc的模板
+func GetViewPath(ctx iris.Context, tplName string) string {
+	mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+	if mobileTemplate {
+		tplName = fmt.Sprintf("mobile/%s", tplName)
+	}
+
+	return tplName
+}
+
+
+func CheckTemplateType(ctx iris.Context) {
+	//后台不需要处理
+	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
+		ctx.Next()
+		return
+	}
+
+	mobileTemplate := false
+	switch config.JsonData.System.TemplateType {
+	case config.TemplateTypeSeparate:
+		// 电脑+手机，需要根据当前的域名情况来处理模板
+		// 三种情况要处理：手机端访问pc端域名，需要执行301操作
+		// 手机端访问手机端域名，加载手机端模板
+		// pc端访问访问移动端域名，加载手机端模板
+		// 特殊情况，没有填写手机端域名
+		if config.JsonData.System.MobileUrl == "" {
+			break
+		}
+		//解析mobileUrl
+		mobileUrl, err := url.Parse(config.JsonData.System.MobileUrl)
+		if err != nil {
+			break
+		}
+
+		if !strings.EqualFold(ctx.Host(), mobileUrl.Hostname()) {
+			// 电脑端访问，检查是否需要301
+			if library.InMobile(ctx) {
+				ctx.Redirect(config.JsonData.System.MobileUrl, 301)
+				return
+			}
+		} else {
+			// 这个时候，访问的是mobile域名，不管什么端访问mobile域名，都直接使用手机模板
+			mobileTemplate = true
+		}
+	case config.TemplateTypeAdapt:
+		// 代码适配，如果发现是手机端访问，则启用手机模板
+		if library.InMobile(ctx) {
+			mobileTemplate = true
+		}
+	default:
+		// 自适应，不需要处理
+	}
+
+	ctx.Values().Set("mobileTemplate", mobileTemplate)
+
+	ctx.Next()
 }

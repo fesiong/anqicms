@@ -152,5 +152,5 @@ func CommentList(ctx iris.Context) {
 	ctx.ViewData("prevPage", prevPage)
 	ctx.ViewData("nextPage", nextPage)
 	ctx.ViewData("comments", comments)
-	ctx.View("comment/list.html")
+	ctx.View(GetViewPath(ctx, "comment/list.html"))
 }

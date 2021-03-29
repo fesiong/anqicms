@@ -78,5 +78,5 @@ func IndexPage(ctx iris.Context) {
 	ctx.ViewData("articleCategories", articleCategories)
 	ctx.ViewData("productCategories", productCategories)
 
-	ctx.View("index.html")
+	ctx.View(GetViewPath(ctx, "index.html"))
 }

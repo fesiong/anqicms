@@ -10,6 +10,8 @@ type SystemConfig struct {
 	SiteCloseTips string `json:"site_close_tips"`
 	TemplateName  string `json:"template_name"`
 	BaseUrl       string `json:"base_url"`
+	MobileUrl     string `json:"mobile_url"`
+	TemplateType  int    `json:"template_type"`
 }
 
 type ContentConfig struct {

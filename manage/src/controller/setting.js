@@ -37,6 +37,7 @@ layui.define(['form', 'upload', 'table'], function(exports){
   form.on('submit(system-submit)', function(obj){
     delete obj.field.file;
     obj.field.site_close = Number(obj.field.site_close);
+    obj.field.template_type = Number(obj.field.template_type);
     admin.req({
       url: '/setting/system'
       ,data: obj.field

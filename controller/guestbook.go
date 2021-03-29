@@ -18,7 +18,7 @@ func GuestbookPage(ctx iris.Context) {
 	populars, _, _ := provider.GetArticleList(0, "views desc", 1, 10)
 	ctx.ViewData("populars", populars)
 
-	ctx.View("guestbook/index.html")
+	ctx.View(GetViewPath(ctx, "guestbook/index.html"))
 }
 
 func GuestbookForm(ctx iris.Context) {

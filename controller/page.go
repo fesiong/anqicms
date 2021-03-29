@@ -35,5 +35,5 @@ func PagePage(ctx iris.Context) {
     allPages, _ := provider.GetCategories(model.CategoryTypePage)
     ctx.ViewData("allPages", allPages)
 
-    ctx.View("page/detail.html")
+    ctx.View(GetViewPath(ctx, "page/detail.html"))
 }

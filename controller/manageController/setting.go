@@ -56,6 +56,23 @@ func SettingSystemForm(ctx iris.Context) {
 
 	req.SiteLogo = strings.Replace(req.SiteLogo, config.JsonData.System.BaseUrl, "", -1)
 
+	//进行一些限制
+	if req.TemplateType == config.TemplateTypeSeparate {
+		if req.MobileUrl == req.BaseUrl {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "手机端域名不能和电脑端域名一样",
+			})
+			return
+		} else if req.MobileUrl == "" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "你选择了电脑+手机模板类型，请填写手机端域名",
+			})
+			return
+		}
+	}
+
 	config.JsonData.System.SiteName = req.SiteName
 	config.JsonData.System.SiteLogo = req.SiteLogo
 	config.JsonData.System.SiteIcp = req.SiteIcp
@@ -65,6 +82,8 @@ func SettingSystemForm(ctx iris.Context) {
 	config.JsonData.System.SiteCloseTips = req.SiteCloseTips
 	config.JsonData.System.TemplateName = req.TemplateName
 	config.JsonData.System.BaseUrl = req.BaseUrl
+	config.JsonData.System.MobileUrl = req.MobileUrl
+	config.JsonData.System.TemplateType = req.TemplateType
 
 	err := config.WriteConfig()
 	if err != nil {

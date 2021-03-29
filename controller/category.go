@@ -10,12 +10,10 @@ import (
 
 func ArticleIndexPage(ctx iris.Context) {
 	CategoryArticlePage(ctx)
-	//ctx.View("category/article_index.html")
 }
 
 func ProductIndexPage(ctx iris.Context) {
 	CategoryProductPage(ctx)
-	//ctx.View("category/product_index.html")
 }
 
 func CategoryPage(ctx iris.Context) {
@@ -115,7 +113,7 @@ func CategoryArticlePage(ctx iris.Context) {
 	ctx.ViewData("category", category)
 	ctx.ViewData("links", links)
 
-	ctx.View("category/article.html")
+	ctx.View(GetViewPath(ctx, "category/article.html"))
 }
 
 func CategoryProductPage(ctx iris.Context) {
@@ -184,5 +182,5 @@ func CategoryProductPage(ctx iris.Context) {
 	ctx.ViewData("category", category)
 	ctx.ViewData("links", links)
 
-	ctx.View("category/product.html")
+	ctx.View(GetViewPath(ctx, "category/product.html"))
 }

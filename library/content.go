@@ -1,6 +1,7 @@
 package library
 
 import (
+	"github.com/kataras/iris/v12"
 	"math/rand"
 	"regexp"
 	"strings"
@@ -34,4 +35,14 @@ func GenerateRandString(length int) string {
 		bytes[i] = byte(b)
 	}
 	return strings.ToLower(string(bytes))
+}
+
+// 是否在手机端浏览器中访问
+func InMobile(ctx iris.Context) bool {
+	ua := strings.ToLower(ctx.GetHeader("User-Agent"))
+	if strings.Contains(ua, "mobile") {
+		return true
+	}
+
+	return false
 }
