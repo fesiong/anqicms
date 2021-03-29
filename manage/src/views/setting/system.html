@@ -77,12 +77,10 @@
           </div>
           <div class="layui-form-item">
             <label class="layui-form-label">模板类型</label>
-            <div class="layui-input-inline">
-              <select name="template_name">
-                <input type="radio" name="template_type" value="0" title="自适应" {{ d.data.system.template_type == 0 ? 'checked' : '' }}>
+            <div class="layui-input-block">
+              <input type="radio" name="template_type" value="0" title="自适应" {{ d.data.system.template_type == 0 ? 'checked' : '' }}>
                 <input type="radio" name="template_type" value="1" title="代码适配" {{ d.data.system.template_type == 1 ? 'checked' : '' }}>
                 <input type="radio" name="template_type" value="2" title="电脑+手机" {{ d.data.system.template_type == 2 ? 'checked' : '' }}>
-              </select>
             </div>
             <div class="layui-form-mid layui-word-aux">自适应类型模板只有一个域名和一套模板；代码适配类型有一个域名和2套模板，电脑端和手机端访问同一个域名会展示不同模板；电脑+手机类型需要2个域名和2套模板，访问电脑域名展示电脑模板，访问手机域名展示手机模板。</div>
           </div>
