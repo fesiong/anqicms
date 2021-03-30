@@ -5,6 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/library"
+	"irisweb/model"
 	"irisweb/provider"
 	"net/url"
 	"strings"
@@ -118,7 +119,6 @@ func GetViewPath(ctx iris.Context, tplName string) string {
 	return tplName
 }
 
-
 func CheckTemplateType(ctx iris.Context) {
 	//后台不需要处理
 	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
@@ -165,4 +165,78 @@ func CheckTemplateType(ctx iris.Context) {
 	ctx.Values().Set("mobileTemplate", mobileTemplate)
 
 	ctx.Next()
+}
+
+func LogAccess(ctx iris.Context) {
+	//后台不做记录
+	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
+		ctx.Next()
+		return
+	}
+
+	//获取蜘蛛
+	spider := GetSpider(ctx)
+	//获取设备
+	device := GetDevice(ctx)
+
+	statistic := &model.Statistic{
+		Spider:    spider,
+		Host:      ctx.Host(),
+		Url:       ctx.RequestPath(false),
+		Ip:        ctx.RemoteAddr(),
+		Device:    device,
+		HttpCode:  ctx.GetStatusCode(),
+		UserAgent: ctx.GetHeader("User-Agent"),
+	}
+	config.DB.Save(statistic)
+
+	ctx.Next()
+}
+
+func GetSpider(ctx iris.Context) string {
+	ua := strings.ToLower(ctx.GetHeader("User-Agent"))
+	//获取蜘蛛
+	spiders := map[string]string{
+		"googlebot":   "google",
+		"bingbot":     "bing",
+		"baiduspider": "baidu",
+		"360spider":   "360",
+		"yahoo!":      "yahoo",
+		"sogou":       "sogou",
+		"bytespider":  "byte",
+		"spider":      "other",
+		"bot":         "other",
+	}
+
+	for k, v := range spiders {
+		if strings.Contains(ua, k) {
+			return v
+		}
+	}
+
+	return ""
+}
+
+func GetDevice(ctx iris.Context) string {
+	ua := strings.ToLower(ctx.GetHeader("User-Agent"))
+
+	devices := map[string]string{
+		"android":   "android",
+		"iphone":    "iphone",
+		"windows":   "windows",
+		"macintosh": "mac",
+		"linux":     "linux",
+		"mobile":    "mobile",
+		//其他设备
+		"spider": "spider",
+		"bot":    "spider",
+	}
+
+	for k, v := range devices {
+		if strings.Contains(ua, k) {
+			return v
+		}
+	}
+
+	return "proxy"
 }

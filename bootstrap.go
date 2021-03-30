@@ -6,6 +6,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/middleware/recover"
 	"irisweb/config"
+	"irisweb/crond"
 	"irisweb/middleware"
 	"irisweb/model"
 	"irisweb/provider"
@@ -41,6 +42,9 @@ func (bootstrap *Bootstrap) Serve() {
 		//创建管理员，会先判断有没有的。不用担心重复
 		_ = provider.InitAdmin("admin", "123456")
 	}
+
+	//开始计划任务
+	crond.Crond()
 
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()

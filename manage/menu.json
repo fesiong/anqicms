@@ -119,6 +119,28 @@
       ]
     },
     {
+      "name": "statistic",
+      "title": "数据统计",
+      "icon": "layui-icon-chart",
+      "list": [
+        {
+          "name": "system",
+          "title": "蜘蛛统计",
+          "jump": "/statistic/spider"
+        },
+        {
+          "name": "content",
+          "title": "流量统计",
+          "jump": "/statistic/traffic"
+        },
+        {
+          "name": "contact",
+          "title": "详细记录",
+          "jump": "/statistic/detail"
+        }
+      ]
+    },
+    {
       "name": "user",
       "title": "管理员",
       "icon": "layui-icon-user",

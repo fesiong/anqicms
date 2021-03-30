@@ -72,6 +72,13 @@ func manageRoute(app *iris.Application) {
 			product.Post("/delete", manageController.ProductDelete)
 		}
 
+		statistic :=  manage.Party("/statistic", middleware.ManageAuth)
+		{
+			statistic.Get("/spider", manageController.StatisticSpider)
+			statistic.Get("/traffic", manageController.StatisticTraffic)
+			statistic.Get("/detail", manageController.StatisticDetail)
+		}
+
 		plugin := manage.Party("/plugin", middleware.ManageAuth)
 		{
 			plugin.Get("/push", manageController.PluginPush)

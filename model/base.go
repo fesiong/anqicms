@@ -41,6 +41,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&Material{},
 		&MaterialCategory{},
 		&MaterialData{},
+		&Statistic{},
 	)
 
 	return err
