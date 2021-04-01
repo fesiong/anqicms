@@ -117,3 +117,39 @@ func ProductDelete(ctx iris.Context) {
 		"msg":  "产品已删除",
 	})
 }
+
+func ProductExtraFieldsSetting(ctx iris.Context) {
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"fields": config.JsonData.ProductExtraFields,
+		},
+	})
+}
+
+func ProductExtraFieldsSettingForm(ctx iris.Context) {
+	var req request.ProductExtraFieldsSetting
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.SaveProductExtraFields(req.Fields)
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
+	})
+}

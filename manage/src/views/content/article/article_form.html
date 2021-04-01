@@ -40,6 +40,45 @@
       </script>
     </div>
   </div>
+  <div class="layui-collapse" style="margin-bottom: 20px;">
+    <div class="layui-colla-item">
+      <h2 class="layui-colla-title">附加参数</h2>
+      <div class="layui-colla-content layui-show">
+        <script type="text/html" template lay-url="/article/setting" lay-done="layui.form.render();">
+          <div class="layui-row">
+            {{#  layui.each(d.data.fields, function(index, item){ }}
+            <div class="layui-col-sm6">
+              <div class="layui-form-item">
+                <label for="L_email" class="layui-form-label">{{item.name}}</label>
+                <div class="layui-input-block">
+                  {{# if(item.type == "text" || item.type == "number"){  }}
+                      <input type="{{item.type}}" name="extra[{{item.field_name}}]" value="{{d.params.extra[item.field_name].value || ''}}" {{# if(item.required){ }}required lay-verify="required"{{# } }} placeholder="{{item.content}}" autocomplete="off" class="layui-input">
+                      {{# }else if(item.type == "textarea"){ }}
+                      <textarea class="layui-textarea" name="extra[{{item.field_name}}]" {{# if(item.required){ }}required lay-verify="required"{{# } }} placeholder="{{item.content}}" rows="3">{{d.params.extra[item.field_name].value || ''}}</textarea>
+                      {{# }else if(item.type == "radio"){ }}
+                      {{# for(let val of layui.util.splitln(item.content)){ }}
+                      <input type="{{item.type}}" name="extra[{{item.field_name}}]" value="{{val}}" title="{{val}}" {{# if(d.params.extra[item.field_name].value == val){ }}checked{{# } }}>
+                      {{# } }}
+                      {{# }else if(item.type == "checkbox"){ }}
+                      {{# for(let val of layui.util.splitln(item.content)){ }}
+                      <input type="{{item.type}}" name="extra[{{item.field_name}}][]" value="{{val}}" title="{{val}}" {{# if(layui.util.inArray(d.params.extra[item.field_name].value, val)){ }}checked{{# } }}>
+                      {{# } }}
+                      {{# }else if(item.type == "select"){ }}
+                      <select name="extra[{{item.field_name}}]">
+                          {{# for(let val of layui.util.splitln(item.content)){ }}
+                          <option value="{{val}}" {{# if(d.params.extra[item.field_name].value == val){ }}selected{{# } }}>{{val}}</option>
+                          {{# } }}
+                      </select>
+                      {{# } }}
+                </div>
+              </div>
+            </div>
+            {{# }) }}
+          </div>
+        </script>
+      </div>
+    </div>
+  </div>
   <div class="layui-form-item">
     <script type="text/html" template>
       <textarea class="layui-textarea" id="text-editor" name="content" rows="30">{{ d.params.data && d.params.data.content || '' }}</textarea>

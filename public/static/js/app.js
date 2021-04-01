@@ -66,6 +66,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
     });
     //监听提交
     form.on('submit(install)', function(data){
+        let index = layer.load();
         let postData = convertFormDataToObject(data.field);
         postData.port = Number(postData.port)
         $.ajax({
@@ -75,6 +76,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
             contentType: "application/json; charset=utf-8",
             dataType: "json",
             success: function (res) {
+                layer.close(index);
                 if(res.code === 0) {
                     layer.alert(res.msg, function(){
                         window.location.href = "/";
@@ -84,6 +86,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
                 }
             },
             error: function (err) {
+                layer.close(index);
                 layer.msg(err);
             }
         });

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -22,11 +23,11 @@ type pluginAnchorConfig struct {
 }
 
 type pluginGuestbookConfig struct {
-	ReturnMessage string            `json:"return_message"`
-	Fields        []*GuestbookField `json:"fields"`
+	ReturnMessage string         `json:"return_message"`
+	Fields        []*CustomField `json:"fields"`
 }
 
-type GuestbookField struct {
+type CustomField struct {
 	Name      string `json:"name"`
 	FieldName string `json:"field_name"`
 	Type      string `json:"type"`
@@ -50,7 +51,7 @@ type pluginSendmail struct {
 	Recipient string `json:"recipient"`
 }
 
-func (g *GuestbookField) SplitContent() []string {
+func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")
 	for _, v := range contents {
@@ -63,9 +64,29 @@ func (g *GuestbookField) SplitContent() []string {
 	return items
 }
 
-func GetGuestbookFields() []*GuestbookField {
+func (g *CustomField) GetFieldColumn() string {
+	column := fmt.Sprintf("`%s`", g.FieldName)
+
+	if g.Type == CustomFieldTypeNumber {
+		column += " int(10)"
+	} else if g.Type == CustomFieldTypeTextarea {
+		column += " text"
+	} else {
+		column += " varchar(250)"
+	}
+
+	if g.Required {
+		column += " NOT NULL"
+	} else {
+		column += " DEFAULT NULL"
+	}
+
+	return column
+}
+
+func GetGuestbookFields() []*CustomField {
 	//这里有默认的设置
-	defaultFields := []*GuestbookField{
+	defaultFields := []*CustomField{
 		{
 			Name:      "用户名",
 			FieldName: "user_name",

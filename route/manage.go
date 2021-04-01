@@ -62,6 +62,9 @@ func manageRoute(app *iris.Application) {
 			article.Get("/detail", manageController.ArticleDetail)
 			article.Post("/detail", manageController.ArticleDetailForm)
 			article.Post("/delete", manageController.ArticleDelete)
+
+			article.Get("/setting", manageController.ArticleExtraFieldsSetting)
+			article.Post("/setting", manageController.ArticleExtraFieldsSettingForm)
 		}
 
 		product := manage.Party("/product", middleware.ManageAuth)
@@ -70,9 +73,12 @@ func manageRoute(app *iris.Application) {
 			product.Get("/detail", manageController.ProductDetail)
 			product.Post("/detail", manageController.ProductDetailForm)
 			product.Post("/delete", manageController.ProductDelete)
+
+			product.Get("/setting", manageController.ProductExtraFieldsSetting)
+			product.Post("/setting", manageController.ProductExtraFieldsSettingForm)
 		}
 
-		statistic :=  manage.Party("/statistic", middleware.ManageAuth)
+		statistic := manage.Party("/statistic", middleware.ManageAuth)
 		{
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
@@ -167,7 +173,6 @@ func manageRoute(app *iris.Application) {
 				sendmail.Post("/setting", manageController.PluginSendmailSettingForm)
 				sendmail.Post("/test", manageController.PluginSendmailTest)
 			}
-
 		}
 	}
 }

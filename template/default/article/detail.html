@@ -10,6 +10,26 @@
                         <span>{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
                         <span>{{article.Views}} 阅读</span>
                     </div>
+                    {% if article.Extra %}
+                    <div class="extra">
+                        <table class="layui-table">
+                            <colgroup>
+                                <col width="100">
+                                <col>
+                            </colgroup>
+                            <tbody>
+                            {% for item in article.GetExtras() %}
+                            <tr>
+                                <td>{{item.Name}}</td>
+                                <td>
+                                    {{item.Value}}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
                     <div class="article-body">
                         {{article.ArticleData.Content|safe}}
                     </div>

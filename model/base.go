@@ -2,6 +2,7 @@ package model
 
 import (
 	"gorm.io/gorm"
+	"irisweb/config"
 )
 
 const (
@@ -14,11 +15,16 @@ const (
  */
 type Model struct {
 	//默认字段
-	Id          uint `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	Id          uint  `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime int64 `json:"created_time" gorm:"column:created_time;type:int(11) default 0;autoCreateTime;index:idx_created_time"`
 	UpdatedTime int64 `json:"updated_time" gorm:"column:updated_time;type:int(11) default 0;autoUpdateTime;index:idx_updated_time"`
 	//删除字段不包含在json中
 	DeletedAt gorm.DeletedAt `json:"-" gorm:"index"`
+}
+
+type CustomField struct {
+	Name      string      `json:"name"`
+	Value     interface{} `json:"value"`
 }
 
 func AutoMigrateDB(db *gorm.DB) error {
@@ -44,5 +50,40 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&Statistic{},
 	)
 
-	return err
+	if err != nil {
+		return err
+	}
+
+	//如果文章、产品有extraFields
+	if len(config.JsonData.ArticleExtraFields) > 0 {
+		stmt := &gorm.Statement{DB: config.DB}
+		stmt.Parse(&Article{})
+		for _, v := range config.JsonData.ArticleExtraFields {
+			column := v.GetFieldColumn()
+			if !db.Migrator().HasColumn(&Article{}, v.FieldName) {
+				//创建语句
+				config.DB.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
+			} else {
+				//更新语句
+				config.DB.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
+			}
+		}
+	}
+	//如果文章、产品有extraFields
+	if len(config.JsonData.ProductExtraFields) > 0 {
+		stmt := &gorm.Statement{DB: config.DB}
+		stmt.Parse(&Product{})
+		for _, v := range config.JsonData.ProductExtraFields {
+			column := v.GetFieldColumn()
+			if !config.DB.Migrator().HasColumn(&Product{}, v.FieldName) {
+				//创建语句
+				config.DB.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
+			} else {
+				//更新语句
+				config.DB.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
+			}
+		}
+	}
+
+	return nil
 }

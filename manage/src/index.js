@@ -11,12 +11,13 @@ layui.extend({
   setter: 'config' //配置文件
   ,admin: 'lib/admin' //核心模块
   ,view: 'lib/view' //核心模块
-}).define(['setter', 'admin'], function(exports){
+}).define(['setter', 'admin', 'util'], function(exports){
   var setter = layui.setter
   ,element = layui.element
   ,admin = layui.admin
   ,tabsPage = admin.tabsPage
   ,view = layui.view
+  ,util = layui.util
   
   //根据路由渲染页面
   ,renderPage = function(){
@@ -190,6 +191,29 @@ layui.extend({
     }
     ,'layuiAdmin'
   );
+
+  //util
+  util.splitln = function(e) {
+    return e.split("\n")
+  }
+
+  util.inArray = function(arr, e) {
+    if(!arr || !e) {
+      return false;
+    }
+    let exists = false;
+    if(typeof arr == 'string') {
+      arr = arr.split(',')
+    }
+    for (let item of arr) {
+      if (item == e) {
+        exists = true;
+        break;
+      }
+    }
+
+    return exists;
+  }
   
   //监听Hash改变
   window.onhashchange = function(){

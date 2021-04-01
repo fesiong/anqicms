@@ -168,6 +168,10 @@ func CheckTemplateType(ctx iris.Context) {
 }
 
 func LogAccess(ctx iris.Context) {
+	if config.DB == nil {
+		ctx.Next()
+		return
+	}
 	//后台不做记录
 	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
 		ctx.Next()

@@ -30,6 +30,9 @@ type configData struct {
 	PluginGuestbook   pluginGuestbookConfig `json:"plugin_guestbook"`
 	PluginUploadFiles []PluginUploadFile    `json:"plugin_upload_file"`
 	PluginSendmail    pluginSendmail        `json:"plugin_sendmail"`
+
+	ArticleExtraFields []*CustomField `json:"article_extra_fields"`
+	ProductExtraFields []*CustomField `json:"product_extra_fields"`
 }
 
 func initPath() {

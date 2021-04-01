@@ -10,18 +10,19 @@ import (
 
 type Article struct {
 	Model
-	Title       string         `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
-	UrlToken    string         `json:"url_token" gorm:"column:url_token;type:varchar(250) not null;default:'';index"`
-	Keywords    string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
-	Description string         `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
-	CategoryId  uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
-	Views       uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
-	Images      pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
-	Status      uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
-	Category    *Category      `json:"category" gorm:"-"`
-	ArticleData *ArticleData   `json:"data" gorm:"-"`
-	Logo        string         `json:"logo" gorm:"-"`
-	Thumb       string         `json:"thumb" gorm:"-"`
+	Title       string                  `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	UrlToken    string                  `json:"url_token" gorm:"column:url_token;type:varchar(250) not null;default:'';index"`
+	Keywords    string                  `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
+	Description string                  `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	CategoryId  uint                    `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
+	Views       uint                    `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
+	Images      pq.StringArray          `json:"images" gorm:"column:images;type:text default null"`
+	Status      uint                    `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Category    *Category               `json:"category" gorm:"-"`
+	ArticleData *ArticleData            `json:"data" gorm:"-"`
+	Logo        string                  `json:"logo" gorm:"-"`
+	Thumb       string                  `json:"thumb" gorm:"-"`
+	Extra       map[string]*CustomField `json:"extra" gorm:"-"`
 }
 
 type ArticleData struct {
@@ -73,4 +74,15 @@ func (article *Article) GetThumb() string {
 	}
 
 	return article.Thumb
+}
+
+func (article *Article) GetExtras() []*CustomField {
+	var extraFields []*CustomField
+	if len(config.JsonData.ArticleExtraFields) > 0 {
+		for _, v := range config.JsonData.ArticleExtraFields {
+			extraFields = append(extraFields, article.Extra[v.FieldName])
+		}
+	}
+
+	return extraFields
 }

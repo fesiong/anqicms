@@ -55,20 +55,39 @@
             if (e.method == 'post' || e.type == 'post') {
                 e.contentType = 'application/json; charset=utf-8';
 
-                //对data值的[]改成多维数组
+                //对data值的[]改成多维数组,对象也要
                 let newData = {}
                 layui.each(e.data, function(i, item){
-                    if(/^.*\[\d*\]$/.test(i)){
-                        let ii = i.replace(/\[\d*\]/, '', i);
-                        if(typeof newData[ii] === 'undefined') {
-                            newData[ii] = [];
+                    if(/^(.*)\[(\w*)\]$/gi.test(i)){
+                        n = i.split('[')
+                        for (let j in n) {
+                            n[j] = n[j].replace(/\]/, '', n[j]);
                         }
-                        newData[ii].push(item);
-                    } else if(n = i.match(/^(.*)\[(\s*)\]$/gi), n){
-                        if(typeof newData[n[0]] === 'undefined') {
-                            newData[n[0]] = {};
+                        if(n.length == 2) {
+                            if(/^\d*$/.test(n[1])) {
+                                if(typeof newData[n[0]] === 'undefined') {
+                                    newData[n[0]] = [];
+                                }
+                                newData[n[0]].push(item);
+                            } else {
+                                if(typeof newData[n[0]] === 'undefined') {
+                                    newData[n[0]] = {};
+                                }
+                                newData[n[0]][n[1]] = item;
+                            }
+                        } else if(n.length == 3) {
+                            if(/^\d*$/.test(n[2])) {
+                                if(typeof newData[n[0]][n[1]] === 'undefined') {
+                                    newData[n[0]][n[1]] = [];
+                                }
+                                newData[n[0]][n[1]].push(item);
+                            } else {
+                                if(typeof newData[n[0]][n[1]] === 'undefined') {
+                                    newData[n[0]][n[1]] = {};
+                                }
+                                newData[n[0]][n[1]][n[2]] = item;
+                            }
                         }
-                        newData[n[0]][n[1]] = item;
                     } else {
                         newData[i] = item
                     }

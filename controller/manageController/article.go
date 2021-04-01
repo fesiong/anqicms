@@ -117,3 +117,39 @@ func ArticleDelete(ctx iris.Context) {
 		"msg":  "文章已删除",
 	})
 }
+
+func ArticleExtraFieldsSetting(ctx iris.Context) {
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"fields": config.JsonData.ArticleExtraFields,
+		},
+	})
+}
+
+func ArticleExtraFieldsSettingForm(ctx iris.Context) {
+	var req request.ArticleExtraFieldsSetting
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.SaveArticleExtraFields(req.Fields)
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
+	})
+}

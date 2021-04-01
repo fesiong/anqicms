@@ -68,8 +68,8 @@ type PluginAnchorSetting struct {
 }
 
 type PluginGuestbookSetting struct {
-	ReturnMessage string                   `json:"return_message"`
-	Fields        []*config.GuestbookField `json:"fields"`
+	ReturnMessage string                `json:"return_message"`
+	Fields        []*config.CustomField `json:"fields"`
 }
 
 type PluginGuestbookDelete struct {

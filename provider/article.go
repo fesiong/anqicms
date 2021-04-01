@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"gorm.io/gorm"
 	"irisweb/config"
 	"irisweb/library"
 	"irisweb/model"
@@ -64,6 +66,42 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 	article.Description = req.Description
 	article.CategoryId = req.CategoryId
 	article.Images = req.Images
+
+	//extra
+	extraFields := map[string]interface{}{}
+	if len(config.JsonData.ArticleExtraFields) > 0 {
+		for _, v := range config.JsonData.ArticleExtraFields {
+			//先检查是否有必填而没有填写的
+			if v.Required && req.Extra[v.FieldName] == nil {
+				return nil, fmt.Errorf("%s必填", v.Name)
+			}
+			if req.Extra[v.FieldName] != nil {
+				if v.Type == config.CustomFieldTypeCheckbox {
+					//只有这个类型的数据是数组,数组转成,分隔字符串
+					if val, ok := req.Extra[v.FieldName].([]interface{}); ok {
+						var val2 []string
+						for _, v2 := range val {
+							val2 = append(val2, v2.(string))
+						}
+						extraFields[v.FieldName] = strings.Join(val2, ",")
+					}
+
+				} else if v.Type == config.CustomFieldTypeNumber {
+					//只有这个类型的数据是数字，转成数字
+					extraFields[v.FieldName], _ = strconv.Atoi(req.Extra[v.FieldName].(string))
+				} else {
+					extraFields[v.FieldName] = req.Extra[v.FieldName]
+				}
+			} else {
+				if v.Type == config.CustomFieldTypeNumber {
+					//只有这个类型的数据是数字，转成数字
+					extraFields[v.FieldName] = 0
+				} else {
+					extraFields[v.FieldName] = ""
+				}
+			}
+		}
+	}
 
 	//goquery
 	htmlR := strings.NewReader(req.Content)
@@ -154,6 +192,12 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 
 	err = article.Save(config.DB)
 
+	//extra
+	if len(extraFields) > 0 {
+		//入库
+		config.DB.Model(article).Updates(extraFields)
+	}
+
 	link := GetUrl("article", article, 0)
 
 	//添加锚文本
@@ -192,6 +236,7 @@ func GetArticleById(id uint) (*model.Article, error) {
 	if err == nil {
 		article.Category = &category
 	}
+	article.Extra = GetArticleExtra(article.Id)
 
 	return &article, nil
 }
@@ -233,6 +278,7 @@ func GetArticleByUrlToken(urlToken string) (*model.Article, error) {
 	if err == nil {
 		article.Category = &category
 	}
+	article.Extra = GetArticleExtra(article.Id)
 
 	return &article, nil
 }
@@ -242,6 +288,16 @@ func GetArticleList(categoryId uint, order string, currentPage int, pageSize int
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
+	extraFields := map[uint]map[string]*model.CustomField{}
+	var results []map[string]interface{}
+	var fields []string
+	fields = append(fields, "id")
+	if len(config.JsonData.ArticleExtraFields) > 0 {
+		for _, v := range config.JsonData.ArticleExtraFields {
+			fields = append(fields, v.FieldName)
+		}
+	}
+
 	builder := config.DB.Model(&model.Article{}).Where("`status` = 1")
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
@@ -249,8 +305,29 @@ func GetArticleList(categoryId uint, order string, currentPage int, pageSize int
 	if order != "" {
 		builder = builder.Order(order)
 	}
-	if err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&articles).Error; err != nil {
+	builder = builder.Count(&total).Limit(pageSize).Offset(offset)
+	if err := builder.Find(&articles).Error; err != nil {
 		return nil, 0, err
+	}
+	if len(fields) > 0 {
+		builder.Select(strings.Join(fields, ",")).Scan(&results)
+		for _, field := range results {
+			item := map[string]*model.CustomField{}
+			for _, v := range config.JsonData.ArticleExtraFields {
+				item[v.FieldName] = &model.CustomField{
+					Name:      v.Name,
+					Value:     field[v.FieldName],
+				}
+			}
+			if id, ok := field["id"].(uint32); ok {
+				extraFields[uint(id)] = item
+			}
+		}
+		for i := range articles {
+			if extraFields[articles[i].Id] != nil {
+				articles[i].Extra = extraFields[articles[i].Id]
+			}
+		}
 	}
 
 	return articles, total, nil
@@ -294,4 +371,71 @@ func GetNextArticleById(categoryId uint, id uint) (*model.Article, error) {
 	}
 
 	return &article, nil
+}
+
+func SaveArticleExtraFields(reqFields []*config.CustomField) error {
+	var diffFields []*config.CustomField
+	for _, v := range config.JsonData.ArticleExtraFields {
+		exists := false
+		for _, f := range reqFields {
+			if v == f {
+				exists = true
+			}
+		}
+		if !exists {
+			diffFields = append(diffFields, v)
+		}
+	}
+
+	//对于需要去除的fields，进行删除操作
+	if len(diffFields) > 0 {
+		for _, v := range diffFields {
+			if config.DB.Migrator().HasColumn(&model.Article{}, v.FieldName) {
+				config.DB.Migrator().DropColumn(&model.Article{}, v.FieldName)
+			}
+		}
+	}
+	//然后再追加
+	stmt := &gorm.Statement{DB: config.DB}
+	stmt.Parse(&model.Article{})
+	for _, v := range reqFields {
+		column := v.GetFieldColumn()
+		if !config.DB.Migrator().HasColumn(&model.Article{}, v.FieldName) {
+			//创建语句
+			config.DB.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
+		} else {
+			//更新语句
+			config.DB.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
+		}
+	}
+
+	//记录到内容
+	config.JsonData.ArticleExtraFields = reqFields
+
+	err := config.WriteConfig()
+
+	return err
+}
+
+func GetArticleExtra(id uint) map[string]*model.CustomField {
+	//读取extra
+	result := map[string]interface{}{}
+	extraFields := map[string]*model.CustomField{}
+	if len(config.JsonData.ArticleExtraFields) > 0 {
+		var fields []string
+		for _, v := range config.JsonData.ArticleExtraFields {
+			fields = append(fields, v.FieldName)
+		}
+		//从数据库中取出来
+		config.DB.Model(&model.Article{}).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
+		//extra的CheckBox的值
+		for _, v := range config.JsonData.ArticleExtraFields {
+			extraFields[v.FieldName] = &model.CustomField{
+				Name:      v.Name,
+				Value:     result[v.FieldName],
+			}
+		}
+	}
+
+	return extraFields
 }

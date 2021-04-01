@@ -148,7 +148,7 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 		return
 	}
 
-	var fields []*config.GuestbookField
+	var fields []*config.CustomField
 	for _, v := range req.Fields {
 		if !v.IsSystem {
 			fields = append(fields, v)

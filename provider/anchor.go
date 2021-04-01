@@ -7,7 +7,6 @@ import (
 	"irisweb/config"
 	"irisweb/library"
 	"irisweb/model"
-	"log"
 	"math"
 	"mime/multipart"
 	"regexp"
@@ -422,9 +421,7 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 
 	if len(existsLinks) < maxAnchorNum {
 		//开始替换关键词
-		log.Println(len(anchors), anchors)
 		for _, anchor := range anchors {
-			log.Println(anchor)
 			if anchor.Title == "" {
 				continue
 			}
