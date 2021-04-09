@@ -173,7 +173,7 @@ layui.define(['form', 'table', 'layedit'], function (exports) {
         ,area: ['1000px', '600px']
         ,id: 'LAY-popup-article-add'
         ,success: function(layero, index){
-          view(this.id).render('content/article/article_form').done(function(){
+          view(this.id).render('content/article/article_form', {extra: {}}).done(function(){
             //
             form.render();
             element.render();

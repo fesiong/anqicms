@@ -199,7 +199,7 @@ layui.define(['form', 'table', 'layedit','upload'], function(exports){
         ,area: ['800px', '600px']
         ,id: 'LAY-popup-product-add'
         ,success: function(layero, index){
-          view(this.id).render('content/product/product_form').done(function(){
+          view(this.id).render('content/product/product_form', {extra: {}}).done(function(){
             //
             //图片上传
             var uploadInst = upload.render({

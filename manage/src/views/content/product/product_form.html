@@ -86,21 +86,21 @@
                 <label for="L_email" class="layui-form-label">{{item.name}}</label>
                 <div class="layui-input-block">
                   {{# if(item.type == "text" || item.type == "number"){  }}
-                      <input type="{{item.type}}" name="extra[{{item.field_name}}]" value="{{d.params.extra[item.field_name].value || ''}}" {{# if(item.required){ }}required lay-verify="required"{{# } }} placeholder="{{item.content}}" autocomplete="off" class="layui-input">
+                      <input type="{{item.type}}" name="extra[{{item.field_name}}]" value="{{d.params.extra[item.field_name]?.value || ''}}" {{# if(item.required){ }}required lay-verify="required"{{# } }} placeholder="{{item.content}}" autocomplete="off" class="layui-input">
                       {{# }else if(item.type == "textarea"){ }}
-                      <textarea class="layui-textarea" name="extra[{{item.field_name}}]" {{# if(item.required){ }}required lay-verify="required"{{# } }} placeholder="{{item.content}}" rows="3">{{d.params.extra[item.field_name].value || ''}}</textarea>
+                      <textarea class="layui-textarea" name="extra[{{item.field_name}}]" {{# if(item.required){ }}required lay-verify="required"{{# } }} placeholder="{{item.content}}" rows="3">{{d.params.extra[item.field_name]?.value || ''}}</textarea>
                       {{# }else if(item.type == "radio"){ }}
                       {{# for(let val of layui.util.splitln(item.content)){ }}
-                      <input type="{{item.type}}" name="extra[{{item.field_name}}]" value="{{val}}" title="{{val}}" {{# if(d.params.extra[item.field_name].value == val){ }}checked{{# } }}>
+                      <input type="{{item.type}}" name="extra[{{item.field_name}}]" value="{{val}}" title="{{val}}" {{# if(d.params.extra[item.field_name]?.value == val){ }}checked{{# } }}>
                       {{# } }}
                       {{# }else if(item.type == "checkbox"){ }}
                       {{# for(let val of layui.util.splitln(item.content)){ }}
-                      <input type="{{item.type}}" name="extra[{{item.field_name}}][]" value="{{val}}" title="{{val}}" {{# if(layui.util.inArray(d.params.extra[item.field_name].value, val)){ }}checked{{# } }}>
+                      <input type="{{item.type}}" name="extra[{{item.field_name}}][]" value="{{val}}" title="{{val}}" {{# if(layui.util.inArray(d.params.extra[item.field_name]?.value, val)){ }}checked{{# } }}>
                       {{# } }}
                       {{# }else if(item.type == "select"){ }}
                       <select name="extra[{{item.field_name}}]">
                           {{# for(let val of layui.util.splitln(item.content)){ }}
-                          <option value="{{val}}" {{# if(d.params.extra[item.field_name].value == val){ }}selected{{# } }}>{{val}}</option>
+                          <option value="{{val}}" {{# if(d.params.extra[item.field_name]?.value == val){ }}selected{{# } }}>{{val}}</option>
                           {{# } }}
                       </select>
                       {{# } }}
