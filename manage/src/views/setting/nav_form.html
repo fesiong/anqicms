@@ -54,10 +54,10 @@
   <div class="layui-form-item nav-type-item" data-id="0">
     <label class="layui-form-label">内置导航</label>
     <div class="layui-input-inline">
-      <select name="page_id">
-        <option value="0" selected>首页</option>
-        <option value="1" selected>文章首页</option>
-        <option value="2" selected>产品首页</option>
+      <select name="inner_page_id">
+        <option value="0" {{# if(d.params.page_id == 0){ }}selected{{# } }}>首页</option>
+        <option value="1" {{# if(d.params.page_id == 1){ }}selected{{# } }}>文章首页</option>
+        <option value="2" {{# if(d.params.page_id == 2){ }}selected{{# } }}>产品首页</option>
       </select>
     </div>
   </div>

@@ -3,7 +3,7 @@
   <div class="layui-row layui-col-space15">
     <div class="layui-col-md8">
       <div class="layui-card">
-        <div class="layui-card-header">评论：<a href="/{{itemType}}/{{itemId}}">{{itemData.Title}}</a></div>
+        <div class="layui-card-header">评论：<a href="{{getUrl(itemType, itemData, 0)}}">{{itemData.Title}}</a></div>
         <div class="layui-card-body">
           内容简介：{{itemData.Description}}...
         </div>

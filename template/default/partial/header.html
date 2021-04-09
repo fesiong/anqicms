@@ -15,7 +15,7 @@
 <body>
 <div class="layui-header">
     <div class="layui-container">
-        <a href="/">
+        <a href="{{GetUrl("index", nil, 0)}}">
             <div class="layui-logo">{% if settingSystem.SiteLogo %}<img class="logo" src="{{settingSystem.SiteLogo}}" alt="{{settingSystem.SiteName}}"> {% endif %}{{settingSystem.SiteName}}</div>
         </a>
         <ul class="layui-nav layui-layout-left nav-list">

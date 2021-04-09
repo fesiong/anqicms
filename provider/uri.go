@@ -17,7 +17,7 @@ func GetUrl(match string, data interface{}, page int) string {
     case "article":
         uri = rewritePattern.Article
         item, ok := data.(*model.Article)
-        if ok {
+        if ok && item != nil {
             //拿到值
             catName := ""
             if strings.Contains(rewritePattern.Article, "catname") {
@@ -41,7 +41,7 @@ func GetUrl(match string, data interface{}, page int) string {
     case "product":
         uri = rewritePattern.Product
         item, ok := data.(*model.Product)
-        if ok {
+        if ok && item != nil {
             catName := ""
             if strings.Contains(rewritePattern.Article, "catname") {
                 category, err := GetCategoryById(item.CategoryId)
@@ -68,7 +68,7 @@ func GetUrl(match string, data interface{}, page int) string {
     case "category":
         uri = rewritePattern.Category
         item, ok := data.(*model.Category)
-        if ok {
+        if ok && item != nil {
             //自动修正
             if item.Type == model.CategoryTypePage {
                 uri = GetUrl("page", item, 0)
@@ -89,7 +89,7 @@ func GetUrl(match string, data interface{}, page int) string {
     case "page":
         uri = rewritePattern.Page
         item, ok := data.(*model.Category)
-        if ok {
+        if ok && item != nil {
             for _, v := range rewritePattern.PageTags {
                 if v == "id" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))

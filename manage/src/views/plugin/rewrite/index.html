@@ -24,8 +24,8 @@
                   <p>产品详情：/p/{id}.html</p>
                   <p>分类列表：/c/{id}(/{page})</p>
                   <p>单页详情：/{id}.html</p>
-                  <p>文章首页：/a</p>
-                  <p>文章首页：/p</p>
+                  <p>文章首页：/a(/{page})</p>
+                  <p>文章首页：/p(/{page})</p>
                 </div>
               </div>
               <div class="layui-col-md3">
@@ -35,8 +35,8 @@
                   <p>产品详情：/p/{filename}.html</p>
                   <p>分类列表：/c/{filename}(/{page})</p>
                   <p>单页详情：/{filename}.html</p>
-                  <p>文章首页：/a</p>
-                  <p>文章首页：/p</p>
+                  <p>文章首页：/a(/{page})</p>
+                  <p>文章首页：/p(/{page})</p>
                 </div>
               </div>
               <div class="layui-col-md3">
@@ -46,8 +46,8 @@
                   <p>产品详情：/p_{id}.html</p>
                   <p>分类列表：/c_{id}(_{page})</p>
                   <p>单页详情：/{id}.html</p>
-                  <p>文章首页：/a</p>
-                  <p>文章首页：/p</p>
+                  <p>文章首页：/a(_{page})</p>
+                  <p>文章首页：/p(_{page})</p>
                 </div>
               </div>
               <div class="layui-col-md3">
@@ -68,10 +68,10 @@
           <div class="layui-form-item">
             <label class="layui-form-label">选择伪静态方案</label>
             <div class="layui-input-medium">
-              <div><input type="radio" name="mode" value="0" lay-filter="rewrite-radio" title="方案1：数字模式（简单，推荐）"></div>
-              <div><input type="radio" name="mode" value="1" lay-filter="rewrite-radio" title="方案2：命名模式（英文或拼音，高端）"></div>
-              <div><input type="radio" name="mode" value="2" lay-filter="rewrite-radio" title="方案3：极简数字模式（极简，根目录）"></div>
-              <div><input type="radio" name="mode" value="3" lay-filter="rewrite-radio" title="方案4：自定义模式（高级模式，请谨慎使用，若设置不当，会导致前端页面打不开）"></div>
+              <div><input type="radio" name="mode" value="0" {{# if(d.data.mode == 0){ }}checked{{# } }} lay-filter="rewrite-radio" title="方案1：数字模式（简单，推荐）"></div>
+              <div><input type="radio" name="mode" value="1" {{# if(d.data.mode == 1){ }}checked{{# } }} lay-filter="rewrite-radio" title="方案2：命名模式（英文或拼音，高端）"></div>
+              <div><input type="radio" name="mode" value="2" {{# if(d.data.mode == 2){ }}checked{{# } }} lay-filter="rewrite-radio" title="方案3：极简数字模式（极简，根目录）"></div>
+              <div><input type="radio" name="mode" value="3" {{# if(d.data.mode == 3){ }}checked{{# } }} lay-filter="rewrite-radio" title="方案4：自定义模式（高级模式，请谨慎使用，若设置不当，会导致前端页面打不开）"></div>
             </div>
           </div>
           <div id="rewrite-patten-field" class="layui-form-item {{# if(d.data.mode != 3){ }}layui-hide{{# } }}">
@@ -99,8 +99,8 @@ article===/p_{filename}.html
 product===/a_{filename}.html
 category===/c_{filename}(_{page})
 page===/{filename}.html
-articleIndex===/articles
-productIndex===/products
+articleIndex===/articles(_{page})
+productIndex===/products(_{page})
 </pre>
 </blockquote>
               <br>变量由花括号包裹{},如{id}。可用的变量有:数据ID <font color="#009688">{id}</font>、数据自定义链接名 <font color="#009688">
@@ -113,8 +113,8 @@ article===/p_{filename}.html
 product===/a_{filename}.html
 category===/c_{filename}(_{page})
 page===/{filename}.html
-articleIndex===/articles
-productIndex===/products
+articleIndex===/articles(_{page})
+productIndex===/products(_{page})
 </pre>
                 </blockquote>
 <div>可直接使用的方案2:</div>
@@ -124,8 +124,8 @@ article===/{catname}/a_{filename}.html
 product===/{catname}/p_{filename}.html
 category===/{filename}(_{page})
 page===/{filename}.html
-articleIndex===/articles
-productIndex===/products
+articleIndex===/articles(_{page})
+productIndex===/products(_{page})
 </pre>
 </blockquote>
 <div>可直接使用的方案3:</div>
@@ -135,8 +135,8 @@ article===/article/{filename}.html
 product===/product/{filename}.html
 category===/category/{filename}(_{page})
 page===/{filename}.html
-articleIndex===/articles
-productIndex===/products
+articleIndex===/articles(_{page})
+productIndex===/products(_{page})
 </pre>
 </blockquote>
             </div>

@@ -92,44 +92,14 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
         });
         return false;
     });
-    //发布文章
-    form.on('submit(article-publish)', function(data){
-        let postData = convertFormDataToObject(data.field);
-        postData.id = Number(postData.id)
-        if(!postData.title) {
-            return layer.msg("请填写文章标题");
-        }
-        //同步编辑器内容
-        layedit.sync(editorIndex);
-		postData.content = $('#text-editor').val();
-        $.ajax({
-            url: "/article/publish",
-            method: "post",
-            data: JSON.stringify(postData),
-            contentType: "application/json; charset=utf-8",
-            dataType: "json",
-            success: function (res) {
-                if(res.code === 0) {
-                    layer.alert(res.msg, function(){
-                        window.location.href = "/article/" + res.data.id;
-                    });
-                } else {
-                    layer.msg(res.msg);
-                }
-            },
-            error: function (err) {
-                layer.msg(err);
-            }
-        });
-        return false;
-    });
+
     //评论
     $('.comment-control .item').click(function(e) {
         let that = $(this);
         let parentId = $(this).parent().data('id');
         let parentUser = $(this).parent().data('user');
         let eventType = $(this).data('id');
-        if (eventType == 'praise') {
+        if (eventType === 'praise') {
             //赞
             $.ajax({
                 url: '/comment/praise',
@@ -159,7 +129,7 @@ layui.use(['element', 'layedit', 'form', 'layer', 'carousel'], function(){
                     layer.msg(err);
                 }
             });
-        } else if (eventType == 'reply') {
+        } else if (eventType === 'reply') {
             //回复
             $('#parent-id-field').val(parentId);
             $('#comment-content-field').prop('placeholder', '回复：' + parentUser).focus();

@@ -49,6 +49,11 @@ func CategoryPage(ctx iris.Context) {
 
 func CategoryArticlePage(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("page", 1)
+	paramPage := ctx.Params().GetIntDefault("page", 0)
+	if paramPage > 0 {
+		currentPage = paramPage
+	}
+
 	//一页显示10条
 	pageSize := 10
 	categoryId := uint(0)
@@ -59,6 +64,7 @@ func CategoryArticlePage(ctx iris.Context) {
 		categoryId = 0
 	} else {
 		category, _ = categoryVal.(*model.Category)
+		categoryId = category.Id
 	}
 
 
@@ -82,12 +88,16 @@ func CategoryArticlePage(ctx iris.Context) {
 
 	prevPage := ""
 	nextPage := ""
+	urlMatch := "category"
+	if category == nil {
+		urlMatch = "articleIndex"
+	}
 	if currentPage > 1 {
-		prevPage = provider.GetUrl("category", category, currentPage-1)
+		prevPage = provider.GetUrl(urlMatch, category, currentPage-1)
 	}
 
 	if currentPage < int(totalPage) {
-		nextPage = provider.GetUrl("category", category, currentPage+1)
+		nextPage = provider.GetUrl(urlMatch, category, currentPage+1)
 	}
 
 	if category != nil {
@@ -118,6 +128,10 @@ func CategoryArticlePage(ctx iris.Context) {
 
 func CategoryProductPage(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("page", 1)
+	paramPage := ctx.Params().GetIntDefault("page", 0)
+	if paramPage > 0 {
+		currentPage = paramPage
+	}
 	//一页显示10条
 	pageSize := 10
 	categoryId := uint(0)
@@ -128,6 +142,7 @@ func CategoryProductPage(ctx iris.Context) {
 		categoryId = 0
 	} else {
 		category, _ = categoryVal.(*model.Category)
+		categoryId = category.Id
 	}
 
 
@@ -151,12 +166,16 @@ func CategoryProductPage(ctx iris.Context) {
 
 	prevPage := ""
 	nextPage := ""
+	urlMatch := "category"
+	if category == nil {
+		urlMatch = "productIndex"
+	}
 	if currentPage > 1 {
-		prevPage = provider.GetUrl("category", category, currentPage-1)
+		prevPage = provider.GetUrl(urlMatch, category, currentPage-1)
 	}
 
 	if currentPage < int(totalPage) {
-		nextPage = provider.GetUrl("category", category, currentPage+1)
+		nextPage = provider.GetUrl(urlMatch, category, currentPage+1)
 	}
 
 	if category != nil {

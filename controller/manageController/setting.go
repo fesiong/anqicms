@@ -240,6 +240,10 @@ func SettingNavForm(ctx iris.Context) {
 	nav.Link = req.Link
 	nav.Sort = req.Sort
 	nav.Status = 1
+	if nav.NavType == model.NavTypeSystem {
+		//内置菜单
+		nav.PageId = req.InnerPageId
+	}
 
 	err = nav.Save(config.DB)
 	if err != nil {

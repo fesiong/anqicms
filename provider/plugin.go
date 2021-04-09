@@ -24,10 +24,6 @@ type bingData struct {
 	UrlList []string `json:"urlList"`
 }
 
-type sitemapData struct {
-	Id          uint64
-}
-
 func PushArticle(link string) {
 	_ = PushBaidu([]string{link})
 	_ = PushBing([]string{link})
@@ -145,9 +141,11 @@ func BuildSitemap() error {
 	totalCount := int64(1)
 	var categoryCount int64
 	var articleCount int64
+	var productCount int64
 	categoryBuilder := config.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Count(&categoryCount)
 	articleBuilder := config.DB.Model(&model.Article{}).Where("`status` = 1").Order("id asc").Count(&articleCount)
-	totalCount += categoryCount + articleCount
+	productBuilder := config.DB.Model(&model.Product{}).Where("`status` = 1").Order("id asc").Count(&productCount)
+	totalCount += categoryCount + articleCount + productCount
 	if totalCount > SitemapLimit {
 		//开展分页模式
 		//index 和 category 存放在同一个文件，文章单独一个文件
@@ -168,14 +166,14 @@ func BuildSitemap() error {
 		//写入首页
 		categoryFile.WriteString(baseUrl + "\n")
 		//写入分类页
-		var categories []*sitemapData
-		categoryBuilder.Scan(&categories)
+		var categories []*model.Category
+		categoryBuilder.Find(&categories)
 		for _, v := range categories {
-			categoryFile.WriteString(fmt.Sprintf("%s/category/%d\n", baseUrl, v.Id))
+			categoryFile.WriteString(GetUrl("category", v, 0))
 		}
 		//写入文章
 		pager := int(math.Ceil(float64(articleCount) / float64(SitemapLimit)))
-		var articles []*sitemapData
+		var articles []*model.Article
 		for i := 1; i <= pager; i++ {
 			//写入index
 			indexFile.WriteString(fmt.Sprintf("%s/article-%d.txt\n", baseUrl, i))
@@ -187,13 +185,35 @@ func BuildSitemap() error {
 				return err
 			}
 
-			err = articleBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Scan(&articles).Error
+			err = articleBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&articles).Error
 			if err == nil {
 				for _, v := range articles {
-					articleFile.WriteString(fmt.Sprintf("%s/article/%d\n", baseUrl, v.Id))
+					articleFile.WriteString(GetUrl("article", v, 0))
 				}
 			}
 			articleFile.Close()
+		}
+		//写入产品
+		pager = int(math.Ceil(float64(productCount) / float64(SitemapLimit)))
+		var products []*model.Product
+		for i := 1; i <= pager; i++ {
+			//写入index
+			indexFile.WriteString(fmt.Sprintf("%s/product-%d.txt\n", baseUrl, i))
+
+			//写入product-sitemap
+			productFile, err := os.OpenFile(fmt.Sprintf("%sproduct-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+			if err != nil {
+				//无法创建
+				return err
+			}
+
+			err = productBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&products).Error
+			if err == nil {
+				for _, v := range products {
+					productFile.WriteString(GetUrl("product", v, 0))
+				}
+			}
+			productFile.Close()
 		}
 	} else {
 		//单一文件模式
@@ -208,15 +228,22 @@ func BuildSitemap() error {
 		sitemapFile.WriteString(baseUrl + "\n")
 
 		//写入分类页
-		var categories []*sitemapData
-		categoryBuilder.Scan(&categories)
+		var categories []*model.Category
+		categoryBuilder.Find(&categories)
 		for _, v := range categories {
-			sitemapFile.WriteString(fmt.Sprintf("%s/category/%d\n", baseUrl, v.Id))
+			sitemapFile.WriteString(GetUrl("category", v, 0))
 		}
-		var articles []*sitemapData
-		articleBuilder.Scan(&articles)
+		//写入文章页
+		var articles []*model.Article
+		articleBuilder.Find(&articles)
 		for _, v := range articles {
-			sitemapFile.WriteString(fmt.Sprintf("%s/article/%d\n", baseUrl, v.Id))
+			sitemapFile.WriteString(GetUrl("article", v, 0))
+		}
+		//写入产品页
+		var products []*model.Product
+		productBuilder.Find(&products)
+		for _, v := range products {
+			sitemapFile.WriteString(GetUrl("product", v, 0))
 		}
 	}
 

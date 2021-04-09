@@ -16,7 +16,7 @@
                     <div class="layui-col-sm6">
                         <h1 class="title">{{product.Title}}</h1>
                         <div class="meta">
-                            {% if product.Category %}<span><a href="/category/{{product.CategoryId}}">{{product.Category.Title}}</a></span>{% endif %}
+                            {% if product.Category %}<span><a href="{{getUrl("category", product.Category, 0)}}">{{product.Category.Title}}</a></span>{% endif %}
                             <span>{{stampToDate(product.CreatedTime, "2006-01-02")}}</span>
                             <span>{{product.Views}} 阅读</span>
                         </div>
@@ -77,7 +77,7 @@
                         <li>
                             上一产品：
                             {% if prev %}
-                              <a href="/product/{{prev.Id}}">{{prev.Title}}</a>
+                              <a href="{{getUrl("product", prev, 0)}}">{{prev.Title}}</a>
                             {% else %}
                               没有了
                             {% endif %}
@@ -85,7 +85,7 @@
                           <li>
                             下一产品：
                             {% if next %}
-                              <a href="/product/{{next.Id}}">{{next.Title}}</a>
+                              <a href="{{getUrl("product", next, 0)}}">{{next.Title}}</a>
                             {% else %}
                               没有了
                             {% endif %}

@@ -1,7 +1,6 @@
 package route
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/controller"
@@ -42,6 +41,7 @@ func Register(app *iris.Application) {
 		comment.Post("/publish", controller.CommentPublish)
 		comment.Post("/praise", controller.CommentPraise)
 		comment.Get("/article/{id:uint}", controller.ArticleCommentList)
+		comment.Get("/product/{id:uint}", controller.ProductCommentList)
 	}
 
 	app.Get("/guestbook.html", controller.GuestbookPage)
@@ -53,7 +53,6 @@ func Register(app *iris.Application) {
 
 func resisterMacros(app *iris.Application) {
 	rewritePattern := config.ParsePatten()
-	fmt.Println(rewritePattern.Parsed)
 	//注册rewrite
 	app.Macros().Register("rewrite", "", false, true, func(paramValue string) (interface{}, bool) {
 		//这里总共有4条正则规则，需要逐一匹配
@@ -63,6 +62,13 @@ func resisterMacros(app *iris.Application) {
 		match := reg.FindStringSubmatch(paramValue)
 		if len(match) > 0 {
 			matchMap["match"] = "articleIndex"
+			for i, v := range match {
+				key := rewritePattern.ArticleIndexTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
 			return matchMap, true
 		}
 		//productPage
@@ -70,6 +76,13 @@ func resisterMacros(app *iris.Application) {
 		match = reg.FindStringSubmatch(paramValue)
 		if len(match) > 0 {
 			matchMap["match"] = "productIndex"
+			for i, v := range match {
+				key := rewritePattern.ProductIndexTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
 			return matchMap, true
 		}
 		//article

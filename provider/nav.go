@@ -21,7 +21,7 @@ func GetNavList(nest bool) ([]*model.Nav, error) {
 				Status: 1,
 				NavType: model.NavTypeSystem,
 				PageId: 0,
-				Link: "/",
+				Link: GetUrl("index", nil, 0),
 			},
 		}, nil
 	}

@@ -83,6 +83,15 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 			category.Type = parent.Type
 		}
 	}
+	if category.UrlToken == "" {
+		newToken := library.GetPinyin(req.Title)
+		_, err := CheckArticleByUrlToken(newToken)
+		if err == nil {
+			//增加随机
+			newToken += library.GenerateRandString(3)
+		}
+		category.UrlToken = newToken
+	}
 
 	err = category.Save(config.DB)
 	if err != nil {

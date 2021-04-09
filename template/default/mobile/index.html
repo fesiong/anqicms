@@ -6,7 +6,7 @@
                 <div class="layui-card-body">
                     <ul class="article-list">
                         {% for item in articles %}
-                        <li class="item">
+                        <li class="item layui-flex">
                             <a href="{{getUrl("article", item, 0)}}" class="link flex-item">
                                 <h5 class="title">{{item.Title}}</h5>
                                 <div class="description">{{item.Description}}</div>

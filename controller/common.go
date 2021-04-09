@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
-	"irisweb/library"
 	"irisweb/model"
 	"irisweb/provider"
 	"net/url"
@@ -145,7 +144,7 @@ func CheckTemplateType(ctx iris.Context) {
 
 		if !strings.EqualFold(ctx.Host(), mobileUrl.Hostname()) {
 			// 电脑端访问，检查是否需要301
-			if library.InMobile(ctx) {
+			if ctx.IsMobile() {
 				ctx.Redirect(config.JsonData.System.MobileUrl, 301)
 				return
 			}
@@ -155,7 +154,7 @@ func CheckTemplateType(ctx iris.Context) {
 		}
 	case config.TemplateTypeAdapt:
 		// 代码适配，如果发现是手机端访问，则启用手机模板
-		if library.InMobile(ctx) {
+		if ctx.IsMobile() {
 			mobileTemplate = true
 		}
 	default:

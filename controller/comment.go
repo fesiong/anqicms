@@ -111,10 +111,35 @@ func ArticleCommentList(ctx iris.Context) {
 	CommentList(ctx)
 }
 
+func ProductCommentList(ctx iris.Context) {
+	ctx.Params().Set("itemType", "product")
+	itemId := uint(ctx.Params().GetIntDefault("id", 0))
+
+	product, err := provider.GetProductById(itemId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.ViewData("itemData", product)
+	webInfo.Title = "评论产品：" + product.Title
+	webInfo.Keywords = product.Keywords
+	webInfo.Description = product.Description
+	ctx.ViewData("webInfo", webInfo)
+
+	CommentList(ctx)
+}
+
 func CommentList(ctx iris.Context) {
 	itemType := ctx.Params().Get("itemType")
 	itemId := uint(ctx.Params().GetIntDefault("id", 0))
 	currentPage := ctx.URLParamIntDefault("page", 1)
+	paramPage := ctx.Params().GetIntDefault("page", 0)
+	if paramPage > 0 {
+		currentPage = paramPage
+	}
 	pageSize := 10
 
 	comments, total, err := provider.GetCommentList(itemType, itemId, "id desc", currentPage, pageSize)

@@ -70,6 +70,7 @@ layui.define(['form', 'upload', 'table'], function(exports){
     data.parent_id = Number(data.parent_id);
     data.nav_type = Number(data.nav_type);
     data.page_id = Number(data.page_id);
+    data.inner_page_id = Number(data.inner_page_id);
     data.sort = Number(data.sort);
     admin.req({
         url: '/setting/nav'

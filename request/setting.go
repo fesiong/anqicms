@@ -39,6 +39,7 @@ type NavConfig struct {
 	ParentId    uint   `json:"parent_id"`
 	NavType     uint   `json:"nav_type"`
 	PageId      uint   `json:"page_id"`
+	InnerPageId uint   `json:"inner_page_id"`
 	Link        string `json:"link"`
 	Sort        uint   `json:"sort"`
 	Status      uint   `json:"status"`
