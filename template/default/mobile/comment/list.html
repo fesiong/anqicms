@@ -1,0 +1,114 @@
+{% include "mobile/partial/header.html" %}
+<div class="layui-container index">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md8">
+      <div class="layui-card">
+        <div class="layui-card-header">评论：<a href="/{{itemType}}/{{itemId}}">{{itemData.Title}}</a></div>
+        <div class="layui-card-body">
+          内容简介：{{itemData.Description}}...
+        </div>
+        <div class="layui-card-header">用户评论</div>
+        <div class="layui-card-body">
+          <div class="comment-list">
+            {% for item in comments %}
+            <div class="comment-item">
+              <div class="item-user">
+                <span class="user-name">
+                  {% if item.Status != 1 %}
+                  审核中：{{item.UserName|truncatechars:6}}
+                  {% else %}
+                  {{item.UserName}}
+                  {% endif %}
+                </span>
+                {% if item.Parent %}
+                <span class="text">回复</span>
+                <span class="user-name">
+                  {% if item.Status != 1 %}
+                  审核中：{{item.Parent.UserName|truncatechars:6}}
+                  {% else %}
+                  {{item.Parent.UserName}}
+                  {% endif %}
+                </span>
+                {% endif %}
+                <span class="publish-time">{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+              </div>
+              <div class="comment-content">
+                {% if item.Parent %}
+                <blockquote class="layui-elem-quote layui-quote-nm">
+                  {% if item.Parent.Status != 1 %}
+                  该内容正在审核中：{{item.Parent.Content|truncatechars:9}}
+                  {% else %}
+                  {{item.Parent.Content|truncatechars:100}}
+                  {% endif %}
+                </blockquote>
+                {% endif %}
+                {% if item.Status != 1 %}
+                  该内容正在审核中：{{item.Content|truncatechars:9}}
+                {% else %}
+                {{item.Content}}
+                {% endif %}
+              </div>
+              <div class="comment-control" data-id="{{item.Id}}" data-user="{{item.UserName}}">
+                <a class="item" data-id="praise"><i class="layui-icon layui-icon-praise"></i>赞(<span class="vote-count">{{item.VoteCount}}</span>)</a>
+                <a class="item" data-id=reply><i class="layui-icon layui-icon-release"></i>回复</a>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          <form class="layui-form" onsubmit="return false;">
+            <input type="hidden" name="parent_id" id="parent-id-field" value="0">
+            <input type="hidden" name="item_type" value="{{ itemType }}">
+            <input type="hidden" name="item_id" value="{{ itemId }}">
+            <div class="layui-form-item">
+              <label class="layui-form-label">用户名</label>
+              <div class="layui-input-inline">
+                <input type="text" name="user_name" required lay-verify="required" placeholder="请填写您的昵称" autocomplete="off"
+                  class="layui-input">
+              </div>
+            </div>
+            <div class="layui-form-item">
+              <label class="layui-form-label">评论内容</label>
+              <div class="layui-input-block">
+                <textarea class="layui-textarea" name="content" placeholder="" id="comment-content-field" rows="5"></textarea>
+              </div>
+            </div>
+            <div class="layui-form-item">
+              <div class="layui-input-block">
+                <button class="layui-btn" lay-submit lay-filter="comment-submit">提交评论</button>
+                <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+              </div>
+            </div>
+          </form>
+        </div>
+        {% if prevPage || nextPage %}
+        <div class="layui-card-body text-center">
+          <div class="layui-box layui-laypage">
+            <a href="{{prevPage}}" class="layui-laypage-prev{% if !prevPage %} layui-disabled{% endif %}">上一页</a>
+            <a href="{{nextPage}}" class="layui-laypage-next{% if !nextPage %} layui-disabled{% endif %}">下一页</a>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="layui-col-md4">
+      {% include "mobile/partial/author.html" %}
+      <div class="layui-card">
+        <div class="layui-card-header">热门文章</div>
+        <div class="layui-card-body">
+          <ul class="aside-list">
+            {% for item in populars %}
+            <li class="item">
+              <a href="{{getUrl("article", item, 0)}}" class="link">
+                <h5 class="title">{{item.Title}}</h5>
+                <span class="extra">{{item.Views}}阅读</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% include "mobile/partial/footer.html" %}

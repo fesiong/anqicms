@@ -7,6 +7,7 @@ import (
 	"irisweb/library"
 	"irisweb/model"
 	"irisweb/provider"
+	"log"
 	"net/url"
 	"strings"
 )
@@ -45,6 +46,7 @@ func CheckCloseSite(ctx iris.Context) {
 }
 
 func Common(ctx iris.Context) {
+	log.Println(ctx.Request().Header)
 	//version
 	ctx.ViewData("version", config.Version)
 	//修正baseUrl

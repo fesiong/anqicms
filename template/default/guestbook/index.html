@@ -1,0 +1,66 @@
+{% include "partial/header.html" %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-card">
+                <div class="layui-card-header">在线留言</div>
+                <div class="layui-card-body">
+                    <form class="layui-form" onsubmit="return false;">
+                        {% for item in fields %}
+                        <div class="layui-form-item">
+                            <label class="layui-form-label">{{item.Name}}</label>
+                            <div class="layui-input-block">
+                                {% if item.Type == "text" || item.Type == "number" %}
+                                <input type="{{item.Type}}" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required"{% endif %} placeholder="{{item.Content}}" autocomplete="off" class="layui-input">
+                                {% elif item.Type == "textarea" %}
+                                <textarea class="layui-textarea" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required"{% endif %} placeholder="{{item.Content}}" rows="5"></textarea>
+                                {% elif item.Type == "radio" %}
+                                {%- for val in item.SplitContent() %}
+                                <input type="{{item.Type}}" name="{{item.FieldName}}" value="{{val}}" title="{{val}}">
+                                {%- endfor %}
+                                {% elif item.Type == "checkbox" %}
+                                {%- for val in item.SplitContent() %}
+                                <input type="{{item.Type}}" name="{{item.FieldName}}[]" value="{{val}}" title="{{val}}">
+                                {%- endfor %}
+                                {% elif item.Type == "select" %}
+                                <select name="{{item.FieldName}}">
+                                    {%- for val in item.SplitContent() %}
+                                    <option value="{{val}}">{{val}}</option>
+                                    {%- endfor %}
+                                </select>
+                                {% endif %}
+                            </div>
+                        </div>
+                        {% endfor %}
+                        <div class="layui-form-item">
+                            <div class="layui-input-block">
+                                <button class="layui-btn" lay-submit lay-filter="guestbook-submit">提交留言</button>
+                                <button type="reset" class="layui-btn layui-btn-primary">重置</button>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            {% include "partial/author.html" %}
+            <div class="layui-card">
+                <div class="layui-card-header">热门文章</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in populars %}
+                        <li class="item">
+                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{item.Views}}阅读</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% include "partial/footer.html" %}

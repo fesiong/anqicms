@@ -1,0 +1,65 @@
+{% include "mobile/partial/header.html" %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-card">
+                <div class="layui-card-body">
+                    <ul class="product-list layui-row layui-col-space15">
+                        {% for item in products %}
+                        <li class="layui-col-xs6 layui-col-sm4 layui-col-md3">
+                            <a href="{{getUrl("product", item, 0)}}" class="item">
+                                <div class="thumb">
+                                    <img alt="{{item.Title}}" src="{{item.GetThumb()}}"/>
+                                    <div class="tips">查看详情</div>
+                                </div>
+                                <div class="layout">
+                                    {% if item.Price or item.Stock %}
+                                    <div class="meta">
+                                        <span class="price"><i>￥</i>{{item.Price|floatformat:2}}元</span>
+                                        {% if item.Stock %}
+                                        <span class="stock">{{item.Stock}}件</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <h5 class="title">{{item.Title}}</h5>
+                                </div>
+                            </a>
+                        </li>
+                        {% empty %}
+                        <li class="item empty">
+                            该列表没有任何内容
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% if prevPage || nextPage %}
+                <div class="layui-card-body text-center">
+                    <div class="layui-box layui-laypage">
+                        <a href="{{prevPage}}" class="layui-laypage-prev{% if !prevPage %} layui-disabled{% endif %}">上一页</a>
+                        <a href="{{nextPage}}" class="layui-laypage-next{% if !nextPage %} layui-disabled{% endif %}">下一页</a>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            <div class="layui-card">
+                <div class="layui-card-header">热门产品</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in populars %}
+                        <li class="item">
+                            <a href="{{getUrl("product", item, 0)}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{item.Views}}阅读</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% include "mobile/partial/footer.html" %}

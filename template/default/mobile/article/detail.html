@@ -1,0 +1,78 @@
+{% include "mobile/partial/header.html" %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-card article-detail">
+                <div class="layui-card-body">
+                    <h1 class="title">{{article.Title}}</h1>
+                    <div class="meta">
+                        {% if article.Category %}<span><a href="{{getUrl("category", article.Category, 0)}}">{{article.Category.Title}}</a></span>{% endif %}
+                        <span>{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
+                        <span>{{article.Views}} 阅读</span>
+                    </div>
+                    <div class="article-body">
+                        {{article.ArticleData.Content|safe}}
+                    </div>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-body">
+                    <div class="article-prev-next">
+                        <li>
+                            上一篇：
+                            {% if prev %}
+                              <a href="{{getUrl("article", prev, 0)}}">{{prev.Title}}</a>
+                            {% else %}
+                              没有了
+                            {% endif %}
+                          </li>
+                          <li>
+                            下一篇：
+                            {% if next %}
+                              <a href="{{getUrl("article", next, 0)}}">{{next.Title}}</a>
+                            {% else %}
+                              没有了
+                            {% endif %}
+                          </li>
+                    </div>
+                </div>
+            </div>
+            {% include "mobile/partial/comment.html" with itemType="article" itemId=article.Id %}
+        </div>
+
+        <div class="layui-col-md4">
+            {% include "mobile/partial/author.html" %}
+            <div class="layui-card">
+                <div class="layui-card-header">最新文章</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in newest %}
+                        <li class="item">
+                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">相关文章</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% for item in relationList %}
+                        <li class="item">
+                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{item.Views}}阅读</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% include "mobile/partial/footer.html" %}

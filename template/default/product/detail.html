@@ -1,0 +1,205 @@
+{% include "partial/header.html" %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-card product-header">
+                <div class="layui-row layui-clear">
+                    <div class="layui-col-sm6 product-photos">
+                        <div class="layui-carousel" id="product-photos">
+                            <div carousel-item>
+                                {% for item in product.Images %}
+                                <div><img src="{{item}}"></div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="layui-col-sm6">
+                        <h1 class="title">{{product.Title}}</h1>
+                        <div class="meta">
+                            {% if product.Category %}<span><a href="/category/{{product.CategoryId}}">{{product.Category.Title}}</a></span>{% endif %}
+                            <span>{{stampToDate(product.CreatedTime, "2006-01-02")}}</span>
+                            <span>{{product.Views}} 阅读</span>
+                        </div>
+                        {% if product.Price or product.Stock %}
+                        <div class="extra">
+                            {% if product.Price %}
+                            <div class="extra-item">
+                                <span class="item-left">价格：</span>
+                                <span class="item-right price"><i>￥</i>{{product.Price|floatformat:2}}元</span>
+                            </div>
+                            {% endif %}
+                            {% if product.Stock %}
+                            <div class="extra-item stock">
+                                <span class="item-left">库存：</span>
+                                <span class="item-right">{{product.Stock}}件</span>
+                            </div>
+                            {% endif %}
+                        </div>
+                        {% endif %}
+                        <div class="action">
+                            <a href="tel:{{settingContact.Cellphone}}" class="layui-btn layui-btn-danger">获取底价</a>
+                            <a href="javascript:;" id="show-cellphone" data-id="{{settingContact.Cellphone}}" class="layui-btn layui-btn-warm">查看电话</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="layui-card article-detail">
+                <div class="layui-card-header">产品详情</div>
+                <div class="layui-card-body">
+                    {% if product.Extra %}
+                    <div class="extra">
+                        <table class="layui-table">
+                            <colgroup>
+                                <col width="100">
+                                <col>
+                            </colgroup>
+                            <tbody>
+                            {% for item in product.GetExtras() %}
+                            <tr>
+                                <td>{{item.Name}}</td>
+                                <td>
+                                    {{item.Value}}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+                    <div class="article-body">
+                        {{product.ProductData.Content|safe}}
+                    </div>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-body">
+                    <div class="article-prev-next">
+                        <li>
+                            上一产品：
+                            {% if prev %}
+                              <a href="/product/{{prev.Id}}">{{prev.Title}}</a>
+                            {% else %}
+                              没有了
+                            {% endif %}
+                          </li>
+                          <li>
+                            下一产品：
+                            {% if next %}
+                              <a href="/product/{{next.Id}}">{{next.Title}}</a>
+                            {% else %}
+                              没有了
+                            {% endif %}
+                          </li>
+                    </div>
+                </div>
+            </div>
+            {% include "partial/comment.html" with itemType="product" itemId=product.Id %}
+            <div class="layui-card">
+                <div class="layui-card-header">相关产品</div>
+                <div class="layui-card-body">
+                    <ul class="product-list layui-row layui-col-space15">
+                        {% for item in relationList %}
+                        <li class="layui-col-xs6 layui-col-sm3">
+                            <a href="{{getUrl("product", item, 0)}}" class="item">
+                                <div class="thumb">
+                                    <img alt="{{item.Title}}" src="{{item.GetThumb()}}"/>
+                                    <div class="tips">查看详情</div>
+                                </div>
+                                <div class="layout">
+                                    {% if item.Price or item.Stock %}
+                                    <div class="meta">
+                                        <span class="price"><i>￥</i>{{item.Price|floatformat:2}}元</span>
+                                        {% if item.Stock %}
+                                        <span class="stock">{{item.Stock}}件</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <h5 class="title">{{item.Title}}</h5>
+                                </div>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            {% include "partial/author.html" %}
+            <div class="layui-card">
+                <div class="layui-card-header">联系我们</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% if settingContact.UserName %}
+                        <li class="item contact-item">
+                            <span class="item-left">联系人</span>
+                            <span class="item-right">{{settingContact.UserName}}</span>
+                        </li>
+                        {% endif %}
+                        {% if settingContact.Cellphone %}
+                        <li class="item contact-item">
+                            <span class="item-left">联系电话</span>
+                            <span class="item-right">{{settingContact.Cellphone}}</span>
+                        </li>
+                        {% endif %}
+                        {% if settingContact.Address %}
+                        <li class="item contact-item">
+                            <span class="item-left">联系微信</span>
+                            <span class="item-right">{{settingContact.Address}}</span>
+                        </li>
+                        {% endif %}
+                        {% if settingContact.Email %}
+                        <li class="item contact-item">
+                            <span class="item-left">联系邮箱</span>
+                            <span class="item-right">{{settingContact.Email}}</span>
+                        </li>
+                        {% endif %}
+                        {% if settingContact.Wechat %}
+                        <li class="item contact-item">
+                            <span class="item-left">联系地址</span>
+                            <span class="item-right">{{settingContact.Wechat}}</span>
+                        </li>
+                        {% endif %}
+                        {% if settingContact.Qrcode %}
+                        <li class="item contact-item">
+                            <span class="item-left">二维码</span>
+                            <span class="item-right">
+                                <img src="{{settingContact.Qrcode}}" style="max-width: 200px;" />
+                            </span>
+                        </li>
+                        {% endif %}
+                    </ul>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">推荐产品</div>
+                <div class="layui-card-body">
+                    <ul class="product-list aside-list layui-row layui-col-space15">
+                        {% for item in newest %}
+                        <li class="layui-col-xs6">
+                            <a href="{{getUrl("product", item, 0)}}" class="item">
+                                <div class="thumb">
+                                    <img alt="{{item.Title}}" src="{{item.GetThumb()}}"/>
+                                    <div class="tips">查看详情</div>
+                                </div>
+                                <div class="layout">
+                                    {% if item.Price or item.Stock %}
+                                    <div class="meta">
+                                        <span class="price"><i>￥</i>{{item.Price|floatformat:2}}元</span>
+                                        {% if item.Stock %}
+                                        <span class="stock">{{item.Stock}}件</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <h5 class="title">{{item.Title}}</h5>
+                                </div>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% include "partial/footer.html" %}
