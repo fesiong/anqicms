@@ -6,8 +6,8 @@
                 <div class="layui-card-body">
                     <ul class="article-list">
                         {% for item in articles %}
-                        <li class="item">
-                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                        <li class="item layui-flex">
+                            <a href="{{getUrl("article", item, 0)}}" class="link flex-item">
                                 <h5 class="title">{{item.Title}}</h5>
                                 <div class="description">{{item.Description}}</div>
                                 <div class="meta">
@@ -16,6 +16,11 @@
                                     <span>{{item.Views}} 阅读</span>
                                 </div>
                             </a>
+                            {% if item.GetThumb() %}
+                            <a href="{{getUrl("article", item, 0)}}" class="thumb">
+                                <img class="thumb-image" alt="{{item.Title}}" src="{{item.GetThumb()}}">
+                            </a>
+                            {% endif %}
                         </li>
                         {% empty %}
                         <li class="item empty">

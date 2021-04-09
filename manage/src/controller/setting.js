@@ -158,6 +158,14 @@ layui.define(['form', 'upload', 'table'], function(exports){
       layer.msg("上传出错");
     }
   });
+  //清除默认图片
+  $('#clean-default-thumb').click(function(){
+    layer.confirm("确定要清除默认图片缩略图吗？", function(index){
+      layer.close(index);
+      $('#default-thumb-input').val("");
+      $('#default-thumb-img').prop('src', '');
+    });
+  });
   
   //contact
   form.on('submit(contact-submit)', function(obj){

@@ -34,6 +34,14 @@ body {
     width: 300px;
 }
 
+.layui-flex{
+    display: flex;
+}
+
+.flex-item{
+    flex: 1;
+}
+
 /* error page */
 .ErrorPage-container {
     display: flex;
@@ -163,6 +171,18 @@ body {
 
 .article-list .item .meta span {
     margin-right: 8px;
+}
+
+.article-list .item .thumb {
+    margin-left:15px;
+    width: 210px;
+    height: 145px;
+}
+.article-list .item .thumb-image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    vertical-align: middle;
 }
 
 .layui-laypage a,
