@@ -88,9 +88,9 @@ go env -w GOPROXY=https://goproxy.cn,direct
 go mod tidy
 go mod vendor
 # 这是编译代码
-go build -o GoBlog app/main.go
+go build -o GoBlog main/main.go
 # 这是测试运行代码
-go run app/main.go
+go run main/main.go
 ```
 至此便可以运行网站了
 ### 运行GoBlog
@@ -99,7 +99,7 @@ go run app/main.go
 # 这是执行编译后的可执行文件
 ./GoBlog
 # 这是测试运行代码
-go run app/main.go
+go run main/main.go
 ```
 在浏览器访问： http://127.0.0.1:8001 。初次访问，需要初始化GoBlog，在初始化界面，输入mysql信息，设置管理员账号、密码。完成后，就可以开始编写博客了。
 ### 服务端部署
