@@ -31,9 +31,10 @@ func PagePage(ctx iris.Context) {
 
     ctx.ViewData("page", category)
 
-    //列出所有的page
-    allPages, _ := provider.GetCategories(model.CategoryTypePage)
-    ctx.ViewData("allPages", allPages)
+    webInfo.Title = category.Title
+    webInfo.Description = category.Description
+    webInfo.NavBar = category.Id
+    webInfo.PageName = "pageDetail"
 
     ctx.View(GetViewPath(ctx, "page/detail.html"))
 }

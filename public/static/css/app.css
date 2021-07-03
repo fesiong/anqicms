@@ -636,6 +636,10 @@ body {
     color: #CF1900;
 }
 
+.layui-breadcrumb {
+    padding-bottom: 15px;
+}
+
 /* 手机端 */
 @media (max-width: 690px) {
     .ErrorPage-container {

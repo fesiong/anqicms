@@ -4,7 +4,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/controller"
-	"irisweb/middleware"
 	"irisweb/model"
 	"irisweb/provider"
 	"regexp"
@@ -17,7 +16,6 @@ func Register(app *iris.Application) {
 	//设置错误
 	app.OnErrorCode(iris.StatusNotFound, controller.NotFound)
 	app.OnErrorCode(iris.StatusInternalServerError, controller.InternalServerError)
-	app.Options("*", middleware.Cors)
 	app.Use(controller.Inspect)
 	app.Use(controller.CheckTemplateType)
 	app.Use(controller.CheckCloseSite)

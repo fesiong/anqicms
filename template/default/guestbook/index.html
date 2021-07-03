@@ -1,10 +1,20 @@
-{% include "partial/header.html" %}
+{% extends 'base.html' %}
+
+{% block container %}
 <div class="layui-container index">
     <div class="layui-row layui-col-space15">
         <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                {% for item in crumbs %}
+                <a href="{{item.Link}}">{{item.Name}}</a>
+                {% endfor %}
+                {% endbreadcrumb %}
+            </div>
             <div class="layui-card">
                 <div class="layui-card-header">在线留言</div>
                 <div class="layui-card-body">
+                    {% guestbook fields %}
                     <form class="layui-form" onsubmit="return false;">
                         {% for item in fields %}
                         <div class="layui-form-item">
@@ -15,16 +25,16 @@
                                 {% elif item.Type == "textarea" %}
                                 <textarea class="layui-textarea" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required"{% endif %} placeholder="{{item.Content}}" rows="5"></textarea>
                                 {% elif item.Type == "radio" %}
-                                {%- for val in item.SplitContent() %}
+                                {%- for val in item.Items %}
                                 <input type="{{item.Type}}" name="{{item.FieldName}}" value="{{val}}" title="{{val}}">
                                 {%- endfor %}
                                 {% elif item.Type == "checkbox" %}
-                                {%- for val in item.SplitContent() %}
+                                {%- for val in item.Items %}
                                 <input type="{{item.Type}}" name="{{item.FieldName}}[]" value="{{val}}" title="{{val}}">
                                 {%- endfor %}
                                 {% elif item.Type == "select" %}
                                 <select name="{{item.FieldName}}">
-                                    {%- for val in item.SplitContent() %}
+                                    {%- for val in item.Items %}
                                     <option value="{{val}}">{{val}}</option>
                                     {%- endfor %}
                                 </select>
@@ -39,6 +49,7 @@
                             </div>
                         </div>
                     </form>
+                    {% endguestbook %}
                 </div>
             </div>
         </div>
@@ -48,19 +59,25 @@
             <div class="layui-card">
                 <div class="layui-card-header">热门文章</div>
                 <div class="layui-card-body">
+                    {% articleList popularArticles with type="list" order="views desc" limit="6" %}
                     <ul class="aside-list">
-                        {% for item in populars %}
+                        {% for item in popularArticles %}
                         <li class="item">
-                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                            <a href="{{item.Link}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
                                 <span class="extra">{{item.Views}}阅读</span>
                             </a>
                         </li>
+                        {% empty %}
+                        <li class="item empty">
+                            无热门文章
+                        </li>
                         {% endfor %}
                     </ul>
+                    {% endarticleList %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% include "partial/footer.html" %}
+{% endblock %}

@@ -11,6 +11,7 @@ import (
 	"irisweb/model"
 	"irisweb/provider"
 	"irisweb/route"
+	"irisweb/tags"
 	"time"
 )
 
@@ -58,8 +59,32 @@ func (bootstrap *Bootstrap) Serve() {
 
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
 	pugEngine.AddFunc("getUrl", provider.GetUrl)
-	bootstrap.Application.RegisterView(pugEngine)
 
+	pugEngine.RegisterTag("tdk", tags.TagTdkParser)
+	pugEngine.RegisterTag("system", tags.TagSystemParser)
+	pugEngine.RegisterTag("contact", tags.TagContactParser)
+	pugEngine.RegisterTag("navList", tags.TagNavListParser)
+	pugEngine.RegisterTag("categoryList", tags.TagCategoryListParser)
+	pugEngine.RegisterTag("categoryDetail", tags.TagCategoryDetailParser)
+	pugEngine.RegisterTag("articleDetail", tags.TagArticleDetailParser)
+	pugEngine.RegisterTag("productDetail", tags.TagProductDetailParser)
+	pugEngine.RegisterTag("pageList", tags.TagPageListParser)
+	pugEngine.RegisterTag("pageDetail", tags.TagPageDetailParser)
+	pugEngine.RegisterTag("prevArticle", tags.TagPrevArticleParser)
+	pugEngine.RegisterTag("nextArticle", tags.TagNextArticleParser)
+	pugEngine.RegisterTag("prevProduct", tags.TagPrevProductParser)
+	pugEngine.RegisterTag("nextProduct", tags.TagNextProductParser)
+	pugEngine.RegisterTag("articleList", tags.TagArticleListParser)
+	pugEngine.RegisterTag("productList", tags.TagProductListParser)
+	pugEngine.RegisterTag("breadcrumb", tags.TagBreadcrumbParser)
+	pugEngine.RegisterTag("pagination", tags.TagPaginationParser)
+	pugEngine.RegisterTag("linkList", tags.TagLinkListParser)
+	pugEngine.RegisterTag("commentList", tags.TagCommentListParser)
+	pugEngine.RegisterTag("guestbook", tags.TagGuestbookParser)
+	pugEngine.RegisterTag("articleParams", tags.TagArticleParamsParser)
+	pugEngine.RegisterTag("productParams", tags.TagProductParamsParser)
+
+	bootstrap.Application.RegisterView(pugEngine)
 
 	bootstrap.Application.Run(
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),

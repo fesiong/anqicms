@@ -1,7 +1,16 @@
-{% include "mobile/partial/header.html" %}
+{% extends 'base.html' %}
+
+{% block container %}
 <div class="layui-container index">
   <div class="layui-row layui-col-space15">
     <div class="layui-col-md8">
+      <div class="layui-breadcrumb">
+        {% breadcrumb crumbs with title=false %}
+        {% for item in crumbs %}
+        <a href="{{item.Link}}">{{item.Name}}</a>
+        {% endfor %}
+        {% endbreadcrumb %}
+      </div>
       <div class="layui-card">
         <div class="layui-card-header">评论：<a href="{{getUrl(itemType, itemData, 0)}}">{{itemData.Title}}</a></div>
         <div class="layui-card-body">
@@ -10,6 +19,7 @@
         <div class="layui-card-header">用户评论</div>
         <div class="layui-card-body">
           <div class="comment-list">
+            {% commentList comments with itemType=itemType itemId=itemId type="page" limit="10" %}
             {% for item in comments %}
             <div class="comment-item">
               <div class="item-user">
@@ -54,6 +64,7 @@
               </div>
             </div>
             {% endfor %}
+            {% endcommentList %}
           </div>
           <form class="layui-form" onsubmit="return false;">
             <input type="hidden" name="parent_id" id="parent-id-field" value="0">
@@ -80,35 +91,50 @@
             </div>
           </form>
         </div>
-        {% if prevPage || nextPage %}
+        {% pagination pages with show="4" %}
         <div class="layui-card-body text-center">
-          <div class="layui-box layui-laypage">
-            <a href="{{prevPage}}" class="layui-laypage-prev{% if !prevPage %} layui-disabled{% endif %}">上一页</a>
-            <a href="{{nextPage}}" class="layui-laypage-next{% if !nextPage %} layui-disabled{% endif %}">下一页</a>
+          <div class="layui-box layui-laypage layui-laypage-default">
+            <a class="layui-laypage-first {% if pages.FirstPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
+            {% if pages.PrevPage %}
+            <a class="layui-laypage-prev" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
+            {% endif %}
+            {% for item in pages.Pages %}
+            <a class="{% if item.IsCurrent %}layui-laypage-curr{% endif %}" href="{{item.Link}}">{{item.Name}}</a>
+            {% endfor %}
+            {% if pages.NextPage %}
+            <a class="layui-laypage-next" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
+            {% endif %}
+            <a class="layui-laypage-last {% if pages.LastPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
           </div>
         </div>
-        {% endif %}
+        {% endpagination %}
       </div>
     </div>
 
     <div class="layui-col-md4">
-      {% include "mobile/partial/author.html" %}
+      {% include "partial/author.html" %}
       <div class="layui-card">
         <div class="layui-card-header">热门文章</div>
         <div class="layui-card-body">
+          {% articleList popularArticles with type="list" order="views desc" limit="6" %}
           <ul class="aside-list">
-            {% for item in populars %}
+            {% for item in popularArticles %}
             <li class="item">
-              <a href="{{getUrl("article", item, 0)}}" class="link">
+              <a href="{{item.Link}}" class="link">
                 <h5 class="title">{{item.Title}}</h5>
                 <span class="extra">{{item.Views}}阅读</span>
               </a>
             </li>
+            {% empty %}
+            <li class="item empty">
+              无热门文章
+            </li>
             {% endfor %}
           </ul>
+          {% endarticleList %}
         </div>
       </div>
     </div>
   </div>
 </div>
-{% include "mobile/partial/footer.html" %}
+{% endblock %}

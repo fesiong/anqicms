@@ -2,6 +2,7 @@
   <div class="layui-card-header">用户评论 <a class="more-text" href="/comment/{{itemType}}/{{ itemId }}">查看更多>></a></div>
   <div class="layui-card-body">
     <div class="comment-list">
+      {% commentList comments with itemType=itemType itemId=itemId type="list" limit="6" %}
       {% for item in comments %}
       <div class="comment-item">
         <div class="item-user">
@@ -46,6 +47,7 @@
         </div>
       </div>
       {% endfor %}
+      {% endcommentList %}
     </div>
     <form class="layui-form" onsubmit="return false;">
       <input type="hidden" name="parent_id" id="parent-id-field" value="0">

@@ -28,12 +28,13 @@ type pluginGuestbookConfig struct {
 }
 
 type CustomField struct {
-	Name      string `json:"name"`
-	FieldName string `json:"field_name"`
-	Type      string `json:"type"`
-	Required  bool   `json:"required"`
-	IsSystem  bool   `json:"is_system"`
-	Content   string `json:"content"`
+	Name      string   `json:"name"`
+	FieldName string   `json:"field_name"`
+	Type      string   `json:"type"`
+	Required  bool     `json:"required"`
+	IsSystem  bool     `json:"is_system"`
+	Content   string   `json:"content"`
+	Items     []string `json:"-"`
 }
 
 type PluginUploadFile struct {
@@ -60,6 +61,8 @@ func (g *CustomField) SplitContent() []string {
 			items = append(items, v)
 		}
 	}
+
+	g.Items = items
 
 	return items
 }

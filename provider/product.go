@@ -284,7 +284,7 @@ func GetProductByUrlToken(urlToken string) (*model.Product, error) {
 	return &product, nil
 }
 
-func GetProductList(categoryId uint, order string, currentPage int, pageSize int) ([]*model.Product, int64, error) {
+func GetProductList(categoryId uint, q string, order string, currentPage int, pageSize int) ([]*model.Product, int64, error) {
 	var products []*model.Product
 	offset := (currentPage - 1) * pageSize
 	var total int64
@@ -302,6 +302,9 @@ func GetProductList(categoryId uint, order string, currentPage int, pageSize int
 	builder := config.DB.Model(&model.Product{}).Where("`status` = 1")
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	if q != "" {
+		builder = builder.Where("`title` like ?", "%"+q+"%")
 	}
 	if order != "" {
 		builder = builder.Order(order)

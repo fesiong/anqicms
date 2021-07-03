@@ -5,19 +5,12 @@ import (
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/model"
-	"irisweb/provider"
+	"irisweb/response"
 	"net/url"
 	"strings"
 )
 
-type WebInfo struct {
-	Title       string `json:"title"`
-	Keywords    string `json:"keywords"`
-	Description string `json:"description"`
-	NavBar      uint   `json:"nav_bar"`
-}
-
-var webInfo WebInfo
+var webInfo response.WebInfo
 
 func NotFound(ctx iris.Context) {
 	ctx.View(GetViewPath(ctx, "errors/404.html"))
@@ -44,6 +37,9 @@ func CheckCloseSite(ctx iris.Context) {
 }
 
 func Common(ctx iris.Context) {
+	//inject ctx
+	ctx.ViewData("requestParams", ctx.Params())
+	ctx.ViewData("urlParams", ctx.URLParams())
 	//version
 	ctx.ViewData("version", config.Version)
 	//修正baseUrl
@@ -53,17 +49,9 @@ func Common(ctx iris.Context) {
 			config.JsonData.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
-	//核心配置
-	ctx.ViewData("settingSystem", config.JsonData.System)
-	//联系方式
-	ctx.ViewData("settingContact", config.JsonData.Contact)
 	//js code
 	ctx.ViewData("pluginJsCode", config.JsonData.PluginPush.JsCode)
-	if config.DB != nil {
-		//读取导航
-		navList, _ := provider.GetNavList(true)
-		ctx.ViewData("navList", navList)
-	}
+
 	webInfo.NavBar = 0
 	ctx.Next()
 }

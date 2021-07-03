@@ -1,0 +1,123 @@
+package tags
+
+import (
+	"fmt"
+	"github.com/iris-contrib/pongo2"
+	"github.com/kataras/iris/v12/context"
+	"irisweb/config"
+	"irisweb/provider"
+	"strconv"
+)
+
+type tagCommentListNode struct {
+	name    string
+	args    map[string]pongo2.IEvaluator
+	wrapper *pongo2.NodeWrapper
+}
+
+func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	if config.DB == nil {
+		return nil
+	}
+	args, err := parseArgs(node.args, ctx)
+	if err != nil {
+		return err
+	}
+
+	itemType := ""
+	itemId := uint(0)
+	order := "id desc"
+	limit := 10
+	currentPage := 1
+	listType := "list"
+
+	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
+	if ok {
+		currentPage, _ = strconv.Atoi(urlParams["page"])
+	}
+	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
+	if ok {
+		paramPage := requestParams.GetIntDefault("page", 0)
+		if paramPage > 0 {
+			currentPage = paramPage
+		}
+	}
+
+	if args["itemType"] != nil {
+		itemType = args["itemType"].String()
+	}
+	if args["itemId"] != nil {
+		itemId = uint(args["itemId"].Integer())
+	}
+	if args["order"] != nil {
+		order = args["order"].String()
+	}
+	if args["limit"] != nil {
+		limit = args["limit"].Integer()
+		if limit > 100 {
+			limit = 100
+		}
+		if limit < 1 {
+			limit = 1
+		}
+	}
+	if args["type"] != nil {
+		listType = args["type"].String()
+	}
+
+	commentList, total, _ := provider.GetCommentList(itemType, itemId, order, currentPage, limit)
+
+	if listType == "page" {
+		urlPatten := fmt.Sprintf("/comment/%s/%d(?page={page})", itemType, itemId)
+		ctx.Private["pagination"] = makePagination(total, currentPage, limit, urlPatten, 4)
+	}
+	ctx.Private[node.name] = commentList
+	//execute
+	node.wrapper.Execute(ctx, writer)
+
+	return nil
+}
+
+func TagCommentListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
+	tagNode := &tagCommentListNode{
+		args: make(map[string]pongo2.IEvaluator),
+	}
+
+	nameToken := arguments.MatchType(pongo2.TokenIdentifier)
+	if nameToken == nil {
+		return nil, arguments.Error("commentList-tag needs a accept name.", nil)
+	}
+
+	tagNode.name = nameToken.Val
+
+	// After having parsed the name we're gonna parse the with options
+	args, err := parseWith(arguments)
+	if err != nil {
+		return nil, err
+	}
+	tagNode.args = args
+
+	for arguments.Remaining() > 0 {
+		return nil, arguments.Error("Malformed commentList-tag arguments.", nil)
+	}
+	wrapper, endtagargs, err := doc.WrapUntilTag("endcommentList")
+	if err != nil {
+		return nil, err
+	}
+	if endtagargs.Remaining() > 0 {
+		endtagnameToken := endtagargs.MatchType(pongo2.TokenIdentifier)
+		if endtagnameToken != nil {
+			if endtagnameToken.Val != nameToken.Val {
+				return nil, endtagargs.Error(fmt.Sprintf("Name for 'endcommentList' must equal to 'commentList'-tag's name ('%s' != '%s').",
+					nameToken.Val, endtagnameToken.Val), nil)
+			}
+		}
+
+		if endtagnameToken == nil || endtagargs.Remaining() > 0 {
+			return nil, endtagargs.Error("Either no or only one argument (identifier) allowed for 'endcommentList'.", nil)
+		}
+	}
+	tagNode.wrapper = wrapper
+
+	return tagNode, nil
+}

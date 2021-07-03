@@ -1,11 +1,13 @@
-{% include "mobile/partial/header.html" %}
+{% extends 'base.html' %}
+
+{% block container %}
 <div class="ErrorPage-container">
     <div class="ErrorPage-text">
         <h1 class="ErrorPage-title">404</h1>
         <p class="ErrorPage-subtitle">你似乎来到了没有知识存在的荒原</p>
-        <a class="button-primary" href="{{GetUrl("index", nil, 0)}}">
+        <a class="button-primary" href="{{getUrl("index", "", 0)}}">
             去往首页
         </a>
     </div>
 </div>
-{% include "mobile/partial/footer.html" %}
+{% endblock %}

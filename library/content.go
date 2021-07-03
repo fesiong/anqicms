@@ -35,3 +35,9 @@ func GenerateRandString(length int) string {
 	}
 	return strings.ToLower(string(bytes))
 }
+
+func Case2Camel(name string) string {
+	name = strings.Replace(name, "_", " ", -1)
+	name = strings.Title(name)
+	return strings.Replace(name, " ", "", -1)
+}

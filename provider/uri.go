@@ -10,6 +10,7 @@ import (
 
 //生成url
 //支持的规则：getUrl("article"|"product"|"category"|"page"|"nav"|"articleIndex"|"productIndex", item, int)
+//如果page == -1，则不对page进行转换。
 func GetUrl(match string, data interface{}, page int) string {
     rewritePattern := config.ParsePatten()
     uri := ""
@@ -135,6 +136,8 @@ func GetUrl(match string, data interface{}, page int) string {
             uri = strings.ReplaceAll(uri, "{page}", fmt.Sprintf("%d", page))
             uri = strings.ReplaceAll(uri, "(", "")
             uri = strings.ReplaceAll(uri, ")", "")
+        } else if page == -1 {
+            //不做处理
         } else {
             //否则删除分页内容
             reg := regexp.MustCompile("\\(.*\\)")
@@ -143,8 +146,12 @@ func GetUrl(match string, data interface{}, page int) string {
     }
 
     if uri == "" {
-        //将连接设置为首页
-        uri = "/"
+        if strings.HasPrefix(match, "/") {
+            uri = match
+        } else {
+            //将连接设置为首页
+            uri = "/"
+        }
     }
 
     return uri

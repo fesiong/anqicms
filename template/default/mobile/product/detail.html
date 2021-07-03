@@ -1,7 +1,16 @@
-{% include "mobile/partial/header.html" %}
+{% extends 'base.html' %}
+
+{% block container %}
 <div class="layui-container index">
     <div class="layui-row layui-col-space15">
         <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                    {% for item in crumbs %}
+                    <a href="{{item.Link}}">{{item.Name}}</a>
+                    {% endfor %}
+                {% endbreadcrumb %}
+            </div>
             <div class="layui-card product-header">
                 <div class="layui-row layui-clear">
                     <div class="layui-col-sm6 product-photos">
@@ -37,8 +46,8 @@
                         </div>
                         {% endif %}
                         <div class="action">
-                            <a href="tel:{{settingContact.Cellphone}}" class="layui-btn layui-btn-danger">获取底价</a>
-                            <a href="javascript:;" id="show-cellphone" data-id="{{settingContact.Cellphone}}" class="layui-btn layui-btn-warm">查看电话</a>
+                            <a href="tel:{% contact with name='Cellphone' %}" class="layui-btn layui-btn-danger">获取底价</a>
+                            <a href="javascript:;" id="show-cellphone" data-id="{% contact with name='Cellphone' %}" class="layui-btn layui-btn-warm">查看电话</a>
                         </div>
                     </div>
                 </div>
@@ -46,8 +55,29 @@
             <div class="layui-card article-detail">
                 <div class="layui-card-header">产品详情</div>
                 <div class="layui-card-body">
+                    {% productParams params %}
+                    <div class="extra">
+                        <table class="layui-table">
+                            <colgroup>
+                                <col width="100">
+                                <col>
+                            </colgroup>
+                            <tbody>
+                            {% for item in params %}
+                            <tr>
+                                <td>{{item.Name}}</td>
+                                <td>
+                                    {{item.Value}}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endproductParams %}
                     <div class="article-body">
-                        {{product.ProductData.Content|safe}}
+                        {% productDetail productContent with name="Content" %}
+                        {{productContent|safe}}
                     </div>
                 </div>
             </div>
@@ -55,34 +85,39 @@
                 <div class="layui-card-body">
                     <div class="article-prev-next">
                         <li>
-                            上一产品：
+                            {% prevProduct prev %}
+                            上一篇：
                             {% if prev %}
-                              <a href="{{getUrl("product", prev, 0)}}">{{prev.Title}}</a>
+                            <a href="{{prev.Link}}">{{prev.Title}}</a>
                             {% else %}
-                              没有了
+                            没有了
                             {% endif %}
+                            {% endprevProduct %}
                           </li>
                           <li>
-                            下一产品：
-                            {% if next %}
-                              <a href="{{getUrl("product", next, 0)}}">{{next.Title}}</a>
-                            {% else %}
+                              {% nextProduct next %}
+                              下一篇：
+                              {% if next %}
+                              <a href="{{next.Link}}">{{next.Title}}</a>
+                              {% else %}
                               没有了
-                            {% endif %}
+                              {% endif %}
+                              {% endnextProduct %}
                           </li>
                     </div>
                 </div>
             </div>
-            {% include "mobile/partial/comment.html" with itemType="product" itemId=product.Id %}
+            {% include "partial/comment.html" with itemType="product" itemId=product.Id %}
             <div class="layui-card">
                 <div class="layui-card-header">相关产品</div>
                 <div class="layui-card-body">
-                    <ul class="product-list layui-row layui-col-space15">
-                        {% for item in relationList %}
-                        <li class="layui-col-xs6 layui-col-sm3">
-                            <a href="{{getUrl("product", item, 0)}}" class="item">
+                    {% productList relationProducts with type="related" limit="6" %}
+                    <ul class="product-list aside-list layui-row layui-col-space15">
+                        {% for item in relationProducts %}
+                        <li class="layui-col-xs6">
+                            <a href="{{item.Link}}" class="item">
                                 <div class="thumb">
-                                    <img alt="{{item.Title}}" src="{{item.GetThumb()}}"/>
+                                    <img alt="{{item.Title}}" src="{{item.Thumb}}"/>
                                     <div class="tips">查看详情</div>
                                 </div>
                                 <div class="layout">
@@ -100,51 +135,58 @@
                         </li>
                         {% endfor %}
                     </ul>
+                    {% endproductList %}
                 </div>
             </div>
         </div>
 
         <div class="layui-col-md4">
-            {% include "mobile/partial/author.html" %}
+            {% include "partial/author.html" %}
             <div class="layui-card">
                 <div class="layui-card-header">联系我们</div>
                 <div class="layui-card-body">
                     <ul class="aside-list">
-                        {% if settingContact.UserName %}
+                        {% contact userName with name="UserName" %}
+                        {% if userName %}
                         <li class="item contact-item">
                             <span class="item-left">联系人</span>
-                            <span class="item-right">{{settingContact.UserName}}</span>
+                            <span class="item-right">{{userName}}</span>
                         </li>
                         {% endif %}
-                        {% if settingContact.Cellphone %}
+                        {% contact cellphone with name="Cellphone" %}
+                        {% if cellphone %}
                         <li class="item contact-item">
                             <span class="item-left">联系电话</span>
-                            <span class="item-right">{{settingContact.Cellphone}}</span>
+                            <span class="item-right">{{cellphone}}</span>
                         </li>
                         {% endif %}
-                        {% if settingContact.Address %}
+                        {% contact address with name="Address" %}
+                        {% if address %}
                         <li class="item contact-item">
                             <span class="item-left">联系微信</span>
-                            <span class="item-right">{{settingContact.Address}}</span>
+                            <span class="item-right">{{address}}</span>
                         </li>
                         {% endif %}
-                        {% if settingContact.Email %}
+                        {% contact contactEmail with name="Email" %}
+                        {% if contactEmail %}
                         <li class="item contact-item">
                             <span class="item-left">联系邮箱</span>
-                            <span class="item-right">{{settingContact.Email}}</span>
+                            <span class="item-right">{{contactEmail}}</span>
                         </li>
                         {% endif %}
-                        {% if settingContact.Wechat %}
+                        {% contact contactWechat with name="Wechat" %}
+                        {% if contactWechat %}
                         <li class="item contact-item">
                             <span class="item-left">联系地址</span>
-                            <span class="item-right">{{settingContact.Wechat}}</span>
+                            <span class="item-right">{{contactWechat}}</span>
                         </li>
                         {% endif %}
-                        {% if settingContact.Qrcode %}
+                        {% contact qrcode with name="Qrcode" %}
+                        {% if qrcode %}
                         <li class="item contact-item">
                             <span class="item-left">二维码</span>
                             <span class="item-right">
-                                <img src="{{settingContact.Qrcode}}" style="max-width: 200px;" />
+                                <img src="{{qrcode}}" style="max-width: 200px;" />
                             </span>
                         </li>
                         {% endif %}
@@ -154,12 +196,13 @@
             <div class="layui-card">
                 <div class="layui-card-header">推荐产品</div>
                 <div class="layui-card-body">
+                    {% productList newProducts with type="list" order="id desc" limit="6" %}
                     <ul class="product-list aside-list layui-row layui-col-space15">
-                        {% for item in newest %}
+                        {% for item in newProducts %}
                         <li class="layui-col-xs6">
-                            <a href="{{getUrl("product", item, 0)}}" class="item">
+                            <a href="{{item.Link}}" class="item">
                                 <div class="thumb">
-                                    <img alt="{{item.Title}}" src="{{item.GetThumb()}}"/>
+                                    <img alt="{{item.Title}}" src="{{item.Thumb}}"/>
                                     <div class="tips">查看详情</div>
                                 </div>
                                 <div class="layout">
@@ -177,9 +220,10 @@
                         </li>
                         {% endfor %}
                     </ul>
+                    {% endproductList %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% include "mobile/partial/footer.html" %}
+{% endblock %}

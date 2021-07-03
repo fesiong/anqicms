@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charSet="utf-8" />
+    <meta name="renderer" content="webkit">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1"/>
+    <meta name="applicable-device" content="mobile">
+    {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
+    <meta name="keywords" content="{% tdk with name='Keywords' %}">
+    <meta name="description" content="{% tdk with name='Description' %}">
+    <link href="https://www.layuicdn.com/layui/css/layui.css" rel="stylesheet">
+    <link href="/static/css/app.css" rel="stylesheet">
+</head>
+<body>
+<div class="layui-header">
+    <div class="layui-container">
+        <a href="{{getUrl("index", "", 0)}}">
+            <div class="layui-logo">
+                {% system siteLogo with name="SiteLogo" %}
+                {% if siteLogo %}<img class="logo" src="{{siteLogo}}" alt="{% system with name='SiteName' %}"> {% endif %}
+                {% system with name="SiteName" %}
+            </div>
+        </a>
+        {% navList navList %}
+        <ul class="layui-nav layui-layout-left nav-list">
+            {%- for item in navList %}
+            <li class="layui-nav-item{% if item.IsCurrent %} layui-this{% endif %}">
+                <a href="{{ item.Link }}">{{item.Title}}</a>
+                {%- if item.NavList %}
+                <dl class="layui-nav-child">
+                    {%- for inner in item.NavList %}
+                    <dd class="{% if inner.IsCurrent %} layui-this{% endif %}">
+                        <a href="{{ inner.Link }}">{{inner.Title}}</a>
+                    </dd>
+                    {% endfor %}
+                </dl>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% endnavList %}
+    </div>
+</div>
+
+{% block container %}
+<div class="layui-container">
+    container
+</div>
+{% endblock %}
+
+<div class="layui-trans layui-footer">
+    <div class="layui-container">
+        {% system siteCopyright with name="SiteCopyright" %}
+        {% if siteCopyright %}<div class="layout">{{siteCopyright|safe}}</div>{% endif %}
+        {% system siteIcp with name="SiteIcp" %}
+        <p>{% if siteIcp %}<a href="https://beian.miit.gov.cn/" rel="nofollow" target="_blank">{{siteIcp}}</a>{% endif %} &copy;2020 <a href="https://www.kandaoni.com">kandaoni.com</a>. All Rights Reserved</p>
+    </div>
+</div>
+</body>
+<script src="https://www.layuicdn.com/layui/layui.js"></script>
+<script src="/static/js/app.js?v=1.0.0"></script>
+<div class="layui-hide">
+    {{- pluginJsCode|safe }}
+</div>
+</html>

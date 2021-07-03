@@ -283,7 +283,7 @@ func GetArticleByUrlToken(urlToken string) (*model.Article, error) {
 	return &article, nil
 }
 
-func GetArticleList(categoryId uint, order string, currentPage int, pageSize int) ([]*model.Article, int64, error) {
+func GetArticleList(categoryId uint, q string, order string, currentPage int, pageSize int) ([]*model.Article, int64, error) {
 	var articles []*model.Article
 	offset := (currentPage - 1) * pageSize
 	var total int64
@@ -301,6 +301,9 @@ func GetArticleList(categoryId uint, order string, currentPage int, pageSize int
 	builder := config.DB.Model(&model.Article{}).Where("`status` = 1")
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	if q != "" {
+		builder = builder.Where("`title` like ?", "%"+q+"%")
 	}
 	if order != "" {
 		builder = builder.Order(order)

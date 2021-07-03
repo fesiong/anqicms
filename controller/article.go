@@ -24,27 +24,16 @@ func ArticleDetail(ctx iris.Context) {
 	}
 
 	_ = article.AddViews(config.DB)
-	//最新
-	newest, _, _ := provider.GetArticleList(article.CategoryId, "id desc", 1, 10)
-	//相邻相关文章
-	relationList, _ := provider.GetRelationArticleList(article.CategoryId, id, 10)
-	//获取上一篇
-	prev, _ := provider.GetPrevArticleById(article.CategoryId, id)
-	//获取下一篇
-	next, _ := provider.GetNextArticleById(article.CategoryId, id)
-	//获取评论内容
-	comments, _, _ := provider.GetCommentList(model.ItemTypeArticle, article.Id, "id desc", 1, 10)
 
 	webInfo.Title = article.Title
 	webInfo.Keywords = article.Keywords
 	webInfo.Description = article.Description
+	//设置页面名称，方便tags识别
+	webInfo.PageName = "articleDetail"
 	ctx.ViewData("webInfo", webInfo)
 	ctx.ViewData("article", article)
-	ctx.ViewData("newest", newest)
-	ctx.ViewData("relationList", relationList)
-	ctx.ViewData("prev", prev)
-	ctx.ViewData("next", next)
-	ctx.ViewData("comments", comments)
+	//设置页面名称，方便tags识别
+	ctx.ViewData("pageName", "articleDetail")
 
 	ctx.View(GetViewPath(ctx, "article/detail.html"))
 }

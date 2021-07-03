@@ -22,6 +22,7 @@ type Nav struct {
 	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	NavList     []*Nav `json:"nav_list" gorm:"-"`
+	IsCurrent   bool   `json:"is_current" gorm:"-"`
 }
 
 func (nav *Nav) Save(db *gorm.DB) error {

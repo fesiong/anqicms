@@ -14,9 +14,8 @@ func GuestbookPage(ctx iris.Context) {
 
 	ctx.ViewData("fields", fields)
 
-	//热门文章
-	populars, _, _ := provider.GetArticleList(0, "views desc", 1, 10)
-	ctx.ViewData("populars", populars)
+	webInfo.Title = "在线留言"
+	webInfo.PageName = "guestbook"
 
 	ctx.View(GetViewPath(ctx, "guestbook/index.html"))
 }

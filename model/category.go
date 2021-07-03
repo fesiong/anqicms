@@ -22,6 +22,7 @@ type Category struct {
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	Spacer      string `json:"spacer" gorm:"-"`
 	HasChildren bool   `json:"has_children" gorm:"-"`
+	Link        string `json:"link" gorm:"-"`
 }
 
 func (category *Category) Save(db *gorm.DB) error {

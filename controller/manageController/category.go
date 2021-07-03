@@ -9,7 +9,7 @@ import (
 
 func CategoryList(ctx iris.Context) {
 	categoryType := uint(ctx.URLParamIntDefault("type", 0))
-	categories, err := provider.GetCategories(categoryType)
+	categories, err := provider.GetCategories(categoryType, 0)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

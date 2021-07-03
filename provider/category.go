@@ -7,7 +7,7 @@ import (
 	"irisweb/request"
 )
 
-func GetCategories(categoryType uint) ([]*model.Category, error) {
+func GetCategories(categoryType uint, parentId uint) ([]*model.Category, error) {
 	var categories []*model.Category
 	db := config.DB
 	builder := db.Where("`status` = ?", 1)
@@ -20,7 +20,7 @@ func GetCategories(categoryType uint) ([]*model.Category, error) {
 	}
 
 	categoryTree := library.NewCategoryTree(categories)
-	categories = categoryTree.GetTree(0, "")
+	categories = categoryTree.GetTree(parentId, "")
 
 	return categories, nil
 }

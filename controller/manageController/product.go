@@ -12,7 +12,7 @@ func ProductList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	pageSize := ctx.URLParamIntDefault("limit", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
-	products, total, err := provider.GetProductList(categoryId, "id desc", currentPage, pageSize)
+	products, total, err := provider.GetProductList(categoryId, "", "id desc", currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -21,7 +21,7 @@ func ProductList(ctx iris.Context) {
 		return
 	}
 	//读取列表的分类
-	categories, _ := provider.GetCategories(model.CategoryTypeProduct)
+	categories, _ := provider.GetCategories(model.CategoryTypeProduct, 0)
 	for i, v := range products {
 		if v.CategoryId > 0 {
 			for _, c := range categories {

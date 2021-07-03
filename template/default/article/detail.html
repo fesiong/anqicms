@@ -1,7 +1,16 @@
-{% include "partial/header.html" %}
+{% extends 'base.html' %}
+
+{% block container %}
 <div class="layui-container index">
     <div class="layui-row layui-col-space15">
         <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                {% for item in crumbs %}
+                <a href="{{item.Link}}">{{item.Name}}</a>
+                {% endfor %}
+                {% endbreadcrumb %}
+            </div>
             <div class="layui-card article-detail">
                 <div class="layui-card-body">
                     <h1 class="title">{{article.Title}}</h1>
@@ -10,7 +19,7 @@
                         <span>{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
                         <span>{{article.Views}} 阅读</span>
                     </div>
-                    {% if article.Extra %}
+                    {% articleParams params %}
                     <div class="extra">
                         <table class="layui-table">
                             <colgroup>
@@ -18,7 +27,7 @@
                                 <col>
                             </colgroup>
                             <tbody>
-                            {% for item in article.GetExtras() %}
+                            {% for item in params %}
                             <tr>
                                 <td>{{item.Name}}</td>
                                 <td>
@@ -29,9 +38,10 @@
                             </tbody>
                         </table>
                     </div>
-                    {% endif %}
+                    {% endarticleParams %}
                     <div class="article-body">
-                        {{article.ArticleData.Content|safe}}
+                        {% articleDetail articleContent with name="Content" %}
+                        {{articleContent|safe}}
                     </div>
                 </div>
             </div>
@@ -39,20 +49,24 @@
                 <div class="layui-card-body">
                     <div class="article-prev-next">
                         <li>
+                            {% prevArticle prev %}
                             上一篇：
                             {% if prev %}
-                              <a href="{{getUrl("article", prev, 0)}}">{{prev.Title}}</a>
+                            <a href="{{prev.Link}}">{{prev.Title}}</a>
                             {% else %}
-                              没有了
+                            没有了
                             {% endif %}
+                            {% endprevArticle %}
                           </li>
                           <li>
-                            下一篇：
-                            {% if next %}
-                              <a href="{{getUrl("article", next, 0)}}">{{next.Title}}</a>
-                            {% else %}
+                              {% nextArticle next %}
+                              下一篇：
+                              {% if next %}
+                              <a href="{{next.Link}}">{{next.Title}}</a>
+                              {% else %}
                               没有了
-                            {% endif %}
+                              {% endif %}
+                              {% endnextArticle %}
                           </li>
                     </div>
                 </div>
@@ -65,34 +79,42 @@
             <div class="layui-card">
                 <div class="layui-card-header">最新文章</div>
                 <div class="layui-card-body">
+                    {% articleList popularArticles with type="list" order="id desc" limit="6" %}
                     <ul class="aside-list">
-                        {% for item in newest %}
+                        {% for item in popularArticles %}
                         <li class="item">
-                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                            <a href="{{item.Link}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
-                                <span class="extra">{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                                <span class="extra">{{item.Views}}阅读</span>
                             </a>
+                        </li>
+                        {% empty %}
+                        <li class="item empty">
+                            无最新文章
                         </li>
                         {% endfor %}
                     </ul>
+                    {% endarticleList %}
                 </div>
             </div>
             <div class="layui-card">
                 <div class="layui-card-header">相关文章</div>
                 <div class="layui-card-body">
+                    {% articleList relationList with type="related" limit="6" %}
                     <ul class="aside-list">
                         {% for item in relationList %}
                         <li class="item">
-                            <a href="{{getUrl("article", item, 0)}}" class="link">
+                            <a href="{{item.Link}}" class="link">
                                 <h5 class="title">{{item.Title}}</h5>
                                 <span class="extra">{{item.Views}}阅读</span>
                             </a>
                         </li>
                         {% endfor %}
                     </ul>
+                    {% endarticleList %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% include "partial/footer.html" %}
+{% endblock %}

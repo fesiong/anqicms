@@ -5,7 +5,6 @@ import (
 	"irisweb/config"
 	"irisweb/model"
 	"irisweb/provider"
-	"math"
 )
 
 func ArticleIndexPage(ctx iris.Context) {
@@ -48,158 +47,54 @@ func CategoryPage(ctx iris.Context) {
 }
 
 func CategoryArticlePage(ctx iris.Context) {
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	paramPage := ctx.Params().GetIntDefault("page", 0)
-	if paramPage > 0 {
-		currentPage = paramPage
-	}
-
-	//一页显示10条
-	pageSize := 10
-	categoryId := uint(0)
 	var category *model.Category
 	categoryVal := ctx.Values().Get("category")
 
-	if categoryVal == nil {
-		categoryId = 0
-	} else {
+	if categoryVal != nil {
 		category, _ = categoryVal.(*model.Category)
-		categoryId = category.Id
-	}
-
-
-	//文章列表
-	articles, total, _ := provider.GetArticleList(categoryId, "id desc", currentPage, pageSize)
-	//读取列表的分类
-	articleCategories, _ := provider.GetCategories(model.CategoryTypeArticle)
-	for i, v := range articles {
-		if v.CategoryId > 0 {
-			for _, c := range articleCategories {
-				if c.Id == v.CategoryId {
-					articles[i].Category = c
-				}
-			}
-		}
-	}
-	//热门文章
-	populars, _, _ := provider.GetArticleList(categoryId, "views desc", 1, 10)
-
-	totalPage := math.Ceil(float64(total)/float64(pageSize))
-
-	prevPage := ""
-	nextPage := ""
-	urlMatch := "category"
-	if category == nil {
-		urlMatch = "articleIndex"
-	}
-	if currentPage > 1 {
-		prevPage = provider.GetUrl(urlMatch, category, currentPage-1)
-	}
-
-	if currentPage < int(totalPage) {
-		nextPage = provider.GetUrl(urlMatch, category, currentPage+1)
 	}
 
 	if category != nil {
 		webInfo.Title = category.Title
 		webInfo.Description = category.Description
 		webInfo.NavBar = category.Id
+		webInfo.PageName = "articleList"
 	} else {
 		webInfo.Title = config.JsonData.Index.SeoTitle
 		webInfo.Keywords = config.JsonData.Index.SeoKeywords
 		webInfo.Description = config.JsonData.Index.SeoDescription
+		webInfo.PageName = "articleIndex"
 	}
 	ctx.ViewData("webInfo", webInfo)
 
-	//首页显示友情链接
-	links, _ := provider.GetLinkList()
-
-	ctx.ViewData("total", total)
-	ctx.ViewData("articles", articles)
-	ctx.ViewData("populars", populars)
-	ctx.ViewData("totalPage", totalPage)
-	ctx.ViewData("prevPage", prevPage)
-	ctx.ViewData("nextPage", nextPage)
 	ctx.ViewData("category", category)
-	ctx.ViewData("links", links)
 
 	ctx.View(GetViewPath(ctx, "category/article.html"))
 }
 
 func CategoryProductPage(ctx iris.Context) {
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	paramPage := ctx.Params().GetIntDefault("page", 0)
-	if paramPage > 0 {
-		currentPage = paramPage
-	}
-	//一页显示10条
-	pageSize := 10
-	categoryId := uint(0)
+
 	var category *model.Category
 	categoryVal := ctx.Values().Get("category")
 
-	if categoryVal == nil {
-		categoryId = 0
-	} else {
+	if categoryVal != nil {
 		category, _ = categoryVal.(*model.Category)
-		categoryId = category.Id
-	}
-
-
-	//产品列表
-	products, total, _ := provider.GetProductList(categoryId, "id desc", currentPage, pageSize)
-	//读取列表的分类
-	productCategories, _ := provider.GetCategories(model.CategoryTypeProduct)
-	for i, v := range products {
-		if v.CategoryId > 0 {
-			for _, c := range productCategories {
-				if c.Id == v.CategoryId {
-					products[i].Category = c
-				}
-			}
-		}
-	}
-	//热门产品
-	populars, _, _ := provider.GetProductList(categoryId, "views desc", 1, 10)
-
-	totalPage := math.Ceil(float64(total)/float64(pageSize))
-
-	prevPage := ""
-	nextPage := ""
-	urlMatch := "category"
-	if category == nil {
-		urlMatch = "productIndex"
-	}
-	if currentPage > 1 {
-		prevPage = provider.GetUrl(urlMatch, category, currentPage-1)
-	}
-
-	if currentPage < int(totalPage) {
-		nextPage = provider.GetUrl(urlMatch, category, currentPage+1)
 	}
 
 	if category != nil {
 		webInfo.Title = category.Title
 		webInfo.Description = category.Description
 		webInfo.NavBar = category.Id
+		webInfo.PageName = "productList"
 	} else {
 		webInfo.Title = config.JsonData.Index.SeoTitle
 		webInfo.Keywords = config.JsonData.Index.SeoKeywords
 		webInfo.Description = config.JsonData.Index.SeoDescription
+		webInfo.PageName = "productIndex"
 	}
 	ctx.ViewData("webInfo", webInfo)
 
-	//首页显示友情链接
-	links, _ := provider.GetLinkList()
-
-	ctx.ViewData("total", total)
-	ctx.ViewData("products", products)
-	ctx.ViewData("populars", populars)
-	ctx.ViewData("totalPage", totalPage)
-	ctx.ViewData("prevPage", prevPage)
-	ctx.ViewData("nextPage", nextPage)
 	ctx.ViewData("category", category)
-	ctx.ViewData("links", links)
 
 	ctx.View(GetViewPath(ctx, "category/product.html"))
 }

@@ -1,15 +1,25 @@
-{% include "mobile/partial/header.html" %}
+{% extends 'base.html' %}
+
+{% block container %}
 <div class="layui-container index">
     <div class="layui-row layui-col-space15">
         <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                {% for item in crumbs %}
+                <a href="{{item.Link}}">{{item.Name}}</a>
+                {% endfor %}
+                {% endbreadcrumb %}
+            </div>
             <div class="layui-card">
                 <div class="layui-card-body">
+                    {% productList products with type="page" limit="10" %}
                     <ul class="product-list layui-row layui-col-space15">
                         {% for item in products %}
                         <li class="layui-col-xs6 layui-col-sm4 layui-col-md3">
-                            <a href="{{getUrl("product", item, 0)}}" class="item">
+                            <a href="{{item.Link}}" class="item">
                                 <div class="thumb">
-                                    <img alt="{{item.Title}}" src="{{item.GetThumb()}}"/>
+                                    <img alt="{{item.Title}}" src="{{item.Thumb}}"/>
                                     <div class="tips">查看详情</div>
                                 </div>
                                 <div class="layout">
@@ -31,15 +41,25 @@
                         </li>
                         {% endfor %}
                     </ul>
+                    {% endproductList %}
                 </div>
-                {% if prevPage || nextPage %}
+                {% pagination pages with show="4" %}
                 <div class="layui-card-body text-center">
-                    <div class="layui-box layui-laypage">
-                        <a href="{{prevPage}}" class="layui-laypage-prev{% if !prevPage %} layui-disabled{% endif %}">上一页</a>
-                        <a href="{{nextPage}}" class="layui-laypage-next{% if !nextPage %} layui-disabled{% endif %}">下一页</a>
+                    <div class="layui-box layui-laypage layui-laypage-default">
+                        <a class="layui-laypage-first {% if pages.FirstPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
+                        {% if pages.PrevPage %}
+                        <a class="layui-laypage-prev" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
+                        {% endif %}
+                        {% for item in pages.Pages %}
+                        <a class="{% if item.IsCurrent %}layui-laypage-curr{% endif %}" href="{{item.Link}}">{{item.Name}}</a>
+                        {% endfor %}
+                        {% if pages.NextPage %}
+                        <a class="layui-laypage-next" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
+                        {% endif %}
+                        <a class="layui-laypage-last {% if pages.LastPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
                     </div>
                 </div>
-                {% endif %}
+                {% endpagination %}
             </div>
         </div>
 
@@ -47,19 +67,34 @@
             <div class="layui-card">
                 <div class="layui-card-header">热门产品</div>
                 <div class="layui-card-body">
-                    <ul class="aside-list">
-                        {% for item in populars %}
-                        <li class="item">
-                            <a href="{{getUrl("product", item, 0)}}" class="link">
-                                <h5 class="title">{{item.Title}}</h5>
-                                <span class="extra">{{item.Views}}阅读</span>
+                    {% productList popularProducts with type="list" order="views desc" limit="6" %}
+                    <ul class="product-list aside-list layui-row layui-col-space15">
+                        {% for item in popularProducts %}
+                        <li class="layui-col-xs6">
+                            <a href="{{item.Link}}" class="item">
+                                <div class="thumb">
+                                    <img alt="{{item.Title}}" src="{{item.Thumb}}"/>
+                                    <div class="tips">查看详情</div>
+                                </div>
+                                <div class="layout">
+                                    {% if item.Price or item.Stock %}
+                                    <div class="meta">
+                                        <span class="price"><i>￥</i>{{item.Price|floatformat:2}}元</span>
+                                        {% if item.Stock %}
+                                        <span class="stock">{{item.Stock}}件</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <h5 class="title">{{item.Title}}</h5>
+                                </div>
                             </a>
                         </li>
                         {% endfor %}
                     </ul>
+                    {% endproductList %}
                 </div>
             </div>
         </div>
     </div>
 </div>
-{% include "mobile/partial/footer.html" %}
+{% endblock %}

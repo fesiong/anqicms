@@ -1,13 +1,10 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/provider"
 	"irisweb/request"
-	"math"
-	"strings"
 )
 
 func CommentPublish(ctx iris.Context) {
@@ -106,6 +103,7 @@ func ArticleCommentList(ctx iris.Context) {
 	webInfo.Title = "评论文章：" + article.Title
 	webInfo.Keywords = article.Keywords
 	webInfo.Description = article.Description
+	webInfo.PageName = "articleComments"
 	ctx.ViewData("webInfo", webInfo)
 
 	CommentList(ctx)
@@ -127,6 +125,7 @@ func ProductCommentList(ctx iris.Context) {
 	webInfo.Title = "评论产品：" + product.Title
 	webInfo.Keywords = product.Keywords
 	webInfo.Description = product.Description
+	webInfo.PageName = "productComments"
 	ctx.ViewData("webInfo", webInfo)
 
 	CommentList(ctx)
@@ -135,47 +134,8 @@ func ProductCommentList(ctx iris.Context) {
 func CommentList(ctx iris.Context) {
 	itemType := ctx.Params().Get("itemType")
 	itemId := uint(ctx.Params().GetIntDefault("id", 0))
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	paramPage := ctx.Params().GetIntDefault("page", 0)
-	if paramPage > 0 {
-		currentPage = paramPage
-	}
-	pageSize := 10
-
-	comments, total, err := provider.GetCommentList(itemType, itemId, "id desc", currentPage, pageSize)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-	totalPage := math.Ceil(float64(total)/float64(pageSize))
-
-	prevPage := ""
-	nextPage := ""
-	urlPfx := fmt.Sprintf("/comment/%s/%d?", itemType, itemId)
-
-	if currentPage > 1 {
-		prevPage = fmt.Sprintf("%spage=%d", urlPfx, currentPage-1)
-	}
-
-	if currentPage < int(totalPage) {
-		nextPage = fmt.Sprintf("%spage=%d", urlPfx, currentPage+1)
-	}
-	if currentPage == 2 {
-		prevPage = strings.TrimRight(prevPage, "page=1")
-	}
-
-	//热门文章
-	populars, _, _ := provider.GetArticleList(0, "views desc", 1, 10)
-	ctx.ViewData("populars", populars)
 
 	ctx.ViewData("itemType", itemType)
 	ctx.ViewData("itemId", itemId)
-	ctx.ViewData("totalPage", totalPage)
-	ctx.ViewData("prevPage", prevPage)
-	ctx.ViewData("nextPage", nextPage)
-	ctx.ViewData("comments", comments)
 	ctx.View(GetViewPath(ctx, "comment/list.html"))
 }

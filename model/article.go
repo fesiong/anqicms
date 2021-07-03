@@ -23,6 +23,7 @@ type Article struct {
 	Logo        string                  `json:"logo" gorm:"-"`
 	Thumb       string                  `json:"thumb" gorm:"-"`
 	Extra       map[string]*CustomField `json:"extra" gorm:"-"`
+	Link        string                  `json:"link" gorm:"-"`
 }
 
 type ArticleData struct {

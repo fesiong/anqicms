@@ -23,7 +23,6 @@ type Link struct {
 	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	CheckedTime int64  `json:"checked_time" gorm:"column:checked_time;type:int(11) not null;default:0"`
-	NavList     []*Nav `json:"nav_list" gorm:"-"`
 }
 
 func (link *Link) Save(db *gorm.DB) error {
