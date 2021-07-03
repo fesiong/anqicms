@@ -42,7 +42,7 @@ func ProductDetail(ctx iris.Context) {
 		} else {
 			categoryTemplate := provider.GetCategoryTemplate(product.Category)
 			if categoryTemplate != nil {
-				tplName = categoryTemplate.Template
+				tplName = categoryTemplate.DetailTemplate
 			}
 		}
 	}

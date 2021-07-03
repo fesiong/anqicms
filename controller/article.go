@@ -45,7 +45,7 @@ func ArticleDetail(ctx iris.Context) {
 		} else {
 			categoryTemplate := provider.GetCategoryTemplate(article.Category)
 			if categoryTemplate != nil {
-				tplName = categoryTemplate.Template
+				tplName = categoryTemplate.DetailTemplate
 			}
 		}
 	}
