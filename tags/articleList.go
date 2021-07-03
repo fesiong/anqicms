@@ -32,6 +32,10 @@ func (node *tagArticleListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	listType := "list"
 	q := ""
 
+	if args["q"] != nil {
+		q = args["q"].String()
+	}
+
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
 	if ok {
 		currentPage, _ = strconv.Atoi(urlParams["page"])
