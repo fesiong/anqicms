@@ -17,6 +17,7 @@ type Article struct {
 	CategoryId  uint                    `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
 	Views       uint                    `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	Images      pq.StringArray          `json:"images" gorm:"column:images;type:text default null"`
+	Template    string                  `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
 	Status      uint                    `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	Category    *Category               `json:"category" gorm:"-"`
 	ArticleData *ArticleData            `json:"data" gorm:"-"`

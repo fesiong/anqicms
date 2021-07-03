@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                {% for item in crumbs %}
+                <a href="{{item.Link}}">{{item.Name}}</a>
+                {% endfor %}
+                {% endbreadcrumb %}
+            </div>
+            <div class="layui-card article-detail">
+                <div class="layui-card-body">
+                    <h1 class="title">{{page.Title}}</h1>
+                    <div class="meta">
+                        <span>{{stampToDate(page.CreatedTime, "2006-01-02")}}</span>
+                        <span>{{page.Views}} 阅读</span>
+                    </div>
+                    <div class="article-body">
+                        {% pageDetail pageContent with name="Content" %}
+                        {{pageContent|safe}}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            {% include "partial/author.html" %}
+            <div class="layui-card">
+                <div class="layui-card-header">其他页面</div>
+                <div class="layui-card-body">
+                    {% pageList allPages %}
+                    <ul class="aside-list">
+                        {% for item in allPages %}
+                        <li class="item">
+                            <a href="{{item.Link}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                                <span class="extra">{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endpageList %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

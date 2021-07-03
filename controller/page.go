@@ -1,6 +1,7 @@
 package controller
 
 import (
+    "fmt"
     "github.com/kataras/iris/v12"
     "irisweb/model"
     "irisweb/provider"
@@ -35,6 +36,18 @@ func PagePage(ctx iris.Context) {
     webInfo.Description = category.Description
     webInfo.NavBar = category.Id
     webInfo.PageName = "pageDetail"
+    ctx.ViewData("webInfo", webInfo)
+    //模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
+    tplName := "page/detail.html"
+    tmpTpl := fmt.Sprintf("page/detail-%d.html", category.Id)
+    if ViewExists(ctx, tmpTpl) {
+        tplName = tmpTpl
+    } else {
+        categoryTemplate := provider.GetCategoryTemplate(category)
+        if categoryTemplate != nil {
+            tplName = categoryTemplate.Template
+        }
+    }
 
-    ctx.View(GetViewPath(ctx, "page/detail.html"))
+    ctx.View(GetViewPath(ctx, tplName))
 }

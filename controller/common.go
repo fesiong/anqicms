@@ -7,6 +7,7 @@ import (
 	"irisweb/model"
 	"irisweb/response"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -104,6 +105,22 @@ func GetViewPath(ctx iris.Context, tplName string) string {
 	}
 
 	return tplName
+}
+
+func ViewExists(ctx iris.Context, tplName string) bool {
+	//tpl 存放目录，在bootstrap中有
+	baseDir := fmt.Sprintf("%stemplate/%s", config.ExecPath, config.JsonData.System.TemplateName)
+	tplFile := baseDir + "/" + GetViewPath(ctx, tplName)
+
+	_, err := os.Stat(tplFile)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	return false
 }
 
 func CheckTemplateType(ctx iris.Context) {

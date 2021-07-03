@@ -68,6 +68,7 @@ func SaveProduct(req *request.Product) (product *model.Product, err error) {
 	product.Price = req.Price
 	product.Stock = req.Stock
 	product.Images = req.Images
+	product.Template = req.Template
 
 	//extra
 	extraFields := map[string]interface{}{}
@@ -324,8 +325,8 @@ func GetProductList(categoryId uint, q string, order string, currentPage int, pa
 					}
 				}
 				item[v.FieldName] = &model.CustomField{
-					Name:      v.Name,
-					Value:     field[v.FieldName],
+					Name:  v.Name,
+					Value: field[v.FieldName],
 				}
 			}
 			if id, ok := field["id"].(uint32); ok {
@@ -446,8 +447,8 @@ func GetProductExtra(id uint) map[string]*model.CustomField {
 				}
 			}
 			extraFields[v.FieldName] = &model.CustomField{
-				Name:      v.Name,
-				Value:     result[v.FieldName],
+				Name:  v.Name,
+				Value: result[v.FieldName],
 			}
 		}
 	}

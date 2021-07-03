@@ -10,6 +10,7 @@ type Article struct {
 	Keywords     string                 `json:"keywords"`
 	Description  string                 `json:"description"`
 	Content      string                 `json:"content"`
+	Template     string                 `json:"template"`
 	Images       []string               `json:"images"`
 	Extra        map[string]interface{} `json:"extra"`
 }

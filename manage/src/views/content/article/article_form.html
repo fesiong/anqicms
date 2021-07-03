@@ -40,6 +40,15 @@
       </script>
     </div>
   </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">文章模板</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="template" value="{{ d.params.template || '' }}" placeholder="自定义文章详情模板，默认继承分类设置" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">默认值：article/detail.html</div>
+  </div>
   <div class="layui-collapse" style="margin-bottom: 20px;">
     <div class="layui-colla-item">
       <h2 class="layui-colla-title">附加参数</h2>

@@ -12,17 +12,19 @@ const (
 
 type Category struct {
 	Model
-	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
-	UrlToken    string `json:"url_token" gorm:"column:url_token;type:varchar(250) not null;default:'';index"`
-	Description string `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
-	Content     string `json:"content" gorm:"column:content;type:longtext default null"`
-	ParentId    uint   `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
-	Type        uint   `json:"type" gorm:"column:type;type:int(10) unsigned not null;default:0;index:idx_type"`
-	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
-	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
-	Spacer      string `json:"spacer" gorm:"-"`
-	HasChildren bool   `json:"has_children" gorm:"-"`
-	Link        string `json:"link" gorm:"-"`
+	Title          string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	UrlToken       string `json:"url_token" gorm:"column:url_token;type:varchar(250) not null;default:'';index"`
+	Description    string `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Content        string `json:"content" gorm:"column:content;type:longtext default null"`
+	ParentId       uint   `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
+	Type           uint   `json:"type" gorm:"column:type;type:int(10) unsigned not null;default:0;index:idx_type"`
+	Sort           uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
+	Template       string `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
+	DetailTemplate string `json:"detail_template" gorm:"column:detail_template;type:varchar(250) not null;default:''"`
+	Status         uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Spacer         string `json:"spacer" gorm:"-"`
+	HasChildren    bool   `json:"has_children" gorm:"-"`
+	Link           string `json:"link" gorm:"-"`
 }
 
 func (category *Category) Save(db *gorm.DB) error {

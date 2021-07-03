@@ -12,6 +12,7 @@ type Product struct {
 	Content      string                 `json:"content"`
 	Price        float64                `json:"price"`
 	Stock        uint                   `json:"stock"`
+	Template     string                 `json:"template"`
 	Images       []string               `json:"images"`
 	Extra        map[string]interface{} `json:"extra"`
 }

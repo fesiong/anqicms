@@ -16,6 +16,7 @@ func GuestbookPage(ctx iris.Context) {
 
 	webInfo.Title = "在线留言"
 	webInfo.PageName = "guestbook"
+	ctx.ViewData("webInfo", webInfo)
 
 	ctx.View(GetViewPath(ctx, "guestbook/index.html"))
 }

@@ -5,6 +5,7 @@ import (
 	"irisweb/library"
 	"irisweb/model"
 	"irisweb/request"
+	"irisweb/response"
 )
 
 func GetCategories(categoryType uint, parentId uint) ([]*model.Category, error) {
@@ -66,7 +67,7 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		}
 	} else {
 		category = &model.Category{
-			Status:      1,
+			Status: 1,
 		}
 	}
 	category.Title = req.Title
@@ -76,6 +77,8 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	category.ParentId = req.ParentId
 	category.Sort = req.Sort
 	category.Status = 1
+	category.Template = req.Template
+	category.DetailTemplate = req.DetailTemplate
 	//增加判断上级，强制类型与上级同步
 	if category.ParentId > 0 {
 		parent, err := GetCategoryById(category.ParentId)
@@ -98,4 +101,26 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		return
 	}
 	return
+}
+
+func GetCategoryTemplate(category *model.Category) *response.CategoryTemplate {
+	if category == nil {
+		return nil
+	}
+
+	if category.Template != "" {
+		return &response.CategoryTemplate{
+			Template:       category.Template,
+			DetailTemplate: category.DetailTemplate,
+		}
+	}
+
+	//查找上级
+	if category.ParentId > 0 {
+		parent, _ := GetCategoryById(category.ParentId)
+		return GetCategoryTemplate(parent)
+	}
+
+	//不存在，则返回空
+	return nil
 }

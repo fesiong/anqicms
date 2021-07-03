@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"irisweb/config"
 	"irisweb/model"
@@ -69,7 +70,22 @@ func CategoryArticlePage(ctx iris.Context) {
 
 	ctx.ViewData("category", category)
 
-	ctx.View(GetViewPath(ctx, "category/article.html"))
+	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
+	tplName := "category/article.html"
+	if category != nil {
+		if category.Template != "" {
+			tplName = category.Template
+		} else if ViewExists(ctx, fmt.Sprintf("category/article-%d.html", category.Id)) {
+			tplName = fmt.Sprintf("category/article-%d.html", category.Id)
+		} else {
+			categoryTemplate := provider.GetCategoryTemplate(category)
+			if categoryTemplate != nil {
+				tplName = categoryTemplate.Template
+			}
+		}
+	}
+
+	ctx.View(GetViewPath(ctx, tplName))
 }
 
 func CategoryProductPage(ctx iris.Context) {
@@ -96,5 +112,20 @@ func CategoryProductPage(ctx iris.Context) {
 
 	ctx.ViewData("category", category)
 
-	ctx.View(GetViewPath(ctx, "category/product.html"))
+	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
+	tplName := "category/product.html"
+	if category != nil {
+		if category.Template != "" {
+			tplName = category.Template
+		} else if ViewExists(ctx, fmt.Sprintf("category/product-%d.html", category.Id)) {
+			tplName = fmt.Sprintf("category/product-%d.html", category.Id)
+		} else {
+			categoryTemplate := provider.GetCategoryTemplate(category)
+			if categoryTemplate != nil {
+				tplName = categoryTemplate.Template
+			}
+		}
+	}
+
+	ctx.View(GetViewPath(ctx, tplName))
 }

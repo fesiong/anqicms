@@ -66,6 +66,7 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 	article.Description = req.Description
 	article.CategoryId = req.CategoryId
 	article.Images = req.Images
+	article.Template = req.Template
 
 	//extra
 	extraFields := map[string]interface{}{}
@@ -318,8 +319,8 @@ func GetArticleList(categoryId uint, q string, order string, currentPage int, pa
 			item := map[string]*model.CustomField{}
 			for _, v := range config.JsonData.ArticleExtraFields {
 				item[v.FieldName] = &model.CustomField{
-					Name:      v.Name,
-					Value:     field[v.FieldName],
+					Name:  v.Name,
+					Value: field[v.FieldName],
 				}
 			}
 			if id, ok := field["id"].(uint32); ok {
@@ -434,8 +435,8 @@ func GetArticleExtra(id uint) map[string]*model.CustomField {
 		//extra的CheckBox的值
 		for _, v := range config.JsonData.ArticleExtraFields {
 			extraFields[v.FieldName] = &model.CustomField{
-				Name:      v.Name,
-				Value:     result[v.FieldName],
+				Name:  v.Name,
+				Value: result[v.FieldName],
 			}
 		}
 	}

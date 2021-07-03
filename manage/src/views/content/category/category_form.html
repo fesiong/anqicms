@@ -45,6 +45,24 @@
     <div class="layui-form-mid layui-word-aux">值越小，排序越靠前，默认99</div>
   </div>
   <div class="layui-form-item">
+    <label class="layui-form-label">分类模板</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="template" value="{{ d.params.template || '' }}" placeholder="分类列表模板，默认继承上级设置" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">文章默认值：category/article.html; 产品默认值：category/product.html; 页面默认值：page/detail.html;</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label">内容模板</label>
+    <div class="layui-input-inline">
+      <script type="text/html" template>
+        <input type="text" name="detail_template" value="{{ d.params.detail_template || '' }}" placeholder="分类所属内容模板，默认继承上级设置" autocomplete="off" class="layui-input">
+      </script>
+    </div>
+    <div class="layui-form-mid layui-word-aux">文章默认值：article/detail.html; 产品默认值：product/detail.html; 页面默认值：page/detail.html;</div>
+  </div>
+  <div class="layui-form-item">
     <label class="layui-form-label">分类描述</label>
     <div class="layui-input-block">
       <script type="text/html" template>
