@@ -51,6 +51,11 @@ func (node *tagProductListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if args["categoryId"] != nil {
 		categoryId = uint(args["categoryId"].Integer())
+	} else {
+		categoryDetail, ok := ctx.Public["category"].(*model.Category)
+		if ok {
+			categoryId = categoryDetail.Id
+		}
 	}
 	if args["order"] != nil {
 		order = args["order"].String()
