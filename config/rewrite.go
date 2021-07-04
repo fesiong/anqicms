@@ -194,7 +194,6 @@ func ParsePatten() *RewritePatten {
 					parsedPatten.ProductIndexTags[n] = str
 				}
 				//重置
-				n = 0
 				str = ""
 			} else if str != "" {
 				str += string(v)
