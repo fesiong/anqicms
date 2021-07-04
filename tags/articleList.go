@@ -53,7 +53,7 @@ func (node *tagArticleListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		categoryId = uint(args["categoryId"].Integer())
 	} else {
 		categoryDetail, ok := ctx.Public["category"].(*model.Category)
-		if ok {
+		if ok && categoryDetail != nil {
 			categoryId = categoryDetail.Id
 		}
 	}
