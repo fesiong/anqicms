@@ -66,6 +66,22 @@ func Inspect(ctx iris.Context) {
 	ctx.Next()
 }
 
+func FileServe(ctx iris.Context) {
+	uri := ctx.RequestPath(false)
+	if uri != "/" {
+		baseDir := fmt.Sprintf("%spublic", config.ExecPath)
+		uriFile := baseDir + uri
+		_, err := os.Stat(uriFile)
+		if err == nil {
+			ctx.ServeFile(uriFile, false)
+			return
+		}
+	}
+
+	//不存在，返回404
+	NotFound(ctx)
+}
+
 func ReRouteContext(ctx iris.Context) {
 	params := ctx.Params().GetEntry("params").Value().(map[string]string)
 	for i, v := range params {
@@ -73,6 +89,9 @@ func ReRouteContext(ctx iris.Context) {
 	}
 
 	switch params["match"] {
+	case "notfound":
+		FileServe(ctx)
+		return
 	case "article":
 		ArticleDetail(ctx)
 		return

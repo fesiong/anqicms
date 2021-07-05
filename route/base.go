@@ -157,6 +157,8 @@ func resisterMacros(app *iris.Application) {
 			return matchMap, true
 		}
 
-		return nil, false
+		//不存在，定义到notfound
+		matchMap["match"] = "notfound"
+		return matchMap, true
 	})
 }

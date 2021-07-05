@@ -72,7 +72,7 @@ GoBlog同时支持小程序接口，小程序端使用Taro跨平台框架开发�
 - [ ] 适配QQ小程序
 
 ### 模板标签
-[查看模板标签说明](#template.md)
+[查看模板标签说明](template.md)
 
 ## GoBlog 的安装
 ### GoBlog依赖的软件
@@ -108,7 +108,16 @@ go run main/main.go
 ```
 在浏览器访问： http://127.0.0.1:8001 。初次访问，需要初始化GoBlog，在初始化界面，输入mysql信息，设置管理员账号、密码。完成后，就可以开始编写博客了。
 ### 服务端部署
-本地测试没有问题后，就可以将代码打包到服务器上编译了。也可以在本地根据服务器系统编译好可执行文件，将可执行文件放到服务器上。一般上，还需要配置nginx代理，来使用80端口或https端口。  
+
+下载最新的发行版：[下载发行版](https://github.com/fesiong/goblog/releases)
+
+根据你的服务器选择，linux用户，请下载goblog-linux.zip，windows用户，请下载goblog-windows.zip。
+
+将压缩包上传的网站根目录。
+
+#### nginx 配置
+
+一般上，还需要配置nginx代理，来使用80端口或https端口。  
 nginx代理代码如下：
 ```bash
     location @GoBlog {
@@ -121,6 +130,52 @@ nginx代理代码如下：
        try_files $uri $uri/index.html @GoBlog;
     }
 ```
+
+完整的nginx配置：
+```conf
+server
+{
+    listen       80;
+    server_name dev.goblog.com m.goblog.com;
+    root /data/wwwroot/irisweb/public;
+
+    location @GoBlog {
+        proxy_pass http://127.0.0.1:8001;
+        proxy_set_header   Host             $host;
+        proxy_set_header   X-Real-IP        $remote_addr;
+        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
+    }
+    location / {
+       try_files $uri $uri/index.html @GoBlog;
+    }
+    access_log off;
+}
+```
+
+#### 宝塔下Apache环境部署
+
+- 调整运行目录，运行目录设置为：/public
+- 设置反向代理，目标URL：http://127.0.0.1:8001
+- 添加计划任务脚本，执行周期，每分钟执行一次，内容为：
+```shell script
+#!/bin/bash
+### check 502
+# author fesion
+# the bin name is goblog
+BINNAME=goblog
+# 设置goblog目标目录
+BINPATH=/你存放goblog的目录
+
+# check the pid if exists
+exists=`ps -ef | grep '\<goblog\>' |grep -v grep |wc -l`
+echo "$(date +'%Y%m%d %H:%M:%S') $BINNAME PID check: $exists" >> $BINPATH/check.log
+echo "PID $BINNAME check: $exists"
+if [ $exists -eq 0 ]; then
+    echo "$BINNAME NOT running"
+    cd $BINPATH && nohup $BINPATH/$BINNAME >> $BINPATH/running.log 2>&1 &
+fi
+```
+添加计划任务后，点执行。
 
 ### 访问管理后台
 管理后台在blog分支和master分支上提供，simple分支没有管理后台。
