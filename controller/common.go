@@ -58,7 +58,8 @@ func Common(ctx iris.Context) {
 }
 
 func Inspect(ctx iris.Context) {
-	if config.DB == nil && ctx.GetCurrentRoute().Path() != "/install" {
+	uri := ctx.RequestPath(false)
+	if config.DB == nil && !strings.HasPrefix(uri, "/static") && !strings.HasPrefix(uri, "/install") {
 		ctx.Redirect("/install")
 		return
 	}
