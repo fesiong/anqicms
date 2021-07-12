@@ -169,7 +169,7 @@ func BuildSitemap() error {
 		var categories []*model.Category
 		categoryBuilder.Find(&categories)
 		for _, v := range categories {
-			categoryFile.WriteString(GetUrl("category", v, 0))
+			categoryFile.WriteString(GetUrl("category", v, 0) + "\n")
 		}
 		//写入文章
 		pager := int(math.Ceil(float64(articleCount) / float64(SitemapLimit)))
@@ -188,7 +188,7 @@ func BuildSitemap() error {
 			err = articleBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&articles).Error
 			if err == nil {
 				for _, v := range articles {
-					articleFile.WriteString(GetUrl("article", v, 0))
+					articleFile.WriteString(GetUrl("article", v, 0) + "\n")
 				}
 			}
 			articleFile.Close()
@@ -210,7 +210,7 @@ func BuildSitemap() error {
 			err = productBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&products).Error
 			if err == nil {
 				for _, v := range products {
-					productFile.WriteString(GetUrl("product", v, 0))
+					productFile.WriteString(GetUrl("product", v, 0) + "\n")
 				}
 			}
 			productFile.Close()
@@ -231,19 +231,19 @@ func BuildSitemap() error {
 		var categories []*model.Category
 		categoryBuilder.Find(&categories)
 		for _, v := range categories {
-			sitemapFile.WriteString(GetUrl("category", v, 0))
+			sitemapFile.WriteString(GetUrl("category", v, 0) + "\n")
 		}
 		//写入文章页
 		var articles []*model.Article
 		articleBuilder.Find(&articles)
 		for _, v := range articles {
-			sitemapFile.WriteString(GetUrl("article", v, 0))
+			sitemapFile.WriteString(GetUrl("article", v, 0) + "\n")
 		}
 		//写入产品页
 		var products []*model.Product
 		productBuilder.Find(&products)
 		for _, v := range products {
-			sitemapFile.WriteString(GetUrl("product", v, 0))
+			sitemapFile.WriteString(GetUrl("product", v, 0) + "\n")
 		}
 	}
 
@@ -282,7 +282,7 @@ func AddonSitemap(itemType string, link string) error {
 			}
 			defer categoryFile.Close()
 			//写入分类页
-			_, err = categoryFile.WriteString(link)
+			_, err = categoryFile.WriteString(link + "\n")
 
 			if err == nil {
 				_ = UpdateSitemapTime()
@@ -304,7 +304,7 @@ func AddonSitemap(itemType string, link string) error {
 				return err
 			}
 			defer articleFile.Close()
-			_, err = articleFile.WriteString(link)
+			_, err = articleFile.WriteString(link + "\n")
 
 			if err == nil {
 				_ = UpdateSitemapTime()
@@ -331,9 +331,9 @@ func AddonSitemap(itemType string, link string) error {
 		defer sitemapFile.Close()
 		//开始追加写入
 		if itemType == "category" {
-			_, err = sitemapFile.WriteString(link)
+			_, err = sitemapFile.WriteString(link + "\n")
 		} else if itemType == "article" {
-			_, err = sitemapFile.WriteString(link)
+			_, err = sitemapFile.WriteString(link + "\n")
 		}
 
 		if err == nil {
