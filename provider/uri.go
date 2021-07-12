@@ -154,5 +154,5 @@ func GetUrl(match string, data interface{}, page int) string {
         }
     }
 
-    return uri
+    return config.JsonData.System.BaseUrl + uri
 }
