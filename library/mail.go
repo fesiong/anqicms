@@ -2,6 +2,7 @@ package library
 
 import (
 	"bytes"
+	"crypto/tls"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,7 @@ import (
 	"io"
 	"mime"
 	"mime/multipart"
+	"net"
 	"net/mail"
 	"net/smtp"
 	"net/textproto"
@@ -214,7 +216,7 @@ func (e *Email) Send() error {
 	to = append(append(append(to, e.To...), e.Cc...), e.Bcc...)
 	// Check to make sure there is at least one recipient and one "From" address
 	if e.From == "" || len(to) == 0 {
-		return errors.New("Must specify at least one From address and one To address")
+		return errors.New("must specify at least one From address and one To address")
 	}
 	from, err := mail.ParseAddress(e.From)
 
@@ -226,7 +228,53 @@ func (e *Email) Send() error {
 		return err
 	}
 
-	return smtp.SendMail(e.Host+":"+strconv.Itoa(e.Port), e.Auth, from.Address, to, raw)
+	if e.Secure == "SSL" {
+		c, err := Dial(e.Host+":"+strconv.Itoa(e.Port))
+		if err != nil {
+			return err
+		}
+		defer c.Close()
+		if ok, param := c.Extension("AUTH"); ok {
+			fmt.Println("ok:", ok)
+			fmt.Println("param:", param)
+			if err = c.Auth(e.Auth); err != nil {
+				fmt.Println("Error during AUTH:", err)
+				return err
+			}
+		}
+		if err = c.Mail(from.Address); err != nil {
+			fmt.Println(err)
+			return err
+		}
+
+		for _, addr := range to {
+			if err = c.Rcpt(addr); err != nil {
+				fmt.Println(err)
+				return err
+			}
+		}
+
+		w, err := c.Data()
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+
+		_, err = w.Write(raw)
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+
+		err = w.Close()
+		if err != nil {
+			fmt.Println(err)
+			return err
+		}
+		return c.Quit()
+	} else {
+		return smtp.SendMail(e.Host+":"+strconv.Itoa(e.Port), e.Auth, from.Address, to, raw)
+	}
 }
 
 // quotePrintEncode writes the quoted-printable text to the IO Writer (according to RFC 2045)
@@ -417,4 +465,14 @@ func putBuffer(buf *bytes.Buffer) {
 	}
 	buf.Reset()
 	bufPool.Put(buf)
+}
+
+func Dial(addr string) (*smtp.Client, error) {
+	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify:true})
+	if err != nil {
+		return nil, err
+	}
+
+	host, _, _ := net.SplitHostPort(addr)
+	return smtp.NewClient(conn, host)
 }
