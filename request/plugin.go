@@ -78,8 +78,9 @@ type PluginGuestbookDelete struct {
 }
 
 type PluginKeyword struct {
-	Id    uint   `json:"id"`
-	Title string `json:"title"`
+	Id         uint   `json:"id"`
+	Title      string `json:"title"`
+	CategoryId uint   `json:"category_id"`
 }
 
 type PluginKeywordDelete struct {

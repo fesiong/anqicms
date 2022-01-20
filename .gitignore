@@ -6,3 +6,5 @@ goblog
 /doc
 /docs
 /test
+/system
+collector.json

@@ -1,99 +1,203 @@
 package library
 
 import (
-	"github.com/axgle/mahonia"
+	"bytes"
+	"context"
+	"crypto/tls"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/parnurzeal/gorequest"
-	"golang.org/x/net/html/charset"
 	"log"
+	"net"
+	"net/http"
+	"net/url"
 	"regexp"
 	"strings"
 	"time"
 )
 
+// charsetPatternInDOMStr meta[http-equiv]元素, content属性中charset截取的正则模式.
+// 如<meta http-equiv="content-type" content="text/html; charset=utf-8">
+var charsetPatternInDOMStr = `charset\s*=\s*(\S*)\s*;?`
+
+// charsetPattern 普通的MatchString可直接接受模式字符串, 无需Compile,
+// 但是只能作为判断是否匹配, 无法从中获取其他信息.
+var charsetPattern = regexp.MustCompile(charsetPatternInDOMStr)
+
 type RequestData struct {
-	Body   string
-	Domain string
-	Scheme string
-	IP     string
-	Server string
+	Header     http.Header
+	Request    *http.Request
+	Body       string
+	Status     string
+	StatusCode int
+	Domain     string
+	Scheme     string
+	IP         string
+	Server     string
+}
+
+type Options struct {
+	Timeout     time.Duration
+	Method      string
+	Type        string
+	Query       interface{}
+	Data        interface{}
+	Header      map[string]string
+	Proxy       string
+	Cookies     []*http.Cookie
+	UserAgent   string
+	IsMobile    bool
+	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
 /**
- * 请求域名返回数据
+ * 请求网络页面，并自动检测页面内容的编码，转换成utf-8
  */
-func Request(urlPath string) (*RequestData, error) {
-	resp, body, errs := gorequest.New().Timeout(30 * time.Second).Get(urlPath).End()
-	if errs != nil {
+func Request(urlPath string, options *Options) (*RequestData, error) {
+	if options == nil {
+		options = &Options{
+			Method:    "GET",
+			Timeout:   10,
+			UserAgent: getUserAgent(false),
+		}
+	}
+	if options.Timeout == 0 {
+		options.Timeout = 10
+	}
+	if options.Method == "" {
+		options.Method = "GET"
+	}
+	options.Method = strings.ToUpper(options.Method)
+
+	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
+	//定义默认的refer
+	parsedUrl, err := url.Parse(urlPath)
+	if err != nil {
+		log.Println(err)
+		return nil, nil
+	}
+	parsedUrl.Path = ""
+	parsedUrl.RawQuery = ""
+	parsedUrl.Fragment = ""
+	req = req.Set("Referer", parsedUrl.String())
+	if options.Type != "" {
+		req = req.Type(options.Type)
+	}
+	if options.Cookies != nil {
+		req = req.AddCookies(options.Cookies)
+	}
+	if options.Query != nil {
+		req = req.Query(options.Query)
+	}
+	if options.Data != nil {
+		req = req.Send(options.Data)
+	}
+	if options.Header != nil {
+		for i, v := range options.Header {
+			req = req.Set(i, v)
+		}
+	}
+	if options.Proxy != "" {
+		req = req.Proxy(options.Proxy)
+	}
+
+	if options.UserAgent == "" {
+		options.UserAgent = getUserAgent(options.IsMobile)
+	}
+	req = req.Set("User-Agent", options.UserAgent)
+
+	if options.DialContext != nil {
+		req.Transport.DialContext = options.DialContext
+	}
+
+	if options.Method == "POST" {
+		req = req.Post(urlPath)
+	} else {
+		req = req.Get(urlPath)
+	}
+
+	resp, body, errs := req.End()
+	if len(errs) > 0 {
 		//如果是https,则尝试退回http请求
 		if strings.HasPrefix(urlPath, "https") {
 			urlPath = strings.Replace(urlPath, "https://", "http://", 1)
-			return Request(urlPath)
+			return Request(urlPath, options)
 		}
-		return nil, errs[0]
-	}
-	contentType := strings.ToLower(resp.Header.Get("Content-Type"))
-	var htmlEncode string
 
-	if strings.Contains(contentType, "gbk") || strings.Contains(contentType, "gb2312") || strings.Contains(contentType, "gb18030") || strings.Contains(contentType, "windows-1252") {
-		htmlEncode = "gb18030"
-	} else if strings.Contains(contentType, "big5") {
-		htmlEncode = "big5"
-	} else if strings.Contains(contentType, "utf-8") {
-		htmlEncode = "utf-8"
+		return &RequestData{}, errs[0]
 	}
 
-	if htmlEncode == "" {
-		//先尝试读取charset
-		reg := regexp.MustCompile(`(?is)<meta[^>]*charset\s*=["']?\s*([A-Za-z0-9\-]+)`)
-		match := reg.FindStringSubmatch(body)
-		if len(match) > 1 {
-			contentType = strings.ToLower(match[1])
-			log.Println(contentType)
-			if strings.Contains(contentType, "gbk") || strings.Contains(contentType, "gb2312") || strings.Contains(contentType, "gb18030") || strings.Contains(contentType, "windows-1252") {
-				htmlEncode = "gb18030"
-			} else if strings.Contains(contentType, "big5") {
-				htmlEncode = "big5"
-			} else if strings.Contains(contentType, "utf-8") {
-				htmlEncode = "utf-8"
-			}
-		}
-		if htmlEncode == "" {
-			reg = regexp.MustCompile(`(?is)<title[^>]*>(.*?)<\/title>`)
-			match = reg.FindStringSubmatch(body)
-			if len(match) > 1 {
-				aa := match[1]
-				_, contentType, _ = charset.DetermineEncoding([]byte(aa), "")
-				log.Println(contentType)
-				htmlEncode = strings.ToLower(htmlEncode)
-				if strings.Contains(contentType, "gbk") || strings.Contains(contentType, "gb2312") || strings.Contains(contentType, "gb18030") || strings.Contains(contentType, "windows-1252") {
-					htmlEncode = "gb18030"
-				} else if strings.Contains(contentType, "big5") {
-					htmlEncode = "big5"
-				} else if strings.Contains(contentType, "utf-8") {
-					htmlEncode = "utf-8"
-				}
-			}
-		}
+	resp.Body.Close()
+
+	// 编码处理
+	charsetName, err := getPageCharset([]byte(body))
+	if err != nil {
+		log.Println("获取页面编码失败: ", err.Error())
 	}
-	if htmlEncode != "" && htmlEncode != "utf-8" {
-		body = ConvertToString(body, htmlEncode, "utf-8")
+	charsetName = strings.ToLower(charsetName)
+	//log.Println("当前页面编码:", charsetName)
+	charSet, exist := CharsetMap[charsetName]
+	if !exist {
+		log.Println("未找到匹配的编码")
+	}
+	if charSet != nil {
+		utf8Coutent, err := DecodeToUTF8([]byte(body), charSet)
+		if err != nil {
+			log.Println("页面解码失败: ", err.Error())
+		} else {
+			body = string(utf8Coutent)
+		}
 	}
 
 	requestData := RequestData{
-		Body:   body,
-		Domain: resp.Request.Host,
-		Scheme: resp.Request.URL.Scheme,
-		Server: resp.Header.Get("Server"),
+		Header:     resp.Header,
+		Request:    resp.Request,
+		Body:       body,
+		Status:     resp.Status,
+		StatusCode: resp.StatusCode,
+		Domain:     resp.Request.Host,
+		Scheme:     resp.Request.URL.Scheme,
+		Server:     resp.Header.Get("Server"),
 	}
 
 	return &requestData, nil
 }
 
-func ConvertToString(src string, srcCode string, tagCode string) string {
-	srcCoder := mahonia.NewEncoder(srcCode)
-	srcResult := srcCoder.ConvertString(src)
-	tagCoder := mahonia.NewDecoder(tagCode)
-	_, cdata, _ := tagCoder.Translate([]byte(srcResult), true)
-	result := string(cdata)
-	return result
+// getPageCharset 解析页面, 从中获取页面编码信息
+func getPageCharset(body []byte) (charset string, err error) {
+	bodyReader := bytes.NewReader(body)
+	dom, err := goquery.NewDocumentFromReader(bodyReader)
+	if err != nil {
+		return
+	}
+	var metaInfo string
+	var exist bool
+	metaInfo, exist = dom.Find("meta[charset]").Attr("charset")
+	if exist {
+		charset = metaInfo
+		return
+	}
+	metaInfo, exist = dom.Find("meta[http-equiv]").Attr("content")
+	if exist {
+		// FindStringSubmatch返回值为切片, 第一个成员为模式匹配到的子串, 之后的成员分别是各分组匹配到的子串.
+		// ta基本等效于FindStringSubmatch(metaInfo, 1), 只查询1个匹配项.
+		matchedArray := charsetPattern.FindStringSubmatch(metaInfo)
+		if len(matchedArray) > 1 {
+			for _, matchedItem := range matchedArray[1:] {
+				if matchedItem != "" {
+					charset = matchedItem
+					return
+				}
+			}
+		}
+	}
+	charset = "utf-8"
+	return
+}
+
+func getUserAgent(isMobile bool) string {
+	if isMobile {
+		return "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1"
+	}
+
+	return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 }

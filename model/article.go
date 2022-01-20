@@ -18,13 +18,18 @@ type Article struct {
 	Views       uint                    `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	Images      pq.StringArray          `json:"images" gorm:"column:images;type:text default null"`
 	Template    string                  `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
-	Status      uint                    `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Status      uint                    `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	Category    *Category               `json:"category" gorm:"-"`
 	ArticleData *ArticleData            `json:"data" gorm:"-"`
 	Logo        string                  `json:"logo" gorm:"-"`
 	Thumb       string                  `json:"thumb" gorm:"-"`
 	Extra       map[string]*CustomField `json:"extra" gorm:"-"`
 	Link        string                  `json:"link" gorm:"-"`
+	//采集专用
+	HasPseudo   int    `json:"has_pseudo" gorm:"column:has_pseudo;type:tinyint(1) not null;default:0"`
+	KeywordId   uint   `json:"keyword_id" gorm:"column:keyword_id;type:bigint(20) not null;default:0"`
+	OriginUrl   string `json:"origin_url" gorm:"column:origin_url;type:varchar(250) not null;default:'';index:idx_origin_url"`
+	OriginTitle string `json:"origin_title" gorm:"column:origin_title;type:varchar(250) not null;default:'';index:idx_origin_title"`
 }
 
 type ArticleData struct {

@@ -24,6 +24,14 @@
     </div>
   </div>
   <div class="layui-form-item">
+    <label class="layui-form-label">原文地址</label>
+    <div class="layui-input-block">
+      <script type="text/html" template>
+      <input type="text" disabled value="{{ d.params.origin_url || '' }}" class="layui-input">
+    </script>
+    </div>
+  </div>
+  <div class="layui-form-item">
     <label class="layui-form-label">文章关键词</label>
     <div class="layui-input-block layui-flex">
       <script type="text/html" template>

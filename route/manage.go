@@ -41,6 +41,17 @@ func manageRoute(app *iris.Application) {
 
 		}
 
+		collector := manage.Party("/collector", middleware.ManageAuth)
+		{
+			//采集全局设置
+			collector.Get("/setting", manageController.HandleCollectSetting)
+			collector.Post("/setting", manageController.HandleSaveCollectSetting)
+			//批量替换文章内容
+			collector.Post("/article/replace", manageController.HandleReplaceArticles)
+			collector.Post("/article/pseudo", manageController.HandleArticlePseudo)
+			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
+		}
+
 		attachment := manage.Party("/attachment", middleware.ManageAuth)
 		{
 			attachment.Get("/list", manageController.AttachmentList)

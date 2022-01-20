@@ -13,8 +13,17 @@ type Article struct {
 	Template     string                 `json:"template"`
 	Images       []string               `json:"images"`
 	Extra        map[string]interface{} `json:"extra"`
+
+	KeywordId   uint   `json:"keyword_id"`
+	OriginUrl   string `json:"origin_url"`
+	OriginTitle string `json:"origin_title"`
+	ContentText string `json:"-" gorm:"-"`
 }
 
 type ArticleExtraFieldsSetting struct {
 	Fields []*config.CustomField `json:"fields"`
+}
+
+type ArticleReplaceRequest struct {
+	ContentReplace []string `json:"content_replace"`
 }

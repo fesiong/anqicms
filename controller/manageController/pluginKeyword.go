@@ -65,6 +65,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 			return
 		}
 		keyword.Title = req.Title
+		keyword.CategoryId = req.CategoryId
 
 		err = keyword.Save(config.DB)
 		if err != nil {
@@ -87,6 +88,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 				}
 				keyword = &model.Keyword{
 					Title:  v,
+					CategoryId: req.CategoryId,
 					Status: 1,
 				}
 				keyword.Save(config.DB)
@@ -158,11 +160,11 @@ func PluginKeywordExport(ctx iris.Context) {
 	}
 
 	//header
-	header := []string{"title"}
+	header := []string{"title", "category_id"}
 	var content [][]interface{}
 	//content
 	for _, v := range keywords {
-		content = append(content, []interface{}{v.Title})
+		content = append(content, []interface{}{v.Title, v.CategoryId})
 	}
 
 	ctx.JSON(iris.Map{

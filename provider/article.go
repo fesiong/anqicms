@@ -68,6 +68,16 @@ func SaveArticle(req *request.Article) (article *model.Article, err error) {
 	article.Images = req.Images
 	article.Template = req.Template
 
+	if req.KeywordId > 0 {
+		article.KeywordId = req.KeywordId
+	}
+	if req.OriginUrl != "" {
+		article.OriginUrl = req.OriginUrl
+	}
+	if req.OriginTitle != "" {
+		article.OriginTitle = req.OriginTitle
+	}
+
 	//extra
 	extraFields := map[string]interface{}{}
 	if len(config.JsonData.ArticleExtraFields) > 0 {

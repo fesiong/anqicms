@@ -7,6 +7,8 @@ import (
 	"io"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -37,16 +39,22 @@ type configData struct {
 
 func initPath() {
 	sep := string(os.PathSeparator)
-	//root := filepath.Dir(os.Args[0])
-	//ExecPath, _ = filepath.Abs(root)
-	ExecPath, _ = os.Getwd()
-	//如果是测试目录，则保留到根目录。这定义根目录为：GuoBaServer
+	ExecPath, _ = os.Executable()
+	ExecPath = filepath.Dir(ExecPath)
 	pathArray := strings.Split(ExecPath, "/")
+	if strings.Contains(ExecPath, "\\") {
+		pathArray = strings.Split(ExecPath, "\\")
+	}
 	for i, v := range pathArray {
 		if v == "irisweb" {
 			ExecPath = strings.Join(pathArray[:i+1], "/")
 			break
 		}
+	}
+
+	if strings.Contains(ExecPath, "/GoLand") {
+		//指定测试环境
+		ExecPath = "/Users/fesion/data/gitpath/irisweb/"
 	}
 
 	length := utf8.RuneCountInString(ExecPath)
@@ -142,6 +150,7 @@ var ExecPath string
 var JsonData configData
 var ServerConfig serverConfig
 var DB *gorm.DB
+var CollectorConfig CollectorJson
 
 func init() {
 	initPath()
@@ -154,6 +163,8 @@ func init() {
 			os.Exit(-1)
 		}
 	}
+
+	LoadCollectorConfig()
 }
 
 func WriteConfig() error {
@@ -179,4 +190,109 @@ func WriteConfig() error {
 	}
 
 	return nil
+}
+
+func LoadCollectorConfig() {
+	//先读取默认配置
+	CollectorConfig = defaultCollectorConfig
+	//再根据用户配置来覆盖
+	buf, err := ioutil.ReadFile(fmt.Sprintf("%scollector.json", ExecPath))
+	configStr := ""
+	if err != nil {
+		//文件不存在
+		return
+	}
+	configStr = string(buf[:])
+	reg := regexp.MustCompile(`/\*.*\*/`)
+
+	configStr = reg.ReplaceAllString(configStr, "")
+	buf = []byte(configStr)
+
+	var collector CollectorJson
+	if err = json.Unmarshal(buf, &collector); err != nil {
+		return
+	}
+
+	//开始处理
+	if collector.ErrorTimes != 0 {
+		CollectorConfig.ErrorTimes = collector.ErrorTimes
+	}
+	if collector.Channels != 0 {
+		CollectorConfig.Channels = collector.Channels
+	}
+	if collector.TitleMinLength != 0 {
+		CollectorConfig.TitleMinLength = collector.TitleMinLength
+	}
+	if collector.ContentMinLength != 0 {
+		CollectorConfig.ContentMinLength = collector.ContentMinLength
+	}
+
+	CollectorConfig.AutoPseudo = collector.AutoPseudo
+	CollectorConfig.CategoryId = collector.CategoryId
+	CollectorConfig.StartHour = collector.StartHour
+	CollectorConfig.EndHour = collector.EndHour
+
+	if collector.DailyLimit > 0 {
+		CollectorConfig.DailyLimit = collector.DailyLimit
+	}
+	if CollectorConfig.DailyLimit > 10000 {
+		//最大1万，否则发布不完
+		CollectorConfig.DailyLimit = 10000
+	}
+
+	for _, v := range collector.TitleExclude {
+		exists := false
+		for _, vv := range CollectorConfig.TitleExclude {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.TitleExclude = append(CollectorConfig.TitleExclude, v)
+		}
+	}
+	for _, v := range collector.TitleExcludePrefix {
+		exists := false
+		for _, vv := range CollectorConfig.TitleExcludePrefix {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.TitleExcludePrefix = append(CollectorConfig.TitleExcludePrefix, v)
+		}
+	}
+	for _, v := range collector.TitleExcludeSuffix {
+		exists := false
+		for _, vv := range CollectorConfig.TitleExcludeSuffix {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.TitleExcludeSuffix = append(CollectorConfig.TitleExcludeSuffix, v)
+		}
+	}
+	for _, v := range collector.ContentExcludeLine {
+		exists := false
+		for _, vv := range CollectorConfig.ContentExcludeLine {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.ContentExcludeLine = append(CollectorConfig.ContentExcludeLine, v)
+		}
+	}
+	for _, v := range collector.ContentReplace {
+		exists := false
+		for _, vv := range CollectorConfig.ContentReplace {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.ContentReplace = append(CollectorConfig.ContentReplace, v)
+		}
+	}
 }

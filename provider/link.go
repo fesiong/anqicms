@@ -36,7 +36,7 @@ func PluginLinkCheck(link *model.Link) (*model.Link, error) {
 	}
 
 	//获取内容
-	resp, err := library.Request(remoteLink)
+	resp, err := library.Request(remoteLink, nil)
 	if err != nil {
 		return nil, err
 	}

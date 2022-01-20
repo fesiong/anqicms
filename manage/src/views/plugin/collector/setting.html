@@ -1,0 +1,134 @@
+<title>采集伪原创设置</title>
+
+<div class="layui-card layadmin-header">
+  <div class="layui-breadcrumb" lay-filter="breadcrumb">
+    <a lay-href="">后台首页</a>
+    <a><cite>采集伪原创管理</cite></a>
+    <a><cite>功能设置</cite></a>
+  </div>
+</div>
+
+<div class="layui-fluid">
+  <div class="layui-row layui-col-space15">
+    <div class="layui-col-md12">
+      <div class="layui-card">
+        <div class="layui-card-header">采集伪原创设置</div>
+        <div class="layui-card-body" pad15>
+          <script type="text/html" template lay-url="/collector/setting" lay-done="layui.form.render();">
+            <div class="layui-form" style="padding: 20px 0 0 0;" id='setting-form'>
+          <div class="layui-form-item">
+            <label class="layui-form-label">标题最少字数</label>
+            <div class="layui-input-inline">
+              <input type="number" name="title_min_length" value="{{ d.data.title_min_length || '' }}" placeholder="默认10个字" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-word-aux">采集文章的时候，标题字数少于指定的字数，则不会采集</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">内容最少字数</label>
+            <div class="layui-input-inline">
+              <input type="number" name="content_min_length" value="{{ d.data.content_min_length || '' }}" placeholder="默认400个字" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，文章内容字数少于指定的字数，则不会采集</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">是否伪原创</label>
+            <div class="layui-input-inline">
+              <input type="radio" name="auto_pseudo" value="0" title="否" {{ d.data.auto_pseudo != 1 ? 'checked' : '' }}>
+              <input type="radio" name="auto_pseudo" value="1" title="是" {{ d.data.auto_pseudo == 1 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">关键词自动拓词</label>
+            <div class="layui-input-inline">
+              <input type="radio" name="auto_dig_keyword" value="0" title="否" {{ d.data.auto_dig_keyword != 1 ? 'checked' : '' }}>
+              <input type="radio" name="auto_dig_keyword" value="1" title="是" {{ d.data.auto_dig_keyword == 1 ? 'checked' : '' }}>
+            </div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">每天开始时间</label>
+            <div class="layui-input-inline">
+              <input type="number" name="start_hour" value="{{ d.data.start_hour || '8' }}" placeholder="请填写0-23的数字" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-aux-word">请填写0-23的数字</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">每天结束时间</label>
+            <div class="layui-input-inline">
+              <input type="number" name="end_hour" value="{{ d.data.end_hour || '20' }}" placeholder="请填写0-23的数字" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-aux-word">请填写0-23的数字，0表示全天都发布</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">每日限额</label>
+            <div class="layui-input-inline">
+              <input type="number" name="daily_limit" value="{{ d.data.daily_limit || '' }}" placeholder="默认1000" autocomplete="off" class="layui-input">
+            </div>
+            <div class="layui-form-mid layui-aux-word">每日最大发布文章量，最大不能超过10000，这是一个约数，并不一定能发布到这个数量</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">默认分类ID</label>
+            <div class="layui-input-inline">
+                <input type="number" name="category_id" value="{{ d.data.category_id || '' }}" placeholder="请填写文章分类id" autocomplete="off" class="layui-input">
+              </div>
+              <div class="layui-form-mid layui-aux-word">如果关键词没设置分类，则采集到的文章默认会被归类到这个分类ID下</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">标题排除词</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="title_exclude" placeholder="一行一个">{{#  layui.each(d.data.link_exclude, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，标题出现这些关键词，则不会采集</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">标题开头排除词</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="title_exclude_prefix" placeholder="一行一个">{{#  layui.each(d.data.title_exclude_prefix, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，标题开头出现这些关键词，则不会采集</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">标题结尾排除词</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="title_exclude_suffix" placeholder="一行一个">{{#  layui.each(d.data.title_exclude_suffix, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，标题结尾出现这些关键词，则不会采集</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">内容忽略行</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="content_exclude_line" placeholder="一行一个">{{#  layui.each(d.data.content_exclude_line, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，内容出现这些词的那一行，将会被移除</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">链接忽略</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="link_exclude" placeholder="一行一个">{{#  layui.each(d.data.link_exclude, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，链接出现这些关键词的，则不会采集</div>
+          </div>
+          <div class="layui-form-item">
+            <label class="layui-form-label">内容替换</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="content_replace" placeholder="一行一组">{{#  layui.each(d.data.content_replace, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，这些内容会被替换，一行一组<br>需要替换的词在前，替换后的词在后，中间用->分隔，如“最好->较好”</div>
+          </div>
+          
+          <div class="layui-form-item">
+            <label class="layui-form-label"></label>
+            <div class="layui-input-inline">
+              <input type="button" lay-submit lay-filter="setting-submit" value="确认" class="layui-btn">
+            </div>
+          </div>
+        </div>
+        </script>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  layui.use('collector', layui.factory('collector'));
+</script>

@@ -16,10 +16,12 @@
         <div class="layui-card-body" pad15>
           <div style="padding-bottom: 10px;">
             <button class="layui-btn article-control-btn" data-type="add">添加</button>
+            <button class="layui-btn article-control-btn" data-type="replace">批量替换</button>
           </div>
           
           <table id="article-manage" lay-filter="article-manage" data-type="default"></table>
           <script type="text/html" id="table-article-toolbar">
+            <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="pseudo" title='对这篇文章进行伪原创'><i class="layui-icon layui-icon-edit"></i>伪原创</a>
             <a class="layui-btn layui-btn-normal layui-btn-xs" lay-event="edit"><i class="layui-icon layui-icon-edit"></i>编辑</a>
             <a class="layui-btn layui-btn-danger layui-btn-xs" lay-event="del"><i class="layui-icon layui-icon-delete"></i>删除</a>
           </script>

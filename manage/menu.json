@@ -115,6 +115,10 @@
         {
           "name": "sendmail",
           "title": "留言邮件提醒"
+        },
+        {
+          "name": "collector",
+          "title": "采集伪原创管理"
         }
       ]
     },

@@ -25,8 +25,11 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
         , url: setter.baseApi + 'plugin/keyword/list'
         , cols: [[
             {checkbox: true}
-            , { field: 'id', width: 60, title: 'ID' }
+            , { field: 'id', width: 100, title: 'ID' }
             , { field: 'title', title: '关键词', minWidth: 200, edit: 'text' }
+            , { field: 'level', title: '层级', width: 60 }
+            , { field: 'category_id', title: '文章分类', width: 100 }
+            , { field: 'article_count', title: '已采集文章', width: 100 }
             , { title: '操作', width: 220, align: 'center', fixed: 'right', toolbar: '#table-keyword-toolbar' }
         ]]
         , page: true
@@ -61,6 +64,7 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
         let data = obj.field;
         data.id = Number(data.id);
         data.weight = Number(data.weight);
+        data.category_id = Number(data.category_id);
         admin.req({
             url: '/plugin/keyword/detail'
             , data: data
@@ -197,7 +201,7 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
                         form.render();
                         //下载
                         $('#download-keyword-template').off('click').on('click', function () {
-                            table.exportFile(['title'], [['SEO']], 'csv');
+                            table.exportFile(['title','category_id'], [['SEO',1]], 'csv');
                         });
                         //导入
                         let uploadInst = upload.render({
@@ -226,6 +230,23 @@ layui.define(['form', 'upload', 'table', 'element'], function (exports) {
                         });
                     });
                     
+                }
+            });
+        },
+        dig: function () {
+            //手动拓词
+            admin.req({
+                url: '/collector/keyword/dig'
+                , data: {}
+                , type: 'post'
+                , done: function (res) {
+                    layer.msg(res.msg);
+                }
+                , fail: function (res) {
+                    layer.msg(res.msg, {
+                        offset: '15px'
+                        , icon: 2
+                    });
                 }
             });
         },

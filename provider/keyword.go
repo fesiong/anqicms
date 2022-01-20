@@ -9,7 +9,8 @@ import (
 )
 
 type KeywordCSV struct {
-	Title string `csv:"title"`
+	Title      string `csv:"title"`
+	CategoryId uint   `csv:"category_id"`
 }
 
 func GetKeywordList(keyword string, currentPage, pageSize int) ([]*model.Keyword, int64, error) {
@@ -76,7 +77,8 @@ func ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, er
 		if err != nil {
 			//表示不存在
 			keyword = &model.Keyword{
-				Title:  item.Title,
+				Title: item.Title,
+				CategoryId: item.CategoryId,
 				Status: 1,
 			}
 			total++

@@ -30,9 +30,10 @@ layui.define(['form', 'table', 'layedit'], function (exports) {
       , { field: 'title', title: '文章标题', minWidth: 200, templet: '<div>{{d.title}}{{# if(d.thumb){ }}<span class="layui-badge">[图]</span>{{# } }}</div>' }
       , { field: 'category_id', width: 150, title: '所属分类', templet: '<div>{{# if(d.category){ }}{{d.category.title}}{{# } }}</div>' }
       , { field: 'views', width: 80, title: '浏览' }
+      , { field: 'has_pseudo', width: 80, title: '伪原创', templet: '<div>{{# if(d.has_pseudo == 1){ }}是{{# } }}</div>' }
       , { field: 'created_time', width: 150, title: '发布时间', templet: '<div>{{layui.util.toDateString(d.created_time*1000, "yyyy-MM-dd HH:mm")}}</div>' }
       , { field: 'updated_time', width: 150, title: '更新时间', templet: '<div>{{layui.util.toDateString(d.updated_time*1000, "yyyy-MM-dd HH:mm")}}</div>' }
-      , { title: '操作', width: 150, align: 'center', fixed: 'right', toolbar: '#table-article-toolbar' }
+      , { title: '操作', width: 230, align: 'center', fixed: 'right', toolbar: '#table-article-toolbar' }
     ]]
     , page: true
     , limit: 20
@@ -163,6 +164,24 @@ layui.define(['form', 'table', 'layedit'], function (exports) {
         });
         }
       });
+    } else if (layEvent === 'pseudo') {
+      layer.confirm('确定要对这篇文章进行伪原创吗？', function (index) {
+        admin.req({
+          url: '/collector/article/pseudo'
+          , data: obj.data
+          , type: 'post'
+          , done: function (res) {
+            articleTable.reload();//重载表格
+            layer.close(index);
+          }
+          , fail: function (res) {
+            layer.msg(res.msg, {
+              offset: '15px'
+              , icon: 2
+            });
+          }
+        });
+      });
     }
   });
   //控制菜单操作
@@ -186,6 +205,19 @@ layui.define(['form', 'table', 'layedit'], function (exports) {
                   type: 'post'
               }
             });
+          });
+        }
+      });
+    },
+    replace: function () {
+      admin.popup({
+        title: '批量替换文章内容'
+        ,area: ['600px', '400px']
+        ,id: 'LAY-popup-article-replace'
+        ,success: function(layero, index){
+          view(this.id).render('content/article/replace', {extra: {}}).done(function(){
+            //
+            form.render();
           });
         }
       });
@@ -420,6 +452,36 @@ layui.define(['form', 'table', 'layedit'], function (exports) {
       });
     });
   }
+
+  form.on('submit(replace-submit)', function (obj) {
+    let data = obj.field;
+    data.content_replace = data.content_replace.trim().split("\n");
+
+    admin.req({
+        url: '/collector/article/replace'
+        , data: data
+        , type: 'post'
+        , done: function (res) {
+            if (res.code === 0) {
+                layer.msg(res.msg, {
+                    offset: '15px'
+                    , icon: 1
+                    , time: 1000
+                }, function () {
+                    layer.closeAll(); //执行关闭
+                });
+            } else {
+                layer.msg(res.msg);
+            }
+        }
+        , fail: function (res) {
+            layer.msg(res.msg, {
+                offset: '15px'
+                , icon: 2
+            });
+        }
+    });
+});
 
   //对外暴露的接口
   exports('article', {});

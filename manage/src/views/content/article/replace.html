@@ -1,0 +1,15 @@
+<div class="layui-form" style="padding: 20px 0 0 0;">
+  <div class="layui-form-item">
+    <label class="layui-form-label">内容替换</label>
+    <div class="layui-input-inline">
+      <textarea class="layui-textarea" name="content_replace" placeholder="一行一组"></textarea>
+    </div>
+    <div class="layui-form-mid layui-aux-word">将会对所有文章执行替换，一行一组<br>需要替换的词在前，替换后的词在后，中间用->分隔，如“最好->较好”</div>
+  </div>
+  <div class="layui-form-item">
+    <label class="layui-form-label"></label>
+    <div class="layui-input-inline">
+      <input type="button" lay-submit lay-filter="replace-submit" value="确认" class="layui-btn">
+    </div>
+  </div>
+</div>
