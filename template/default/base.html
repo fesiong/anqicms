@@ -9,7 +9,7 @@
     {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
     <meta name="keywords" content="{% tdk with name='Keywords' %}">
     <meta name="description" content="{% tdk with name='Description' %}">
-    <link href="https://www.layuicdn.com/layui/css/layui.css" rel="stylesheet">
+    <link href="/static/layui/css/layui.css" rel="stylesheet">
     <link href="/static/css/app.css" rel="stylesheet">
 </head>
 <body>
@@ -58,7 +58,7 @@
     </div>
 </div>
 </body>
-<script src="https://www.layuicdn.com/layui/layui.js"></script>
+<script src="/static/layui/layui.js"></script>
 <script src="/static/js/app.js?v=1.0.0"></script>
 <div class="layui-hide">
     {{- pluginJsCode|safe }}
