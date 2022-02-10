@@ -36,6 +36,7 @@ layui.define(['form', 'table', 'layedit'], function (exports) {
     data.title_exclude_prefix = data.title_exclude_prefix.trim().split("\n");
     data.title_exclude_suffix = data.title_exclude_suffix.trim().split("\n");
     data.content_exclude_line = data.content_exclude_line.trim().split("\n");
+    data.content_exclude = data.content_exclude.trim().split("\n");
     data.link_exclude = data.link_exclude.trim().split("\n");
     data.content_replace = data.content_replace.trim().split("\n");
 

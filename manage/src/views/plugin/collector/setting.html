@@ -108,6 +108,13 @@
             <div class="layui-form-mid layui-aux-word">采集文章的时候，链接出现这些关键词的，则不会采集</div>
           </div>
           <div class="layui-form-item">
+            <label class="layui-form-label">内容排除</label>
+            <div class="layui-input-inline">
+              <textarea class="layui-textarea" name="content_exclude" placeholder="一行一个">{{#  layui.each(d.data.content_exclude, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>
+            </div>
+            <div class="layui-form-mid layui-aux-word">采集文章的时候，内容出现这些词，则整篇文章都丢弃</div>
+          </div>
+          <div class="layui-form-item">
             <label class="layui-form-label">内容替换</label>
             <div class="layui-input-inline">
               <textarea class="layui-textarea" name="content_replace" placeholder="一行一组">{{#  layui.each(d.data.content_replace, function(index, item){ }}{{item}}{{"\n"}}{{# }) }}</textarea>

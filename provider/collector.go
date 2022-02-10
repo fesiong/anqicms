@@ -309,6 +309,7 @@ func CollectArticleFromBaidu(keyword *model.Keyword) ([]*request.Article, error)
 			log.Println("链接无文章", article.OriginUrl)
 			continue
 		}
+
 		log.Println(article.Title, len(article.Content), article.OriginUrl)
 
 		articles = append(articles, article)
@@ -450,6 +451,12 @@ func ParseNormalDetail(article *request.Article, doc *goquery.Document) {
 			}
 		}
 		article.Title = title
+	}
+
+	if utf8.RuneCountInString(article.Title) < config.CollectorConfig.TitleMinLength || HasContain(article.Title, config.CollectorConfig.TitleExclude) || HasPrefix(article.Title, config.CollectorConfig.TitleExcludePrefix) || HasSuffix(article.Title, config.CollectorConfig.TitleExcludeSuffix) {
+		article.Title = ""
+		//跳过这篇文章
+		return
 	}
 
 	//尝试获取正文内容
@@ -617,6 +624,11 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 	}
 	if planLen < config.CollectorConfig.ContentMinLength {
 		//小于指定字数的，直接抛弃了
+		return "", contentText, maxDeep
+	}
+
+	//如果内容包含指定关键词，则集体抛弃
+	if HasContain(planText, config.CollectorConfig.ContentExclude) {
 		return "", contentText, maxDeep
 	}
 

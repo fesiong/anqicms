@@ -9,6 +9,7 @@ type CollectorJson struct {
 	TitleExcludePrefix []string `json:"title_exclude_prefix"`
 	TitleExcludeSuffix []string `json:"title_exclude_suffix"`
 	ContentExcludeLine []string `json:"content_exclude_line"`
+	ContentExclude     []string `json:"content_exclude"`
 	LinkExclude        []string `json:"link_exclude"`
 	ContentReplace     []string `json:"content_replace"`
 	AutoPseudo         bool     `json:"auto_pseudo"`      //是否伪原创
