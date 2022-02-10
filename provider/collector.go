@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/jinzhu/now"
 	"irisweb/config"
 	"irisweb/library"
 	"irisweb/model"
@@ -170,6 +171,11 @@ func CollectArticles() {
 		return
 	}
 
+	// 如果采集的文章数量达到了设置的限制，则当天停止采集
+	if GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
+		return
+	}
+
 	lastId := uint(0)
 	for {
 		var keywords []*model.Keyword
@@ -222,6 +228,12 @@ func CollectArticlesByKeyword(keyword *model.Keyword) error {
 		//如果自动伪原创
 		if autoPseudo {
 			go PseudoOriginalArticle(modelArticle)
+		}
+		//文章计数
+		UpdateTodayArticleCount(1)
+		if GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
+			//当天的采集任务已完成
+			break
 		}
 	}
 
@@ -1011,6 +1023,26 @@ func PseudoArticle(content string, isEnglish bool) string {
 		content = translateFunc(content, to)
 	}
 	return content
+}
+
+var cachedTodayArticleCount response.CacheArticleCount
+func GetTodayArticleCount() int64 {
+	today := now.BeginningOfDay()
+	if cachedTodayArticleCount.Day == today.Day() {
+		return cachedTodayArticleCount.Count
+	}
+
+	cachedTodayArticleCount.Day = today.Day()
+	cachedTodayArticleCount.Count = 0
+
+	todayUnix := today.Unix()
+	config.DB.Model(&model.Article{}).Where("created_time >= ? and created_time < ?", todayUnix, todayUnix + 86400).Count(&cachedTodayArticleCount.Count)
+
+	return cachedTodayArticleCount.Count
+}
+
+func UpdateTodayArticleCount(addNum int) {
+	cachedTodayArticleCount.Count += int64(addNum)
 }
 
 func GetArticleTotalByKeywordId(id uint) int64 {
