@@ -309,6 +309,19 @@ func CollectArticleFromBaidu(keyword *model.Keyword) ([]*request.Article, error)
 			log.Println("链接无文章", article.OriginUrl)
 			continue
 		}
+		//对乱码的跳过
+		runeTitle := []rune(article.Title)
+		isDeny := false
+		for _, r := range runeTitle {
+			if r == 65533 {
+				isDeny = true
+				break
+			}
+		}
+		if isDeny {
+			log.Println("乱码", article.OriginUrl)
+			continue
+		}
 
 		log.Println(article.Title, len(article.Content), article.OriginUrl)
 
@@ -350,6 +363,10 @@ func ParseArticleDetail(article *request.Article) error {
 	doc, err := goquery.NewDocumentFromReader(htmlR)
 	if err != nil {
 		return err
+	}
+	otherItems := doc.Find("input,textarea,select,radio,form,button,header,footer,.footer,noscript,meta,nav,hr")
+	if otherItems.Length() > 0 {
+		otherItems.Remove()
 	}
 
 	//如果是百度百科地址，单独处理
@@ -590,8 +607,8 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 
 	// 通过一级一级的往下查找
 	aLinks := nodeItem.Find("a")
-	aText := strings.TrimSpace(RemoveTags(aLinks.Text()))
-	planText := strings.TrimSpace(RemoveTags(nodeItem.Text()))
+	aText := strings.TrimSpace(CleanTagsAndSpaces(aLinks.Text()))
+	planText := strings.TrimSpace(CleanTagsAndSpaces(nodeItem.Text()))
 	planLen := utf8.RuneCountInString(planText)
 	if isEnglish {
 		//英语使用空格来计算词数
@@ -637,6 +654,11 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 
 func CleanTags(nodeItem *goquery.Selection) (string, string) {
 	clonedItem := nodeItem.Clone()
+	contentText := strings.TrimSpace(clonedItem.Text())
+	//清理空格
+	re, _ := regexp.Compile(`\s+`)
+	contentText = re.ReplaceAllString(contentText, " ")
+
 	for {
 		if clonedItem.Children().Length() == 1 && clonedItem.Children().Contents().Length() > 0 {
 			clonedItem.Children().Contents().Unwrap()
@@ -647,9 +669,19 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 
 	//降dom深度
 	clonedItem.Children().Each(func(i int, item *goquery.Selection) {
-		//只保留 img,code,blockquote,pre
-		if item.Is("img") || item.Is("code") || item.Is("blockquote") || item.Is("pre") {
+		// 如果是隐藏的，则删除
+		style, exists := item.Attr("style")
+		if exists && strings.Contains(strings.ReplaceAll(strings.ToLower(style), " ",""), "display:none") {
+			item.Remove()
 			return
+		}
+		//只保留 img,code,blockquote,pre
+		if item.Is("code") || item.Is("blockquote") || item.Is("pre") {
+			return
+		}
+		if item.Is("img") {
+			src, _ := item.Find("img").Attr("src")
+			item.ReplaceWithHtml(fmt.Sprintf("<img src=\"%s\"/>", src))
 		}
 		if item.Find("blockquote").Length() > 0 {
 			item.ReplaceWithSelection(item.Find("blockquote"))
@@ -664,11 +696,22 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			return
 		}
 		if item.Find("img").Length() > 0 {
-			item.ReplaceWithSelection(item.Find("img"))
+			src, _ := item.Find("img").Attr("src")
+			item.ReplaceWithHtml(fmt.Sprintf("<img src=\"%s\"/>", src))
 			return
 		}
 		//其他情况
-		item.SetText(strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " ")))
+		if item.Is("p") || item.Is("div") {
+			// 如果一行内容，内部只有a，则移除
+			if item.Find("a").Length() > 0 && strings.TrimSpace(item.Find("a").Text()) == strings.TrimSpace(item.Text()) {
+				item.Remove()
+				return
+			}
+			// div转成p
+			item.ReplaceWithHtml(fmt.Sprintf("<p>%s</p>", strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " "))))
+		} else if !item.Is("table") || !item.Is("ul") || !item.Is("ol") {
+			item.SetText(strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " ")))
+		}
 	})
 
 	inner := clonedItem.Find("*")
@@ -697,15 +740,27 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 
 	content, _ := clonedItem.Html()
 	content = strings.TrimSpace(content)
-	contentText := strings.TrimSpace(clonedItem.Text())
+	contentText = strings.TrimSpace(clonedItem.Text())
 
 	//清理空格
-	re, _ := regexp.Compile(`\s+`)
+	re, _ = regexp.Compile(`\s+`)
 	contentText = re.ReplaceAllString(contentText, " ")
 	//清理空标签
 	content = RemoveTags(content)
 
 	return content, contentText
+}
+
+func CleanTagsAndSpaces(content string) string {
+	endReg, _ := regexp.Compile("\\</[\\S\\s]+?\\>")
+	content = endReg.ReplaceAllString(content, "\n")
+	re, _ := regexp.Compile("\\<[\\S\\s]+?\\>")
+	content = re.ReplaceAllString(content, "")
+	content = strings.ReplaceAll(content, string(rune(0XA0)), " ")
+	content = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(content, "&nbsp;", " "), "&ensp;", " "), "&emsp;", " ")
+	content = strings.TrimSpace(content)
+
+	return content
 }
 
 func RemoveTags(html string) string {
@@ -847,11 +902,11 @@ func joinURL(baseURL, subURL string) (fullURL, fullURLWithoutFrag string) {
 	if err != nil {
 		return
 	}
+	fullURLObj := baseURLObj
 	subURLObj, err := url.Parse(subURL)
-	if err != nil {
-		return
+	if err == nil {
+		fullURLObj = baseURLObj.ResolveReference(subURLObj)
 	}
-	fullURLObj := baseURLObj.ResolveReference(subURLObj)
 	fullURL = fullURLObj.String()
 	fullURLObj.Fragment = ""
 	fullURLWithoutFrag = fullURLObj.String()

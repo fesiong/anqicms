@@ -1,11 +1,10 @@
 package library
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/parnurzeal/gorequest"
+	"golang.org/x/net/html/charset"
 	"log"
 	"net"
 	"net/http"
@@ -127,9 +126,9 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	}
 
 	resp.Body.Close()
-
+	contentType := resp.Header.Get("Content-Type")
 	// 编码处理
-	charsetName, err := getPageCharset([]byte(body))
+	charsetName, err := getPageCharset(body, contentType)
 	if err != nil {
 		log.Println("获取页面编码失败: ", err.Error())
 	}
@@ -163,34 +162,40 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 }
 
 // getPageCharset 解析页面, 从中获取页面编码信息
-func getPageCharset(body []byte) (charset string, err error) {
-	bodyReader := bytes.NewReader(body)
-	dom, err := goquery.NewDocumentFromReader(bodyReader)
-	if err != nil {
-		return
-	}
-	var metaInfo string
-	var exist bool
-	metaInfo, exist = dom.Find("meta[charset]").Attr("charset")
-	if exist {
-		charset = metaInfo
-		return
-	}
-	metaInfo, exist = dom.Find("meta[http-equiv]").Attr("content")
-	if exist {
-		// FindStringSubmatch返回值为切片, 第一个成员为模式匹配到的子串, 之后的成员分别是各分组匹配到的子串.
-		// ta基本等效于FindStringSubmatch(metaInfo, 1), 只查询1个匹配项.
-		matchedArray := charsetPattern.FindStringSubmatch(metaInfo)
+func getPageCharset(content, contentType string) (charSet string, err error) {
+	//log.Println("服务器返回编码：", contentType)
+	if contentType != "" {
+		matchedArray := charsetPattern.FindStringSubmatch(strings.ToLower(contentType))
 		if len(matchedArray) > 1 {
 			for _, matchedItem := range matchedArray[1:] {
-				if matchedItem != "" {
-					charset = matchedItem
+				if strings.ToLower(matchedItem) != "utf-8" {
+					charSet = matchedItem
 					return
 				}
 			}
 		}
 	}
-	charset = "utf-8"
+	//log.Println("继续查找编码1")
+	var checkType string
+	reg := regexp.MustCompile(`(?is)<title[^>]*>(.*?)<\/title>`)
+	match := reg.FindStringSubmatch(content)
+	if len(match) > 1 {
+		_, checkType, _ = charset.DetermineEncoding([]byte(match[1]), "")
+		//log.Println("Title解析编码：", checkType)
+		if checkType == "utf-8" {
+			charSet = checkType
+			return
+		}
+	}
+	//log.Println("继续查找编码2")
+	reg = regexp.MustCompile(`(?is)<meta[^>]*charset\s*=["']?\s*([\w\d\-]+)`)
+	match = reg.FindStringSubmatch(content)
+	if len(match) > 1 {
+		charSet = match[1]
+		return
+	}
+	//log.Println("找不到编码")
+	charSet = "utf-8"
 	return
 }
 
