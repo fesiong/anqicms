@@ -13,13 +13,14 @@
             </div>
             <div class="layui-card article-detail">
                 <div class="layui-card-body">
-                    <h1 class="title">{{article.Title}}</h1>
+                    <h1 class="title">{% archiveDetail with name="Title" %}</h1>
                     <div class="meta">
-                        {% if article.Category %}<span><a href="{{getUrl("category", article.Category, 0)}}">{{article.Category.Title}}</a></span>{% endif %}
-                        <span>{{stampToDate(article.CreatedTime, "2006-01-02")}}</span>
-                        <span>{{article.Views}} 阅读</span>
+                        {% archiveDetail category with name="Category" %}
+                        {% if category %}<span><a href="{{category.Link}}">{{category.Title}}</a></span>{% endif %}
+                        <span>{% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
+                        <span>{% archiveDetail with name="Views" %} 阅读</span>
                     </div>
-                    {% articleParams params %}
+                    {% archiveParams params %}
                     <div class="extra">
                         <table class="layui-table">
                             <colgroup>
@@ -38,9 +39,9 @@
                             </tbody>
                         </table>
                     </div>
-                    {% endarticleParams %}
+                    {% endarchiveParams %}
                     <div class="article-body">
-                        {% articleDetail articleContent with name="Content" %}
+                        {% archiveDetail articleContent with name="Content" %}
                         {{articleContent|safe}}
                     </div>
                 </div>
@@ -49,37 +50,53 @@
                 <div class="layui-card-body">
                     <div class="article-prev-next">
                         <li>
-                            {% prevArticle prev %}
+                            {% prevArchive prev %}
                             上一篇：
                             {% if prev %}
                             <a href="{{prev.Link}}">{{prev.Title}}</a>
                             {% else %}
                             没有了
                             {% endif %}
-                            {% endprevArticle %}
+                            {% endprevArchive %}
                           </li>
                           <li>
-                              {% nextArticle next %}
+                              {% nextArchive next %}
                               下一篇：
                               {% if next %}
                               <a href="{{next.Link}}">{{next.Title}}</a>
                               {% else %}
                               没有了
                               {% endif %}
-                              {% endnextArticle %}
+                              {% endnextArchive %}
                           </li>
                     </div>
                 </div>
             </div>
-            {% include "partial/comment.html" with itemType="article" itemId=article.Id %}
+            {% include "partial/comment.html" %}
         </div>
 
         <div class="layui-col-md4">
             {% include "partial/author.html" %}
             <div class="layui-card">
+                <div class="layui-card-header">文章分类</div>
+                <div class="layui-card-body">
+                    {% categoryList articleCategories with moduleId="1" parentId="0" %}
+                    <ul class="aside-list">
+                        {% for item in articleCategories %}
+                        <li class="item {% if item.IsCurrent %}active{% endif %}">
+                            <a href="{{item.Link}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endcategoryList %}
+                </div>
+            </div>
+            <div class="layui-card">
                 <div class="layui-card-header">最新文章</div>
                 <div class="layui-card-body">
-                    {% articleList popularArticles with type="list" order="id desc" limit="6" %}
+                    {% archiveList popularArticles with type="list" order="id desc" limit="6" %}
                     <ul class="aside-list">
                         {% for item in popularArticles %}
                         <li class="item">
@@ -94,13 +111,13 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    {% endarticleList %}
+                    {% endarchiveList %}
                 </div>
             </div>
             <div class="layui-card">
                 <div class="layui-card-header">相关文章</div>
                 <div class="layui-card-body">
-                    {% articleList relationList with type="related" limit="6" %}
+                    {% archiveList relationList with type="related" limit="6" %}
                     <ul class="aside-list">
                         {% for item in relationList %}
                         <li class="item">
@@ -111,7 +128,7 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    {% endarticleList %}
+                    {% endarchiveList %}
                 </div>
             </div>
         </div>

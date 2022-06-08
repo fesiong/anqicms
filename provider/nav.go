@@ -1,13 +1,14 @@
 package provider
 
 import (
-	"irisweb/config"
-	"irisweb/model"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
 )
 
 func GetNavList(nest bool) ([]*model.Nav, error) {
 	var tmpList []*model.Nav
-	db := config.DB
+	db := dao.DB
 	//读取第一层
 	if err := db.Where("status = ?", 1).Order("sort asc").Find(&tmpList).Error; err != nil {
 		//始终返回index
@@ -17,7 +18,7 @@ func GetNavList(nest bool) ([]*model.Nav, error) {
 	if len(tmpList) == 0 {
 		return []*model.Nav{
 			{
-				Title:  "首页",
+				Title:  config.Lang("首页"),
 				Status: 1,
 				NavType: model.NavTypeSystem,
 				PageId: 0,
@@ -60,7 +61,7 @@ func GetNavList(nest bool) ([]*model.Nav, error) {
 
 func GetNavById(id uint) (*model.Nav, error) {
 	var nav model.Nav
-	if err := config.DB.Where("id = ?", id).First(&nav).Error; err != nil {
+	if err := dao.DB.Where("id = ?", id).First(&nav).Error; err != nil {
 		return nil, err
 	}
 

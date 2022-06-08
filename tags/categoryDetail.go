@@ -3,10 +3,10 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/model"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"reflect"
 )
 
@@ -16,7 +16,7 @@ type tagCategoryDetailNode struct {
 }
 
 func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -25,48 +25,42 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 	id := uint(0)
 
-	if args["id"] != nil {
-		id = uint(args["id"].Integer())
-	}
-
 	fieldName := ""
 	if args["name"] != nil {
 		fieldName = args["name"].String()
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	categoryDetail, ok := ctx.Public["category"].(*model.Category)
-	if !ok && id == 0 {
-		return nil
-	}
-	//不是同一个，从新获取
-	if categoryDetail != nil && (id > 0 && categoryDetail.Id != id) {
-		categoryDetail = nil
+	categoryDetail, _ := ctx.Public["category"].(*model.Category)
+	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
+	if ok && archiveDetail != nil {
+		categoryDetail = provider.GetCategoryFromCache(archiveDetail.CategoryId)
 	}
 
-	if categoryDetail == nil && id > 0 {
-		var err error
-		categoryDetail, err = provider.GetCategoryById(id)
-		if err != nil {
-			return nil
+	if args["id"] != nil {
+		id = uint(args["id"].Integer())
+		categoryDetail = provider.GetCategoryFromCache(id)
+	}
+
+	if categoryDetail != nil {
+		categoryDetail.Link = provider.GetUrl("category", categoryDetail, 0)
+
+		v := reflect.ValueOf(*categoryDetail)
+
+		f := v.FieldByName(fieldName)
+
+		content := fmt.Sprintf("%v", f)
+
+		// output
+		if node.name == "" {
+			writer.WriteString(content)
+		} else {
+			if fieldName == "Images" {
+				ctx.Private[node.name] = categoryDetail.Images
+			} else {
+				ctx.Private[node.name] = content
+			}
 		}
-	}
-	if categoryDetail == nil {
-		return nil
-	}
-	categoryDetail.Link = provider.GetUrl("category", categoryDetail, 0)
-
-	v := reflect.ValueOf(*categoryDetail)
-
-	f := v.FieldByName(fieldName)
-
-	content := fmt.Sprintf("%v", f)
-
-	// output
-	if node.name == "" {
-		writer.WriteString(content)
-	} else {
-		ctx.Private[node.name] = content
 	}
 
 	return nil

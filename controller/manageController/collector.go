@@ -1,48 +1,15 @@
 package manageController
 
 import (
-	"bytes"
-	"encoding/json"
-	"fmt"
 	"github.com/kataras/iris/v12"
-	"io"
-	"io/ioutil"
-	"irisweb/config"
-	"irisweb/provider"
-	"irisweb/request"
-	"os"
-	"regexp"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 // HandleCollectSetting 全局配置
 func HandleCollectSetting(ctx iris.Context) {
-	var collector config.CollectorJson
-	//再根据用户配置来覆盖
-	buf, err := ioutil.ReadFile(fmt.Sprintf("%scollector.json", config.ExecPath))
-	configStr := ""
-	if err != nil {
-		//文件不存在
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  "",
-			"data": collector,
-		})
-		return
-	}
-	configStr = string(buf[:])
-	reg := regexp.MustCompile(`/\*.*\*/`)
-
-	configStr = reg.ReplaceAllString(configStr, "")
-	buf = []byte(configStr)
-
-	if err = json.Unmarshal(buf, &collector); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  "",
-			"data": collector,
-		})
-		return
-	}
+	collector := provider.GetUserCollectorSetting()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -63,7 +30,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 	}
 
 	//将现有配置写回文件
-	configFile, err := os.OpenFile(fmt.Sprintf("%scollector.json", config.ExecPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	err := provider.SaveUserCollectorSetting(req, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -71,32 +38,6 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 		})
 		return
 	}
-
-	defer configFile.Close()
-
-	buff := &bytes.Buffer{}
-
-	buf, err := json.MarshalIndent(req, "", "\t")
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-	buff.Write(buf)
-
-	_, err = io.Copy(configFile, buff)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	//重新读取配置
-	config.LoadCollectorConfig()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -105,7 +46,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 }
 
 func HandleReplaceArticles(ctx iris.Context) {
-	var req request.ArticleReplaceRequest
+	var req request.ArchiveReplaceRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -121,26 +62,11 @@ func HandleReplaceArticles(ctx iris.Context) {
 		})
 		return
 	}
-
-	go provider.ReplaceArticles(req.ContentReplace)
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "替换任务已触发",
-	})
-}
-
-func HandleArticlePseudo(ctx iris.Context) {
-	var req request.Article
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+	// 先尝试保存
+	collectorJson := config.CollectorJson{
+		ContentReplace: req.ContentReplace,
 	}
-
-	article, err := provider.GetArticleById(req.Id)
+	err := provider.SaveUserCollectorSetting(collectorJson, false)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -149,7 +75,41 @@ func HandleArticlePseudo(ctx iris.Context) {
 		return
 	}
 
-	err = provider.PseudoOriginalArticle(article)
+	if req.Replace {
+		go provider.ReplaceArticles()
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "替换任务已触发",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "关键词已保存",
+	})
+}
+
+func HandleArticlePseudo(ctx iris.Context) {
+	var req request.Archive
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	archiveData, err := provider.GetArchiveDataById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err = provider.PseudoOriginalArticle(archiveData)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

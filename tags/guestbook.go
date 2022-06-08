@@ -3,7 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
+	"kandaoni.com/anqicms/config"
 )
 
 type tagGuestbookNode struct {

@@ -2,32 +2,45 @@ package provider
 
 import (
     "fmt"
-    "irisweb/config"
-    "irisweb/model"
+    "kandaoni.com/anqicms/config"
+    "kandaoni.com/anqicms/model"
     "regexp"
     "strings"
 )
 
-//生成url
-//支持的规则：getUrl("article"|"product"|"category"|"page"|"nav"|"articleIndex"|"productIndex", item, int)
+// GetUrl 生成url
+//支持的规则：getUrl("archive"|"category"|"page"|"nav"|"archiveIndex", item, int)
 //如果page == -1，则不对page进行转换。
 func GetUrl(match string, data interface{}, page int) string {
-    rewritePattern := config.ParsePatten()
+    rewritePattern := config.ParsePatten(false)
     uri := ""
     switch match {
-    case "article":
-        uri = rewritePattern.Article
-        item, ok := data.(*model.Article)
+    case "archive":
+        uri = rewritePattern.Archive
+        item, ok := data.(*model.Archive)
         if ok && item != nil {
+            if item.FixedLink != "" {
+                uri =  item.FixedLink
+                break
+            }
             //拿到值
             catName := ""
-            if strings.Contains(rewritePattern.Article, "catname") {
-                category, err := GetCategoryById(item.CategoryId)
-                if err == nil {
-                    catName = category.UrlToken
+            if strings.Contains(rewritePattern.Archive, "catname") {
+                if item.Category != nil {
+                    catName = item.Category.UrlToken
+                } else {
+                    category := GetCategoryFromCache(item.CategoryId)
+                    if category != nil {
+                        catName = category.UrlToken
+                    }
                 }
             }
-            for _, v := range rewritePattern.ArticleTags {
+            moduleToken := ""
+            module := GetModuleFromCache(item.ModuleId)
+            if module != nil {
+                moduleToken = module.UrlToken
+            }
+            for _, v := range rewritePattern.ArchiveTags {
                 if v == "id" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
                 } else if v == "catid" {
@@ -36,44 +49,35 @@ func GetUrl(match string, data interface{}, page int) string {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
                 } else if v == "catname" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
+                } else if v == "module" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), moduleToken)
                 }
             }
         }
-    case "product":
-        uri = rewritePattern.Product
-        item, ok := data.(*model.Product)
+    case "archiveIndex":
+        uri = rewritePattern.ArchiveIndex
+        item, ok := data.(*model.Module)
         if ok && item != nil {
-            catName := ""
-            if strings.Contains(rewritePattern.Article, "catname") {
-                category, err := GetCategoryById(item.CategoryId)
-                if err == nil {
-                    catName = category.UrlToken
-                }
-            }
-            for _, v := range rewritePattern.ProductTags {
-                if v == "id" {
-                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-                } else if v == "catid" {
-                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.CategoryId))
-                } else if v == "filename" {
+            for _, v := range rewritePattern.ArchiveIndexTags {
+                // 模型首页，只支持module属性
+                if v == "module" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-                } else if v == "catname" {
-                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
                 }
             }
         }
-    case "articleIndex":
-        uri = rewritePattern.ArticleIndex
-    case "productIndex":
-        uri = rewritePattern.ProductIndex
     case "category":
         uri = rewritePattern.Category
         item, ok := data.(*model.Category)
         if ok && item != nil {
             //自动修正
-            if item.Type == model.CategoryTypePage {
+            if item.Type == config.CategoryTypePage {
                 uri = GetUrl("page", item, 0)
             } else {
+                moduleToken := ""
+                module := GetModuleFromCache(item.ModuleId)
+                if module != nil {
+                    moduleToken = module.UrlToken
+                }
                 for _, v := range rewritePattern.CategoryTags {
                     if v == "id" {
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
@@ -83,6 +87,8 @@ func GetUrl(match string, data interface{}, page int) string {
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
                     } else if v == "catname" {
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                    } else if v == "module" {
+                        uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), moduleToken)
                     }
                 }
             }
@@ -111,22 +117,46 @@ func GetUrl(match string, data interface{}, page int) string {
                 if item.PageId == 0 {
                     //首页
                     uri = "/"
-                } else if item.PageId == 1 {
-                    //文章首页
-                    uri = GetUrl("articleIndex", nil, 0)
-                } else if item.PageId == 2 {
-                    //产品首页
-                    uri = GetUrl("productIndex", nil, 0)
+                } else if item.PageId > 0 {
+                    //文档首页
+                    module := GetModuleFromCache(item.PageId)
+                    uri = GetUrl("archiveIndex", module, 0)
                 }
             } else if item.NavType == model.NavTypeCategory {
-                category, err := GetCategoryById(item.PageId)
-                if err == nil {
+                category := GetCategoryFromCache(item.PageId)
+                if category != nil {
                     uri = GetUrl("category", category, 0)
                 }
             } else if item.NavType == model.NavTypeOutlink {
                 //外链
                 uri = item.Link
             }
+        }
+    case "tagIndex":
+        uri = rewritePattern.TagIndex
+    case "tag":
+        uri = rewritePattern.Tag
+        item, ok := data.(*model.Tag)
+        if ok && item != nil {
+            for _, v := range rewritePattern.TagTags {
+                if v == "id" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+                } else if v == "catid" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+                } else if v == "filename" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                } else if v == "catname" {
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                }
+            }
+        }
+    }
+    if uri == "" {
+        if strings.HasPrefix(match, "/") {
+            uri = match
+        } else {
+            //将连接设置为首页
+            uri = "/"
         }
     }
     //处理分页问题
@@ -142,15 +172,6 @@ func GetUrl(match string, data interface{}, page int) string {
             //否则删除分页内容
             reg := regexp.MustCompile("\\(.*\\)")
             uri = reg.ReplaceAllString(uri, "")
-        }
-    }
-
-    if uri == "" {
-        if strings.HasPrefix(match, "/") {
-            uri = match
-        } else {
-            //将连接设置为首页
-            uri = "/"
         }
     }
 

@@ -3,10 +3,11 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
-	"irisweb/response"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 type tagBreadcrumbNode struct {
@@ -21,7 +22,7 @@ type crumb struct {
 }
 
 func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -29,7 +30,7 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return err
 	}
 
-	index := "首页"
+	index := config.Lang("首页")
 	if args["index"] != nil {
 		index = args["index"].String()
 	}
@@ -49,31 +50,34 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
 	if ok {
 		switch webInfo.PageName {
-		case "articleIndex":
-			crumbs = append(crumbs, &crumb{
-				Name: "新闻中心",
-				Link: provider.GetUrl("articleIndex", nil, 0),
-			})
+		case "archiveIndex":
+			module, ok := ctx.Public["module"].(*model.Module)
+			if ok {
+				crumbs = append(crumbs, &crumb{
+					Name: module.Title,
+					Link: provider.GetUrl("archiveIndex", module, 0),
+				})
+			}
 			break
-		case "articleList":
+		case "archiveList":
 			categoryInfo, ok := ctx.Public["category"].(*model.Category)
 			if ok {
 				crumbs = append(crumbs, buildCategoryCrumbs(categoryInfo.ParentId)...)
+				crumbs = append(crumbs, &crumb{
+					Name: categoryInfo.Title,
+					Link: provider.GetUrl("category", categoryInfo, 0),
+				})
 			}
-			crumbs = append(crumbs, &crumb{
-				Name: categoryInfo.Title,
-				Link: provider.GetUrl("category", categoryInfo, 0),
-			})
 			break
-		case "articleDetail":
-			article, ok := ctx.Public["article"].(*model.Article)
+		case "archiveDetail":
+			archive, ok := ctx.Public["archive"].(*model.Archive)
 			if ok {
 				//检查是否存在分类
-				crumbs = append(crumbs, buildCategoryCrumbs(article.CategoryId)...)
+				crumbs = append(crumbs, buildCategoryCrumbs(archive.CategoryId)...)
 
-				title := article.Title
+				title := archive.Title
 				if !showTitle {
-					title = "正文"
+					title = config.Lang("正文")
 				}
 				crumbs = append(crumbs, &crumb{
 					Name: title,
@@ -81,67 +85,22 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 				})
 			}
 			break
-		case "articleComments":
-			itemData, ok := ctx.Public["itemData"].(*model.Article)
+		case "comments":
+			itemData, ok := ctx.Public["itemData"].(*model.Archive)
 			if ok {
 				crumbs = append(crumbs, &crumb{
 					Name: itemData.Title,
-					Link: provider.GetUrl("article", itemData, 0),
+					Link: provider.GetUrl("archive", itemData, 0),
 				})
 			}
 			crumbs = append(crumbs, &crumb{
-				Name: "文章评论",
-				Link: "",
-			})
-			break
-		case "productIndex":
-			crumbs = append(crumbs, &crumb{
-				Name: "产品中心",
-				Link: provider.GetUrl("productIndex", nil, 0),
-			})
-			break
-		case "productList":
-			categoryInfo, ok := ctx.Public["category"].(*model.Category)
-			if ok {
-				crumbs = append(crumbs, buildCategoryCrumbs(categoryInfo.ParentId)...)
-			}
-			crumbs = append(crumbs, &crumb{
-				Name: categoryInfo.Title,
-				Link: provider.GetUrl("category", categoryInfo, 0),
-			})
-			break
-		case "productDetail":
-			product, ok := ctx.Public["product"].(*model.Product)
-			if ok {
-				//检查是否存在分类
-				crumbs = append(crumbs, buildCategoryCrumbs(product.CategoryId)...)
-
-				title := product.Title
-				if !showTitle {
-					title = "正文"
-				}
-				crumbs = append(crumbs, &crumb{
-					Name: title,
-					Link: "",
-				})
-			}
-			break
-		case "productComments":
-			itemData, ok := ctx.Public["itemData"].(*model.Product)
-			if ok {
-				crumbs = append(crumbs, &crumb{
-					Name: itemData.Title,
-					Link: provider.GetUrl("product", itemData, 0),
-				})
-			}
-			crumbs = append(crumbs, &crumb{
-				Name: "产品评论",
+				Name: config.Lang("评论"),
 				Link: "",
 			})
 			break
 		case "guestbook":
 			crumbs = append(crumbs, &crumb{
-				Name: "留言板",
+				Name: config.Lang("留言板"),
 				Link: provider.GetUrl("/guestbook.html", nil, 0),
 			})
 			break
@@ -154,6 +113,11 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 				})
 			}
 			break
+		default:
+			crumbs = append(crumbs, &crumb{
+				Name: webInfo.Title,
+				Link: "",
+			})
 		}
 	}
 
@@ -210,8 +174,8 @@ func TagBreadcrumbParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pon
 func buildCategoryCrumbs(categoryId uint) []*crumb {
 	var crumbs []*crumb
 	if categoryId > 0 {
-		category, err := provider.GetCategoryById(categoryId)
-		if err == nil {
+		category := provider.GetCategoryFromCache(categoryId)
+		if category != nil {
 			if category.ParentId > 0 {
 				crumbs = buildCategoryCrumbs(category.ParentId)
 			}

@@ -1,17 +1,19 @@
 package provider
 
 import (
+	"errors"
 	"github.com/PuerkitoBio/goquery"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/model"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"strings"
 	"time"
 )
 
 func GetLinkList() ([]*model.Link, error) {
 	var links []*model.Link
-	db := config.DB
+	db := dao.DB
 	err := db.Order("sort asc").Find(&links).Error
 	if err != nil {
 		return nil, err
@@ -22,11 +24,37 @@ func GetLinkList() ([]*model.Link, error) {
 
 func GetLinkById(id uint) (*model.Link, error) {
 	var link model.Link
-	if err := config.DB.Where("id = ?", id).First(&link).Error; err != nil {
+	if err := dao.DB.Where("id = ?", id).First(&link).Error; err != nil {
 		return nil, err
 	}
 
 	return &link, nil
+}
+
+func GetLinkByLink(link string) (*model.Link, error) {
+	if link == "" {
+		return nil, errors.New("link必填")
+	}
+
+	var friendLink model.Link
+	var err error
+	err = dao.DB.Where("`link` = ?", link).First(&friendLink).Error
+	if err != nil {
+		// 增加兼容模式查找
+		if strings.HasPrefix(link, "https") {
+			link = strings.ReplaceAll(link, "https://", "http://")
+		} else {
+			link = strings.ReplaceAll(link, "http://", "https://")
+		}
+		err = dao.DB.Where("`link` = ?", link).First(&friendLink).Error
+	}
+
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &friendLink, nil
 }
 
 func PluginLinkCheck(link *model.Link) (*model.Link, error) {
@@ -77,7 +105,7 @@ func PluginLinkCheck(link *model.Link) (*model.Link, error) {
 
 	link.CheckedTime = time.Now().Unix()
 	link.Status = linkStatus
-	link.Save(config.DB)
+	link.Save(dao.DB)
 
 	return link, nil
 }

@@ -2,9 +2,9 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginSitemap(ctx iris.Context) {
@@ -12,6 +12,8 @@ func PluginSitemap(ctx iris.Context) {
 
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 	pluginSitemap.UpdatedTime = provider.GetSitemapTime()
+	// 写入Sitemap的url
+	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap.txt"
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -83,6 +85,8 @@ func PluginSitemapBuild(ctx iris.Context) {
 
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 	pluginSitemap.UpdatedTime = provider.GetSitemapTime()
+	// 写入Sitemap的url
+	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap.txt"
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

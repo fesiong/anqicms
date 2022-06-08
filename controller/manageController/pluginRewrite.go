@@ -2,8 +2,8 @@ package manageController
 
 import (
     "github.com/kataras/iris/v12"
-    "irisweb/config"
-    "irisweb/request"
+    "kandaoni.com/anqicms/config"
+    "kandaoni.com/anqicms/request"
 )
 
 func PluginRewrite(ctx iris.Context) {
@@ -26,16 +26,20 @@ func PluginRewriteForm(ctx iris.Context) {
         return
     }
 
-    config.JsonData.PluginRewrite.Mode = req.Mode
-    config.JsonData.PluginRewrite.Patten = req.Patten
+    if config.JsonData.PluginRewrite.Mode != req.Mode || config.JsonData.PluginRewrite.Patten != req.Patten {
+        config.JsonData.PluginRewrite.Mode = req.Mode
+        config.JsonData.PluginRewrite.Patten = req.Patten
+        err := config.WriteConfig()
+        if err != nil {
+            ctx.JSON(iris.Map{
+                "code": config.StatusFailed,
+                "msg":  err.Error(),
+            })
+            return
+        }
 
-    err := config.WriteConfig()
-    if err != nil {
-        ctx.JSON(iris.Map{
-            "code": config.StatusFailed,
-            "msg":  err.Error(),
-        })
-        return
+        config.ParsePatten(true)
+        config.RestartChan <- true
     }
 
     ctx.JSON(iris.Map{

@@ -2,7 +2,7 @@ package library
 
 import (
 	"fmt"
-	"irisweb/config"
+	"kandaoni.com/anqicms/config"
 	"os"
 	"sync"
 )

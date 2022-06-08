@@ -16,35 +16,21 @@
                     <div class="layui-col-sm6 product-photos">
                         <div class="layui-carousel" id="product-photos">
                             <div carousel-item>
-                                {% for item in product.Images %}
+                                {% archiveDetail archiveImages with name="Images" %}
+                                {% for item in archiveImages %}
                                 <div><img src="{{item}}"></div>
                                 {% endfor %}
                             </div>
                         </div>
                     </div>
                     <div class="layui-col-sm6">
-                        <h1 class="title">{{product.Title}}</h1>
+                        <h1 class="title">{% archiveDetail with name="Title" %}</h1>
                         <div class="meta">
-                            {% if product.Category %}<span><a href="{{getUrl("category", product.Category, 0)}}">{{product.Category.Title}}</a></span>{% endif %}
-                            <span>{{stampToDate(product.CreatedTime, "2006-01-02")}}</span>
-                            <span>{{product.Views}} 阅读</span>
+                            {% archiveDetail category with name="Category" %}
+                            {% if category %}<span><a href="{{category.Link}}">{{category.Title}}</a></span>{% endif %}
+                            <span>{% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
+                            <span>{% archiveDetail with name="Views" %} 阅读</span>
                         </div>
-                        {% if product.Price or product.Stock %}
-                        <div class="extra">
-                            {% if product.Price %}
-                            <div class="extra-item">
-                                <span class="item-left">价格：</span>
-                                <span class="item-right price"><i>￥</i>{{product.Price|floatformat:2}}元</span>
-                            </div>
-                            {% endif %}
-                            {% if product.Stock %}
-                            <div class="extra-item stock">
-                                <span class="item-left">库存：</span>
-                                <span class="item-right">{{product.Stock}}件</span>
-                            </div>
-                            {% endif %}
-                        </div>
-                        {% endif %}
                         <div class="action">
                             <a href="tel:{% contact with name='Cellphone' %}" class="layui-btn layui-btn-danger">获取底价</a>
                             <a href="javascript:;" id="show-cellphone" data-id="{% contact with name='Cellphone' %}" class="layui-btn layui-btn-warm">查看电话</a>
@@ -55,7 +41,7 @@
             <div class="layui-card article-detail">
                 <div class="layui-card-header">产品详情</div>
                 <div class="layui-card-body">
-                    {% productParams params %}
+                    {% archiveParams params %}
                     <div class="extra">
                         <table class="layui-table">
                             <colgroup>
@@ -74,9 +60,9 @@
                             </tbody>
                         </table>
                     </div>
-                    {% endproductParams %}
+                    {% endarchiveParams %}
                     <div class="article-body">
-                        {% productDetail productContent with name="Content" %}
+                        {% archiveDetail productContent with name="Content" %}
                         {{productContent|safe}}
                     </div>
                 </div>
@@ -85,33 +71,33 @@
                 <div class="layui-card-body">
                     <div class="article-prev-next">
                         <li>
-                            {% prevProduct prev %}
+                            {% prevArchive prev %}
                             上一篇：
                             {% if prev %}
                             <a href="{{prev.Link}}">{{prev.Title}}</a>
                             {% else %}
                             没有了
                             {% endif %}
-                            {% endprevProduct %}
+                            {% endprevArchive %}
                           </li>
                           <li>
-                              {% nextProduct next %}
+                              {% nextArchive next %}
                               下一篇：
                               {% if next %}
                               <a href="{{next.Link}}">{{next.Title}}</a>
                               {% else %}
                               没有了
                               {% endif %}
-                              {% endnextProduct %}
+                              {% endnextArchive %}
                           </li>
                     </div>
                 </div>
             </div>
-            {% include "partial/comment.html" with itemType="product" itemId=product.Id %}
+            {% include "partial/comment.html" with itemId=product.Id %}
             <div class="layui-card">
                 <div class="layui-card-header">相关产品</div>
                 <div class="layui-card-body">
-                    {% productList relationProducts with type="related" limit="6" %}
+                    {% archiveList relationProducts with type="related" limit="6" %}
                     <ul class="product-list aside-list layui-row layui-col-space15">
                         {% for item in relationProducts %}
                         <li class="layui-col-xs6">
@@ -135,7 +121,7 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    {% endproductList %}
+                    {% endarchiveList %}
                 </div>
             </div>
         </div>
@@ -196,7 +182,7 @@
             <div class="layui-card">
                 <div class="layui-card-header">推荐产品</div>
                 <div class="layui-card-body">
-                    {% productList newProducts with type="list" order="id desc" limit="6" %}
+                    {% archiveList newProducts with type="list" order="id desc" limit="6" %}
                     <ul class="product-list aside-list layui-row layui-col-space15">
                         {% for item in newProducts %}
                         <li class="layui-col-xs6">
@@ -220,7 +206,7 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    {% endproductList %}
+                    {% endarchiveList %}
                 </div>
             </div>
         </div>

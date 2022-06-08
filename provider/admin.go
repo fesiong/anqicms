@@ -2,19 +2,25 @@ package provider
 
 import (
 	"errors"
-	"irisweb/config"
-	"irisweb/model"
+	"fmt"
+	"github.com/dgrijalva/jwt-go"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"strings"
+	"time"
 )
 
-func InitAdmin(userName string, password string) error {
+func InitAdmin(userName string, password string, force bool) error {
 	if userName == "" || password == "" {
 		return errors.New("请提供用户名和密码")
 	}
 
 	var exists int64
-	db := config.DB
+	db := dao.DB
 	db.Model(&model.Admin{}).Count(&exists)
-	if exists > 0 {
+	if exists > 0 && !force {
 		return errors.New("已有管理员不能再创建")
 	}
 
@@ -22,7 +28,8 @@ func InitAdmin(userName string, password string) error {
 		UserName: userName,
 		Status:   1,
 	}
-	admin.Password = admin.EncryptPassword(password)
+	admin.Id = 1
+	admin.EncryptPassword(password)
 	err := admin.Save(db)
 	if err !=  nil {
 		return err
@@ -33,7 +40,7 @@ func InitAdmin(userName string, password string) error {
 
 func GetAdminByUserName(userName string)(*model.Admin, error) {
 	var admin model.Admin
-	db := config.DB
+	db := dao.DB
 	err := db.Where("`user_name` = ?", userName).First(&admin).Error
 	if err != nil {
 		return nil, err
@@ -43,10 +50,80 @@ func GetAdminByUserName(userName string)(*model.Admin, error) {
 
 func GetAdminById(id uint)(*model.Admin, error) {
 	var admin model.Admin
-	db := config.DB
+	db := dao.DB
 	err := db.Where("`id` = ?", id).First(&admin).Error
 	if err != nil {
 		return nil, err
 	}
 	return &admin, nil
+}
+
+func GetAdminInfoById(id uint) (*model.Admin, error) {
+	var authUser model.Admin
+	err := dao.DB.Where("id = ?", id).First(&authUser).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &authUser, nil
+}
+
+func GetAdminInfoByName(name string) (*model.Admin, error) {
+	var authUser model.Admin
+	err := dao.DB.Where("name = ?", name).First(&authUser).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &authUser, nil
+}
+
+func GetAdminAuthToken(userId uint) string {
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"adminId":  fmt.Sprintf("%d", userId),
+		"timestamp": fmt.Sprintf("%d", time.Now().Unix()),
+	})
+	// 获取签名字符串
+	tokenString, err := jwtToken.SignedString([]byte(config.JsonData.Server.TokenSecret))
+	if err != nil {
+		return ""
+	}
+
+	return tokenString
+}
+
+func UpdateAdminInfo(adminId uint, req request.AdminInfoRequest) (*model.Admin, error) {
+	admin, err := GetAdminInfoById(adminId)
+	if err != nil {
+		return nil, err
+	}
+	//开始验证
+	req.UserName = strings.TrimSpace(req.UserName)
+	req.Password = strings.TrimSpace(req.Password)
+
+	var exists *model.Admin
+
+	if req.UserName != "" {
+		exists, err = GetAdminInfoByName(req.UserName)
+		if err == nil && exists.Id != admin.Id {
+			return nil, errors.New("用户名已被占用，请更换一个")
+		}
+		admin.UserName = req.UserName
+	}
+
+	if req.Password != "" {
+		if len(req.Password) < 6 {
+			return nil, errors.New("请输入6位及以上长度的密码")
+		}
+		err = admin.EncryptPassword(req.Password)
+		if err != nil {
+			return nil, errors.New("密码设置失败")
+		}
+	}
+	err = dao.DB.Save(admin).Error
+	if err != nil {
+		return nil, errors.New("用户信息更新失败")
+	}
+
+	return admin, nil
 }

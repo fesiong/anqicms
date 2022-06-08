@@ -2,9 +2,9 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 )
 
 func IndexPage(ctx iris.Context) {
@@ -25,9 +25,18 @@ func IndexPage(ctx iris.Context) {
 	webInfo.Description = config.JsonData.Index.SeoDescription
 	//设置页面名称，方便tags识别
 	webInfo.PageName = "index"
+	webInfo.CanonicalUrl = provider.GetUrl("", nil, 0)
 	ctx.ViewData("webInfo", webInfo)
 
 	ctx.ViewData("category", category)
 
-	ctx.View(GetViewPath(ctx, "index/index.html"))
+	// 支持2种文件结构，一种是目录式的，一种是扁平式的
+	tplName := "index/index.html"
+	if ViewExists(ctx, "index.html") {
+		tplName = "index.html"
+	}
+	err := ctx.View(GetViewPath(ctx, tplName))
+	if err != nil {
+		ctx.Values().Set("message", err.Error())
+	}
 }

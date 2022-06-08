@@ -1,17 +1,21 @@
 package request
 
+import "kandaoni.com/anqicms/config"
+
 type SystemConfig struct {
-	SiteName      string `json:"site_name"`
-	SiteLogo      string `json:"site_logo"`
-	SiteIcp       string `json:"site_icp"`
-	SiteCopyright string `json:"site_copyright"`
-	AdminUri      string `json:"admin_uri"`
-	SiteClose     int    `json:"site_close"`
-	SiteCloseTips string `json:"site_close_tips"`
-	TemplateName  string `json:"template_name"`
-	BaseUrl       string `json:"base_url"`
-	MobileUrl     string `json:"mobile_url"`
-	TemplateType  int    `json:"template_type"`
+	SiteName      string              `json:"site_name"`
+	SiteLogo      string              `json:"site_logo"`
+	SiteIcp       string              `json:"site_icp"`
+	SiteCopyright string              `json:"site_copyright"`
+	AdminUrl      string              `json:"admin_url"`
+	SiteClose     int                 `json:"site_close"`
+	SiteCloseTips string              `json:"site_close_tips"`
+	TemplateName  string              `json:"template_name"`
+	BaseUrl       string              `json:"base_url"`
+	MobileUrl     string              `json:"mobile_url"`
+	TemplateType  int                 `json:"template_type"`
+	Language      string              `json:"language"`
+	ExtraFields   []config.ExtraField `json:"extra_fields"` // 用户自定义字段
 }
 
 type ContentConfig struct {
@@ -39,17 +43,17 @@ type NavConfig struct {
 	ParentId    uint   `json:"parent_id"`
 	NavType     uint   `json:"nav_type"`
 	PageId      uint   `json:"page_id"`
-	InnerPageId uint   `json:"inner_page_id"`
 	Link        string `json:"link"`
 	Sort        uint   `json:"sort"`
 	Status      uint   `json:"status"`
 }
 
 type ContactConfig struct {
-	UserName  string `json:"user_name"`
-	Cellphone string `json:"cellphone"`
-	Address   string `json:"address"`
-	Email     string `json:"email"`
-	Wechat    string `json:"wechat"`
-	Qrcode    string `json:"qrcode"`
+	UserName    string              `json:"user_name"`
+	Cellphone   string              `json:"cellphone"`
+	Address     string              `json:"address"`
+	Email       string              `json:"email"`
+	Wechat      string              `json:"wechat"`
+	Qrcode      string              `json:"qrcode"`
+	ExtraFields []config.ExtraField `json:"extra_fields"` // 用户自定义字段
 }

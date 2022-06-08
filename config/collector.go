@@ -1,23 +1,28 @@
 package config
 
 type CollectorJson struct {
-	ErrorTimes         int      `json:"error_times"` //预留
-	Channels           int      `json:"channels"`    //预留
-	TitleMinLength     int      `json:"title_min_length"`
-	ContentMinLength   int      `json:"content_min_length"`
-	TitleExclude       []string `json:"title_exclude"`
-	TitleExcludePrefix []string `json:"title_exclude_prefix"`
-	TitleExcludeSuffix []string `json:"title_exclude_suffix"`
-	ContentExcludeLine []string `json:"content_exclude_line"`
-	ContentExclude     []string `json:"content_exclude"`
-	LinkExclude        []string `json:"link_exclude"`
-	ContentReplace     []string `json:"content_replace"`
-	AutoPseudo         bool     `json:"auto_pseudo"`      //是否伪原创
-	AutoDigKeyword     bool     `json:"auto_dig_keyword"` //关键词是否自动拓词
-	CategoryId         uint     `json:"category_id"`      //默认分类
-	StartHour          int      `json:"start_hour"`       //每天开始时间
-	EndHour            int      `json:"end_hour"`         //每天结束时间
-	DailyLimit         int      `json:"daily_limit"`      //每日限额
+	ErrorTimes         int              `json:"error_times"` //预留
+	Channels           int              `json:"channels"`    //预留
+	TitleMinLength     int              `json:"title_min_length"`
+	ContentMinLength   int              `json:"content_min_length"`
+	TitleExclude       []string         `json:"title_exclude"`
+	TitleExcludePrefix []string         `json:"title_exclude_prefix"`
+	TitleExcludeSuffix []string         `json:"title_exclude_suffix"`
+	ContentExcludeLine []string         `json:"content_exclude_line"`
+	ContentExclude     []string         `json:"content_exclude"`
+	LinkExclude        []string         `json:"link_exclude"`
+	ContentReplace     []ReplaceKeyword `json:"content_replace"`
+	AutoPseudo         bool             `json:"auto_pseudo"`      //是否伪原创
+	AutoDigKeyword     bool             `json:"auto_dig_keyword"` //关键词是否自动拓词
+	CategoryId         uint             `json:"category_id"`      //默认分类
+	StartHour          int              `json:"start_hour"`       //每天开始时间
+	EndHour            int              `json:"end_hour"`         //每天结束时间
+	DailyLimit         int              `json:"daily_limit"`      //每日限额
+}
+
+type ReplaceKeyword struct {
+	From string `json:"from"`
+	To   string `json:"to"`
 }
 
 var defaultCollectorConfig = CollectorJson{

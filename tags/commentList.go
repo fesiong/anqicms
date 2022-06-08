@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
 	"github.com/kataras/iris/v12/context"
-	"irisweb/config"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"strconv"
+	"strings"
 )
 
 type tagCommentListNode struct {
@@ -16,7 +18,7 @@ type tagCommentListNode struct {
 }
 
 func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -24,12 +26,16 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		return err
 	}
 
-	itemType := ""
-	itemId := uint(0)
+	archiveId := uint(0)
 	order := "id desc"
 	limit := 10
+	offset := 0
 	currentPage := 1
 	listType := "list"
+
+	if args["archiveId"] != nil {
+		archiveId = uint(args["archiveId"].Integer())
+	}
 
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
 	if ok {
@@ -43,17 +49,22 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 
-	if args["itemType"] != nil {
-		itemType = args["itemType"].String()
+	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
+	if ok && archiveDetail != nil {
+		archiveId = archiveDetail.Id
 	}
-	if args["itemId"] != nil {
-		itemId = uint(args["itemId"].Integer())
-	}
+
 	if args["order"] != nil {
 		order = args["order"].String()
 	}
 	if args["limit"] != nil {
-		limit = args["limit"].Integer()
+		limitArgs := strings.Split(args["limit"].String(), ",")
+		if len(limitArgs) == 2 {
+			offset, _ = strconv.Atoi(limitArgs[0])
+			limit, _ = strconv.Atoi(limitArgs[1])
+		} else if len(limitArgs) == 1 {
+			limit, _ = strconv.Atoi(limitArgs[0])
+		}
 		if limit > 100 {
 			limit = 100
 		}
@@ -65,11 +76,25 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		listType = args["type"].String()
 	}
 
-	commentList, total, _ := provider.GetCommentList(itemType, itemId, order, currentPage, limit)
+	commentList, total, _ := provider.GetCommentList(archiveId, order, currentPage, limit, offset)
 
 	if listType == "page" {
-		urlPatten := fmt.Sprintf("/comment/%s/%d(?page={page})", itemType, itemId)
-		ctx.Private["pagination"] = makePagination(total, currentPage, limit, urlPatten, 4)
+		// 如果评论是在文章详情页或产品详情页，则根据具体来判断页码
+		var urlPatten = fmt.Sprintf("/comment/%d(?page={page})", archiveId)
+		var link string
+		if archiveDetail != nil {
+			// 在文章中
+			link = provider.GetUrl("archive", archiveDetail, 0)
+		}
+		if link != "" {
+			if strings.Contains(link, "?") {
+				urlPatten = fmt.Sprintf("%s(&page={page})", link)
+			} else {
+				urlPatten = fmt.Sprintf("%s(?page={page})", link)
+			}
+		}
+
+		ctx.Private["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
 	}
 	ctx.Private[node.name] = commentList
 	//execute

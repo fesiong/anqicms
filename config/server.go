@@ -5,4 +5,5 @@ type serverConfig struct {
 	Env         string `json:"env"`
 	Port        int    `json:"port"`
 	LogLevel    string `json:"log_level"`
+	TokenSecret string `json:"token_secret"`
 }

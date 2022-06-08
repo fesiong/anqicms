@@ -2,14 +2,25 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func CategoryList(ctx iris.Context) {
+	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	categoryType := uint(ctx.URLParamIntDefault("type", 0))
-	categories, err := provider.GetCategories(categoryType, 0)
+	title := ctx.URLParam("title")
+
+	var categories []*model.Category
+	var err error
+	if categoryType == config.CategoryTypePage {
+		categories, err = provider.GetPages(title)
+	} else {
+		categories, err = provider.GetCategories(moduleId, title, 0)
+	}
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -26,7 +37,7 @@ func CategoryList(ctx iris.Context) {
 }
 
 func CategoryDetail(ctx iris.Context) {
-	id := ctx.Params().GetUintDefault("id", 0)
+	id := uint(ctx.URLParamIntDefault("id", 0))
 
 	category, err := provider.GetCategoryById(id)
 	if err != nil {
@@ -65,7 +76,7 @@ func CategoryDetailForm(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已更新",
+		"msg":  "保存成功",
 		"data": category,
 	})
 }
@@ -88,7 +99,7 @@ func CategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	err = category.Delete(config.DB)
+	err = category.Delete(dao.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -96,6 +107,8 @@ func CategoryDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.DeleteCacheCategories()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

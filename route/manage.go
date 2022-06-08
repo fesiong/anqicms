@@ -3,33 +3,45 @@ package route
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/controller/manageController"
-	"irisweb/middleware"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/controller/manageController"
+	"kandaoni.com/anqicms/middleware"
 )
 
 func manageRoute(app *iris.Application) {
-	manage := app.Party(config.JsonData.System.AdminUri)
+	system := app.Party("/system", manageController.AdminFileServ)
 	{
-		manage.HandleDir("/", fmt.Sprintf("%smanage", config.ExecPath))
-		manage.Post("/user/login", manageController.UserLogin)
-		manage.Get("/version", manageController.Version)
+		system.HandleDir("/", fmt.Sprintf("%ssystem", config.ExecPath))
+	}
+	manage := system.Party("/api", middleware.ParseAdminUrl)
+	{
+		manage.Post("/login", manageController.AdminLogin)
 		manage.Get("/statistics", manageController.Statistics)
+		manage.Get("/captcha", controller.GenerateCaptcha)
 
-		user := manage.Party("/user", middleware.ManageAuth)
+		version := manage.Party("/version")
+		{
+			version.Get("/info", manageController.Version)
+			version.Get("/check", manageController.CheckVersion)
+			version.Post("/upgrade", manageController.VersionUpgrade)
+		}
+
+		user := manage.Party("/admin", middleware.ParseAdminToken)
 		{
 			user.Get("/detail", manageController.UserDetail)
 			user.Post("/detail", manageController.UserDetailForm)
 			user.Post("/logout", manageController.UserLogout)
 		}
 
-		setting := manage.Party("/setting", middleware.ManageAuth)
+		setting := manage.Party("/setting", middleware.ParseAdminToken)
 		{
 			setting.Get("/system", manageController.SettingSystem)
 			setting.Get("/content", manageController.SettingContent)
 			setting.Get("/index", manageController.SettingIndex)
 			setting.Get("/nav", manageController.SettingNav)
 			setting.Get("/contact", manageController.SettingContact)
+			setting.Get("/cache", manageController.SettingCache)
 
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
@@ -38,10 +50,11 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/nav", manageController.SettingNavForm)
 			setting.Post("/nav/delete", manageController.SettingNavDelete)
 			setting.Post("/contact", manageController.SettingContactForm)
+			setting.Post("/cache", manageController.SettingCacheForm)
 
 		}
 
-		collector := manage.Party("/collector", middleware.ManageAuth)
+		collector := manage.Party("/collector", middleware.ParseAdminToken)
 		{
 			//采集全局设置
 			collector.Get("/setting", manageController.HandleCollectSetting)
@@ -52,14 +65,28 @@ func manageRoute(app *iris.Application) {
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
 
-		attachment := manage.Party("/attachment", middleware.ManageAuth)
+		attachment := manage.Party("/attachment", middleware.ParseAdminToken)
 		{
 			attachment.Get("/list", manageController.AttachmentList)
 			attachment.Post("/upload", manageController.AttachmentUpload)
 			attachment.Post("/delete", manageController.AttachmentDelete)
+
+			attachment.Post("/category", manageController.AttachmentChangeCategory)
+			attachment.Get("/category/list", manageController.AttachmentCategoryList)
+			attachment.Post("/category/detail", manageController.AttachmentCategoryDetailForm)
+			attachment.Post("/category/delete", manageController.AttachmentCategoryDelete)
 		}
 
-		category := manage.Party("/category", middleware.ManageAuth)
+		module := manage.Party("/module", middleware.ParseAdminToken)
+		{
+			module.Get("/list", manageController.ModuleList)
+			module.Get("/detail", manageController.ModuleDetail)
+			module.Post("/detail", manageController.ModuleDetailForm)
+			module.Post("/delete", manageController.ModuleDelete)
+			module.Post("/field/delete", manageController.ModuleFieldsDelete)
+		}
+
+		category := manage.Party("/category", middleware.ParseAdminToken)
 		{
 			category.Get("/list", manageController.CategoryList)
 			category.Get("/detail", manageController.CategoryDetail)
@@ -67,36 +94,39 @@ func manageRoute(app *iris.Application) {
 			category.Post("/delete", manageController.CategoryDelete)
 		}
 
-		article := manage.Party("/article", middleware.ManageAuth)
+		archive := manage.Party("/archive", middleware.ParseAdminToken)
 		{
-			article.Get("/list", manageController.ArticleList)
-			article.Get("/detail", manageController.ArticleDetail)
-			article.Post("/detail", manageController.ArticleDetailForm)
-			article.Post("/delete", manageController.ArticleDelete)
-
-			article.Get("/setting", manageController.ArticleExtraFieldsSetting)
-			article.Post("/setting", manageController.ArticleExtraFieldsSettingForm)
+			archive.Get("/list", manageController.ArchiveList)
+			archive.Get("/detail", manageController.ArchiveDetail)
+			archive.Post("/detail", manageController.ArchiveDetailForm)
+			archive.Post("/delete", manageController.ArchiveDelete)
+			archive.Post("/recover", manageController.ArchiveRecover)
 		}
 
-		product := manage.Party("/product", middleware.ManageAuth)
-		{
-			product.Get("/list", manageController.ProductList)
-			product.Get("/detail", manageController.ProductDetail)
-			product.Post("/detail", manageController.ProductDetailForm)
-			product.Post("/delete", manageController.ProductDelete)
-
-			product.Get("/setting", manageController.ProductExtraFieldsSetting)
-			product.Post("/setting", manageController.ProductExtraFieldsSettingForm)
-		}
-
-		statistic := manage.Party("/statistic", middleware.ManageAuth)
+		statistic := manage.Party("/statistic", middleware.ParseAdminToken)
 		{
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
 			statistic.Get("/detail", manageController.StatisticDetail)
 		}
 
-		plugin := manage.Party("/plugin", middleware.ManageAuth)
+		design := manage.Party("/design", middleware.ParseAdminToken)
+		{
+			design.Get("/list", manageController.GetDesignList)
+			design.Get("/info", manageController.GetDesignInfo)
+			design.Post("/save", manageController.SaveDesignInfo)
+			design.Post("/delete", manageController.DeleteDesignInfo)
+			design.Post("/use", manageController.UseDesignInfo)
+			design.Get("/file/info", manageController.GetDesignFileDetail)
+			design.Get("/file/histories", manageController.GetDesignFileHistories)
+			design.Post("/file/history/delete", manageController.DeleteDesignFileHistories)
+			design.Post("/file/restore", manageController.RestoreDesignFile)
+			design.Post("/file/save", manageController.SaveDesignFile)
+			design.Post("/file/delete", manageController.DeleteDesignFile)
+			design.Get("/docs", manageController.GetDesignDocs)
+		}
+
+		plugin := manage.Party("/plugin", middleware.ParseAdminToken)
 		{
 			plugin.Get("/push", manageController.PluginPush)
 			plugin.Post("/push", manageController.PluginPushForm)
@@ -168,8 +198,10 @@ func manageRoute(app *iris.Application) {
 
 			material := plugin.Party("/material")
 			{
+				material.Post("/convert/file", manageController.ConvertFileToUtf8)
 				material.Get("/list", manageController.PluginMaterialList)
 				material.Post("/detail", manageController.PluginMaterialDetailForm)
+				material.Post("/import", manageController.PluginMaterialImport)
 				material.Post("/delete", manageController.PluginMaterialDelete)
 
 				material.Get("/category/list", manageController.PluginMaterialCategoryList)
@@ -183,6 +215,28 @@ func manageRoute(app *iris.Application) {
 				sendmail.Get("/setting", manageController.PluginSendmailSetting)
 				sendmail.Post("/setting", manageController.PluginSendmailSettingForm)
 				sendmail.Post("/test", manageController.PluginSendmailTest)
+			}
+
+			importApi := plugin.Party("/import")
+			{
+				importApi.Get("/api", manageController.PluginImportApi)
+				importApi.Post("/token", manageController.PluginUpdateApiToken)
+			}
+
+			tag := plugin.Party("/tag")
+			{
+				tag.Get("/list", manageController.PluginTagList)
+				tag.Get("/detail", manageController.PluginTagDetail)
+				tag.Post("/detail", manageController.PluginTagDetailForm)
+				tag.Post("/delete", manageController.PluginTagDelete)
+			}
+
+			redirect := plugin.Party("/redirect")
+			{
+				redirect.Get("/list", manageController.PluginRedirectList)
+				redirect.Post("/detail", manageController.PluginRedirectDetailForm)
+				redirect.Post("/delete", manageController.PluginRedirectDelete)
+				redirect.Post("/import", manageController.PluginRedirectImport)
 			}
 		}
 	}

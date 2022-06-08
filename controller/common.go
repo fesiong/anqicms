@@ -3,18 +3,41 @@ package controller
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/response"
+	captcha "github.com/mojocn/base64Captcha"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 	"net/url"
 	"os"
 	"strings"
 )
 
 var webInfo response.WebInfo
+var Store = captcha.DefaultMemStore
 
 func NotFound(ctx iris.Context) {
-	ctx.View(GetViewPath(ctx, "errors/404.html"))
+	tplName := "errors/404.html"
+	if ViewExists(ctx, "errors_404.html") {
+		tplName = "errors_404.html"
+	}
+	ctx.StatusCode(404)
+	err := ctx.View(GetViewPath(ctx, tplName))
+	if err != nil {
+		ctx.Values().Set("message", err.Error())
+	}
+}
+
+func ShowMessage(ctx iris.Context, message string, link string) {
+	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>"+config.Lang("提示信息")+"</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>"+message+"</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">"+config.Lang("返回")+"</a>"
+
+	if link != "" {
+		str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + link + "\">"+config.Lang("点击继续")+"</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + link + "\"}, 3000);</script>"
+	}
+
+	str += "</div></body></html>"
+
+	ctx.WriteString(str)
 }
 
 func InternalServerError(ctx iris.Context) {
@@ -23,14 +46,30 @@ func InternalServerError(ctx iris.Context) {
 		errMessage = "(Unexpected) internal server error"
 	}
 	ctx.ViewData("errMessage", errMessage)
-	ctx.View(GetViewPath(ctx, "errors/500.html"))
+	tplName := "errors/500.html"
+	if ViewExists(ctx, "errors_500.html") {
+		tplName = "errors_500.html"
+	}
+	ctx.StatusCode(500)
+	err := ctx.View(GetViewPath(ctx, tplName))
+	if err != nil {
+		ShowMessage(ctx, errMessage, "")
+	}
 }
 
 func CheckCloseSite(ctx iris.Context) {
-	if config.JsonData.System.SiteClose == 1 && !strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
+	if config.JsonData.System.SiteClose == 1 && !strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
 		closeTips := config.JsonData.System.SiteCloseTips
 		ctx.ViewData("closeTips", closeTips)
-		ctx.View(GetViewPath(ctx, "errors/close.html"))
+		tplName := "errors/close.html"
+		if ViewExists(ctx, "errors_close.html") {
+			tplName = "errors_close.html"
+		}
+
+		err := ctx.View(GetViewPath(ctx, tplName))
+		if err != nil {
+			ctx.Values().Set("message", err.Error())
+		}
 		return
 	}
 
@@ -47,11 +86,22 @@ func Common(ctx iris.Context) {
 	if config.JsonData.System.BaseUrl == "" {
 		urlPath, err := url.Parse(ctx.FullRequestURI())
 		if err == nil {
+			if ctx.GetHeader("X-Server-Port") == "443" {
+				urlPath.Scheme = "https"
+			}
 			config.JsonData.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
 	//js code
 	ctx.ViewData("pluginJsCode", config.JsonData.PluginPush.JsCode)
+
+	// 设置分页
+	currentPage := ctx.URLParamIntDefault("page", 1)
+	paramPage := ctx.Params().GetIntDefault("page", 0)
+	if paramPage > 0 {
+		currentPage = paramPage
+	}
+	ctx.Values().Set("page", currentPage)
 
 	webInfo.NavBar = 0
 	ctx.Next()
@@ -59,7 +109,7 @@ func Common(ctx iris.Context) {
 
 func Inspect(ctx iris.Context) {
 	uri := ctx.RequestPath(false)
-	if config.DB == nil && !strings.HasPrefix(uri, "/static") && !strings.HasPrefix(uri, "/install") {
+	if dao.DB == nil && !strings.HasPrefix(uri, "/static") && !strings.HasPrefix(uri, "/install") {
 		ctx.Redirect("/install")
 		return
 	}
@@ -67,7 +117,7 @@ func Inspect(ctx iris.Context) {
 	ctx.Next()
 }
 
-func FileServe(ctx iris.Context) {
+func FileServe(ctx iris.Context) bool {
 	uri := ctx.RequestPath(false)
 	if uri != "/" {
 		baseDir := fmt.Sprintf("%spublic", config.ExecPath)
@@ -75,15 +125,21 @@ func FileServe(ctx iris.Context) {
 		_, err := os.Stat(uriFile)
 		if err == nil {
 			ctx.ServeFile(uriFile, false)
-			return
+			return true
 		}
 	}
 
-	//不存在，返回404
-	NotFound(ctx)
+	return false
 }
 
 func ReRouteContext(ctx iris.Context) {
+	defer LogAccess(ctx)
+	// 先验证文件是否真的存在，如果存在，则fileServe
+	exists := FileServe(ctx)
+	if exists {
+		return
+	}
+
 	params := ctx.Params().GetEntry("params").Value().(map[string]string)
 	for i, v := range params {
 		ctx.Params().Set(i, v)
@@ -91,13 +147,13 @@ func ReRouteContext(ctx iris.Context) {
 
 	switch params["match"] {
 	case "notfound":
-		FileServe(ctx)
+		// 走到 not Found
+		break
+	case "archive":
+		ArchiveDetail(ctx)
 		return
-	case "article":
-		ArticleDetail(ctx)
-		return
-	case "product":
-		ProductDetail(ctx)
+	case "archiveIndex":
+		ArchiveIndex(ctx)
 		return
 	case "category":
 		CategoryPage(ctx)
@@ -105,11 +161,14 @@ func ReRouteContext(ctx iris.Context) {
 	case "page":
 		PagePage(ctx)
 		return
-	case "articleIndex":
-		ArticleIndexPage(ctx)
+	case "search":
+		SearchPage(ctx)
 		return
-	case "productIndex":
-		ProductIndexPage(ctx)
+	case "tagIndex":
+		TagIndexPage(ctx)
+		return
+	case "tag":
+		TagPage(ctx)
 		return
 	}
 
@@ -117,6 +176,7 @@ func ReRouteContext(ctx iris.Context) {
 	NotFound(ctx)
 }
 
+// GetViewPath
 // 区分mobile的模板和pc的模板
 func GetViewPath(ctx iris.Context, tplName string) string {
 	mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
@@ -145,7 +205,7 @@ func ViewExists(ctx iris.Context, tplName string) bool {
 
 func CheckTemplateType(ctx iris.Context) {
 	//后台不需要处理
-	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
+	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
 		ctx.Next()
 		return
 	}
@@ -192,12 +252,35 @@ func CheckTemplateType(ctx iris.Context) {
 }
 
 func LogAccess(ctx iris.Context) {
-	if config.DB == nil {
+	if dao.DB == nil {
 		ctx.Next()
 		return
 	}
+	if ctx.IsAjax() || ctx.Method() != "GET" {
+		ctx.Next()
+		return
+	}
+	currentPath := ctx.Request().RequestURI
 	//后台不做记录
-	if strings.HasPrefix(ctx.GetCurrentRoute().Path(), config.JsonData.System.AdminUri) {
+	if strings.HasPrefix(currentPath, "/system") {
+		ctx.Next()
+		return
+	}
+	//静态资源不做记录
+	if strings.HasPrefix(currentPath, "/static") ||
+		strings.HasPrefix(currentPath, "/uploads") ||
+		strings.Contains(currentPath, "/js") ||
+		strings.Contains(currentPath, "/css") ||
+		strings.Contains(currentPath, "/image") ||
+		strings.HasSuffix(currentPath, ".ico") ||
+		strings.HasSuffix(currentPath, ".jpg") ||
+		strings.HasSuffix(currentPath, ".png") ||
+		strings.HasSuffix(currentPath, ".jpeg") ||
+		strings.HasSuffix(currentPath, ".gif") ||
+		strings.HasSuffix(currentPath, ".js") ||
+		strings.HasSuffix(currentPath, ".css") ||
+		strings.HasSuffix(currentPath, ".map") ||
+		strings.HasSuffix(currentPath, ".webp")  {
 		ctx.Next()
 		return
 	}
@@ -209,14 +292,15 @@ func LogAccess(ctx iris.Context) {
 
 	statistic := &model.Statistic{
 		Spider:    spider,
-		Host:      ctx.Host(),
-		Url:       ctx.RequestPath(false),
+		Host:      ctx.Request().Host,
+		Url:       ctx.Request().RequestURI,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
 		HttpCode:  ctx.GetStatusCode(),
 		UserAgent: ctx.GetHeader("User-Agent"),
 	}
-	config.DB.Save(statistic)
+	// 这里不需要等待
+	go dao.DB.Save(statistic)
 
 	ctx.Next()
 }
@@ -267,4 +351,36 @@ func GetDevice(ctx iris.Context) string {
 	}
 
 	return "proxy"
+}
+
+func NewDriver() *captcha.DriverString {
+	driver := new(captcha.DriverString)
+	driver.Height = 76
+	driver.Width = 240
+	//driver.NoiseCount = 4
+	//driver.ShowLineOptions = captcha.OptionShowSineLine | captcha.OptionShowSlimeLine | captcha.OptionShowHollowLine
+	driver.Fonts = []string{"Flim-Flam.ttf","RitaSmith.ttf"}
+	driver.Length = 4
+	driver.Source = "1234567890qwertyuipkjhgfdsazxcvbnm"
+
+	return driver
+}
+
+func GenerateCaptcha(ctx iris.Context) {
+	var driver = NewDriver().ConvertFonts()
+	c := captcha.NewCaptcha(driver, Store)
+	id, content, answer := c.Driver.GenerateIdQuestionAnswer()
+	item, _ := c.Driver.DrawCaptcha(content)
+	c.Store.Set(id, answer)
+
+	bs64 := item.EncodeB64string()
+
+	ctx.JSON(iris.Map{
+		"code":       config.StatusOK,
+		"msg":        "",
+		"data":       iris.Map{
+			"captcha_id": id,
+			"captcha": bs64,
+		},
+	})
 }

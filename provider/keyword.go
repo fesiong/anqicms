@@ -2,10 +2,13 @@ package provider
 
 import (
 	"fmt"
-	"github.com/gocarina/gocsv"
-	"irisweb/config"
-	"irisweb/model"
+	"io/ioutil"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
 	"mime/multipart"
+	"strconv"
+	"strings"
 )
 
 type KeywordCSV struct {
@@ -18,7 +21,7 @@ func GetKeywordList(keyword string, currentPage, pageSize int) ([]*model.Keyword
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := config.DB.Model(&model.Keyword{}).Order("id desc")
+	builder := dao.DB.Model(&model.Keyword{}).Order("id desc")
 	if keyword != "" {
 		//模糊搜索
 		builder = builder.Where("(`title` like ?)", "%"+keyword+"%")
@@ -34,7 +37,7 @@ func GetKeywordList(keyword string, currentPage, pageSize int) ([]*model.Keyword
 
 func GetAllKeywords() ([]*model.Keyword, error) {
 	var keywords []*model.Keyword
-	err := config.DB.Model(&model.Keyword{}).Order("id desc").Find(&keywords).Error
+	err := dao.DB.Model(&model.Keyword{}).Order("id desc").Find(&keywords).Error
 	if err != nil {
 		return nil, err
 	}
@@ -45,7 +48,7 @@ func GetAllKeywords() ([]*model.Keyword, error) {
 func GetKeywordById(id uint) (*model.Keyword, error) {
 	var keyword model.Keyword
 
-	err := config.DB.Where("`id` = ?", id).First(&keyword).Error
+	err := dao.DB.Where("`id` = ?", id).First(&keyword).Error
 	if err != nil {
 		return nil, err
 	}
@@ -56,7 +59,7 @@ func GetKeywordById(id uint) (*model.Keyword, error) {
 func GetKeywordByTitle(title string) (*model.Keyword, error) {
 	var keyword model.Keyword
 
-	err := config.DB.Where("`title` = ?", title).First(&keyword).Error
+	err := dao.DB.Where("`title` = ?", title).First(&keyword).Error
 	if err != nil {
 		return nil, err
 	}
@@ -65,33 +68,47 @@ func GetKeywordByTitle(title string) (*model.Keyword, error) {
 }
 
 func ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, error) {
-	var keywords []*KeywordCSV
-
-	if err := gocsv.Unmarshal(file, &keywords); err != nil {
+	buff, err := ioutil.ReadAll(file)
+	if err != nil {
 		return "", err
 	}
 
-	total := 0
-	for _, item := range keywords {
-		keyword, err := GetKeywordByTitle(item.Title)
+	lines := strings.Split(string(buff), "\n")
+	var total int
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		// 格式：title, category_id
+		if i == 0 {
+			continue
+		}
+		values := strings.Split(line, ",")
+		if len(values) < 2 {
+			continue
+		}
+		title := strings.TrimSpace(values[0])
+		if title == "" {
+			continue
+		}
+		keyword, err := GetKeywordByTitle(title)
 		if err != nil {
 			//表示不存在
 			keyword = &model.Keyword{
-				Title: item.Title,
-				CategoryId: item.CategoryId,
+				Title: title,
 				Status: 1,
 			}
 			total++
 		}
+		categoryId, _ := strconv.Atoi(values[1])
+		keyword.CategoryId = uint(categoryId)
 
-		keyword.Save(config.DB)
+		keyword.Save(dao.DB)
 	}
 
-	return fmt.Sprintf("成功导入了%d个关键词", total), nil
+	return fmt.Sprintf(config.Lang("成功导入了%d个关键词"), total), nil
 }
 
 func DeleteKeyword(keyword *model.Keyword) error {
-	err := config.DB.Delete(keyword).Error
+	err := dao.DB.Delete(keyword).Error
 	if err != nil {
 		return err
 	}

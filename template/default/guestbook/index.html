@@ -15,7 +15,7 @@
                 <div class="layui-card-header">在线留言</div>
                 <div class="layui-card-body">
                     {% guestbook fields %}
-                    <form class="layui-form" onsubmit="return false;">
+                    <form class="layui-form" action="/guestbook.html" method="post" onsubmit="return false;">
                         {% for item in fields %}
                         <div class="layui-form-item">
                             <label class="layui-form-label">{{item.Name}}</label>
@@ -59,7 +59,7 @@
             <div class="layui-card">
                 <div class="layui-card-header">热门文章</div>
                 <div class="layui-card-body">
-                    {% articleList popularArticles with type="list" order="views desc" limit="6" %}
+                    {% archiveList popularArticles with type="list" order="views desc" limit="6" %}
                     <ul class="aside-list">
                         {% for item in popularArticles %}
                         <li class="item">
@@ -74,7 +74,7 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    {% endarticleList %}
+                    {% endarchiveList %}
                 </div>
             </div>
         </div>

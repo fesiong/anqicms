@@ -10,17 +10,20 @@ const (
 )
 
 type systemConfig struct {
-	SiteName      string `json:"site_name"`
-	SiteLogo      string `json:"site_logo"`
-	SiteIcp       string `json:"site_icp"`
-	SiteCopyright string `json:"site_copyright"`
-	BaseUrl       string `json:"base_url"`
-	MobileUrl     string `json:"mobile_url"`
-	AdminUri      string `json:"admin_uri"`
-	SiteClose     int    `json:"site_close"`
-	SiteCloseTips string `json:"site_close_tips"`
-	TemplateName  string `json:"template_name"`
-	TemplateType  int    `json:"template_type"`
+	SiteName      string       `json:"site_name"`
+	SiteLogo      string       `json:"site_logo"`
+	SiteIcp       string       `json:"site_icp"`
+	SiteCopyright string       `json:"site_copyright"`
+	BaseUrl       string       `json:"base_url"`
+	MobileUrl     string       `json:"mobile_url"`
+	AdminUrl      string       `json:"admin_url"`
+	SiteClose     int          `json:"site_close"`
+	SiteCloseTips string       `json:"site_close_tips"`
+	TemplateName  string       `json:"template_name"`
+	TemplateType  int          `json:"template_type"`
+	TemplateUrl   string       `json:"template_url"` // template 的静态文件目录
+	Language      string       `json:"language"`     // 语言包引用
+	ExtraFields   []ExtraField `json:"extra_fields"` // 用户自定义字段
 }
 
 type contentConfig struct {
@@ -41,10 +44,17 @@ type indexConfig struct {
 }
 
 type contactConfig struct {
-	UserName  string `json:"user_name"`
-	Cellphone string `json:"cellphone"`
-	Address   string `json:"address"`
-	Email     string `json:"email"`
-	Wechat    string `json:"wechat"`
-	Qrcode    string `json:"qrcode"`
+	UserName    string       `json:"user_name"`
+	Cellphone   string       `json:"cellphone"`
+	Address     string       `json:"address"`
+	Email       string       `json:"email"`
+	Wechat      string       `json:"wechat"`
+	Qrcode      string       `json:"qrcode"`
+	ExtraFields []ExtraField `json:"extra_fields"` // 用户自定义字段
+}
+
+type ExtraField struct {
+	Name   string `json:"name"`
+	Value  string `json:"value"`
+	Remark string `json:"remark"`
 }

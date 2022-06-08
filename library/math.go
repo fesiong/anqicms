@@ -10,6 +10,25 @@ import (
 	"time"
 )
 
+var tenToAny = map[int]string{0: "0", 1: "1", 2: "2", 3: "3", 4: "4", 5: "5", 6: "6", 7: "7", 8: "8", 9: "9", 10: "a", 11: "b", 12: "c", 13: "d", 14: "e", 15: "f", 16: "g", 17: "h", 18: "i", 19: "j", 20: "k", 21: "l", 22: "m", 23: "n", 24: "o", 25: "p", 26: "q", 27: "r", 28: "s", 29: "t", 30: "u", 31: "v", 32: "w", 33: "x", 34: "y", 35: "z", 37: "A", 38: "B", 39: "C", 40: "D", 41: "E", 42: "F", 43: "G", 44: "H", 45: "I", 46: "J", 47: "K", 48: "L", 49: "M", 50: "N", 51: "O", 52: "P", 53: "Q", 54: "R", 55: "S", 56: "T", 57: "U", 58: "V", 59: "W", 60: "X", 61: "Y", 62: "Z", 63: ":", 64: ";", 65: "<", 66: "=", 67: ">", 68: "?", 69: "@", 70: "[", 71: "]", 72: "^", 73: "_", 74: "{", 75: "|", 76: "}"}
+
+func DecimalToAny(num int64, n int) string {
+	newNumStr := ""
+	var remainder int
+	var remainderString string
+	for num != 0 {
+		remainder = int(num % int64(n))
+		if 76 > remainder && remainder > 9 {
+			remainderString = tenToAny[remainder]
+		} else {
+			remainderString = strconv.Itoa(remainder)
+		}
+		newNumStr = remainderString + newNumStr
+		num = num / int64(n)
+	}
+	return newNumStr
+}
+
 func GenerateRandNumber(length uint) uint {
 	numberByteArray := [9]byte{1, 2, 3, 4, 5, 6, 7, 9}
 	numberLength := len(numberByteArray)

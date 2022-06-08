@@ -6,7 +6,7 @@
         <div class="layui-col-md8">
             <div class="layui-card">
                 <div class="layui-card-body">
-                    {% articleList articles with type="page" limit="10" %}
+                    {% archiveList articles with type="page" limit="10" %}
                     <ul class="article-list">
                         {% for item in articles %}
                         <li class="item layui-flex">
@@ -31,7 +31,7 @@
                         </li>
                         {% endfor %}
                     </ul>
-                    {% endarticleList %}
+                    {% endarchiveList %}
                 </div>
                 {% pagination pages with show="4" %}
                 <div class="layui-card-body text-center">
@@ -58,7 +58,7 @@
             <div class="layui-card">
                 <div class="layui-card-header">文章分类</div>
                 <div class="layui-card-body">
-                    {% categoryList articleCategories with type="1" parentId="0" %}
+                    {% categoryList articleCategories with moduleId="1" parentId="0" %}
                     <ul class="aside-list">
                         {% for item in articleCategories %}
                         <li class="item">
@@ -74,7 +74,7 @@
             <div class="layui-card">
                 <div class="layui-card-header">产品分类</div>
                 <div class="layui-card-body">
-                    {% categoryList productCategories with type="2" parentId="0" %}
+                    {% categoryList productCategories with moduleId="2" parentId="0" %}
                     <ul class="aside-list">
                         {% for item in productCategories %}
                         <li class="item">
@@ -90,7 +90,7 @@
             <div class="layui-card">
                 <div class="layui-card-header">热门文章</div>
                 <div class="layui-card-body">
-                    {% articleList popularArticles with type="list" order="views desc" limit="6" %}
+                    {% archiveList popularArticles with type="list" order="views desc" limit="6" %}
                     <ul class="aside-list">
                     {% for item in popularArticles %}
                         <li class="item">
@@ -105,7 +105,7 @@
                     </li>
                     {% endfor %}
                     </ul>
-                    {% endarticleList %}
+                    {% endarchiveList %}
                 </div>
             </div>
         </div>

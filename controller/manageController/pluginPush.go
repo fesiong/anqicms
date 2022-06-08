@@ -2,8 +2,8 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginPush(ctx iris.Context) {

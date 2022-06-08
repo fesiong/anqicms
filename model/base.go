@@ -2,7 +2,6 @@ package model
 
 import (
 	"gorm.io/gorm"
-	"irisweb/config"
 )
 
 const (
@@ -25,65 +24,4 @@ type Model struct {
 type CustomField struct {
 	Name      string      `json:"name"`
 	Value     interface{} `json:"value"`
-}
-
-func AutoMigrateDB(db *gorm.DB) error {
-	//自动迁移数据库
-	err := db.AutoMigrate(
-		&Admin{},
-		&Article{},
-		&ArticleData{},
-		&Attachment{},
-		&Category{},
-		&Nav{},
-		&Link{},
-		&Comment{},
-		&Product{},
-		&ProductData{},
-		&Anchor{},
-		&AnchorData{},
-		&Guestbook{},
-		&Keyword{},
-		&Material{},
-		&MaterialCategory{},
-		&MaterialData{},
-		&Statistic{},
-	)
-
-	if err != nil {
-		return err
-	}
-
-	//如果文章、产品有extraFields
-	if len(config.JsonData.ArticleExtraFields) > 0 {
-		stmt := &gorm.Statement{DB: config.DB}
-		stmt.Parse(&Article{})
-		for _, v := range config.JsonData.ArticleExtraFields {
-			column := v.GetFieldColumn()
-			if !db.Migrator().HasColumn(&Article{}, v.FieldName) {
-				//创建语句
-				config.DB.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
-			} else {
-				//更新语句
-				config.DB.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
-			}
-		}
-	}
-	//如果文章、产品有extraFields
-	if len(config.JsonData.ProductExtraFields) > 0 {
-		stmt := &gorm.Statement{DB: config.DB}
-		stmt.Parse(&Product{})
-		for _, v := range config.JsonData.ProductExtraFields {
-			column := v.GetFieldColumn()
-			if !config.DB.Migrator().HasColumn(&Product{}, v.FieldName) {
-				//创建语句
-				config.DB.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
-			} else {
-				//更新语句
-				config.DB.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(stmt.Table), gorm.Expr(column))
-			}
-		}
-	}
-
-	return nil
 }

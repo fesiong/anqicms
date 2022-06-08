@@ -1,11 +1,11 @@
 package main
 
 import (
-	"irisweb"
-	"irisweb/config"
+	"kandaoni.com/anqicms"
+	"kandaoni.com/anqicms/config"
 )
 
 func main() {
-	b := irisweb.New(config.ServerConfig.Port, config.ServerConfig.LogLevel)
+	b := anqicms.New(config.ServerConfig.Port, config.ServerConfig.LogLevel)
 	b.Serve()
 }

@@ -3,10 +3,11 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/model"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"reflect"
 )
 
@@ -16,7 +17,7 @@ type tagPageDetailNode struct {
 }
 
 func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -38,15 +39,14 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if !ok && id == 0 {
 		return nil
 	}
-	//不是同一个，从新获取
+	//不是同一个，重新获取
 	if pageDetail != nil && (id > 0 && pageDetail.Id != id) {
 		pageDetail = nil
 	}
 
 	if pageDetail == nil && id > 0 {
-		var err error
-		pageDetail, err = provider.GetCategoryById(id)
-		if err != nil {
+		pageDetail = provider.GetCategoryFromCache(id)
+		if pageDetail == nil {
 			return nil
 		}
 	}
@@ -54,9 +54,10 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return nil
 	}
 
-	if pageDetail.Type != model.CategoryTypePage {
+	if pageDetail.Type != config.CategoryTypePage {
 		return nil
 	}
+	pageDetail.Link = provider.GetUrl("page", pageDetail, 0)
 
 	v := reflect.ValueOf(*pageDetail)
 
@@ -67,7 +68,11 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if node.name == "" {
 		writer.WriteString(content)
 	} else {
-		ctx.Private[node.name] = content
+		if fieldName == "Images" {
+			ctx.Private[node.name] = pageDetail.Images
+		} else {
+			ctx.Private[node.name] = content
+		}
 	}
 
 	return nil

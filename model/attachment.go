@@ -3,7 +3,7 @@ package model
 import (
 	"fmt"
 	"gorm.io/gorm"
-	"irisweb/config"
+	"kandaoni.com/anqicms/config"
 	"path/filepath"
 	"strings"
 )
@@ -16,12 +16,30 @@ type Attachment struct {
 	FileMd5      string `json:"file_md5" gorm:"column:file_md5;type:varchar(32) unique not null;default:''"`
 	Width        int    `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
 	Height       int    `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
+	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	Logo         string `json:"logo" gorm:"-"`
 	Thumb        string `json:"thumb" gorm:"-"`
 }
 
+type AttachmentCategory struct {
+	Model
+	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	AttachCount uint   `json:"attach_count" gorm:"column:attach_count;type:int(10) unsigned not null;default:0"`
+	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+}
+
 func (attachment *Attachment) GetThumb() {
+	// 如果不是图片
+	if !strings.HasSuffix(attachment.FileLocation, ".jpg") &&
+		!strings.HasSuffix(attachment.FileLocation, ".jpeg") &&
+		!strings.HasSuffix(attachment.FileLocation, ".gif") &&
+		!strings.HasSuffix(attachment.FileLocation, ".png") &&
+		!strings.HasSuffix(attachment.FileLocation, ".bmp") &&
+		!strings.HasSuffix(attachment.FileLocation, ".webp") &&
+		!strings.HasSuffix(attachment.FileLocation, ".svg") {
+		return
+	}
 	//如果是一个远程地址，则缩略图和原图地址一致
 	if strings.HasPrefix(attachment.FileLocation, "http") {
 		attachment.Logo = attachment.FileLocation
@@ -39,6 +57,12 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 		return err
 	}
 
+	// 统计数量
+	if attachment.CategoryId > 0 {
+		var attachCount int64
+		db.Model(&Attachment{}).Where("`category_id` = ?", attachment.CategoryId).Count(&attachCount)
+		db.Model(&AttachmentCategory{}).Where("`id` = ?", attachment.CategoryId).UpdateColumn("attach_count", attachCount)
+	}
 	attachment.GetThumb()
 
 	return nil

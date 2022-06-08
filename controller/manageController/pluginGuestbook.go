@@ -2,15 +2,17 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
+	"strings"
 )
 
 func PluginGuestbookList(ctx iris.Context) {
 	//需要支持分页，还要支持搜索
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	pageSize := ctx.URLParamIntDefault("limit", 20)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 
 	guestbookList, total, err := provider.GetGuestbookList(keyword, currentPage, pageSize)
@@ -23,10 +25,10 @@ func PluginGuestbookList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"count": total,
-		"data": guestbookList,
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  guestbookList,
 	})
 }
 
@@ -121,7 +123,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"header": header,
+			"header":  header,
 			"content": content,
 		},
 	})
@@ -133,7 +135,7 @@ func PluginGuestbookSetting(ctx iris.Context) {
 		"msg":  "",
 		"data": iris.Map{
 			"return_message": config.JsonData.PluginGuestbook.ReturnMessage,
-			"fields": config.GetGuestbookFields(),
+			"fields":         config.GetGuestbookFields(),
 		},
 	})
 }
@@ -149,9 +151,16 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 	}
 
 	var fields []*config.CustomField
+	var existsFields = map[string]struct{}{}
 	for _, v := range req.Fields {
 		if !v.IsSystem {
-			fields = append(fields, v)
+			if v.FieldName == "" {
+				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name), "-", "_")
+			}
+			if _, ok := existsFields[v.FieldName]; !ok {
+				existsFields[v.FieldName] = struct{}{}
+				fields = append(fields, v)
+			}
 		}
 	}
 

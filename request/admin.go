@@ -1,8 +1,11 @@
 package request
 
-type Admin struct {
-	UserName string `json:"user_name" validate:"required"`
-	Password string `json:"password" validate:"required"`
+type AdminInfoRequest struct {
+	Id        int    `json:"id"`
+	UserName  string `json:"user_name"`
+	Password  string `json:"password"`
+	CaptchaId string `json:"captcha_id"`
+	Captcha   string `json:"captcha"`
 }
 
 type ChangeAdmin struct {

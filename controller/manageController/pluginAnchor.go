@@ -3,16 +3,18 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
+	"strings"
 )
 
 func PluginAnchorList(ctx iris.Context) {
 	//需要支持分页，还要支持搜索
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	pageSize := ctx.URLParamIntDefault("limit", 20)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 
 	linkList, total, err := provider.GetAnchorList(keyword, currentPage, pageSize)
@@ -27,7 +29,7 @@ func PluginAnchorList(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"count": total,
+		"total": total,
 		"data": linkList,
 	})
 }
@@ -60,6 +62,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	req.Link = strings.TrimPrefix(req.Link, config.JsonData.System.BaseUrl)
 
 	var anchor *model.Anchor
 	var err error
@@ -107,7 +110,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 	anchor.Link = req.Link
 	anchor.Weight = req.Weight
 
-	err = anchor.Save(config.DB)
+	err = anchor.Save(dao.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

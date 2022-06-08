@@ -17,6 +17,7 @@ type Material struct {
 	Status        uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	AutoUpdate    uint   `json:"auto_update" gorm:"column:auto_update;type:tinyint(1) unsigned not null;default:0"`
 	UseCount      uint   `json:"use_count" gorm:"column:use_count;type:int(10) unsigned not null;default:0"`
+	Md5           string `json:"md5" gorm:"column:md5;type:varchar(32) default null;index:idx_md5"`
 	CategoryTitle string `json:"category_title" gorm:"-"`
 }
 

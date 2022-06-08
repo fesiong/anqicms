@@ -3,10 +3,12 @@ package controller
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"strings"
+	"time"
 )
 
 func GuestbookPage(ctx iris.Context) {
@@ -14,74 +16,111 @@ func GuestbookPage(ctx iris.Context) {
 
 	ctx.ViewData("fields", fields)
 
-	webInfo.Title = "在线留言"
+	webInfo.Title = config.Lang("在线留言")
 	webInfo.PageName = "guestbook"
+	webInfo.CanonicalUrl = provider.GetUrl("/guestbook.html", nil, 0)
 	ctx.ViewData("webInfo", webInfo)
 
-	ctx.View(GetViewPath(ctx, "guestbook/index.html"))
+	tplName := "guestbook/index.html"
+	if ViewExists(ctx, "guestbook.html") {
+		tplName = "guestbook.html"
+	}
+	err := ctx.View(GetViewPath(ctx, tplName))
+	if err != nil {
+		ctx.Values().Set("message", err.Error())
+	}
 }
 
 func GuestbookForm(ctx iris.Context) {
+	// 支持返回为 json 或html， 默认 html
+	returnType := ctx.PostValueTrim("return")
 	fields := config.GetGuestbookFields()
-	var req map[string]interface{}
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
+	var req = map[string]string{}
+	// 采用post接收
 	extraData := map[string]interface{}{}
 	for _, item := range fields {
-		if item.Required && req[item.FieldName] == nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  fmt.Sprintf("%s必填", item.Name),
-			})
+		var val interface{}
+		if item.Type == config.CustomFieldTypeCheckbox {
+			val = ctx.PostValues(item.FieldName + "[]")
+		} else {
+			val = ctx.PostValueTrim(item.FieldName)
+		}
+
+		if item.Required && val == nil {
+			msg := fmt.Sprintf("%s必填", item.Name)
+			if returnType == "json" {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  msg,
+				})
+			} else {
+				ShowMessage(ctx, msg, "")
+			}
 			return
 		}
 		if !item.IsSystem {
-			extraData[item.Name] = req[item.FieldName]
+			extraData[item.Name] = val
 		}
+		req[item.FieldName], _ = val.(string)
 	}
 
 	//先填充默认字段
 	guestbook := &model.Guestbook{
-		UserName:  req["user_name"].(string),
-		Contact:   req["contact"].(string),
-		Content:   req["content"].(string),
+		UserName:  req["user_name"],
+		Contact:   req["contact"],
+		Content:   req["content"],
 		Ip:        ctx.RemoteAddr(),
 		Refer:     ctx.Request().Referer(),
 		ExtraData: extraData,
 	}
 
-	err := config.DB.Save(guestbook).Error
+	err := dao.DB.Save(guestbook).Error
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "保存失败",
-		})
+		msg := config.Lang("保存失败")
+		if returnType == "json" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  msg,
+			})
+		} else {
+			ShowMessage(ctx, msg, "")
+		}
 		return
 	}
 
 	//发送邮件
-	subject := fmt.Sprintf("%s有来自%s的新留言", config.JsonData.System.SiteName, guestbook.UserName)
+	subject := fmt.Sprintf(config.Lang("%s有来自%s的新留言"), config.JsonData.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
 		content := fmt.Sprintf("%s：%s\n", item.Name, req[item.FieldName])
 
 		contents = append(contents, content)
 	}
-	_ = provider.SendMail(subject, strings.Join(contents, ""))
+	// 增加来路和IP返回
+	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("提交IP"), guestbook.Ip))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("来源页面"), guestbook.Refer))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("提交时间"), time.Now().Format("2006-01-02 15:04:05")))
+
+	// 后台发信
+	go provider.SendMail(subject, strings.Join(contents, ""))
 
 	msg := config.JsonData.PluginGuestbook.ReturnMessage
 	if msg == "" {
-		msg = "感谢您的留言！"
+		msg = config.Lang("感谢您的留言！")
 	}
 
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg": msg,
-	})
+	if returnType == "json" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  msg,
+		})
+	} else {
+		link := provider.GetUrl("/guestbook.html", nil, 0)
+		refer := ctx.GetReferrer()
+		if refer.URL != "" {
+			link = refer.URL
+		}
+
+		ShowMessage(ctx, msg, link)
+	}
 }

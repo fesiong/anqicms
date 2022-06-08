@@ -3,8 +3,8 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/provider"
 )
 
 type tagLinkListNode struct {
@@ -14,7 +14,7 @@ type tagLinkListNode struct {
 }
 
 func (node *tagLinkListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	linkList, _ := provider.GetLinkList()

@@ -41,3 +41,26 @@ func Case2Camel(name string) string {
 	name = strings.Title(name)
 	return strings.Replace(name, " ", "", -1)
 }
+
+func ParseUrlToken(name string) string {
+	name = strings.ToLower(name)
+	name = strings.Replace(name, " ", "-", -1)
+	name = strings.Replace(name, "_", "-", -1)
+	if name == "" {
+		return name
+	}
+	names := []rune(name)
+	for i := 0; i < len(names); i++ {
+		if (names[i] >= 48 && names[i] <= 57) || (names[i] >= 97 && names[i] <= 122) || names[i] == 45 {
+			// 这个范围是对的
+		} else {
+			// 需要删除
+			names = append(names[:i], names[i+1:]...)
+			i--
+		}
+	}
+	//去除连续的换行符
+	re, _ := regexp.Compile("-{2,}")
+	name = re.ReplaceAllString(name, "-")
+	return name
+}

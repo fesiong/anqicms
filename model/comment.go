@@ -4,13 +4,9 @@ import (
 	"gorm.io/gorm"
 )
 
-const ItemTypeArticle = "article"
-const ItemTypeProduct = "product"
-
 type Comment struct {
 	Model
-	ItemType  string   `json:"item_type" gorm:"column:item_type;type:varchar(32) not null;default:'';index:idx_item_type"`
-	ItemId    uint     `json:"item_id" gorm:"column:item_id;type:int(10) unsigned not null;default:0;index:idx_item_id"`
+	ArchiveId uint     `json:"archive_id" gorm:"column:archive_id;type:int(10) unsigned not null;default:0;index:idx_archive_id"`
 	UserId    uint     `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index:idx_user_id"`
 	UserName  string   `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:''"`
 	Ip        string   `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
@@ -28,6 +24,7 @@ func (comment *Comment) Save(db *gorm.DB) error {
 	if err := db.Save(comment).Error; err != nil {
 		return err
 	}
+	comment.UpdateCommentCount(db)
 
 	return nil
 }
@@ -36,5 +33,14 @@ func (comment *Comment) Delete(db *gorm.DB) error {
 	if err := db.Delete(comment).Error; err != nil {
 		return err
 	}
+	comment.UpdateCommentCount(db)
+
 	return nil
+}
+
+func (comment *Comment) UpdateCommentCount(db *gorm.DB) {
+	// 更新数量
+	var total int64
+	db.Model(&Comment{}).Where("`archive_id` = ?", comment.ArchiveId).Count(&total)
+	db.Model(&Archive{}).Where("`id` = ?", comment.ArchiveId).UpdateColumn("comment_count", total)
 }

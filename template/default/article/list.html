@@ -1,0 +1,106 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                {% for item in crumbs %}
+                <a href="{{item.Link}}">{{item.Name}}</a>
+                {% endfor %}
+                {% endbreadcrumb %}
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-body">
+                    {% archiveList articles with type="page" limit="10" %}
+                    <ul class="article-list">
+                    {% for item in articles %}
+                    <li class="item layui-flex">
+                        <a href="{{item.Link}}" class="link flex-item">
+                            <h5 class="title">{{item.Title}}</h5>
+                            <div class="description">{{item.Description}}</div>
+                            <div class="meta">
+                                <span>{% categoryDetail with name="Title" id=item.CategoryId %}</span>
+                                <span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                                <span>{{item.Views}} 阅读</span>
+                            </div>
+                        </a>
+                        {% if item.Thumb %}
+                        <a href="{{item.Link}}" class="thumb">
+                            <img class="thumb-image" alt="{{item.Title}}" src="{{item.Thumb}}">
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% empty %}
+                    <li class="item empty">
+                        该列表没有任何内容
+                    </li>
+                    {% endfor %}
+                    </ul>
+                    {% endarchiveList %}
+                </div>
+                {% pagination pages with show="4" %}
+                <div class="layui-card-body text-center">
+                    <div class="layui-box layui-laypage layui-laypage-default">
+                        <a class="layui-laypage-first {% if pages.FirstPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
+                        {% if pages.PrevPage %}
+                        <a class="layui-laypage-prev" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
+                        {% endif %}
+                        {% for item in pages.Pages %}
+                        <a class="{% if item.IsCurrent %}layui-laypage-curr{% endif %}" href="{{item.Link}}">{{item.Name}}</a>
+                        {% endfor %}
+                        {% if pages.NextPage %}
+                        <a class="layui-laypage-next" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
+                        {% endif %}
+                        <a class="layui-laypage-last {% if pages.LastPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
+                    </div>
+                </div>
+                {% endpagination %}
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            <div class="layui-card">
+                <div class="layui-card-header">文章分类</div>
+                <div class="layui-card-body">
+                    {% categoryList articleCategories with moduleId="1" parentId="0" %}
+                    <ul class="aside-list">
+                        {% for item in articleCategories %}
+                        <li class="item {% if item.IsCurrent %}active{% endif %}">
+                            <a href="{{item.Link}}" class="link">
+                                <h5 class="title">{{item.Title}}</h5>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endcategoryList %}
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">热门文章</div>
+                <div class="layui-card-body">
+                    <ul class="aside-list">
+                        {% archiveList popularArticles with type="list" order="views desc" limit="6" %}
+                        <ul class="aside-list">
+                            {% for item in popularArticles %}
+                            <li class="item">
+                                <a href="{{item.Link}}" class="link">
+                                    <h5 class="title">{{item.Title}}</h5>
+                                    <span class="extra">{{item.Views}}阅读</span>
+                                </a>
+                            </li>
+                            {% empty %}
+                            <li class="item empty">
+                                无热门文章
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% endarchiveList %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

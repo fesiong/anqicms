@@ -2,9 +2,9 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginRobots(ctx iris.Context) {

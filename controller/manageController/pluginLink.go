@@ -2,10 +2,11 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginLinkList(ctx iris.Context) {
@@ -63,7 +64,7 @@ func PluginLinkDetailForm(ctx iris.Context) {
 	link.Sort = req.Sort
 	link.Status = 0
 
-	err = link.Save(config.DB)
+	err = link.Save(dao.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -71,6 +72,8 @@ func PluginLinkDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 保存完毕，实时监测
+	go provider.PluginLinkCheck(link)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -96,7 +99,7 @@ func PluginLinkDelete(ctx iris.Context) {
 		return
 	}
 
-	err = link.Delete(config.DB)
+	err = link.Delete(dao.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

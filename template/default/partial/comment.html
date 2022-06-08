@@ -1,8 +1,8 @@
 <div class="layui-card">
-  <div class="layui-card-header">用户评论 <a class="more-text" href="/comment/{{itemType}}/{{ itemId }}">查看更多>></a></div>
+  <div class="layui-card-header">用户评论 <a class="more-text" href="/comment/{% archiveDetail with name="Id" %}">查看更多>></a></div>
   <div class="layui-card-body">
     <div class="comment-list">
-      {% commentList comments with itemType=itemType itemId=itemId type="list" limit="6" %}
+      {% commentList comments with type="list" limit="6" %}
       {% for item in comments %}
       <div class="comment-item">
         <div class="item-user">
@@ -51,8 +51,7 @@
     </div>
     <form class="layui-form" onsubmit="return false;">
       <input type="hidden" name="parent_id" id="parent-id-field" value="0">
-      <input type="hidden" name="item_type" value="{{ itemType }}">
-      <input type="hidden" name="item_id" value="{{ itemId }}">
+      <input type="hidden" name="archive_id" value="{% archiveDetail with name="Id" %}">
       <div class="layui-form-item">
         <label class="layui-form-label">用户名</label>
         <div class="layui-input-inline">

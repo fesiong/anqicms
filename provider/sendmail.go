@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"irisweb/config"
-	"irisweb/library"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"os"
 	"strings"
 	"time"
@@ -93,7 +93,7 @@ func SendMail(subject, content string) error {
 
 	if setting.Account == "" {
 		//成功配置，则跳过
-		return errors.New("请配置发件人信息")
+		return errors.New(config.Lang("请配置发件人信息"))
 	}
 
 	//开始发送
@@ -129,7 +129,7 @@ func SendMail(subject, content string) error {
 		logMailError(subject, err.Error())
 		return err
 	}
-	logMailError(subject, "发送成功")
+	logMailError(subject, config.Lang("发送成功"))
 	return nil
 }
 

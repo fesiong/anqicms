@@ -3,9 +3,9 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/response"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/response"
 	"reflect"
 )
 

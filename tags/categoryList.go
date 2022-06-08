@@ -3,8 +3,11 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 type tagCategoryListNode struct {
@@ -14,7 +17,7 @@ type tagCategoryListNode struct {
 }
 
 func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -22,19 +25,36 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		return err
 	}
 
-	if args["type"] == nil {
-		return nil
+	moduleId := uint(0)
+	if args["moduleId"] != nil {
+		moduleId = uint(args["moduleId"].Integer())
 	}
 
-	categoryType := args["type"].Integer()
+	categoryDetail, _ := ctx.Public["category"].(*model.Category)
 	parentId := uint(0)
 	if args["parentId"] != nil {
-		parentId = uint(args["parentId"].Integer())
+		if args["parentId"].String() == "parent" {
+			if categoryDetail != nil {
+				parentId = categoryDetail.ParentId
+			}
+		} else {
+			parentId = uint(args["parentId"].Integer())
+		}
+	} else if categoryDetail != nil {
+		parentId = categoryDetail.Id
 	}
 
-	categoryList, _ := provider.GetCategories(uint(categoryType), parentId)
-	for i := range categoryList {
+	webInfo, webOk := ctx.Public["webInfo"].(response.WebInfo)
+
+	categoryList := provider.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive)
+	for i := 0; i < len(categoryList); i++ {
 		categoryList[i].Link = provider.GetUrl("category", categoryList[i], 0)
+		categoryList[i].IsCurrent = false
+		if webOk {
+			if (webInfo.PageName == "archiveList" || webInfo.PageName == "archiveDetail") && categoryList[i].Id == webInfo.NavBar {
+				categoryList[i].IsCurrent = true
+			}
+		}
 	}
 
 	ctx.Private[node.name] = categoryList

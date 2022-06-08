@@ -2,13 +2,14 @@ package provider
 
 import (
 	"github.com/jinzhu/now"
-	"irisweb/config"
-	"irisweb/model"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
 	"time"
 )
 
 type SpiderData struct {
 	Total         int64  `json:"total"`
+	Ips           int64  `json:"ips"`
 	StatisticDate string `json:"statistic_date"`
 }
 
@@ -23,10 +24,10 @@ func StatisticSpider(separate string) []*SpiderData {
 		todayStamp := now.BeginningOfDay().Unix()
 		nowHour := now.BeginningOfHour().Hour()
 		for i := 0; i <= nowHour; i++ {
-			timeStamps = append(timeStamps, todayStamp + int64(i) * 3600)
+			timeStamps = append(timeStamps, todayStamp+int64(i)*3600)
 		}
 		var tmpResult []*SpiderData
-		config.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` != ''").
+		dao.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` != ''").
 			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%h:00') AS statistic_date").
 			Group("statistic_date").Find(&tmpResult)
 
@@ -42,13 +43,13 @@ func StatisticSpider(separate string) []*SpiderData {
 			result = append(result, item)
 		}
 	} else {
-		//其他情况，按天展示，展示15天
+		//其他情况，按天展示，展示30天
 		currTimeStamp := now.BeginningOfDay().Unix()
-		for i := 15; i >= 0; i-- {
+		for i := 30; i >= 0; i-- {
 			timeStamps = append(timeStamps, currTimeStamp-int64(i)*86400)
 		}
 		var tmpResult []*SpiderData
-		config.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamps[0]).Where("`spider` != ''").
+		dao.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamps[0]).Where("`spider` != ''").
 			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%m-%d') AS statistic_date").
 			Group("statistic_date").Find(&tmpResult)
 
@@ -68,6 +69,7 @@ func StatisticSpider(separate string) []*SpiderData {
 	return result
 }
 
+// StatisticTraffic 增加IP
 func StatisticTraffic(separate string) []*SpiderData {
 	//支持按天，按小时区分
 	var timeStamps []int64
@@ -79,12 +81,17 @@ func StatisticTraffic(separate string) []*SpiderData {
 		todayStamp := now.BeginningOfDay().Unix()
 		nowHour := now.BeginningOfHour().Hour()
 		for i := 0; i <= nowHour; i++ {
-			timeStamps = append(timeStamps, todayStamp + int64(i) * 3600)
+			timeStamps = append(timeStamps, todayStamp+int64(i)*3600)
 		}
 		var tmpResult []*SpiderData
-		config.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` = ''").
-			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%h:00') AS statistic_date").
+		dao.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` = ''").
+			Select("count(1) AS total FROM_UNIXTIME(created_time, '%h:00') AS statistic_date").
 			Group("statistic_date").Find(&tmpResult)
+
+		var tmpResult2 []*SpiderData
+		dao.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` = ''").
+			Select("count(1) AS ips, FROM_UNIXTIME(created_time, '%h:00') AS statistic_date").
+			Group("statistic_date").Find(&tmpResult2)
 
 		for _, v := range timeStamps {
 			formatTime := time.Unix(v, 0).Format("15:04")
@@ -95,18 +102,29 @@ func StatisticTraffic(separate string) []*SpiderData {
 					break
 				}
 			}
+			for _, s := range tmpResult2 {
+				if s.StatisticDate == formatTime {
+					item.Ips = s.Ips
+					break
+				}
+			}
 			result = append(result, item)
 		}
 	} else {
-		//其他情况，按天展示，展示15天
+		//其他情况，按天展示，展示30天
 		currTimeStamp := now.BeginningOfDay().Unix()
-		for i := 15; i >= 0; i-- {
+		for i := 30; i >= 0; i-- {
 			timeStamps = append(timeStamps, currTimeStamp-int64(i)*86400)
 		}
 		var tmpResult []*SpiderData
-		config.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamps[0]).Where("`spider` = ''").
-			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%m-%d') AS statistic_date").
+		dao.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamps[0]).Where("`spider` = ''").
+			Select("count(1) AS total, count(distinct ip) as ips, FROM_UNIXTIME(created_time, '%m-%d') AS statistic_date").
 			Group("statistic_date").Find(&tmpResult)
+		//
+		//var tmpResult2 []*SpiderData
+		//dao.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamps[0]).Where("`spider` = ''").
+		//	Select("count(1) AS ips, FROM_UNIXTIME(created_time, '%m-%d') AS statistic_date").
+		//	Group("statistic_date").Find(&tmpResult2)
 
 		for _, v := range timeStamps {
 			formatTime := time.Unix(v, 0).Format("01-02")
@@ -117,6 +135,12 @@ func StatisticTraffic(separate string) []*SpiderData {
 					break
 				}
 			}
+			//for _, s := range tmpResult2 {
+			//	if s.StatisticDate == formatTime {
+			//		item.Ips = s.Ips
+			//		break
+			//	}
+			//}
 			result = append(result, item)
 		}
 	}
@@ -137,7 +161,7 @@ func StatisticDetail(isSpider bool, currentPage, limit int) ([]*model.Statistic,
 	}
 	offset := (currentPage - 1) * limit
 
-	builder := config.DB.Model(&model.Statistic{})
+	builder := dao.DB.Model(&model.Statistic{})
 	if isSpider {
 		builder = builder.Where("`spider` != ''")
 	}

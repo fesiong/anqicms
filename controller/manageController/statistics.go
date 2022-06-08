@@ -2,8 +2,8 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 )
 
 //蜘蛛爬行情况
@@ -34,8 +34,8 @@ func StatisticTraffic(ctx iris.Context) {
 }
 
 func StatisticDetail(ctx iris.Context) {
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	pageSize := ctx.URLParamIntDefault("limit", 20)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	isSpider, _ := ctx.URLParamBool("is_spider")
 
 	list, total, _ :=  provider.StatisticDetail(isSpider, currentPage, pageSize)
@@ -43,7 +43,7 @@ func StatisticDetail(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"count": total,
+		"total": total,
 		"data": list,
 	})
 }

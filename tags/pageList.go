@@ -3,9 +3,9 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/provider"
 )
 
 type tagPageListNode struct {
@@ -15,10 +15,10 @@ type tagPageListNode struct {
 }
 
 func (node *tagPageListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
-	pageList, _ := provider.GetCategories(model.CategoryTypePage, 0)
+	pageList := provider.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
 	for i := range pageList {
 		pageList[i].Link = provider.GetUrl("page", pageList[i], 0)
 	}

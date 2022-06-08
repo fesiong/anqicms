@@ -3,18 +3,19 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 	"strings"
 )
 
 func PluginKeywordList(ctx iris.Context) {
 	//需要支持分页，还要支持搜索
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	pageSize := ctx.URLParamIntDefault("limit", 20)
-	keyword := ctx.URLParam("keyword")
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	keyword := ctx.URLParam("title")
 
 	keywordList, total, err := provider.GetKeywordList(keyword, currentPage, pageSize)
 	if err != nil {
@@ -28,7 +29,7 @@ func PluginKeywordList(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"count": total,
+		"total": total,
 		"data": keywordList,
 	})
 }
@@ -67,7 +68,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 		keyword.Title = req.Title
 		keyword.CategoryId = req.CategoryId
 
-		err = keyword.Save(config.DB)
+		err = keyword.Save(dao.DB)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -91,7 +92,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 					CategoryId: req.CategoryId,
 					Status: 1,
 				}
-				keyword.Save(config.DB)
+				keyword.Save(dao.DB)
 			}
 		}
 	}

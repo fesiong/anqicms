@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 )
 
-var articleLang = [2]string{"zh", "en"}
+var archiveLang = [2]string{"zh", "en"}
 
 type translateSources struct {
 	sync.Mutex

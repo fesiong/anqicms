@@ -1,13 +1,14 @@
 package route
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/controller"
-	"irisweb/model"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/middleware"
+	"kandaoni.com/anqicms/provider"
 	"regexp"
-	"strconv"
+	"strings"
 )
 
 func Register(app *iris.Application) {
@@ -20,113 +21,82 @@ func Register(app *iris.Application) {
 	app.Use(controller.CheckTemplateType)
 	app.Use(controller.CheckCloseSite)
 	app.Use(controller.Common)
-	app.Use(controller.LogAccess)
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath))
-	app.Get("/{params:rewrite}", controller.ReRouteContext)
-	app.Get("/", controller.IndexPage)
+	app.Get("/{params:rewrite}", middleware.FrontendCheck, middleware.Check301, controller.ReRouteContext)
+	app.Get("/", middleware.FrontendCheck, controller.LogAccess, controller.IndexPage)
 
-	app.Get("/install", controller.Install)
-	app.Post("/install", controller.InstallForm)
+	app.Get("/install", middleware.FrontendCheck, controller.Install)
+	app.Post("/install", middleware.FrontendCheck, controller.InstallForm)
 
-	attachment := app.Party("/attachment")
+	attachment := app.Party("/attachment", middleware.FrontendCheck)
 	{
 		attachment.Post("/upload", controller.AttachmentUpload)
 	}
 
-	comment := app.Party("/comment")
+	comment := app.Party("/comment", middleware.FrontendCheck, controller.LogAccess)
 	{
 		comment.Post("/publish", controller.CommentPublish)
 		comment.Post("/praise", controller.CommentPraise)
-		comment.Get("/article/{id:uint}", controller.ArticleCommentList)
-		comment.Get("/product/{id:uint}", controller.ProductCommentList)
+		comment.Get("/{id:uint}", controller.CommentList)
 	}
 
-	app.Get("/guestbook.html", controller.GuestbookPage)
-	app.Post("/guestbook.html", controller.GuestbookForm)
+	app.Get("/guestbook.html", middleware.FrontendCheck, controller.LogAccess, controller.GuestbookPage)
+	app.Post("/guestbook.html", middleware.FrontendCheck, controller.GuestbookForm)
+
+	api := app.Party("/api", middleware.FrontendCheck)
+	{
+		api.Get("/captcha", controller.GenerateCaptcha)
+
+		// 内容导入API
+		api.Post("/import/archive", controller.VerifyApiToken, controller.ApiImportArchive)
+		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
+		api.Post("/friendlink/create", controller.VerifyApiToken, controller.ApiImportCreateFriendLink)
+		api.Post("/friendlink/delete", controller.VerifyApiToken, controller.ApiImportDeleteFriendLink)
+	}
 
 	//后台管理路由相关
 	manageRoute(app)
 }
 
 func resisterMacros(app *iris.Application) {
-	rewritePattern := config.ParsePatten()
 	//注册rewrite
 	app.Macros().Register("rewrite", "", false, true, func(paramValue string) (interface{}, bool) {
-		//这里总共有4条正则规则，需要逐一匹配
+		//这里总共有6条正则规则，需要逐一匹配
+		// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
 		matchMap := map[string]string{}
-		//articlePage
-		reg := regexp.MustCompile(rewritePattern.ArticleIndexRule)
+		// 如果匹配到固化链接，则直接返回
+		if !strings.HasPrefix(paramValue, "uploads/") && !strings.HasPrefix(paramValue, "static/") && !strings.HasPrefix(paramValue, "system/") {
+			archiveId := provider.GetFixedLinkFromCache("/" + paramValue)
+			if archiveId > 0 {
+				matchMap["match"] = "archive"
+				matchMap["id"] = fmt.Sprintf("%d", archiveId)
+				return matchMap, true
+			}
+		}
+		// 搜索
+		if paramValue == "search" {
+			matchMap["match"] = "search"
+			return matchMap, true
+		}
+		rewritePattern := config.ParsePatten(false)
+		//archivePage
+		reg := regexp.MustCompile(rewritePattern.ArchiveIndexRule)
 		match := reg.FindStringSubmatch(paramValue)
 		if len(match) > 0 {
-			matchMap["match"] = "articleIndex"
+			matchMap["match"] = "archiveIndex"
 			for i, v := range match {
-				key := rewritePattern.ArticleIndexTags[i]
+				key := rewritePattern.ArchiveIndexTags[i]
 				if i == 0 {
 					key = "route"
 				}
 				matchMap[key] = v
 			}
-			return matchMap, true
-		}
-		//productPage
-		reg = regexp.MustCompile(rewritePattern.ProductIndexRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 0 {
-			matchMap["match"] = "productIndex"
-			for i, v := range match {
-				key := rewritePattern.ProductIndexTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
+			// 这个规则可能与下面的冲突，因此检查一遍
+			module := provider.GetModuleFromCacheByToken(matchMap["module"])
+			if module != nil {
+				return matchMap, true
 			}
-			return matchMap, true
-		}
-		//article
-		reg = regexp.MustCompile(rewritePattern.ArticleRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "article"
-			for i, v := range match {
-				key := rewritePattern.ArticleTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			//如果article和product设置了同一个规则，是无法判断它实际属于什么的，如果设置了catid或catname，那么还能挽救一下
-			if matchMap["catname"] != "" {
-				//存在catname
-				category, err := provider.GetCategoryByUrlToken(matchMap["catname"])
-				if err == nil && category.Type == model.CategoryTypeProduct {
-					//好家伙，把product的正则当做article了，修正。
-					matchMap["match"] = "product"
-				}
-			} else if matchMap["catid"] != "" {
-				//存在catid
-				categoryId, _ := strconv.Atoi(matchMap["catid"])
-				category, err := provider.GetCategoryById(uint(categoryId))
-				if err == nil && category.Type == model.CategoryTypeProduct {
-					//好家伙，把product的正则当做article了，修正。
-					matchMap["match"] = "product"
-				}
-			}
-			return matchMap, true
-		}
-		//product
-		reg = regexp.MustCompile(rewritePattern.ProductRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "product"
-			for i, v := range match {
-				key := rewritePattern.ProductTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			return matchMap, true
 		}
 		//category
 		reg = regexp.MustCompile(rewritePattern.CategoryRule)
@@ -140,7 +110,18 @@ func resisterMacros(app *iris.Application) {
 				}
 				matchMap[key] = v
 			}
-			return matchMap, true
+			if matchMap["filename"] != "" || matchMap["catname"] != "" {
+				if matchMap["catname"] != "" {
+					matchMap["filename"] = matchMap["catname"]
+				}
+				// 这个规则可能与下面的冲突，因此检查一遍
+				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+				if category != nil {
+					return matchMap, true
+				}
+			} else {
+				return matchMap, true
+			}
 		}
 		//page
 		reg = regexp.MustCompile(rewritePattern.PageRule)
@@ -149,6 +130,56 @@ func resisterMacros(app *iris.Application) {
 			matchMap["match"] = "page"
 			for i, v := range match {
 				key := rewritePattern.PageTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			if matchMap["filename"] != "" {
+				// 这个规则可能与下面的冲突，因此检查一遍
+				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+				if category != nil {
+					return matchMap, true
+				}
+			} else {
+				return matchMap, true
+			}
+		}
+		//最后archive
+		reg = regexp.MustCompile(rewritePattern.ArchiveRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "archive"
+			for i, v := range match {
+				key := rewritePattern.ArchiveTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			return matchMap, true
+		}
+		//tagIndex
+		reg = regexp.MustCompile(rewritePattern.TagIndexRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "tagIndex"
+			for i, v := range match {
+				key := rewritePattern.TagIndexTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			return matchMap, true
+		}
+		//tag
+		reg = regexp.MustCompile(rewritePattern.TagRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "tag"
+			for i, v := range match {
+				key := rewritePattern.TagTags[i]
 				if i == 0 {
 					key = "route"
 				}

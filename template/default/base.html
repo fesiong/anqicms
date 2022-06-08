@@ -8,9 +8,13 @@
     <meta name="applicable-device" content="mobile">
     {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
     <meta name="keywords" content="{% tdk with name='Keywords' %}">
-    <meta name="description" content="{% tdk with name='Description' %}">
-    <link href="/static/layui/css/layui.css" rel="stylesheet">
-    <link href="/static/css/app.css" rel="stylesheet">
+    <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
+    <link href="{% system with name="TemplateUrl" %}/layui/css/layui.css" rel="stylesheet">
+    <link href="{% system with name="TemplateUrl" %}/css/app.css" rel="stylesheet">
+    {%- tdk canonical with name="CanonicalUrl" %}
+    {%- if canonical %}
+    <link rel="canonical" href="{{canonical}}" />
+    {%- endif %}
 </head>
 <body>
 <div class="layui-header">
@@ -58,8 +62,8 @@
     </div>
 </div>
 </body>
-<script src="/static/layui/layui.js"></script>
-<script src="/static/js/app.js?v=1.0.0"></script>
+<script src="{% system with name="TemplateUrl" %}/layui/layui.js"></script>
+<script src="{% system with name="TemplateUrl" %}/js/app.js?v=1.0.0"></script>
 <div class="layui-hide">
     {{- pluginJsCode|safe }}
 </div>

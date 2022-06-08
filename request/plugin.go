@@ -1,6 +1,6 @@
 package request
 
-import "irisweb/config"
+import "kandaoni.com/anqicms/config"
 
 type PluginPushConfig struct {
 	BaiduApi string `json:"baidu_api"`
@@ -37,8 +37,7 @@ type PluginLink struct {
 
 type PluginComment struct {
 	Id        uint   `json:"id"`
-	ItemType  string `json:"item_type"`
-	ItemId    uint   `json:"item_id"`
+	ArchiveId uint   `json:"archive_id"`
 	UserId    uint   `json:"user_id"`
 	UserName  string `json:"user_name"`
 	Ip        string `json:"ip"`
@@ -113,4 +112,29 @@ type PluginSendmail struct {
 	Account   string `json:"account"`
 	Password  string `json:"password"`
 	Recipient string `json:"recipient"`
+}
+
+type PluginMaterialImportRequest struct {
+	Materials []*PluginMaterial `json:"materials"`
+}
+
+type PluginTag struct {
+	Id          uint   `json:"id"`
+	Title       string `json:"title"`
+	UrlToken    string `json:"url_token"`
+	SeoTitle    string `json:"seo_title"`
+	Keywords    string `json:"keywords"`
+	Description string `json:"description"`
+	FirstLetter string `json:"first_letter"`
+	Status      uint   `json:"status"`
+}
+
+type PluginRedirectRequest struct {
+	Id      uint   `json:"id"`
+	FromUrl string `json:"from_url"`
+	ToUrl   string `json:"to_url"`
+}
+
+type PluginRedirectsRequest struct {
+	Urls []PluginRedirectRequest `json:"urls"`
 }

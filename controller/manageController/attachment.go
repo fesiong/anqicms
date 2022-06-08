@@ -2,10 +2,11 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/controller"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func AttachmentUpload(ctx iris.Context) {
@@ -14,10 +15,11 @@ func AttachmentUpload(ctx iris.Context) {
 }
 
 func AttachmentList(ctx iris.Context) {
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	pageSize := ctx.URLParamIntDefault("limit", 30)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 
-	attachments, total, err := provider.GetAttachmentList(currentPage, pageSize)
+	attachments, total, err := provider.GetAttachmentList(categoryId, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -29,7 +31,7 @@ func AttachmentList(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"count": total,
+		"total": total,
 		"limit": pageSize,
 		"data": attachments,
 	})
@@ -53,7 +55,101 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	err = attach.Delete(config.DB)
+	err = attach.Delete(dao.DB)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "分类已删除",
+	})
+}
+
+func AttachmentChangeCategory(ctx iris.Context) {
+	var req request.ChangeAttachmentCategory
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.ChangeAttachmentCategory(req.CategoryId, req.Ids)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "分类已更新",
+	})
+}
+
+func AttachmentCategoryList(ctx iris.Context) {
+
+	categories, err := provider.GetAttachmentCategories()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": categories,
+	})
+}
+
+func AttachmentCategoryDetailForm(ctx iris.Context) {
+	var req request.AttachmentCategory
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	category, err := provider.SaveAttachmentCategory(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "分类已更新",
+		"data": category,
+	})
+}
+
+func AttachmentCategoryDelete(ctx iris.Context) {
+	var req request.AttachmentCategory
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.DeleteAttachmentCategory(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

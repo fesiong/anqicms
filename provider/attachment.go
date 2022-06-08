@@ -13,9 +13,11 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/model"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 	"math"
 	"mime/multipart"
 	"os"
@@ -26,14 +28,19 @@ import (
 	"time"
 )
 
-func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.Attachment, error) {
-	db := config.DB
+func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint) (*model.Attachment, error) {
+	db := dao.DB
 	//获取宽高
 	bufFile := bufio.NewReader(file)
 	img, imgType, err := image.Decode(bufFile)
 	if err != nil {
+		if strings.HasSuffix(info.Filename, "mp4") {
+			file.Seek(0, io.SeekStart)
+			return AttachmentUploadVideo(file, info, categoryId)
+		}
+
 		//无法获取图片尺寸
-		fmt.Println("无法获取图片尺寸")
+		fmt.Println(config.Lang("无法获取图片尺寸"))
 		return nil, err
 	}
 	imgType = strings.ToLower(imgType)
@@ -41,7 +48,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.A
 	height := img.Bounds().Dy()
 	//只允许上传jpg,jpeg,gif,png
 	if imgType != "jpg" && imgType != "jpeg" && imgType != "gif" && imgType != "png" {
-		return nil, errors.New(fmt.Sprintf("不支持的图片格式：%s。", imgType))
+		return nil, errors.New(fmt.Sprintf("%s: %s。", config.Lang("不支持的图片格式"), imgType))
 	}
 	if imgType == "jpeg" {
 		imgType = "jpg"
@@ -74,6 +81,10 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.A
 			if err != nil {
 				return nil, err
 			}
+		}
+		// 如果更换了分类
+		if categoryId > 0 && attachment.CategoryId != categoryId {
+			db.Model(attachment).UpdateColumn("category_id", categoryId)
 		}
 		//直接返回
 		return attachment, nil
@@ -160,10 +171,11 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.A
 	attachment = &model.Attachment{
 		FileName:     fileName,
 		FileLocation: filePath + tmpName,
-		FileSize:     int64(info.Size),
+		FileSize:     info.Size,
 		FileMd5:      md5Str,
 		Width:        width,
 		Height:       height,
+		CategoryId:   categoryId,
 		Status:       1,
 	}
 	attachment.GetThumb()
@@ -176,8 +188,88 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader) (*model.A
 	return attachment, nil
 }
 
+func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, categoryId uint) (*model.Attachment, error) {
+	// 视频不做验证
+	fileName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
+	//获取文件的MD5，检查数据库是否已经存在，存在则不用重复上传
+	md5hash := md5.New()
+	bufFile := bufio.NewReader(file)
+	_, err := io.Copy(md5hash, bufFile)
+	if err != nil {
+		return nil, err
+	}
+	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	attachment, err := GetAttachmentByMd5(md5Str)
+	if err == nil {
+		if attachment.DeletedAt.Valid {
+			//更新
+			err = dao.DB.Model(attachment).Update("deleted_at", nil).Error
+			if err != nil {
+				return nil, err
+			}
+		}
+		// 如果更换了分类
+		if categoryId > 0 && attachment.CategoryId != categoryId {
+			dao.DB.Model(attachment).UpdateColumn("category_id", categoryId)
+		}
+		//直接返回
+		return attachment, nil
+	}
+
+	tmpName := md5Str[8:24] + path.Ext(info.Filename)
+	filePath := strconv.Itoa(time.Now().Year()) + strconv.Itoa(int(time.Now().Month())) + "/" + strconv.Itoa(time.Now().Day()) + "/"
+
+	//将文件写入本地
+	basePath := config.ExecPath + "public/uploads/"
+	//先判断文件夹是否存在，不存在就先创建
+	_, err = os.Stat(basePath + filePath)
+	if err != nil && os.IsNotExist(err) {
+		err = os.MkdirAll(basePath+filePath, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	originFile, err := os.OpenFile(basePath+filePath+tmpName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		//无法创建
+		return nil, err
+	}
+
+	defer originFile.Close()
+
+	_, err = io.Copy(originFile, file)
+	if err != nil {
+		//文件写入失败
+		return nil, err
+	}
+
+	//文件上传完成
+	attachment = &model.Attachment{
+		FileName:     fileName,
+		FileLocation: filePath + tmpName,
+		FileSize:     info.Size,
+		FileMd5:      md5Str,
+		CategoryId: categoryId,
+		Status:       1,
+	}
+	attachment.GetThumb()
+
+	err = attachment.Save(dao.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	return attachment, nil
+}
+
 func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error) {
-	db := config.DB
+	db := dao.DB
 	resp, body, errs := gorequest.New().Set("referer", src).Timeout(30 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
@@ -199,7 +291,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			height := img.Bounds().Dy()
 			//只允许上传jpg,jpeg,gif,png
 			if imgType != "jpg" && imgType != "jpeg" && imgType != "gif" && imgType != "png" {
-				return nil, errors.New(fmt.Sprintf("不支持的图片格式：%s。", imgType))
+				return nil, errors.New(fmt.Sprintf("%s: %s。", config.Lang("不支持的图片格式"), imgType))
 			}
 			if imgType == "jpeg" {
 				imgType = "jpg"
@@ -329,7 +421,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 
 			return attachment, nil
 		} else {
-			return nil, errors.New("不支持的图片格式")
+			return nil, errors.New(config.Lang("不支持的图片格式"))
 		}
 	}
 
@@ -337,7 +429,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 }
 
 func GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
-	db := config.DB
+	db := dao.DB
 	var attach model.Attachment
 
 	if err := db.Unscoped().Where("`file_md5` = ?", md5).First(&attach).Error; err != nil {
@@ -350,7 +442,7 @@ func GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
 }
 
 func GetAttachmentById(id uint) (*model.Attachment, error) {
-	db := config.DB
+	db := dao.DB
 	var attach model.Attachment
 
 	if err := db.Where("`id` = ?", id).First(&attach).Error; err != nil {
@@ -362,12 +454,16 @@ func GetAttachmentById(id uint) (*model.Attachment, error) {
 	return &attach, nil
 }
 
-func GetAttachmentList(currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
+func GetAttachmentList(categoryId uint, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
 	var attachments []*model.Attachment
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := config.DB.Model(&model.Attachment{}).Where("`status` = 1").Order("id desc")
+	builder := dao.DB.Model(&model.Attachment{})
+	if categoryId > 0 {
+		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	builder = builder.Where("`status` = 1").Order("id desc")
 	if err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&attachments).Error; err != nil {
 		return nil, 0, err
 	}
@@ -379,7 +475,7 @@ func GetAttachmentList(currentPage int, pageSize int) ([]*model.Attachment, int6
 }
 
 func ThumbRebuild() {
-	db := config.DB
+	db := dao.DB
 	limit := 1000
 	var total int64
 	attachmentBuilder := db.Model(&model.Attachment{}).Where("`status` = 1").Order("id desc").Count(&total)
@@ -449,4 +545,76 @@ func BuildThumb(attachment *model.Attachment) error {
 	}
 
 	return nil
+}
+
+// GetAttachmentCategories 获取所有分类
+func GetAttachmentCategories() ([]*model.AttachmentCategory, error) {
+	var categories []*model.AttachmentCategory
+
+	err := dao.DB.Where("`status` = 1").Find(&categories).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return categories, nil
+}
+
+func GetAttachmentCategoryById(id uint) (*model.AttachmentCategory, error) {
+	var category model.AttachmentCategory
+	if err := dao.DB.Where("id = ?", id).First(&category).Error; err != nil {
+		return nil, err
+	}
+
+	return &category, nil
+}
+
+func ChangeAttachmentCategory(categoryId uint, ids []uint) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	dao.DB.Model(&model.Attachment{}).Where("`id` IN(?)", ids).UpdateColumn("category_id", categoryId)
+
+	return nil
+}
+
+func DeleteAttachmentCategory(id uint) error {
+	category, err := GetAttachmentCategoryById(id)
+	if err != nil {
+		return err
+	}
+
+	//如果存在内容，则不能删除
+	var attachCount int64
+	dao.DB.Model(&model.Attachment{}).Where("`category_id` = ?", category.Id).Count(&attachCount)
+	if attachCount > 0 {
+		return errors.New(config.Lang("请删除分类下的图片，才能删除分类"))
+	}
+
+	//执行删除操作
+	err = dao.DB.Delete(category).Error
+
+	return err
+}
+
+func SaveAttachmentCategory(req *request.AttachmentCategory) (category *model.AttachmentCategory, err error) {
+	if req.Id > 0 {
+		category, err = GetAttachmentCategoryById(req.Id)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		category = &model.AttachmentCategory{
+			Status: 1,
+		}
+	}
+	category.Title = req.Title
+	category.Status = 1
+
+	err = dao.DB.Save(category).Error
+
+	if err != nil {
+		return
+	}
+	return
 }

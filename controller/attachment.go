@@ -2,11 +2,13 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
-	"irisweb/config"
-	"irisweb/provider"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 )
 
 func AttachmentUpload(ctx iris.Context) {
+	// 增加分类
+	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -17,7 +19,7 @@ func AttachmentUpload(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	attachment, err := provider.AttachmentUpload(file, info)
+	attachment, err := provider.AttachmentUpload(file, info, categoryId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"status": config.StatusFailed,

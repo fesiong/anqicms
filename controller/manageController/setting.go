@@ -4,25 +4,31 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"io/ioutil"
-	"irisweb/config"
-	"irisweb/model"
-	"irisweb/provider"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
+	"os"
 	"strings"
+	"time"
 )
 
 func SettingSystem(ctx iris.Context) {
 	system := config.JsonData.System
-	var templateNames []string
-	//读取目录
-	readerInfos, err := ioutil.ReadDir(fmt.Sprintf("%stemplate", config.ExecPath))
-	if err != nil {
-		fmt.Println(err)
-		//怎么会不存在？
+	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") {
+		system.SiteLogo = config.JsonData.System.BaseUrl + system.SiteLogo
 	}
-	for _, info := range readerInfos {
-		if info.IsDir() {
-			templateNames = append(templateNames, info.Name())
+
+	// 读取language列表
+	var languages []string
+	readerInfos, err := ioutil.ReadDir(fmt.Sprintf("%slanguage", config.ExecPath))
+	if err == nil {
+		for _, info := range readerInfos {
+			if strings.HasSuffix(info.Name(), ".yml") {
+				languages = append(languages, strings.TrimSuffix(info.Name(), ".yml"))
+			}
 		}
 	}
 
@@ -31,7 +37,7 @@ func SettingSystem(ctx iris.Context) {
 		"msg":  "",
 		"data": iris.Map{
 			"system":         system,
-			"template_names": templateNames,
+			"languages":      languages,
 		},
 	})
 }
@@ -46,30 +52,41 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
-	if !strings.HasPrefix(req.AdminUri, "/") || len(req.AdminUri) < 2 {
+	req.AdminUrl = strings.TrimSpace(req.AdminUrl)
+	if req.AdminUrl != "" && !strings.HasPrefix(req.AdminUrl, "http") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "后台路径需要以/开头",
+			"msg":  "后台域名请填写正确的域名，并做好解析，否则可能会导致后台无法访问",
 		})
 		return
 	}
 
-	req.SiteLogo = strings.Replace(req.SiteLogo, config.JsonData.System.BaseUrl, "", -1)
+	req.SiteLogo = strings.TrimPrefix(req.SiteLogo, config.JsonData.System.BaseUrl)
 
-	//进行一些限制
-	if req.TemplateType == config.TemplateTypeSeparate {
-		if req.MobileUrl == req.BaseUrl {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  "手机端域名不能和电脑端域名一样",
-			})
-			return
-		} else if req.MobileUrl == "" {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  "你选择了电脑+手机模板类型，请填写手机端域名",
-			})
-			return
+	////进行一些限制
+	//if req.TemplateType == config.TemplateTypeSeparate {
+	//	if req.MobileUrl == req.BaseUrl {
+	//		ctx.JSON(iris.Map{
+	//			"code": config.StatusFailed,
+	//			"msg":  "手机端域名不能和电脑端域名一样",
+	//		})
+	//		return
+	//	} else if req.MobileUrl == "" {
+	//		ctx.JSON(iris.Map{
+	//			"code": config.StatusFailed,
+	//			"msg":  "你选择了电脑+手机模板类型，请填写手机端域名",
+	//		})
+	//		return
+	//	}
+	//}
+
+	changed := false
+	if config.JsonData.System.AdminUrl != req.AdminUrl {
+		changed = true
+	}
+	if req.ExtraFields != nil {
+		for i := range req.ExtraFields {
+			req.ExtraFields[i].Name = library.Case2Camel(req.ExtraFields[i].Name)
 		}
 	}
 
@@ -77,13 +94,15 @@ func SettingSystemForm(ctx iris.Context) {
 	config.JsonData.System.SiteLogo = req.SiteLogo
 	config.JsonData.System.SiteIcp = req.SiteIcp
 	config.JsonData.System.SiteCopyright = req.SiteCopyright
-	config.JsonData.System.AdminUri = req.AdminUri
+	config.JsonData.System.AdminUrl = req.AdminUrl
 	config.JsonData.System.SiteClose = req.SiteClose
 	config.JsonData.System.SiteCloseTips = req.SiteCloseTips
-	config.JsonData.System.TemplateName = req.TemplateName
+	//config.JsonData.System.TemplateName = req.TemplateName
+	//config.JsonData.System.TemplateType = req.TemplateType
 	config.JsonData.System.BaseUrl = req.BaseUrl
 	config.JsonData.System.MobileUrl = req.MobileUrl
-	config.JsonData.System.TemplateType = req.TemplateType
+	config.JsonData.System.Language = req.Language
+	config.JsonData.System.ExtraFields = req.ExtraFields
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -94,6 +113,14 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
+	// 重载 language
+	config.LoadLanguage()
+
+	// 如果切换了模板，则重载模板
+	if changed {
+		config.RestartChan <- true
+	}
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
@@ -102,6 +129,9 @@ func SettingSystemForm(ctx iris.Context) {
 
 func SettingContent(ctx iris.Context) {
 	system := config.JsonData.Content
+	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") {
+		system.DefaultThumb = config.JsonData.System.BaseUrl + system.DefaultThumb
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -120,7 +150,7 @@ func SettingContentForm(ctx iris.Context) {
 		return
 	}
 
-	req.DefaultThumb = strings.Replace(req.DefaultThumb, config.JsonData.System.BaseUrl, "", -1)
+	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, config.JsonData.System.BaseUrl)
 
 	config.JsonData.Content.RemoteDownload = req.RemoteDownload
 	config.JsonData.Content.FilterOutlink = req.FilterOutlink
@@ -240,12 +270,8 @@ func SettingNavForm(ctx iris.Context) {
 	nav.Link = req.Link
 	nav.Sort = req.Sort
 	nav.Status = 1
-	if nav.NavType == model.NavTypeSystem {
-		//内置菜单
-		nav.PageId = req.InnerPageId
-	}
 
-	err = nav.Save(config.DB)
+	err = nav.Save(dao.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -278,7 +304,7 @@ func SettingNavDelete(ctx iris.Context) {
 		return
 	}
 
-	err = nav.Delete(config.DB)
+	err = nav.Delete(dao.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -295,6 +321,9 @@ func SettingNavDelete(ctx iris.Context) {
 
 func SettingContact(ctx iris.Context) {
 	system := config.JsonData.Contact
+	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") {
+		system.Qrcode = config.JsonData.System.BaseUrl + system.Qrcode
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -313,7 +342,13 @@ func SettingContactForm(ctx iris.Context) {
 		return
 	}
 
-	req.Qrcode = strings.Replace(req.Qrcode, config.JsonData.System.BaseUrl, "", -1)
+	req.Qrcode = strings.TrimPrefix(req.Qrcode, config.JsonData.System.BaseUrl)
+
+	if req.ExtraFields != nil {
+		for i := range req.ExtraFields {
+			req.ExtraFields[i].Name = library.Case2Camel(req.ExtraFields[i].Name)
+		}
+	}
 
 	config.JsonData.Contact.UserName = req.UserName
 	config.JsonData.Contact.Cellphone = req.Cellphone
@@ -321,6 +356,7 @@ func SettingContactForm(ctx iris.Context) {
 	config.JsonData.Contact.Email = req.Email
 	config.JsonData.Contact.Wechat = req.Wechat
 	config.JsonData.Contact.Qrcode = req.Qrcode
+	config.JsonData.Contact.ExtraFields = req.ExtraFields
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -334,5 +370,38 @@ func SettingContactForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
+	})
+}
+
+func SettingCache(ctx iris.Context) {
+	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
+	info, err := os.Stat(filePath)
+	var lastUpdate int64
+	if err == nil {
+		lastUpdate = info.ModTime().Unix()
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"last_update": lastUpdate,
+		},
+	})
+}
+
+func SettingCacheForm(ctx iris.Context) {
+	// todo, 清理缓存
+	provider.DeleteCacheCategories()
+	provider.DeleteCacheFixedLinks()
+	provider.DeleteCacheModules()
+	provider.DeleteCacheRedirects()
+	// 记录
+	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
+	ioutil.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "缓存已更新",
 	})
 }

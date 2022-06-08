@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<div class="layui-container index">
+    <div class="layui-row layui-col-space15">
+        <div class="layui-col-md8">
+            <div class="layui-breadcrumb">
+                {% breadcrumb crumbs with title=false %}
+                {% for item in crumbs %}
+                <a href="{{item.Link}}">{{item.Name}}</a>
+                {% endfor %}
+                {% endbreadcrumb %}
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-body">
+                    {% archiveList products with type="page" limit="10" %}
+                    <ul class="product-list layui-row layui-col-space15">
+                        {% for item in products %}
+                        <li class="layui-col-xs6 layui-col-sm4 layui-col-md3">
+                            <a href="{{item.Link}}" class="item">
+                                <div class="thumb">
+                                    <img alt="{{item.Title}}" src="{{item.Thumb}}"/>
+                                    <div class="tips">查看详情</div>
+                                </div>
+                                <div class="layout">
+                                    {% if item.Price or item.Stock %}
+                                    <div class="meta">
+                                        <span class="price"><i>￥</i>{{item.Price|floatformat:2}}元</span>
+                                        {% if item.Stock %}
+                                        <span class="stock">{{item.Stock}}件</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <h5 class="title">{{item.Title}}</h5>
+                                </div>
+                            </a>
+                        </li>
+                        {% empty %}
+                        <li class="item empty">
+                            该列表没有任何内容
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endarchiveList %}
+                </div>
+                {% pagination pages with show="4" %}
+                <div class="layui-card-body text-center">
+                    <div class="layui-box layui-laypage layui-laypage-default">
+                        <a class="layui-laypage-first {% if pages.FirstPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
+                        {% if pages.PrevPage %}
+                        <a class="layui-laypage-prev" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
+                        {% endif %}
+                        {% for item in pages.Pages %}
+                        <a class="{% if item.IsCurrent %}layui-laypage-curr{% endif %}" href="{{item.Link}}">{{item.Name}}</a>
+                        {% endfor %}
+                        {% if pages.NextPage %}
+                        <a class="layui-laypage-next" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
+                        {% endif %}
+                        <a class="layui-laypage-last {% if pages.LastPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
+                    </div>
+                </div>
+                {% endpagination %}
+            </div>
+        </div>
+
+        <div class="layui-col-md4">
+            <div class="layui-card">
+                <div class="layui-card-header">热门产品</div>
+                <div class="layui-card-body">
+                    {% archiveList popularProducts with type="list" order="views desc" limit="6" %}
+                    <ul class="product-list aside-list layui-row layui-col-space15">
+                        {% for item in popularProducts %}
+                        <li class="layui-col-xs6">
+                            <a href="{{item.Link}}" class="item">
+                                <div class="thumb">
+                                    <img alt="{{item.Title}}" src="{{item.Thumb}}"/>
+                                    <div class="tips">查看详情</div>
+                                </div>
+                                <div class="layout">
+                                    {% if item.Price or item.Stock %}
+                                    <div class="meta">
+                                        <span class="price"><i>￥</i>{{item.Price|floatformat:2}}元</span>
+                                        {% if item.Stock %}
+                                        <span class="stock">{{item.Stock}}件</span>
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                    <h5 class="title">{{item.Title}}</h5>
+                                </div>
+                            </a>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                    {% endarchiveList %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -3,13 +3,14 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/library"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"reflect"
+	"strings"
 )
 
 type tagSystemNode struct {
-	name     string
+	name string
 	args map[string]pongo2.IEvaluator
 }
 
@@ -25,11 +26,25 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	v := reflect.ValueOf(config.JsonData.System)
+	var content string
 
-	f := v.FieldByName(fieldName)
+	// TemplateUrl 实时算出来, 它的计算方式是 /static/{TemplateName}
+	if fieldName == "TemplateUrl" {
+		content = fmt.Sprintf("%s/static/%s", strings.TrimRight(config.JsonData.System.BaseUrl, "/"), config.JsonData.System.TemplateName)
+	} else if config.JsonData.System.ExtraFields != nil {
+		for i := range config.JsonData.System.ExtraFields {
+			if config.JsonData.System.ExtraFields[i].Name == fieldName {
+				content = config.JsonData.System.ExtraFields[i].Value
+				break
+			}
+		}
+	}
+	if content == "" {
+		v := reflect.ValueOf(config.JsonData.System)
+		f := v.FieldByName(fieldName)
 
-	content := fmt.Sprintf("%v", f)
+		content = fmt.Sprintf("%v", f)
+	}
 
 	// output
 	if node.name == "" {

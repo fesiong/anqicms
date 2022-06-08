@@ -3,8 +3,8 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/library"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"reflect"
 )
 
@@ -25,11 +25,22 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	v := reflect.ValueOf(config.JsonData.Contact)
+	var content string
 
-	f := v.FieldByName(fieldName)
+	if config.JsonData.Contact.ExtraFields != nil {
+		for i := range config.JsonData.Contact.ExtraFields {
+			if config.JsonData.Contact.ExtraFields[i].Name == fieldName {
+				content = config.JsonData.Contact.ExtraFields[i].Value
+				break
+			}
+		}
+	}
+	if content == "" {
+		v := reflect.ValueOf(config.JsonData.Contact)
+		f := v.FieldByName(fieldName)
 
-	content := fmt.Sprintf("%v", f)
+		content = fmt.Sprintf("%v", f)
+	}
 
 	// output
 	if node.name == "" {

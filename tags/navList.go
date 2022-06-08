@@ -3,9 +3,10 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
-	"irisweb/config"
-	"irisweb/provider"
-	"irisweb/response"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 type tagNavListNode struct {
@@ -15,7 +16,7 @@ type tagNavListNode struct {
 }
 
 func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if config.DB == nil {
+	if dao.DB == nil {
 		return nil
 	}
 	navList, _ := provider.GetNavList(true)
@@ -23,13 +24,16 @@ func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
 	if ok {
 		for i := range navList {
-			if navList[i].PageId == webInfo.NavBar {
+			navList[i].IsCurrent = false
+			if (navList[i].NavType == model.NavTypeSystem && (webInfo.PageName == "index" || webInfo.PageName == "archiveIndex") && navList[i].PageId == webInfo.NavBar) || (navList[i].NavType == model.NavTypeCategory && (webInfo.PageName == "archiveDetail" || webInfo.PageName == "archiveList") && navList[i].PageId == webInfo.NavBar) {
 				navList[i].IsCurrent = true
 			}
 			if navList[i].NavList != nil {
 				for j := range navList[i].NavList {
-					if navList[i].NavList[j].PageId == webInfo.NavBar {
+					navList[i].NavList[j].IsCurrent = false
+					if (navList[i].NavList[j].NavType == model.NavTypeSystem && (webInfo.PageName == "index" || webInfo.PageName == "archiveIndex") && navList[i].NavList[j].PageId == webInfo.NavBar) || (navList[i].NavList[j].NavType == model.NavTypeCategory && (webInfo.PageName == "archiveDetail" || webInfo.PageName == "archiveList") && navList[i].NavList[j].PageId == webInfo.NavBar) {
 						navList[i].NavList[j].IsCurrent = true
+						navList[i].IsCurrent = true
 					}
 				}
 			}

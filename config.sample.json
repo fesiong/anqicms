@@ -1,15 +1,8 @@
 {
-	"mysql": {
-		"database": "irisweb",
-		"user": "root",
-		"password": "root",
-		"host": "localhost",
-		"port": 3306
-	},
 	"server": {
-		"site_name": "看到你博客",
+		"site_name": "安企内容管理系统(AnqiCMS)",
 		"env": "development",
 		"port": 8001,
-		"log_level": "debug"
+		"log_level": "release"
 	}
 }

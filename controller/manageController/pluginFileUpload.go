@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"io/ioutil"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/request"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/request"
 	"os"
 	"path"
 	"time"
@@ -14,6 +14,10 @@ import (
 
 func PluginFileUploadList(ctx iris.Context) {
 	uploadFiles := config.JsonData.PluginUploadFiles
+
+	for i := range uploadFiles {
+		uploadFiles[i].Link = config.JsonData.System.BaseUrl + "/" + uploadFiles[i].FileName
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

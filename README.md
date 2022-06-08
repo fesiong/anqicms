@@ -1,19 +1,25 @@
-# GoBlog 基于irisweb的golang编写的简洁版个人博客系统
+# AnqiCMS 基于irisweb的golang编写的安企内容管理系统
 
-GoBlog是一个开源的个人博客系统，界面优雅，小巧、执行速度飞快，并且对seo友好，可以满足日常博客需求。你完全可以用它来搭建自己的博客。它的使用很简单，部署非常方便。  
-  
-GoBlog是一款由golang编写的博客，它使用了golang非常流行的网页框架irisweb+gorm，pc和移动端自适应，页面模板使用类似blade模板引擎语法，上手非常容易。  
-  
-GoBlog同时支持小程序接口，小程序端使用Taro跨平台框架开发，将同时支持微信小程序、百度智能小程序、QQ小程序、支付宝小程序，字节跳动小程序等。
+安企内容管理系统(AnqiCMS)，是一款使用 GoLang 开发的企业站内容管理系统，它部署简单，软件安全，界面优雅，小巧，执行速度飞快，使用 AnqiCMS 搭建的网站可以防止众多安全问题发生。AnqiCMS 的设计对SEO友好，并且内置了大量企业站常用功能，对网站优化有很好的帮助提升，对企业管理网站一定程度上提供了办事效率，提高企业的竞争力。
 
-## GoBlog 分支版本说明
+AnqiCMS 除了适合做企业站，也适合做营销型网站、企业官网、商品展示站点、政府网站、门户网站、个人博客等等各种类型的网站。AnqiCMS 是什么，AnqiCMS 是一个可以自由使用并开放源码的内容管理系统，你可以拿 AnqiCMS 来搭建各种不违法的网站。
+
+AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以非常容易上手模板制作。网站模式支持 自适应、代码适配、PC+mobile独立站点 模式，根据不用需求，可以选择适合自己的搭配方式来建站。
+
+我们的追求：让天下都是安全的网站。
+
+我们一直朝着网站安全的方向前进，让 AnqiCMS 为你的网站安全护航。
+
+欢迎您使用 AnqiCMS。
+
+## AnqiCMS 分支版本说明
 
 - master为最新开发版代码
 - simple 为仅包含基础功能的博客代码
 - blog 为具有完整后台的博客代码
-- enterprise 为博客基础上加入了企业站功能的代码
+- enterprise 为安企内容管理系统(AnqiCMS)的代码
 
-## GoBlog 开发计划表
+## AnqiCMS 开发计划表
 
 ### simple 基础功能 (已发布)
 
@@ -41,7 +47,7 @@ GoBlog同时支持小程序接口，小程序端使用Taro跨平台框架开发�
 - [x] 自定义导航配置功能
 - [x] 优雅的启动和重启博客
 
-### enterprise 企业站适配 (开发中)
+### enterprise 安企内容管理系统(AnqiCMS) (已发布)
 
 - [x] 增加多模板支持功能
 - [x] 增加产品模块和管理
@@ -73,17 +79,17 @@ GoBlog同时支持小程序接口，小程序端使用Taro跨平台框架开发�
 - [ ] 适配QQ小程序
 
 ### 模板标签
-[查看模板标签说明](template.md)
+[查看模板标签说明](https://www.kandaoni.com/category/10)
 
-## GoBlog 的安装
-### GoBlog依赖的软件
+## AnqiCMS 的安装
+### AnqiCMS依赖的软件
 | 软件 | 版本|  
 |:---------|:-------:|
 | golang  |  1.13 (及以上) |
 | mysql  |  5.6.35 (及以上) |
 
 ### 克隆代码
-将`GoBlog`的代码克隆到本地任意目录，并进入该目录操作  
+将`AnqiCMS`的代码克隆到本地任意目录，并进入该目录操作  
 ### 安装依赖环境
 由于众所周知的原因，我们需要设置代理，在终端执行这个代码：
 ```bash
@@ -94,25 +100,25 @@ go env -w GOPROXY=https://goproxy.cn,direct
 go mod tidy
 go mod vendor
 # 这是编译代码
-go build -o GoBlog main/main.go
+go build -o anqicms main/main.go
 # 这是测试运行代码
 go run main/main.go
 ```
 至此便可以运行网站了
-### 运行GoBlog
-启动GoBlog
+### 运行AnqiCMS
+启动AnqiCMS
 ```bash
 # 这是执行编译后的可执行文件
-./GoBlog
+./anqicms
 # 这是测试运行代码
 go run main/main.go
 ```
-在浏览器访问： http://127.0.0.1:8001 。初次访问，需要初始化GoBlog，在初始化界面，输入mysql信息，设置管理员账号、密码。完成后，就可以开始编写博客了。
+在浏览器访问： http://127.0.0.1:8001 。初次访问，需要初始化AnqiCMS，在初始化界面，输入mysql信息，设置管理员账号、密码。完成后，就可以开始编写博客了。
 ### 服务端部署
 
 下载最新的发行版：[下载发行版](https://github.com/fesiong/goblog/releases)
 
-根据你的服务器选择，linux用户，请下载goblog-linux.zip，windows用户，请下载goblog-windows.zip。
+根据你的服务器选择，linux用户，请下载anqicms-linux.zip，windows用户，请下载anqicms-windows.zip。
 
 将压缩包上传的网站根目录。
 
@@ -121,14 +127,15 @@ go run main/main.go
 一般上，还需要配置nginx代理，来使用80端口或https端口。  
 nginx代理代码如下：
 ```bash
-    location @GoBlog {
+    location @AnqiCMS {
         proxy_pass http://127.0.0.1:8001;
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
     }
+    error_page 404 =200  @AnqiCMS;
     location / {
-       try_files $uri $uri/index.html @GoBlog;
+       try_files $uri $uri/index.html @AnqiCMS;
     }
 ```
 
@@ -137,17 +144,18 @@ nginx代理代码如下：
 server
 {
     listen       80;
-    server_name dev.goblog.com m.goblog.com;
+    server_name dev.anqicms.com m.anqicms.com;
     root /data/wwwroot/irisweb/public;
 
-    location @GoBlog {
+    location @AnqiCMS {
         proxy_pass http://127.0.0.1:8001;
         proxy_set_header   Host             $host;
         proxy_set_header   X-Real-IP        $remote_addr;
         proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
     }
+    error_page 404 =200  @AnqiCMS;
     location / {
-       try_files $uri $uri/index.html @GoBlog;
+       try_files $uri $uri/index.html @AnqiCMS;
     }
     access_log off;
 }
@@ -162,13 +170,13 @@ server
 #!/bin/bash
 ### check 502
 # author fesion
-# the bin name is goblog
-BINNAME=goblog
-# 设置goblog目标目录
-BINPATH=/你存放goblog的目录
+# the bin name is anqicms
+BINNAME=anqicms
+# 设置anqicms目标目录
+BINPATH=/你存放anqicms的目录
 
 # check the pid if exists
-exists=`ps -ef | grep '\<goblog\>' |grep -v grep |wc -l`
+exists=`ps -ef | grep '\<anqicms\>' |grep -v grep |wc -l`
 echo "$(date +'%Y%m%d %H:%M:%S') $BINNAME PID check: $exists" >> $BINPATH/check.log
 echo "PID $BINNAME check: $exists"
 if [ $exists -eq 0 ]; then
@@ -206,6 +214,6 @@ fi
 ![扫码入群讨论](https://www.kandaoni.com/uploads/20213/3/thumb_1525154eb779f3c7.png)
 
 ## License
-The MIT License (MIT)
+AnqiCMS 最终用户授权协议
 
 Copyright (c) 2019-NOW  Fesion <tpyzlxy@163.com>

@@ -3,7 +3,9 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
+	"kandaoni.com/anqicms/response"
 	"math"
+	"net/url"
 	"regexp"
 	"strings"
 )
@@ -50,6 +52,50 @@ func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 
 	if args["show"] != nil {
 		paginator.maxPagesShow = args["show"].Integer()
+	}
+
+	// 支持重定义pattern
+	if args["prefix"] != nil {
+		paginator.urlPatten = args["prefix"].String()
+	}
+
+	if paginator.urlPatten == "" {
+		webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
+		if ok {
+			paginator.urlPatten = webInfo.CanonicalUrl
+		}
+	}
+	if !strings.Contains(paginator.urlPatten, PagePlaceholder) {
+		// 先判断是否已经有page了，这里只判断 page=\d 模式
+		if strings.Contains(paginator.urlPatten, "page=") {
+			reg, _ := regexp.Compile(`(([&?])page=\d*)`)
+			paginator.urlPatten = reg.ReplaceAllStringFunc(paginator.urlPatten, func(s string) string {
+				// 移除
+				return ""
+			})
+		}
+		if strings.Contains(paginator.urlPatten, "?") {
+			paginator.urlPatten += "&page=" + PagePlaceholder
+		} else {
+			paginator.urlPatten += "?page=" + PagePlaceholder
+		}
+	}
+
+	// 分页的时候，还需要检查是否有搜索参数，有的话，也要加上
+	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
+	if ok && len(urlParams) > 0 {
+		urlPatten, err := url.Parse(paginator.urlPatten)
+		if err == nil {
+			urlQuery := urlPatten.Query()
+			for k, v := range urlParams {
+				if k == "page" {
+					continue
+				}
+				urlQuery.Set(k, v)
+			}
+			urlPatten.RawQuery = urlQuery.Encode()
+			paginator.urlPatten = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(urlPatten.String(), "%7Bpage%7D", PagePlaceholder), "%28","("),"%29", ")")
+		}
 	}
 
 	if paginator.TotalPages <= 1 {
@@ -115,15 +161,15 @@ func TagPaginationParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pon
 	return tagNode, nil
 }
 
-func makePagination(TotalItems int64, CurrentPage, pageSize int, urlPatten string, maxPagesShow int) *pagination {
-	if CurrentPage < 1 {
-		CurrentPage = 1
+func makePagination(TotalItems int64, currentPage, pageSize int, urlPatten string, maxPagesShow int) *pagination {
+	if currentPage < 1 {
+		currentPage = 1
 	}
 	pager := &pagination{
 		TotalItems:   TotalItems,
 		TotalPages:   0,
 		pageSize:     pageSize,
-		CurrentPage:  CurrentPage,
+		CurrentPage:  currentPage,
 		urlPatten:    urlPatten,
 		maxPagesShow: maxPagesShow,
 	}
@@ -136,7 +182,7 @@ func makePagination(TotalItems int64, CurrentPage, pageSize int, urlPatten strin
 
 func (p *pagination) getFirstPage() *pageItem {
 	item := &pageItem{
-		Name: "首页",
+		Name: "第一页",
 		Link: p.getPageUrl(1),
 	}
 
@@ -258,6 +304,10 @@ func (p *pagination) getPageUrl(page int) string {
 	} else {
 		reg := regexp.MustCompile("\\(.*\\)")
 		link = reg.ReplaceAllString(link, "")
+		reg = regexp.MustCompile(`page=\{page\}&?`)
+		link = reg.ReplaceAllString(link, "")
+		link = strings.Trim(link, "?")
+		link = strings.Trim(link, "&")
 	}
 
 	return link

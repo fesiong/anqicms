@@ -2,22 +2,21 @@ package config
 
 import (
 	"bytes"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
-
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 )
 
 type configData struct {
-	DB     mysqlConfig  `json:"mysql"`
+	Mysql  mysqlConfig  `json:"mysql"`
 	Server serverConfig `json:"server"`
 	//setting
 	System  systemConfig  `json:"system"`
@@ -32,31 +31,26 @@ type configData struct {
 	PluginGuestbook   pluginGuestbookConfig `json:"plugin_guestbook"`
 	PluginUploadFiles []PluginUploadFile    `json:"plugin_upload_file"`
 	PluginSendmail    pluginSendmail        `json:"plugin_sendmail"`
-
-	ArticleExtraFields []*CustomField `json:"article_extra_fields"`
-	ProductExtraFields []*CustomField `json:"product_extra_fields"`
+	PluginImportApi   pluginImportApiConfig `json:"plugin_import_api"`
 }
 
 func initPath() {
 	sep := string(os.PathSeparator)
-	ExecPath, _ = os.Executable()
-	ExecPath = filepath.Dir(ExecPath)
+	//root := filepath.Dir(os.Args[0])
+	//ExecPath, _ = filepath.Abs(root)
+	ExecPath, _ = os.Getwd()
 	pathArray := strings.Split(ExecPath, "/")
+	//如果是测试目录，则保留到根目录。这定义根目录为：anqicms
 	if strings.Contains(ExecPath, "\\") {
 		pathArray = strings.Split(ExecPath, "\\")
 	}
+
 	for i, v := range pathArray {
-		if v == "irisweb" {
+		if v == "anqicms" {
 			ExecPath = strings.Join(pathArray[:i+1], "/")
 			break
 		}
 	}
-
-	if strings.Contains(ExecPath, "/GoLand") {
-		//指定测试环境
-		ExecPath = "/Users/fesion/data/gitpath/irisweb/"
-	}
-
 	length := utf8.RuneCountInString(ExecPath)
 	lastChar := ExecPath[length-1:]
 	if lastChar != sep {
@@ -68,103 +62,48 @@ func initJSON() {
 	rawConfig, err := ioutil.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"irisweb 博客\",\"env\": \"development\",\"port\": 8001,\"log_level\":\"debug\"}}")
+		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"development\",\"port\": 8001,\"log_level\":\"debug\"}}")
 	}
 
 	if err := json.Unmarshal(rawConfig, &JsonData); err != nil {
 		fmt.Println("Invalid Config: ", err.Error())
 		os.Exit(-1)
 	}
-	//给后台添加默认值
-	if JsonData.System.AdminUri == "" {
-		JsonData.System.AdminUri = "/manage"
-	}
+
 	//如果没有设置模板，则默认是default
 	if JsonData.System.TemplateName == "" {
-		JsonData.System.TemplateName = "/default"
+		JsonData.System.TemplateName = "default"
 	}
-}
-
-func InitDB(setting *mysqlConfig) error {
-	var db *gorm.DB
-	var err error
-	url := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		setting.User, setting.Password, setting.Host, setting.Port, setting.Database)
-	setting.Url = url
-	db, err = gorm.Open(mysql.Open(url), &gorm.Config{
-		DisableForeignKeyConstraintWhenMigrating: true,
-	})
-	if err != nil {
-		if strings.Contains(err.Error(), "1049") {
-			url2 := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
-				setting.User, setting.Password, setting.Host, setting.Port)
-			db, err = gorm.Open(mysql.Open(url2), &gorm.Config{
-				DisableForeignKeyConstraintWhenMigrating: true,
-			})
-			if err != nil {
-				return err
-			}
-			err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", setting.Database)).Error
-			if err != nil {
-				return err
-			}
-			//重新连接db
-			db, err = gorm.Open(mysql.Open(url), &gorm.Config{
-				DisableForeignKeyConstraintWhenMigrating: true,
-			})
-			if err != nil {
-				return err
-			}
-		} else {
-			return err
-		}
+	if JsonData.System.Language == "" {
+		JsonData.System.Language = "zh"
 	}
-
-	sqlDB, err := db.DB()
-	if err != nil {
-		return err
+	// 导入API生成
+	if JsonData.PluginImportApi.Token == "" {
+		h := md5.New()
+		h.Write([]byte(fmt.Sprintf("%d", time.Now().Nanosecond())))
+		JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
+		// 回写
+		_ = WriteConfig()
 	}
-	sqlDB.SetMaxIdleConns(1000)
-	sqlDB.SetMaxOpenConns(100000)
-	sqlDB.SetConnMaxLifetime(-1)
-
-	DB = db
-
-	return nil
 }
 
 func initServer() {
 	ServerConfig = JsonData.Server
-	sep := string(os.PathSeparator)
-	//root := filepath.Dir(os.Args[0])
-	//ExecPath, _ = filepath.Abs(root)
-	ExecPath, _ = os.Getwd()
-	length := utf8.RuneCountInString(ExecPath)
-	lastChar := ExecPath[length-1:]
-	if lastChar != sep {
-		ExecPath = ExecPath + sep
-	}
 }
 
 var ExecPath string
 var JsonData configData
 var ServerConfig serverConfig
-var DB *gorm.DB
 var CollectorConfig CollectorJson
+var RestartChan = make(chan bool, 1)
+var languages = map[string]string{}
 
 func init() {
 	initPath()
 	initJSON()
 	initServer()
-	if JsonData.DB.Database != "" {
-		err := InitDB(&JsonData.DB)
-		if err != nil {
-			fmt.Println("Failed To Connect Database: ", err.Error())
-			os.Exit(-1)
-		}
-	}
-
 	LoadCollectorConfig()
+	LoadLanguage()
 }
 
 func WriteConfig() error {
@@ -295,4 +234,34 @@ func LoadCollectorConfig() {
 			CollectorConfig.ContentReplace = append(CollectorConfig.ContentReplace, v)
 		}
 	}
+}
+
+func LoadLanguage() {
+	// 重置
+	languages = map[string]string{}
+	if JsonData.System.Language == "" {
+		// 默认中文
+		JsonData.System.Language = "zh"
+	}
+	languagePath := fmt.Sprintf("%slanguage/%s.yml", ExecPath, JsonData.System.Language)
+
+	yamlFile, err := ioutil.ReadFile(languagePath)
+	if err == nil {
+		strSlice := strings.Split(string(yamlFile), "\n")
+		for _, v := range strSlice {
+			vSplit := strings.SplitN(v, ":", 2)
+			if len(vSplit) == 2 {
+				languages[strings.Trim(vSplit[0], "\" ")] = strings.Trim(vSplit[1], "\" ")
+			}
+		}
+	}
+	//ended
+}
+
+func Lang(str string) string {
+	if newStr, ok := languages[str]; ok {
+		return newStr
+	}
+
+	return str
 }

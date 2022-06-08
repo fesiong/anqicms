@@ -12,8 +12,9 @@ type pluginPushConfig struct {
 }
 
 type pluginSitemapConfig struct {
-	AutoBuild   int   `json:"auto_build"`
-	UpdatedTime int64 `json:"updated_time"`
+	AutoBuild   int    `json:"auto_build"`
+	UpdatedTime int64  `json:"updated_time"`
+	SitemapURL  string `json:"sitemap_url"`
 }
 
 type pluginAnchorConfig struct {
@@ -33,6 +34,7 @@ type CustomField struct {
 	Type      string   `json:"type"`
 	Required  bool     `json:"required"`
 	IsSystem  bool     `json:"is_system"`
+	IsFilter  bool     `json:"is_filter"`
 	Content   string   `json:"content"`
 	Items     []string `json:"-"`
 }
@@ -41,6 +43,7 @@ type PluginUploadFile struct {
 	Hash        string `json:"hash"`
 	FileName    string `json:"file_name"`
 	CreatedTime int64  `json:"created_time"`
+	Link        string `json:"link"`
 }
 
 type pluginSendmail struct {
@@ -50,6 +53,10 @@ type pluginSendmail struct {
 	Account   string `json:"account"`
 	Password  string `json:"password"`
 	Recipient string `json:"recipient"`
+}
+
+type pluginImportApiConfig struct {
+	Token string `json:"token"`
 }
 
 func (g *CustomField) SplitContent() []string {
@@ -67,6 +74,16 @@ func (g *CustomField) SplitContent() []string {
 	return items
 }
 
+// CheckSetFilter 支付允许筛选
+func (g *CustomField) CheckSetFilter() bool {
+	if g.Type != CustomFieldTypeRadio && g.Type != CustomFieldTypeCheckbox && g.Type != CustomFieldTypeSelect {
+		g.IsFilter = false
+		return false
+	}
+
+	return true
+}
+
 func (g *CustomField) GetFieldColumn() string {
 	column := fmt.Sprintf("`%s`", g.FieldName)
 
@@ -78,11 +95,13 @@ func (g *CustomField) GetFieldColumn() string {
 		column += " varchar(250)"
 	}
 
-	if g.Required {
-		column += " NOT NULL"
-	} else {
-		column += " DEFAULT NULL"
-	}
+	//if g.Required {
+	//	column += " NOT NULL"
+	//} else {
+	//	column += " DEFAULT NULL"
+	//}
+	// 因为是后插值，因此这里默认都是null
+	column += " DEFAULT NULL"
 
 	return column
 }
@@ -91,21 +110,21 @@ func GetGuestbookFields() []*CustomField {
 	//这里有默认的设置
 	defaultFields := []*CustomField{
 		{
-			Name:      "用户名",
+			Name:      Lang("用户名"),
 			FieldName: "user_name",
 			Type:      "text",
 			Required:  true,
 			IsSystem:  true,
 		},
 		{
-			Name:      "联系方式",
+			Name:      Lang("联系方式"),
 			FieldName: "contact",
 			Type:      "text",
 			Required:  true,
 			IsSystem:  true,
 		},
 		{
-			Name:      "留言内容",
+			Name:      Lang("留言内容"),
 			FieldName: "content",
 			Type:      "textarea",
 			Required:  true,

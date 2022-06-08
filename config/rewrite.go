@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 const (
@@ -18,55 +19,55 @@ type PluginRewriteConfig struct {
 }
 
 type RewritePatten struct {
-	Article      string `json:"article"`
-	Product      string `json:"product"`
+	Archive      string `json:"archive"`
 	Category     string `json:"category"`
+	ArchiveIndex string `json:"archive_index"`
 	Page         string `json:"page"`
-	ArticleIndex string `json:"article_index"`
-	ProductIndex string `json:"product_index"`
+	TagIndex     string `json:"tag_index"`
+	Tag          string `json:"tag"`
 
-	ArticleRule      string
-	ProductRule      string
+	ArchiveRule      string
 	CategoryRule     string
 	PageRule         string
-	ArticleIndexRule string
-	ProductIndexRule string
+	ArchiveIndexRule string
+	TagIndexRule     string
+	TagRule          string
 
-	ArticleTags      map[int]string
-	ProductTags      map[int]string
+	ArchiveTags      map[int]string
 	CategoryTags     map[int]string
 	PageTags         map[int]string
-	ArticleIndexTags map[int]string
-	ProductIndexTags map[int]string
+	ArchiveIndexTags map[int]string
+	TagIndexTags     map[int]string
+	TagTags          map[int]string
 
 	Parsed bool
 }
 
 var rewriteNumberModePatten = RewritePatten{
-	Article:      "/a/{id}.html",
-	Product:      "/p/{id}.html",
-	Category:     "/c/{id}(/{page})",
+	Archive:      "/{module}/{id}.html",
+	Category:     "/{module}/{id}(/{page})",
 	Page:         "/{id}.html",
-	ArticleIndex: "/a(/{page})",
-	ProductIndex: "/p(/{page})",
+	ArchiveIndex: "/{module}",
+	TagIndex:     "/tags(/{page})",
+	Tag:          "/tag/{id}(/{page})",
 }
 
 var rewriteStringModePatten = RewritePatten{
-	Article:      "/a/{filename}.html",
-	Product:      "/p/{filename}.html",
-	Category:     "/c/{filename}(/{page})",
+	Archive:      "/{module}/{filename}.html",
+	Category:     "/{module}/{filename}(/{page})",
 	Page:         "/{filename}.html",
-	ArticleIndex: "/a(/{page})",
-	ProductIndex: "/p(/{page})",
+	ArchiveIndex: "/{module}",
+	TagIndex:     "/tags(/{page})",
+	Tag:          "/tag/{filename}(/{page})",
 }
 
 var rewriteTinyModePatten = RewritePatten{
-	Article:      "/a_{id}.html",
-	Product:      "/p_{id}.html",
-	Category:     "/c_{id}(_{page})",
+	Archive:      "/{module}_{id}.html",
+	Category:     "/{module}_{id}(_{page})",
 	Page:         "/{id}.html",
-	ArticleIndex: "/a(_{page})",
-	ProductIndex: "/p(_{page})",
+	ArchiveIndex: "/{module}",
+	TagIndex:     "/tags(_{page})",
+	Tag:          "/tag_{id}(_{page})",
 }
 
 type replaceChar struct {
@@ -90,14 +91,15 @@ var replaceParams = map[string]string{
 	"{id}":       "([\\d]+)",
 	"{filename}": "([^\\/\\.\\_]+)",
 	"{catname}":  "([^\\/\\.\\_]+)",
+	"{module}":  "([^\\/\\.\\_]+)",
 	"{catid}":    "([\\d]+)",
 	"{page}":     "([\\d]+)",
 }
 
 var parsedPatten *RewritePatten
 
-func GetRewritePatten() *RewritePatten {
-	if parsedPatten != nil {
+func GetRewritePatten(focus bool) *RewritePatten {
+	if parsedPatten != nil && !focus {
 		return parsedPatten
 	}
 	if JsonData.PluginRewrite.Mode == RewriteNumberMode {
@@ -126,46 +128,58 @@ func parseRewritePatten(patten string) *RewritePatten {
 			val := strings.TrimSpace(singlePatten[1])
 
 			switch strings.TrimSpace(singlePatten[0]) {
-			case "article":
-				parsedPatten.Article = val
-			case "product":
-				parsedPatten.Product = val
+			case "archive":
+				parsedPatten.Archive = val
 			case "category":
 				parsedPatten.Category = val
 			case "page":
 				parsedPatten.Page = val
-			case "articleIndex":
-				parsedPatten.ArticleIndex = val
-			case "productIndex":
-				parsedPatten.ProductIndex = val
+			case "ArchiveIndex":
+				parsedPatten.ArchiveIndex = val
+			case "tagIndex":
+				parsedPatten.TagIndex = val
+			case "tag":
+				parsedPatten.Tag = val
 			}
 		}
+	}
+	// 如果没有填写tag的规则，则给一个默认的
+	if parsedPatten.TagIndex == "" {
+		parsedPatten.TagIndex = "/tags(/{page})"
+	}
+	if parsedPatten.Tag == "" {
+		parsedPatten.Tag = "/tag/{id}(/{page})"
 	}
 
 	return parsedPatten
 }
 
-func ParsePatten() *RewritePatten {
-	GetRewritePatten()
+var mu sync.Mutex
+
+func ParsePatten(focus bool) *RewritePatten {
+	mu.Lock()
+	GetRewritePatten(focus)
 	if parsedPatten.Parsed {
+		mu.Unlock()
 		return parsedPatten
 	}
 
-	parsedPatten.ArticleTags = map[int]string{}
-	parsedPatten.ProductTags = map[int]string{}
+	parsedPatten.ArchiveTags = map[int]string{}
 	parsedPatten.CategoryTags = map[int]string{}
 	parsedPatten.PageTags = map[int]string{}
-	parsedPatten.ArticleIndexTags = map[int]string{}
-	parsedPatten.ProductIndexTags = map[int]string{}
+	parsedPatten.ArchiveIndexTags = map[int]string{}
+	parsedPatten.TagIndexTags = map[int]string{}
+	parsedPatten.TagTags = map[int]string{}
 
 	pattens := map[string]string{
-		"article":      parsedPatten.Article,
-		"product":      parsedPatten.Product,
+		"archive":      parsedPatten.Archive,
 		"category":     parsedPatten.Category,
 		"page":         parsedPatten.Page,
-		"articleIndex": parsedPatten.ArticleIndex,
-		"productIndex": parsedPatten.ProductIndex,
+		"archiveIndex": parsedPatten.ArchiveIndex,
+		"tagIndex":     parsedPatten.TagIndex,
+		"tag":          parsedPatten.Tag,
 	}
+
 	for key, item := range pattens {
 		n := 0
 		str := ""
@@ -180,18 +194,18 @@ func ParsePatten() *RewritePatten {
 					n++
 				}
 				switch key {
-				case "article":
-					parsedPatten.ArticleTags[n] = str
-				case "product":
-					parsedPatten.ProductTags[n] = str
+				case "archive":
+					parsedPatten.ArchiveTags[n] = str
 				case "category":
 					parsedPatten.CategoryTags[n] = str
 				case "page":
 					parsedPatten.PageTags[n] = str
-				case "articleIndex":
-					parsedPatten.ArticleIndexTags[n] = str
-				case "productIndex":
-					parsedPatten.ProductIndexTags[n] = str
+				case "archiveIndex":
+					parsedPatten.ArchiveIndexTags[n] = str
+				case "tagIndex":
+					parsedPatten.TagIndexTags[n] = str
+				case "tag":
+					parsedPatten.TagTags[n] = str
 				}
 				//重置
 				str = ""
@@ -202,19 +216,16 @@ func ParsePatten() *RewritePatten {
 	}
 
 	//移除首个 /
-	parsedPatten.ArticleRule = strings.TrimLeft(parsedPatten.Article, "/")
-	parsedPatten.ProductRule = strings.TrimLeft(parsedPatten.Product, "/")
+	parsedPatten.ArchiveRule = strings.TrimLeft(parsedPatten.Archive, "/")
 	parsedPatten.CategoryRule = strings.TrimLeft(parsedPatten.Category, "/")
 	parsedPatten.PageRule = strings.TrimLeft(parsedPatten.Page, "/")
-	parsedPatten.ArticleIndexRule = strings.TrimLeft(parsedPatten.ArticleIndex, "/")
-	parsedPatten.ProductIndexRule = strings.TrimLeft(parsedPatten.ProductIndex, "/")
+	parsedPatten.ArchiveIndexRule = strings.TrimLeft(parsedPatten.ArchiveIndex, "/")
+	parsedPatten.TagIndexRule = strings.TrimLeft(parsedPatten.TagIndex, "/")
+	parsedPatten.TagRule = strings.TrimLeft(parsedPatten.Tag, "/")
 
 	for _, r := range needReplace {
-		if strings.Contains(parsedPatten.ArticleRule, r.Key) {
-			parsedPatten.ArticleRule = strings.ReplaceAll(parsedPatten.ArticleRule, r.Key, r.Value)
-		}
-		if strings.Contains(parsedPatten.ProductRule, r.Key) {
-			parsedPatten.ProductRule = strings.ReplaceAll(parsedPatten.ProductRule, r.Key, r.Value)
+		if strings.Contains(parsedPatten.ArchiveRule, r.Key) {
+			parsedPatten.ArchiveRule = strings.ReplaceAll(parsedPatten.ArchiveRule, r.Key, r.Value)
 		}
 		if strings.Contains(parsedPatten.CategoryRule, r.Key) {
 			parsedPatten.CategoryRule = strings.ReplaceAll(parsedPatten.CategoryRule, r.Key, r.Value)
@@ -222,20 +233,20 @@ func ParsePatten() *RewritePatten {
 		if strings.Contains(parsedPatten.PageRule, r.Key) {
 			parsedPatten.PageRule = strings.ReplaceAll(parsedPatten.PageRule, r.Key, r.Value)
 		}
-		if strings.Contains(parsedPatten.ArticleIndexRule, r.Key) {
-			parsedPatten.ArticleIndexRule = strings.ReplaceAll(parsedPatten.ArticleIndexRule, r.Key, r.Value)
+		if strings.Contains(parsedPatten.ArchiveIndexRule, r.Key) {
+			parsedPatten.ArchiveIndexRule = strings.ReplaceAll(parsedPatten.ArchiveIndexRule, r.Key, r.Value)
 		}
-		if strings.Contains(parsedPatten.ProductIndexRule, r.Key) {
-			parsedPatten.ProductIndexRule = strings.ReplaceAll(parsedPatten.ProductIndexRule, r.Key, r.Value)
+		if strings.Contains(parsedPatten.TagIndexRule, r.Key) {
+			parsedPatten.TagIndexRule = strings.ReplaceAll(parsedPatten.TagIndexRule, r.Key, r.Value)
+		}
+		if strings.Contains(parsedPatten.TagRule, r.Key) {
+			parsedPatten.TagRule = strings.ReplaceAll(parsedPatten.TagRule, r.Key, r.Value)
 		}
 	}
 
 	for s, r := range replaceParams {
-		if strings.Contains(parsedPatten.ArticleRule, s) {
-			parsedPatten.ArticleRule = strings.ReplaceAll(parsedPatten.ArticleRule, s, r)
-		}
-		if strings.Contains(parsedPatten.ProductRule, s) {
-			parsedPatten.ProductRule = strings.ReplaceAll(parsedPatten.ProductRule, s, r)
+		if strings.Contains(parsedPatten.ArchiveRule, s) {
+			parsedPatten.ArchiveRule = strings.ReplaceAll(parsedPatten.ArchiveRule, s, r)
 		}
 		if strings.Contains(parsedPatten.CategoryRule, s) {
 			parsedPatten.CategoryRule = strings.ReplaceAll(parsedPatten.CategoryRule, s, r)
@@ -243,23 +254,27 @@ func ParsePatten() *RewritePatten {
 		if strings.Contains(parsedPatten.PageRule, s) {
 			parsedPatten.PageRule = strings.ReplaceAll(parsedPatten.PageRule, s, r)
 		}
-		if strings.Contains(parsedPatten.ArticleIndexRule, s) {
-			parsedPatten.ArticleIndexRule = strings.ReplaceAll(parsedPatten.ArticleIndexRule, s, r)
+		if strings.Contains(parsedPatten.ArchiveIndexRule, s) {
+			parsedPatten.ArchiveIndexRule = strings.ReplaceAll(parsedPatten.ArchiveIndexRule, s, r)
 		}
-		if strings.Contains(parsedPatten.ProductIndexRule, s) {
-			parsedPatten.ProductIndexRule = strings.ReplaceAll(parsedPatten.ProductIndexRule, s, r)
+		if strings.Contains(parsedPatten.TagIndexRule, s) {
+			parsedPatten.TagIndexRule = strings.ReplaceAll(parsedPatten.TagIndexRule, s, r)
+		}
+		if strings.Contains(parsedPatten.TagRule, s) {
+			parsedPatten.TagRule = strings.ReplaceAll(parsedPatten.TagRule, s, r)
 		}
 	}
 	//修改为强制包裹
-	parsedPatten.ArticleRule = fmt.Sprintf("^%s$", parsedPatten.ArticleRule)
-	parsedPatten.ProductRule = fmt.Sprintf("^%s$", parsedPatten.ProductRule)
+	parsedPatten.ArchiveRule = fmt.Sprintf("^%s$", parsedPatten.ArchiveRule)
 	parsedPatten.CategoryRule = fmt.Sprintf("^%s$", parsedPatten.CategoryRule)
 	parsedPatten.PageRule = fmt.Sprintf("^%s$", parsedPatten.PageRule)
-	parsedPatten.ArticleIndexRule = fmt.Sprintf("^%s$", parsedPatten.ArticleIndexRule)
-	parsedPatten.ProductIndexRule = fmt.Sprintf("^%s$", parsedPatten.ProductIndexRule)
+	parsedPatten.ArchiveIndexRule = fmt.Sprintf("^%s$", parsedPatten.ArchiveIndexRule)
+	parsedPatten.TagIndexRule = fmt.Sprintf("^%s$", parsedPatten.TagIndexRule)
+	parsedPatten.TagRule = fmt.Sprintf("^%s$", parsedPatten.TagRule)
 
 	//标记替换过
 	parsedPatten.Parsed = true
+	mu.Unlock()
 
 	return parsedPatten
 }

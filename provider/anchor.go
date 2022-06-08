@@ -3,13 +3,15 @@ package provider
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/gocarina/gocsv"
-	"irisweb/config"
-	"irisweb/library"
-	"irisweb/model"
+	"io/ioutil"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"math"
 	"mime/multipart"
 	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -24,7 +26,7 @@ func GetAnchorList(keyword string, currentPage, pageSize int) ([]*model.Anchor, 
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := config.DB.Model(&model.Anchor{}).Order("id desc")
+	builder := dao.DB.Model(&model.Anchor{}).Order("id desc")
 	if keyword != "" {
 		//模糊搜索
 		builder = builder.Where("(`title` like ? OR `link` like ?)", "%"+keyword+"%", "%"+keyword+"%")
@@ -40,7 +42,7 @@ func GetAnchorList(keyword string, currentPage, pageSize int) ([]*model.Anchor, 
 
 func GetAllAnchors() ([]*model.Anchor, error) {
 	var anchors []*model.Anchor
-	err := config.DB.Model(&model.Anchor{}).Order("weight desc").Find(&anchors).Error
+	err := dao.DB.Model(&model.Anchor{}).Order("weight desc").Find(&anchors).Error
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +53,7 @@ func GetAllAnchors() ([]*model.Anchor, error) {
 func GetAnchorById(id uint) (*model.Anchor, error) {
 	var anchor model.Anchor
 
-	err := config.DB.Where("`id` = ?", id).First(&anchor).Error
+	err := dao.DB.Where("`id` = ?", id).First(&anchor).Error
 	if err != nil {
 		return nil, err
 	}
@@ -62,7 +64,7 @@ func GetAnchorById(id uint) (*model.Anchor, error) {
 func GetAnchorByTitle(title string) (*model.Anchor, error) {
 	var anchor model.Anchor
 
-	err := config.DB.Where("`title` = ?", title).First(&anchor).Error
+	err := dao.DB.Where("`title` = ?", title).First(&anchor).Error
 	if err != nil {
 		return nil, err
 	}
@@ -71,38 +73,47 @@ func GetAnchorByTitle(title string) (*model.Anchor, error) {
 }
 
 func ImportAnchors(file multipart.File, info *multipart.FileHeader) (string, error) {
-	var anchors []*AnchorCSV
-
-	if err := gocsv.Unmarshal(file, &anchors); err != nil {
+	buff, err := ioutil.ReadAll(file)
+	if err != nil {
 		return "", err
 	}
 
-	total := 0
-	for _, item := range anchors {
-		item.Title = strings.TrimSpace(item.Title)
-		if item.Title == "" {
+	lines := strings.Split(string(buff), "\n")
+	var total int
+	for i, line := range lines {
+		line = strings.TrimSpace(line)
+		// 格式：title, link, weight
+		if i == 0 {
 			continue
 		}
-		anchor, err := GetAnchorByTitle(item.Title)
+		values := strings.Split(line, ",")
+		if len(values) < 3 {
+			continue
+		}
+		title := strings.TrimSpace(values[0])
+		if title == "" {
+			continue
+		}
+		anchor, err := GetAnchorByTitle(title)
 		if err != nil {
 			//表示不存在
 			anchor = &model.Anchor{
-				Title: item.Title,
+				Title: title,
 				Status:       1,
 			}
 			total ++
 		}
-		anchor.Link = item.Link
-		anchor.Weight = item.Weight
+		anchor.Link = strings.TrimPrefix(values[1], config.JsonData.System.BaseUrl)
+		anchor.Weight, _ = strconv.Atoi(values[2])
 
-		anchor.Save(config.DB)
+		anchor.Save(dao.DB)
 	}
 
-	return fmt.Sprintf("成功导入了%d个锚文本", total), nil
+	return fmt.Sprintf(config.Lang("成功导入了%d个锚文本"), total), nil
 }
 
 func DeleteAnchor(anchor *model.Anchor) error {
-	err := config.DB.Delete(anchor).Error
+	err := dao.DB.Delete(anchor).Error
 	if err != nil {
 		return err
 	}
@@ -115,7 +126,7 @@ func DeleteAnchor(anchor *model.Anchor) error {
 
 func CleanAnchor(anchorId uint) {
 	var anchorData []*model.AnchorData
-	err := config.DB.Where("`anchor_id` = ?", anchorId).Find(&anchorData).Error
+	err := dao.DB.Where("`anchor_id` = ?", anchorId).Find(&anchorData).Error
 	if err != nil {
 		return
 	}
@@ -123,63 +134,33 @@ func CleanAnchor(anchorId uint) {
 	anchorIdStr := fmt.Sprintf("%d", anchorId)
 
 	for _, data := range anchorData {
-		if data.ItemType == model.ItemTypeArticle {
-			//处理article
-			articleData, err := GetArticleDataById(data.ItemId)
-			if err != nil {
-				continue
-			}
-			htmlR := strings.NewReader(articleData.Content)
-			doc, err := goquery.NewDocumentFromReader(htmlR)
-			if err == nil {
-				clean := false
-				doc.Find("a,strong").Each(func(i int, s *goquery.Selection) {
-					existsId, exists := s.Attr("data-anchor")
-
-					if exists && existsId == anchorIdStr {
-						//清理它
-						s.Contents().Unwrap()
-						clean = true
-					}
-				})
-				//清理完毕，更新
-				if clean {
-					//更新内容
-					articleData.Content, _ = doc.Find("body").Html()
-					config.DB.Save(articleData)
-				}
-			}
-			//删除当前item
-			config.DB.Unscoped().Delete(data)
-		} else if data.ItemType == model.ItemTypeProduct {
-			//处理产品
-			productData, err := GetProductDataById(data.ItemId)
-			if err != nil {
-				continue
-			}
-			htmlR := strings.NewReader(productData.Content)
-			doc, err := goquery.NewDocumentFromReader(htmlR)
-			if err == nil {
-				clean := false
-				doc.Find("a,strong").Each(func(i int, s *goquery.Selection) {
-					existsId, exists := s.Attr("data-anchor")
-
-					if exists && existsId == anchorIdStr {
-						//清理它
-						s.Contents().Unwrap()
-						clean = true
-					}
-				})
-				//清理完毕，更新
-				if clean {
-					//更新内容
-					productData.Content, _ = doc.Find("body").Html()
-					config.DB.Save(productData)
-				}
-			}
-			//删除当前item,永久删除
-			config.DB.Unscoped().Delete(data)
+		//处理archive
+		archiveData, err := GetArchiveDataById(data.ItemId)
+		if err != nil {
+			continue
 		}
+		htmlR := strings.NewReader(archiveData.Content)
+		doc, err := goquery.NewDocumentFromReader(htmlR)
+		if err == nil {
+			clean := false
+			doc.Find("a,strong").Each(func(i int, s *goquery.Selection) {
+				existsId, exists := s.Attr("data-anchor")
+
+				if exists && existsId == anchorIdStr {
+					//清理它
+					s.Contents().Unwrap()
+					clean = true
+				}
+			})
+			//清理完毕，更新
+			if clean {
+				//更新内容
+				archiveData.Content, _ = doc.Find("body").Html()
+				dao.DB.Save(archiveData)
+			}
+		}
+		//删除当前item
+		dao.DB.Unscoped().Delete(data)
 	}
 }
 
@@ -191,13 +172,13 @@ func ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 
 		//更新替换数量
 		anchor.ReplaceCount = 0
-		config.DB.Save(anchor)
+		dao.DB.Save(anchor)
 		return
 	}
 	//其他当做更改了连接
 	//如果锚文本只更改了连接，则需要重新替换新的连接
 	var anchorData []*model.AnchorData
-	err := config.DB.Where("`anchor_id` = ?", anchor.Id).Find(&anchorData).Error
+	err := dao.DB.Where("`anchor_id` = ?", anchor.Id).Find(&anchorData).Error
 	if err != nil {
 		return
 	}
@@ -205,63 +186,35 @@ func ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 	anchorIdStr := fmt.Sprintf("%d", anchor.Id)
 
 	for _, data := range anchorData {
-		if data.ItemType == model.ItemTypeArticle {
-			//处理article
-			articleData, err := GetArticleDataById(data.ItemId)
-			if err != nil {
-				continue
-			}
-			htmlR := strings.NewReader(articleData.Content)
-			doc, err := goquery.NewDocumentFromReader(htmlR)
-			if err == nil {
-				update := false
-				doc.Find("a").Each(func(i int, s *goquery.Selection) {
-					existsId, exists := s.Attr("data-anchor")
+		//处理archive
+		archiveData, err := GetArchiveDataById(data.ItemId)
+		if err != nil {
+			continue
+		}
+		htmlR := strings.NewReader(archiveData.Content)
+		doc, err := goquery.NewDocumentFromReader(htmlR)
+		if err == nil {
+			update := false
+			doc.Find("a").Each(func(i int, s *goquery.Selection) {
+				existsId, exists := s.Attr("data-anchor")
 
-					if exists && existsId == anchorIdStr {
-						//换成新的链接
-						s.SetAttr("href", anchor.Link)
-						update = true
-					}
-				})
-				//更新完毕，更新
-				if update {
-					//更新内容
-					articleData.Content, _ = doc.Find("body").Html()
-					config.DB.Save(articleData)
+				if exists && existsId == anchorIdStr {
+					//换成新的链接
+					s.SetAttr("href", anchor.Link)
+					update = true
 				}
-			}
-		} else if data.ItemType == model.ItemTypeProduct {
-			//处理产品
-			productData, err := GetProductDataById(data.ItemId)
-			if err != nil {
-				continue
-			}
-			htmlR := strings.NewReader(productData.Content)
-			doc, err := goquery.NewDocumentFromReader(htmlR)
-			if err == nil {
-				update := false
-				doc.Find("a").Each(func(i int, s *goquery.Selection) {
-					existsId, exists := s.Attr("data-anchor")
-
-					if exists && existsId == anchorIdStr {
-						//换成新的链接
-						s.SetAttr("href", anchor.Link)
-						update = true
-					}
-				})
-				//更新完毕，更新
-				if update {
-					//更新内容
-					productData.Content, _ = doc.Find("body").Html()
-					config.DB.Save(productData)
-				}
+			})
+			//更新完毕，更新
+			if update {
+				//更新内容
+				archiveData.Content, _ = doc.Find("body").Html()
+				dao.DB.Save(archiveData)
 			}
 		}
 	}
 }
 
-//单个替换
+// ReplaceAnchor 单个替换
 func ReplaceAnchor(anchor *model.Anchor) {
 	//交由下方执行
 	if anchor == nil {
@@ -271,7 +224,7 @@ func ReplaceAnchor(anchor *model.Anchor) {
 	}
 }
 
-//批量替换
+// ReplaceAnchors 批量替换
 func ReplaceAnchors(anchors []*model.Anchor) {
 	if len(anchors) == 0 {
 		anchors, _ = GetAllAnchors()
@@ -284,39 +237,26 @@ func ReplaceAnchors(anchors []*model.Anchor) {
 	//先遍历文章、产品，添加锚文本
 	//每次取100个
 	limit := 100
-	offset := 0
-	var articles []*model.Article
+	lastId := uint(0)
+	var archives []*model.Archive
+
 	for {
-		config.DB.Order("id asc").Limit(limit).Offset(offset).Find(&articles)
-		if len(articles) == 0 {
+		dao.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&archives)
+		if len(archives) == 0 {
 			break
 		}
 		//加下一轮
-		offset += limit
-		for _, v := range articles {
+		lastId = archives[len(archives)-1].Id
+		for _, v := range archives {
 			//执行替换
-			link := GetUrl("article", v, 0)
-			ReplaceContent(anchors, "article", v.Id, link)
-		}
-	}
-	offset = 0
-	var products []*model.Product
-	for {
-		config.DB.Order("id asc").Limit(limit).Offset(offset).Find(&products)
-		if len(products) == 0 {
-			break
-		}
-		//加下一轮
-		offset += limit
-		for _, v := range products {
-			//执行替换
-			link := GetUrl("product", v, 0)
-			ReplaceContent(anchors, "product", v.Id, link)
+			link := GetUrl("archive", v, 0)
+			ReplaceContent(anchors, "archive", v.Id, link)
 		}
 	}
 }
 
 func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link string) string {
+	link = strings.TrimPrefix(link, config.JsonData.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = GetAllAnchors()
 		if len(anchors) == 0 {
@@ -327,33 +267,18 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 
 	content := ""
 
-	var err error
-	var articleData *model.ArticleData
-	var productData *model.ProductData
-
-	if itemType == "article" {
-		articleData, err = GetArticleDataById(itemId)
-		if err != nil {
-			return ""
-		}
-		content = articleData.Content
-	} else if itemType == "product" {
-		productData, err = GetProductDataById(itemId)
-		if err != nil {
-			return ""
-		}
-		content = productData.Content
-	} else {
-		//暂不支持其他
+	archiveData, err := GetArchiveDataById(itemId)
+	if err != nil {
 		return ""
 	}
+	content = archiveData.Content
 
 	//获取纯文本字数
 	stripedContent := library.StripTags(content)
 	contentLen := len([]rune(stripedContent))
-	if config.JsonData.PluginAnchor.AnchorDensity < 10 {
-		//默认设置100
-		config.JsonData.PluginAnchor.AnchorDensity = 100
+	if config.JsonData.PluginAnchor.AnchorDensity < 20 {
+		//默认设置200
+		config.JsonData.PluginAnchor.AnchorDensity = 200
 	}
 
 	//最大可以替换的数量
@@ -425,7 +350,7 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 			if anchor.Title == "" {
 				continue
 			}
-			if anchor.Link == link {
+			if strings.HasSuffix(anchor.Link, link) {
 				//当前url，跳过
 				continue
 			}
@@ -474,12 +399,12 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 					ItemType: itemType,
 					ItemId:   itemId,
 				}
-				config.DB.Save(anchorData)
+				dao.DB.Save(anchorData)
 				//更新计数
 				var count int64
-				config.DB.Model(&model.AnchorData{}).Where("`anchor_id` = ?", anchor.Id).Count(&count)
+				dao.DB.Model(&model.AnchorData{}).Where("`anchor_id` = ?", anchor.Id).Count(&count)
 				anchor.ReplaceCount = count
-				config.DB.Save(anchor)
+				dao.DB.Save(anchor)
 			}
 
 			//判断数量是否达到了，达到了就跳出
@@ -494,24 +419,17 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 		content = strings.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)
 	}
 
-	if itemType == "article" {
-		if !strings.EqualFold(articleData.Content, content) {
-			//内容有更新，执行更新
-			articleData.Content = content
-			config.DB.Save(articleData)
-		}
-	} else if itemType == "product" {
-		if !strings.EqualFold(productData.Content, content) {
-			//内容有更新，执行更新
-			productData.Content = content
-			config.DB.Save(productData)
-		}
+	if !strings.EqualFold(archiveData.Content, content) {
+		//内容有更新，执行更新
+		archiveData.Content = content
+		dao.DB.Save(archiveData)
 	}
 
 	return content
 }
 
 func AutoInsertAnchor(keywords, link string) {
+	link = strings.TrimPrefix(link, config.JsonData.System.BaseUrl)
 	keywords = strings.ReplaceAll(keywords, "，", ",")
 	keywords = strings.ReplaceAll(keywords, " ", ",")
 	keywords = strings.ReplaceAll(keywords, "_", ",")
@@ -530,7 +448,7 @@ func AutoInsertAnchor(keywords, link string) {
 				Link:         link,
 				Status:       1,
 			}
-			config.DB.Save(anchor)
+			dao.DB.Save(anchor)
 		}
 	}
 }
