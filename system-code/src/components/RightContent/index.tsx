@@ -26,7 +26,7 @@ const GlobalHeaderRight: React.FC = () => {
       <span
         className={styles.action}
         onClick={() => {
-          window.open('https://github.com/fesiong/goblog');
+          window.open('https://www.kandaoni.com/anqicms');
         }}
       >
         <GithubOutlined />

@@ -182,10 +182,6 @@ github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXf
 github.com/stretchr/testify v1.3.0/go.mod h1:M5WIy9Dh21IEIfnGCwXGc5bZfKNJtfHm1UVUgZn+9EI=
 github.com/stretchr/testify v1.4.0 h1:2E4SXV/wtOkTonXsotYi4li6zVWxYlZuYNCXe9XRJyk=
 github.com/stretchr/testify v1.4.0/go.mod h1:j7eGeouHqKxXV5pUuKE4zz7dFj8WfuZ+81PSLYec5m4=
-github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.385 h1:bwgb0FZJRlPcDn3uRJfA7rI7dZejg7LZS0b8rUBE2CQ=
-github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common v1.0.385/go.mod h1:7sCQWVkxcsR38nffDW057DRGk8mUjK1Ing/EFOK8s8Y=
-github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sms v1.0.385 h1:VztwqAwsOCooTTPUddxwhgbw4g0nQeZhtTXQLXvw5dI=
-github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/sms v1.0.385/go.mod h1:U/CLj41AOZKeovCSMLvWy7ctU1tLDd4Yng1sTtP7Na8=
 github.com/ugorji/go/codec v0.0.0-20181204163529-d75b2dcb6bc8/go.mod h1:VFNgLljTbGfSG7qAOspJ7OScBnGdDN/yBr0sguwnwf0=
 github.com/valyala/bytebufferpool v1.0.0 h1:GqA5TC/0021Y/b9FG4Oi9Mr3q7XYx6KllzawFIhcdPw=
 github.com/valyala/bytebufferpool v1.0.0/go.mod h1:6bBcMArwyJ5K/AmCkWv1jt77kVWyCJ6HpOuEn7z0Csc=
