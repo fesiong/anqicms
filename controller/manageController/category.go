@@ -29,6 +29,10 @@ func CategoryList(ctx iris.Context) {
 		return
 	}
 
+	for i := range categories {
+		categories[i].Link = provider.GetUrl("category", categories[i], 0)
+	}
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
