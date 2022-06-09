@@ -134,7 +134,7 @@ func parseRewritePatten(patten string) *RewritePatten {
 				parsedPatten.Category = val
 			case "page":
 				parsedPatten.Page = val
-			case "ArchiveIndex":
+			case "archiveIndex":
 				parsedPatten.ArchiveIndex = val
 			case "tagIndex":
 				parsedPatten.TagIndex = val
