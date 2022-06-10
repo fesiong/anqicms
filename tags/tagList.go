@@ -30,6 +30,11 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	offset := 0
 	currentPage := 1
 	itemId := uint(0)
+	listType := "list"
+
+	if args["type"] != nil {
+		listType = args["type"].String()
+	}
 
 	if args["itemId"] != nil {
 		itemId = uint(args["itemId"].Integer())
@@ -72,13 +77,23 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		}
 	}
 
+	if listType == "page" {
+		if currentPage > 1 {
+			offset = (currentPage - 1) * limit
+		}
+	}
+
+
 	tagList, total, _ := provider.GetTagList(itemId, "", letter, currentPage, limit, offset)
 	for i := range tagList {
 		tagList[i].Link = provider.GetUrl("tag", tagList[i], 0)
 	}
-	// 分页
-	urlPatten := provider.GetUrl("tagIndex", nil, -1)
-	ctx.Private["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+
+	if listType == "page" {
+		// 分页
+		urlPatten := provider.GetUrl("tagIndex", nil, -1)
+		ctx.Public["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+	}
 
 	ctx.Private[node.name] = tagList
 

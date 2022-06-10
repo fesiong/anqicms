@@ -89,9 +89,9 @@ var needReplace = []replaceChar{
 
 var replaceParams = map[string]string{
 	"{id}":       "([\\d]+)",
-	"{filename}": "([^\\/\\.\\_]+)",
-	"{catname}":  "([^\\/\\.\\_]+)",
-	"{module}":  "([^\\/\\.\\_]+)",
+	"{filename}": "([^\\/\\.\\_]+?)",
+	"{catname}":  "([^\\/\\.\\_]+?)",
+	"{module}":  "([^\\/\\.\\_]+?)",
 	"{catid}":    "([\\d]+)",
 	"{page}":     "([\\d]+)",
 }

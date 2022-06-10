@@ -45,7 +45,7 @@ func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return err
 	}
 
-	paginator, ok := ctx.Private["pagination"].(*pagination)
+	paginator, ok := ctx.Public["pagination"].(*pagination)
 	if !ok {
 		return nil
 	}

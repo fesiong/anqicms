@@ -62,9 +62,14 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	listType := "list"
 	flag := ""
 	q := ""
+	child := true
 
 	if args["type"] != nil {
 		listType = args["type"].String()
+	}
+
+	if args["child"] != nil {
+		child = args["child"].Bool()
 	}
 
 	if args["flag"] != nil {
@@ -163,10 +168,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			archives = archives[:limit]
 		}
 	} else {
-		if currentPage > 1 {
-			offset = (currentPage - 1) * limit
-		}
-
 		builder := dao.DB.Model(&model.Archive{}).Where("`status` = 1")
 
 		if moduleId > 0 {
@@ -193,17 +194,27 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 
 		if categoryId > 0 {
-			subIds := provider.GetSubCategoryIds(categoryId, nil)
-			subIds = append(subIds, categoryId)
-			builder = builder.Where("`category_id` IN(?)", subIds)
-		}
-		if q != "" {
-			builder = builder.Where("`title` like ?", "%"+q+"%")
+			if child {
+				subIds := provider.GetSubCategoryIds(categoryId, nil)
+				subIds = append(subIds, categoryId)
+				builder = builder.Where("`category_id` IN(?)", subIds)
+			} else {
+				builder = builder.Where("`category_id` = ?", categoryId)
+			}
 		}
 		if order != "" {
 			builder = builder.Order(order)
 		}
-		builder = builder.Count(&total).Limit(limit).Offset(offset)
+		if listType == "page" {
+			if currentPage > 1 {
+				offset = (currentPage - 1) * limit
+			}
+			if q != "" {
+				builder = builder.Where("`title` like ?", "%"+q+"%")
+			}
+			builder.Count(&total)
+		}
+		builder = builder.Limit(limit).Offset(offset)
 		if err := builder.Find(&archives).Error; err != nil {
 			return nil
 		}
@@ -252,7 +263,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				urlPatten = ""
 			}
 		}
-		ctx.Private["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+		ctx.Public["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
 	}
 	ctx.Private[node.name] = archives
 

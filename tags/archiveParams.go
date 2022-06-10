@@ -9,8 +9,8 @@ import (
 )
 
 type tagArchiveParamsNode struct {
-	name string
-	args map[string]pongo2.IEvaluator
+	name    string
+	args    map[string]pongo2.IEvaluator
 	wrapper *pongo2.NodeWrapper
 }
 
@@ -40,6 +40,11 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		archiveParams := provider.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
 
 		if len(archiveParams) > 0 {
+			for i := range archiveParams {
+				if archiveParams[i].Value == nil {
+					archiveParams[i].Value = archiveParams[i].Default
+				}
+			}
 			if sorted {
 				var extraFields []*model.CustomField
 				module := provider.GetModuleFromCache(archiveDetail.ModuleId)

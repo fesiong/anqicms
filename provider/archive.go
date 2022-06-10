@@ -143,8 +143,9 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 		//extra的CheckBox的值
 		for _, v := range module.Fields {
 			extraFields[v.FieldName] = &model.CustomField{
-				Name:  v.Name,
-				Value: result[v.FieldName],
+				Name:    v.Name,
+				Value:   result[v.FieldName],
+				Default: v.Content,
 			}
 		}
 	}

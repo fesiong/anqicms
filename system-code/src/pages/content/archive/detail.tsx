@@ -353,18 +353,21 @@ export default class ArchiveForm extends React.Component {
                                 name={['extra', item.field_name, 'value']}
                                 label={item.name}
                                 required={item.required ? true : false}
+                                placeholder={item.content && "默认值：" + item.content}
                               />
                             ) : item.type === 'number' ? (
                               <ProFormDigit
                                 name={['extra', item.field_name, 'value']}
                                 label={item.name}
                                 required={item.required ? true : false}
+                                placeholder={item.content && "默认值：" + item.content}
                               />
                             ) : item.type === 'textarea' ? (
                               <ProFormTextArea
                                 name={['extra', item.field_name, 'value']}
                                 label={item.name}
                                 required={item.required ? true : false}
+                                placeholder={item.content && "默认值：" + item.content}
                               />
                             ) : item.type === 'radio' ? (
                               <ProFormRadio.Group

@@ -90,23 +90,7 @@
             </div>
           </form>
         </div>
-        {% pagination pages with show="4" %}
-        <div class="layui-card-body text-center">
-          <div class="layui-box layui-laypage layui-laypage-default">
-            <a class="layui-laypage-first {% if pages.FirstPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
-            {% if pages.PrevPage %}
-            <a class="layui-laypage-prev" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
-            {% endif %}
-            {% for item in pages.Pages %}
-            <a class="{% if item.IsCurrent %}layui-laypage-curr{% endif %}" href="{{item.Link}}">{{item.Name}}</a>
-            {% endfor %}
-            {% if pages.NextPage %}
-            <a class="layui-laypage-next" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
-            {% endif %}
-            <a class="layui-laypage-last {% if pages.LastPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
-          </div>
-        </div>
-        {% endpagination %}
+        {% include "partial/pagination.html" %}
       </div>
     </div>
 

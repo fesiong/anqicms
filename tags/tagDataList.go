@@ -31,6 +31,11 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	currentPage := 1
 	order := "id desc"
 	tagId := uint(0)
+	listType := "list"
+
+	if args["type"] != nil {
+		listType = args["type"].String()
+	}
 
 	tagDetail, _ := ctx.Public["tag"].(*model.Tag)
 	if args["tagId"] != nil {
@@ -68,13 +73,17 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 		var total int64
 		var archives []*model.Archive
-		if currentPage > 1 {
-			offset = (currentPage - 1) * limit
-		}
 
 		builder := dao.DB.Table("`archives` as a").Joins("INNER JOIN `tag_data` as t ON a.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id).Where("a.`status` = 1").Order(order)
 
-		builder = builder.Count(&total).Limit(limit).Offset(offset)
+		if listType == "page" {
+			if currentPage > 1 {
+				offset = (currentPage - 1) * limit
+			}
+			builder.Count(&total)
+		}
+
+		builder = builder.Limit(limit).Offset(offset)
 		if err := builder.Find(&archives).Error; err != nil {
 			return nil
 		}
@@ -84,9 +93,11 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 
 		ctx.Private[node.name] = archives
-		// 分页
-		urlPatten := provider.GetUrl("tag", tagDetail, -1)
-		ctx.Private["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+		if listType == "page" {
+			// 分页
+			urlPatten := provider.GetUrl("tag", tagDetail, -1)
+			ctx.Public["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+		}
 	}
 
 	//execute
