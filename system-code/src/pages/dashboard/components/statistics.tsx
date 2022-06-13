@@ -39,7 +39,7 @@ const StatisticsRow = ({ loading, data }: { loading: boolean; data: any }) => (
       <ChartCard
         bordered={false}
         loading={loading}
-        title="访问量"
+        title="一周访问量"
         action={
           <Tooltip title="网页访问数据">
             <InfoCircleOutlined />
@@ -64,7 +64,7 @@ const StatisticsRow = ({ loading, data }: { loading: boolean; data: any }) => (
       <ChartCard
         bordered={false}
         loading={loading}
-        title="蜘蛛访问"
+        title="一周蜘蛛访问"
         action={
           <Tooltip title="蜘蛛访问记录">
             <InfoCircleOutlined />

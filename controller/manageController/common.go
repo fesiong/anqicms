@@ -97,7 +97,7 @@ func GetStatisticsSummary(ctx iris.Context) {
 			counter := moduleCount{
 				Name: v.Title,
 			}
-			dao.DB.Model(&model.Archive{}).Count(&counter.Total)
+			dao.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
 			result.ModuleCounts = append(result.ModuleCounts, counter)
 			result.ArchiveCount.Total += counter.Total
 		}
@@ -115,10 +115,10 @@ func GetStatisticsSummary(ctx iris.Context) {
 		dao.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
 		dao.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
 
-		dao.DB.Model(&model.Statistic{}).Where("`spider` = ''").Count(&result.TrafficCount.Total)
+		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", time.Now().AddDate(0,0,-7).Unix()).Count(&result.TrafficCount.Total)
 		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", today.Unix()).Count(&result.TrafficCount.Today)
 
-		dao.DB.Model(&model.Statistic{}).Where("`spider`!= ''").Count(&result.SpiderCount.Total)
+		dao.DB.Model(&model.Statistic{}).Where("`spider`!= '' and `created_time` >= ?", time.Now().AddDate(0,0,-7).Unix()).Count(&result.SpiderCount.Total)
 		dao.DB.Model(&model.Statistic{}).Where("`spider` != '' and `created_time` >= ?", today.Unix()).Count(&result.SpiderCount.Today)
 
 		var lastInclude model.SpiderInclude
