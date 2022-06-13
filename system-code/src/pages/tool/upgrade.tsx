@@ -9,6 +9,8 @@ import { PageHeaderWrapper } from '@ant-design/pro-layout';
 import { Button, Card, message, Modal, Upload } from 'antd';
 import { checkVersion, getVersion, upgradeVersion } from '@/services/version';
 
+var loading = false;
+
 const ToolUpgradeForm: React.FC<any> = (props) => {
   const [setting, setSetting] = useState<any>(null);
   const [newVersion, setNewVersion] = useState<any>(null);
@@ -30,11 +32,16 @@ const ToolUpgradeForm: React.FC<any> = (props) => {
     })
   };
 
-  const upgradeSubmit = async (values: any) => {
+  const upgradeSubmit = async () => {
+    if (loading) {
+      return;
+    }
     Modal.confirm({
       title: '确定要升级到最新版吗？',
       onOk: () => {
-        upgradeVersion(values)
+        loading = true;
+        const hide = message.loading('正在升级中,请勿刷新页面', 0);
+        upgradeVersion({version: newVersion.version})
       .then((res) => {
         Modal.info({
           content: res.msg
@@ -43,6 +50,9 @@ const ToolUpgradeForm: React.FC<any> = (props) => {
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        loading = false;
+        hide();
       });
       }
     })

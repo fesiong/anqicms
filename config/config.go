@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -38,7 +40,12 @@ func initPath() {
 	sep := string(os.PathSeparator)
 	//root := filepath.Dir(os.Args[0])
 	//ExecPath, _ = filepath.Abs(root)
-	ExecPath, _ = os.Getwd()
+	ExecPath, _ = os.Executable()
+	baseName := filepath.Base(ExecPath)
+	ExecPath = filepath.Dir(ExecPath)
+	if strings.Contains(baseName, "go_build") {
+		ExecPath, _ = os.Getwd()
+	}
 	pathArray := strings.Split(ExecPath, "/")
 	//如果是测试目录，则保留到根目录。这定义根目录为：anqicms
 	if strings.Contains(ExecPath, "\\") {
@@ -56,6 +63,7 @@ func initPath() {
 	if lastChar != sep {
 		ExecPath = ExecPath + sep
 	}
+	log.Println(ExecPath)
 }
 
 func initJSON() {
