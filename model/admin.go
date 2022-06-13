@@ -8,12 +8,27 @@ import (
 
 type Admin struct {
 	Model
-	UserName    string `json:"user_name" gorm:"column:user_name;type:varchar(16) not null;default:'';index:idx_user_name"`
-	Password    string `json:"-" gorm:"column:password;type:varchar(128) not null;default:''"`
-	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11) default 0;autoCreateTime"`
-	LoginTime   int64  `json:"login_time" gorm:"column:login_time;type:int(11) default 0;index:idx_login_time"` //用户登录时间
-	Token       string `json:"token" gorm:"-"`
+	UserName  string `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:'';index:idx_user_name"`
+	Password  string `json:"-" gorm:"column:password;type:varchar(128) not null;default:''"`
+	Status    uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	LoginTime int64  `json:"login_time" gorm:"column:login_time;type:int(11) default 0;index:idx_login_time"` //用户登录时间
+	Token     string `json:"token" gorm:"-"`
+}
+
+type AdminLoginLog struct {
+	Model
+	AdminId  uint   `json:"admin_id" gorm:"column:admin_id;type:int(10) unsigned not null;default:0;index:idx_admin_id"`
+	Ip       string `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
+	Status   uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+	UserName string `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:''"`
+	Password string `json:"password" gorm:"column:password;type:varchar(128) not null;default:''"`
+}
+
+type AdminLog struct {
+	Model
+	AdminId uint   `json:"admin_id" gorm:"column:admin_id;type:int(10) unsigned not null;default:0;index:idx_admin_id"`
+	Ip      string `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
+	Log     string `json:"log" gorm:"column:log;type:varchar(250) not null;default:''"`
 }
 
 func (admin *Admin) CheckPassword(password string) bool {

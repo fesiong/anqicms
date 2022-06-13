@@ -97,6 +97,8 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 		}
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新关键词：%s", req.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "关键词已更新",
@@ -144,7 +146,9 @@ func PluginKeywordDelete(ctx iris.Context) {
 		}
 	}
 
-		ctx.JSON(iris.Map{
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除关键词：%d, %v", req.Id, req.Ids))
+
+	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "已执行删除操作",
 	})
@@ -167,6 +171,8 @@ func PluginKeywordExport(ctx iris.Context) {
 	for _, v := range keywords {
 		content = append(content, []interface{}{v.Title, v.CategoryId})
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("导出关键词"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -197,6 +203,8 @@ func PluginKeywordImport(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("导入关键词"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

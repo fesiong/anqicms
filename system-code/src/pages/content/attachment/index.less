@@ -90,3 +90,36 @@
     max-width: 100%;
   }
 }
+.attachment-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  .preview {
+    flex: 1;
+    margin-right: 20px;
+    max-height: 600px;
+    .img {
+      width: 100%;
+    }
+  }
+  .detail {
+    flex: 1;
+    .info {
+    }
+    .item {
+      display: flex;
+      padding: 3px 0;
+      .name {
+        font-weight: bold;
+        margin-right: 10px;
+      }
+      .value {
+        flex: 1;
+        word-break: break-all;
+      }
+    }
+    .btns {
+      margin: 20px 0;
+    }
+  }
+}

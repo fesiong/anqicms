@@ -1,8 +1,10 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
 
@@ -38,6 +40,8 @@ func PluginPushForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新搜索引擎推送配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

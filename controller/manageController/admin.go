@@ -1,10 +1,12 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
@@ -77,6 +79,16 @@ func AdminLogin(ctx iris.Context) {
 		adminLoginError.Times++
 		adminLoginError.LastTime = time.Now().Unix()
 
+		// 记录日志
+		adminLog := model.AdminLoginLog{
+			AdminId:  0,
+			Ip:       ctx.RemoteAddr(),
+			Status:   0,
+			UserName: req.UserName,
+			Password: req.Password,
+		}
+		dao.DB.Create(&adminLog)
+
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  "管理员账号或密码错误",
@@ -88,6 +100,16 @@ func AdminLogin(ctx iris.Context) {
 		adminLoginError.Times++
 		adminLoginError.LastTime = time.Now().Unix()
 
+		// 记录日志
+		adminLog := model.AdminLoginLog{
+			AdminId:  admin.Id,
+			Ip:       ctx.RemoteAddr(),
+			Status:   0,
+			UserName: req.UserName,
+			Password: req.Password,
+		}
+		dao.DB.Create(&adminLog)
+
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  "管理员账号或密码错误",
@@ -97,7 +119,17 @@ func AdminLogin(ctx iris.Context) {
 
 	// 重置管理员登录失败次数
 	adminLoginError.Times = 0
-	admin.Token = provider.GetAdminAuthToken(admin.Id)
+	admin.Token = provider.GetAdminAuthToken(admin.Id, ctx.RemoteAddr(), req.Remember)
+
+	// 记录日志
+	adminLog := model.AdminLoginLog{
+		AdminId:  admin.Id,
+		Ip:       ctx.RemoteAddr(),
+		Status:   1,
+		UserName: req.UserName,
+		Password: "",
+	}
+	dao.DB.Create(&adminLog)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -176,8 +208,50 @@ func UserDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新管理员信息：%d => %s", admin.Id, admin.UserName))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "管理员信息已更新",
+	})
+}
+
+func GetAdminLoginLog(ctx iris.Context) {
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	offset := (currentPage - 1) * pageSize
+
+	var logs []model.AdminLoginLog
+	var total int64
+	dao.DB.Model(&model.AdminLoginLog{}).Count(&total).Limit(pageSize).Offset(offset).Order("id desc").Find(&logs)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  logs,
+	})
+}
+
+func GetAdminLog(ctx iris.Context) {
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	offset := (currentPage - 1) * pageSize
+
+	var logs []model.AdminLog
+	var total int64
+	dao.DB.Model(&model.AdminLog{}).Count(&total).Limit(pageSize).Offset(offset).Order("id desc").Find(&logs)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  logs,
 	})
 }

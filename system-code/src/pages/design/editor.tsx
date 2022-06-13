@@ -1,18 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
-import Editor from 'react-simple-code-editor';
-import { highlight, languages } from 'prismjs/components/prism-core';
-import 'prismjs/components/prism-clike';
-import 'prismjs/components/prism-javascript';
-import 'prismjs/components/prism-markup';
-import 'prismjs/components/prism-css';
-import 'prismjs/themes/prism.css';
+import MonacoEditor from 'react-monaco-editor';
 import { Button, Card, Col, message, Row, Space, Collapse, Modal } from 'antd';
 import { history } from 'umi';
 import { deleteDesignHistoryFile, getDesignFileHistories, getDesignFileInfo, getDesignInfo, restoreDesignFileInfo, saveDesignFileInfo } from '@/services/design';
 import './index.less';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
 import moment from 'moment';
+import { getLanguage } from '@ant-design/pro-layout/lib/locales';
 
 const DesignEditor: React.FC = () => {
   const [fileInfo, setFileInfo] = useState<any>({});
@@ -20,6 +15,7 @@ const DesignEditor: React.FC = () => {
   const [showHistory, setShowHistory] = useState<boolean>(false);
   const [code, setCode] = useState<string>(``);
   const actionRef = useRef<ActionType>();
+  const [loaded, setLoaded] = useState<boolean>(false);
 
   var unsave = false;
 
@@ -45,6 +41,7 @@ const DesignEditor: React.FC = () => {
 
   const fetchDesignFileInfo = async (path: any) => {
     const packageName = history.location.query?.package;
+    setLoaded(false);
     getDesignFileInfo({
       package: packageName,
       path: path,
@@ -52,12 +49,18 @@ const DesignEditor: React.FC = () => {
       .then((res) => {
         setFileInfo(res.data);
         setCode(res.data.content || '');
+        setLoaded(true);
         actionRef.current?.reload();
       })
       .catch(() => {
         message.error('获取模板信息出错');
       });
   };
+
+  const editorDidMount = (editor: any, monaco: any) => {
+    //console.log('editorDidMount', editor);
+    //editor.focus();
+  }
 
   const onChangeCode = (newCode: string) => {
     if (code != newCode) {
@@ -145,6 +148,21 @@ const DesignEditor: React.FC = () => {
     return (size / 1024 / 1024).toFixed(2) + 'MB'
   }
 
+  const getLanguage = (filePath: string) => {
+    return filePath.indexOf('.html') !== -1 ? 'html' : filePath.indexOf('.css') !== -1 ? 'css' : 'javascript';
+  }
+
+  const getHeight = () => {
+    let num = window?.innerHeight - 260;
+    if (num < 450) {
+      num = 450;
+    } else if (num > 900) {
+      num = 900;
+    }
+
+    return num;
+  }
+
   const columns: ProColumns<any>[] = [
     {
       title: 'Hash',
@@ -192,24 +210,19 @@ const DesignEditor: React.FC = () => {
       <Card>
         <Row gutter={16}>
           <Col span={18}>
-            <div className='code-editor-box'>
-            <Editor
-              onKeyDown={handleKeyDown}
-              className="code-editor"
+            <div className='code-editor-box' onKeyDown={handleKeyDown}>
+            {loaded && <MonacoEditor
+              height={getHeight()}
+              language={getLanguage(fileInfo?.path || '')}
+              theme="vs-dark"
               value={code}
-              onValueChange={(code) => onChangeCode(code)}
-              highlight={(code) => highlight(code, fileInfo?.path?.indexOf('.js') !== -1 ? languages.js : fileInfo?.path?.indexOf('.css') !== -1 ? languages.css : languages.html).split('\n')
-              .map(
-                (line: string, index: number) =>
-                  `<span key="${index}" class="container_editor_line_number">${line}</span>`
-              )
-              .join('\n')}
-              padding={10}
-              style={{
-                fontFamily: '"Fira code", "Fira Mono", monospace',
-                fontSize: 14,
+              options={{
+                selectOnLineNumbers: false,
+                wordWrap: 'on'
               }}
-            />
+              onChange={onChangeCode}
+              editorDidMount={editorDidMount}
+            />}
             </div>
             <div className="mt-normal">
               <Space size={16}>

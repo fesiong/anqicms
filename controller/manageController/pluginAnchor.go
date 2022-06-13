@@ -124,6 +124,8 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		go provider.ChangeAnchor(anchor, changeTitle)
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改锚文本：%d => %s", anchor.Id, anchor.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "链接已更新",
@@ -155,6 +157,8 @@ func PluginAnchorReplace(ctx iris.Context) {
 	} else {
 		go provider.ReplaceAnchor(nil)
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("执行锚文本批量替换"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -203,7 +207,9 @@ func PluginAnchorDelete(ctx iris.Context) {
 		}
 	}
 
-		ctx.JSON(iris.Map{
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除锚文本：%d, %v", req.Id, req.Ids))
+
+	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "已执行删除操作",
 	})
@@ -226,6 +232,8 @@ func PluginAnchorExport(ctx iris.Context) {
 	for _, v := range anchors {
 		content = append(content, []interface{}{v.Title, v.Link, v.Weight})
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("导出锚文本"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -256,6 +264,8 @@ func PluginAnchorImport(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("导入锚文本：%s", result))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -300,6 +310,8 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改锚文本设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

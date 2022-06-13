@@ -29,8 +29,9 @@ const StatisticSpider: React.FC<any> = (props) => {
   const config = {
     data,
     //padding: 'auto',
-    xField: 'statistic_date',
-    yField: 'total',
+    xField: 'date',
+    yField: 'value',
+    seriesField: 'label',
     xAxis: {
       // type: 'timeCat',
       tickCount: 5,

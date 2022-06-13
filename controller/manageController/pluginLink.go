@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -75,6 +76,8 @@ func PluginLinkDetailForm(ctx iris.Context) {
 	// 保存完毕，实时监测
 	go provider.PluginLinkCheck(link)
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改友情链接：%d => %s", link.Id, link.Link))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "链接已更新",
@@ -107,6 +110,8 @@ func PluginLinkDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除友情链接：%d => %s", link.Id, link.Link))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

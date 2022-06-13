@@ -174,7 +174,7 @@ func BuildSitemap() error {
 			indexFile.WriteString(fmt.Sprintf("%s/archive-%d.txt\n", baseUrl, i))
 
 			//写入archive-sitemap
-			archiveFile, err := os.OpenFile(fmt.Sprintf("%archive-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+			archiveFile, err := os.OpenFile(fmt.Sprintf("%sarchive-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 			if err != nil {
 				//无法创建
 				return err

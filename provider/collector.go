@@ -269,6 +269,9 @@ func CollectArticles() {
 	if dao.DB == nil {
 		return
 	}
+	if !config.CollectorConfig.AutoCollect {
+		return
+	}
 	if runningCollectArticles {
 		return
 	}

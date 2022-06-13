@@ -24,8 +24,8 @@ const ToolUpgradeForm: React.FC<any> = (props) => {
     checkVersion().then(res => {
       setNewVersion(res.data || null)
 
-      if (res.msg) {
-        message.info(res.msg)
+      if (res.data?.description) {
+        message.info(res.data.description)
       }
     })
   };
@@ -36,7 +36,9 @@ const ToolUpgradeForm: React.FC<any> = (props) => {
       onOk: () => {
         upgradeVersion(values)
       .then((res) => {
-        message.success(res.msg);
+        Modal.info({
+          content: res.msg
+        });
         getSetting();
       })
       .catch((err) => {
@@ -51,26 +53,25 @@ const ToolUpgradeForm: React.FC<any> = (props) => {
       <Card>
         {setting && (
           <ProForm submitter={false} title="系统升级">
-            <ProFormText name='version' fieldProps={{
+            <ProFormText name='old_version' fieldProps={{
               value: setting.version,
             }} label="当前版本" width="lg" readonly />
-          {newVersion &&
+          {newVersion ?
           <div>
-            <ProFormText name='new_version' fieldProps={{
+            <ProFormText name='version' fieldProps={{
               value: newVersion.version,
             }} label="最新版本" width="lg" readonly />
-            {newVersion.content && <ProFormText name='new_version' fieldProps={{
-              value: newVersion.content,
-            }} label="版本说明" width="lg" readonly />}
-            {newVersion.version > setting.version ? <div className='mt-normal'>
+            <ProFormText name='description' fieldProps={{
+              value: newVersion.description,
+            }} label="版本说明" width="lg" readonly />
+            <div className='mt-normal'>
               <Button onClick={upgradeSubmit}>升级到最新版</Button>
             </div>
-            :
-            <div>
+          </div>
+          :
+          <div>
               你的系统已经是最新版。如果不确定，你可以访问 <a href='https://www.kandaoni.com/download' target={'_blank'}>https://www.kandaoni.com/download</a> 获取最新版
             </div>
-            }
-          </div>
           }
           </ProForm>
         )}

@@ -34,3 +34,14 @@ type FilterItem struct {
 	IsCurrent bool   `json:"is_current"`
 	Total     int64  `json:"total"`
 }
+
+type LastVersion struct {
+	Version     string `json:"version"`
+	Description string `json:"description"`
+}
+
+type ChartData struct {
+	Date  string `json:"date"`
+	Label string `json:"label"`
+	Value int    `json:"value"`
+}

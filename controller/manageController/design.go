@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -57,6 +58,8 @@ func SaveDesignInfo(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板信息：%s", req.Package))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "修改成功",
@@ -98,6 +101,8 @@ func UseDesignInfo(ctx iris.Context) {
 		config.RestartChan <- true
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "切换成功",
@@ -115,6 +120,8 @@ func DeleteDesignInfo(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", packageName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -174,6 +181,8 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板文件历史：%s => %s", req.Package, req.Filepath))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "删除成功",
@@ -201,6 +210,8 @@ func RestoreDesignFile(ctx iris.Context) {
 
 	fileInfo, _ := provider.GetDesignFileDetail(req.Package, req.Filepath, true)
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "替换成功",
@@ -227,6 +238,8 @@ func SaveDesignFile(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板文件：%s => %s", req.Package, req.Path))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "修改成功",
@@ -251,6 +264,8 @@ func DeleteDesignFile(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板文件：%s => %s", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -145,9 +146,11 @@ func ArchiveDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新文档：%d => %s", archive.Id, archive.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "文章已更新",
+		"msg":  "文档已更新",
 		"data": archive,
 	})
 }
@@ -178,6 +181,8 @@ func ArchiveRecover(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("恢复文档：%d => %s", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -211,6 +216,8 @@ func ArchiveDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档：%d => %s", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -4,9 +4,15 @@ import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import moment from 'moment';
 import { getStatisticInfo } from '@/services/statistic';
+import { useModel } from 'umi';
 
 const StatisticDetail: React.FC = () => {
   const actionRef = useRef<ActionType>();
+  const { initialState } = useModel('@@initialState');
+
+  const openLink = (text: string) => {
+    window.open((initialState?.system?.base_url || '') + text)
+  }
 
   const columns: ProColumns<any>[] = [
     {
@@ -23,6 +29,7 @@ const StatisticDetail: React.FC = () => {
       dataIndex: 'url',
       width: 200,
       ellipsis: true,
+      render: (text, record) => <div className='link' onClick={() => openLink(record.url)}>{text}</div>,
     },
     {
       title: 'IP',
@@ -31,6 +38,12 @@ const StatisticDetail: React.FC = () => {
     {
       title: '设备',
       dataIndex: 'device',
+      width: 100,
+    },
+    {
+      title: '蜘蛛',
+      dataIndex: 'spider',
+      width: 80,
     },
     {
       title: '状态码',
@@ -48,7 +61,7 @@ const StatisticDetail: React.FC = () => {
   return (
     <PageContainer>
       <ProTable<any>
-        headerTitle="详细记录"
+        headerTitle="浏览详细记录"
         actionRef={actionRef}
         rowKey="id"
         search={false}

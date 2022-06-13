@@ -147,6 +147,14 @@ class CollectorSetting extends React.Component<CollectorSettingProps> {
               this.handleSubmit(values);
             }}
           >
+            <ProFormRadio.Group
+              name="auto_collect"
+              label="是否自动采集"
+              options={[
+                { label: '否', value: false },
+                { label: '自动按计划采集', value: true },
+              ]}
+            />
             <ProFormDigit
               name="title_min_length"
               label="标题最少字数"

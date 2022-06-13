@@ -32,6 +32,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
   const handleUploadImage = (e: any) => {
     let formData = new FormData();
     formData.append('file', e.file);
+    formData.append('category_id', categoryId + "");
     uploadAttachment(formData).then((res) => {
       message.info(res.msg);
       actionRef.current?.reload();
@@ -79,7 +80,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
                 <Upload
                   name="file"
                   showUploadList={false}
-                  accept=".jpg,.jpeg,.png,.gif"
+                  accept=".jpg,.jpeg,.png,.gif,.webp"
                   customRequest={handleUploadImage}
                 >
                   <Button type="primary">上传新图片</Button>

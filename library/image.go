@@ -24,7 +24,7 @@ func ThumbnailCrop(minWidth, minHeight int, img image.Image, thumbCrop int) imag
 		//补白
 		thumbImg = imaging.Fit(img, minWidth, minHeight, imaging.Lanczos)
 		thumbImg = ResizeFill(thumbImg, minWidth, minHeight)
-	} else if thumbCrop == 2 {
+	} else {
 		//裁剪
 		thumbImg = imaging.Thumbnail(img, minWidth, minHeight, imaging.Lanczos)
 	}

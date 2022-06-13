@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"os"
 	"path"
@@ -75,6 +76,8 @@ func PluginFileUploadDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除上传验证文件：%s", fileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -148,6 +151,8 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("上传验证文件：%s", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -102,6 +102,8 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
+
 	provider.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
@@ -137,6 +139,9 @@ func PluginRedirectDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
+
 	provider.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
@@ -164,6 +169,9 @@ func PluginRedirectImport(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("导入301跳转链接"))
+
 	provider.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{

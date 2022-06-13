@@ -6,6 +6,7 @@ type AdminInfoRequest struct {
 	Password  string `json:"password"`
 	CaptchaId string `json:"captcha_id"`
 	Captcha   string `json:"captcha"`
+	Remember  bool   `json:"remember"`
 }
 
 type ChangeAdmin struct {

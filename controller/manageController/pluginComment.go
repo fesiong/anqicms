@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -94,6 +95,8 @@ func PluginCommentDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改评论内容：%d", comment.Id))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "评论已更新",
@@ -126,6 +129,8 @@ func PluginCommentDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", comment.Id, comment.Content))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -165,6 +170,8 @@ func PluginCommentCheck(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("审核通过锚文本：%d", comment.Id))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

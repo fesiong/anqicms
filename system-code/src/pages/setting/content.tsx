@@ -89,6 +89,21 @@ const SettingContactFrom: React.FC<any> = (props) => {
               ]}
             />
             <ProFormRadio.Group
+              name="use_webp"
+              label="启用Webp图片格式"
+              options={[
+                {
+                  value: 0,
+                  label: '不启用',
+                },
+                {
+                  value: 1,
+                  label: '启用',
+                },
+              ]}
+              extra='如果你希望上传的jpg、png等图片，都全部转为webp图片格式(可以减少体积),则选择启用。只对修改后的上传的图片生效。'
+            />
+            <ProFormRadio.Group
               name="resize_image"
               label="自动压缩大图"
               fieldProps={{
@@ -131,7 +146,7 @@ const SettingContactFrom: React.FC<any> = (props) => {
                   label: '按最长边补白',
                 },
                 {
-                  value: 3,
+                  value: 2,
                   label: '按最短边裁剪',
                 },
               ]}

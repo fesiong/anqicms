@@ -1,8 +1,9 @@
 package config
 
 type CollectorJson struct {
-	ErrorTimes         int              `json:"error_times"` //预留
-	Channels           int              `json:"channels"`    //预留
+	AutoCollect        bool             `json:"auto_collect"` // 是否自动采集
+	ErrorTimes         int              `json:"error_times"`  //预留
+	Channels           int              `json:"channels"`     //预留
 	TitleMinLength     int              `json:"title_min_length"`
 	ContentMinLength   int              `json:"content_min_length"`
 	TitleExclude       []string         `json:"title_exclude"`
@@ -26,6 +27,7 @@ type ReplaceKeyword struct {
 }
 
 var defaultCollectorConfig = CollectorJson{
+	AutoCollect:      false,
 	ErrorTimes:       5,
 	Channels:         2,
 	TitleMinLength:   10,

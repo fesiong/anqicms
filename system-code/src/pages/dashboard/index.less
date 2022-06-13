@@ -6,3 +6,12 @@
   background: @input-bg;
   box-shadow: @card-shadow;
 }
+.info-card {
+  .title {
+    font-weight: bold;
+    margin-bottom: 16px;
+  }
+  &+.info-card {
+    margin-top: 24px;
+  }
+}

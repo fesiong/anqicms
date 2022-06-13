@@ -166,6 +166,7 @@ func LoadCollectorConfig() {
 		CollectorConfig.ContentMinLength = collector.ContentMinLength
 	}
 
+	CollectorConfig.AutoCollect = collector.AutoCollect
 	CollectorConfig.AutoPseudo = collector.AutoPseudo
 	CollectorConfig.CategoryId = collector.CategoryId
 	CollectorConfig.StartHour = collector.StartHour

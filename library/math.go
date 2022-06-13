@@ -53,3 +53,36 @@ func Md5Bytes(bytes []byte) string {
 	h.Write(bytes)
 	return hex.EncodeToString(h.Sum(nil))
 }
+
+// VersionCompare 对比两个版本，a > b = 1; a < b = -1;
+func VersionCompare(a string, b string) int {
+	aSplit := strings.Split(a, ".")
+	bSplit := strings.Split(b, ".")
+
+	aLen := len(aSplit)
+	bLen := len(bSplit)
+	length := min(aLen, bLen)
+
+	for i := 0; i < length; i++ {
+		intA, _ := strconv.ParseInt(aSplit[i], 10, 32)
+		intB, _ := strconv.ParseInt(bSplit[i], 10, 32)
+		if intA > intB {
+			return 1
+		} else if intB > intA {
+			return -1
+		}
+	}
+	if aLen > bLen {
+		return 1
+	} else if bLen > aLen {
+		return -1
+	}
+	return 0
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}

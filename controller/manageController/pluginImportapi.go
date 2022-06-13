@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 	"time"
 )
 
@@ -28,6 +29,8 @@ func PluginUpdateApiToken(ctx iris.Context) {
 	config.JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
 	// 回写
 	_ = config.WriteConfig()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新API导入Token"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -121,6 +121,8 @@ func SettingSystemForm(ctx iris.Context) {
 		config.RestartChan <- true
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统配置"))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
@@ -170,6 +172,8 @@ func SettingContentForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新内容配置"))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
@@ -179,6 +183,9 @@ func SettingContentForm(ctx iris.Context) {
 //重建所有的thumb
 func SettingThumbRebuild(ctx iris.Context) {
 	go provider.ThumbRebuild()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("重新生成所有缩略图"))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "缩略图已更新",
@@ -217,6 +224,8 @@ func SettingIndexForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新首页TDK"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -280,6 +289,8 @@ func SettingNavForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新导航信息：%d => %s", nav.Id, nav.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
@@ -312,6 +323,8 @@ func SettingNavDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除导航信息：%d => %s", nav.Id, nav.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -367,6 +380,8 @@ func SettingContactForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新联系人信息"))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
@@ -399,6 +414,8 @@ func SettingCacheForm(ctx iris.Context) {
 	// 记录
 	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
 	ioutil.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("手动更新缓存"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
@@ -31,14 +32,14 @@ func InitAdmin(userName string, password string, force bool) error {
 	admin.Id = 1
 	admin.EncryptPassword(password)
 	err := admin.Save(db)
-	if err !=  nil {
+	if err != nil {
 		return err
 	}
 
 	return nil
 }
 
-func GetAdminByUserName(userName string)(*model.Admin, error) {
+func GetAdminByUserName(userName string) (*model.Admin, error) {
 	var admin model.Admin
 	db := dao.DB
 	err := db.Where("`user_name` = ?", userName).First(&admin).Error
@@ -48,7 +49,7 @@ func GetAdminByUserName(userName string)(*model.Admin, error) {
 	return &admin, nil
 }
 
-func GetAdminById(id uint)(*model.Admin, error) {
+func GetAdminById(id uint) (*model.Admin, error) {
 	var admin model.Admin
 	db := dao.DB
 	err := db.Where("`id` = ?", id).First(&admin).Error
@@ -78,10 +79,16 @@ func GetAdminInfoByName(name string) (*model.Admin, error) {
 	return &authUser, nil
 }
 
-func GetAdminAuthToken(userId uint) string {
+func GetAdminAuthToken(userId uint, ip string, remember bool) string {
+	t := time.Now().AddDate(0, 0, 1)
+	// 记住会记住30天
+	if remember {
+		t = t.AddDate(0, 0, 29)
+	}
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"adminId":  fmt.Sprintf("%d", userId),
-		"timestamp": fmt.Sprintf("%d", time.Now().Unix()),
+		"adminId": fmt.Sprintf("%d", userId),
+		"ip":      ip,
+		"t":       fmt.Sprintf("%d", t.Unix()),
 	})
 	// 获取签名字符串
 	tokenString, err := jwtToken.SignedString([]byte(config.JsonData.Server.TokenSecret))
@@ -126,4 +133,16 @@ func UpdateAdminInfo(adminId uint, req request.AdminInfoRequest) (*model.Admin, 
 	}
 
 	return admin, nil
+}
+
+func AddAdminLog(ctx iris.Context, logData string) {
+	adminLog := model.AdminLog{
+		Log: logData,
+	}
+	if ctx != nil {
+		adminLog.AdminId = uint(ctx.Values().GetIntDefault("adminId", 0))
+		adminLog.Ip = ctx.RemoteAddr()
+	}
+
+	dao.DB.Create(&adminLog)
 }

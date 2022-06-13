@@ -1,6 +1,7 @@
 // https://umijs.org/config/
 import { defineConfig } from 'umi';
 import { join } from 'path';
+const MonacoWebpackPlugin = require('monaco-editor-webpack-plugin');
 
 import defaultSettings from './defaultSettings';
 import routes from './routes';
@@ -45,4 +46,11 @@ export default defineConfig({
   //mfsu: {},
   webpack5: {},
   exportStatic: {},
+  chainWebpack(config, { webpack }) {
+    config.plugin('monaco-editor').use(MonacoWebpackPlugin, [
+      {
+          languages: ['javascript','css','html']
+      }
+  ])
+  },
 });

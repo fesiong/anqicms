@@ -77,6 +77,8 @@ func AutoMigrateDB(db *gorm.DB) error {
 	//自动迁移数据库
 	err := db.AutoMigrate(
 		&model.Admin{},
+		&model.AdminLoginLog{},
+		&model.AdminLog{},
 		&model.Attachment{},
 		&model.AttachmentCategory{},
 		&model.Category{},
@@ -97,6 +99,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.Module{},
 		&model.Archive{},
 		&model.ArchiveData{},
+		&model.SpiderInclude{},
 	)
 
 	if err != nil {

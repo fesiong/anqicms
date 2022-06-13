@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -39,6 +40,8 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改采集配置"))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "保存成功",
@@ -76,6 +79,9 @@ func HandleReplaceArticles(ctx iris.Context) {
 	}
 
 	if req.Replace {
+
+		provider.AddAdminLog(ctx, fmt.Sprintf("批量替换文档内容"))
+
 		go provider.ReplaceArticles()
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
@@ -83,6 +89,8 @@ func HandleReplaceArticles(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新替换关键词配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -118,6 +126,8 @@ func HandleArticlePseudo(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("文档伪原创操作：%d => %s", archiveData.Id, ""))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "伪原创已完成",
@@ -126,6 +136,8 @@ func HandleArticlePseudo(ctx iris.Context) {
 
 func HandleDigKeywords(ctx iris.Context) {
 	go provider.StartDigKeywords()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("手动触发关键词拓词任务"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

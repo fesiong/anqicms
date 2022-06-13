@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -81,6 +82,8 @@ func ModuleDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", module.Id, module.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "保存成功",
@@ -107,6 +110,8 @@ func ModuleFieldsDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除模型字段：%d => %s", req.Id, req.FieldName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -148,6 +153,8 @@ func ModuleDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档模型：%d => %s", module.Id, module.Title))
 
 	provider.DeleteCacheModules()
 

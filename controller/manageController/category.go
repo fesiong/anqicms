@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -78,6 +79,8 @@ func CategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("保存文档分类：%d => %s", category.Id, category.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "保存成功",
@@ -111,6 +114,8 @@ func CategoryDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档分类：%d => %s", category.Id, category.Title))
 
 	provider.DeleteCacheCategories()
 

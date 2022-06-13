@@ -32,6 +32,19 @@ export const showNumber = (num: number) => {
   return result;
 };
 
+export const sizeFormat = (num: number) => {
+  let result: any = '';
+  if (num > 1000000) {
+    result = (num / 1048576).toFixed(2) + 'MB';
+  } else if (num > 500) {
+    result = (num / 1024).toFixed(2) + 'KB';
+  } else {
+    result = num + "B";
+  }
+
+  return result;
+};
+
 // 只支持csv，excel
 export const exportFile = (titles: string[], data: any[][], type?: string) => {
   type = type || 'csv';

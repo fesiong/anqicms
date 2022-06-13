@@ -17,7 +17,6 @@ func manageRoute(app *iris.Application) {
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{
 		manage.Post("/login", manageController.AdminLogin)
-		manage.Get("/statistics", manageController.Statistics)
 		manage.Get("/captcha", controller.GenerateCaptcha)
 
 		version := manage.Party("/version")
@@ -32,6 +31,8 @@ func manageRoute(app *iris.Application) {
 			user.Get("/detail", manageController.UserDetail)
 			user.Post("/detail", manageController.UserDetailForm)
 			user.Post("/logout", manageController.UserLogout)
+			user.Get("/login/log", manageController.GetAdminLoginLog)
+			user.Get("/log", manageController.GetAdminLog)
 		}
 
 		setting := manage.Party("/setting", middleware.ParseAdminToken)
@@ -108,6 +109,10 @@ func manageRoute(app *iris.Application) {
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
 			statistic.Get("/detail", manageController.StatisticDetail)
+			statistic.Get("/include", manageController.GetSpiderInclude)
+			statistic.Get("/include/detail", manageController.GetSpiderIncludeDetail)
+			statistic.Get("/summary", manageController.GetStatisticsSummary)
+			statistic.Get("/dashboard", manageController.GetStatisticsDashboard)
 		}
 
 		design := manage.Party("/design", middleware.ParseAdminToken)

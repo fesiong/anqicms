@@ -15,7 +15,7 @@
     name: '后台首页',
     icon: 'home',
     hideInTop: true,
-    component: './Dashboard',
+    component: './dashboard/index',
   },
   {
     path: '/setting',
@@ -279,8 +279,18 @@
       },
       {
         path: '/statistic/detail',
-        name: '详细记录',
+        name: '访问详细记录',
         component: '@/pages/statistic/detail',
+      },
+      {
+        path: '/statistic/include',
+        name: '收录统计',
+        component: '@/pages/statistic/include',
+      },
+      {
+        path: '/statistic/include/detail',
+        name: '收录详细记录',
+        component: '@/pages/statistic/include/detail',
       },
       {
         component: './404',

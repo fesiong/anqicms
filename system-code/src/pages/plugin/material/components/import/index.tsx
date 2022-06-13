@@ -51,10 +51,7 @@ const MaterialImport: React.FC<MaterialImportProps> = (props) => {
       .then((res) => {
         let count = updateUploadedMaterials(res.data);
 
-        message.success({
-          content: '已选择个' + count + '片段',
-          key: 'single-message',
-        });
+        message.success('已选择个' + count + '片段');
       })
       .finally(() => {
         hide();
@@ -136,10 +133,7 @@ const MaterialImport: React.FC<MaterialImportProps> = (props) => {
     let content = removeHtmlTag(editingContent);
     let count = updateUploadedMaterials(content);
     setShowTextarea(false);
-    message.success({
-      content: '已选择个' + count + '片段',
-      key: 'single-message',
-    });
+    message.success('已选择个' + count + '片段');
   };
 
   const handleSubmitImport = () => {
@@ -162,15 +156,12 @@ const MaterialImport: React.FC<MaterialImportProps> = (props) => {
           const hide = message.loading('正在处理中', 0);
           pluginMaterialImport({ materials: uploadedMaterials })
             .then((res) => {
-              message.success({ content: res.msg, key: 'single-message' });
+              message.success(res.msg);
               setVisible(false);
               props.onCancel();
             })
             .catch((err) => {
-              message.error({
-                content: '上传错误，请稍后重试',
-                key: 'single-message',
-              });
+              message.error('上传错误，请稍后重试');
             })
             .finally(() => {
               hide();
@@ -181,15 +172,12 @@ const MaterialImport: React.FC<MaterialImportProps> = (props) => {
       const hide = message.loading('正在处理中', 0);
       pluginMaterialImport({ materials: uploadedMaterials })
         .then((res) => {
-          message.success({ content: res.msg, key: 'single-message' });
+          message.success(res.msg);
           setVisible(false);
           props.onCancel();
         })
         .catch((err) => {
-          message.error({
-            content: '上传错误，请稍后重试',
-            key: 'single-message',
-          });
+          message.error('上传错误，请稍后重试');
         })
         .finally(() => {
           hide();

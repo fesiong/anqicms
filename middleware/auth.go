@@ -8,7 +8,9 @@ import (
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/provider"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // ParseAdminToken 解析token
@@ -29,11 +31,26 @@ func ParseAdminToken(ctx iris.Context) {
 		})
 		return
 	} else {
-		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid && claims["adminId"] != nil {
+		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			userID, ok := claims["adminId"].(string)
-			if ok {
-				ctx.Values().Set("adminId", userID)
+			ip, ok2 := claims["ip"].(string)
+			timeStamp, ok3 := claims["t"].(string)
+			if !ok || !ok2 || !ok3 {
+				ctx.JSON(iris.Map{
+					"code": config.StatusNoLogin,
+					"msg":  "该操作需要登录，请登录后重试",
+				})
+				return
 			}
+			sec, _ := strconv.ParseInt(timeStamp, 10, 64)
+			if ip != ctx.RemoteAddr() || sec < time.Now().Unix() {
+				ctx.JSON(iris.Map{
+					"code": config.StatusNoLogin,
+					"msg":  "该操作需要登录，请登录后重试",
+				})
+				return
+			}
+			ctx.Values().Set("adminId", userID)
 		} else {
 			ctx.JSON(iris.Map{
 				"code": config.StatusNoLogin,

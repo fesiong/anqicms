@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
@@ -64,9 +65,11 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除图片：%d => %s", attach.Id, attach.FileLocation))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已删除",
+		"msg":  "图片已删除",
 	})
 }
 
@@ -88,6 +91,8 @@ func AttachmentChangeCategory(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("更改图片的分类：%d => %v", req.CategoryId, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -132,6 +137,8 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("保存图片分类：%d => %s", category.Id, category.Title))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "分类已更新",
@@ -157,6 +164,8 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除图片分类：%d => %s", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

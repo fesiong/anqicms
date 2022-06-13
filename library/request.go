@@ -48,9 +48,8 @@ type Options struct {
 	DialContext func(ctx context.Context, network, addr string) (net.Conn, error)
 }
 
-/**
- * 请求网络页面，并自动检测页面内容的编码，转换成utf-8
- */
+// Request
+// 请求网络页面，并自动检测页面内容的编码，转换成utf-8
 func Request(urlPath string, options *Options) (*RequestData, error) {
 	if options == nil {
 		options = &Options{

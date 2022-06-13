@@ -146,7 +146,7 @@ const Login: React.FC = () => {
               marginBottom: 24,
             }}
           >
-            <ProFormCheckbox noStyle name="autoLogin">
+            <ProFormCheckbox noStyle name="remember">
               自动登录
             </ProFormCheckbox>
             <a

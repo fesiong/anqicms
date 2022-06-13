@@ -33,7 +33,7 @@ func (node *tagPrevArchiveNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if archiveDetail != nil {
 		var prevArchive model.Archive
-		if err2 := dao.DB.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Where("`status` = 1").First(&prevArchive).Error; err2 == nil {
+		if err2 := dao.DB.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Where("`status` = 1").Last(&prevArchive).Error; err2 == nil {
 			prevArchive.GetThumb()
 			prevArchive.Link = provider.GetUrl("archive", &prevArchive, 0)
 			ctx.Private[node.name] = prevArchive
