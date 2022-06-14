@@ -97,6 +97,7 @@ func resisterMacros(app *iris.Application) {
 			if module != nil {
 				return matchMap, true
 			}
+			matchMap = map[string]string{}
 		}
 		//category
 		reg = regexp.MustCompile(rewritePattern.CategoryRule)
@@ -122,6 +123,7 @@ func resisterMacros(app *iris.Application) {
 			} else {
 				return matchMap, true
 			}
+			matchMap = map[string]string{}
 		}
 		//page
 		reg = regexp.MustCompile(rewritePattern.PageRule)
@@ -144,6 +146,7 @@ func resisterMacros(app *iris.Application) {
 			} else {
 				return matchMap, true
 			}
+			matchMap = map[string]string{}
 		}
 		//最后archive
 		reg = regexp.MustCompile(rewritePattern.ArchiveRule)

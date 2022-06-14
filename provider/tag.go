@@ -89,6 +89,7 @@ func DeleteTag(id uint) error {
 }
 
 func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
+	newPost := false
 	if req.Id > 0 {
 		tag, err = GetTagById(req.Id)
 		if err != nil {
@@ -98,6 +99,7 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		tag = &model.Tag{
 			Status: 1,
 		}
+		newPost = true
 	}
 	tag.Title = req.Title
 	tag.SeoTitle = req.SeoTitle
@@ -140,6 +142,14 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		return
 	}
 
+	if newPost && tag.Status == config.ContentStatusOK {
+		link := GetUrl("tag", tag, 0)
+		go PushArchive(link)
+		if config.JsonData.PluginSitemap.AutoBuild == 1 {
+			_ = AddonSitemap("tag", link)
+		}
+	}
+
 	return
 }
 
@@ -169,6 +179,12 @@ func SaveTagData(itemId uint, tagNames []string) error {
 				Status:      1,
 			}
 			dao.DB.Save(tag)
+
+			link := GetUrl("tag", tag, 0)
+			go PushArchive(link)
+			if config.JsonData.PluginSitemap.AutoBuild == 1 {
+				_ = AddonSitemap("tag", link)
+			}
 		}
 		tagIds = append(tagIds, tag.Id)
 		tagData := model.TagData{

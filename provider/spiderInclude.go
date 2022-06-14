@@ -18,7 +18,6 @@ import (
 // https://www.baidu.com/s?wd=site%3Awww.baidu.com&tn=json&rn=10
 func QuerySpiderInclude() {
 	link, _ := url.Parse(config.JsonData.System.BaseUrl)
-	link.Host = "www.kanshuge.org"
 	includeLog := model.SpiderInclude{
 		BaiduCount:  GetBaiduInclude(link.Host),
 		SogouCount:  GetSogouInclude(link.Host),

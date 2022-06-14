@@ -138,9 +138,11 @@ func BuildSitemap() error {
 	totalCount := int64(1)
 	var categoryCount int64
 	var archiveCount int64
+	var tagCount int64
 	categoryBuilder := dao.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Count(&categoryCount)
 	archiveBuilder := dao.DB.Model(&model.Archive{}).Where("`status` = 1").Order("id asc").Count(&archiveCount)
-	totalCount += categoryCount + archiveCount
+	tagBuilder := dao.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
+	totalCount += categoryCount + archiveCount + tagCount
 	if totalCount > SitemapLimit {
 		//开展分页模式
 		//index 和 category 存放在同一个文件，文章单独一个文件
@@ -150,7 +152,7 @@ func BuildSitemap() error {
 			return err
 		}
 		defer indexFile.Close()
-		indexFile.WriteString(fmt.Sprintf("%s/category.txt\n", baseUrl))
+		indexFile.WriteString(fmt.Sprintf("%scategory.txt\n", baseUrl))
 
 		categoryFile, err := os.OpenFile(fmt.Sprintf("%scategory.txt", basePath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		if err != nil {
@@ -171,7 +173,7 @@ func BuildSitemap() error {
 		var archives []*model.Archive
 		for i := 1; i <= pager; i++ {
 			//写入index
-			indexFile.WriteString(fmt.Sprintf("%s/archive-%d.txt\n", baseUrl, i))
+			indexFile.WriteString(fmt.Sprintf("%sarchive-%d.txt\n", baseUrl, i))
 
 			//写入archive-sitemap
 			archiveFile, err := os.OpenFile(fmt.Sprintf("%sarchive-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
@@ -187,6 +189,28 @@ func BuildSitemap() error {
 				}
 			}
 			archiveFile.Close()
+		}
+		//写入tag
+		pager = int(math.Ceil(float64(tagCount) / float64(SitemapLimit)))
+		var tags []*model.Tag
+		for i := 1; i <= pager; i++ {
+			//写入index
+			indexFile.WriteString(fmt.Sprintf("%stag-%d.txt\n", baseUrl, i))
+
+			//写入tag-sitemap
+			tagFile, err := os.OpenFile(fmt.Sprintf("%stag-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+			if err != nil {
+				//无法创建
+				return err
+			}
+
+			err = tagBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&tags).Error
+			if err == nil {
+				for _, v := range tags {
+					tagFile.WriteString(GetUrl("tag", v, 0) + "\n")
+				}
+			}
+			tagFile.Close()
 		}
 	} else {
 		//单一文件模式
@@ -212,6 +236,12 @@ func BuildSitemap() error {
 		for _, v := range archives {
 			sitemapFile.WriteString(GetUrl("archive", v, 0) + "\n")
 		}
+		//写入tag
+		var tags []*model.Tag
+		tagBuilder.Find(&tags)
+		for _, v := range tags {
+			sitemapFile.WriteString(GetUrl("tag", v, 0) + "\n")
+		}
 	}
 
 	_ = UpdateSitemapTime()
@@ -219,14 +249,16 @@ func BuildSitemap() error {
 	return nil
 }
 
-//追加sitemap
+// AddonSitemap 追加sitemap
 func AddonSitemap(itemType string, link string) error {
 	basePath := fmt.Sprintf("%spublic/", config.ExecPath)
 	totalCount := int64(1)
 	var categoryCount int64
 	var archiveCount int64
+	var tagCount int64
 	dao.DB.Model(&model.Category{}).Where("`status` = 1").Count(&categoryCount)
 	dao.DB.Model(&model.Archive{}).Where("`status` = 1").Count(&archiveCount)
+	dao.DB.Model(&model.Tag{}).Where("`status` = 1").Count(&tagCount)
 	totalCount += categoryCount + archiveCount
 
 	if totalCount > SitemapLimit {
@@ -276,6 +308,28 @@ func AddonSitemap(itemType string, link string) error {
 			if err == nil {
 				_ = UpdateSitemapTime()
 			}
+		} else if itemType == "tag" {
+			//tag
+			pager := int(math.Ceil(float64(tagCount) / float64(SitemapLimit)))
+			tagPath := fmt.Sprintf("%stag-%d.txt", basePath, pager)
+			_, err := os.Stat(tagPath)
+			if err != nil {
+				if os.IsNotExist(err) {
+					return BuildSitemap()
+				} else {
+					return err
+				}
+			}
+			tagFile, err := os.OpenFile(tagPath, os.O_RDWR|os.O_APPEND, 0666)
+			if err != nil {
+				return err
+			}
+			defer tagFile.Close()
+			_, err = tagFile.WriteString(link + "\n")
+
+			if err == nil {
+				_ = UpdateSitemapTime()
+			}
 		}
 	} else {
 		sitemapPath := fmt.Sprintf("%ssitemap.txt", basePath)
@@ -300,6 +354,8 @@ func AddonSitemap(itemType string, link string) error {
 		if itemType == "category" {
 			_, err = sitemapFile.WriteString(link + "\n")
 		} else if itemType == "archive" {
+			_, err = sitemapFile.WriteString(link + "\n")
+		} else if itemType == "tag" {
 			_, err = sitemapFile.WriteString(link + "\n")
 		}
 

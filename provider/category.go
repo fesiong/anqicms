@@ -80,6 +80,7 @@ func GetCategoryByUrlToken(urlToken string) (*model.Category, error) {
 }
 
 func SaveCategory(req *request.Category) (category *model.Category, err error) {
+	newPost := false
 	if req.Id > 0 {
 		category, err = GetCategoryById(req.Id)
 		if err != nil {
@@ -89,6 +90,7 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		category = &model.Category{
 			Status: 1,
 		}
+		newPost = true
 	}
 	category.Title = req.Title
 	category.SeoTitle = req.SeoTitle
@@ -143,6 +145,13 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	err = category.Save(dao.DB)
 	if err != nil {
 		return
+	}
+	if newPost && category.Status == config.ContentStatusOK {
+		link := GetUrl("category", category, 0)
+		go PushArchive(link)
+		if config.JsonData.PluginSitemap.AutoBuild == 1 {
+			_ = AddonSitemap("category", link)
+		}
 	}
 
 	DeleteCacheCategories()
