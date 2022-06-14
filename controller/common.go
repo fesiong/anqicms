@@ -17,6 +17,9 @@ var webInfo response.WebInfo
 var Store = captcha.DefaultMemStore
 
 func NotFound(ctx iris.Context) {
+	webInfo.Title = config.Lang("404 Not Found")
+	ctx.ViewData("webInfo", webInfo)
+
 	tplName := "errors/404.html"
 	if ViewExists(ctx, "errors_404.html") {
 		tplName = "errors_404.html"
@@ -41,6 +44,9 @@ func ShowMessage(ctx iris.Context, message string, link string) {
 }
 
 func InternalServerError(ctx iris.Context) {
+	webInfo.Title = config.Lang("500 Internal Error")
+	ctx.ViewData("webInfo", webInfo)
+
 	errMessage := ctx.Values().GetString("message")
 	if errMessage == "" {
 		errMessage = "(Unexpected) internal server error"
@@ -65,6 +71,9 @@ func CheckCloseSite(ctx iris.Context) {
 		if ViewExists(ctx, "errors_close.html") {
 			tplName = "errors_close.html"
 		}
+
+		webInfo.Title = config.Lang(closeTips)
+		ctx.ViewData("webInfo", webInfo)
 
 		err := ctx.View(GetViewPath(ctx, tplName))
 		if err != nil {

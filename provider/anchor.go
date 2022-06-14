@@ -327,21 +327,16 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 		return key
 	})
 	//过滤所有属性
-	reg, _ = regexp.Compile("(?i)<[a-z0-9]+(\\s+[^>]+)>")
+	reg, _ = regexp.Compile("(?i)</?[a-z0-9]+(\\s+[^>]+)>")
 	content = reg.ReplaceAllStringFunc(content, func(s string) string {
-		//保留标签
-		reg := regexp.MustCompile("(?i)<[a-z0-9]+(\\s+[^>]+)>")
-		match := reg.FindStringSubmatch(s)
-
 		key := fmt.Sprintf("{$%d}", numCount)
-		newStr := strings.Replace(s, match[1], key, 1)
 		replacedMatch = append(replacedMatch, &replaceType{
 			Key:   key,
-			Value: match[1],
+			Value: s,
 		})
 		numCount++
 
-		return newStr
+		return key
 	})
 
 	if len(existsLinks) < maxAnchorNum {

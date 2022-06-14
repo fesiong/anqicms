@@ -47,6 +47,10 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		}
 		content += config.JsonData.System.SiteName
 	}
+	if fieldName == "Title" && content == "" {
+		// 保持标题至少是网站名称
+		content = config.JsonData.System.SiteName
+	}
 
 	// output
 	if node.name == "" {
