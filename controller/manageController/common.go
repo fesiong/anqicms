@@ -250,14 +250,16 @@ func VersionUpgrade(ctx iris.Context) {
 	exec := filepath.Base(path)
 
 	for _, f := range zipReader.File {
-		reader, err := f.OpenRaw()
+		reader, err := f.Open()
 		if err != nil {
 			continue
 		}
 		data, err := io.ReadAll(reader)
 		if err != nil {
+			reader.Close()
 			continue
 		}
+		reader.Close()
 		if f.FileInfo().IsDir() {
 			continue
 		}
