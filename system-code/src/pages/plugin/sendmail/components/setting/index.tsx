@@ -12,6 +12,7 @@ const SendmailSetting: React.FC<SendmailSettingProps> = (props) => {
   const [visible, setVisible] = useState<boolean>(false);
 
   const handleSubmit = async (values: any) => {
+    values.port = Number(values.port);
     pluginSaveSendmailSetting(values).then((res) => {
       message.info(res.msg);
       setVisible(false);
