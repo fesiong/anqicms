@@ -229,7 +229,7 @@ func BuildSitemap() error {
 			return err
 		}
 		defer indexFile.Close()
-		indexFile.WriteString(fmt.Sprintf("%scategory.txt\n", baseUrl))
+		indexFile.WriteString(fmt.Sprintf("%s/category.txt\n", baseUrl))
 
 		categoryFile, err := os.OpenFile(fmt.Sprintf("%scategory.txt", basePath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 		if err != nil {
@@ -250,7 +250,7 @@ func BuildSitemap() error {
 		var archives []*model.Archive
 		for i := 1; i <= pager; i++ {
 			//写入index
-			indexFile.WriteString(fmt.Sprintf("%sarchive-%d.txt\n", baseUrl, i))
+			indexFile.WriteString(fmt.Sprintf("%s/archive-%d.txt\n", baseUrl, i))
 
 			//写入archive-sitemap
 			archiveFile, err := os.OpenFile(fmt.Sprintf("%sarchive-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
@@ -272,7 +272,7 @@ func BuildSitemap() error {
 		var tags []*model.Tag
 		for i := 1; i <= pager; i++ {
 			//写入index
-			indexFile.WriteString(fmt.Sprintf("%stag-%d.txt\n", baseUrl, i))
+			indexFile.WriteString(fmt.Sprintf("%s/tag-%d.txt\n", baseUrl, i))
 
 			//写入tag-sitemap
 			tagFile, err := os.OpenFile(fmt.Sprintf("%stag-%d.txt", basePath, i), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
