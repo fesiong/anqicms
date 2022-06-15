@@ -89,7 +89,7 @@ func GetCacheNavs() []model.Nav {
 		}
 	}
 
-	dao.DB.Where(model.Nav{}).Find(&navs)
+	dao.DB.Where(model.Nav{}).Order("sort asc").Find(&navs)
 
 	library.MemCache.Set("navs", navs, 0)
 
