@@ -32,6 +32,14 @@ export async function getSettingNav(params?: any, options?: { [key: string]: any
   });
 }
 
+export async function getSettingNavTypes(params?: any, options?: { [key: string]: any }) {
+  return get({
+    url: '/setting/nav/type',
+    params,
+    options,
+  });
+}
+
 export async function getSettingContact(params?: any, options?: { [key: string]: any }) {
   return get({
     url: '/setting/contact',
@@ -96,6 +104,22 @@ export async function deleteSettingNav(body: any, options?: { [key: string]: any
   });
 }
 
+export async function saveSettingNavType(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/setting/nav/type',
+    body,
+    options,
+  });
+}
+
+export async function deleteSettingNavType(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/setting/nav/type/delete',
+    body,
+    options,
+  });
+}
+
 export async function saveSettingContact(body: any, options?: { [key: string]: any }) {
   return post({
     url: '/setting/contact',
@@ -107,6 +131,14 @@ export async function saveSettingContact(body: any, options?: { [key: string]: a
 export async function saveSettingCache(body: any, options?: { [key: string]: any }) {
   return post({
     url: '/setting/cache',
+    body,
+    options,
+  });
+}
+
+export async function convertImagetoWebp(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/setting/convert/webp',
     body,
     options,
   });

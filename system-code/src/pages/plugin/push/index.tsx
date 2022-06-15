@@ -1,12 +1,15 @@
 import React, { useEffect, useState } from 'react';
 import ProForm, { ProFormTextArea, ProFormRadio, ProFormText } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Alert, Card, Col, message, Radio, Row, Space, Tag } from 'antd';
-import { pluginGetPush, pluginSavePush } from '@/services/plugin/push';
+import { Alert, Button, Card, Col, message, Modal, Radio, Row, Space, Tag } from 'antd';
+import { pluginGetPush, pluginGetPushLogs, pluginSavePush } from '@/services/plugin/push';
+import ProTable, { ProColumns } from '@ant-design/pro-table';
+import moment from 'moment';
 
 const PluginPush: React.FC<any> = (props) => {
   const [pushSetting, setPushSetting] = useState<any>({});
   const [fetched, setFetched] = useState<boolean>(false);
+  const [logVisible, setLogVisible] = useState<boolean>(false);
 
   useEffect(() => {
     getSetting();
@@ -29,10 +32,36 @@ const PluginPush: React.FC<any> = (props) => {
         console.log(err);
       });
   };
+
+  const handleShowPushLog = () => {
+    setLogVisible(true)
+  }
+
+  const columns: ProColumns<any>[] = [
+    {
+      title: '时间',
+      width: 160,
+      dataIndex: 'created_time',
+      render: (text, record) => moment(record.created_time * 1000).format('YYYY-MM-DD HH:mm'),
+    },
+    {
+      title: '搜索引擎',
+      width: 160,
+      dataIndex: 'spider',
+    },
+    {
+      title: '推送结果',
+      dataIndex: 'result',
+    },
+  ];
+
   return (
     <PageHeaderWrapper>
       <Card>
-        <Alert message="搜索引擎推送功能支持百度搜索、必应搜索的主动推送，其他搜索引擎虽然没有主动推送功能，但部分搜索引擎依然可以使用JS推送。" />
+        <Alert message={<div>
+          <span>搜索引擎推送功能支持百度搜索、必应搜索的主动推送，其他搜索引擎虽然没有主动推送功能，但部分搜索引擎依然可以使用JS推送。</span>
+          <Button size='small' onClick={handleShowPushLog}>查看最近推送记录</Button>
+          </div>} />
         <div className="mt-normal">
           {fetched && (
             <ProForm onFinish={onSubmit} initialValues={pushSetting}>
@@ -64,6 +93,22 @@ const PluginPush: React.FC<any> = (props) => {
           )}
         </div>
       </Card>
+      <Modal title='查看最近推送记录' width={900} visible={logVisible} onCancel={() => {
+        setLogVisible(false)
+      }} onOk={() => {
+        setLogVisible(false)
+      }}>
+        <ProTable<any>
+        rowKey="id"
+        search={false}
+        pagination={false}
+        toolBarRender={false}
+        request={(params, sort) => {
+          return pluginGetPushLogs(params);
+        }}
+        columns={columns}
+      />
+      </Modal>
     </PageHeaderWrapper>
   );
 };

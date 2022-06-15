@@ -9,7 +9,8 @@ import {
 import ProList from '@ant-design/pro-list';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
 import { Button, Card, message, Modal, Space, Tag } from 'antd';
-import { deleteSettingNav, getSettingNav, saveSettingNav, getCategories, getModules } from '@/services';
+import { deleteSettingNav, getSettingNav, saveSettingNav, getCategories, getModules, getSettingNavTypes } from '@/services';
+import NavTypes from './components/navType';
 
 const SettingNavFrom: React.FC<any> = (props) => {
   const [navs, setNavList] = useState<any>([]);
@@ -19,17 +20,28 @@ const SettingNavFrom: React.FC<any> = (props) => {
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [nav_type, setNavType] = useState<number>(0);
   const [innerOptions, setInnerOptions] = useState<any[]>([]);
+  const [navTypes, setNavTypes] = useState<any[]>([]);
+  const [typeId, setTypeId] = useState<number>(1);
 
   useEffect(() => {
-    getNavList();
+    getNavList(typeId);
     getCategoryList();
     getModuleList();
+    getNavTypes();
   }, []);
 
-  const getNavList = async () => {
-    const res = await getSettingNav();
+  const getNavList = async (typeId: number) => {
+    const res = await getSettingNav({
+      type_id: typeId,
+    });
     let navs = res.data || [];
     setNavList(navs);
+  };
+
+  const getNavTypes = async () => {
+    const res = await getSettingNavTypes();
+    let types = res.data || [];
+    setNavTypes(types);
   };
 
   const getCategoryList = async () => {
@@ -69,7 +81,7 @@ const SettingNavFrom: React.FC<any> = (props) => {
       onOk: () => {
         deleteSettingNav(row).then(res => {
           message.success(res.msg);
-          getNavList();
+          getNavList(typeId);
         })
       }
     })
@@ -83,11 +95,12 @@ const SettingNavFrom: React.FC<any> = (props) => {
 
   const onNavSubmit = async (values: any) => {
     values = Object.assign(editingNav, values)
+    values.type_id = typeId;
     saveSettingNav(values)
       .then((res) => {
         message.success(res.msg);
         setModalVisible(false);
-        getNavList();
+        getNavList(typeId);
       })
       .catch((err) => {
         console.log(err);
@@ -102,9 +115,21 @@ const SettingNavFrom: React.FC<any> = (props) => {
     }
   }
 
+  const handleChangeNavType = (typeId: number) => {
+    setTypeId(typeId)
+    getNavList(typeId);
+  }
+
   return (
     <PageHeaderWrapper>
-      <Card>
+      <Card title={<div>
+        <Space>
+          {navTypes.map((item) => (
+            <Button key={item.id} type={typeId == item.id ? 'primary' : 'default'} onClick={() => {handleChangeNavType(item.id)}}>{item.title}</Button>
+          ))}
+          <NavTypes onCancel={()=> {getNavTypes()}}><Button>导航类别管理</Button></NavTypes>
+        </Space>
+      </div>}>
         <ProList<any>
           toolBarRender={() => {
             return [<Button onClick={handleShowAddNav}>添加导航</Button>];

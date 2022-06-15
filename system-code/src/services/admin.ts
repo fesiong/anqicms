@@ -16,6 +16,22 @@ export async function getAdminInfo(params?: any, options?: { [key: string]: any 
   });
 }
 
+export async function getAdminLoginLogs(params?: any, options?: { [key: string]: any }) {
+  return get({
+    url: '/admin/logs/login',
+    params,
+    options,
+  });
+}
+
+export async function getAdminActionLogs(params?: any, options?: { [key: string]: any }) {
+  return get({
+    url: '/admin/logs/action',
+    params,
+    options,
+  });
+}
+
 export async function saveAdmin(body: any, options?: { [key: string]: any }) {
   return post({
     url: '/admin/detail',

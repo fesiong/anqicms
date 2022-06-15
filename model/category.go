@@ -33,6 +33,18 @@ type Category struct {
 	IsCurrent      bool           `json:"is_current" gorm:"-"`
 }
 
+func (category *Category) BeforeSave(tx *gorm.DB) error {
+	if len(category.Images) > 0 {
+		for i := range category.Images {
+			category.Images[i] = strings.TrimPrefix(category.Images[i], config.JsonData.System.BaseUrl)
+		}
+	}
+	if category.Logo != "" {
+		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.System.BaseUrl)
+	}
+	return nil
+}
+
 func (category *Category) AfterFind(tx *gorm.DB) error {
 	category.GetThumb()
 	return nil

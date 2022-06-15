@@ -2,12 +2,14 @@ package provider
 
 import (
 	"errors"
+	"github.com/PuerkitoBio/goquery"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"net/url"
 	"strings"
 )
 
@@ -96,7 +98,6 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	category.SeoTitle = req.SeoTitle
 	category.Keywords = req.Keywords
 	category.Description = req.Description
-	category.Content = req.Content
 	category.Type = req.Type
 	category.ModuleId = req.ModuleId
 	category.ParentId = req.ParentId
@@ -141,6 +142,78 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		}
 		category.UrlToken = newToken
 	}
+	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
+	//goquery
+	htmlR := strings.NewReader(req.Content)
+	doc, err := goquery.NewDocumentFromReader(htmlR)
+	if err == nil {
+		baseHost := ""
+		urls, err := url.Parse(config.JsonData.System.BaseUrl)
+		if err == nil {
+			baseHost = urls.Host
+		}
+
+		//提取描述
+		if category.Description == "" {
+			textRune := []rune(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
+			if len(textRune) > 150 {
+				category.Description = string(textRune[:150])
+			} else {
+				category.Description = string(textRune)
+			}
+		}
+		//下载远程图片
+		if config.JsonData.Content.RemoteDownload == 1 {
+			doc.Find("img").Each(func(i int, s *goquery.Selection) {
+				src, exists := s.Attr("src")
+				if exists {
+					alt := s.AttrOr("alt", "")
+					imgUrl, err := url.Parse(src)
+					if err == nil {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost {
+							//外链
+							attachment, err := DownloadRemoteImage(src, alt)
+							if err == nil {
+								s.SetAttr("src", attachment.Logo)
+							}
+						}
+					}
+				}
+			})
+		}
+		//提取缩略图
+		if len(category.Logo) == 0 {
+			imgSections := doc.Find("img")
+			if imgSections.Length() > 0 {
+				//获取第一条
+				category.Logo = imgSections.Eq(0).AttrOr("src", "")
+			}
+		}
+
+		//过滤外链
+		doc.Find("a").Each(func(i int, s *goquery.Selection) {
+			href, exists := s.Attr("href")
+			if exists {
+				aUrl, err := url.Parse(href)
+				if err == nil {
+					if aUrl.Host != "" && aUrl.Host != baseHost {
+						//外链
+						if config.JsonData.Content.FilterOutlink == 1 {
+							//过滤外链
+							s.Contents().Unwrap()
+						} else {
+							//增加nofollow
+							s.SetAttr("rel", "nofollow")
+						}
+					}
+				}
+			}
+		})
+
+		//返回最终可用的内容
+		req.Content, _ = doc.Find("body").Html()
+	}
+	category.Content = req.Content
 
 	err = category.Save(dao.DB)
 	if err != nil {

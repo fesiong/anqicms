@@ -47,6 +47,9 @@ export default class ImageList extends React.Component {
     tmpCategoryId: 0,
     currentAttach: {},
     detailVisible: false,
+
+    indeterminate: false,
+    selectedAll: false,
   };
 
   componentDidMount() {
@@ -105,6 +108,8 @@ export default class ImageList extends React.Component {
           message.info(res.msg);
         }
         this.setState({
+          indeterminate: false,
+          selectedAll: false,
           selectedIds: [],
         });
         this.hideAttachDetail();
@@ -114,8 +119,11 @@ export default class ImageList extends React.Component {
   };
 
   onChangeSelect = (e: any) => {
+    const {images} = this.state;
     this.setState({
       selectedIds: e,
+      indeterminate: e.length == 0 ? false : e.length < images.length ? true : false,
+      selectedAll: e.length == images.length ? true : false,
     });
   };
 
@@ -137,6 +145,10 @@ export default class ImageList extends React.Component {
       {
         categoryId: e,
         page: 1,
+
+        indeterminate: false,
+        selectedAll: false,
+        selectedIds: [],
       },
       () => {
         this.getImageList();
@@ -178,6 +190,11 @@ export default class ImageList extends React.Component {
         }).then(res => {
           message.info(res.msg)
           this.getImageList();
+          this.setState({
+            indeterminate: false,
+            selectedAll: false,
+            selectedIds: [],
+          });
         })
       }
     })
@@ -221,8 +238,29 @@ export default class ImageList extends React.Component {
     });
   }
 
+  onCheckAllChange = (e: any) => {
+    if (e.target.checked) {
+      const {images} = this.state;
+      let result = [];
+      for (let item of images) {
+        result.push(item.id);
+      }
+      this.setState({
+        selectedIds: result,
+        indeterminate: false,
+        selectedAll: true,
+      });
+    } else {
+      this.setState({
+        selectedIds: [],
+        indeterminate: false,
+        selectedAll: false,
+      });
+    }
+  }
+
   render() {
-    const { images, total, limit, categories, categoryId, fetched, selectedIds, currentAttach, detailVisible } = this.state;
+    const { images, total, limit, categories, categoryId, fetched, selectedIds, currentAttach, detailVisible, indeterminate, selectedAll } = this.state;
 
     return (
       <PageContainer>
@@ -232,6 +270,7 @@ export default class ImageList extends React.Component {
           extra={
             <div className="meta">
               <Space size={16}>
+                <Checkbox indeterminate={indeterminate} onChange={this.onCheckAllChange} checked={selectedAll}>全部选中</Checkbox>
                 <span>分类筛选</span>
                 <Select
                   defaultValue={categoryId}
@@ -282,7 +321,7 @@ export default class ImageList extends React.Component {
           }
         >
           <div className="body">
-            <Checkbox.Group onChange={this.onChangeSelect} style={{ display: 'block' }}>
+            <Checkbox.Group onChange={this.onChangeSelect} value={selectedIds} style={{ display: 'block' }}>
               {!fetched ? (
                 <Empty
                   className="empty-normal"

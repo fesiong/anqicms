@@ -141,6 +141,10 @@ func AddAdminLog(ctx iris.Context, logData string) {
 	}
 	if ctx != nil {
 		adminLog.AdminId = uint(ctx.Values().GetIntDefault("adminId", 0))
+		admin, err := GetAdminInfoById(adminLog.AdminId)
+		if err == nil {
+			adminLog.UserName = admin.UserName
+		}
 		adminLog.Ip = ctx.RemoteAddr()
 	}
 

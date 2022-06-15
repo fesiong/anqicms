@@ -1,20 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, message, Modal, Image, Avatar, Upload, Select, Space } from 'antd';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
-import ProForm, {
-  ModalForm,
-  ProFormRadio,
-  ProFormText,
-  ProFormTextArea,
-} from '@ant-design/pro-form';
-import { deleteArticleSetting, getArticleSetting, saveArticleSetting } from '@/services/archive';
 import ProList from '@ant-design/pro-list';
 import { getAttachmentCategories, getAttachments, uploadAttachment } from '@/services/attachment';
 import './index.less'
 
 export type AttachmentProps = {
   onSelect: (row?: any) => void;
-  visible: boolean;
+  onCancel?: (row?: any) => void;
+  visible?: boolean;
+  manual?: boolean;
 };
 
 const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
@@ -46,7 +41,11 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
 
   const useDetail = (row: any) => {
     props.onSelect(row);
-    setVisible(false);
+    visibleControl(false);
+  }
+
+  const visibleControl = (flag: boolean) => {
+    props.manual ? props.onCancel(flag) : setVisible(flag)
   }
 
   return (
@@ -54,7 +53,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
       <div
         style={{display: 'inline-block'}}
         onClick={() => {
-          setVisible(!visible);
+          visibleControl(!visible);
         }}
       >
         {props.children}
@@ -87,12 +86,12 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
                 </Upload>
               </Space>
         </div>}
-        visible={visible}
+        visible={props.manual ? props.visible : visible}
         onCancel={() => {
-          setVisible(false);
+          visibleControl(false);
         }}
         onOk={() => {
-          setVisible(false);
+          visibleControl(false);
         }}
       >
         <ProList<any>

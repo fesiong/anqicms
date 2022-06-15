@@ -1,5 +1,5 @@
 import { Space } from 'antd';
-import { GithubOutlined } from '@ant-design/icons';
+import { IeOutlined } from '@ant-design/icons';
 import React from 'react';
 import { useModel } from 'umi';
 import Avatar from './AvatarDropdown';
@@ -29,7 +29,7 @@ const GlobalHeaderRight: React.FC = () => {
           window.open('https://www.kandaoni.com/anqicms');
         }}
       >
-        <GithubOutlined />
+        <IeOutlined />
       </span>
       <Avatar menu />
     </Space>

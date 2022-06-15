@@ -172,3 +172,14 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 		"msg":  "分类已删除",
 	})
 }
+
+func ConvertImageToWebp(ctx iris.Context) {
+	go provider.StartConvertImageToWebp()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量转换图片为webp"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "转换任务已提交到后台运行，具体结束时间与实际图片数量有关。",
+	})
+}

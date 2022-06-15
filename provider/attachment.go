@@ -14,17 +14,18 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"math"
 	"mime/multipart"
 	"os"
 	"path"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -147,7 +148,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	}
 
 	tmpName := md5Str[8:24] + "." + imgType
-	filePath := strconv.Itoa(time.Now().Year()) + strconv.Itoa(int(time.Now().Month())) + "/" + strconv.Itoa(time.Now().Day()) + "/"
+	filePath := fmt.Sprintf("%4d%2d/%2d/", time.Now().Year(), time.Now().Month(), time.Now().Day())
 	if attachId > 0 {
 		filePath = filepath.Dir(attachment.FileLocation) + "/"
 		tmpName = filepath.Base(attachment.FileLocation)
@@ -262,7 +263,7 @@ func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, cate
 	}
 
 	tmpName := md5Str[8:24] + path.Ext(info.Filename)
-	filePath := strconv.Itoa(time.Now().Year()) + strconv.Itoa(int(time.Now().Month())) + "/" + strconv.Itoa(time.Now().Day()) + "/"
+	filePath := fmt.Sprintf("%4d%2d/%2d/", time.Now().Year(), time.Now().Month(), time.Now().Day())
 
 	//将文件写入本地
 	basePath := config.ExecPath + "public/uploads/"
@@ -295,7 +296,7 @@ func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, cate
 		FileLocation: filePath + tmpName,
 		FileSize:     info.Size,
 		FileMd5:      md5Str,
-		CategoryId: categoryId,
+		CategoryId:   categoryId,
 		Status:       1,
 	}
 	attachment.GetThumb()
@@ -400,7 +401,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			}
 
 			tmpName := md5Str[8:24] + "." + imgType
-			filePath := strconv.Itoa(time.Now().Year()) + strconv.Itoa(int(time.Now().Month())) + "/" + strconv.Itoa(time.Now().Day()) + "/"
+			filePath := fmt.Sprintf("%4d%2d/%2d/", time.Now().Year(), time.Now().Month(), time.Now().Day())
 
 			if fileName == "" {
 				fileName = strings.TrimSuffix(tmpName, path.Ext(tmpName))
@@ -568,7 +569,7 @@ func BuildThumb(attachment *model.Attachment) error {
 
 	img, imgType, err := image.Decode(f)
 	if err != nil {
-		f.Seek(0,0)
+		f.Seek(0, 0)
 		img, err = webp.Decode(f)
 		if err != nil {
 			fmt.Println(config.Lang("无法获取图片尺寸"))
@@ -680,4 +681,230 @@ func SaveAttachmentCategory(req *request.AttachmentCategory) (category *model.At
 		return
 	}
 	return
+}
+
+func StartConvertImageToWebp() {
+	// 根据attachment表读取每一张图片
+	type replaced struct {
+		From string
+		To   string
+	}
+	lastId := uint(0)
+	limit := 500
+	for {
+		var attaches []model.Attachment
+		dao.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&attaches)
+		if len(attaches) == 0 {
+			break
+		}
+		lastId = attaches[len(attaches)-1].Id
+		var results = make([]replaced, 0, len(attaches))
+		for _, v := range attaches {
+			if strings.HasSuffix(v.FileLocation, ".webp") {
+				continue
+			}
+			result := replaced{
+				From: "/uploads/" + v.FileLocation,
+			}
+			// 先转换图片
+			err := convertToWebp(&v)
+			if err == nil {
+				// 接着替换内容
+				// 替换 attachment file_location,上一步已经完成
+				result.To = "/uploads/" + v.FileLocation
+				results = append(results, result)
+			}
+		}
+		// 替换 category content,images,logo
+		var categories []model.Category
+		dao.DB.Find(&categories)
+		for _, v := range categories {
+			update := false
+			for x := range results {
+				if strings.HasSuffix(v.Logo, results[x].From) {
+					v.Logo = strings.ReplaceAll(v.Logo, results[x].From, results[x].To)
+					update = true
+				}
+				if len(v.Images) > 0 {
+					for y := range v.Images {
+						if strings.HasSuffix(v.Images[y], results[x].From) {
+							v.Images[y] = strings.ReplaceAll(v.Images[y], results[x].From, results[x].To)
+							update = true
+						}
+					}
+				}
+				if strings.Contains(v.Content, results[x].From) {
+					v.Content = strings.ReplaceAll(v.Content, results[x].From, results[x].To)
+					update = true
+				}
+			}
+			if update {
+				dao.DB.Updates(&v)
+			}
+		}
+		// 替换 archive logo,images
+		innerLastId := uint(0)
+		for {
+			var archives []model.Archive
+			dao.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&archives)
+			if len(archives) == 0 {
+				break
+			}
+			innerLastId = archives[len(archives)-1].Id
+			for _, v := range archives {
+				update := false
+				for x := range results {
+					if strings.HasSuffix(v.Logo, results[x].From) {
+						v.Logo = strings.ReplaceAll(v.Logo, results[x].From, results[x].To)
+						update = true
+					}
+					if len(v.Images) > 0 {
+						for y := range v.Images {
+							if strings.HasSuffix(v.Images[y], results[x].From) {
+								v.Images[y] = strings.ReplaceAll(v.Images[y], results[x].From, results[x].To)
+								update = true
+							}
+						}
+					}
+				}
+				if update {
+					dao.DB.Updates(&v)
+				}
+			}
+		}
+		// 替换 archive_data content
+		innerLastId = uint(0)
+		for {
+			var archiveData []model.ArchiveData
+			dao.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&archiveData)
+			if len(archiveData) == 0 {
+				break
+			}
+			innerLastId = archiveData[len(archiveData)-1].Id
+			for _, v := range archiveData {
+				update := false
+				for x := range results {
+					if strings.Contains(v.Content, results[x].From) {
+						v.Content = strings.ReplaceAll(v.Content, results[x].From, results[x].To)
+						update = true
+					}
+				}
+				if update {
+					dao.DB.Updates(&v)
+				}
+			}
+		}
+		// 替换 comment content
+		innerLastId = uint(0)
+		for {
+			var comments []model.Comment
+			dao.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&comments)
+			if len(comments) == 0 {
+				break
+			}
+			innerLastId = comments[len(comments)-1].Id
+			for _, v := range comments {
+				update := false
+				for x := range results {
+					if strings.Contains(v.Content, results[x].From) {
+						v.Content = strings.ReplaceAll(v.Content, results[x].From, results[x].To)
+						update = true
+					}
+				}
+				if update {
+					dao.DB.Updates(&v)
+				}
+			}
+		}
+		// 替换 material content
+		innerLastId = uint(0)
+		for {
+			var materials []model.Material
+			dao.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&materials)
+			if len(materials) == 0 {
+				break
+			}
+			innerLastId = materials[len(materials)-1].Id
+			for _, v := range materials {
+				update := false
+				for x := range results {
+					if strings.Contains(v.Content, results[x].From) {
+						v.Content = strings.ReplaceAll(v.Content, results[x].From, results[x].To)
+						update = true
+					}
+				}
+				if update {
+					dao.DB.Updates(&v)
+				}
+			}
+		}
+		// 替换配置
+		update := false
+		for x := range results {
+			if config.JsonData.System.SiteLogo == results[x].From {
+				config.JsonData.System.SiteLogo = results[x].To
+				update = true
+			}
+			if config.JsonData.Contact.Qrcode == results[x].From {
+				config.JsonData.Contact.Qrcode = results[x].To
+				update = true
+			}
+			if config.JsonData.Content.DefaultThumb == results[x].From {
+				config.JsonData.Content.DefaultThumb = results[x].To
+				update = true
+			}
+		}
+		if update {
+			config.WriteConfig()
+		}
+	}
+
+	log.Println("finished convert to webp")
+}
+
+func convertToWebp(attachment *model.Attachment) error {
+	basePath := config.ExecPath + "public/uploads/"
+	originPath := basePath + attachment.FileLocation
+
+	// 对原图处理
+	f, err := os.Open(originPath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	newFile := strings.TrimSuffix(attachment.FileLocation, filepath.Ext(attachment.FileLocation)) + ".webp"
+
+	img, _, err := image.Decode(f)
+	if err != nil {
+		fmt.Println(config.Lang("无法获取图片尺寸"))
+		return err
+	}
+
+	buff := &bytes.Buffer{}
+	_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+	err = ioutil.WriteFile(basePath+newFile, buff.Bytes(), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	// 回写
+	attachment.FileLocation = newFile
+	attachment.FileMd5 = library.Md5Bytes(buff.Bytes())
+	dao.DB.Save(attachment)
+
+	paths, fileName := filepath.Split(attachment.FileLocation)
+	thumbPath := basePath + paths + "thumb_" + fileName
+
+	buff.Reset()
+	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, 1)
+
+	_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+
+	err = ioutil.WriteFile(thumbPath, buff.Bytes(), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

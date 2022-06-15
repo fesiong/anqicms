@@ -26,7 +26,7 @@
                 {% system with name="SiteName" %}
             </div>
         </a>
-        {% navList navList %}
+        {% navList navList with typeId=1 %}
         <ul class="layui-nav layui-layout-left nav-list">
             {%- for item in navList %}
             <li class="layui-nav-item{% if item.IsCurrent %} layui-this{% endif %}">

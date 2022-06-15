@@ -6,11 +6,10 @@ import config from '@/services/config';
 import { getStore } from '@/utils/store';
 import { Boot } from '@wangeditor/editor';
 import {MaterialsMenuConf} from './material/menu';
-import {ImagesMenuConf} from './images/menu';
+import AttachmentSelect from '../attachment';
 
 // 注册。要在创建编辑器之前注册，且只能注册一次，不可重复注册。
 Boot.registerMenu(MaterialsMenuConf);
-Boot.registerMenu(ImagesMenuConf);
 
 export type WangEditorProps = {
   className: string;
@@ -18,22 +17,20 @@ export type WangEditorProps = {
   setContent: (html: any) => Promise<void>;
 };
 
+var editorInsertFn: (url: string, alt?: string, href?: string) => void;
+
 const WangEditor: React.FC<WangEditorProps> = (props) => {
   const [editor, setEditor] = useState<IDomEditor | null>(null);
+  const [attachVisible, setAttachVisible] = useState<boolean>(false);
+
   const editorConfig: Partial<IEditorConfig> = {};
   editorConfig.placeholder = '请输入内容...';
   editorConfig.MENU_CONF = {};
   editorConfig.MENU_CONF['uploadImage'] = {
-    server: config.baseUrl + '/attachment/upload',
-    allowedFileTypes: ['image/*'],
-    headers: {
-      admin: getStore('adminToken'),
-    },
-    customInsert(res: any, insertFn: any) {
-      res = res.data || {};
-      insertFn(res.src, res.title, null);
-    },
-    fieldName: 'file',
+    customBrowseAndUpload(insertFn: any) {
+      editorInsertFn = insertFn;
+      setAttachVisible(true);
+    }
   };
   editorConfig.MENU_CONF['uploadVideo'] = {
     server: config.baseUrl + '/attachment/upload',
@@ -47,6 +44,13 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
     },
     fieldName: 'file',
   };
+
+  const handleSelectImages = (e: any) => {
+    if (editorInsertFn) {
+      editorInsertFn(e.logo, e.file_name);
+    }
+    setAttachVisible(false);
+  }
 
   //const defaultContent = [{ type: 'paragraph', children: [{ text: '' }] }];
 
@@ -63,7 +67,7 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
     // 可配置 toolbarKeys: [...]
     insertKeys: {
       index: 0, // 自定义插入的位置
-      keys: ['material', 'attachment'],
+      keys: ['material'],
     },
   };
 
@@ -97,6 +101,7 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
         style={{ height: '500px' }}
       />
       <div style={{display: 'none'}} id='tmp-editor'></div>
+      <AttachmentSelect onSelect={(row) => {handleSelectImages(row)}} onCancel={(flag) => {setAttachVisible(flag)}} visible={attachVisible} manual={true} />
     </div>
   );
 };

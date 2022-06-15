@@ -63,7 +63,7 @@ func GetLastSendmailList() ([]*MailLog, error) {
 			// stop if we are at the beginning
 			break
 		}
-		if line == 20 {
+		if line == 100 {
 			break
 		}
 	}

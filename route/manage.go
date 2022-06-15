@@ -31,8 +31,8 @@ func manageRoute(app *iris.Application) {
 			user.Get("/detail", manageController.UserDetail)
 			user.Post("/detail", manageController.UserDetailForm)
 			user.Post("/logout", manageController.UserLogout)
-			user.Get("/login/log", manageController.GetAdminLoginLog)
-			user.Get("/log", manageController.GetAdminLog)
+			user.Get("/logs/login", manageController.GetAdminLoginLog)
+			user.Get("/logs/action", manageController.GetAdminLog)
 		}
 
 		setting := manage.Party("/setting", middleware.ParseAdminToken)
@@ -41,6 +41,7 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/content", manageController.SettingContent)
 			setting.Get("/index", manageController.SettingIndex)
 			setting.Get("/nav", manageController.SettingNav)
+			setting.Get("/nav/type", manageController.SettingNavType)
 			setting.Get("/contact", manageController.SettingContact)
 			setting.Get("/cache", manageController.SettingCache)
 
@@ -50,8 +51,11 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/index", manageController.SettingIndexForm)
 			setting.Post("/nav", manageController.SettingNavForm)
 			setting.Post("/nav/delete", manageController.SettingNavDelete)
+			setting.Post("/nav/type", manageController.SettingNavTypeForm)
+			setting.Post("/nav/type/delete", manageController.SettingNavTypeDelete)
 			setting.Post("/contact", manageController.SettingContactForm)
 			setting.Post("/cache", manageController.SettingCacheForm)
+			setting.Post("/convert/webp", manageController.ConvertImageToWebp)
 
 		}
 
@@ -135,6 +139,7 @@ func manageRoute(app *iris.Application) {
 		{
 			plugin.Get("/push", manageController.PluginPush)
 			plugin.Post("/push", manageController.PluginPushForm)
+			plugin.Get("/push/logs", manageController.PluginPushLogList)
 
 			plugin.Get("/robots", manageController.PluginRobots)
 			plugin.Post("/robots", manageController.PluginRobotsForm)

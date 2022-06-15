@@ -1,14 +1,17 @@
 package provider
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/parnurzeal/gorequest"
+	"io"
 	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 	"math"
 	"net/http"
 	"os"
@@ -19,6 +22,7 @@ import (
 
 // SitemapLimit 单个sitemap文件可包含的连接数
 const SitemapLimit = 50000
+const PushLogFile = "push"
 
 type bingData struct {
 	SiteUrl string   `json:"siteUrl"`
@@ -45,7 +49,7 @@ func PushBaidu(list []string) error {
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 
-	library.DebugLog("push-baidu", string(body))
+	logPushResult("baidu", string(body))
 	return nil
 }
 
@@ -65,8 +69,81 @@ func PushBing(list []string) error {
 		return errs[0]
 	}
 
-	library.DebugLog("push-bing", body)
+	logPushResult("bing", body)
 	return nil
+}
+
+func logPushResult(spider string, result string) {
+	pushLog := response.PushLog{
+		CreatedTime: time.Now().Unix(),
+		Result:      result,
+		Spider:      spider,
+	}
+
+	content, err := json.Marshal(pushLog)
+
+	if err == nil {
+		library.DebugLog(PushLogFile, string(content))
+	}
+}
+
+func GetLastPushList() ([]response.PushLog, error) {
+	var pushLogs []response.PushLog
+	//获取20条数据
+	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, PushLogFile)
+	logFile, err := os.Open(filePath)
+	if nil != err {
+		//打开失败
+		return pushLogs, nil
+	}
+	defer logFile.Close()
+
+	line := int64(1)
+	cursor := int64(0)
+	stat, err := logFile.Stat()
+	fileSize := stat.Size()
+	tmp := ""
+	for {
+		cursor -= 1
+		logFile.Seek(cursor, io.SeekEnd)
+
+		char := make([]byte, 1)
+		logFile.Read(char)
+
+		if cursor != -1 && (char[0] == 10 || char[0] == 13) {
+			//跳到一个新行，清空
+			line++
+			//解析
+			if tmp != "" {
+				var pushLog response.PushLog
+				err := json.Unmarshal([]byte(tmp), &pushLog)
+				if err == nil {
+					pushLogs = append(pushLogs, pushLog)
+				}
+			}
+			tmp = ""
+		}
+
+		tmp = fmt.Sprintf("%s%s", string(char), tmp)
+
+		if cursor == -fileSize {
+			// stop if we are at the beginning
+			break
+		}
+		if line == 100 {
+			break
+		}
+	}
+	//解析最后一条
+	if tmp != "" {
+		var pushLog response.PushLog
+		err := json.Unmarshal([]byte(tmp), &pushLog)
+		if err == nil {
+			pushLogs = append(pushLogs, pushLog)
+		}
+	}
+
+	return pushLogs, nil
 }
 
 func GetRobots() string {

@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"log"
 )
 
 type tagNavListNode struct {
@@ -19,7 +20,20 @@ func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	if dao.DB == nil {
 		return nil
 	}
-	navList, _ := provider.GetNavList(true)
+	args, err := parseArgs(node.args, ctx)
+	if err != nil {
+		return err
+	}
+
+	typeId := uint(1)
+	if args["typeId"] != nil {
+		typeId = uint(args["typeId"].Integer())
+	}
+
+	navList := provider.GetNavsFromCache(typeId)
+for _, v := range navList {
+	log.Printf("%#v", *v)
+}
 
 	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
 	if ok {

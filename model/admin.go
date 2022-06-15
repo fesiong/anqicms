@@ -26,9 +26,10 @@ type AdminLoginLog struct {
 
 type AdminLog struct {
 	Model
-	AdminId uint   `json:"admin_id" gorm:"column:admin_id;type:int(10) unsigned not null;default:0;index:idx_admin_id"`
-	Ip      string `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
-	Log     string `json:"log" gorm:"column:log;type:varchar(250) not null;default:''"`
+	AdminId  uint   `json:"admin_id" gorm:"column:admin_id;type:int(10) unsigned not null;default:0;index:idx_admin_id"`
+	Ip       string `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
+	Log      string `json:"log" gorm:"column:log;type:varchar(250) not null;default:''"`
+	UserName string `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:''"`
 }
 
 func (admin *Admin) CheckPassword(password string) bool {

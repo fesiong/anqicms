@@ -18,6 +18,24 @@ func PluginPush(ctx iris.Context) {
 	})
 }
 
+func PluginPushLogList(ctx iris.Context) {
+	//不需要分页，只显示最后20条
+	list, err := provider.GetLastPushList()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": list,
+	})
+}
+
 func PluginPushForm(ctx iris.Context) {
 	var req request.PluginPushConfig
 	if err := ctx.ReadJSON(&req); err != nil {

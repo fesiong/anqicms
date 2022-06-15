@@ -85,6 +85,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.AttachmentCategory{},
 		&model.Category{},
 		&model.Nav{},
+		&model.NavType{},
 		&model.Link{},
 		&model.Comment{},
 		&model.Anchor{},
@@ -155,6 +156,10 @@ func AutoMigrateDB(db *gorm.DB) error {
 			m.Migrate(db)
 		}
 	}
+	// 检查导航类别
+	navType := model.NavType{Title: "默认导航"}
+	navType.Id = 1
+	db.Model(&model.NavType{}).FirstOrCreate(&navType)
 
 	return nil
 }

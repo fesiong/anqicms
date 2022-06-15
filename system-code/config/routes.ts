@@ -321,7 +321,23 @@
     icon: 'user',
     path: '/account',
     hideInTop: true,
-    component: './account',
+    routes: [
+      {
+        path: '/account/index',
+        name: '管理员信息',
+        component: '@/pages/account/index',
+      },
+      {
+        path: '/account/logs/login',
+        name: '登录记录',
+        component: '@/pages/account/logs/login',
+      },
+      {
+        path: '/account/logs/action',
+        name: '操作记录',
+        component: '@/pages/account/logs/action',
+      },
+    ]
   },
   {
     path: '/',

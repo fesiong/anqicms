@@ -1,45 +1,41 @@
 import React, { useRef, useState } from 'react';
 import { Alert, Button, Card, Input, message, Modal, Space, Upload } from 'antd';
-import {
-  pluginDeleteMaterialCategory,
-  pluginGetMaterialCategories,
-  pluginSaveMaterialCategory,
-} from '@/services/plugin/material';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
+import { deleteSettingNavType, getSettingNavTypes, saveSettingNavType } from '@/services';
 
-export type MaterialCategoryProps = {
+export type navTypesProps = {
   onCancel: (flag?: boolean) => void;
 };
 
-const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
+const NavTypes: React.FC<navTypesProps> = (props) => {
   const actionRef = useRef<ActionType>();
   const [visible, setVisible] = useState<boolean>(false);
   const [editVisbile, setEditVisible] = useState<boolean>(false);
-  const [editingCategory, setEditingCategory] = useState<any>({});
+  const [editingType, setEditingType] = useState<any>({});
   const [editingInput, setEditingInput] = useState<string>('');
 
-  const handleAddCategory = () => {
-    setEditingCategory({});
+  const handleAddType = () => {
+    setEditingType({});
     setEditingInput('');
     setEditVisible(true);
   };
 
-  const handleEditCategory = (record: any) => {
-    setEditingCategory(record);
+  const handleEditType = (record: any) => {
+    setEditingType(record);
     setEditingInput(record.title);
     setEditVisible(true);
   };
 
   const handleRemove = async (record: any) => {
-    let res = await pluginDeleteMaterialCategory(record);
+    let res = await deleteSettingNavType(record);
 
     message.info(res.msg);
     actionRef.current?.reloadAndRest?.();
   };
 
-  const handleSaveCategory = () => {
-    pluginSaveMaterialCategory({
-      id: editingCategory.id,
+  const handleSaveType = () => {
+    saveSettingNavType({
+      id: editingType.id,
       title: editingInput,
     })
       .then((res) => {
@@ -63,13 +59,8 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
       width: 60,
     },
     {
-      title: '板块名称',
+      title: '导航名称',
       dataIndex: 'title',
-    },
-    {
-      title: '素材数量',
-      dataIndex: 'material_count',
-      width: 80,
     },
     {
       title: '操作',
@@ -81,7 +72,7 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
           <a
             key="edit"
             onClick={() => {
-              handleEditCategory(record);
+              handleEditType(record);
             }}
           >
             编辑
@@ -104,6 +95,7 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
   return (
     <>
       <div
+        style={{display: 'inline-block'}}
         onClick={() => {
           setVisible(!visible);
         }}
@@ -116,10 +108,10 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
           <Button
             type="primary"
             onClick={() => {
-              handleAddCategory();
+              handleAddType();
             }}
           >
-            新增板块
+            新增导航类别
           </Button>
         }
         width={600}
@@ -131,14 +123,13 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
       >
         <div style={{ marginTop: '20px', marginBottom: '20px' }}>
           <ProTable<any>
-            headerTitle="内容素材类别管理"
             actionRef={actionRef}
             rowKey="id"
             search={false}
             pagination={false}
             toolBarRender={false}
             request={(params, sort) => {
-              return pluginGetMaterialCategories(params);
+              return getSettingNavTypes(params);
             }}
             columns={columns}
           />
@@ -146,19 +137,19 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
       </Modal>
       <Modal
         visible={editVisbile}
-        title={editingCategory.id ? '重命名板块：' + editingCategory.title : '新增板块'}
+        title={editingType.id ? '重命名类别：' + editingType.title : '新增导航类别'}
         width={480}
         zIndex={2000}
         okText="确认"
         cancelText="取消"
         maskClosable={false}
-        onOk={handleSaveCategory}
+        onOk={handleSaveType}
         onCancel={() => {
           setEditVisible(false);
         }}
       >
         <div style={{ marginTop: '20px', marginBottom: '20px' }}>
-          <p>请填写板块名称: </p>
+          <p>请填写名称: </p>
           <Input
             size="large"
             value={editingInput}
@@ -172,4 +163,4 @@ const MaterialCategory: React.FC<MaterialCategoryProps> = (props) => {
   );
 };
 
-export default MaterialCategory;
+export default NavTypes;

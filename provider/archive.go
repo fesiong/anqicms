@@ -268,6 +268,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		}
 	}
 
+	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
 	//goquery
 	htmlR := strings.NewReader(req.Content)
 	doc, err := goquery.NewDocumentFromReader(htmlR)
@@ -280,7 +281,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 
 		//提取描述
 		if req.Description == "" {
-			textRune := []rune(strings.TrimSpace(doc.Text()))
+			textRune := []rune(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
 			if len(textRune) > 150 {
 				archive.Description = string(textRune[:150])
 			} else {

@@ -18,6 +18,13 @@ func GetUrl(match string, data interface{}, page int) string {
     case "archive":
         uri = rewritePattern.Archive
         item, ok := data.(*model.Archive)
+        if !ok {
+            item2, ok2 := data.(model.Archive)
+            if ok2 {
+                item = &item2
+                ok = ok2
+            }
+        }
         if ok && item != nil {
             if item.FixedLink != "" {
                 uri =  item.FixedLink
@@ -57,6 +64,13 @@ func GetUrl(match string, data interface{}, page int) string {
     case "archiveIndex":
         uri = rewritePattern.ArchiveIndex
         item, ok := data.(*model.Module)
+        if !ok {
+            item2, ok2 := data.(model.Module)
+            if ok2 {
+                item = &item2
+                ok = ok2
+            }
+        }
         if ok && item != nil {
             for _, v := range rewritePattern.ArchiveIndexTags {
                 // 模型首页，只支持module属性
@@ -68,6 +82,13 @@ func GetUrl(match string, data interface{}, page int) string {
     case "category":
         uri = rewritePattern.Category
         item, ok := data.(*model.Category)
+        if !ok {
+            item2, ok2 := data.(model.Category)
+            if ok2 {
+                item = &item2
+                ok = ok2
+            }
+        }
         if ok && item != nil {
             //自动修正
             if item.Type == config.CategoryTypePage {
@@ -96,6 +117,13 @@ func GetUrl(match string, data interface{}, page int) string {
     case "page":
         uri = rewritePattern.Page
         item, ok := data.(*model.Category)
+        if !ok {
+            item2, ok2 := data.(model.Category)
+            if ok2 {
+                item = &item2
+                ok = ok2
+            }
+        }
         if ok && item != nil {
             for _, v := range rewritePattern.PageTags {
                 if v == "id" {
@@ -112,6 +140,13 @@ func GetUrl(match string, data interface{}, page int) string {
     case "nav":
         uri = ""
         item, ok := data.(*model.Nav)
+        if !ok {
+            item2, ok2 := data.(model.Nav)
+            if ok2 {
+                item = &item2
+                ok = ok2
+            }
+        }
         if ok {
             if item.NavType == model.NavTypeSystem {
                 if item.PageId == 0 {
@@ -137,6 +172,13 @@ func GetUrl(match string, data interface{}, page int) string {
     case "tag":
         uri = rewritePattern.Tag
         item, ok := data.(*model.Tag)
+        if !ok {
+            item2, ok2 := data.(model.Tag)
+            if ok2 {
+                item = &item2
+                ok = ok2
+            }
+        }
         if ok && item != nil {
             for _, v := range rewritePattern.TagTags {
                 if v == "id" {

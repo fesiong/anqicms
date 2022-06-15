@@ -91,6 +91,9 @@ export default class ArchiveForm extends React.Component {
   };
 
   componentWillUnmount() {
+    if (!this.state.archive.id) {
+      setStore('tmpArchive', this.unsaveContent);
+    }
     window.removeEventListener('beforeunload', this.beforeunload);
   }
 
@@ -265,11 +268,22 @@ export default class ArchiveForm extends React.Component {
     }
   };
 
+  handleKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key === "s" && (event.ctrlKey || event.metaKey)) {
+
+      let values = this.formRef.current?.getFieldsValue();
+      // 自动保存
+      this.onSubmit(values);
+
+      event.preventDefault();
+    }
+  };
+
   render() {
     const { archive, content, module, fetched, keywordsVisible, searchedTags } = this.state;
     return (
       <PageContainer title={(archive.id > 0 ? '修改' : '添加') + '文档'}>
-        <Card>
+        <Card onKeyDown={this.handleKeyDown}>
           {fetched && (
             <ProForm
               initialValues={archive}

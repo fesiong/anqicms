@@ -8,10 +8,10 @@ import ProForm, {
   ProFormGroup,
 } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Card, message, Upload } from 'antd';
+import { Button, Card, message, Modal, Upload } from 'antd';
 import { uploadAttachment } from '@/services/attachment';
 import { PlusOutlined } from '@ant-design/icons';
-import { getSettingContent, saveSettingContent } from '@/services/setting';
+import { convertImagetoWebp, getSettingContent, saveSettingContent } from '@/services/setting';
 import AttachmentSelect from '@/components/attachment';
 
 const SettingContactFrom: React.FC<any> = (props) => {
@@ -35,6 +35,18 @@ const SettingContactFrom: React.FC<any> = (props) => {
     setDefaultThumb(row.logo);
     message.success('上传完成');
   };
+
+  const handleConvertToWebp = () => {
+    Modal.confirm({
+      title: '确定要将图库中不是webp的图片转成webp吗？',
+      content: '该功能可能会因为替换不彻底而导致部分页面引用的旧图片地址显示不正常，该部分需要手工去发现并修复。',
+      onOk: () => {
+        convertImagetoWebp({}).then(res => {
+          message.info(res.msg);
+        })
+      }
+    })
+  }
 
   const onSubmit = async (values: any) => {
     values.default_thumb = defaultThumb;
@@ -101,7 +113,10 @@ const SettingContactFrom: React.FC<any> = (props) => {
                   label: '启用',
                 },
               ]}
-              extra='如果你希望上传的jpg、png等图片，都全部转为webp图片格式(可以减少体积),则选择启用。只对修改后的上传的图片生效。'
+              extra={<div>
+                <span>如果你希望上传的jpg、png等图片，都全部转为webp图片格式(可以减少体积),则选择启用。只对修改后的上传的图片生效。</span>
+                <span>如果你想将以上传的图片转为webp，请点击&nbsp;&nbsp;<Button size='small' onClick={handleConvertToWebp}>使用webp转换工具</Button></span>
+              </div>}
             />
             <ProFormRadio.Group
               name="resize_image"

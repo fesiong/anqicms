@@ -45,3 +45,9 @@ type ChartData struct {
 	Label string `json:"label"`
 	Value int    `json:"value"`
 }
+
+type PushLog struct {
+	CreatedTime int64  `json:"created_time"`
+	Spider      string `json:"spider"`
+	Result      string `json:"result"`
+}

@@ -46,6 +46,15 @@ type ArchiveData struct {
 	Content string `json:"content" gorm:"column:content;type:longtext default null"`
 }
 
+func (a *Archive) BeforeSave(tx *gorm.DB) error {
+	if len(a.Images) > 0 {
+		for i := range a.Images {
+			a.Images[i] = strings.TrimPrefix(a.Images[i], config.JsonData.System.BaseUrl)
+		}
+	}
+	return nil
+}
+
 func (a *Archive) AfterFind(tx *gorm.DB) error {
 	a.GetThumb()
 	return nil

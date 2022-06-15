@@ -5,9 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"io/ioutil"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"os"
@@ -36,8 +34,8 @@ func SettingSystem(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"system":         system,
-			"languages":      languages,
+			"system":    system,
+			"languages": languages,
 		},
 	})
 }
@@ -230,105 +228,6 @@ func SettingIndexForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
-	})
-}
-
-func SettingNav(ctx iris.Context) {
-	navList, _ := provider.GetNavList(false)
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"data": navList,
-	})
-}
-
-func SettingNavForm(ctx iris.Context) {
-	var req request.NavConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	var nav *model.Nav
-	var err error
-	if req.Id > 0 {
-		nav, err = provider.GetNavById(req.Id)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  err.Error(),
-			})
-			return
-		}
-	} else {
-		nav = &model.Nav{
-			Status: 1,
-		}
-	}
-
-	nav.Title = req.Title
-	nav.SubTitle = req.SubTitle
-	nav.Description = req.Description
-	nav.ParentId = req.ParentId
-	nav.NavType = req.NavType
-	nav.PageId = req.PageId
-	nav.Link = req.Link
-	nav.Sort = req.Sort
-	nav.Status = 1
-
-	err = nav.Save(dao.DB)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新导航信息：%d => %s", nav.Id, nav.Title))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "配置已更新",
-	})
-}
-
-func SettingNavDelete(ctx iris.Context) {
-	var req request.NavConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-	nav, err := provider.GetNavById(req.Id)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	err = nav.Delete(dao.DB)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除导航信息：%d => %s", nav.Id, nav.Title))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "导航已删除",
 	})
 }
 

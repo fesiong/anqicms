@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { LogoutOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
+import { GroupOutlined, LogoutOutlined, ProfileOutlined, SettingOutlined, UserOutlined } from '@ant-design/icons';
 import { Avatar, Menu, Spin } from 'antd';
 import { history, useModel } from 'umi';
 import { stringify } from 'querystring';
@@ -40,7 +40,7 @@ const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ menu }) => {
         return;
       }
       if (!key) {
-        history.push(`/account`);
+        history.push(`/account/index`);
         return
       }
       history.push(`/account/${key}`);
@@ -78,7 +78,14 @@ const AvatarDropdown: React.FC<GlobalHeaderRightProps> = ({ menu }) => {
           管理员信息
         </Menu.Item>
       )}
-
+      <Menu.Item key="logs/login">
+      <GroupOutlined />
+        登录记录
+      </Menu.Item>
+      <Menu.Item key="logs/action">
+      <ProfileOutlined />
+        操作记录
+      </Menu.Item>
       {menu && <Menu.Divider />}
 
       <Menu.Item key="logout">

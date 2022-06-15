@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"net/url"
 	"strings"
 )
 
@@ -62,10 +63,65 @@ func SaveMaterial(req *request.PluginMaterial) (material *model.Material, err er
 	material.Title = req.Title
 	material.Status = 1
 	material.CategoryId = req.CategoryId
-	material.Content = req.Content
 	material.AutoUpdate = req.AutoUpdate
 	md5Str := library.Md5(material.Content)
 	material.Md5 = md5Str
+
+	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
+	//goquery
+	htmlR := strings.NewReader(req.Content)
+	doc, err := goquery.NewDocumentFromReader(htmlR)
+	if err == nil {
+		baseHost := ""
+		urls, err := url.Parse(config.JsonData.System.BaseUrl)
+		if err == nil {
+			baseHost = urls.Host
+		}
+
+		//下载远程图片
+		if config.JsonData.Content.RemoteDownload == 1 {
+			doc.Find("img").Each(func(i int, s *goquery.Selection) {
+				src, exists := s.Attr("src")
+				if exists {
+					alt := s.AttrOr("alt", "")
+					imgUrl, err := url.Parse(src)
+					if err == nil {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost {
+							//外链
+							attachment, err := DownloadRemoteImage(src, alt)
+							if err == nil {
+								s.SetAttr("src", attachment.Logo)
+							}
+						}
+					}
+				}
+			})
+		}
+
+		//过滤外链
+		doc.Find("a").Each(func(i int, s *goquery.Selection) {
+			href, exists := s.Attr("href")
+			if exists {
+				aUrl, err := url.Parse(href)
+				if err == nil {
+					if aUrl.Host != "" && aUrl.Host != baseHost {
+						//外链
+						if config.JsonData.Content.FilterOutlink == 1 {
+							//过滤外链
+							s.Contents().Unwrap()
+						} else {
+							//增加nofollow
+							s.SetAttr("rel", "nofollow")
+						}
+					}
+				}
+			}
+		})
+
+		//返回最终可用的内容
+		req.Content, _ = doc.Find("body").Html()
+	}
+	material.Content = req.Content
 
 	err = dao.DB.Save(material).Error
 
