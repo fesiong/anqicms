@@ -43,7 +43,7 @@ func initPath() {
 	ExecPath, _ = os.Executable()
 	baseName := filepath.Base(ExecPath)
 	ExecPath = filepath.Dir(ExecPath)
-	if strings.Contains(baseName, "go_build") {
+	if strings.Contains(baseName, "go_build") || strings.Contains(baseName, "Test") {
 		ExecPath, _ = os.Getwd()
 	}
 	pathArray := strings.Split(ExecPath, "/")

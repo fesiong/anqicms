@@ -242,24 +242,22 @@ func VersionUpgrade(ctx iris.Context) {
 		})
 		return
 	}
-	defer zipReader.Close()
+	defer func() {
+		zipReader.Close()
+
+		// 删除压缩包
+		os.Remove(tmpFile)
+	}()
 
 	needChange := false
 	var errorFiles []string
 	path, _ := os.Executable()
 	exec := filepath.Base(path)
 
+	execPath := filepath.Join(config.ExecPath, exec)
+	tmpExecPath := execPath + ".tmp"
+
 	for _, f := range zipReader.File {
-		reader, err := f.Open()
-		if err != nil {
-			continue
-		}
-		data, err := io.ReadAll(reader)
-		if err != nil {
-			reader.Close()
-			continue
-		}
-		reader.Close()
 		if f.FileInfo().IsDir() {
 			continue
 		}
@@ -267,24 +265,39 @@ func VersionUpgrade(ctx iris.Context) {
 		if strings.Contains(f.Name, "static/") || strings.Contains(f.Name, "template/") {
 			continue
 		}
+		reader, err := f.Open()
+		if err != nil {
+			continue
+		}
 		realName := filepath.Join(config.ExecPath, f.Name)
 		if f.Name == "anqicms" || f.Name == "anqicms.exe" {
-			realName = filepath.Join(config.ExecPath, exec)
+			// 先以临时文件存储
+			realName = tmpExecPath
 		}
-		os.MkdirAll(filepath.Dir(realName), os.ModePerm)
-		err = ioutil.WriteFile(realName, data, os.ModePerm)
+		_ = os.MkdirAll(filepath.Dir(realName), os.ModePerm)
+		newFile, err := os.Create(realName)
 		if err != nil {
-			if f.Name == "anqicms" || f.Name == "anqicms.exe" {
-				needChange = true
-				// 重命名
-				realName = realName + ".tmp"
-				err = ioutil.WriteFile(realName, data, os.ModePerm)
-				if err != nil {
-					errorFiles = append(errorFiles, realName)
-				}
-			} else {
-				errorFiles = append(errorFiles, realName)
-			}
+			reader.Close()
+			errorFiles = append(errorFiles, realName)
+			continue
+		}
+		_, err = io.Copy(newFile, reader)
+		if err != nil {
+			reader.Close()
+			errorFiles = append(errorFiles, realName)
+			continue
+		}
+
+		reader.Close()
+		_ = newFile.Close()
+	}
+	// 尝试更换主程序
+	err = os.Remove(execPath)
+	if err == nil {
+		// 成功删除，则重命名
+		err = os.Rename(tmpExecPath, execPath)
+		if err == nil {
+			needChange = true
 		}
 	}
 	if len(errorFiles) > 0 {
@@ -296,10 +309,11 @@ func VersionUpgrade(ctx iris.Context) {
 	}
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, config.Version))
-	msg := "已升级版本，请手动重启软件。"
-	if needChange {
-		msg += exec + " 新文件已被命名为 " + exec + ".tmp ，请先移除旧文件，并将 " + exec + ".tmp 改名把 .tmp 去掉"
+	msg := "已升级版本。"
+	if !needChange {
+		msg += fmt.Sprintf("%s 更新的文件已被命名为 %s.tmp ，请先移除旧文件 %s，并将 %s.tmp 改名重命名为 %s", exec, exec, exec, exec, exec)
 	}
+	msg += "，请手动重启软件。"
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
