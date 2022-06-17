@@ -53,20 +53,28 @@ func ArchiveDetail(ctx iris.Context) {
 	}
 	// 默认模板规则：表名 / index,list, detail .html
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
-	tplName := module.TableName + "/detail.html"
-	tplName2 := module.TableName + "_detail.html"
-	if ViewExists(ctx, tplName2) {
-		tplName = tplName2
+	var tplName string
+	if archive.Template != "" {
+		tplName = archive.Template
+	} else {
+		category := provider.GetCategoryFromCache(archive.CategoryId)
+		if category != nil {
+			categoryTemplate := provider.GetCategoryTemplate(category)
+			if categoryTemplate != nil {
+				tplName = categoryTemplate.DetailTemplate
+			}
+		}
 	}
-	category := provider.GetCategoryFromCache(archive.CategoryId)
-	if category != nil {
-		categoryTemplate := provider.GetCategoryTemplate(category)
-		if categoryTemplate != nil {
-			tplName = categoryTemplate.DetailTemplate
+	if tplName == "" {
+		tplName = module.TableName + "/detail.html"
+		tplName2 := module.TableName + "_detail.html"
+		if ViewExists(ctx, tplName2) {
+			tplName = tplName2
 		}
-		if !strings.HasSuffix(tplName, ".html") {
-			tplName += ".html"
-		}
+	}
+
+	if !strings.HasSuffix(tplName, ".html") {
+		tplName += ".html"
 	}
 
 	tmpTpl := fmt.Sprintf("%s/detail-%d.html", module.TableName, archive.Id)

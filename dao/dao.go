@@ -6,7 +6,6 @@ import (
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
-	"log"
 	"os"
 	"strings"
 )
@@ -17,7 +16,6 @@ var OriginDB *gorm.DB
 var err error
 
 func init() {
-	log.Printf("%#v", config.JsonData.Mysql)
 	if config.JsonData.Mysql.Database != "" {
 		err := InitDB()
 		if err != nil {

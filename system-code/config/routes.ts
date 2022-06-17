@@ -298,25 +298,6 @@
     ],
   },
   {
-    path: '/tool/upgrade',
-    icon: 'CloudSync',
-    name: '系统升级',
-    hideInTop: true,
-    component: '@/pages/tool/upgrade',
-  },
-  {
-    path: '/tool/cache',
-    name: '更新缓存',
-    hideInMenu: true,
-    component: '@/pages/tool/cache',
-  },
-  {
-    path: '/preview',
-    link: 'preview',
-    name: '预览',
-    hideInMenu: true,
-  },
-  {
     name: '管理员',
     icon: 'user',
     path: '/account',
@@ -338,6 +319,25 @@
         component: '@/pages/account/logs/action',
       },
     ]
+  },
+  {
+    path: '/tool/upgrade',
+    icon: 'CloudSync',
+    name: '系统升级',
+    hideInTop: true,
+    component: '@/pages/tool/upgrade',
+  },
+  {
+    path: '/tool/cache',
+    name: '更新缓存',
+    hideInMenu: true,
+    component: '@/pages/tool/cache',
+  },
+  {
+    path: '/preview',
+    link: 'preview',
+    name: '预览',
+    hideInMenu: true,
   },
   {
     path: '/',

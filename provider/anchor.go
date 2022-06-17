@@ -98,10 +98,10 @@ func ImportAnchors(file multipart.File, info *multipart.FileHeader) (string, err
 		if err != nil {
 			//表示不存在
 			anchor = &model.Anchor{
-				Title: title,
-				Status:       1,
+				Title:  title,
+				Status: 1,
 			}
-			total ++
+			total++
 		}
 		anchor.Link = strings.TrimPrefix(values[1], config.JsonData.System.BaseUrl)
 		anchor.Weight, _ = strconv.Atoi(values[2])
@@ -282,15 +282,15 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 	}
 
 	//最大可以替换的数量
-	maxAnchorNum := int(math.Ceil(float64(contentLen)/float64(config.JsonData.PluginAnchor.AnchorDensity)))
+	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(config.JsonData.PluginAnchor.AnchorDensity)))
 
 	type replaceType struct {
-		Key string
+		Key   string
 		Value string
 	}
 
 	existsKeywords := map[string]bool{}
-	existsLinks :=  map[string]bool{}
+	existsLinks := map[string]bool{}
 
 	var replacedMatch []*replaceType
 	numCount := 0
@@ -410,7 +410,7 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 	}
 
 	//关键词替换完毕，将原来替换的重新替换回去，需要倒序
-	for i := len(replacedMatch)-1; i>= 0; i-- {
+	for i := len(replacedMatch) - 1; i >= 0; i-- {
 		content = strings.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)
 	}
 
@@ -423,7 +423,7 @@ func ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link 
 	return content
 }
 
-func AutoInsertAnchor(keywords, link string) {
+func AutoInsertAnchor(archiveId uint, keywords, link string) {
 	link = strings.TrimPrefix(link, config.JsonData.System.BaseUrl)
 	keywords = strings.ReplaceAll(keywords, "，", ",")
 	keywords = strings.ReplaceAll(keywords, " ", ",")
@@ -439,9 +439,10 @@ func AutoInsertAnchor(keywords, link string) {
 		if err != nil {
 			//插入新的
 			anchor := &model.Anchor{
-				Title:        v,
-				Link:         link,
-				Status:       1,
+				Title:     v,
+				Link:      link,
+				ArchiveId: archiveId,
+				Status:    1,
 			}
 			dao.DB.Save(anchor)
 		}

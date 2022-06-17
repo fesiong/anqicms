@@ -7,7 +7,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"log"
 )
 
 type tagNavListNode struct {
@@ -31,9 +30,6 @@ func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	}
 
 	navList := provider.GetNavsFromCache(typeId)
-for _, v := range navList {
-	log.Printf("%#v", *v)
-}
 
 	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
 	if ok {

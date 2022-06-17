@@ -148,7 +148,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	}
 
 	tmpName := md5Str[8:24] + "." + imgType
-	filePath := fmt.Sprintf("%4d%2d/%2d/", time.Now().Year(), time.Now().Month(), time.Now().Day())
+	filePath := time.Now().Format("200601/02/")
 	if attachId > 0 {
 		filePath = filepath.Dir(attachment.FileLocation) + "/"
 		tmpName = filepath.Base(attachment.FileLocation)
@@ -263,7 +263,7 @@ func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, cate
 	}
 
 	tmpName := md5Str[8:24] + path.Ext(info.Filename)
-	filePath := fmt.Sprintf("%4d%2d/%2d/", time.Now().Year(), time.Now().Month(), time.Now().Day())
+	filePath := time.Now().Format("200601/02/")
 
 	//将文件写入本地
 	basePath := config.ExecPath + "public/uploads/"
@@ -401,7 +401,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			}
 
 			tmpName := md5Str[8:24] + "." + imgType
-			filePath := fmt.Sprintf("%4d%2d/%2d/", time.Now().Year(), time.Now().Month(), time.Now().Day())
+			filePath := time.Now().Format("200601/02/")
 
 			if fileName == "" {
 				fileName = strings.TrimSuffix(tmpName, path.Ext(tmpName))

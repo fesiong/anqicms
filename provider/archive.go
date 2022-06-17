@@ -400,7 +400,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	//提取锚文本
 	if config.JsonData.PluginAnchor.KeywordWay == 1 && archive.Status == config.ContentStatusOK {
 
-		go AutoInsertAnchor(archive.Keywords, link)
+		go AutoInsertAnchor(archive.Id, archive.Keywords, link)
 	}
 
 	// 缓存清理
@@ -506,7 +506,7 @@ func PublishPlanArchives() {
 
 			//提取锚文本
 			if config.JsonData.PluginAnchor.KeywordWay == 1 {
-				go AutoInsertAnchor(archive.Keywords, link)
+				go AutoInsertAnchor(archive.Id, archive.Keywords, link)
 			}
 			go PushArchive(link)
 			if config.JsonData.PluginSitemap.AutoBuild == 1 {
