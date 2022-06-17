@@ -308,7 +308,7 @@ func VersionUpgrade(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, config.Version))
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, lastVersion.Version))
 	msg := "已升级版本。"
 	if !needChange {
 		msg += fmt.Sprintf("%s 更新的文件已被命名为 %s.tmp ，请先移除旧文件 %s，并将 %s.tmp 改名重命名为 %s", exec, exec, exec, exec, exec)
