@@ -240,7 +240,7 @@ const ModuleForm: React.FC<ModuleFormProps> = (props) => {
                 defaultValue={setting.title_name}
                 onChange={(e: any) => {handleChangeInput('title_name', e)}}
               />
-              <div className="text-muted">仅支持英文小写字母。</div>
+              <div className="text-muted">显示在发布文档的时候的标题提示位置。</div>
             </Col>
           </Row>
           </div>

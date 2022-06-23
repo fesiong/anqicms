@@ -118,6 +118,7 @@ func CategoryDelete(ctx iris.Context) {
 	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档分类：%d => %s", category.Id, category.Title))
 
 	provider.DeleteCacheCategories()
+	provider.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

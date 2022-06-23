@@ -1,4 +1,4 @@
-import { Button, message, Input, Drawer, Modal, Space } from 'antd';
+import { Button, message, Input, Drawer, Modal, Space, Alert } from 'antd';
 import React, { useState, useRef, useEffect } from 'react';
 import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
@@ -53,8 +53,9 @@ const PluginSendmail: React.FC = () => {
 
   return (
     <PageContainer>
+      <Alert className='mb-normal' message='邮件提醒可以将网站的留言通过邮件发送到你的邮箱里。' />
       <ProTable<any>
-        headerTitle="留言邮件提醒"
+        headerTitle="邮件提醒"
         rowKey="id"
         actionRef={actionRef}
         search={false}

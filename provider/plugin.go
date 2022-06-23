@@ -14,6 +14,7 @@ import (
 	"kandaoni.com/anqicms/response"
 	"math"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -27,6 +28,13 @@ const PushLogFile = "push"
 type bingData struct {
 	SiteUrl string   `json:"siteUrl"`
 	UrlList []string `json:"urlList"`
+}
+
+type bingData2 struct {
+	Host        string   `json:"host"`
+	Key         string   `json:"key"`
+	KeyLocation string   `json:"keyLocation"`
+	UrlList     []string `json:"urlList"`
 }
 
 func PushArchive(link string) {
@@ -49,7 +57,7 @@ func PushBaidu(list []string) error {
 	defer resp.Body.Close()
 	body, _ := ioutil.ReadAll(resp.Body)
 
-	logPushResult("baidu", string(body))
+	logPushResult("baidu", fmt.Sprintf("%v, %s", list, string(body)))
 	return nil
 }
 
@@ -58,18 +66,57 @@ func PushBing(list []string) error {
 	if bingApi == "" {
 		return errors.New("没有配置必应主动推送")
 	}
-	postData := bingData{
-		SiteUrl: config.JsonData.System.BaseUrl,
-		UrlList: list,
+
+	// bing 推送有2种方式，一种是传统的api，另一种是 IndexNow
+	if strings.HasPrefix(bingApi, "https://www.bing.com/indexnow") {
+		baseUrl, err := url.Parse(config.JsonData.System.BaseUrl)
+		if err != nil {
+			return err
+		}
+		// IndexNow
+		// 验证以下是否存在txt
+		parsedUrl, err := url.Parse(bingApi)
+		if err != nil {
+			return err
+		}
+		apiKey := parsedUrl.Query().Get("key")
+
+		txtFile := config.ExecPath + "public/" + apiKey + ".txt"
+		_, err = os.Stat(txtFile)
+		if err != nil && os.IsNotExist(err) {
+			// 生成一个
+			_ = ioutil.WriteFile(txtFile, []byte(apiKey), os.ModePerm)
+		}
+		// 开始推送
+		postData := bingData2{
+			Host: baseUrl.Host,
+			Key: apiKey,
+			KeyLocation: config.JsonData.System.BaseUrl + "/" + apiKey + ".txt",
+			UrlList: list,
+		}
+		resp, body, errs := gorequest.New().Timeout(10*time.Second).Set("Content-Type", "application/json; charset=utf-8").Post(bingApi).Send(postData).End()
+		if errs != nil {
+			fmt.Println(errs)
+			return errs[0]
+		}
+		if resp.StatusCode == 200 {
+			body = "URL submitted successfully"
+		}
+		logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
+	} else {
+		postData := bingData{
+			SiteUrl: config.JsonData.System.BaseUrl,
+			UrlList: list,
+		}
+
+		_, body, errs := gorequest.New().Timeout(10*time.Second).Set("Content-Type", "application/json; charset=utf-8").Post(bingApi).Send(postData).End()
+		if errs != nil {
+			fmt.Println(errs)
+			return errs[0]
+		}
+		logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
 	}
 
-	_, body, errs := gorequest.New().Timeout(10*time.Second).Set("Content-Type", "application/json; charset=utf-8").Post(bingApi).Send(postData).End()
-	if errs != nil {
-		fmt.Println(errs)
-		return errs[0]
-	}
-
-	logPushResult("bing", body)
 	return nil
 }
 

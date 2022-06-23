@@ -450,6 +450,7 @@ export default class ArchiveForm extends React.Component {
                   <Card className='aside-card' size='small' title='所属分类'>
                   <ProFormSelect
                     //label="所属分类"
+                    showSearch
                     name="category_id"
                     width="lg"
                     request={async () => {

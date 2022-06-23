@@ -90,7 +90,7 @@ const CategoryForm: React.FC<CategoryFormProps> = (props) => {
 
   return (
     <ModalForm
-      width={800}
+      width={900}
       title={props.category?.id ? '编辑分类' : '添加分类'}
       initialValues={props.category}
       visible={props.visible}
@@ -173,7 +173,7 @@ const CategoryForm: React.FC<CategoryFormProps> = (props) => {
           />
           <ProFormText
             name="keywords"
-            label="标签关键词"
+            label="关键词"
             extra="你可以单独设置关键词"
           />
           <ProFormText

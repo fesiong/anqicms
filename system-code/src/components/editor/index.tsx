@@ -6,10 +6,14 @@ import config from '@/services/config';
 import { getStore } from '@/utils/store';
 import { Boot } from '@wangeditor/editor';
 import {MaterialsMenuConf} from './material/menu';
+import {HtmlMenuConf} from './html/menu';
 import AttachmentSelect from '../attachment';
+import MonacoEditor from 'react-monaco-editor';
+import './index.less';
 
 // 注册。要在创建编辑器之前注册，且只能注册一次，不可重复注册。
 Boot.registerMenu(MaterialsMenuConf);
+Boot.registerMenu(HtmlMenuConf);
 
 export type WangEditorProps = {
   className: string;
@@ -18,10 +22,12 @@ export type WangEditorProps = {
 };
 
 var editorInsertFn: (url: string, alt?: string, href?: string) => void;
+var code = '';
 
 const WangEditor: React.FC<WangEditorProps> = (props) => {
   const [editor, setEditor] = useState<IDomEditor | null>(null);
   const [attachVisible, setAttachVisible] = useState<boolean>(false);
+  const [htmlMode, setHtmlMode] = useState<boolean>(false);
 
   const editorConfig: Partial<IEditorConfig> = {};
   editorConfig.placeholder = '请输入内容...';
@@ -44,13 +50,29 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
     },
     fieldName: 'file',
   };
-
+  editorConfig.MENU_CONF['html'] = {
+    setMode(mode: boolean) {
+      setHtmlMode(mode)
+      if(!mode && editorInsertFn) {
+        editorInsertFn(code)
+      }
+    },
+    customHtml(insertFn: any) {
+      editorInsertFn = insertFn;
+    }
+  };
   const handleSelectImages = (e: any) => {
     if (editorInsertFn) {
       editorInsertFn(e.logo, e.file_name);
     }
     setAttachVisible(false);
   }
+
+  const onChangeCode = (newCode: string) => {
+    if (code != newCode) {
+      code = newCode
+    }
+  };
 
   //const defaultContent = [{ type: 'paragraph', children: [{ text: '' }] }];
 
@@ -67,7 +89,7 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
     // 可配置 toolbarKeys: [...]
     insertKeys: {
       index: 0, // 自定义插入的位置
-      keys: ['material'],
+      keys: ['html','material'],
     },
   };
 
@@ -78,8 +100,7 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
 
   return (
     <div
-      className={props.className}
-      data-testid="editor-container"
+      className={'editor-container ' + props.className}
       style={{ border: '1px solid #ccc', marginTop: '10px' }}
     >
       <Toolbar
@@ -97,10 +118,23 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
         onCreated={(editor) => {
           setEditor(editor);
         }}
-        onChange={(editor) => props.setContent(editor.getHtml())}
+        onChange={(editor) => {let html = editor.getHtml();props.setContent(html);code = html}}
         style={{ height: '500px' }}
       />
-      <div style={{display: 'none'}} id='tmp-editor'></div>
+      <div style={{display: htmlMode ? 'block' : 'none'}} className='tmp-editor'>
+      {htmlMode && <MonacoEditor
+              height={523}
+              language={'html'}
+              theme="vs-dark"
+              value={code}
+              options={{
+                selectOnLineNumbers: false,
+                wordWrap: 'on'
+              }}
+              onChange={onChangeCode}
+              editorDidMount={() => {}}
+            />}
+      </div>
       <AttachmentSelect onSelect={(row) => {handleSelectImages(row)}} onCancel={(flag) => {setAttachVisible(flag)}} visible={attachVisible} manual={true} />
     </div>
   );

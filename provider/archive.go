@@ -139,13 +139,15 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 			fields = append(fields, "`"+v.FieldName+"`")
 		}
 		//从数据库中取出来
-		dao.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
-		//extra的CheckBox的值
-		for _, v := range module.Fields {
-			extraFields[v.FieldName] = &model.CustomField{
-				Name:    v.Name,
-				Value:   result[v.FieldName],
-				Default: v.Content,
+		if len(fields) > 0 {
+			dao.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
+			//extra的CheckBox的值
+			for _, v := range module.Fields {
+				extraFields[v.FieldName] = &model.CustomField{
+					Name:    v.Name,
+					Value:   result[v.FieldName],
+					Default: v.Content,
+				}
 			}
 		}
 	}
@@ -268,6 +270,8 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		}
 	}
 
+	// 将单个&nbsp;替换为空格
+	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
 	//goquery
 	htmlR := strings.NewReader(req.Content)
@@ -407,6 +411,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	if oldFixedLink != "" || archive.FixedLink != "" {
 		DeleteCacheFixedLinks()
 	}
+	DeleteCacheIndex()
 
 	//新发布的文章，执行推送
 	if newPost && archive.Status == config.ContentStatusOK {
@@ -418,6 +423,22 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	return
 }
 
+func UpdateArchiveUrlToken(archive *model.Archive) error {
+	if archive.UrlToken == "" {
+		newToken := library.GetPinyin(archive.Title)
+		_, err := GetArchiveByUrlToken(newToken)
+		if err == nil {
+			//增加随机
+			newToken += library.GenerateRandString(3)
+		}
+
+		archive.UrlToken = newToken
+		dao.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
+	}
+
+	return nil
+}
+
 func RecoverArchive(archive *model.Archive) error {
 	err := dao.DB.Unscoped().Model(&model.Archive{}).Where("id", archive.Id).UpdateColumn("deleted_at", nil).Error
 	if err != nil {
@@ -427,6 +448,7 @@ func RecoverArchive(archive *model.Archive) error {
 	if archive.FixedLink != "" {
 		DeleteCacheFixedLinks()
 	}
+	DeleteCacheIndex()
 
 	return nil
 }
@@ -445,6 +467,7 @@ func DeleteArchive(archive *model.Archive) error {
 	if archive.FixedLink != "" {
 		DeleteCacheFixedLinks()
 	}
+	DeleteCacheIndex()
 
 	return nil
 }

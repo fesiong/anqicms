@@ -7,10 +7,11 @@ import (
 )
 
 const (
-	RewriteNumberMode = 0 //数字模式
-	RewriteStringMode = 1 //命名模式
-	RewriteTinyMode   = 2 //极简数字模式
-	RewritePattenMode = 3 //正则模式
+	RewriteNumberMode  = 0 //数字模式
+	RewriteStringMode1 = 1 //命名模式1
+	RewriteStringMode2 = 2 //命名模式2
+	RewriteStringMode3 = 3 //命名模式3
+	RewritePattenMode  = 4 //正则模式
 )
 
 type PluginRewriteConfig struct {
@@ -45,29 +46,38 @@ type RewritePatten struct {
 
 var rewriteNumberModePatten = RewritePatten{
 	Archive:      "/{module}/{id}.html",
-	Category:     "/{module}/{id}(/{page})",
+	Category:     "/{module}/{catid}(/{page})",
 	Page:         "/{id}.html",
 	ArchiveIndex: "/{module}",
 	TagIndex:     "/tags(/{page})",
 	Tag:          "/tag/{id}(/{page})",
 }
 
-var rewriteStringModePatten = RewritePatten{
+var rewriteStringMode1Patten = RewritePatten{
 	Archive:      "/{module}/{filename}.html",
-	Category:     "/{module}/{filename}(/{page})",
+	Category:     "/{module}/{catname}(/{page})",
 	Page:         "/{filename}.html",
 	ArchiveIndex: "/{module}",
 	TagIndex:     "/tags(/{page})",
 	Tag:          "/tag/{filename}(/{page})",
 }
 
-var rewriteTinyModePatten = RewritePatten{
-	Archive:      "/{module}_{id}.html",
-	Category:     "/{module}_{id}(_{page})",
-	Page:         "/{id}.html",
+var rewriteStringMode2Patten = RewritePatten{
+	Archive:      "/{catname}/{id}.html",
+	Category:     "/{catname}(/{page})",
+	Page:         "/{filename}.html",
 	ArchiveIndex: "/{module}",
-	TagIndex:     "/tags(_{page})",
-	Tag:          "/tag_{id}(_{page})",
+	TagIndex:     "/tags(/{page})",
+	Tag:          "/tag/{id}(/{page})",
+}
+
+var rewriteStringMode3Patten = RewritePatten{
+	Archive:      "/{catname}/{filename}.html",
+	Category:     "/{catname}(/{page})",
+	Page:         "/{filename}.html",
+	ArchiveIndex: "/{module}",
+	TagIndex:     "/tags(/{page})",
+	Tag:          "/tag/{filename}(/{page})",
 }
 
 type replaceChar struct {
@@ -91,7 +101,7 @@ var replaceParams = map[string]string{
 	"{id}":       "([\\d]+)",
 	"{filename}": "([^\\/\\.\\_]+?)",
 	"{catname}":  "([^\\/\\.\\_]+?)",
-	"{module}":  "([^\\/\\.\\_]+?)",
+	"{module}":   "([^\\/\\.\\_]+?)",
 	"{catid}":    "([\\d]+)",
 	"{page}":     "([\\d]+)",
 }
@@ -104,10 +114,12 @@ func GetRewritePatten(focus bool) *RewritePatten {
 	}
 	if JsonData.PluginRewrite.Mode == RewriteNumberMode {
 		parsedPatten = &rewriteNumberModePatten
-	} else if JsonData.PluginRewrite.Mode == RewriteStringMode {
-		parsedPatten = &rewriteStringModePatten
-	} else if JsonData.PluginRewrite.Mode == RewriteTinyMode {
-		parsedPatten = &rewriteTinyModePatten
+	} else if JsonData.PluginRewrite.Mode == RewriteStringMode1 {
+		parsedPatten = &rewriteStringMode1Patten
+	} else if JsonData.PluginRewrite.Mode == RewriteStringMode2 {
+		parsedPatten = &rewriteStringMode2Patten
+	} else if JsonData.PluginRewrite.Mode == RewriteStringMode3 {
+		parsedPatten = &rewriteStringMode3Patten
 	} else if JsonData.PluginRewrite.Mode == RewritePattenMode {
 		parsedPatten = parseRewritePatten(JsonData.PluginRewrite.Patten)
 	}

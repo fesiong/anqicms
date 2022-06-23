@@ -29,7 +29,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
     formData.append('file', e.file);
     formData.append('category_id', categoryId + "");
     uploadAttachment(formData).then((res) => {
-      message.info(res.msg);
+      message.info(res.msg || '上传成功');
       actionRef.current?.reload();
     });
   };
@@ -79,6 +79,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
                 <Upload
                   name="file"
                   showUploadList={false}
+                  multiple
                   accept=".jpg,.jpeg,.png,.gif,.webp"
                   customRequest={handleUploadImage}
                 >

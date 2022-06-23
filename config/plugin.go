@@ -117,22 +117,34 @@ func GetGuestbookFields() []*CustomField {
 			IsSystem:  true,
 		},
 		{
-			Name:      Lang("联系方式"),
+			Name:      Lang("联系电话"),
 			FieldName: "contact",
 			Type:      "text",
-			Required:  true,
+			Required:  false,
 			IsSystem:  true,
 		},
 		{
 			Name:      Lang("留言内容"),
 			FieldName: "content",
 			Type:      "textarea",
-			Required:  true,
+			Required:  false,
 			IsSystem:  true,
 		},
 	}
 
-	fields := append(defaultFields, JsonData.PluginGuestbook.Fields...)
+	exists := false
+	for _, v := range JsonData.PluginGuestbook.Fields {
+		if v.IsSystem || v.FieldName == "user_name" {
+			exists = true
+			break
+		}
+	}
+	var fields []*CustomField
+	if exists {
+		fields = JsonData.PluginGuestbook.Fields
+	} else {
+		fields = append(defaultFields, JsonData.PluginGuestbook.Fields...)
+	}
 
 	return fields
 }

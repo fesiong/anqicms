@@ -142,6 +142,8 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		}
 		category.UrlToken = newToken
 	}
+	// 将单个&nbsp;替换为空格
+	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
 	//goquery
 	htmlR := strings.NewReader(req.Content)
@@ -228,6 +230,7 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	}
 
 	DeleteCacheCategories()
+	DeleteCacheIndex()
 
 	return
 }
@@ -280,7 +283,7 @@ func GetCacheCategories() []model.Category {
 		}
 	}
 
-	dao.DB.Where(model.Category{}).Find(&categories)
+	dao.DB.Where(model.Category{}).Order("sort asc").Find(&categories)
 
 	library.MemCache.Set("categories", categories, 0)
 

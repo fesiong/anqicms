@@ -186,7 +186,7 @@ func SettingThumbRebuild(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "缩略图已更新",
+		"msg":  "缩略图正在自动生成中，请稍后查看结果。",
 	})
 }
 
@@ -310,6 +310,7 @@ func SettingCacheForm(ctx iris.Context) {
 	provider.DeleteCacheFixedLinks()
 	provider.DeleteCacheModules()
 	provider.DeleteCacheRedirects()
+	provider.DeleteCacheIndex()
 	// 记录
 	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
 	ioutil.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)

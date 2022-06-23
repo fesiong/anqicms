@@ -41,7 +41,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 		if len(archiveParams) > 0 {
 			for i := range archiveParams {
-				if archiveParams[i].Value == nil {
+				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 					archiveParams[i].Value = archiveParams[i].Default
 				}
 			}

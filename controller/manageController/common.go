@@ -298,12 +298,14 @@ func VersionUpgrade(ctx iris.Context) {
 		err = os.Rename(tmpExecPath, execPath)
 		if err == nil {
 			needChange = true
+			os.Chmod(execPath, os.ModePerm)
 		}
 	}
-	if len(errorFiles) > 0 {
+	if len(errorFiles) > 1 {
+		log.Println("Upgrade error files: ", errorFiles)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  fmt.Sprintf("版本更新失败, 以下文件未更新：%v", errorFiles),
 		})
 		return
 	}

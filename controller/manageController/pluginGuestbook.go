@@ -162,10 +162,10 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 			if v.FieldName == "" {
 				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name), "-", "_")
 			}
-			if _, ok := existsFields[v.FieldName]; !ok {
-				existsFields[v.FieldName] = struct{}{}
-				fields = append(fields, v)
-			}
+		}
+		if _, ok := existsFields[v.FieldName]; !ok {
+			existsFields[v.FieldName] = struct{}{}
+			fields = append(fields, v)
 		}
 	}
 

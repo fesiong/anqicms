@@ -22,7 +22,7 @@ const PluginRewrite: React.FC<any> = (props) => {
   };
 
   const onSubmit = async (values: any) => {
-    values = Object.assign(rewriteMode, values)
+    values = Object.assign(rewriteMode, values);
     pluginSaveRewrite(values)
       .then((res) => {
         message.success(res.msg);
@@ -37,13 +37,12 @@ const PluginRewrite: React.FC<any> = (props) => {
         <Alert
           message={
             <div>
-              <p>特别说明：修改伪静态规则后，需要重启项目服务，才能让配置生效</p>
               <Row>
                 <Col span={6}>
                   <h3>方案1：数字模式</h3>
                   <div>
                     <div>文档详情：{'/{module}/{id}.html'}</div>
-                    <div>文档列表：{'/{module}/{id}(/{page})'}</div>
+                    <div>文档列表：{'/{module}/{catid}(/{page})'}</div>
                     <div>模型首页：{'/{module}'}</div>
                     <div>单页详情：{'/{id}.html'}</div>
                     <div>标签列表：{'/tags(/{page})'}</div>
@@ -51,10 +50,10 @@ const PluginRewrite: React.FC<any> = (props) => {
                   </div>
                 </Col>
                 <Col span={6}>
-                  <h3>方案2：命名模式</h3>
+                  <h3>方案2：命名模式1</h3>
                   <div>
                     <div>文档详情：{'/{module}/{filename}.html'}</div>
-                    <div>文档列表：{'/{module}/{filename}(/{page})'}</div>
+                    <div>文档列表：{'/{module}/{catname}(/{page})'}</div>
                     <div>模型首页：{'/{module}'}</div>
                     <div>单页详情：{'/{filename}.html'}</div>
                     <div>标签列表：{'/tags(/{page})'}</div>
@@ -62,25 +61,25 @@ const PluginRewrite: React.FC<any> = (props) => {
                   </div>
                 </Col>
                 <Col span={6}>
-                  <h3>方案3：极简数字模式</h3>
+                  <h3>方案3：命名模式2</h3>
                   <div>
-                    <div>文章详情：{'/{module}_{id}.html'}</div>
-                    <div>文档列表：{'/{module}_{id}(_{page})'}</div>
+                    <div>文档详情：{'/{catname}/{id}.html'}</div>
+                    <div>文档列表：{'/{catname}(/{page})'}</div>
                     <div>模型首页：{'/{module}'}</div>
-                    <div>单页详情：{'/{id}.html'}</div>
-                    <div>标签列表：{'/tags(_{page})'}</div>
-                    <div>标签详情：{'/tag_{id}(_{page})'}</div>
+                    <div>单页详情：{'/{filename}.html'}</div>
+                    <div>标签列表：{'/tags(/{page})'}</div>
+                    <div>标签详情：{'/tag/{id}(/{page})'}</div>
                   </div>
                 </Col>
                 <Col span={6}>
-                  <h3>方案4：自定义模式</h3>
+                  <h3>方案4：命名模式3</h3>
                   <div>
-                    <div>文章详情：自定义</div>
-                    <div>文档列表：自定义</div>
-                    <div>模型首页：自定义</div>
-                    <div>单页详情：自定义</div>
-                    <div>标签列表：自定义</div>
-                    <div>标签详情：自定义</div>
+                    <div>文档详情：{'/{catname}/{filename}.html'}</div>
+                    <div>文档列表：{'/{catname}(/{page})'}</div>
+                    <div>模型首页：{'/{module}'}</div>
+                    <div>单页详情：{'/{filename}.html'}</div>
+                    <div>标签列表：{'/tags(/{page})'}</div>
+                    <div>标签详情：{'/tag/{filename}(/{page})'}</div>
                   </div>
                 </Col>
               </Row>
@@ -98,15 +97,16 @@ const PluginRewrite: React.FC<any> = (props) => {
                 >
                   <Space direction="vertical">
                     <Radio value={0}>方案1：数字模式（简单，推荐）</Radio>
-                    <Radio value={1}>方案2：命名模式（英文或拼音，高端）</Radio>
-                    <Radio value={2}>方案3：极简数字模式（极简，根目录）</Radio>
-                    <Radio value={3}>
-                      方案4：自定义模式（高级模式，请谨慎使用，若设置不当，会导致前端页面打不开）
+                    <Radio value={1}>方案2：命名模式1（英文或拼音）</Radio>
+                    <Radio value={2}>方案3：命名模式2（英文或拼音+数字）</Radio>
+                    <Radio value={3}>方案4：命名模式3（英文或拼音）</Radio>
+                    <Radio value={4}>
+                      方案5：自定义模式（高级模式，请谨慎使用，若设置不当，会导致前端页面打不开）
                     </Radio>
                   </Space>
                 </Radio.Group>
               </ProForm.Item>
-              {currentMode == 3 && (
+              {currentMode == 4 && (
                 <ProFormTextArea
                   name="patten"
                   fieldProps={{ rows: 8 }}
@@ -146,7 +146,8 @@ const PluginRewrite: React.FC<any> = (props) => {
               变量由花括号包裹 <Tag color="blue">{'{}'}</Tag>,如 <Tag color="blue">{'{id}'}</Tag>
               。可用的变量有:数据ID <Tag color="blue">{'{id}'}</Tag>、数据自定义链接名{' '}
               <Tag color="blue">{'{filename}'}</Tag>、分类自定义链接名{' '}
-              <Tag color="blue">{'{catname}'}</Tag>、分类ID <Tag color="blue">{'{catid}'}</Tag>、模型表名 <Tag color="blue">{'{module}'}</Tag>
+              <Tag color="blue">{'{catname}'}</Tag>、分类ID <Tag color="blue">{'{catid}'}</Tag>
+              、模型表名 <Tag color="blue">{'{module}'}</Tag>
               ,分页页码 <Tag color="blue">{'{page}'}</Tag>
               ,分页需放在小括号内,如: <Tag color="blue">{'(/{page})'}</Tag>
             </p>

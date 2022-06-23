@@ -138,9 +138,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	} else {
 		// 如果使用webp，则生成webp
 		if config.JsonData.Content.UseWebp == 1 && attachId == 0 {
-			if imgType != "webp" {
-				_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
-			}
+			_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
 			imgType = "webp"
 		} else {
 			_, _ = io.Copy(buff, file)
@@ -391,9 +389,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			} else {
 				// 如果使用webp，则生成webp
 				if config.JsonData.Content.UseWebp == 1 {
-					if imgType != "webp" {
-						_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
-					}
+					_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
 					imgType = "webp"
 				} else {
 					_, _ = io.Copy(buff, bufFile)
@@ -582,7 +578,7 @@ func BuildThumb(attachment *model.Attachment) error {
 	}
 
 	buff := &bytes.Buffer{}
-	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, 1)
+	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
 
 	if imgType == "webp" {
 		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
@@ -601,7 +597,6 @@ func BuildThumb(attachment *model.Attachment) error {
 	}
 
 	defer thumbFile.Close()
-
 	_, err = io.Copy(thumbFile, buff)
 	if err != nil {
 		//文件写入失败
@@ -897,7 +892,7 @@ func convertToWebp(attachment *model.Attachment) error {
 	thumbPath := basePath + paths + "thumb_" + fileName
 
 	buff.Reset()
-	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, 1)
+	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
 
 	_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
 

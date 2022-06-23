@@ -48,7 +48,7 @@ const GuestbookSetting: React.FC = (props) => {
     for (let i in setting.fields) {
       if (setting.fields[i].field_name == values.field_name) {
         exists = true;
-        setting.fields[i] = values;
+        setting.fields[i] = Object.assign(setting.fields[i],values);
       }
     }
     if (!exists) {
@@ -120,7 +120,6 @@ const GuestbookSetting: React.FC = (props) => {
       dataIndex: 'option',
       render: (text: any, record, index) => (
         <Space size={20}>
-          {!record.is_system && (
             <>
               <a
                 onClick={() => {
@@ -130,7 +129,7 @@ const GuestbookSetting: React.FC = (props) => {
               >
                 编辑
               </a>
-              <a
+          {!record.is_system && (<a
                 className="text-red"
                 onClick={() => {
                   handleRemoveItem(index);
@@ -138,8 +137,8 @@ const GuestbookSetting: React.FC = (props) => {
               >
                 删除
               </a>
-            </>
           )}
+            </>
         </Space>
       ),
     },

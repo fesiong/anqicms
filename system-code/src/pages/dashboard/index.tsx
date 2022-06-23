@@ -150,15 +150,15 @@ const Dashboard: React.FC = () => {
                  <Col span={12}>
                    <div className='info-card'>
                      <div className='title'>本次登录</div>
-                     <p>时间：{infoData.now_login ? moment(infoData.now_login.created_time * 1000).format('MM-DD HH:mm') : '-'}</p>
-                    <div>IP：{infoData.now_login?.ip}</div>
+                     <p>{infoData.now_login ? moment(infoData.now_login.created_time * 1000).format('MM-DD HH:mm') : '-'}</p>
+                    <div>{infoData.now_login?.ip}</div>
                    </div>
                  </Col>
                  <Col span={12}>
                   <div className='info-card'>
                      <div className='title'>上次登录</div>
-                     <p>时间：{infoData.last_login ? moment(infoData.last_login.created_time * 1000).format('MM-DD HH:mm') : '-'}</p>
-                    <div>IP：{infoData.last_login?.ip}</div>
+                     <p>{infoData.last_login ? moment(infoData.last_login.created_time * 1000).format('MM-DD HH:mm') : '-'}</p>
+                    <div>{infoData.last_login?.ip}</div>
                    </div>
                  </Col>
                </Row>
@@ -173,20 +173,14 @@ const Dashboard: React.FC = () => {
                  </Col>
                  <Col span={12}>
                  <div className='info-card'>
-                     <div className='title'>网站地址</div>
-                     <div>{infoData.system?.base_url}</div>
-                   </div>
-                 </Col>
-                 <Col span={12}>
-                  <div className='info-card'>
-                     <div className='title'>移动端地址</div>
-                     <div>{infoData.system?.mobile_url || '未设置'}</div>
-                   </div>
-                 </Col>
-                 <Col span={12}>
-                 <div className='info-card'>
                      <div className='title'>网站类型</div>
                      <div>{infoData.system?.template_type == 2 ? '电脑+手机' : infoData.system?.template_type == 1 ? '代码适配' : '自适应'}</div>
+                   </div>
+                 </Col>
+                 <Col span={24}>
+                 <div className='info-card'>
+                     <div className='title'>网站地址</div>
+                     <div>{infoData.system?.base_url}</div>
                    </div>
                  </Col>
                </Row>

@@ -67,6 +67,8 @@ func SaveMaterial(req *request.PluginMaterial) (material *model.Material, err er
 	md5Str := library.Md5(material.Content)
 	material.Md5 = md5Str
 
+	// 将单个&nbsp;替换为空格
+	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
 	//goquery
 	htmlR := strings.NewReader(req.Content)

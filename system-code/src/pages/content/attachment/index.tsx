@@ -88,7 +88,7 @@ export default class ImageList extends React.Component {
     formData.append('file', e.file);
     formData.append('category_id', categoryId + "");
     uploadAttachment(formData).then((res) => {
-      message.info(res.msg);
+      message.info(res.msg || '上传成功');
       this.getImageList();
     });
   };
@@ -300,6 +300,7 @@ export default class ImageList extends React.Component {
                 </AttachmentCategory>
                 <Upload
                   name="file"
+                  multiple
                   showUploadList={false}
                   accept=".jpg,.jpeg,.png,.gif,.webp"
                   customRequest={this.handleUploadImage}

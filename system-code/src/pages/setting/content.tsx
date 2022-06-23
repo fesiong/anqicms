@@ -11,7 +11,7 @@ import { PageHeaderWrapper } from '@ant-design/pro-layout';
 import { Button, Card, message, Modal, Upload } from 'antd';
 import { uploadAttachment } from '@/services/attachment';
 import { PlusOutlined } from '@ant-design/icons';
-import { convertImagetoWebp, getSettingContent, saveSettingContent } from '@/services/setting';
+import { convertImagetoWebp, getSettingContent, rebuildThumb, saveSettingContent } from '@/services/setting';
 import AttachmentSelect from '@/components/attachment';
 
 const SettingContactFrom: React.FC<any> = (props) => {
@@ -42,6 +42,18 @@ const SettingContactFrom: React.FC<any> = (props) => {
       content: '该功能可能会因为替换不彻底而导致部分页面引用的旧图片地址显示不正常，该部分需要手工去发现并修复。',
       onOk: () => {
         convertImagetoWebp({}).then(res => {
+          message.info(res.msg);
+        })
+      }
+    })
+  }
+
+  const handleRebuildThumb = () => {
+    Modal.confirm({
+      title: '确定要重修生成缩略图吗？',
+      content: '如果你是刚改的缩略图尺寸，还没保存，请先取消，并提交保存，再点击生成。',
+      onOk: () => {
+        rebuildThumb({}).then(res => {
           message.info(res.msg);
         })
       }
@@ -183,6 +195,9 @@ const SettingContactFrom: React.FC<any> = (props) => {
                 }}
               />
             </ProFormGroup>
+              <div className='text-muted mb-normal'>
+                <span>如果你更改了缩略图尺寸，请先提交保存，然后再点击重新&nbsp;&nbsp;<Button size='small' onClick={handleRebuildThumb}>批量生成缩略图</Button></span>
+              </div>
             <ProFormText
               label="默认缩略图"
               width="lg"

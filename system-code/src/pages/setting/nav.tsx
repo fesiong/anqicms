@@ -46,7 +46,8 @@ const SettingNavFrom: React.FC<any> = (props) => {
 
   const getCategoryList = async () => {
     const res = await getCategories();
-    let categories = res.data || [];
+    const pages = await getCategories({type: 3});
+    let categories = (res.data || []).concat(pages.data || []);
     setCategories(categories);
   };
 
@@ -221,7 +222,7 @@ const SettingNavFrom: React.FC<any> = (props) => {
           <ProFormText name="description" label="导航描述" width="lg" />
           <ProFormRadio.Group
             name="nav_type"
-            label="模板类型"
+            label="链接类型"
             fieldProps={{
               onChange: (e: any) => {
                 setNavType(e.target.value);

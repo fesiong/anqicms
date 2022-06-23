@@ -30,6 +30,10 @@ func GetUrl(match string, data interface{}, page int) string {
                 uri =  item.FixedLink
                 break
             }
+            // 修正
+            if item.UrlToken == "" {
+                _ = UpdateArchiveUrlToken(item)
+            }
             //拿到值
             catName := ""
             if strings.Contains(rewritePattern.Archive, "catname") {

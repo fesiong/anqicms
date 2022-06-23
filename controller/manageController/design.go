@@ -99,6 +99,8 @@ func UseDesignInfo(ctx iris.Context) {
 
 		// 如果切换了模板，则重载模板
 		config.RestartChan <- true
+
+		provider.DeleteCacheIndex()
 	}
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
@@ -237,6 +239,8 @@ func SaveDesignFile(ctx iris.Context) {
 		})
 		return
 	}
+
+	provider.DeleteCacheIndex()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板文件：%s => %s", req.Package, req.Path))
 

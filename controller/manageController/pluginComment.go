@@ -5,6 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -78,6 +79,8 @@ func PluginCommentDetailForm(ctx iris.Context) {
 		return
 	}
 
+	// 将单个&nbsp;替换为空格
+	req.Content = library.ReplaceSingleSpace(req.Content)
 	comment.UserName = req.UserName
 	comment.Content = req.Content
 	comment.Status = 1

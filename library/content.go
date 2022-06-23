@@ -64,3 +64,16 @@ func ParseUrlToken(name string) string {
 	name = re.ReplaceAllString(name, "-")
 	return name
 }
+
+func ReplaceSingleSpace(content string) string {
+	// 将单个&nbsp;替换为空格
+	re, _ := regexp.Compile(`(&nbsp;|\xA0)+`)
+	content = re.ReplaceAllStringFunc(content, func(s string) string {
+		if s == "&nbsp;" || s == "\xA0" {
+			return " "
+		}
+		return s
+	})
+
+	return content
+}
