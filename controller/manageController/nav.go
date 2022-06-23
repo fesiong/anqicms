@@ -31,6 +31,22 @@ func SettingNavForm(ctx iris.Context) {
 		return
 	}
 
+	if req.Title == "" {
+		if req.NavType == model.NavTypeCategory {
+			category := provider.GetCategoryFromCache(req.PageId)
+			if category != nil {
+				req.Title = category.Title
+			}
+		}
+	}
+	if req.Title == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请填写导航显示名称",
+		})
+		return
+	}
+
 	var nav *model.Nav
 	var err error
 	if req.Id > 0 {
@@ -71,6 +87,7 @@ func SettingNavForm(ctx iris.Context) {
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新导航信息：%d => %s", nav.Id, nav.Title))
 
 	provider.DeleteCacheNavs()
+	provider.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -108,6 +125,7 @@ func SettingNavDelete(ctx iris.Context) {
 	provider.AddAdminLog(ctx, fmt.Sprintf("删除导航信息：%d => %s", nav.Id, nav.Title))
 
 	provider.DeleteCacheNavs()
+	provider.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

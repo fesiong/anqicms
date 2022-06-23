@@ -29,8 +29,12 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
     formData.append('file', e.file);
     formData.append('category_id', categoryId + "");
     uploadAttachment(formData).then((res) => {
-      message.info(res.msg || '上传成功');
-      actionRef.current?.reload();
+      if (res.code !== 0 ){
+        message.info(res.msg);
+      } else {
+        message.info(res.msg || '上传成功');
+        actionRef.current?.reload();
+      }
     });
   };
 
@@ -45,7 +49,7 @@ const AttachmentSelect: React.FC<AttachmentProps> = (props) => {
   }
 
   const visibleControl = (flag: boolean) => {
-    props.manual ? props.onCancel(flag) : setVisible(flag)
+    props.manual ? (props.onCancel ? props.onCancel(flag) : null) : setVisible(flag)
   }
 
   return (

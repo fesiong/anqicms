@@ -42,6 +42,7 @@ func PluginRewriteForm(ctx iris.Context) {
 
         config.ParsePatten(true)
         config.RestartChan <- true
+        provider.DeleteCacheIndex()
     }
 
     provider.AddAdminLog(ctx, fmt.Sprintf("调整伪静态配置：%d", req.Mode))

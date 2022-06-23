@@ -16,6 +16,7 @@ const (
 	CustomFieldTypeRadio    = "radio"
 	CustomFieldTypeCheckbox = "checkbox"
 	CustomFieldTypeSelect   = "select"
+	CustomFieldTypeImage    = "image"
 )
 
 const (

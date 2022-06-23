@@ -88,8 +88,12 @@ export default class ImageList extends React.Component {
     formData.append('file', e.file);
     formData.append('category_id', categoryId + "");
     uploadAttachment(formData).then((res) => {
-      message.info(res.msg || '上传成功');
-      this.getImageList();
+      if (res.code !== 0 ){
+        message.info(res.msg);
+      } else {
+        message.info(res.msg || '上传成功');
+        this.getImageList();
+      }
     });
   };
 
@@ -223,18 +227,21 @@ export default class ImageList extends React.Component {
   }
 
   handleReplaceAttach = (e: any) => {
-    const {currentAttach} = this.state;
+    let {currentAttach} = this.state;
     let formData = new FormData();
     formData.append('file', e.file);
     formData.append('replace', "true");
     formData.append('id', currentAttach.id);
     uploadAttachment(formData).then((res) => {
-      message.info(res.msg);
-      currentAttach.updated_time = (new Date()).getTime();
-      this.setState({
-        currentAttach,
-      })
-      this.getImageList();
+      if (res.code !== 0 ){
+        message.info(res.msg);
+      } else {
+        message.info(res.msg || '替换成功');
+        this.setState({
+          currentAttach: Object.assign(currentAttach, res.data || {}),
+        })
+        this.getImageList();
+      }
     });
   }
 

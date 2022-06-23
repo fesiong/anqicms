@@ -33,6 +33,7 @@ import (
 func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId uint) (*model.Attachment, error) {
 	db := dao.DB
 	//获取宽高
+	fileSize := info.Size
 	bufFile := bufio.NewReader(file)
 	img, imgType, err := image.Decode(bufFile)
 	if err != nil {
@@ -68,21 +69,11 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 
 	fileName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
 
-	var attachment *model.Attachment
-	if attachId > 0 {
-		attachment, err = GetAttachmentById(attachId)
-		if err != nil {
-			return nil, errors.New("需要替换的图片资源不存在")
-		}
-		fileName = attachment.FileName
-		imgType = strings.TrimPrefix(filepath.Ext(attachment.FileLocation), ".")
-	}
-
 	_, err = file.Seek(0, 0)
 	if err != nil {
 		return nil, err
 	}
-	//获取文件的MD5，检查数据库是否已经存在，存在则不用重复上传
+	//获取文件的MD5，检查数据库是否已经存在，则采用覆盖方式处理
 	md5hash := md5.New()
 	bufFile = bufio.NewReader(file)
 	_, err = io.Copy(md5hash, bufFile)
@@ -95,7 +86,25 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 		return nil, err
 	}
 
+	var attachment *model.Attachment
+	if attachId > 0 {
+		attachment, err = GetAttachmentById(attachId)
+		if err != nil {
+			return nil, errors.New("需要替换的图片资源不存在")
+		}
+		fileName = attachment.FileName
+		imgType = strings.TrimPrefix(filepath.Ext(attachment.FileLocation), ".")
+		// 如果上传的图片已存在，则不允许替换
+		exists, err := GetAttachmentByMd5(md5Str)
+		if err == nil && attachment.Id != exists.Id {
+			return nil, errors.New("替换失败，已存在当前上传的图片。")
+		}
+	}
+
 	if attachId == 0 {
+		if config.JsonData.Content.UseWebp == 1 {
+			imgType = "webp"
+		}
 		attachment, err = GetAttachmentByMd5(md5Str)
 		if err == nil {
 			if attachment.DeletedAt.Valid {
@@ -109,8 +118,9 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 			if categoryId > 0 && attachment.CategoryId != categoryId {
 				db.Model(attachment).UpdateColumn("category_id", categoryId)
 			}
-			//直接返回
-			return attachment, nil
+			fileName = attachment.FileName
+			imgType = strings.TrimPrefix(filepath.Ext(attachment.FileLocation), ".")
+			attachId = attachment.Id
 		}
 	}
 
@@ -120,30 +130,30 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 		//默认800
 		resizeWidth = 800
 	}
+	quality := config.JsonData.Content.Quality
+	if quality == 0 {
+		// 默认质量是90
+		quality = webp.DefaulQuality
+	}
 	buff := &bytes.Buffer{}
 
 	if config.JsonData.Content.ResizeImage == 1 && width > resizeWidth && imgType != "gif" {
-		newImg := library.Resize(img, resizeWidth, 0)
-		width = newImg.Bounds().Dx()
-		height = newImg.Bounds().Dy()
-		// 保存裁剪的图片
-		if (config.JsonData.Content.UseWebp == 1 && attachId == 0) || imgType == "webp" {
-			_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
-			imgType = "webp"
-		} else if imgType == "jpg" {
-			_ = jpeg.Encode(buff, newImg, nil)
-		} else if imgType == "png" {
-			_ = png.Encode(buff, newImg)
-		}
-	} else {
-		// 如果使用webp，则生成webp
-		if config.JsonData.Content.UseWebp == 1 && attachId == 0 {
-			_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
-			imgType = "webp"
-		} else {
-			_, _ = io.Copy(buff, file)
-		}
+		img = library.Resize(img, resizeWidth, 0)
+		width = img.Bounds().Dx()
+		height = img.Bounds().Dy()
 	}
+	// 保存裁剪的图片
+	if imgType == "webp" {
+		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
+		log.Println("webp:", quality)
+	} else if imgType == "jpg" {
+		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
+	} else if imgType == "png" {
+		_ = png.Encode(buff, img)
+	} else if imgType == "gif" {
+		_ = gif.Encode(buff, img, nil)
+	}
+	fileSize = int64(buff.Len())
 
 	tmpName := md5Str[8:24] + "." + imgType
 	filePath := time.Now().Format("200601/02/")
@@ -182,9 +192,9 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 
 	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
 	if imgType == "webp" {
-		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
 	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, newImg, nil)
+		_ = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality})
 	} else if imgType == "png" {
 		_ = png.Encode(buff, newImg)
 	} else if imgType == "gif" {
@@ -209,7 +219,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	attachment = &model.Attachment{
 		FileName:     fileName,
 		FileLocation: filePath + tmpName,
-		FileSize:     info.Size,
+		FileSize:     fileSize,
 		FileMd5:      md5Str,
 		Width:        width,
 		Height:       height,
@@ -340,6 +350,9 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			if imgType == "jpeg" {
 				imgType = "jpg"
 			}
+			if config.JsonData.Content.UseWebp == 1 {
+				imgType = "webp"
+			}
 
 			//获取文件的MD5，检查数据库是否已经存在，存在则不用重复上传
 			md5hash := md5.New()
@@ -353,10 +366,9 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 
 			attachment, err := GetAttachmentByMd5(md5Str)
 			if err == nil {
-				if attachment.Status != 1 {
-					//更新status
-					attachment.Status = 1
-					err = attachment.Save(db)
+				if attachment.DeletedAt.Valid {
+					//更新
+					err = db.Model(attachment).Update("deleted_at", nil).Error
 					if err != nil {
 						return nil, err
 					}
@@ -371,30 +383,29 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 				//默认800
 				resizeWidth = 800
 			}
+			quality := config.JsonData.Content.Quality
+			if quality == 0 {
+				// 默认质量是90
+				quality = webp.DefaulQuality
+			}
 			buff := &bytes.Buffer{}
 
 			if config.JsonData.Content.ResizeImage == 1 && width > resizeWidth && imgType != "gif" {
-				newImg := library.Resize(img, resizeWidth, 0)
-				width = newImg.Bounds().Dx()
-				height = newImg.Bounds().Dy()
-				// 保存裁剪的图片
-				if config.JsonData.Content.UseWebp == 1 || imgType == "webp" {
-					_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
-					imgType = "webp"
-				} else if imgType == "jpg" {
-					_ = jpeg.Encode(buff, newImg, nil)
-				} else if imgType == "png" {
-					_ = png.Encode(buff, newImg)
-				}
-			} else {
-				// 如果使用webp，则生成webp
-				if config.JsonData.Content.UseWebp == 1 {
-					_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
-					imgType = "webp"
-				} else {
-					_, _ = io.Copy(buff, bufFile)
-				}
+				img = library.Resize(img, resizeWidth, 0)
+				width = img.Bounds().Dx()
+				height = img.Bounds().Dy()
+
 			}
+			if imgType == "webp" {
+				_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
+			} else if imgType == "jpg" {
+				_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
+			} else if imgType == "png" {
+				_ = png.Encode(buff, img)
+			} else if imgType == "gif" {
+				_ = gif.Encode(buff, img, nil)
+			}
+			fileSize := int64(buff.Len())
 
 			tmpName := md5Str[8:24] + "." + imgType
 			filePath := time.Now().Format("200601/02/")
@@ -433,9 +444,9 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 
 			newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
 			if imgType == "webp" {
-				_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+				_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
 			} else if imgType == "jpg" {
-				_ = jpeg.Encode(buff, newImg, nil)
+				_ = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality})
 			} else if imgType == "png" {
 				_ = png.Encode(buff, newImg)
 			} else if imgType == "gif" {
@@ -460,7 +471,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			attachment = &model.Attachment{
 				FileName:     fileName,
 				FileLocation: filePath + tmpName,
-				FileSize:     int64(len(body)),
+				FileSize:     fileSize,
 				FileMd5:      md5Str,
 				Width:        width,
 				Height:       height,
@@ -517,7 +528,7 @@ func GetAttachmentList(categoryId uint, currentPage int, pageSize int) ([]*model
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
 	}
-	builder = builder.Where("`status` = 1").Order("id desc")
+	builder = builder.Where("`status` = 1").Order("updated_time desc")
 	if err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&attachments).Error; err != nil {
 		return nil, 0, err
 	}
@@ -576,14 +587,19 @@ func BuildThumb(attachment *model.Attachment) error {
 	if imgType == "jpeg" {
 		imgType = "jpg"
 	}
+	quality := config.JsonData.Content.Quality
+	if quality == 0 {
+		// 默认质量是90
+		quality = webp.DefaulQuality
+	}
 
 	buff := &bytes.Buffer{}
 	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
 
 	if imgType == "webp" {
-		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
 	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, newImg, nil)
+		_ = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality})
 	} else if imgType == "png" {
 		_ = png.Encode(buff, newImg)
 	} else if imgType == "gif" {
@@ -875,9 +891,13 @@ func convertToWebp(attachment *model.Attachment) error {
 		fmt.Println(config.Lang("无法获取图片尺寸"))
 		return err
 	}
-
+	quality := config.JsonData.Content.Quality
+	if quality == 0 {
+		// 默认质量是90
+		quality = webp.DefaulQuality
+	}
 	buff := &bytes.Buffer{}
-	_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+	_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
 	err = ioutil.WriteFile(basePath+newFile, buff.Bytes(), os.ModePerm)
 	if err != nil {
 		return err
@@ -894,7 +914,7 @@ func convertToWebp(attachment *model.Attachment) error {
 	buff.Reset()
 	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
 
-	_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: webp.DefaulQuality})
+	_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
 
 	err = ioutil.WriteFile(thumbPath, buff.Bytes(), os.ModePerm)
 	if err != nil {

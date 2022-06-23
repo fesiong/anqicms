@@ -35,13 +35,13 @@ func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	if ok {
 		for i := range navList {
 			navList[i].IsCurrent = false
-			if (navList[i].NavType == model.NavTypeSystem && (webInfo.PageName == "index" || webInfo.PageName == "archiveIndex") && navList[i].PageId == webInfo.NavBar) || (navList[i].NavType == model.NavTypeCategory && (webInfo.PageName == "archiveDetail" || webInfo.PageName == "archiveList") && navList[i].PageId == webInfo.NavBar) {
+			if (navList[i].NavType == model.NavTypeSystem && (webInfo.PageName == "index" || webInfo.PageName == "archiveIndex") && navList[i].PageId == webInfo.NavBar) || (navList[i].NavType == model.NavTypeCategory && (webInfo.PageName == "archiveDetail" || webInfo.PageName == "archiveList" || webInfo.PageName == "pageDetail") && navList[i].PageId == webInfo.NavBar) {
 				navList[i].IsCurrent = true
 			}
 			if navList[i].NavList != nil {
 				for j := range navList[i].NavList {
 					navList[i].NavList[j].IsCurrent = false
-					if (navList[i].NavList[j].NavType == model.NavTypeSystem && (webInfo.PageName == "index" || webInfo.PageName == "archiveIndex") && navList[i].NavList[j].PageId == webInfo.NavBar) || (navList[i].NavList[j].NavType == model.NavTypeCategory && (webInfo.PageName == "archiveDetail" || webInfo.PageName == "archiveList") && navList[i].NavList[j].PageId == webInfo.NavBar) {
+					if (navList[i].NavList[j].NavType == model.NavTypeSystem && (webInfo.PageName == "index" || webInfo.PageName == "archiveIndex") && navList[i].NavList[j].PageId == webInfo.NavBar) || (navList[i].NavList[j].NavType == model.NavTypeCategory && (webInfo.PageName == "archiveDetail" || webInfo.PageName == "archiveList" || webInfo.PageName == "pageDetail") && navList[i].NavList[j].PageId == webInfo.NavBar) {
 						navList[i].NavList[j].IsCurrent = true
 						navList[i].IsCurrent = true
 					}

@@ -10,6 +10,7 @@ import {HtmlMenuConf} from './html/menu';
 import AttachmentSelect from '../attachment';
 import MonacoEditor from 'react-monaco-editor';
 import './index.less';
+import { message } from 'antd';
 
 // 注册。要在创建编辑器之前注册，且只能注册一次，不可重复注册。
 Boot.registerMenu(MaterialsMenuConf);
@@ -46,7 +47,12 @@ const WangEditor: React.FC<WangEditorProps> = (props) => {
     },
     customInsert(res: any, insertFn: any) {
       res = res.data || {};
-      insertFn(res.src);
+      if (res.code !== 0 ){
+        message.info(res.msg);
+      } else {
+        message.info(res.msg || '上传成功');
+        insertFn(res.logo);
+      }
     },
     fieldName: 'file',
   };

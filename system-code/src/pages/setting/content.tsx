@@ -69,6 +69,7 @@ const SettingContactFrom: React.FC<any> = (props) => {
     values.thumb_crop = Number(values.thumb_crop);
     values.thumb_width = Number(values.thumb_width);
     values.thumb_height = Number(values.thumb_height);
+    values.quality = Number(values.quality)
 
     saveSettingContent(values)
       .then((res) => {
@@ -130,6 +131,16 @@ const SettingContactFrom: React.FC<any> = (props) => {
                 <span>如果你想将以上传的图片转为webp，请点击&nbsp;&nbsp;<Button size='small' onClick={handleConvertToWebp}>使用webp转换工具</Button></span>
               </div>}
             />
+            <ProFormText
+                name="quality"
+                label="图片质量"
+                width="lg"
+                placeholder="默认：90"
+                fieldProps={{
+                  suffix: '%',
+                }}
+                extra='图片质量只对jpg格式和webp格式生效。默认质量为90%'
+              />
             <ProFormRadio.Group
               name="resize_image"
               label="自动压缩大图"
