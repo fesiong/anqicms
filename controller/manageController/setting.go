@@ -118,6 +118,7 @@ func SettingSystemForm(ctx iris.Context) {
 	if changed {
 		config.RestartChan <- true
 	}
+	provider.DeleteCacheIndex()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统配置"))
 
@@ -170,6 +171,7 @@ func SettingContentForm(ctx iris.Context) {
 		})
 		return
 	}
+	provider.DeleteCacheIndex()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新内容配置"))
 
@@ -223,6 +225,7 @@ func SettingIndexForm(ctx iris.Context) {
 		})
 		return
 	}
+	provider.DeleteCacheIndex()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新首页TDK"))
 
@@ -279,6 +282,7 @@ func SettingContactForm(ctx iris.Context) {
 		})
 		return
 	}
+	provider.DeleteCacheIndex()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新联系人信息"))
 

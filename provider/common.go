@@ -7,7 +7,7 @@ const (
 )
 
 func CacheIndex(body []byte) {
-	library.MemCache.Set(IndexCacheKey, body, 86400)
+	library.MemCache.Set(IndexCacheKey, body, 3600)
 }
 
 func GetIndexCache() []byte {

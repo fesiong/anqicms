@@ -30,7 +30,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	moduleId := uint(0)
-	categoryId := uint(0)
+	var categoryIds []uint
 
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
@@ -42,11 +42,21 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		categoryDetail = provider.GetCategoryFromCache(archiveDetail.CategoryId)
 	}
 	if args["categoryId"] != nil {
-		categoryId = uint(args["categoryId"].Integer())
-		categoryDetail = provider.GetCategoryFromCache(categoryId)
-	}
-	if categoryDetail != nil {
-		categoryId = categoryDetail.Id
+		tmpIds := strings.Split(args["categoryId"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				categoryDetail = provider.GetCategoryFromCache(uint(tmpId))
+				if categoryDetail != nil {
+					categoryIds = append(categoryIds, categoryDetail.Id)
+					moduleId = categoryDetail.ModuleId
+				}
+			}
+		}
+	} else if categoryDetail != nil {
+		if len(categoryIds) == 0 {
+			categoryIds = append(categoryIds, categoryDetail.Id)
+		}
 		moduleId = categoryDetail.ModuleId
 	}
 
@@ -130,6 +140,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		//获取id
 		archiveId := uint(0)
 		archiveDetail, ok = ctx.Public["archive"].(*model.Archive)
+		var categoryId = uint(0)
+		if len(categoryIds) > 0 {
+			categoryId = categoryIds[0]
+		}
 		if ok {
 			archiveId = archiveDetail.Id
 			categoryId = archiveDetail.CategoryId
@@ -193,13 +207,19 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 
-		if categoryId > 0 {
+		if len(categoryIds) > 0 {
 			if child {
-				subIds := provider.GetSubCategoryIds(categoryId, nil)
-				subIds = append(subIds, categoryId)
+				var subIds []uint
+				for _, v := range categoryIds {
+					tmpIds := provider.GetSubCategoryIds(v, nil)
+					subIds = append(subIds, tmpIds...)
+					subIds = append(subIds, v)
+				}
 				builder = builder.Where("`category_id` IN(?)", subIds)
+			} else if len(categoryIds) == 1 {
+				builder = builder.Where("`category_id` = ?", categoryIds[0])
 			} else {
-				builder = builder.Where("`category_id` = ?", categoryId)
+				builder = builder.Where("`category_id` IN(?)", categoryIds)
 			}
 		}
 		if order != "" {

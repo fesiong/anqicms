@@ -3,9 +3,10 @@ package request
 import "kandaoni.com/anqicms/config"
 
 type PluginPushConfig struct {
-	BaiduApi string `json:"baidu_api"`
-	BingApi  string `json:"bing_api"`
-	JsCode   string `json:"js_code"`
+	BaiduApi string            `json:"baidu_api"`
+	BingApi  string            `json:"bing_api"`
+	JsCode   string            `json:"js_code"`
+	JsCodes  []config.CodeItem `json:"js_codes"`
 }
 
 type PluginRobotsConfig struct {
@@ -13,7 +14,8 @@ type PluginRobotsConfig struct {
 }
 
 type PluginSitemapConfig struct {
-	AutoBuild int `json:"auto_build"`
+	AutoBuild int    `json:"auto_build"`
+	Type      string `json:"type"`
 }
 
 type PluginRewriteConfig struct {

@@ -47,6 +47,10 @@ const ArchiveList: React.FC = (props) => {
     history.push('/archive/detail?id=' + record.id);
   };
 
+  const handleCopyArchive = async (record: any) => {
+    history.push('/archive/detail?copyid=' + record.id);
+  };
+
   const columns: ProColumns<any>[] = [
     {
       title: '编号',
@@ -175,6 +179,15 @@ const ArchiveList: React.FC = (props) => {
             }}
           >
             编辑
+          </a>
+          <a
+            key="edit"
+            onClick={() => {
+              handleCopyArchive(record);
+            }}
+            title='复制文本新发一篇'
+          >
+            复制
           </a>
           <a key="preview" href={record.link} target="_blank">
             查看

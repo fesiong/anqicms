@@ -102,7 +102,11 @@ func Common(ctx iris.Context) {
 		}
 	}
 	//js code
-	ctx.ViewData("pluginJsCode", config.JsonData.PluginPush.JsCode)
+	var jsCodes string
+	for _, v := range config.JsonData.PluginPush.JsCodes {
+		jsCodes += v.Value + "\n"
+	}
+	ctx.ViewData("pluginJsCode", jsCodes)
 
 	// 设置分页
 	currentPage := ctx.URLParamIntDefault("page", 1)

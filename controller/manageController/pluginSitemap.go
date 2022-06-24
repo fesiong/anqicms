@@ -14,7 +14,7 @@ func PluginSitemap(ctx iris.Context) {
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 	pluginSitemap.UpdatedTime = provider.GetSitemapTime()
 	// 写入Sitemap的url
-	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap.txt"
+	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap." + pluginSitemap.Type
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -32,8 +32,11 @@ func PluginSitemapForm(ctx iris.Context) {
 		})
 		return
 	}
-
+	if req.Type != "xml" {
+		req.Type = "txt"
+	}
 	config.JsonData.PluginSitemap.AutoBuild = req.AutoBuild
+	config.JsonData.PluginSitemap.Type = req.Type
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -61,9 +64,12 @@ func PluginSitemapBuild(ctx iris.Context) {
 		})
 		return
 	}
-
+	if req.Type != "xml" {
+		req.Type = "txt"
+	}
 	//先保存一次
 	config.JsonData.PluginSitemap.AutoBuild = req.AutoBuild
+	config.JsonData.PluginSitemap.Type = req.Type
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -89,7 +95,7 @@ func PluginSitemapBuild(ctx iris.Context) {
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 	pluginSitemap.UpdatedTime = provider.GetSitemapTime()
 	// 写入Sitemap的url
-	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap.txt"
+	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap." + pluginSitemap.Type
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("手动更新sitemap"))
 

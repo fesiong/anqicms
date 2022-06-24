@@ -4,13 +4,13 @@ import (
 	"errors"
 	"fmt"
 	"github.com/dgrijalva/jwt-go"
+	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"strings"
-	"time"
 )
 
 func InitAdmin(userName string, password string, force bool) error {
@@ -79,15 +79,14 @@ func GetAdminInfoByName(name string) (*model.Admin, error) {
 	return &authUser, nil
 }
 
-func GetAdminAuthToken(userId uint, ip string, remember bool) string {
-	t := time.Now().AddDate(0, 0, 1)
+func GetAdminAuthToken(userId uint, remember bool) string {
+	t := now.BeginningOfDay().AddDate(0, 0, 1)
 	// 记住会记住30天
 	if remember {
 		t = t.AddDate(0, 0, 29)
 	}
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"adminId": fmt.Sprintf("%d", userId),
-		"ip":      ip,
 		"t":       fmt.Sprintf("%d", t.Unix()),
 	})
 	// 获取签名字符串

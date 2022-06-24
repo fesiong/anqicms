@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import ProForm, { ProFormTextArea, ProFormRadio, ProFormText } from '@ant-design/pro-form';
+import ProForm, { ProFormTextArea, ProFormRadio, ProFormText, ProFormInstance } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
 import { Alert, Button, Card, Col, message, Radio, Row, Space, Tag } from 'antd';
 import { pluginBuildSitemap, pluginGetSitemap, pluginSaveSitemap } from '@/services/plugin/sitemap';
 import moment from 'moment';
 
 const PluginSitemap: React.FC<any> = (props) => {
+  const formRef = React.createRef<ProFormInstance>();
   const [sitemapSetting, setSitemapSetting] = useState<any>({});
   const [fetched, setFetched] = useState<boolean>(false);
 
@@ -31,7 +32,8 @@ const PluginSitemap: React.FC<any> = (props) => {
   };
 
   const rebuildSitemap = () => {
-    pluginBuildSitemap().then((res) => {
+    let values = formRef.current?.getFieldsValue();
+    pluginBuildSitemap(values).then((res) => {
       message.info(res.msg);
       if (res.code === 0) {
         setSitemapSetting(res.data);
@@ -46,7 +48,7 @@ const PluginSitemap: React.FC<any> = (props) => {
           message={
             <div>
               <div>
-                由于现在各大搜索引擎的sitemap提交，都已支持txt格式的sitemap，并且txt的sitemap文件大小相比于xml的sitemap文件更小，因此本sitemap功能，只支持txt格式的sitemap文件生成。
+                现在各大搜索引擎的sitemap提交，都已支持txt格式的sitemap，并且txt的sitemap文件大小相比于xml的sitemap文件更小，因此建议使用 txt格式的Sitemap。
               </div>
               <div>
                 由于各个搜索引擎的sitemap提交，都限制了5万条或10M大小，因此本sitemap功能，将按照5万条一个sitemap文件的数量生成。
@@ -56,8 +58,16 @@ const PluginSitemap: React.FC<any> = (props) => {
         />
         {fetched && (
           <div className="mt-normal">
-            <ProForm onFinish={onSubmit} initialValues={sitemapSetting} title="123">
+            <ProForm onFinish={onSubmit} initialValues={sitemapSetting} formRef={formRef}>
               <Card size="small" title="Sitemap设置" bordered={false}>
+              <ProFormRadio.Group
+                  name="type"
+                  label="Sitemap格式"
+                  options={[
+                    { value: 'txt', label: 'txt' },
+                    { value: 'xml', label: 'xml' },
+                  ]}
+                />
                 <ProFormRadio.Group
                   name="auto_build"
                   label="Sitemap生成方法"

@@ -308,6 +308,7 @@ const ModuleForm: React.FC<ModuleFormProps> = (props) => {
               radio: '单项选择',
               checkbox: '多项选择',
               select: '下拉选择',
+              image: '图片',
             }}
           />
           <ProFormRadio.Group

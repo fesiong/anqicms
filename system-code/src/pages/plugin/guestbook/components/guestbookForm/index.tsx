@@ -8,6 +8,7 @@ import {
 } from '@ant-design/pro-form';
 
 import moment from 'moment';
+import { Image } from 'antd';
 
 export type GuestbookFormProps = {
   onCancel: (flag?: boolean) => void;
@@ -44,6 +45,9 @@ const GuestbookForm: React.FC<GuestbookFormProps> = (props) => {
           initialValue={props.editingGuestbook.extra_data[key]}
           label={key}
           readonly
+          extra={props.editingGuestbook.extra_data[key]?.indexOf('http') !== -1 &&
+          <Image width={200} src={props.editingGuestbook.extra_data[key]} />
+          }
         />
       ))}
       <ProFormText name="ip" label="IP" readonly />

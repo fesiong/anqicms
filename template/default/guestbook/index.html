@@ -15,7 +15,7 @@
                 <div class="layui-card-header">在线留言</div>
                 <div class="layui-card-body">
                     {% guestbook fields %}
-                    <form class="layui-form" action="/guestbook.html" method="post" onsubmit="return false;">
+                    <form class="layui-form" action="/guestbook.html" method="post" enctype="multipart/form-data" onsubmit="return false;">
                         {% for item in fields %}
                         <div class="layui-form-item">
                             <label class="layui-form-label">{{item.Name}}</label>
@@ -38,6 +38,8 @@
                                     <option value="{{val}}">{{val}}</option>
                                     {%- endfor %}
                                 </select>
+                                {% elif item.Type == "image" %}
+                                <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required"{% endif %} placeholder="{{item.Content}}" autocomplete="off" class="layui-input">
                                 {% endif %}
                             </div>
                         </div>

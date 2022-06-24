@@ -48,7 +48,7 @@ func PluginPushForm(ctx iris.Context) {
 
 	config.JsonData.PluginPush.BaiduApi = req.BaiduApi
 	config.JsonData.PluginPush.BingApi = req.BingApi
-	config.JsonData.PluginPush.JsCode = req.JsCode
+	config.JsonData.PluginPush.JsCodes = req.JsCodes
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -58,6 +58,7 @@ func PluginPushForm(ctx iris.Context) {
 		})
 		return
 	}
+	provider.DeleteCacheIndex()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新搜索引擎推送配置"))
 

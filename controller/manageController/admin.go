@@ -119,7 +119,7 @@ func AdminLogin(ctx iris.Context) {
 
 	// 重置管理员登录失败次数
 	adminLoginError.Times = 0
-	admin.Token = provider.GetAdminAuthToken(admin.Id, ctx.RemoteAddr(), req.Remember)
+	admin.Token = provider.GetAdminAuthToken(admin.Id, req.Remember)
 
 	// 记录日志
 	adminLog := model.AdminLoginLog{

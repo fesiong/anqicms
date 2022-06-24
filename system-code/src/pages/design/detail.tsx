@@ -163,6 +163,14 @@ const DesignDetail: React.FC = () => {
         search={false}
         toolBarRender={() => [
           <Button
+            key="download"
+            onClick={() => {
+              setVisible(true)
+            }}
+          >
+            打包下载模板
+          </Button>,
+          <Button
             key="edit"
             onClick={() => {
               setVisible(true)

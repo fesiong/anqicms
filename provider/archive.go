@@ -143,6 +143,12 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 			dao.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
+				if v.Type == config.CustomFieldTypeImage {
+					value, ok := result[v.FieldName].(string)
+					if ok && value != "" && !strings.HasPrefix(value, "http") {
+						result[v.FieldName] = config.JsonData.System.BaseUrl + value
+					}
+				}
 				extraFields[v.FieldName] = &model.CustomField{
 					Name:    v.Name,
 					Value:   result[v.FieldName],
@@ -256,7 +262,12 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.Atoi(fmt.Sprintf("%v", extraValue["value"]))
 					} else {
-						extraFields[v.FieldName] = extraValue["value"]
+						value, ok := extraValue["value"].(string)
+						if ok {
+							extraFields[v.FieldName] = strings.TrimPrefix(value, config.JsonData.System.BaseUrl)
+						} else {
+							extraFields[v.FieldName] = extraValue["value"]
+						}
 					}
 				}
 			} else {
@@ -417,7 +428,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	if newPost && archive.Status == config.ContentStatusOK {
 		go PushArchive(link)
 		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("archive", link)
+			_ = AddonSitemap("archive", link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
 		}
 	}
 	return
@@ -533,7 +544,7 @@ func PublishPlanArchives() {
 			}
 			go PushArchive(link)
 			if config.JsonData.PluginSitemap.AutoBuild == 1 {
-				_ = AddonSitemap("archive", link)
+				_ = AddonSitemap("archive", link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
 			}
 		}
 	}

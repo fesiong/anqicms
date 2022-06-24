@@ -85,6 +85,19 @@ func initJSON() {
 	if JsonData.System.Language == "" {
 		JsonData.System.Language = "zh"
 	}
+	// 兼容旧版 jscode
+	if JsonData.PluginPush.JsCode != "" {
+		JsonData.PluginPush.JsCodes = append(JsonData.PluginPush.JsCodes, CodeItem{
+			Name:  "未命名JS",
+			Value: JsonData.PluginPush.JsCode,
+		})
+		JsonData.PluginPush.JsCode = ""
+		_ = WriteConfig()
+	}
+	// sitemap
+	if JsonData.PluginSitemap.Type != "xml" {
+		JsonData.PluginSitemap.Type = "txt"
+	}
 	// 导入API生成
 	if JsonData.PluginImportApi.Token == "" {
 		h := md5.New()

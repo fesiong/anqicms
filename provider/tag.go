@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"strings"
+	"time"
 )
 
 func GetTagList(itemId uint, title string, firstLetter string, currentPage, pageSize int, offset int) ([]*model.Tag, int64, error) {
@@ -146,7 +147,7 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		link := GetUrl("tag", tag, 0)
 		go PushArchive(link)
 		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("tag", link)
+			_ = AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
 		}
 	}
 
@@ -183,7 +184,7 @@ func SaveTagData(itemId uint, tagNames []string) error {
 			link := GetUrl("tag", tag, 0)
 			go PushArchive(link)
 			if config.JsonData.PluginSitemap.AutoBuild == 1 {
-				_ = AddonSitemap("tag", link)
+				_ = AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
 			}
 		}
 		tagIds = append(tagIds, tag.Id)

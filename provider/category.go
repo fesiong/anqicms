@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/response"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func GetCategories(moduleId uint, title string, parentId uint) ([]*model.Category, error) {
@@ -225,7 +226,7 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		link := GetUrl("category", category, 0)
 		go PushArchive(link)
 		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("category", link)
+			_ = AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
 		}
 	}
 

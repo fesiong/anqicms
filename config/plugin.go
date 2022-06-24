@@ -5,14 +5,21 @@ import (
 	"strings"
 )
 
+type CodeItem struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
+}
+
 type pluginPushConfig struct {
-	BaiduApi string `json:"baidu_api"`
-	BingApi  string `json:"bing_api"`
-	JsCode   string `json:"js_code"`
+	BaiduApi string     `json:"baidu_api"`
+	BingApi  string     `json:"bing_api"`
+	JsCode   string     `json:"js_code"`
+	JsCodes  []CodeItem `json:"js_codes"`
 }
 
 type pluginSitemapConfig struct {
 	AutoBuild   int    `json:"auto_build"`
+	Type        string `json:"type"`
 	UpdatedTime int64  `json:"updated_time"`
 	SitemapURL  string `json:"sitemap_url"`
 }

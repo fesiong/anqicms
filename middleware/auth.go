@@ -33,9 +33,8 @@ func ParseAdminToken(ctx iris.Context) {
 	} else {
 		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 			userID, ok := claims["adminId"].(string)
-			ip, ok2 := claims["ip"].(string)
-			timeStamp, ok3 := claims["t"].(string)
-			if !ok || !ok2 || !ok3 {
+			timeStamp, ok2 := claims["t"].(string)
+			if !ok || !ok2 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
 					"msg":  "该操作需要登录，请登录后重试",
@@ -43,7 +42,7 @@ func ParseAdminToken(ctx iris.Context) {
 				return
 			}
 			sec, _ := strconv.ParseInt(timeStamp, 10, 64)
-			if ip != ctx.RemoteAddr() || sec < time.Now().Unix() {
+			if sec < time.Now().Unix() {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
 					"msg":  "该操作需要登录，请登录后重试",

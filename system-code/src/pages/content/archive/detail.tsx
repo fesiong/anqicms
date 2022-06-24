@@ -31,7 +31,7 @@ const { Panel } = Collapse;
 export default class ArchiveForm extends React.Component {
   state: { [key: string]: any } = {
     fetched: false,
-    archive: { extra: {}, content: '', flag: [] },
+    archive: getStore('unsaveArchive') || { extra: {}, content: '', flag: [] },
     content: '',
     modules: [],
     module: { fields: [] },
@@ -41,7 +41,6 @@ export default class ArchiveForm extends React.Component {
   };
 
   defaultContent = '';
-  unsaveContent = getStore('tmpArchive') || '';
 
   formRef = React.createRef<ProFormInstance>();
 
@@ -58,10 +57,15 @@ export default class ArchiveForm extends React.Component {
     if (id > 0) {
       this.getArchive(Number(id));
     } else {
-      this.setState({
-        fetched: true,
-        content: this.unsaveContent,
-      });
+      let copyId =  history.location.query?.copyid || 0;
+      if (copyId > 0) {
+        this.getArchive(Number(copyId), true)
+      } else {
+        this.setState({
+          fetched: true,
+          content: this.state.archive.content || '',
+        });
+      }
     }
 
     let moduleId = history.location.query?.module_id || 1;
@@ -78,10 +82,20 @@ export default class ArchiveForm extends React.Component {
   };
 
   beforeunload = (e: any) => {
-    if (!this.state.archive.id) {
-      setStore('tmpArchive', this.unsaveContent);
+    let archive = this.state.archive;
+    if (!archive.id) {
+      let values = this.formRef.current?.getFieldsValue();
+      archive.content = this.state.content;
+      var extra = archive.extra;
+      archive = Object.assign(archive, values);
+      archive.extra = Object.assign(archive.extra, extra);
+      archive.content = this.state.content;
+      if (typeof archive.flag === 'object') {
+        archive.flag = archive.flag.join(',');
+      }
+      setStore('unsaveArchive', archive);
     }
-    if (this.unsaveContent != '' && this.unsaveContent != this.defaultContent) {
+    if (this.state.content != '' && this.state.content != this.defaultContent) {
       let confirmationMessage = '你有尚未保存的内容，直接离开会导致内容丢失，确定要离开吗？';
       (e || window.event).returnValue = confirmationMessage;
       return confirmationMessage;
@@ -91,24 +105,37 @@ export default class ArchiveForm extends React.Component {
   };
 
   componentWillUnmount() {
-    if (!this.state.archive.id) {
-      setStore('tmpArchive', this.unsaveContent);
+    let archive = this.state.archive;
+    if (!archive.id) {
+      let values = this.formRef.current?.getFieldsValue();
+      archive.content = this.state.content;
+      var extra = archive.extra;
+      archive = Object.assign(archive, values);
+      archive.extra = Object.assign(archive.extra, extra);
+      archive.content = this.state.content;
+      if (typeof archive.flag === 'object') {
+        archive.flag = archive.flag.join(',');
+      }
+      setStore('unsaveArchive', archive);
     }
     window.removeEventListener('beforeunload', this.beforeunload);
   }
 
-  getArchive = async (id: number) => {
+  getArchive = async (id: number, copy?: boolean) => {
     let res = await getArchiveInfo({
       id: id,
     });
     let archive = res.data || { extra: {}, flag: null };
+    if (copy) {
+      archive.id = 0;
+      archive.url_token = '';
+    }
     let content = archive.data?.content || '';
     if (content.length > 0 && content[0] != '<') {
       content = '<p>' + content + '</p>';
     }
     archive.flag = archive.flag?.split(',') || [];
     archive.created_moment = moment(archive.created_time * 1000);
-    this.unsaveContent = '';
     this.defaultContent = content;
     this.getModule(archive.module_id);
     this.setState({
@@ -152,7 +179,6 @@ export default class ArchiveForm extends React.Component {
   };
 
   setContent = async (html: string) => {
-    this.unsaveContent = html;
     this.setState({
       content: html,
     });
@@ -233,7 +259,9 @@ export default class ArchiveForm extends React.Component {
 
   onSubmit = async (values: any) => {
     let { archive, content } = this.state;
+    var extra = archive.extra;
     archive = Object.assign(archive, values);
+    archive.extra = Object.assign(archive.extra, extra);
     // 必须选择分类
     if (!archive.category_id || archive.category_id == 0) {
       message.error('请选择文档分类');
@@ -267,6 +295,26 @@ export default class ArchiveForm extends React.Component {
       history.goBack();
     }
   };
+
+  handleCleanExtraField = (field: string) => {
+    let { archive } = this.state;
+    delete archive.extra[field];
+    this.setState({
+      archive
+    })
+  }
+
+  handleUploadExtraField = (field: string, row: any) => {
+    let { archive } = this.state;
+    if (!archive.extra[field]) {
+      archive.extra[field] = {};
+    }
+    archive.extra[field].value = row.logo;
+
+    this.setState({
+      archive
+    })
+  }
 
   handleKeyDown = (event: React.KeyboardEvent) => {
     if (event.key === "s" && (event.ctrlKey || event.metaKey)) {
@@ -422,6 +470,30 @@ export default class ArchiveForm extends React.Component {
                                   return data;
                                 }}
                               />
+                            ) : item.type === 'image' ? (
+                              <ProFormText label={item.name}>
+                              {archive.extra[item.field_name]?.value
+                                ?
+                                <div className="ant-upload-item">
+                                      <Image
+                                        preview={{
+                                          src: archive.extra[item.field_name]?.value,
+                                        }}
+                                        src={archive.extra[item.field_name]?.value}
+                                      />
+                                      <span className="delete" onClick={this.handleCleanExtraField.bind(this, item.field_name)}>
+                                        <DeleteOutlined />
+                                      </span>
+                                    </div>
+                                : <AttachmentSelect onSelect={ this.handleUploadExtraField.bind(this, item.field_name) } visible={false}>
+                                <div className="ant-upload-item">
+                                  <div className='add'>
+                                    <PlusOutlined />
+                                    <div style={{ marginTop: 8 }}>上传</div>
+                                  </div>
+                                </div>
+                              </AttachmentSelect>}
+                              </ProFormText>
                             ) : (
                               ''
                             )}

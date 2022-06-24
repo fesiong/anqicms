@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"os"
 	"path"
+	"strings"
 	"time"
 )
 
@@ -96,6 +97,10 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		return
 	}
 	defer file.Close()
+
+	info.Filename = strings.ReplaceAll(info.Filename, "..", "")
+	info.Filename = strings.ReplaceAll(info.Filename, "/", "")
+	info.Filename = strings.ReplaceAll(info.Filename, "\\", "")
 
 	ext := path.Ext(info.Filename)
 
