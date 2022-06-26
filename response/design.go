@@ -36,5 +36,6 @@ type DesignDocGroup struct {
 
 type DesignDoc struct {
 	Title   string `json:"title"`
+	Link    string `json:"link"`
 	Content string `json:"content"`
 }

@@ -30,7 +30,7 @@ const GlobalHeaderContent: React.FC = (props) => {
     if (current != null) {
       // preview单独处理
       if (current.path == "/preview") {
-        window.open(initialState.system?.base_url)
+        window.open(initialState.system?.base_url || '')
         return;
       }
 

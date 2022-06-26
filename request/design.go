@@ -15,11 +15,13 @@ type RestoreDesignFileRequest struct {
 	Hash     string `json:"hash"`
 	Package  string `json:"package"`
 	Filepath string `json:"path"`
+	Type     string `json:"type"`
 }
 
 type SaveDesignFileRequest struct {
 	Package       string `json:"package"`
 	Path          string `json:"path"`
+	Type          string `json:"type"`
 	RenamePath    string `json:"rename_path"`
 	Content       string `json:"content"`
 	Remark        string `json:"remark"`

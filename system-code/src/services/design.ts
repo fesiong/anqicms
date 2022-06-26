@@ -40,6 +40,14 @@ export async function deleteDesignInfo(body: any, options?: { [key: string]: any
   });
 }
 
+export async function UploadDesignInfo(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/design/upload',
+    body,
+    options,
+  });
+}
+
 export async function getDesignFileInfo(params: any, options?: { [key: string]: any }) {
   return get({
     url: '/design/file/info',
@@ -83,6 +91,14 @@ export async function saveDesignFileInfo(body: any, options?: { [key: string]: a
 export async function deleteDesignFileInfo(body: any, options?: { [key: string]: any }) {
   return post({
     url: '/design/file/delete',
+    body,
+    options,
+  });
+}
+
+export async function UploadDesignFileInfo(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/design/file/upload',
     body,
     options,
   });

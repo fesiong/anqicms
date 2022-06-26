@@ -1,14 +1,20 @@
 package provider
 
 import (
+	"archive/zip"
+	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"mime/multipart"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -46,12 +52,12 @@ func GetDesignList() []response.DesignPackage {
 				}
 				hasChange = true
 			} else {
-				bytes, err := ioutil.ReadFile(configFile)
+				data, err := ioutil.ReadFile(configFile)
 				if err != nil {
 					// 无法读取，只能跳过
 					continue
 				}
-				err = json.Unmarshal(bytes, &designInfo)
+				err = json.Unmarshal(data, &designInfo)
 
 				if err != nil {
 					// 解析失败
@@ -71,18 +77,7 @@ func GetDesignList() []response.DesignPackage {
 			}
 
 			if hasChange {
-				// 更新文件
-				buf, err := json.MarshalIndent(designInfo, "", "\t")
-				if err != nil {
-					// 解析失败
-					continue
-				}
-
-				err = ioutil.WriteFile(configFile, buf, os.ModePerm)
-				if err != nil {
-					// 写入失败
-					//	continue
-				}
+				_ = writeDesignInfo(&designInfo)
 			}
 
 			if designInfo.Package == config.JsonData.System.TemplateName {
@@ -121,20 +116,9 @@ func SaveDesignInfo(req request.DesignInfoRequest) error {
 	//designInfo.Homepage = req.Homepage
 	//designInfo.Created = req.Created
 
-	// 更新文件
-	basePath := config.ExecPath + "template/" + req.Package
-	configFile := basePath + "/" + "config.json"
-	buf, err := json.MarshalIndent(designInfo, "", "\t")
-	if err == nil {
-		// 解析失败
-		err = ioutil.WriteFile(configFile, buf, os.ModePerm)
-		if err != nil {
-			// 写入失败
-			//	continue
-		}
-	}
+	err := writeDesignInfo(&designInfo)
 
-	return nil
+	return err
 }
 
 // DeleteDesignInfo 删除的模板，会被移动到 cache
@@ -187,11 +171,13 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 
 	basePath := config.ExecPath + "template/" + packageName
 	var hasChange = false
-	configFile := basePath + "/" + "config.json"
 
 	designInfo := designList[designIndex]
 	// 尝试读取模板文件
 	files := readAllFiles(basePath)
+	if len(files) < len(designInfo.TplFiles) {
+		hasChange = true
+	}
 	for i := range files {
 		if strings.HasSuffix(files[i].Path, "config.json") {
 			continue
@@ -220,6 +206,9 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 	// 读取静态文件
 	staticPath := config.ExecPath + "public/static/" + packageName
 	files = readAllFiles(staticPath)
+	if len(files) < len(designInfo.StaticFiles) {
+		hasChange = true
+	}
 	for i := range files {
 		fullPath := strings.TrimPrefix(files[i].Path, staticPath+"/")
 		var exists = false
@@ -244,43 +233,309 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 	}
 
 	if hasChange {
-		// 更新文件
-		buf, err := json.MarshalIndent(designInfo, "", "\t")
-		if err == nil {
-			// 解析失败
-			err = ioutil.WriteFile(configFile, buf, os.ModePerm)
-			if err != nil {
-				// 写入失败
-				//	continue
-			}
-		}
+		saveFile := designInfo
+		_ = writeDesignInfo(&saveFile)
 	}
 
 	return &designInfo, nil
 }
 
-func GetDesignFileDetail(packageName string, filePath string, scan bool) (*response.DesignFile, error) {
+func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
+	// 解压
+	zipReader, err := zip.NewReader(file, info.Size)
+	if err != nil {
+		return err
+	}
+
+	packageName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
+	// 先尝试读取config.json
+	tmpFile, err := zipReader.Open("template/config.json")
+	if err == nil {
+		data, err := ioutil.ReadAll(tmpFile)
+		if err == nil {
+			var designInfo response.DesignPackage
+			err = json.Unmarshal(data, &designInfo)
+			if err == nil {
+				packageName = designInfo.Package
+			}
+		}
+	}
+	// 检查是否已经存在
+	packagePath := config.ExecPath + "template/" + packageName
+	_, err = os.Stat(packagePath)
+	if err == nil {
+		// 已存在
+		i := 1
+		for {
+			packagePath = fmt.Sprintf("%stemplate/%s%d", config.ExecPath, packageName, i)
+			_, err = os.Stat(packagePath)
+			if err != nil {
+				packageName = fmt.Sprintf("%s%d", packageName, i)
+				break
+			}
+			i++
+		}
+	}
+
+	for _, f := range zipReader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		fileExt := filepath.Ext(f.Name)
+		if fileExt == ".php" {
+			continue
+		}
+		f.Name = strings.ReplaceAll(f.Name, "..", "")
+		f.Name = strings.ReplaceAll(f.Name, "\\", "")
+		var realName string
+		// 模板文件
+		if strings.HasPrefix(f.Name, "template/") {
+			if fileExt != ".html" && fileExt != ".json" {
+				continue
+			}
+			basePath := filepath.Join(config.ExecPath, "template", packageName)
+			realName = filepath.Clean(basePath + strings.TrimPrefix(f.Name, "template/"))
+			if !strings.HasPrefix(realName, basePath) {
+				continue
+			}
+		}
+		// static
+		if strings.HasPrefix(f.Name, "static/") {
+			basePath := filepath.Join(config.ExecPath, "public/static", packageName)
+			realName = filepath.Clean(basePath + strings.TrimPrefix(f.Name, "static/"))
+			if !strings.HasPrefix(realName, basePath) {
+				continue
+			}
+		}
+
+		reader, err := f.Open()
+		if err != nil {
+			continue
+		}
+		_ = os.MkdirAll(filepath.Dir(realName), os.ModePerm)
+		newFile, err := os.Create(realName)
+		if err != nil {
+			reader.Close()
+			continue
+		}
+		_, err = io.Copy(newFile, reader)
+		if err != nil {
+			reader.Close()
+			newFile.Close()
+			continue
+		}
+
+		reader.Close()
+		_ = newFile.Close()
+	}
+
+	return nil
+}
+
+func CreateDesignZip(packageName string) (*bytes.Buffer, error) {
+	buff := &bytes.Buffer{}
+
+	archive := zip.NewWriter(buff)
+	defer archive.Close()
+
+	// 读取模板
+	basePath := config.ExecPath + "template/" + packageName
+	// 尝试读取模板文件
+	files, err := ioutil.ReadDir(basePath)
+	if err != nil {
+		return nil, err
+	}
+	for _, info := range files {
+		fullName := basePath + "/" + info.Name()
+		file, err := os.Open(fullName)
+		if err != nil {
+			return nil, err
+		}
+		err = compress(file, "template", archive)
+		if err != nil {
+			return nil, err
+		}
+	}
+	// 读取静态文件
+	staticPath := config.ExecPath + "public/static/" + packageName
+	files, err = ioutil.ReadDir(staticPath)
+	if err != nil {
+		return nil, err
+	}
+	for _, info := range files {
+		fullName := staticPath + "/" + info.Name()
+		file, err := os.Open(fullName)
+		if err != nil {
+			return nil, err
+		}
+		err = compress(file, "static", archive)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return buff, nil
+}
+
+func compress(file *os.File, prefix string, zw *zip.Writer) error {
+	info, err := file.Stat()
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	if strings.HasPrefix(info.Name(), ".") {
+		return nil
+	}
+	if prefix != "" {
+		prefix += "/"
+	}
+	if info.IsDir() {
+		prefix = prefix + info.Name()
+		fileInfos, err := file.Readdir(-1)
+		if err != nil {
+			return err
+		}
+		for _, fi := range fileInfos {
+			f, err := os.Open(file.Name() + "/" + fi.Name())
+			if err != nil {
+				return err
+			}
+			err = compress(f, prefix, zw)
+			if err != nil {
+				return err
+			}
+		}
+	} else {
+		header, err := zip.FileInfoHeader(info)
+		header.Name = prefix + header.Name
+		if err != nil {
+			return err
+		}
+		writer, err := zw.CreateHeader(header)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(writer, file)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageName, fileType, filePath string) error {
+	fileExt := filepath.Ext(info.Filename)
+	if fileExt == ".php" {
+		return errors.New("不能上传php文件")
+	}
+
+	designInfo, err := GetDesignInfo(packageName, false)
+	if err != nil {
+		return err
+	}
+
+	var basePath string
+	filePath = strings.ReplaceAll(filePath, "..", "")
+	var realPath string
+	if fileType == "static" {
+		// 资源
+		basePath = filepath.Join(config.ExecPath, "public/static", designInfo.Package)
+		realPath = filepath.Clean(basePath + "/" + filePath)
+		if !strings.HasPrefix(realPath, basePath) {
+			return errors.New("不能越级上传模板")
+		}
+	} else {
+		if fileExt != ".html" && fileExt != ".zip" {
+			return errors.New("请上传html模板")
+		}
+		basePath = filepath.Join(config.ExecPath, "template", designInfo.Package)
+		realPath = filepath.Clean(basePath + "/" + filePath)
+		if !strings.HasPrefix(realPath, basePath) {
+			return errors.New("不能越级上传模板")
+		}
+	}
+	realPath = strings.TrimRight(realPath, "/")
+	if fileExt == ".zip" {
+		// 解压
+		zipReader, err := zip.NewReader(file, info.Size)
+		if err != nil {
+			return err
+		}
+		for _, f := range zipReader.File {
+			if f.FileInfo().IsDir() {
+				continue
+			}
+			ext := filepath.Ext(f.Name)
+			if ext == ".php" {
+				continue
+			}
+			if fileType != "static" && ext != ".html" {
+				continue
+			}
+			f.Name = strings.ReplaceAll(f.Name, "..", "")
+			f.Name = strings.ReplaceAll(f.Name, "\\", "")
+			realFile := filepath.Clean(realPath + "/" + f.Name)
+			if !strings.HasPrefix(realFile, basePath) {
+				continue
+			}
+
+			reader, err := f.Open()
+			if err != nil {
+				continue
+			}
+			_ = os.MkdirAll(filepath.Dir(realFile), os.ModePerm)
+			newFile, err := os.Create(realFile)
+			if err != nil {
+				reader.Close()
+				continue
+			}
+			_, err = io.Copy(newFile, reader)
+			if err != nil {
+				reader.Close()
+				newFile.Close()
+				continue
+			}
+
+			reader.Close()
+			_ = newFile.Close()
+		}
+	} else {
+		info.Filename = strings.ReplaceAll(info.Filename, "..", "")
+		info.Filename = strings.ReplaceAll(info.Filename, "\\", "")
+		realFile := filepath.Clean(realPath + "/" + info.Filename)
+		if !strings.HasPrefix(realFile, basePath) {
+			return errors.New("不能越级上传文件")
+		}
+		// 单独文件处理
+		newFile, err := os.Create(realFile)
+		if err != nil {
+			return err
+		}
+		_, err = io.Copy(newFile, file)
+		if err != nil {
+			newFile.Close()
+			return err
+		}
+
+		_ = newFile.Close()
+	}
+
+	return nil
+}
+
+func GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*response.DesignFile, error) {
 	designInfo, err := GetDesignInfo(packageName, false)
 	if err != nil {
 		return nil, errors.New("模板不存在")
 	}
 
+	filePath = strings.ReplaceAll(filePath, "..", "")
 	var designFileDetail response.DesignFile
 	var exists = false
-	var isTpl = false
 	if filePath == "" && len(designInfo.TplFiles) > 0 {
 		filePath = designInfo.TplFiles[0].Path
 	}
-	if strings.HasSuffix(filePath, ".html") {
-		isTpl = true
-		for i := range designInfo.TplFiles {
-			if designInfo.TplFiles[i].Path == filePath {
-				designFileDetail = designInfo.TplFiles[i]
-				exists = true
-				break
-			}
-		}
-	} else {
+	if fileType == "static" {
 		// 保存模板静态文件
 		for i := range designInfo.StaticFiles {
 			if designInfo.StaticFiles[i].Path == filePath {
@@ -289,21 +544,53 @@ func GetDesignFileDetail(packageName string, filePath string, scan bool) (*respo
 				break
 			}
 		}
+	} else {
+		for i := range designInfo.TplFiles {
+			if designInfo.TplFiles[i].Path == filePath {
+				designFileDetail = designInfo.TplFiles[i]
+				exists = true
+				break
+			}
+		}
+	}
+
+	var basePath string
+	var realPath string
+	if fileType == "static" {
+		// 资源
+		basePath = filepath.Join(config.ExecPath, "public/static", designInfo.Package)
+		realPath = filepath.Clean(basePath + "/" + filePath)
+		if !strings.HasPrefix(realPath, basePath) {
+			return nil, errors.New("文件不存在")
+		}
+	} else {
+		basePath = filepath.Join(config.ExecPath, "template", designInfo.Package)
+		realPath = filepath.Clean(basePath + "/" + filePath)
+		if !strings.HasPrefix(realPath, basePath) {
+			return nil, errors.New("文件不存在")
+		}
+	}
+
+	_, err = os.Stat(realPath)
+	if err != nil && os.IsNotExist(err) {
+		return nil, errors.New("文件不存在")
 	}
 
 	if !exists {
-		return nil, errors.New("文件不存在")
+		designFileDetail = response.DesignFile{
+			Path:    filePath,
+		}
 	}
 
 	if !scan {
 		return &designFileDetail, nil
 	}
 
-	if isTpl {
-		return GetDesignTplFileDetail(packageName, designFileDetail)
+	if fileType == "static" {
+		return GetDesignStaticFileDetail(packageName, designFileDetail)
 	}
 
-	return GetDesignStaticFileDetail(packageName, designFileDetail)
+	return GetDesignTplFileDetail(packageName, designFileDetail)
 }
 
 func GetDesignTplFileDetail(packageName string, designFileDetail response.DesignFile) (*response.DesignFile, error) {
@@ -315,14 +602,14 @@ func GetDesignTplFileDetail(packageName string, designFileDetail response.Design
 		//return nil, errors.New("模板文件读取失败")
 	}
 
-	bytes, err := ioutil.ReadFile(fullPath)
+	data, err := ioutil.ReadFile(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
 		//return nil, errors.New("模板文件读取失败")
 	}
 
 	designFileDetail.LastMod = info.ModTime().Unix()
-	designFileDetail.Content = string(bytes)
+	designFileDetail.Content = string(data)
 
 	return &designFileDetail, nil
 }
@@ -336,20 +623,20 @@ func GetDesignStaticFileDetail(packageName string, designFileDetail response.Des
 		//return nil, errors.New("模板文件读取失败")
 	}
 
-	bytes, err := ioutil.ReadFile(fullPath)
+	data, err := ioutil.ReadFile(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
 		//return nil, errors.New("模板文件读取失败")
 	}
 
 	designFileDetail.LastMod = info.ModTime().Unix()
-	designFileDetail.Content = string(bytes)
+	designFileDetail.Content = string(data)
 
 	return &designFileDetail, nil
 }
 
-func GetDesignFileHistories(packageName string, filePath string) []response.DesignFileHistory {
-	designFileDetail, err := GetDesignFileDetail(packageName, filePath, false)
+func GetDesignFileHistories(packageName, filePath, fileType string) []response.DesignFileHistory {
+	designFileDetail, err := GetDesignFileDetail(packageName, filePath, fileType, false)
 	if err != nil {
 		return nil
 	}
@@ -394,13 +681,13 @@ func StoreDesignHistory(packageName string, filePath string, content []byte) err
 	return err
 }
 
-func DeleteDesignHistoryFile(packageName string, filePath string, historyHash string) error {
-	designFileDetail, err := GetDesignFileDetail(packageName, filePath, false)
+func DeleteDesignHistoryFile(packageName, filePath, historyHash, fileType string) error {
+	designFileDetail, err := GetDesignFileDetail(packageName, filePath, fileType, false)
 	if err != nil {
 		return err
 	}
 
-	histories := GetDesignFileHistories(packageName, filePath)
+	histories := GetDesignFileHistories(packageName, filePath, fileType)
 	var exists = false
 	for i := range histories {
 		if histories[i].Hash == historyHash {
@@ -427,13 +714,13 @@ func DeleteDesignHistoryFile(packageName string, filePath string, historyHash st
 	return nil
 }
 
-func RestoreDesignFile(packageName string, filePath string, historyHash string) error {
-	designFileDetail, err := GetDesignFileDetail(packageName, filePath, false)
+func RestoreDesignFile(packageName, filePath, historyHash, fileType string) error {
+	designFileDetail, err := GetDesignFileDetail(packageName, filePath, fileType, false)
 	if err != nil {
 		return err
 	}
 
-	histories := GetDesignFileHistories(packageName, filePath)
+	histories := GetDesignFileHistories(packageName, filePath, fileType)
 	var exists = false
 	for i := range histories {
 		if histories[i].Hash == historyHash {
@@ -449,11 +736,11 @@ func RestoreDesignFile(packageName string, filePath string, historyHash string) 
 
 	var fullPath string
 	// 保存html模板
-	if strings.HasSuffix(filePath, ".html") {
-		fullPath = config.ExecPath + "template/" + packageName + "/" + designFileDetail.Path
-	} else {
+	if fileType == "static" {
 		// 保存模板静态文件
 		fullPath = config.ExecPath + "public/static/" + packageName + "/" + designFileDetail.Path
+	} else {
+		fullPath = config.ExecPath + "template/" + packageName + "/" + designFileDetail.Path
 	}
 
 	_, err = os.Stat(historyPath)
@@ -469,55 +756,41 @@ func RestoreDesignFile(packageName string, filePath string, historyHash string) 
 	return nil
 }
 
-func DeleteDesignFile(packageName string, filePath string) error {
+func DeleteDesignFile(packageName, filePath, fileType string) error {
 	// 先验证文件名是否合法
 	designInfo, err := GetDesignInfo(packageName, false)
 	if err != nil {
 		return errors.New("模板不存在")
 	}
 
-	var designFileDetail response.DesignFile
-	var existsIndex = -1
-	var isTpl = false
-
-	if strings.HasSuffix(filePath, ".html") {
-		isTpl = true
-		for i := range designInfo.TplFiles {
-			if designInfo.TplFiles[i].Path == filePath {
-				designFileDetail = designInfo.TplFiles[i]
-				existsIndex = i
-				designInfo.TplFiles = append(designInfo.TplFiles[:i], designInfo.TplFiles[i+1:]...)
+	if fileType == "static" {
+		// 保存模板静态文件
+		for i := range designInfo.StaticFiles {
+			if designInfo.StaticFiles[i].Path == filePath {
+				designInfo.StaticFiles = append(designInfo.StaticFiles[:i], designInfo.StaticFiles[i+1:]...)
 				break
 			}
 		}
 	} else {
-		// 保存模板静态文件
-		for i := range designInfo.StaticFiles {
-			if designInfo.StaticFiles[i].Path == filePath {
-				designFileDetail = designInfo.StaticFiles[i]
-				existsIndex = i
-				designInfo.StaticFiles = append(designInfo.StaticFiles[:i], designInfo.StaticFiles[i+1:]...)
+		for i := range designInfo.TplFiles {
+			if designInfo.TplFiles[i].Path == filePath {
+				designInfo.TplFiles = append(designInfo.TplFiles[:i], designInfo.TplFiles[i+1:]...)
 				break
 			}
 		}
 	}
 
-	// 只记录remark
-	if existsIndex == -1 {
-		return nil
+	// 删除物理文件
+	var basePath string
+	if fileType == "static" {
+		// 静态文件
+		basePath = config.ExecPath + "public/static/" + packageName
 	} else {
-		var fullPath string
-		// 保存html模板
-		if isTpl {
-			fullPath = config.ExecPath + "template/" + packageName + "/" + designFileDetail.Path
-		} else {
-			// 保存模板静态文件
-			fullPath = config.ExecPath + "public/static/" + packageName + "/" + designFileDetail.Path
-		}
-
+		basePath = config.ExecPath + "template/" + packageName
+	}
+	fullPath := filepath.Clean(basePath + "/" + filePath)
+	if strings.HasPrefix(fullPath, basePath) {
 		os.Remove(fullPath)
-
-		// 更新文件
 
 		// 暂时不删除 history
 		//pathMd5 := library.Md5(designFileDetail.Path)
@@ -529,17 +802,7 @@ func DeleteDesignFile(packageName string, filePath string) error {
 		//os.RemoveAll(historyPath)
 	}
 	// 更新文件
-	basePath := config.ExecPath + "template/" + packageName
-	configFile := basePath + "/" + "config.json"
-	buf, err := json.MarshalIndent(designInfo, "", "\t")
-	if err == nil {
-		// 解析失败
-		err = ioutil.WriteFile(configFile, buf, os.ModePerm)
-		if err != nil {
-			// 写入失败
-			//	continue
-		}
-	}
+	err = writeDesignInfo(designInfo)
 
 	return nil
 }
@@ -551,60 +814,47 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 		return errors.New("模板不存在")
 	}
 
-	var designFileDetail response.DesignFile
-	var existsIndex = -1
-	var isTpl = false
-
-	if strings.HasSuffix(req.Path, ".html") {
-		isTpl = true
-		for i := range designInfo.TplFiles {
-			if designInfo.TplFiles[i].Path == req.Path {
-				designFileDetail = designInfo.TplFiles[i]
-				existsIndex = i
-				break
-			}
-		}
-
-		// 不能越级到上级
-		basePath := config.ExecPath + "template/" + req.Package + "/"
-		fullPath := filepath.Clean(basePath + req.Path)
-		if !strings.HasPrefix(fullPath, basePath) {
-			return errors.New("模板文件保存失败")
-		}
-		req.Path = strings.TrimPrefix(fullPath, basePath)
-		if req.RenamePath != "" && req.RenamePath != req.Path {
-			newPath := filepath.Clean(basePath + req.RenamePath)
-			if !strings.HasPrefix(newPath, basePath) {
-				return errors.New("模板文件保存失败")
-			}
-			req.Path = strings.TrimPrefix(newPath, basePath)
-			// 移动
-			if existsIndex != -1 {
-				err = os.Rename(fullPath, newPath)
-				if err != nil {
-					return err
-				}
-				designFileDetail.Path = req.Path
-			}
-		}
-
+	// 先检查文件是否存在
+	var basePath string
+	if req.Type == "static" {
+		basePath = config.ExecPath + "public/static/" + req.Package + "/"
 	} else {
+		basePath = config.ExecPath + "template/" + req.Package + "/"
+	}
+	fullPath := filepath.Clean(basePath + req.Path)
+	if !strings.HasPrefix(fullPath, basePath) {
+		return errors.New("模板文件不存在")
+	}
+
+	if req.UpdateContent {
+		// 修改内容
+		if req.Type == "static" {
+			return SaveDesignStaticFile(req)
+		}
 		// 保存模板静态文件
-		for i := range designInfo.StaticFiles {
-			if designInfo.StaticFiles[i].Path == req.Path {
-				designFileDetail = designInfo.StaticFiles[i]
-				existsIndex = i
-				break
+		return SaveDesignTplFile(req)
+	} else {
+		// 修改备注名称等
+		var designFileDetail response.DesignFile
+		var existsIndex = -1
+		if req.Type == "static" {
+			for i := range designInfo.StaticFiles {
+				if designInfo.StaticFiles[i].Path == req.Path {
+					designFileDetail = designInfo.StaticFiles[i]
+					existsIndex = i
+					break
+				}
+			}
+		} else {
+			for i := range designInfo.TplFiles {
+				if designInfo.TplFiles[i].Path == req.Path {
+					designFileDetail = designInfo.TplFiles[i]
+					existsIndex = i
+					break
+				}
 			}
 		}
-
-		// 不能越级到上级
-		basePath := config.ExecPath + "public/static/" + req.Package + "/"
-		fullPath := filepath.Clean(basePath + req.Path)
-		if !strings.HasPrefix(fullPath, basePath) {
-			return errors.New("模板文件保存失败")
-		}
-		req.Path = strings.TrimPrefix(fullPath, basePath)
+		// 如果进行了重命名
 		if req.RenamePath != "" && req.RenamePath != req.Path {
 			newPath := filepath.Clean(basePath + req.RenamePath)
 			if !strings.HasPrefix(newPath, basePath) {
@@ -612,62 +862,82 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 			}
 			req.Path = strings.TrimPrefix(newPath, basePath)
 			// 移动
-			if existsIndex != -1 {
-				err = os.Rename(fullPath, newPath)
-				if err != nil {
-					return err
+			_, err = os.Stat(fullPath)
+			if err != nil {
+				return err
+			}
+			err = os.Rename(fullPath, newPath)
+			if err != nil {
+				return err
+			}
+
+		}
+		//
+		if existsIndex == -1 {
+			if req.Remark != "" {
+				// 写入文件
+				designFileDetail = response.DesignFile{
+					Path:    req.Path,
+					Remark:  req.Remark,
+					Content: "",
+					LastMod: 0,
 				}
-				designFileDetail.Path = req.Path
+				if req.Type != "static" {
+					designInfo.TplFiles = append(designInfo.TplFiles, designFileDetail)
+				} else {
+					designInfo.StaticFiles = append(designInfo.StaticFiles, designFileDetail)
+				}
+			}
+		} else {
+			designFileDetail.Remark = req.Remark
+			if req.Type != "static" {
+				designInfo.TplFiles[existsIndex] = designFileDetail
+			} else {
+				designInfo.StaticFiles[existsIndex] = designFileDetail
+			}
+		}
+		// 更新文件
+		err = writeDesignInfo(designInfo)
+
+		return err
+	}
+}
+
+func writeDesignInfo(designInfo *response.DesignPackage) error {
+	// 更新文件
+	basePath := config.ExecPath + "template/" + designInfo.Package + "/"
+	configFile := basePath + "config.json"
+	// 保存之前，清理只记录有remark的文件到列表
+	var newFiles []response.DesignFile
+	for i := range designInfo.TplFiles {
+		if designInfo.TplFiles[i].Remark != "" {
+			_, err := os.Stat(basePath + designInfo.TplFiles[i].Path)
+			if err != nil || !os.IsNotExist(err) {
+				newFiles = append(newFiles, designInfo.TplFiles[i])
 			}
 		}
 	}
+	designInfo.TplFiles = newFiles
 
-	// 只记录remark
-	if existsIndex == -1 {
-		// 写入文件
-		designFileDetail = response.DesignFile{
-			Path:    req.Path,
-			Remark:  req.Remark,
-			Content: "",
-			LastMod: 0,
-		}
-		if isTpl {
-			designInfo.TplFiles = append(designInfo.TplFiles, designFileDetail)
-		} else {
-			designInfo.StaticFiles = append(designInfo.StaticFiles, designFileDetail)
-		}
-	} else {
-		designFileDetail.Remark = req.Remark
-		if isTpl {
-			designInfo.TplFiles[existsIndex] = designFileDetail
-		} else {
-			designInfo.StaticFiles[existsIndex] = designFileDetail
+	var newStaticFiles []response.DesignFile
+	baseStaticPath := config.ExecPath + "public/static/" + designInfo.Package + "/"
+	for i := range designInfo.StaticFiles {
+		if designInfo.StaticFiles[i].Remark != "" {
+			_, err := os.Stat(baseStaticPath + designInfo.StaticFiles[i].Path)
+			if err != nil || !os.IsNotExist(err) {
+				newStaticFiles = append(newStaticFiles, designInfo.StaticFiles[i])
+			}
 		}
 	}
-	// 更新文件
-	basePath := config.ExecPath + "template/" + req.Package
-	configFile := basePath + "/" + "config.json"
+	designInfo.StaticFiles = newStaticFiles
+
 	buf, err := json.MarshalIndent(designInfo, "", "\t")
 	if err == nil {
 		// 解析失败
 		err = ioutil.WriteFile(configFile, buf, os.ModePerm)
-		if err != nil {
-			// 写入失败
-			//	continue
-		}
 	}
 
-	// todo 更改为struct 操控模式
-
-	if !req.UpdateContent {
-		return nil
-	}
-
-	if isTpl {
-		return SaveDesignTplFile(req)
-	}
-	// 保存模板静态文件
-	return SaveDesignStaticFile(req)
+	return err
 }
 
 func SaveDesignTplFile(req request.SaveDesignFileRequest) error {

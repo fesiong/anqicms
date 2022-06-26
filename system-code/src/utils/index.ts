@@ -1,3 +1,7 @@
+import config from "@/services/config";
+import { message } from "antd";
+import { getStore } from "./store";
+
 /**
  * 校验是否登录
  * @param permits
@@ -130,3 +134,59 @@ export const getWordsCount = function (str: string) {
 export const case2Camel = function (str: string) {
   return str.replaceAll('_', ' ').toLowerCase().replace(/( |^)[a-z]/g, (L) => L.toUpperCase()).replaceAll(' ', '');
 }
+
+export const downloadFile = (url: string, params?: any, fileName?: string) => {
+  //强制等待1秒钟
+  let hide = message.loading('正在下载中');
+
+  let headers = {
+    admin: getStore('adminToken'),
+    'Content-Type': 'application/json',
+  };
+  if (!fileName) {
+    fileName = 'file';
+  }
+  return fetch(config.baseUrl + url, {
+    headers: headers,
+    method: 'post',
+    body: JSON.stringify(params),
+  })
+    .then((res: any) => {
+      fileName =
+        res.headers
+          .get('Content-Disposition')
+          ?.split(';')[1]
+          ?.split('filename=')[1]
+          .replace(/"/g, '') || fileName;
+      res
+        .blob()
+        .then((blob: any) => {
+          if (blob.type == 'application/json') {
+            //json 报错了
+            var reader = new FileReader();
+            reader.readAsText(blob, 'utf-8');
+            reader.onload = () => {
+              let data = JSON.parse(reader.result as string);
+              message.error(data.msg);
+            };
+            return;
+          }
+          let a = document.createElement('a');
+          let blobUrl = window?.URL?.createObjectURL(blob);
+          a.href = blobUrl;
+          a.download = fileName + '';
+          a.click();
+          window?.URL?.revokeObjectURL(blobUrl);
+        })
+        .catch((err: any) => {
+          console.log(err);
+          message.destroy();
+          message.error('文件打包失败' + err);
+        });
+    })
+    .finally(() => {
+      hide();
+      return Promise.resolve({});
+    });
+};
+

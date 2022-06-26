@@ -4,14 +4,17 @@ import "kandaoni.com/anqicms/library"
 
 const (
 	IndexCacheKey = "index"
+
+	UserAgentPc     = "pc"
+	UserAgentMobile = "mobile"
 )
 
-func CacheIndex(body []byte) {
-	library.MemCache.Set(IndexCacheKey, body, 3600)
+func CacheIndex(ua string, body []byte) {
+	library.MemCache.Set(IndexCacheKey+ua, body, 3600)
 }
 
-func GetIndexCache() []byte {
-	body := library.MemCache.Get(IndexCacheKey)
+func GetIndexCache(ua string) []byte {
+	body := library.MemCache.Get(IndexCacheKey + ua)
 
 	if body == nil {
 		return nil
@@ -26,5 +29,6 @@ func GetIndexCache() []byte {
 }
 
 func DeleteCacheIndex() {
-	library.MemCache.Delete(IndexCacheKey)
+	library.MemCache.Delete(IndexCacheKey + UserAgentPc)
+	library.MemCache.Delete(IndexCacheKey + UserAgentMobile)
 }

@@ -8,10 +8,16 @@ import (
 )
 
 func IndexPage(ctx iris.Context) {
+	var ua string
+	if ctx.IsMobile() {
+		ua = provider.UserAgentMobile
+	} else {
+		ua = provider.UserAgentPc
+	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	// 只缓存首页
 	if currentPage == 1 {
-		body := provider.GetIndexCache()
+		body := provider.GetIndexCache(ua)
 		if body != nil {
 			log.Println("Load index from cache.")
 			ctx.Write(body)
@@ -39,6 +45,6 @@ func IndexPage(ctx iris.Context) {
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else if currentPage == 1 {
-		provider.CacheIndex(recorder.Body())
+		provider.CacheIndex(ua, recorder.Body())
 	}
 }

@@ -188,7 +188,7 @@ func PluginKeywordImport(ctx iris.Context) {
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    err.Error(),
 		})
 		return
@@ -198,7 +198,7 @@ func PluginKeywordImport(ctx iris.Context) {
 	result, err := provider.ImportKeywords(file, info)
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    err.Error(),
 		})
 		return

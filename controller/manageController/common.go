@@ -284,6 +284,7 @@ func VersionUpgrade(ctx iris.Context) {
 		_, err = io.Copy(newFile, reader)
 		if err != nil {
 			reader.Close()
+			newFile.Close()
 			errorFiles = append(errorFiles, realName)
 			continue
 		}

@@ -154,7 +154,7 @@ func PluginRedirectImport(ctx iris.Context) {
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    err.Error(),
 		})
 		return
@@ -164,7 +164,7 @@ func PluginRedirectImport(ctx iris.Context) {
 	result, err := provider.ImportRedirects(file, info)
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    err.Error(),
 		})
 		return

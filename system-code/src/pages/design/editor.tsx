@@ -1,13 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
 import MonacoEditor from 'react-monaco-editor';
-import { Button, Card, Col, message, Row, Space, Collapse, Modal } from 'antd';
+import { Button, Card, Col, message, Row, Space, Collapse, Modal, BackTop } from 'antd';
 import { history } from 'umi';
 import { deleteDesignHistoryFile, getDesignFileHistories, getDesignFileInfo, getDesignInfo, restoreDesignFileInfo, saveDesignFileInfo } from '@/services/design';
 import './index.less';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
 import moment from 'moment';
-import { getLanguage } from '@ant-design/pro-layout/lib/locales';
+
+var fileType: string = '';
 
 const DesignEditor: React.FC = () => {
   const [fileInfo, setFileInfo] = useState<any>({});
@@ -21,9 +22,6 @@ const DesignEditor: React.FC = () => {
 
   useEffect(() => {
     fetchDesignInfo();
-
-    const path = history.location.query?.path || '';
-    fetchDesignFileInfo(path);
   }, []);
 
   const fetchDesignInfo = async () => {
@@ -33,6 +31,17 @@ const DesignEditor: React.FC = () => {
     })
       .then((res) => {
         setDesignInfo(res.data);
+
+        var path = history.location.query?.path || '';
+        var type = history.location.query?.type || '';
+        fileType = type + '';
+
+        if (path == '' && res.data.tpl_files?.length > 0) {
+          type = 'template';
+          path = res.data.tpl_files[0].path;
+        }
+
+        fetchDesignFileInfo(path);
       })
       .catch(() => {
         message.error('获取模板信息出错');
@@ -44,6 +53,7 @@ const DesignEditor: React.FC = () => {
     setLoaded(false);
     getDesignFileInfo({
       package: packageName,
+      type: fileType,
       path: path,
     })
       .then((res) => {
@@ -73,6 +83,7 @@ const DesignEditor: React.FC = () => {
     fileInfo.content = code;
     fileInfo.package = designInfo.package;
     fileInfo.update_content = true;
+    fileInfo.type = fileType;
     unsave = false;
     saveDesignFileInfo(fileInfo).then((res) => {
       message.info(res.msg);
@@ -80,18 +91,26 @@ const DesignEditor: React.FC = () => {
     });
   };
 
-  const handleEditFile = (info: any) => {
+  const handleEditFile = (type: string, info: any) => {
     if (unsave) {
       Modal.confirm({
         title: '你有未保存的代码，确定要编辑新文件吗？',
         content: '这么做将会导致未保存的代码丢失。',
         onOk: () => {
+          fileType = type;
           fetchDesignFileInfo(info.path);
+          scrollToTop();
         },
       });
     } else {
+      fileType = type;
       fetchDesignFileInfo(info.path);
+      scrollToTop();
     }
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo(window.pageXOffset, 0);
   };
 
   const handleRestore = (info: any) => {
@@ -103,6 +122,7 @@ const DesignEditor: React.FC = () => {
           hash: info.hash,
           package: designInfo.package,
           path: fileInfo.path,
+          type: fileType,
         }).then(res => {
           message.info(res.msg);
           fetchDesignFileInfo(info.path);
@@ -119,6 +139,7 @@ const DesignEditor: React.FC = () => {
           hash: info.hash,
           package: designInfo.package,
           path: fileInfo.path,
+          type: fileType,
         }).then(res => {
           message.info(res.msg);
           actionRef.current?.reload();
@@ -258,7 +279,7 @@ const DesignEditor: React.FC = () => {
                   <div
                     key={index}
                     className={'tpl-item link ' + (fileInfo.path == item.path ? 'active' : '')}
-                    onClick={() => handleEditFile(item)}
+                    onClick={() => handleEditFile('template', item)}
                   >
                     <div className="name">{item.path}</div>
                     <div className="extra">{item.remark}</div>
@@ -267,12 +288,12 @@ const DesignEditor: React.FC = () => {
               </Collapse.Panel>
               <Collapse.Panel className="tpl-file-list" showArrow={false} header="资源文件" key="2">
                 {designInfo?.static_files?.map((item: any, index: number) => {
-                  if (item.path.indexOf('.js') !== -1 || item.path.indexOf('.css') !== -1) {
+                  if (item.path.indexOf('.js') !== -1 || item.path.indexOf('.ts') !== -1 || item.path.indexOf('.css') !== -1 || item.path.indexOf('.scss') !== -1 || item.path.indexOf('.sass') !== -1 || item.path.indexOf('.less') !== -1) {
                     return (
                       <div
                         key={index}
                         className={'tpl-item link ' + (fileInfo.path == item.path ? 'active' : '')}
-                        onClick={() => handleEditFile(item)}
+                        onClick={() => handleEditFile('static', item)}
                       >
                         <div className="name">{item.path}</div>
                         <div className="extra">{item.remark}</div>

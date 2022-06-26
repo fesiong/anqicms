@@ -1,3 +1,4 @@
 robots.txt
-sitemap*
+/*.xml
+/*.txt
 /system

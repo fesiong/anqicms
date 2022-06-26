@@ -91,7 +91,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    err.Error(),
 		})
 		return
@@ -106,7 +106,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 
 	if ext != ".txt" && ext != ".htm" && ext != ".html" {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    "只允许上传txt/htm/html",
 		})
 		return
@@ -116,7 +116,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	buff, err := ioutil.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    "读取失败",
 		})
 		return
@@ -125,7 +125,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	err = ioutil.WriteFile(filePath, buff, 0644)
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
+			"code": config.StatusFailed,
 			"msg":    "文件保存失败",
 		})
 		return
