@@ -271,7 +271,7 @@ func LoadLanguage() {
 	if err == nil {
 		strSlice := strings.Split(string(yamlFile), "\n")
 		for _, v := range strSlice {
-			vSplit := strings.SplitN(v, ":", 2)
+			vSplit := strings.SplitN(strings.TrimSpace(v), ":", 2)
 			if len(vSplit) == 2 {
 				languages[strings.Trim(vSplit[0], "\" ")] = strings.Trim(vSplit[1], "\" ")
 			}
