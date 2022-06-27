@@ -1,6 +1,6 @@
 package config
 
-const Version = "2.1.9"
+const Version = "2.2.0"
 
 const (
 	StatusOK         = 0
