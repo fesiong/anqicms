@@ -8,6 +8,8 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"strconv"
+	"strings"
 )
 
 type tagCategoryListNode struct {
@@ -25,6 +27,8 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		return err
 	}
 
+	limit := 0
+	offset := 0
 	moduleId := uint(0)
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
@@ -44,10 +48,32 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		parentId = categoryDetail.Id
 	}
 
+	if args["limit"] != nil {
+		limitArgs := strings.Split(args["limit"].String(), ",")
+		if len(limitArgs) == 2 {
+			offset, _ = strconv.Atoi(limitArgs[0])
+			limit, _ = strconv.Atoi(limitArgs[1])
+		} else if len(limitArgs) == 1 {
+			limit, _ = strconv.Atoi(limitArgs[0])
+		}
+		if limit > 100 {
+			limit = 100
+		}
+		if limit < 1 {
+			limit = 1
+		}
+	}
+
 	webInfo, webOk := ctx.Public["webInfo"].(response.WebInfo)
 
 	categoryList := provider.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive)
 	for i := 0; i < len(categoryList); i++ {
+		if offset > i {
+			continue
+		}
+		if limit > 0 && i > (limit + offset) {
+			break
+		}
 		categoryList[i].Link = provider.GetUrl("category", categoryList[i], 0)
 		categoryList[i].IsCurrent = false
 		if webOk {
