@@ -25,7 +25,6 @@ open: build
 	open ./release
 
 clean:
-	rm -rf ./release/windows
 	rm -rf ./release/linux
 
 start:
