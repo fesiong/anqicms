@@ -17,7 +17,7 @@ import Keywords from '@/components/keywords';
 import { history } from 'umi';
 import { getTags } from '@/services/tag';
 import moment from 'moment';
-import { getStore, setStore } from '@/utils/store';
+import { getStore, removeStore, setStore } from '@/utils/store';
 import AttachmentSelect from '@/components/attachment';
 import {
   getArchiveInfo,
@@ -289,8 +289,7 @@ export default class ArchiveForm extends React.Component {
       }
       message.error(res.msg);
     } else {
-      this.unsaveContent = '';
-      setStore('tmpArchive', '');
+      removeStore('unsaveArchive');
       message.success(res.msg);
       history.goBack();
     }

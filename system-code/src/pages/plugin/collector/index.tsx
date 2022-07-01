@@ -23,7 +23,7 @@ const PluginCollector: React.FC = () => {
             message={
               <div>
                 <p>
-                  已采集的文章，请到“<Link to="/content/article">文章管理</Link>”中查看
+                  已采集的文章，请到“<Link to="/archive/list">文章管理</Link>”中查看
                 </p>
                 <div>
                   关键词管理，请到“<Link to="/plugin/keyword">关键词库管理</Link>”中查看
