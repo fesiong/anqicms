@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, message, Input, Drawer, Modal, Space, Alert, Card, Upload } from 'antd';
-import React, { useState, useRef, useEffect } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { Button, message, Modal, Space, Alert, Upload } from 'antd';
+import React, { useState, useRef } from 'react';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import moment from 'moment';
@@ -20,7 +20,7 @@ const PluginFileupload: React.FC = () => {
     Modal.confirm({
       title: '确定要删除选中的文件吗？',
       onOk: async () => {
-        const hide = message.loading('正在删除');
+        const hide = message.loading('正在删除', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {
@@ -44,10 +44,13 @@ const PluginFileupload: React.FC = () => {
   const handleUploadFile = (e: any) => {
     let formData = new FormData();
     formData.append('file', e.file);
+    const hide = message.loading('正在提交中', 0);
     pluginUploadFile(formData).then((res) => {
       message.success(res.msg);
       setVisible(false);
       actionRef.current?.reloadAndRest?.();
+    }).finally(() => {
+      hide();
     });
   };
 

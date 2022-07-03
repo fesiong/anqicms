@@ -1,17 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import { Button, Space, Modal, message, Image, Upload } from 'antd';
 import {
   deleteDesignFileInfo,
-  deleteDesignInfo,
   getDesignInfo,
-  getDesignList,
   saveDesignFileInfo,
   saveDesignInfo,
   UploadDesignFileInfo,
-  useDesignInfo,
 } from '@/services/design';
 import { history, useModel } from 'umi';
 import moment from 'moment';
@@ -175,6 +172,7 @@ const DesignDetail: React.FC = () => {
       message.error('文件名不能为空');
       return;
     }
+    const hide = message.loading('正在提交中', 0);
     values.package = designInfo.package;
     values.type = addFileType;
 
@@ -183,6 +181,8 @@ const DesignDetail: React.FC = () => {
       fetchDesignInfo();
       setEditVisible(false);
       setAddVisible(false);
+    }).finally(() => {
+      hide();
     });
   };
 
@@ -224,6 +224,7 @@ const DesignDetail: React.FC = () => {
         formData.append('type', addFileType);
         formData.append('path', values.path);
 
+        const hide = message.loading('正在提交中', 0);
         UploadDesignFileInfo(formData).then((res) => {
           if (res.code !== 0 ){
             message.info(res.msg);
@@ -232,6 +233,8 @@ const DesignDetail: React.FC = () => {
             setAddVisible(false);
             actionRef.current?.reload();
           }
+        }).finally(() => {
+          hide();
         });
       },
     });

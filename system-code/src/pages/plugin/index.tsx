@@ -1,6 +1,6 @@
-import React, { createElement } from 'react';
+import React from 'react';
 import { PageContainer } from '@ant-design/pro-layout';
-import { Card, Alert, Typography, Row, Col, Avatar } from 'antd';
+import { Card, Row, Col } from 'antd';
 import './index.less';
 import routes from '../../../config/routes';
 import { history } from 'umi';

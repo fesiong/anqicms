@@ -1,8 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Input, message, Modal, Row, Select, Space, Upload } from 'antd';
-import { ModalForm, ProFormSelect } from '@ant-design/pro-form';
-import { exportFile, getWordsCount, removeHtmlTag } from '@/utils';
-import { pluginImportKeyword } from '@/services/plugin/keyword';
+import { Alert, Button, Col, Input, message, Modal, Row, Select, Space, Upload } from 'antd';
+import { ModalForm } from '@ant-design/pro-form';
+import { getWordsCount, removeHtmlTag } from '@/utils';
 import {
   pluginGetMaterialCategories,
   pluginMaterialConvertFile,

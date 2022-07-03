@@ -1,4 +1,4 @@
-import { DomEditor, IDomEditor, IButtonMenu } from '@wangeditor/core';
+import { IDomEditor, IButtonMenu } from '@wangeditor/core';
 
 // 定义菜单 class
 class HtmlMenu implements IButtonMenu {

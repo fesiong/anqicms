@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import ProForm, {
-  ProFormSelect,
   ProFormText,
-  ProFormTextArea,
-  ProFormRadio,
 } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Card, message, Upload } from 'antd';
+import { Card, message } from 'antd';
 import { getSettingCache, saveSettingCache } from '@/services/setting';
 import moment from 'moment';
 
@@ -23,6 +20,7 @@ const ToolCacheForm: React.FC<any> = (props) => {
   };
 
   const onSubmit = async (values: any) => {
+    const hide = message.loading('正在提交中', 0);
     saveSettingCache(values)
       .then((res) => {
         message.success(res.msg);
@@ -30,6 +28,8 @@ const ToolCacheForm: React.FC<any> = (props) => {
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

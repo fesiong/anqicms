@@ -67,6 +67,7 @@ func manageRoute(app *iris.Application) {
 			//批量替换文章内容
 			collector.Post("/article/replace", manageController.HandleReplaceArticles)
 			collector.Post("/article/pseudo", manageController.HandleArticlePseudo)
+			collector.Post("/article/collect", manageController.HandleArticleCollect)
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
 
@@ -106,6 +107,7 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/detail", manageController.ArchiveDetailForm)
 			archive.Post("/delete", manageController.ArchiveDelete)
 			archive.Post("/recover", manageController.ArchiveRecover)
+			archive.Post("/release", manageController.ArchiveRelease)
 		}
 
 		statistic := manage.Party("/statistic", middleware.ParseAdminToken)

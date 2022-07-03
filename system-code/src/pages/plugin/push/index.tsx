@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import ProForm, { ProFormTextArea, ProFormRadio, ProFormText, ModalForm } from '@ant-design/pro-form';
+import ProForm, { ProFormTextArea, ProFormText, ModalForm } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Alert, Button, Card, Col, message, Modal, Radio, Row, Space, Tag } from 'antd';
+import { Alert, Button, Card, message, Modal, Space, Tag } from 'antd';
 import { pluginGetPush, pluginGetPushLogs, pluginSavePush } from '@/services/plugin/push';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
 import moment from 'moment';
@@ -30,12 +30,15 @@ const PluginPush: React.FC<any> = (props) => {
   const onSubmit = async (values: any) => {
     values = Object.assign(pushSetting, values)
     pushSetting.js_codes = jsCodes
+    const hide = message.loading('正在处理中', 0);
     pluginSavePush(values)
       .then((res) => {
         message.success(res.msg);
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

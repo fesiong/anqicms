@@ -3,10 +3,13 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"time"
 )
 
 func ArchiveList(ctx iris.Context) {
@@ -14,19 +17,51 @@ func ArchiveList(ctx iris.Context) {
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
+	status := ctx.URLParam("status") // 支持 '':all，draft:0, ok:1, plan:2
+	// 回收站
 	recycle, _ := ctx.URLParamBool("recycle")
+	// 采集的
+	collect, _ := ctx.URLParamBool("collect")
 
 	var archives []*model.Archive
 	var total int64
 	var err error
 
+	var ops func(tx *gorm.DB) *gorm.DB
 	if recycle {
-		archives, total, _ = provider.GetArchiveRecycleList(currentPage, pageSize)
+		ops = func(tx *gorm.DB) *gorm.DB {
+			return tx.Unscoped().Where("`deleted_at` is not null").Order("id desc")
+		}
+	} else if collect {
+		ops = func(tx *gorm.DB) *gorm.DB {
+			return tx.Where("`origin_url` != ''").Order("id desc")
+		}
 	} else {
 		// 必须传递分类
 		title := ctx.URLParam("title")
-		archives, total, err = provider.GetArchiveList(moduleId, categoryId, title, "id desc", currentPage, pageSize)
+		ops = func(tx *gorm.DB) *gorm.DB {
+			if moduleId > 0 {
+				tx = tx.Where("`module_id` = ?", moduleId)
+			}
+			if categoryId > 0 {
+				tx = tx.Where("`category_id` = ?", categoryId)
+			}
+			if status == "draft" {
+				tx = tx.Where("`status` = ?", config.ContentStatusDraft)
+			} else if status == "ok" {
+				tx = tx.Where("`status` = ?", config.ContentStatusOK)
+			} else if status == "plan" {
+				tx = tx.Where("`status` = ?", config.ContentStatusPlan)
+			}
+			if title != "" {
+				tx = tx.Where("`title` like ?", "%"+title+"%")
+			}
+			tx = tx.Order("id desc")
+			return tx
+		}
 	}
+	archives, total, _ = provider.GetArchiveList(ops, currentPage, pageSize)
+
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -187,6 +222,46 @@ func ArchiveRecover(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "文章已恢复",
+	})
+}
+
+func ArchiveRelease(ctx iris.Context) {
+	var req request.Archive
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	archive, err := provider.GetUnscopedArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 只有待发布的需要发布
+	if archive.Status == config.ContentStatusDraft {
+		archive.Status = config.ContentStatusOK
+		archive.CreatedTime = time.Now().Unix()
+		dao.DB.Save(archive)
+		err = provider.SuccessReleaseArchive(archive, true)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		provider.AddAdminLog(ctx, fmt.Sprintf("发布文档：%d => %s", archive.Id, archive.Title))
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已发布",
 	})
 }
 

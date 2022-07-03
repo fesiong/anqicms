@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import MonacoEditor from 'react-monaco-editor';
-import { Button, Card, Col, message, Row, Space, Collapse, Modal, BackTop } from 'antd';
+import { Button, Card, Col, message, Row, Space, Collapse, Modal } from 'antd';
 import { history } from 'umi';
 import { deleteDesignHistoryFile, getDesignFileHistories, getDesignFileInfo, getDesignInfo, restoreDesignFileInfo, saveDesignFileInfo } from '@/services/design';
 import './index.less';
@@ -17,11 +17,18 @@ const DesignEditor: React.FC = () => {
   const [code, setCode] = useState<string>(``);
   const actionRef = useRef<ActionType>();
   const [loaded, setLoaded] = useState<boolean>(false);
+  const [height, setHeight] = useState(0);
 
   var unsave = false;
 
   useEffect(() => {
     fetchDesignInfo();
+    getHeight();
+    window.addEventListener('resize', getHeight);
+    return () => {
+        // 组件销毁时移除监听事件
+        window.removeEventListener('resize', getHeight);
+    }
   }, []);
 
   const fetchDesignInfo = async () => {
@@ -85,9 +92,12 @@ const DesignEditor: React.FC = () => {
     fileInfo.update_content = true;
     fileInfo.type = fileType;
     unsave = false;
+    const hide = message.loading('正在提交中', 0);
     saveDesignFileInfo(fileInfo).then((res) => {
       message.info(res.msg);
       actionRef.current?.reload();
+    }).finally(() => {
+      hide();
     });
   };
 
@@ -118,6 +128,7 @@ const DesignEditor: React.FC = () => {
       title: '确定要恢复到指定时间的版本吗？',
       content: '这么做将会导致未保存的代码丢失。',
       onOk: () => {
+        const hide = message.loading('正在提交中', 0);
         restoreDesignFileInfo({
           hash: info.hash,
           package: designInfo.package,
@@ -126,6 +137,8 @@ const DesignEditor: React.FC = () => {
         }).then(res => {
           message.info(res.msg);
           fetchDesignFileInfo(info.path);
+        }).finally(() => {
+          hide();
         });
       },
     });
@@ -135,6 +148,7 @@ const DesignEditor: React.FC = () => {
     Modal.confirm({
       title: '确定要删除这个历史记录吗？',
       onOk: () => {
+        const hide = message.loading('正在提交中', 0);
         deleteDesignHistoryFile({
           hash: info.hash,
           package: designInfo.package,
@@ -143,7 +157,9 @@ const DesignEditor: React.FC = () => {
         }).then(res => {
           message.info(res.msg);
           actionRef.current?.reload();
-        });
+        }).finally(() => {
+          hide();
+        });;
       },
     });
   }
@@ -181,7 +197,7 @@ const DesignEditor: React.FC = () => {
       num = 900;
     }
 
-    return num;
+    setHeight(num);
   }
 
   const columns: ProColumns<any>[] = [
@@ -233,7 +249,7 @@ const DesignEditor: React.FC = () => {
           <Col span={18}>
             <div className='code-editor-box' onKeyDown={handleKeyDown}>
             {loaded && <MonacoEditor
-              height={getHeight()}
+              height={height}
               language={getLanguage(fileInfo?.path || '')}
               theme="vs-dark"
               value={code}

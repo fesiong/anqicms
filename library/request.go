@@ -5,6 +5,7 @@ import (
 	"crypto/tls"
 	"github.com/parnurzeal/gorequest"
 	"golang.org/x/net/html/charset"
+	"io/ioutil"
 	"log"
 	"net"
 	"net/http"
@@ -66,7 +67,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	}
 	options.Method = strings.ToUpper(options.Method)
 
-	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
+	req := gorequest.New().SetDebug(true).SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
 	//定义默认的refer
 	parsedUrl, err := url.Parse(urlPath)
 	if err != nil {
@@ -204,4 +205,51 @@ func getUserAgent(isMobile bool) string {
 	}
 
 	return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
+}
+
+func GetURLData(url, refer string) (*RequestData, error) {
+	client := &http.Client{}
+	req, err := http.NewRequest("GET", url, nil)
+	req.Header.Set("User-Agent", getUserAgent(false))
+	req.Header.Set("Referer", refer)
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return &RequestData{}, err
+	}
+	body, _ := ioutil.ReadAll(resp.Body)
+
+	contentType := resp.Header.Get("Content-Type")
+	// 编码处理
+	charsetName, err := getPageCharset(string(body), contentType)
+	if err != nil {
+		log.Println("获取页面编码失败: ", err.Error())
+	}
+	charsetName = strings.ToLower(charsetName)
+	//log.Println("当前页面编码:", charsetName)
+	charSet, exist := CharsetMap[charsetName]
+	if !exist {
+		log.Println("未找到匹配的编码")
+	}
+	if charSet != nil {
+		utf8Coutent, err := DecodeToUTF8(body, charSet)
+		if err != nil {
+			log.Println("页面解码失败: ", err.Error())
+		} else {
+			body = utf8Coutent
+		}
+	}
+
+	requestData := RequestData{
+		Header:     resp.Header,
+		Request:    resp.Request,
+		Body:       string(body),
+		Status:     resp.Status,
+		StatusCode: resp.StatusCode,
+		Domain:     resp.Request.Host,
+		Scheme:     resp.Request.URL.Scheme,
+		Server:     resp.Header.Get("Server"),
+	}
+
+	return &requestData, nil
 }

@@ -21,10 +21,13 @@ const RedirectImport: React.FC<RedirectImportProps> = (props) => {
   const handleUploadFile = (e: any) => {
     let formData = new FormData();
     formData.append('file', e.file);
+    const hide = message.loading('正在处理中', 0);
     pluginImportRedirect(formData).then((res) => {
       message.success(res.msg);
       setVisible(false);
       props.onCancel();
+    }).finally(() => {
+      hide();
     });
   };
 

@@ -41,10 +41,11 @@ const SettingSystemFrom: React.FC<any> = (props) => {
 
   const onSubmit = async (values: any) => {
     values.site_logo = siteLogo;
+    const hide = message.loading('正在提交中', 0);
     saveSettingSystem(values)
       .then(async (res) => {
         message.success(res.msg);
-        const system = await initialState?.fetchUserInfo?.();
+        const system = await initialState?.fetchSystemSetting?.();
         if (system) {
           await setInitialState((s) => ({
             ...s,
@@ -54,6 +55,8 @@ const SettingSystemFrom: React.FC<any> = (props) => {
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

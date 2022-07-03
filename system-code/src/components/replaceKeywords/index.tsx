@@ -23,7 +23,7 @@ const ReplaceKeywords: React.FC<ReplaceKeywordsProps> = (props) => {
 
   const getKeywords = async () => {
     const res = await getCollectorSetting();
-    let keywords = res.data.content_replace || [];
+    let keywords = res.data?.content_replace || [];
     setKeywords(keywords);
   };
 

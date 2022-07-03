@@ -22,6 +22,7 @@ const PluginRewrite: React.FC<any> = (props) => {
   };
 
   const onSubmit = async (values: any) => {
+    const hide = message.loading('正在提交中', 0);
     values = Object.assign(rewriteMode, values);
     pluginSaveRewrite(values)
       .then((res) => {
@@ -29,6 +30,8 @@ const PluginRewrite: React.FC<any> = (props) => {
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
   return (

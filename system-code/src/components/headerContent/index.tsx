@@ -1,11 +1,11 @@
-import { Menu, MenuProps, Space } from 'antd';
+import { Menu } from 'antd';
 import React from 'react';
 import { history, useModel } from 'umi';
 import './index.less';
 import routes from '../../../config/routes';
 
 const GlobalHeaderContent: React.FC = (props) => {
-  const { initialState } = useModel('@@initialState');
+  const { initialState, setInitialState } = useModel('@@initialState');
 
   const getSelectKey = () => {
     const selectPath = history.location.pathname;
@@ -24,13 +24,26 @@ const GlobalHeaderContent: React.FC = (props) => {
     return null;
   }
 
-  const onClickMenu = (e: any) => {
+  const onClickMenu = async (e: any) => {
     let index = e.key;
     let current: any = routes[index] || null;
     if (current != null) {
       // preview单独处理
       if (current.path == "/preview") {
-        window.open(initialState.system?.base_url || '')
+        let baseUrl = '';
+        if (!initialState.system) {
+          const system = await initialState?.fetchSystemSetting?.();
+          if (system) {
+            await setInitialState((s) => ({
+              ...s,
+              system: system,
+            }));
+          }
+          baseUrl = system?.base_url || '';
+        } else {
+          baseUrl = initialState.system?.base_url || ''
+        }
+        window.open(baseUrl)
         return;
       }
 

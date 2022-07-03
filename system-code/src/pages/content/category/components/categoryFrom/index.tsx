@@ -9,7 +9,7 @@ import {
 } from '@ant-design/pro-form';
 
 import { getCategories, saveCategory } from '@/services';
-import { Collapse, message, Upload, Image } from 'antd';
+import { Collapse, message, Image } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import WangEditor from '@/components/editor';
 import AttachmentSelect from '@/components/attachment';

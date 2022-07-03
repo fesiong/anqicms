@@ -6,11 +6,8 @@ import {
   Col,
   Image,
   Modal,
-  Input,
   message,
   Checkbox,
-  Popover,
-  Table,
   Select,
   Empty,
   Upload,
@@ -29,7 +26,6 @@ import {
   uploadAttachment,
 } from '@/services/attachment';
 import AttachmentCategory from './components/category';
-import ProForm, { ProFormSelect } from '@ant-design/pro-form';
 import moment from 'moment';
 import { sizeFormat } from '@/utils';
 
@@ -83,6 +79,7 @@ export default class ImageList extends React.Component {
   };
 
   handleUploadImage = (e: any) => {
+    const hide = message.loading('正在提交中', 0);
     const { categoryId } = this.state;
     let formData = new FormData();
     formData.append('file', e.file);
@@ -94,6 +91,8 @@ export default class ImageList extends React.Component {
         message.info(res.msg || '上传成功');
         this.getImageList();
       }
+    }).finally(() => {
+      hide();
     });
   };
 

@@ -52,6 +52,14 @@ func InstallForm(ctx iris.Context) {
 	req.AdminPassword = ctx.PostValueTrim("admin_password")
 	req.BaseUrl = ctx.PostValueTrim("base_url")
 
+	if len(req.Password) < 6 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请填写6位以上的管理员密码",
+		})
+		return
+	}
+
 	//更新网站配置
 	req.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
 	config.JsonData.System.BaseUrl = req.BaseUrl

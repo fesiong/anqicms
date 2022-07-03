@@ -1,8 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ModalForm,
-  ProFormDigit,
-  ProFormSelect,
   ProFormText,
   ProFormTextArea,
 } from '@ant-design/pro-form';

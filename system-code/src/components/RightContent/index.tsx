@@ -1,9 +1,8 @@
 import { Space } from 'antd';
-import { IeOutlined } from '@ant-design/icons';
+import { QuestionCircleOutlined } from '@ant-design/icons';
 import React from 'react';
 import { useModel } from 'umi';
 import Avatar from './AvatarDropdown';
-import HeaderSearch from '../HeaderSearch';
 import styles from './index.less';
 
 export type SiderTheme = 'light' | 'dark';
@@ -24,12 +23,13 @@ const GlobalHeaderRight: React.FC = () => {
   return (
     <Space className={className}>
       <span
+        style={{fontSize: 20}}
         className={styles.action}
         onClick={() => {
           window.open('https://www.kandaoni.com/anqicms');
         }}
       >
-        <IeOutlined />
+        <QuestionCircleOutlined />
       </span>
       <Avatar menu />
     </Space>

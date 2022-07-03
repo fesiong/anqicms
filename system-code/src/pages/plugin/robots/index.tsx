@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import ProForm, { ProFormTextArea, ProFormRadio, ProFormText } from '@ant-design/pro-form';
+import ProForm, { ProFormTextArea } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Alert, Button, Card, Col, message, Radio, Row, Space, Tag } from 'antd';
+import { Alert, Button, Card, message } from 'antd';
 import { pluginGetRobots, pluginSaveRobots } from '@/services/plugin/robots';
 import { useModel } from 'umi';
 
@@ -22,12 +22,15 @@ const PluginRobots: React.FC<any> = (props) => {
   };
 
   const onSubmit = async (values: any) => {
+    const hide = message.loading('正在提交中', 0);
     pluginSaveRobots(values)
       .then((res) => {
         message.success(res.msg);
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
   return (

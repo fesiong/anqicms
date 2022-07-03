@@ -2,9 +2,7 @@
 let storage: any = {};
 
 if (
-  typeof window !== 'undefined' &&
-  typeof window.document !== 'undefined' &&
-  typeof window.document.createElement !== 'undefined'
+  typeof localStorage !== 'undefined'
 ) {
   storage = localStorage;
 }

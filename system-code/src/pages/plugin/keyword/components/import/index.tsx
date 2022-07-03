@@ -21,10 +21,13 @@ const KeywordImport: React.FC<KeywordImportProps> = (props) => {
   const handleUploadFile = (e: any) => {
     let formData = new FormData();
     formData.append('file', e.file);
+    const hide = message.loading('正在提交中', 0);
     pluginImportKeyword(formData).then((res) => {
       message.success(res.msg);
       setVisible(false);
       props.onCancel();
+    }).finally(() => {
+      hide();
     });
   };
 

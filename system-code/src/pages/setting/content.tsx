@@ -1,15 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import ProForm, {
-  ProFormSelect,
   ProFormText,
-  ProFormTextArea,
   ProFormRadio,
-  ProFormFieldSet,
   ProFormGroup,
 } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Button, Card, message, Modal, Upload } from 'antd';
-import { uploadAttachment } from '@/services/attachment';
+import { Button, Card, message, Modal } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { convertImagetoWebp, getSettingContent, rebuildThumb, saveSettingContent } from '@/services/setting';
 import AttachmentSelect from '@/components/attachment';
@@ -71,12 +67,15 @@ const SettingContactFrom: React.FC<any> = (props) => {
     values.thumb_height = Number(values.thumb_height);
     values.quality = Number(values.quality)
 
+    const hide = message.loading('正在提交中', 0);
     saveSettingContent(values)
       .then((res) => {
         message.success(res.msg);
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

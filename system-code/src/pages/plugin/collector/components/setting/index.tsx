@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
   ModalForm,
   ProFormDigit,
@@ -7,7 +7,7 @@ import {
   ProFormText,
 } from '@ant-design/pro-form';
 import './index.less';
-import { Button, Input, message, Space, Tag } from 'antd';
+import { Input, message, Space, Tag } from 'antd';
 import { getCollectorSetting, saveCollectorSetting } from '@/services/collector';
 import { getCategories } from '@/services/category';
 
@@ -63,10 +63,14 @@ class CollectorSetting extends React.Component<CollectorSettingProps> {
   handleSubmit = async (values: any) => {
     const { setting } = this.state;
     values = Object.assign(setting, values);
+
+    const hide = message.loading('正在提交中', 0);
     saveCollectorSetting(values).then((res) => {
       message.info(res.msg);
       this.handleSetVisible(false);
       this.props.onCancel();
+    }).finally(() => {
+      hide();
     });
   };
 
@@ -155,6 +159,33 @@ class CollectorSetting extends React.Component<CollectorSettingProps> {
                 { label: '自动按计划采集', value: true },
               ]}
             />
+            <ProFormSelect
+              label="默认发布文章分类"
+              name="category_id"
+              required
+              extra="如果关键词没设置分类，则采集到的文章默认会被归类到这个分类下,必须设置一个分类否则无法正常采集"
+              request={async () => {
+                let res = await getCategories({ type: 1 });
+                return res.data || [];
+              }}
+              fieldProps={{
+                fieldNames: {
+                  label: 'title',
+                  value: 'id',
+                },
+                optionItemRender(item) {
+                  return <div dangerouslySetInnerHTML={{ __html: item.spacer + item.title }}></div>;
+                },
+              }}
+            />
+            <ProFormRadio.Group
+              name="save_type"
+              label="文章处理方式"
+              options={[
+                { label: '存入草稿箱', value: 0 },
+                { label: '正常发布', value: 1 },
+              ]}
+            />
             <ProFormDigit
               name="title_min_length"
               label="标题最少字数"
@@ -180,7 +211,7 @@ class CollectorSetting extends React.Component<CollectorSettingProps> {
               label="是否伪原创"
               options={[
                 { label: '否', value: false },
-                { label: '进行伪原创', value: true },
+                // { label: '进行伪原创', value: true },
               ]}
             />
             {/* <ProFormDigit
@@ -212,24 +243,6 @@ class CollectorSetting extends React.Component<CollectorSettingProps> {
               label="每日采集限额"
               placeholder="默认1000"
               extra="每日最大发布文章量，最大不能超过10000，这是一个约数，并不一定能发布到这个数量"
-            />
-            <ProFormSelect
-              label="默认发布文章分类"
-              name="category_id"
-              extra="如果关键词没设置分类，则采集到的文章默认会被归类到这个分类下"
-              request={async () => {
-                let res = await getCategories({ type: 1 });
-                return res.data || [];
-              }}
-              fieldProps={{
-                fieldNames: {
-                  label: 'title',
-                  value: 'id',
-                },
-                optionItemRender(item) {
-                  return <div dangerouslySetInnerHTML={{ __html: item.spacer + item.title }}></div>;
-                },
-              }}
             />
             <ProFormText
               label="标题排除词"

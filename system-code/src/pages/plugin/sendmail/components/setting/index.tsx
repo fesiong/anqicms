@@ -13,10 +13,13 @@ const SendmailSetting: React.FC<SendmailSettingProps> = (props) => {
 
   const handleSubmit = async (values: any) => {
     values.port = Number(values.port);
+    const hide = message.loading('正在提交中', 0);
     pluginSaveSendmailSetting(values).then((res) => {
       message.info(res.msg);
       setVisible(false);
       props.onCancel();
+    }).finally(() => {
+      hide();
     });
   };
 

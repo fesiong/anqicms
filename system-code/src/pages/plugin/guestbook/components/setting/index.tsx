@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Col, Input, message, Modal, Row, Space } from 'antd';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
-import ProForm, {
+import {
   ModalForm,
   ProFormRadio,
   ProFormText,

@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Alert, Button, Card, Input, message, Modal, Space, Upload } from 'antd';
+import { Button, Input, message, Modal, Space } from 'antd';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
 import { deleteSettingNavType, getSettingNavTypes, saveSettingNavType } from '@/services';
 

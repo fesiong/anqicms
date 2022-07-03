@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, message, Input, Drawer, Modal, Space } from 'antd';
+import { Button, message, Modal, Space } from 'antd';
 import React, { useState, useRef } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import { deleteCategory, getCategories } from '@/services/category';
@@ -18,7 +18,7 @@ const PageCategory: React.FC = () => {
     Modal.confirm({
       title: '确定要删除选中的单页面吗？',
       onOk: async () => {
-        const hide = message.loading('正在删除');
+        const hide = message.loading('正在删除', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {

@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, Col, Input, message, Modal, Row, Space, Tag } from 'antd';
 import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
-import ProForm, {
+import {
   ModalForm,
   ProFormRadio,
   ProFormText,
@@ -92,7 +92,7 @@ const ModuleForm: React.FC<ModuleFormProps> = (props) => {
       return;
     }
     submitting = true;
-    let hide = message.loading('正在提交中')
+    let hide = message.loading('正在提交中', 0)
     saveModule(setting).then(res => {
       if (res.code === 0) {
         message.success(res.msg);

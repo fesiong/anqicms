@@ -91,7 +91,7 @@ func ArchiveDetail(ctx iris.Context) {
 func ArchiveIndex(ctx iris.Context) {
 	urlToken := ctx.Params().GetString("module")
 	module := provider.GetModuleFromCacheByToken(urlToken)
-	if module == nil || module.Status != config.ContentStatusOK {
+	if module == nil {
 		NotFound(ctx)
 		return
 	}

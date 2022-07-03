@@ -17,12 +17,15 @@ const SettingIndexFrom: React.FC<any> = (props) => {
   };
 
   const onSubmit = async (values: any) => {
+    const hide = message.loading('正在提交中', 0);
     saveSettingIndex(values)
       .then((res) => {
         message.success(res.msg);
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

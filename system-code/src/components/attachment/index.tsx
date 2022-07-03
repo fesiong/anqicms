@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Button, message, Modal, Image, Avatar, Upload, Select, Space } from 'antd';
-import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
+import { ActionType } from '@ant-design/pro-table';
 import ProList from '@ant-design/pro-list';
 import { getAttachmentCategories, getAttachments, uploadAttachment } from '@/services/attachment';
 import './index.less'

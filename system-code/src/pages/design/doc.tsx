@@ -1,9 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
-import type { ProColumns, ActionType } from '@ant-design/pro-table';
-import ProTable from '@ant-design/pro-table';
-import moment from 'moment';
-import { Alert, Card, Input, Modal } from 'antd';
+import { PageContainer } from '@ant-design/pro-layout';
+import type { ActionType } from '@ant-design/pro-table';
+import { Alert, Card, Modal } from 'antd';
 import './index.less';
 import { getDesignDocs } from '@/services/design';
 

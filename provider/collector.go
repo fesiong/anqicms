@@ -234,7 +234,7 @@ func collectSuggestBaiduWord(existsWords *sync.Map, keyword *model.Keyword) erro
 
 // getBetweenSeconds 根据发布量获取每天发布间隔
 // 根据设置的时间，随机休息秒数
-func getBetweenSeconds() int {
+func getBetweenSeconds() time.Duration {
 	limit := config.CollectorConfig.DailyLimit
 	if limit == 0 {
 		limit = 1000
@@ -248,7 +248,7 @@ func getBetweenSeconds() int {
 	}
 	seconds := hour * 3600
 
-	between := seconds / limit - 1
+	between := seconds / limit * 2 - 1
 	if config.CollectorConfig.AutoPseudo {
 		between -= 1
 	}
@@ -260,7 +260,7 @@ func getBetweenSeconds() int {
 		between = 1
 	}
 
-	return between
+	return time.Duration(between) * time.Second
 }
 
 var runningCollectArticles = false
@@ -303,7 +303,8 @@ func CollectArticles() {
 		lastId = keywords[len(keywords) - 1].Id
 		for i := 0; i < len(keywords); i++ {
 			keyword := keywords[i]
-			err := CollectArticlesByKeyword(keyword)
+			total, err := CollectArticlesByKeyword(keyword, false)
+			log.Printf("关键词：%s 采集了 %d 篇文章", keyword.Title, total)
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
 				break
@@ -312,13 +313,13 @@ func CollectArticles() {
 	}
 }
 
-func CollectArticlesByKeyword(keyword *model.Keyword) error {
+func CollectArticlesByKeyword(keyword *model.Keyword, focus bool) (int, error) {
 	var archives []*request.Archive
 	var err error
-	archives, err = CollectArticleFromBaidu(keyword)
+	archives, err = CollectArticleFromBaidu(keyword, focus)
 
 	if err != nil {
-		return err
+		return 0, err
 	}
 
 	autoPseudo := false
@@ -326,6 +327,7 @@ func CollectArticlesByKeyword(keyword *model.Keyword) error {
 		autoPseudo = true
 	}
 
+	var total int
 	for _, archive := range archives {
 		//原始标题
 		archive.OriginTitle = archive.Title
@@ -343,11 +345,16 @@ func CollectArticlesByKeyword(keyword *model.Keyword) error {
 			dao.DB.Where("module_id = 1").Take(&category)
 			archive.CategoryId = category.Id
 		}
+		// 如果不是正常发布，则存到草稿
+		if config.CollectorConfig.SaveType == 0 {
+			archive.Draft = true
+		}
 		modelArchive, err := SaveArchive(archive)
 		if err != nil {
 			log.Println("保存文章出错：", archive.Title, err.Error())
-			continue
+			return total, err
 		}
+		total++
 		//如果自动伪原创
 		if autoPseudo {
 			archiveData, err := GetArchiveDataById(modelArchive.Id)
@@ -357,7 +364,7 @@ func CollectArticlesByKeyword(keyword *model.Keyword) error {
 		}
 		//文章计数
 		UpdateTodayArticleCount(1)
-		if GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
+		if !focus && GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
 			//当天的采集任务已完成
 			break
 		}
@@ -367,10 +374,10 @@ func CollectArticlesByKeyword(keyword *model.Keyword) error {
 	keyword.LastTime = time.Now().Unix()
 	dao.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
 
-	return nil
+	return total, nil
 }
 
-func CollectArticleFromBaidu(keyword *model.Keyword) ([]*request.Archive, error) {
+func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) ([]*request.Archive, error) {
 	resp, err := library.Request(fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=0",keyword.Title), &library.Options{
 		Timeout:  5,
 		IsMobile: false,
@@ -419,8 +426,10 @@ func CollectArticleFromBaidu(keyword *model.Keyword) ([]*request.Archive, error)
 			continue
 		}
 
-		//根据设置的时间，随机休息秒数
-		time.Sleep(time.Duration(getBetweenSeconds()))
+		if !focus {
+			//根据设置的时间，随机休息秒数
+			time.Sleep(getBetweenSeconds())
+		}
 
 		archive := &request.Archive{
 			OriginUrl:  link.Url,
@@ -466,6 +475,10 @@ func ParseBaiduJson(content string) []*response.WebLink {
 
 	var links []*response.WebLink
 	for _, v := range baiduJson.Feed.Entry {
+		// 百度的链接，都加上https
+		if strings.HasPrefix(v.Url, "http://") && strings.Contains(v.Url, "baidu.com") {
+			v.Url = "https://" + strings.TrimPrefix(v.Url, "http://")
+		}
 		links = append(links, &response.WebLink{
 			Name: v.Title,
 			Url:  v.Url,

@@ -16,6 +16,7 @@ type CollectorJson struct {
 	AutoPseudo         bool             `json:"auto_pseudo"`      //是否伪原创
 	AutoDigKeyword     bool             `json:"auto_dig_keyword"` //关键词是否自动拓词
 	CategoryId         uint             `json:"category_id"`      //默认分类
+	SaveType           uint             `json:"save_type"`        // 文档处理方式
 	StartHour          int              `json:"start_hour"`       //每天开始时间
 	EndHour            int              `json:"end_hour"`         //每天结束时间
 	DailyLimit         int              `json:"daily_limit"`      //每日限额
@@ -35,6 +36,7 @@ var defaultCollectorConfig = CollectorJson{
 	AutoPseudo:       false,
 	AutoDigKeyword:   false,
 	CategoryId:       0,
+	SaveType:         0,
 	StartHour:        8,
 	EndHour:          20,
 	DailyLimit:       1000,

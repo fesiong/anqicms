@@ -65,14 +65,18 @@ func resisterMacros(app *iris.Application) {
 		//这里总共有6条正则规则，需要逐一匹配
 		// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
 		matchMap := map[string]string{}
+		// 静态资源直接返回
+		if strings.HasPrefix(paramValue, "uploads/") ||
+			strings.HasPrefix(paramValue, "static/") ||
+			strings.HasPrefix(paramValue, "system/") {
+			return matchMap, true
+		}
 		// 如果匹配到固化链接，则直接返回
-		if !strings.HasPrefix(paramValue, "uploads/") && !strings.HasPrefix(paramValue, "static/") && !strings.HasPrefix(paramValue, "system/") {
-			archiveId := provider.GetFixedLinkFromCache("/" + paramValue)
-			if archiveId > 0 {
-				matchMap["match"] = "archive"
-				matchMap["id"] = fmt.Sprintf("%d", archiveId)
-				return matchMap, true
-			}
+		archiveId := provider.GetFixedLinkFromCache("/" + paramValue)
+		if archiveId > 0 {
+			matchMap["match"] = "archive"
+			matchMap["id"] = fmt.Sprintf("%d", archiveId)
+			return matchMap, true
 		}
 		// 搜索
 		if paramValue == "search" {

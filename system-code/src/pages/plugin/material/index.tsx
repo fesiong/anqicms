@@ -1,11 +1,11 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, message, Input, Drawer, Modal, Space, Select } from 'antd';
+import { Button, message, Modal, Space, Select } from 'antd';
 import React, { useState, useRef, useEffect } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 
-import { exportFile, removeHtmlTag } from '@/utils';
+import { removeHtmlTag } from '@/utils';
 import MaterialImport from './components/import';
 import { pluginDeleteMaterial, pluginGetMaterialCategories, pluginGetMaterials } from '@/services/plugin/material';
 import MaterialForm from './components/materialForm';
@@ -34,7 +34,7 @@ const PluginMaterial: React.FC = () => {
     Modal.confirm({
       title: '确定要删除选中的素材吗？',
       onOk: async () => {
-        const hide = message.loading('正在删除');
+        const hide = message.loading('正在删除', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {

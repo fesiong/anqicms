@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import { Button, Space, Modal, message, Upload } from 'antd';
-import { deleteDesignInfo, getDesignList, saveDesignInfo, UploadDesignInfo, useDesignInfo } from '@/services/design';
+import { deleteDesignInfo, getDesignList, UploadDesignInfo, useDesignInfo } from '@/services/design';
 import { history } from 'umi';
-import { ModalForm, ProFormRadio, ProFormText } from '@ant-design/pro-form';
+import { ModalForm, ProFormText } from '@ant-design/pro-form';
 
 const DesignIndex: React.FC = () => {
   const [addVisible, setAddVisible] = useState<boolean>(false)
@@ -37,10 +37,13 @@ const DesignIndex: React.FC = () => {
     Modal.confirm({
       title: '确定要删除这套设计模板吗？',
       onOk: () => {
+        const hide = message.loading('正在提交中', 0);
         deleteDesignInfo({package: packageName}).then(res => {
           message.info(res.msg);
           actionRef.current?.reload();
-        })
+        }).finally(() => {
+          hide();
+        });
       }
     })
   }
@@ -48,6 +51,7 @@ const DesignIndex: React.FC = () => {
   const handleUploadZip = (e: any) => {
     let formData = new FormData();
     formData.append('file', e.file);
+    const hide = message.loading('正在提交中', 0);
     UploadDesignInfo(formData).then((res) => {
       if (res.code !== 0 ){
         message.info(res.msg);
@@ -56,6 +60,8 @@ const DesignIndex: React.FC = () => {
         setAddVisible(false);
         actionRef.current?.reload();
       }
+    }).finally(() => {
+      hide();
     });
   }
 

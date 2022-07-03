@@ -1,13 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import ProForm, {
-  ProFormSelect,
   ProFormText,
-  ProFormTextArea,
-  ProFormRadio,
 } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Button, Card, Col, Collapse, message, Modal, Row, Upload } from 'antd';
-import { uploadAttachment } from '@/services/attachment';
+import { Button, Card, Col, Collapse, message, Modal, Row } from 'antd';
 import { PlusOutlined } from '@ant-design/icons';
 import { getSettingContact, saveSettingContact } from '@/services/setting';
 import AttachmentSelect from '@/components/attachment';
@@ -35,12 +31,15 @@ const SettingContactFrom: React.FC<any> = (props) => {
 
   const onSubmit = async (values: any) => {
     values.qrcode = qrcode;
+    const hide = message.loading('正在提交中', 0);
     saveSettingContact(values)
       .then((res) => {
         message.success(res.msg);
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

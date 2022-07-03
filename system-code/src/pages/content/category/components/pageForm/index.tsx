@@ -3,9 +3,8 @@ import { ModalForm, ProFormDigit, ProFormText, ProFormTextArea } from '@ant-desi
 
 import { saveCategory } from '@/services/category';
 import WangEditor from '@/components/editor';
-import { Upload, Image, message, Collapse } from 'antd';
+import { Image, message, Collapse } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
-import { uploadAttachment } from '@/services/attachment';
 import AttachmentSelect from '@/components/attachment';
 
 export type CategoryFormProps = {

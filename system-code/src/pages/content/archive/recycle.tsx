@@ -1,23 +1,19 @@
-import { PlusOutlined } from '@ant-design/icons';
-import { Button, message, Input, Drawer, Modal, Space } from 'antd';
+import { Button, message, Modal, Space } from 'antd';
 import React, { useState, useRef } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
-import { history } from 'umi';
-import ReplaceKeywords from '@/components/replaceKeywords';
-import { deleteArchive, getArchives, getModules, recoverArchive } from '@/services';
+import { deleteArchive, getArchives, recoverArchive } from '@/services';
 
 const ArchiveList: React.FC = (props) => {
   const actionRef = useRef<ActionType>();
   const [selectedRowKeys, setSelectedRowKeys] = useState<any[]>([]);
-  const [replaceVisible, setReplaceVisible] = useState<boolean>(false);
 
   const handleRemove = async (selectedRowKeys: any[]) => {
     Modal.confirm({
       title: '确定要删除选中的文档吗？',
       onOk: async () => {
-        const hide = message.loading('正在删除');
+        const hide = message.loading('正在删除', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {
@@ -43,7 +39,7 @@ const ArchiveList: React.FC = (props) => {
     Modal.confirm({
       title: '确定要恢复选中的文档吗？',
       onOk: async () => {
-        const hide = message.loading('正在恢复');
+        const hide = message.loading('正在恢复', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {
@@ -167,12 +163,6 @@ const ArchiveList: React.FC = (props) => {
           onChange: (selectedRowKeys) => {
             setSelectedRowKeys(selectedRowKeys);
           },
-        }}
-      />
-      <ReplaceKeywords
-        visible={replaceVisible}
-        onCancel={() => {
-          setReplaceVisible(false);
         }}
       />
     </PageContainer>

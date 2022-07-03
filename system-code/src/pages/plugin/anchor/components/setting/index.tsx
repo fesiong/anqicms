@@ -1,12 +1,9 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Button, message, Modal, Space } from 'antd';
-import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
-import ProForm, {
+import React, { useEffect, useState } from 'react';
+import { message } from 'antd';
+import {
   ModalForm,
   ProFormDigit,
   ProFormRadio,
-  ProFormText,
-  ProFormTextArea,
 } from '@ant-design/pro-form';
 import { pluginGetAnchorSetting, pluginSaveAnchorSetting } from '@/services/plugin/anchor';
 

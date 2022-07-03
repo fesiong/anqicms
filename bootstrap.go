@@ -120,6 +120,7 @@ func (bootstrap *Bootstrap) Start() {
 		iris.WithRemoteAddrHeader("X-Forwarded-For"),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithoutBodyConsumptionOnUnmarshal,
+		iris.WithoutPathCorrection,
 	)
 
 	if err != nil {

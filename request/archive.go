@@ -20,6 +20,7 @@ type Archive struct {
 	CanonicalUrl string                 `json:"canonical_url"`
 	FixedLink    string                 `json:"fixed_link"`
 	Flag         string                 `json:"flag"`
+	Draft        bool                   `json:"draft"` // 是否是存草稿
 
 	// 是否强制保存
 	ForceSave bool `json:"force_save"`

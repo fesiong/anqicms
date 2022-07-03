@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, message, Input, Drawer, Modal, Space } from 'antd';
+import { Button, message, Modal, Space } from 'antd';
 import React, { useState, useRef } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import { ProFormSelect } from '@ant-design/pro-form';
@@ -20,7 +20,7 @@ const ArchiveList: React.FC = (props) => {
     Modal.confirm({
       title: '确定要删除选中的文档吗？',
       onOk: async () => {
-        const hide = message.loading('正在删除');
+        const hide = message.loading('正在删除', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {
@@ -139,10 +139,9 @@ const ArchiveList: React.FC = (props) => {
     {
       title: '状态',
       dataIndex: 'status',
-      hideInSearch: true,
       valueEnum: {
         0: {
-          text: '待审',
+          text: '草稿',
           status: 'Default',
         },
         1: {
@@ -153,6 +152,21 @@ const ArchiveList: React.FC = (props) => {
           text: '待发布',
           status: 'Default',
         },
+      },
+      renderFormItem: (_, { type, defaultRender, formItemProps, fieldProps, ...rest }, form) => {
+        return (
+          <ProFormSelect
+            name="status"
+            request={async () => {
+              return [
+                {label: '全部', value: ''},
+                {label: '正常', value: 'ok'},
+                {label: '草稿', value: 'draft'},
+                {label: '待发布', value: 'plan'},
+              ];
+            }}
+          />
+        );
       },
     },
     {
@@ -213,7 +227,7 @@ const ArchiveList: React.FC = (props) => {
         actionRef={actionRef}
         rowKey="id"
         search={{
-          span: 6,
+          span: 8,
           defaultCollapsed: false,
         }}
         toolBarRender={() => [

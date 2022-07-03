@@ -144,3 +144,31 @@ func HandleDigKeywords(ctx iris.Context) {
 		"msg":  "关键词拓词任务已触发",
 	})
 }
+
+// HandleArticleCollect 手动采集不受时间限制，并且需要指定关键词
+func HandleArticleCollect(ctx iris.Context) {
+	var req request.KeywordRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	keyword, err := provider.GetKeywordById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	go provider.CollectArticlesByKeyword(keyword, true)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "采集任务已触发，预计1分钟后即可查看采集结果",
+	})
+}

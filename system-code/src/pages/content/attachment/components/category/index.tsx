@@ -1,5 +1,5 @@
 import React, { useRef, useState } from 'react';
-import { Alert, Button, Card, Input, message, Modal, Space, Upload } from 'antd';
+import { Button, Input, message, Modal, Space } from 'antd';
 import {
   deleteAttachmentCategory,
   getAttachmentCategories,
@@ -38,6 +38,7 @@ const AttachmentCategory: React.FC<AttachmentCategoryProps> = (props) => {
   };
 
   const handleSaveCategory = () => {
+    const hide = message.loading('正在提交中', 0);
     saveAttachmentCategory({
       id: editingCategory.id,
       title: editingInput,
@@ -53,6 +54,8 @@ const AttachmentCategory: React.FC<AttachmentCategoryProps> = (props) => {
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

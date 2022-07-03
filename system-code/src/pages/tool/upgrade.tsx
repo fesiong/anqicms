@@ -1,12 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import ProForm, {
-  ProFormSelect,
   ProFormText,
-  ProFormTextArea,
-  ProFormRadio,
 } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Button, Card, message, Modal, Upload } from 'antd';
+import { Button, Card, message, Modal } from 'antd';
 import { checkVersion, getVersion, upgradeVersion } from '@/services/version';
 
 var loading = false;

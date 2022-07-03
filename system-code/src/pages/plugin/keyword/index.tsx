@@ -1,7 +1,7 @@
 import { PlusOutlined } from '@ant-design/icons';
-import { Button, message, Input, Drawer, Modal, Space } from 'antd';
-import React, { useState, useRef, useEffect } from 'react';
-import { PageContainer, FooterToolbar } from '@ant-design/pro-layout';
+import { Button, message, Modal, Space } from 'antd';
+import React, { useState, useRef } from 'react';
+import { PageContainer } from '@ant-design/pro-layout';
 import type { ProColumns, ActionType } from '@ant-design/pro-table';
 import ProTable from '@ant-design/pro-table';
 import {
@@ -11,7 +11,7 @@ import {
 } from '@/services/plugin/keyword';
 import { exportFile } from '@/utils';
 import KeywordImport from './components/import';
-import { digCollectorKeyword } from '@/services/collector';
+import { collectCollectorArticle, digCollectorKeyword } from '@/services/collector';
 import KeywordForm from './components/keywordForm';
 
 const PluginKeyword: React.FC = () => {
@@ -24,7 +24,7 @@ const PluginKeyword: React.FC = () => {
     Modal.confirm({
       title: '确定要删除选中的关键词吗？',
       onOk: async () => {
-        const hide = message.loading('正在删除');
+        const hide = message.loading('正在删除', 0);
         if (!selectedRowKeys) return true;
         try {
           for (let item of selectedRowKeys) {
@@ -63,6 +63,22 @@ const PluginKeyword: React.FC = () => {
     message.info(res.msg);
   };
 
+  const handleCollectArticle = (keyword: any) => {
+    const hide = message.loading('正在采集中', 0);
+    collectCollectorArticle(keyword).then(res => {
+      if (res.code !== 0) {
+        message.error(res.msg)
+      } else {
+        if (actionRef.current) {
+          actionRef.current.reload();
+        }
+        message.info(res.msg);
+      }
+    }).finally(() => {
+      hide();
+    })
+  }
+
   const columns: ProColumns<any>[] = [
     {
       title: 'ID',
@@ -90,6 +106,14 @@ const PluginKeyword: React.FC = () => {
       valueType: 'option',
       render: (_, record) => (
         <Space size={20}>
+          <a
+            key="collect"
+            onClick={() => {
+              handleCollectArticle(record);
+            }}
+          >
+            手动采集文章
+          </a>
           <a
             key="edit"
             onClick={() => {

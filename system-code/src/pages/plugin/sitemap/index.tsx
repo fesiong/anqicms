@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import ProForm, { ProFormTextArea, ProFormRadio, ProFormText, ProFormInstance } from '@ant-design/pro-form';
+import ProForm, { ProFormRadio, ProFormText, ProFormInstance } from '@ant-design/pro-form';
 import { PageHeaderWrapper } from '@ant-design/pro-layout';
-import { Alert, Button, Card, Col, message, Radio, Row, Space, Tag } from 'antd';
+import { Alert, Button, Card, message, Space } from 'antd';
 import { pluginBuildSitemap, pluginGetSitemap, pluginSaveSitemap } from '@/services/plugin/sitemap';
 import moment from 'moment';
 
@@ -22,22 +22,28 @@ const PluginSitemap: React.FC<any> = (props) => {
   };
 
   const onSubmit = async (values: any) => {
+    const hide = message.loading('正在提交中', 0);
     pluginSaveSitemap(values)
       .then((res) => {
         message.success(res.msg);
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 
   const rebuildSitemap = () => {
     let values = formRef.current?.getFieldsValue();
+    const hide = message.loading('正在提交中', 0);
     pluginBuildSitemap(values).then((res) => {
       message.info(res.msg);
       if (res.code === 0) {
         setSitemapSetting(res.data);
       }
+    }).finally(() => {
+      hide();
     });
   };
 

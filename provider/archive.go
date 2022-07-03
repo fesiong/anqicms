@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -80,7 +81,7 @@ func GetArchiveDataById(id uint) (*model.ArchiveData, error) {
 	return &data, nil
 }
 
-func GetArchiveList(moduleId, categoryId uint, q string, order string, currentPage int, pageSize int) ([]*model.Archive, int64, error) {
+func GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage int, pageSize int) ([]*model.Archive, int64, error) {
 	var archives []*model.Archive
 	if currentPage < 1 {
 		currentPage = 1
@@ -88,37 +89,11 @@ func GetArchiveList(moduleId, categoryId uint, q string, order string, currentPa
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := dao.DB.Model(&model.Archive{}).Where("`status` = 1")
+	builder := dao.DB.Model(&model.Archive{})
 
-	if moduleId > 0 {
-		builder = builder.Where("`module_id` = ?", moduleId)
+	if ops != nil {
+		builder = ops(builder)
 	}
-	if categoryId > 0 {
-		builder = builder.Where("`category_id` = ?", categoryId)
-	}
-	if q != "" {
-		builder = builder.Where("`title` like ?", "%"+q+"%")
-	}
-	if order != "" {
-		builder = builder.Order(order)
-	}
-	builder = builder.Count(&total).Limit(pageSize).Offset(offset)
-	if err := builder.Find(&archives).Error; err != nil {
-		return nil, 0, err
-	}
-
-	return archives, total, nil
-}
-
-func GetArchiveRecycleList(currentPage int, pageSize int) ([]*model.Archive, int64, error) {
-	var archives []*model.Archive
-	if currentPage < 1 {
-		currentPage = 1
-	}
-	offset := (currentPage - 1) * pageSize
-	var total int64
-
-	builder := dao.DB.Debug().Model(&model.Archive{}).Unscoped().Where("`deleted_at` is not null")
 
 	builder = builder.Count(&total).Limit(pageSize).Offset(offset)
 	if err := builder.Find(&archives).Error; err != nil {
@@ -182,10 +157,14 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		archive = &model.Archive{
 			Status: 1,
 		}
-		// createdTime
-		if req.CreatedTime > 0 {
-			archive.CreatedTime = req.CreatedTime
-		}
+	}
+	// createdTime
+	if req.CreatedTime > 0 {
+		archive.CreatedTime = req.CreatedTime
+	}
+	archive.Status = config.ContentStatusOK
+	if req.Draft {
+		archive.Status = config.ContentStatusDraft
 	}
 	if archive.CreatedTime > time.Now().Unix() {
 		// 未来时间，设置为待发布
@@ -406,8 +385,17 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	// tags
 	_ = SaveTagData(archive.Id, req.Tags)
 
-	link := GetUrl("archive", archive, 0)
+	// 缓存清理
+	if oldFixedLink != "" || archive.FixedLink != "" {
+		DeleteCacheFixedLinks()
+	}
 
+	err = SuccessReleaseArchive(archive, newPost)
+	return
+}
+
+func SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
+	link := GetUrl("archive", archive, 0)
 	//添加锚文本
 	if config.JsonData.PluginAnchor.ReplaceWay == 1 {
 		go ReplaceContent(nil, "archive", archive.Id, link)
@@ -418,10 +406,6 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		go AutoInsertAnchor(archive.Id, archive.Keywords, link)
 	}
 
-	// 缓存清理
-	if oldFixedLink != "" || archive.FixedLink != "" {
-		DeleteCacheFixedLinks()
-	}
 	DeleteCacheIndex()
 
 	//新发布的文章，执行推送
@@ -431,7 +415,8 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 			_ = AddonSitemap("archive", link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
 		}
 	}
-	return
+
+	return nil
 }
 
 func UpdateArchiveUrlToken(archive *model.Archive) error {

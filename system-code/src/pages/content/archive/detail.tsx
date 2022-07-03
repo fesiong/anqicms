@@ -10,7 +10,7 @@ import ProForm, {
   ProFormInstance,
   ProFormDateTimePicker,
 } from '@ant-design/pro-form';
-import { message, Upload, Collapse, Card, Row, Col, Image, Modal, Space, Button } from 'antd';
+import { message, Collapse, Card, Row, Col, Image, Modal, Button } from 'antd';
 import { DeleteOutlined, PlusOutlined } from '@ant-design/icons';
 import WangEditor from '@/components/editor';
 import Keywords from '@/components/keywords';
@@ -57,9 +57,9 @@ export default class ArchiveForm extends React.Component {
     if (id > 0) {
       this.getArchive(Number(id));
     } else {
-      let copyId =  history.location.query?.copyid || 0;
+      let copyId = history.location.query?.copyid || 0;
       if (copyId > 0) {
-        this.getArchive(Number(copyId), true)
+        this.getArchive(Number(copyId), true);
       } else {
         this.setState({
           fetched: true,
@@ -267,11 +267,13 @@ export default class ArchiveForm extends React.Component {
       message.error('请选择文档分类');
       return;
     }
+    const hide = message.loading('正在提交中', 0);
     archive.content = content;
     if (typeof archive.flag === 'object') {
       archive.flag = archive.flag.join(',');
     }
     let res = await saveArchive(archive);
+    hide();
     if (res.code != 0) {
       if (res.data && res.data.id) {
         // 提示
@@ -299,9 +301,9 @@ export default class ArchiveForm extends React.Component {
     let { archive } = this.state;
     delete archive.extra[field];
     this.setState({
-      archive
-    })
-  }
+      archive,
+    });
+  };
 
   handleUploadExtraField = (field: string, row: any) => {
     let { archive } = this.state;
@@ -311,13 +313,12 @@ export default class ArchiveForm extends React.Component {
     archive.extra[field].value = row.logo;
 
     this.setState({
-      archive
-    })
-  }
+      archive,
+    });
+  };
 
   handleKeyDown = (event: React.KeyboardEvent) => {
-    if (event.key === "s" && (event.ctrlKey || event.metaKey)) {
-
+    if (event.key === 's' && (event.ctrlKey || event.metaKey)) {
       let values = this.formRef.current?.getFieldsValue();
       // 自动保存
       this.onSubmit(values);
@@ -414,21 +415,21 @@ export default class ArchiveForm extends React.Component {
                                 name={['extra', item.field_name, 'value']}
                                 label={item.name}
                                 required={item.required ? true : false}
-                                placeholder={item.content && "默认值：" + item.content}
+                                placeholder={item.content && '默认值：' + item.content}
                               />
                             ) : item.type === 'number' ? (
                               <ProFormDigit
                                 name={['extra', item.field_name, 'value']}
                                 label={item.name}
                                 required={item.required ? true : false}
-                                placeholder={item.content && "默认值：" + item.content}
+                                placeholder={item.content && '默认值：' + item.content}
                               />
                             ) : item.type === 'textarea' ? (
                               <ProFormTextArea
                                 name={['extra', item.field_name, 'value']}
                                 label={item.name}
                                 required={item.required ? true : false}
-                                placeholder={item.content && "默认值：" + item.content}
+                                placeholder={item.content && '默认值：' + item.content}
                               />
                             ) : item.type === 'radio' ? (
                               <ProFormRadio.Group
@@ -471,27 +472,40 @@ export default class ArchiveForm extends React.Component {
                               />
                             ) : item.type === 'image' ? (
                               <ProFormText label={item.name}>
-                              {archive.extra[item.field_name]?.value
-                                ?
-                                <div className="ant-upload-item">
-                                      <Image
-                                        preview={{
-                                          src: archive.extra[item.field_name]?.value,
-                                        }}
-                                        src={archive.extra[item.field_name]?.value}
-                                      />
-                                      <span className="delete" onClick={this.handleCleanExtraField.bind(this, item.field_name)}>
-                                        <DeleteOutlined />
-                                      </span>
-                                    </div>
-                                : <AttachmentSelect onSelect={ this.handleUploadExtraField.bind(this, item.field_name) } visible={false}>
-                                <div className="ant-upload-item">
-                                  <div className='add'>
-                                    <PlusOutlined />
-                                    <div style={{ marginTop: 8 }}>上传</div>
+                                {archive.extra[item.field_name]?.value ? (
+                                  <div className="ant-upload-item">
+                                    <Image
+                                      preview={{
+                                        src: archive.extra[item.field_name]?.value,
+                                      }}
+                                      src={archive.extra[item.field_name]?.value}
+                                    />
+                                    <span
+                                      className="delete"
+                                      onClick={this.handleCleanExtraField.bind(
+                                        this,
+                                        item.field_name,
+                                      )}
+                                    >
+                                      <DeleteOutlined />
+                                    </span>
                                   </div>
-                                </div>
-                              </AttachmentSelect>}
+                                ) : (
+                                  <AttachmentSelect
+                                    onSelect={this.handleUploadExtraField.bind(
+                                      this,
+                                      item.field_name,
+                                    )}
+                                    visible={false}
+                                  >
+                                    <div className="ant-upload-item">
+                                      <div className="add">
+                                        <PlusOutlined />
+                                        <div style={{ marginTop: 8 }}>上传</div>
+                                      </div>
+                                    </div>
+                                  </AttachmentSelect>
+                                )}
                               </ProFormText>
                             ) : (
                               ''
@@ -508,80 +522,107 @@ export default class ArchiveForm extends React.Component {
                   />
                 </Col>
                 <Col span={6}>
-                  <Row gutter={20} className='mb-normal'>
-                              <Col flex={1}>
-                              <Button block type='primary' onClick={() => {
-                      this.onSubmit(this.formRef.current?.getFieldsValue())
-                    }}>提交</Button>
-                              </Col>
-                              <Col flex={1}>
-                              <Button block onClick={() => {history.goBack();}}>返回</Button>
-                              </Col>
+                  <Row gutter={20} className="mb-normal">
+                    <Col flex={1}>
+                      <Button
+                        block
+                        type="primary"
+                        onClick={() => {
+                          this.onSubmit(this.formRef.current?.getFieldsValue());
+                        }}
+                      >
+                        提交
+                      </Button>
+                    </Col>
+                    <Col flex={1}>
+                      <Button
+                        block
+                        onClick={() => {
+                          let values= this.formRef.current?.getFieldsValue() || {};
+                          values.draft = true;
+                          this.onSubmit(values);
+                        }}
+                      >
+                        存草稿
+                      </Button>
+                    </Col>
+                    <Col flex={1}>
+                      <Button
+                        block
+                        onClick={() => {
+                          history.goBack();
+                        }}
+                      >
+                        返回
+                      </Button>
+                    </Col>
                   </Row>
-                  <Card className='aside-card' size='small' title='所属分类'>
-                  <ProFormSelect
-                    //label="所属分类"
-                    showSearch
-                    name="category_id"
-                    width="lg"
-                    request={async () => {
-                      let res = await getCategories({ type: 1 });
-                      return res.data || [];
-                    }}
-                    fieldProps={{
-                      fieldNames: {
-                        label: 'title',
-                        value: 'id',
-                      },
-                      optionItemRender(item) {
-                        return (
-                          <div dangerouslySetInnerHTML={{ __html: item.spacer + item.title }}></div>
-                        );
-                      },
-                      onChange: this.onChangeSelectCategory,
-                    }}
-                    extra={<div>内容模型：{module.title}</div>}
-                  />
+                  <Card className="aside-card" size="small" title="所属分类">
+                    <ProFormSelect
+                      //label="所属分类"
+                      showSearch
+                      name="category_id"
+                      width="lg"
+                      request={async () => {
+                        let res = await getCategories({ type: 1 });
+                        return res.data || [];
+                      }}
+                      fieldProps={{
+                        fieldNames: {
+                          label: 'title',
+                          value: 'id',
+                        },
+                        optionItemRender(item) {
+                          return (
+                            <div
+                              dangerouslySetInnerHTML={{ __html: item.spacer + item.title }}
+                            ></div>
+                          );
+                        },
+                        onChange: this.onChangeSelectCategory,
+                      }}
+                      extra={<div>内容模型：{module.title}</div>}
+                    />
                   </Card>
-                  <Card className='aside-card' size='small' title='文章图片'>
-                  <ProFormText>
-                    {archive.images?.length
-                      ? archive.images.map((item: string, index: number) => (
-                          <div className="ant-upload-item" key={index}>
-                            <Image
-                              preview={{
-                                src: item,
-                              }}
-                              src={item}
-                            />
-                            <span
-                              className="delete"
-                              onClick={this.handleCleanLogo.bind(this, index)}
-                            >
-                              <DeleteOutlined />
-                            </span>
+                  <Card className="aside-card" size="small" title="文章图片">
+                    <ProFormText>
+                      {archive.images?.length
+                        ? archive.images.map((item: string, index: number) => (
+                            <div className="ant-upload-item" key={index}>
+                              <Image
+                                preview={{
+                                  src: item,
+                                }}
+                                src={item}
+                              />
+                              <span
+                                className="delete"
+                                onClick={this.handleCleanLogo.bind(this, index)}
+                              >
+                                <DeleteOutlined />
+                              </span>
+                            </div>
+                          ))
+                        : null}
+                      <AttachmentSelect onSelect={this.handleSelectImages} visible={false}>
+                        <div className="ant-upload-item">
+                          <div className="add">
+                            <PlusOutlined />
+                            <div style={{ marginTop: 8 }}>上传</div>
                           </div>
-                        ))
-                      : null}
-                    <AttachmentSelect onSelect={this.handleSelectImages} visible={false}>
-                      <div className="ant-upload-item">
-                        <div className="add">
-                          <PlusOutlined />
-                          <div style={{ marginTop: 8 }}>上传</div>
                         </div>
-                      </div>
-                    </AttachmentSelect>
-                  </ProFormText>
+                      </AttachmentSelect>
+                    </ProFormText>
                   </Card>
-                  <Card className='aside-card' size='small' title='自定义URL'>
+                  <Card className="aside-card" size="small" title="自定义URL">
                     <ProFormText
                       name="url_token"
                       placeholder="默认会自动生成，无需填写"
                       extra="注意：自定义URL只能填写字母、数字和下划线，不能带空格"
                     />
                   </Card>
-                  <Card className='aside-card' size='small' title='发布时间'>
-                  <ProFormDateTimePicker
+                  <Card className="aside-card" size="small" title="发布时间">
+                    <ProFormDateTimePicker
                       name="created_moment"
                       placeholder="默认会自动生成，无需填写"
                       extra="如果你选择的是未来的时间，则会被放入到待发布列表，等待时间到了才会正式发布"
@@ -592,8 +633,8 @@ export default class ArchiveForm extends React.Component {
                       }}
                     />
                   </Card>
-                  <Card className='aside-card' size='small' title='Tag标签'>
-                  <ProFormSelect
+                  <Card className="aside-card" size="small" title="Tag标签">
+                    <ProFormSelect
                       mode="tags"
                       name="tags"
                       valueEnum={searchedTags}
@@ -602,7 +643,7 @@ export default class ArchiveForm extends React.Component {
                         tokenSeparators: [',', '，'],
                         onInputKeyDown: this.onChangeTagInput,
                       }}
-                      extra='可以输入或选择标签，多个标签可用,分隔'
+                      extra="可以输入或选择标签，多个标签可用,分隔"
                     />
                   </Card>
                 </Col>

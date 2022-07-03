@@ -39,3 +39,11 @@ export async function recoverArchive(body: any, options?: { [key: string]: any }
     options,
   });
 }
+
+export async function releaseArchive(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/archive/release',
+    body,
+    options,
+  });
+}

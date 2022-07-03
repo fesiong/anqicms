@@ -39,3 +39,11 @@ export async function digCollectorKeyword(body?: any, options?: { [key: string]:
     options,
   });
 }
+
+export async function collectCollectorArticle(body?: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/collector/article/collect',
+    body,
+    options,
+  });
+}

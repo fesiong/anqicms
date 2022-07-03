@@ -97,6 +97,7 @@ const SettingNavFrom: React.FC<any> = (props) => {
   const onNavSubmit = async (values: any) => {
     values = Object.assign(editingNav, values)
     values.type_id = typeId;
+    const hide = message.loading('正在提交中', 0);
     saveSettingNav(values)
       .then((res) => {
         message.success(res.msg);
@@ -105,6 +106,8 @@ const SettingNavFrom: React.FC<any> = (props) => {
       })
       .catch((err) => {
         console.log(err);
+      }).finally(() => {
+        hide();
       });
   };
 

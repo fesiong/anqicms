@@ -1,6 +1,6 @@
 import ProList from '@ant-design/pro-list';
 import { pluginGetMaterialCategories, pluginGetMaterials } from '@/services/plugin/material';
-import { Button, Modal, Space, Tag } from 'antd';
+import { Modal, Space, Tag } from 'antd';
 import './index.less';
 import { FileSearchOutlined, PlusSquareOutlined } from '@ant-design/icons';
 import { DomEditor, IDomEditor, IButtonMenu } from '@wangeditor/core';

@@ -1,7 +1,6 @@
 import React from 'react';
 import {
   ModalForm,
-  ProFormDigit,
   ProFormRadio,
   ProFormText,
   ProFormTextArea,
