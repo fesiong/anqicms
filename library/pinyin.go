@@ -11,9 +11,12 @@ func GetPinyin(hans string) string {
 	var result = make([]string, 0, len(hans))
 	tmpHans := []rune(hans)
 	var tmp string
-	for _, r := range tmpHans {
+	for i, r := range tmpHans {
 		if (r >= 65 && r <= 90) || (r >= 97 && r <= 122) {
 			tmp += string(r)
+			if i == len(tmpHans)-1 {
+				result = append(result, tmp)
+			}
 		} else {
 			if tmp != "" {
 				result = append(result, tmp)
