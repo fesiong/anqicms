@@ -67,7 +67,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	}
 	options.Method = strings.ToUpper(options.Method)
 
-	req := gorequest.New().SetDebug(true).SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
+	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
 	//定义默认的refer
 	parsedUrl, err := url.Parse(urlPath)
 	if err != nil {

@@ -139,11 +139,11 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 
 // StartDigKeywords 开始挖掘关键词，通过核心词来拓展
 // 最多只10万关键词，抓取前3级，如果超过3级，则每次只执行一级
-func StartDigKeywords() {
+func StartDigKeywords(focus bool) {
 	if dao.DB == nil {
 		return
 	}
-	if config.CollectorConfig.AutoDigKeyword == false {
+	if config.CollectorConfig.AutoDigKeyword == false && !focus {
 		return
 	}
 	if digKeywordRunning {

@@ -14,13 +14,17 @@ func Crond() {
 	crontab.AddFunc("@daily", cleanStatistics)
 	// 每天清理一次回收站内容
 	crontab.AddFunc("@daily", provider.CleanArchives)
-	crontab.AddFunc("@hourly", provider.StartDigKeywords)
+	crontab.AddFunc("@hourly", startDigKeywords)
 	crontab.AddFunc("1 */10 * * * *", provider.CollectArticles)
 	//每天检查一次收录量
 	crontab.AddFunc("30 30 8 * * *", provider.QuerySpiderInclude)
 	// 每分钟检查一次需要发布的文章
 	crontab.AddFunc("1 * * * * *", PublishPlanContents)
 	crontab.Start()
+}
+
+func startDigKeywords() {
+	provider.StartDigKeywords(false)
 }
 
 func cleanStatistics() {

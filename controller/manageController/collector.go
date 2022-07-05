@@ -135,7 +135,7 @@ func HandleArticlePseudo(ctx iris.Context) {
 }
 
 func HandleDigKeywords(ctx iris.Context) {
-	go provider.StartDigKeywords()
+	go provider.StartDigKeywords(true)
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("手动触发关键词拓词任务"))
 
