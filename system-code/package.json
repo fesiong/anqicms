@@ -55,8 +55,8 @@
     "@ant-design/pro-list": "^1.21.54",
     "@ant-design/pro-table": "^2.61.0",
     "@umijs/route-utils": "^2.0.0",
-    "@wangeditor/editor": "^5.1.0",
-    "@wangeditor/editor-for-react": "^1.0.3",
+    "@wangeditor/editor": "^5.1.1",
+    "@wangeditor/editor-for-react": "^1.0.4",
     "antd": "^4.17.0",
     "caniuse-lite": "^1.0.30001352",
     "classnames": "^2.3.0",
@@ -118,6 +118,6 @@
     "commit-msg": "fabric verify-commit"
   },
   "peerDependencies": {
-    "@wangeditor/core": "^1.1.0"
+    "@wangeditor/core": "^1.1.1"
   }
 }

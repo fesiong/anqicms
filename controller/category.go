@@ -12,6 +12,10 @@ import (
 func CategoryPage(ctx iris.Context) {
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	categoryId := ctx.Params().GetUintDefault("id", 0)
+	catId := ctx.Params().GetUintDefault("catid", 0)
+	if catId > 0 {
+		categoryId = catId
+	}
 	urlToken := ctx.Params().GetString("filename")
 	var category *model.Category
 	var err error

@@ -286,7 +286,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		if config.JsonData.Content.RemoteDownload == 1 {
 			doc.Find("img").Each(func(i int, s *goquery.Selection) {
 				src, exists := s.Attr("src")
-				if exists {
+				if exists && src != "" {
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)
 					if err == nil {
@@ -298,6 +298,8 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 							}
 						}
 					}
+				} else {
+					s.Remove()
 				}
 			})
 		}
@@ -306,7 +308,10 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 			imgSections := doc.Find("img")
 			if imgSections.Length() > 0 {
 				//获取第一条
-				archive.Images = append(archive.Images, imgSections.Eq(0).AttrOr("src", ""))
+				src := imgSections.Eq(0).AttrOr("src", "")
+				if src != "" {
+					archive.Images = append(archive.Images, src)
+				}
 			}
 		}
 		for i, v := range archive.Images {
@@ -348,6 +353,11 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 
 		//返回最终可用的内容
 		req.Content, _ = doc.Find("body").Html()
+	}
+	// 限制数量
+	descRunes := []rune(archive.Description)
+	if len(descRunes) > 250 {
+		archive.Description = string(descRunes[:250])
 	}
 
 	// 保存主表

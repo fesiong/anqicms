@@ -103,6 +103,29 @@ func resisterMacros(app *iris.Application) {
 			}
 			matchMap = map[string]string{}
 		}
+		//page
+		reg = regexp.MustCompile(rewritePattern.PageRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "page"
+			for i, v := range match {
+				key := rewritePattern.PageTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			if matchMap["filename"] != "" {
+				// 这个规则可能与下面的冲突，因此检查一遍
+				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+				if category != nil && category.Type == config.CategoryTypePage {
+					return matchMap, true
+				}
+			} else {
+				return matchMap, true
+			}
+			matchMap = map[string]string{}
+		}
 		//category
 		reg = regexp.MustCompile(rewritePattern.CategoryRule)
 		match = reg.FindStringSubmatch(paramValue)
@@ -121,30 +144,7 @@ func resisterMacros(app *iris.Application) {
 				}
 				// 这个规则可能与下面的冲突，因此检查一遍
 				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
-				if category != nil {
-					return matchMap, true
-				}
-			} else {
-				return matchMap, true
-			}
-			matchMap = map[string]string{}
-		}
-		//page
-		reg = regexp.MustCompile(rewritePattern.PageRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "page"
-			for i, v := range match {
-				key := rewritePattern.PageTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			if matchMap["filename"] != "" {
-				// 这个规则可能与下面的冲突，因此检查一遍
-				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
-				if category != nil {
+				if category != nil && category.Type != config.CategoryTypePage {
 					return matchMap, true
 				}
 			} else {

@@ -7,6 +7,7 @@ import ProTable, { ActionType, ProColumns } from '@ant-design/pro-table';
 import ReplaceKeywords from '@/components/replaceKeywords';
 import { PlusOutlined } from '@ant-design/icons';
 import { deleteArchive, releaseArchive, getArchives } from '@/services';
+import moment from 'moment';
 
 const PluginCollector: React.FC = () => {
   const actionRef = useRef<ActionType>();
@@ -68,6 +69,10 @@ const PluginCollector: React.FC = () => {
     });
   };
 
+  const handleEditArchive = async (record: any) => {
+    history.push('/archive/detail?id=' + record.id);
+  };
+
   const columns: ProColumns<any>[] = [
     {
       title: '编号',
@@ -90,6 +95,7 @@ const PluginCollector: React.FC = () => {
       title: 'thumb',
       dataIndex: 'thumb',
       hideInSearch: true,
+      width: 70,
       render: (text, record) => {
         return (
           text ? <img src={record.thumb} className='list-thumb' /> : null
@@ -121,13 +127,23 @@ const PluginCollector: React.FC = () => {
       }
     },
     {
+      title: '时间',
+      hideInSearch: true,
+      dataIndex: 'created_time',
+      render: (item) => {
+        if (`${item}` === '0') {
+          return false;
+        }
+        return moment((item as number) * 1000).format('YYYY-MM-DD HH:mm');
+      },
+    },
+    {
       title: '操作',
       dataIndex: 'option',
       valueType: 'option',
       render: (_, record) => (
         <Space size={20}>
         {record.status == 0 && <a
-          className="text-red"
           key="recover"
           onClick={async () => {
             await handlePublish([record.id]);
@@ -135,6 +151,14 @@ const PluginCollector: React.FC = () => {
         >
           发布
         </a>}
+          <a
+            key="delete"
+            onClick={async () => {
+              handleEditArchive(record);
+            }}
+          >
+            编辑
+          </a>
           <a
             className="text-red"
             key="delete"
@@ -187,15 +211,6 @@ const PluginCollector: React.FC = () => {
             }}
           >
             批量替换关键词
-          </Button>,
-          <Button
-            type="primary"
-            key="add"
-            onClick={() => {
-              history.push('/archive/detail');
-            }}
-          >
-            <PlusOutlined /> 手动采集
           </Button>,
         ]}
         tableAlertOptionRender={({ selectedRowKeys, onCleanSelected }) => (

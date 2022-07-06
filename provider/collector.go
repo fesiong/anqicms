@@ -414,56 +414,64 @@ func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) ([]*request.Arc
 			strings.Contains(link.Url, "/wd?") {
 			continue
 		}
-		//百度的不使用 chromedp
-		resp, err := library.Request(link.Url, &library.Options{
-			Timeout:  5,
-			IsMobile: false,
-			Header: map[string]string{
-				"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s",keyword.Title),
-			},
-		})
-		if err != nil {
-			continue
-		}
 
-		if !focus {
-			//根据设置的时间，随机休息秒数
-			time.Sleep(getBetweenSeconds())
-		}
+		archive, err := CollectSingleArticle(link, keyword)
+		if err == nil {
+			archives = append(archives, archive)
 
-		archive := &request.Archive{
-			OriginUrl:  link.Url,
-			ContentText: resp.Body,
-		}
-		_ = ParseArticleDetail(archive)
-		if len(archive.Content) == 0 {
-			log.Println("链接无文章", archive.OriginUrl)
-			continue
-		}
-		if archive.Title == "" {
-			log.Println("链接无文章", archive.OriginUrl)
-			continue
-		}
-		//对乱码的跳过
-		runeTitle := []rune(archive.Title)
-		isDeny := false
-		for _, r := range runeTitle {
-			if r == 65533 {
-				isDeny = true
-				break
+			if !focus {
+				//根据设置的时间，随机休息秒数
+				time.Sleep(getBetweenSeconds())
 			}
 		}
-		if isDeny {
-			log.Println("乱码", archive.OriginUrl)
-			continue
-		}
-
-		log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
-
-		archives = append(archives, archive)
 	}
 
 	return archives, nil
+}
+
+func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*request.Archive, error) {
+	//百度的不使用 chromedp
+	resp, err := library.Request(link.Url, &library.Options{
+		Timeout:  5,
+		IsMobile: false,
+		Header: map[string]string{
+			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s",keyword.Title),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	archive := &request.Archive{
+		OriginUrl:  link.Url,
+		ContentText: resp.Body,
+	}
+	_ = ParseArticleDetail(archive)
+	if len(archive.Content) == 0 {
+		log.Println("链接无文章", archive.OriginUrl)
+		return nil, err
+	}
+	if archive.Title == "" {
+		log.Println("链接无文章", archive.OriginUrl)
+		return nil, err
+	}
+	//对乱码的跳过
+	runeTitle := []rune(archive.Title)
+	isDeny := false
+	for _, r := range runeTitle {
+		if r == 65533 {
+			isDeny = true
+			break
+		}
+	}
+	if isDeny {
+		log.Println("乱码", archive.OriginUrl)
+		return nil, err
+	}
+
+	log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
+
+	return archive, nil
 }
 
 func ParseBaiduJson(content string) []*response.WebLink {
@@ -476,8 +484,12 @@ func ParseBaiduJson(content string) []*response.WebLink {
 	var links []*response.WebLink
 	for _, v := range baiduJson.Feed.Entry {
 		// 百度的链接，都加上https
-		if strings.HasPrefix(v.Url, "http://") && strings.Contains(v.Url, "baidu.com") {
-			v.Url = "https://" + strings.TrimPrefix(v.Url, "http://")
+		//if strings.HasPrefix(v.Url, "http://") && strings.Contains(v.Url, "baidu.com") {
+		//	v.Url = "https://" + strings.TrimPrefix(v.Url, "http://")
+		//}
+		// 百度自家的不采集
+		if strings.Contains(v.Url, "baidu.com") {
+			continue
 		}
 		links = append(links, &response.WebLink{
 			Name: v.Title,
@@ -592,7 +604,6 @@ func ParseToutiaoDetail(archive *request.Archive, doc *goquery.Document) {
 
 func ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
 	ParseLinking(doc, archive.OriginUrl)
-
 	title := ParseArticleTitle(doc)
 
 	//根据标题判断是否是英文，如果是英文，则采用英文的计数
@@ -815,28 +826,61 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			return
 		}
 		//只保留 img,code,blockquote,pre
-		if item.Is("code") || item.Is("blockquote") || item.Is("pre") {
+		if item.Is("blockquote") || item.Is("pre") {
+			return
+		}
+		if item.Is("code") {
+			// 重新wrap
+			tmp := item.Text()
+			item.ReplaceWithHtml("<pre><code>"+tmp+"</code></pre>")
 			return
 		}
 		if item.Is("img") {
-			src, _ := item.Find("img").Attr("src")
-			item.ReplaceWithHtml(fmt.Sprintf("<img src=\"%s\"/>", src))
+			src, _ := item.Attr("src")
+			dataSrc, exists2 := item.Attr("data-src")
+			if exists2 {
+				src = dataSrc
+			}
+			dataSrc, exists2 = item.Attr("data-original")
+			if exists2 {
+				src = dataSrc
+			}
+			alt, _ := item.Attr("alt")
+			if src == "" {
+				item.Remove()
+			} else {
+				item.ReplaceWithHtml("<p><img src=\""+src+"\" alt=\""+alt+"\"/></p>")
+			}
+			return
 		}
 		if item.Find("blockquote").Length() > 0 {
 			item.ReplaceWithSelection(item.Find("blockquote"))
-			return
-		}
-		if item.Find("code").Length() > 0 {
-			item.ReplaceWithSelection(item.Find("code"))
 			return
 		}
 		if item.Find("pre").Length() > 0 {
 			item.ReplaceWithSelection(item.Find("pre"))
 			return
 		}
+		if item.Find("code").Length() > 0 {
+			tmp := item.Find("code").Text()
+			item.ReplaceWithHtml("<pre><code>"+tmp+"</code></pre>")
+			return
+		}
 		if item.Find("img").Length() > 0 {
-			src, _ := item.Find("img").Attr("src")
-			item.ReplaceWithHtml(fmt.Sprintf("<img src=\"%s\"/>", src))
+			item.Find("img").Each(func(i int, inner *goquery.Selection) {
+				src, _ := inner.Attr("src")
+				dataSrc, exists2 := inner.Attr("data-src")
+				if exists2 {
+					src = dataSrc
+					inner.RemoveAttr("data-src")
+				}
+				dataSrc, exists2 = inner.Attr("data-original")
+				if exists2 {
+					src = dataSrc
+					inner.RemoveAttr("data-original")
+				}
+				inner.SetAttr("src", src)
+			})
 			return
 		}
 		//其他情况
@@ -848,7 +892,13 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			}
 			// div转成p
 			item.ReplaceWithHtml(fmt.Sprintf("<p>%s</p>", strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " "))))
-		} else if !item.Is("table") || !item.Is("ul") || !item.Is("ol") {
+		} else if item.Is("ul") || item.Is("ol") {
+			if item.Find("li").Length() == 0 {
+				if item.Find("li").Length() == 0 {
+					item.SetHtml("<li>"+item.Text()+"</li>")
+				}
+			}
+		} else if !item.Is("table") {
 			item.SetText(strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " ")))
 		}
 	})
@@ -1024,7 +1074,7 @@ func ReplaceContentFromConfig(content string) string {
 }
 
 func ParseLinking(htmlDom *goquery.Document, baseUrl string) {
-	aList := htmlDom.Find("a")
+	aList := htmlDom.Find("[href]")
 	aList.Each(func(i int, nodeItem *goquery.Selection) {
 		subURL, exist := nodeItem.Attr("href")
 		if !exist || emptyLinkPattern.MatchString(subURL) {
@@ -1034,49 +1084,20 @@ func ParseLinking(htmlDom *goquery.Document, baseUrl string) {
 		nodeItem.SetAttr("href", fullURL)
 	})
 
-	linkList := htmlDom.Find("link")
-	linkList.Each(func(i int, nodeItem *goquery.Selection) {
-		subURL, exist := nodeItem.Attr("href")
-		if !exist || emptyLinkPattern.MatchString(subURL) {
-			return
-		}
-		fullURL, _ := joinURL(baseUrl, subURL)
-		nodeItem.SetAttr("href", fullURL)
-	})
-
-	scriptList := htmlDom.Find("script")
-	scriptList.Each(func(i int, nodeItem *goquery.Selection) {
+	srcList := htmlDom.Find("[src]")
+	srcList.Each(func(i int, nodeItem *goquery.Selection) {
 		subURL, exist := nodeItem.Attr("src")
-		if !exist || emptyLinkPattern.MatchString(subURL) {
-			return
+		// 尝试获取data-src
+		dataSrc, exists := nodeItem.Attr("data-src")
+		if exists {
+			subURL = dataSrc
+			nodeItem.RemoveAttr("data-src")
 		}
-		fullURL, _ := joinURL(baseUrl, subURL)
-		nodeItem.SetAttr("src", fullURL)
-	})
-
-	imgList := htmlDom.Find("img")
-	imgList.Each(func(i int, nodeItem *goquery.Selection) {
-		subURL, exist := nodeItem.Attr("src")
-		if !exist || emptyLinkPattern.MatchString(subURL) {
-			return
+		dataSrc, exists = nodeItem.Attr("data-original")
+		if exists {
+			subURL = dataSrc
+			nodeItem.RemoveAttr("data-original")
 		}
-		fullURL, _ := joinURL(baseUrl, subURL)
-		nodeItem.SetAttr("src", fullURL)
-	})
-
-	videoList := htmlDom.Find("video")
-	videoList.Each(func(i int, nodeItem *goquery.Selection) {
-		subURL, exist := nodeItem.Attr("src")
-		if !exist || emptyLinkPattern.MatchString(subURL) {
-			return
-		}
-		fullURL, _ := joinURL(baseUrl, subURL)
-		nodeItem.SetAttr("src", fullURL)
-	})
-
-	audioList := htmlDom.Find("audio")
-	audioList.Each(func(i int, nodeItem *goquery.Selection) {
-		subURL, exist := nodeItem.Attr("src")
 		if !exist || emptyLinkPattern.MatchString(subURL) {
 			return
 		}
