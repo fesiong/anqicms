@@ -30,7 +30,7 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 
 	// TemplateUrl 实时算出来, 它的计算方式是 /static/{TemplateName}
 	if fieldName == "TemplateUrl" {
-		content = fmt.Sprintf("%s/static/%s", strings.TrimRight(config.JsonData.System.BaseUrl, "/"), config.JsonData.System.TemplateName)
+		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(config.JsonData.System.BaseUrl, "/"), config.JsonData.System.TemplateName)
 	} else if config.JsonData.System.ExtraFields != nil {
 		for i := range config.JsonData.System.ExtraFields {
 			if config.JsonData.System.ExtraFields[i].Name == fieldName {
