@@ -16,7 +16,7 @@ func IndexPage(ctx iris.Context) {
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	// 只缓存首页
-	if currentPage == 1 {
+	if currentPage == 1 && ctx.GetHeader("Cache-Control") != "no-cache" {
 		body := provider.GetIndexCache(ua)
 		if body != nil {
 			log.Println("Load index from cache.")

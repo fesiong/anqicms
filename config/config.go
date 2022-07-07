@@ -269,7 +269,7 @@ func LoadLanguage() {
 
 	yamlFile, err := ioutil.ReadFile(languagePath)
 	if err == nil {
-		strSlice := strings.Split(string(yamlFile), "\n")
+		strSlice := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(yamlFile), "\r\n", "\n"), "\r", "\n"), "\n")
 		for _, v := range strSlice {
 			vSplit := strings.SplitN(strings.TrimSpace(v), ":", 2)
 			if len(vSplit) == 2 {

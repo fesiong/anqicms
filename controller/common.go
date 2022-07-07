@@ -27,7 +27,7 @@ func NotFound(ctx iris.Context) {
 	ctx.StatusCode(404)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
-		ctx.Values().Set("message", err.Error())
+		ShowMessage(ctx, "404 Not Found", "")
 	}
 }
 
@@ -77,7 +77,7 @@ func CheckCloseSite(ctx iris.Context) {
 
 		err := ctx.View(GetViewPath(ctx, tplName))
 		if err != nil {
-			ctx.Values().Set("message", err.Error())
+			ShowMessage(ctx, closeTips, "")
 		}
 		return
 	}
