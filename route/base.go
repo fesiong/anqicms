@@ -103,6 +103,34 @@ func resisterMacros(app *iris.Application) {
 			}
 			matchMap = map[string]string{}
 		}
+		//tagIndex
+		reg = regexp.MustCompile(rewritePattern.TagIndexRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "tagIndex"
+			for i, v := range match {
+				key := rewritePattern.TagIndexTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			return matchMap, true
+		}
+		//tag
+		reg = regexp.MustCompile(rewritePattern.TagRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "tag"
+			for i, v := range match {
+				key := rewritePattern.TagTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			return matchMap, true
+		}
 		//page
 		reg = regexp.MustCompile(rewritePattern.PageRule)
 		match = reg.FindStringSubmatch(paramValue)
@@ -138,17 +166,36 @@ func resisterMacros(app *iris.Application) {
 				}
 				matchMap[key] = v
 			}
-			if matchMap["filename"] != "" || matchMap["catname"] != "" {
-				if matchMap["catname"] != "" {
-					matchMap["filename"] = matchMap["catname"]
-				}
-				// 这个规则可能与下面的冲突，因此检查一遍
-				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
-				if category != nil && category.Type != config.CategoryTypePage {
-					return matchMap, true
+			if matchMap["module"] != "" {
+				// 需要先验证是否是module
+				module := provider.GetModuleFromCacheByToken(matchMap["module"])
+				if module != nil {
+					if matchMap["filename"] != "" || matchMap["catname"] != "" {
+						if matchMap["catname"] != "" {
+							matchMap["filename"] = matchMap["catname"]
+						}
+						// 这个规则可能与下面的冲突，因此检查一遍
+						category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+						if category != nil && category.Type != config.CategoryTypePage {
+							return matchMap, true
+						}
+					} else {
+						return matchMap, true
+					}
 				}
 			} else {
-				return matchMap, true
+				if matchMap["filename"] != "" || matchMap["catname"] != "" {
+					if matchMap["catname"] != "" {
+						matchMap["filename"] = matchMap["catname"]
+					}
+					// 这个规则可能与下面的冲突，因此检查一遍
+					category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+					if category != nil && category.Type != config.CategoryTypePage {
+						return matchMap, true
+					}
+				} else {
+					return matchMap, true
+				}
 			}
 			matchMap = map[string]string{}
 		}
@@ -164,35 +211,15 @@ func resisterMacros(app *iris.Application) {
 				}
 				matchMap[key] = v
 			}
-			return matchMap, true
-		}
-		//tagIndex
-		reg = regexp.MustCompile(rewritePattern.TagIndexRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "tagIndex"
-			for i, v := range match {
-				key := rewritePattern.TagIndexTags[i]
-				if i == 0 {
-					key = "route"
+			if matchMap["module"] != "" {
+				// 需要先验证是否是module
+				module := provider.GetModuleFromCacheByToken(matchMap["module"])
+				if module != nil {
+					return matchMap, true
 				}
-				matchMap[key] = v
+			} else {
+				return matchMap, true
 			}
-			return matchMap, true
-		}
-		//tag
-		reg = regexp.MustCompile(rewritePattern.TagRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "tag"
-			for i, v := range match {
-				key := rewritePattern.TagTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			return matchMap, true
 		}
 
 		//不存在，定义到notfound
