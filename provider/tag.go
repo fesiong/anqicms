@@ -161,11 +161,14 @@ func SaveTagData(itemId uint, tagNames []string) error {
 	}
 	var tagIds = make([]uint, 0, len(tagNames))
 	for _, tagName := range tagNames {
+		if tagName == "" {
+			continue
+		}
 		tag, err := GetTagByTitle(tagName)
 		if err != nil {
 			newToken := library.GetPinyin(tagName)
 			_, err = GetTagByUrlToken(newToken)
-			if err == nil {
+			if err == nil || newToken == "" {
 				//增加随机
 				newToken += library.GenerateRandString(3)
 			}
