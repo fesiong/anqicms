@@ -103,69 +103,6 @@ func resisterMacros(app *iris.Application) {
 			}
 			matchMap = map[string]string{}
 		}
-		//category
-		reg = regexp.MustCompile(rewritePattern.CategoryRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "category"
-			for i, v := range match {
-				key := rewritePattern.CategoryTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			if matchMap["filename"] != "" || matchMap["catname"] != "" {
-				if matchMap["catname"] != "" {
-					matchMap["filename"] = matchMap["catname"]
-				}
-				// 这个规则可能与下面的冲突，因此检查一遍
-				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
-				if category != nil {
-					return matchMap, true
-				}
-			} else {
-				return matchMap, true
-			}
-			matchMap = map[string]string{}
-		}
-		//page
-		reg = regexp.MustCompile(rewritePattern.PageRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "page"
-			for i, v := range match {
-				key := rewritePattern.PageTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			if matchMap["filename"] != "" {
-				// 这个规则可能与下面的冲突，因此检查一遍
-				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
-				if category != nil {
-					return matchMap, true
-				}
-			} else {
-				return matchMap, true
-			}
-			matchMap = map[string]string{}
-		}
-		//最后archive
-		reg = regexp.MustCompile(rewritePattern.ArchiveRule)
-		match = reg.FindStringSubmatch(paramValue)
-		if len(match) > 1 {
-			matchMap["match"] = "archive"
-			for i, v := range match {
-				key := rewritePattern.ArchiveTags[i]
-				if i == 0 {
-					key = "route"
-				}
-				matchMap[key] = v
-			}
-			return matchMap, true
-		}
 		//tagIndex
 		reg = regexp.MustCompile(rewritePattern.TagIndexRule)
 		match = reg.FindStringSubmatch(paramValue)
@@ -193,6 +130,96 @@ func resisterMacros(app *iris.Application) {
 				matchMap[key] = v
 			}
 			return matchMap, true
+		}
+		//page
+		reg = regexp.MustCompile(rewritePattern.PageRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "page"
+			for i, v := range match {
+				key := rewritePattern.PageTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			if matchMap["filename"] != "" {
+				// 这个规则可能与下面的冲突，因此检查一遍
+				category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+				if category != nil && category.Type == config.CategoryTypePage {
+					return matchMap, true
+				}
+			} else {
+				return matchMap, true
+			}
+			matchMap = map[string]string{}
+		}
+		//category
+		reg = regexp.MustCompile(rewritePattern.CategoryRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "category"
+			for i, v := range match {
+				key := rewritePattern.CategoryTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			if matchMap["module"] != "" {
+				// 需要先验证是否是module
+				module := provider.GetModuleFromCacheByToken(matchMap["module"])
+				if module != nil {
+					if matchMap["filename"] != "" || matchMap["catname"] != "" {
+						if matchMap["catname"] != "" {
+							matchMap["filename"] = matchMap["catname"]
+						}
+						// 这个规则可能与下面的冲突，因此检查一遍
+						category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+						if category != nil && category.Type != config.CategoryTypePage {
+							return matchMap, true
+						}
+					} else {
+						return matchMap, true
+					}
+				}
+			} else {
+				if matchMap["filename"] != "" || matchMap["catname"] != "" {
+					if matchMap["catname"] != "" {
+						matchMap["filename"] = matchMap["catname"]
+					}
+					// 这个规则可能与下面的冲突，因此检查一遍
+					category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
+					if category != nil && category.Type != config.CategoryTypePage {
+						return matchMap, true
+					}
+				} else {
+					return matchMap, true
+				}
+			}
+			matchMap = map[string]string{}
+		}
+		//最后archive
+		reg = regexp.MustCompile(rewritePattern.ArchiveRule)
+		match = reg.FindStringSubmatch(paramValue)
+		if len(match) > 1 {
+			matchMap["match"] = "archive"
+			for i, v := range match {
+				key := rewritePattern.ArchiveTags[i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
+			}
+			if matchMap["module"] != "" {
+				// 需要先验证是否是module
+				module := provider.GetModuleFromCacheByToken(matchMap["module"])
+				if module != nil {
+					return matchMap, true
+				}
+			} else {
+				return matchMap, true
+			}
 		}
 
 		//不存在，定义到notfound

@@ -72,6 +72,7 @@ const ArchiveList: React.FC = (props) => {
       title: 'thumb',
       dataIndex: 'thumb',
       hideInSearch: true,
+      width: 70,
       render: (text, record) => {
         return (
           text ? <img src={record.thumb} className='list-thumb' /> : null

@@ -67,11 +67,12 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 	webInfo, webOk := ctx.Public["webInfo"].(response.WebInfo)
 
 	categoryList := provider.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive)
+	var resultList []*model.Category
 	for i := 0; i < len(categoryList); i++ {
 		if offset > i {
 			continue
 		}
-		if limit > 0 && i > (limit + offset) {
+		if limit > 0 && i >= (limit + offset) {
 			break
 		}
 		categoryList[i].Link = provider.GetUrl("category", categoryList[i], 0)
@@ -81,9 +82,10 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 				categoryList[i].IsCurrent = true
 			}
 		}
+		resultList = append(resultList, categoryList[i])
 	}
 
-	ctx.Private[node.name] = categoryList
+	ctx.Private[node.name] = resultList
 
 	//execute
 	node.wrapper.Execute(ctx, writer)

@@ -42,7 +42,7 @@
             <div class="layui-card">
                 <div class="layui-card-header">文章分类</div>
                 <div class="layui-card-body">
-                    {% categoryList articleCategories with moduleId="1" parentId="0" %}
+                    {% categoryList articleCategories with moduleId="1" parentId="0" limit="2" %}
                     <ul class="aside-list">
                         {% for item in articleCategories %}
                         <li class="item">

@@ -240,16 +240,16 @@ export default class ArchiveForm extends React.Component {
   };
 
   onChangeTagInput = (e: any) => {
-    let value = e.target.value;
+    let value = e.target?.value || '';
     getTags({
       type: 1,
       title: value,
       pageSize: 10,
     }).then((res) => {
       let data = res.data || [];
-      let result = [];
+      let result = {};
       for (let item of data) {
-        result.push(item.title);
+        result[item.title] = item.title;
       }
       this.setState({
         searchedTags: result,
@@ -642,6 +642,7 @@ export default class ArchiveForm extends React.Component {
                       fieldProps={{
                         tokenSeparators: [',', '，'],
                         onInputKeyDown: this.onChangeTagInput,
+                        onFocus: this.onChangeTagInput,
                       }}
                       extra="可以输入或选择标签，多个标签可用,分隔"
                     />

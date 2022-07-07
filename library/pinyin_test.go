@@ -6,7 +6,7 @@ import (
 )
 
 func TestGetPinyin(t *testing.T) {
-	result := GetPinyin("如何利用SEO优化网站？")
+	result := GetPinyin("Electronic Water Bath")
 
 	log.Println(result)
 }

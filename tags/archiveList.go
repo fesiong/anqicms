@@ -63,6 +63,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	module := provider.GetModuleFromCache(moduleId)
 	if module == nil {
 		module, _ = ctx.Public["module"].(*model.Module)
+		if module != nil {
+			moduleId = module.Id
+		}
 	}
 
 	order := "id desc"

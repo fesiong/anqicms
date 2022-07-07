@@ -40,37 +40,6 @@
                         </table>
                     </div>
                     {% endarchiveParams %}
-                    {% archiveParams params with sorted=false %}
-                    <div class="extra">
-                        <table class="layui-table">
-                            <colgroup>
-                                <col width="100">
-                                <col>
-                            </colgroup>
-                            <tbody>
-                            <tr>
-                                <td>{{params.author.Name}}</td>
-                                <td>
-                                    {{params.author.Value}}
-                                </td>
-                            </tr>
-                            <tr>
-                                <td>{{params.verify.Name}}</td>
-                                <td>
-                                    {{params.verify.Value}}
-                                </td>
-                            </tr>
-
-                            <tr>
-                                <td>{{params.task.Name}}</td>
-                                <td>
-                                    {{params.task.Value}}
-                                </td>
-                            </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endarchiveParams %}
                     <div class="article-body">
                         {% archiveDetail articleContent with name="Content" %}
                         {{articleContent|safe}}
