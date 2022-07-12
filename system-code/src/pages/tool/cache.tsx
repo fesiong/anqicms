@@ -6,6 +6,7 @@ import { PageHeaderWrapper } from '@ant-design/pro-layout';
 import { Card, message } from 'antd';
 import { getSettingCache, saveSettingCache } from '@/services/setting';
 import moment from 'moment';
+import { removeStore } from '@/utils/store';
 
 const ToolCacheForm: React.FC<any> = (props) => {
   const [setting, setSetting] = useState<any>(null);
@@ -21,6 +22,7 @@ const ToolCacheForm: React.FC<any> = (props) => {
 
   const onSubmit = async (values: any) => {
     const hide = message.loading('正在提交中', 0);
+    removeStore('unsaveArchive');
     saveSettingCache(values)
       .then((res) => {
         message.success(res.msg);
