@@ -171,26 +171,32 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		archive.Status = config.ContentStatusPlan
 	}
 	// 判断重复
-	if req.UrlToken != "" {
-		req.UrlToken = library.ParseUrlToken(req.UrlToken)
-		exists, err := GetArchiveByUrlToken(req.UrlToken)
-		if err == nil {
-			if archive.Id == 0 || (archive.Id > 0 && exists.Id != archive.Id) {
-				return nil, errors.New(config.Lang("自定义URL重复"))
-			}
-		}
-		archive.UrlToken = req.UrlToken
+	req.UrlToken = library.ParseUrlToken(req.UrlToken)
+	if req.UrlToken == "" {
+		req.UrlToken = library.GetPinyin(req.Title)
 	}
-	if archive.UrlToken == "" {
-		newToken := library.GetPinyin(req.Title)
-		_, err := GetArchiveByUrlToken(newToken)
-		if err == nil {
-			//增加随机
-			newToken += library.GenerateRandString(3)
+	index := 0
+	for {
+		tmpToken := req.UrlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", req.UrlToken, index)
 		}
+		// 判断分类
+		_, err = GetCategoryByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		// 判断archive
+		tmpArc, err := GetArchiveByUrlToken(tmpToken)
+		if err == nil && tmpArc.Id != archive.Id {
+			index++
+			continue
+		}
+		archive.UrlToken = tmpToken
+		break
+	}
 
-		archive.UrlToken = newToken
-	}
 	archive.ModuleId = category.ModuleId
 	archive.Title = req.Title
 	archive.SeoTitle = req.SeoTitle
@@ -432,13 +438,28 @@ func SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
 func UpdateArchiveUrlToken(archive *model.Archive) error {
 	if archive.UrlToken == "" {
 		newToken := library.GetPinyin(archive.Title)
-		_, err := GetArchiveByUrlToken(newToken)
-		if err == nil {
-			//增加随机
-			newToken += library.GenerateRandString(3)
+		index := 0
+		for {
+			tmpToken := newToken
+			if index > 0 {
+				tmpToken = fmt.Sprintf("%s-%d", newToken, index)
+			}
+			// 判断分类
+			_, err := GetCategoryByUrlToken(tmpToken)
+			if err == nil {
+				index++
+				continue
+			}
+			// 判断archive
+			tmpArc, err := GetArchiveByUrlToken(tmpToken)
+			if err == nil && tmpArc.Id != archive.Id {
+				index++
+				continue
+			}
+			archive.UrlToken = tmpToken
+			break
 		}
 
-		archive.UrlToken = newToken
 		dao.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
 	}
 

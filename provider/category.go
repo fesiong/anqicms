@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"errors"
+	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -115,17 +115,6 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	if category.Logo != "" {
 		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.System.BaseUrl)
 	}
-	// 判断重复
-	if req.UrlToken != "" {
-		req.UrlToken = library.ParseUrlToken(req.UrlToken)
-		exists, err := GetCategoryByUrlToken(req.UrlToken)
-		if err == nil {
-			if category.Id == 0 || (category.Id > 0 && exists.Id != category.Id) {
-				return nil, errors.New(config.Lang("自定义URL重复"))
-			}
-		}
-		category.UrlToken = req.UrlToken
-	}
 	//增加判断上级，强制类型与上级同步
 	if category.ParentId > 0 {
 		parent, err := GetCategoryById(category.ParentId)
@@ -134,14 +123,31 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 			category.ModuleId = parent.ModuleId
 		}
 	}
-	if category.UrlToken == "" {
-		newToken := library.GetPinyin(req.Title)
-		_, err := GetCategoryByUrlToken(newToken)
-		if err == nil {
-			//增加随机
-			newToken += library.GenerateRandString(3)
+	// 判断重复
+	req.UrlToken = library.ParseUrlToken(req.UrlToken)
+	if req.UrlToken == "" {
+		req.UrlToken = library.GetPinyin(req.Title)
+	}
+	index := 0
+	for {
+		tmpToken := req.UrlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", req.UrlToken, index)
 		}
-		category.UrlToken = newToken
+		// 判断分类
+		tmpCat, err := GetCategoryByUrlToken(tmpToken)
+		if err == nil && tmpCat.Id != category.Id {
+			index++
+			continue
+		}
+		// 判断archive
+		_, err = GetArchiveByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		category.UrlToken = tmpToken
+		break
 	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)

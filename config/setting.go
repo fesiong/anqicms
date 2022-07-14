@@ -29,6 +29,7 @@ type systemConfig struct {
 type contentConfig struct {
 	RemoteDownload int    `json:"remote_download"`
 	FilterOutlink  int    `json:"filter_outlink"`
+	UrlTokenType   int    `json:"url_token_type"`
 	UseWebp        int    `json:"use_webp"`
 	Quality        int    `json:"quality"`
 	ResizeImage    int    `json:"resize_image"`

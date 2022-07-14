@@ -29,3 +29,8 @@ const (
 	ContentStatusOK    = 1 // 正式内容
 	ContentStatusPlan  = 2 // 计划内容，等待发布
 )
+
+const (
+	UrlTokenTypeFull = 0
+	UrlTokenTypeSort = 1
+)
