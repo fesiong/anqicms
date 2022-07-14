@@ -44,6 +44,7 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/nav/type", manageController.SettingNavType)
 			setting.Get("/contact", manageController.SettingContact)
 			setting.Get("/cache", manageController.SettingCache)
+			setting.Get("/safe", manageController.SettingSafe)
 
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
@@ -56,6 +57,7 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/contact", manageController.SettingContactForm)
 			setting.Post("/cache", manageController.SettingCacheForm)
 			setting.Post("/convert/webp", manageController.ConvertImageToWebp)
+			setting.Post("/safe", manageController.SettingSafeForm)
 
 		}
 

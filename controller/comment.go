@@ -12,6 +12,10 @@ import (
 func CommentPublish(ctx iris.Context) {
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
+	if ok := SafeVerify(ctx, "comment"); !ok {
+		return
+	}
+
 	//登录状态的用户，发布不进审核，否则进审核
 	status := uint(0)
 	userId := ctx.Values().GetIntDefault("adminId", 0)

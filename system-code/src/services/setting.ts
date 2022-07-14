@@ -56,6 +56,14 @@ export async function getSettingCache(params?: any, options?: { [key: string]: a
   });
 }
 
+export async function getSettingSafe(params?: any, options?: { [key: string]: any }) {
+  return get({
+    url: '/setting/safe',
+    params,
+    options,
+  });
+}
+
 export async function saveSettingSystem(body: any, options?: { [key: string]: any }) {
   return post({
     url: '/setting/system',
@@ -139,6 +147,14 @@ export async function saveSettingCache(body: any, options?: { [key: string]: any
 export async function convertImagetoWebp(body: any, options?: { [key: string]: any }) {
   return post({
     url: '/setting/convert/webp',
+    body,
+    options,
+  });
+}
+
+export async function saveSettingSafe(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/setting/safe',
     body,
     options,
   });

@@ -100,7 +100,21 @@ func CategoryPage(ctx iris.Context) {
 
 func SearchPage(ctx iris.Context) {
 	q := ctx.URLParam("q")
-	webInfo.Title = fmt.Sprintf("搜索: %s", q)
+	if config.JsonData.Safe.ContentForbidden != "" {
+		forbiddens := strings.Split(config.JsonData.Safe.ContentForbidden, "\n")
+		for _, v := range forbiddens {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			if strings.Contains(q, v) {
+				ShowMessage(ctx, config.Lang("您搜索的关键词包含有不允许的字符"), "")
+				return
+			}
+		}
+	}
+
+	webInfo.Title = fmt.Sprintf("%s: %s", config.Lang("搜索"), q)
 	webInfo.PageName = "search"
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	webInfo.CanonicalUrl = provider.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)

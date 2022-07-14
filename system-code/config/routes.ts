@@ -34,6 +34,11 @@
         component: './setting/content',
       },
       {
+        path: '/setting/safe',
+        name: '内容安全设置',
+        component: './setting/safe',
+      },
+      {
         path: '/setting/contact',
         name: '联系方式设置',
         component: './setting/contact',

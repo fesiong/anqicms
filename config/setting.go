@@ -56,6 +56,16 @@ type contactConfig struct {
 	ExtraFields []ExtraField `json:"extra_fields"` // 用户自定义字段
 }
 
+type safeConfig struct {
+	Captcha          int    `json:"captcha"`
+	DailyLimit       int    `json:"daily_limit"`
+	ContentLimit     int    `json:"content_limit"`
+	IntervalLimit    int    `json:"interval_limit"`
+	ContentForbidden string `json:"content_forbidden"`
+	IPForbidden      string `json:"ip_forbidden"`
+	UAForbidden      string `json:"ua_forbidden"`
+}
+
 type ExtraField struct {
 	Name   string `json:"name"`
 	Value  string `json:"value"`

@@ -65,3 +65,13 @@ type ContactConfig struct {
 	Qrcode      string              `json:"qrcode"`
 	ExtraFields []config.ExtraField `json:"extra_fields"` // 用户自定义字段
 }
+
+type SafeConfig struct {
+	Captcha          int    `json:"captcha"`
+	DailyLimit       int    `json:"daily_limit"`
+	ContentLimit     int    `json:"content_limit"`
+	IntervalLimit    int    `json:"interval_limit"`
+	ContentForbidden string `json:"content_forbidden"`
+	IPForbidden      string `json:"ip_forbidden"`
+	UAForbidden      string `json:"ua_forbidden"`
+}

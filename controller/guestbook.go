@@ -34,6 +34,11 @@ func GuestbookPage(ctx iris.Context) {
 func GuestbookForm(ctx iris.Context) {
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
+	if ok := SafeVerify(ctx, "guestbook"); !ok {
+		return
+	}
+
+
 	fields := config.GetGuestbookFields()
 	var req = map[string]string{}
 	// 采用post接收

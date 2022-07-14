@@ -329,3 +329,49 @@ func SettingCacheForm(ctx iris.Context) {
 		"msg":  "缓存已更新",
 	})
 }
+
+func SettingSafe(ctx iris.Context) {
+	system := config.JsonData.Safe
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": system,
+	})
+}
+
+func SettingSafeForm(ctx iris.Context) {
+	var req request.SafeConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	config.JsonData.Safe.Captcha = req.Captcha
+	config.JsonData.Safe.DailyLimit = req.DailyLimit
+	config.JsonData.Safe.ContentLimit = req.ContentLimit
+	config.JsonData.Safe.IntervalLimit = req.IntervalLimit
+	config.JsonData.Safe.ContentForbidden = req.ContentForbidden
+	config.JsonData.Safe.IPForbidden = req.IPForbidden
+	config.JsonData.Safe.UAForbidden = req.UAForbidden
+
+	err := config.WriteConfig()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	provider.DeleteCacheIndex()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新安全设置"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
+	})
+}

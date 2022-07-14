@@ -25,6 +25,7 @@ type configData struct {
 	Content contentConfig `json:"content"`
 	Index   indexConfig   `json:"index"`
 	Contact contactConfig `json:"contact"`
+	Safe    safeConfig    `json:"safe"`
 	//plugin
 	PluginPush        pluginPushConfig      `json:"plugin_push"`
 	PluginSitemap     pluginSitemapConfig   `json:"plugin_sitemap"`
