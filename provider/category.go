@@ -315,6 +315,9 @@ func GetSubCategoryIds(categoryId uint, categories []model.Category) []uint {
 }
 
 func GetCategoryFromCache(categoryId uint) *model.Category {
+	if categoryId == 0 {
+		return nil
+	}
 	categories := GetCacheCategories()
 	for i := range categories {
 		if categories[i].Id == categoryId {

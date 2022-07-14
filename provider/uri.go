@@ -6,6 +6,7 @@ import (
     "kandaoni.com/anqicms/model"
     "regexp"
     "strings"
+    "time"
 )
 
 // GetUrl 生成url
@@ -34,23 +35,7 @@ func GetUrl(match string, data interface{}, page int) string {
             if item.UrlToken == "" {
                 _ = UpdateArchiveUrlToken(item)
             }
-            //拿到值
-            catName := ""
-            if strings.Contains(rewritePattern.Archive, "catname") {
-                if item.Category != nil {
-                    catName = item.Category.UrlToken
-                } else {
-                    category := GetCategoryFromCache(item.CategoryId)
-                    if category != nil {
-                        catName = category.UrlToken
-                    }
-                }
-            }
-            moduleToken := ""
-            module := GetModuleFromCache(item.ModuleId)
-            if module != nil {
-                moduleToken = module.UrlToken
-            }
+
             for _, v := range rewritePattern.ArchiveTags {
                 if v == "id" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
@@ -59,9 +44,47 @@ func GetUrl(match string, data interface{}, page int) string {
                 } else if v == "filename" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
                 } else if v == "catname" {
+                    catName := ""
+                    if item.Category != nil {
+                        catName = item.Category.UrlToken
+                    } else {
+                        category := GetCategoryFromCache(item.CategoryId)
+                        if category != nil {
+                            catName = category.UrlToken
+                        }
+                    }
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), catName)
+                } else if v == "multicatname" {
+                    var catNames string
+                    category := GetCategoryFromCache(item.CategoryId)
+                    for category != nil {
+                        catNames = category.UrlToken + "/" + catNames
+                        category = GetCategoryFromCache(category.ParentId)
+                    }
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), strings.Trim(catNames, "/"))
                 } else if v == "module" {
+                    moduleToken := ""
+                    module := GetModuleFromCache(item.ModuleId)
+                    if module != nil {
+                        moduleToken = module.UrlToken
+                    }
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), moduleToken)
+                } else if v == "year" || v == "month" || v == "day" || v == "hour" || v == "minute" || v == "second" {
+                    var timeFormat string
+                    if v == "year" {
+                        timeFormat = "2006"
+                    } else if v == "month" {
+                        timeFormat = "01"
+                    } else if v == "day" {
+                        timeFormat = "02"
+                    } else if v == "hour" {
+                        timeFormat = "15"
+                    } else if v == "minute" {
+                        timeFormat = "04"
+                    } else if v == "second" {
+                        timeFormat = "05"
+                    }
+                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), time.Unix(item.CreatedTime, 0).Format(timeFormat))
                 }
             }
         }
@@ -98,11 +121,6 @@ func GetUrl(match string, data interface{}, page int) string {
             if item.Type == config.CategoryTypePage {
                 uri = GetUrl("page", item, 0)
             } else {
-                moduleToken := ""
-                module := GetModuleFromCache(item.ModuleId)
-                if module != nil {
-                    moduleToken = module.UrlToken
-                }
                 for _, v := range rewritePattern.CategoryTags {
                     if v == "id" {
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
@@ -112,7 +130,20 @@ func GetUrl(match string, data interface{}, page int) string {
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
                     } else if v == "catname" {
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+                    } else if v == "multicatname" {
+                        var catNames string
+                        category := GetCategoryFromCache(item.Id)
+                        for category != nil {
+                            catNames = category.UrlToken + "/" + catNames
+                            category = GetCategoryFromCache(category.ParentId)
+                        }
+                        uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), strings.Trim(catNames, "/"))
                     } else if v == "module" {
+                        moduleToken := ""
+                        module := GetModuleFromCache(item.ModuleId)
+                        if module != nil {
+                            moduleToken = module.UrlToken
+                        }
                         uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), moduleToken)
                     }
                 }
@@ -134,9 +165,7 @@ func GetUrl(match string, data interface{}, page int) string {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
                 } else if v == "catid" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-                } else if v == "filename" {
-                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-                } else if v == "catname" {
+                } else if v == "filename" || v == "catname" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
                 }
             }
@@ -189,9 +218,7 @@ func GetUrl(match string, data interface{}, page int) string {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
                 } else if v == "catid" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
-                } else if v == "filename" {
-                    uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
-                } else if v == "catname" {
+                } else if v == "filename" || v == "catname" {
                     uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
                 }
             }

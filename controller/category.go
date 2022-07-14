@@ -17,6 +17,21 @@ func CategoryPage(ctx iris.Context) {
 		categoryId = catId
 	}
 	urlToken := ctx.Params().GetString("filename")
+	multiCatNames := ctx.Params().GetString("multicatname")
+	if multiCatNames != "" {
+		chunkCatNames := strings.Split(multiCatNames, "/")
+		urlToken = chunkCatNames[len(chunkCatNames)-1]
+		var prev *model.Category
+		for _, catName := range chunkCatNames {
+			tmpCat := provider.GetCategoryFromCacheByToken(catName)
+			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
+				NotFound(ctx)
+				return
+			}
+			prev = tmpCat
+		}
+	}
+
 	var category *model.Category
 	var err error
 	if urlToken != "" {
