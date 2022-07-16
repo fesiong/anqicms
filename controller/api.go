@@ -13,6 +13,7 @@ import (
 )
 
 func ApiImportArchive(ctx iris.Context) {
+	id := uint(ctx.PostValueIntDefault("id", 0))
 	title := ctx.PostValueTrim("title")
 	seoTitle := ctx.PostValueTrim("seo_title")
 	content := ctx.PostValueTrim("content")
@@ -22,6 +23,10 @@ func ApiImportArchive(ctx iris.Context) {
 	logo := ctx.PostValueTrim("logo")
 	publishTime := ctx.PostValueTrim("publish_time")
 	tmpTag := ctx.PostValueTrim("tag")
+	images := ctx.PostValues("images[]")
+	urlToken := ctx.PostValueTrim("url_token")
+	draft, _ := ctx.PostValueBool("draft")
+	cover, _ := ctx.PostValueBool("cover")
 
 	category := provider.GetCategoryFromCache(categoryId)
 	if category == nil || category.Type != config.CategoryTypeArchive {
@@ -55,16 +60,6 @@ func ApiImportArchive(ctx iris.Context) {
 		return
 	}
 
-	// 标题重复的不允许导入
-	_, err := provider.GetArchiveByTitle(title)
-	if err == nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  config.Lang("文档标题重复，不允许重复导入"),
-		})
-		return
-	}
-
 	var req = request.Archive{
 		Title:       title,
 		SeoTitle:    seoTitle,
@@ -72,8 +67,64 @@ func ApiImportArchive(ctx iris.Context) {
 		Keywords:    keywords,
 		Description: description,
 		Content:     content,
+		Images:      images,
+		UrlToken:    urlToken,
 		Extra:       map[string]interface{}{},
+		Draft:       draft,
 	}
+	// 如果传了ID，则采用覆盖的形式
+	if id > 0 {
+		_, err := provider.GetArchiveById(id)
+		if err != nil {
+			// 不存在，创建一个
+			archive := model.Archive{
+				Title:       title,
+				SeoTitle:    seoTitle,
+				UrlToken:    urlToken,
+				Keywords:    keywords,
+				Description: description,
+				ModuleId:    category.ModuleId,
+				CategoryId:  categoryId,
+				Status:      0,
+				Logo:        logo,
+			}
+			err = dao.DB.Create(&archive).Error
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  config.Lang("导入文章失败"),
+				})
+				return
+			}
+			req.Id = id
+		} else {
+			// 已存在
+			if cover {
+				req.Id = id
+			} else {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  config.Lang("文档ID重复，不允许重复导入"),
+				})
+				return
+			}
+		}
+	} else {
+		// 标题重复的不允许导入
+		exists, err := provider.GetArchiveByTitle(title)
+		if err == nil {
+			if cover {
+				req.Id = exists.Id
+			} else {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  config.Lang("文档标题重复，不允许重复导入"),
+				})
+				return
+			}
+		}
+	}
+
 	if publishTime != "" {
 		timeStamp, err := time.Parse("2006-01-02 15:04:05", publishTime)
 		if err == nil {
