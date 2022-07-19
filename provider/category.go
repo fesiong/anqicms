@@ -128,27 +128,8 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	if req.UrlToken == "" {
 		req.UrlToken = library.GetPinyin(req.Title)
 	}
-	index := 0
-	for {
-		tmpToken := req.UrlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", req.UrlToken, index)
-		}
-		// 判断分类
-		tmpCat, err := GetCategoryByUrlToken(tmpToken)
-		if err == nil && tmpCat.Id != category.Id {
-			index++
-			continue
-		}
-		// 判断archive
-		_, err = GetArchiveByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
-		}
-		category.UrlToken = tmpToken
-		break
-	}
+	category.UrlToken = VerifyCategoryUrlToken(req.UrlToken, category.Id)
+
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
@@ -358,4 +339,30 @@ func GetCategoriesFromCache(moduleId, parentId uint, pageType int) []*model.Cate
 	}
 
 	return tmpCategories
+}
+
+func VerifyCategoryUrlToken(urlToken string, id uint) string {
+	index := 0
+	for {
+		tmpToken := urlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+		}
+		// 判断分类
+		tmpCat, err := GetCategoryByUrlToken(tmpToken)
+		if err == nil && tmpCat.Id != id {
+			index++
+			continue
+		}
+		// 判断archive
+		_, err = GetArchiveByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		urlToken = tmpToken
+		break
+	}
+
+	return urlToken
 }

@@ -175,27 +175,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	if req.UrlToken == "" {
 		req.UrlToken = library.GetPinyin(req.Title)
 	}
-	index := 0
-	for {
-		tmpToken := req.UrlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", req.UrlToken, index)
-		}
-		// 判断分类
-		_, err = GetCategoryByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
-		}
-		// 判断archive
-		tmpArc, err := GetArchiveByUrlToken(tmpToken)
-		if err == nil && tmpArc.Id != archive.Id {
-			index++
-			continue
-		}
-		archive.UrlToken = tmpToken
-		break
-	}
+	archive.UrlToken = VerifyArchiveUrlToken(req.UrlToken, archive.Id)
 
 	archive.ModuleId = category.ModuleId
 	archive.Title = req.Title
@@ -438,27 +418,7 @@ func SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
 func UpdateArchiveUrlToken(archive *model.Archive) error {
 	if archive.UrlToken == "" {
 		newToken := library.GetPinyin(archive.Title)
-		index := 0
-		for {
-			tmpToken := newToken
-			if index > 0 {
-				tmpToken = fmt.Sprintf("%s-%d", newToken, index)
-			}
-			// 判断分类
-			_, err := GetCategoryByUrlToken(tmpToken)
-			if err == nil {
-				index++
-				continue
-			}
-			// 判断archive
-			tmpArc, err := GetArchiveByUrlToken(tmpToken)
-			if err == nil && tmpArc.Id != archive.Id {
-				index++
-				continue
-			}
-			archive.UrlToken = tmpToken
-			break
-		}
+		archive.UrlToken = VerifyArchiveUrlToken(newToken, archive.Id)
 
 		dao.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
 	}
@@ -584,4 +544,30 @@ func CleanArchives() {
 			dao.DB.Unscoped().Where("id = ?", archive.Id).Delete(model.Archive{})
 		}
 	}
+}
+
+func VerifyArchiveUrlToken(urlToken string, id uint) string {
+	index := 0
+	for {
+		tmpToken := urlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+		}
+		// 判断分类
+		_, err := GetCategoryByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		// 判断archive
+		tmpArc, err := GetArchiveByUrlToken(tmpToken)
+		if err == nil && tmpArc.Id != id {
+			index++
+			continue
+		}
+		urlToken = tmpToken
+		break
+	}
+
+	return urlToken
 }

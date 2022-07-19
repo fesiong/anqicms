@@ -127,23 +127,25 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 
 	resp.Body.Close()
 	contentType := resp.Header.Get("Content-Type")
-	// 编码处理
-	charsetName, err := getPageCharset(body, contentType)
-	if err != nil {
-		log.Println("获取页面编码失败: ", err.Error())
-	}
-	charsetName = strings.ToLower(charsetName)
-	//log.Println("当前页面编码:", charsetName)
-	charSet, exist := CharsetMap[charsetName]
-	if !exist {
-		log.Println("未找到匹配的编码")
-	}
-	if charSet != nil {
-		utf8Coutent, err := DecodeToUTF8([]byte(body), charSet)
+	if strings.Contains(contentType, "html") {
+		// 编码处理
+		charsetName, err := getPageCharset(body, contentType)
 		if err != nil {
-			log.Println("页面解码失败: ", err.Error())
-		} else {
-			body = string(utf8Coutent)
+			log.Println("获取页面编码失败: ", err.Error())
+		}
+		charsetName = strings.ToLower(charsetName)
+		//log.Println("当前页面编码:", charsetName)
+		charSet, exist := CharsetMap[charsetName]
+		if !exist {
+			log.Println("未找到匹配的编码")
+		}
+		if charSet != nil {
+			utf8Coutent, err := DecodeToUTF8([]byte(body), charSet)
+			if err != nil {
+				log.Println("页面解码失败: ", err.Error())
+			} else {
+				body = string(utf8Coutent)
+			}
 		}
 	}
 
@@ -208,6 +210,7 @@ func getUserAgent(isMobile bool) string {
 }
 
 func GetURLData(url, refer string) (*RequestData, error) {
+	log.Println(url)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
 	req.Header.Set("User-Agent", getUserAgent(false))
@@ -220,23 +223,25 @@ func GetURLData(url, refer string) (*RequestData, error) {
 	body, _ := ioutil.ReadAll(resp.Body)
 
 	contentType := resp.Header.Get("Content-Type")
-	// 编码处理
-	charsetName, err := getPageCharset(string(body), contentType)
-	if err != nil {
-		log.Println("获取页面编码失败: ", err.Error())
-	}
-	charsetName = strings.ToLower(charsetName)
-	//log.Println("当前页面编码:", charsetName)
-	charSet, exist := CharsetMap[charsetName]
-	if !exist {
-		log.Println("未找到匹配的编码")
-	}
-	if charSet != nil {
-		utf8Coutent, err := DecodeToUTF8(body, charSet)
+	if strings.Contains(contentType, "html") {
+		// 编码处理
+		charsetName, err := getPageCharset(string(body), contentType)
 		if err != nil {
-			log.Println("页面解码失败: ", err.Error())
-		} else {
-			body = utf8Coutent
+			log.Println("获取页面编码失败: ", err.Error())
+		}
+		charsetName = strings.ToLower(charsetName)
+		//log.Println("当前页面编码:", charsetName)
+		charSet, exist := CharsetMap[charsetName]
+		if !exist {
+			log.Println("未找到匹配的编码")
+		}
+		if charSet != nil {
+			utf8Coutent, err := DecodeToUTF8(body, charSet)
+			if err != nil {
+				log.Println("页面解码失败: ", err.Error())
+			} else {
+				body = utf8Coutent
+			}
 		}
 	}
 

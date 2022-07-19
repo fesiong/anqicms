@@ -255,6 +255,14 @@ func manageRoute(app *iris.Application) {
 				redirect.Post("/delete", manageController.PluginRedirectDelete)
 				redirect.Post("/import", manageController.PluginRedirectImport)
 			}
+
+			transfer := plugin.Party("/transfer")
+			{
+				transfer.Get("/task", manageController.GetTransferTask)
+				transfer.Post("/download", manageController.DownloadClientFile)
+				transfer.Post("/create", manageController.CreateTransferTask)
+				transfer.Post("/start", manageController.TransferWebData)
+			}
 		}
 	}
 }

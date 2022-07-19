@@ -248,7 +248,7 @@ func GetUrl(match string, data interface{}, page int) string {
         }
     }
 
-    if strings.HasPrefix(uri, "/") && !strings.HasPrefix(uri, "//") {
+    if strings.HasPrefix(uri, "/") {
         uri = config.JsonData.System.BaseUrl + uri
     }
     return uri

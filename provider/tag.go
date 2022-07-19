@@ -114,27 +114,7 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	if req.UrlToken == "" {
 		req.UrlToken = library.GetPinyin(req.Title)
 	}
-	index := 0
-	for {
-		tmpToken := req.UrlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", req.UrlToken, index)
-		}
-		// 判断分类
-		_, err = GetCategoryByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
-		}
-		// 判断archive
-		tmpTag, err := GetArchiveByUrlToken(tmpToken)
-		if err == nil && tmpTag.Id != tag.Id {
-			index++
-			continue
-		}
-		tag.UrlToken = tmpToken
-		break
-	}
+	tag.UrlToken = VerifyTagUrlToken(req.UrlToken, tag.Id)
 
 	if tag.FirstLetter == "" {
 		letter := "A"
@@ -174,27 +154,7 @@ func SaveTagData(itemId uint, tagNames []string) error {
 		tag, err := GetTagByTitle(tagName)
 		if err != nil {
 			newToken := library.GetPinyin(tagName)
-			index := 0
-			for {
-				tmpToken := newToken
-				if index > 0 {
-					tmpToken = fmt.Sprintf("%s-%d", newToken, index)
-				}
-				// 判断分类
-				_, err = GetCategoryByUrlToken(tmpToken)
-				if err == nil {
-					index++
-					continue
-				}
-				// 判断archive
-				tmpTag, err := GetArchiveByUrlToken(tmpToken)
-				if err == nil && tmpTag.Id != tag.Id {
-					index++
-					continue
-				}
-				newToken = tmpToken
-				break
-			}
+			tag.UrlToken = VerifyTagUrlToken(newToken, 0)
 			letter := "A"
 			if newToken != "-" {
 				letter = string(newToken[0])
@@ -237,4 +197,30 @@ func GetTagsByItemId(itemId uint) []*model.Tag {
 	}
 
 	return tags
+}
+
+func VerifyTagUrlToken(urlToken string, id uint) string {
+	index := 0
+	for {
+		tmpToken := urlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+		}
+		// 判断分类
+		_, err := GetCategoryByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		// 判断archive
+		tmpTag, err := GetTagByUrlToken(tmpToken)
+		if err == nil && tmpTag.Id != id {
+			index++
+			continue
+		}
+		urlToken = tmpToken
+		break
+	}
+
+	return urlToken
 }
