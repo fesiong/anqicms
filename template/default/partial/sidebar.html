@@ -1,0 +1,38 @@
+<div class="sidebar">
+  <div class="sidebar-list">
+    <h2>产品分类</h2>
+    <div class="menu-sidebarmenu-container">
+      <ul id="menu-sidebarmenu" class="menu">
+        {% categoryList productCategories with moduleId="2" parentId="0" %}
+        {% for item in productCategories %}
+        <li class="menu-item">
+          <a href="{{item.Link}}">{{item.Title}}</a>
+          {% categoryList subCategories with moduleId="2" parentId=item.Id %}
+          {% if subCategories %}
+          <ul class="sub-menu">
+            {% for inner in subCategories %}
+            <li class="menu-item"><a href="{{inner.Link}}">{{inner.Title}}</a></li>
+            {% endfor %}
+          </ul>
+          {% endif %}
+          {% endcategoryList %}
+        </li>
+        <li class="menu-item"><a href="{{item.Link}}">{{item.Title}}</a></li>
+        {% endfor %}
+        {% endcategoryList %}
+      </ul>
+    </div>
+  </div>
+  <div class="sidebar-contact">
+    <h2>联系方式</h2>
+    <div class="sidebar-contact-content">
+      <div class="sidebar-contact-item">
+        <img src="{% system with name='TemplateUrl' %}img/sidebar.webp" alt="">
+        <h3>{% system with name="SiteName" %}</h3>
+        <p>联系人:{% contact with name="UserName" %}</p>
+        <p>电 话:{% contact with name="Cellphone" %}</p>
+        <p>地 址:{% contact with name="Address" %}</p>
+      </div>
+    </div>
+  </div>
+</div>

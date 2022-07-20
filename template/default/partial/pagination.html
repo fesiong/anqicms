@@ -1,17 +1,19 @@
 {% pagination pages with show="5" %}
-<div class="layui-card-body text-center">
-    <div class="layui-box layui-laypage layui-laypage-default">
-        <a class="layui-laypage-first {% if pages.FirstPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
-        {% if pages.PrevPage %}
-        <a class="layui-laypage-prev" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
-        {% endif %}
-        {% for item in pages.Pages %}
-        <a class="{% if item.IsCurrent %}layui-laypage-curr{% endif %}" href="{{item.Link}}">{{item.Name}}</a>
-        {% endfor %}
-        {% if pages.NextPage %}
-        <a class="layui-laypage-next" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
-        {% endif %}
-        <a class="layui-laypage-last {% if pages.LastPage.IsCurrent %}layui-laypage-curr{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
-    </div>
+<div class="wp-pagenavi">
+    <a class="previouspostslink {% if pages.FirstPage.IsCurrent %}active{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
+    {% if pages.PrevPage %}
+    <a class="previouspostslink" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
+    {% endif %}
+    {% for item in pages.Pages %}
+    {% if item.IsCurrent %}
+    <span class="current">{{item.Name}}</span>
+    {% else %}
+    <a class="page larger" href="{{item.Link}}">{{item.Name}}</a>
+    {% endif %}
+    {% endfor %}
+    {% if pages.NextPage %}
+    <a class="nextpostslink" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
+    {% endif %}
+    <a class="nextpostslink {% if pages.LastPage.IsCurrent %}active{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
 </div>
 {% endpagination %}

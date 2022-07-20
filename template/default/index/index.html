@@ -1,108 +1,108 @@
 {% extends 'base.html' %}
-
 {% block container %}
-<div class="layui-container index">
-    <div class="layui-row layui-col-space15">
-        <div class="layui-col-md8">
-            <div class="layui-card">
-                <div class="layui-card-body">
-                    {% archiveList articles with type="page" limit="10" %}
-                    <ul class="article-list">
-                        {% for item in articles %}
-                        <li class="item layui-flex">
-                            <a href="{{item.Link}}" class="link flex-item">
-                                <h5 class="title">{{item.Title}}</h5>
-                                <div class="description">{{item.Description}}</div>
-                                <div class="meta">
-                                    <span>{% categoryDetail with name="Title" id=item.CategoryId %}</span>
-                                    <span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
-                                    <span>{{item.Views}} 阅读</span>
-                                </div>
-                            </a>
-                            {% if item.Thumb %}
-                            <a href="{{item.Link}}" class="thumb">
-                                <img class="thumb-image" alt="{{item.Title}}" src="{{item.Thumb}}">
-                            </a>
-                            {% endif %}
-                        </li>
-                        {% empty %}
-                        <li class="item empty">
-                            该列表没有任何内容
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% endarchiveList %}
-                </div>
-                {% include "partial/pagination.html" %}
-            </div>
-        </div>
-
-        <div class="layui-col-md4">
-            {% include "partial/author.html" %}
-            <div class="layui-card">
-                <div class="layui-card-header">文章分类</div>
-                <div class="layui-card-body">
-                    {% categoryList articleCategories with moduleId="1" parentId="0" limit="2" %}
-                    <ul class="aside-list">
-                        {% for item in articleCategories %}
-                        <li class="item">
-                            <a href="{{item.Link}}" class="link">
-                                <h5 class="title">{{item.Title}}</h5>
-                            </a>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% endcategoryList %}
-                </div>
-            </div>
-            <div class="layui-card">
-                <div class="layui-card-header">产品分类</div>
-                <div class="layui-card-body">
-                    {% categoryList productCategories with moduleId="2" parentId="0" %}
-                    <ul class="aside-list">
-                        {% for item in productCategories %}
-                        <li class="item">
-                            <a href="{{item.Link}}" class="link">
-                                <h5 class="title">{{item.Title}}</h5>
-                            </a>
-                        </li>
-                        {% endfor %}
-                    </ul>
-                    {% endcategoryList %}
-                </div>
-            </div>
-            <div class="layui-card">
-                <div class="layui-card-header">热门文章</div>
-                <div class="layui-card-body">
-                    {% archiveList popularArticles with type="list" order="views desc" limit="6" %}
-                    <ul class="aside-list">
-                    {% for item in popularArticles %}
-                        <li class="item">
-                            <a href="{{item.Link}}" class="link">
-                                <h5 class="title">{{item.Title}}</h5>
-                                <span class="extra">{{item.Views}}阅读</span>
-                            </a>
-                        </li>
-                    {% empty %}
-                    <li class="item empty">
-                        无热门文章
-                    </li>
-                    {% endfor %}
-                    </ul>
-                    {% endarchiveList %}
-                </div>
-            </div>
-        </div>
-    </div>
-    {% linkList friendLinks %}
-    {% if friendLinks %}
-    <div class="friend-links">
-        <span class="title">友情链接：</span>
-        {% for item in friendLinks %}
-        <a class="item" href="{{item.Link}}" {% if item.Nofollow == 1 %} rel="nofollow"{% endif %} target="_blank">{{item.Title}}</a>
-        {% endfor %}
-    </div>
-    {% endif %}
-    {% endlinkList %}
+<!-- banner -->
+<div class="banner">
+	<img src="{% system with name='TemplateUrl' %}img/banner.webp" alt="">
 </div>
+<!-- banner -->
+<!-- products -->
+<div class="index-products clearfix">
+	<div class="container">
+		<div class="index-title">明星产品</div>
+		<div class="index-products-content clearfix">
+			<div class="index-menu">
+				{% categoryList productCategories with moduleId="2" parentId="0" limit="8" %}
+				{% for item in productCategories %}
+				<a href="{{item.Link}}">{{item.Title}}</a>
+				{% endfor %}
+				{% endcategoryList %}
+			</div>
+			<ul class="index-products-ul">
+				{% archiveList products with moduleId=2 type="list" limit="6" %}
+				{% for item in products %}
+				<li class="index-products-li">
+					<div class="item">
+						<div class="item-img">
+							<a href="{{item.Link}}"><img src="{{item.Thumb}}" alt="{{item.Title}}"></a>
+						</div>
+						<div class="item-text">
+							<h3><a href="{{item.Link}}" title="{{item.Title}}">{{item.Title}}</a></h3>
+						</div>
+					</div>
+				</li>
+				{% endfor %}
+				{% endarchiveList %}
+			</ul>
+		</div>
+	</div>
+</div>
+<!-- products -->
+<!-- about -->
+<div class="index-about clearfix">
+	<div class="container">
+		<div class="index-about-content">
+			<div class="index-about-img">
+				<img src="{% system with name='TemplateUrl' %}img/about.webp" alt="">
+			</div>
+			<div class="index-about-text">
+				<div class="index-about-text-item">
+					<h3>买仪器，找安企，客户放心，代理商赚钱</h3>
+					<h1>{% system with name="SiteName" %}</h1>
+					<p>上海安企仪器设备有限公司成立于2011年，致力为全球实验室用户提供更智能更高效的智能样品前处理设备、温湿度试验设备，和智能分析自动平台设备等的高新技术企业。</p>
+					<h4>主营产品：</h4>
+					<div class="index-about-text-list">
+						{% categoryList productCategories with moduleId="2" parentId="0" limit="8" %}
+						{% for item in productCategories %}
+						<a href="{{item.Link}}">{{item.Title}}</a>
+						{% endfor %}
+						{% endcategoryList %}
+					</div>
+					<a href="tel:{% contact with name='Cellphone' %}" class="btn" rel="nofollow">联系我们</a>
+				</div>
+			</div>
+		</div>
+	</div>
+</div>
+<!-- about -->
+<!-- news -->
+<div class="index-news clearfix">
+	<div class="container">
+		<div class="index-news-title">
+			新闻中心
+		</div>
+		<div class="index-news-content">
+			{% archiveList articles with moduleId=1 type="list" limit="0,1" %}
+			{% for item in articles %}
+			<div class="index-news-content-left">
+				<div class="item">
+					<div class="item-img">
+						<a href="{{item.Link}}" title="{{item.Title}}"><img src="{{item.Thumb}}" alt="{{item.Title}}"></a>
+					</div>
+					<div class="item-text">
+						<h3><a href="{{item.Link}}" title="{{item.Title}}">{{item.Title}}</a></h3>
+					</div>
+				</div>
+			</div>
+			{% endfor %}
+			{% endarchiveList %}
+			<ul class="index-news-content-right">
+				{% archiveList articles with moduleId=1 type="list" limit="1,3" %}
+				{% for item in articles %}
+				<li class="index-news-content-li">
+					<i class="fa"></i>
+					<div class="index-news-text">
+						<div class="index-news-text-title clearfix">
+							<h3><a href="{{item.Link}}" title="{{item.Title}}">{{item.Title}}</a></h3>
+							<span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+						</div>
+						<p>{{item.Description}}</p>
+					</div>
+				</li>
+				{% endfor %}
+				{% endarchiveList %}
+			</ul>
+		</div>
+	</div>
+</div>
+<!-- news -->
 {% endblock %}

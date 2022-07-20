@@ -12,7 +12,7 @@
 				<!-- products-top -->
 				<div class="products-arc-top clearfix">
 					<div class="products-arc-img">
-						<img src="{% archiveDetail with name='Logo' %}" alt="">
+						<img src="{% archiveDetail with name='Logo' %}" alt="{% archiveDetail with name='Title' %}">
 					</div>
 					<div class="products-arc-text">
 						<h1>{% archiveDetail with name="Title" %}</h1>
@@ -32,7 +32,7 @@
 				</div>
 				<!-- relpro -->
 				<div class="relpro clearfix">
-					<h3 class="rel-title"><i></i>相关产品</h3>
+					<h3 class="rel-title"><i></i>相关案例</h3>
 					<ul class="relpro-ul">
 						{% archiveList products with type="related" limit="4" %}
 						{% for inner in products %}
