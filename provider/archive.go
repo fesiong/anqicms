@@ -528,6 +528,9 @@ func PublishPlanArchives() {
 
 // CleanArchives 计划任务删除存档，30天前被删除的
 func CleanArchives() {
+	if dao.DB == nil {
+		return
+	}
 	var archives []model.Archive
 	dao.DB.Debug().Model(&model.Archive{}).Unscoped().Where("`deleted_at` is not null AND `deleted_at` < ?", time.Now().AddDate(0, 0, -30)).Find(&archives)
 	if len(archives) > 0 {

@@ -68,7 +68,7 @@ func GuestbookForm(ctx iris.Context) {
 					"msg":  msg,
 				})
 			} else {
-				ShowMessage(ctx, msg, "")
+				ShowMessage(ctx, msg, nil)
 			}
 			return
 		}
@@ -97,7 +97,7 @@ func GuestbookForm(ctx iris.Context) {
 				"msg":  msg,
 			})
 		} else {
-			ShowMessage(ctx, msg, "")
+			ShowMessage(ctx, msg, nil)
 		}
 		return
 	}
@@ -135,6 +135,8 @@ func GuestbookForm(ctx iris.Context) {
 			link = refer.URL
 		}
 
-		ShowMessage(ctx, msg, link)
+		ShowMessage(ctx, msg, []Button{
+			{Name: "点击继续", Link: link},
+		})
 	}
 }

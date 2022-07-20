@@ -17,6 +17,9 @@ import (
 // QuerySpiderInclude 记录 网站的收录情况
 // https://www.baidu.com/s?wd=site%3Awww.baidu.com&tn=json&rn=10
 func QuerySpiderInclude() {
+	if dao.DB == nil {
+		return
+	}
 	link, _ := url.Parse(config.JsonData.System.BaseUrl)
 	includeLog := model.SpiderInclude{
 		BaiduCount:  GetBaiduInclude(link.Host),

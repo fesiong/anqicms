@@ -19,6 +19,11 @@ import (
 var webInfo response.WebInfo
 var Store = captcha.DefaultMemStore
 
+type Button struct {
+	Name string
+	Link string
+}
+
 func NotFound(ctx iris.Context) {
 	webInfo.Title = config.Lang("404 Not Found")
 	ctx.ViewData("webInfo", webInfo)
@@ -30,15 +35,18 @@ func NotFound(ctx iris.Context) {
 	ctx.StatusCode(404)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
-		ShowMessage(ctx, "404 Not Found", "")
+		ShowMessage(ctx, "404 Not Found", nil)
 	}
 }
 
-func ShowMessage(ctx iris.Context, message string, link string) {
+func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + config.Lang("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + config.Lang("返回") + "</a>"
 
-	if link != "" {
-		str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + link + "\">" + config.Lang("点击继续") + "</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + link + "\"}, 3000);</script>"
+	if len(buttons) > 0 {
+		for _, btn := range buttons {
+			str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + btn.Link + "\">" + config.Lang(btn.Name) + "</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + btn.Link + "\"}, 3000);</script>"
+		}
+		str += "<script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + buttons[0].Link + "\"}, 3000);</script>"
 	}
 
 	str += "</div></body></html>"
@@ -62,7 +70,7 @@ func InternalServerError(ctx iris.Context) {
 	ctx.StatusCode(500)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
-		ShowMessage(ctx, errMessage, "")
+		ShowMessage(ctx, errMessage, nil)
 	}
 }
 
@@ -82,7 +90,7 @@ func CheckCloseSite(ctx iris.Context) {
 
 			err := ctx.View(GetViewPath(ctx, tplName))
 			if err != nil {
-				ShowMessage(ctx, closeTips, "")
+				ShowMessage(ctx, closeTips, nil)
 			}
 			return
 		}
@@ -97,7 +105,7 @@ func CheckCloseSite(ctx iris.Context) {
 				}
 				if strings.Contains(ua, v) {
 					ctx.StatusCode(400)
-					ShowMessage(ctx, config.Lang("您已被禁止访问"), "")
+					ShowMessage(ctx, config.Lang("您已被禁止访问"), nil)
 					return
 				}
 			}
@@ -121,7 +129,7 @@ func CheckCloseSite(ctx iris.Context) {
 					}
 					if strings.HasPrefix(ip, v) {
 						ctx.StatusCode(400)
-						ShowMessage(ctx, config.Lang("您已被禁止访问"), "")
+						ShowMessage(ctx, config.Lang("您已被禁止访问"), nil)
 						return
 					}
 				}
@@ -459,7 +467,7 @@ func SafeVerify(ctx iris.Context, from string) bool {
 					"msg":  config.Lang("验证码不正确"),
 				})
 			} else {
-				ShowMessage(ctx, config.Lang("验证码不正确"), "")
+				ShowMessage(ctx, config.Lang("验证码不正确"), nil)
 			}
 			return false
 		}
@@ -470,7 +478,7 @@ func SafeVerify(ctx iris.Context, from string) bool {
 					"msg":  config.Lang("验证码不正确"),
 				})
 			} else {
-				ShowMessage(ctx, config.Lang("验证码不正确"), "")
+				ShowMessage(ctx, config.Lang("验证码不正确"), nil)
 			}
 			return false
 		}
@@ -485,7 +493,7 @@ func SafeVerify(ctx iris.Context, from string) bool {
 					"msg":  config.Lang("您提交的内容长度过短"),
 				})
 			} else {
-				ShowMessage(ctx, config.Lang("您提交的内容长度过短"), "")
+				ShowMessage(ctx, config.Lang("您提交的内容长度过短"), nil)
 			}
 			return false
 		}
@@ -505,7 +513,7 @@ func SafeVerify(ctx iris.Context, from string) bool {
 						"msg":  config.Lang("您提交的内容包含有不允许的字符"),
 					})
 				} else {
-					ShowMessage(ctx, config.Lang("您提交的内容包含有不允许的字符"), "")
+					ShowMessage(ctx, config.Lang("您提交的内容包含有不允许的字符"), nil)
 				}
 				return false
 			}
@@ -529,7 +537,7 @@ func SafeVerify(ctx iris.Context, from string) bool {
 						"msg":  config.Lang("已达到进入允许提交上限"),
 					})
 				} else {
-					ShowMessage(ctx, config.Lang("已达到进入允许提交上限"), "")
+					ShowMessage(ctx, config.Lang("已达到进入允许提交上限"), nil)
 				}
 				return false
 			}
@@ -549,7 +557,7 @@ func SafeVerify(ctx iris.Context, from string) bool {
 						"msg":  config.Lang("请不要在短时间内多次提交"),
 					})
 				} else {
-					ShowMessage(ctx, config.Lang("请不要在短时间内多次提交"), "")
+					ShowMessage(ctx, config.Lang("请不要在短时间内多次提交"), nil)
 				}
 				return false
 			}

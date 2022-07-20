@@ -94,7 +94,7 @@ func ArchiveDetail(ctx iris.Context) {
 
 	module := provider.GetModuleFromCache(archive.ModuleId)
 	if module == nil {
-		ShowMessage(ctx, fmt.Sprintf("%s: %d", config.Lang("未定义模型"), archive.ModuleId), "")
+		ShowMessage(ctx, fmt.Sprintf("%s: %d", config.Lang("未定义模型"), archive.ModuleId), nil)
 		return
 	}
 	// 默认模板规则：表名 / index,list, detail .html

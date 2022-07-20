@@ -54,7 +54,7 @@ func CategoryPage(ctx iris.Context) {
 
 	module := provider.GetModuleFromCache(category.ModuleId)
 	if module == nil {
-		ShowMessage(ctx, config.Lang("未定义模型"), "")
+		ShowMessage(ctx, config.Lang("未定义模型"), nil)
 		return
 	}
 
@@ -108,7 +108,7 @@ func SearchPage(ctx iris.Context) {
 				continue
 			}
 			if strings.Contains(q, v) {
-				ShowMessage(ctx, config.Lang("您搜索的关键词包含有不允许的字符"), "")
+				ShowMessage(ctx, config.Lang("您搜索的关键词包含有不允许的字符"), nil)
 				return
 			}
 		}
