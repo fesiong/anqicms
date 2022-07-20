@@ -16,6 +16,7 @@ build: clean
 	cp -r ./start.sh ./release/linux/
 	cp -r ./stop.sh ./release/linux/
 	cp -r ./License ./release/linux/
+	cp -r ./clientFiles ./release/linux/
 	cp -r ./README.md ./release/linux/
 	dos2unix ./release/linux/start.sh
 	dos2unix ./release/linux/stop.sh
