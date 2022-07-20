@@ -43,6 +43,9 @@ func Case2Camel(name string) string {
 }
 
 func ParseUrlToken(name string) string {
+	if name == "" {
+		return name
+	}
 	name = strings.ToLower(name)
 	name = strings.Replace(name, " ", "-", -1)
 	name = strings.Replace(name, "_", "-", -1)

@@ -34,14 +34,20 @@ func GuestbookPage(ctx iris.Context) {
 func GuestbookForm(ctx iris.Context) {
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
+	if ok := SafeVerify(ctx, "guestbook"); !ok {
+		return
+	}
+
+
 	fields := config.GetGuestbookFields()
 	var req = map[string]string{}
 	// 采用post接收
 	extraData := map[string]interface{}{}
 	for _, item := range fields {
-		var val interface{}
+		var val string
 		if item.Type == config.CustomFieldTypeCheckbox {
-			val = ctx.PostValues(item.FieldName + "[]")
+			tmpVal := ctx.PostValues(item.FieldName + "[]")
+			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage {
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
@@ -54,7 +60,7 @@ func GuestbookForm(ctx iris.Context) {
 			val = ctx.PostValueTrim(item.FieldName)
 		}
 
-		if item.Required && val == nil {
+		if item.Required && val == "" {
 			msg := fmt.Sprintf("%s必填", item.Name)
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
@@ -62,14 +68,14 @@ func GuestbookForm(ctx iris.Context) {
 					"msg":  msg,
 				})
 			} else {
-				ShowMessage(ctx, msg, "")
+				ShowMessage(ctx, msg, nil)
 			}
 			return
 		}
 		if !item.IsSystem {
 			extraData[item.Name] = val
 		}
-		req[item.FieldName], _ = val.(string)
+		req[item.FieldName] = val
 	}
 
 	//先填充默认字段
@@ -91,7 +97,7 @@ func GuestbookForm(ctx iris.Context) {
 				"msg":  msg,
 			})
 		} else {
-			ShowMessage(ctx, msg, "")
+			ShowMessage(ctx, msg, nil)
 		}
 		return
 	}
@@ -129,6 +135,8 @@ func GuestbookForm(ctx iris.Context) {
 			link = refer.URL
 		}
 
-		ShowMessage(ctx, msg, link)
+		ShowMessage(ctx, msg, []Button{
+			{Name: "点击继续", Link: link},
+		})
 	}
 }

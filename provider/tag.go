@@ -1,7 +1,7 @@
 package provider
 
 import (
-	"errors"
+	"fmt"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -110,25 +110,12 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	tag.Description = req.Description
 	tag.FirstLetter = req.FirstLetter
 	// 判断重复
-	if req.UrlToken != "" {
-		req.UrlToken = library.ParseUrlToken(req.UrlToken)
-		exists, err := GetTagByUrlToken(req.UrlToken)
-		if err == nil {
-			if tag.Id == 0 || (tag.Id > 0 && exists.Id != tag.Id) {
-				return nil, errors.New(config.Lang("自定义URL重复"))
-			}
-		}
-		tag.UrlToken = req.UrlToken
+	req.UrlToken = library.ParseUrlToken(req.UrlToken)
+	if req.UrlToken == "" {
+		req.UrlToken = library.GetPinyin(req.Title)
 	}
-	if tag.UrlToken == "" {
-		newToken := library.GetPinyin(req.Title)
-		_, err := GetTagByUrlToken(newToken)
-		if err == nil {
-			//增加随机
-			newToken += library.GenerateRandString(3)
-		}
-		tag.UrlToken = newToken
-	}
+	tag.UrlToken = VerifyTagUrlToken(req.UrlToken, tag.Id)
+
 	if tag.FirstLetter == "" {
 		letter := "A"
 		if tag.UrlToken != "-" {
@@ -167,11 +154,7 @@ func SaveTagData(itemId uint, tagNames []string) error {
 		tag, err := GetTagByTitle(tagName)
 		if err != nil {
 			newToken := library.GetPinyin(tagName)
-			_, err = GetTagByUrlToken(newToken)
-			if err == nil || newToken == "" {
-				//增加随机
-				newToken += library.GenerateRandString(3)
-			}
+			tag.UrlToken = VerifyTagUrlToken(newToken, 0)
 			letter := "A"
 			if newToken != "-" {
 				letter = string(newToken[0])
@@ -214,4 +197,30 @@ func GetTagsByItemId(itemId uint) []*model.Tag {
 	}
 
 	return tags
+}
+
+func VerifyTagUrlToken(urlToken string, id uint) string {
+	index := 0
+	for {
+		tmpToken := urlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+		}
+		// 判断分类
+		_, err := GetCategoryByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		// 判断archive
+		tmpTag, err := GetTagByUrlToken(tmpToken)
+		if err == nil && tmpTag.Id != id {
+			index++
+			continue
+		}
+		urlToken = tmpToken
+		break
+	}
+
+	return urlToken
 }

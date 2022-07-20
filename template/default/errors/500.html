@@ -1,13 +1,12 @@
 {% extends 'base.html' %}
 
 {% block container %}
-<div class="ErrorPage-container">
-    <div class="ErrorPage-text">
-        <h1 class="ErrorPage-title">500</h1>
-        <p class="ErrorPage-subtitle">系统给程序员提了一个bug，程序员正在修复中：{{errMessage}}</p>
-        <a class="button-primary" href="{{getUrl("index", "", 0)}}">
-            去往首页
-        </a>
+<div class="page container clearfix">
+  <div class="page-item clearfix">
+    <div class="page404 clearfix">
+      <h1>500</h1>
+      <p>页面出错了：{{errMessage}}，您可以 <a href="/" rel="nofollow">返回首页</a></p>
     </div>
+  </div>
 </div>
 {% endblock %}

@@ -166,14 +166,18 @@ func resisterMacros(app *iris.Application) {
 				}
 				matchMap[key] = v
 			}
+			if matchMap["catname"] != "" {
+				matchMap["filename"] = matchMap["catname"]
+			}
+			if matchMap["multicatname"] != "" {
+				chunkCatNames := strings.Split(matchMap["multicatname"], "/")
+				matchMap["filename"] = chunkCatNames[len(chunkCatNames)-1]
+			}
 			if matchMap["module"] != "" {
 				// 需要先验证是否是module
 				module := provider.GetModuleFromCacheByToken(matchMap["module"])
 				if module != nil {
-					if matchMap["filename"] != "" || matchMap["catname"] != "" {
-						if matchMap["catname"] != "" {
-							matchMap["filename"] = matchMap["catname"]
-						}
+					if matchMap["filename"] != "" {
 						// 这个规则可能与下面的冲突，因此检查一遍
 						category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
 						if category != nil && category.Type != config.CategoryTypePage {
@@ -184,10 +188,7 @@ func resisterMacros(app *iris.Application) {
 					}
 				}
 			} else {
-				if matchMap["filename"] != "" || matchMap["catname"] != "" {
-					if matchMap["catname"] != "" {
-						matchMap["filename"] = matchMap["catname"]
-					}
+				if matchMap["filename"] != "" {
 					// 这个规则可能与下面的冲突，因此检查一遍
 					category := provider.GetCategoryFromCacheByToken(matchMap["filename"])
 					if category != nil && category.Type != config.CategoryTypePage {

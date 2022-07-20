@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	captcha "github.com/mojocn/base64Captcha"
 	"kandaoni.com/anqicms/config"
@@ -11,10 +12,17 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"time"
+	"unicode/utf8"
 )
 
 var webInfo response.WebInfo
 var Store = captcha.DefaultMemStore
+
+type Button struct {
+	Name string
+	Link string
+}
 
 func NotFound(ctx iris.Context) {
 	webInfo.Title = config.Lang("404 Not Found")
@@ -27,15 +35,18 @@ func NotFound(ctx iris.Context) {
 	ctx.StatusCode(404)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
-		ShowMessage(ctx, "404 Not Found", "")
+		ShowMessage(ctx, "404 Not Found", nil)
 	}
 }
 
-func ShowMessage(ctx iris.Context, message string, link string) {
-	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>"+config.Lang("提示信息")+"</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>"+message+"</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">"+config.Lang("返回")+"</a>"
+func ShowMessage(ctx iris.Context, message string, buttons []Button) {
+	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + config.Lang("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + config.Lang("返回") + "</a>"
 
-	if link != "" {
-		str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + link + "\">"+config.Lang("点击继续")+"</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + link + "\"}, 3000);</script>"
+	if len(buttons) > 0 {
+		for _, btn := range buttons {
+			str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + btn.Link + "\">" + config.Lang(btn.Name) + "</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + btn.Link + "\"}, 3000);</script>"
+		}
+		str += "<script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + buttons[0].Link + "\"}, 3000);</script>"
 	}
 
 	str += "</div></body></html>"
@@ -59,27 +70,71 @@ func InternalServerError(ctx iris.Context) {
 	ctx.StatusCode(500)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
-		ShowMessage(ctx, errMessage, "")
+		ShowMessage(ctx, errMessage, nil)
 	}
 }
 
 func CheckCloseSite(ctx iris.Context) {
-	if config.JsonData.System.SiteClose == 1 && !strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
-		closeTips := config.JsonData.System.SiteCloseTips
-		ctx.ViewData("closeTips", closeTips)
-		tplName := "errors/close.html"
-		if ViewExists(ctx, "errors_close.html") {
-			tplName = "errors_close.html"
-		}
+	if !strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
+		// 闭站
+		if config.JsonData.System.SiteClose == 1 {
+			closeTips := config.JsonData.System.SiteCloseTips
+			ctx.ViewData("closeTips", closeTips)
+			tplName := "errors/close.html"
+			if ViewExists(ctx, "errors_close.html") {
+				tplName = "errors_close.html"
+			}
 
-		webInfo.Title = config.Lang(closeTips)
-		ctx.ViewData("webInfo", webInfo)
+			webInfo.Title = config.Lang(closeTips)
+			ctx.ViewData("webInfo", webInfo)
 
-		err := ctx.View(GetViewPath(ctx, tplName))
-		if err != nil {
-			ShowMessage(ctx, closeTips, "")
+			err := ctx.View(GetViewPath(ctx, tplName))
+			if err != nil {
+				ShowMessage(ctx, closeTips, nil)
+			}
+			return
 		}
-		return
+		// UA 禁止
+		if config.JsonData.Safe.UAForbidden != "" {
+			ua := ctx.GetHeader("User-Agent")
+			forbiddens := strings.Split(config.JsonData.Safe.UAForbidden, "\n")
+			for _, v := range forbiddens {
+				v = strings.TrimSpace(v)
+				if v == "" {
+					continue
+				}
+				if strings.Contains(ua, v) {
+					ctx.StatusCode(400)
+					ShowMessage(ctx, config.Lang("您已被禁止访问"), nil)
+					return
+				}
+			}
+		}
+		// ip禁止
+		if config.JsonData.Safe.IPForbidden != "" {
+			ip := ctx.RemoteAddr()
+			if ip != "127.0.0.1" {
+				forbiddens := strings.Split(config.JsonData.Safe.IPForbidden, "\n")
+				for _, v := range forbiddens {
+					v = strings.TrimSpace(v)
+					if v == "" {
+						continue
+					}
+					// 移除子网掩码
+					vs := strings.SplitN(v, "/", 2)
+					v = vs[0]
+					// 移除后缀.0
+					for strings.HasSuffix(v, ".0") {
+						v = strings.TrimSuffix(v, ".0")
+					}
+					if strings.HasPrefix(ip, v) {
+						ctx.StatusCode(400)
+						ShowMessage(ctx, config.Lang("您已被禁止访问"), nil)
+						return
+					}
+				}
+			}
+		}
 	}
 
 	ctx.Next()
@@ -293,7 +348,7 @@ func LogAccess(ctx iris.Context) {
 		strings.HasSuffix(currentPath, ".js") ||
 		strings.HasSuffix(currentPath, ".css") ||
 		strings.HasSuffix(currentPath, ".map") ||
-		strings.HasSuffix(currentPath, ".webp")  {
+		strings.HasSuffix(currentPath, ".webp") {
 		ctx.Next()
 		return
 	}
@@ -372,7 +427,7 @@ func NewDriver() *captcha.DriverString {
 	driver.Width = 240
 	//driver.NoiseCount = 4
 	//driver.ShowLineOptions = captcha.OptionShowSineLine | captcha.OptionShowSlimeLine | captcha.OptionShowHollowLine
-	driver.Fonts = []string{"Flim-Flam.ttf","RitaSmith.ttf"}
+	driver.Fonts = []string{"Flim-Flam.ttf", "RitaSmith.ttf"}
 	driver.Length = 4
 	driver.Source = "1234567890qwertyuipkjhgfdsazxcvbnm"
 
@@ -389,11 +444,125 @@ func GenerateCaptcha(ctx iris.Context) {
 	bs64 := item.EncodeB64string()
 
 	ctx.JSON(iris.Map{
-		"code":       config.StatusOK,
-		"msg":        "",
-		"data":       iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
 			"captcha_id": id,
-			"captcha": bs64,
+			"captcha":    bs64,
 		},
 	})
+}
+
+func SafeVerify(ctx iris.Context, from string) bool {
+	returnType := ctx.PostValueTrim("return")
+	// 检查验证码
+	if config.JsonData.Safe.Captcha == 1 {
+		captchaId := ctx.PostValueTrim("captcha_id")
+		captchaValue := ctx.PostValueTrim("captcha")
+		// 验证 captcha
+		if captchaId == "" {
+			if returnType == "json" {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  config.Lang("验证码不正确"),
+				})
+			} else {
+				ShowMessage(ctx, config.Lang("验证码不正确"), nil)
+			}
+			return false
+		}
+		if ok := Store.Verify(captchaId, captchaValue, true); !ok {
+			if returnType == "json" {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  config.Lang("验证码不正确"),
+				})
+			} else {
+				ShowMessage(ctx, config.Lang("验证码不正确"), nil)
+			}
+			return false
+		}
+	}
+	// 内容长度现在 ContentLimit
+	content := ctx.PostValueTrim("content")
+	if config.JsonData.Safe.ContentLimit > 0 {
+		if utf8.RuneCountInString(content) < config.JsonData.Safe.ContentLimit {
+			if returnType == "json" {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  config.Lang("您提交的内容长度过短"),
+				})
+			} else {
+				ShowMessage(ctx, config.Lang("您提交的内容长度过短"), nil)
+			}
+			return false
+		}
+	}
+	// 禁止的内容
+	if config.JsonData.Safe.ContentForbidden != "" {
+		forbiddens := strings.Split(config.JsonData.Safe.ContentForbidden, "\n")
+		for _, v := range forbiddens {
+			v = strings.TrimSpace(v)
+			if v == "" {
+				continue
+			}
+			if strings.Contains(content, v) {
+				if returnType == "json" {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  config.Lang("您提交的内容包含有不允许的字符"),
+					})
+				} else {
+					ShowMessage(ctx, config.Lang("您提交的内容包含有不允许的字符"), nil)
+				}
+				return false
+			}
+		}
+	}
+
+	ip := ctx.RemoteAddr()
+	if ip != "127.0.0.1" {
+		// 检查每日限制
+		if config.JsonData.Safe.DailyLimit > 0 {
+			var todayCount int64
+			if from == "guestbook" {
+				dao.DB.Model(&model.Guestbook{}).Where("`ip` = ? and `created_time` >= ?", ip, now.BeginningOfDay().Unix()).Count(&todayCount)
+			} else if from == "comment" {
+				dao.DB.Model(&model.Comment{}).Where("`ip` = ? and `created_time` >= ?", ip, now.BeginningOfDay().Unix()).Count(&todayCount)
+			}
+			if int(todayCount) >= config.JsonData.Safe.DailyLimit {
+				if returnType == "json" {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  config.Lang("已达到进入允许提交上限"),
+					})
+				} else {
+					ShowMessage(ctx, config.Lang("已达到进入允许提交上限"), nil)
+				}
+				return false
+			}
+		}
+		// 检查提交间隔
+		if config.JsonData.Safe.IntervalLimit > 0 {
+			var lastTime int64
+			if from == "guestbook" {
+				dao.DB.Model(&model.Guestbook{}).Where("`ip` = ?", ip).Order("id desc").Pluck("created_time", &lastTime)
+			} else if from == "comment" {
+				dao.DB.Model(&model.Comment{}).Where("`ip` = ?", ip).Order("id desc").Pluck("created_time", &lastTime)
+			}
+			if lastTime > 0 && lastTime >= time.Now().Unix()-int64(config.JsonData.Safe.IntervalLimit) {
+				if returnType == "json" {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  config.Lang("请不要在短时间内多次提交"),
+					})
+				} else {
+					ShowMessage(ctx, config.Lang("请不要在短时间内多次提交"), nil)
+				}
+				return false
+			}
+		}
+	}
+
+	return true
 }

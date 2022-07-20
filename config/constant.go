@@ -1,6 +1,6 @@
 package config
 
-const Version = "2.2.5"
+const Version = "2.2.7"
 
 const (
 	StatusOK         = 0
@@ -28,4 +28,9 @@ const (
 	ContentStatusDraft = 0 // 草稿
 	ContentStatusOK    = 1 // 正式内容
 	ContentStatusPlan  = 2 // 计划内容，等待发布
+)
+
+const (
+	UrlTokenTypeFull = 0
+	UrlTokenTypeSort = 1
 )

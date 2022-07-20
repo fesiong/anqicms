@@ -24,6 +24,9 @@ func Crond() {
 }
 
 func startDigKeywords() {
+	if dao.DB == nil {
+		return
+	}
 	provider.StartDigKeywords(false)
 }
 

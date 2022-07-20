@@ -2,6 +2,7 @@ package library
 
 import (
 	"github.com/mozillazg/go-pinyin"
+	"kandaoni.com/anqicms/config"
 	"strings"
 )
 
@@ -25,13 +26,26 @@ func GetPinyin(hans string) string {
 			result = append(result, pinyin.Slug(string(r), py))
 		}
 	}
-	str := strings.Join(result, "-")
-	str = ParseUrlToken(str)
-	if len(str) > 100 {
-		str = str[:100]
-	}
 
-	str = strings.Trim(str, "-")
+	var str string
+	if config.JsonData.Content.UrlTokenType == config.UrlTokenTypeSort {
+		// 采用首字母模式
+		var bt = make([]byte, 0, len(result))
+		for _, v := range result {
+			if v != "" {
+				bt = append(bt, v[0])
+			}
+		}
+		str = string(bt)
+	} else {
+		str = strings.Join(result, "-")
+		str = ParseUrlToken(str)
+		if len(str) > 100 {
+			str = str[:100]
+		}
+
+		str = strings.Trim(str, "-")
+	}
 
 	return str
 }

@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"strings"
+	"time"
 )
 
 func ArchiveDetail(ctx iris.Context) {
@@ -22,6 +23,51 @@ func ArchiveDetail(ctx iris.Context) {
 		archive, err = provider.GetArchiveById(id)
 	}
 	if err != nil || archive.Status != config.ContentStatusOK {
+		NotFound(ctx)
+		return
+	}
+	multiCatNames := ctx.Params().GetString("multicatname")
+	if multiCatNames != "" {
+		chunkCatNames := strings.Split(multiCatNames, "/")
+		var prev *model.Category
+		for _, catName := range chunkCatNames {
+			tmpCat := provider.GetCategoryFromCacheByToken(catName)
+			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
+				NotFound(ctx)
+				return
+			}
+			prev = tmpCat
+		}
+	}
+
+	createTime := time.Unix(archive.CreatedTime, 0)
+	year := ctx.Params().GetString("year")
+	month := ctx.Params().GetString("month")
+	day := ctx.Params().GetString("day")
+	hour := ctx.Params().GetString("hour")
+	minute := ctx.Params().GetString("minute")
+	second := ctx.Params().GetString("second")
+	if year != "" && year != createTime.Format("2006") {
+		NotFound(ctx)
+		return
+	}
+	if month != "" && month != createTime.Format("01") {
+		NotFound(ctx)
+		return
+	}
+	if day != "" && day != createTime.Format("02") {
+		NotFound(ctx)
+		return
+	}
+	if hour != "" && hour != createTime.Format("15") {
+		NotFound(ctx)
+		return
+	}
+	if minute != "" && minute != createTime.Format("04") {
+		NotFound(ctx)
+		return
+	}
+	if second != "" && second != createTime.Format("05") {
 		NotFound(ctx)
 		return
 	}
@@ -48,7 +94,7 @@ func ArchiveDetail(ctx iris.Context) {
 
 	module := provider.GetModuleFromCache(archive.ModuleId)
 	if module == nil {
-		ShowMessage(ctx, fmt.Sprintf("%s: %d", config.Lang("未定义模型"), archive.ModuleId), "")
+		ShowMessage(ctx, fmt.Sprintf("%s: %d", config.Lang("未定义模型"), archive.ModuleId), nil)
 		return
 	}
 	// 默认模板规则：表名 / index,list, detail .html

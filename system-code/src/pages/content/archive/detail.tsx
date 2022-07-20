@@ -31,7 +31,7 @@ const { Panel } = Collapse;
 export default class ArchiveForm extends React.Component {
   state: { [key: string]: any } = {
     fetched: false,
-    archive: getStore('unsaveArchive') || { extra: {}, content: '', flag: [] },
+    archive: { extra: {}, content: '', flag: [] },
     content: '',
     modules: [],
     module: { fields: [] },
@@ -40,6 +40,7 @@ export default class ArchiveForm extends React.Component {
     searchedTags: [],
   };
 
+  submitted = false;
   defaultContent = '';
 
   formRef = React.createRef<ProFormInstance>();
@@ -50,6 +51,8 @@ export default class ArchiveForm extends React.Component {
       modules: res.data || [],
     });
 
+    let moduleId = history.location.query?.module_id || 1;
+    let categoryId = history.location.query?.category_id || 0;
     let id = history.location.query?.id || 0;
     if (id == 'new') {
       id = 0;
@@ -61,16 +64,21 @@ export default class ArchiveForm extends React.Component {
       if (copyId > 0) {
         this.getArchive(Number(copyId), true);
       } else {
+        let archive = getStore('unsaveArchive')
+        if (archive) {
+          categoryId = archive.category_id;
+          this.setState({
+            archive,
+          })
+        }
+        this.defaultContent = archive?.content || '';
         this.setState({
           fetched: true,
-          content: this.state.archive.content || '',
+          content: archive?.content || '',
         });
       }
     }
 
-    let moduleId = history.location.query?.module_id || 1;
-
-    let categoryId = history.location.query?.category_id || 0;
     if (categoryId > 0) {
       this.getArchiveCategory(Number(categoryId));
     } else {
@@ -83,13 +91,10 @@ export default class ArchiveForm extends React.Component {
 
   beforeunload = (e: any) => {
     let archive = this.state.archive;
-    if (!archive.id) {
+    if (!archive.id && !this.submitted) {
       let values = this.formRef.current?.getFieldsValue();
       archive.content = this.state.content;
-      var extra = archive.extra;
       archive = Object.assign(archive, values);
-      archive.extra = Object.assign(archive.extra, extra);
-      archive.content = this.state.content;
       if (typeof archive.flag === 'object') {
         archive.flag = archive.flag.join(',');
       }
@@ -106,13 +111,10 @@ export default class ArchiveForm extends React.Component {
 
   componentWillUnmount() {
     let archive = this.state.archive;
-    if (!archive.id) {
+    if (!archive.id && !this.submitted) {
       let values = this.formRef.current?.getFieldsValue();
       archive.content = this.state.content;
-      var extra = archive.extra;
       archive = Object.assign(archive, values);
-      archive.extra = Object.assign(archive.extra, extra);
-      archive.content = this.state.content;
       if (typeof archive.flag === 'object') {
         archive.flag = archive.flag.join(',');
       }
@@ -261,7 +263,6 @@ export default class ArchiveForm extends React.Component {
     let { archive, content } = this.state;
     var extra = archive.extra;
     archive = Object.assign(archive, values);
-    archive.extra = Object.assign(archive.extra, extra);
     // 必须选择分类
     if (!archive.category_id || archive.category_id == 0) {
       message.error('请选择文档分类');
@@ -298,6 +299,10 @@ export default class ArchiveForm extends React.Component {
   };
 
   handleCleanExtraField = (field: string) => {
+    let extra = {};
+    extra[field] = {value: ''};
+    this.formRef?.current?.setFieldsValue({extra});
+
     let { archive } = this.state;
     delete archive.extra[field];
     this.setState({
@@ -306,6 +311,9 @@ export default class ArchiveForm extends React.Component {
   };
 
   handleUploadExtraField = (field: string, row: any) => {
+    let extra = {};
+    extra[field] = {value: row.logo};
+    this.formRef?.current?.setFieldsValue({extra});
     let { archive } = this.state;
     if (!archive.extra[field]) {
       archive.extra[field] = {};
@@ -471,7 +479,10 @@ export default class ArchiveForm extends React.Component {
                                 }}
                               />
                             ) : item.type === 'image' ? (
-                              <ProFormText label={item.name}>
+                              <ProFormText
+                                name={['extra', item.field_name, 'value']}
+                                label={item.name}
+                                >
                                 {archive.extra[item.field_name]?.value ? (
                                   <div className="ant-upload-item">
                                     <Image

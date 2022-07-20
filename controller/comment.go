@@ -12,6 +12,10 @@ import (
 func CommentPublish(ctx iris.Context) {
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
+	if ok := SafeVerify(ctx, "comment"); !ok {
+		return
+	}
+
 	//登录状态的用户，发布不进审核，否则进审核
 	status := uint(0)
 	userId := ctx.Values().GetIntDefault("adminId", 0)
@@ -49,7 +53,7 @@ func CommentPublish(ctx iris.Context) {
 				"msg":  msg,
 			})
 		} else {
-			ShowMessage(ctx, msg, "")
+			ShowMessage(ctx, msg, nil)
 		}
 		return
 	}
@@ -67,7 +71,9 @@ func CommentPublish(ctx iris.Context) {
 		if refer.URL != "" {
 			link = refer.URL
 		}
-		ShowMessage(ctx, config.Lang("发布成功"), link)
+		ShowMessage(ctx, config.Lang("发布成功"), []Button{
+			{Name: "点击继续", Link: link},
+		})
 	}
 }
 

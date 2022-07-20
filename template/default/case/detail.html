@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/breadcrumb.html" %}
+<div class="products-index clearfix">
+	<div class="index-title">{% categoryDetail with name="Title" %}</div>
+	<!-- products content -->
+	<div class="container clearfix">
+		<!-- products-cotnent -->
+		<div class="products-cotnent clearfix">
+			<div class="page-content">
+				<!-- products-top -->
+				<div class="products-arc-top clearfix">
+					<div class="products-arc-img">
+						<img src="{% archiveDetail with name='Logo' %}" alt="{% archiveDetail with name='Title' %}">
+					</div>
+					<div class="products-arc-text">
+						<h1>{% archiveDetail with name="Title" %}</h1>
+						<p>{% archiveDetail with name="Description" %}</p>
+						<div class="products-text-contact">
+							<i class="fa fa-mobile-phone"></i>咨询热线:
+							<span>
+								<a href="tel:{% contact with name='Cellphone' %}" rel="nofollow">{% contact with name="Cellphone" %}</a>
+							</span>
+						</div>
+					</div>
+				</div>
+				<!-- products-top -->
+				<div class="arc clearfix">
+					{% archiveDetail productContent with name="Content" %}
+					{{productContent|safe}}
+				</div>
+				<!-- relpro -->
+				<div class="relpro clearfix">
+					<h3 class="rel-title"><i></i>相关案例</h3>
+					<ul class="relpro-ul">
+						{% archiveList products with type="related" limit="4" %}
+						{% for inner in products %}
+						<li class="relpro-li">
+							<div class="relpro-item">
+								<div class="relpro-img">
+									<a href="{{inner.Link}}"><img src="{{inner.Thumb}}" alt="{{inner.Title}}"></a>
+								</div>
+								<div class="relpro-text">
+									<h4><a href="{{inner.Link}}">{{inner.Title}}</a></h4>
+								</div>
+							</div>
+						</li>
+						{% endfor %}
+						{% endarchiveList %}
+					</ul>
+				</div>
+				<!-- relpro -->
+				<!-- relblog -->
+				<div class="relblog clearfix">
+					<h3 class="rel-title"><i></i>相关文章</h3>
+					<ul class="relblog-ul">
+						{% archiveList articles with moduleId=1 type="list" limit="10" %}
+						{% for inner in articles %}
+						<li class="relblog-li">
+							<h3><a href="{{inner.Link}}">{{inner.Title}}</a></h3>
+							<span>{{stampToDate(inner.CreatedTime, "2006-01-02")}}</span>
+						</li>
+						{% endfor %}
+						{% endarchiveList %}
+					</ul>
+				</div>
+				<!-- relblog -->
+			</div>
+			{% include "partial/sidebar.html" %}
+		</div>
+		<!-- products-cotnent -->
+
+	</div>
+	<!-- products content -->
+</div>
+{% endblock %}

@@ -21,6 +21,7 @@ type SystemConfig struct {
 type ContentConfig struct {
 	RemoteDownload int    `json:"remote_download"`
 	FilterOutlink  int    `json:"filter_outlink"`
+	UrlTokenType   int    `json:"url_token_type"`
 	Quality        int    `json:"quality"`
 	ResizeImage    int    `json:"resize_image"`
 	ResizeWidth    int    `json:"resize_width"`
@@ -63,4 +64,14 @@ type ContactConfig struct {
 	Wechat      string              `json:"wechat"`
 	Qrcode      string              `json:"qrcode"`
 	ExtraFields []config.ExtraField `json:"extra_fields"` // 用户自定义字段
+}
+
+type SafeConfig struct {
+	Captcha          int    `json:"captcha"`
+	DailyLimit       int    `json:"daily_limit"`
+	ContentLimit     int    `json:"content_limit"`
+	IntervalLimit    int    `json:"interval_limit"`
+	ContentForbidden string `json:"content_forbidden"`
+	IPForbidden      string `json:"ip_forbidden"`
+	UAForbidden      string `json:"ua_forbidden"`
 }

@@ -98,12 +98,19 @@ var needReplace = []replaceChar{
 }
 
 var replaceParams = map[string]string{
-	"{id}":       "([\\d]+)",
-	"{filename}": "([^\\/\\.\\_]+?)",
-	"{catname}":  "([^\\/\\.\\_]+?)",
-	"{module}":   "([^\\/\\.\\_]+?)",
-	"{catid}":    "([\\d]+)",
-	"{page}":     "([\\d]+)",
+	"{id}":           "([\\d]+)",
+	"{filename}":     "([^\\/]+?)",
+	"{catname}":      "([^\\/]+?)",
+	"{multicatname}": "(.+?)",
+	"{module}":       "([^\\/]+?)",
+	"{catid}":        "([\\d]+)",
+	"{year}":         "([\\d]+)",
+	"{month}":        "([\\d]+)",
+	"{day}":          "([\\d]+)",
+	"{hour}":         "([\\d]+)",
+	"{minute}":       "([\\d]+)",
+	"{second}":       "([\\d]+)",
+	"{page}":         "([\\d]+)",
 }
 
 var parsedPatten *RewritePatten

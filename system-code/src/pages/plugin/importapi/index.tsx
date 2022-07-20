@@ -115,6 +115,11 @@ const PluginImportApi: React.FC<any> = (props) => {
                       ]}
                       dataSource={[
                         {
+                          title: 'id',
+                          required: false,
+                          remark: '文档ID，默认自动生成',
+                        },
+                        {
                           title: 'title',
                           required: true,
                           remark: '文档标题',
@@ -140,6 +145,16 @@ const PluginImportApi: React.FC<any> = (props) => {
                           remark: '文档简介',
                         },
                         {
+                          title: 'url_token',
+                          required: false,
+                          remark: '自定义URL别名，仅支持数字、英文字母',
+                        },
+                        {
+                          title: 'images[]',
+                          required: false,
+                          remark: '文章组图，可以设置最多9张图片。',
+                        },
+                        {
                           title: 'logo',
                           required: false,
                           remark:
@@ -160,6 +175,16 @@ const PluginImportApi: React.FC<any> = (props) => {
                           title: '其他自定义字段',
                           required: false,
                           remark: '如果你还传了其他自定义字段，并且文档表中存在该字段，则也支持。',
+                        },
+                        {
+                          title: 'draft',
+                          required: false,
+                          remark: '是否存入到草稿，支持的值有：false|true，填写true时，则发布的文档会保存到草稿',
+                        },
+                        {
+                          title: 'cover',
+                          required: false,
+                          remark: '当相同标题、ID文档存在时是否覆盖，支持的值有：false|true，填写true时，则会覆盖成最新的内容，设置为false时，则会提示错误',
                         },
                       ]}
                       key="title"

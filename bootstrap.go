@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/middleware/recover"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/crond"
@@ -33,7 +32,7 @@ func New(port int, loggerLevel string) *Bootstrap {
 }
 
 func (bootstrap *Bootstrap) loadGlobalMiddleware() {
-	bootstrap.Application.Use(recover.New())
+	bootstrap.Application.Use(middleware.NewRecover())
 	bootstrap.Application.Use(middleware.Cors)
 	bootstrap.Application.Options("*", middleware.Cors)
 }

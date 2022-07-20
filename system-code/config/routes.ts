@@ -34,6 +34,11 @@
         component: './setting/content',
       },
       {
+        path: '/setting/safe',
+        name: '内容安全设置',
+        component: './setting/safe',
+      },
+      {
         path: '/setting/contact',
         name: '联系方式设置',
         component: './setting/contact',
@@ -217,6 +222,12 @@
         name: '301跳转管理',
         component: '@/pages/plugin/redirect/index',
         icon: '<svg t="1654564143222" class="icon" viewBox="0 0 1088 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" p-id="21622" width="128" height="128"><path d="M445.312 572.864V448.448H318.656v-124.16c0-31.36-237.696 144.96-237.696 144.96a60.544 60.544 0 0 0-0.064 84.672s237.76 180.352 237.76 146.752V572.8h126.656zM704.128 448v126.272h130.944V704c0 29.12 233.408-148.224 233.408-148.224a55.744 55.744 0 0 0 0-80.704s-237.696-177.92-237.696-152.832L835.072 448h-130.944zM512 0h128v1024H512z" fill="#1296db" p-id="21623"></path></svg>'
+      },
+      {
+        path: '/plugin/transfer',
+        name: '网站内容迁移',
+        component: '@/pages/plugin/transfer/index',
+        icon: '<svg viewBox="64 64 896 896" focusable="false" data-icon="swap" width="1em" height="1em" fill="currentColor" aria-hidden="true"><path d="M847.9 592H152c-4.4 0-8 3.6-8 8v60c0 4.4 3.6 8 8 8h605.2L612.9 851c-4.1 5.2-.4 13 6.3 13h72.5c4.9 0 9.5-2.2 12.6-6.1l168.8-214.1c16.5-21 1.6-51.8-25.2-51.8zM872 356H266.8l144.3-183c4.1-5.2.4-13-6.3-13h-72.5c-4.9 0-9.5 2.2-12.6 6.1L150.9 380.2c-16.5 21-1.6 51.8 25.1 51.8h696c4.4 0 8-3.6 8-8v-60c0-4.4-3.6-8-8-8z"></path></svg>'
       },
       {
         component: './404',

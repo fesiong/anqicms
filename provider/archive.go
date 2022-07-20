@@ -171,26 +171,12 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		archive.Status = config.ContentStatusPlan
 	}
 	// 判断重复
-	if req.UrlToken != "" {
-		req.UrlToken = library.ParseUrlToken(req.UrlToken)
-		exists, err := GetArchiveByUrlToken(req.UrlToken)
-		if err == nil {
-			if archive.Id == 0 || (archive.Id > 0 && exists.Id != archive.Id) {
-				return nil, errors.New(config.Lang("自定义URL重复"))
-			}
-		}
-		archive.UrlToken = req.UrlToken
+	req.UrlToken = library.ParseUrlToken(req.UrlToken)
+	if req.UrlToken == "" {
+		req.UrlToken = library.GetPinyin(req.Title)
 	}
-	if archive.UrlToken == "" {
-		newToken := library.GetPinyin(req.Title)
-		_, err := GetArchiveByUrlToken(newToken)
-		if err == nil {
-			//增加随机
-			newToken += library.GenerateRandString(3)
-		}
+	archive.UrlToken = VerifyArchiveUrlToken(req.UrlToken, archive.Id)
 
-		archive.UrlToken = newToken
-	}
 	archive.ModuleId = category.ModuleId
 	archive.Title = req.Title
 	archive.SeoTitle = req.SeoTitle
@@ -432,13 +418,8 @@ func SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
 func UpdateArchiveUrlToken(archive *model.Archive) error {
 	if archive.UrlToken == "" {
 		newToken := library.GetPinyin(archive.Title)
-		_, err := GetArchiveByUrlToken(newToken)
-		if err == nil {
-			//增加随机
-			newToken += library.GenerateRandString(3)
-		}
+		archive.UrlToken = VerifyArchiveUrlToken(newToken, archive.Id)
 
-		archive.UrlToken = newToken
 		dao.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
 	}
 
@@ -547,6 +528,9 @@ func PublishPlanArchives() {
 
 // CleanArchives 计划任务删除存档，30天前被删除的
 func CleanArchives() {
+	if dao.DB == nil {
+		return
+	}
 	var archives []model.Archive
 	dao.DB.Debug().Model(&model.Archive{}).Unscoped().Where("`deleted_at` is not null AND `deleted_at` < ?", time.Now().AddDate(0, 0, -30)).Find(&archives)
 	if len(archives) > 0 {
@@ -563,4 +547,30 @@ func CleanArchives() {
 			dao.DB.Unscoped().Where("id = ?", archive.Id).Delete(model.Archive{})
 		}
 	}
+}
+
+func VerifyArchiveUrlToken(urlToken string, id uint) string {
+	index := 0
+	for {
+		tmpToken := urlToken
+		if index > 0 {
+			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+		}
+		// 判断分类
+		_, err := GetCategoryByUrlToken(tmpToken)
+		if err == nil {
+			index++
+			continue
+		}
+		// 判断archive
+		tmpArc, err := GetArchiveByUrlToken(tmpToken)
+		if err == nil && tmpArc.Id != id {
+			index++
+			continue
+		}
+		urlToken = tmpToken
+		break
+	}
+
+	return urlToken
 }

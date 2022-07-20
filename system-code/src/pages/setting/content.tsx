@@ -59,6 +59,7 @@ const SettingContactFrom: React.FC<any> = (props) => {
   const onSubmit = async (values: any) => {
     values.default_thumb = defaultThumb;
     values.filter_outlink = Number(values.filter_outlink);
+    values.url_token_type = Number(values.url_token_type);
     values.remote_download = Number(values.remote_download);
     values.resize_image = Number(values.resize_image);
     values.resize_width = Number(values.resize_width);
@@ -111,6 +112,21 @@ const SettingContactFrom: React.FC<any> = (props) => {
                   label: '过滤',
                 },
               ]}
+            />
+            <ProFormRadio.Group
+              name="url_token_type"
+              label="自定义URL格式"
+              options={[
+                {
+                  value: 0,
+                  label: '全拼音',
+                },
+                {
+                  value: 1,
+                  label: '首字母',
+                },
+              ]}
+              extra='默认是标题的全拼音，如果选择首字母的话，则会只取每个字的第一个字母（英文则是每个单词的第一个字母）'
             />
             <ProFormRadio.Group
               name="use_webp"
