@@ -21,6 +21,20 @@ func TestCollectSingleArticle(t *testing.T) {
 	log.Printf("%#v", result.Content)
 }
 
+func TestCollectArticlesByKeyword(t *testing.T) {
+	keyword := model.Keyword{
+		Title:        "负氧离子",
+		Status:       1,
+	}
+
+	num, err := CollectArticlesByKeyword(keyword, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	log.Println(num)
+}
+
 func TestGoquery(t *testing.T) {
 	str := "<p>来张图中吧：</p>\n<p><img data-original=\"https://cdn.jiler.cn/techug/uploads/2017/03/420532-20170305205228282-609193437-1000x519.png\" title=\"图0：2017年的golang、python、php、c++、c、java、Nodejs性能对比\" alt=\"图0：2017年的golang、python、php、c++、c、java、Nodejs性能对比\"/></p>\n<p>总结：</p>"
 

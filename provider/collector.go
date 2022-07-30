@@ -303,7 +303,7 @@ func CollectArticles() {
 		lastId = keywords[len(keywords) - 1].Id
 		for i := 0; i < len(keywords); i++ {
 			keyword := keywords[i]
-			total, err := CollectArticlesByKeyword(keyword, false)
+			total, err := CollectArticlesByKeyword(*keyword, false)
 			log.Printf("关键词：%s 采集了 %d 篇文章", keyword.Title, total)
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
@@ -313,10 +313,10 @@ func CollectArticles() {
 	}
 }
 
-func CollectArticlesByKeyword(keyword *model.Keyword, focus bool) (int, error) {
+func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (int, error) {
 	var archives []*request.Archive
 	var err error
-	archives, err = CollectArticleFromBaidu(keyword, focus)
+	archives, err = CollectArticleFromBaidu(&keyword, focus)
 
 	if err != nil {
 		return 0, err
@@ -449,11 +449,11 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 	_ = ParseArticleDetail(archive)
 	if len(archive.Content) == 0 {
 		log.Println("链接无文章", archive.OriginUrl)
-		return nil, err
+		return nil, errors.New("链接无文章")
 	}
 	if archive.Title == "" {
 		log.Println("链接无文章", archive.OriginUrl)
-		return nil, err
+		return nil, errors.New("链接无文章")
 	}
 	//对乱码的跳过
 	runeTitle := []rune(archive.Title)
@@ -466,7 +466,7 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 	}
 	if isDeny {
 		log.Println("乱码", archive.OriginUrl)
-		return nil, err
+		return nil, errors.New("乱码")
 	}
 
 	log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
