@@ -268,7 +268,7 @@ func (t *TransferWebsite) transferModules() error {
 		}
 		dao.DB.Save(&module)
 
-		module.Migrate(dao.DB)
+		module.Migrate(dao.DB, true)
 	}
 	DeleteCacheModules()
 

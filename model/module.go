@@ -30,7 +30,7 @@ func (a *moduleFields) Scan(data interface{}) error {
 	return json.Unmarshal(data.([]byte), &a)
 }
 
-func (m *Module) Migrate(tx *gorm.DB) {
+func (m *Module) Migrate(tx *gorm.DB, focus bool) {
 	if !tx.Migrator().HasTable(m.TableName) {
 		tx.Exec("CREATE TABLE `?` (`id` int(10) unsigned NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) DEFAULT CHARSET=utf8mb4;", gorm.Expr(m.TableName))
 	}
@@ -41,7 +41,7 @@ func (m *Module) Migrate(tx *gorm.DB) {
 		if !m.HasColumn(tx, field.FieldName) {
 			//创建语句
 			tx.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(m.TableName), gorm.Expr(column))
-		} else {
+		} else if focus {
 			//更新语句
 			tx.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(m.TableName), gorm.Expr(column))
 		}

@@ -111,7 +111,7 @@ func SaveModule(req *request.ModuleRequest) (module *model.Module, err error) {
 		}
 	}
 
-	module.Migrate(dao.DB)
+	module.Migrate(dao.DB, true)
 
 	DeleteCacheModules()
 

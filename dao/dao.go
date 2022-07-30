@@ -151,8 +151,13 @@ func AutoMigrateDB(db *gorm.DB) error {
 		if exists == 0 {
 			db.Create(&m)
 			// 并生成表
-			m.Migrate(db)
+			m.Migrate(db, false)
 		}
+	}
+	// 表字段重新检查
+	db.Model(&model.Module{}).Find(&modules)
+	for _, m := range modules {
+		m.Migrate(db, false)
 	}
 	// 检查导航类别
 	navType := model.NavType{Title: "默认导航"}
