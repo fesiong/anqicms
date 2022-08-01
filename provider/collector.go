@@ -831,8 +831,7 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 		}
 		if item.Is("code") {
 			// 重新wrap
-			tmp := item.Text()
-			item.ReplaceWithHtml("<pre><code>"+tmp+"</code></pre>")
+			item.WrapHtml("<pre></pre>")
 			return
 		}
 		if item.Is("img") {
@@ -894,12 +893,11 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			item.ReplaceWithHtml(fmt.Sprintf("<p>%s</p>", strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " "))))
 		} else if item.Is("ul") || item.Is("ol") {
 			if item.Find("li").Length() == 0 {
-				if item.Find("li").Length() == 0 {
-					item.SetHtml("<li>"+item.Text()+"</li>")
-				}
+				tmp, _ := item.Html()
+				item.WrapInnerHtml("<li>"+tmp+"</li>")
 			}
 		} else if !item.Is("table") {
-			item.SetText(strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " ")))
+			item.ReplaceWithHtml("<p>"+strings.ReplaceAll(item.Text(), "\n", " ")+"</p>")
 		}
 	})
 

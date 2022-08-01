@@ -2,7 +2,6 @@ package manageController
 
 import (
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -10,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strings"
 	"time"
 )
 
@@ -120,26 +118,7 @@ func ArchiveDetail(ctx iris.Context) {
 	archive.ArchiveData, err = provider.GetArchiveDataById(archive.Id)
 	if err == nil {
 		// 重新解析，保证不会被编辑器报错
-		htmlR := strings.NewReader(archive.ArchiveData.Content)
-		doc, err := goquery.NewDocumentFromReader(htmlR)
-		if err == nil {
-			doc.Find("body").Children().Each(func(i int, item *goquery.Selection) {
-				//只保留 img,code,blockquote,pre
-				if item.Is("img") {
-					src, _ := item.Attr("src")
-					item.ReplaceWithHtml("<p><img src=\""+src+"\"/></p>")
-				} else if item.Is("code") {
-					tmp := item.Text()
-					item.ReplaceWithHtml("<pre><code>"+tmp+"</code></pre>")
-				}
-			})
-			doc.Find("ul,ol").Each(func(i int, inner *goquery.Selection) {
-				if inner.Find("li").Length() == 0 {
-					inner.SetHtml("<li>"+inner.Text()+"</li>")
-				}
-			})
-			archive.ArchiveData.Content, _ = doc.Find("body").Html()
-		}
+		archive.ArchiveData.Content = provider.ParseContent(archive.ArchiveData.Content)
 	}
 	// 读取 extraDat
 	archive.Extra = provider.GetArchiveExtra(archive.ModuleId, archive.Id)

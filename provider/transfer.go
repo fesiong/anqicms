@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"github.com/chai2010/webp"
 	"image"
 	"image/gif"
@@ -307,7 +308,7 @@ func (t *TransferWebsite) transferCategories() error {
 			Keywords:    result.Data[i].Keywords,
 			UrlToken:    result.Data[i].UrlToken,
 			Description: result.Data[i].Description,
-			Content:     result.Data[i].Content,
+			Content:     ParseContent(result.Data[i].Content),
 			ModuleId:    result.Data[i].ModuleId,
 			ParentId:    result.Data[i].ParentId,
 			Type:        config.CategoryTypeArchive,
@@ -443,7 +444,7 @@ func (t *TransferWebsite) transferArchives() error {
 			dao.DB.Save(&archive)
 			// 保存内容表
 			archiveData := model.ArchiveData{
-				Content: result.Data[i].Content,
+				Content: ParseContent(result.Data[i].Content),
 			}
 			archiveData.Id = archive.Id
 			dao.DB.Save(&archiveData)
@@ -516,7 +517,7 @@ func (t *TransferWebsite) transferSinglePages() error {
 			Keywords:    result.Data[i].Keywords,
 			UrlToken:    result.Data[i].UrlToken,
 			Description: result.Data[i].Description,
-			Content:     result.Data[i].Content,
+			Content:     ParseContent(result.Data[i].Content),
 			ModuleId:    result.Data[i].ModuleId,
 			ParentId:    result.Data[i].ParentId,
 			Type:        config.CategoryTypePage,
@@ -798,4 +799,76 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*librar
 	}
 
 	return resp, err
+}
+
+// ParseContent 转换content内容，使它符合编辑器使用。
+func ParseContent(content string) string {
+	htmlR := strings.NewReader(content)
+	doc, err := goquery.NewDocumentFromReader(htmlR)
+	if err != nil {
+		return content
+	}
+	body := doc.Find("body")
+
+	body.Children().Each(func(i int, item *goquery.Selection) {
+		//只保留 顶层只运行 pre，blockquote,ul,ol,table,p,div
+		if item.Is("blockquote") ||
+			item.Is("pre") ||
+			item.Is("table") ||
+			item.Is("h1") ||
+			item.Is("h2") ||
+			item.Is("h3") ||
+			item.Is("h4") ||
+			item.Is("h5") ||
+			item.Is("h6") ||
+			item.Is("p") ||
+			item.Is("div") {
+			return
+		}
+		if item.Is("figure") {
+			// 重新wrap
+			tmp, _ := item.Html()
+			item.ReplaceWithHtml("<p>"+tmp+"</p>")
+			return
+		}
+		if item.Is("code") {
+			// 重新wrap
+			item.WrapHtml("<pre></pre>")
+			return
+		}
+		if item.Is("img") {
+			src, _ := item.Attr("src")
+			dataSrc, exists2 := item.Attr("data-src")
+			if exists2 {
+				src = dataSrc
+			}
+			dataSrc, exists2 = item.Attr("data-original")
+			if exists2 {
+				src = dataSrc
+			}
+			alt, _ := item.Attr("alt")
+			if src == "" {
+				item.Remove()
+			} else {
+				item.ReplaceWithHtml("<p><img src=\""+src+"\" alt=\""+alt+"\"/></p>")
+			}
+			return
+		}
+		//其他情况
+		if item.Is("ul") || item.Is("ol") {
+			if item.Find("li").Length() == 0 {
+				tmp, _ := item.Html()
+				item.WrapInnerHtml("<li>"+tmp+"</li>")
+			}
+		} else {
+			item.WrapHtml("<div></div>")
+		}
+	})
+
+	result, err := body.Html()
+	if err != nil {
+		log.Println("保存错误", err)
+		return content
+	}
+	return result
 }
