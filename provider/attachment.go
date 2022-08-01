@@ -32,16 +32,39 @@ import (
 
 func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId uint) (*model.Attachment, error) {
 	db := dao.DB
+
+	isImage := 0
+	if strings.HasSuffix(info.Filename, ".jpg") ||
+		strings.HasSuffix(info.Filename, ".jpeg") ||
+		strings.HasSuffix(info.Filename, ".png") ||
+		strings.HasSuffix(info.Filename, ".gif") ||
+		strings.HasSuffix(info.Filename, ".webp") {
+		isImage = 1
+	}
+
+	var attachment *model.Attachment
+	var err error
+	if attachId > 0 {
+		attachment, err = GetAttachmentById(attachId)
+		if err != nil {
+			return nil, errors.New("需要替换的图片资源不存在")
+		}
+		isImage = attachment.IsImage
+	}
+
+	if isImage != 1 {
+		if strings.HasSuffix(info.Filename, "mp4") {
+			return AttachmentUploadVideo(file, info, categoryId, attachId)
+		} else {
+			return AttachmentUploadFile(file, info, categoryId, attachId)
+		}
+	}
+
 	//获取宽高
 	fileSize := info.Size
 	bufFile := bufio.NewReader(file)
 	img, imgType, err := image.Decode(bufFile)
 	if err != nil {
-		if strings.HasSuffix(info.Filename, "mp4") {
-			file.Seek(0, io.SeekStart)
-			return AttachmentUploadVideo(file, info, categoryId)
-		}
-
 		if strings.HasSuffix(info.Filename, "webp") {
 			bufFile.Reset(file)
 			img, err = webp.Decode(bufFile)
@@ -86,18 +109,13 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 		return nil, err
 	}
 
-	var attachment *model.Attachment
-	if attachId > 0 {
-		attachment, err = GetAttachmentById(attachId)
-		if err != nil {
-			return nil, errors.New("需要替换的图片资源不存在")
-		}
+	if attachment != nil {
 		fileName = attachment.FileName
 		imgType = strings.TrimPrefix(filepath.Ext(attachment.FileLocation), ".")
 		// 如果上传的图片已存在，则不允许替换
 		exists, err := GetAttachmentByMd5(md5Str)
 		if err == nil && attachment.Id != exists.Id {
-			return nil, errors.New("替换失败，已存在当前上传的图片。")
+			return nil, errors.New("替换失败，已存在当前上传的资源。")
 		}
 	}
 
@@ -224,6 +242,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 		Width:        width,
 		Height:       height,
 		CategoryId:   categoryId,
+		IsImage:      1,
 		Status:       1,
 	}
 	attachment.Id = attachId
@@ -237,7 +256,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	return attachment, nil
 }
 
-func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, categoryId uint) (*model.Attachment, error) {
+func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, categoryId, attachId uint) (*model.Attachment, error) {
 	// 视频不做验证
 	fileName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
 	//获取文件的MD5，检查数据库是否已经存在，存在则不用重复上传
@@ -253,26 +272,43 @@ func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, cate
 		return nil, err
 	}
 
-	attachment, err := GetAttachmentByMd5(md5Str)
-	if err == nil {
-		if attachment.DeletedAt.Valid {
-			//更新
-			err = dao.DB.Model(attachment).Update("deleted_at", nil).Error
-			if err != nil {
-				return nil, err
+	var attachment *model.Attachment
+	if attachId > 0 {
+		attachment, err = GetAttachmentById(attachId)
+		if err != nil {
+			return nil, errors.New("需要替换的资源不存在")
+		}
+		fileName = attachment.FileName
+		// 如果上传的图片已存在，则不允许替换
+		exists, err := GetAttachmentByMd5(md5Str)
+		if err == nil && attachment.Id != exists.Id {
+			return nil, errors.New("替换失败，已存在当前上传的资源。")
+		}
+	} else {
+		attachment, err = GetAttachmentByMd5(md5Str)
+		if err == nil {
+			if attachment.DeletedAt.Valid {
+				//更新
+				err = dao.DB.Model(attachment).Update("deleted_at", nil).Error
+				if err != nil {
+					return nil, err
+				}
 			}
+			// 如果更换了分类
+			if categoryId > 0 && attachment.CategoryId != categoryId {
+				dao.DB.Model(attachment).UpdateColumn("category_id", categoryId)
+			}
+			fileName = attachment.FileName
+			attachId = attachment.Id
 		}
-		// 如果更换了分类
-		if categoryId > 0 && attachment.CategoryId != categoryId {
-			dao.DB.Model(attachment).UpdateColumn("category_id", categoryId)
-		}
-		//直接返回
-		return attachment, nil
 	}
 
 	tmpName := md5Str[8:24] + path.Ext(info.Filename)
 	filePath := time.Now().Format("200601/02/")
-
+	if attachId > 0 {
+		filePath = filepath.Dir(attachment.FileLocation) + "/"
+		tmpName = filepath.Base(attachment.FileLocation)
+	}
 	//将文件写入本地
 	basePath := config.ExecPath + "public/uploads/"
 	//先判断文件夹是否存在，不存在就先创建
@@ -305,6 +341,109 @@ func AttachmentUploadVideo(file multipart.File, info *multipart.FileHeader, cate
 		FileSize:     info.Size,
 		FileMd5:      md5Str,
 		CategoryId:   categoryId,
+		IsImage:      0,
+		Status:       1,
+	}
+	attachment.GetThumb()
+
+	err = attachment.Save(dao.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	return attachment, nil
+}
+
+func AttachmentUploadFile(file multipart.File, info *multipart.FileHeader, categoryId, attachId uint) (*model.Attachment, error) {
+	// 可以上传所有文件除了php。
+	fileExt := path.Ext(info.Filename)
+	if fileExt == ".php" {
+		return nil, errors.New("不允许上传php文件")
+	}
+	fileName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
+	//获取文件的MD5，检查数据库是否已经存在，存在则不用重复上传
+	md5hash := md5.New()
+	bufFile := bufio.NewReader(file)
+	_, err := io.Copy(md5hash, bufFile)
+	if err != nil {
+		return nil, err
+	}
+	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+	_, err = file.Seek(0, 0)
+	if err != nil {
+		return nil, err
+	}
+
+	var attachment *model.Attachment
+	if attachId > 0 {
+		attachment, err = GetAttachmentById(attachId)
+		if err != nil {
+			return nil, errors.New("需要替换的资源不存在")
+		}
+		fileName = attachment.FileName
+		// 如果上传的图片已存在，则不允许替换
+		exists, err := GetAttachmentByMd5(md5Str)
+		if err == nil && attachment.Id != exists.Id {
+			return nil, errors.New("替换失败，已存在当前上传的资源。")
+		}
+	} else {
+		attachment, err = GetAttachmentByMd5(md5Str)
+		if err == nil {
+			if attachment.DeletedAt.Valid {
+				//更新
+				err = dao.DB.Model(attachment).Update("deleted_at", nil).Error
+				if err != nil {
+					return nil, err
+				}
+			}
+			// 如果更换了分类
+			if categoryId > 0 && attachment.CategoryId != categoryId {
+				dao.DB.Model(attachment).UpdateColumn("category_id", categoryId)
+			}
+			fileName = attachment.FileName
+			attachId = attachment.Id
+		}
+	}
+
+	tmpName := md5Str[8:24] + path.Ext(info.Filename)
+	filePath := time.Now().Format("200601/02/")
+	if attachId > 0 {
+		filePath = filepath.Dir(attachment.FileLocation) + "/"
+		tmpName = filepath.Base(attachment.FileLocation)
+	}
+	//将文件写入本地
+	basePath := config.ExecPath + "public/uploads/"
+	//先判断文件夹是否存在，不存在就先创建
+	_, err = os.Stat(basePath + filePath)
+	if err != nil && os.IsNotExist(err) {
+		err = os.MkdirAll(basePath+filePath, os.ModePerm)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	originFile, err := os.OpenFile(basePath+filePath+tmpName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	if err != nil {
+		//无法创建
+		return nil, err
+	}
+
+	defer originFile.Close()
+
+	_, err = io.Copy(originFile, file)
+	if err != nil {
+		//文件写入失败
+		return nil, err
+	}
+
+	//文件上传完成
+	attachment = &model.Attachment{
+		FileName:     fileName,
+		FileLocation: filePath + tmpName,
+		FileSize:     info.Size,
+		FileMd5:      md5Str,
+		CategoryId:   categoryId,
+		IsImage:      0,
 		Status:       1,
 	}
 	attachment.GetThumb()
@@ -475,6 +614,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 				FileMd5:      md5Str,
 				Width:        width,
 				Height:       height,
+				IsImage:      1,
 				Status:       1,
 			}
 			attachment.GetThumb()
@@ -519,7 +659,7 @@ func GetAttachmentById(id uint) (*model.Attachment, error) {
 	return &attach, nil
 }
 
-func GetAttachmentList(categoryId uint, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
+func GetAttachmentList(categoryId uint, q string, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
 	var attachments []*model.Attachment
 	offset := (currentPage - 1) * pageSize
 	var total int64
@@ -527,6 +667,9 @@ func GetAttachmentList(categoryId uint, currentPage int, pageSize int) ([]*model
 	builder := dao.DB.Model(&model.Attachment{})
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	if q != "" {
+		builder = builder.Where("`file_name` like ?", "%"+q+"%")
 	}
 	builder = builder.Where("`status` = 1").Order("updated_time desc")
 	if err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&attachments).Error; err != nil {

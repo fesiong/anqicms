@@ -17,6 +17,7 @@ type Attachment struct {
 	Width        int    `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
 	Height       int    `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
 	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
+	IsImage      int    `json:"is_image" gorm:"column:is_image;type:tinyint(1) not null;default:0"`
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	Logo         string `json:"logo" gorm:"-"`
 	Thumb        string `json:"thumb" gorm:"-"`

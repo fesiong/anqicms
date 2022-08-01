@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"log"
 	"strings"
 	"time"
 )
@@ -88,7 +89,10 @@ func ApiImportArchive(ctx iris.Context) {
 				Status:      0,
 				Logo:        logo,
 			}
+			archive.Id = id
 			err = dao.DB.Create(&archive).Error
+
+			log.Println("导入测试", err, archive)
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -132,7 +136,7 @@ func ApiImportArchive(ctx iris.Context) {
 		}
 	}
 	if logo != "" {
-		req.Images = []string{logo}
+		req.Images = append(req.Images, logo)
 	}
 	if tmpTag != "" {
 		tags := strings.Split(strings.ReplaceAll(tmpTag, "，", ","), ",")
@@ -188,6 +192,10 @@ func ApiImportArchive(ctx iris.Context) {
 
 func ApiImportGetCategories(ctx iris.Context) {
 	moduleId := uint(ctx.PostValueIntDefault("module_id", 0))
+	tmpModuleId := ctx.URLParamIntDefault("module_id", 0)
+	if tmpModuleId > 0 {
+		moduleId = uint(tmpModuleId)
+	}
 
 	module := provider.GetModuleFromCache(moduleId)
 

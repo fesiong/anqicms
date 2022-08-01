@@ -17,6 +17,7 @@ const (
 	CustomFieldTypeCheckbox = "checkbox"
 	CustomFieldTypeSelect   = "select"
 	CustomFieldTypeImage    = "image"
+	CustomFieldTypeFile     = "file"
 )
 
 const (

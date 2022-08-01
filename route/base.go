@@ -50,6 +50,7 @@ func Register(app *iris.Application) {
 
 		// 内容导入API
 		api.Post("/import/archive", controller.VerifyApiToken, controller.ApiImportArchive)
+		api.Get("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		api.Post("/friendlink/create", controller.VerifyApiToken, controller.ApiImportCreateFriendLink)
 		api.Post("/friendlink/delete", controller.VerifyApiToken, controller.ApiImportDeleteFriendLink)

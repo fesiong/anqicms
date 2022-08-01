@@ -110,6 +110,9 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/delete", manageController.ArchiveDelete)
 			archive.Post("/recover", manageController.ArchiveRecover)
 			archive.Post("/release", manageController.ArchiveRelease)
+			archive.Post("/recommend", manageController.UpdateArchiveRecommend)
+			archive.Post("/status", manageController.UpdateArchiveStatus)
+			archive.Post("/category", manageController.UpdateArchiveCategory)
 		}
 
 		statistic := manage.Party("/statistic", middleware.ParseAdminToken)

@@ -123,31 +123,29 @@ func SaveDesignInfo(req request.DesignInfoRequest) error {
 
 // DeleteDesignInfo 删除的模板，会被移动到 cache
 func DeleteDesignInfo(packageName string) error {
-	designList := GetDesignList()
-	var designIndex = -1
-	for i := range designList {
-		if designList[i].Package == packageName {
-			designIndex = i
-			break
-		}
-	}
-	if designIndex == -1 {
+	if packageName == "" {
 		return errors.New("模板不存在")
 	}
-
 	if packageName == "default" {
 		return errors.New("默认模板不能删除")
 	}
 
 	basePath := config.ExecPath + "template/" + packageName
-	cachePath := config.ExecPath + "cache/" + ".history/" + packageName + "/.template"
-	os.RemoveAll(cachePath)
-	os.Rename(basePath, cachePath)
+	basePath = filepath.Clean(basePath)
+	if !strings.HasPrefix(basePath, config.ExecPath + "template/") {
+		return errors.New("模板不存在")
+	}
+
+	cachePath := config.ExecPath + "cache/" + ".history/" + packageName
+	os.MkdirAll(cachePath, os.ModePerm)
+
+	os.RemoveAll(cachePath + "/template")
+	os.Rename(basePath, cachePath + "/template")
 	// 读取静态文件
 	staticPath := config.ExecPath + "public/static/" + packageName
-	cachePath = config.ExecPath + "cache/" + ".history/" + packageName + "/.static"
-	os.RemoveAll(cachePath)
-	os.Rename(staticPath, cachePath)
+	os.RemoveAll(cachePath + "/static")
+	os.MkdirAll(cachePath, os.ModePerm)
+	os.Rename(staticPath, cachePath + "/static")
 
 	return nil
 }
@@ -294,7 +292,7 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 				continue
 			}
 			basePath := filepath.Join(config.ExecPath, "template", packageName)
-			realName = filepath.Clean(basePath + strings.TrimPrefix(f.Name, "template/"))
+			realName = filepath.Clean(basePath + "/" + strings.TrimPrefix(f.Name, "template/"))
 			if !strings.HasPrefix(realName, basePath) {
 				continue
 			}
@@ -302,7 +300,7 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 		// static
 		if strings.HasPrefix(f.Name, "static/") {
 			basePath := filepath.Join(config.ExecPath, "public/static", packageName)
-			realName = filepath.Clean(basePath + strings.TrimPrefix(f.Name, "static/"))
+			realName = filepath.Clean(basePath + "/" + strings.TrimPrefix(f.Name, "static/"))
 			if !strings.HasPrefix(realName, basePath) {
 				continue
 			}

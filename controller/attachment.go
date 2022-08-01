@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"strings"
 )
 
 func AttachmentUpload(ctx iris.Context) {
@@ -23,18 +22,11 @@ func AttachmentUpload(ctx iris.Context) {
 	defer file.Close()
 
 	if attachId > 0 {
-		attachment, err := provider.GetAttachmentById(attachId)
+		_, err := provider.GetAttachmentById(attachId)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"status": config.StatusFailed,
 				"msg":    "需要替换的图片资源不存在",
-			})
-			return
-		}
-		if strings.HasSuffix(attachment.FileLocation, ".mp4") {
-			ctx.JSON(iris.Map{
-				"status": config.StatusFailed,
-				"msg":    "仅支持替换图片资源",
 			})
 			return
 		}
@@ -49,7 +41,7 @@ func AttachmentUpload(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("上传图片：%d => %s", attachment.Id, attachment.FileLocation))
+	provider.AddAdminLog(ctx, fmt.Sprintf("上传资源附件：%d => %s", attachment.Id, attachment.FileLocation))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

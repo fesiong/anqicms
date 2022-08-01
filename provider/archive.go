@@ -118,7 +118,7 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 			dao.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
-				if v.Type == config.CustomFieldTypeImage {
+				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
 					value, ok := result[v.FieldName].(string)
 					if ok && value != "" && !strings.HasPrefix(value, "http") {
 						result[v.FieldName] = config.JsonData.System.BaseUrl + value
@@ -457,6 +457,36 @@ func DeleteArchive(archive *model.Archive) error {
 	DeleteCacheIndex()
 
 	return nil
+}
+
+func UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New("无可操作的文档")
+	}
+	err := dao.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumn("flag", req.Flag).Error
+
+	return err
+}
+
+func UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New("无可操作的文档")
+	}
+	err := dao.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("status", req.Status).Error
+	// 如果选择的有待发布的内容，则将时间更新为当前时间
+	if req.Status == config.ContentStatusOK {
+		dao.DB.Model(&model.Archive{}).Where("`id` IN (?) and `created_time` > ?", req.Ids, time.Now().Unix()).UpdateColumn("created_time", time.Now().Unix())
+	}
+	return err
+}
+
+func UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New("无可操作的文档")
+	}
+	err := dao.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumn("category_id", req.CategoryId).Error
+
+	return err
 }
 
 // DeleteCacheFixedLinks 固定链接

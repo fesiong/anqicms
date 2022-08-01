@@ -48,12 +48,15 @@ func GuestbookForm(ctx iris.Context) {
 		if item.Type == config.CustomFieldTypeCheckbox {
 			tmpVal := ctx.PostValues(item.FieldName + "[]")
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
-		} else if item.Type == config.CustomFieldTypeImage {
+		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
 				attach, err := provider.AttachmentUpload(file, info, 0, 0)
 				if err == nil {
 					val = attach.Logo
+					if attach.Logo == "" {
+						val = attach.FileLocation
+					}
 				}
 			}
 		} else {

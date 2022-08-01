@@ -323,3 +323,87 @@ func ArchiveDelete(ctx iris.Context) {
 		"msg":  "文章已删除",
 	})
 }
+
+func UpdateArchiveRecommend(ctx iris.Context) {
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+
+	err := provider.UpdateArchiveRecommend(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档Flag：%v => %s", req.Ids, req.Flag))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
+func UpdateArchiveStatus(ctx iris.Context) {
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+
+	err := provider.UpdateArchiveStatus(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档状态：%v => %d", req.Ids, req.Status))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
+func UpdateArchiveCategory(ctx iris.Context) {
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+
+	err := provider.UpdateArchiveCategory(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档分类：%v => %d", req.Ids, req.CategoryId))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}

@@ -116,9 +116,16 @@ func UseDesignInfo(ctx iris.Context) {
 }
 
 func DeleteDesignInfo(ctx iris.Context) {
-	packageName := ctx.URLParam("package")
+	var req request.DesignInfoRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
-	err := provider.DeleteDesignInfo(packageName)
+	err := provider.DeleteDesignInfo(req.Package)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -127,7 +134,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", packageName))
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -35,3 +35,11 @@ type ArchiveReplaceRequest struct {
 	Replace        bool                    `json:"replace"`
 	ContentReplace []config.ReplaceKeyword `json:"content_replace"`
 }
+
+type ArchivesUpdateRequest struct {
+	Ids []uint `json:"ids"`
+
+	CategoryId uint   `json:"category_id"`
+	Status     uint   `json:"status"`
+	Flag       string `json:"flag"`
+}
