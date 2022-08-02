@@ -92,7 +92,7 @@ func (a *Archive) GetThumb() string {
 	//取第一张
 	if len(a.Images) > 0 {
 		for i := range a.Images {
-			if !strings.HasPrefix(a.Images[i], "http") {
+			if !strings.HasPrefix(a.Images[i], "http") && !strings.HasPrefix(a.Images[i], "//") {
 				a.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(a.Images[i], "/")
 			}
 		}
@@ -101,7 +101,7 @@ func (a *Archive) GetThumb() string {
 		a.Thumb = paths + "thumb_" + fileName
 	} else if config.JsonData.Content.DefaultThumb != "" {
 		a.Logo = config.JsonData.Content.DefaultThumb
-		if !strings.HasPrefix(a.Logo, "http") {
+		if !strings.HasPrefix(a.Logo, "http") && !strings.HasPrefix(a.Logo, "//") {
 			a.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
 		}
 		a.Thumb = a.Logo

@@ -54,14 +54,14 @@ func (category *Category) GetThumb() string {
 	//取第一张
 	if len(category.Images) > 0 {
 		for i := range category.Images {
-			if !strings.HasPrefix(category.Images[i], "http") {
+			if !strings.HasPrefix(category.Images[i], "http") && !strings.HasPrefix(category.Images[i], "//") {
 				category.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Images[i], "/")
 			}
 		}
 	}
 	if category.Logo != "" {
 		//如果是一个远程地址，则缩略图和原图地址一致
-		if strings.HasPrefix(category.Logo, "http") {
+		if strings.HasPrefix(category.Logo, "http") || strings.HasPrefix(category.Logo, "//") {
 			category.Thumb = category.Logo
 		} else {
 			category.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
@@ -70,7 +70,7 @@ func (category *Category) GetThumb() string {
 		}
 	} else if config.JsonData.Content.DefaultThumb != "" {
 		category.Thumb = config.JsonData.Content.DefaultThumb
-		if !strings.HasPrefix(category.Thumb, "http") {
+		if !strings.HasPrefix(category.Thumb, "http") && !strings.HasPrefix(category.Thumb, "//") {
 			category.Thumb = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
 		}
 	}

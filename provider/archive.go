@@ -120,7 +120,7 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 			for _, v := range module.Fields {
 				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
 					value, ok := result[v.FieldName].(string)
-					if ok && value != "" && !strings.HasPrefix(value, "http") {
+					if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
 						result[v.FieldName] = config.JsonData.PluginStorage.StorageUrl + value
 					}
 				}

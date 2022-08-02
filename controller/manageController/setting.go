@@ -15,7 +15,7 @@ import (
 
 func SettingSystem(ctx iris.Context) {
 	system := config.JsonData.System
-	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") {
+	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") && !strings.HasPrefix(system.SiteLogo, "//") {
 		system.SiteLogo = config.JsonData.PluginStorage.StorageUrl + system.SiteLogo
 	}
 
@@ -135,7 +135,7 @@ func SettingSystemForm(ctx iris.Context) {
 
 func SettingContent(ctx iris.Context) {
 	system := config.JsonData.Content
-	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") {
+	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") && !strings.HasPrefix(system.DefaultThumb, "//") {
 		system.DefaultThumb = config.JsonData.PluginStorage.StorageUrl + system.DefaultThumb
 	}
 
@@ -243,7 +243,7 @@ func SettingIndexForm(ctx iris.Context) {
 
 func SettingContact(ctx iris.Context) {
 	system := config.JsonData.Contact
-	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") {
+	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") && !strings.HasPrefix(system.Qrcode, "//") {
 		system.Qrcode = config.JsonData.PluginStorage.StorageUrl + system.Qrcode
 	}
 
