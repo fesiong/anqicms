@@ -29,6 +29,15 @@ type AttachmentCategory struct {
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 }
 
+func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
+	// 兼容旧数据
+	if strings.HasPrefix(attachment.FileLocation, "20") {
+		attachment.FileLocation = "uploads/" + attachment.FileLocation
+		tx.Model(attachment).UpdateColumn("file_location", attachment.FileLocation)
+	}
+	return nil
+}
+
 func (attachment *Attachment) GetThumb() {
 	// 如果不是图片
 	ext := filepath.Ext(attachment.FileLocation)
@@ -56,8 +65,15 @@ func (attachment *Attachment) GetThumb() {
 }
 
 func (attachment *Attachment) Save(db *gorm.DB) error {
-	if err := db.Save(attachment).Error; err != nil {
-		return err
+	var err error
+	if attachment.Id > 0 {
+		if err = db.Updates(attachment).Error; err != nil {
+			return err
+		}
+	} else {
+		if err = db.Save(attachment).Error; err != nil {
+			return err
+		}
 	}
 
 	// 统计数量

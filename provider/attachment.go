@@ -77,7 +77,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 		// 已存在
 		if attachment.DeletedAt.Valid {
 			//更新
-			err = db.Model(attachment).Update("deleted_at", nil).Error
+			err = db.Unscoped().Model(attachment).Update("deleted_at", nil).Error
 			if err != nil {
 				return nil, err
 			}
@@ -92,7 +92,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	}
 	// 生成文件名
 	tmpName := md5Str[8:24] + fileExt
-	filePath := time.Now().Format("200601/02/")
+	filePath := time.Now().Format("uploads/200601/02/")
 	if attachId > 0 {
 		filePath = filepath.Dir(attachment.FileLocation) + "/"
 		tmpName = filepath.Base(attachment.FileLocation)
@@ -344,7 +344,7 @@ func ThumbRebuild() {
 }
 
 func BuildThumb(attachment *model.Attachment) error {
-	basePath := config.ExecPath + "public/uploads/"
+	basePath := config.ExecPath + "public/"
 	originPath := basePath + attachment.FileLocation
 
 	paths, fileName := filepath.Split(attachment.FileLocation)
@@ -491,14 +491,14 @@ func StartConvertImageToWebp() {
 				continue
 			}
 			result := replaced{
-				From: "/uploads/" + v.FileLocation,
+				From: "/" + v.FileLocation,
 			}
 			// 先转换图片
 			err := convertToWebp(&v)
 			if err == nil {
 				// 接着替换内容
 				// 替换 attachment file_location,上一步已经完成
-				result.To = "/uploads/" + v.FileLocation
+				result.To = "/" + v.FileLocation
 				results = append(results, result)
 			}
 		}
@@ -650,7 +650,7 @@ func StartConvertImageToWebp() {
 }
 
 func convertToWebp(attachment *model.Attachment) error {
-	basePath := config.ExecPath + "public/uploads/"
+	basePath := config.ExecPath + "public/"
 	originPath := basePath + attachment.FileLocation
 
 	// 对原图处理

@@ -8,7 +8,7 @@ import (
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/tencentyun/cos-go-sdk-v5"
-	"io"
+	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"log"
 	"net/http"
@@ -51,8 +51,9 @@ func GetBucket() (bucket *BucketStorage, err error) {
 func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error) {
 	location = strings.TrimLeft(location, "/")
 	if config.JsonData.PluginStorage.KeepLocal || bs.storageType == config.StorageTypeLocal {
+		log.Println("本地存储", location)
 		//将文件写入本地
-		basePath := config.ExecPath + "public/uploads/"
+		basePath := config.ExecPath + "public/"
 		//先判断文件夹是否存在，不存在就先创建
 		_, err := os.Stat(basePath + location)
 		if err != nil && os.IsNotExist(err) {
@@ -61,15 +62,10 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 				return "", err
 			}
 		}
-		originFile, err := os.OpenFile(basePath+location, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+		err = ioutil.WriteFile(basePath+location,buff, os.ModePerm)
 		if err != nil {
+			log.Println(err.Error())
 			//无法创建
-			return "", err
-		}
-		defer originFile.Close()
-
-		_, err = io.Copy(originFile, bytes.NewReader(buff))
-		if err != nil {
 			return "", err
 		}
 	}
