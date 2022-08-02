@@ -161,6 +161,9 @@ func manageRoute(app *iris.Application) {
 			plugin.Get("/rewrite", manageController.PluginRewrite)
 			plugin.Post("/rewrite", manageController.PluginRewriteForm)
 
+			plugin.Get("/storage", manageController.PluginStorageConfig)
+			plugin.Post("/storage", manageController.PluginStorageConfigForm)
+
 			link := plugin.Party("/link")
 			{
 				link.Get("/list", manageController.PluginLinkList)

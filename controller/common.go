@@ -154,6 +154,7 @@ func Common(ctx iris.Context) {
 				urlPath.Scheme = "https"
 			}
 			config.JsonData.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+			config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 		}
 	}
 	//js code

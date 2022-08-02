@@ -88,7 +88,7 @@ func SaveMaterial(req *request.PluginMaterial) (material *model.Material, err er
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)
 					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, config.JsonData.PluginStorage.StorageUrl) {
 							//外链
 							attachment, err := DownloadRemoteImage(src, alt)
 							if err == nil {

@@ -35,3 +35,10 @@ const (
 	UrlTokenTypeFull = 0
 	UrlTokenTypeSort = 1
 )
+
+const (
+	StorageTypeLocal   = "local" // or empty
+	StorageTypeAliyun  = "aliyun"
+	StorageTypeTencent = "tencent"
+	StorageTypeQiniu   = "qiniu"
+)

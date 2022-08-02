@@ -66,6 +66,26 @@ type pluginImportApiConfig struct {
 	Token string `json:"token"`
 }
 
+type pluginStorageConfig struct {
+	StorageUrl  string `json:"storage_url"`
+	StorageType string `json:"storage_type"`
+	KeepLocal   bool   `json:"keep_local"`
+
+	AliyunEndpoint        string `json:"aliyun_endpoint"`
+	AliyunAccessKeyId     string `json:"aliyun_access_key_id"`
+	AliyunAccessKeySecret string `json:"aliyun_access_key_secret"`
+	AliyunBucketName      string `json:"aliyun_bucket_name"`
+
+	TencentSecretId  string `json:"tencent_secret_id"`
+	TencentSecretKey string `json:"tencent_secret_key"`
+	TencentBucketUrl string `json:"tencent_bucket_url"`
+
+	QiniuAccessKey string `json:"qiniu_access_key"`
+	QiniuSecretKey string `json:"qiniu_secret_key"`
+	QiniuBucket    string `json:"qiniu_bucket"`
+	QiniuRegion    string `json:"qiniu_region"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

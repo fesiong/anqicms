@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"net/url"
+	"strings"
 )
 
 func Install(ctx iris.Context) {
@@ -209,7 +210,8 @@ func InstallForm(ctx iris.Context) {
 			req.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
-	config.JsonData.System.BaseUrl = req.BaseUrl
+	config.JsonData.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
+	config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 
 	config.JsonData.Mysql.Database = req.Database
 	config.JsonData.Mysql.User = req.User

@@ -16,7 +16,7 @@ import (
 func SettingSystem(ctx iris.Context) {
 	system := config.JsonData.System
 	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") {
-		system.SiteLogo = config.JsonData.System.BaseUrl + system.SiteLogo
+		system.SiteLogo = config.JsonData.PluginStorage.StorageUrl + system.SiteLogo
 	}
 
 	// 读取language列表
@@ -59,7 +59,7 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
-	req.SiteLogo = strings.TrimPrefix(req.SiteLogo, config.JsonData.System.BaseUrl)
+	req.SiteLogo = strings.TrimPrefix(req.SiteLogo, config.JsonData.PluginStorage.StorageUrl)
 
 	////进行一些限制
 	//if req.TemplateType == config.TemplateTypeSeparate {
@@ -87,7 +87,7 @@ func SettingSystemForm(ctx iris.Context) {
 			req.ExtraFields[i].Name = library.Case2Camel(req.ExtraFields[i].Name)
 		}
 	}
-
+	req.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
 	config.JsonData.System.SiteName = req.SiteName
 	config.JsonData.System.SiteLogo = req.SiteLogo
 	config.JsonData.System.SiteIcp = req.SiteIcp
@@ -97,6 +97,10 @@ func SettingSystemForm(ctx iris.Context) {
 	config.JsonData.System.SiteCloseTips = req.SiteCloseTips
 	//config.JsonData.System.TemplateName = req.TemplateName
 	//config.JsonData.System.TemplateType = req.TemplateType
+	// 如果本来storageUrl = baseUrl
+	if config.JsonData.PluginStorage.StorageUrl == config.JsonData.System.BaseUrl {
+		config.JsonData.PluginStorage.StorageUrl = req.BaseUrl
+	}
 	config.JsonData.System.BaseUrl = req.BaseUrl
 	config.JsonData.System.MobileUrl = req.MobileUrl
 	config.JsonData.System.Language = req.Language
@@ -132,7 +136,7 @@ func SettingSystemForm(ctx iris.Context) {
 func SettingContent(ctx iris.Context) {
 	system := config.JsonData.Content
 	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") {
-		system.DefaultThumb = config.JsonData.System.BaseUrl + system.DefaultThumb
+		system.DefaultThumb = config.JsonData.PluginStorage.StorageUrl + system.DefaultThumb
 	}
 
 	ctx.JSON(iris.Map{
@@ -152,7 +156,7 @@ func SettingContentForm(ctx iris.Context) {
 		return
 	}
 
-	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, config.JsonData.System.BaseUrl)
+	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, config.JsonData.PluginStorage.StorageUrl)
 
 	config.JsonData.Content.RemoteDownload = req.RemoteDownload
 	config.JsonData.Content.FilterOutlink = req.FilterOutlink
@@ -240,7 +244,7 @@ func SettingIndexForm(ctx iris.Context) {
 func SettingContact(ctx iris.Context) {
 	system := config.JsonData.Contact
 	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") {
-		system.Qrcode = config.JsonData.System.BaseUrl + system.Qrcode
+		system.Qrcode = config.JsonData.PluginStorage.StorageUrl + system.Qrcode
 	}
 
 	ctx.JSON(iris.Map{
@@ -260,7 +264,7 @@ func SettingContactForm(ctx iris.Context) {
 		return
 	}
 
-	req.Qrcode = strings.TrimPrefix(req.Qrcode, config.JsonData.System.BaseUrl)
+	req.Qrcode = strings.TrimPrefix(req.Qrcode, config.JsonData.PluginStorage.StorageUrl)
 
 	if req.ExtraFields != nil {
 		for i := range req.ExtraFields {

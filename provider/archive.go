@@ -121,7 +121,7 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
 					value, ok := result[v.FieldName].(string)
 					if ok && value != "" && !strings.HasPrefix(value, "http") {
-						result[v.FieldName] = config.JsonData.System.BaseUrl + value
+						result[v.FieldName] = config.JsonData.PluginStorage.StorageUrl + value
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
@@ -229,7 +229,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
-							extraFields[v.FieldName] = strings.TrimPrefix(value, config.JsonData.System.BaseUrl)
+							extraFields[v.FieldName] = strings.TrimPrefix(value, config.JsonData.PluginStorage.StorageUrl)
 						} else {
 							extraFields[v.FieldName] = extraValue["value"]
 						}
@@ -276,7 +276,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)
 					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, config.JsonData.PluginStorage.StorageUrl) {
 							//外链
 							attachment, err := DownloadRemoteImage(src, alt)
 							if err == nil {
@@ -301,7 +301,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 			}
 		}
 		for i, v := range archive.Images {
-			archive.Images[i] = strings.TrimPrefix(v, config.JsonData.System.BaseUrl)
+			archive.Images[i] = strings.TrimPrefix(v, config.JsonData.PluginStorage.StorageUrl)
 		}
 
 		//过滤外链

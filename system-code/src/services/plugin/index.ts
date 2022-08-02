@@ -12,3 +12,4 @@ export * from './rewrite';
 export * from './robots';
 export * from './sendmail';
 export * from './sitemap';
+export * from './storage';

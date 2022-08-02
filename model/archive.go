@@ -49,7 +49,7 @@ type ArchiveData struct {
 func (a *Archive) BeforeSave(tx *gorm.DB) error {
 	if len(a.Images) > 0 {
 		for i := range a.Images {
-			a.Images[i] = strings.TrimPrefix(a.Images[i], config.JsonData.System.BaseUrl)
+			a.Images[i] = strings.TrimPrefix(a.Images[i], config.JsonData.PluginStorage.StorageUrl)
 		}
 	}
 	return nil
@@ -91,20 +91,19 @@ func (a *Archive) Delete(db *gorm.DB) error {
 func (a *Archive) GetThumb() string {
 	//取第一张
 	if len(a.Images) > 0 {
-		a.Logo = a.Images[0]
-		//如果是一个远程地址，则缩略图和原图地址一致
-		if strings.HasPrefix(a.Logo, "http") {
-			a.Thumb = a.Logo
-		} else {
-			paths, fileName := filepath.Split(a.Logo)
-			a.Thumb = config.JsonData.System.BaseUrl + paths + "thumb_" + fileName
-			a.Logo = config.JsonData.System.BaseUrl + a.Logo
-		}
 		for i := range a.Images {
-			a.Images[i] = config.JsonData.System.BaseUrl + a.Images[i]
+			if !strings.HasPrefix(a.Images[i], "http") {
+				a.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(a.Images[i], "/")
+			}
 		}
+		a.Logo = a.Images[0]
+		paths, fileName := filepath.Split(a.Logo)
+		a.Thumb = paths + "thumb_" + fileName
 	} else if config.JsonData.Content.DefaultThumb != "" {
-		a.Logo = config.JsonData.System.BaseUrl + config.JsonData.Content.DefaultThumb
+		a.Logo = config.JsonData.Content.DefaultThumb
+		if !strings.HasPrefix(a.Logo, "http") {
+			a.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
+		}
 		a.Thumb = a.Logo
 	}
 

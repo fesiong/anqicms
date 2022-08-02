@@ -36,11 +36,11 @@ type Category struct {
 func (category *Category) BeforeSave(tx *gorm.DB) error {
 	if len(category.Images) > 0 {
 		for i := range category.Images {
-			category.Images[i] = strings.TrimPrefix(category.Images[i], config.JsonData.System.BaseUrl)
+			category.Images[i] = strings.TrimPrefix(category.Images[i], config.JsonData.PluginStorage.StorageUrl)
 		}
 	}
 	if category.Logo != "" {
-		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.System.BaseUrl)
+		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.PluginStorage.StorageUrl)
 	}
 	return nil
 }
@@ -54,7 +54,9 @@ func (category *Category) GetThumb() string {
 	//取第一张
 	if len(category.Images) > 0 {
 		for i := range category.Images {
-			category.Images[i] = config.JsonData.System.BaseUrl + category.Images[i]
+			if !strings.HasPrefix(category.Images[i], "http") {
+				category.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Images[i], "/")
+			}
 		}
 	}
 	if category.Logo != "" {
@@ -62,12 +64,15 @@ func (category *Category) GetThumb() string {
 		if strings.HasPrefix(category.Logo, "http") {
 			category.Thumb = category.Logo
 		} else {
+			category.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
 			paths, fileName := filepath.Split(category.Logo)
-			category.Thumb = config.JsonData.System.BaseUrl + paths + "thumb_" + fileName
-			category.Logo = config.JsonData.System.BaseUrl + category.Logo
+			category.Thumb = paths + "thumb_" + fileName
 		}
 	} else if config.JsonData.Content.DefaultThumb != "" {
-		category.Thumb = config.JsonData.System.BaseUrl + config.JsonData.Content.DefaultThumb
+		category.Thumb = config.JsonData.Content.DefaultThumb
+		if !strings.HasPrefix(category.Thumb, "http") {
+			category.Thumb = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
+		}
 	}
 
 	return category.Thumb

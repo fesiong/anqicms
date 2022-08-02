@@ -35,6 +35,7 @@ type configData struct {
 	PluginUploadFiles []PluginUploadFile    `json:"plugin_upload_file"`
 	PluginSendmail    pluginSendmail        `json:"plugin_sendmail"`
 	PluginImportApi   pluginImportApiConfig `json:"plugin_import_api"`
+	PluginStorage     pluginStorageConfig   `json:"plugin_storage"`
 }
 
 func initPath() {
@@ -106,6 +107,14 @@ func initJSON() {
 		JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
 		// 回写
 		_ = WriteConfig()
+	}
+
+	// 配置默认的storageUrl
+	if JsonData.PluginStorage.StorageUrl == "" {
+		JsonData.PluginStorage.StorageUrl = JsonData.System.BaseUrl
+	}
+	if JsonData.PluginStorage.StorageType == "" {
+		JsonData.PluginStorage.StorageType = StorageTypeLocal
 	}
 }
 

@@ -1,7 +1,6 @@
 package model
 
 import (
-	"fmt"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"path/filepath"
@@ -32,13 +31,13 @@ type AttachmentCategory struct {
 
 func (attachment *Attachment) GetThumb() {
 	// 如果不是图片
-	if !strings.HasSuffix(attachment.FileLocation, ".jpg") &&
-		!strings.HasSuffix(attachment.FileLocation, ".jpeg") &&
-		!strings.HasSuffix(attachment.FileLocation, ".gif") &&
-		!strings.HasSuffix(attachment.FileLocation, ".png") &&
-		!strings.HasSuffix(attachment.FileLocation, ".bmp") &&
-		!strings.HasSuffix(attachment.FileLocation, ".webp") &&
-		!strings.HasSuffix(attachment.FileLocation, ".svg") {
+	ext := filepath.Ext(attachment.FileLocation)
+	if ext != ".jpg" &&
+		ext != ".jpeg" &&
+		ext != ".gif" &&
+		ext != ".png" &&
+		ext != ".bmp" &&
+		ext != ".webp" {
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
@@ -46,10 +45,13 @@ func (attachment *Attachment) GetThumb() {
 		attachment.Logo = attachment.FileLocation
 		attachment.Thumb = attachment.FileLocation
 	} else {
-		pfx := fmt.Sprintf("%s/uploads/", config.JsonData.System.BaseUrl)
-		attachment.Logo = pfx + attachment.FileLocation
-		paths, fileName := filepath.Split(attachment.FileLocation)
-		attachment.Thumb = pfx + paths + "thumb_" + fileName
+		// 兼容旧数据
+		if strings.HasPrefix(attachment.FileLocation, "20") {
+			attachment.FileLocation = "uploads/" + attachment.FileLocation
+		}
+		attachment.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + attachment.FileLocation
+		paths, fileName := filepath.Split(attachment.Logo)
+		attachment.Thumb = paths + "thumb_" + fileName
 	}
 }
 

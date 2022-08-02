@@ -2,18 +2,10 @@ package provider
 
 import (
 	"archive/zip"
-	"bytes"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"github.com/chai2010/webp"
-	"image"
-	"image/gif"
-	"image/jpeg"
-	"image/png"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -21,9 +13,9 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"log"
+	"mime/multipart"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -633,10 +625,19 @@ func (t *TransferWebsite) transferStatics() error {
 }
 
 func insertAttachment(realName string) {
-	basePath := config.ExecPath + "public/uploads/"
+	basePath := config.ExecPath + "public/"
 	if !strings.HasPrefix(realName, basePath) {
 		return
 	}
+	fileLocation := strings.TrimPrefix(realName, basePath)
+	var exists model.Attachment
+	// location 存在跳过
+	err := dao.DB.Where("`file_location` = ?", fileLocation).Take(&exists).Error
+	if err == nil {
+		// 已存在，跳过
+		return
+	}
+
 	file, err := os.OpenFile(realName, os.O_RDWR, 0666)
 	if err != nil {
 		log.Println(err)
@@ -649,137 +650,18 @@ func insertAttachment(realName string) {
 		log.Println(err)
 		return
 	}
-	//获取宽高
-	fileSize := info.Size()
-	img, imgType, err := image.Decode(file)
-	if err != nil {
-		if strings.HasSuffix(info.Name(), "webp") {
-			file.Seek(0, 0)
-			img, err = webp.Decode(file)
-			if err != nil {
-				fmt.Println(config.Lang("无法获取图片尺寸"))
-				return
-			}
-			imgType = "webp"
-		} else {
-			//无法获取图片尺寸
-			fmt.Println(config.Lang("无法获取图片尺寸"))
-			return
-		}
-	}
-	imgType = strings.ToLower(imgType)
-	width := img.Bounds().Dx()
-	height := img.Bounds().Dy()
-	if imgType == "jpeg" {
-		imgType = "jpg"
-	}
-	//只允许上传jpg,jpeg,gif,png,webp
-	if imgType != "jpg" && imgType != "jpeg" && imgType != "gif" && imgType != "png" && imgType != "webp" {
-		log.Println("不支持的图片格式")
-		return
-	}
 
-	fileName := strings.TrimSuffix(info.Name(), path.Ext(info.Name()))
-	file.Seek(0, 0)
+	fileHeader := &multipart.FileHeader{
+		Filename: filepath.Base(realName),
+		Header:   nil,
+		Size:     info.Size(),
+	}
+	// 再走一遍上传流程
+	_, err = AttachmentUpload(file, fileHeader, 0, 0)
 	if err != nil {
 		log.Println(err)
 		return
 	}
-	//获取文件的MD5，检查数据库是否已经存在，则采用覆盖方式处理
-	md5hash := md5.New()
-	_, err = io.Copy(md5hash, file)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	md5Str := hex.EncodeToString(md5hash.Sum(nil))
-	file.Seek(0, 0)
-
-	attachment, err := GetAttachmentByMd5(md5Str)
-	if err == nil {
-		// 已存在，跳过
-		return
-	}
-
-	//如果图片宽度大于800，自动压缩到800, gif 不能处理
-	resizeWidth := config.JsonData.Content.ResizeWidth
-	if resizeWidth == 0 {
-		//默认800
-		resizeWidth = 800
-	}
-	quality := config.JsonData.Content.Quality
-	if quality == 0 {
-		// 默认质量是90
-		quality = webp.DefaulQuality
-	}
-	buff := &bytes.Buffer{}
-
-	if config.JsonData.Content.ResizeImage == 1 && width > resizeWidth && imgType != "gif" {
-		img = library.Resize(img, resizeWidth, 0)
-		width = img.Bounds().Dx()
-		height = img.Bounds().Dy()
-	}
-	// 保存裁剪的图片
-	if imgType == "webp" {
-		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
-		log.Println("webp:", quality)
-	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
-	} else if imgType == "png" {
-		_ = png.Encode(buff, img)
-	} else if imgType == "gif" {
-		_ = gif.Encode(buff, img, nil)
-	}
-	fileSize = int64(buff.Len())
-
-	_, err = io.Copy(file, buff)
-	if err != nil {
-		//文件写入失败
-		log.Println(err)
-		return
-	}
-
-	//生成宽度为250的缩略图
-	thumbName := "thumb_" + filepath.Base(realName)
-
-	newImg := library.ThumbnailCrop(config.JsonData.Content.ThumbWidth, config.JsonData.Content.ThumbHeight, img, config.JsonData.Content.ThumbCrop)
-	if imgType == "webp" {
-		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
-	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality})
-	} else if imgType == "png" {
-		_ = png.Encode(buff, newImg)
-	} else if imgType == "gif" {
-		_ = gif.Encode(buff, newImg, nil)
-	}
-
-	thumbFile, err := os.OpenFile(filepath.Dir(realName)+"/"+thumbName, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	defer thumbFile.Close()
-
-	_, err = io.Copy(thumbFile, buff)
-	if err != nil {
-		//文件写入失败
-		return
-	}
-
-	//文件上传完成
-	attachment = &model.Attachment{
-		FileName:     fileName,
-		FileLocation: strings.TrimPrefix(realName, basePath),
-		FileSize:     fileSize,
-		FileMd5:      md5Str,
-		Width:        width,
-		Height:       height,
-		CategoryId:   0,
-		IsImage:      1,
-		Status:       1,
-	}
-
-	err = attachment.Save(dao.DB)
 }
 
 func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*library.RequestData, error) {
