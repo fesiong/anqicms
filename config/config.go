@@ -43,23 +43,13 @@ func initPath() {
 	//root := filepath.Dir(os.Args[0])
 	//ExecPath, _ = filepath.Abs(root)
 	ExecPath, _ = os.Executable()
-	log.Println(ExecPath)
 	baseName := filepath.Base(ExecPath)
 	ExecPath = filepath.Dir(ExecPath)
 	if strings.Contains(baseName, "go_build") || strings.Contains(ExecPath, "go-build") || strings.Contains(baseName, "Test") {
 		ExecPath, _ = os.Getwd()
 	}
-	pathArray := strings.Split(ExecPath, "/")
-	//如果是测试目录，则保留到根目录。这定义根目录为：anqicms
-	if strings.Contains(ExecPath, "\\") {
-		pathArray = strings.Split(ExecPath, "\\")
-	}
-
-	for i, v := range pathArray {
-		if v == "anqicms" {
-			ExecPath = strings.Join(pathArray[:i+1], "/")
-			break
-		}
+	if strings.Contains(baseName, "Test") {
+		ExecPath = filepath.Dir(ExecPath)
 	}
 	length := utf8.RuneCountInString(ExecPath)
 	lastChar := ExecPath[length-1:]
