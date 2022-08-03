@@ -31,6 +31,9 @@ func DownloadClientFile(ctx iris.Context) {
 
 	// 下载指定的文件
 	clientFile := config.ExecPath + "clientFiles/" + req.Provider + "2anqicms.php"
+	if req.Provider == "train" {
+		clientFile = config.ExecPath + "clientFiles/train2anqicms.wpm"
+	}
 	_, err := os.Stat(clientFile)
 	if err != nil {
 		ctx.JSON(iris.Map{

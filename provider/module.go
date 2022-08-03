@@ -2,13 +2,15 @@ package provider
 
 import (
 	"errors"
+	"regexp"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"regexp"
 )
 
 func GetModules() ([]model.Module, error) {
@@ -184,7 +186,7 @@ func GetCacheModules() []model.Module {
 		}
 	}
 
-	dao.DB.Where(model.Module{}).Find(&modules)
+	dao.DB.Where(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules)
 
 	library.MemCache.Set("modules", modules, 0)
 

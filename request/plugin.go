@@ -159,4 +159,8 @@ type PluginStorageConfigRequest struct {
 	QiniuSecretKey string `json:"qiniu_secret_key"`
 	QiniuBucket    string `json:"qiniu_bucket"`
 	QiniuRegion    string `json:"qiniu_region"`
+
+	UpyunBucket   string `json:"upyun_bucket"`
+	UpyunOperator string `json:"upyun_operator"`
+	UpyunPassword string `json:"upyun_password"`
 }

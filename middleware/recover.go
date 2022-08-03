@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"github.com/kataras/iris/v12/context"
+	"kandaoni.com/anqicms/library"
 	"runtime"
 	"strconv"
 )
@@ -30,6 +31,7 @@ func NewRecover() context.Handler {
 				logMessage += fmt.Sprintf("At Request: %s\n", getRequestLogs(ctx))
 				logMessage += fmt.Sprintf("Trace: %s\n", err)
 				logMessage += fmt.Sprintf("\n%s", stacktrace)
+				library.DebugLog("error", logMessage)
 				ctx.Application().Logger().Warn(logMessage)
 				ctx.Values().Set("message", err)
 				ctx.StatusCode(500)

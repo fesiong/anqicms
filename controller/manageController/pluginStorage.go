@@ -47,6 +47,10 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	config.JsonData.PluginStorage.QiniuBucket = req.QiniuBucket
 	config.JsonData.PluginStorage.QiniuRegion = req.QiniuRegion
 
+	config.JsonData.PluginStorage.UpyunBucket = req.UpyunBucket
+	config.JsonData.PluginStorage.UpyunOperator = req.UpyunOperator
+	config.JsonData.PluginStorage.UpyunPassword = req.UpyunPassword
+
 	err := config.WriteConfig()
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -57,6 +61,15 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	}
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新Storage配置"))
+
+	err = provider.Storage.InitBucket()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

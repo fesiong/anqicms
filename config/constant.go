@@ -41,4 +41,5 @@ const (
 	StorageTypeAliyun  = "aliyun"
 	StorageTypeTencent = "tencent"
 	StorageTypeQiniu   = "qiniu"
+	StorageTypeUpyun   = "upyun"
 )
