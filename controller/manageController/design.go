@@ -216,6 +216,8 @@ func UploadDesignFile(ctx iris.Context) {
 		return
 	}
 
+	provider.DeleteCacheIndex()
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":    "上传成功",
@@ -305,6 +307,7 @@ func RestoreDesignFile(ctx iris.Context) {
 
 	fileInfo, _ := provider.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
 
+	provider.DeleteCacheIndex()
 	provider.AddAdminLog(ctx, fmt.Sprintf("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
 
 	ctx.JSON(iris.Map{
@@ -507,6 +510,10 @@ func GetDesignDocs(ctx iris.Context) {
 				{
 					Title: "友情链接标签",
 					Link: "https://www.kandaoni.com/article/97",
+				},
+				{
+					Title: "留言验证码使用标签",
+					Link: "https://www.kandaoni.com/article/139",
 				},
 			},
 		},

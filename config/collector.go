@@ -4,6 +4,7 @@ type CollectorJson struct {
 	AutoCollect        bool             `json:"auto_collect"` // 是否自动采集
 	ErrorTimes         int              `json:"error_times"`  //预留
 	Channels           int              `json:"channels"`     //预留
+	FromWebsite        string           `json:"from_website"`
 	TitleMinLength     int              `json:"title_min_length"`
 	ContentMinLength   int              `json:"content_min_length"`
 	TitleExclude       []string         `json:"title_exclude"`

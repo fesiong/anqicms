@@ -47,6 +47,7 @@ func (attachment *Attachment) GetThumb() {
 		ext != ".png" &&
 		ext != ".bmp" &&
 		ext != ".webp" {
+		attachment.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + attachment.FileLocation
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致

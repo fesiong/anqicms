@@ -378,7 +378,12 @@ func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (int, error) {
 }
 
 func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) ([]*request.Archive, error) {
-	resp, err := library.Request(fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=0",keyword.Title), &library.Options{
+	collectUrl := fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=0",keyword.Title)
+	if config.CollectorConfig.FromWebsite != "" {
+		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=0",keyword.Title, config.CollectorConfig.FromWebsite)
+	}
+
+	resp, err := library.Request(collectUrl, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
 		Header: map[string]string{
