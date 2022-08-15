@@ -116,10 +116,6 @@ func ArchiveDetail(ctx iris.Context) {
 
 	// 读取data
 	archive.ArchiveData, err = provider.GetArchiveDataById(archive.Id)
-	if err == nil {
-		// 重新解析，保证不会被编辑器报错
-		archive.ArchiveData.Content = provider.ParseContent(archive.ArchiveData.Content)
-	}
 	// 读取 extraDat
 	archive.Extra = provider.GetArchiveExtra(archive.ModuleId, archive.Id)
 

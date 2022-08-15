@@ -685,6 +685,8 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*librar
 
 // ParseContent 转换content内容，使它符合编辑器使用。
 func ParseContent(content string) string {
+	// 已更换编辑器，不需要再做处理
+	return content
 	htmlR := strings.NewReader(content)
 	doc, err := goquery.NewDocumentFromReader(htmlR)
 	if err != nil {
