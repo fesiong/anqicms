@@ -60,6 +60,21 @@ func SaveDesignInfo(ctx iris.Context) {
 		return
 	}
 
+	if config.JsonData.System.TemplateName == req.Package {
+		// 更改当前
+		if config.JsonData.System.TemplateType != req.TemplateType {
+			config.JsonData.System.TemplateType = req.TemplateType
+			err = config.WriteConfig()
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  err.Error(),
+				})
+				return
+			}
+		}
+	}
+
 	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板信息：%s", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -89,6 +104,7 @@ func UseDesignInfo(ctx iris.Context) {
 
 	if config.JsonData.System.TemplateName != req.Package {
 		config.JsonData.System.TemplateName = req.Package
+		config.JsonData.System.TemplateType = req.TemplateType
 
 		err = config.WriteConfig()
 		if err != nil {
