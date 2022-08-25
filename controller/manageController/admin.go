@@ -3,6 +3,7 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/dao"
@@ -138,7 +139,7 @@ func AdminLogin(ctx iris.Context) {
 	})
 }
 
-func UserLogout(ctx iris.Context) {
+func AdminLogout(ctx iris.Context) {
 	// todo
 
 	ctx.JSON(iris.Map{
@@ -147,10 +148,44 @@ func UserLogout(ctx iris.Context) {
 	})
 }
 
-func UserDetail(ctx iris.Context) {
-	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+func AdminList(ctx iris.Context) {
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	searchId := uint(ctx.URLParamIntDefault("id", 0))
+	groupId := uint(ctx.URLParamIntDefault("group_id", 0))
+	userName := ctx.URLParam("user_name")
 
-	admin, err := provider.GetAdminById(adminId)
+	ops := func(tx *gorm.DB) *gorm.DB {
+		if searchId > 0 {
+			tx = tx.Where("`id` = ?", searchId)
+		}
+		if groupId > 0 {
+			tx = tx.Where("`group_id` = ?", groupId)
+		}
+		if userName != "" {
+			tx = tx.Where("`user_name` like ?", "%"+userName+"%")
+		}
+		tx = tx.Order("id desc")
+		return tx
+	}
+	users, total := provider.GetAdminList(ops, currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  users,
+	})
+}
+
+func AdminDetail(ctx iris.Context) {
+	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	queryId := uint(ctx.URLParamIntDefault("id", 0))
+	if queryId == 0 {
+		queryId = adminId
+	}
+
+	admin, err := provider.GetAdminInfoById(queryId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -166,8 +201,8 @@ func UserDetail(ctx iris.Context) {
 	})
 }
 
-func UserDetailForm(ctx iris.Context) {
-	var req request.ChangeAdmin
+func AdminDetailForm(ctx iris.Context) {
+	var req request.AdminInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -177,19 +212,45 @@ func UserDetailForm(ctx iris.Context) {
 	}
 
 	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	var admin *model.Admin
+	var err error
 
-	admin, err := provider.GetAdminById(adminId)
-	if err != nil {
+	if req.Id > 0 {
+		admin, err = provider.GetAdminInfoById(req.Id)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "管理员不存在",
+			})
+			return
+		}
+		if admin.Id == adminId {
+			req.Status = 1
+		}
+	} else {
+		admin, err = provider.GetAdminByUserName(req.UserName)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "该账号已存在",
+			})
+			return
+		}
+		admin = &model.Admin{}
+	}
+	if req.UserName == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "用户不存在",
+			"msg":  "账号不能为空",
 		})
 		return
 	}
 
+	admin.GroupId = req.GroupId
+	admin.Status = req.Status
 	admin.UserName = req.UserName
 	if req.Password != "" {
-		if !admin.CheckPassword(req.OldPassword) {
+		if req.OldPassword != "" && !admin.CheckPassword(req.OldPassword) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  "当前密码不正确",
@@ -213,6 +274,41 @@ func UserDetailForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "管理员信息已更新",
+	})
+}
+
+func AdminDetailDelete(ctx iris.Context) {
+	var req request.AdminInfoRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	// 不能删除自己，不能删除id = 1 的管理员
+	if adminId == 1 || req.Id == adminId {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "该管理员不可删除",
+		})
+		return
+	}
+
+	err := provider.DeleteAdminInfo(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除管理员：%d => %s", req.Id, req.UserName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "删除成功",
 	})
 }
 
@@ -253,5 +349,103 @@ func GetAdminLog(ctx iris.Context) {
 		"msg":   "",
 		"total": total,
 		"data":  logs,
+	})
+}
+
+func AdminGroupList(ctx iris.Context) {
+	groups := provider.GetAdminGroups()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": groups,
+	})
+}
+
+func AdminGroupDetail(ctx iris.Context) {
+	id := uint(ctx.URLParamIntDefault("id", 0))
+
+	group, err := provider.GetAdminGroupInfo(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": group,
+	})
+}
+
+func AdminGroupDetailForm(ctx iris.Context) {
+	var req request.GroupRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Title == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "分组名称不能为空",
+		})
+		return
+	}
+
+	err := provider.SaveAdminGroupInfo(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新管理员组信息：%d => %s", req.Id, req.Title))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "保存成功",
+	})
+}
+
+func AdminGroupDelete(ctx iris.Context) {
+	var req request.GroupRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.DeleteAdminGroup(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除管理员组：%d => %s", req.Id, req.Title))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "删除成功",
+	})
+}
+
+// AdminMenus 后台操作按钮
+func AdminMenus(ctx iris.Context) {
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": config.DefaultMenuGroups,
 	})
 }

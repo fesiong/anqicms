@@ -1,17 +1,24 @@
 package request
 
+import "kandaoni.com/anqicms/model"
+
 type AdminInfoRequest struct {
-	Id        int    `json:"id"`
-	UserName  string `json:"user_name"`
-	Password  string `json:"password"`
-	CaptchaId string `json:"captcha_id"`
-	Captcha   string `json:"captcha"`
-	Remember  bool   `json:"remember"`
+	Id          uint   `json:"id"`
+	UserName    string `json:"user_name"`
+	Password    string `json:"password"`
+	CaptchaId   string `json:"captcha_id"`
+	Captcha     string `json:"captcha"`
+	Remember    bool   `json:"remember"`
+	Status      uint   `json:"status"`
+	GroupId     uint   `json:"group_id"`
+	OldPassword string `json:"old_password"`
+	RePassword  string `json:"re_password"`
 }
 
-type ChangeAdmin struct {
-	UserName    string `json:"user_name" validate:"required"`
-	OldPassword string `json:"old_password"`
-	Password    string `json:"password"`
-	RePassword  string `json:"re_password"`
+type GroupRequest struct {
+	Id          uint               `json:"id"`
+	Title       string             `json:"title"`
+	Description string             `json:"description"`
+	Status      int                `json:"status"`
+	Setting     model.GroupSetting `json:"setting"` //配置
 }

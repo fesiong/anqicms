@@ -77,6 +77,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 	//自动迁移数据库
 	err := db.AutoMigrate(
 		&model.Admin{},
+		&model.AdminGroup{},
 		&model.AdminLoginLog{},
 		&model.AdminLog{},
 		&model.Attachment{},
@@ -124,20 +125,20 @@ func AutoMigrateDB(db *gorm.DB) error {
 			TableName: "product",
 			UrlToken:  "product",
 			Title:     "产品中心",
-			Fields:    []config.CustomField{
+			Fields: []config.CustomField{
 				{
-					Name: "价格",
+					Name:      "价格",
 					FieldName: "price",
-					Type: "number",
-					Required: false,
-					IsSystem: true,
+					Type:      "number",
+					Required:  false,
+					IsSystem:  true,
 				},
 				{
-					Name: "库存",
+					Name:      "库存",
 					FieldName: "stock",
-					Type: "number",
-					Required: false,
-					IsSystem: true,
+					Type:      "number",
+					Required:  false,
+					IsSystem:  true,
 				},
 			},
 			IsSystem:  1,
@@ -163,6 +164,15 @@ func AutoMigrateDB(db *gorm.DB) error {
 	navType := model.NavType{Title: "默认导航"}
 	navType.Id = 1
 	db.Model(&model.NavType{}).FirstOrCreate(&navType)
+	// 检查分组
+	adminGroup := model.AdminGroup{
+		Title:       "超级管理员",
+		Description: "超级管理员分组",
+		Status:      1,
+		Setting:     model.GroupSetting{},
+	}
+	adminGroup.Id = 1
+	db.Where("`id` = 1").FirstOrCreate(&adminGroup)
 
 	return nil
 }

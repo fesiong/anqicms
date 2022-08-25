@@ -6,6 +6,7 @@ const (
 	StatusOK         = 0
 	StatusFailed     = -1
 	StatusNoLogin    = 1001
+	StatusNoAccess   = 1002
 	StatusApiSuccess = 200
 )
 

@@ -80,6 +80,59 @@ func ParseAdminUrl(ctx iris.Context) {
 	ctx.Next()
 }
 
+func AdminPermission(ctx iris.Context) {
+	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	if adminId == 1 {
+		ctx.Next()
+		return
+	}
+	uri := strings.TrimPrefix(ctx.RequestPath(false), "/system/api")
+
+	// 检查后台对应的前端
+	var front string
+	for _, g := range config.DefaultMenuGroups {
+		exists := false
+		for _, m := range g.Menus {
+			if m.Backend != "" && strings.HasPrefix(uri, m.Backend) {
+				front = m.Path
+				exists = true
+				break
+			}
+		}
+		if exists {
+			break
+		}
+	}
+
+	// 如果一个链接不在menu里，则不用拦截
+	if front == "" {
+		ctx.Next()
+		return
+	}
+
+	admin, err := provider.GetAdminInfoById(adminId)
+	if err == nil {
+		if admin.GroupId == 1 {
+			ctx.Next()
+			return
+		}
+		if admin.Group != nil {
+			permissions := admin.Group.Setting.Permissions
+			for i := range permissions {
+				if strings.HasPrefix(front, permissions[i]) {
+					ctx.Next()
+					return
+				}
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusNoAccess,
+		"msg":  "权限不足。Permission denied.",
+	})
+}
+
 func FrontendCheck(ctx iris.Context) {
 	uri := ctx.Request().RequestURI
 
@@ -113,7 +166,7 @@ func Check301(ctx iris.Context) {
 			urlParsed, err := url.Parse(val)
 			if err == nil && ctx.Host() == urlParsed.Host && uri == urlParsed.RequestURI() {
 				// 相同，跳过
-				val  = ""
+				val = ""
 			}
 		} else {
 			if val == uri {

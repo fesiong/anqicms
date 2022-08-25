@@ -26,16 +26,23 @@ func manageRoute(app *iris.Application) {
 			version.Post("/upgrade", manageController.VersionUpgrade)
 		}
 
-		user := manage.Party("/admin", middleware.ParseAdminToken)
+		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
-			user.Get("/detail", manageController.UserDetail)
-			user.Post("/detail", manageController.UserDetailForm)
-			user.Post("/logout", manageController.UserLogout)
-			user.Get("/logs/login", manageController.GetAdminLoginLog)
-			user.Get("/logs/action", manageController.GetAdminLog)
+			admin.Get("/menus", manageController.AdminMenus)
+			admin.Get("/list", manageController.AdminList)
+			admin.Get("/detail", manageController.AdminDetail)
+			admin.Post("/detail", manageController.AdminDetailForm)
+			admin.Post("/delete", manageController.AdminDetailDelete)
+			admin.Post("/logout", manageController.AdminLogout)
+			admin.Get("/logs/login", manageController.GetAdminLoginLog)
+			admin.Get("/logs/action", manageController.GetAdminLog)
+			admin.Get("/group/list", manageController.AdminGroupList)
+			admin.Get("/group/detail", manageController.AdminGroupDetail)
+			admin.Post("/group/detail", manageController.AdminGroupDetailForm)
+			admin.Post("/group/delete", manageController.AdminGroupDelete)
 		}
 
-		setting := manage.Party("/setting", middleware.ParseAdminToken)
+		setting := manage.Party("/setting", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			setting.Get("/system", manageController.SettingSystem)
 			setting.Get("/content", manageController.SettingContent)
@@ -61,7 +68,7 @@ func manageRoute(app *iris.Application) {
 
 		}
 
-		collector := manage.Party("/collector", middleware.ParseAdminToken)
+		collector := manage.Party("/collector", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			//采集全局设置
 			collector.Get("/setting", manageController.HandleCollectSetting)
@@ -73,7 +80,7 @@ func manageRoute(app *iris.Application) {
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
 
-		attachment := manage.Party("/attachment", middleware.ParseAdminToken)
+		attachment := manage.Party("/attachment", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			attachment.Get("/list", manageController.AttachmentList)
 			attachment.Post("/upload", manageController.AttachmentUpload)
@@ -85,7 +92,7 @@ func manageRoute(app *iris.Application) {
 			attachment.Post("/category/delete", manageController.AttachmentCategoryDelete)
 		}
 
-		module := manage.Party("/module", middleware.ParseAdminToken)
+		module := manage.Party("/module", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			module.Get("/list", manageController.ModuleList)
 			module.Get("/detail", manageController.ModuleDetail)
@@ -94,7 +101,7 @@ func manageRoute(app *iris.Application) {
 			module.Post("/field/delete", manageController.ModuleFieldsDelete)
 		}
 
-		category := manage.Party("/category", middleware.ParseAdminToken)
+		category := manage.Party("/category", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			category.Get("/list", manageController.CategoryList)
 			category.Get("/detail", manageController.CategoryDetail)
@@ -102,7 +109,7 @@ func manageRoute(app *iris.Application) {
 			category.Post("/delete", manageController.CategoryDelete)
 		}
 
-		archive := manage.Party("/archive", middleware.ParseAdminToken)
+		archive := manage.Party("/archive", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			archive.Get("/list", manageController.ArchiveList)
 			archive.Get("/detail", manageController.ArchiveDetail)
@@ -115,7 +122,7 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 		}
 
-		statistic := manage.Party("/statistic", middleware.ParseAdminToken)
+		statistic := manage.Party("/statistic", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
@@ -126,7 +133,7 @@ func manageRoute(app *iris.Application) {
 			statistic.Get("/dashboard", manageController.GetStatisticsDashboard)
 		}
 
-		design := manage.Party("/design", middleware.ParseAdminToken)
+		design := manage.Party("/design", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			design.Get("/list", manageController.GetDesignList)
 			design.Get("/info", manageController.GetDesignInfo)
@@ -145,7 +152,7 @@ func manageRoute(app *iris.Application) {
 			design.Get("/docs", manageController.GetDesignDocs)
 		}
 
-		plugin := manage.Party("/plugin", middleware.ParseAdminToken)
+		plugin := manage.Party("/plugin", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			plugin.Get("/push", manageController.PluginPush)
 			plugin.Post("/push", manageController.PluginPushForm)
