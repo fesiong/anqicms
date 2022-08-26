@@ -48,6 +48,9 @@
           {% elif item.Type == "image" %}
           <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %}
             placeholder="{{item.Name}}, {{item.Content}}">
+          {% elif item.Type == "file" %}
+          <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %}
+                 placeholder="{{item.Name}}, {{item.Content}}">
           {% endif %}
           {% endfor %}
           {% endguestbook %}
