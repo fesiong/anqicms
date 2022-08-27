@@ -90,7 +90,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	if args["q"] != nil {
-		q = args["q"].String()
+		q = strings.TrimSpace(args["q"].String())
 	}
 
 	// 支持更多的参数搜索，
@@ -108,7 +108,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 		currentPage, _ = strconv.Atoi(urlParams["page"])
-		q = urlParams["q"]
+		q = strings.TrimSpace(urlParams["q"])
 	}
 	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
 	if ok {
