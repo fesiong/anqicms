@@ -177,7 +177,7 @@ func StartDigKeywords(focus bool) {
 		keyword.HasDig = 1
 		dao.DB.Model(keyword).UpdateColumn("has_dig", keyword.HasDig)
 		//不能太快，每次休息随机1-5秒钟
-		time.Sleep(time.Duration(1 + rand.Intn(5)) * time.Second)
+		time.Sleep(time.Duration(1+rand.Intn(5)) * time.Second)
 	}
 	//重新计数
 	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
@@ -189,7 +189,7 @@ type BaiduSuggest struct {
 
 type BaiduSuggestItem struct {
 	Type string `json:"type"`
-	Q string `json:"q"`
+	Q    string `json:"q"`
 }
 
 func collectSuggestBaiduWord(existsWords *sync.Map, keyword *model.Keyword) error {
@@ -215,16 +215,20 @@ func collectSuggestBaiduWord(existsWords *sync.Map, keyword *model.Keyword) erro
 	if err != nil {
 		return err
 	}
-
+	rootWords := GetRootWords()
 	for _, sug := range suggest.G {
+		// 判断是否包含核心词
+		if !ContainRootWords(rootWords, sug.Q) {
+			continue
+		}
 		if _, ok := existsWords.Load(sug.Q); ok {
 			continue
 		}
-		existsWords.Store(sug.Q, keyword.Level + 1)
+		existsWords.Store(sug.Q, keyword.Level+1)
 		word := &model.Keyword{
-			Title:   sug.Q,
+			Title:      sug.Q,
 			CategoryId: keyword.CategoryId,
-			Level:  keyword.Level + 1,
+			Level:      keyword.Level + 1,
 		}
 		dao.DB.Model(&model.Keyword{}).Where("title = ?", sug.Q).FirstOrCreate(&word)
 	}
@@ -248,7 +252,7 @@ func getBetweenSeconds() time.Duration {
 	}
 	seconds := hour * 3600
 
-	between := seconds / limit * 2 - 1
+	between := seconds/limit*2 - 1
 	if config.CollectorConfig.AutoPseudo {
 		between -= 1
 	}
@@ -300,11 +304,15 @@ func CollectArticles() {
 		if len(keywords) == 0 {
 			break
 		}
-		lastId = keywords[len(keywords) - 1].Id
+		lastId = keywords[len(keywords)-1].Id
 		for i := 0; i < len(keywords); i++ {
 			keyword := keywords[i]
 			total, err := CollectArticlesByKeyword(*keyword, false)
 			log.Printf("关键词：%s 采集了 %d 篇文章", keyword.Title, total)
+			// 达到数量了，退出
+			if GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
+				return
+			}
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
 				break
@@ -314,60 +322,10 @@ func CollectArticles() {
 }
 
 func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (int, error) {
-	var archives []*request.Archive
-	var err error
-	archives, err = CollectArticleFromBaidu(&keyword, focus)
+	total, err := CollectArticleFromBaidu(&keyword, focus)
 
 	if err != nil {
-		return 0, err
-	}
-
-	autoPseudo := false
-	if config.CollectorConfig.AutoPseudo {
-		autoPseudo = true
-	}
-
-	var total int
-	for _, archive := range archives {
-		//原始标题
-		archive.OriginTitle = archive.Title
-		if checkArticleExists(archive.OriginUrl, archive.OriginTitle) {
-			continue
-		}
-		archive.KeywordId = keyword.Id
-		archive.CategoryId = keyword.CategoryId
-		if archive.CategoryId == 0 && config.CollectorConfig.CategoryId > 0 {
-			archive.CategoryId = config.CollectorConfig.CategoryId
-		}
-		// 必须有一个分类，如果都没有，则获取第一个
-		if archive.CategoryId == 0 {
-			var category model.Category
-			dao.DB.Where("module_id = 1").Take(&category)
-			archive.CategoryId = category.Id
-		}
-		// 如果不是正常发布，则存到草稿
-		if config.CollectorConfig.SaveType == 0 {
-			archive.Draft = true
-		}
-		modelArchive, err := SaveArchive(archive)
-		if err != nil {
-			log.Println("保存文章出错：", archive.Title, err.Error())
-			return total, err
-		}
-		total++
-		//如果自动伪原创
-		if autoPseudo {
-			archiveData, err := GetArchiveDataById(modelArchive.Id)
-			if err == nil {
-				go PseudoOriginalArticle(archiveData)
-			}
-		}
-		//文章计数
-		UpdateTodayArticleCount(1)
-		if !focus && GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
-			//当天的采集任务已完成
-			break
-		}
+		return total, err
 	}
 
 	keyword.ArticleCount = GetArticleTotalByKeywordId(keyword.Id)
@@ -377,10 +335,58 @@ func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (int, error) {
 	return total, nil
 }
 
-func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) ([]*request.Archive, error) {
-	collectUrl := fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=0",keyword.Title)
+func SaveCollectArticle(archive *request.Archive, keyword *model.Keyword) error {
+	autoPseudo := false
+	if config.CollectorConfig.AutoPseudo {
+		autoPseudo = true
+	}
+
+	//原始标题
+	archive.OriginTitle = archive.Title
+
+	if checkArticleExists(archive.OriginUrl, archive.OriginTitle) {
+		log.Println("已存在于数据库", archive.OriginTitle)
+		return errors.New("已存在于数据库")
+	}
+
+	archive.KeywordId = keyword.Id
+	archive.CategoryId = keyword.CategoryId
+	if archive.CategoryId == 0 && config.CollectorConfig.CategoryId > 0 {
+		archive.CategoryId = config.CollectorConfig.CategoryId
+	}
+	// 必须有一个分类，如果都没有，则获取第一个
+	if archive.CategoryId == 0 {
+		var category model.Category
+		dao.DB.Where("module_id = 1").Take(&category)
+		archive.CategoryId = category.Id
+	}
+	// 如果不是正常发布，则存到草稿
+	if config.CollectorConfig.SaveType == 0 {
+		archive.Draft = true
+	}
+	modelArchive, err := SaveArchive(archive)
+	if err != nil {
+		log.Println("保存文章出错：", archive.Title, err.Error())
+		return err
+	}
+
+	//如果自动伪原创
+	if autoPseudo {
+		archiveData, err := GetArchiveDataById(modelArchive.Id)
+		if err == nil {
+			go PseudoOriginalArticle(archiveData)
+		}
+	}
+	//文章计数
+	UpdateTodayArticleCount(1)
+
+	return nil
+}
+
+func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
+	collectUrl := fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=10", keyword.Title)
 	if config.CollectorConfig.FromWebsite != "" {
-		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=0",keyword.Title, config.CollectorConfig.FromWebsite)
+		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=10", keyword.Title, config.CollectorConfig.FromWebsite)
 	}
 
 	resp, err := library.Request(collectUrl, &library.Options{
@@ -393,10 +399,10 @@ func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) ([]*request.Arc
 		},
 	})
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
 
-	var archives []*request.Archive
+	var total int
 	links := ParseBaiduJson(resp.Body)
 	for _, link := range links {
 		//需要过滤可能不是内容的链接，/ 结尾的全部抛弃
@@ -420,18 +426,26 @@ func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) ([]*request.Arc
 			continue
 		}
 
+		//预判标题是否相关
+		if !ContainKeywords(link.Name, keyword.Title) {
+			continue
+		}
+
 		archive, err := CollectSingleArticle(link, keyword)
 		if err == nil {
-			archives = append(archives, archive)
+			err = SaveCollectArticle(archive, keyword)
 
-			if !focus {
-				//根据设置的时间，随机休息秒数
-				time.Sleep(getBetweenSeconds())
+			if err == nil {
+				total++
+				if !focus {
+					//根据设置的时间，随机休息秒数
+					time.Sleep(getBetweenSeconds())
+				}
 			}
 		}
 	}
 
-	return archives, nil
+	return total, nil
 }
 
 func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*request.Archive, error) {
@@ -440,7 +454,7 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 		Timeout:  5,
 		IsMobile: false,
 		Header: map[string]string{
-			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s",keyword.Title),
+			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s", keyword.Title),
 		},
 	})
 	if err != nil {
@@ -448,7 +462,7 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 	}
 
 	archive := &request.Archive{
-		OriginUrl:  link.Url,
+		OriginUrl:   link.Url,
 		ContentText: resp.Body,
 	}
 	_ = ParseArticleDetail(archive)
@@ -542,7 +556,6 @@ func ParseArticleDetail(archive *request.Archive) error {
 
 	return nil
 }
-
 
 func ParseBaikeDetail(archive *request.Archive, doc *goquery.Document) {
 	//获取标题
@@ -826,7 +839,7 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 	clonedItem.Children().Each(func(i int, item *goquery.Selection) {
 		// 如果是隐藏的，则删除
 		style, exists := item.Attr("style")
-		if exists && strings.Contains(strings.ReplaceAll(strings.ToLower(style), " ",""), "display:none") {
+		if exists && strings.Contains(strings.ReplaceAll(strings.ToLower(style), " ", ""), "display:none") {
 			item.Remove()
 			return
 		}
@@ -853,7 +866,7 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			if src == "" {
 				item.Remove()
 			} else {
-				item.ReplaceWithHtml("<p><img src=\""+src+"\" alt=\""+alt+"\"/></p>")
+				item.ReplaceWithHtml("<p><img src=\"" + src + "\" alt=\"" + alt + "\"/></p>")
 			}
 			return
 		}
@@ -867,7 +880,7 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 		}
 		if item.Find("code").Length() > 0 {
 			tmp := item.Find("code").Text()
-			item.ReplaceWithHtml("<pre><code>"+tmp+"</code></pre>")
+			item.ReplaceWithHtml("<pre><code>" + tmp + "</code></pre>")
 			return
 		}
 		if item.Find("img").Length() > 0 {
@@ -899,10 +912,10 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 		} else if item.Is("ul") || item.Is("ol") {
 			if item.Find("li").Length() == 0 {
 				tmp, _ := item.Html()
-				item.WrapInnerHtml("<li>"+tmp+"</li>")
+				item.WrapInnerHtml("<li>" + tmp + "</li>")
 			}
 		} else if !item.Is("table") {
-			item.ReplaceWithHtml("<p>"+strings.ReplaceAll(item.Text(), "\n", " ")+"</p>")
+			item.ReplaceWithHtml("<p>" + strings.ReplaceAll(item.Text(), "\n", " ") + "</p>")
 		}
 	})
 
@@ -1042,7 +1055,7 @@ func ReplaceContentFromConfig(content string) string {
 	for _, v := range config.CollectorConfig.ContentReplace {
 		// 增加支持正则表达式替换
 		if strings.HasPrefix(v.From, "{") && strings.HasSuffix(v.From, "}") && len(v.From) > 2 {
-			newWord := v.From[1:len(v.From)-1]
+			newWord := v.From[1 : len(v.From)-1]
 			// 支持特定规则：邮箱地址，手机号，电话号码，网址、微信号，QQ号，
 			if newWord == "邮箱地址" {
 				re, err = regexp.Compile(`\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*`)
@@ -1169,7 +1182,7 @@ func CheckContentIsEnglish(content string) bool {
 		}
 	}
 
-	if float64(enCount) > float64(len(content)) * 0.95 {
+	if float64(enCount) > float64(len(content))*0.95 {
 		return true
 	}
 
@@ -1271,18 +1284,19 @@ func PseudoArticle(content string, isEnglish bool) string {
 	}
 	//第二次转换
 	translateFunc = TranslateSources.getSource()
-	to = archiveLang[(langIndex + 1)%2]
+	to = archiveLang[(langIndex+1)%2]
 	content = translateFunc(content, to)
 	if content == "" {
 		//进行一次尝试
 		translateFunc = TranslateSources.getSource()
-		to = archiveLang[(langIndex + 1)%2]
+		to = archiveLang[(langIndex+1)%2]
 		content = translateFunc(content, to)
 	}
 	return content
 }
 
 var cachedTodayArticleCount response.CacheArticleCount
+
 func GetTodayArticleCount() int64 {
 	today := now.BeginningOfDay()
 	if cachedTodayArticleCount.Day == today.Day() {
@@ -1293,7 +1307,7 @@ func GetTodayArticleCount() int64 {
 	cachedTodayArticleCount.Count = 0
 
 	todayUnix := today.Unix()
-	dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", todayUnix, todayUnix + 86400).Count(&cachedTodayArticleCount.Count)
+	dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", todayUnix, todayUnix+86400).Count(&cachedTodayArticleCount.Count)
 
 	return cachedTodayArticleCount.Count
 }
@@ -1317,6 +1331,53 @@ func checkArticleExists(originUrl, originTitle string) bool {
 	}
 	dao.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
 	if total > 0 {
+		return true
+	}
+
+	return false
+}
+
+func GetRootWords() [][]string {
+	var rootKeywords []string
+	dao.DB.Model(&model.Keyword{}).Where("`level` = 0").Limit(1000).Pluck("title", &rootKeywords)
+
+	var result = make([][]string, 0, len(rootKeywords))
+	for i := range rootKeywords {
+		result = append(result, library.WordSplit(strings.ToLower(rootKeywords[i]), false))
+	}
+
+	return result
+}
+
+func ContainRootWords(rootWords [][]string, word string) bool {
+	word = strings.ToLower(word)
+	for i := range rootWords {
+		match := true
+		for _, w := range rootWords[i] {
+			if !strings.Contains(word, w) {
+				match = false
+				break
+			}
+		}
+		if match {
+			return true
+		}
+	}
+
+	return false
+}
+
+func ContainKeywords(title, keyword string) bool {
+	words := library.WordSplit(strings.ToLower(keyword), false)
+
+	match := true
+	for _, w := range words {
+		if !strings.Contains(title, w) {
+			match = false
+			break
+		}
+	}
+	if match {
 		return true
 	}
 

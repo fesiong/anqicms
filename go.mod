@@ -9,6 +9,7 @@ require (
 	github.com/chromedp/chromedp v0.7.6
 	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/disintegration/imaging v1.6.2
+	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
 	github.com/iris-contrib/pongo2 v0.0.1
 	github.com/jinzhu/now v1.1.4
 	github.com/kataras/iris/v12 v12.1.8
@@ -34,6 +35,7 @@ require (
 	github.com/CloudyKit/fastprinter v0.0.0-20200109182630-33d98a066a53 // indirect
 	github.com/CloudyKit/jet/v3 v3.0.0 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20181106222321-ec9c9a553398 // indirect
+	github.com/adamzy/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
 	github.com/ajg/form v1.5.1 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/aymerick/raymond v2.0.3-0.20180322193309-b565731e1464+incompatible // indirect

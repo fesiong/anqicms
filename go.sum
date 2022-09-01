@@ -12,6 +12,9 @@ github.com/PuerkitoBio/goquery v1.8.0/go.mod h1:ypIiRMtY7COPGk+I/YbZLbxsxn9g5ejn
 github.com/QcloudApi/qcloud_sign_golang v0.0.0-20141224014652-e4130a326409/go.mod h1:1pk82RBxDY/JZnPQrtqHlUFfCctgdorsd9M06fMynOM=
 github.com/Shopify/goreferrer v0.0.0-20181106222321-ec9c9a553398 h1:WDC6ySpJzbxGWFh4aMxFFC28wwGp5pEuoTtvA4q/qQ4=
 github.com/Shopify/goreferrer v0.0.0-20181106222321-ec9c9a553398/go.mod h1:a1uqRtAwp2Xwc6WNPJEufxJ7fx3npB4UV/JOLmbu5I0=
+github.com/adamzy/cedar-go v0.0.0-20170805034717-80a9c64b256d h1:ir/IFJU5xbja5UaBEQLjcvn7aAU01nqU/NUyOBEU+ew=
+github.com/adamzy/cedar-go v0.0.0-20170805034717-80a9c64b256d/go.mod h1:PRWNwWq0yifz6XDPZu48aSld8BWwBfr2JKB2bGWiEd4=
+github.com/adamzy/sego v0.0.0-20151004184924-5eab9a44f8e8/go.mod h1:KQxo+Xesl2wLJ3yJcX443KaoWzXpbPzU1GNRyE8kNEY=
 github.com/ajg/form v1.5.1 h1:t9c7v8JUKu/XxOGBU0yjNpaMloxGEJhUkqFRq0ibGeU=
 github.com/ajg/form v1.5.1/go.mod h1:uL1WgH+h2mgNtvBq0339dVnzXdBETtL2LeUXaIv25UY=
 github.com/aliyun/aliyun-oss-go-sdk v2.2.4+incompatible h1:cD1bK/FmYTpL+r5i9lQ9EU6ScAjA173EVsii7gAc6SQ=
@@ -99,6 +102,8 @@ github.com/gorilla/websocket v1.4.1 h1:q7AeDBpnBk8AogcD4DSag/Ukw/KV+YhzLj2bP5HvK
 github.com/gorilla/websocket v1.4.1/go.mod h1:YR8l580nyteQvAITg2hZ9XVh4b55+EU/adAjf1fMHhE=
 github.com/hashicorp/go-version v1.2.0/go.mod h1:fltr4n8CU8Ke44wwGCBoEymUuxUHl09ZGVZPK5anwXA=
 github.com/hashicorp/hcl v1.0.0/go.mod h1:E5yfLk+7swimpb2L/Alb/PJmXilQ/rhwaUYs4T20WEQ=
+github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76 h1:qNQ2+1IQT9Mor/vfEHePOQSbiapLoNI7sQmpxM7l1Ew=
+github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76/go.mod h1:Fymg8+khR/cKSuIwqRxy/jmZg7PIPLk7CauXzrbcMUM=
 github.com/imkira/go-interpol v1.1.0 h1:KIiKr0VSG2CUW1hl1jpiyuzuJeKUUpC8iM1AIE7N1Vk=
 github.com/imkira/go-interpol v1.1.0/go.mod h1:z0h2/2T3XF8kyEPpRgJ3kmNv+C43p+I/CoI+jC3w2iA=
 github.com/inconshreveable/mousetrap v1.0.0/go.mod h1:PxqpIevigyE2G7u3NXJIT2ANytuPF1OarO4DADm73n8=
@@ -111,6 +116,8 @@ github.com/iris-contrib/pongo2 v0.0.1 h1:zGP7pW51oi5eQZMIlGA3I+FHY9/HOQWDB+572yi
 github.com/iris-contrib/pongo2 v0.0.1/go.mod h1:Ssh+00+3GAZqSQb30AvBRNxBx7rf0GqwkjqxNd0u65g=
 github.com/iris-contrib/schema v0.0.1 h1:10g/WnoRR+U+XXHWKBHeNy/+tZmM2kcAVGLOsz+yaDA=
 github.com/iris-contrib/schema v0.0.1/go.mod h1:urYA3uvUNG1TIIjOSCzHr9/LmbQo8LrOcOqfqxa4hXw=
+github.com/issue9/assert v1.4.1 h1:gUtOpMTeaE4JTe9kACma5foOHBvVt1p5XTFrULDwdXI=
+github.com/issue9/assert v1.4.1/go.mod h1:Yktk83hAVl1SPSYtd9kjhBizuiBIqUQyj+D5SE2yjVY=
 github.com/jinzhu/inflection v1.0.0 h1:K317FqzuhWc8YvSVlFMCCUb36O/S9MCKRDI7QkRKD/E=
 github.com/jinzhu/inflection v1.0.0/go.mod h1:h+uFLlag+Qp1Va5pdKtLDYj+kHp5pxUVkryuEj+Srlc=
 github.com/jinzhu/now v1.1.3/go.mod h1:d3SSVoowX0Lcu0IBviAWJpolVfI5UJVZZ7cO71lE/z8=
