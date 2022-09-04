@@ -360,9 +360,12 @@ func SaveCollectArticle(archive *request.Archive, keyword *model.Keyword) error 
 		dao.DB.Where("module_id = 1").Take(&category)
 		archive.CategoryId = category.Id
 	}
+	log.Println("draft:", config.CollectorConfig.SaveType)
 	// 如果不是正常发布，则存到草稿
 	if config.CollectorConfig.SaveType == 0 {
 		archive.Draft = true
+	} else {
+		archive.Draft = false
 	}
 	modelArchive, err := SaveArchive(archive)
 	if err != nil {

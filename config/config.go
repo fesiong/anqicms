@@ -193,6 +193,10 @@ func LoadCollectorConfig() {
 	CollectorConfig.CategoryId = collector.CategoryId
 	CollectorConfig.StartHour = collector.StartHour
 	CollectorConfig.EndHour = collector.EndHour
+	CollectorConfig.FromWebsite = collector.FromWebsite
+	CollectorConfig.AutoDigKeyword = collector.AutoDigKeyword
+	CollectorConfig.SaveType = collector.SaveType
+	CollectorConfig.SaveType = collector.SaveType
 
 	if collector.DailyLimit > 0 {
 		CollectorConfig.DailyLimit = collector.DailyLimit
