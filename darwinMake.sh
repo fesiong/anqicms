@@ -15,4 +15,5 @@ cp -r ./stop.sh ./release/darwin/
 cp -r ./License ./release/darwin/
 cp -r ./clientFiles ./release/darwin/
 cp -r ./README.md ./release/darwin/
+cp -r ./dictionary.txt ./release/darwin/
 GOOS=darwin GOARCH=amd64 go build -ldflags '-w -s' -o ./release/darwin/anqicms kandaoni.com/anqicms/main

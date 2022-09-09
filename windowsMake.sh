@@ -14,4 +14,5 @@ cp -r ./stop.bat ./release/windows/
 cp -r ./License ./release/windows/
 cp -r ./clientFiles ./release/windows/
 cp -r ./README.md ./release/windows/
+cp -r ./dictionary.txt ./release/windows/
 GOOS=windows GOARCH=amd64 go build -ldflags '-w -s -H=windowsgui' -o ./release/windows/anqicms.exe kandaoni.com/anqicms/main

@@ -18,6 +18,7 @@ build: clean
 	cp -r ./License ./release/linux/
 	cp -r ./clientFiles ./release/linux/
 	cp -r ./README.md ./release/linux/
+	cp -r ./dictionary.txt ./release/linux/
 	dos2unix ./release/linux/start.sh
 	dos2unix ./release/linux/stop.sh
 	GOOS=linux GOARCH=amd64 go build -ldflags '-w -s' -o ./release/linux/anqicms kandaoni.com/anqicms/main
