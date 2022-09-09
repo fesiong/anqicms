@@ -396,15 +396,15 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "一些基本约定",
-					Link: "https://www.kandaoni.com/article/116",
+					Link: "https://www.anqicms.com/help-design/116.html",
 				},
 				{
 					Title: "目录和模板",
-					Link: "https://www.kandaoni.com/article/117",
+					Link: "https://www.anqicms.com/help-design/117.html",
 				},
 				{
 					Title: "标签和使用方法",
-					Link: "https://www.kandaoni.com/article/118",
+					Link: "https://www.anqicms.com/help-design/118.html",
 				},
 			},
 		},
@@ -413,27 +413,27 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "系统设置标签",
-					Link: "https://www.kandaoni.com/article/73",
+					Link: "https://www.anqicms.com/manual-normal/73.html",
 				},
 				{
 					Title: "联系方式标签",
-					Link: "https://www.kandaoni.com/article/74",
+					Link: "https://www.anqicms.com/manual-normal/74.html",
 				},
 				{
 					Title: "万能TDK标签",
-					Link: "https://www.kandaoni.com/article/75",
+					Link: "https://www.anqicms.com/manual-normal/75.html",
 				},
 				{
 					Title: "导航列表标签",
-					Link: "https://www.kandaoni.com/article/76",
+					Link: "https://www.anqicms.com/manual-normal/76.html",
 				},
 				{
 					Title: "面包屑导航标签",
-					Link: "https://www.kandaoni.com/article/87",
+					Link: "https://www.anqicms.com/manual-normal/87.html",
 				},
 				{
 					Title: "统计代码标签",
-					Link: "https://www.kandaoni.com/article/91",
+					Link: "https://www.anqicms.com/manual-normal/91.html",
 				},
 			},
 		},
@@ -442,19 +442,19 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "分类列表标签",
-					Link: "https://www.kandaoni.com/article/77",
+					Link: "https://www.anqicms.com/manual-category/77.html",
 				},
 				{
 					Title: "分类详情标签",
-					Link: "https://www.kandaoni.com/article/78",
+					Link: "https://www.anqicms.com/manual-category/78.html",
 				},
 				{
 					Title: "单页列表标签",
-					Link: "https://www.kandaoni.com/article/83",
+					Link: "https://www.anqicms.com/manual-category/83.html",
 				},
 				{
 					Title: "单页详情标签",
-					Link: "https://www.kandaoni.com/article/84",
+					Link: "https://www.anqicms.com/manual-category/84.html",
 				},
 			},
 		},
@@ -463,31 +463,31 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "文档列表标签",
-					Link: "https://www.kandaoni.com/article/79",
+					Link: "https://www.anqicms.com/manual-archive/79.html",
 				},
 				{
 					Title: "文档详情标签",
-					Link: "https://www.kandaoni.com/article/80",
+					Link: "https://www.anqicms.com/manual-archive/80.html",
 				},
 				{
 					Title: "上一篇文档标签",
-					Link: "https://www.kandaoni.com/article/88",
+					Link: "https://www.anqicms.com/manual-archive/88.html",
 				},
 				{
 					Title: "下一篇文档标签",
-					Link: "https://www.kandaoni.com/article/89",
+					Link: "https://www.anqicms.com/manual-archive/89.html",
 				},
 				{
 					Title: "相关文档标签",
-					Link: "https://www.kandaoni.com/article/92",
+					Link: "https://www.anqicms.com/manual-archive/92.html",
 				},
 				{
 					Title: "文档参数标签",
-					Link: "https://www.kandaoni.com/article/95",
+					Link: "https://www.anqicms.com/manual-archive/95.html",
 				},
 				{
 					Title: "文档参数筛选标签",
-					Link: "https://www.kandaoni.com/article/96",
+					Link: "https://www.anqicms.com/manual-archive/96.html",
 				},
 			},
 		},
@@ -496,15 +496,15 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "文档Tag列表标签",
-					Link: "https://www.kandaoni.com/article/81",
+					Link: "https://www.anqicms.com/manual-tag/81.html",
 				},
 				{
 					Title: "Tag文档列表标签",
-					Link: "https://www.kandaoni.com/article/82",
+					Link: "https://www.anqicms.com/manual-tag/82.html",
 				},
 				{
 					Title: "Tag详情标签",
-					Link: "https://www.kandaoni.com/article/90",
+					Link: "https://www.anqicms.com/manual-tag/90.html",
 				},
 			},
 		},
@@ -513,23 +513,23 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "评论标列表签",
-					Link: "https://www.kandaoni.com/article/85",
+					Link: "https://www.anqicms.com/manual-other/85.html",
 				},
 				{
 					Title: "留言表单标签",
-					Link: "https://www.kandaoni.com/article/86",
+					Link: "https://www.anqicms.com/manual-other/86.html",
 				},
 				{
 					Title: "分页标签",
-					Link: "https://www.kandaoni.com/article/94",
+					Link: "https://www.anqicms.com/manual-other/94.html",
 				},
 				{
 					Title: "友情链接标签",
-					Link: "https://www.kandaoni.com/article/97",
+					Link: "https://www.anqicms.com/manual-other/97.html",
 				},
 				{
 					Title: "留言验证码使用标签",
-					Link: "https://www.kandaoni.com/article/139",
+					Link: "https://www.anqicms.com/manual-other/139.html",
 				},
 			},
 		},
@@ -538,35 +538,35 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "其他辅助标签",
-					Link: "https://www.kandaoni.com/article/93",
+					Link: "https://www.anqicms.com/manual-common/93.html",
 				},
 				{
 					Title: "更多过滤器",
-					Link: "https://www.kandaoni.com/article/98",
+					Link: "https://www.anqicms.com/manual-common/98.html",
 				},
 				{
 					Title: "定义变量赋值标签",
-					Link: "https://www.kandaoni.com/article/99",
+					Link: "https://www.anqicms.com/manual-common/99.html",
 				},
 				{
 					Title: "格式化时间戳标签",
-					Link: "https://www.kandaoni.com/article/100",
+					Link: "https://www.anqicms.com/manual-common/100.html",
 				},
 				{
 					Title: "for循环遍历标签",
-					Link: "https://www.kandaoni.com/article/101",
+					Link: "https://www.anqicms.com/manual-common/101.html",
 				},
 				{
 					Title: "移除逻辑标签占用行",
-					Link: "https://www.kandaoni.com/article/102",
+					Link: "https://www.anqicms.com/manual-common/102.html",
 				},
 				{
 					Title: "算术运算标签",
-					Link: "https://www.kandaoni.com/article/103",
+					Link: "https://www.anqicms.com/manual-common/103.html",
 				},
 				{
 					Title: "if逻辑判断标签",
-					Link: "https://www.kandaoni.com/article/104",
+					Link: "https://www.anqicms.com/manual-common/104.html",
 				},
 			},
 		},

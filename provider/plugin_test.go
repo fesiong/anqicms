@@ -6,7 +6,7 @@ import (
 )
 
 func TestPushBing(t *testing.T) {
-	urls := []string{"https://www.kandaoni.com/article/132"}
+	urls := []string{"https://www.anqicms.com/help-basic/112.html"}
 
 	err := PushBing(urls)
 	log.Println(err)

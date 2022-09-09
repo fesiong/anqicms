@@ -68,7 +68,7 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 - [x] 增加自定义文章、产品字段功能
 - [x] 增加移动端模板功能
 - [x] 增加计划任务功能
-- [x] 增加模板标签功能[查看标签使用手册](https://www.kandaoni.com/category/10)
+- [x] 增加模板标签功能[查看标签使用手册](https://www.anqicms.com/manual)
 - [x] 增加自定义分类模板、文章模板、产品模板、页面模板功能
 - [x] 增加内容采集功能
 - [x] 增加内容伪原创功能 ？该功能还需要调试
@@ -84,7 +84,7 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 - [ ] 适配QQ小程序
 
 ### 模板标签
-[查看模板标签说明](https://www.kandaoni.com/category/10)
+[查看模板标签说明](https://www.anqicms.com/manual)
 
 ## AnqiCMS 的安装
 ### AnqiCMS依赖的软件

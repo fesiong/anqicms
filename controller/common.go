@@ -35,6 +35,7 @@ func NotFound(ctx iris.Context) {
 	ctx.StatusCode(404)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
+		ctx.StatusCode(404)
 		ShowMessage(ctx, "404 Not Found", nil)
 	}
 }

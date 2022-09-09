@@ -156,7 +156,7 @@ func Install(ctx iris.Context) {
         <label class="layui-form-label">网站地址</label>
         <div class="layui-input-block">
           <input type="text" name="base_url" value="" autocomplete="off" class="layui-input">
-          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：https://www.kandaoni.com，用来生成全站的绝对地址</div>
+          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：https://www.anqicms.com，用来生成全站的绝对地址</div>
         </div>
       </div>
       <div class="layui-form-item">

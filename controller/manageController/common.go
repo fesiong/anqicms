@@ -170,7 +170,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查新版
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.kandaoni.com/downloads/version.json"
+	link := "https://www.anqicms.com/downloads/version.json"
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
@@ -212,7 +212,7 @@ func VersionUpgrade(ctx iris.Context) {
 		return
 	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.kandaoni.com/downloads/anqicms-%s-v%s.zip", runtime.GOOS, lastVersion.Version)
+	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-v%s.zip", runtime.GOOS, lastVersion.Version)
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {

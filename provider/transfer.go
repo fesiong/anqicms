@@ -2,6 +2,8 @@ package provider
 
 import (
 	"archive/zip"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -658,7 +660,10 @@ func (t *TransferWebsite) transferStatics() error {
 			strings.HasSuffix(f.Name, ".png") ||
 			strings.HasSuffix(f.Name, ".gif") ||
 			strings.HasSuffix(f.Name, ".webp") {
-			insertAttachment(realName)
+			insertAttachment(realName, 1)
+		} else if strings.HasSuffix(f.Name, ".mp4") ||
+			strings.HasSuffix(f.Name, ".webm") {
+			insertAttachment(realName, 0)
 		}
 	}
 
@@ -667,7 +672,7 @@ func (t *TransferWebsite) transferStatics() error {
 	return nil
 }
 
-func insertAttachment(realName string) {
+func insertAttachment(realName string, isImage int) {
 	basePath := config.ExecPath + "public/"
 	if !strings.HasPrefix(realName, basePath) {
 		return
@@ -693,6 +698,27 @@ func insertAttachment(realName string) {
 		log.Println(err)
 		return
 	}
+	md5hash := md5.New()
+	_, err = io.Copy(md5hash, file)
+	file.Seek(0, 0)
+	if err != nil {
+		return
+	}
+	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+
+	attachment := &model.Attachment{
+		FileName:     filepath.Base(fileLocation),
+		FileLocation: fileLocation,
+		FileSize:     info.Size(),
+		FileMd5:      md5Str,
+		CategoryId:   0,
+		IsImage:      isImage,
+		Status:       1,
+	}
+	err = attachment.Save(dao.DB)
+	if err != nil {
+		return
+	}
 
 	fileHeader := &multipart.FileHeader{
 		Filename: filepath.Base(realName),
@@ -700,7 +726,7 @@ func insertAttachment(realName string) {
 		Size:     info.Size(),
 	}
 	// 再走一遍上传流程
-	_, err = AttachmentUpload(file, fileHeader, 0, 0)
+	_, err = AttachmentUpload(file, fileHeader, 0, attachment.Id)
 	if err != nil {
 		log.Println(err)
 		return
