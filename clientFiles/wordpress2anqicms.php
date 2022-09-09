@@ -224,6 +224,7 @@ class anqicms
                         }
                     }
                 }
+                
               $archive = array(
                 'id' => $val['ID'],
                 'title' => $val['post_title'],
@@ -323,8 +324,7 @@ class anqicms
             $thumb = $this->db->getOneCol("meta_value", "postmeta", "meta_key = '_wp_attachment_metadata' and post_id = '{$thumbId}'");
             if ($thumb) {
                 $thumb = unserialize($thumb);
-                $article['logo']  = $baseDir . $thumb['file'];
-                $article['thumb'] = $baseDir . $thumb['sizes']['medium'];
+                $article['images']  = [$baseDir . $thumb['file']];
             }
         }
 
@@ -817,7 +817,7 @@ function showMessage($msg, $code = -1)
 }
 
 function nl2p($text)
-  {
+{
     $text = preg_replace_callback('/(.*)\r?\n\s*/', function($matches){
         if (substr(trim($matches[1]), -1) != ">") {
             return "<p>{$matches[1]}</p>\n";
@@ -827,4 +827,28 @@ function nl2p($text)
         return $str;
     }, $text);
     return $text;
-  }
+}
+
+function baseUrl()
+{
+    static $baseUrl;
+    if ($baseUrl) {
+        return $baseUrl;
+    }
+    $isHttps = false;
+    if (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') {
+        $isHttps = true;
+    } elseif (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+        $isHttps = true;
+    } elseif (!empty($_SERVER['HTTP_FRONT_END_HTTPS']) && strtolower($_SERVER['HTTP_FRONT_END_HTTPS']) !== 'off') {
+        $isHttps = true;
+    }
+
+    $dirNameArr = explode('/', $_SERVER['REQUEST_URI']);
+    array_pop($dirNameArr);
+    $dirName = implode("/", $dirNameArr) . "/";
+
+    $baseUrl = ($isHttps ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"] . $dirName;
+
+    return $baseUrl;
+}

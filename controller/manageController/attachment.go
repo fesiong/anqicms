@@ -74,6 +74,42 @@ func AttachmentDelete(ctx iris.Context) {
 	})
 }
 
+func AttachmentEdit(ctx iris.Context) {
+	var req request.Attachment
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	attach, err := provider.GetAttachmentById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	attach.FileName = req.FileName
+	err = dao.DB.Save(attach).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改图片名称：%d => %s", attach.Id, attach.FileName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "图片名称已修改",
+	})
+}
+
 func AttachmentChangeCategory(ctx iris.Context) {
 	var req request.ChangeAttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {

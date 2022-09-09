@@ -54,6 +54,31 @@ func Register(app *iris.Application) {
 		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		api.Post("/friendlink/create", controller.VerifyApiToken, controller.ApiImportCreateFriendLink)
 		api.Post("/friendlink/delete", controller.VerifyApiToken, controller.ApiImportDeleteFriendLink)
+
+		// common api
+		api.Get("/archive/detail", controller.ApiArchiveDetail)
+		api.Get("/archive/filters", controller.ApiArchiveFilters)
+		api.Get("/archive/list", controller.ApiArchiveList)
+		api.Get("/archive/params", controller.ApiArchiveParams)
+		api.Get("/category/detail", controller.ApiCategoryDetail)
+		api.Get("/category/list", controller.ApiCategoryList)
+		api.Get("/comment/list", controller.ApiCommentList)
+		api.Get("/setting/contact", controller.ApiContact)
+		api.Get("/setting/system", controller.ApiSystem)
+		api.Get("/guestbook/fields", controller.ApiGuestbook)
+		api.Get("/friendlink/list", controller.ApiLinkList)
+		api.Get("/nav/list", controller.ApiNavList)
+		api.Get("/archive/next", controller.ApiNextArchive)
+		api.Get("/archive/prev", controller.ApiPrevArchive)
+		api.Get("/page/detail", controller.ApiPageDetail)
+		api.Get("/page/list", controller.ApiPageList)
+		api.Get("/tag/detail", controller.ApiTagDetail)
+		api.Get("/tag/data/list", controller.ApiTagDataList)
+		api.Get("/tag/list", controller.ApiTagList)
+		api.Post("/attachment/upload", controller.ApiAttachmentUpload)
+		api.Post("/comment/publish", controller.ApiCommentPublish)
+		api.Post("/comment/praise", controller.ApiCommentPraise)
+		app.Post("/guestbook.html", controller.ApiGuestbookForm)
 	}
 
 	//后台管理路由相关

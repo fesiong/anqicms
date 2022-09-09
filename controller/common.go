@@ -48,6 +48,13 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 		}
 		str += "<script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + buttons[0].Link + "\"}, 3000);</script>"
 	}
+	var jsCodes string
+	for _, v := range config.JsonData.PluginPush.JsCodes {
+		jsCodes += v.Value + "\n"
+	}
+	if jsCodes != "" {
+		str += jsCodes
+	}
 
 	str += "</div></body></html>"
 

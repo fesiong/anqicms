@@ -1,7 +1,8 @@
 package request
 
 type Attachment struct {
-	Id uint `json:"id"`
+	Id       uint   `json:"id"`
+	FileName string `json:"file_name"`
 }
 
 type AttachmentCategory struct {

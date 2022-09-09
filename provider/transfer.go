@@ -101,6 +101,7 @@ type ArchiveData struct {
 	Content      string                 `json:"content"`
 	Template     string                 `json:"template"`
 	Images       []string               `json:"images"`
+	Logo         string                 `json:"logo"`
 	Extra        map[string]interface{} `json:"extra"`
 	Status       uint                   `json:"status"`
 	CreatedTime  int64                  `json:"created_time"`
@@ -248,9 +249,13 @@ func (t *TransferWebsite) transferModules() error {
 	var result TransferModules
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 
@@ -288,9 +293,13 @@ func (t *TransferWebsite) transferCategories() error {
 	var result TransferCategories
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -331,9 +340,13 @@ func (t *TransferWebsite) transferTags() error {
 	var result TransferTags
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -369,9 +382,13 @@ func (t *TransferWebsite) transferKeywords() error {
 	var result TransferAnchors
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -401,9 +418,13 @@ func (t *TransferWebsite) transferArchives() error {
 		var result TransferArchives
 		err = json.Unmarshal([]byte(resp.Body), &result)
 		if err != nil {
+			t.ErrorMsg = err.Error()
+			t.Status = 2 // done
 			return errors.New(resp.Body)
 		}
 		if result.Code != 0 {
+			t.ErrorMsg = result.Msg
+			t.Status = 2 // done
 			return errors.New(result.Msg)
 		}
 		if len(result.Data) == 0 {
@@ -423,6 +444,12 @@ func (t *TransferWebsite) transferArchives() error {
 				Images:      result.Data[i].Images,
 				Status:      result.Data[i].Status,
 				Flag:        result.Data[i].Flag,
+			}
+			if result.Data[i].Logo != "" {
+				archive.Images = append(archive.Images, result.Data[i].Logo)
+			}
+			for x := range archive.Images {
+				archive.Images[x] = strings.Replace(archive.Images[x], t.BaseUrl, "", 1)
 			}
 			archive.CreatedTime = result.Data[i].CreatedTime
 			archive.UpdatedTime = result.Data[i].UpdatedTime
@@ -497,9 +524,13 @@ func (t *TransferWebsite) transferSinglePages() error {
 	var result TransferCategories
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -516,17 +547,27 @@ func (t *TransferWebsite) transferSinglePages() error {
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
 		}
+		if result.Data[i].Logo != "" {
+			category.Logo = strings.Replace(result.Data[i].Logo, t.BaseUrl, "", 1)
+		}
 		category.UrlToken = strings.TrimSuffix(category.UrlToken, ".html")
-		// 如果已存在
+		// 如果已存在，如果类型不一样，则新增id，如果类型一样，则覆盖
 		exists, err := GetCategoryById(result.Data[i].Id)
 		if err == nil {
-			if exists.Id == result.Data[i].Id {
-				category.Id = result.Data[i].Id
-			} else {
-				exists, err = GetCategoryByTitle(category.Title)
-				if err == nil && exists.Type == config.CategoryTypePage {
-					category.Id = result.Data[i].Id
+			if exists.Type != config.CategoryTypePage {
+				exists2, err := GetCategoryByTitle(category.Title)
+				if err == nil {
+					// 如果名称相同，但类型不同，则跳过当前数据
+					if exists2.Type != config.CategoryTypePage {
+						continue
+					} else {
+						category.Id = exists2.Id
+					}
+				} else {
+					// 不用旧ID，按新内容写入
 				}
+			} else {
+				category.Id = result.Data[i].Id
 			}
 		} else {
 			category.Id = result.Data[i].Id
@@ -548,6 +589,8 @@ func (t *TransferWebsite) transferStatics() error {
 	tmpZipPath := config.ExecPath + "cache/transfer.zip"
 	tmpFile, err := os.Create(tmpZipPath)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return err
 	}
 	defer tmpFile.Close()
@@ -712,7 +755,7 @@ func ParseContent(content string) string {
 		if item.Is("figure") {
 			// 重新wrap
 			tmp, _ := item.Html()
-			item.ReplaceWithHtml("<p>"+tmp+"</p>")
+			item.ReplaceWithHtml("<p>" + tmp + "</p>")
 			return
 		}
 		if item.Is("code") {
@@ -734,7 +777,7 @@ func ParseContent(content string) string {
 			if src == "" {
 				item.Remove()
 			} else {
-				item.ReplaceWithHtml("<p><img src=\""+src+"\" alt=\""+alt+"\"/></p>")
+				item.ReplaceWithHtml("<p><img src=\"" + src + "\" alt=\"" + alt + "\"/></p>")
 			}
 			return
 		}
@@ -742,7 +785,7 @@ func ParseContent(content string) string {
 		if item.Is("ul") || item.Is("ol") {
 			if item.Find("li").Length() == 0 {
 				tmp, _ := item.Html()
-				item.WrapInnerHtml("<li>"+tmp+"</li>")
+				item.WrapInnerHtml("<li>" + tmp + "</li>")
 			}
 		} else {
 			item.WrapHtml("<div></div>")

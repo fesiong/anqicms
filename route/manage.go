@@ -85,6 +85,7 @@ func manageRoute(app *iris.Application) {
 			attachment.Get("/list", manageController.AttachmentList)
 			attachment.Post("/upload", manageController.AttachmentUpload)
 			attachment.Post("/delete", manageController.AttachmentDelete)
+			attachment.Post("/edit", manageController.AttachmentEdit)
 
 			attachment.Post("/category", manageController.AttachmentChangeCategory)
 			attachment.Get("/category/list", manageController.AttachmentCategoryList)

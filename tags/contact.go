@@ -2,14 +2,16 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/iris-contrib/pongo2"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"reflect"
 )
 
 type tagContactNode struct {
-	name     string
+	name string
 	args map[string]pongo2.IEvaluator
 }
 
@@ -40,6 +42,11 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)
+	}
+	if fieldName == "Qrcode" {
+		if !strings.HasPrefix(content, "http") && !strings.HasPrefix(content, "//") {
+			content = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
+		}
 	}
 
 	// output
@@ -82,4 +89,3 @@ func TagContactParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2
 
 	return tagNode, nil
 }
-

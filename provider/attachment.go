@@ -241,7 +241,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 }
 
 func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error) {
-	resp, body, errs := gorequest.New().Set("referer", src).Timeout(30 * time.Second).Get(src).EndBytes()
+	resp, body, errs := gorequest.New().Set("referer", src).Timeout(20 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
 		contentType := resp.Header.Get("content-type")
