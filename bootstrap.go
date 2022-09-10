@@ -14,6 +14,7 @@ import (
 	"kandaoni.com/anqicms/tags"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -53,6 +54,9 @@ func (bootstrap *Bootstrap) Serve() {
 		time.Sleep(1 * time.Second)
 		link := fmt.Sprintf("http://127.0.0.1:%d", bootstrap.Port)
 		if config.JsonData.System.BaseUrl != "" {
+			if strings.Contains(config.JsonData.System.BaseUrl, "127.0.0.1") {
+				config.JsonData.System.BaseUrl = link
+			}
 			link = config.JsonData.System.BaseUrl
 		}
 		err := open.Run(link)
