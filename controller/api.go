@@ -186,6 +186,7 @@ func ApiImportArchive(ctx iris.Context) {
 		"msg":  config.Lang("发布成功"),
 		"data": iris.Map{
 			"url": provider.GetUrl("archive", archive, 0),
+			"id": archive.Id,
 		},
 	})
 }

@@ -78,7 +78,7 @@ func Register(app *iris.Application) {
 		api.Post("/attachment/upload", controller.ApiAttachmentUpload)
 		api.Post("/comment/publish", controller.ApiCommentPublish)
 		api.Post("/comment/praise", controller.ApiCommentPraise)
-		app.Post("/guestbook.html", controller.ApiGuestbookForm)
+		api.Post("/guestbook.html", controller.ApiGuestbookForm)
 	}
 
 	//后台管理路由相关

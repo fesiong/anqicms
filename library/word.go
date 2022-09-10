@@ -8,10 +8,13 @@ import (
 )
 
 var segmenter sego.Segmenter
-
+var dictLoaded = false
 const removeWord = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~。？！，、；：“ ” ‘ ’「」『』（）〔〕【】《》〈〉—…·～"
 
 func WordSplit(s string, searchMode bool) []string {
+	if !dictLoaded {
+		initDict()
+	}
 	segments := segmenter.Segment([]byte(s))
 
 	words := sego.SegmentsToSlice(segments, searchMode)
@@ -26,8 +29,12 @@ func WordSplit(s string, searchMode bool) []string {
 	return words
 }
 
+func DictClose() {
+	segmenter.Close()
+}
 
-func init() {
+func initDict() {
 	dictFile := fmt.Sprintf("%s%s.txt", config.ExecPath, "dictionary")
 	segmenter.LoadDictionary(dictFile)
+	dictLoaded = true
 }

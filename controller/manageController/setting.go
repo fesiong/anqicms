@@ -322,6 +322,8 @@ func SettingCacheForm(ctx iris.Context) {
 	provider.DeleteCacheModules()
 	provider.DeleteCacheRedirects()
 	provider.DeleteCacheIndex()
+	// 释放词典
+	library.DictClose()
 	// 记录
 	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
 	ioutil.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
