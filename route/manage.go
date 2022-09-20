@@ -277,6 +277,68 @@ func manageRoute(app *iris.Application) {
 				transfer.Post("/create", manageController.CreateTransferTask)
 				transfer.Post("/start", manageController.TransferWebData)
 			}
+
+			user := plugin.Party("/user")
+			{
+				user.Get("/list", manageController.PluginUserList)
+				user.Get("/detail", manageController.PluginUserDetail)
+				user.Post("/detail", manageController.PluginUserDetailForm)
+				user.Post("/delete", manageController.PluginUserDelete)
+				user.Get("/group/list", manageController.PluginUserGroupList)
+				user.Get("/group/detail", manageController.PluginUserGroupDetail)
+				user.Post("/group/detail", manageController.PluginUserGroupDetailForm)
+				user.Post("/group/delete", manageController.PluginUserGroupDelete)
+			}
+
+			weapp := plugin.Party("/weapp")
+			{
+				weapp.Get("/config", manageController.PluginWeappConfig)
+				weapp.Post("/config", manageController.PluginWeappConfigForm)
+			}
+
+			retailer := plugin.Party("/retailer")
+			{
+				retailer.Get("/list", manageController.PluginGetRetailers)
+				retailer.Get("/config", manageController.PluginRetailerConfig)
+				retailer.Post("/config", manageController.PluginRetailerConfigForm)
+				retailer.Post("/realname", manageController.PluginRetailerSetRealName)
+				retailer.Post("/apply", manageController.PluginRetailerApply)
+			}
+
+			order := plugin.Party("/order")
+			{
+				order.Get("/pay/config", manageController.PluginPayConfig)
+				order.Post("/pay/config", manageController.PluginPayConfigForm)
+				order.Post("/pay/upload", manageController.PluginPayUploadFile)
+
+				order.Get("/list", manageController.PluginOrderList)
+				order.Get("/detail", manageController.PluginOrderDetail)
+				order.Post("/deliver", manageController.PluginOrderSetDeliver)
+				order.Post("/finished", manageController.PluginOrderSetFinished)
+				order.Post("/canceled", manageController.PluginOrderSetCanceled)
+				order.Post("/refund", manageController.PluginOrderSetRefund)
+				order.Post("/export", manageController.PluginOrderExport)
+			}
+
+			withdraw := plugin.Party("/withdraw")
+			{
+				withdraw.Get("/list", manageController.PluginWithdrawList)
+				withdraw.Get("/detail", manageController.PluginWithdrawDetail)
+				withdraw.Post("/approval", manageController.PluginWithdrawSetApproval)
+				withdraw.Post("/finished", manageController.PluginWithdrawSetFinished)
+			}
+
+			commission := plugin.Party("/commission")
+			{
+				commission.Get("/list", manageController.PluginCommissionList)
+				commission.Get("/detail", manageController.PluginCommissionDetail)
+			}
+
+			finance := plugin.Party("/finance")
+			{
+				finance.Get("/list", manageController.PluginFinanceList)
+				finance.Get("/detail", manageController.PluginFinanceDetail)
+			}
 		}
 	}
 }

@@ -227,7 +227,7 @@ func AddAdminLog(ctx iris.Context, logData string) {
 		Log: logData,
 	}
 	if ctx != nil {
-		adminLog.AdminId = uint(ctx.Values().GetIntDefault("adminId", 0))
+		adminLog.AdminId = ctx.Values().GetUintDefault("adminId", 0)
 		admin, err := GetAdminInfoById(adminLog.AdminId)
 		if err == nil {
 			adminLog.UserName = admin.UserName

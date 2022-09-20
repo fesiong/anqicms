@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/PuerkitoBio/goquery"
 	"github.com/fatih/structs"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
@@ -37,30 +36,26 @@ func ApiArchiveDetail(ctx iris.Context) {
 		return
 	}
 
-	// 读取data
-	archive.ArchiveData, err = provider.GetArchiveDataById(archive.Id)
-	if err == nil {
-		// 重新解析，保证不会被编辑器报错
-		htmlR := strings.NewReader(archive.ArchiveData.Content)
-		doc, err := goquery.NewDocumentFromReader(htmlR)
-		if err == nil {
-			doc.Find("body").Children().Each(func(i int, item *goquery.Selection) {
-				//只保留 img,code,blockquote,pre
-				if item.Is("img") {
-					src, _ := item.Attr("src")
-					item.ReplaceWithHtml("<p><img src=\"" + src + "\"/></p>")
-				} else if item.Is("code") {
-					tmp := item.Text()
-					item.ReplaceWithHtml("<pre><code>" + tmp + "</code></pre>")
-				}
-			})
-			doc.Find("ul,ol").Each(func(i int, inner *goquery.Selection) {
-				if inner.Find("li").Length() == 0 {
-					inner.SetHtml("<li>" + inner.Text() + "</li>")
-				}
-			})
-			archive.ArchiveData.Content, _ = doc.Find("body").Html()
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId > 0 {
+		if archive.Price > 0 {
+			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
 		}
+		if archive.ReadLevel > 0 && !archive.HasOrdered {
+			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
+				archive.HasOrdered = true
+			}
+		}
+	}
+	// if read level larger than 0, then need to check permission
+	if archive.ReadLevel > 0 && !archive.HasOrdered {
+		archive.ArchiveData = &model.ArchiveData{
+			Content: fmt.Sprintf(config.Lang("该内容需要用户等级%d以上才能阅读"), archive.ReadLevel),
+		}
+	} else {
+		// 读取data
+		archive.ArchiveData, _ = provider.GetArchiveDataById(archive.Id)
 	}
 	// 读取分类
 	archive.Category = provider.GetCategoryFromCache(archive.CategoryId)
@@ -961,7 +956,6 @@ func ApiGuestbookForm(ctx iris.Context) {
 		return
 	}
 	var result = map[string]string{}
-	// 采用post接收
 	extraData := map[string]interface{}{}
 	for _, item := range fields {
 		var val string
@@ -1032,5 +1026,48 @@ func ApiGuestbookForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
+	})
+}
+
+func ApiArchivePublish(ctx iris.Context) {
+	var req request.Archive
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	userId := ctx.Values().GetIntDefault("userId", 0)
+	req.Draft = true
+	req.UserId = uint(userId)
+
+	// read body twice
+	var extraReq = map[string]interface{}{}
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		body, _ := ctx.GetBody()
+		library.DebugLog("error", err.Error(), string(body))
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req.Extra = extraReq
+
+	archive, err := provider.SaveArchive(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "发布成功，已进入审核",
+		"data": archive,
 	})
 }

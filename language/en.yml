@@ -63,3 +63,4 @@
 "您提交的内容包含有不允许的字符": "The content you submitted contains characters that are not allowed"
 "已达到进入允许提交上限": "You have reached the upper limit of allowed submission"
 "请不要在短时间内多次提交": "Please do not submit multiple times in a short time"
+"该内容需要用户等级%d以上才能阅读": "This content require read level %d or higher to be read"

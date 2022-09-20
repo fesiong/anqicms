@@ -36,6 +36,9 @@ type configData struct {
 	PluginSendmail    pluginSendmail        `json:"plugin_sendmail"`
 	PluginImportApi   pluginImportApiConfig `json:"plugin_import_api"`
 	PluginStorage     pluginStorageConfig   `json:"plugin_storage"`
+	PluginPay         pluginPayConfig       `json:"plugin_pay"`
+	PluginWeapp       pluginWeappConfig     `json:"plugin_weapp"`
+	PluginRetailer    pluginRetailerConfig  `json:"plugin_retailer"`
 }
 
 func initPath() {

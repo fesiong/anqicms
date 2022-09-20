@@ -12,8 +12,6 @@ import (
 
 // DB connection
 var DB *gorm.DB
-var OriginDB *gorm.DB
-var err error
 
 func init() {
 	if config.JsonData.Mysql.Database != "" {
@@ -102,6 +100,19 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.Archive{},
 		&model.ArchiveData{},
 		&model.SpiderInclude{},
+
+		&model.User{},
+		&model.UserGroup{},
+		&model.UserWeixin{},
+		&model.UserWithdraw{},
+		&model.WeappQrcode{},
+		&model.Order{},
+		&model.OrderDetail{},
+		&model.OrderAddress{},
+		&model.OrderRefund{},
+		&model.Payment{},
+		&model.Finance{},
+		&model.Commission{},
 	)
 
 	if err != nil {

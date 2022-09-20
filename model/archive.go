@@ -28,6 +28,7 @@ type Archive struct {
 	UserId       uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Price        int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	Stock        int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`
+	ReadLevel    int            `json:"read_level" gorm:"column:read_level;type:int(10) not null;default:0"` // 阅读关联 group level
 	//采集专用
 	HasPseudo   int    `json:"has_pseudo" gorm:"column:has_pseudo;type:tinyint(1) not null;default:0"`
 	KeywordId   uint   `json:"keyword_id" gorm:"column:keyword_id;type:bigint(20) not null;default:0"`
@@ -42,6 +43,7 @@ type Archive struct {
 	Extra       map[string]*CustomField `json:"extra" gorm:"-"`
 	Link        string                  `json:"link" gorm:"-"`
 	Tags        []string                `json:"tags,omitempty" gorm:"-"`
+	HasOrdered  bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
 }
 
 type ArchiveData struct {

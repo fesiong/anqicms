@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/iris-contrib/pongo2"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -59,10 +60,18 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			archiveDetail.Link = provider.GetUrl("archive", archiveDetail, 0)
 		}
 		if fieldName == "Content" {
-			// 当读取content 的时候，再查询
-			archiveData, err := provider.GetArchiveDataById(archiveDetail.Id)
-			if err == nil {
-				content = archiveData.Content
+			// if read level larger than 0, then need to check permission
+			if archiveDetail.ReadLevel > 0 {
+				userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+				if userGroup == nil || userGroup.Level < archiveDetail.ReadLevel {
+					content = fmt.Sprintf(config.Lang("该内容需要用户等级%d以上才能阅读"), archiveDetail.ReadLevel)
+				}
+			} else {
+				// 当读取content 的时候，再查询
+				archiveData, err := provider.GetArchiveDataById(archiveDetail.Id)
+				if err == nil {
+					content = archiveData.Content
+				}
 			}
 		}
 		if fieldName == "Images" || fieldName == "Category" {

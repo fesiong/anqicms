@@ -81,7 +81,7 @@ func ParseAdminUrl(ctx iris.Context) {
 }
 
 func AdminPermission(ctx iris.Context) {
-	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	adminId := ctx.Values().GetUintDefault("adminId", 0)
 	if adminId == 1 {
 		ctx.Next()
 		return

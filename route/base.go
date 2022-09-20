@@ -23,28 +23,28 @@ func Register(app *iris.Application) {
 	app.Use(controller.Common)
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath))
-	app.Get("/{params:rewrite}", middleware.FrontendCheck, middleware.Check301, controller.ReRouteContext)
-	app.Get("/", middleware.FrontendCheck, controller.LogAccess, controller.IndexPage)
+	app.Get("/{params:rewrite}", middleware.FrontendCheck, middleware.Check301, middleware.ParseUserToken, controller.ReRouteContext)
+	app.Get("/", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken, controller.IndexPage)
 
 	app.Get("/install", middleware.FrontendCheck, controller.Install)
 	app.Post("/install", middleware.FrontendCheck, controller.InstallForm)
 
-	attachment := app.Party("/attachment", middleware.FrontendCheck)
+	attachment := app.Party("/attachment", middleware.FrontendCheck, middleware.ParseUserToken)
 	{
 		attachment.Post("/upload", controller.AttachmentUpload)
 	}
 
-	comment := app.Party("/comment", middleware.FrontendCheck, controller.LogAccess)
+	comment := app.Party("/comment", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken)
 	{
 		comment.Post("/publish", controller.CommentPublish)
 		comment.Post("/praise", controller.CommentPraise)
 		comment.Get("/{id:uint}", controller.CommentList)
 	}
 
-	app.Get("/guestbook.html", middleware.FrontendCheck, controller.LogAccess, controller.GuestbookPage)
-	app.Post("/guestbook.html", middleware.FrontendCheck, controller.GuestbookForm)
+	app.Get("/guestbook.html", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
+	app.Post("/guestbook.html", middleware.FrontendCheck, middleware.ParseUserToken, controller.GuestbookForm)
 
-	api := app.Party("/api", middleware.FrontendCheck)
+	api := app.Party("/api", middleware.FrontendCheck, middleware.ParseUserToken)
 	{
 		api.Get("/captcha", controller.GenerateCaptcha)
 
@@ -54,7 +54,31 @@ func Register(app *iris.Application) {
 		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		api.Post("/friendlink/create", controller.VerifyApiToken, controller.ApiImportCreateFriendLink)
 		api.Post("/friendlink/delete", controller.VerifyApiToken, controller.ApiImportDeleteFriendLink)
-
+		// 前端api
+		api.Post("/login", controller.ApiLogin)
+		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
+		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
+		api.Post("/order/create", middleware.UserAuth, controller.ApiCreateOrder)
+		api.Get("/order/address", middleware.UserAuth, controller.ApiGetOrderAddress)
+		api.Post("/order/address", middleware.UserAuth, controller.ApiSaveOrderAddress)
+		api.Get("/order/detail", middleware.UserAuth, controller.ApiGetOrderDetail)
+		api.Post("/order/cancel", middleware.UserAuth, controller.ApiCancelOrder)
+		api.Post("/order/refund", middleware.UserAuth, controller.ApiApplyRefundOrder)
+		api.Post("/order/finish", middleware.UserAuth, controller.ApiFinishedOrder)
+		api.Post("/order/payment", middleware.UserAuth, controller.ApiCreateOrderPayment)
+		api.Post("/weapp/qrcode", middleware.UserAuth, controller.ApiCreateWeappQrcode)
+		//检查支付情况
+		api.Get("/payment/check", controller.ApiPaymentCheck)
+		api.Get("/retailer/info", controller.ApiGetRetailerInfo)
+		api.Get("/retailer/statistics", middleware.UserAuth, controller.ApiGetRetailerStatistics)
+		api.Post("/retailer/update", middleware.UserAuth, controller.ApiUpdateRetailerInfo)
+		api.Get("/retailer/orders", middleware.UserAuth, controller.ApiGetRetailerOrders)
+		api.Get("/retailer/withdraw", middleware.UserAuth, controller.ApiGetRetailerWithdraws)
+		api.Post("/retailer/withdraw", middleware.UserAuth, controller.ApiRetailerWithdraw)
+		api.Get("/retailer/members", middleware.UserAuth, controller.ApiGetRetailerMembers)
+		api.Get("/retailer/commissions", middleware.UserAuth, controller.ApiGetRetailerCommissions)
+		// 发布文档
+		api.Post("/archive/publish", middleware.UserAuth, controller.ApiArchivePublish)
 		// common api
 		api.Get("/archive/detail", controller.ApiArchiveDetail)
 		api.Get("/archive/filters", controller.ApiArchiveFilters)

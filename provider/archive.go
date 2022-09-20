@@ -189,6 +189,12 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	archive.Flag = req.Flag
 	oldFixedLink := archive.FixedLink
 	archive.FixedLink = req.FixedLink
+	archive.Price = req.Price
+	archive.Stock = req.Stock
+	archive.ReadLevel = req.ReadLevel
+	if req.UserId > 0 {
+		archive.UserId = req.UserId
+	}
 
 	if req.KeywordId > 0 {
 		archive.KeywordId = req.KeywordId
@@ -603,4 +609,17 @@ func VerifyArchiveUrlToken(urlToken string, id uint) string {
 	}
 
 	return urlToken
+}
+
+func CheckArchiveHasOrder(userId uint, archiveId uint) bool {
+	var order model.Order
+	err := dao.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archiveId).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+		config.OrderStatusPaid,
+		config.OrderStatusDelivering,
+		config.OrderStatusCompleted}).Take(&order).Error
+	if err == nil {
+		return true
+	}
+
+	return false
 }

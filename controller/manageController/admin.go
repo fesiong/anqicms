@@ -179,7 +179,7 @@ func AdminList(ctx iris.Context) {
 }
 
 func AdminDetail(ctx iris.Context) {
-	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	adminId := ctx.Values().GetUintDefault("adminId", 0)
 	queryId := uint(ctx.URLParamIntDefault("id", 0))
 	if queryId == 0 {
 		queryId = adminId
@@ -211,7 +211,7 @@ func AdminDetailForm(ctx iris.Context) {
 		return
 	}
 
-	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	adminId := ctx.Values().GetUintDefault("adminId", 0)
 	var admin *model.Admin
 	var err error
 
@@ -286,7 +286,7 @@ func AdminDetailDelete(ctx iris.Context) {
 		})
 		return
 	}
-	adminId := uint(ctx.Values().GetIntDefault("adminId", 0))
+	adminId := ctx.Values().GetUintDefault("adminId", 0)
 	// 不能删除自己，不能删除id = 1 的管理员
 	if adminId == 1 || req.Id == adminId {
 		ctx.JSON(iris.Map{
