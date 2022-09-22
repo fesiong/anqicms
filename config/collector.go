@@ -21,11 +21,20 @@ type CollectorJson struct {
 	StartHour          int              `json:"start_hour"`       //每天开始时间
 	EndHour            int              `json:"end_hour"`         //每天结束时间
 	DailyLimit         int              `json:"daily_limit"`      //每日限额
+	CustomPatten       []*CustomPatten  `json:"custom_patten"`    // 自定义采集匹配
 }
 
 type ReplaceKeyword struct {
 	From string `json:"from"`
 	To   string `json:"to"`
+}
+
+type CustomPatten struct {
+	Domain         string           `json:"domain"`
+	TitlePatten    string           `json:"title_patten"`
+	ContentPatten  string           `json:"content_patten"`
+	TitleReplace   []ReplaceKeyword `json:"title_replace"`
+	ContentReplace []ReplaceKeyword `json:"content_replace"`
 }
 
 var defaultCollectorConfig = CollectorJson{
@@ -79,8 +88,8 @@ var defaultCollectorConfig = CollectorJson{
 		"编辑:",
 		"摄影：",
 		"摄影:",
-		"本文地址：",
-		"本文地址:",
+		"本文地址",
+		"原文地址",
 		"微信：",
 		"微信:",
 		"官方微信",
@@ -99,8 +108,35 @@ var defaultCollectorConfig = CollectorJson{
 		"关注央视网",
 		"©",
 		"（记者",
+		"相关文章",
+		"相关推荐",
+		"原作者所有",
+		"专题推荐",
+		"随机推荐",
+		"了解详情",
+		"了解更多",
+		"查看更多",
+		"来源网络",
+		"转载请",
 	},
 	LinkExclude: []string{
 		"查看更多",
+	},
+	CustomPatten: []*CustomPatten{
+		{
+			Domain:        "mp.weixin.qq.com",
+			TitlePatten:   "h1",
+			ContentPatten: "#js_content",
+		},
+		{
+			Domain:        "zhihu.com",
+			TitlePatten:   "h1",
+			ContentPatten: ".RichContent-inner .RichText,.Post-RichTextContainer .RichText",
+		},
+		{
+			Domain:        "toutiao.com",
+			TitlePatten:   "h1",
+			ContentPatten: ".article-content article",
+		},
 	},
 }

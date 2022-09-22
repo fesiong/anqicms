@@ -135,10 +135,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 		}
 		charsetName = strings.ToLower(charsetName)
 		//log.Println("当前页面编码:", charsetName)
-		charSet, exist := CharsetMap[charsetName]
-		if !exist {
-			log.Println("未找到匹配的编码")
-		}
+		charSet, _ := CharsetMap[charsetName]
 		if charSet != nil {
 			utf8Coutent, err := DecodeToUTF8([]byte(body), charSet)
 			if err != nil {
