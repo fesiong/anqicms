@@ -21,18 +21,12 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 )
 
 var emptyLinkPatternStr = `(^data:)|(^tel:)|(^mailto:)|(about:blank)|(javascript:)`
 var emptyLinkPattern = regexp.MustCompile(emptyLinkPatternStr)
-
-// 始终保持只有一个keyword任务
-var digKeywordRunning = false
-
-var maxWordsNum = int64(100000)
 
 func GetUserCollectorSetting() config.CollectorJson {
 	var collector config.CollectorJson
@@ -133,105 +127,6 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 
 	//重新读取配置
 	config.LoadCollectorConfig()
-
-	return nil
-}
-
-// StartDigKeywords 开始挖掘关键词，通过核心词来拓展
-// 最多只10万关键词，抓取前3级，如果超过3级，则每次只执行一级
-func StartDigKeywords(focus bool) {
-	if dao.DB == nil {
-		return
-	}
-	if config.CollectorConfig.AutoDigKeyword == false && !focus {
-		return
-	}
-	if digKeywordRunning {
-		return
-	}
-	digKeywordRunning = true
-	defer func() {
-		digKeywordRunning = false
-	}()
-	collectedWords := &sync.Map{}
-
-	//非严格的限制数量
-	var maxNum int64
-	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
-	if maxNum >= maxWordsNum {
-		return
-	}
-
-	var keywords []*model.Keyword
-	dao.DB.Where("has_dig = 0").Order("id asc").Limit(100).Find(&keywords)
-	if len(keywords) == 0 {
-		return
-	}
-
-	for _, keyword := range keywords {
-		//下一级的
-		err := collectSuggestBaiduWord(collectedWords, keyword)
-		if err != nil {
-			break
-		}
-		keyword.HasDig = 1
-		dao.DB.Model(keyword).UpdateColumn("has_dig", keyword.HasDig)
-		//不能太快，每次休息随机1-5秒钟
-		time.Sleep(time.Duration(1+rand.Intn(5)) * time.Second)
-	}
-	//重新计数
-	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
-}
-
-type BaiduSuggest struct {
-	G []BaiduSuggestItem `json:"g"`
-}
-
-type BaiduSuggestItem struct {
-	Type string `json:"type"`
-	Q    string `json:"q"`
-}
-
-func collectSuggestBaiduWord(existsWords *sync.Map, keyword *model.Keyword) error {
-	//执行一次，2层
-	link := fmt.Sprintf("http://www.baidu.com/sugrec?prod=pc&wd=%s", url.QueryEscape(keyword.Title))
-	resp, err := library.Request(link, &library.Options{
-		Timeout:  5,
-		IsMobile: false,
-		Header: map[string]string{
-			"Host":            "www.baidu.com",
-			"Referer":         "https://www.baidu.com",
-			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-			"Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-		},
-	})
-
-	if err != nil {
-		return err
-	}
-
-	var suggest BaiduSuggest
-	err = json.Unmarshal([]byte(resp.Body), &suggest)
-	if err != nil {
-		return err
-	}
-	rootWords := GetRootWords()
-	for _, sug := range suggest.G {
-		// 判断是否包含核心词
-		if !ContainRootWords(rootWords, sug.Q) {
-			continue
-		}
-		if _, ok := existsWords.Load(sug.Q); ok {
-			continue
-		}
-		existsWords.Store(sug.Q, keyword.Level+1)
-		word := &model.Keyword{
-			Title:      sug.Q,
-			CategoryId: keyword.CategoryId,
-			Level:      keyword.Level + 1,
-		}
-		dao.DB.Model(&model.Keyword{}).Where("title = ?", sug.Q).FirstOrCreate(&word)
-	}
 
 	return nil
 }
@@ -634,16 +529,8 @@ func ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
 	}
 
 	//根据标题判断是否是英文，如果是英文，则采用英文的计数
-	isEnglish := false
+	isEnglish := CheckContentIsEnglish(title)
 	if title != "" {
-		re, err := regexp.Compile("^[\u0000-\u007E]+$")
-		if err != nil {
-			log.Println("reg err", err.Error())
-		} else {
-			if re.MatchString(title) {
-				isEnglish = true
-			}
-		}
 		archive.Title = title
 	}
 
@@ -1201,7 +1088,6 @@ func CheckContentIsEnglish(content string) bool {
 			enCount++
 		}
 	}
-
 	if float64(enCount) > float64(len(content))*0.95 {
 		return true
 	}
@@ -1351,53 +1237,6 @@ func checkArticleExists(originUrl, originTitle string) bool {
 	}
 	dao.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
 	if total > 0 {
-		return true
-	}
-
-	return false
-}
-
-func GetRootWords() [][]string {
-	var rootKeywords []string
-	dao.DB.Model(&model.Keyword{}).Where("`level` = 0").Limit(1000).Pluck("title", &rootKeywords)
-
-	var result = make([][]string, 0, len(rootKeywords))
-	for i := range rootKeywords {
-		result = append(result, library.WordSplit(strings.ToLower(rootKeywords[i]), false))
-	}
-
-	return result
-}
-
-func ContainRootWords(rootWords [][]string, word string) bool {
-	word = strings.ToLower(word)
-	for i := range rootWords {
-		match := true
-		for _, w := range rootWords[i] {
-			if !strings.Contains(word, w) {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-
-	return false
-}
-
-func ContainKeywords(title, keyword string) bool {
-	words := library.WordSplit(strings.ToLower(keyword), false)
-
-	match := true
-	for _, w := range words {
-		if !strings.Contains(title, w) {
-			match = false
-			break
-		}
-	}
-	if match {
 		return true
 	}
 

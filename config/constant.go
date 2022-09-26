@@ -44,3 +44,16 @@ const (
 	StorageTypeQiniu   = "qiniu"
 	StorageTypeUpyun   = "upyun"
 )
+
+const (
+	EnginBaidu  = "baidu" // or empty
+	Engin360    = "360"
+	EnginSogou  = "sogou"
+	EnginGoogle = "google"
+	EnginBingCn = "bingcn"
+	EnginBing   = "bing"
+	EnginOther  = "other"
+
+	LanguageZh = "zh"
+	LanguageEn = "en"
+)

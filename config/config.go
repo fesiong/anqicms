@@ -117,6 +117,8 @@ var ExecPath string
 var JsonData configData
 var ServerConfig serverConfig
 var CollectorConfig CollectorJson
+var CombinationConfig CombinationJson
+var KeywordConfig KeywordJson
 var RestartChan = make(chan bool, 1)
 var languages = map[string]string{}
 
@@ -125,6 +127,8 @@ func init() {
 	initJSON()
 	initServer()
 	LoadCollectorConfig()
+	LoadCombinationConfig()
+	LoadKeywordConfig()
 	LoadLanguage()
 }
 
@@ -196,7 +200,6 @@ func LoadCollectorConfig() {
 	CollectorConfig.FromWebsite = collector.FromWebsite
 	CollectorConfig.AutoDigKeyword = collector.AutoDigKeyword
 	CollectorConfig.SaveType = collector.SaveType
-	CollectorConfig.SaveType = collector.SaveType
 
 	if collector.DailyLimit > 0 {
 		CollectorConfig.DailyLimit = collector.DailyLimit
@@ -250,6 +253,17 @@ func LoadCollectorConfig() {
 			CollectorConfig.ContentExcludeLine = append(CollectorConfig.ContentExcludeLine, v)
 		}
 	}
+	for _, v := range collector.ContentExclude {
+		exists := false
+		for _, vv := range CollectorConfig.ContentExclude {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.ContentExclude = append(CollectorConfig.ContentExclude, v)
+		}
+	}
 	for _, v := range collector.ContentReplace {
 		exists := false
 		for _, vv := range CollectorConfig.ContentReplace {
@@ -259,6 +273,120 @@ func LoadCollectorConfig() {
 		}
 		if !exists {
 			CollectorConfig.ContentReplace = append(CollectorConfig.ContentReplace, v)
+		}
+	}
+}
+
+func LoadCombinationConfig() {
+	//先读取默认配置
+	CombinationConfig = defaultCombinationConfig
+	//再根据用户配置来覆盖
+	buf, err := ioutil.ReadFile(fmt.Sprintf("%scombination.json", ExecPath))
+	configStr := ""
+	if err != nil {
+		//文件不存在
+		return
+	}
+	configStr = string(buf[:])
+	reg := regexp.MustCompile(`/\*.*\*/`)
+
+	configStr = reg.ReplaceAllString(configStr, "")
+	buf = []byte(configStr)
+
+	var combination CombinationJson
+	if err = json.Unmarshal(buf, &combination); err != nil {
+		return
+	}
+
+	CombinationConfig.AutoCollect = combination.AutoCollect
+	CombinationConfig.FromEngine = combination.FromEngine
+	CombinationConfig.Language = combination.Language
+	CombinationConfig.InsertImage = combination.InsertImage
+	CombinationConfig.FromWebsite = combination.FromWebsite
+	CombinationConfig.CategoryId = combination.CategoryId
+	CombinationConfig.StartHour = combination.StartHour
+	CombinationConfig.EndHour = combination.EndHour
+	CombinationConfig.AutoDigKeyword = combination.AutoDigKeyword
+	CombinationConfig.SaveType = combination.SaveType
+
+	if combination.DailyLimit > 0 {
+		CombinationConfig.DailyLimit = combination.DailyLimit
+	}
+	if CombinationConfig.DailyLimit > 10000 {
+		//最大1万，否则发布不完
+		CombinationConfig.DailyLimit = 10000
+	}
+
+	for _, v := range combination.ContentExclude {
+		exists := false
+		for _, vv := range CombinationConfig.ContentExclude {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CombinationConfig.ContentExclude = append(CombinationConfig.ContentExclude, v)
+		}
+	}
+	for _, v := range combination.ContentReplace {
+		exists := false
+		for _, vv := range CollectorConfig.ContentReplace {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.ContentReplace = append(CollectorConfig.ContentReplace, v)
+		}
+	}
+}
+
+func LoadKeywordConfig() {
+	//先读取默认配置
+	KeywordConfig = defaultKeywordConfig
+	//再根据用户配置来覆盖
+	buf, err := ioutil.ReadFile(fmt.Sprintf("%skeyword.json", ExecPath))
+	configStr := ""
+	if err != nil {
+		//文件不存在
+		return
+	}
+	configStr = string(buf[:])
+	reg := regexp.MustCompile(`/\*.*\*/`)
+
+	configStr = reg.ReplaceAllString(configStr, "")
+	buf = []byte(configStr)
+
+	var keyword KeywordJson
+	if err = json.Unmarshal(buf, &keyword); err != nil {
+		return
+	}
+
+	KeywordConfig.AutoDig = keyword.AutoDig
+	KeywordConfig.FromEngine = keyword.FromEngine
+	KeywordConfig.FromWebsite = keyword.FromWebsite
+	KeywordConfig.Language = keyword.Language
+
+	for _, v := range keyword.TitleExclude {
+		exists := false
+		for _, vv := range KeywordConfig.TitleExclude {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			KeywordConfig.TitleExclude = append(KeywordConfig.TitleExclude, v)
+		}
+	}
+	for _, v := range keyword.TitleReplace {
+		exists := false
+		for _, vv := range KeywordConfig.TitleReplace {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			KeywordConfig.TitleReplace = append(KeywordConfig.TitleReplace, v)
 		}
 	}
 }
