@@ -89,3 +89,19 @@ const (
 	WithdrawStatusFinished = 2
 	WithdrawStatusCanceled = -1
 )
+
+const (
+	EnginBaidu  = "baidu" // or empty
+	Engin360    = "360"
+	EnginSogou  = "sogou"
+	EnginGoogle = "google"
+	EnginBingCn = "bingcn"
+	EnginBing   = "bing"
+	EnginOther  = "other"
+
+	LanguageZh = "zh"
+	LanguageEn = "en"
+
+	CollectModeCollect = 0
+	CollectModeCombine = 1
+)

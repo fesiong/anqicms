@@ -120,6 +120,7 @@ var ExecPath string
 var JsonData configData
 var ServerConfig serverConfig
 var CollectorConfig CollectorJson
+var KeywordConfig KeywordJson
 var RestartChan = make(chan bool, 1)
 var languages = map[string]string{}
 
@@ -128,6 +129,7 @@ func init() {
 	initJSON()
 	initServer()
 	LoadCollectorConfig()
+	LoadKeywordConfig()
 	LoadLanguage()
 }
 
@@ -197,9 +199,16 @@ func LoadCollectorConfig() {
 	CollectorConfig.StartHour = collector.StartHour
 	CollectorConfig.EndHour = collector.EndHour
 	CollectorConfig.FromWebsite = collector.FromWebsite
-	CollectorConfig.AutoDigKeyword = collector.AutoDigKeyword
+	CollectorConfig.CollectMode = collector.CollectMode
 	CollectorConfig.SaveType = collector.SaveType
-	CollectorConfig.SaveType = collector.SaveType
+	CollectorConfig.FromEngine = collector.FromEngine
+	CollectorConfig.Language = collector.Language
+	CollectorConfig.InsertImage = collector.InsertImage
+	CollectorConfig.Images = collector.Images
+
+	if CollectorConfig.Language == "" {
+		CollectorConfig.Language = LanguageZh
+	}
 
 	if collector.DailyLimit > 0 {
 		CollectorConfig.DailyLimit = collector.DailyLimit
@@ -253,6 +262,17 @@ func LoadCollectorConfig() {
 			CollectorConfig.ContentExcludeLine = append(CollectorConfig.ContentExcludeLine, v)
 		}
 	}
+	for _, v := range collector.ContentExclude {
+		exists := false
+		for _, vv := range CollectorConfig.ContentExclude {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			CollectorConfig.ContentExclude = append(CollectorConfig.ContentExclude, v)
+		}
+	}
 	for _, v := range collector.ContentReplace {
 		exists := false
 		for _, vv := range CollectorConfig.ContentReplace {
@@ -262,6 +282,56 @@ func LoadCollectorConfig() {
 		}
 		if !exists {
 			CollectorConfig.ContentReplace = append(CollectorConfig.ContentReplace, v)
+		}
+	}
+}
+
+func LoadKeywordConfig() {
+	//先读取默认配置
+	KeywordConfig = defaultKeywordConfig
+	//再根据用户配置来覆盖
+	buf, err := ioutil.ReadFile(fmt.Sprintf("%skeyword.json", ExecPath))
+	configStr := ""
+	if err != nil {
+		//文件不存在
+		return
+	}
+	configStr = string(buf[:])
+	reg := regexp.MustCompile(`/\*.*\*/`)
+
+	configStr = reg.ReplaceAllString(configStr, "")
+	buf = []byte(configStr)
+
+	var keyword KeywordJson
+	if err = json.Unmarshal(buf, &keyword); err != nil {
+		return
+	}
+
+	KeywordConfig.AutoDig = keyword.AutoDig
+	KeywordConfig.FromEngine = keyword.FromEngine
+	KeywordConfig.FromWebsite = keyword.FromWebsite
+	KeywordConfig.Language = keyword.Language
+
+	for _, v := range keyword.TitleExclude {
+		exists := false
+		for _, vv := range KeywordConfig.TitleExclude {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			KeywordConfig.TitleExclude = append(KeywordConfig.TitleExclude, v)
+		}
+	}
+	for _, v := range keyword.TitleReplace {
+		exists := false
+		for _, vv := range KeywordConfig.TitleReplace {
+			if vv == v {
+				exists = true
+			}
+		}
+		if !exists {
+			KeywordConfig.TitleReplace = append(KeywordConfig.TitleReplace, v)
 		}
 	}
 }

@@ -11,6 +11,46 @@ import (
 	"strings"
 )
 
+// PluginKeywordSetting 全局配置
+func PluginKeywordSetting(ctx iris.Context) {
+	setting := provider.GetUserKeywordSetting()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": setting,
+	})
+}
+
+// PluginSaveKeywordSetting 全局配置保存
+func PluginSaveKeywordSetting(ctx iris.Context) {
+	var req config.KeywordJson
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	//将现有配置写回文件
+	err := provider.SaveUserKeywordSetting(req, true)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改关键词配置"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "保存成功",
+	})
+}
+
 func PluginKeywordList(ctx iris.Context) {
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -27,10 +67,10 @@ func PluginKeywordList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
+		"code":  config.StatusOK,
+		"msg":   "",
 		"total": total,
-		"data": keywordList,
+		"data":  keywordList,
 	})
 }
 
@@ -88,9 +128,9 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 					continue
 				}
 				keyword = &model.Keyword{
-					Title:  v,
+					Title:      v,
 					CategoryId: req.CategoryId,
-					Status: 1,
+					Status:     1,
 				}
 				keyword.Save(dao.DB)
 			}
@@ -178,7 +218,7 @@ func PluginKeywordExport(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"header": header,
+			"header":  header,
 			"content": content,
 		},
 	})
@@ -189,7 +229,7 @@ func PluginKeywordImport(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -199,7 +239,7 @@ func PluginKeywordImport(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}

@@ -39,6 +39,9 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	if fileExt == ".jpeg" {
 		fileExt = ".jpg"
 	}
+	if fileExt == "." {
+		fileExt = ""
+	}
 	isImage := 0
 	if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" {
 		isImage = 1
@@ -58,11 +61,12 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	fileName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
 	// 获取md5
 	md5hash := md5.New()
-	_, err = io.Copy(md5hash, file)
 	file.Seek(0, 0)
+	_, err = io.Copy(md5hash, file)
 	if err != nil {
 		return nil, err
 	}
+	file.Seek(0, 0)
 	md5Str := hex.EncodeToString(md5hash.Sum(nil))
 	exists, _ := GetAttachmentByMd5(md5Str)
 	if attachment != nil {
@@ -101,7 +105,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	// 不是图片的时候的处理方法
 	if isImage != 1 {
 		bts, _ := ioutil.ReadAll(file)
-		_, err = Storage.UploadFile(filePath + tmpName, bts)
+		_, err = Storage.UploadFile(filePath+tmpName, bts)
 		if err != nil {
 			return nil, err
 		}
@@ -192,7 +196,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 
 	// 上传原图
 	log.Println("图片大小", fileSize)
-	_, err = Storage.UploadFile(filePath + tmpName, buff.Bytes())
+	_, err = Storage.UploadFile(filePath+tmpName, buff.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +216,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	}
 
 	// 上传原图
-	_, err = Storage.UploadFile(filePath + thumbName, buff.Bytes())
+	_, err = Storage.UploadFile(filePath+thumbName, buff.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -241,11 +245,15 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 }
 
 func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error) {
-	resp, body, errs := gorequest.New().Set("referer", src).Timeout(20 * time.Second).Get(src).EndBytes()
+	resp, body, errs := gorequest.New().Set("referer", src).Timeout(15 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
 		contentType := resp.Header.Get("content-type")
 		if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/png" || contentType == "image/gif" || contentType == "image/webp" {
+			if fileName == "" {
+				fileName = "image"
+			}
+			fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "." + strings.Split(contentType, "/")[1]
 			//获取宽高
 			tmpfile, err := ioutil.TempFile("", "download")
 			if err != nil {
@@ -256,11 +264,11 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			if _, err := tmpfile.Write(body); err != nil {
 				return nil, err
 			}
-
+			tmpfile.Seek(0, 0)
 			fileHeader := &multipart.FileHeader{
 				Filename: filepath.Base(fileName),
 				Header:   nil,
-				Size: int64(len(body)),
+				Size:     int64(len(body)),
 			}
 
 			return AttachmentUpload(tmpfile, fileHeader, 0, 0)
@@ -700,7 +708,7 @@ func convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = Storage.UploadFile(paths + "thumb_" + fileName, buff.Bytes())
+	_, err = Storage.UploadFile(paths+"thumb_"+fileName, buff.Bytes())
 	if err != nil {
 		return err
 	}

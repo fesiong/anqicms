@@ -21,18 +21,12 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 )
 
 var emptyLinkPatternStr = `(^data:)|(^tel:)|(^mailto:)|(about:blank)|(javascript:)`
 var emptyLinkPattern = regexp.MustCompile(emptyLinkPatternStr)
-
-//始终保持只有一个keyword任务
-var digKeywordRunning = false
-
-var maxWordsNum = int64(100000)
 
 func GetUserCollectorSetting() config.CollectorJson {
 	var collector config.CollectorJson
@@ -93,9 +87,6 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 		if req.AutoPseudo {
 			collector.AutoPseudo = req.AutoPseudo
 		}
-		if req.AutoDigKeyword {
-			collector.AutoDigKeyword = req.AutoDigKeyword
-		}
 		if req.CategoryId > 0 {
 			collector.CategoryId = req.CategoryId
 		}
@@ -133,105 +124,6 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 
 	//重新读取配置
 	config.LoadCollectorConfig()
-
-	return nil
-}
-
-// StartDigKeywords 开始挖掘关键词，通过核心词来拓展
-// 最多只10万关键词，抓取前3级，如果超过3级，则每次只执行一级
-func StartDigKeywords(focus bool) {
-	if dao.DB == nil {
-		return
-	}
-	if config.CollectorConfig.AutoDigKeyword == false && !focus {
-		return
-	}
-	if digKeywordRunning {
-		return
-	}
-	digKeywordRunning = true
-	defer func() {
-		digKeywordRunning = false
-	}()
-	collectedWords := &sync.Map{}
-
-	//非严格的限制数量
-	var maxNum int64
-	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
-	if maxNum >= maxWordsNum {
-		return
-	}
-
-	var keywords []*model.Keyword
-	dao.DB.Where("has_dig = 0").Order("id asc").Limit(100).Find(&keywords)
-	if len(keywords) == 0 {
-		return
-	}
-
-	for _, keyword := range keywords {
-		//下一级的
-		err := collectSuggestBaiduWord(collectedWords, keyword)
-		if err != nil {
-			break
-		}
-		keyword.HasDig = 1
-		dao.DB.Model(keyword).UpdateColumn("has_dig", keyword.HasDig)
-		//不能太快，每次休息随机1-5秒钟
-		time.Sleep(time.Duration(1+rand.Intn(5)) * time.Second)
-	}
-	//重新计数
-	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
-}
-
-type BaiduSuggest struct {
-	G []BaiduSuggestItem `json:"g"`
-}
-
-type BaiduSuggestItem struct {
-	Type string `json:"type"`
-	Q    string `json:"q"`
-}
-
-func collectSuggestBaiduWord(existsWords *sync.Map, keyword *model.Keyword) error {
-	//执行一次，2层
-	link := fmt.Sprintf("http://www.baidu.com/sugrec?prod=pc&wd=%s", url.QueryEscape(keyword.Title))
-	resp, err := library.Request(link, &library.Options{
-		Timeout:  5,
-		IsMobile: false,
-		Header: map[string]string{
-			"Host":            "www.baidu.com",
-			"Referer":         "https://www.baidu.com",
-			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-			"Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
-		},
-	})
-
-	if err != nil {
-		return err
-	}
-
-	var suggest BaiduSuggest
-	err = json.Unmarshal([]byte(resp.Body), &suggest)
-	if err != nil {
-		return err
-	}
-	rootWords := GetRootWords()
-	for _, sug := range suggest.G {
-		// 判断是否包含核心词
-		if !ContainRootWords(rootWords, sug.Q) {
-			continue
-		}
-		if _, ok := existsWords.Load(sug.Q); ok {
-			continue
-		}
-		existsWords.Store(sug.Q, keyword.Level+1)
-		word := &model.Keyword{
-			Title:      sug.Q,
-			CategoryId: keyword.CategoryId,
-			Level:      keyword.Level + 1,
-		}
-		dao.DB.Model(&model.Keyword{}).Where("title = ?", sug.Q).FirstOrCreate(&word)
-	}
 
 	return nil
 }
@@ -321,8 +213,12 @@ func CollectArticles() {
 	}
 }
 
-func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (int, error) {
-	total, err := CollectArticleFromBaidu(&keyword, focus)
+func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (total int, err error) {
+	if config.CollectorConfig.CollectMode == config.CollectModeCombine {
+		total, err = GenerateCombination(&keyword)
+	} else if config.CollectorConfig.CollectMode == config.CollectModeCollect {
+		total, err = CollectArticleFromBaidu(&keyword, focus)
+	}
 
 	if err != nil {
 		return total, err
@@ -457,7 +353,7 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 		Timeout:  5,
 		IsMobile: false,
 		Header: map[string]string{
-			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s", keyword.Title),
+			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s", url.QueryEscape(keyword.Title)),
 		},
 	})
 	if err != nil {
@@ -537,10 +433,6 @@ func ParseArticleDetail(archive *request.Archive) error {
 	if err != nil {
 		return err
 	}
-	otherItems := doc.Find("input,textarea,select,radio,form,button,header,footer,.footer,noscript,meta,nav,hr")
-	if otherItems.Length() > 0 {
-		otherItems.Remove()
-	}
 
 	//如果是百度百科地址，单独处理
 	if strings.Contains(archive.OriginUrl, "baike.baidu.com") {
@@ -555,7 +447,7 @@ func ParseArticleDetail(archive *request.Archive) error {
 		ParseNormalDetail(archive, doc)
 	}
 
-	archive.Content = ReplaceContentFromConfig(archive.Content)
+	archive.Content = ReplaceContentFromConfig(archive.Content, config.CollectorConfig.ContentReplace)
 
 	return nil
 }
@@ -597,9 +489,14 @@ func ParseZhihuDetail(archive *request.Archive, doc *goquery.Document) {
 	//获取标题
 	archive.Title = strings.TrimSpace(doc.Find("h1").Eq(0).Text())
 
-	contentList := doc.Find(".RichContent-inner .RichText,.Post-RichTextContainer .RichText").Eq(0)
-
-	content, _ := CleanTags(contentList)
+	var content, planText string
+	doc.Find(".RichContent-inner .RichText,.Post-RichTextContainer .RichText").Each(func(i int, item *goquery.Selection) {
+		tmpContent, tmpText := CleanTags(item)
+		if len(tmpText) > len(planText) {
+			content = tmpContent
+			planText = tmpText
+		}
+	})
 
 	archive.Content = content
 	//如果获取不到内容，则 fallback 到normal
@@ -627,17 +524,14 @@ func ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
 	ParseLinking(doc, archive.OriginUrl)
 	title := ParseArticleTitle(doc)
 
+	otherItems := doc.Find("input,textarea,select,radio,form,button,header,aside,footer,.footer,noscript,meta,nav,hr")
+	if otherItems.Length() > 0 {
+		otherItems.Remove()
+	}
+
 	//根据标题判断是否是英文，如果是英文，则采用英文的计数
-	isEnglish := false
+	isEnglish := CheckContentIsEnglish(title)
 	if title != "" {
-		re, err := regexp.Compile("^[\u0000-\u007E]+$")
-		if err != nil {
-			log.Println("reg err", err.Error())
-		} else {
-			if re.MatchString(title) {
-				isEnglish = true
-			}
-		}
 		archive.Title = title
 	}
 
@@ -648,9 +542,19 @@ func ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
 	}
 
 	//尝试获取正文内容
-	var planText string
-	archive.Content, planText, _ = ParseArticleContent(doc.Find("body"), 0, isEnglish)
-	log.Println(len(archive.Content), len(planText))
+	content, planText, _, _ := ParseArticleContent(doc.Find("body"), 0, isEnglish)
+	if content != nil {
+		archive.Content, planText = CleanTags(content)
+		planLen := utf8.RuneCountInString(planText)
+		if isEnglish {
+			//英语使用空格来计算词数
+			planLen = len(strings.Split(planText, " "))
+		}
+		if planLen < config.CollectorConfig.ContentMinLength {
+			//小于指定次数的，直接抛弃了
+			archive.Content = ""
+		}
+	}
 }
 
 func ParseArticleTitle(doc *goquery.Document) string {
@@ -742,43 +646,12 @@ func ParseArticleTitle(doc *goquery.Document) string {
 	return title
 }
 
-func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) (string, string, int) {
-	content := ""
+func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) (*goquery.Selection, string, int, int) {
+	var content *goquery.Selection
 	contentText := ""
 
+	maxPCount := nodeItem.ChildrenFiltered("p").Length()
 	maxDeep := deep
-	children := nodeItem.Children()
-	for i := range children.Nodes {
-		item := children.Eq(i)
-		tmpContent, tmpText, tmpDeep := ParseArticleContent(item, deep+1, isEnglish)
-		if tmpDeep > maxDeep {
-			maxDeep = tmpDeep
-		}
-		if tmpText != "" && len(tmpText) > len(contentText) {
-			//表示有内容
-			content = tmpContent
-			contentText = tmpText
-		}
-	}
-
-	if content != "" {
-		if nodeItem.ChildrenFiltered("p").Length() == 0 {
-			return content, contentText, maxDeep
-		}
-		//系数
-		if float64(len(contentText))*1.5 > float64(len(nodeItem.Text())) {
-			return content, contentText, maxDeep
-		}
-	}
-
-	//深度大于10的，抛弃
-	//if maxDeep > 10 {
-	//	return content, contentText, maxDeep
-	//}
-
-	// 通过一级一级的往下查找
-	aLinks := nodeItem.Find("a")
-	aText := strings.TrimSpace(CleanTagsAndSpaces(aLinks.Text()))
 	planText := strings.TrimSpace(CleanTagsAndSpaces(nodeItem.Text()))
 	planLen := utf8.RuneCountInString(planText)
 	if isEnglish {
@@ -787,48 +660,100 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 	}
 	if planLen < config.CollectorConfig.ContentMinLength {
 		//小于指定次数的，直接抛弃了
-		return content, contentText, maxDeep
+		return nil, contentText, maxDeep, maxPCount
 	}
+	// 如果有上一页、下一页明显的列表页特征，则跳过
+	if strings.Contains(planText, "上一页") || strings.Contains(planText, "下一页") {
+		return nil, "", maxDeep, maxPCount
+	}
+
+	children := nodeItem.Children()
+	for i := range children.Nodes {
+		item := children.Eq(i)
+		tmpContent, tmpText, tmpDeep, tmpPCount := ParseArticleContent(item, deep+1, isEnglish)
+		if maxPCount == -1 {
+			maxPCount = tmpPCount
+		}
+		if tmpDeep > maxDeep {
+			maxDeep = tmpDeep
+		}
+		if tmpText != "" && len(tmpText) > len(contentText) && tmpPCount >= maxPCount {
+			//表示有内容
+			content = tmpContent
+			contentText = tmpText
+			maxPCount = tmpPCount
+		}
+	}
+
+	if content != nil {
+		return content, contentText, maxDeep, maxPCount
+		//return content, contentText, maxDeep, maxPCount
+		//if nodeItem.ChildrenFiltered("p").Length() == 0 {
+		//	return content, contentText, maxDeep, maxPCount
+		//}
+		////系数
+		//if float64(len(contentText))*1.5 > float64(len(nodeItem.Text())) {
+		//	return content, contentText, maxDeep, maxPCount
+		//}
+	}
+
+	// 通过一级一级的往下查找
+	liItems := nodeItem.Find("li")
+	if liItems.Length() > 0 && liItems.Length() < liItems.Find("a").Length() {
+		return content, contentText, maxDeep, maxPCount
+	}
+	aLinks := nodeItem.Find("a")
+	aText := strings.TrimSpace(CleanTagsAndSpaces(aLinks.Text()))
 	if len(aText)*5 > len(planText) {
 		//a标签过多，这个不是文章内容
-		return content, contentText, maxDeep
-	}
-
-	otherItems := nodeItem.Find("input,textarea,select,radio,form,button,footer,.footer,noscript,meta")
-	if otherItems.Length() > 0 {
-		otherItems.Remove()
-	}
-
-	//超过10个链接的抛弃
-	//if aLinks.Length() > 10 {
-	//	return content, contentText, maxDeep
-	//}
-
-	content, planText = CleanTags(nodeItem)
-	planLen = utf8.RuneCountInString(planText)
-	if isEnglish {
-		//英语使用空格来计算词数
-		planLen = len(strings.Split(planText, " "))
-	}
-	if planLen < config.CollectorConfig.ContentMinLength {
-		//小于指定字数的，直接抛弃了
-		return "", contentText, maxDeep
+		return content, contentText, maxDeep, maxPCount
 	}
 
 	//如果内容包含指定关键词，则集体抛弃
 	if HasContain(planText, config.CollectorConfig.ContentExclude) {
-		return "", contentText, maxDeep
+		return nil, contentText, maxDeep, maxPCount
 	}
 
-	return content, planText, maxDeep
+	if nodeItem.Is("ul") ||
+		nodeItem.Is("ol") ||
+		nodeItem.Is("dl") ||
+		nodeItem.Is("aside") {
+		return content, contentText, maxDeep, maxPCount
+	}
+
+	return nodeItem.Clone(), planText, maxDeep, maxPCount
 }
 
-func CleanTags(nodeItem *goquery.Selection) (string, string) {
-	clonedItem := nodeItem.Clone()
+func CleanTags(clonedItem *goquery.Selection) (string, string) {
 	contentText := strings.TrimSpace(clonedItem.Text())
 	//清理空格
-	re, _ := regexp.Compile(`\s+`)
+	re, _ := regexp.Compile(`\s{2,}`)
 	contentText = re.ReplaceAllString(contentText, " ")
+
+	pLength := clonedItem.ChildrenFiltered("p").Length()
+	divs := clonedItem.ChildrenFiltered("div")
+	if pLength > divs.Length()*3 {
+		divs.Remove()
+	}
+	clonedItem.Find("blockquote").Each(func(i int, item *goquery.Selection) {
+		if item.Find("a").Length() > 1 {
+			item.Remove()
+			return
+		}
+	})
+	clonedItem.Find("ul,ol,dl").Each(func(i int, item *goquery.Selection) {
+		if item.Find("a").Length() >= item.Find("li,dd").Length() {
+			item.Remove()
+			return
+		}
+	})
+	clonedItem.Find("a").Each(func(i int, item *goquery.Selection) {
+		parent := item.Parent()
+		if len(strings.TrimSpace(parent.Text())) < len(strings.TrimSpace(item.Text()))*2 {
+			parent.Remove()
+			return
+		}
+	})
 
 	for {
 		if clonedItem.Children().Length() == 1 && clonedItem.Children().Contents().Length() > 0 {
@@ -837,7 +762,6 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			break
 		}
 	}
-
 	//降dom深度
 	clonedItem.Children().Each(func(i int, item *goquery.Selection) {
 		// 如果是隐藏的，则删除
@@ -846,8 +770,7 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			item.Remove()
 			return
 		}
-		//只保留 img,code,blockquote,pre
-		if item.Is("blockquote") || item.Is("pre") {
+		if item.Is("pre") {
 			return
 		}
 		if item.Is("code") {
@@ -871,10 +794,6 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			} else {
 				item.ReplaceWithHtml("<p><img src=\"" + src + "\" alt=\"" + alt + "\"/></p>")
 			}
-			return
-		}
-		if item.Find("blockquote").Length() > 0 {
-			item.ReplaceWithSelection(item.Find("blockquote"))
 			return
 		}
 		if item.Find("pre").Length() > 0 {
@@ -904,24 +823,13 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 			return
 		}
 		//其他情况
-		if item.Is("p") || item.Is("div") {
-			// 如果一行内容，内部只有a，则移除
-			if item.Find("a").Length() > 0 && strings.TrimSpace(item.Find("a").Text()) == strings.TrimSpace(item.Text()) {
-				item.Remove()
-				return
-			}
-			// div转成p
-			item.ReplaceWithHtml(fmt.Sprintf("<p>%s</p>", strings.TrimSpace(strings.ReplaceAll(item.Text(), "\n", " "))))
-		} else if item.Is("ul") || item.Is("ol") {
-			if item.Find("li").Length() == 0 {
-				tmp, _ := item.Html()
-				item.WrapInnerHtml("<li>" + tmp + "</li>")
-			}
-		} else if !item.Is("table") {
-			item.ReplaceWithHtml("<p>" + strings.ReplaceAll(item.Text(), "\n", " ") + "</p>")
+		// 如果一行内容，内部只有a，则移除
+		if item.Find("a").Length() > 0 && strings.TrimSpace(item.Find("a").Text()) == strings.TrimSpace(item.Text()) {
+			item.Remove()
+			return
 		}
 	})
-
+	clonedItem.Find("h1,a,span").Contents().Unwrap()
 	inner := clonedItem.Find("*")
 	inner.Each(func(i int, innerItem *goquery.Selection) {
 		//移除 class,style
@@ -933,25 +841,22 @@ func CleanTags(nodeItem *goquery.Selection) (string, string) {
 
 		}
 		//移除不需要的词
-		if innerItem.Children().Length() == 0 && HasContain(innerItem.Text(), config.CollectorConfig.ContentExcludeLine) {
-			innerItem.Remove()
-			return
-		}
-		//清理a
-		if innerItem.Is("a") && HasContain(innerItem.Text(), config.CollectorConfig.LinkExclude) {
-			innerItem.Remove()
-			return
+		if HasContain(innerItem.Text(), config.CollectorConfig.ContentExcludeLine) {
+			if innerItem.Children().Length() == 0 || innerItem.Children().Text() == "" {
+				innerItem.Remove()
+				return
+			}
 		}
 	})
 
-	clonedItem.Find("h1,a").Contents().Unwrap()
-
 	content, _ := clonedItem.Html()
 	content = strings.TrimSpace(content)
+	if clonedItem.Is("p") {
+		content = "<p>" + content + "</p>"
+	}
 	contentText = strings.TrimSpace(clonedItem.Text())
-
 	//清理空格
-	re, _ = regexp.Compile(`\s+`)
+	re, _ = regexp.Compile(`\s{2,}`)
 	contentText = re.ReplaceAllString(contentText, " ")
 	//清理空标签
 	content = RemoveTags(content)
@@ -1022,6 +927,9 @@ func HasSuffix(need string, needArray []string) bool {
 }
 
 func HasContain(need string, needArray []string) bool {
+	if need == "" {
+		return false
+	}
 	for _, v := range needArray {
 		if v == "" {
 			continue
@@ -1035,8 +943,8 @@ func HasContain(need string, needArray []string) bool {
 }
 
 // ReplaceContentFromConfig 替换文章内容
-func ReplaceContentFromConfig(content string) string {
-	if content == "" || len(config.CollectorConfig.ContentReplace) <= 0 {
+func ReplaceContentFromConfig(content string, replacer []config.ReplaceKeyword) string {
+	if content == "" || len(replacer) <= 0 {
 		return content
 	}
 
@@ -1055,7 +963,7 @@ func ReplaceContentFromConfig(content string) string {
 		}
 	}
 
-	for _, v := range config.CollectorConfig.ContentReplace {
+	for _, v := range replacer {
 		// 增加支持正则表达式替换
 		if strings.HasPrefix(v.From, "{") && strings.HasSuffix(v.From, "}") && len(v.From) > 2 {
 			newWord := v.From[1 : len(v.From)-1]
@@ -1125,7 +1033,7 @@ func ParseLinking(htmlDom *goquery.Document, baseUrl string) {
 	})
 }
 
-//注意，第三方url的host不做覆盖
+// 注意，第三方url的host不做覆盖
 func joinURL(baseURL, subURL string) (fullURL, fullURLWithoutFrag string) {
 	baseURL = strings.TrimSpace(baseURL)
 	subURL = strings.TrimSpace(subURL)
@@ -1184,7 +1092,6 @@ func CheckContentIsEnglish(content string) bool {
 			enCount++
 		}
 	}
-
 	if float64(enCount) > float64(len(content))*0.95 {
 		return true
 	}
@@ -1204,9 +1111,9 @@ func ReplaceArticles() {
 		startId = archives[len(archives)-1].Id
 		for _, archive := range archives {
 			var archiveData model.ArchiveData
-			title := ReplaceContentFromConfig(archive.Title)
+			title := ReplaceContentFromConfig(archive.Title, config.CollectorConfig.ContentReplace)
 			dao.DB.Where("id = ?", archive.Id).Take(&archiveData)
-			content := ReplaceContentFromConfig(archiveData.Content)
+			content := ReplaceContentFromConfig(archiveData.Content, config.CollectorConfig.ContentReplace)
 
 			//替换完了
 			hasReplace := false
@@ -1334,53 +1241,6 @@ func checkArticleExists(originUrl, originTitle string) bool {
 	}
 	dao.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
 	if total > 0 {
-		return true
-	}
-
-	return false
-}
-
-func GetRootWords() [][]string {
-	var rootKeywords []string
-	dao.DB.Model(&model.Keyword{}).Where("`level` = 0").Limit(1000).Pluck("title", &rootKeywords)
-
-	var result = make([][]string, 0, len(rootKeywords))
-	for i := range rootKeywords {
-		result = append(result, library.WordSplit(strings.ToLower(rootKeywords[i]), false))
-	}
-
-	return result
-}
-
-func ContainRootWords(rootWords [][]string, word string) bool {
-	word = strings.ToLower(word)
-	for i := range rootWords {
-		match := true
-		for _, w := range rootWords[i] {
-			if !strings.Contains(word, w) {
-				match = false
-				break
-			}
-		}
-		if match {
-			return true
-		}
-	}
-
-	return false
-}
-
-func ContainKeywords(title, keyword string) bool {
-	words := library.WordSplit(strings.ToLower(keyword), false)
-
-	match := true
-	for _, w := range words {
-		if !strings.Contains(title, w) {
-			match = false
-			break
-		}
-	}
-	if match {
 		return true
 	}
 

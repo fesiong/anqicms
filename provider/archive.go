@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -278,6 +279,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		if config.JsonData.Content.RemoteDownload == 1 {
 			doc.Find("img").Each(func(i int, s *goquery.Selection) {
 				src, exists := s.Attr("src")
+				log.Println("下载图片：", src)
 				if exists && src != "" {
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)

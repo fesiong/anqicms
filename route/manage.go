@@ -213,6 +213,8 @@ func manageRoute(app *iris.Application) {
 
 			keyword := plugin.Party("/keyword")
 			{
+				keyword.Get("/setting", manageController.PluginKeywordSetting)
+				keyword.Post("/setting", manageController.PluginSaveKeywordSetting)
 				keyword.Get("/list", manageController.PluginKeywordList)
 				keyword.Post("/detail", manageController.PluginKeywordDetailForm)
 				keyword.Post("/delete", manageController.PluginKeywordDelete)
