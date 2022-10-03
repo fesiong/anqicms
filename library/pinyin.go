@@ -13,7 +13,7 @@ func GetPinyin(hans string) string {
 	tmpHans := []rune(hans)
 	var tmp string
 	for i, r := range tmpHans {
-		if (r >= 65 && r <= 90) || (r >= 97 && r <= 122) {
+		if (r >= 48 && r <= 57) || (r >= 65 && r <= 90) || (r >= 97 && r <= 122) {
 			tmp += string(r)
 			if i == len(tmpHans)-1 {
 				result = append(result, tmp)
