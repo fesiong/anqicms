@@ -39,6 +39,9 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	if fileExt == ".jpeg" {
 		fileExt = ".jpg"
 	}
+	if fileExt == "." {
+		fileExt = ""
+	}
 	isImage := 0
 	if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" {
 		isImage = 1
@@ -247,6 +250,10 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 		//处理
 		contentType := resp.Header.Get("content-type")
 		if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/png" || contentType == "image/gif" || contentType == "image/webp" {
+			if fileName == "" {
+				fileName = "image"
+			}
+			fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "." + strings.Split(contentType, "/")[1]
 			//获取宽高
 			tmpfile, err := ioutil.TempFile("", "download")
 			if err != nil {

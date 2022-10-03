@@ -56,4 +56,7 @@ const (
 
 	LanguageZh = "zh"
 	LanguageEn = "en"
+
+	CollectModeCollect = 0
+	CollectModeCombine = 1
 )

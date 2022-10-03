@@ -11,3 +11,4 @@ goblog
 /system
 /release
 collector.json
+*.json

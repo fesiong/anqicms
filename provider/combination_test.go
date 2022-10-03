@@ -3,14 +3,16 @@ package provider
 import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
-	"log"
 	"testing"
 )
 
-func TestCollectCombinationMaterials(t *testing.T) {
-	keyword := &model.Keyword{Title: "搞笑"}
-	config.KeywordConfig.FromEngine = config.Engin360
-	result := collectCombinationMaterials(keyword)
-
-	log.Println(result)
+func TestGenerateCombination(t *testing.T) {
+	keyword := &model.Keyword{Title: "sunglasses"}
+	config.CollectorConfig.FromEngine = config.EnginBing
+	config.CollectorConfig.InsertImage = true
+	config.CollectorConfig.Language = config.LanguageEn
+	_, err := GenerateCombination(keyword)
+	if err != nil {
+		t.Fatal(err)
+	}
 }

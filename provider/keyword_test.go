@@ -4,6 +4,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"log"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -33,4 +34,26 @@ func TestKeywordFilter(t *testing.T) {
 	for _, v := range ss {
 		log.Println(KeywordFilter(v))
 	}
+}
+
+func TestContainKeywords(t *testing.T) {
+	s := "哪位来讲一下环氧地板漆怎么样?来说说_涂料/油漆_太平洋家居问答"
+
+	res := ContainKeywords(s, "环氧地坪漆怎么样")
+
+	log.Println(res)
+}
+
+func TestTrim(t *testing.T) {
+	s := "环氧漆地坪质量怎么样?-环氧漆地坪口碑怎么样? - 小麦优选"
+	title := strings.TrimSpace(s)
+	title = strings.Trim(title, "...…")
+	index := strings.IndexAny(title, "|-_?？.")
+	log.Println(index)
+	if index > 0 {
+		title = title[:index]
+		title = strings.TrimSpace(title)
+	}
+
+	log.Println(title)
 }

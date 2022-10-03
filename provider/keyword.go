@@ -210,7 +210,7 @@ func StartDigKeywords(focus bool) {
 	if dao.DB == nil {
 		return
 	}
-	if (config.CollectorConfig.AutoDigKeyword == false && config.CombinationConfig.AutoDigKeyword == false) && !focus {
+	if config.KeywordConfig.AutoDig == false && !focus {
 		return
 	}
 	if digKeywordRunning {
@@ -452,7 +452,7 @@ func KeywordFilter(word string) (string, bool) {
 		}
 	}
 	var err error
-	for _, v := range config.CollectorConfig.ContentReplace {
+	for _, v := range config.KeywordConfig.TitleReplace {
 		// 增加支持正则表达式替换
 		if strings.HasPrefix(v.From, "{") && strings.HasSuffix(v.From, "}") && len(v.From) > 2 {
 			newWord := v.From[1 : len(v.From)-1]
@@ -520,8 +520,8 @@ func ContainKeywords(title, keyword string) bool {
 	if title == "" {
 		return false
 	}
+	title = strings.ToLower(title)
 	words := library.WordSplit(strings.ToLower(keyword), false)
-
 	maxLen := 0
 	matchLen := 0
 	for _, w := range words {
@@ -530,7 +530,7 @@ func ContainKeywords(title, keyword string) bool {
 			matchLen += len(w)
 		}
 	}
-	if float64(matchLen)/float64(maxLen) >= 0.75 {
+	if float64(matchLen)/float64(maxLen) >= 0.60 {
 		return true
 	}
 

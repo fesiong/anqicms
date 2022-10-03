@@ -6,8 +6,8 @@ import (
 )
 
 func TestDownloadRemoteImage(t *testing.T) {
-	link := "https://www.php.cn/static/images/sw/yamaxun_mob.jpg"
-	alt := "4.png"
+	link := "https://mmbiz.qpic.cn/mmbiz_jpg/YNoY3yGicTIRicbeSpTCnzxK1icJ0vBLlnMwibl9icyZcNnL4ml0ic3YI1Yp3RyeK8FicBu9OFVvmibRuK89ky5u2faCnw/640?wx_fmt=jpeg"
+	alt := ""
 
 	result, err := DownloadRemoteImage(link, alt)
 	if err != nil {

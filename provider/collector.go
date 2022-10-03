@@ -87,9 +87,6 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 		if req.AutoPseudo {
 			collector.AutoPseudo = req.AutoPseudo
 		}
-		if req.AutoDigKeyword {
-			collector.AutoDigKeyword = req.AutoDigKeyword
-		}
 		if req.CategoryId > 0 {
 			collector.CategoryId = req.CategoryId
 		}
@@ -216,8 +213,12 @@ func CollectArticles() {
 	}
 }
 
-func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (int, error) {
-	total, err := CollectArticleFromBaidu(&keyword, focus)
+func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (total int, err error) {
+	if config.CollectorConfig.CollectMode == config.CollectModeCombine {
+		total, err = GenerateCombination(&keyword)
+	} else if config.CollectorConfig.CollectMode == config.CollectModeCollect {
+		total, err = CollectArticleFromBaidu(&keyword, focus)
+	}
 
 	if err != nil {
 		return total, err
@@ -446,7 +447,7 @@ func ParseArticleDetail(archive *request.Archive) error {
 		ParseNormalDetail(archive, doc)
 	}
 
-	archive.Content = ReplaceContentFromConfig(archive.Content)
+	archive.Content = ReplaceContentFromConfig(archive.Content, config.CollectorConfig.ContentReplace)
 
 	return nil
 }
@@ -926,6 +927,9 @@ func HasSuffix(need string, needArray []string) bool {
 }
 
 func HasContain(need string, needArray []string) bool {
+	if need == "" {
+		return false
+	}
 	for _, v := range needArray {
 		if v == "" {
 			continue
@@ -939,8 +943,8 @@ func HasContain(need string, needArray []string) bool {
 }
 
 // ReplaceContentFromConfig 替换文章内容
-func ReplaceContentFromConfig(content string) string {
-	if content == "" || len(config.CollectorConfig.ContentReplace) <= 0 {
+func ReplaceContentFromConfig(content string, replacer []config.ReplaceKeyword) string {
+	if content == "" || len(replacer) <= 0 {
 		return content
 	}
 
@@ -959,7 +963,7 @@ func ReplaceContentFromConfig(content string) string {
 		}
 	}
 
-	for _, v := range config.CollectorConfig.ContentReplace {
+	for _, v := range replacer {
 		// 增加支持正则表达式替换
 		if strings.HasPrefix(v.From, "{") && strings.HasSuffix(v.From, "}") && len(v.From) > 2 {
 			newWord := v.From[1 : len(v.From)-1]
@@ -1107,9 +1111,9 @@ func ReplaceArticles() {
 		startId = archives[len(archives)-1].Id
 		for _, archive := range archives {
 			var archiveData model.ArchiveData
-			title := ReplaceContentFromConfig(archive.Title)
+			title := ReplaceContentFromConfig(archive.Title, config.CollectorConfig.ContentReplace)
 			dao.DB.Where("id = ?", archive.Id).Take(&archiveData)
-			content := ReplaceContentFromConfig(archiveData.Content)
+			content := ReplaceContentFromConfig(archiveData.Content, config.CollectorConfig.ContentReplace)
 
 			//替换完了
 			hasReplace := false
