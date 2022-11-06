@@ -62,9 +62,6 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginRetailer.GoodsPrice = req.GoodsPrice
-	config.JsonData.PluginRetailer.ShareReward = req.ShareReward
-	config.JsonData.PluginRetailer.ParentReward = req.ParentReward
 	config.JsonData.PluginRetailer.AllowSelf = req.AllowSelf
 	config.JsonData.PluginRetailer.BecomeRetailer = req.BecomeRetailer
 

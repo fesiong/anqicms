@@ -103,7 +103,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 
 		&model.User{},
 		&model.UserGroup{},
-		&model.UserWeixin{},
+		&model.UserWechat{},
 		&model.UserWithdraw{},
 		&model.WeappQrcode{},
 		&model.Order{},
@@ -113,6 +113,9 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.Payment{},
 		&model.Finance{},
 		&model.Commission{},
+		&model.WechatMenu{},
+		&model.WechatMessage{},
+		&model.WechatReplyRule{},
 	)
 
 	if err != nil {
@@ -177,13 +180,41 @@ func AutoMigrateDB(db *gorm.DB) error {
 	db.Model(&model.NavType{}).FirstOrCreate(&navType)
 	// 检查分组
 	adminGroup := model.AdminGroup{
+		Model:       model.Model{Id: 1},
 		Title:       "超级管理员",
 		Description: "超级管理员分组",
 		Status:      1,
 		Setting:     model.GroupSetting{},
 	}
-	adminGroup.Id = 1
 	db.Where("`id` = 1").FirstOrCreate(&adminGroup)
+
+	// set default user groups
+	userGeroups := []model.UserGroup{
+		{
+
+			Title:  "普通用户",
+			Level:  0,
+			Status: 1,
+		},
+		{
+			Model:  model.Model{Id: 2},
+			Title:  "中级用户",
+			Level:  1,
+			Status: 1,
+		},
+		{
+			Model:  model.Model{Id: 3},
+			Title:  "高级用户",
+			Level:  2,
+			Status: 1,
+		},
+	}
+	// check if groups not exist
+	var groupNum int64
+	db.Model(&model.UserGroup{}).Count(&groupNum)
+	if groupNum == 0 {
+		db.CreateInBatches(userGeroups, 10)
+	}
 
 	return nil
 }

@@ -3,11 +3,11 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
 	"github.com/medivhzhan/weapp/v3"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"log"
@@ -52,6 +52,50 @@ func GetUserInfoById(userId uint) (*model.User, error) {
 	return &user, nil
 }
 
+func GetUserInfoByUserName(userName string) (*model.User, error) {
+	var user model.User
+	err := dao.DB.Where("`user_name` = ?", userName).Take(&user).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func GetUserInfoByEmail(email string) (*model.User, error) {
+	var user model.User
+	err := dao.DB.Where("`email` = ?", email).Take(&user).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func GetUserInfoByPhone(phone string) (*model.User, error) {
+	var user model.User
+	err := dao.DB.Where("`phone` = ?", phone).Take(&user).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
+func CheckUserInviteCode(inviteCode string) (*model.User, error) {
+	var user model.User
+	err := dao.DB.Where("`invite_code` = ?", inviteCode).Take(&user).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &user, nil
+}
+
 func GetUsersInfoByIds(userIds []uint) []*model.User {
 	var users []*model.User
 	if len(userIds) == 0 {
@@ -64,13 +108,23 @@ func GetUsersInfoByIds(userIds []uint) []*model.User {
 
 func SaveUserInfo(req *request.UserRequest) error {
 	var user = model.User{
-		UserName:  req.UserName,
-		AvatarURL: req.AvatarURL,
-		Phone:     req.Phone,
-		GroupId:   req.GroupId,
-		Status:    1,
-		Balance:   0,
+		UserName:   req.UserName,
+		RealName:   req.RealName,
+		AvatarURL:  req.AvatarURL,
+		Phone:      req.Phone,
+		Email:      req.Email,
+		IsRetailer: req.IsRetailer,
+		ParentId:   req.ParentId,
+		InviteCode: req.InviteCode,
+		GroupId:    req.GroupId,
+		ExpireTime: req.ExpireTime,
+		Status:     req.Status,
 	}
+	req.Password = strings.TrimSpace(req.Password)
+	if req.Password != "" {
+		user.EncryptPassword(req.Password)
+	}
+
 	if req.Id > 0 {
 		_, err := GetUserInfoById(req.Id)
 		if err != nil {
@@ -100,7 +154,7 @@ func DeleteUserInfo(userId uint) error {
 func GetUserGroups() []*model.UserGroup {
 	var groups []*model.UserGroup
 
-	dao.DB.Order("id asc").Find(&groups)
+	dao.DB.Order("level asc,id asc").Find(&groups)
 
 	return groups
 }
@@ -122,6 +176,7 @@ func SaveUserGroupInfo(req *request.UserGroupRequest) error {
 		Title:       req.Title,
 		Description: req.Description,
 		Level:       req.Level,
+		Price:       req.Price,
 		Status:      1,
 		Setting:     req.Setting,
 	}
@@ -138,22 +193,35 @@ func SaveUserGroupInfo(req *request.UserGroupRequest) error {
 	return err
 }
 
-func GetUserWeixinByOpenid(openid string) (*model.UserWeixin, error) {
-	var userWeixin model.UserWeixin
-	if err := dao.DB.Where("`openid` = ?", openid).First(&userWeixin).Error; err != nil {
+func GetUserWechatByOpenid(openid string) (*model.UserWechat, error) {
+	var userWechat model.UserWechat
+	if err := dao.DB.Where("`openid` = ?", openid).First(&userWechat).Error; err != nil {
 		return nil, err
 	}
 
-	return &userWeixin, nil
+	return &userWechat, nil
 }
 
-func GetUserWeixinByUserId(userId uint) (*model.UserWeixin, error) {
-	var userWeixin model.UserWeixin
-	if err := dao.DB.Where("`user_id` = ?", userId).First(&userWeixin).Error; err != nil {
+func GetUserByUnionId(unionId string) (*model.User, error) {
+	var userWechat model.UserWechat
+	if err := dao.DB.Where("`union_id` = ? AND user_id > 0", unionId).First(&userWechat).Error; err != nil {
 		return nil, err
 	}
 
-	return &userWeixin, nil
+	user, err := GetUserInfoById(userWechat.UserId)
+	if err != nil {
+		return nil, err
+	}
+	return user, nil
+}
+
+func GetUserWechatByUserId(userId uint) (*model.UserWechat, error) {
+	var userWechat model.UserWechat
+	if err := dao.DB.Where("`user_id` = ?", userId).First(&userWechat).Error; err != nil {
+		return nil, err
+	}
+
+	return &userWechat, nil
 }
 
 func DeleteUserGroup(groupId uint) error {
@@ -169,7 +237,58 @@ func DeleteUserGroup(groupId uint) error {
 	return err
 }
 
-func LoginByWeixin(req *request.ApiLoginRequest) (*model.User, error) {
+func RegisterUser(req *request.ApiRegisterRequest) (*model.User, error) {
+	if req.UserName == "" || req.Password == "" {
+		return nil, errors.New(config.Lang("请正确填写用户名和密码"))
+	}
+	if len(req.Password) < 6 {
+		return nil, errors.New(config.Lang("请输入6位以上的密码"))
+	}
+	_, err := GetUserInfoByUserName(req.UserName)
+	if err == nil {
+		return nil, errors.New(config.Lang("该用户名已被注册"))
+	}
+	if req.Phone != "" {
+		if !VerifyCellphoneFormat(req.Phone) {
+			return nil, errors.New(config.Lang("手机号不正确"))
+		}
+		_, err := GetUserInfoByPhone(req.Phone)
+		if err == nil {
+			return nil, errors.New(config.Lang("该手机号已被注册"))
+		}
+	}
+	if req.Email != "" {
+		if !VerifyEmailFormat(req.Email) {
+			return nil, errors.New(config.Lang("邮箱不正确"))
+		}
+		_, err := GetUserInfoByEmail(req.Email)
+		if err == nil {
+			return nil, errors.New(config.Lang("该邮箱已被注册"))
+		}
+	}
+	if req.Phone == "" && req.Email == "" {
+		return nil, errors.New(config.Lang("邮箱和手机号至少填写一个"))
+	}
+
+	user := model.User{
+		UserName:  req.UserName,
+		RealName:  req.RealName,
+		AvatarURL: req.AvatarURL,
+		ParentId:  req.InviteId,
+		Phone:     req.Phone,
+		Email:     req.Email,
+		GroupId:   0,
+		Status:    1,
+	}
+	user.EncryptPassword(req.Password)
+	dao.DB.Save(&user)
+
+	_ = user.EncodeToken(dao.DB)
+
+	return &user, nil
+}
+
+func LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, error) {
 	loginRs, err := GetWeappClient(false).Login(req.Code)
 	if err != nil {
 		return nil, err
@@ -180,10 +299,10 @@ func LoginByWeixin(req *request.ApiLoginRequest) (*model.User, error) {
 		return nil, errors.New("无法获取openid")
 	}
 
-	var weixinUserInfo *weapp.UserInfo
-	weixinUserInfo, err = GetWeappClient(false).DecryptUserInfo(loginRs.SessionKey, req.RawData, req.EncryptedData, req.Signature, req.Iv)
+	var wecahtUserInfo *weapp.UserInfo
+	wecahtUserInfo, err = GetWeappClient(false).DecryptUserInfo(loginRs.SessionKey, req.RawData, req.EncryptedData, req.Signature, req.Iv)
 	if err != nil {
-		weixinUserInfo = &weapp.UserInfo{
+		wecahtUserInfo = &weapp.UserInfo{
 			Avatar:   req.Avatar,
 			Gender:   int(req.Gender),
 			Country:  req.County,
@@ -194,13 +313,13 @@ func LoginByWeixin(req *request.ApiLoginRequest) (*model.User, error) {
 		}
 	}
 	// 拿到openid
-	userWeixin, userErr := GetUserWeixinByOpenid(loginRs.OpenID)
+	userWechat, userErr := GetUserWechatByOpenid(loginRs.OpenID)
 	var user *model.User
 	if userErr != nil {
 		//系统没记录，则插入一条记录
 		user = &model.User{
-			UserName:  weixinUserInfo.Nickname,
-			AvatarURL: weixinUserInfo.Avatar,
+			UserName:  wecahtUserInfo.Nickname,
+			AvatarURL: wecahtUserInfo.Avatar,
 			ParentId:  req.InviteId,
 			GroupId:   0,
 			Status:    1,
@@ -211,62 +330,92 @@ func LoginByWeixin(req *request.ApiLoginRequest) (*model.User, error) {
 			return nil, err
 		}
 
-		userWeixin = &model.UserWeixin{
+		userWechat = &model.UserWechat{
 			UserId:    user.Id,
-			Nickname:  weixinUserInfo.Nickname,
-			AvatarURL: weixinUserInfo.Avatar,
-			Gender:    weixinUserInfo.Gender,
+			Nickname:  wecahtUserInfo.Nickname,
+			AvatarURL: wecahtUserInfo.Avatar,
+			Gender:    wecahtUserInfo.Gender,
 			Openid:    loginRs.OpenID,
 			UnionId:   loginRs.UnionID,
+			Platform:  config.PlatformWeapp,
 			Status:    1,
 		}
 
-		err = dao.DB.Save(userWeixin).Error
+		err = dao.DB.Save(userWechat).Error
 		if err != nil {
 			//删掉
 			dao.DB.Delete(user)
 			return nil, err
 		}
 
-		go DownloadAvatar(userWeixin.AvatarURL, user)
+		go DownloadAvatar(userWechat.AvatarURL, user)
 	} else {
-		user, err = GetUserInfoById(userWeixin.UserId)
+		user, err = GetUserInfoById(userWechat.UserId)
 		if err != nil {
 			return nil, err
 		}
 		//更新信息
-		if weixinUserInfo.Nickname != "" && (userWeixin.Nickname != weixinUserInfo.Nickname || userWeixin.AvatarURL != weixinUserInfo.Avatar) {
-			user.UserName = weixinUserInfo.Nickname
-			user.AvatarURL = weixinUserInfo.Avatar
+		if wecahtUserInfo.Nickname != "" && (userWechat.Nickname != wecahtUserInfo.Nickname || userWechat.AvatarURL != wecahtUserInfo.Avatar) {
+			user.UserName = wecahtUserInfo.Nickname
+			user.AvatarURL = wecahtUserInfo.Avatar
 			err = dao.DB.Save(user).Error
 			if err != nil {
 				return nil, err
 			}
 
-			userWeixin.Nickname = weixinUserInfo.Nickname
-			userWeixin.AvatarURL = weixinUserInfo.Avatar
-			err = dao.DB.Save(userWeixin).Error
+			userWechat.Nickname = wecahtUserInfo.Nickname
+			userWechat.AvatarURL = wecahtUserInfo.Avatar
+			err = dao.DB.Save(userWechat).Error
 			if err != nil {
 				return nil, err
 			}
 		}
 	}
 
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": fmt.Sprintf("%d", user.Id),
-		"t":      fmt.Sprintf("%d", time.Now().AddDate(0, 0, 30).Unix()),
-	})
-	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.JsonData.Server.TokenSecret))
-	if err != nil {
-		return nil, err
-	}
-	user.Token = tokenString
+	_ = user.EncodeToken(dao.DB)
 
 	return user, nil
 }
 
-func LoginByPassword(req *request.ApiLoginRequest) (*model.User, error) {
+func LoginViaWechat(req *request.ApiLoginRequest) (*model.User, error) {
+	openid := library.CodeCache.GetByCode(req.Code, false)
+	if openid == "" {
+		return nil, errors.New("验证码不正确")
+	}
+	// auto register
+	userWechat, err := GetUserWechatByOpenid(openid)
+	if err != nil {
+		return nil, errors.New("用户信息不完整")
+	}
+	var user *model.User
+	if userWechat.UserId == 0 {
+		user = &model.User{
+			UserName:  userWechat.Nickname,
+			AvatarURL: userWechat.AvatarURL,
+			GroupId:   0,
+			Password:  "",
+			Status:    1,
+		}
+		dao.DB.Save(user)
+		userWechat.UserId = user.Id
+		dao.DB.Save(userWechat)
+	} else {
+		user, err = GetUserInfoById(userWechat.UserId)
+		if err != nil {
+			return nil, errors.New("用户信息不完整")
+		}
+	}
+	if req.InviteId > 0 && user.ParentId == 0 {
+		user.ParentId = req.InviteId
+		dao.DB.Save(user)
+	}
+
+	_ = user.EncodeToken(dao.DB)
+
+	return user, nil
+}
+
+func LoginViaPassword(req *request.ApiLoginRequest) (*model.User, error) {
 	var user model.User
 	if VerifyEmailFormat(req.UserName) {
 		//邮箱登录
@@ -293,16 +442,7 @@ func LoginByPassword(req *request.ApiLoginRequest) (*model.User, error) {
 		return nil, errors.New("密码错误")
 	}
 
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": fmt.Sprintf("%d", user.Id),
-		"t":      fmt.Sprintf("%d", time.Now().AddDate(0, 0, 30).Unix()),
-	})
-	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.JsonData.Server.TokenSecret))
-	if err != nil {
-		return nil, err
-	}
-	user.Token = tokenString
+	_ = user.EncodeToken(dao.DB)
 
 	return &user, nil
 }
@@ -326,7 +466,7 @@ func DownloadAvatar(avatarUrl string, userInfo *model.User) {
 
 	//生成用户文件
 	tmpName := fmt.Sprintf("%010d.jpg", userInfo.Id)
-	filePath := fmt.Sprintf("uploads/avatar/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
+	filePath := fmt.Sprintf("/uploads/avatar/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
 	attach, err := DownloadRemoteImage(avatarUrl, filePath)
 	if err != nil {
 		return
@@ -356,4 +496,82 @@ func SetRetailerInfo(userId uint, isRetailer int) error {
 	err := dao.DB.Model(&model.User{}).Where("`id` = ?", userId).UpdateColumn("is_retailer", isRetailer).Error
 
 	return err
+}
+
+func UpdateUserInfo(userId uint, req *request.UserRequest) error {
+	user, err := GetUserInfoById(userId)
+	if err != nil {
+		return err
+	}
+
+	exist, err := GetUserInfoByUserName(req.UserName)
+	if err == nil && exist.Id != user.Id {
+		return errors.New(config.Lang("该用户名已被注册"))
+	}
+
+	if user.Phone != "" {
+		req.Phone = ""
+	}
+	if user.Email != "" {
+		req.Email = ""
+	}
+	if req.Phone != "" {
+		if !VerifyCellphoneFormat(req.Phone) {
+			return errors.New(config.Lang("手机号不正确"))
+		}
+		exist, err = GetUserInfoByPhone(req.Phone)
+		if err == nil && exist.Id != user.Id {
+			return errors.New(config.Lang("该手机号已被注册"))
+		}
+		user.Phone = req.Phone
+	}
+	if req.Email != "" {
+		if !VerifyEmailFormat(req.Email) {
+			return errors.New(config.Lang("邮箱不正确"))
+		}
+		exist, err = GetUserInfoByEmail(req.Email)
+		if err == nil && exist.Id != user.Id {
+			return errors.New(config.Lang("该邮箱已被注册"))
+		}
+		user.Email = req.Email
+	}
+	user.UserName = req.UserName
+	user.RealName = req.RealName
+
+	dao.DB.Save(user)
+
+	return nil
+}
+
+func CleanUserVip() {
+	if dao.DB == nil {
+		return
+	}
+	var group model.UserGroup
+	err := dao.DB.Where("`status` = 1").Order("level asc").Take(&group).Error
+	if err != nil {
+		return
+	}
+	dao.DB.Model(&model.User{}).Where("`status` = 1 and `group_id` != ? and `expire_time` < ?", group.Id, time.Now().Unix()).UpdateColumn("group_id", group.Id)
+}
+
+func GetUserDiscount(userId uint, user *model.User) int64 {
+	if user == nil {
+		user, _ = GetUserInfoById(userId)
+	}
+	if user != nil {
+		if user.ParentId > 0 {
+			parent, err := GetUserInfoById(user.ParentId)
+			if err == nil {
+				group, err := GetUserGroupInfo(parent.GroupId)
+				if err == nil {
+					if group.Setting.Discount > 0 {
+						return group.Setting.Discount
+					}
+				}
+			}
+		}
+	}
+
+	return 0
 }

@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 )

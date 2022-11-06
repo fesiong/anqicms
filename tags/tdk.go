@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/response"
@@ -10,8 +10,8 @@ import (
 )
 
 type tagTdkNode struct {
-	args    map[string]pongo2.IEvaluator
-	name     string
+	args map[string]pongo2.IEvaluator
+	name string
 }
 
 func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {

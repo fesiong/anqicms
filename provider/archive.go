@@ -614,14 +614,29 @@ func VerifyArchiveUrlToken(urlToken string, id uint) string {
 }
 
 func CheckArchiveHasOrder(userId uint, archiveId uint) bool {
-	var order model.Order
-	err := dao.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archiveId).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+	if userId == 0 || archiveId == 0 {
+		return false
+	}
+	var exist int64
+	dao.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archiveId).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
 		config.OrderStatusPaid,
 		config.OrderStatusDelivering,
-		config.OrderStatusCompleted}).Take(&order).Error
-	if err == nil {
+		config.OrderStatusCompleted}).Count(&exist)
+	if exist > 0 {
 		return true
 	}
+
+	//var orderIds []string
+	//dao.DB.Model(&model.OrderDetail{}).Where("`user_id` = ? and `goods_id` = ?", userId, archiveId).Pluck("order_id", &orderIds)
+	//if len(orderIds) == 0 {
+	//	return false
+	//}
+	//
+	//var exist int64
+	//dao.DB.Model(&model.Order{}).Where("`order_id` IN(?) and `status` > ?", orderIds, 0).Count(&exist)
+	//if exist > 0 {
+	//	return true
+	//}
 
 	return false
 }

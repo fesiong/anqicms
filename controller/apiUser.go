@@ -7,9 +7,51 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"strconv"
 	"strings"
 	"time"
 )
+
+func ApiRegister(ctx iris.Context) {
+	var req request.ApiRegisterRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		body, _ := ctx.GetBody()
+		library.DebugLog("error", err.Error(), string(body))
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	tmpInvite := ctx.GetCookie("invite")
+	if tmpInvite != "" {
+		tmpId, _ := strconv.Atoi(tmpInvite)
+		req.InviteId = uint(tmpId)
+	}
+	req.UserName = strings.TrimSpace(req.UserName)
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Password = strings.TrimSpace(req.Password)
+	user, err := provider.RegisterUser(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// set token to cookie
+	t := iris.CookieExpires(24 * time.Hour)
+	ctx.SetCookieKV("token", user.Token, iris.CookiePath("/"), t)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": user,
+	})
+}
 
 func ApiLogin(ctx iris.Context) {
 	var req request.ApiLoginRequest
@@ -24,23 +66,39 @@ func ApiLogin(ctx iris.Context) {
 		return
 	}
 
+	tmpInvite := ctx.GetCookie("invite")
+	if tmpInvite != "" {
+		tmpId, _ := strconv.Atoi(tmpInvite)
+		req.InviteId = uint(tmpId)
+	}
+
 	var user *model.User
 
-	if req.Platform == "tt" {
+	if req.Platform == config.PlatformTT {
 		//头条的登录逻辑
 		// todo
-	} else if req.Platform == "swan" {
+	} else if req.Platform == config.PlatformSwan {
 		//百度的登录逻辑
 		//todo
-	} else if req.Platform == "alipay" {
+	} else if req.Platform == config.PlatformAlipay {
 		//支付宝的登录逻辑
 		// todo
-	} else if req.Platform == "qq" {
+	} else if req.Platform == config.PlatformQQ {
 		//QQ的登录逻辑
 		// todo
-	} else if req.Platform == "weapp" {
-		//wechat  login
-		user, err = provider.LoginByWeixin(&req)
+	} else if req.Platform == config.PlatformWeapp {
+		//weapp  login
+		user, err = provider.LoginViaWeapp(&req)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	} else if req.Platform == config.PlatformWechat {
+		// WeChat official account login
+		user, err = provider.LoginViaWechat(&req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -87,7 +145,7 @@ func ApiLogin(ctx iris.Context) {
 		}
 
 		//开始登录用户
-		user, err = provider.LoginByPassword(&req)
+		user, err = provider.LoginViaPassword(&req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -136,5 +194,135 @@ func ApiGetUserDetail(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  nil,
 		"data": user,
+	})
+}
+
+func ApiUpdateUserDetail(ctx iris.Context) {
+	var req request.UserRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req.UserName = strings.TrimSpace(req.UserName)
+	req.RealName = strings.TrimSpace(req.RealName)
+	req.Phone = strings.TrimSpace(req.Phone)
+	req.Email = strings.TrimSpace(req.Email)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+
+	err := provider.UpdateUserInfo(userId, &req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "保存成功",
+	})
+}
+
+func ApiGetUserGroups(ctx iris.Context) {
+	groups := provider.GetUserGroups()
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId > 0 {
+		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+		discount := provider.GetUserDiscount(userId, userInfo)
+		for i := range groups {
+			if groups[i].Price > 0 {
+				if discount > 0 {
+					groups[i].FavorablePrice = groups[i].Price * discount / 100
+				}
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": groups,
+	})
+}
+
+func ApiGetUserGroupDetail(ctx iris.Context) {
+	id := uint(ctx.URLParamIntDefault("id", 0))
+	group, err := provider.GetUserGroupInfo(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId > 0 {
+		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+		discount := provider.GetUserDiscount(userId, userInfo)
+		if group.Price > 0 {
+			if discount > 0 {
+				group.FavorablePrice = group.Price * discount / 100
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": group,
+	})
+}
+
+func ApiUpdateUserPassword(ctx iris.Context) {
+	var req request.UserPasswordRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req.Password = strings.TrimSpace(req.Password)
+	req.OldPassword = strings.TrimSpace(req.OldPassword)
+	if len(req.Password) < 6 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请填写6位以上的密码",
+		})
+		return
+	}
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	user, err := provider.GetUserInfoById(userId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请登录",
+		})
+		return
+	}
+
+	if !user.CheckPassword(req.OldPassword) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "旧密码错误",
+		})
+		return
+	}
+	err = user.EncryptPassword(req.Password)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "密码修改成功",
 	})
 }

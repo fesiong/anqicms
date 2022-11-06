@@ -164,3 +164,8 @@ type PluginStorageConfigRequest struct {
 	UpyunOperator string `json:"upyun_operator"`
 	UpyunPassword string `json:"upyun_password"`
 }
+
+type PluginImportApiConfig struct {
+	Token     string `json:"token"`      // 文档导入token
+	LinkToken string `json:"link_token"` // 友情链接token
+}

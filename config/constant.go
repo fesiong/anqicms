@@ -64,8 +64,10 @@ const (
 	CommissionStatusPaid   = 1 //已提现
 	CommissionStatusCancel = -1
 
-	PayWayWeixin = "weixin"
-	PayWayAlipay = "alipay"
+	PayWayWechat  = "wechat"  // 微信网页支付
+	PayWayWeapp   = "weapp"   // 微信小程序支付
+	PayWayAlipay  = "alipay"  // 支付宝支付
+	PayWayOffline = "offline" // 线下支付
 )
 
 const (
@@ -104,4 +106,21 @@ const (
 
 	CollectModeCollect = 0
 	CollectModeCombine = 1
+)
+
+// login platform
+const (
+	PlatformTT       = "tt"       // toutiao
+	PlatformSwan     = "swan"     // baidu
+	PlatformAlipay   = "alipay"   // alipay
+	PlatformQQ       = "qq"       // qq
+	PlatformWeapp    = "weapp"    // weapp mini program
+	PlatformWechat   = "wechat"   // WeChat official account
+	PlatformInWechat = "inwechat" // in the wechat browser
+	PlatformWebsite  = "website"  // normal login way, like email/cellphone/username
+)
+
+const (
+	OrderTypeGoods = "goods"
+	OrderTypeVip   = "vip"
 )

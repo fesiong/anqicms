@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"fmt"
+	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/library"
 	"runtime"
@@ -9,7 +10,7 @@ import (
 )
 
 func NewRecover() context.Handler {
-	return func(ctx context.Context) {
+	return func(ctx iris.Context) {
 		defer func() {
 			if err := recover(); err != nil {
 				if ctx.IsStopped() {
@@ -43,7 +44,7 @@ func NewRecover() context.Handler {
 	}
 }
 
-func getRequestLogs(ctx context.Context) string {
+func getRequestLogs(ctx iris.Context) string {
 	var status, ip, method, path string
 	status = strconv.Itoa(ctx.GetStatusCode())
 	path = ctx.Path()

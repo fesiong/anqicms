@@ -12,7 +12,7 @@ type Attachment struct {
 	FileName     string `json:"file_name" gorm:"column:file_name;type:varchar(100) not null;default:''"`
 	FileLocation string `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
 	FileSize     int64  `json:"file_size" gorm:"column:file_size;type:bigint(20) unsigned not null;default:0"`
-	FileMd5      string `json:"file_md5" gorm:"column:file_md5;type:varchar(32) unique not null;default:''"`
+	FileMd5      string `json:"file_md5" gorm:"column:file_md5;type:varchar(32) not null;default:'';unique"`
 	Width        int    `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
 	Height       int    `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
 	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`

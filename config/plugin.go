@@ -63,7 +63,8 @@ type pluginSendmail struct {
 }
 
 type pluginImportApiConfig struct {
-	Token string `json:"token"`
+	Token     string `json:"token"`      // 文档导入token
+	LinkToken string `json:"link_token"` // 友情链接token
 }
 
 type pluginStorageConfig struct {

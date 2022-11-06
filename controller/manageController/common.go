@@ -31,7 +31,7 @@ func AdminFileServ(ctx iris.Context) {
 		uriFile := baseDir + uri
 		_, err := os.Stat(uriFile)
 		if err == nil {
-			ctx.ServeFile(uriFile, false)
+			ctx.ServeFile(uriFile)
 			return
 		}
 
@@ -39,7 +39,7 @@ func AdminFileServ(ctx iris.Context) {
 			uriFile = uriFile + "/index.html"
 			_, err = os.Stat(uriFile)
 			if err == nil {
-				ctx.ServeFile(uriFile, false)
+				ctx.ServeFile(uriFile)
 				return
 			}
 		}
@@ -115,10 +115,10 @@ func GetStatisticsSummary(ctx iris.Context) {
 		dao.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
 		dao.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
 
-		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", time.Now().AddDate(0,0,-7).Unix()).Count(&result.TrafficCount.Total)
+		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.TrafficCount.Total)
 		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", today.Unix()).Count(&result.TrafficCount.Today)
 
-		dao.DB.Model(&model.Statistic{}).Where("`spider`!= '' and `created_time` >= ?", time.Now().AddDate(0,0,-7).Unix()).Count(&result.SpiderCount.Total)
+		dao.DB.Model(&model.Statistic{}).Where("`spider`!= '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.SpiderCount.Total)
 		dao.DB.Model(&model.Statistic{}).Where("`spider` != '' and `created_time` >= ?", today.Unix()).Count(&result.SpiderCount.Today)
 
 		var lastInclude model.SpiderInclude

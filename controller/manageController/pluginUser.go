@@ -5,9 +5,64 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"strings"
 )
+
+func PluginUserFieldsSetting(ctx iris.Context) {
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"fields": config.GetUserFields(),
+		},
+	})
+}
+
+func PluginUserFieldsSettingForm(ctx iris.Context) {
+	var req request.PluginUserSetting
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	var fields []*config.CustomField
+	var existsFields = map[string]struct{}{}
+	for _, v := range req.Fields {
+		if !v.IsSystem {
+			if v.FieldName == "" {
+				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name), "-", "_")
+			}
+		}
+		if _, ok := existsFields[v.FieldName]; !ok {
+			existsFields[v.FieldName] = struct{}{}
+			fields = append(fields, v)
+		}
+	}
+
+	config.JsonData.PluginUser.Fields = fields
+
+	err := config.WriteConfig()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改用户额外字段设置信息"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
+	})
+}
 
 func PluginUserList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -16,6 +71,7 @@ func PluginUserList(ctx iris.Context) {
 	groupId := uint(ctx.URLParamIntDefault("group_id", 0))
 	userName := ctx.URLParam("user_name")
 	realName := ctx.URLParam("realName")
+	phone := ctx.URLParam("phone")
 
 	ops := func(tx *gorm.DB) *gorm.DB {
 		if userId > 0 {
@@ -23,6 +79,9 @@ func PluginUserList(ctx iris.Context) {
 		}
 		if groupId > 0 {
 			tx = tx.Where("`group_id` = ?", userId)
+		}
+		if phone != "" {
+			tx = tx.Where("`phone` = ?", phone)
 		}
 		if userName != "" {
 			tx = tx.Where("`user_name` like ?", "%"+userName+"%")

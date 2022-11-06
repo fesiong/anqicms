@@ -18,11 +18,12 @@
 						<h1>{% archiveDetail with name="Title" %}</h1>
 						<p>{% archiveDetail with name="Description" %}</p>
 						<div class="products-text-contact">
-							<i class="fa fa-mobile-phone"></i>咨询热线:
+							<i class="layui-icon layui-icon-cellphone"></i>咨询热线:
 							<span>
 								<a href="tel:{% contact with name='Cellphone' %}" rel="nofollow">{% contact with name="Cellphone" %}</a>
 							</span>
 						</div>
+						<div class=""><span>售价：{% archiveDetail archivePrice with name="Price" %}{{archivePrice/100}}</span><button>立即购买</button></div>
 					</div>
 				</div>
 				<!-- products-top -->

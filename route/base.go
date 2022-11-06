@@ -44,19 +44,40 @@ func Register(app *iris.Application) {
 	app.Get("/guestbook.html", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
 	app.Post("/guestbook.html", middleware.FrontendCheck, middleware.ParseUserToken, controller.GuestbookForm)
 
+	// login and register
+	app.Get("/login", middleware.FrontendCheck, controller.LoginPage)
+	app.Get("/register", middleware.FrontendCheck, controller.RegisterPage)
+	app.Get("/logout", middleware.FrontendCheck, middleware.ParseUserToken, controller.AccountLogout)
+	// account party
+	app.Get("/account/{route:path}", middleware.FrontendCheck, middleware.ParseUserToken, controller.AccountIndexPage)
+
 	api := app.Party("/api", middleware.FrontendCheck, middleware.ParseUserToken)
 	{
 		api.Get("/captcha", controller.GenerateCaptcha)
+		// WeChat official account api
+		api.Get("/wechat/auth", controller.WechatAuthApi)
+		api.Get("/wechat", controller.WechatApi)
+		api.Post("/wechat", controller.WechatApi)
 
 		// 内容导入API
 		api.Post("/import/archive", controller.VerifyApiToken, controller.ApiImportArchive)
 		api.Get("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
-		api.Post("/friendlink/create", controller.VerifyApiToken, controller.ApiImportCreateFriendLink)
-		api.Post("/friendlink/delete", controller.VerifyApiToken, controller.ApiImportDeleteFriendLink)
+		// 友链API
+		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)
+		api.Post("/friendlink/delete", controller.VerifyApiLinkToken, controller.ApiImportDeleteFriendLink)
+		api.Get("/friendlink/list", controller.VerifyApiLinkToken, controller.ApiImportGetFriendLinks)
+		api.Post("/friendlink/list", controller.VerifyApiLinkToken, controller.ApiImportGetFriendLinks)
+		api.Get("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
+		api.Post("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
+		api.Post("/register", controller.ApiRegister)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
+		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
+		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
+		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
+		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
 		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
 		api.Post("/order/create", middleware.UserAuth, controller.ApiCreateOrder)
 		api.Get("/order/address", middleware.UserAuth, controller.ApiGetOrderAddress)
@@ -68,6 +89,7 @@ func Register(app *iris.Application) {
 		api.Post("/order/payment", middleware.UserAuth, controller.ApiCreateOrderPayment)
 		api.Post("/weapp/qrcode", middleware.UserAuth, controller.ApiCreateWeappQrcode)
 		//检查支付情况
+		api.Get("/archive/order/check", controller.ApiArchiveOrderCheck)
 		api.Get("/payment/check", controller.ApiPaymentCheck)
 		api.Get("/retailer/info", controller.ApiGetRetailerInfo)
 		api.Get("/retailer/statistics", middleware.UserAuth, controller.ApiGetRetailerStatistics)
@@ -103,6 +125,13 @@ func Register(app *iris.Application) {
 		api.Post("/comment/publish", controller.ApiCommentPublish)
 		api.Post("/comment/praise", controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.ApiGuestbookForm)
+	}
+
+	notify := app.Party("/notify")
+	{
+		notify.Get("/weapp/msg", controller.NotifyWeappMsg)
+		notify.Post("/wechat/pay", controller.NotifyWechatPay)
+		notify.Post("/alipay/pay", controller.NotifyAlipay)
 	}
 
 	//后台管理路由相关

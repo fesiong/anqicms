@@ -282,6 +282,8 @@ func manageRoute(app *iris.Application) {
 
 			user := plugin.Party("/user")
 			{
+				user.Get("/fields", manageController.PluginUserFieldsSetting)
+				user.Post("/fields", manageController.PluginUserFieldsSettingForm)
 				user.Get("/list", manageController.PluginUserList)
 				user.Get("/detail", manageController.PluginUserDetail)
 				user.Post("/detail", manageController.PluginUserDetailForm)
@@ -298,6 +300,22 @@ func manageRoute(app *iris.Application) {
 				weapp.Post("/config", manageController.PluginWeappConfigForm)
 			}
 
+			wechat := plugin.Party("/wechat")
+			{
+				wechat.Get("/config", manageController.PluginWechatConfig)
+				wechat.Post("/config", manageController.PluginWechatConfigForm)
+				wechat.Get("/message/list", manageController.PluginWechatMessages)
+				wechat.Post("/message/delete", manageController.PluginWechatMessageDelete)
+				wechat.Post("/message/reply", manageController.PluginWechatMessageReply)
+				wechat.Get("/reply/rule/list", manageController.PluginWechatReplyRules)
+				wechat.Post("/reply/rule/delete", manageController.PluginWechatReplyRuleDelete)
+				wechat.Post("/reply/rule/save", manageController.PluginWechatReplyRuleForm)
+				wechat.Get("/menu/list", manageController.PluginWechatMenus)
+				wechat.Post("/menu/save", manageController.PluginWechatMenuSave)
+				wechat.Post("/menu/delete", manageController.PluginWechatMenuDelete)
+				wechat.Post("/menu/sync", manageController.PluginWechatMenuSync)
+			}
+
 			retailer := plugin.Party("/retailer")
 			{
 				retailer.Get("/list", manageController.PluginGetRetailers)
@@ -307,18 +325,24 @@ func manageRoute(app *iris.Application) {
 				retailer.Post("/apply", manageController.PluginRetailerApply)
 			}
 
+			pay := plugin.Party("/pay")
+			{
+				pay.Get("/config", manageController.PluginPayConfig)
+				pay.Post("/config", manageController.PluginPayConfigForm)
+				pay.Post("/upload", manageController.PluginPayUploadFile)
+			}
+
 			order := plugin.Party("/order")
 			{
-				order.Get("/pay/config", manageController.PluginPayConfig)
-				order.Post("/pay/config", manageController.PluginPayConfigForm)
-				order.Post("/pay/upload", manageController.PluginPayUploadFile)
-
+				order.Get("/config", manageController.PluginOrderConfig)
+				order.Post("/config", manageController.PluginOrderConfigForm)
 				order.Get("/list", manageController.PluginOrderList)
 				order.Get("/detail", manageController.PluginOrderDetail)
 				order.Post("/deliver", manageController.PluginOrderSetDeliver)
 				order.Post("/finished", manageController.PluginOrderSetFinished)
 				order.Post("/canceled", manageController.PluginOrderSetCanceled)
 				order.Post("/refund", manageController.PluginOrderSetRefund)
+				order.Post("/refund/apply", manageController.PluginOrderApplyRefund)
 				order.Post("/export", manageController.PluginOrderExport)
 			}
 

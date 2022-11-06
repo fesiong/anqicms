@@ -35,15 +35,16 @@ type Archive struct {
 	OriginUrl   string `json:"origin_url" gorm:"column:origin_url;type:varchar(250) not null;default:'';index:idx_origin_url"`
 	OriginTitle string `json:"origin_title" gorm:"column:origin_title;type:varchar(250) not null;default:'';index:idx_origin_title"`
 	// 其他内容
-	Category    *Category               `json:"category" gorm:"-"`
-	ModuleName  string                  `json:"module_name" gorm:"-"`
-	ArchiveData *ArchiveData            `json:"data" gorm:"-"`
-	Logo        string                  `json:"logo" gorm:"-"`
-	Thumb       string                  `json:"thumb" gorm:"-"`
-	Extra       map[string]*CustomField `json:"extra" gorm:"-"`
-	Link        string                  `json:"link" gorm:"-"`
-	Tags        []string                `json:"tags,omitempty" gorm:"-"`
-	HasOrdered  bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
+	Category       *Category               `json:"category" gorm:"-"`
+	ModuleName     string                  `json:"module_name" gorm:"-"`
+	ArchiveData    *ArchiveData            `json:"data" gorm:"-"`
+	Logo           string                  `json:"logo" gorm:"-"`
+	Thumb          string                  `json:"thumb" gorm:"-"`
+	Extra          map[string]*CustomField `json:"extra" gorm:"-"`
+	Link           string                  `json:"link" gorm:"-"`
+	Tags           []string                `json:"tags,omitempty" gorm:"-"`
+	HasOrdered     bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
+	FavorablePrice int64                   `json:"favorable_price" gorm:"-"`
 }
 
 type ArchiveData struct {

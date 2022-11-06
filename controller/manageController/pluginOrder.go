@@ -3,13 +3,9 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 func PluginOrderList(ctx iris.Context) {
@@ -38,12 +34,12 @@ func PluginOrderDetail(ctx iris.Context) {
 		return
 	}
 
-	order.User,  _ = provider.GetUserInfoById(order.UserId)
+	order.User, _ = provider.GetUserInfoById(order.UserId)
 	if order.ShareUserId > 0 {
-		order.ShareUser,  _ = provider.GetUserInfoById(order.ShareUserId)
+		order.ShareUser, _ = provider.GetUserInfoById(order.ShareUserId)
 	}
 	if order.ShareParentUserId > 0 {
-		order.ParentUser,  _ = provider.GetUserInfoById(order.ShareParentUserId)
+		order.ParentUser, _ = provider.GetUserInfoById(order.ShareParentUserId)
 	}
 
 	ctx.JSON(iris.Map{
@@ -179,18 +175,8 @@ func PluginOrderSetRefund(ctx iris.Context) {
 	})
 }
 
-func PluginPayConfig(ctx iris.Context) {
-	pluginRewrite := config.JsonData.PluginPay
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"data": pluginRewrite,
-	})
-}
-
-func PluginPayConfigForm(ctx iris.Context) {
-	var req request.PluginPayConfig
+func PluginOrderApplyRefund(ctx iris.Context) {
+	var req request.OrderRefundRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -199,22 +185,62 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginPay.AlipayAppId = req.AlipayAppId
-	config.JsonData.PluginPay.AlipayPrivateKey = req.AlipayPrivateKey
-	if req.AlipayCertPath != "" {
-		config.JsonData.PluginPay.AlipayCertPath = req.AlipayCertPath
+	order, err := provider.GetOrderInfoByOrderId(req.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
 	}
 
-	config.JsonData.PluginPay.WeixinAppId = req.WeixinAppId
-	config.JsonData.PluginPay.WeixinAppSecret = req.WeixinAppSecret
-	config.JsonData.PluginPay.WeixinMchId = req.WeixinMchId
-	config.JsonData.PluginPay.WeixinApiKey = req.WeixinApiKey
-	if req.WeixinCertPath != "" {
-		config.JsonData.PluginPay.WeixinCertPath = req.WeixinCertPath
+	err = provider.ApplyOrderRefund(order)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
 	}
-	if req.WeixinKeyPath != "" {
-		config.JsonData.PluginPay.WeixinCertPath = req.WeixinKeyPath
+
+	err = provider.SetOrderRefund(order, 1)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
 	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "已申请成功",
+	})
+}
+
+func PluginOrderConfig(ctx iris.Context) {
+	setting := config.JsonData.PluginOrder
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": setting,
+	})
+}
+
+func PluginOrderConfigForm(ctx iris.Context) {
+	var req request.PluginOrderConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	config.JsonData.PluginOrder.NoProcess = req.NoProcess
+	config.JsonData.PluginOrder.AutoFinishDay = req.AutoFinishDay
+	config.JsonData.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
 
 	err := config.WriteConfig()
 	if err != nil {
@@ -226,84 +252,11 @@ func PluginPayConfigForm(ctx iris.Context) {
 	}
 	provider.DeleteCacheIndex()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新支付配置信息"))
+	provider.AddAdminLog(ctx, fmt.Sprintf("更新订单配置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
-	})
-}
-
-func PluginPayUploadFile(ctx iris.Context) {
-	name := ctx.PostValue("name")
-	if name != "weixin_cert_path" && name != "weixin_key_path" && name != "alipay_cert_path" {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "文件名无效",
-		})
-		return
-	}
-	file, _, err := ctx.FormFile("file")
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-	defer file.Close()
-
-	filePath := fmt.Sprintf("%sdata/cert/%s", config.ExecPath, name+".pem")
-	buff, err := ioutil.ReadAll(file)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "读取失败",
-		})
-		return
-	}
-
-	err = os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "目录创建失败",
-		})
-		return
-	}
-	err = ioutil.WriteFile(filePath, buff, 0644)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "文件保存失败",
-		})
-		return
-	}
-
-	fileName := strings.TrimPrefix(filePath, config.ExecPath)
-	if name == "weixin_cert_path" {
-		config.JsonData.PluginPay.WeixinCertPath = fileName
-	} else if name == "weixin_key_path" {
-		config.JsonData.PluginPay.WeixinKeyPath = fileName
-	} else if name == "alipay_cert_path" {
-		config.JsonData.PluginPay.AlipayCertPath = fileName
-	}
-
-	err = config.WriteConfig()
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("上传支付Cert文件：%s", name))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "文件已上传完成",
-		"data": fileName,
 	})
 }
 
@@ -325,7 +278,7 @@ func PluginOrderExport(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"header": header,
+			"header":  header,
 			"content": content,
 		},
 	})

@@ -835,7 +835,6 @@ textarea{
     }
     .head-phone i{
         font-size: 40px;
-        width: 15%;
         flex-shrink: 0;
         color:#b81b32;
         text-align: center;

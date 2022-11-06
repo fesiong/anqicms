@@ -2,14 +2,19 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
+	"fmt"
 	"github.com/go-pay/gopay"
+	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/pkg/util"
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
+	"github.com/skip2/go-qrcode"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"strconv"
 	"time"
 )
@@ -258,7 +263,7 @@ func ApiSaveOrderAddress(ctx iris.Context) {
 }
 
 func ApiCreateOrderPayment(ctx iris.Context) {
-	var req request.OrderRequest
+	var req request.PaymentRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -280,7 +285,48 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		return
 	}
 
-	payment, err := provider.GeneratePayment(order)
+	payment, err := provider.GeneratePayment(order, req.PayWay)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.PayWay == "" {
+		req.PayWay = payment.PayWay
+	}
+
+	if req.PayWay == config.PayWayWechat {
+		createWechatPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayWeapp {
+		createWeappPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayAlipay {
+		createAlipayPayment(ctx, payment)
+	} else {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "无法创建支付订单",
+		})
+	}
+}
+
+func createWechatPayment(ctx iris.Context, payment *model.Payment) {
+	//根据订单生成支付信息
+	//生成支付信息
+	client := wechat.NewClient(config.JsonData.PluginPay.WechatAppId, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true)
+
+	bm := make(gopay.BodyMap)
+	bm.Set("body", payment.Remark).
+		Set("nonce_str", util.RandomString(32)).
+		Set("spbill_create_ip", ctx.RemoteAddr()).
+		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
+		Set("total_fee", payment.Amount).
+		Set("trade_type", wechat.TradeType_Native).
+		Set("notify_url", config.JsonData.System.BaseUrl+"/notify/wechat/pay").
+		Set("sign_type", wechat.SignType_MD5)
+
+	wxRsp, err := client.UnifiedOrder(context.Background(), bm)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -289,15 +335,41 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		return
 	}
 
-	createWeixinPayment(ctx, payment)
+	if wxRsp.ReturnCode != gopay.SUCCESS {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  wxRsp.ReturnMsg,
+		})
+		return
+	}
+
+	if wxRsp.ResultCode != gopay.SUCCESS {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  wxRsp.ErrCodeDes,
+		})
+		return
+	}
+
+	png, _ := qrcode.Encode(wxRsp.CodeUrl, qrcode.Medium, 256)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":  "wechat",
+			"code_url": fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(png)),
+		},
+	})
+	return
 }
 
-func createWeixinPayment(ctx iris.Context, payment *model.Payment) {
+func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 	//根据订单生成支付信息
 	//生成支付信息
-	client := wechat.NewClient(config.JsonData.PluginPay.WeixinAppId, config.JsonData.PluginPay.WeixinMchId, config.JsonData.PluginPay.WeixinApiKey, true)
+	client := wechat.NewClient(config.JsonData.PluginPay.WeappAppId, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true)
 
-	userWeixin, err := provider.GetUserWeixinByUserId(payment.UserId)
+	userWechat, err := provider.GetUserWechatByUserId(payment.UserId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -313,9 +385,9 @@ func createWeixinPayment(ctx iris.Context, payment *model.Payment) {
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
 		Set("trade_type", wechat.TradeType_Mini).
-		Set("notify_url", config.JsonData.System.BaseUrl+"/notify/weixin/pay").
+		Set("notify_url", config.JsonData.System.BaseUrl+"/notify/wechat/pay").
 		Set("sign_type", wechat.SignType_MD5).
-		Set("openid", userWeixin.Openid)
+		Set("openid", userWechat.Openid)
 
 	wxRsp, err := client.UnifiedOrder(context.Background(), bm)
 	if err != nil {
@@ -345,18 +417,87 @@ func createWeixinPayment(ctx iris.Context, payment *model.Payment) {
 	// 微信小程序支付需要 paySign
 	timeStamp := strconv.FormatInt(time.Now().Unix(), 10)
 	packages := "prepay_id=" + wxRsp.PrepayId
-	paySign := wechat.GetMiniPaySign(config.JsonData.PluginPay.WeixinAppId, wxRsp.NonceStr, packages, wechat.SignType_MD5, timeStamp, config.JsonData.PluginPay.WeixinApiKey)
+	paySign := wechat.GetMiniPaySign(config.JsonData.PluginPay.WeappAppId, wxRsp.NonceStr, packages, wechat.SignType_MD5, timeStamp, config.JsonData.PluginPay.WechatApiKey)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"code_url":  wxRsp.CodeUrl,
+			"pay_way":   "weapp",
 			"paySign":   paySign,
 			"timeStamp": timeStamp,
-			"package":  packages,
+			"package":   packages,
 			"nonceStr":  wxRsp.NonceStr,
-			"signType": wechat.SignType_MD5,
+			"signType":  wechat.SignType_MD5,
+		},
+	})
+	return
+}
+
+func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
+	client, err := alipay.NewClient(config.JsonData.PluginPay.AlipayAppId, config.JsonData.PluginPay.AlipayPrivateKey, true)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	//配置公共参数
+	client.SetCharset("utf-8").
+		SetSignType(alipay.RSA2).
+		SetNotifyUrl(config.JsonData.System.BaseUrl + "/notify/alipay/pay").
+		SetReturnUrl(config.JsonData.System.BaseUrl + "/")
+
+	// 自动同步验签（只支持证书模式）
+	certPath := fmt.Sprintf("%sdata/cert/alipay_cert_path.pem", config.ExecPath)
+	rootCertPath := fmt.Sprintf("%sdata/cert/alipay_root_cert_path.pem", config.ExecPath)
+	publicCertPath := fmt.Sprintf("%sdata/cert/alipay_public_cert_path.pem", config.ExecPath)
+	publicKey, err := os.ReadFile(publicCertPath)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	client.AutoVerifySign(publicKey)
+
+	// 传入证书内容
+	err = client.SetCertSnByPath(certPath, rootCertPath, publicCertPath)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	//请求参数
+	bm := make(gopay.BodyMap)
+
+	bm.Set("subject", payment.Remark)
+	bm.Set("out_trade_no", payment.PaymentId)
+	bm.Set("total_amount", fmt.Sprintf("%.2f", float32(payment.Amount)/100))
+
+	//创建订单
+	payUrl, err := client.TradePagePay(context.Background(), bm)
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":  "alipay",
+			"jump_url": payUrl,
 		},
 	})
 	return
@@ -372,7 +513,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 		})
 		return
 	}
-	if order.Status == config.OrderStatusPaid {
+	if order.Status != config.OrderStatusWaiting {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
@@ -383,7 +524,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 	for i := 0; i < 20; i++ {
 		order, _ := provider.GetOrderInfoByOrderId(orderId)
-		if order.Status == config.OrderStatusPaid {
+		if order.Status != config.OrderStatusWaiting {
 			//支付成功
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
@@ -398,4 +539,17 @@ func ApiPaymentCheck(ctx iris.Context) {
 		"code": config.StatusFailed,
 		"msg":  "未支付",
 	})
+}
+
+func ApiArchiveOrderCheck(ctx iris.Context) {
+	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	exist := provider.CheckArchiveHasOrder(userId, archiveId)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": exist,
+	})
+	return
 }

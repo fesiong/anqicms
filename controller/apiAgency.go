@@ -12,6 +12,10 @@ import (
 
 func ApiGetRetailerInfo(ctx iris.Context) {
 	retailerId := uint(ctx.URLParamIntDefault("retailer_id", 0))
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	if retailerId == 0 {
+		retailerId = userId
+	}
 	user, err := provider.GetUserInfoById(retailerId)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -20,6 +24,7 @@ func ApiGetRetailerInfo(ctx iris.Context) {
 		})
 		return
 	}
+	user.Group, _ = provider.GetUserGroupInfo(user.GroupId)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

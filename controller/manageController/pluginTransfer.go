@@ -43,7 +43,7 @@ func DownloadClientFile(ctx iris.Context) {
 		return
 	}
 
-	ctx.ServeFile(clientFile, false)
+	ctx.ServeFile(clientFile)
 }
 
 func CreateTransferTask(ctx iris.Context) {

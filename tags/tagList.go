@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
@@ -41,7 +41,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	} else {
 		// 自动获取
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
-		if ok{
+		if ok {
 			itemId = archiveDetail.Id
 		}
 	}
@@ -82,7 +82,6 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 			offset = (currentPage - 1) * limit
 		}
 	}
-
 
 	tagList, total, _ := provider.GetTagList(itemId, "", letter, currentPage, limit, offset)
 	for i := range tagList {
@@ -125,7 +124,7 @@ func TagTagListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2
 	for arguments.Remaining() > 0 {
 		return nil, arguments.Error("Malformed tagList-tag arguments.", nil)
 	}
-	
+
 	wrapper, endtagargs, err := doc.WrapUntilTag("endtagList")
 	if err != nil {
 		return nil, err

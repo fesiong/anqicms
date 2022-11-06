@@ -38,7 +38,6 @@ func GuestbookForm(ctx iris.Context) {
 		return
 	}
 
-
 	fields := config.GetGuestbookFields()
 	var req = map[string]string{}
 	// 采用post接收
@@ -46,7 +45,7 @@ func GuestbookForm(ctx iris.Context) {
 	for _, item := range fields {
 		var val string
 		if item.Type == config.CustomFieldTypeCheckbox {
-			tmpVal := ctx.PostValues(item.FieldName + "[]")
+			tmpVal, _ := ctx.PostValues(item.FieldName + "[]")
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			file, info, err := ctx.FormFile(item.FieldName)

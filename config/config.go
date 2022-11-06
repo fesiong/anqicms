@@ -38,7 +38,10 @@ type configData struct {
 	PluginStorage     pluginStorageConfig   `json:"plugin_storage"`
 	PluginPay         pluginPayConfig       `json:"plugin_pay"`
 	PluginWeapp       pluginWeappConfig     `json:"plugin_weapp"`
+	PluginWechat      pluginWeappConfig     `json:"plugin_wechat"`
 	PluginRetailer    pluginRetailerConfig  `json:"plugin_retailer"`
+	PluginUser        pluginUserConfig      `json:"plugin_user"`
+	PluginOrder       pluginOrderConfig     `json:"plugin_order"`
 }
 
 func initPath() {
@@ -66,7 +69,7 @@ func initJSON() {
 	rawConfig, err := ioutil.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"development\",\"port\": 8001,\"log_level\":\"debug\"}}")
+		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"development\",\"port\": 8001,\"log_level\":\"error\"}}")
 	}
 
 	if err := json.Unmarshal(rawConfig, &JsonData); err != nil {
@@ -95,10 +98,15 @@ func initJSON() {
 		JsonData.PluginSitemap.Type = "txt"
 	}
 	// 导入API生成
-	if JsonData.PluginImportApi.Token == "" {
+	if JsonData.PluginImportApi.Token == "" || JsonData.PluginImportApi.LinkToken == "" {
 		h := md5.New()
 		h.Write([]byte(fmt.Sprintf("%d", time.Now().Nanosecond())))
-		JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
+		if JsonData.PluginImportApi.Token == "" {
+			JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
+		}
+		if JsonData.PluginImportApi.LinkToken == "" {
+			JsonData.PluginImportApi.LinkToken = JsonData.PluginImportApi.Token
+		}
 		// 回写
 		_ = WriteConfig()
 	}
@@ -109,6 +117,14 @@ func initJSON() {
 	}
 	if JsonData.PluginStorage.StorageType == "" {
 		JsonData.PluginStorage.StorageType = StorageTypeLocal
+	}
+
+	if JsonData.PluginUser.DefaultGroupId == 0 {
+		JsonData.PluginUser.DefaultGroupId = 1
+	}
+	if JsonData.PluginOrder.AutoFinishDay <= 0 {
+		// default auto finish day
+		JsonData.PluginOrder.AutoFinishDay = 10
 	}
 }
 

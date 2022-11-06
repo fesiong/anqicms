@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -14,8 +14,8 @@ import (
 )
 
 type tagArchiveFiltersNode struct {
-	name string
-	args map[string]pongo2.IEvaluator
+	name    string
+	args    map[string]pongo2.IEvaluator
 	wrapper *pongo2.NodeWrapper
 }
 

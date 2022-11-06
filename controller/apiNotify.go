@@ -18,8 +18,8 @@ import (
 	"time"
 )
 
-func NotifyWeixinMsg(ctx iris.Context) {
-	srv, err := server.NewServer(config.JsonData.PluginWeapp.AppID, config.JsonData.PluginWeapp.Token, config.JsonData.PluginWeapp.EncodingAESKey, config.JsonData.PluginPay.WeixinMchId, config.JsonData.PluginPay.WeixinApiKey, true, nil)
+func NotifyWeappMsg(ctx iris.Context) {
+	srv, err := server.NewServer(config.JsonData.PluginWeapp.AppID, config.JsonData.PluginWeapp.Token, config.JsonData.PluginWeapp.EncodingAESKey, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true, nil)
 	if err != nil {
 		log.Println(fmt.Sprintf("init server error: %s", err))
 	}
@@ -33,20 +33,21 @@ func NotifyWeixinMsg(ctx iris.Context) {
 	}
 }
 
-func NotifyWexinPay(ctx iris.Context) {
+// NotifyWechatPay 公众号和小程序共用支付回调通知
+func NotifyWechatPay(ctx iris.Context) {
 	body, err := ctx.GetBody()
 	library.DebugLog("wechat", string(body))
 	notifyReq, err := wechat.ParseNotifyToBodyMap(ctx.Request())
 	rsp := new(wechat.NotifyResponse) // 回复微信的数据
 
-	ok, err := wechat.VerifySign(config.JsonData.PluginPay.WeixinApiKey, wechat.SignType_MD5, notifyReq)
-	if !ok {
-		library.DebugLog("wechat", "err", err, fmt.Sprintf("%#v", notifyReq))
-		rsp.ReturnCode = gopay.FAIL
-		rsp.ReturnMsg = "支付失败"
-		ctx.WriteString(rsp.ToXmlString())
-		return
-	}
+	//ok, err := wechat.VerifySign(config.JsonData.PluginPay.WechatApiKey, wechat.SignType_MD5, notifyReq)
+	//if !ok {
+	//	library.DebugLog("wechat", "err", err, fmt.Sprintf("%#v", notifyReq))
+	//	rsp.ReturnCode = gopay.FAIL
+	//	rsp.ReturnMsg = "支付失败"
+	//	ctx.WriteString(rsp.ToXmlString())
+	//	return
+	//}
 	//检查payment订单
 	payment, err := provider.GetPaymentInfoByPaymentId(notifyReq.GetString("out_trade_no"))
 	if err != nil {
@@ -103,10 +104,12 @@ func NotifyWexinPay(ctx iris.Context) {
 		}
 	} else {
 		// this is a pay order
-		payment.PaidWay = "wechat"
+		payment.PayWay = "wechat"
 		payment.TerraceId = notifyReq.GetString("transaction_id")
 		payment.PaidTime = time.Now().Unix()
 		dao.DB.Save(payment)
+		order.PaymentId = payment.PaymentId
+		dao.DB.Save(order)
 
 		//生成用户支付记录
 		var userBalance int64
@@ -161,7 +164,7 @@ func NotifyAlipay(ctx iris.Context) {
 		}
 	}
 
-	file, err := os.Open(config.ExecPath + config.JsonData.PluginPay.AlipayCertPath)
+	file, err := os.Open(config.ExecPath + config.JsonData.PluginPay.AlipayPublicCertPath)
 	if err != nil {
 		return
 	}
@@ -169,6 +172,7 @@ func NotifyAlipay(ctx iris.Context) {
 
 	ok, err := alipay.VerifySign(string(fileContent), bm)
 	if ok == false || err != nil {
+		library.DebugLog("alipay", err)
 		ctx.WriteString("fail")
 		return
 	}
@@ -216,10 +220,12 @@ func NotifyAlipay(ctx iris.Context) {
 		}
 	} else {
 		// this is a pay order
-		payment.PaidWay = "alipay"
+		payment.PayWay = "alipay"
 		payment.PaidTime = time.Now().Unix()
 		payment.TerraceId = bm.GetString("trade_no")
 		dao.DB.Save(payment)
+		order.PaymentId = payment.PaymentId
+		dao.DB.Save(order)
 		//生成用户支付记录
 		var userBalance int64
 		err = dao.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error

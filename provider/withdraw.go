@@ -109,10 +109,19 @@ func SetUserWithdrawFinished(req *request.UserWithdrawRequest) error {
 	return nil
 }
 
+var withdrawRunning = false
+
 func CheckWithdrawToWechat() {
 	if dao.DB == nil {
 		return
 	}
+	if withdrawRunning {
+		return
+	}
+	withdrawRunning = true
+	defer func() {
+		withdrawRunning = false
+	}()
 	var withdraws []model.UserWithdraw
 
 	dao.DB.Where("status = ?", config.CommissionStatusWait).Find(&withdraws)
@@ -121,12 +130,24 @@ func CheckWithdrawToWechat() {
 	if len(withdraws) == 0 {
 		return
 	}
-
-	client := wechat.NewClient(config.JsonData.PluginPay.WeixinAppId, config.JsonData.PluginPay.WeixinMchId, config.JsonData.PluginPay.WeixinApiKey, true)
-	err := client.AddCertPemFilePath(config.ExecPath + config.JsonData.PluginPay.WeixinCertPath, config.ExecPath + config.JsonData.PluginPay.WeixinKeyPath)
-	if err != nil {
-		log.Println("微信证书错误：", err.Error())
-		return
+	var wechatClient *wechat.Client
+	var weapp2Client *wechat.Client
+	var err error
+	if config.JsonData.PluginPay.WechatAppId != "" {
+		wechatClient = wechat.NewClient(config.JsonData.PluginPay.WechatAppId, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true)
+		err = wechatClient.AddCertPemFilePath(config.ExecPath+config.JsonData.PluginPay.WechatCertPath, config.ExecPath+config.JsonData.PluginPay.WechatKeyPath)
+		if err != nil {
+			log.Println("微信证书错误：", err.Error())
+			return
+		}
+	}
+	if config.JsonData.PluginPay.WeappAppId != "" {
+		weapp2Client = wechat.NewClient(config.JsonData.PluginPay.WeappAppId, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true)
+		err = weapp2Client.AddCertPemFilePath(config.ExecPath+config.JsonData.PluginPay.WechatCertPath, config.ExecPath+config.JsonData.PluginPay.WechatKeyPath)
+		if err != nil {
+			log.Println("微信证书错误：", err.Error())
+			return
+		}
 	}
 
 	for _, withdraw := range withdraws {
@@ -148,7 +169,7 @@ func CheckWithdrawToWechat() {
 		}
 
 		// 请求提现
-		userWeixin, err := GetUserWeixinByUserId(withdraw.UserId)
+		userWechat, err := GetUserWechatByUserId(withdraw.UserId)
 		if err != nil {
 			// 这种情况一般不会出现
 			withdraw.Status = -1
@@ -164,7 +185,7 @@ func CheckWithdrawToWechat() {
 			dao.DB.Save(&withdraw)
 			continue
 		}
-		if userWeixin.Openid == "" || user.RealName == "" {
+		if userWechat.Openid == "" || user.RealName == "" {
 			// 这种情况一般不会出现
 			withdraw.ErrorTimes++
 			withdraw.Remark = "用户未绑定微信或未实名认证"
@@ -176,20 +197,46 @@ func CheckWithdrawToWechat() {
 		bm := make(gopay.BodyMap)
 		bm.Set("nonce_str", util.RandomString(32)).
 			Set("partner_trade_no", fmt.Sprintf("%d", withdraw.Id)).
-			Set("openid", userWeixin.Openid).
+			Set("openid", userWechat.Openid).
 			Set("check_name", "FORCE_CHECK").
 			Set("re_user_name", user.RealName).
 			Set("amount", withdraw.Amount).
-			Set("desc", "搜外内容管家佣金提现").
+			Set("desc", "佣金提现").
 			Set("sign_type", wechat.SignType_HMAC_SHA256)
 
-		wxRsp, err := client.Transfer(context.Background(), bm)
-		if err != nil {
-			withdraw.ErrorTimes++
-			withdraw.Remark = err.Error()
-			withdraw.LastTime = nowStamp
-			dao.DB.Save(&withdraw)
-			continue
+		var wxRsp *wechat.TransfersResponse
+		if userWechat.Platform == config.PlatformWeapp {
+			if weapp2Client == nil {
+				withdraw.ErrorTimes++
+				withdraw.Remark = "出错"
+				withdraw.LastTime = nowStamp
+				dao.DB.Save(&withdraw)
+				continue
+			}
+			wxRsp, err = weapp2Client.Transfer(context.Background(), bm)
+			if err != nil {
+				withdraw.ErrorTimes++
+				withdraw.Remark = err.Error()
+				withdraw.LastTime = nowStamp
+				dao.DB.Save(&withdraw)
+				continue
+			}
+		} else {
+			if wechatClient == nil {
+				withdraw.ErrorTimes++
+				withdraw.Remark = "出错"
+				withdraw.LastTime = nowStamp
+				dao.DB.Save(&withdraw)
+				continue
+			}
+			wxRsp, err = wechatClient.Transfer(context.Background(), bm)
+			if err != nil {
+				withdraw.ErrorTimes++
+				withdraw.Remark = err.Error()
+				withdraw.LastTime = nowStamp
+				dao.DB.Save(&withdraw)
+				continue
+			}
 		}
 
 		if wxRsp.ReturnCode == gopay.FAIL {

@@ -6,6 +6,8 @@ type PluginWeappConfig struct {
 	//公众号存在的部分
 	Token          string `json:"token"`
 	EncodingAESKey string `json:"encoding_aes_key"`
+	VerifyKey      string `json:"verify_key"`
+	VerifyMsg      string `json:"verify_msg"`
 }
 
 type WeappQrcodeRequest struct {

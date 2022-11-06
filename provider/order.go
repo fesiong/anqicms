@@ -3,7 +3,9 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"github.com/go-pay/gopay"
+	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/pkg/util"
 	"github.com/go-pay/gopay/wechat"
 	"gorm.io/gorm"
@@ -13,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"log"
+	"os"
 	"time"
 )
 
@@ -71,6 +74,12 @@ func GetOrderList(userId uint, status string, page, pageSize int) ([]*model.Orde
 			for i := range orders {
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
+						if orders[i].Type == config.OrderTypeVip {
+							group, err := GetUserGroupInfo(details[j].GoodsId)
+							if err == nil {
+								details[i].Group = group
+							}
+						}
 						orders[i].Details = append(orders[i].Details, details[j])
 					}
 				}
@@ -99,16 +108,23 @@ func GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 	var details []*model.OrderDetail
 	dao.DB.Where("`order_id` = ?", order.OrderId).Find(&details)
 	if len(details) > 0 {
-		var archiveIds = make([]uint, 0, len(details))
-		for i := range details {
-			archiveIds = append(archiveIds, details[i].GoodsId)
-		}
-		var archives []*model.Archive
-		dao.DB.Where("`id` IN(?)", archiveIds).Find(&archives)
-		for i := range details {
-			for x := range archives {
-				if archives[x].Id == details[i].GoodsId {
-					details[i].Goods = archives[x]
+		if order.Type == config.OrderTypeVip {
+			group, err := GetUserGroupInfo(details[0].GoodsId)
+			if err == nil {
+				details[0].Group = group
+			}
+		} else {
+			var archiveIds = make([]uint, 0, len(details))
+			for i := range details {
+				archiveIds = append(archiveIds, details[i].GoodsId)
+			}
+			var archives []*model.Archive
+			dao.DB.Where("`id` IN(?)", archiveIds).Find(&archives)
+			for i := range details {
+				for x := range archives {
+					if archives[x].Id == details[i].GoodsId {
+						details[i].Goods = archives[x]
+					}
 				}
 			}
 		}
@@ -144,7 +160,7 @@ func GetPaymentInfoByOrderId(orderId string) (*model.Payment, error) {
 	return &payment, nil
 }
 
-func GeneratePayment(order *model.Order) (*model.Payment, error) {
+func GeneratePayment(order *model.Order, payWay string) (*model.Payment, error) {
 	payment, err := GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil
@@ -156,11 +172,14 @@ func GeneratePayment(order *model.Order) (*model.Payment, error) {
 		Amount:  order.Amount,
 		Status:  0,
 		Remark:  order.Remark,
+		PayWay:  payWay,
 	}
 	err = dao.DB.Save(payment).Error
 	if err != nil {
 		return nil, err
 	}
+	order.PaymentId = payment.PaymentId
+	dao.DB.Save(order)
 
 	return payment, nil
 }
@@ -175,7 +194,7 @@ func SetOrderDeliver(req *request.OrderRequest) error {
 	order.DeliverTime = time.Now().Unix()
 	order.ExpressCompany = req.ExpressCompany
 	order.TrackingNumber = req.TrackingNumber
-	order.EndTime = time.Now().AddDate(0, 0, 10).Unix()
+	order.EndTime = time.Now().AddDate(0, 0, config.JsonData.PluginOrder.AutoFinishDay).Unix()
 	dao.DB.Save(order)
 
 	return nil
@@ -267,6 +286,29 @@ func SetOrderFinished(order *model.Order) error {
 			tx.Model(model.Commission{}).Where("`user_id` = ?").Select("SUM(`amount`) as total").Take(&totalReward)
 			tx.Model(model.User{}).Where("`id` = ?", order.ShareParentUserId).UpdateColumn("total_reward", totalReward.Total)
 		}
+		// 如果是vip订单，则还需要处理VIP信息
+		if order.Type == config.OrderTypeVip {
+			var user model.User
+			var orderDetail model.OrderDetail
+			err = tx.Model(model.User{}).Where("`id` = ?", order.UserId).Take(&user).Error
+			err2 := tx.Model(model.OrderDetail{}).Where("`order_id` = ?", order.OrderId).Take(&orderDetail).Error
+			if err == nil && err2 == nil {
+				startTime := user.ExpireTime
+				if startTime < time.Now().Unix() {
+					startTime = time.Now().Unix()
+				}
+				var group model.UserGroup
+				err = tx.Model(model.UserGroup{}).Where("`id` = ?", orderDetail.GoodsId).Take(&group).Error
+				if err != nil {
+					group.Setting.ExpireDay = 365
+				}
+				startTime += int64(group.Setting.ExpireDay) * 86400
+
+				user.ExpireTime = startTime
+				user.GroupId = group.Id
+				tx.Save(&user)
+			}
+		}
 	}
 	tx.Commit()
 
@@ -288,39 +330,142 @@ func SetOrderRefund(order *model.Order, status int) error {
 	}
 	// todo 金钱原路退回
 	if status == 1 {
-		client := wechat.NewClient(config.JsonData.PluginPay.WeixinAppId, config.JsonData.PluginPay.WeixinMchId, config.JsonData.PluginPay.WeixinApiKey, true)
-		err := client.AddCertPemFilePath(config.ExecPath + config.JsonData.PluginPay.WeixinCertPath, config.ExecPath + config.JsonData.PluginPay.WeixinKeyPath)
+		payment, err := GetPaymentInfoByPaymentId(order.PaymentId)
 		if err != nil {
-			log.Println("微信证书错误：", err.Error())
 			return err
 		}
+		if payment.PayWay == config.PayWayWechat {
+			// 公众号支付
+			client := wechat.NewClient(config.JsonData.PluginPay.WechatAppId, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true)
+			err := client.AddCertPemFilePath(config.ExecPath+config.JsonData.PluginPay.WechatCertPath, config.ExecPath+config.JsonData.PluginPay.WechatKeyPath)
+			if err != nil {
+				log.Println("微信证书错误：", err.Error())
+				return err
+			}
 
-		bm := make(gopay.BodyMap)
-		bm.Set("nonce_str", util.RandomString(32)).
-			Set("out_trade_no", order.PaymentId).
-			Set("out_refund_no", refund.RefundId).
-			Set("total_fee", order.Amount).
-			Set("refund_fee", refund.Amount).
-			Set("sign_type", wechat.SignType_MD5)
+			bm := make(gopay.BodyMap)
+			bm.Set("nonce_str", util.RandomString(32)).
+				Set("out_trade_no", order.PaymentId).
+				Set("out_refund_no", refund.RefundId).
+				Set("total_fee", order.Amount).
+				Set("refund_fee", refund.Amount).
+				Set("sign_type", wechat.SignType_MD5)
 
-		wxRsp, _, err := client.Refund(context.Background(), bm)
-		if err != nil {
-			refund.Remark = err.Error()
+			wxRsp, _, err := client.Refund(context.Background(), bm)
+			if err != nil {
+				refund.Remark = err.Error()
+				dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return err
+			}
+
+			refund.Remark = wxRsp.ErrCodeDes
 			dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-			return err
+
+			if wxRsp.ReturnCode == gopay.FAIL {
+				return errors.New(wxRsp.ReturnMsg)
+			}
+			if wxRsp.ResultCode == gopay.FAIL {
+				refund.Status = config.OrderRefundStatusFailed
+				dao.DB.Model(refund).UpdateColumn("status", refund.Status)
+				return errors.New(wxRsp.ErrCodeDes)
+			}
+		} else if payment.PayWay == config.PayWayWeapp {
+			// 小程序支付
+			client := wechat.NewClient(config.JsonData.PluginPay.WeappAppId, config.JsonData.PluginPay.WechatMchId, config.JsonData.PluginPay.WechatApiKey, true)
+			err := client.AddCertPemFilePath(config.ExecPath+config.JsonData.PluginPay.WechatCertPath, config.ExecPath+config.JsonData.PluginPay.WechatKeyPath)
+			if err != nil {
+				log.Println("微信证书错误：", err.Error())
+				return err
+			}
+
+			bm := make(gopay.BodyMap)
+			bm.Set("nonce_str", util.RandomString(32)).
+				Set("out_trade_no", order.PaymentId).
+				Set("out_refund_no", refund.RefundId).
+				Set("total_fee", order.Amount).
+				Set("refund_fee", refund.Amount).
+				Set("sign_type", wechat.SignType_MD5)
+
+			wxRsp, _, err := client.Refund(context.Background(), bm)
+			if err != nil {
+				refund.Remark = err.Error()
+				dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return err
+			}
+
+			refund.Remark = wxRsp.ErrCodeDes
+			dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+
+			if wxRsp.ReturnCode == gopay.FAIL {
+				return errors.New(wxRsp.ReturnMsg)
+			}
+			if wxRsp.ResultCode == gopay.FAIL {
+				refund.Status = config.OrderRefundStatusFailed
+				dao.DB.Model(refund).UpdateColumn("status", refund.Status)
+				return errors.New(wxRsp.ErrCodeDes)
+			}
+		} else if payment.PayWay == config.PayWayAlipay {
+			// 支付宝支付
+			client, err := alipay.NewClient(config.JsonData.PluginPay.AlipayAppId, config.JsonData.PluginPay.AlipayPrivateKey, true)
+			if err != nil {
+				refund.Remark = err.Error()
+				dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return err
+			}
+			//配置公共参数
+			client.SetCharset("utf-8").
+				SetSignType(alipay.RSA2).
+				SetNotifyUrl(config.JsonData.System.BaseUrl + "/notify/alipay/pay")
+
+			// 自动同步验签（只支持证书模式）
+			certPath := fmt.Sprintf("%sdata/cert/alipay_cert_path.pem", config.ExecPath)
+			rootCertPath := fmt.Sprintf("%sdata/cert/alipay_root_cert_path.pem", config.ExecPath)
+			publicCertPath := fmt.Sprintf("%sdata/cert/alipay_public_cert_path.pem", config.ExecPath)
+			publicKey, err := os.ReadFile(publicCertPath)
+			if err != nil {
+				refund.Remark = err.Error()
+				dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return err
+			}
+			client.AutoVerifySign(publicKey)
+
+			// 传入证书内容
+			err = client.SetCertSnByPath(certPath, rootCertPath, publicCertPath)
+			if err != nil {
+				refund.Remark = err.Error()
+				dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return err
+			}
+			//请求参数
+			bm := make(gopay.BodyMap)
+			bm.Set("out_trade_no", order.PaymentId)
+			bm.Set("out_request_no", refund.RefundId)
+			bm.Set("refund_amount", fmt.Sprintf("%.2f", float32(refund.Amount)/100))
+
+			//创建订单
+			resp, err := client.TradeRefund(context.Background(), bm)
+
+			if err != nil {
+				refund.Remark = err.Error()
+				dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+				return err
+			}
+			refund.Remark = resp.Response.Msg
+			if resp.Response.SubCode != "" {
+				refund.Remark = resp.Response.SubMsg
+			}
+			dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
+
+			if resp.Response.Code != "10000" || resp.Response.SubCode != "" {
+				refund.Status = config.OrderRefundStatusFailed
+				dao.DB.Model(refund).UpdateColumn("status", refund.Status)
+				return errors.New(refund.Remark)
+			}
+		} else {
+			// 线下支付，的退款流程
+			// 不用处理
 		}
 
-		refund.Remark = wxRsp.ErrCodeDes
-		dao.DB.Model(refund).UpdateColumn("remark", refund.Remark)
-
-		if wxRsp.ReturnCode == gopay.FAIL {
-			return errors.New(wxRsp.ReturnMsg)
-		}
-		if wxRsp.ResultCode == gopay.FAIL {
-			refund.Status = config.OrderRefundStatusFailed
-			dao.DB.Model(refund).UpdateColumn("status", refund.Status)
-			return errors.New(wxRsp.ErrCodeDes)
-		}
 		refund.Status = config.OrderRefundStatusDone
 		err = SuccessRefundOrder(refund, order)
 		if err != nil {
@@ -388,6 +533,11 @@ func SuccessPaidOrder(order *model.Order) error {
 	}
 
 	db.Commit()
+
+	if config.JsonData.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
+		// 如果订单自动完成，则在这里处理
+		SetOrderFinished(order)
+	}
 
 	return nil
 }
@@ -474,36 +624,56 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(req.Details) == 0 && req.GoodsId == 0 {
+		return nil, errors.New("请选择商品")
+	}
+	if len(req.Details) == 0 {
+		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, Quantity: req.Quantity}}
+	}
 	tx := dao.DB.Begin()
-	//保存订单地址
-	orderAddress, err := SaveOrderAddress(tx, userId, &req.Address)
-	if err != nil {
-		tx.Rollback()
-		return nil, err
+	var orderAddress *model.OrderAddress
+	if config.JsonData.PluginOrder.NoProcess == false || req.Address != nil {
+		//保存订单地址
+		orderAddress, err = SaveOrderAddress(tx, userId, req.Address)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
 	}
 	var amount int64
+	var originAmount int64
 	var remark = req.Remark
 	if remark == "" {
-		for _, v := range req.Details {
-			archive, err := GetArchiveById(v.GoodsId)
+		if req.Type == config.OrderTypeVip {
+			group, err := GetUserGroupInfo(req.Details[0].GoodsId)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
-			if remark == "" {
-				remark += archive.Title + "等"
+			remark += group.Title
+		} else {
+			for _, v := range req.Details {
+				archive, err := GetArchiveById(v.GoodsId)
+				if err != nil {
+					tx.Rollback()
+					return nil, err
+				}
+				if remark == "" {
+					remark += archive.Title + "等"
+				}
 			}
 		}
 	}
 
 	order := model.Order{
 		UserId:      userId,
-		AddressId:   orderAddress.Id,
 		Remark:      remark,
-		Origin:      req.Origin,
-		Color:       req.Color,
+		Type:        req.Type,
 		Status:      0,
 		ShareUserId: user.ParentId,
+	}
+	if orderAddress != nil {
+		order.AddressId = orderAddress.Id
 	}
 	err = tx.Save(&order).Error
 	if err != nil {
@@ -511,27 +681,33 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 		return nil, err
 	}
 	// 计算商品总价
-	for _, v := range req.Details {
-		archive, err := GetArchiveById(v.GoodsId)
+	if req.Type == config.OrderTypeVip {
+		group, err := GetUserGroupInfo(req.Details[0].GoodsId)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
 		}
 		//计算价格
-		price := archive.Price
+		price := group.Price
 		originPrice := price
-		detailAmount := price * int64(v.Quantity)
+		discount := GetUserDiscount(userId, user)
+		if discount > 0 {
+			price = originPrice * discount / 100
+		}
+		detailAmount := price * int64(req.Details[0].Quantity)
+		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
 		amount += detailAmount
+		originAmount += originDetailAmount
 		//给每条子订单入库
 		orderDetail := model.OrderDetail{
 			OrderId:      order.OrderId,
 			UserId:       userId,
-			GoodsId:      v.GoodsId,
+			GoodsId:      req.Details[0].GoodsId,
 			Price:        price,
 			OriginPrice:  originPrice,
 			Amount:       detailAmount,
-			OriginAmount: detailAmount,
-			Quantity:     v.Quantity,
+			OriginAmount: originDetailAmount,
+			Quantity:     req.Details[0].Quantity,
 			Status:       1,
 		}
 		err = tx.Save(&orderDetail).Error
@@ -539,9 +715,45 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 			tx.Rollback()
 			return nil, err
 		}
+	} else {
+		for _, v := range req.Details {
+			archive, err := GetArchiveById(v.GoodsId)
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			//计算价格
+			price := archive.Price
+			originPrice := price
+			discount := GetUserDiscount(userId, user)
+			if discount > 0 {
+				price = originPrice * discount / 100
+			}
+			detailAmount := price * int64(v.Quantity)
+			originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+			amount += detailAmount
+			originAmount += originDetailAmount
+			//给每条子订单入库
+			orderDetail := model.OrderDetail{
+				OrderId:      order.OrderId,
+				UserId:       userId,
+				GoodsId:      v.GoodsId,
+				Price:        price,
+				OriginPrice:  originPrice,
+				Amount:       detailAmount,
+				OriginAmount: originDetailAmount,
+				Quantity:     v.Quantity,
+				Status:       1,
+			}
+			err = tx.Save(&orderDetail).Error
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+		}
 	}
 	order.Amount = amount
-	order.OriginAmount = amount
+	order.OriginAmount = originAmount
 
 	shareId := user.ParentId
 	if config.JsonData.PluginRetailer.AllowSelf == 1 && (config.JsonData.PluginRetailer.BecomeRetailer == 1 || user.IsRetailer == 1) {
@@ -551,15 +763,18 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 		shareUser, err := GetUserInfoById(shareId)
 		if err == nil {
 			if config.JsonData.PluginRetailer.BecomeRetailer == 1 || shareUser.IsRetailer == 1 {
-				order.ShareAmount = order.Amount * config.JsonData.PluginRetailer.ShareReward / 100
-				// 如果上级也是分销员，则上级也获得推荐奖励
-				if shareUser.ParentId > 0 && config.JsonData.PluginRetailer.ParentReward > 0 {
-					parent, err := GetUserInfoById(shareUser.ParentId)
-					if err == nil {
-						// 需要分给上级
-						if config.JsonData.PluginRetailer.BecomeRetailer == 1 || parent.IsRetailer == 1 {
-							order.ShareParentAmount = order.Amount * config.JsonData.PluginRetailer.ParentReward / 100
-							order.ShareParentUserId = parent.Id
+				shareGroup, err := GetUserGroupInfo(shareUser.GroupId)
+				if err == nil && shareGroup.Setting.ShareReward > 0 {
+					order.ShareAmount = order.Amount * shareGroup.Setting.ShareReward / 100
+					// 如果上级也是分销员，则上级也获得推荐奖励
+					if shareUser.ParentId > 0 && shareGroup.Setting.ParentReward > 0 {
+						parent, err := GetUserInfoById(shareUser.ParentId)
+						if err == nil {
+							// 需要分给上级
+							if config.JsonData.PluginRetailer.BecomeRetailer == 1 || parent.IsRetailer == 1 {
+								order.ShareParentAmount = order.Amount * shareGroup.Setting.ParentReward / 100
+								order.ShareParentUserId = parent.Id
+							}
 						}
 					}
 				}
@@ -585,6 +800,9 @@ func GetOrderAddressByUserId(userId uint) (*model.OrderAddress, error) {
 }
 
 func GetOrderAddressById(id uint) (*model.OrderAddress, error) {
+	if id == 0 {
+		return nil, nil
+	}
 	var orderAddress model.OrderAddress
 	err := dao.DB.Where("`id` = ?", id).Take(&orderAddress).Error
 	if err != nil {
@@ -595,6 +813,9 @@ func GetOrderAddressById(id uint) (*model.OrderAddress, error) {
 }
 
 func SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderAddressRequest) (*model.OrderAddress, error) {
+	if req == nil {
+		return nil, nil
+	}
 	var orderAddress model.OrderAddress
 	var err error
 	if req.Id > 0 {
@@ -630,6 +851,52 @@ func GetRetailerOrders(retailerId uint, page, pageSize int) ([]*model.Order, int
 	offset := (page - 1) * pageSize
 	tx := dao.DB.Model(&model.Order{}).Where("(`share_user_id` = ? or `share_parent_user_id` = ?)", retailerId, retailerId)
 	tx.Count(&total).Order("id desc").Limit(pageSize).Offset(offset).Find(&orders)
+	if len(orders) > 0 {
+		var orderIds = make([]string, 0, len(orders))
+		var userIds = make([]uint, 0, len(orders))
+		for i := range orders {
+			orderIds = append(orderIds, orders[i].OrderId)
+			userIds = append(userIds, orders[i].UserId)
+		}
+		var details []*model.OrderDetail
+		dao.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
+		if len(details) > 0 {
+			var archiveIds = make([]uint, 0, len(details))
+			for i := range details {
+				archiveIds = append(archiveIds, details[i].GoodsId)
+			}
+			var archives []*model.Archive
+			dao.DB.Where("`id` IN(?)", archiveIds).Find(&archives)
+			for i := range details {
+				for x := range archives {
+					if archives[x].Id == details[i].GoodsId {
+						details[i].Goods = archives[x]
+					}
+				}
+			}
+			for i := range orders {
+				for j := range details {
+					if orders[i].OrderId == details[j].OrderId {
+						if orders[i].Type == config.OrderTypeVip {
+							group, err := GetUserGroupInfo(details[j].GoodsId)
+							if err == nil {
+								details[i].Group = group
+							}
+						}
+						orders[i].Details = append(orders[i].Details, details[j])
+					}
+				}
+			}
+		}
+		users := GetUsersInfoByIds(userIds)
+		for i := range orders {
+			for u := range users {
+				if orders[i].UserId == users[u].Id {
+					orders[i].User = users[u]
+				}
+			}
+		}
+	}
 
 	return orders, total
 }
@@ -734,7 +1001,7 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 	tx.Count(&total)
 
 	//header
-	header = []string{"下单时间", "支付时间", "订单ID", "订单状态", "订单金额", "订购数量", "图片地址", "购买用户", "分销用户", "分销佣金", "邀请用户", "邀请奖励", "收件人", "收件人电话", "收件地址", "快递公司", "快递单号"}
+	header = []string{"下单时间", "支付时间", "订单ID", "订单状态", "订单金额", "订购商品", "订购数量", "购买用户", "分销用户", "分销佣金", "邀请用户", "邀请奖励", "收件人", "收件人电话", "收件地址", "快递公司", "快递单号"}
 	content = [][]interface{}{}
 	// 一次读取1000条
 	var lastId uint = 0
@@ -779,6 +1046,12 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 			for i := range orders {
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
+						if orders[i].Type == config.OrderTypeVip {
+							group, err := GetUserGroupInfo(details[j].GoodsId)
+							if err == nil {
+								details[i].Group = group
+							}
+						}
 						orders[i].Details = append(orders[i].Details, details[j])
 					}
 				}
@@ -809,11 +1082,13 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 				}
 			}
 			//content
-			//[]string{"下单时间", "支付时间", "订单ID", "订单状态", "订单金额", "订购数量", "图片地址", "购买用户", "分销用户", "分销佣金", "邀请用户", "邀请奖励", "收件人", "收件人电话", "收件地址", "快递公司", "快递单号"}
+			//[]string{"下单时间", "支付时间", "订单ID", "订单状态", "订单金额", "订购商品", "订购数量", "购买用户", "分销用户", "分销佣金", "邀请用户", "邀请奖励", "收件人", "收件人电话", "收件地址", "快递公司", "快递单号"}
 			for d := range orders[i].Details {
-				var logo string
-				if orders[i].Details[d].Goods != nil {
-					logo = orders[i].Details[d].Goods.Logo
+				var goodsTitle string
+				if orders[i].Details[d].Group != nil {
+					goodsTitle = "VIP：" + orders[i].Details[d].Group.Title
+				} else if orders[i].Details[d].Goods != nil {
+					goodsTitle = "商品：" + orders[i].Details[d].Goods.Title
 				}
 
 				content = append(content, []interface{}{
@@ -822,8 +1097,8 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 					"," + orders[i].OrderId,
 					getOrderStatus(orders[i].Status),
 					orders[i].Details[d].Amount / 100,
+					goodsTitle,
 					orders[i].Details[d].Quantity,
-					logo,
 					userName,
 					shareName,
 					orders[i].ShareAmount / 100,
@@ -840,6 +1115,36 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 	}
 
 	return header, content
+}
+
+var checkOrderRunning = false
+
+func AutoCheckOrders() {
+	if dao.DB == nil {
+		return
+	}
+	if checkOrderRunning {
+		return
+	}
+	checkOrderRunning = true
+	defer func() {
+		checkOrderRunning = false
+	}()
+
+	currentStamp := time.Now().Unix()
+	// auto close order
+	if config.JsonData.PluginOrder.AutoCloseMinute > 0 {
+		closeStamp := currentStamp - config.JsonData.PluginOrder.AutoCloseMinute*60
+		dao.DB.Model(&model.Order{}).Where("`status` = ? and created_time < ?", config.OrderStatusWaiting, closeStamp)
+	}
+	// auto finish order
+	var orders []*model.Order
+	dao.DB.Where("`status` = ? and end_time < ?", config.OrderStatusDelivering, currentStamp).Find(&orders)
+	if len(orders) > 0 {
+		for _, v := range orders {
+			SetOrderFinished(v)
+		}
+	}
 }
 
 func getOrderStatus(status int) string {

@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -13,8 +13,8 @@ import (
 )
 
 type tagArchiveDetailNode struct {
-	args    map[string]pongo2.IEvaluator
-	name     string
+	args map[string]pongo2.IEvaluator
+	name string
 }
 
 func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
@@ -43,6 +43,17 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
 		archiveDetail, _ = provider.GetArchiveById(id)
+		// check has Order
+		if fieldName == "HasOrdered" && archiveDetail != nil {
+			userInfo, ok := ctx.Public["userInfo"].(*model.User)
+			if ok && userInfo.Id > 0 {
+				archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
+				discount := provider.GetUserDiscount(userInfo.Id, userInfo)
+				if discount > 0 {
+					archiveDetail.FavorablePrice = archiveDetail.Price * discount / 100
+				}
+			}
+		}
 	}
 
 	if archiveDetail != nil {

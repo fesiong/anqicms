@@ -8,19 +8,18 @@ import (
 
 type Order struct {
 	Model
-	OrderId           string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;uniqueIndex"`
+	OrderId           string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;unique"`
 	PaymentId         string `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;index"`
 	UserId            uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	AddressId         uint   `json:"address_id" gorm:"column:address_id;type:int(10) unsigned not null;default:0"`
 	Remark            string `json:"remark" gorm:"column:remark;type:varchar(250) not null;default:''"`
-	Origin            string `json:"origin" gorm:"column:origin;type:varchar(250) not null;default:''"` // 来源
-	Color             string `json:"color" gorm:"column:color;type:varchar(250) not null;default:''"`   // 瓶盖颜色
+	Type              string `json:"type" gorm:"column:type;type:varchar(20) not null;default:'goods'"` // 订单类型，支持 goods|vip,默认goods
 	Status            int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
 	RefundStatus      int    `json:"refund_status" gorm:"column:refund_status;type:tinyint(1) not null;default:0"`
 	OriginAmount      int64  `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0;comment:订单商品总价"`
 	Amount            int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:订单计算运费、优惠后的总价"`
 	PaidTime          int64  `json:"paid_time" gorm:"column:paid_time;type:int(10) not null;default:0;comment:支付时间"`
-	EndTime           int64  `json:"end_time" gorm:"column:end_time;type:int(10) not null;default:0;comment:在确认支付之前，为订单关闭时间，在订单支付周期中，为自动确认订单时间，在支付完成后，为自动确认收货时间"`
+	EndTime           int64  `json:"end_time" gorm:"column:end_time;type:int(10) not null;default:0;comment:在确认支付之前，为订单关闭时间，在支付完成后，为自动确认收货时间"`
 	DeliverTime       int64  `json:"deliver_time" gorm:"column:deliver_time;type:int(10) not null;default:0;comment:发货时间"`
 	FinishedTime      int64  `json:"finished_time" gorm:"column:finished_time;type:int(10) not null;default:0;comment:订单完成时间"`
 	DiscountAmount    int64  `json:"discount_amount" gorm:"column:discount_amount;type:bigint(20) not null;default:0;comment:优惠金额"` // 可能一个订单支持多个优惠
@@ -54,17 +53,18 @@ func (o *Order) AfterCreate(tx *gorm.DB) (err error) {
 
 type OrderDetail struct {
 	Model
-	OrderId      string   `json:"order_id" gorm:"column:order_id;type:varchar(36) not null"`
-	UserId       uint     `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	GoodsId      uint     `json:"goods_id" gorm:"column:goods_id;type:int(10) not null;index"`
-	GoodsItemId  uint     `json:"goods_item_id" gorm:"column:goods_item_id;type:int(10) not null;default:0;index"`
-	Price        int64    `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
-	OriginPrice  int64    `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
-	Amount       int64    `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"` // 实际支付的金额，用于退款的时候进行退款操作
-	OriginAmount int64    `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0"`
-	Quantity     int      `json:"quantity" gorm:"column:quantity;type:int(10) not null;default:0"`
-	Status       int      `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
-	Goods        *Archive `json:"goods" gorm:"-"`
+	OrderId      string     `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
+	UserId       uint       `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
+	GoodsId      uint       `json:"goods_id" gorm:"column:goods_id;type:int(10) not null;index"`
+	GoodsItemId  uint       `json:"goods_item_id" gorm:"column:goods_item_id;type:int(10) not null;default:0;index"`
+	Price        int64      `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
+	OriginPrice  int64      `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
+	Amount       int64      `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"` // 实际支付的金额，用于退款的时候进行退款操作
+	OriginAmount int64      `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0"`
+	Quantity     int        `json:"quantity" gorm:"column:quantity;type:int(10) not null;default:0"`
+	Status       int        `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
+	Goods        *Archive   `json:"goods" gorm:"-"`
+	Group        *UserGroup `json:"group" gorm:"-"`
 }
 
 type OrderAddress struct {
@@ -83,7 +83,7 @@ type OrderAddress struct {
 // OrderRefund 退款记录
 type OrderRefund struct {
 	Model
-	RefundId   string `json:"refund_id" gorm:"column:refund_id;type:varchar(36) not null;uniqueIndex"`
+	RefundId   string `json:"refund_id" gorm:"column:refund_id;type:varchar(36) not null;unique"`
 	OrderId    string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null"`
 	DetailId   uint   `json:"detail_id" gorm:"column:detail_id;type:int(10) not null;default:0"`
 	UserId     uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
@@ -109,13 +109,13 @@ func (o *OrderRefund) AfterCreate(tx *gorm.DB) (err error) {
 
 type Payment struct {
 	Model
-	PaymentId string `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;uniqueIndex"`
+	PaymentId string `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;unique"`
 	TerraceId string `json:"terrace_id" gorm:"column:terrace_id;type:varchar(64) not null;index"` //交易id，服务商返回
 	UserId    uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	OrderId   string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;index"` //订单id
 	Amount    int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:'支付总价'"`
 	Status    int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`                 //支付状态
-	PaidWay   string `json:"paid_way" gorm:"column:paid_way;type:varchar(32) not null;default:'';index"`     // 支付方式
+	PayWay    string `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`       // 支付方式
 	PaidTime  int64  `json:"paid_time" gorm:"column:paid_time;type:int(10) not null;default:0;comment:支付时间"` //该订单支付时间
 	Remark    string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`                     //备注
 }

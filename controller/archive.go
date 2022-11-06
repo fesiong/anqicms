@@ -77,6 +77,12 @@ func ArchiveDetail(ctx iris.Context) {
 	if userId > 0 {
 		if archive.Price > 0 {
 			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
+			// check price can make any discount？
+			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+			discount := provider.GetUserDiscount(userId, userInfo)
+			if discount > 0 {
+				archive.FavorablePrice = archive.Price * discount / 100
+			}
 		}
 		if archive.ReadLevel > 0 && !archive.HasOrdered {
 			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)

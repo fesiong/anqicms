@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
