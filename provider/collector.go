@@ -241,7 +241,7 @@ func SaveCollectArticle(archive *request.Archive, keyword *model.Keyword) error 
 
 	if checkArticleExists(archive.OriginUrl, archive.OriginTitle) {
 		log.Println("已存在于数据库", archive.OriginTitle)
-		return errors.New("已存在于数据库")
+		return errors.New(config.Lang("已存在于数据库"))
 	}
 
 	archive.KeywordId = keyword.Id
@@ -366,11 +366,11 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 	_ = ParseArticleDetail(archive)
 	if len(archive.Content) == 0 {
 		log.Println("链接无文章", archive.OriginUrl)
-		return nil, errors.New("链接无文章")
+		return nil, errors.New(config.Lang("链接无文章"))
 	}
 	if archive.Title == "" {
 		log.Println("链接无文章", archive.OriginUrl)
-		return nil, errors.New("链接无文章")
+		return nil, errors.New(config.Lang("链接无文章"))
 	}
 	//对乱码的跳过
 	runeTitle := []rune(archive.Title)
@@ -383,7 +383,7 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 	}
 	if isDeny {
 		log.Println("乱码", archive.OriginUrl)
-		return nil, errors.New("乱码")
+		return nil, errors.New(config.Lang("乱码"))
 	}
 
 	log.Println(archive.Title, len(archive.Content), archive.OriginUrl)

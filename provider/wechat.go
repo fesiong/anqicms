@@ -162,7 +162,7 @@ func ReplyWechatMessage(req *request.WechatMessageRequest) error {
 	}
 
 	if req.Reply == "" {
-		return errors.New("请填写回复内容")
+		return errors.New(config.Lang("请填写回复内容"))
 	}
 
 	err2 := GetWechatServer(false).SendText(message.Openid, req.Reply)

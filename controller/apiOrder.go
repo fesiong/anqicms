@@ -51,7 +51,7 @@ func ApiGetOrderDetail(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "权限不足",
+			"msg":  config.Lang("权限不足"),
 		})
 		return
 	}
@@ -112,7 +112,7 @@ func ApiCancelOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "该订单不可操作",
+			"msg":  config.Lang("该订单不可操作"),
 		})
 		return
 	}
@@ -128,7 +128,7 @@ func ApiCancelOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "订单已取消",
+		"msg":  config.Lang("订单已取消"),
 	})
 }
 
@@ -154,7 +154,7 @@ func ApiApplyRefundOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "该订单不可操作",
+			"msg":  config.Lang("该订单不可操作"),
 		})
 		return
 	}
@@ -170,7 +170,7 @@ func ApiApplyRefundOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "退款申请已提交",
+		"msg":  config.Lang("退款申请已提交"),
 	})
 }
 
@@ -196,7 +196,7 @@ func ApiFinishedOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "该订单不可操作",
+			"msg":  config.Lang("该订单不可操作"),
 		})
 		return
 	}
@@ -212,7 +212,7 @@ func ApiFinishedOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "订单已完成",
+		"msg":  config.Lang("订单已完成"),
 	})
 }
 
@@ -306,7 +306,7 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "无法创建支付订单",
+			"msg":  config.Lang("无法创建支付订单"),
 		})
 	}
 }
@@ -517,7 +517,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "支付成功",
+			"msg":  config.Lang("支付成功"),
 		})
 		return
 	}
@@ -528,7 +528,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 			//支付成功
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
-				"msg":  "支付成功",
+				"msg":  config.Lang("支付成功"),
 			})
 			return
 		}
@@ -537,7 +537,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  "未支付",
+		"msg":  config.Lang("未支付"),
 	})
 }
 

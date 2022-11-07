@@ -51,7 +51,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	if attachId > 0 {
 		attachment, err = GetAttachmentById(attachId)
 		if err != nil {
-			return nil, errors.New("需要替换的图片资源不存在")
+			return nil, errors.New(config.Lang("需要替换的图片资源不存在"))
 		}
 		isImage = attachment.IsImage
 	}
@@ -70,7 +70,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	exists, _ := GetAttachmentByMd5(md5Str)
 	if attachment != nil {
 		if exists != nil && attachment.Id != exists.Id {
-			return nil, errors.New("替换失败，已存在当前上传的资源。")
+			return nil, errors.New(config.Lang("替换失败，已存在当前上传的资源。"))
 		}
 		fileName = attachment.FileName
 		fileExt = filepath.Ext(attachment.FileLocation)
@@ -194,7 +194,6 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	fileSize = int64(buff.Len())
 
 	// 上传原图
-	//log.Println("图片大小", fileSize)
 	_, err = Storage.UploadFile(filePath+tmpName, buff.Bytes())
 	if err != nil {
 		return nil, err

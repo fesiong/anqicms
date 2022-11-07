@@ -10,7 +10,6 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -279,7 +278,6 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		if config.JsonData.Content.RemoteDownload == 1 {
 			doc.Find("img").Each(func(i int, s *goquery.Selection) {
 				src, exists := s.Attr("src")
-				log.Println("下载图片：", src)
 				if exists && src != "" {
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)
@@ -478,7 +476,7 @@ func UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) error {
 
 func UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New("无可操作的文档")
+		return errors.New(config.Lang("无可操作的文档"))
 	}
 	err := dao.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("status", req.Status).Error
 	// 如果选择的有待发布的内容，则将时间更新为当前时间
@@ -490,7 +488,7 @@ func UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error {
 
 func UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New("无可操作的文档")
+		return errors.New(config.Lang("无可操作的文档"))
 	}
 	err := dao.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumn("category_id", req.CategoryId).Error
 

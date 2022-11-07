@@ -59,10 +59,6 @@ func getCombinationEnginLink(keyword *model.Keyword) string {
 }
 
 func GenerateCombination(keyword *model.Keyword) (int, error) {
-	//_, err := GetArchiveByTitle(keyword.Title)
-	//if err == nil {
-	//	return errors.New("文档已存在")
-	//}
 	result, err := collectCombinationMaterials(keyword)
 	if err != nil {
 		return 0, err
@@ -230,7 +226,7 @@ func parseSections(sel *goquery.Selection, word, sourceLink string) ([]Combinati
 	list.Find("span,em,i,strong,b,br").Contents().Unwrap()
 	list = filterList(list)
 	if list == nil || list.Nodes == nil {
-		return nil, errors.New("没有可用对象")
+		return nil, errors.New(config.Lang("没有可用对象"))
 	}
 	list.AddClass("isTop")
 	parsedUrl, err := url.Parse(sourceLink)
@@ -404,7 +400,7 @@ func (ci *CombinationItem) GetSingleLinkData(sourceLink string) error {
 	runeText := []rune(ci.Description)
 	runeLen := len(runeText)
 	if runeLen < 50 {
-		return errors.New("不符合条件")
+		return errors.New(config.Lang("不符合条件"))
 	}
 	subText := string(runeText[runeLen/2-5 : runeLen/2+5])
 

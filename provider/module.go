@@ -69,13 +69,13 @@ func SaveModule(req *request.ModuleRequest) (module *model.Module, err error) {
 	// 检查tableName
 	exists, err := GetModuleByTableName(req.TableName)
 	if err == nil && exists.Id != req.Id {
-		return nil, errors.New("模型表名已存在，请更换一个")
+		return nil, errors.New(config.Lang("模型表名已存在，请更换一个"))
 	}
 
 	// 检查tableName
 	exists, err = GetModuleByUrlToken(req.UrlToken)
 	if err == nil && exists.Id != req.Id {
-		return nil, errors.New("模型URL别名已存在，请更换一个")
+		return nil, errors.New(config.Lang("模型URL别名已存在，请更换一个"))
 	}
 
 	oldTableName := module.TableName
@@ -84,14 +84,14 @@ func SaveModule(req *request.ModuleRequest) (module *model.Module, err error) {
 	if oldTableName != module.TableName {
 		// 表示是新表
 		if dao.DB.Migrator().HasTable(module.TableName) {
-			return nil, errors.New("模型表名已存在，请更换一个")
+			return nil, errors.New(config.Lang("模型表名已存在，请更换一个"))
 		}
 	}
 	// 检查fields
 	for i := range req.Fields {
 		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.Fields[i].FieldName)
 		if err != nil || !match {
-			return nil, errors.New(req.Fields[i].FieldName + "命名不正确")
+			return nil, errors.New(req.Fields[i].FieldName + config.Lang("命名不正确"))
 		}
 	}
 

@@ -40,14 +40,14 @@ func NotifyWechatPay(ctx iris.Context) {
 	notifyReq, err := wechat.ParseNotifyToBodyMap(ctx.Request())
 	rsp := new(wechat.NotifyResponse) // 回复微信的数据
 
-	//ok, err := wechat.VerifySign(config.JsonData.PluginPay.WechatApiKey, wechat.SignType_MD5, notifyReq)
-	//if !ok {
-	//	library.DebugLog("wechat", "err", err, fmt.Sprintf("%#v", notifyReq))
-	//	rsp.ReturnCode = gopay.FAIL
-	//	rsp.ReturnMsg = "支付失败"
-	//	ctx.WriteString(rsp.ToXmlString())
-	//	return
-	//}
+	ok, err := wechat.VerifySign(config.JsonData.PluginPay.WechatApiKey, wechat.SignType_MD5, notifyReq)
+	if !ok {
+		library.DebugLog("wechat", "err", err, fmt.Sprintf("%#v", notifyReq))
+		rsp.ReturnCode = gopay.FAIL
+		rsp.ReturnMsg = "支付失败"
+		ctx.WriteString(rsp.ToXmlString())
+		return
+	}
 	//检查payment订单
 	payment, err := provider.GetPaymentInfoByPaymentId(notifyReq.GetString("out_trade_no"))
 	if err != nil {
@@ -180,7 +180,6 @@ func NotifyAlipay(ctx iris.Context) {
 	//检查payment订单
 	payment, err := provider.GetPaymentInfoByPaymentId(bm.GetString("out_trade_no"))
 	if err != nil {
-		//ctx.WriteString(bm.NotOK("支付失败"))
 		return
 	}
 	if payment.PaidTime > 0 {

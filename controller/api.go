@@ -9,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"log"
 	"strconv"
 	"strings"
 	"time"
@@ -94,7 +93,6 @@ func ApiImportArchive(ctx iris.Context) {
 			archive.Id = id
 			err = dao.DB.Create(&archive).Error
 
-			log.Println("导入测试", err, archive)
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,

@@ -102,7 +102,7 @@ func SaveDesignInfo(req request.DesignInfoRequest) error {
 		}
 	}
 	if designIndex == -1 {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	designInfo := designList[designIndex]
@@ -123,16 +123,16 @@ func SaveDesignInfo(req request.DesignInfoRequest) error {
 // DeleteDesignInfo 删除的模板，会被移动到 cache
 func DeleteDesignInfo(packageName string) error {
 	if packageName == "" {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 	if packageName == "default" {
-		return errors.New("默认模板不能删除")
+		return errors.New(config.Lang("默认模板不能删除"))
 	}
 
 	basePath := config.ExecPath + "template/" + packageName
 	basePath = filepath.Clean(basePath)
 	if !strings.HasPrefix(basePath, config.ExecPath+"template/") {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	cachePath := config.ExecPath + "cache/" + ".history/" + packageName
@@ -159,7 +159,7 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		}
 	}
 	if designIndex == -1 {
-		return nil, errors.New("模板不存在")
+		return nil, errors.New(config.Lang("模板不存在"))
 	}
 
 	if !scan {
@@ -439,16 +439,16 @@ func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageNa
 		basePath = filepath.Join(config.ExecPath, "public/static", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return errors.New("不能越级上传模板")
+			return errors.New(config.Lang("不能越级上传模板"))
 		}
 	} else {
 		if fileExt != ".html" && fileExt != ".zip" {
-			return errors.New("请上传html模板")
+			return errors.New(config.Lang("请上传html模板"))
 		}
 		basePath = filepath.Join(config.ExecPath, "template", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return errors.New("不能越级上传模板")
+			return errors.New(config.Lang("不能越级上传模板"))
 		}
 	}
 	realPath = strings.TrimRight(realPath, "/")
@@ -501,7 +501,7 @@ func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageNa
 		info.Filename = strings.ReplaceAll(info.Filename, "\\", "")
 		realFile := filepath.Clean(realPath + "/" + info.Filename)
 		if !strings.HasPrefix(realFile, basePath) {
-			return errors.New("不能越级上传文件")
+			return errors.New(config.Lang("不能越级上传文件"))
 		}
 		// 单独文件处理
 		newFile, err := os.Create(realFile)
@@ -523,7 +523,7 @@ func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageNa
 func GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*response.DesignFile, error) {
 	designInfo, err := GetDesignInfo(packageName, false)
 	if err != nil {
-		return nil, errors.New("模板不存在")
+		return nil, errors.New(config.Lang("模板不存在"))
 	}
 
 	filePath = strings.ReplaceAll(filePath, "..", "")
@@ -558,19 +558,19 @@ func GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*re
 		basePath = filepath.Join(config.ExecPath, "public/static", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return nil, errors.New("文件不存在")
+			return nil, errors.New(config.Lang("文件不存在"))
 		}
 	} else {
 		basePath = filepath.Join(config.ExecPath, "template", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return nil, errors.New("文件不存在")
+			return nil, errors.New(config.Lang("文件不存在"))
 		}
 	}
 
 	_, err = os.Stat(realPath)
 	if err != nil && os.IsNotExist(err) {
-		return nil, errors.New("文件不存在")
+		return nil, errors.New(config.Lang("文件不存在"))
 	}
 
 	if !exists {
@@ -596,13 +596,11 @@ func GetDesignTplFileDetail(packageName string, designFileDetail response.Design
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
 	}
 
 	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
 	}
 
 	designFileDetail.LastMod = info.ModTime().Unix()
@@ -617,14 +615,9 @@ func GetDesignStaticFileDetail(packageName string, designFileDetail response.Des
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
 	}
 
 	data, err := os.ReadFile(fullPath)
-	if err != nil {
-		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
-	}
 
 	designFileDetail.LastMod = info.ModTime().Unix()
 	designFileDetail.Content = string(data)
@@ -757,7 +750,7 @@ func DeleteDesignFile(packageName, filePath, fileType string) error {
 	// 先验证文件名是否合法
 	designInfo, err := GetDesignInfo(packageName, false)
 	if err != nil {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	if fileType == "static" {
@@ -808,7 +801,7 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 	// 先验证文件名是否合法
 	designInfo, err := GetDesignInfo(req.Package, false)
 	if err != nil {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	// 先检查文件是否存在
@@ -820,7 +813,7 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 	}
 	fullPath := filepath.Clean(basePath + req.Path)
 	if !strings.HasPrefix(fullPath, basePath) {
-		return errors.New("模板文件不存在")
+		return errors.New(config.Lang("模板文件不存在"))
 	}
 
 	if req.UpdateContent {
@@ -855,7 +848,7 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 		if req.RenamePath != "" && req.RenamePath != req.Path {
 			newPath := filepath.Clean(basePath + req.RenamePath)
 			if !strings.HasPrefix(newPath, basePath) {
-				return errors.New("模板文件保存失败")
+				return errors.New(config.Lang("模板文件保存失败"))
 			}
 			req.Path = strings.TrimPrefix(newPath, basePath)
 			// 移动

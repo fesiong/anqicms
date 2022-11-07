@@ -94,7 +94,7 @@ func ApiArchiveFilters(ctx iris.Context) {
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "模型不存在",
+			"msg":  config.Lang("模型不存在"),
 		})
 		return
 	}
@@ -1072,7 +1072,7 @@ func ApiArchivePublish(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "发布成功，已进入审核",
+		"msg":  config.Lang("发布成功，已进入审核"),
 		"data": archive,
 	})
 }

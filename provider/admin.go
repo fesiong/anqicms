@@ -16,7 +16,7 @@ import (
 
 func InitAdmin(userName string, password string, force bool) error {
 	if userName == "" || password == "" {
-		return errors.New("请提供用户名和密码")
+		return errors.New(config.Lang("请提供用户名和密码"))
 	}
 
 	var exists model.Admin
@@ -27,7 +27,7 @@ func InitAdmin(userName string, password string, force bool) error {
 			exists.GroupId = 1
 			db.Model(&exists).UpdateColumn("group_id", exists.GroupId)
 		}
-		return errors.New("已有管理员不能再创建")
+		return errors.New(config.Lang("已有管理员不能再创建"))
 	}
 
 	admin := &model.Admin{
@@ -200,23 +200,23 @@ func UpdateAdminInfo(adminId uint, req request.AdminInfoRequest) (*model.Admin, 
 	if req.UserName != "" {
 		exists, err = GetAdminInfoByName(req.UserName)
 		if err == nil && exists.Id != admin.Id {
-			return nil, errors.New("用户名已被占用，请更换一个")
+			return nil, errors.New(config.Lang("用户名已被占用，请更换一个"))
 		}
 		admin.UserName = req.UserName
 	}
 
 	if req.Password != "" {
 		if len(req.Password) < 6 {
-			return nil, errors.New("请输入6位及以上长度的密码")
+			return nil, errors.New(config.Lang("请输入6位及以上长度的密码"))
 		}
 		err = admin.EncryptPassword(req.Password)
 		if err != nil {
-			return nil, errors.New("密码设置失败")
+			return nil, errors.New(config.Lang("密码设置失败"))
 		}
 	}
 	err = dao.DB.Save(admin).Error
 	if err != nil {
-		return nil, errors.New("用户信息更新失败")
+		return nil, errors.New(config.Lang("用户信息更新失败"))
 	}
 
 	return admin, nil

@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v4"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/response"
 	"math"
 	"net/url"
@@ -182,7 +183,7 @@ func makePagination(TotalItems int64, currentPage, pageSize int, urlPatten strin
 
 func (p *pagination) getFirstPage() *pageItem {
 	item := &pageItem{
-		Name: "第一页",
+		Name: config.Lang("第一页"),
 		Link: p.getPageUrl(1),
 	}
 
@@ -195,7 +196,7 @@ func (p *pagination) getFirstPage() *pageItem {
 
 func (p *pagination) getLastPage() *pageItem {
 	item := &pageItem{
-		Name: "尾页",
+		Name: config.Lang("尾页"),
 		Link: p.getPageUrl(p.TotalPages),
 	}
 
@@ -212,7 +213,7 @@ func (p *pagination) getPrevPage() *pageItem {
 	}
 
 	item := &pageItem{
-		Name: "上一页",
+		Name: config.Lang("上一页"),
 		Link: p.getPageUrl(p.CurrentPage - 1),
 	}
 
@@ -224,7 +225,7 @@ func (p *pagination) getNextPage() *pageItem {
 		return nil
 	}
 	item := &pageItem{
-		Name: "下一页",
+		Name: config.Lang("下一页"),
 		Link: p.getPageUrl(p.CurrentPage + 1),
 	}
 

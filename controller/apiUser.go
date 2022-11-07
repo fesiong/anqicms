@@ -113,14 +113,14 @@ func ApiLogin(ctx iris.Context) {
 			if req.CaptchaId == "" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "图形码不正确",
+					"msg":  config.Lang("图形码不正确"),
 				})
 				return
 			}
 			if ok := Store.Verify(req.CaptchaId, req.Captcha, true); !ok {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "图形码不正确",
+					"msg":  config.Lang("图形码不正确"),
 				})
 				return
 			}
@@ -131,7 +131,7 @@ func ApiLogin(ctx iris.Context) {
 		if req.UserName == "" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "请输入账号",
+				"msg":  config.Lang("请输入账号"),
 			})
 			return
 		}
@@ -139,7 +139,7 @@ func ApiLogin(ctx iris.Context) {
 		if len(req.Password) < 6 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "请输入6位及以上长度的密码",
+				"msg":  config.Lang("请输入6位及以上长度的密码"),
 			})
 			return
 		}
@@ -149,7 +149,7 @@ func ApiLogin(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "登录失败",
+				"msg":  config.Lang("登录失败"),
 			})
 			return
 		}
@@ -158,7 +158,7 @@ func ApiLogin(ctx iris.Context) {
 	if user == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "登录失败",
+			"msg":  config.Lang("登录失败"),
 		})
 		return
 	}
@@ -223,7 +223,7 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  config.Lang("保存成功"),
 	})
 }
 
@@ -291,7 +291,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 	if len(req.Password) < 6 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请填写6位以上的密码",
+			"msg":  config.Lang("请填写6位以上的密码"),
 		})
 		return
 	}
@@ -300,7 +300,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请登录",
+			"msg":  config.Lang("请登录"),
 		})
 		return
 	}
@@ -308,7 +308,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 	if !user.CheckPassword(req.OldPassword) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "旧密码错误",
+			"msg":  config.Lang("旧密码错误"),
 		})
 		return
 	}
@@ -323,6 +323,6 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "密码修改成功",
+		"msg":  config.Lang("密码修改成功"),
 	})
 }

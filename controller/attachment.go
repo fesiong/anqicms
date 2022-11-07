@@ -26,7 +26,7 @@ func AttachmentUpload(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"status": config.StatusFailed,
-				"msg":    "需要替换的图片资源不存在",
+				"msg":    config.Lang("需要替换的图片资源不存在"),
 			})
 			return
 		}

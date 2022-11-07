@@ -496,7 +496,7 @@ func ApplyOrderRefund(order *model.Order) error {
 		UserId:   order.UserId,
 		Amount:   order.Amount,
 		Status:   0,
-		Remark:   "用户申请退款",
+		Remark:   config.Lang("用户申请退款"),
 	}
 	dao.DB.Save(refund)
 
@@ -625,7 +625,7 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 		return nil, err
 	}
 	if len(req.Details) == 0 && req.GoodsId == 0 {
-		return nil, errors.New("请选择商品")
+		return nil, errors.New(config.Lang("请选择商品"))
 	}
 	if len(req.Details) == 0 {
 		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, Quantity: req.Quantity}}
@@ -659,7 +659,7 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 					return nil, err
 				}
 				if remark == "" {
-					remark += archive.Title + "等"
+					remark += archive.Title + config.Lang("等")
 				}
 			}
 		}
@@ -821,7 +821,7 @@ func SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderAddressRequest
 	if req.Id > 0 {
 		err = tx.Where("`id` = ?", req.Id).Take(&orderAddress).Error
 		if err != nil || orderAddress.UserId != userId {
-			return nil, errors.New("地址不存在")
+			return nil, errors.New(config.Lang("地址不存在"))
 		}
 	} else {
 		orderAddress = model.OrderAddress{
@@ -931,7 +931,7 @@ func RetailerApplyWithdraw(retailerId uint) error {
 	}
 
 	if total <= 0 {
-		return errors.New("没有可提现金额")
+		return errors.New(config.Lang("没有可提现金额"))
 	}
 
 	// todo执行提现操作
@@ -1001,7 +1001,7 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 	tx.Count(&total)
 
 	//header
-	header = []string{"下单时间", "支付时间", "订单ID", "订单状态", "订单金额", "订购商品", "订购数量", "购买用户", "分销用户", "分销佣金", "邀请用户", "邀请奖励", "收件人", "收件人电话", "收件地址", "快递公司", "快递单号"}
+	header = []string{config.Lang("下单时间"), config.Lang("支付时间"), config.Lang("订单ID"), config.Lang("订单状态"), config.Lang("订单金额"), config.Lang("订购商品"), config.Lang("订购数量"), config.Lang("购买用户"), config.Lang("分销用户"), config.Lang("分销佣金"), config.Lang("邀请用户"), config.Lang("邀请奖励"), config.Lang("收件人"), config.Lang("收件人电话"), config.Lang("收件地址"), config.Lang("快递公司"), config.Lang("快递单号")}
 	content = [][]interface{}{}
 	// 一次读取1000条
 	var lastId uint = 0
@@ -1088,7 +1088,7 @@ func ExportOrders(req *request.OrderExportRequest) (header []string, content [][
 				if orders[i].Details[d].Group != nil {
 					goodsTitle = "VIP：" + orders[i].Details[d].Group.Title
 				} else if orders[i].Details[d].Goods != nil {
-					goodsTitle = "商品：" + orders[i].Details[d].Goods.Title
+					goodsTitle = config.Lang("商品：") + orders[i].Details[d].Goods.Title
 				}
 
 				content = append(content, []interface{}{
@@ -1151,25 +1151,25 @@ func getOrderStatus(status int) string {
 	var text string
 	switch status {
 	case -1:
-		text = "订单关闭"
+		text = config.Lang("订单关闭")
 		break
 	case 0:
-		text = "待支付"
+		text = config.Lang("待支付")
 		break
 	case 1:
-		text = "待发货"
+		text = config.Lang("待发货")
 		break
 	case 2:
-		text = "待支付"
+		text = config.Lang("待支付")
 		break
 	case 3:
-		text = "已完成"
+		text = config.Lang("已完成")
 		break
 	case 8:
-		text = "退款中"
+		text = config.Lang("退款中")
 		break
 	case 9:
-		text = "已退款"
+		text = config.Lang("已退款")
 		break
 	}
 

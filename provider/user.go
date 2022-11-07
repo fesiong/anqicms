@@ -380,12 +380,12 @@ func LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, error) {
 func LoginViaWechat(req *request.ApiLoginRequest) (*model.User, error) {
 	openid := library.CodeCache.GetByCode(req.Code, false)
 	if openid == "" {
-		return nil, errors.New("验证码不正确")
+		return nil, errors.New(config.Lang("验证码不正确"))
 	}
 	// auto register
 	userWechat, err := GetUserWechatByOpenid(openid)
 	if err != nil {
-		return nil, errors.New("用户信息不完整")
+		return nil, errors.New(config.Lang("用户信息不完整"))
 	}
 	var user *model.User
 	if userWechat.UserId == 0 {
@@ -402,7 +402,7 @@ func LoginViaWechat(req *request.ApiLoginRequest) (*model.User, error) {
 	} else {
 		user, err = GetUserInfoById(userWechat.UserId)
 		if err != nil {
-			return nil, errors.New("用户信息不完整")
+			return nil, errors.New(config.Lang("用户信息不完整"))
 		}
 	}
 	if req.InviteId > 0 && user.ParentId == 0 {
@@ -439,7 +439,7 @@ func LoginViaPassword(req *request.ApiLoginRequest) (*model.User, error) {
 	//验证密码
 	ok := user.CheckPassword(req.Password)
 	if !ok {
-		return nil, errors.New("密码错误")
+		return nil, errors.New(config.Lang("密码错误"))
 	}
 
 	_ = user.EncodeToken(dao.DB)

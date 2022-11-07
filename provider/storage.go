@@ -61,7 +61,6 @@ func (bs *BucketStorage) InitBucket() (err error) {
 func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error) {
 	location = strings.TrimLeft(location, "/")
 	if config.JsonData.PluginStorage.KeepLocal || bs.storageType == config.StorageTypeLocal {
-		//log.Println("本地存储", location)
 		//将文件写入本地
 		basePath := config.ExecPath + "public/"
 		//先判断文件夹是否存在，不存在就先创建

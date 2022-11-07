@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
 )
 
 type Admin struct {
@@ -87,7 +88,7 @@ func (admin *Admin) CheckPassword(password string) bool {
 
 func (admin *Admin) EncryptPassword(password string) error {
 	if password == "" {
-		return errors.New("密码为空")
+		return errors.New(config.Lang("密码为空"))
 	}
 	pass := []byte(password)
 	hash, err := bcrypt.GenerateFromPassword(pass, bcrypt.MinCost)

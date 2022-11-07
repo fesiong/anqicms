@@ -138,7 +138,7 @@ func GuestbookForm(ctx iris.Context) {
 		}
 
 		ShowMessage(ctx, msg, []Button{
-			{Name: "点击继续", Link: link},
+			{Name: config.Lang("点击继续"), Link: link},
 		})
 	}
 }
