@@ -19,7 +19,7 @@ func PluginWechatConfig(ctx iris.Context) {
 }
 
 func PluginWechatConfigForm(ctx iris.Context) {
-	var req request.PluginWeappConfig
+	var req config.PluginWeappConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -35,7 +35,7 @@ func PluginWechatConfigForm(ctx iris.Context) {
 	config.JsonData.PluginWechat.VerifyKey = req.VerifyKey
 	config.JsonData.PluginWechat.VerifyMsg = req.VerifyMsg
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.WechatSettingKey, config.JsonData.PluginWechat)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

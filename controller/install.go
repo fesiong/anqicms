@@ -173,6 +173,7 @@ func Install(ctx iris.Context) {
 }
 
 var installRunning bool
+
 func InstallForm(ctx iris.Context) {
 	if dao.DB != nil {
 		ShowMessage(ctx, "已初始化完成，无需再处理", []Button{
@@ -213,11 +214,11 @@ func InstallForm(ctx iris.Context) {
 	config.JsonData.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
 	config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 
-	config.JsonData.Mysql.Database = req.Database
-	config.JsonData.Mysql.User = req.User
-	config.JsonData.Mysql.Password = req.Password
-	config.JsonData.Mysql.Host = req.Host
-	config.JsonData.Mysql.Port = req.Port
+	config.Server.Mysql.Database = req.Database
+	config.Server.Mysql.User = req.User
+	config.Server.Mysql.Password = req.Password
+	config.Server.Mysql.Host = req.Host
+	config.Server.Mysql.Port = req.Port
 
 	err := dao.InitDB()
 	if err != nil {
@@ -245,6 +246,8 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	_ = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
+	_ = provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
 
 	//创建管理员
 	err = provider.InitAdmin(req.AdminUser, req.AdminPassword, true)

@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 )
 
 func PluginImportApi(ctx iris.Context) {
@@ -23,7 +22,7 @@ func PluginImportApi(ctx iris.Context) {
 }
 
 func PluginUpdateApiToken(ctx iris.Context) {
-	var req request.PluginImportApiConfig
+	var req config.PluginImportApiConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -38,8 +37,14 @@ func PluginUpdateApiToken(ctx iris.Context) {
 		config.JsonData.PluginImportApi.LinkToken = req.LinkToken
 	}
 	// 回写
-	_ = config.WriteConfig()
-
+	err := provider.SaveSettingValue(provider.ImportApiSettingKey, config.JsonData.PluginImportApi)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新API导入Token"))
 
 	ctx.JSON(iris.Map{

@@ -178,7 +178,7 @@ func GetAdminAuthToken(userId uint, remember bool) string {
 		"t":       fmt.Sprintf("%d", t.Unix()),
 	})
 	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.JsonData.Server.TokenSecret))
+	tokenString, err := jwtToken.SignedString([]byte(config.Server.Server.TokenSecret))
 	if err != nil {
 		return ""
 	}

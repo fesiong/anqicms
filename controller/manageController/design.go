@@ -64,7 +64,7 @@ func SaveDesignInfo(ctx iris.Context) {
 		// 更改当前
 		if config.JsonData.System.TemplateType != req.TemplateType {
 			config.JsonData.System.TemplateType = req.TemplateType
-			err = config.WriteConfig()
+			err = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -105,8 +105,7 @@ func UseDesignInfo(ctx iris.Context) {
 	if config.JsonData.System.TemplateName != req.Package {
 		config.JsonData.System.TemplateName = req.Package
 		config.JsonData.System.TemplateType = req.TemplateType
-
-		err = config.WriteConfig()
+		err = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -115,12 +114,14 @@ func UseDesignInfo(ctx iris.Context) {
 			return
 		}
 
-		// 如果切换了模板，则重载模板
-		config.RestartChan <- true
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			// 如果切换了模板，则重载模板
+			config.RestartChan <- true
 
-		time.Sleep(2 * time.Second)
-
-		provider.DeleteCacheIndex()
+			time.Sleep(2 * time.Second)
+			provider.DeleteCacheIndex()
+		}()
 	}
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
@@ -187,7 +188,7 @@ func UploadDesignInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -197,14 +198,14 @@ func UploadDesignInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":    "上传成功",
+		"msg":  "上传成功",
 	})
 }
 
@@ -213,7 +214,7 @@ func UploadDesignFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -227,7 +228,7 @@ func UploadDesignFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -236,7 +237,7 @@ func UploadDesignFile(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":    "上传成功",
+		"msg":  "上传成功",
 	})
 }
 
@@ -396,15 +397,15 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "一些基本约定",
-					Link: "https://www.anqicms.com/help-design/116.html",
+					Link:  "https://www.anqicms.com/help-design/116.html",
 				},
 				{
 					Title: "目录和模板",
-					Link: "https://www.anqicms.com/help-design/117.html",
+					Link:  "https://www.anqicms.com/help-design/117.html",
 				},
 				{
 					Title: "标签和使用方法",
-					Link: "https://www.anqicms.com/help-design/118.html",
+					Link:  "https://www.anqicms.com/help-design/118.html",
 				},
 			},
 		},
@@ -413,27 +414,27 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "系统设置标签",
-					Link: "https://www.anqicms.com/manual-normal/73.html",
+					Link:  "https://www.anqicms.com/manual-normal/73.html",
 				},
 				{
 					Title: "联系方式标签",
-					Link: "https://www.anqicms.com/manual-normal/74.html",
+					Link:  "https://www.anqicms.com/manual-normal/74.html",
 				},
 				{
 					Title: "万能TDK标签",
-					Link: "https://www.anqicms.com/manual-normal/75.html",
+					Link:  "https://www.anqicms.com/manual-normal/75.html",
 				},
 				{
 					Title: "导航列表标签",
-					Link: "https://www.anqicms.com/manual-normal/76.html",
+					Link:  "https://www.anqicms.com/manual-normal/76.html",
 				},
 				{
 					Title: "面包屑导航标签",
-					Link: "https://www.anqicms.com/manual-normal/87.html",
+					Link:  "https://www.anqicms.com/manual-normal/87.html",
 				},
 				{
 					Title: "统计代码标签",
-					Link: "https://www.anqicms.com/manual-normal/91.html",
+					Link:  "https://www.anqicms.com/manual-normal/91.html",
 				},
 			},
 		},
@@ -442,19 +443,19 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "分类列表标签",
-					Link: "https://www.anqicms.com/manual-category/77.html",
+					Link:  "https://www.anqicms.com/manual-category/77.html",
 				},
 				{
 					Title: "分类详情标签",
-					Link: "https://www.anqicms.com/manual-category/78.html",
+					Link:  "https://www.anqicms.com/manual-category/78.html",
 				},
 				{
 					Title: "单页列表标签",
-					Link: "https://www.anqicms.com/manual-category/83.html",
+					Link:  "https://www.anqicms.com/manual-category/83.html",
 				},
 				{
 					Title: "单页详情标签",
-					Link: "https://www.anqicms.com/manual-category/84.html",
+					Link:  "https://www.anqicms.com/manual-category/84.html",
 				},
 			},
 		},
@@ -463,31 +464,31 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "文档列表标签",
-					Link: "https://www.anqicms.com/manual-archive/79.html",
+					Link:  "https://www.anqicms.com/manual-archive/79.html",
 				},
 				{
 					Title: "文档详情标签",
-					Link: "https://www.anqicms.com/manual-archive/80.html",
+					Link:  "https://www.anqicms.com/manual-archive/80.html",
 				},
 				{
 					Title: "上一篇文档标签",
-					Link: "https://www.anqicms.com/manual-archive/88.html",
+					Link:  "https://www.anqicms.com/manual-archive/88.html",
 				},
 				{
 					Title: "下一篇文档标签",
-					Link: "https://www.anqicms.com/manual-archive/89.html",
+					Link:  "https://www.anqicms.com/manual-archive/89.html",
 				},
 				{
 					Title: "相关文档标签",
-					Link: "https://www.anqicms.com/manual-archive/92.html",
+					Link:  "https://www.anqicms.com/manual-archive/92.html",
 				},
 				{
 					Title: "文档参数标签",
-					Link: "https://www.anqicms.com/manual-archive/95.html",
+					Link:  "https://www.anqicms.com/manual-archive/95.html",
 				},
 				{
 					Title: "文档参数筛选标签",
-					Link: "https://www.anqicms.com/manual-archive/96.html",
+					Link:  "https://www.anqicms.com/manual-archive/96.html",
 				},
 			},
 		},
@@ -496,15 +497,15 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "文档Tag列表标签",
-					Link: "https://www.anqicms.com/manual-tag/81.html",
+					Link:  "https://www.anqicms.com/manual-tag/81.html",
 				},
 				{
 					Title: "Tag文档列表标签",
-					Link: "https://www.anqicms.com/manual-tag/82.html",
+					Link:  "https://www.anqicms.com/manual-tag/82.html",
 				},
 				{
 					Title: "Tag详情标签",
-					Link: "https://www.anqicms.com/manual-tag/90.html",
+					Link:  "https://www.anqicms.com/manual-tag/90.html",
 				},
 			},
 		},
@@ -513,23 +514,23 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "评论标列表签",
-					Link: "https://www.anqicms.com/manual-other/85.html",
+					Link:  "https://www.anqicms.com/manual-other/85.html",
 				},
 				{
 					Title: "留言表单标签",
-					Link: "https://www.anqicms.com/manual-other/86.html",
+					Link:  "https://www.anqicms.com/manual-other/86.html",
 				},
 				{
 					Title: "分页标签",
-					Link: "https://www.anqicms.com/manual-other/94.html",
+					Link:  "https://www.anqicms.com/manual-other/94.html",
 				},
 				{
 					Title: "友情链接标签",
-					Link: "https://www.anqicms.com/manual-other/97.html",
+					Link:  "https://www.anqicms.com/manual-other/97.html",
 				},
 				{
 					Title: "留言验证码使用标签",
-					Link: "https://www.anqicms.com/manual-other/139.html",
+					Link:  "https://www.anqicms.com/manual-other/139.html",
 				},
 			},
 		},
@@ -538,35 +539,35 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "其他辅助标签",
-					Link: "https://www.anqicms.com/manual-common/93.html",
+					Link:  "https://www.anqicms.com/manual-common/93.html",
 				},
 				{
 					Title: "更多过滤器",
-					Link: "https://www.anqicms.com/manual-common/98.html",
+					Link:  "https://www.anqicms.com/manual-common/98.html",
 				},
 				{
 					Title: "定义变量赋值标签",
-					Link: "https://www.anqicms.com/manual-common/99.html",
+					Link:  "https://www.anqicms.com/manual-common/99.html",
 				},
 				{
 					Title: "格式化时间戳标签",
-					Link: "https://www.anqicms.com/manual-common/100.html",
+					Link:  "https://www.anqicms.com/manual-common/100.html",
 				},
 				{
 					Title: "for循环遍历标签",
-					Link: "https://www.anqicms.com/manual-common/101.html",
+					Link:  "https://www.anqicms.com/manual-common/101.html",
 				},
 				{
 					Title: "移除逻辑标签占用行",
-					Link: "https://www.anqicms.com/manual-common/102.html",
+					Link:  "https://www.anqicms.com/manual-common/102.html",
 				},
 				{
 					Title: "算术运算标签",
-					Link: "https://www.anqicms.com/manual-common/103.html",
+					Link:  "https://www.anqicms.com/manual-common/103.html",
 				},
 				{
 					Title: "if逻辑判断标签",
-					Link: "https://www.anqicms.com/manual-common/104.html",
+					Link:  "https://www.anqicms.com/manual-common/104.html",
 				},
 			},
 		},

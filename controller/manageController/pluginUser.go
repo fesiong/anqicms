@@ -22,7 +22,7 @@ func PluginUserFieldsSetting(ctx iris.Context) {
 }
 
 func PluginUserFieldsSettingForm(ctx iris.Context) {
-	var req request.PluginUserSetting
+	var req config.PluginUserConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -47,7 +47,7 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 
 	config.JsonData.PluginUser.Fields = fields
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.UserSettingKey, config.JsonData.PluginUser)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

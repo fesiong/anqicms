@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"strings"
 )
 
@@ -20,7 +19,7 @@ func PluginStorageConfig(ctx iris.Context) {
 }
 
 func PluginStorageConfigForm(ctx iris.Context) {
-	var req request.PluginStorageConfigRequest
+	var req config.PluginStorageConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -51,7 +50,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	config.JsonData.PluginStorage.UpyunOperator = req.UpyunOperator
 	config.JsonData.PluginStorage.UpyunPassword = req.UpyunPassword
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

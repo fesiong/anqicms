@@ -53,7 +53,7 @@ func PluginRetailerConfig(ctx iris.Context) {
 }
 
 func PluginRetailerConfigForm(ctx iris.Context) {
-	var req request.PluginRetailerConfig
+	var req config.PluginRetailerConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -65,7 +65,7 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 	config.JsonData.PluginRetailer.AllowSelf = req.AllowSelf
 	config.JsonData.PluginRetailer.BecomeRetailer = req.BecomeRetailer
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.RetailerSettingKey, config.JsonData.PluginRetailer)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

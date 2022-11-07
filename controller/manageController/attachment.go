@@ -31,11 +31,11 @@ func AttachmentList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
+		"code":  config.StatusOK,
+		"msg":   "",
 		"total": total,
 		"limit": pageSize,
-		"data": attachments,
+		"data":  attachments,
 	})
 }
 

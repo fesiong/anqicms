@@ -1,7 +1,6 @@
 package request
 
 import (
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 )
 
@@ -71,13 +70,4 @@ type ApiLoginRequest struct {
 	Password  string `json:"password"`
 	CaptchaId string `json:"captcha_id"`
 	Captcha   string `json:"captcha"`
-}
-
-type PluginRetailerConfig struct {
-	AllowSelf      int64 `json:"allow_self"`      // 允许自购 0,1
-	BecomeRetailer int64 `json:"become_retailer"` // 成为分销员方式， 0 审核，1 自动
-}
-
-type PluginUserSetting struct {
-	Fields []*config.CustomField `json:"fields"`
 }

@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 )
 
 func PluginWeappConfig(ctx iris.Context) {
@@ -19,7 +18,7 @@ func PluginWeappConfig(ctx iris.Context) {
 }
 
 func PluginWeappConfigForm(ctx iris.Context) {
-	var req request.PluginWeappConfig
+	var req config.PluginWeappConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -33,7 +32,7 @@ func PluginWeappConfigForm(ctx iris.Context) {
 	config.JsonData.PluginWeapp.Token = req.Token
 	config.JsonData.PluginWeapp.EncodingAESKey = req.EncodingAESKey
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.WeappSettingKey, config.JsonData.PluginWeapp)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

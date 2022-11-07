@@ -69,7 +69,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	}
 
 	//更新文件列表
-	err = config.WriteConfig()
+	err = provider.SaveSettingValue(provider.UploadFilesSettingKey, config.JsonData.PluginUploadFiles)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -86,13 +86,13 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	})
 }
 
-//上传，只允许上传txt,htm,html
+// 上传，只允许上传txt,htm,html
 func PluginFileUploadUpload(ctx iris.Context) {
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -107,7 +107,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	if ext != ".txt" && ext != ".htm" && ext != ".html" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    "只允许上传txt/htm/html",
+			"msg":  "只允许上传txt/htm/html",
 		})
 		return
 	}
@@ -117,7 +117,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    "读取失败",
+			"msg":  "读取失败",
 		})
 		return
 	}
@@ -126,7 +126,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    "文件保存失败",
+			"msg":  "文件保存失败",
 		})
 		return
 	}
@@ -148,7 +148,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		})
 	}
 
-	err = config.WriteConfig()
+	err = provider.SaveSettingValue(provider.UploadFilesSettingKey, config.JsonData.PluginUploadFiles)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

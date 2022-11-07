@@ -9,7 +9,7 @@ type KeywordJson struct {
 	TitleReplace []ReplaceKeyword `json:"title_replace"`
 }
 
-var defaultKeywordConfig = KeywordJson{
+var DefaultKeywordConfig = KeywordJson{
 	AutoDig:     false,
 	FromEngine:  EnginBaidu,
 	Language:    LanguageZh,

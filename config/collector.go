@@ -41,7 +41,7 @@ type CustomPatten struct {
 	ContentReplace []ReplaceKeyword `json:"content_replace"`
 }
 
-var defaultCollectorConfig = CollectorJson{
+var DefaultCollectorConfig = CollectorJson{
 	AutoCollect:      false,
 	ErrorTimes:       5,
 	Channels:         2,

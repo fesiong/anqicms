@@ -1,6 +1,6 @@
 package config
 
-type serverConfig struct {
+type ServerConfig struct {
 	SiteName    string `json:"site_name"`
 	Env         string `json:"env"`
 	Port        int    `json:"port"`

@@ -22,7 +22,7 @@ func ParseUserToken(ctx iris.Context) {
 			// can not parse the token
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(config.JsonData.Server.TokenSecret), nil
+		return []byte(config.Server.Server.TokenSecret), nil
 	})
 
 	if tokenErr == nil {

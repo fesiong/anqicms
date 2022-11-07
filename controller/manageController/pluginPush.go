@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 )
 
 func PluginPush(ctx iris.Context) {
@@ -37,7 +36,7 @@ func PluginPushLogList(ctx iris.Context) {
 }
 
 func PluginPushForm(ctx iris.Context) {
-	var req request.PluginPushConfig
+	var req config.PluginPushConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -50,7 +49,7 @@ func PluginPushForm(ctx iris.Context) {
 	config.JsonData.PluginPush.BingApi = req.BingApi
 	config.JsonData.PluginPush.JsCodes = req.JsCodes
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.PushSettingKey, config.JsonData.PluginPush)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

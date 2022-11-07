@@ -9,7 +9,7 @@ const (
 	TemplateTypeSeparate = 2
 )
 
-type systemConfig struct {
+type SystemConfig struct {
 	SiteName      string       `json:"site_name"`
 	SiteLogo      string       `json:"site_logo"`
 	SiteIcp       string       `json:"site_icp"`
@@ -26,7 +26,7 @@ type systemConfig struct {
 	ExtraFields   []ExtraField `json:"extra_fields"` // 用户自定义字段
 }
 
-type contentConfig struct {
+type ContentConfig struct {
 	RemoteDownload int    `json:"remote_download"`
 	FilterOutlink  int    `json:"filter_outlink"`
 	UrlTokenType   int    `json:"url_token_type"`
@@ -40,13 +40,13 @@ type contentConfig struct {
 	DefaultThumb   string `json:"default_thumb"`
 }
 
-type indexConfig struct {
+type IndexConfig struct {
 	SeoTitle       string `json:"seo_title"`
 	SeoKeywords    string `json:"seo_keywords"`
 	SeoDescription string `json:"seo_description"`
 }
 
-type contactConfig struct {
+type ContactConfig struct {
 	UserName    string       `json:"user_name"`
 	Cellphone   string       `json:"cellphone"`
 	Address     string       `json:"address"`
@@ -56,7 +56,7 @@ type contactConfig struct {
 	ExtraFields []ExtraField `json:"extra_fields"` // 用户自定义字段
 }
 
-type safeConfig struct {
+type SafeConfig struct {
 	Captcha          int    `json:"captcha"`
 	DailyLimit       int    `json:"daily_limit"`
 	ContentLimit     int    `json:"content_limit"`

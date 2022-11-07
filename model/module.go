@@ -60,9 +60,9 @@ func (m *Module) Migrate(tx *gorm.DB, focus bool) {
 		// 创建文件夹
 		os.Mkdir(dir, os.ModePerm)
 		// 创建文件
-		os.WriteFile(dir + "/detail.html", []byte(m.TableName), os.ModePerm)
-		os.WriteFile(dir + "/index.html", []byte(m.TableName), os.ModePerm)
-		os.WriteFile(dir + "/list.html", []byte(m.TableName), os.ModePerm)
+		os.WriteFile(dir+"/detail.html", []byte(m.TableName), os.ModePerm)
+		os.WriteFile(dir+"/index.html", []byte(m.TableName), os.ModePerm)
+		os.WriteFile(dir+"/list.html", []byte(m.TableName), os.ModePerm)
 	}
 }
 
@@ -70,17 +70,17 @@ func (m *Module) HasColumn(tx *gorm.DB, field string) bool {
 	var count int64
 	tx.Raw(
 		"SELECT count(*) FROM INFORMATION_SCHEMA.columns WHERE table_schema = ? AND table_name = ? AND column_name = ?",
-		config.JsonData.Mysql.Database, m.TableName, field,
+		config.Server.Mysql.Database, m.TableName, field,
 	).Row().Scan(&count)
 
 	return count > 0
 }
 
-func (m *Module) HasIndex(tx *gorm.DB,name string) bool {
+func (m *Module) HasIndex(tx *gorm.DB, name string) bool {
 	var count int64
 	tx.Raw(
 		"SELECT count(*) FROM information_schema.statistics WHERE table_schema = ? AND table_name = ? AND index_name = ?",
-		config.JsonData.Mysql.Database, m.TableName, name,
+		config.Server.Mysql.Database, m.TableName, name,
 	).Row().Scan(&count)
 
 	return count > 0

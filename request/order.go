@@ -57,29 +57,6 @@ type OrderRefundRequest struct {
 	Status  int    `json:"status"`
 }
 
-type PluginPayConfig struct {
-	AlipayAppId          string `json:"alipay_app_id"`
-	AlipayPrivateKey     string `json:"alipay_private_key"`
-	AlipayCertPath       string `json:"alipay_cert_path"`        // 应用公钥证书路径
-	AlipayRootCertPath   string `json:"alipay_root_cert_path"`   // 支付宝根证书文件路径
-	AlipayPublicCertPath string `json:"alipay_public_cert_path"` // 支付宝公钥证书文件路径
-
-	WechatAppId     string `json:"wechat_app_id"`
-	WechatAppSecret string `json:"wechat_app_secret"`
-	WeappAppId      string `json:"weapp_app_id"`
-	WeappAppSecret  string `json:"weapp_app_secret"`
-	WechatMchId     string `json:"wechat_mch_id"`
-	WechatApiKey    string `json:"wechat_api_key"`
-	WechatCertPath  string `json:"wechat_cert_path"`
-	WechatKeyPath   string `json:"wechat_key_path"`
-}
-
-type PluginOrderConfig struct {
-	NoProcess       bool  `json:"no_process"`        // 是否没有交易流程
-	AutoFinishDay   int   `json:"auto_finish_day"`   // 自动完成订单时间
-	AutoCloseMinute int64 `json:"auto_close_minute"` // 自动关闭订单时间
-}
-
 type OrderAddressRequest struct {
 	Id          uint   `json:"id"`
 	UserId      uint   `json:"user_id"`

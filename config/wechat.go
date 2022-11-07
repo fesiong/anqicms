@@ -1,6 +1,6 @@
 package config
 
-type pluginWeappConfig struct {
+type PluginWeappConfig struct {
 	AppID     string `json:"app_id"`
 	AppSecret string `json:"app_secret"`
 	//公众号存在的部分

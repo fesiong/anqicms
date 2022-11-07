@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 )
 
 func PluginSendmailList(ctx iris.Context) {
@@ -65,7 +64,7 @@ func PluginSendmailSetting(ctx iris.Context) {
 }
 
 func PluginSendmailSettingForm(ctx iris.Context) {
-	var req request.PluginSendmail
+	var req config.PluginSendmail
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -81,7 +80,7 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 	config.JsonData.PluginSendmail.Password = req.Password
 	config.JsonData.PluginSendmail.Recipient = req.Recipient
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.SendmailSettingKey, config.JsonData.PluginSendmail)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

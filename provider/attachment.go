@@ -195,7 +195,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 	fileSize = int64(buff.Len())
 
 	// 上传原图
-	log.Println("图片大小", fileSize)
+	//log.Println("图片大小", fileSize)
 	_, err = Storage.UploadFile(filePath+tmpName, buff.Bytes())
 	if err != nil {
 		return nil, err
@@ -650,7 +650,10 @@ func StartConvertImageToWebp() {
 			}
 		}
 		if update {
-			config.WriteConfig()
+			_ = SaveSettingValue(SystemSettingKey, config.JsonData.System)
+			_ = SaveSettingValue(ContactSettingKey, config.JsonData.Contact)
+			_ = SaveSettingValue(ContentSettingKey, config.JsonData.Content)
+
 		}
 	}
 

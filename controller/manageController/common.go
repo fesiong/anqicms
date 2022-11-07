@@ -160,6 +160,9 @@ func GetStatisticsDashboard(ctx iris.Context) {
 	result["system"] = config.JsonData.System
 
 	result["version"] = config.Version
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	result["memory_usage"] = ms.Alloc
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

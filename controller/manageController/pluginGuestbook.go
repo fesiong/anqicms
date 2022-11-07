@@ -146,7 +146,7 @@ func PluginGuestbookSetting(ctx iris.Context) {
 }
 
 func PluginGuestbookSettingForm(ctx iris.Context) {
-	var req request.PluginGuestbookSetting
+	var req config.PluginGuestbookConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -172,7 +172,7 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 	config.JsonData.PluginGuestbook.ReturnMessage = req.ReturnMessage
 	config.JsonData.PluginGuestbook.Fields = fields
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.GuestbookSettingKey, config.JsonData.PluginGuestbook)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

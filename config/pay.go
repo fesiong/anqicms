@@ -1,6 +1,6 @@
 package config
 
-type pluginPayConfig struct {
+type PluginPayConfig struct {
 	AlipayAppId          string `json:"alipay_app_id"`
 	AlipayPrivateKey     string `json:"alipay_private_key"`
 	AlipayCertPath       string `json:"alipay_cert_path"`        // 应用公钥证书路径
@@ -17,12 +17,12 @@ type pluginPayConfig struct {
 	WechatKeyPath   string `json:"wechat_key_path"`   // 证书路径
 }
 
-type pluginRetailerConfig struct {
+type PluginRetailerConfig struct {
 	AllowSelf      int64 `json:"allow_self"`      // 允许自购 0,1
 	BecomeRetailer int64 `json:"become_retailer"` // 成为分销员方式， 0 审核，1 自动
 }
 
-type pluginOrderConfig struct {
+type PluginOrderConfig struct {
 	NoProcess       bool  `json:"no_process"`        // 是否没有交易流程
 	AutoFinishDay   int   `json:"auto_finish_day"`   // 自动完成订单时间
 	AutoCloseMinute int64 `json:"auto_close_minute"` // 自动关闭订单时间

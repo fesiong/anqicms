@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,7 +22,7 @@ func PluginPayConfig(ctx iris.Context) {
 }
 
 func PluginPayConfigForm(ctx iris.Context) {
-	var req request.PluginPayConfig
+	var req config.PluginPayConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -58,7 +57,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 		config.JsonData.PluginPay.WechatKeyPath = req.WechatKeyPath
 	}
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.PaySettingKey, config.JsonData.PluginPay)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -132,7 +131,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 		config.JsonData.PluginPay.AlipayCertPath = fileName
 	}
 
-	err = config.WriteConfig()
+	err = provider.SaveSettingValue(provider.PaySettingKey, config.JsonData.PluginPay)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

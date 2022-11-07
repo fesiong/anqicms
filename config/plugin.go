@@ -10,27 +10,27 @@ type CodeItem struct {
 	Value string `json:"value"`
 }
 
-type pluginPushConfig struct {
+type PluginPushConfig struct {
 	BaiduApi string     `json:"baidu_api"`
 	BingApi  string     `json:"bing_api"`
 	JsCode   string     `json:"js_code"`
 	JsCodes  []CodeItem `json:"js_codes"`
 }
 
-type pluginSitemapConfig struct {
+type PluginSitemapConfig struct {
 	AutoBuild   int    `json:"auto_build"`
 	Type        string `json:"type"`
 	UpdatedTime int64  `json:"updated_time"`
 	SitemapURL  string `json:"sitemap_url"`
 }
 
-type pluginAnchorConfig struct {
+type PluginAnchorConfig struct {
 	AnchorDensity int `json:"anchor_density"`
 	ReplaceWay    int `json:"replace_way"`
 	KeywordWay    int `json:"keyword_way"`
 }
 
-type pluginGuestbookConfig struct {
+type PluginGuestbookConfig struct {
 	ReturnMessage string         `json:"return_message"`
 	Fields        []*CustomField `json:"fields"`
 }
@@ -53,7 +53,7 @@ type PluginUploadFile struct {
 	Link        string `json:"link"`
 }
 
-type pluginSendmail struct {
+type PluginSendmail struct {
 	Server    string `json:"server"`
 	UseSSL    int    `json:"use_ssl"`
 	Port      int    `json:"port"`
@@ -62,12 +62,12 @@ type pluginSendmail struct {
 	Recipient string `json:"recipient"`
 }
 
-type pluginImportApiConfig struct {
+type PluginImportApiConfig struct {
 	Token     string `json:"token"`      // 文档导入token
 	LinkToken string `json:"link_token"` // 友情链接token
 }
 
-type pluginStorageConfig struct {
+type PluginStorageConfig struct {
 	StorageUrl  string `json:"storage_url"`
 	StorageType string `json:"storage_type"`
 	KeepLocal   bool   `json:"keep_local"`

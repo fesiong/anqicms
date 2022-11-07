@@ -44,6 +44,10 @@ func (bootstrap *Bootstrap) Serve() {
 		_ = dao.AutoMigrateDB(dao.DB)
 		//创建管理员，会先判断有没有的。不用担心重复
 		_ = provider.InitAdmin("admin", "123456", false)
+		// 加载setting
+		provider.InitSetting()
+		// 初始化数据
+		dao.InitModelData(dao.DB)
 	}
 
 	//开始计划任务

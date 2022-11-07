@@ -2,8 +2,6 @@ package config
 
 import (
 	"bytes"
-	"crypto/md5"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,35 +11,37 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"time"
 	"unicode/utf8"
 )
 
-type configData struct {
-	Mysql  mysqlConfig  `json:"mysql"`
-	Server serverConfig `json:"server"`
+type ServerJson struct {
+	Mysql  MysqlConfig  `json:"mysql"`
+	Server ServerConfig `json:"server"`
+}
+
+type ConfigJson struct {
 	//setting
-	System  systemConfig  `json:"system"`
-	Content contentConfig `json:"content"`
-	Index   indexConfig   `json:"index"`
-	Contact contactConfig `json:"contact"`
-	Safe    safeConfig    `json:"safe"`
+	System  SystemConfig  `json:"system"`
+	Content ContentConfig `json:"content"`
+	Index   IndexConfig   `json:"index"`
+	Contact ContactConfig `json:"contact"`
+	Safe    SafeConfig    `json:"safe"`
 	//plugin
-	PluginPush        pluginPushConfig      `json:"plugin_push"`
-	PluginSitemap     pluginSitemapConfig   `json:"plugin_sitemap"`
+	PluginPush        PluginPushConfig      `json:"plugin_push"`
+	PluginSitemap     PluginSitemapConfig   `json:"plugin_sitemap"`
 	PluginRewrite     PluginRewriteConfig   `json:"plugin_rewrite"`
-	PluginAnchor      pluginAnchorConfig    `json:"plugin_anchor"`
-	PluginGuestbook   pluginGuestbookConfig `json:"plugin_guestbook"`
+	PluginAnchor      PluginAnchorConfig    `json:"plugin_anchor"`
+	PluginGuestbook   PluginGuestbookConfig `json:"plugin_guestbook"`
 	PluginUploadFiles []PluginUploadFile    `json:"plugin_upload_file"`
-	PluginSendmail    pluginSendmail        `json:"plugin_sendmail"`
-	PluginImportApi   pluginImportApiConfig `json:"plugin_import_api"`
-	PluginStorage     pluginStorageConfig   `json:"plugin_storage"`
-	PluginPay         pluginPayConfig       `json:"plugin_pay"`
-	PluginWeapp       pluginWeappConfig     `json:"plugin_weapp"`
-	PluginWechat      pluginWeappConfig     `json:"plugin_wechat"`
-	PluginRetailer    pluginRetailerConfig  `json:"plugin_retailer"`
-	PluginUser        pluginUserConfig      `json:"plugin_user"`
-	PluginOrder       pluginOrderConfig     `json:"plugin_order"`
+	PluginSendmail    PluginSendmail        `json:"plugin_sendmail"`
+	PluginImportApi   PluginImportApiConfig `json:"plugin_import_api"`
+	PluginStorage     PluginStorageConfig   `json:"plugin_storage"`
+	PluginPay         PluginPayConfig       `json:"plugin_pay"`
+	PluginWeapp       PluginWeappConfig     `json:"plugin_weapp"`
+	PluginWechat      PluginWeappConfig     `json:"plugin_wechat"`
+	PluginRetailer    PluginRetailerConfig  `json:"plugin_retailer"`
+	PluginUser        PluginUserConfig      `json:"plugin_user"`
+	PluginOrder       PluginOrderConfig     `json:"plugin_order"`
 }
 
 func initPath() {
@@ -69,72 +69,18 @@ func initJSON() {
 	rawConfig, err := ioutil.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"development\",\"port\": 8001,\"log_level\":\"error\"}}")
+		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"production\",\"port\": 8001,\"log_level\":\"error\"}}")
 	}
 
-	if err := json.Unmarshal(rawConfig, &JsonData); err != nil {
+	if err := json.Unmarshal(rawConfig, &Server); err != nil {
 		fmt.Println("Invalid Config: ", err.Error())
 		os.Exit(-1)
 	}
-
-	//如果没有设置模板，则默认是default
-	if JsonData.System.TemplateName == "" {
-		JsonData.System.TemplateName = "default"
-	}
-	if JsonData.System.Language == "" {
-		JsonData.System.Language = "zh"
-	}
-	// 兼容旧版 jscode
-	if JsonData.PluginPush.JsCode != "" {
-		JsonData.PluginPush.JsCodes = append(JsonData.PluginPush.JsCodes, CodeItem{
-			Name:  "未命名JS",
-			Value: JsonData.PluginPush.JsCode,
-		})
-		JsonData.PluginPush.JsCode = ""
-		_ = WriteConfig()
-	}
-	// sitemap
-	if JsonData.PluginSitemap.Type != "xml" {
-		JsonData.PluginSitemap.Type = "txt"
-	}
-	// 导入API生成
-	if JsonData.PluginImportApi.Token == "" || JsonData.PluginImportApi.LinkToken == "" {
-		h := md5.New()
-		h.Write([]byte(fmt.Sprintf("%d", time.Now().Nanosecond())))
-		if JsonData.PluginImportApi.Token == "" {
-			JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
-		}
-		if JsonData.PluginImportApi.LinkToken == "" {
-			JsonData.PluginImportApi.LinkToken = JsonData.PluginImportApi.Token
-		}
-		// 回写
-		_ = WriteConfig()
-	}
-
-	// 配置默认的storageUrl
-	if JsonData.PluginStorage.StorageUrl == "" {
-		JsonData.PluginStorage.StorageUrl = JsonData.System.BaseUrl
-	}
-	if JsonData.PluginStorage.StorageType == "" {
-		JsonData.PluginStorage.StorageType = StorageTypeLocal
-	}
-
-	if JsonData.PluginUser.DefaultGroupId == 0 {
-		JsonData.PluginUser.DefaultGroupId = 1
-	}
-	if JsonData.PluginOrder.AutoFinishDay <= 0 {
-		// default auto finish day
-		JsonData.PluginOrder.AutoFinishDay = 10
-	}
-}
-
-func initServer() {
-	ServerConfig = JsonData.Server
 }
 
 var ExecPath string
-var JsonData configData
-var ServerConfig serverConfig
+var Server ServerJson
+var JsonData ConfigJson
 var CollectorConfig CollectorJson
 var KeywordConfig KeywordJson
 var RestartChan = make(chan bool, 1)
@@ -143,7 +89,6 @@ var languages = map[string]string{}
 func init() {
 	initPath()
 	initJSON()
-	initServer()
 	LoadCollectorConfig()
 	LoadKeywordConfig()
 	LoadLanguage()
@@ -160,7 +105,7 @@ func WriteConfig() error {
 
 	buff := &bytes.Buffer{}
 
-	buf, err := json.MarshalIndent(JsonData, "", "\t")
+	buf, err := json.MarshalIndent(Server, "", "\t")
 	if err != nil {
 		return err
 	}
@@ -176,7 +121,7 @@ func WriteConfig() error {
 
 func LoadCollectorConfig() {
 	//先读取默认配置
-	CollectorConfig = defaultCollectorConfig
+	CollectorConfig = DefaultCollectorConfig
 	//再根据用户配置来覆盖
 	buf, err := ioutil.ReadFile(fmt.Sprintf("%scollector.json", ExecPath))
 	configStr := ""
@@ -304,7 +249,7 @@ func LoadCollectorConfig() {
 
 func LoadKeywordConfig() {
 	//先读取默认配置
-	KeywordConfig = defaultKeywordConfig
+	KeywordConfig = DefaultKeywordConfig
 	//再根据用户配置来覆盖
 	buf, err := ioutil.ReadFile(fmt.Sprintf("%skeyword.json", ExecPath))
 	configStr := ""

@@ -1,6 +1,6 @@
 package config
 
-type pluginUserConfig struct {
+type PluginUserConfig struct {
 	Fields         []*CustomField `json:"fields"`
 	DefaultGroupId uint           `json:"default_group_id"`
 }

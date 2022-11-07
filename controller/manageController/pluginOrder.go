@@ -229,7 +229,7 @@ func PluginOrderConfig(ctx iris.Context) {
 }
 
 func PluginOrderConfigForm(ctx iris.Context) {
-	var req request.PluginOrderConfig
+	var req config.PluginOrderConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -242,7 +242,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	config.JsonData.PluginOrder.AutoFinishDay = req.AutoFinishDay
 	config.JsonData.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.OrderSettingKey, config.JsonData.PluginOrder)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

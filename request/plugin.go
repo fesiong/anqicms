@@ -1,26 +1,7 @@
 package request
 
-import "kandaoni.com/anqicms/config"
-
-type PluginPushConfig struct {
-	BaiduApi string            `json:"baidu_api"`
-	BingApi  string            `json:"bing_api"`
-	JsCode   string            `json:"js_code"`
-	JsCodes  []config.CodeItem `json:"js_codes"`
-}
-
 type PluginRobotsConfig struct {
 	Robots string `json:"robots"`
-}
-
-type PluginSitemapConfig struct {
-	AutoBuild int    `json:"auto_build"`
-	Type      string `json:"type"`
-}
-
-type PluginRewriteConfig struct {
-	Mode   int    `json:"mode"`
-	Patten string `json:"patten"`
 }
 
 type PluginLink struct {
@@ -62,17 +43,6 @@ type PluginAnchorDelete struct {
 	Ids []uint `json:"ids"`
 }
 
-type PluginAnchorSetting struct {
-	AnchorDensity int `json:"anchor_density"`
-	ReplaceWay    int `json:"replace_way"`
-	KeywordWay    int `json:"keyword_way"`
-}
-
-type PluginGuestbookSetting struct {
-	ReturnMessage string                `json:"return_message"`
-	Fields        []*config.CustomField `json:"fields"`
-}
-
 type PluginGuestbookDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
@@ -107,15 +77,6 @@ type PluginMaterialCategory struct {
 	Title string `json:"title"`
 }
 
-type PluginSendmail struct {
-	Server    string `json:"server"`
-	UseSSL    int    `json:"use_ssl"`
-	Port      int    `json:"port"`
-	Account   string `json:"account"`
-	Password  string `json:"password"`
-	Recipient string `json:"recipient"`
-}
-
 type PluginMaterialImportRequest struct {
 	Materials []*PluginMaterial `json:"materials"`
 }
@@ -139,33 +100,4 @@ type PluginRedirectRequest struct {
 
 type PluginRedirectsRequest struct {
 	Urls []PluginRedirectRequest `json:"urls"`
-}
-
-type PluginStorageConfigRequest struct {
-	StorageUrl  string `json:"storage_url"`
-	StorageType string `json:"storage_type"`
-	KeepLocal   bool   `json:"keep_local"`
-
-	AliyunEndpoint        string `json:"aliyun_endpoint"`
-	AliyunAccessKeyId     string `json:"aliyun_access_key_id"`
-	AliyunAccessKeySecret string `json:"aliyun_access_key_secret"`
-	AliyunBucketName      string `json:"aliyun_bucket_name"`
-
-	TencentSecretId  string `json:"tencent_secret_id"`
-	TencentSecretKey string `json:"tencent_secret_key"`
-	TencentBucketUrl string `json:"tencent_bucket_url"`
-
-	QiniuAccessKey string `json:"qiniu_access_key"`
-	QiniuSecretKey string `json:"qiniu_secret_key"`
-	QiniuBucket    string `json:"qiniu_bucket"`
-	QiniuRegion    string `json:"qiniu_region"`
-
-	UpyunBucket   string `json:"upyun_bucket"`
-	UpyunOperator string `json:"upyun_operator"`
-	UpyunPassword string `json:"upyun_password"`
-}
-
-type PluginImportApiConfig struct {
-	Token     string `json:"token"`      // 文档导入token
-	LinkToken string `json:"link_token"` // 友情链接token
 }

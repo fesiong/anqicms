@@ -27,10 +27,10 @@ func PluginAnchorList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
+		"code":  config.StatusOK,
+		"msg":   "",
 		"total": total,
-		"data": linkList,
+		"data":  linkList,
 	})
 }
 
@@ -239,7 +239,7 @@ func PluginAnchorExport(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"header": header,
+			"header":  header,
 			"content": content,
 		},
 	})
@@ -250,7 +250,7 @@ func PluginAnchorImport(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -260,7 +260,7 @@ func PluginAnchorImport(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -285,7 +285,7 @@ func PluginAnchorSetting(ctx iris.Context) {
 }
 
 func PluginAnchorSettingForm(ctx iris.Context) {
-	var req request.PluginAnchorSetting
+	var req config.PluginAnchorConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -302,7 +302,7 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 	config.JsonData.PluginAnchor.ReplaceWay = req.ReplaceWay
 	config.JsonData.PluginAnchor.KeywordWay = req.KeywordWay
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.AnchorSettingKey, config.JsonData.PluginAnchor)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

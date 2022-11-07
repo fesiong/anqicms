@@ -150,7 +150,7 @@ func (u *User) EncodeToken(tx *gorm.DB) error {
 		"t":      fmt.Sprintf("%d", time.Now().AddDate(0, 0, 30).Unix()),
 	})
 	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.JsonData.Server.TokenSecret))
+	tokenString, err := jwtToken.SignedString([]byte(config.Server.Server.TokenSecret))
 	if err != nil {
 		return err
 	}
