@@ -489,8 +489,7 @@ func LoadKeywordSetting() {
 
 func GetSettingValue(key string) string {
 	var value string
-	dao.DB.Where("`key` = ?", key).Pluck("value", &value)
-
+	dao.DB.Model(&model.Setting{}).Where("`key` = ?", key).Pluck("value", &value)
 	return value
 }
 
