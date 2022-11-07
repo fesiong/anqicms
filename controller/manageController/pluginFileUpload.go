@@ -3,7 +3,7 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"io/ioutil"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
@@ -113,7 +113,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	}
 
 	filePath := fmt.Sprintf("%spublic/%s", config.ExecPath, info.Filename)
-	buff, err := ioutil.ReadAll(file)
+	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -122,7 +122,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		return
 	}
 
-	err = ioutil.WriteFile(filePath, buff, 0644)
+	err = os.WriteFile(filePath, buff, 0644)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

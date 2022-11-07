@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/url"
@@ -73,7 +72,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 				return "", err
 			}
 		}
-		err = ioutil.WriteFile(basePath+location, buff, os.ModePerm)
+		err = os.WriteFile(basePath+location, buff, os.ModePerm)
 		if err != nil {
 			log.Println(err.Error())
 			//无法创建

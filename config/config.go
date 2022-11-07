@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"os"
 	"path/filepath"
@@ -66,7 +65,7 @@ func initPath() {
 }
 
 func initJSON() {
-	rawConfig, err := ioutil.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
+	rawConfig, err := os.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
 		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"production\",\"port\": 8001,\"log_level\":\"error\"}}")
@@ -123,7 +122,7 @@ func LoadCollectorConfig() {
 	//先读取默认配置
 	CollectorConfig = DefaultCollectorConfig
 	//再根据用户配置来覆盖
-	buf, err := ioutil.ReadFile(fmt.Sprintf("%scollector.json", ExecPath))
+	buf, err := os.ReadFile(fmt.Sprintf("%scollector.json", ExecPath))
 	configStr := ""
 	if err != nil {
 		//文件不存在
@@ -251,7 +250,7 @@ func LoadKeywordConfig() {
 	//先读取默认配置
 	KeywordConfig = DefaultKeywordConfig
 	//再根据用户配置来覆盖
-	buf, err := ioutil.ReadFile(fmt.Sprintf("%skeyword.json", ExecPath))
+	buf, err := os.ReadFile(fmt.Sprintf("%skeyword.json", ExecPath))
 	configStr := ""
 	if err != nil {
 		//文件不存在
@@ -306,7 +305,7 @@ func LoadLanguage() {
 	}
 	languagePath := fmt.Sprintf("%slanguage/%s.yml", ExecPath, JsonData.System.Language)
 
-	yamlFile, err := ioutil.ReadFile(languagePath)
+	yamlFile, err := os.ReadFile(languagePath)
 	if err == nil {
 		strSlice := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(yamlFile), "\r\n", "\n"), "\r", "\n"), "\n")
 		for _, v := range strSlice {

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/request"
@@ -52,7 +51,7 @@ func GetDesignList() []response.DesignPackage {
 				}
 				hasChange = true
 			} else {
-				data, err := ioutil.ReadFile(configFile)
+				data, err := os.ReadFile(configFile)
 				if err != nil {
 					// 无法读取，只能跳过
 					continue
@@ -132,7 +131,7 @@ func DeleteDesignInfo(packageName string) error {
 
 	basePath := config.ExecPath + "template/" + packageName
 	basePath = filepath.Clean(basePath)
-	if !strings.HasPrefix(basePath, config.ExecPath + "template/") {
+	if !strings.HasPrefix(basePath, config.ExecPath+"template/") {
 		return errors.New("模板不存在")
 	}
 
@@ -140,12 +139,12 @@ func DeleteDesignInfo(packageName string) error {
 	os.MkdirAll(cachePath, os.ModePerm)
 
 	os.RemoveAll(cachePath + "/template")
-	os.Rename(basePath, cachePath + "/template")
+	os.Rename(basePath, cachePath+"/template")
 	// 读取静态文件
 	staticPath := config.ExecPath + "public/static/" + packageName
 	os.RemoveAll(cachePath + "/static")
 	os.MkdirAll(cachePath, os.ModePerm)
-	os.Rename(staticPath, cachePath + "/static")
+	os.Rename(staticPath, cachePath+"/static")
 
 	return nil
 }
@@ -193,9 +192,9 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		}
 		if !exists {
 			designInfo.TplFiles = append(designInfo.TplFiles, response.DesignFile{
-				Path:   fullPath,
-				Remark: "",
-				Size: files[i].Size,
+				Path:    fullPath,
+				Remark:  "",
+				Size:    files[i].Size,
 				LastMod: files[i].LastMod,
 			})
 			hasChange = true
@@ -221,9 +220,9 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		}
 		if !exists {
 			designInfo.StaticFiles = append(designInfo.StaticFiles, response.DesignFile{
-				Path:   fullPath,
-				Remark: "",
-				Size: files[i].Size,
+				Path:    fullPath,
+				Remark:  "",
+				Size:    files[i].Size,
 				LastMod: files[i].LastMod,
 			})
 			hasChange = true
@@ -249,7 +248,7 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 	// 先尝试读取config.json
 	tmpFile, err := zipReader.Open("template/config.json")
 	if err == nil {
-		data, err := ioutil.ReadAll(tmpFile)
+		data, err := io.ReadAll(tmpFile)
 		if err == nil {
 			var designInfo response.DesignPackage
 			err = json.Unmarshal(data, &designInfo)
@@ -339,7 +338,7 @@ func CreateDesignZip(packageName string) (*bytes.Buffer, error) {
 	// 读取模板
 	basePath := config.ExecPath + "template/" + packageName
 	// 尝试读取模板文件
-	files, err := ioutil.ReadDir(basePath)
+	files, err := os.ReadDir(basePath)
 	if err != nil {
 		return nil, err
 	}
@@ -356,7 +355,7 @@ func CreateDesignZip(packageName string) (*bytes.Buffer, error) {
 	}
 	// 读取静态文件
 	staticPath := config.ExecPath + "public/static/" + packageName
-	files, err = ioutil.ReadDir(staticPath)
+	files, err = os.ReadDir(staticPath)
 	if err != nil {
 		return nil, err
 	}
@@ -576,7 +575,7 @@ func GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*re
 
 	if !exists {
 		designFileDetail = response.DesignFile{
-			Path:    filePath,
+			Path: filePath,
 		}
 	}
 
@@ -600,7 +599,7 @@ func GetDesignTplFileDetail(packageName string, designFileDetail response.Design
 		//return nil, errors.New("模板文件读取失败")
 	}
 
-	data, err := ioutil.ReadFile(fullPath)
+	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
 		//return nil, errors.New("模板文件读取失败")
@@ -621,7 +620,7 @@ func GetDesignStaticFileDetail(packageName string, designFileDetail response.Des
 		//return nil, errors.New("模板文件读取失败")
 	}
 
-	data, err := ioutil.ReadFile(fullPath)
+	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
 		//return nil, errors.New("模板文件读取失败")
@@ -653,7 +652,7 @@ func GetDesignFileHistories(packageName, filePath, fileType string) []response.D
 		histories = append(histories, response.DesignFileHistory{
 			Hash:    filepath.Base(files[i].Path),
 			LastMod: files[i].LastMod,
-			Size: files[i].Size,
+			Size:    files[i].Size,
 		})
 	}
 
@@ -674,7 +673,7 @@ func StoreDesignHistory(packageName string, filePath string, content []byte) err
 		}
 	}
 	// 开始写入文件
-	err = ioutil.WriteFile(historyPath+"/"+historyHash, content, os.ModePerm)
+	err = os.WriteFile(historyPath+"/"+historyHash, content, os.ModePerm)
 
 	return err
 }
@@ -932,7 +931,7 @@ func writeDesignInfo(designInfo *response.DesignPackage) error {
 	buf, err := json.MarshalIndent(designInfo, "", "\t")
 	if err == nil {
 		// 解析失败
-		err = ioutil.WriteFile(configFile, buf, os.ModePerm)
+		err = os.WriteFile(configFile, buf, os.ModePerm)
 	}
 
 	return err
@@ -947,7 +946,7 @@ func SaveDesignTplFile(req request.SaveDesignFileRequest) error {
 	_, err := os.Stat(fullPath)
 	if err == nil {
 		// 文件存在，验证内容的md5, 如果一致，就不保存
-		oldBytes, _ := ioutil.ReadFile(fullPath)
+		oldBytes, _ := os.ReadFile(fullPath)
 		oldMd5 := library.Md5Bytes(oldBytes)
 		newMd5 := library.Md5(req.Content)
 
@@ -970,7 +969,7 @@ func SaveDesignTplFile(req request.SaveDesignFileRequest) error {
 		}
 	}
 
-	err = ioutil.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
+	err = os.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -987,7 +986,7 @@ func SaveDesignStaticFile(req request.SaveDesignFileRequest) error {
 	_, err := os.Stat(fullPath)
 	if err == nil {
 		// 文件存在，验证内容的md5, 如果一致，就不保存
-		oldBytes, _ := ioutil.ReadFile(fullPath)
+		oldBytes, _ := os.ReadFile(fullPath)
 		oldMd5 := library.Md5Bytes(oldBytes)
 		newMd5 := library.Md5(req.Content)
 
@@ -1010,7 +1009,7 @@ func SaveDesignStaticFile(req request.SaveDesignFileRequest) error {
 		}
 	}
 
-	err = ioutil.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
+	err = os.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -1023,7 +1022,7 @@ func readAllFiles(dir string) []response.DesignFile {
 		return []response.DesignFile{}
 	}
 
-	files, _ := ioutil.ReadDir(dir)
+	files, _ := os.ReadDir(dir)
 	var fileList []response.DesignFile
 	for _, file := range files {
 		// .开头的，除了 .htaccess 其他都排除
@@ -1036,10 +1035,14 @@ func readAllFiles(dir string) []response.DesignFile {
 		if file.IsDir() {
 			fileList = append(fileList, readAllFiles(fullName)...)
 		} else {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
 			fileList = append(fileList, response.DesignFile{
 				Path:    fullName,
-				LastMod: file.ModTime().Unix(),
-				Size:    file.Size(),
+				LastMod: info.ModTime().Unix(),
+				Size:    info.Size(),
 			})
 		}
 	}

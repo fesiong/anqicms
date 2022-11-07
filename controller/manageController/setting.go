@@ -3,7 +3,6 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
@@ -20,7 +19,7 @@ func SettingSystem(ctx iris.Context) {
 
 	// 读取language列表
 	var languages []string
-	readerInfos, err := ioutil.ReadDir(fmt.Sprintf("%slanguage", config.ExecPath))
+	readerInfos, err := os.ReadDir(fmt.Sprintf("%slanguage", config.ExecPath))
 	if err == nil {
 		for _, info := range readerInfos {
 			if strings.HasSuffix(info.Name(), ".yml") {
@@ -307,7 +306,7 @@ func SettingCacheForm(ctx iris.Context) {
 	library.DictClose()
 	// 记录
 	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
-	ioutil.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("手动更新缓存"))
 

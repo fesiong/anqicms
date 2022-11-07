@@ -9,7 +9,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"github.com/parnurzeal/gorequest"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -228,7 +227,7 @@ func VersionUpgrade(ctx iris.Context) {
 	}
 	// 将文件写入
 	tmpFile := config.ExecPath + filepath.Base(link)
-	err := ioutil.WriteFile(tmpFile, body, os.ModePerm)
+	err := os.WriteFile(tmpFile, body, os.ModePerm)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

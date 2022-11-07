@@ -8,7 +8,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/now"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -30,7 +29,7 @@ var emptyLinkPattern = regexp.MustCompile(emptyLinkPatternStr)
 
 func GetUserCollectorSetting() config.CollectorJson {
 	var collector config.CollectorJson
-	buf, err := ioutil.ReadFile(fmt.Sprintf("%scollector.json", config.ExecPath))
+	buf, err := os.ReadFile(fmt.Sprintf("%scollector.json", config.ExecPath))
 	configStr := ""
 	if err != nil {
 		//文件不存在

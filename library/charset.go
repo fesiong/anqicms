@@ -7,7 +7,7 @@ import (
 	"golang.org/x/text/encoding/traditionalchinese"
 	"golang.org/x/text/encoding/unicode"
 	"golang.org/x/text/transform"
-	"io/ioutil"
+	"io"
 )
 
 // CharsetMap 字符集映射
@@ -26,7 +26,7 @@ func DecodeToUTF8(input []byte, charset encoding.Encoding) (output []byte, err e
 		return
 	}
 	reader := transform.NewReader(bytes.NewReader(input), charset.NewDecoder())
-	output, err = ioutil.ReadAll(reader)
+	output, err = io.ReadAll(reader)
 	if err != nil {
 		return
 	}

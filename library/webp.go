@@ -9,7 +9,6 @@ import (
 	"image"
 	"image/jpeg"
 	"image/png"
-	"io/ioutil"
 	"log"
 	"os"
 	"path"
@@ -31,7 +30,7 @@ func ConvertImage(raw, optimized string) error {
 }
 
 func readRawImage(imgPath string, maxPixel int) (img image.Image, err error) {
-	data, err := ioutil.ReadFile(imgPath)
+	data, err := os.ReadFile(imgPath)
 	if err != nil {
 		return
 	}
@@ -74,7 +73,7 @@ func webpEncoder(p1, p2 string, quality float32) error {
 		return err
 	}
 
-	if err = ioutil.WriteFile(p2, buf.Bytes(), 0644); err != nil {
+	if err = os.WriteFile(p2, buf.Bytes(), 0644); err != nil {
 		return err
 	}
 

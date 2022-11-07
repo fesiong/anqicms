@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -31,7 +30,7 @@ type KeywordCSV struct {
 
 func GetUserKeywordSetting() config.KeywordJson {
 	var keywordJson config.KeywordJson
-	buf, err := ioutil.ReadFile(fmt.Sprintf("%skeyword.json", config.ExecPath))
+	buf, err := os.ReadFile(fmt.Sprintf("%skeyword.json", config.ExecPath))
 	configStr := ""
 	if err != nil {
 		//文件不存在
@@ -156,7 +155,7 @@ func GetKeywordByTitle(title string) (*model.Keyword, error) {
 }
 
 func ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, error) {
-	buff, err := ioutil.ReadAll(file)
+	buff, err := io.ReadAll(file)
 	if err != nil {
 		return "", err
 	}

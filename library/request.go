@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"github.com/parnurzeal/gorequest"
 	"golang.org/x/net/html/charset"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -217,7 +217,7 @@ func GetURLData(url, refer string) (*RequestData, error) {
 	if err != nil {
 		return &RequestData{}, err
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "html") {

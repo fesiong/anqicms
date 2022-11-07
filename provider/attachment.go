@@ -13,7 +13,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -104,7 +103,7 @@ func AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryI
 
 	// 不是图片的时候的处理方法
 	if isImage != 1 {
-		bts, _ := ioutil.ReadAll(file)
+		bts, _ := io.ReadAll(file)
 		_, err = Storage.UploadFile(filePath+tmpName, bts)
 		if err != nil {
 			return nil, err
@@ -255,7 +254,7 @@ func DownloadRemoteImage(src string, fileName string) (*model.Attachment, error)
 			}
 			fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "." + strings.Split(contentType, "/")[1]
 			//获取宽高
-			tmpfile, err := ioutil.TempFile("", "download")
+			tmpfile, err := os.CreateTemp("", "download")
 			if err != nil {
 				return nil, err
 			}
@@ -685,7 +684,7 @@ func convertToWebp(attachment *model.Attachment) error {
 	}
 	buff := &bytes.Buffer{}
 	_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
-	err = ioutil.WriteFile(basePath+newFile, buff.Bytes(), os.ModePerm)
+	err = os.WriteFile(basePath+newFile, buff.Bytes(), os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -707,7 +706,7 @@ func convertToWebp(attachment *model.Attachment) error {
 
 	_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
 
-	err = ioutil.WriteFile(thumbPath, buff.Bytes(), os.ModePerm)
+	err = os.WriteFile(thumbPath, buff.Bytes(), os.ModePerm)
 	if err != nil {
 		return err
 	}

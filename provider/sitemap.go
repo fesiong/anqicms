@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
@@ -19,7 +18,7 @@ func UpdateSitemapTime() error {
 	path := fmt.Sprintf("%scache/sitemap-time.log", config.ExecPath)
 
 	nowTime := fmt.Sprintf("%d", time.Now().Unix())
-	err := ioutil.WriteFile(path, []byte(nowTime), 0666)
+	err := os.WriteFile(path, []byte(nowTime), 0666)
 
 	if err != nil {
 		return err
@@ -30,7 +29,7 @@ func UpdateSitemapTime() error {
 
 func GetSitemapTime() int64 {
 	path := fmt.Sprintf("%scache/sitemap-time.log", config.ExecPath)
-	timeBytes, err := ioutil.ReadFile(path)
+	timeBytes, err := os.ReadFile(path)
 	if err != nil {
 		return 0
 	}
@@ -224,7 +223,7 @@ func NewSitemapGenerator(sitemapType string, filePath string, load bool) *Sitema
 
 func (g *SitemapGenerator) Load() {
 	if g.Type == "xml" {
-		data, err := ioutil.ReadFile(g.FilePath)
+		data, err := os.ReadFile(g.FilePath)
 		if err == nil {
 			err = xml.Unmarshal(data, g)
 			if err == nil {
@@ -232,7 +231,7 @@ func (g *SitemapGenerator) Load() {
 			}
 		}
 	} else {
-		data, err := ioutil.ReadFile(g.FilePath)
+		data, err := os.ReadFile(g.FilePath)
 		if err == nil {
 			links := strings.Split(string(bytes.TrimSpace(data)), "\r\n")
 			g.Urls = make([]SitemapUrl, 0, len(links))
@@ -285,7 +284,7 @@ func (g *SitemapGenerator) Save() error {
 		for i := range g.Urls {
 			links = append(links, g.Urls[i].Loc)
 		}
-		err := ioutil.WriteFile(g.FilePath, []byte(strings.Join(links, "\r\n")), os.ModePerm)
+		err := os.WriteFile(g.FilePath, []byte(strings.Join(links, "\r\n")), os.ModePerm)
 
 		return err
 	}
@@ -306,7 +305,7 @@ func NewSitemapIndexGenerator(sitemapType string, filePath string, load bool) *S
 
 func (s *SitemapIndexGenerator) Load() {
 	if s.Type == "xml" {
-		data, err := ioutil.ReadFile(s.FilePath)
+		data, err := os.ReadFile(s.FilePath)
 		if err == nil {
 			err = xml.Unmarshal(data, s)
 			if err == nil {
@@ -314,7 +313,7 @@ func (s *SitemapIndexGenerator) Load() {
 			}
 		}
 	} else {
-		data, err := ioutil.ReadFile(s.FilePath)
+		data, err := os.ReadFile(s.FilePath)
 		if err == nil {
 			links := strings.Split(string(bytes.TrimSpace(data)), "\r\n")
 			s.Sitemaps = make([]SitemapUrl, 0, len(links))
@@ -364,7 +363,7 @@ func (s *SitemapIndexGenerator) Save() error {
 		for i := range s.Sitemaps {
 			links = append(links, s.Sitemaps[i].Loc)
 		}
-		err := ioutil.WriteFile(s.FilePath, []byte(strings.Join(links, "\r\n")), os.ModePerm)
+		err := os.WriteFile(s.FilePath, []byte(strings.Join(links, "\r\n")), os.ModePerm)
 
 		return err
 	}

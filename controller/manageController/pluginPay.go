@@ -3,7 +3,7 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"io/ioutil"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"os"
@@ -96,7 +96,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 	defer file.Close()
 
 	filePath := fmt.Sprintf("%sdata/cert/%s", config.ExecPath, name+".pem")
-	buff, err := ioutil.ReadAll(file)
+	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

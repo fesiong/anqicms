@@ -5,7 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding/simplifiedchinese"
-	"io/ioutil"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
@@ -29,10 +29,10 @@ func PluginMaterialList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
+		"code":  config.StatusOK,
+		"msg":   "",
 		"total": total,
-		"data": materialList,
+		"data":  materialList,
 	})
 }
 
@@ -187,8 +187,8 @@ func PluginMaterialImport(ctx iris.Context) {
 	provider.AddAdminLog(ctx, fmt.Sprintf("导入内容素材"))
 
 	ctx.JSON(iris.Map{
-		"code":  config.StatusOK,
-		"msg":   "导入成功",
+		"code": config.StatusOK,
+		"msg":  "导入成功",
 	})
 }
 
@@ -198,7 +198,7 @@ func ConvertFileToUtf8(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg": err.Error(),
+			"msg":  err.Error(),
 			"data": "",
 		})
 		return
@@ -207,7 +207,7 @@ func ConvertFileToUtf8(ctx iris.Context) {
 	defer file.Close()
 
 	//写入文件
-	bufBytes, _ := ioutil.ReadAll(file)
+	bufBytes, _ := io.ReadAll(file)
 
 	_, contentType, _ := charset.DetermineEncoding(bufBytes, "")
 	if contentType != "utf-8" {

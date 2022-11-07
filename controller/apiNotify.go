@@ -7,7 +7,7 @@ import (
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/medivhzhan/weapp/v3/server"
-	"io/ioutil"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -168,7 +168,7 @@ func NotifyAlipay(ctx iris.Context) {
 	if err != nil {
 		return
 	}
-	fileContent, err := ioutil.ReadAll(file)
+	fileContent, err := io.ReadAll(file)
 
 	ok, err := alipay.VerifySign(string(fileContent), bm)
 	if ok == false || err != nil {
