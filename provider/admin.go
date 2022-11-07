@@ -3,7 +3,7 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"

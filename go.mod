@@ -7,13 +7,13 @@ require (
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.5+incompatible
 	github.com/chai2010/webp v1.1.1
 	github.com/chromedp/chromedp v0.8.6
-	github.com/dgrijalva/jwt-go v3.2.0+incompatible
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v0.0.0-20220610011842-69c10b41e5e1
 	github.com/fatih/structs v1.1.0
+	github.com/flosch/pongo2/v4 v4.0.2
 	github.com/go-pay/gopay v1.5.85
+	github.com/golang-jwt/jwt/v4 v4.4.2
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
-	github.com/iris-contrib/pongo2 v0.0.1
 	github.com/jinzhu/now v1.1.5
 	github.com/kataras/iris/v12 v12.2.0-beta6
 	github.com/lib/pq v1.10.7
@@ -51,7 +51,6 @@ require (
 	github.com/eknkc/amber v0.0.0-20171010120322-cdade1c07385 // indirect
 	github.com/elazarl/goproxy v0.0.0-20221015165544-a0805db90819 // indirect
 	github.com/fatih/color v1.13.0 // indirect
-	github.com/flosch/pongo2/v4 v4.0.2 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
