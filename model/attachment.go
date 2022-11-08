@@ -5,11 +5,12 @@ import (
 	"kandaoni.com/anqicms/config"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 )
 
 type Attachment struct {
 	Model
-	FileName     string `json:"file_name" gorm:"column:file_name;type:varchar(100) not null;default:''"`
+	FileName     string `json:"file_name" gorm:"column:file_name;type:varchar(250) not null;default:''"`
 	FileLocation string `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
 	FileSize     int64  `json:"file_size" gorm:"column:file_size;type:bigint(20) unsigned not null;default:0"`
 	FileMd5      string `json:"file_md5" gorm:"column:file_md5;type:varchar(32) not null;default:'';unique"`
@@ -27,6 +28,13 @@ type AttachmentCategory struct {
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	AttachCount uint   `json:"attach_count" gorm:"column:attach_count;type:int(10) unsigned not null;default:0"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+}
+
+func (attachment *Attachment) BeforeSave(tx *gorm.DB) error {
+	if utf8.RuneCountInString(attachment.FileName) > 250 {
+		attachment.FileName = string([]rune(attachment.FileName)[:250])
+	}
+	return nil
 }
 
 func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
