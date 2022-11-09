@@ -392,6 +392,15 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		DeleteCacheFixedLinks()
 	}
 
+	// 尝试添加全文索引
+	AddFulltextIndex(&TinyArchive{
+		Id:       archive.Id,
+		ModuleId: archive.ModuleId,
+		Title:    archive.Title,
+		Keywords: archive.Keywords,
+		Content:  archiveData.Content,
+	})
+
 	err = SuccessReleaseArchive(archive, newPost)
 	return
 }
@@ -442,6 +451,10 @@ func RecoverArchive(archive *model.Archive) error {
 		DeleteCacheFixedLinks()
 	}
 	DeleteCacheIndex()
+	var doc TinyArchive
+	dao.DB.Table("`archives` as a").Joins("left join `archive_data` as d on a.id=d.id").Select("a.id,a.title,a.keywords,a.module_id,d.content").Where("a.`id` > ?", archive.Id).Take(&doc)
+	// 尝试添加全文索引
+	AddFulltextIndex(&doc)
 
 	return nil
 }
@@ -461,6 +474,7 @@ func DeleteArchive(archive *model.Archive) error {
 		DeleteCacheFixedLinks()
 	}
 	DeleteCacheIndex()
+	RemoveFulltextIndex(archive.Id)
 
 	return nil
 }

@@ -34,6 +34,7 @@ const (
 	RetailerSettingKey    = "retailer"
 	UserSettingKey        = "user"
 	OrderSettingKey       = "order"
+	FulltextSettingKey    = "fulltext"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -67,6 +68,7 @@ func InitSetting() {
 	LoadRetailerSetting()
 	LoadUserSetting()
 	LoadOrderSetting()
+	LoadFulltextSetting()
 
 	LoadCollectorSetting()
 	LoadKeywordSetting()
@@ -317,6 +319,13 @@ func LoadOrderSetting() {
 	if config.JsonData.PluginOrder.AutoFinishDay <= 0 {
 		// default auto finish day
 		config.JsonData.PluginOrder.AutoFinishDay = 10
+	}
+}
+
+func LoadFulltextSetting() {
+	value := GetSettingValue(FulltextSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &config.JsonData.PluginFulltext)
 	}
 }
 

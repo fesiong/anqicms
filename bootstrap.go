@@ -48,6 +48,8 @@ func (bootstrap *Bootstrap) Serve() {
 		provider.InitSetting()
 		// 初始化数据
 		dao.InitModelData(dao.DB)
+		// 初始化索引
+		provider.InitFulltext()
 	}
 
 	//开始计划任务

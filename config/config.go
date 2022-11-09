@@ -41,6 +41,7 @@ type ConfigJson struct {
 	PluginRetailer    PluginRetailerConfig  `json:"plugin_retailer"`
 	PluginUser        PluginUserConfig      `json:"plugin_user"`
 	PluginOrder       PluginOrderConfig     `json:"plugin_order"`
+	PluginFulltext    PluginFulltextConfig  `json:"plugin_fulltext"`
 }
 
 func initPath() {

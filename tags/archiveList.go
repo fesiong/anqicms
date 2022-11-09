@@ -117,6 +117,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			currentPage = paramPage
 		}
 	}
+	if currentPage < 1 {
+		currentPage = 1
+	}
 
 	if args["order"] != nil {
 		order = args["order"].String()
@@ -228,17 +231,32 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if order != "" {
 			builder = builder.Order(order)
 		}
+		var fulltextSearch bool
 		if listType == "page" {
 			if currentPage > 1 {
 				offset = (currentPage - 1) * limit
 			}
 			if q != "" {
-				builder = builder.Where("`title` like ?", "%"+q+"%")
+				ids, total2, err2 := provider.Search(q, moduleId, currentPage, limit)
+				if err2 != nil {
+					builder = builder.Where("`title` like ?", "%"+q+"%")
+					builder.Count(&total)
+				} else {
+					fulltextSearch = true
+					if len(ids) == 0 {
+						ids = append(ids, 0)
+					}
+					builder = builder.Where("`id` IN(?)", ids)
+					total = total2
+				}
+			} else {
+				builder.Count(&total)
 			}
-			builder.Count(&total)
 		}
-		builder = builder.Limit(limit).Offset(offset)
-		if err := builder.Find(&archives).Error; err != nil {
+		if !fulltextSearch {
+			builder = builder.Limit(limit).Offset(offset)
+		}
+		if err2 := builder.Find(&archives).Error; err2 != nil {
 			return nil
 		}
 		var archiveIds = make([]uint, 0, len(archives))

@@ -91,6 +91,10 @@ type PluginStorageConfig struct {
 	UpyunPassword string `json:"upyun_password"`
 }
 
+type PluginFulltextConfig struct {
+	Open bool `json:"open"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

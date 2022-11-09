@@ -365,6 +365,13 @@ func manageRoute(app *iris.Application) {
 				finance.Get("/list", manageController.PluginFinanceList)
 				finance.Get("/detail", manageController.PluginFinanceDetail)
 			}
+
+			// 全文索引
+			fulltext := plugin.Party("/fulltext")
+			{
+				fulltext.Get("/config", manageController.PluginFulltextConfig)
+				fulltext.Post("/config", manageController.PluginFulltextConfigForm)
+			}
 		}
 	}
 }
