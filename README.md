@@ -204,21 +204,19 @@ fi
 
 密码：123456
 
-## 示例网站 & 开发文档 & golang实战学习教程
-[示例网站 - https://www.kandaoni.com/](https://www.kandaoni.com/)  
-
-[实战学习教程](https://www.kandaoni.com/category/1)  
+## 示例网站 & 开发文档
+[示例网站 - https://www.anqicms.com/](https://www.anqicms.com/manual)
 
 
 ## 👥问题反馈    
 遇到问题, 请在Github上开issue。  
-也可以加我的微信：no_reg
+也可以加我的微信：websafety
 
 扫码加入golang开发学习群
 
-![扫码入群讨论](https://www.kandaoni.com/uploads/20213/3/thumb_1525154eb779f3c7.png)
+![扫码入群讨论](https://www.anqicms.com/uploads/202211/09/1a55bfcde55aa2d6.webp)
 
 ## License
 AnqiCMS 最终用户授权协议
 
-Copyright (c) 2019-NOW  Fesion <tpyzlxy@163.com>
+Copyright (c) 2019-NOW  Fesion <tpyzlxy@gmail.com>
