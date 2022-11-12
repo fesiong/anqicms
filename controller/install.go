@@ -58,6 +58,11 @@ func Install(ctx iris.Context) {
       flex: 1;
     }
 
+	.layui-form-text {
+		padding: 6px 0;
+		flex: 1;
+	}
+
     .layui-input {
       box-sizing: border-box;
       width: 100%;
@@ -160,6 +165,13 @@ func Install(ctx iris.Context) {
         </div>
       </div>
       <div class="layui-form-item">
+        <label class="layui-form-label">演示数据</label>
+        <div class="layui-form-text">
+          <label><input type="checkbox" name="preview_data" value="1" checked>安装</label>
+          <span class="layui-form-mid layui-aux-word">勾选后，将安装默认演示数据</span>
+        </div>
+      </div>
+      <div class="layui-form-item">
         <div class="layui-input-block submit-buttons">
           <button type="reset" class="layui-btn">重置</button>
           <button class="layui-btn btn-primary" type="submit">确认初始化</button>
@@ -168,7 +180,6 @@ func Install(ctx iris.Context) {
     </form>
   </div>
 </body>
-
 </html>`)
 }
 
@@ -199,6 +210,7 @@ func InstallForm(ctx iris.Context) {
 	req.AdminUser = ctx.PostValueTrim("admin_user")
 	req.AdminPassword = ctx.PostValueTrim("admin_password")
 	req.BaseUrl = ctx.PostValueTrim("base_url")
+	req.PreviewData, _ = ctx.PostValueBool("preview_data")
 
 	if len(req.AdminPassword) < 6 {
 		ShowMessage(ctx, "请填写6位以上的管理员密码", nil)
@@ -249,6 +261,11 @@ func InstallForm(ctx iris.Context) {
 	_ = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
 	_ = provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
 
+	if req.PreviewData {
+		_ = provider.RestoreDesignData(config.JsonData.System.TemplateName)
+	}
+	// 读入配置
+	provider.InitSetting()
 	//创建管理员
 	err = provider.InitAdmin(req.AdminUser, req.AdminPassword, true)
 	if err != nil {

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"os"
 	"time"
@@ -41,9 +42,6 @@ const (
 )
 
 func InitSetting() {
-	if dao.DB == nil {
-		return
-	}
 	// 需要对 config.json数据进行迁移
 	transferConfig()
 	// load setting from db
@@ -75,6 +73,9 @@ func InitSetting() {
 }
 
 func transferConfig() {
+	if dao.DB == nil {
+		return
+	}
 	var existCount int64
 	dao.DB.Model(&model.Setting{}).Count(&existCount)
 	if existCount > 0 {
@@ -498,11 +499,17 @@ func LoadKeywordSetting() {
 
 func GetSettingValue(key string) string {
 	var value string
+	if dao.DB == nil {
+		return value
+	}
 	dao.DB.Model(&model.Setting{}).Where("`key` = ?", key).Pluck("value", &value)
 	return value
 }
 
 func SaveSettingValue(key string, value interface{}) error {
+	if dao.DB == nil {
+		return nil
+	}
 	setting := model.Setting{
 		Key: key,
 	}
@@ -514,4 +521,18 @@ func SaveSettingValue(key string, value interface{}) error {
 	setting.Value = string(buf)
 
 	return dao.DB.Save(&setting).Error
+}
+
+func DeleteCache() {
+	// todo, 清理缓存
+	DeleteCacheCategories()
+	DeleteCacheFixedLinks()
+	DeleteCacheModules()
+	DeleteCacheRedirects()
+	DeleteCacheIndex()
+	// 释放词典
+	library.DictClose()
+	// 记录
+	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
+	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
 }

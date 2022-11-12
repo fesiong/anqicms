@@ -203,9 +203,79 @@ func UploadDesignInfo(ctx iris.Context) {
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("上传模板：%s", info.Filename))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "上传成功",
+	})
+}
+
+func BackupDesignData(ctx iris.Context) {
+	var req request.DesignDataRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.BackupDesignData(req.Package)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("备份模板数据：%s", req.Package))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "数据备份成功",
+	})
+}
+
+func RestoreDesignData(ctx iris.Context) {
+	var req request.DesignDataRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.AutoBackup {
+		// 如果用户勾选了自动备份
+		err := provider.BackupData()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+
+	err := provider.RestoreDesignData(req.Package)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.DeleteCacheIndex()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("初始化模板数据：%s", req.Package))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "数据初始化成功",
 	})
 }
 
@@ -234,6 +304,7 @@ func UploadDesignFile(ctx iris.Context) {
 	}
 
 	provider.DeleteCacheIndex()
+	provider.AddAdminLog(ctx, fmt.Sprintf("上传模板文件：%s", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -6,9 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gorm.io/gorm/clause"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"mime/multipart"
@@ -83,6 +86,13 @@ func GetDesignList() []response.DesignPackage {
 				designInfo.Status = 1
 			} else {
 				designInfo.Status = 0
+			}
+			dataPath := config.ExecPath + "template/" + designInfo.Package + "/data.db"
+			_, err = os.Stat(dataPath)
+			if err == nil {
+				designInfo.PreviewData = true
+			} else {
+				designInfo.PreviewData = false
 			}
 
 			designLists = append(designLists, designInfo)
@@ -176,7 +186,7 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		hasChange = true
 	}
 	for i := range files {
-		if strings.HasSuffix(files[i].Path, "config.json") {
+		if strings.HasSuffix(files[i].Path, "config.json") || strings.HasSuffix(files[i].Path, "data.db") {
 			continue
 		}
 		fullPath := strings.TrimPrefix(files[i].Path, basePath+"/")
@@ -287,7 +297,7 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 		var realName string
 		// 模板文件
 		if strings.HasPrefix(f.Name, "template/") {
-			if fileExt != ".html" && fileExt != ".json" {
+			if fileExt != ".html" && fileExt != ".json" && fileExt != ".db" {
 				continue
 			}
 			basePath := filepath.Join(config.ExecPath, "template", packageName)
@@ -1003,6 +1013,498 @@ func SaveDesignStaticFile(req request.SaveDesignFileRequest) error {
 	}
 
 	err = os.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RestoreDesignData(packageName string) error {
+	dataPath := config.ExecPath + "template/" + packageName + "/data.db"
+	_, err := os.Stat(dataPath)
+	if err != nil {
+		return errors.New("无可初始化的数据")
+	}
+
+	zipReader, err := zip.OpenReader(dataPath)
+	if err != nil {
+		return errors.New("读取数据失败")
+	}
+	defer zipReader.Close()
+
+	for _, f := range zipReader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		reader, err := f.Open()
+		if err != nil {
+			continue
+		}
+		restoreSingleData(f.Name, reader)
+		reader.Close()
+	}
+
+	return nil
+}
+
+// restoreSingleData
+//
+//	    	anchors              []model.Anchor
+//			anchorData           []model.AnchorData
+//			archives             []model.Archive
+//			archiveData          []model.ArchiveData
+//			attachments          []model.Attachment
+//			attachmentCategories []model.AttachmentCategory
+//			categories           []model.Category
+//			comments             []model.Comment
+//			guestbooks           []model.Guestbook
+//			keywords             []model.Keyword
+//			links                []model.Link
+//			materials            []model.Material
+//			materialCategories   []model.MaterialCategory
+//			materialData         []model.MaterialData
+//			modules              []model.Module
+//			navs                 []model.Nav
+//			navTypes             []model.NavType
+//			redirects            []model.Redirect
+//			settings             []model.Setting
+//			tags                 []model.Tag
+//			tagData              []model.TagData
+//			userGroups           []model.UserGroup
+func restoreSingleData(name string, reader io.ReadCloser) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return
+	}
+	if name == "settings" {
+		var settings []model.Setting
+		err = json.Unmarshal(data, &settings)
+		if err != nil {
+			return
+		}
+		for _, v := range settings {
+			// 处理system,防止域名覆盖
+			if v.Key == SystemSettingKey {
+				var systemSetting config.SystemConfig
+				_ = json.Unmarshal([]byte(v.Value), &systemSetting)
+				systemSetting.TemplateName = config.JsonData.System.TemplateName
+				systemSetting.BaseUrl = config.JsonData.System.BaseUrl
+				systemSetting.MobileUrl = config.JsonData.System.MobileUrl
+				systemSetting.AdminUrl = config.JsonData.System.AdminUrl
+				buf, err := json.Marshal(systemSetting)
+				if err == nil {
+					v.Value = string(buf)
+				}
+			}
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		InitSetting()
+	} else if name == "modules" {
+		var modules []model.Module
+		err = json.Unmarshal(data, &modules)
+		if err != nil {
+			return
+		}
+		for _, v := range modules {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+			// 更新模型数据
+			v.Migrate(dao.DB, true)
+		}
+		DeleteCacheModules()
+	} else if name == "categories" {
+		var categories []model.Category
+		err = json.Unmarshal(data, &categories)
+		if err != nil {
+			return
+		}
+		for _, v := range categories {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheCategories()
+	} else if name == "archives" {
+		var archives []model.Archive
+		err = json.Unmarshal(data, &archives)
+		if err != nil {
+			return
+		}
+		for _, v := range archives {
+			// archive 还有 附加表数据
+			if v.Extra != nil {
+				module, err := GetModuleById(v.ModuleId)
+				if err == nil {
+					extraFields := map[string]interface{}{
+						"id": v.Id,
+					}
+					for ek, ev := range v.Extra {
+						extraFields[ek] = ev.Value
+					}
+					dao.DB.Table(module.TableName).Clauses(clause.OnConflict{UpdateAll: true}).Create(&extraFields)
+				}
+			}
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheFixedLinks()
+	} else if name == "archiveData" {
+		var archiveData []model.ArchiveData
+		err = json.Unmarshal(data, &archiveData)
+		if err != nil {
+			return
+		}
+		for _, v := range archiveData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "tags" {
+		var tags []model.Tag
+		err = json.Unmarshal(data, &tags)
+		if err != nil {
+			return
+		}
+		for _, v := range tags {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "tagData" {
+		var tagData []model.TagData
+		err = json.Unmarshal(data, &tagData)
+		if err != nil {
+			return
+		}
+		for _, v := range tagData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "anchors" {
+		var anchors []model.Anchor
+		err = json.Unmarshal(data, &anchors)
+		if err != nil {
+			return
+		}
+		for _, v := range anchors {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "anchorData" {
+		var anchorData []model.AnchorData
+		err = json.Unmarshal(data, &anchorData)
+		if err != nil {
+			return
+		}
+		for _, v := range anchorData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "attachments" {
+		var attachments []model.Attachment
+		err = json.Unmarshal(data, &attachments)
+		if err != nil {
+			return
+		}
+		for _, v := range attachments {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "attachmentCategories" {
+		var attachmentCategories []model.AttachmentCategory
+		err = json.Unmarshal(data, &attachmentCategories)
+		if err != nil {
+			return
+		}
+		for _, v := range attachmentCategories {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "comments" {
+		var comments []model.Comment
+		err = json.Unmarshal(data, &comments)
+		if err != nil {
+			return
+		}
+		for _, v := range comments {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "guestbooks" {
+		var guestbooks []model.Guestbook
+		err = json.Unmarshal(data, &guestbooks)
+		if err != nil {
+			return
+		}
+		for _, v := range guestbooks {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "keywords" {
+		var keywords []model.Keyword
+		err = json.Unmarshal(data, &keywords)
+		if err != nil {
+			return
+		}
+		for _, v := range keywords {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "links" {
+		var links []model.Link
+		err = json.Unmarshal(data, &links)
+		if err != nil {
+			return
+		}
+		for _, v := range links {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "materials" {
+		var materials []model.Material
+		err = json.Unmarshal(data, &materials)
+		if err != nil {
+			return
+		}
+		for _, v := range materials {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "materialCategories" {
+		var materialCategories []model.MaterialCategory
+		err = json.Unmarshal(data, &materialCategories)
+		if err != nil {
+			return
+		}
+		for _, v := range materialCategories {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "materialData" {
+		var materialData []model.MaterialData
+		err = json.Unmarshal(data, &materialData)
+		if err != nil {
+			return
+		}
+		for _, v := range materialData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "navTypes" {
+		var navTypes []model.NavType
+		err = json.Unmarshal(data, &navTypes)
+		if err != nil {
+			return
+		}
+		for _, v := range navTypes {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "navs" {
+		var navs []model.Nav
+		err = json.Unmarshal(data, &navs)
+		if err != nil {
+			return
+		}
+		for _, v := range navs {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheNavs()
+	} else if name == "redirects" {
+		var redirects []model.Redirect
+		err = json.Unmarshal(data, &redirects)
+		if err != nil {
+			return
+		}
+		for _, v := range redirects {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheRedirects()
+	} else if name == "userGroups" {
+		var userGroups []model.UserGroup
+		err = json.Unmarshal(data, &userGroups)
+		if err != nil {
+			return
+		}
+		for _, v := range userGroups {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else {
+		name = strings.ReplaceAll(name, "..", "")
+		name = strings.ReplaceAll(name, "\\", "")
+		realFile := filepath.Clean(config.ExecPath + "public/" + name)
+		if !strings.HasPrefix(realFile, config.ExecPath+"public/") {
+			return
+		}
+
+		_ = os.MkdirAll(filepath.Dir(realFile), os.ModePerm)
+		os.WriteFile(realFile, data, os.ModePerm)
+	}
+}
+
+func BackupDesignData(packageName string) error {
+	dataPath := config.ExecPath + "template/" + packageName + "/data.db"
+	zipFile, err := os.Create(dataPath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+	zw := zip.NewWriter(zipFile)
+	defer zw.Close()
+
+	// 每项数据不超过200条
+	var maxLimit = 200
+
+	// 开始逐个写入数据
+	var anchors []model.Anchor
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&anchors)
+	if len(anchors) > 0 {
+		_ = writeDataToZip("anchors", anchors, zw)
+		var anchorIds = make([]uint, 0, len(anchors))
+		for i := range anchors {
+			anchorIds = append(anchorIds, anchors[i].Id)
+		}
+		var anchorData []model.AnchorData
+		dao.DB.Where("`anchor_id` IN(?)", anchorIds).Find(&anchorData)
+		if len(anchorData) > 0 {
+			_ = writeDataToZip("anchorData", anchorData, zw)
+		}
+	}
+	var archives []model.Archive
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&archives)
+	if len(archives) > 0 {
+		var archiveIds = make([]uint, 0, len(archives))
+		for i := range archives {
+			archiveIds = append(archiveIds, archives[i].Id)
+			archives[i].Extra = GetArchiveExtra(archives[i].ModuleId, archives[i].Id)
+		}
+		_ = writeDataToZip("archives", archives, zw)
+		var archiveData []model.ArchiveData
+		dao.DB.Where("`id` IN(?)", archiveIds).Find(&archiveData)
+		if len(archiveData) > 0 {
+			_ = writeDataToZip("archiveData", archiveData, zw)
+		}
+	}
+	var attachments []model.Attachment
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&attachments)
+	if len(attachments) > 0 {
+		_ = writeDataToZip("attachments", attachments, zw)
+		for i := range attachments {
+			// read file from local
+			fullName := config.ExecPath + attachments[i].FileLocation
+			file, err := os.Open(fullName)
+			if err != nil {
+				continue
+			}
+			info, _ := file.Stat()
+			header, err := zip.FileInfoHeader(info)
+			header.Name = attachments[i].FileLocation
+			if err != nil {
+				_ = file.Close()
+				continue
+			}
+			writer, err := zw.CreateHeader(header)
+			if err != nil {
+				_ = file.Close()
+				continue
+			}
+			_, _ = io.Copy(writer, file)
+		}
+	}
+	var attachmentCategories []model.AttachmentCategory
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&attachmentCategories)
+	if len(attachmentCategories) > 0 {
+		_ = writeDataToZip("attachmentCategories", attachmentCategories, zw)
+	}
+	var categories []model.Category
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&categories)
+	if len(categories) > 0 {
+		_ = writeDataToZip("categories", categories, zw)
+	}
+	var comments []model.Comment
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&comments)
+	if len(comments) > 0 {
+		_ = writeDataToZip("comments", comments, zw)
+	}
+	var guestbooks []model.Guestbook
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&guestbooks)
+	if len(guestbooks) > 0 {
+		_ = writeDataToZip("guestbooks", guestbooks, zw)
+	}
+	var keywords []model.Keyword
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&keywords)
+	if len(keywords) > 0 {
+		_ = writeDataToZip("keywords", keywords, zw)
+	}
+	var links []model.Link
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&links)
+	if len(links) > 0 {
+		_ = writeDataToZip("links", links, zw)
+	}
+	var materials []model.Material
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&materials)
+	if len(materials) > 0 {
+		_ = writeDataToZip("materials", materials, zw)
+		var materialIds = make([]uint, 0, len(materials))
+		for i := range materials {
+			materialIds = append(materialIds, materials[i].Id)
+		}
+		var materialData []model.MaterialData
+		dao.DB.Where("`material_id` IN(?)", materialIds).Find(&materialData)
+		if len(materialData) > 0 {
+			_ = writeDataToZip("materialData", materialData, zw)
+		}
+	}
+	var materialCategories []model.MaterialCategory
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&materialCategories)
+	if len(materialCategories) > 0 {
+		_ = writeDataToZip("materialCategories", materialCategories, zw)
+	}
+	var modules []model.Module
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&modules)
+	if len(modules) > 0 {
+		_ = writeDataToZip("modules", modules, zw)
+	}
+	var navs []model.Nav
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&navs)
+	if len(navs) > 0 {
+		_ = writeDataToZip("navs", navs, zw)
+	}
+	var navTypes []model.NavType
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&navTypes)
+	if len(navTypes) > 0 {
+		_ = writeDataToZip("navTypes", navTypes, zw)
+	}
+	var redirects []model.Redirect
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&redirects)
+	if len(redirects) > 0 {
+		_ = writeDataToZip("redirects", redirects, zw)
+	}
+	var settings []model.Setting
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&settings)
+	if len(settings) > 0 {
+		_ = writeDataToZip("settings", settings, zw)
+	}
+	var tags []model.Tag
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&tags)
+	if len(tags) > 0 {
+		_ = writeDataToZip("tags", tags, zw)
+		var tagIds = make([]uint, 0, len(tags))
+		for i := range tags {
+			tagIds = append(tagIds, tags[i].Id)
+		}
+		var tagData []model.TagData
+		dao.DB.Where("`tag_id` IN(?)", tagIds).Find(&tagData)
+		if len(tagData) > 0 {
+			_ = writeDataToZip("tagData", tagData, zw)
+		}
+	}
+	var userGroups []model.UserGroup
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&userGroups)
+	if len(userGroups) > 0 {
+		_ = writeDataToZip("userGroups", userGroups, zw)
+	}
+	return nil
+}
+
+func writeDataToZip(name string, data interface{}, zw *zip.Writer) error {
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	size := len(buf)
+	header := &zip.FileHeader{
+		Name:               name,
+		UncompressedSize64: uint64(size),
+	}
+	header.Modified = time.Now()
+	header.SetMode(os.ModePerm)
+
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(buf)
 	if err != nil {
 		return err
 	}

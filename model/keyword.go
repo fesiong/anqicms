@@ -6,7 +6,7 @@ import (
 
 type Keyword struct {
 	Model
-	Title        string `json:"title" gorm:"column:title;type:varchar(250) not null;default:'';unique"`
+	Title        string `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';unique"`
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
 	Level        int    `json:"level" gorm:"column:level;type:int(10);default:0"`

@@ -42,7 +42,7 @@ func InitDB() error {
 			if err != nil {
 				return err
 			}
-			err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", config.Server.Mysql.Database)).Error
+			err = db.Exec(fmt.Sprintf("CREATE DATABASE %s DEFAULT CHARACTER SET utf8mb4", config.Server.Mysql.Database)).Error
 			if err != nil {
 				return err
 			}
@@ -73,7 +73,7 @@ func InitDB() error {
 
 func AutoMigrateDB(db *gorm.DB) error {
 	//自动迁移数据库
-	err := db.AutoMigrate(
+	err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
 		&model.Admin{},
 		&model.AdminGroup{},
 		&model.AdminLoginLog{},

@@ -1,4 +1,4 @@
-# 在linux或mac下运行
+# 在linux下运行
 all: open
 
 build: clean
@@ -24,7 +24,6 @@ build: clean
 	GOOS=linux GOARCH=amd64 go build -ldflags '-w -s' -o ./release/linux/anqicms kandaoni.com/anqicms/main
 
 open: build
-	open ./release
 
 clean:
 	rm -rf ./release/linux

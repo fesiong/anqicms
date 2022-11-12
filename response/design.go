@@ -12,6 +12,7 @@ type DesignPackage struct {
 	Status       int          `json:"status"`
 	TplFiles     []DesignFile `json:"tpl_files"`
 	StaticFiles  []DesignFile `json:"static_files"`
+	PreviewData  bool         `json:"preview_data"`
 }
 
 type DesignFile struct {

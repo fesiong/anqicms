@@ -27,3 +27,8 @@ type SaveDesignFileRequest struct {
 	Remark        string `json:"remark"`
 	UpdateContent bool   `json:"update_content"`
 }
+
+type DesignDataRequest struct {
+	Package    string `json:"package"`
+	AutoBackup bool   `json:"auto_backup"`
+}

@@ -296,17 +296,7 @@ func SettingCache(ctx iris.Context) {
 }
 
 func SettingCacheForm(ctx iris.Context) {
-	// todo, 清理缓存
-	provider.DeleteCacheCategories()
-	provider.DeleteCacheFixedLinks()
-	provider.DeleteCacheModules()
-	provider.DeleteCacheRedirects()
-	provider.DeleteCacheIndex()
-	// 释放词典
-	library.DictClose()
-	// 记录
-	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
-	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+	provider.DeleteCache()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("手动更新缓存"))
 

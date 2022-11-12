@@ -9,4 +9,5 @@ type Install struct {
 	AdminUser     string `json:"admin_user" validate:"required"`
 	AdminPassword string `json:"admin_password" validate:"required"`
 	BaseUrl       string `json:"base_url"`
+	PreviewData   bool   `json:"preview_data"`
 }

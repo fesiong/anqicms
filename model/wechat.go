@@ -15,14 +15,14 @@ type UserWechat struct {
 type WeappQrcode struct {
 	Model
 	UserId  uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	Path    string `json:"path" gorm:"column:path;type:varchar(255) not null;default:'';index:idx_path"`
+	Path    string `json:"path" gorm:"column:path;type:varchar(190) not null;default:'';index:idx_path"`
 	CodeUrl string `json:"code_url" gorm:"column:code_url;type:varchar(255) not null;default:''"`
 }
 
 type SubscribedUser struct {
 	Model
 	UserId     uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	Openid     string `json:"openid" gorm:"column:openid;type:varchar(255) not null;default:'';index:idx_openid_template_id"`
+	Openid     string `json:"openid" gorm:"column:openid;type:varchar(128) not null;default:'';index:idx_openid_template_id"`
 	TemplateId string `json:"template_id" gorm:"column:template_id;type:varchar(64) not null;default:'';index:idx_openid_template_id"`
 }
 

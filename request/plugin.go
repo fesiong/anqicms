@@ -101,3 +101,7 @@ type PluginRedirectRequest struct {
 type PluginRedirectsRequest struct {
 	Urls []PluginRedirectRequest `json:"urls"`
 }
+
+type PluginBackupRequest struct {
+	Name string `json:"name"`
+}

@@ -143,6 +143,8 @@ func manageRoute(app *iris.Application) {
 			design.Post("/download", manageController.DownloadDesignInfo)
 			design.Post("/upload", manageController.UploadDesignInfo)
 			design.Post("/use", manageController.UseDesignInfo)
+			design.Post("/data/restore", manageController.RestoreDesignData)
+			design.Post("/data/backup", manageController.BackupDesignData)
 			design.Get("/file/info", manageController.GetDesignFileDetail)
 			design.Get("/file/histories", manageController.GetDesignFileHistories)
 			design.Post("/file/history/delete", manageController.DeleteDesignFileHistories)
@@ -371,6 +373,16 @@ func manageRoute(app *iris.Application) {
 			{
 				fulltext.Get("/config", manageController.PluginFulltextConfig)
 				fulltext.Post("/config", manageController.PluginFulltextConfigForm)
+			}
+
+			backup := plugin.Party("/backup")
+			{
+				backup.Get("/list", manageController.PluginBackupList)
+				backup.Post("/dump", manageController.PluginBackupDump)
+				backup.Post("/restore", manageController.PluginBackupRestore)
+				backup.Post("/delete", manageController.PluginBackupDelete)
+				backup.Post("/export", manageController.PluginBackupExport)
+				backup.Post("/import", manageController.PluginBackupImport)
 			}
 		}
 	}
