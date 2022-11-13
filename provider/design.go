@@ -1105,6 +1105,8 @@ func restoreSingleData(name string, reader io.ReadCloser) {
 				if err == nil {
 					v.Value = string(buf)
 				}
+			} else if v.Key == StorageSettingKey || v.Key == ImportApiSettingKey {
+				continue
 			}
 			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 		}
@@ -1465,7 +1467,7 @@ func BackupDesignData(packageName string) error {
 		_ = writeDataToZip("redirects", redirects, zw)
 	}
 	var settings []model.Setting
-	dao.DB.Find(&settings)
+	dao.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey}).Find(&settings)
 	if len(settings) > 0 {
 		_ = writeDataToZip("settings", settings, zw)
 	}
