@@ -144,22 +144,7 @@ func InitModelData(db *gorm.DB) {
 			TableName: "product",
 			UrlToken:  "product",
 			Title:     "产品中心",
-			Fields: []config.CustomField{
-				{
-					Name:      "价格",
-					FieldName: "price",
-					Type:      "number",
-					Required:  false,
-					IsSystem:  true,
-				},
-				{
-					Name:      "库存",
-					FieldName: "stock",
-					Type:      "number",
-					Required:  false,
-					IsSystem:  true,
-				},
-			},
+			Fields:    nil,
 			IsSystem:  1,
 			TitleName: "产品名称",
 			Status:    1,

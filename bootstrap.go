@@ -86,7 +86,9 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
-
+	if config.JsonData.System.TemplateName == "" {
+		config.JsonData.System.TemplateName = "default"
+	}
 	pugEngine := iris.Django(fmt.Sprintf("%stemplate/%s", config.ExecPath, config.JsonData.System.TemplateName), ".html")
 	// 始终动态加载
 	pugEngine.Reload(true)

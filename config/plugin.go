@@ -128,7 +128,8 @@ func (g *CustomField) GetFieldColumn() string {
 	} else if g.Type == CustomFieldTypeTextarea {
 		column += " text"
 	} else {
-		column += " varchar(250)"
+		// mysql 5.6 下，utf8mb4 索引只能用190
+		column += " varchar(190)"
 	}
 
 	//if g.Required {
@@ -158,6 +159,20 @@ func GetGuestbookFields() []*CustomField {
 			Type:      "text",
 			Required:  false,
 			IsSystem:  true,
+		},
+		{
+			Name:      Lang("Email"),
+			FieldName: "email",
+			Type:      "text",
+			Required:  false,
+			IsSystem:  false,
+		},
+		{
+			Name:      Lang("WhatsApp"),
+			FieldName: "whatsapp",
+			Type:      "text",
+			Required:  false,
+			IsSystem:  false,
 		},
 		{
 			Name:      Lang("留言内容"),

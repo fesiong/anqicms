@@ -161,7 +161,7 @@ func Install(ctx iris.Context) {
         <label class="layui-form-label">网站地址</label>
         <div class="layui-input-block">
           <input type="text" name="base_url" value="" autocomplete="off" class="layui-input">
-          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：https://www.anqicms.com，用来生成全站的绝对地址</div>
+          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：http://www.anqicms.com，如本地测试请勿填写。</div>
         </div>
       </div>
       <div class="layui-form-item">
@@ -266,6 +266,8 @@ func InstallForm(ctx iris.Context) {
 	}
 	// 读入配置
 	provider.InitSetting()
+	// 初始化数据
+	dao.InitModelData(dao.DB)
 	//创建管理员
 	err = provider.InitAdmin(req.AdminUser, req.AdminPassword, true)
 	if err != nil {

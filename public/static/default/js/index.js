@@ -94,7 +94,9 @@ layui.define(function (exports) {
       .removeClass("side-nav-show");
   });
   $("#menu-sidebarmenu > .menu-item > a").on("click", function (e) {
-    e.preventDefault();
+    if($(this).next('.sub-menu').length) {
+      e.preventDefault();
+    }
   });
 
   

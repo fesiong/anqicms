@@ -54,6 +54,12 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 			moduleId = parentCategory.ModuleId
 		}
 	}
+	if moduleId == 0 {
+		module, _ := ctx.Public["module"].(*model.Module)
+		if module != nil {
+			moduleId = module.Id
+		}
+	}
 
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")

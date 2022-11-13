@@ -1033,8 +1033,17 @@ func RestoreDesignData(packageName string) error {
 	}
 	defer zipReader.Close()
 
+	settings, err := zipReader.Open("settings")
+	if err == nil {
+		restoreSingleData("settings", settings)
+	}
+	modules, err := zipReader.Open("modules")
+	if err == nil {
+		restoreSingleData("modules", modules)
+	}
+	// 需要先处理 settings 和 modules，再开始处理其他表
 	for _, f := range zipReader.File {
-		if f.FileInfo().IsDir() {
+		if f.FileInfo().IsDir() || f.Name == "settings" || f.Name == "modules" {
 			continue
 		}
 		reader, err := f.Open()
@@ -1139,7 +1148,17 @@ func restoreSingleData(name string, reader io.ReadCloser) {
 					for ek, ev := range v.Extra {
 						extraFields[ek] = ev.Value
 					}
-					dao.DB.Table(module.TableName).Clauses(clause.OnConflict{UpdateAll: true}).Create(&extraFields)
+					// 先检查是否存在
+					var existsId uint
+					dao.DB.Table(module.TableName).Where("`id` = ?", v.Id).Pluck("id", &existsId)
+					if existsId > 0 {
+						// 已存在
+						dao.DB.Table(module.TableName).Where("`id` = ?", v.Id).Updates(extraFields)
+					} else {
+						// 新建
+						extraFields["id"] = v.Id
+						dao.DB.Table(module.TableName).Where("`id` = ?", v.Id).Create(extraFields)
+					}
 				}
 			}
 			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
@@ -1371,7 +1390,7 @@ func BackupDesignData(packageName string) error {
 		_ = writeDataToZip("attachments", attachments, zw)
 		for i := range attachments {
 			// read file from local
-			fullName := config.ExecPath + attachments[i].FileLocation
+			fullName := config.ExecPath + "public/" + attachments[i].FileLocation
 			file, err := os.Open(fullName)
 			if err != nil {
 				continue
@@ -1389,6 +1408,7 @@ func BackupDesignData(packageName string) error {
 				continue
 			}
 			_, _ = io.Copy(writer, file)
+			_ = file.Close()
 		}
 	}
 	var attachmentCategories []model.AttachmentCategory
@@ -1461,7 +1481,7 @@ func BackupDesignData(packageName string) error {
 		_ = writeDataToZip("redirects", redirects, zw)
 	}
 	var settings []model.Setting
-	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&settings)
+	dao.DB.Find(&settings)
 	if len(settings) > 0 {
 		_ = writeDataToZip("settings", settings, zw)
 	}

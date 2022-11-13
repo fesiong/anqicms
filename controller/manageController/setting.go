@@ -141,6 +141,7 @@ func SettingContentForm(ctx iris.Context) {
 	config.JsonData.Content.RemoteDownload = req.RemoteDownload
 	config.JsonData.Content.FilterOutlink = req.FilterOutlink
 	config.JsonData.Content.UrlTokenType = req.UrlTokenType
+	config.JsonData.Content.UseWebp = req.UseWebp
 	config.JsonData.Content.Quality = req.Quality
 	config.JsonData.Content.ResizeImage = req.ResizeImage
 	config.JsonData.Content.ResizeWidth = req.ResizeWidth
