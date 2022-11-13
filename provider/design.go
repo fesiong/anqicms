@@ -1332,9 +1332,6 @@ func restoreSingleData(name string, reader io.ReadCloser) {
 		name = strings.ReplaceAll(name, "..", "")
 		name = strings.ReplaceAll(name, "\\", "")
 		realFile := filepath.Clean(config.ExecPath + "public/" + name)
-		if !strings.HasPrefix(realFile, config.ExecPath+"public/") {
-			return
-		}
 
 		_ = os.MkdirAll(filepath.Dir(realFile), os.ModePerm)
 		os.WriteFile(realFile, data, os.ModePerm)
@@ -1389,26 +1386,13 @@ func BackupDesignData(packageName string) error {
 	if len(attachments) > 0 {
 		_ = writeDataToZip("attachments", attachments, zw)
 		for i := range attachments {
-			// read file from local
-			fullName := config.ExecPath + "public/" + attachments[i].FileLocation
-			file, err := os.Open(fullName)
-			if err != nil {
-				continue
-			}
-			info, _ := file.Stat()
-			header, err := zip.FileInfoHeader(info)
-			header.Name = attachments[i].FileLocation
-			if err != nil {
-				_ = file.Close()
-				continue
-			}
-			writer, err := zw.CreateHeader(header)
-			if err != nil {
-				_ = file.Close()
-				continue
-			}
-			_, _ = io.Copy(writer, file)
-			_ = file.Close()
+			// read file from local, real file and thumb file
+			fullPath := config.ExecPath + "public/" + attachments[i].FileLocation
+			_ = writeFileToZip(attachments[i].FileLocation, fullPath, zw)
+			// thumb file
+			thumbName := filepath.Dir(attachments[i].FileLocation) + "/thumb_" + filepath.Base(attachments[i].FileLocation)
+			thumbPath := config.ExecPath + "public/" + thumbName
+			_ = writeFileToZip(thumbName, thumbPath, zw)
 		}
 	}
 	var attachmentCategories []model.AttachmentCategory
@@ -1504,6 +1488,29 @@ func BackupDesignData(packageName string) error {
 	if len(userGroups) > 0 {
 		_ = writeDataToZip("userGroups", userGroups, zw)
 	}
+	return nil
+}
+
+func writeFileToZip(name string, filePath string, zw *zip.Writer) error {
+	fullName := filePath
+	file, err := os.Open(fullName)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	info, _ := file.Stat()
+	header, err := zip.FileInfoHeader(info)
+	header.Name = name
+	if err != nil {
+		return err
+	}
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(writer, file)
+	_ = file.Close()
+
 	return nil
 }
 

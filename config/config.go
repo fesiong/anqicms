@@ -62,6 +62,7 @@ func initPath() {
 	if lastChar != sep {
 		ExecPath = ExecPath + sep
 	}
+	ExecPath = strings.ReplaceAll(ExecPath, "\\", "/")
 	log.Println(ExecPath)
 }
 
