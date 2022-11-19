@@ -59,6 +59,7 @@ func (bs *BucketStorage) InitBucket() (err error) {
 }
 
 func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error) {
+	log.Println("存储到", bs.storageType)
 	location = strings.TrimLeft(location, "/")
 	if config.JsonData.PluginStorage.KeepLocal || bs.storageType == config.StorageTypeLocal {
 		//将文件写入本地
@@ -202,7 +203,7 @@ func (bs *BucketStorage) initUpyunBucket() error {
 	return nil
 }
 
-func init() {
+func InitBucket() {
 	var err error
 	Storage, err = GetBucket()
 

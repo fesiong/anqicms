@@ -125,9 +125,10 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
-					Name:    v.Name,
-					Value:   result[v.FieldName],
-					Default: v.Content,
+					Name:        v.Name,
+					Value:       result[v.FieldName],
+					Default:     v.Content,
+					FollowLevel: v.FollowLevel,
 				}
 			}
 		}

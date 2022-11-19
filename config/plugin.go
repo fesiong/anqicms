@@ -36,14 +36,15 @@ type PluginGuestbookConfig struct {
 }
 
 type CustomField struct {
-	Name      string   `json:"name"`
-	FieldName string   `json:"field_name"`
-	Type      string   `json:"type"`
-	Required  bool     `json:"required"`
-	IsSystem  bool     `json:"is_system"`
-	IsFilter  bool     `json:"is_filter"`
-	Content   string   `json:"content"`
-	Items     []string `json:"-"`
+	Name        string   `json:"name"`
+	FieldName   string   `json:"field_name"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	IsSystem    bool     `json:"is_system"`
+	IsFilter    bool     `json:"is_filter"`
+	FollowLevel bool     `json:"follow_level"`
+	Content     string   `json:"content"`
+	Items       []string `json:"-"`
 }
 
 type PluginUploadFile struct {
@@ -113,6 +114,10 @@ func (g *CustomField) SplitContent() []string {
 // CheckSetFilter 支付允许筛选
 func (g *CustomField) CheckSetFilter() bool {
 	if g.Type != CustomFieldTypeRadio && g.Type != CustomFieldTypeCheckbox && g.Type != CustomFieldTypeSelect {
+		g.IsFilter = false
+		return false
+	}
+	if g.FollowLevel {
 		g.IsFilter = false
 		return false
 	}

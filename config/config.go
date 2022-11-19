@@ -84,6 +84,7 @@ var Server ServerJson
 var JsonData ConfigJson
 var CollectorConfig CollectorJson
 var KeywordConfig KeywordJson
+var AnqiUser AnqiUserConfig
 var RestartChan = make(chan bool, 1)
 var languages = map[string]string{}
 

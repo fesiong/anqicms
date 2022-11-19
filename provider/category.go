@@ -129,7 +129,12 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		req.UrlToken = library.GetPinyin(req.Title)
 	}
 	category.UrlToken = VerifyCategoryUrlToken(req.UrlToken, category.Id)
-
+	if category.ModuleId == 0 {
+		modules := GetCacheModules()
+		if len(modules) > 0 {
+			category.ModuleId = modules[0].Id
+		}
+	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")

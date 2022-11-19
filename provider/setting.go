@@ -36,6 +36,7 @@ const (
 	UserSettingKey        = "user"
 	OrderSettingKey       = "order"
 	FulltextSettingKey    = "fulltext"
+	AnqiSettingKey        = "anqi"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -67,6 +68,7 @@ func InitSetting() {
 	LoadUserSetting()
 	LoadOrderSetting()
 	LoadFulltextSetting()
+	LoadAnqiUser()
 
 	LoadCollectorSetting()
 	LoadKeywordSetting()
@@ -272,6 +274,8 @@ func LoadStorageSetting() {
 	if config.JsonData.PluginStorage.StorageType == "" {
 		config.JsonData.PluginStorage.StorageType = config.StorageTypeLocal
 	}
+	// 初始化存储桶
+	InitBucket()
 }
 
 func LoadPaySetting() {
@@ -328,6 +332,15 @@ func LoadFulltextSetting() {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &config.JsonData.PluginFulltext)
 	}
+}
+
+func LoadAnqiUser() {
+	value := GetSettingValue(AnqiSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &config.AnqiUser)
+	}
+
+	go AnqiCheckLogin()
 }
 
 func LoadCollectorSetting() {

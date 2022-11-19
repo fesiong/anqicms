@@ -52,7 +52,7 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		}
 	}
 
-	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉
+	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉，并且不是跟随阅读等级
 	var filterFields []config.CustomField
 	var filterGroups []response.FilterGroup
 	var newParams = make(url.Values)

@@ -45,9 +45,21 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		archiveDetail, _ = provider.GetArchiveById(id)
 		// check has Order
 		if fieldName == "HasOrdered" && archiveDetail != nil {
+			// if read level larger than 0, then need to check permission
+			if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
+				archiveDetail.HasOrdered = true
+			}
 			userInfo, ok := ctx.Public["userInfo"].(*model.User)
 			if ok && userInfo.Id > 0 {
-				archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
+				if archiveDetail.Price > 0 {
+					archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
+				}
+				if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
+					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+					if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
+						archiveDetail.HasOrdered = true
+					}
+				}
 				discount := provider.GetUserDiscount(userInfo.Id, userInfo)
 				if discount > 0 {
 					archiveDetail.FavorablePrice = archiveDetail.Price * discount / 100

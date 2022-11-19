@@ -37,6 +37,10 @@ func ApiArchiveDetail(ctx iris.Context) {
 	}
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	// if read level larger than 0, then need to check permission
+	if archive.Price == 0 && archive.ReadLevel == 0 {
+		archive.HasOrdered = true
+	}
 	if userId > 0 {
 		if archive.Price > 0 {
 			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
@@ -69,6 +73,9 @@ func ApiArchiveDetail(ctx iris.Context) {
 	for i := range archive.Extra {
 		if archive.Extra[i].Value == nil || archive.Extra[i].Value == "" {
 			archive.Extra[i].Value = archive.Extra[i].Default
+		}
+		if archive.Extra[i].FollowLevel && !archive.HasOrdered {
+			delete(archive.Extra, i)
 		}
 	}
 	tags := provider.GetTagsByItemId(archive.Id)
@@ -384,10 +391,28 @@ func ApiArchiveParams(ctx iris.Context) {
 	}
 
 	archiveParams := provider.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
-
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	// if read level larger than 0, then need to check permission
+	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
+		archiveDetail.HasOrdered = true
+	}
+	if userId > 0 {
+		if archiveDetail.Price > 0 {
+			archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userId, archiveDetail.Id)
+		}
+		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
+			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+			if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
+				archiveDetail.HasOrdered = true
+			}
+		}
+	}
 	for i := range archiveParams {
 		if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 			archiveParams[i].Value = archiveParams[i].Default
+		}
+		if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
+			delete(archiveParams, i)
 		}
 	}
 	if sorted {

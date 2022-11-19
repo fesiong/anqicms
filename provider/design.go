@@ -247,6 +247,23 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 	return &designInfo, nil
 }
 
+func GetDesignTemplateFiles(packageName string) ([]response.DesignFile, error) {
+
+	basePath := config.ExecPath + "template/" + packageName
+	// 尝试读取模板文件
+	files := readAllFiles(basePath)
+	var templates = make([]response.DesignFile, 0, len(files))
+	for i := range files {
+		if strings.HasSuffix(files[i].Path, "config.json") || strings.HasSuffix(files[i].Path, "data.db") {
+			continue
+		}
+		files[i].Path = strings.TrimPrefix(files[i].Path, basePath+"/")
+		templates = append(templates, files[i])
+	}
+
+	return templates, nil
+}
+
 func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 	// 解压
 	zipReader, err := zip.NewReader(file, info.Size)
@@ -903,6 +920,86 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 	}
 }
 
+func CopyDesignFile(req request.CopyDesignFileRequest) error {
+	if req.NewPath == "" && req.NewPath == req.Path {
+		return errors.New("新文件名和被复制文件一致，请重新填写")
+	}
+	// 先验证文件名是否合法
+	designInfo, err := GetDesignInfo(req.Package, false)
+	if err != nil {
+		return errors.New(config.Lang("模板不存在"))
+	}
+
+	// 先检查文件是否存在
+	var basePath string
+	if req.Type == "static" {
+		basePath = config.ExecPath + "public/static/" + req.Package + "/"
+	} else {
+		basePath = config.ExecPath + "template/" + req.Package + "/"
+	}
+	fullPath := filepath.Clean(basePath + req.Path)
+	if !strings.HasPrefix(fullPath, basePath) {
+		return errors.New(config.Lang("模板文件不存在"))
+	}
+
+	// 修改备注名称等
+	var designFileDetail response.DesignFile
+	var existsIndex = -1
+	if req.Type == "static" {
+		for i := range designInfo.StaticFiles {
+			if designInfo.StaticFiles[i].Path == req.Path {
+				designFileDetail = designInfo.StaticFiles[i]
+				existsIndex = i
+				break
+			}
+		}
+	} else {
+		for i := range designInfo.TplFiles {
+			if designInfo.TplFiles[i].Path == req.Path {
+				designFileDetail = designInfo.TplFiles[i]
+				existsIndex = i
+				break
+			}
+		}
+	}
+	if existsIndex != -1 {
+		// 文件已存在
+		return errors.New(config.Lang("新文件已存在，无法完成复制"))
+	}
+	// 如果进行了重命名
+	newPath := filepath.Clean(basePath + req.NewPath)
+	if !strings.HasPrefix(newPath, basePath) {
+		return errors.New(config.Lang("模板文件保存失败"))
+	}
+	req.Path = strings.TrimPrefix(newPath, basePath)
+	// 开始复制
+	oldFile, err := os.ReadFile(fullPath)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(newPath, oldFile, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	//
+	// 写入文件
+	designFileDetail = response.DesignFile{
+		Path:    req.NewPath,
+		Remark:  req.Remark,
+		Content: "",
+		LastMod: 0,
+	}
+	if req.Type != "static" {
+		designInfo.TplFiles = append(designInfo.TplFiles, designFileDetail)
+	} else {
+		designInfo.StaticFiles = append(designInfo.StaticFiles, designFileDetail)
+	}
+	// 更新文件
+	err = writeDesignInfo(designInfo)
+
+	return err
+}
+
 func writeDesignInfo(designInfo *response.DesignPackage) error {
 	// 更新文件
 	basePath := config.ExecPath + "template/" + designInfo.Package + "/"
@@ -1105,7 +1202,7 @@ func restoreSingleData(name string, reader io.ReadCloser) {
 				if err == nil {
 					v.Value = string(buf)
 				}
-			} else if v.Key == StorageSettingKey || v.Key == ImportApiSettingKey {
+			} else if v.Key == StorageSettingKey || v.Key == ImportApiSettingKey || v.Key == AnqiSettingKey {
 				continue
 			}
 			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
@@ -1467,7 +1564,7 @@ func BackupDesignData(packageName string) error {
 		_ = writeDataToZip("redirects", redirects, zw)
 	}
 	var settings []model.Setting
-	dao.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey}).Find(&settings)
+	dao.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey, AnqiSettingKey}).Find(&settings)
 	if len(settings) > 0 {
 		_ = writeDataToZip("settings", settings, zw)
 	}
@@ -1520,6 +1617,11 @@ func writeDataToZip(name string, data interface{}, zw *zip.Writer) error {
 	buf, err := json.Marshal(data)
 	if err != nil {
 		return err
+	}
+	// 全局替换 域名
+	buf = bytes.ReplaceAll(buf, []byte(config.JsonData.System.BaseUrl), []byte{})
+	if config.JsonData.PluginStorage.StorageUrl != config.JsonData.System.BaseUrl {
+		buf = bytes.ReplaceAll(buf, []byte(config.JsonData.PluginStorage.StorageUrl), []byte{})
 	}
 	size := len(buf)
 	header := &zip.FileHeader{

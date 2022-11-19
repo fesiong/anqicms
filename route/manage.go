@@ -26,6 +26,15 @@ func manageRoute(app *iris.Application) {
 			version.Post("/upgrade", manageController.VersionUpgrade)
 		}
 
+		anqi := manage.Party("/anqi")
+		{
+			anqi.Get("/info", manageController.GetAnqiInfo)
+			anqi.Post("/login", manageController.AnqiLogin)
+			anqi.Post("/upload", manageController.AnqiUploadAttachment)
+			anqi.Post("/template/share", manageController.AnqiShareTemplate)
+			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
+		}
+
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			admin.Get("/menus", manageController.AdminMenus)
@@ -150,9 +159,11 @@ func manageRoute(app *iris.Application) {
 			design.Post("/file/history/delete", manageController.DeleteDesignFileHistories)
 			design.Post("/file/restore", manageController.RestoreDesignFile)
 			design.Post("/file/save", manageController.SaveDesignFile)
+			design.Post("/file/copy", manageController.CopyDesignFile)
 			design.Post("/file/upload", manageController.UploadDesignFile)
 			design.Post("/file/delete", manageController.DeleteDesignFile)
 			design.Get("/docs", manageController.GetDesignDocs)
+			design.Get("/file/templates", manageController.GetDesignTemplateFiles)
 		}
 
 		plugin := manage.Party("/plugin", middleware.ParseAdminToken, middleware.AdminPermission)

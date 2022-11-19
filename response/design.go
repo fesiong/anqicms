@@ -1,6 +1,8 @@
 package response
 
 type DesignPackage struct {
+	TemplateId   uint         `json:"template_id"`
+	AuthId       uint         `json:"auth_id"`
 	Name         string       `json:"name"`
 	Package      string       `json:"package"`
 	Version      string       `json:"version"`

@@ -22,7 +22,8 @@ type Model struct {
 }
 
 type CustomField struct {
-	Name    string      `json:"name"`
-	Value   interface{} `json:"value"`
-	Default interface{} `json:"default"`
+	Name        string      `json:"name"`
+	Value       interface{} `json:"value"`
+	Default     interface{} `json:"default"`
+	FollowLevel bool        `json:"follow_level"`
 }

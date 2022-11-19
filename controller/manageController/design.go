@@ -434,6 +434,33 @@ func SaveDesignFile(ctx iris.Context) {
 	})
 }
 
+func CopyDesignFile(ctx iris.Context) {
+	var req request.CopyDesignFileRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.CopyDesignFile(req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("复制模板文件：%s => %s", req.Package, req.Path))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "复制成功",
+	})
+}
+
 func DeleteDesignFile(ctx iris.Context) {
 	var req request.SaveDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
@@ -458,6 +485,24 @@ func DeleteDesignFile(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "删除成功",
+	})
+}
+
+func GetDesignTemplateFiles(ctx iris.Context) {
+	packageName := config.JsonData.System.TemplateName
+	templates, err := provider.GetDesignTemplateFiles(packageName)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": templates,
 	})
 }
 
