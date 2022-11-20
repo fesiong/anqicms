@@ -165,6 +165,7 @@ func ApiArchiveFilters(ctx iris.Context) {
 func ApiArchiveList(ctx iris.Context) {
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
+	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	var categoryIds []uint
 	var categoryDetail *model.Category
 	tmpCatId := ctx.URLParam("categoryId")
@@ -276,6 +277,10 @@ func ApiArchiveList(ctx iris.Context) {
 		}
 	} else {
 		builder := dao.DB.Model(&model.Archive{}).Where("`status` = 1")
+
+		if authorId > 0 {
+			builder = builder.Where("user_id = ?", authorId)
+		}
 
 		if moduleId > 0 {
 			builder = builder.Where("module_id = ?", moduleId)

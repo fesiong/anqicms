@@ -31,9 +31,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	moduleId := uint(0)
 	var categoryIds []uint
+	var authorId = uint(0)
 
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
+	}
+	if args["authorId"] != nil {
+		authorId = uint(args["authorId"].Integer())
 	}
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
@@ -189,7 +193,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	} else {
 		builder := dao.DB.Model(&model.Archive{}).Where("`status` = 1")
-
+		if authorId > 0 {
+			builder = builder.Where("user_id = ?", authorId)
+		}
 		if moduleId > 0 {
 			builder = builder.Where("module_id = ?", moduleId)
 		}
