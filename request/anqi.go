@@ -7,6 +7,7 @@ type AnqiLoginRequest struct {
 
 type AnqiTemplateRequest struct {
 	TemplateId    uint     `json:"template_id"`
+	AutoBackup    bool     `json:"auto_backup"`
 	Name          string   `json:"name"`
 	Price         int64    `json:"price"`
 	Author        string   `json:"author"`
