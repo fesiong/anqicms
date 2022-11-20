@@ -14,8 +14,8 @@ func AttachmentUpload(ctx iris.Context) {
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
-			"msg":    err.Error(),
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -25,8 +25,8 @@ func AttachmentUpload(ctx iris.Context) {
 		_, err := provider.GetAttachmentById(attachId)
 		if err != nil {
 			ctx.JSON(iris.Map{
-				"status": config.StatusFailed,
-				"msg":    config.Lang("需要替换的图片资源不存在"),
+				"code": config.StatusFailed,
+				"msg":  config.Lang("需要替换的图片资源不存在"),
 			})
 			return
 		}
@@ -35,8 +35,8 @@ func AttachmentUpload(ctx iris.Context) {
 	attachment, err := provider.AttachmentUpload(file, info, categoryId, attachId)
 	if err != nil {
 		ctx.JSON(iris.Map{
-			"status": config.StatusFailed,
-			"msg":    err.Error(),
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
 		})
 		return
 	}
