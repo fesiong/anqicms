@@ -51,7 +51,7 @@ func GetAnqiInfo(ctx iris.Context) {
 }
 
 func AnqiUploadAttachment(ctx iris.Context) {
-	file, _, err := ctx.FormFile("file")
+	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -68,7 +68,7 @@ func AnqiUploadAttachment(ctx iris.Context) {
 		})
 		return
 	}
-	attachment, err := provider.AnqiUploadAttachment(fileBytes, "file")
+	attachment, err := provider.AnqiUploadAttachment(fileBytes, info.Filename)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
