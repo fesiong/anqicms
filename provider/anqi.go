@@ -149,7 +149,7 @@ func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 	}
 
 	var result AnqiAttachmentResult
-	_, body, errs := NewAuthReq(gorequest.TypeMultipart).Post(AnqiApi+"/template/upload").SendFile(data, name, "file").EndStruct(&result)
+	_, body, errs := NewAuthReq(gorequest.TypeMultipart).Post(AnqiApi+"/template/upload").SendFile(data, name, "attach").EndStruct(&result)
 	if len(errs) > 0 {
 		library.DebugLog("error", string(body))
 		return nil, errs[0]
