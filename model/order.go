@@ -24,6 +24,8 @@ type Order struct {
 	FinishedTime      int64  `json:"finished_time" gorm:"column:finished_time;type:int(10) not null;default:0;comment:订单完成时间"`
 	DiscountAmount    int64  `json:"discount_amount" gorm:"column:discount_amount;type:bigint(20) not null;default:0;comment:优惠金额"` // 可能一个订单支持多个优惠
 	CouponCodeId      string `json:"-" gorm:"column:coupon_code_id;type:varchar(36) not null;default:''"`
+	SellerId          uint   `json:"seller_id" gorm:"column:seller_id;type:int(10) unsigned not null;default:0;index"` // 卖家
+	SellerAmount      int64  `json:"seller_amount" gorm:"column:seller_amount;type:bigint(20) not null;default:0;comment:卖家可得金额"`
 	ShareUserId       uint   `json:"share_user_id" gorm:"column:share_user_id;type:int(10) unsigned not null;default:0;index"`                // 分享者
 	ShareParentUserId uint   `json:"share_parent_user_id" gorm:"column:share_parent_user_id;type:int(10) unsigned not null;default:0;index"`  // 分享者的上级
 	ShareAmount       int64  `json:"share_amount" gorm:"column:share_amount;type:bigint(20) not null;default:0;comment:分销可得金额"`               // 分销可得金额

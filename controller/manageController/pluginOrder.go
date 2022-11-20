@@ -241,6 +241,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	config.JsonData.PluginOrder.NoProcess = req.NoProcess
 	config.JsonData.PluginOrder.AutoFinishDay = req.AutoFinishDay
 	config.JsonData.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
+	config.JsonData.PluginOrder.SellerPercent = req.SellerPercent
 
 	err := provider.SaveSettingValue(provider.OrderSettingKey, config.JsonData.PluginOrder)
 	if err != nil {

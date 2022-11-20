@@ -210,6 +210,43 @@ func SetOrderFinished(order *model.Order) error {
 		return err
 	}
 	// 处理订单完成，并开始分钱
+	// seller
+	if order.SellerAmount > 0 {
+		sellerCommission := model.Commission{
+			UserId:      order.SellerId,
+			OrderId:     order.OrderId,
+			OrderAmount: order.Amount,
+			Amount:      order.SellerAmount,
+			Status:      0,
+			WithdrawId:  0,
+			Remark:      "销售收入",
+		}
+		err = tx.Save(&sellerCommission).Error
+		if err != nil {
+			tx.Rollback()
+			return err
+		}
+		tx.Model(model.User{}).Where("`id` = ?", order.SellerId).UpdateColumn("balance", gorm.Expr("`balance` + ?", order.SellerAmount))
+		var userBalance int64
+		err = tx.Model(&model.User{}).Where("`id` = ?", order.SellerId).Pluck("balance", &userBalance).Error
+		//状态更改了，增加一条记录到用户
+		finance := model.Finance{
+			UserId:      order.SellerId,
+			Direction:   config.FinanceIncome,
+			Amount:      order.SellerAmount,
+			AfterAmount: userBalance,
+			Action:      config.FinanceActionSale,
+			OrderId:     order.OrderId,
+			Status:      1,
+		}
+		err = tx.Create(&finance).Error
+		if err != nil {
+			//
+		}
+		var totalReward response.SumAmount
+		tx.Model(model.Commission{}).Where("`user_id` = ?", order.SellerId).Select("SUM(`amount`) as total").Take(&totalReward)
+		tx.Model(model.User{}).Where("`id` = ?", order.SellerId).UpdateColumn("total_reward", totalReward.Total)
+	}
 	if order.ShareAmount > 0 {
 		//
 		shareUser, err := GetUserInfoById(order.ShareUserId)
@@ -246,7 +283,7 @@ func SetOrderFinished(order *model.Order) error {
 				//
 			}
 			var totalReward response.SumAmount
-			tx.Model(model.Commission{}).Where("`user_id` = ?").Select("SUM(`amount`) as total").Take(&totalReward)
+			tx.Model(model.Commission{}).Where("`user_id` = ?", shareUser.Id).Select("SUM(`amount`) as total").Take(&totalReward)
 			tx.Model(model.User{}).Where("`id` = ?", shareUser.Id).UpdateColumn("total_reward", totalReward.Total)
 		}
 
@@ -260,7 +297,7 @@ func SetOrderFinished(order *model.Order) error {
 				WithdrawId:  0,
 				Remark:      "",
 			}
-			err = dao.DB.Save(&shareAmount).Error
+			err = tx.Save(&shareAmount).Error
 			if err != nil {
 				tx.Rollback()
 				return err
@@ -283,31 +320,31 @@ func SetOrderFinished(order *model.Order) error {
 				//
 			}
 			var totalReward response.SumAmount
-			tx.Model(model.Commission{}).Where("`user_id` = ?").Select("SUM(`amount`) as total").Take(&totalReward)
+			tx.Model(model.Commission{}).Where("`user_id` = ?", order.ShareParentUserId).Select("SUM(`amount`) as total").Take(&totalReward)
 			tx.Model(model.User{}).Where("`id` = ?", order.ShareParentUserId).UpdateColumn("total_reward", totalReward.Total)
 		}
-		// 如果是vip订单，则还需要处理VIP信息
-		if order.Type == config.OrderTypeVip {
-			var user model.User
-			var orderDetail model.OrderDetail
-			err = tx.Model(model.User{}).Where("`id` = ?", order.UserId).Take(&user).Error
-			err2 := tx.Model(model.OrderDetail{}).Where("`order_id` = ?", order.OrderId).Take(&orderDetail).Error
-			if err == nil && err2 == nil {
-				startTime := user.ExpireTime
-				if startTime < time.Now().Unix() {
-					startTime = time.Now().Unix()
-				}
-				var group model.UserGroup
-				err = tx.Model(model.UserGroup{}).Where("`id` = ?", orderDetail.GoodsId).Take(&group).Error
-				if err != nil {
-					group.Setting.ExpireDay = 365
-				}
-				startTime += int64(group.Setting.ExpireDay) * 86400
-
-				user.ExpireTime = startTime
-				user.GroupId = group.Id
-				tx.Save(&user)
+	}
+	// 如果是vip订单，则还需要处理VIP信息
+	if order.Type == config.OrderTypeVip {
+		var user model.User
+		var orderDetail model.OrderDetail
+		err = tx.Model(model.User{}).Where("`id` = ?", order.UserId).Take(&user).Error
+		err2 := tx.Model(model.OrderDetail{}).Where("`order_id` = ?", order.OrderId).Take(&orderDetail).Error
+		if err == nil && err2 == nil {
+			startTime := user.ExpireTime
+			if startTime < time.Now().Unix() {
+				startTime = time.Now().Unix()
 			}
+			var group model.UserGroup
+			err = tx.Model(model.UserGroup{}).Where("`id` = ?", orderDetail.GoodsId).Take(&group).Error
+			if err != nil {
+				group.Setting.ExpireDay = 365
+			}
+			startTime += int64(group.Setting.ExpireDay) * 86400
+
+			user.ExpireTime = startTime
+			user.GroupId = group.Id
+			tx.Save(&user)
 		}
 	}
 	tx.Commit()
@@ -643,6 +680,7 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	var amount int64
 	var originAmount int64
 	var remark = req.Remark
+	var sellerId uint = 0
 	if remark == "" {
 		if req.Type == config.OrderTypeVip {
 			group, err := GetUserGroupInfo(req.Details[0].GoodsId)
@@ -657,6 +695,15 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 				if err != nil {
 					tx.Rollback()
 					return nil, err
+				}
+				if archive.UserId > 0 {
+					if sellerId == 0 {
+						sellerId = archive.UserId
+					}
+					if sellerId != archive.UserId {
+						tx.Rollback()
+						return nil, errors.New(config.Lang("不支持跨店下单"))
+					}
 				}
 				if remark == "" {
 					remark += archive.Title + config.Lang("等")
@@ -780,6 +827,11 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 				}
 			}
 		}
+	}
+	order.SellerId = sellerId
+	if sellerId > 0 && config.JsonData.PluginOrder.SellerPercent > 0 {
+		sellerAmount := order.Amount - order.ShareAmount - order.ShareParentAmount
+		order.SellerAmount = sellerAmount
 	}
 
 	tx.Save(&order)

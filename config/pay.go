@@ -26,4 +26,5 @@ type PluginOrderConfig struct {
 	NoProcess       bool  `json:"no_process"`        // 是否没有交易流程
 	AutoFinishDay   int   `json:"auto_finish_day"`   // 自动完成订单时间
 	AutoCloseMinute int64 `json:"auto_close_minute"` // 自动关闭订单时间
+	SellerPercent   int64 `json:"seller_percent"`    // 商家销售获得收益比例
 }
