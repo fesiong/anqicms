@@ -42,6 +42,9 @@ func ApiArchiveDetail(ctx iris.Context) {
 		archive.HasOrdered = true
 	}
 	if userId > 0 {
+		if archive.UserId == userId {
+			archive.HasOrdered = true
+		}
 		if archive.Price > 0 {
 			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
 			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
@@ -402,6 +405,9 @@ func ApiArchiveParams(ctx iris.Context) {
 		archiveDetail.HasOrdered = true
 	}
 	if userId > 0 {
+		if archiveDetail.UserId == userId {
+			archiveDetail.HasOrdered = true
+		}
 		if archiveDetail.Price > 0 {
 			archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userId, archiveDetail.Id)
 		}

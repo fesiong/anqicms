@@ -45,6 +45,9 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			}
 			userInfo, ok := ctx.Public["userInfo"].(*model.User)
 			if ok && userInfo.Id > 0 {
+				if archiveDetail.UserId == userInfo.Id {
+					archiveDetail.HasOrdered = true
+				}
 				if archiveDetail.Price > 0 {
 					archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
 				}

@@ -75,6 +75,9 @@ func ArchiveDetail(ctx iris.Context) {
 	// check the archive had paid if the archive need to pay.
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
+		if archive.UserId == userId {
+			archive.HasOrdered = true
+		}
 		if archive.Price > 0 {
 			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
 			// check price can make any discount？
