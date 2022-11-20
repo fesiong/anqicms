@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
@@ -8,6 +9,8 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/request"
+	"mime/multipart"
+	"path/filepath"
 	"time"
 )
 
@@ -118,6 +121,8 @@ func AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 		return err
 	}
 	req.TemplatePath = attach.FileLocation
+	req.TemplateType = design.TemplateType
+	req.TemplateId = design.TemplateId
 	// 开始提交数据
 	_, body, errs := NewAuthReq().Post(AnqiApi + "/template/share").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
@@ -150,8 +155,42 @@ func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 	return &result.Data, nil
 }
 
-func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) {
-	
+func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
+	var result AnqiTemplateResult
+
+	_, body, errs := NewAuthReq().Post(AnqiApi + "/template/download").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		library.DebugLog("error", string(body))
+		return errs[0]
+	}
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+
+	downloadUrl, ok := result.Data.(string)
+	if !ok {
+		return errors.New("读取下载地址错误")
+	}
+
+	_, body, errs = NewAuthReq().Get(downloadUrl).EndBytes()
+	if errs != nil {
+		return errs[0]
+	}
+
+	info := &multipart.FileHeader{
+		Filename: filepath.Base(downloadUrl),
+		Header:   nil,
+		Size:     int64(len(body)),
+	}
+	file := bytes.NewReader(body)
+
+	// 将模板写入到本地
+	err := UploadDesignZip(file, info)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func NewAuthReq() *gorequest.SuperAgent {

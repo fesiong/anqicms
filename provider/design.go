@@ -264,7 +264,7 @@ func GetDesignTemplateFiles(packageName string) ([]response.DesignFile, error) {
 	return templates, nil
 }
 
-func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
+func UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
 	// 解压
 	zipReader, err := zip.NewReader(file, info.Size)
 	if err != nil {

@@ -124,15 +124,15 @@ func AnqiDownloadTemplate(ctx iris.Context) {
 		})
 		return
 	}
-	//
-	//err = provider.AnqiDownloadTemplate(&req)
-	//if err != nil {
-	//	ctx.JSON(iris.Map{
-	//		"code": config.StatusFailed,
-	//		"msg":  err.Error(),
-	//	})
-	//	return
-	//}
+
+	err = provider.AnqiDownloadTemplate(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
