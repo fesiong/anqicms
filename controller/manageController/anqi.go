@@ -79,7 +79,7 @@ func AnqiUploadAttachment(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "",
+		"msg":  "上传成功",
 		"data": attachment,
 	})
 }
@@ -136,6 +136,6 @@ func AnqiDownloadTemplate(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "",
+		"msg":  "下载成功",
 	})
 }

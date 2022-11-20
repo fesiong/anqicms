@@ -274,10 +274,10 @@ func UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
 	packageName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
 	// 先尝试读取config.json
 	tmpFile, err := zipReader.Open("template/config.json")
+	var designInfo response.DesignPackage
 	if err == nil {
 		data, err := io.ReadAll(tmpFile)
 		if err == nil {
-			var designInfo response.DesignPackage
 			err = json.Unmarshal(data, &designInfo)
 			if err == nil {
 				packageName = designInfo.Package
@@ -352,6 +352,9 @@ func UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
 		reader.Close()
 		_ = newFile.Close()
 	}
+	designInfo.Package = packageName
+	designInfo.Created = time.Now().Format("2006-01-02 15:04:05")
+	_ = writeDesignInfo(&designInfo)
 
 	return nil
 }
