@@ -108,7 +108,7 @@ func AnqiShareTemplate(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "",
+		"msg":  "提交成功",
 	})
 }
 

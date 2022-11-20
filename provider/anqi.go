@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"mime/multipart"
 	"path/filepath"
 	"time"
@@ -23,6 +24,12 @@ type AnqiLoginResult struct {
 }
 
 type AnqiTemplateResult struct {
+	Code int                    `json:"code"`
+	Msg  string                 `json:"msg"`
+	Data response.DesignPackage `json:"data"`
+}
+
+type AnqiDownloadTemplateResult struct {
 	Code int         `json:"code"`
 	Msg  string      `json:"msg"`
 	Data interface{} `json:"data"`
@@ -139,8 +146,16 @@ func AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 	if result.Code != 0 {
 		return errors.New(result.Msg)
 	}
+	design.TemplateId = result.Data.TemplateId
+	design.AuthId = result.Data.AuthId
+	design.Name = result.Data.Name
+	design.Version = result.Data.Version
+	design.Description = result.Data.Description
+	design.Author = result.Data.Author
+	design.Homepage = result.Data.Homepage
+	err = writeDesignInfo(design)
 
-	return nil
+	return err
 }
 
 func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
@@ -162,7 +177,7 @@ func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 }
 
 func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
-	var result AnqiTemplateResult
+	var result AnqiDownloadTemplateResult
 
 	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/template/download").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
