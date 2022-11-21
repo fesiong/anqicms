@@ -305,12 +305,15 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 		return
 	}
 
-	if !user.CheckPassword(req.OldPassword) {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  config.Lang("旧密码错误"),
-		})
-		return
+	// 如果初次设置密码，则不需要检查
+	if user.Password != "" {
+		if !user.CheckPassword(req.OldPassword) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  config.Lang("旧密码错误"),
+			})
+			return
+		}
 	}
 	err = user.EncryptPassword(req.Password)
 	if err != nil {
