@@ -14,7 +14,7 @@ type Archive struct {
 	SeoTitle     string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	UrlToken     string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
 	Keywords     string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
-	Description  string         `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Description  string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_id"`
 	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
 	Views        uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
