@@ -47,6 +47,9 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)
+		if content == "" && fieldName == "SeoTitle" {
+			content = tagDetail.Title
+		}
 	}
 
 	// output

@@ -77,6 +77,9 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		f := v.FieldByName(fieldName)
 
 		content := fmt.Sprintf("%v", f)
+		if content == "" && fieldName == "SeoTitle" {
+			content = archiveDetail.Title
+		}
 
 		if fieldName == "CreatedTime" || fieldName == "UpdatedTime" {
 			content = time.Unix(f.Int(), 0).Format(format)

@@ -64,7 +64,9 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	f := v.FieldByName(fieldName)
 
 	content := fmt.Sprintf("%v", f)
-
+	if content == "" && fieldName == "SeoTitle" {
+		content = pageDetail.Title
+	}
 	if node.name == "" {
 		writer.WriteString(content)
 	} else {

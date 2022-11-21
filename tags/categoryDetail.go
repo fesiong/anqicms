@@ -50,7 +50,9 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		f := v.FieldByName(fieldName)
 
 		content := fmt.Sprintf("%v", f)
-
+		if content == "" && fieldName == "SeoTitle" {
+			content = categoryDetail.Title
+		}
 		// output
 		if node.name == "" {
 			writer.WriteString(content)
