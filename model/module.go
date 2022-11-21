@@ -57,12 +57,17 @@ func (m *Module) Migrate(tx *gorm.DB, focus bool) {
 	dir := fmt.Sprintf("%stemplate/%s/%s", config.ExecPath, config.JsonData.System.TemplateName, m.TableName)
 	_, err := os.Stat(dir)
 	if err != nil && os.IsNotExist(err) {
-		// 创建文件夹
-		os.Mkdir(dir, os.ModePerm)
-		// 创建文件
-		os.WriteFile(dir+"/detail.html", []byte(m.TableName), os.ModePerm)
-		os.WriteFile(dir+"/index.html", []byte(m.TableName), os.ModePerm)
-		os.WriteFile(dir+"/list.html", []byte(m.TableName), os.ModePerm)
+		// 还需要考虑扁平化的情况
+		dir2 := fmt.Sprintf("%stemplate/%s/%s_detail.html", config.ExecPath, config.JsonData.System.TemplateName, m.TableName)
+		_, err = os.Stat(dir2)
+		if err != nil {
+			// 创建文件夹
+			os.Mkdir(dir, os.ModePerm)
+			// 创建文件
+			os.WriteFile(dir+"/detail.html", []byte(m.TableName), os.ModePerm)
+			os.WriteFile(dir+"/index.html", []byte(m.TableName), os.ModePerm)
+			os.WriteFile(dir+"/list.html", []byte(m.TableName), os.ModePerm)
+		}
 	}
 }
 
