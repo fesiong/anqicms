@@ -37,12 +37,12 @@ func GetBucket() (bucket *BucketStorage, err error) {
 		qiniuBucketClient:   nil,
 	}
 
-	err = bucket.InitBucket()
+	err = bucket.initBucket()
 
 	return
 }
 
-func (bs *BucketStorage) InitBucket() (err error) {
+func (bs *BucketStorage) initBucket() (err error) {
 	if bs.storageType == config.StorageTypeAliyun {
 		err = bs.initAliyunBucket()
 	} else if bs.storageType == config.StorageTypeTencent {

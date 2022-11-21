@@ -61,14 +61,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新Storage配置"))
 
-	err = provider.Storage.InitBucket()
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
+	provider.InitBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
