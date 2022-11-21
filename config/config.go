@@ -70,7 +70,7 @@ func initJSON() {
 	rawConfig, err := os.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		rawConfig = []byte("{\"db\":{},\"server\":{\"site_name\":\"安企内容管理系统(AnqiCMS)\",\"env\": \"production\",\"port\": 8001,\"log_level\":\"error\"}}")
+		rawConfig = []byte("{\"db\":{},\"server\":{\"env\": \"production\",\"port\": 8001,\"log_level\":\"error\"}}")
 	}
 
 	if err := json.Unmarshal(rawConfig, &Server); err != nil {
