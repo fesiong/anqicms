@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -323,6 +324,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 		})
 		return
 	}
+	dao.DB.Save(user)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
