@@ -29,6 +29,7 @@ func ApiImportArchive(ctx iris.Context) {
 	urlToken := ctx.PostValueTrim("url_token")
 	draft, _ := ctx.PostValueBool("draft")
 	cover, _ := ctx.PostValueBool("cover")
+	// todo 漏掉一些字段
 
 	category := provider.GetCategoryFromCache(categoryId)
 	if category == nil || category.Type != config.CategoryTypeArchive {
