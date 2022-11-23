@@ -830,7 +830,7 @@ func CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	}
 	order.SellerId = sellerId
 	if sellerId > 0 && config.JsonData.PluginOrder.SellerPercent > 0 {
-		sellerAmount := order.Amount - order.ShareAmount - order.ShareParentAmount
+		sellerAmount := (order.Amount - order.ShareAmount - order.ShareParentAmount) * config.JsonData.PluginOrder.SellerPercent / 100
 		order.SellerAmount = sellerAmount
 	}
 
