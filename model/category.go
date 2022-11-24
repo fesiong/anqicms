@@ -14,7 +14,7 @@ type Category struct {
 	SeoTitle       string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	Keywords       string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
 	UrlToken       string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
-	Description    string         `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Description    string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Content        string         `json:"content" gorm:"column:content;type:longtext default null"`
 	ModuleId       uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:0;index:idx_module_id"`
 	ParentId       uint           `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
