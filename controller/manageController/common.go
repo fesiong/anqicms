@@ -251,20 +251,19 @@ func VersionUpgrade(ctx iris.Context) {
 		os.Remove(tmpFile)
 	}()
 
-	needChange := false
 	var errorFiles []string
 	path, _ := os.Executable()
 	exec := filepath.Base(path)
 
 	execPath := filepath.Join(config.ExecPath, exec)
-	tmpExecPath := execPath + ".tmp"
+	tmpExecPath := execPath + ".new"
 
 	for _, f := range zipReader.File {
 		if f.FileInfo().IsDir() {
 			continue
 		}
 		// 模板文件不更新
-		if strings.Contains(f.Name, "static/") || strings.Contains(f.Name, "template/") {
+		if strings.Contains(f.Name, "static/") || strings.Contains(f.Name, "template/") || strings.Contains(f.Name, "favicon.ico") {
 			continue
 		}
 		reader, err := f.Open()
@@ -295,30 +294,33 @@ func VersionUpgrade(ctx iris.Context) {
 		_ = newFile.Close()
 	}
 	// 尝试更换主程序
-	err = os.Remove(execPath)
+	oldPath := execPath + ".old"
+	_ = os.Remove(oldPath)
+	err = os.Rename(execPath, oldPath)
 	if err == nil {
-		// 成功删除，则重命名
 		err = os.Rename(tmpExecPath, execPath)
 		if err == nil {
-			needChange = true
-			os.Chmod(execPath, os.ModePerm)
+			_ = os.Chmod(execPath, os.ModePerm)
+			// 移动成功
+			_ = os.Remove(oldPath)
+		} else {
+			//移动失败
+			err = os.Rename(oldPath, execPath)
 		}
+	} else {
+		log.Println("fail to rename old executable.")
 	}
 	if len(errorFiles) > 1 {
 		log.Println("Upgrade error files: ", errorFiles)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  fmt.Sprintf("版本更新失败, 以下文件未更新：%v", errorFiles),
+			"msg":  fmt.Sprintf("版本更新部分失败, 以下文件未更新：%v", errorFiles),
 		})
 		return
 	}
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, lastVersion.Version))
-	msg := "已升级版本。"
-	if !needChange {
-		msg += fmt.Sprintf("%s 更新的文件已被命名为 %s.tmp ，请先移除旧文件 %s，并将 %s.tmp 改名重命名为 %s", exec, exec, exec, exec, exec)
-	}
-	msg += "，请手动重启软件。"
+	msg := "已升级版本，请重启软件以使用新版。"
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,

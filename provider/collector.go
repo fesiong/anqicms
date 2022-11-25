@@ -1,13 +1,11 @@
 package provider
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/now"
-	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -17,7 +15,6 @@ import (
 	"log"
 	"math/rand"
 	"net/url"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -29,19 +26,12 @@ var emptyLinkPattern = regexp.MustCompile(emptyLinkPatternStr)
 
 func GetUserCollectorSetting() config.CollectorJson {
 	var collector config.CollectorJson
-	buf, err := os.ReadFile(fmt.Sprintf("%scollector.json", config.ExecPath))
-	configStr := ""
-	if err != nil {
-		//文件不存在
+	value := GetSettingValue(CollectorSettingKey)
+	if value == "" {
 		return collector
 	}
-	configStr = string(buf[:])
-	reg := regexp.MustCompile(`/\*.*\*/`)
 
-	configStr = reg.ReplaceAllString(configStr, "")
-	buf = []byte(configStr)
-
-	if err = json.Unmarshal(buf, &collector); err != nil {
+	if err := json.Unmarshal([]byte(value), &collector); err != nil {
 		return collector
 	}
 
@@ -100,29 +90,9 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 		}
 	}
 
-	//将现有配置写回文件
-	configFile, err := os.OpenFile(fmt.Sprintf("%scollector.json", config.ExecPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
-	if err != nil {
-		return err
-	}
-
-	defer configFile.Close()
-
-	buff := &bytes.Buffer{}
-
-	buf, err := json.MarshalIndent(collector, "", "\t")
-	if err != nil {
-		return err
-	}
-	buff.Write(buf)
-
-	_, err = io.Copy(configFile, buff)
-	if err != nil {
-		return err
-	}
-
+	_ = SaveSettingValue(CollectorSettingKey, collector)
 	//重新读取配置
-	config.LoadCollectorConfig()
+	LoadCollectorSetting()
 
 	return nil
 }

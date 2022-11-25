@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
@@ -14,7 +13,6 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net/url"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,19 +28,12 @@ type KeywordCSV struct {
 
 func GetUserKeywordSetting() config.KeywordJson {
 	var keywordJson config.KeywordJson
-	buf, err := os.ReadFile(fmt.Sprintf("%skeyword.json", config.ExecPath))
-	configStr := ""
-	if err != nil {
-		//文件不存在
+	value := GetSettingValue(KeywordSettingKey)
+	if value == "" {
 		return keywordJson
 	}
-	configStr = string(buf[:])
-	reg := regexp.MustCompile(`/\*.*\*/`)
 
-	configStr = reg.ReplaceAllString(configStr, "")
-	buf = []byte(configStr)
-
-	if err = json.Unmarshal(buf, &keywordJson); err != nil {
+	if err := json.Unmarshal([]byte(value), &keywordJson); err != nil {
 		return keywordJson
 	}
 
@@ -71,29 +62,9 @@ func SaveUserKeywordSetting(req config.KeywordJson, focus bool) error {
 		}
 	}
 
-	//将现有配置写回文件
-	configFile, err := os.OpenFile(fmt.Sprintf("%skeyword.json", config.ExecPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, os.ModePerm)
-	if err != nil {
-		return err
-	}
-
-	defer configFile.Close()
-
-	buff := &bytes.Buffer{}
-
-	buf, err := json.MarshalIndent(keywordJson, "", "\t")
-	if err != nil {
-		return err
-	}
-	buff.Write(buf)
-
-	_, err = io.Copy(configFile, buff)
-	if err != nil {
-		return err
-	}
-
+	_ = SaveSettingValue(KeywordSettingKey, keywordJson)
 	//重新读取配置
-	config.LoadKeywordConfig()
+	LoadKeywordSetting()
 
 	return nil
 }

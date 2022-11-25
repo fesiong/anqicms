@@ -11,7 +11,11 @@ import (
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"mime/multipart"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"runtime"
+	"syscall"
 	"time"
 )
 
@@ -158,6 +162,28 @@ func AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 	return err
 }
 
+func AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
+	if config.AnqiUser.AuthId == 0 {
+		return errors.New("请先登录 AnqiCMS 账号")
+	}
+	req.Version = config.Version
+	req.Platform = runtime.GOOS
+	req.Domain = config.JsonData.System.BaseUrl
+	// 开始提交数据
+	var result AnqiDownloadTemplateResult
+	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/feedback").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		library.DebugLog("error", string(body))
+		return errs[0]
+	}
+
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+
+	return nil
+}
+
 func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 	if config.AnqiUser.AuthId == 0 {
 		return nil, errors.New("请先登录 AnqiCMS 账号")
@@ -227,4 +253,28 @@ func NewAuthReq(contentType string) *gorequest.SuperAgent {
 		Set("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
 
 	return req
+}
+
+// Restart first need to stop iris. so it will call after iris shutdown complete.
+func Restart() error {
+	self, err := os.Executable()
+	if err != nil {
+		return err
+	}
+	args := os.Args
+	env := os.Environ()
+	// Windows does not support exec syscall.
+	if runtime.GOOS == "windows" {
+		cmd := exec.Command(self, args[1:]...)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+		cmd.Stdin = os.Stdin
+		cmd.Env = env
+		err = cmd.Run()
+		if err == nil {
+			os.Exit(0)
+		}
+		return err
+	}
+	return syscall.Exec(self, args, env)
 }

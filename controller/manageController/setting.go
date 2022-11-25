@@ -334,6 +334,8 @@ func SettingSafeForm(ctx iris.Context) {
 	config.JsonData.Safe.ContentForbidden = req.ContentForbidden
 	config.JsonData.Safe.IPForbidden = req.IPForbidden
 	config.JsonData.Safe.UAForbidden = req.UAForbidden
+	config.JsonData.Safe.APIOpen = req.APIOpen
+	config.JsonData.Safe.APIPublish = req.APIPublish
 
 	err := provider.SaveSettingValue(provider.SafeSettingKey, config.JsonData.Safe)
 	if err != nil {

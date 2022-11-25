@@ -26,13 +26,14 @@ func manageRoute(app *iris.Application) {
 			version.Post("/upgrade", manageController.VersionUpgrade)
 		}
 
-		anqi := manage.Party("/anqi")
+		anqi := manage.Party("/anqi", middleware.ParseAdminToken)
 		{
 			anqi.Get("/info", manageController.GetAnqiInfo)
 			anqi.Post("/login", manageController.AnqiLogin)
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
+			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)

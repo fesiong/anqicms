@@ -72,6 +72,8 @@ func InitSetting() {
 
 	LoadCollectorSetting()
 	LoadKeywordSetting()
+	// language
+	config.LoadLanguage()
 }
 
 func transferConfig() {

@@ -5,7 +5,7 @@ go 1.18
 require (
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.5+incompatible
-	github.com/chai2010/webp v1.1.1
+	github.com/chai2010/webp v1.1.2-0.20220219151144-e81c7511b15a
 	github.com/chromedp/chromedp v0.8.6
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v0.0.0-20220610011842-69c10b41e5e1
@@ -104,7 +104,7 @@ require (
 	github.com/yosssi/ace v0.0.5 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
 	golang.org/x/sys v0.1.0 // indirect
-	golang.org/x/time v0.1.0 // indirect
+	golang.org/x/time v0.0.0-20220922220347-f3bd1da661af // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect

@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"time"
 )
 
 func AnqiLogin(ctx iris.Context) {
@@ -137,5 +138,45 @@ func AnqiDownloadTemplate(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "下载成功",
+	})
+}
+
+func AnqiSendFeedback(ctx iris.Context) {
+	var req request.AnqiFeedbackRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		body, _ := ctx.GetBody()
+		library.DebugLog("error", err.Error(), string(body))
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err = provider.AnqiSendFeedback(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "提交成功",
+	})
+}
+
+func RestartAnqicms(ctx iris.Context) {
+	// first need to stop iris
+	config.RestartChan <- false
+
+	time.Sleep(3 * time.Second)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "重启成功",
 	})
 }

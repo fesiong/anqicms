@@ -399,3 +399,15 @@ func VerifyApiLinkToken(ctx iris.Context) {
 
 	ctx.Next()
 }
+
+func CheckApiOpen(ctx iris.Context) {
+	if 1 != config.JsonData.Safe.APIOpen {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  config.Lang("API接口功能未开放"),
+		})
+		return
+	}
+
+	ctx.Next()
+}

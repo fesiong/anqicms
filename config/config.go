@@ -8,7 +8,6 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -91,9 +90,6 @@ var languages = map[string]string{}
 func init() {
 	initPath()
 	initJSON()
-	LoadCollectorConfig()
-	LoadKeywordConfig()
-	LoadLanguage()
 }
 
 func WriteConfig() error {
@@ -119,184 +115,6 @@ func WriteConfig() error {
 	}
 
 	return nil
-}
-
-func LoadCollectorConfig() {
-	//先读取默认配置
-	CollectorConfig = DefaultCollectorConfig
-	//再根据用户配置来覆盖
-	buf, err := os.ReadFile(fmt.Sprintf("%scollector.json", ExecPath))
-	configStr := ""
-	if err != nil {
-		//文件不存在
-		return
-	}
-	configStr = string(buf[:])
-	reg := regexp.MustCompile(`/\*.*\*/`)
-
-	configStr = reg.ReplaceAllString(configStr, "")
-	buf = []byte(configStr)
-
-	var collector CollectorJson
-	if err = json.Unmarshal(buf, &collector); err != nil {
-		return
-	}
-
-	//开始处理
-	if collector.ErrorTimes != 0 {
-		CollectorConfig.ErrorTimes = collector.ErrorTimes
-	}
-	if collector.Channels != 0 {
-		CollectorConfig.Channels = collector.Channels
-	}
-	if collector.TitleMinLength != 0 {
-		CollectorConfig.TitleMinLength = collector.TitleMinLength
-	}
-	if collector.ContentMinLength != 0 {
-		CollectorConfig.ContentMinLength = collector.ContentMinLength
-	}
-
-	CollectorConfig.AutoCollect = collector.AutoCollect
-	CollectorConfig.AutoPseudo = collector.AutoPseudo
-	CollectorConfig.CategoryId = collector.CategoryId
-	CollectorConfig.StartHour = collector.StartHour
-	CollectorConfig.EndHour = collector.EndHour
-	CollectorConfig.FromWebsite = collector.FromWebsite
-	CollectorConfig.CollectMode = collector.CollectMode
-	CollectorConfig.SaveType = collector.SaveType
-	CollectorConfig.FromEngine = collector.FromEngine
-	CollectorConfig.Language = collector.Language
-	CollectorConfig.InsertImage = collector.InsertImage
-	CollectorConfig.Images = collector.Images
-
-	if CollectorConfig.Language == "" {
-		CollectorConfig.Language = LanguageZh
-	}
-
-	if collector.DailyLimit > 0 {
-		CollectorConfig.DailyLimit = collector.DailyLimit
-	}
-	if CollectorConfig.DailyLimit > 10000 {
-		//最大1万，否则发布不完
-		CollectorConfig.DailyLimit = 10000
-	}
-
-	for _, v := range collector.TitleExclude {
-		exists := false
-		for _, vv := range CollectorConfig.TitleExclude {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			CollectorConfig.TitleExclude = append(CollectorConfig.TitleExclude, v)
-		}
-	}
-	for _, v := range collector.TitleExcludePrefix {
-		exists := false
-		for _, vv := range CollectorConfig.TitleExcludePrefix {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			CollectorConfig.TitleExcludePrefix = append(CollectorConfig.TitleExcludePrefix, v)
-		}
-	}
-	for _, v := range collector.TitleExcludeSuffix {
-		exists := false
-		for _, vv := range CollectorConfig.TitleExcludeSuffix {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			CollectorConfig.TitleExcludeSuffix = append(CollectorConfig.TitleExcludeSuffix, v)
-		}
-	}
-	for _, v := range collector.ContentExcludeLine {
-		exists := false
-		for _, vv := range CollectorConfig.ContentExcludeLine {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			CollectorConfig.ContentExcludeLine = append(CollectorConfig.ContentExcludeLine, v)
-		}
-	}
-	for _, v := range collector.ContentExclude {
-		exists := false
-		for _, vv := range CollectorConfig.ContentExclude {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			CollectorConfig.ContentExclude = append(CollectorConfig.ContentExclude, v)
-		}
-	}
-	for _, v := range collector.ContentReplace {
-		exists := false
-		for _, vv := range CollectorConfig.ContentReplace {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			CollectorConfig.ContentReplace = append(CollectorConfig.ContentReplace, v)
-		}
-	}
-}
-
-func LoadKeywordConfig() {
-	//先读取默认配置
-	KeywordConfig = DefaultKeywordConfig
-	//再根据用户配置来覆盖
-	buf, err := os.ReadFile(fmt.Sprintf("%skeyword.json", ExecPath))
-	configStr := ""
-	if err != nil {
-		//文件不存在
-		return
-	}
-	configStr = string(buf[:])
-	reg := regexp.MustCompile(`/\*.*\*/`)
-
-	configStr = reg.ReplaceAllString(configStr, "")
-	buf = []byte(configStr)
-
-	var keyword KeywordJson
-	if err = json.Unmarshal(buf, &keyword); err != nil {
-		return
-	}
-
-	KeywordConfig.AutoDig = keyword.AutoDig
-	KeywordConfig.FromEngine = keyword.FromEngine
-	KeywordConfig.FromWebsite = keyword.FromWebsite
-	KeywordConfig.Language = keyword.Language
-
-	for _, v := range keyword.TitleExclude {
-		exists := false
-		for _, vv := range KeywordConfig.TitleExclude {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			KeywordConfig.TitleExclude = append(KeywordConfig.TitleExclude, v)
-		}
-	}
-	for _, v := range keyword.TitleReplace {
-		exists := false
-		for _, vv := range KeywordConfig.TitleReplace {
-			if vv == v {
-				exists = true
-			}
-		}
-		if !exists {
-			KeywordConfig.TitleReplace = append(KeywordConfig.TitleReplace, v)
-		}
-	}
 }
 
 func LoadLanguage() {

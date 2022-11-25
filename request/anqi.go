@@ -22,3 +22,13 @@ type AnqiTemplateRequest struct {
 	PreviewImages []string `json:"preview_images"`
 	TemplatePath  string   `json:"template_path"`
 }
+
+type AnqiFeedbackRequest struct {
+	Title    string   `json:"title"`
+	Type     string   `json:"type"`
+	Content  string   `json:"content"`
+	Domain   string   `json:"domain"`
+	Version  string   `json:"version"`
+	Platform string   `json:"platform"`
+	Images   []string `json:"images"`
+}

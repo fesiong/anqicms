@@ -1071,6 +1071,13 @@ func ApiGuestbookForm(ctx iris.Context) {
 }
 
 func ApiArchivePublish(ctx iris.Context) {
+	if config.JsonData.Safe.APIPublish != 1 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "发布接口已关闭",
+		})
+		return
+	}
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

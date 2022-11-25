@@ -72,12 +72,14 @@ func (bootstrap *Bootstrap) Serve() {
 	}()
 	// 伪静态规则和模板更改变化
 	for {
-		<-config.RestartChan
-		fmt.Println("监听到路由更改")
-		bootstrap.Application.Shutdown(context.Background())
-		log.Println("进程结束，开始重启")
-		// 重启
-		go bootstrap.Start()
+		select {
+		case <-config.RestartChan:
+			fmt.Println("监听到路由更改")
+			_ = bootstrap.Shutdown()
+			log.Println("进程结束，开始重启")
+			// 重启
+			_ = provider.Restart()
+		}
 	}
 }
 
