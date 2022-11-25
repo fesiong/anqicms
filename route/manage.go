@@ -33,6 +33,7 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
+			anqi.Post("/feedback", manageController.AnqiSendFeedback)
 			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
