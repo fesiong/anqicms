@@ -29,7 +29,13 @@ func ApiImportArchive(ctx iris.Context) {
 	urlToken := ctx.PostValueTrim("url_token")
 	draft, _ := ctx.PostValueBool("draft")
 	cover, _ := ctx.PostValueBool("cover")
-	// todo 漏掉一些字段
+	template := ctx.PostValueTrim("template")
+	canonicalUrl := ctx.PostValueTrim("canonical_url")
+	fixedLink := ctx.PostValueTrim("fixed_link")
+	flag := ctx.PostValueTrim("flag")
+	price := ctx.PostValueInt64Default("price", 0)
+	stock := ctx.PostValueInt64Default("stock", 0)
+	readLevel := ctx.PostValueIntDefault("read_level", 0)
 
 	category := provider.GetCategoryFromCache(categoryId)
 	if category == nil || category.Type != config.CategoryTypeArchive {
@@ -64,17 +70,25 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 
 	var req = request.Archive{
-		Title:       title,
-		SeoTitle:    seoTitle,
-		CategoryId:  categoryId,
-		Keywords:    keywords,
-		Description: description,
-		Content:     content,
-		Images:      images,
-		UrlToken:    urlToken,
-		Extra:       map[string]interface{}{},
-		Draft:       draft,
+		Title:        title,
+		SeoTitle:     seoTitle,
+		CategoryId:   categoryId,
+		Keywords:     keywords,
+		Description:  description,
+		Content:      content,
+		Template:     template,
+		CanonicalUrl: canonicalUrl,
+		FixedLink:    fixedLink,
+		Flag:         flag,
+		Price:        price,
+		Stock:        stock,
+		ReadLevel:    readLevel,
+		Images:       images,
+		UrlToken:     urlToken,
+		Extra:        map[string]interface{}{},
+		Draft:        draft,
 	}
+
 	// 如果传了ID，则采用覆盖的形式
 	if id > 0 {
 		_, err := provider.GetArchiveById(id)
