@@ -1071,13 +1071,6 @@ func ApiGuestbookForm(ctx iris.Context) {
 }
 
 func ApiArchivePublish(ctx iris.Context) {
-	if config.JsonData.Safe.APIPublish != 1 {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "发布接口已关闭",
-		})
-		return
-	}
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -1086,14 +1079,17 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
+	if config.JsonData.Safe.APIPublish != 1 {
+		req.Draft = true
+		return
+	}
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	req.Draft = true
 	req.UserId = uint(userId)
-
+	req.Extra = map[string]interface{}{}
 	// read body twice
 	var extraReq = map[string]interface{}{}
 	var err error
-	if err = ctx.ReadJSON(&req); err != nil {
+	if err = ctx.ReadJSON(&extraReq); err != nil {
 		body, _ := ctx.GetBody()
 		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
@@ -1102,7 +1098,11 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
-	req.Extra = extraReq
+	for k := range extraReq {
+		req.Extra[k] = map[string]interface{}{
+			"value": extraReq[k],
+		}
+	}
 
 	archive, err := provider.SaveArchive(&req)
 	if err != nil {
@@ -1112,6 +1112,7 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
+	archive.Link = provider.GetUrl("archive", archive, 0)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
