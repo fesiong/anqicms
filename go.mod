@@ -6,12 +6,10 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.0
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.5+incompatible
 	github.com/chai2010/webp v1.1.2-0.20220219151144-e81c7511b15a
-	github.com/chromedp/chromedp v0.8.6
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v0.0.0-20220610011842-69c10b41e5e1
 	github.com/fatih/structs v1.1.0
-	github.com/fesiong/pongo2 v0.0.0
-	github.com/flosch/pongo2/v4 v4.0.2
+	github.com/flosch/pongo2/v6 v6.0.0
 	github.com/go-pay/gopay v1.5.85
 	github.com/golang-jwt/jwt/v4 v4.4.2
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
@@ -48,8 +46,6 @@ require (
 	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
-	github.com/chromedp/cdproto v0.0.0-20220924210414-0e3390be1777 // indirect
-	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/clbanning/mxj v1.8.4 // indirect
 	github.com/cznic/fileutil v0.0.0-20181122101858-4d67cfea8c87 // indirect
 	github.com/cznic/internal v0.0.0-20181122101858-3279554c546e // indirect
@@ -62,10 +58,8 @@ require (
 	github.com/eknkc/amber v0.0.0-20171010120322-cdade1c07385 // indirect
 	github.com/elazarl/goproxy v0.0.0-20221015165544-a0805db90819 // indirect
 	github.com/fatih/color v1.13.0 // indirect
+	github.com/flosch/pongo2/v4 v4.0.2 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
-	github.com/gobwas/httphead v0.1.0 // indirect
-	github.com/gobwas/pool v0.2.1 // indirect
-	github.com/gobwas/ws v1.1.0 // indirect
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
@@ -111,5 +105,3 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	moul.io/http2curl v1.0.0 // indirect
 )
-
-replace github.com/fesiong/pongo2 => /Users/fesion/data/gitpath/pongo2

@@ -15,7 +15,7 @@ import (
 	"sync"
 
 	"github.com/fatih/structs"
-	"github.com/fesiong/pongo2"
+	"github.com/flosch/pongo2/v6"
 )
 
 type (

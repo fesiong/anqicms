@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/fesiong/pongo2"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/provider"
 )
 

@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/fesiong/pongo2"
+	"github.com/flosch/pongo2/v6"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"

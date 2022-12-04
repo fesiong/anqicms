@@ -1,6 +1,6 @@
 package tags
 
-import "github.com/fesiong/pongo2"
+import "github.com/flosch/pongo2/v6"
 
 func parseArgs(args map[string]pongo2.IEvaluator, ctx *pongo2.ExecutionContext) (map[string]*pongo2.Value, *pongo2.Error) {
 	parsedArgs := map[string]*pongo2.Value{}

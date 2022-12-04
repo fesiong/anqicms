@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/fesiong/pongo2"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 )
 
