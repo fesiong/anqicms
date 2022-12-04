@@ -56,15 +56,21 @@ type AnqiAttachmentResult struct {
 	Data AnqiAttachment `json:"data"`
 }
 
-func AnqiLogin(req *request.AnqiLoginRequest) error {
+// AnqiLogin
+// anqi 账号只需要登录一次，全部站点通用，信息记录在
+func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
+	defaultSite := CurrentSite(nil)
+	if w.Id == 1 {
+		defaultSite = w
+	}
 	// 重置
 	config.AnqiUser = config.AnqiUserConfig{}
-	_ = SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+	_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
 	var result AnqiLoginResult
-	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/login").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/login").Send(req).EndStruct(&result)
 
 	if len(errs) > 0 {
-		library.DebugLog("error", string(body))
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]
 	}
 
@@ -76,7 +82,7 @@ func AnqiLogin(req *request.AnqiLoginRequest) error {
 	config.AnqiUser = result.Data
 	config.AnqiUser.LoginTime = time.Now().Unix()
 	config.AnqiUser.CheckTime = config.AnqiUser.LoginTime
-	err := SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+	err := defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
 	if err != nil {
 		return err
 	}
@@ -84,18 +90,22 @@ func AnqiLogin(req *request.AnqiLoginRequest) error {
 	return nil
 }
 
-func AnqiCheckLogin() {
+func (w *Website) AnqiCheckLogin() {
 	if config.AnqiUser.AuthId == 0 {
 		return
 	}
 	if config.AnqiUser.CheckTime > time.Now().Add(-86400*time.Second).Unix() {
 		return
 	}
+	defaultSite := CurrentSite(nil)
+	if w.Id == 1 {
+		defaultSite = w
+	}
 	var result AnqiLoginResult
-	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/check").Send(config.AnqiUser).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/check").Send(config.AnqiUser).EndStruct(&result)
 
 	if len(errs) > 0 {
-		library.DebugLog("error", string(body))
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		config.AnqiUser.CheckTime = time.Now().Unix()
 		return
 	}
@@ -103,37 +113,37 @@ func AnqiCheckLogin() {
 	if result.Code != 0 {
 		// 重置
 		config.AnqiUser = config.AnqiUserConfig{}
-		_ = SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+		_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
 		return
 	}
 
 	// login success
 	config.AnqiUser.CheckTime = time.Now().Unix()
-	_ = SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+	_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
 }
 
-func AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
+func (w *Website) AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 	if config.AnqiUser.AuthId == 0 {
 		return errors.New("请先登录 AnqiCMS 账号")
 	}
-	design, err := GetDesignInfo(req.Package, false)
+	design, err := w.GetDesignInfo(req.Package, false)
 	if err != nil {
 		return err
 	}
 	if req.AutoBackup {
 		// 先自动备份
-		err = BackupDesignData(req.Package)
+		err = w.BackupDesignData(req.Package)
 		if err != nil {
 			return err
 		}
 	}
 	// 需要先推送design
 	var result AnqiTemplateResult
-	designData, err := CreateDesignZip(design.Package)
+	designData, err := w.CreateDesignZip(design.Package)
 	if err != nil {
 		return err
 	}
-	attach, err := AnqiUploadAttachment(designData.Bytes(), design.Package+".zip")
+	attach, err := w.AnqiUploadAttachment(designData.Bytes(), design.Package+".zip")
 	if err != nil {
 		return err
 	}
@@ -141,9 +151,9 @@ func AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 	req.TemplateType = design.TemplateType
 	req.TemplateId = design.TemplateId
 	// 开始提交数据
-	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/template/share").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/template/share").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
-		library.DebugLog("error", string(body))
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]
 	}
 
@@ -157,23 +167,23 @@ func AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 	design.Description = result.Data.Description
 	design.Author = result.Data.Author
 	design.Homepage = result.Data.Homepage
-	err = writeDesignInfo(design)
+	err = w.writeDesignInfo(design)
 
 	return err
 }
 
-func AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
+func (w *Website) AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
 	if config.AnqiUser.AuthId == 0 {
 		return errors.New("请先登录 AnqiCMS 账号")
 	}
 	req.Version = config.Version
 	req.Platform = runtime.GOOS
-	req.Domain = config.JsonData.System.BaseUrl
+	req.Domain = w.System.BaseUrl
 	// 开始提交数据
 	var result AnqiDownloadTemplateResult
-	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/feedback").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/feedback").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
-		library.DebugLog("error", string(body))
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]
 	}
 
@@ -184,15 +194,15 @@ func AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
 	return nil
 }
 
-func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
+func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 	if config.AnqiUser.AuthId == 0 {
 		return nil, errors.New("请先登录 AnqiCMS 账号")
 	}
 
 	var result AnqiAttachmentResult
-	_, body, errs := NewAuthReq(gorequest.TypeMultipart).Post(AnqiApi+"/template/upload").SendFile(data, name, "attach").EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).Post(AnqiApi+"/template/upload").SendFile(data, name, "attach").EndStruct(&result)
 	if len(errs) > 0 {
-		library.DebugLog("error", string(body))
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return nil, errs[0]
 	}
 	if result.Code != 0 {
@@ -202,12 +212,12 @@ func AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 	return &result.Data, nil
 }
 
-func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
+func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	var result AnqiDownloadTemplateResult
 
-	_, body, errs := NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/template/download").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/template/download").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
-		library.DebugLog("error", string(body))
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]
 	}
 	if result.Code != 0 {
@@ -219,7 +229,7 @@ func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 		return errors.New("读取下载地址错误")
 	}
 
-	_, body, errs = NewAuthReq(gorequest.TypeHTML).Get(downloadUrl).EndBytes()
+	_, body, errs = w.NewAuthReq(gorequest.TypeHTML).Get(downloadUrl).EndBytes()
 	if errs != nil {
 		return errs[0]
 	}
@@ -232,7 +242,7 @@ func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	file := bytes.NewReader(body)
 
 	// 将模板写入到本地
-	err := UploadDesignZip(file, info)
+	err := w.UploadDesignZip(file, info)
 	if err != nil {
 		return err
 	}
@@ -240,7 +250,7 @@ func AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	return nil
 }
 
-func NewAuthReq(contentType string) *gorequest.SuperAgent {
+func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
 	req := gorequest.New().
 		SetDoNotClearSuperAgent(true).
 		TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
@@ -248,7 +258,7 @@ func NewAuthReq(contentType string) *gorequest.SuperAgent {
 		Type(contentType).
 		Set("token", config.AnqiUser.Token).
 		//set key header
-		Set("domain", config.JsonData.System.BaseUrl).
+		Set("domain", w.System.BaseUrl).
 		//set oem header
 		Set("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
 

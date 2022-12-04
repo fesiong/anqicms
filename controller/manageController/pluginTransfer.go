@@ -10,7 +10,8 @@ import (
 )
 
 func GetTransferTask(ctx iris.Context) {
-	task := provider.GetTransferTask()
+	currentSite := provider.CurrentSite(ctx)
+	task := currentSite.GetTransferTask()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -47,6 +48,7 @@ func DownloadClientFile(ctx iris.Context) {
 }
 
 func CreateTransferTask(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.TransferWebsite
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -56,7 +58,7 @@ func CreateTransferTask(ctx iris.Context) {
 		return
 	}
 
-	task, err := provider.CreateTransferTask(&req)
+	task, err := currentSite.CreateTransferTask(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -73,7 +75,8 @@ func CreateTransferTask(ctx iris.Context) {
 }
 
 func TransferWebData(ctx iris.Context) {
-	task := provider.GetTransferTask()
+	currentSite := provider.CurrentSite(ctx)
+	task := currentSite.GetTransferTask()
 	if task == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

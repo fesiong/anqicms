@@ -2,10 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/fesiong/pongo2"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -20,7 +19,8 @@ type tagArchiveFiltersNode struct {
 }
 
 func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -33,12 +33,12 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	moduleId := uint(args["moduleId"].Integer())
-	module := provider.GetModuleFromCache(moduleId)
+	module := currentSite.GetModuleFromCache(moduleId)
 	if module == nil {
 		return nil
 	}
 
-	allText := config.Lang("全部")
+	allText := currentSite.Lang("全部")
 
 	if args["allText"] != nil {
 		if args["allText"].IsBool() {
@@ -77,7 +77,7 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		matchData = categoryDetail
 		urlMatch = "category"
 	}
-	urlPatten := provider.GetUrl(urlMatch, matchData, 1)
+	urlPatten := currentSite.GetUrl(urlMatch, matchData, 1)
 	if strings.Contains(urlPatten, "?") {
 		urlPatten += "&"
 	} else {

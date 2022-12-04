@@ -1,7 +1,5 @@
 package provider
 
-import "kandaoni.com/anqicms/library"
-
 const (
 	IndexCacheKey = "index"
 
@@ -9,12 +7,12 @@ const (
 	UserAgentMobile = "mobile"
 )
 
-func CacheIndex(ua string, body []byte) {
-	library.MemCache.Set(IndexCacheKey+ua, body, 3600)
+func (w *Website) CacheIndex(ua string, body []byte) {
+	w.MemCache.Set(IndexCacheKey+ua, body, 3600)
 }
 
-func GetIndexCache(ua string) []byte {
-	body := library.MemCache.Get(IndexCacheKey + ua)
+func (w *Website) GetIndexCache(ua string) []byte {
+	body := w.MemCache.Get(IndexCacheKey + ua)
 
 	if body == nil {
 		return nil
@@ -28,7 +26,7 @@ func GetIndexCache(ua string) []byte {
 	return nil
 }
 
-func DeleteCacheIndex() {
-	library.MemCache.Delete(IndexCacheKey + UserAgentPc)
-	library.MemCache.Delete(IndexCacheKey + UserAgentMobile)
+func (w *Website) DeleteCacheIndex() {
+	w.MemCache.Delete(IndexCacheKey + UserAgentPc)
+	w.MemCache.Delete(IndexCacheKey + UserAgentMobile)
 }

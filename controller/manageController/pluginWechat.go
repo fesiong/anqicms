@@ -9,7 +9,8 @@ import (
 )
 
 func PluginWechatConfig(ctx iris.Context) {
-	setting := config.JsonData.PluginWechat
+	currentSite := provider.CurrentSite(ctx)
+	setting := currentSite.PluginWechat
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -19,6 +20,7 @@ func PluginWechatConfig(ctx iris.Context) {
 }
 
 func PluginWechatConfigForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginWeappConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -28,14 +30,14 @@ func PluginWechatConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginWechat.AppID = req.AppID
-	config.JsonData.PluginWechat.AppSecret = req.AppSecret
-	config.JsonData.PluginWechat.Token = req.Token
-	config.JsonData.PluginWechat.EncodingAESKey = req.EncodingAESKey
-	config.JsonData.PluginWechat.VerifyKey = req.VerifyKey
-	config.JsonData.PluginWechat.VerifyMsg = req.VerifyMsg
+	currentSite.PluginWechat.AppID = req.AppID
+	currentSite.PluginWechat.AppSecret = req.AppSecret
+	currentSite.PluginWechat.Token = req.Token
+	currentSite.PluginWechat.EncodingAESKey = req.EncodingAESKey
+	currentSite.PluginWechat.VerifyKey = req.VerifyKey
+	currentSite.PluginWechat.VerifyMsg = req.VerifyMsg
 
-	err := provider.SaveSettingValue(provider.WechatSettingKey, config.JsonData.PluginWechat)
+	err := currentSite.SaveSettingValue(provider.WechatSettingKey, currentSite.PluginWechat)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -44,9 +46,9 @@ func PluginWechatConfigForm(ctx iris.Context) {
 		return
 	}
 	// 强制更新信息
-	provider.GetWechatServer(true)
+	currentSite.GetWechatServer(true)
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新服务号信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新服务号信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -55,10 +57,11 @@ func PluginWechatConfigForm(ctx iris.Context) {
 }
 
 func PluginWechatMessages(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	messages, total := provider.GetWechatMessages(currentPage, pageSize)
+	messages, total := currentSite.GetWechatMessages(currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -69,6 +72,7 @@ func PluginWechatMessages(ctx iris.Context) {
 }
 
 func PluginWechatMessageDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatMessageRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -78,7 +82,7 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteWechatMessage(req.Id)
+	err := currentSite.DeleteWechatMessage(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -86,7 +90,7 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除微信留言：%d => %s", req.Id, req.Content))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除微信留言：%d => %s", req.Id, req.Content))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -95,6 +99,7 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 }
 
 func PluginWechatMessageReply(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatMessageRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -104,7 +109,7 @@ func PluginWechatMessageReply(ctx iris.Context) {
 		return
 	}
 
-	err := provider.ReplyWechatMessage(&req)
+	err := currentSite.ReplyWechatMessage(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -112,7 +117,7 @@ func PluginWechatMessageReply(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("微信留言：%d => %s", req.Id, req.Reply))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("微信留言：%d => %s", req.Id, req.Reply))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -121,10 +126,11 @@ func PluginWechatMessageReply(ctx iris.Context) {
 }
 
 func PluginWechatReplyRules(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	rules, total := provider.GetWechatReplyRules(currentPage, pageSize)
+	rules, total := currentSite.GetWechatReplyRules(currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -135,6 +141,7 @@ func PluginWechatReplyRules(ctx iris.Context) {
 }
 
 func PluginWechatReplyRuleDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatReplyRuleRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -144,7 +151,7 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteWechatReplyRule(req.Id)
+	err := currentSite.DeleteWechatReplyRule(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -152,7 +159,7 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除微信自动回复规则：%d => %s", req.Id, req.Keyword))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除微信自动回复规则：%d => %s", req.Id, req.Keyword))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -161,6 +168,7 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 }
 
 func PluginWechatReplyRuleForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatReplyRuleRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -170,7 +178,7 @@ func PluginWechatReplyRuleForm(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveWechatReplyRule(&req)
+	err := currentSite.SaveWechatReplyRule(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -178,7 +186,7 @@ func PluginWechatReplyRuleForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新微信自动回复规则：%d => %s", req.Id, req.Keyword))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新微信自动回复规则：%d => %s", req.Id, req.Keyword))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -187,7 +195,8 @@ func PluginWechatReplyRuleForm(ctx iris.Context) {
 }
 
 func PluginWechatMenus(ctx iris.Context) {
-	menus := provider.GetWechatMenus()
+	currentSite := provider.CurrentSite(ctx)
+	menus := currentSite.GetWechatMenus()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -197,6 +206,7 @@ func PluginWechatMenus(ctx iris.Context) {
 }
 
 func PluginWechatMenuDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatMenuRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -206,7 +216,7 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteWechatMenu(req.Id)
+	err := currentSite.DeleteWechatMenu(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -214,7 +224,7 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除微信菜单：%d => %s", req.Id, req.Name))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除微信菜单：%d => %s", req.Id, req.Name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -223,6 +233,7 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 }
 
 func PluginWechatMenuSave(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatMenuRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -232,7 +243,7 @@ func PluginWechatMenuSave(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveWechatMenu(&req)
+	err := currentSite.SaveWechatMenu(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -240,7 +251,7 @@ func PluginWechatMenuSave(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("保存微信菜单：%d => %s", req.Id, req.Name))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("保存微信菜单：%d => %s", req.Id, req.Name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -249,7 +260,8 @@ func PluginWechatMenuSave(ctx iris.Context) {
 }
 
 func PluginWechatMenuSync(ctx iris.Context) {
-	err := provider.SyncWechatMenu()
+	currentSite := provider.CurrentSite(ctx)
+	err := currentSite.SyncWechatMenu()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -257,7 +269,7 @@ func PluginWechatMenuSync(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新微信菜单"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新微信菜单"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

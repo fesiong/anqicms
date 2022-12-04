@@ -2,8 +2,8 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -15,6 +15,7 @@ import (
 )
 
 func ApiImportArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.PostValueIntDefault("id", 0))
 	title := ctx.PostValueTrim("title")
 	seoTitle := ctx.PostValueTrim("seo_title")
@@ -37,19 +38,19 @@ func ApiImportArchive(ctx iris.Context) {
 	stock := ctx.PostValueInt64Default("stock", 0)
 	readLevel := ctx.PostValueIntDefault("read_level", 0)
 
-	category := provider.GetCategoryFromCache(categoryId)
+	category := currentSite.GetCategoryFromCache(categoryId)
 	if category == nil || category.Type != config.CategoryTypeArchive {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("请选择一个栏目"),
+			"msg":  currentSite.Lang("请选择一个栏目"),
 		})
 		return
 	}
-	module := provider.GetModuleFromCache(category.ModuleId)
+	module := currentSite.GetModuleFromCache(category.ModuleId)
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("未定义模型"),
+			"msg":  currentSite.Lang("未定义模型"),
 		})
 		return
 	}
@@ -57,14 +58,14 @@ func ApiImportArchive(ctx iris.Context) {
 	if title == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("请填写文章标题"),
+			"msg":  currentSite.Lang("请填写文章标题"),
 		})
 		return
 	}
 	if content == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("请填写文章内容"),
+			"msg":  currentSite.Lang("请填写文章内容"),
 		})
 		return
 	}
@@ -91,7 +92,7 @@ func ApiImportArchive(ctx iris.Context) {
 
 	// 如果传了ID，则采用覆盖的形式
 	if id > 0 {
-		_, err := provider.GetArchiveById(id)
+		_, err := currentSite.GetArchiveById(id)
 		if err != nil {
 			// 不存在，创建一个
 			archive := model.Archive{
@@ -106,12 +107,12 @@ func ApiImportArchive(ctx iris.Context) {
 				Logo:        logo,
 			}
 			archive.Id = id
-			err = dao.DB.Create(&archive).Error
+			err = currentSite.DB.Create(&archive).Error
 
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  config.Lang("导入文章失败"),
+					"msg":  currentSite.Lang("导入文章失败"),
 				})
 				return
 			}
@@ -123,21 +124,21 @@ func ApiImportArchive(ctx iris.Context) {
 			} else {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  config.Lang("文档ID重复，不允许重复导入"),
+					"msg":  currentSite.Lang("文档ID重复，不允许重复导入"),
 				})
 				return
 			}
 		}
 	} else {
 		// 标题重复的不允许导入
-		exists, err := provider.GetArchiveByTitle(title)
+		exists, err := currentSite.GetArchiveByTitle(title)
 		if err == nil {
 			if cover {
 				req.Id = exists.Id
 			} else {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  config.Lang("文档标题重复，不允许重复导入"),
+					"msg":  currentSite.Lang("文档标题重复，不允许重复导入"),
 				})
 				return
 			}
@@ -187,7 +188,7 @@ func ApiImportArchive(ctx iris.Context) {
 		}
 	}
 
-	archive, err := provider.SaveArchive(&req)
+	archive, err := currentSite.SaveArchive(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -198,29 +199,32 @@ func ApiImportArchive(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("发布成功"),
+		"msg":  currentSite.Lang("发布成功"),
 		"data": iris.Map{
-			"url": provider.GetUrl("archive", archive, 0),
+			"url": currentSite.GetUrl("archive", archive, 0),
 			"id":  archive.Id,
 		},
 	})
 }
 
 func ApiImportGetCategories(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	tmpModuleId := ctx.FormValue("module_id")
 	moduleId, _ := strconv.Atoi(tmpModuleId)
 
-	module := provider.GetModuleFromCache(uint(moduleId))
+	module := currentSite.GetModuleFromCache(uint(moduleId))
 
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("未定义模型"),
+			"msg":  currentSite.Lang("未定义模型"),
 		})
 		return
 	}
 
-	tmpCategories, _ := provider.GetCategories(uint(moduleId), "", 0)
+	tmpCategories, _ := currentSite.GetCategories(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`module_id` = ?", moduleId)
+	}, 0)
 
 	var categories []response.ApiCategory
 	for i := range tmpCategories {
@@ -233,19 +237,20 @@ func ApiImportGetCategories(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusApiSuccess,
-		"msg":  config.Lang("获取成功"),
+		"msg":  currentSite.Lang("获取成功"),
 		"data": categories,
 	})
 }
 
 func ApiImportCreateFriendLink(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	// 增加支持 didi 友链的批量导入
 	form := library.NewForm(ctx.Request().Form)
 	var otherList []map[string]string
 	err := form.Bind(&otherList, "other_list")
 	if err == nil && len(otherList) > 0 {
 		for _, item := range otherList {
-			friendLink, err := provider.GetLinkByLink(item["url"])
+			friendLink, err := currentSite.GetLinkByLink(item["url"])
 			if err != nil {
 				friendLink = &model.Link{}
 			}
@@ -253,14 +258,14 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 			friendLink.Link = item["url"]
 			friendLink.Contact = item["qq"]
 			friendLink.Status = 0
-			friendLink.Save(dao.DB)
+			friendLink.Save(currentSite.DB)
 		}
 
-		provider.DeleteCacheIndex()
+		currentSite.DeleteCacheIndex()
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  config.Lang("链接已保存"),
+			"msg":  currentSite.Lang("链接已保存"),
 		})
 		return
 	}
@@ -283,7 +288,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	}
 	remark := ctx.PostValueTrim("remark")
 
-	friendLink, err := provider.GetLinkByLink(link)
+	friendLink, err := currentSite.GetLinkByLink(link)
 	if err != nil {
 		friendLink = &model.Link{
 			Status: 0,
@@ -310,7 +315,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	friendLink.Nofollow = nofollow
 	friendLink.Status = 0
 
-	err = friendLink.Save(dao.DB)
+	err = friendLink.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -319,17 +324,18 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 		return
 	}
 	// 保存完毕，实时监测
-	go provider.PluginLinkCheck(friendLink)
+	go currentSite.PluginLinkCheck(friendLink)
 
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("链接已保存"),
+		"msg":  currentSite.Lang("链接已保存"),
 	})
 }
 
 func ApiImportDeleteFriendLink(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	link := ctx.PostValueTrim("link")
 	if linkUrl := ctx.PostValueTrim("url"); linkUrl != "" {
 		link = linkUrl
@@ -338,21 +344,21 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	if link == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("link必填"),
+			"msg":  currentSite.Lang("link必填"),
 		})
 		return
 	}
 
-	friendLink, err := provider.GetLinkByLink(link)
+	friendLink, err := currentSite.GetLinkByLink(link)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("链接不存在"),
+			"msg":  currentSite.Lang("链接不存在"),
 		})
 		return
 	}
 
-	err = friendLink.Delete(dao.DB)
+	err = friendLink.Delete(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -361,16 +367,17 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 		return
 	}
 
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("链接已删除"),
+		"msg":  currentSite.Lang("链接已删除"),
 	})
 }
 
 func ApiImportGetFriendLinks(ctx iris.Context) {
-	links, _ := provider.GetLinkList()
+	currentSite := provider.CurrentSite(ctx)
+	links, _ := currentSite.GetLinkList()
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -379,18 +386,20 @@ func ApiImportGetFriendLinks(ctx iris.Context) {
 }
 
 func ApiImportCheckFriendLink(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("验证成功"),
+		"msg":  currentSite.Lang("验证成功"),
 	})
 }
 
 func VerifyApiToken(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	token := ctx.FormValue("token")
-	if token != config.JsonData.PluginImportApi.Token {
+	if token != currentSite.PluginImportApi.Token {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("Token错误"),
+			"msg":  currentSite.Lang("Token错误"),
 		})
 		return
 	}
@@ -399,14 +408,15 @@ func VerifyApiToken(ctx iris.Context) {
 }
 
 func VerifyApiLinkToken(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	token := ctx.FormValue("token")
 	if didiToken := ctx.GetHeader("didi-token"); didiToken != "" {
 		token = didiToken
 	}
-	if token != config.JsonData.PluginImportApi.LinkToken {
+	if token != currentSite.PluginImportApi.LinkToken {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("Token错误"),
+			"msg":  currentSite.Lang("Token错误"),
 		})
 		return
 	}
@@ -415,10 +425,11 @@ func VerifyApiLinkToken(ctx iris.Context) {
 }
 
 func CheckApiOpen(ctx iris.Context) {
-	if 1 != config.JsonData.Safe.APIOpen {
+	currentSite := provider.CurrentSite(ctx)
+	if 1 != currentSite.Safe.APIOpen {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("API接口功能未开放"),
+			"msg":  currentSite.Lang("API接口功能未开放"),
 		})
 		return
 	}

@@ -2,17 +2,20 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 func TagIndexPage(ctx iris.Context) {
-	webInfo.Title = config.Lang("标签列表")
-	webInfo.PageName = "tagIndex"
-	currentPage := ctx.Values().GetIntDefault("page", 1)
-	webInfo.CanonicalUrl = provider.GetUrl("tagIndex", nil, currentPage)
-	ctx.ViewData("webInfo", webInfo)
+	currentSite := provider.CurrentSite(ctx)
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = currentSite.Lang("标签列表")
+		webInfo.PageName = "tagIndex"
+		currentPage := ctx.Values().GetIntDefault("page", 1)
+		webInfo.CanonicalUrl = currentSite.GetUrl("tagIndex", nil, currentPage)
+		ctx.ViewData("webInfo", webInfo)
+	}
 
 	tplName := "tag/index.html"
 	if ViewExists(ctx, "tag_index.html") {
@@ -25,32 +28,35 @@ func TagIndexPage(ctx iris.Context) {
 }
 
 func TagPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	tagId := ctx.Params().GetUintDefault("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var tag *model.Tag
 	var err error
 	if urlToken != "" {
 		//优先使用urlToken
-		tag, err = provider.GetTagByUrlToken(urlToken)
+		tag, err = currentSite.GetTagByUrlToken(urlToken)
 	} else {
-		tag, err = provider.GetTagById(tagId)
+		tag, err = currentSite.GetTagById(tagId)
 	}
 	if err != nil {
 		NotFound(ctx)
 		return
 	}
 
-	webInfo.Title = tag.Title
-	if tag.SeoTitle != "" {
-		webInfo.Title = tag.SeoTitle
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = tag.Title
+		if tag.SeoTitle != "" {
+			webInfo.Title = tag.SeoTitle
+		}
+		webInfo.Keywords = tag.Keywords
+		webInfo.Description = tag.Description
+		webInfo.NavBar = tag.Id
+		webInfo.PageName = "tag"
+		currentPage := ctx.Values().GetIntDefault("page", 1)
+		webInfo.CanonicalUrl = currentSite.GetUrl("tag", tag, currentPage)
+		ctx.ViewData("webInfo", webInfo)
 	}
-	webInfo.Keywords = tag.Keywords
-	webInfo.Description = tag.Description
-	webInfo.NavBar = tag.Id
-	webInfo.PageName = "tag"
-	currentPage := ctx.Values().GetIntDefault("page", 1)
-	webInfo.CanonicalUrl = provider.GetUrl("tag", tag, currentPage)
-	ctx.ViewData("webInfo", webInfo)
 
 	ctx.ViewData("tag", tag)
 

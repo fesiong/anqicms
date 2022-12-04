@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/fesiong/pongo2"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -16,7 +15,8 @@ type tagNavListNode struct {
 }
 
 func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -29,9 +29,9 @@ func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		typeId = uint(args["typeId"].Integer())
 	}
 
-	navList := provider.GetNavsFromCache(typeId)
+	navList := currentSite.GetNavsFromCache(typeId)
 
-	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
+	webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
 	if ok {
 		for i := range navList {
 			navList[i].IsCurrent = false

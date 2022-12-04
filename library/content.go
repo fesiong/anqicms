@@ -1,11 +1,9 @@
 package library
 
 import (
-	"math/rand"
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 	"unsafe"
 )
 
@@ -26,16 +24,6 @@ func StripTags(src string) string {
 	re, _ = regexp.Compile("\\s{2,}")
 	src = re.ReplaceAllString(src, "\n")
 	return strings.TrimSpace(src)
-}
-
-func GenerateRandString(length int) string {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	bytes := make([]byte, length)
-	for i := 0; i < length; i++ {
-		b := r.Intn(26) + 65
-		bytes[i] = byte(b)
-	}
-	return strings.ToLower(string(bytes))
 }
 
 func Case2Camel(name string) string {

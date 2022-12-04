@@ -2,10 +2,7 @@ package crond
 
 import (
 	"github.com/robfig/cron/v3"
-	"kandaoni.com/anqicms/dao"
-	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"time"
 )
 
 func Crond() {
@@ -13,41 +10,108 @@ func Crond() {
 	//每天执行一次，清理很久的statistic
 	crontab.AddFunc("@daily", cleanStatistics)
 	// 每天清理一次回收站内容
-	crontab.AddFunc("@daily", provider.CleanArchives)
+	crontab.AddFunc("@daily", CleanArchives)
 	crontab.AddFunc("@hourly", startDigKeywords)
-	crontab.AddFunc("1 */10 * * * *", provider.CollectArticles)
+	crontab.AddFunc("1 */10 * * * *", CollectArticles)
 	//每天检查一次收录量
-	crontab.AddFunc("30 30 8 * * *", provider.QuerySpiderInclude)
+	crontab.AddFunc("30 30 8 * * *", QuerySpiderInclude)
 	// 每分钟检查一次需要发布的文章
 	crontab.AddFunc("1 * * * * *", PublishPlanContents)
 	// 每分钟提现
-	crontab.AddFunc("1 * * * * *", provider.CheckWithdrawToWechat)
+	crontab.AddFunc("1 * * * * *", CheckWithdrawToWechat)
 	// 每分钟定期检查订单
-	crontab.AddFunc("1 * * * * *", provider.AutoCheckOrders)
+	crontab.AddFunc("1 * * * * *", AutoCheckOrders)
 	// 每天检查VIP
-	crontab.AddFunc("@daily", provider.CleanUserVip)
+	crontab.AddFunc("@daily", CleanUserVip)
 	crontab.Start()
 }
 
 func startDigKeywords() {
-	if dao.DB == nil {
-		return
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.StartDigKeywords(false)
 	}
-	provider.StartDigKeywords(false)
 }
 
 func cleanStatistics() {
-	if dao.DB == nil {
-		return
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CleanStatistics()
 	}
-	//清理一个月前的记录
-	agoStamp := time.Now().AddDate(0, 0, -30).Unix()
-	dao.DB.Unscoped().Where("`created_time` < ?", agoStamp).Delete(model.Statistic{})
 }
 
 func PublishPlanContents() {
-	if dao.DB == nil {
-		return
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.PublishPlanArchives()
 	}
-	go provider.PublishPlanArchives()
+}
+
+func CleanArchives() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CleanArchives()
+	}
+}
+
+func CollectArticles() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CollectArticles()
+	}
+}
+
+func QuerySpiderInclude() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.QuerySpiderInclude()
+	}
+}
+
+func CheckWithdrawToWechat() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckWithdrawToWechat()
+	}
+}
+
+func AutoCheckOrders() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.AutoCheckOrders()
+	}
+}
+
+func CleanUserVip() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CleanUserVip()
+	}
 }

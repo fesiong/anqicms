@@ -10,6 +10,7 @@ import (
 )
 
 func PluginGetRetailers(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	userId := uint(ctx.URLParamIntDefault("id", 0))
@@ -17,7 +18,7 @@ func PluginGetRetailers(ctx iris.Context) {
 	realName := ctx.URLParam("realName")
 
 	ops := func(tx *gorm.DB) *gorm.DB {
-		if config.JsonData.PluginRetailer.BecomeRetailer == 1 {
+		if currentSite.PluginRetailer.BecomeRetailer == 1 {
 			tx = tx.Where("`is_retailer` = ?", 1)
 		}
 		if userId > 0 {
@@ -32,7 +33,7 @@ func PluginGetRetailers(ctx iris.Context) {
 		tx = tx.Order("id desc")
 		return tx
 	}
-	users, total := provider.GetUserList(ops, currentPage, pageSize)
+	users, total := currentSite.GetUserList(ops, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -43,7 +44,8 @@ func PluginGetRetailers(ctx iris.Context) {
 }
 
 func PluginRetailerConfig(ctx iris.Context) {
-	retailer := config.JsonData.PluginRetailer
+	currentSite := provider.CurrentSite(ctx)
+	retailer := currentSite.PluginRetailer
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -53,6 +55,7 @@ func PluginRetailerConfig(ctx iris.Context) {
 }
 
 func PluginRetailerConfigForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginRetailerConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -62,10 +65,10 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginRetailer.AllowSelf = req.AllowSelf
-	config.JsonData.PluginRetailer.BecomeRetailer = req.BecomeRetailer
+	currentSite.PluginRetailer.AllowSelf = req.AllowSelf
+	currentSite.PluginRetailer.BecomeRetailer = req.BecomeRetailer
 
-	err := provider.SaveSettingValue(provider.RetailerSettingKey, config.JsonData.PluginRetailer)
+	err := currentSite.SaveSettingValue(provider.RetailerSettingKey, currentSite.PluginRetailer)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -74,7 +77,7 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新分销员信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新分销员信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -83,6 +86,7 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 }
 
 func PluginRetailerSetRealName(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -92,7 +96,7 @@ func PluginRetailerSetRealName(ctx iris.Context) {
 		return
 	}
 
-	err := provider.UpdateUserRealName(req.Id, req.RealName)
+	err := currentSite.UpdateUserRealName(req.Id, req.RealName)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -101,7 +105,7 @@ func PluginRetailerSetRealName(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新分销员用户信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新分销员用户信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -110,6 +114,7 @@ func PluginRetailerSetRealName(ctx iris.Context) {
 }
 
 func PluginRetailerApply(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -119,7 +124,7 @@ func PluginRetailerApply(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SetRetailerInfo(req.Id, req.IsRetailer)
+	err := currentSite.SetRetailerInfo(req.Id, req.IsRetailer)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -128,7 +133,7 @@ func PluginRetailerApply(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新分销员用户信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新分销员用户信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

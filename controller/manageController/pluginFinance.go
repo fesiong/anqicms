@@ -7,10 +7,11 @@ import (
 )
 
 func PluginFinanceList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	orders, total := provider.GetFinanceList(currentPage, pageSize)
+	orders, total := currentSite.GetFinanceList(currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -21,9 +22,10 @@ func PluginFinanceList(ctx iris.Context) {
 }
 
 func PluginFinanceDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	withdraw, err := provider.GetFinanceById(id)
+	withdraw, err := currentSite.GetFinanceById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

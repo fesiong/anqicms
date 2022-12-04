@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -45,8 +47,6 @@ type ConfigJson struct {
 
 func initPath() {
 	sep := string(os.PathSeparator)
-	//root := filepath.Dir(os.Args[0])
-	//ExecPath, _ = filepath.Abs(root)
 	ExecPath, _ = os.Executable()
 	baseName := filepath.Base(ExecPath)
 	ExecPath = filepath.Dir(ExecPath)
@@ -69,27 +69,29 @@ func initJSON() {
 	rawConfig, err := os.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		rawConfig = []byte("{\"db\":{},\"server\":{\"env\": \"production\",\"port\": 8001,\"log_level\":\"error\"}}")
-	}
-
-	if err := json.Unmarshal(rawConfig, &Server); err != nil {
-		fmt.Println("Invalid Config: ", err.Error())
-		os.Exit(-1)
+		tokenSecret := GenerateRandString(32)
+		Server.Server.Env = "production"
+		Server.Server.Port = 8001
+		Server.Server.LogLevel = "error"
+		Server.Server.TokenSecret = tokenSecret
+	} else {
+		if err = json.Unmarshal(rawConfig, &Server); err != nil {
+			fmt.Println("Invalid Config: ", err.Error())
+			os.Exit(-1)
+		}
 	}
 }
 
 var ExecPath string
 var Server ServerJson
-var JsonData ConfigJson
-var CollectorConfig CollectorJson
-var KeywordConfig KeywordJson
 var AnqiUser AnqiUserConfig
 var RestartChan = make(chan bool, 1)
-var languages = map[string]string{}
+var Languages = map[string]map[string]string{}
 
 func init() {
 	initPath()
 	initJSON()
+	initLanguage()
 }
 
 func WriteConfig() error {
@@ -117,32 +119,38 @@ func WriteConfig() error {
 	return nil
 }
 
-func LoadLanguage() {
+func initLanguage() {
 	// 重置
-	languages = map[string]string{}
-	if JsonData.System.Language == "" {
-		// 默认中文
-		JsonData.System.Language = "zh"
-	}
-	languagePath := fmt.Sprintf("%slanguage/%s.yml", ExecPath, JsonData.System.Language)
-
-	yamlFile, err := os.ReadFile(languagePath)
+	// 读取language列表
+	readerInfos, err := os.ReadDir(fmt.Sprintf("%slanguage", ExecPath))
 	if err == nil {
-		strSlice := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(yamlFile), "\r\n", "\n"), "\r", "\n"), "\n")
-		for _, v := range strSlice {
-			vSplit := strings.SplitN(strings.TrimSpace(v), ":", 2)
-			if len(vSplit) == 2 {
-				languages[strings.Trim(vSplit[0], "\" ")] = strings.Trim(vSplit[1], "\" ")
+		for _, info := range readerInfos {
+			if strings.HasSuffix(info.Name(), ".yml") {
+				lang := strings.TrimSuffix(info.Name(), ".yml")
+				languagePath := ExecPath + "language/" + info.Name()
+				languages := map[string]string{}
+				yamlFile, err := os.ReadFile(languagePath)
+				if err == nil {
+					strSlice := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(yamlFile), "\r\n", "\n"), "\r", "\n"), "\n")
+					for _, v := range strSlice {
+						vSplit := strings.SplitN(strings.TrimSpace(v), ":", 2)
+						if len(vSplit) == 2 {
+							languages[strings.Trim(vSplit[0], "\" ")] = strings.Trim(vSplit[1], "\" ")
+						}
+					}
+				}
+				Languages[lang] = languages
 			}
 		}
 	}
-	//ended
 }
 
-func Lang(str string) string {
-	if newStr, ok := languages[str]; ok {
-		return newStr
+func GenerateRandString(length int) string {
+	r := rand.New(rand.NewSource(time.Now().Unix()))
+	buf := make([]byte, length)
+	for i := 0; i < length; i++ {
+		b := r.Intn(26) + 65
+		buf[i] = byte(b)
 	}
-
-	return str
+	return strings.ToLower(string(buf))
 }

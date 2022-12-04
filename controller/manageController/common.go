@@ -5,12 +5,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"github.com/parnurzeal/gorequest"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -24,9 +22,10 @@ import (
 )
 
 func AdminFileServ(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	uri := ctx.RequestPath(false)
 	if uri != "/" {
-		baseDir := config.ExecPath
+		baseDir := currentSite.RootPath
 		uriFile := baseDir + uri
 		_, err := os.Stat(uriFile)
 		if err == nil {
@@ -57,79 +56,10 @@ func Version(ctx iris.Context) {
 	})
 }
 
-type moduleCount struct {
-	Name  string `json:"name"`
-	Total int64  `json:"total"`
-}
-type archiveCount struct {
-	Total     int64 `json:"total"`
-	LastWeek  int64 `json:"last_week"`
-	UnRelease int64 `json:"un_release"`
-	Today     int64 `json:"today"`
-}
-type splitCount struct {
-	Total int64 `json:"total"`
-	Today int64 `json:"today"`
-}
-type statistics struct {
-	cacheTime       int64
-	ModuleCounts    []moduleCount       `json:"archive_counts"`
-	ArchiveCount    archiveCount        `json:"archive_count"`
-	CategoryCount   int64               `json:"category_count"`
-	LinkCount       int64               `json:"link_count"`
-	GuestbookCount  int64               `json:"guestbook_count"`
-	TrafficCount    splitCount          `json:"traffic_count"`
-	SpiderCount     splitCount          `json:"spider_count"`
-	IncludeCount    model.SpiderInclude `json:"include_count"`
-	TemplateCount   int64               `json:"template_count"`
-	PageCount       int64               `json:"page_count"`
-	AttachmentCount int64               `json:"attachment_count"`
-}
-
-var cachedStatistics *statistics
-
 func GetStatisticsSummary(ctx iris.Context) {
-	var result = statistics{}
-	if cachedStatistics == nil || cachedStatistics.cacheTime < time.Now().Add(-60*time.Second).Unix() {
-		modules := provider.GetCacheModules()
-		for _, v := range modules {
-			counter := moduleCount{
-				Name: v.Title,
-			}
-			dao.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
-			result.ModuleCounts = append(result.ModuleCounts, counter)
-			result.ArchiveCount.Total += counter.Total
-		}
-		lastWeek := now.BeginningOfWeek()
-		today := now.BeginningOfDay()
-		dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
-		dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
-		dao.DB.Model(&model.Archive{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+	currentSite := provider.CurrentSite(ctx)
 
-		dao.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&result.CategoryCount)
-		dao.DB.Model(&model.Link{}).Count(&result.LinkCount)
-		dao.DB.Model(&model.Guestbook{}).Count(&result.GuestbookCount)
-		designList := provider.GetDesignList()
-		result.TemplateCount = int64(len(designList))
-		dao.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
-		dao.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
-
-		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.TrafficCount.Total)
-		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", today.Unix()).Count(&result.TrafficCount.Today)
-
-		dao.DB.Model(&model.Statistic{}).Where("`spider`!= '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.SpiderCount.Total)
-		dao.DB.Model(&model.Statistic{}).Where("`spider` != '' and `created_time` >= ?", today.Unix()).Count(&result.SpiderCount.Today)
-
-		var lastInclude model.SpiderInclude
-		dao.DB.Model(&model.SpiderInclude{}).Order("id desc").Take(&lastInclude)
-		result.IncludeCount = lastInclude
-
-		result.cacheTime = time.Now().Unix()
-
-		cachedStatistics = &result
-	} else {
-		result = *cachedStatistics
-	}
+	result := currentSite.GetStatisticsSummary()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -139,10 +69,11 @@ func GetStatisticsSummary(ctx iris.Context) {
 }
 
 func GetStatisticsDashboard(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var result = iris.Map{}
 	// 登录信息
 	var loginLogs []model.AdminLoginLog
-	dao.DB.Order("id desc").Limit(2).Find(&loginLogs)
+	currentSite.DB.Order("id desc").Limit(2).Find(&loginLogs)
 	if len(loginLogs) == 2 {
 		result["last_login"] = iris.Map{
 			"created_time": loginLogs[1].CreatedTime,
@@ -156,7 +87,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 		}
 	}
 	// 配置信息
-	result["system"] = config.JsonData.System
+	result["system"] = currentSite.System
 
 	result["version"] = config.Version
 	var ms runtime.MemStats
@@ -205,6 +136,7 @@ func CheckVersion(ctx iris.Context) {
 }
 
 func VersionUpgrade(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var lastVersion response.LastVersion
 	if err := ctx.ReadJSON(&lastVersion); err != nil {
 		ctx.JSON(iris.Map{
@@ -319,7 +251,7 @@ func VersionUpgrade(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, lastVersion.Version))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, lastVersion.Version))
 	msg := "已升级版本，请重启软件以使用新版。"
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

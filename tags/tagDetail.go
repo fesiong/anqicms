@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/fesiong/pongo2"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -16,7 +15,8 @@ type tagTagDetailNode struct {
 }
 
 func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -28,7 +28,7 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	tagDetail, _ := ctx.Public["tag"].(*model.Tag)
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		tagDetail, _ = provider.GetTagById(id)
+		tagDetail, _ = currentSite.GetTagById(id)
 	}
 
 	fieldName := ""
@@ -40,7 +40,7 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	var content string
 
 	if tagDetail != nil {
-		tagDetail.Link = provider.GetUrl("tag", tagDetail, 0)
+		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
 
 		v := reflect.ValueOf(*tagDetail)
 

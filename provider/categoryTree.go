@@ -6,20 +6,20 @@ import (
 
 type CategoryTree struct {
 	categories []*model.Category
-	tree []*model.Category
-	treeKey map[uint]bool
-	deep int
-	icons []string
-	tmp map[uint][]*model.Category
+	tree       []*model.Category
+	treeKey    map[uint]bool
+	deep       int
+	icons      []string
+	tmp        map[uint][]*model.Category
 }
 
 func NewCategoryTree(categories []*model.Category) *CategoryTree {
 	ct := &CategoryTree{
 		categories: categories,
 		tree:       []*model.Category{},
-		treeKey: map[uint]bool{},
+		treeKey:    map[uint]bool{},
 		deep:       1,
-		icons:      []string{"└&nbsp;&nbsp;","","", ""},
+		icons:      []string{"└&nbsp;&nbsp;", "", "", ""},
 		tmp:        map[uint][]*model.Category{},
 	}
 

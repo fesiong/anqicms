@@ -6,7 +6,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"log"
@@ -26,9 +25,9 @@ type KeywordCSV struct {
 	CategoryId uint   `csv:"category_id"`
 }
 
-func GetUserKeywordSetting() config.KeywordJson {
+func (w *Website) GetUserKeywordSetting() config.KeywordJson {
 	var keywordJson config.KeywordJson
-	value := GetSettingValue(KeywordSettingKey)
+	value := w.GetSettingValue(KeywordSettingKey)
 	if value == "" {
 		return keywordJson
 	}
@@ -40,8 +39,8 @@ func GetUserKeywordSetting() config.KeywordJson {
 	return keywordJson
 }
 
-func SaveUserKeywordSetting(req config.KeywordJson, focus bool) error {
-	keywordJson := GetUserKeywordSetting()
+func (w *Website) SaveUserKeywordSetting(req config.KeywordJson, focus bool) error {
+	keywordJson := w.GetUserKeywordSetting()
 	if focus {
 		keywordJson = req
 	} else {
@@ -62,9 +61,9 @@ func SaveUserKeywordSetting(req config.KeywordJson, focus bool) error {
 		}
 	}
 
-	_ = SaveSettingValue(KeywordSettingKey, keywordJson)
+	_ = w.SaveSettingValue(KeywordSettingKey, keywordJson)
 	//重新读取配置
-	LoadKeywordSetting()
+	w.LoadKeywordSetting()
 
 	return nil
 }
@@ -74,12 +73,12 @@ var digKeywordRunning = false
 
 var maxWordsNum = int64(100000)
 
-func GetKeywordList(keyword string, currentPage, pageSize int) ([]*model.Keyword, int64, error) {
+func (w *Website) GetKeywordList(keyword string, currentPage, pageSize int) ([]*model.Keyword, int64, error) {
 	var keywords []*model.Keyword
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := dao.DB.Model(&model.Keyword{}).Order("id desc")
+	builder := w.DB.Model(&model.Keyword{}).Order("id desc")
 	if keyword != "" {
 		//模糊搜索
 		builder = builder.Where("(`title` like ?)", "%"+keyword+"%")
@@ -93,9 +92,9 @@ func GetKeywordList(keyword string, currentPage, pageSize int) ([]*model.Keyword
 	return keywords, total, nil
 }
 
-func GetAllKeywords() ([]*model.Keyword, error) {
+func (w *Website) GetAllKeywords() ([]*model.Keyword, error) {
 	var keywords []*model.Keyword
-	err := dao.DB.Model(&model.Keyword{}).Order("id desc").Find(&keywords).Error
+	err := w.DB.Model(&model.Keyword{}).Order("id desc").Find(&keywords).Error
 	if err != nil {
 		return nil, err
 	}
@@ -103,10 +102,10 @@ func GetAllKeywords() ([]*model.Keyword, error) {
 	return keywords, nil
 }
 
-func GetKeywordById(id uint) (*model.Keyword, error) {
+func (w *Website) GetKeywordById(id uint) (*model.Keyword, error) {
 	var keyword model.Keyword
 
-	err := dao.DB.Where("`id` = ?", id).First(&keyword).Error
+	err := w.DB.Where("`id` = ?", id).First(&keyword).Error
 	if err != nil {
 		return nil, err
 	}
@@ -114,10 +113,10 @@ func GetKeywordById(id uint) (*model.Keyword, error) {
 	return &keyword, nil
 }
 
-func GetKeywordByTitle(title string) (*model.Keyword, error) {
+func (w *Website) GetKeywordByTitle(title string) (*model.Keyword, error) {
 	var keyword model.Keyword
 
-	err := dao.DB.Where("`title` = ?", title).First(&keyword).Error
+	err := w.DB.Where("`title` = ?", title).First(&keyword).Error
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +124,7 @@ func GetKeywordByTitle(title string) (*model.Keyword, error) {
 	return &keyword, nil
 }
 
-func ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, error) {
+func (w *Website) ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, error) {
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		return "", err
@@ -147,7 +146,7 @@ func ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, er
 		if title == "" {
 			continue
 		}
-		keyword, err := GetKeywordByTitle(title)
+		keyword, err := w.GetKeywordByTitle(title)
 		if err != nil {
 			//表示不存在
 			keyword = &model.Keyword{
@@ -159,14 +158,14 @@ func ImportKeywords(file multipart.File, info *multipart.FileHeader) (string, er
 		categoryId, _ := strconv.Atoi(values[1])
 		keyword.CategoryId = uint(categoryId)
 
-		keyword.Save(dao.DB)
+		keyword.Save(w.DB)
 	}
 
-	return fmt.Sprintf(config.Lang("成功导入了%d个关键词"), total), nil
+	return fmt.Sprintf(w.Lang("成功导入了%d个关键词"), total), nil
 }
 
-func DeleteKeyword(keyword *model.Keyword) error {
-	err := dao.DB.Delete(keyword).Error
+func (w *Website) DeleteKeyword(keyword *model.Keyword) error {
+	err := w.DB.Delete(keyword).Error
 	if err != nil {
 		return err
 	}
@@ -176,11 +175,11 @@ func DeleteKeyword(keyword *model.Keyword) error {
 
 // StartDigKeywords 开始挖掘关键词，通过核心词来拓展
 // 最多只10万关键词，抓取前3级，如果超过3级，则每次只执行一级
-func StartDigKeywords(focus bool) {
-	if dao.DB == nil {
+func (w *Website) StartDigKeywords(focus bool) {
+	if w.DB == nil {
 		return
 	}
-	if config.KeywordConfig.AutoDig == false && !focus {
+	if w.KeywordConfig.AutoDig == false && !focus {
 		return
 	}
 	if digKeywordRunning {
@@ -194,34 +193,34 @@ func StartDigKeywords(focus bool) {
 
 	//非严格的限制数量
 	var maxNum int64
-	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
+	w.DB.Model(&model.Keyword{}).Count(&maxNum)
 	if maxNum >= maxWordsNum {
 		return
 	}
 
 	var keywords []*model.Keyword
-	dao.DB.Where("has_dig = 0").Order("id asc").Limit(100).Find(&keywords)
+	w.DB.Where("has_dig = 0").Order("id asc").Limit(10).Find(&keywords)
 	if len(keywords) == 0 {
 		return
 	}
 
 	for _, keyword := range keywords {
 		//下一级的
-		err := collectKeyword(collectedWords, keyword)
+		err := w.collectKeyword(collectedWords, keyword)
 		if err != nil {
 			break
 		}
 		keyword.HasDig = 1
-		dao.DB.Model(keyword).UpdateColumn("has_dig", keyword.HasDig)
+		w.DB.Model(keyword).UpdateColumn("has_dig", keyword.HasDig)
 		//不能太快，每次休息随机1-30秒钟
 		time.Sleep(time.Duration(1+rand.Intn(30)) * time.Second)
 	}
 	//重新计数
-	dao.DB.Model(&model.Keyword{}).Count(&maxNum)
+	w.DB.Model(&model.Keyword{}).Count(&maxNum)
 }
 
-func collectKeyword(existsWords *sync.Map, keyword *model.Keyword) error {
-	link := getKeywordEnginLink(keyword)
+func (w *Website) collectKeyword(existsWords *sync.Map, keyword *model.Keyword) error {
+	link := w.getKeywordEnginLink(keyword)
 	resp, err := library.Request(link, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
@@ -234,12 +233,12 @@ func collectKeyword(existsWords *sync.Map, keyword *model.Keyword) error {
 	if err != nil {
 		return err
 	}
-	links := CollectKeywords(resp.Body)
-	rootWords := GetRootWords()
+	links := w.CollectKeywords(resp.Body)
+	rootWords := w.GetRootWords()
 	for _, k := range links {
 		log.Println(k.Title)
 		// 判断是否包含核心词
-		if !ContainRootWords(rootWords, k.Title) {
+		if !w.ContainRootWords(rootWords, k.Title) {
 			continue
 		}
 		if _, ok := existsWords.Load(k.Title); ok {
@@ -251,16 +250,16 @@ func collectKeyword(existsWords *sync.Map, keyword *model.Keyword) error {
 			CategoryId: keyword.CategoryId,
 			Level:      keyword.Level + 1,
 		}
-		dao.DB.Model(&model.Keyword{}).Where("title = ?", k.Title).FirstOrCreate(&word)
+		w.DB.Model(&model.Keyword{}).Where("title = ?", k.Title).FirstOrCreate(&word)
 	}
 
 	return nil
 }
 
-func getKeywordEnginLink(keyword *model.Keyword) string {
+func (w *Website) getKeywordEnginLink(keyword *model.Keyword) string {
 	// default baidu
 	var link string
-	switch config.KeywordConfig.FromEngine {
+	switch w.KeywordConfig.FromEngine {
 	case config.Engin360:
 		link = fmt.Sprintf("https://sug.so.360.cn/suggest?src=so_home&word=%s", url.QueryEscape(keyword.Title))
 		break
@@ -277,8 +276,8 @@ func getKeywordEnginLink(keyword *model.Keyword) string {
 		link = fmt.Sprintf("https://cn.bing.com/search?q=%s&ensearch=1", url.QueryEscape(keyword.Title))
 		break
 	case config.EnginOther:
-		if strings.Contains(config.KeywordConfig.FromWebsite, "%s") {
-			link = fmt.Sprintf(config.KeywordConfig.FromWebsite, url.QueryEscape(keyword.Title))
+		if strings.Contains(w.KeywordConfig.FromWebsite, "%s") {
+			link = fmt.Sprintf(w.KeywordConfig.FromWebsite, url.QueryEscape(keyword.Title))
 			break
 		}
 	case config.EnginBaidu:
@@ -290,7 +289,7 @@ func getKeywordEnginLink(keyword *model.Keyword) string {
 	return link
 }
 
-func CollectKeywords(content string) []*model.Keyword {
+func (w *Website) CollectKeywords(content string) []*model.Keyword {
 	var words []*model.Keyword
 	existsWords := map[string]*model.Keyword{}
 
@@ -321,7 +320,7 @@ func CollectKeywords(content string) []*model.Keyword {
 					v = strings.Trim(v, "“”·… ")
 					v = strings.TrimSpace(v)
 					var ok bool
-					if v, ok = KeywordFilter(v); !ok {
+					if v, ok = w.KeywordFilter(v); !ok {
 						continue
 					}
 
@@ -356,7 +355,7 @@ func CollectKeywords(content string) []*model.Keyword {
 				v = strings.TrimSpace(v)
 				v = tagRe.ReplaceAllString(v, "")
 				var ok bool
-				if v, ok = KeywordFilter(v); !ok {
+				if v, ok = w.KeywordFilter(v); !ok {
 					continue
 				}
 
@@ -382,7 +381,7 @@ func CollectKeywords(content string) []*model.Keyword {
 	return words
 }
 
-func KeywordFilter(word string) (string, bool) {
+func (w *Website) KeywordFilter(word string) (string, bool) {
 	if strings.Contains(word, "/") {
 		// maybe it's a link
 		return "", false
@@ -401,10 +400,10 @@ func KeywordFilter(word string) (string, bool) {
 	if strings.Contains(word, "-") && !isEnglish {
 		return "", false
 	}
-	if config.KeywordConfig.Language == config.LanguageZh && isEnglish {
+	if w.KeywordConfig.Language == config.LanguageZh && isEnglish {
 		return "", false
 	}
-	if config.KeywordConfig.Language == config.LanguageEn && !isEnglish {
+	if w.KeywordConfig.Language == config.LanguageEn && !isEnglish {
 		return "", false
 	}
 
@@ -416,13 +415,13 @@ func KeywordFilter(word string) (string, bool) {
 	if runeLength < 3 || runeLength > 30 {
 		return "", false
 	}
-	for _, v := range config.KeywordConfig.TitleExclude {
+	for _, v := range w.KeywordConfig.TitleExclude {
 		if strings.Contains(word, v) {
 			return "", false
 		}
 	}
 	var err error
-	for _, v := range config.KeywordConfig.TitleReplace {
+	for _, v := range w.KeywordConfig.TitleReplace {
 		// 增加支持正则表达式替换
 		if strings.HasPrefix(v.From, "{") && strings.HasSuffix(v.From, "}") && len(v.From) > 2 {
 			newWord := v.From[1 : len(v.From)-1]
@@ -456,9 +455,9 @@ func KeywordFilter(word string) (string, bool) {
 	return word, true
 }
 
-func GetRootWords() [][]string {
+func (w *Website) GetRootWords() [][]string {
 	var rootKeywords []string
-	dao.DB.Model(&model.Keyword{}).Where("`level` = 0").Limit(1000).Pluck("title", &rootKeywords)
+	w.DB.Model(&model.Keyword{}).Where("`level` = 0").Limit(1000).Pluck("title", &rootKeywords)
 
 	var result = make([][]string, 0, len(rootKeywords))
 	for i := range rootKeywords {
@@ -468,7 +467,7 @@ func GetRootWords() [][]string {
 	return result
 }
 
-func ContainRootWords(rootWords [][]string, word string) bool {
+func (w *Website) ContainRootWords(rootWords [][]string, word string) bool {
 	word = strings.ToLower(word)
 	for i := range rootWords {
 		match := true
@@ -486,7 +485,7 @@ func ContainRootWords(rootWords [][]string, word string) bool {
 	return false
 }
 
-func ContainKeywords(title, keyword string) bool {
+func (w *Website) ContainKeywords(title, keyword string) bool {
 	if title == "" {
 		return false
 	}

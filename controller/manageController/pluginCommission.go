@@ -7,10 +7,11 @@ import (
 )
 
 func PluginCommissionList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	orders, total := provider.GetCommissionList(currentPage, pageSize)
+	orders, total := currentSite.GetCommissionList(currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -21,9 +22,10 @@ func PluginCommissionList(ctx iris.Context) {
 }
 
 func PluginCommissionDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	withdraw, err := provider.GetCommissionById(id)
+	withdraw, err := currentSite.GetCommissionById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

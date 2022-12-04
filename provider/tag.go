@@ -3,7 +3,6 @@ package provider
 import (
 	"fmt"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
@@ -11,20 +10,20 @@ import (
 	"time"
 )
 
-func GetTagList(itemId uint, title string, firstLetter string, currentPage, pageSize int, offset int) ([]*model.Tag, int64, error) {
+func (w *Website) GetTagList(itemId uint, title string, firstLetter string, currentPage, pageSize int, offset int) ([]*model.Tag, int64, error) {
 	var tags []*model.Tag
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
 	}
 	var total int64
 
-	builder := dao.DB.Model(&model.Tag{}).Order("id desc")
+	builder := w.DB.Model(&model.Tag{}).Order("id desc")
 	if firstLetter != "" {
 		builder = builder.Where("`first_letter` = ?", firstLetter)
 	}
 	if itemId != 0 {
 		var ids []uint
-		dao.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &ids)
+		w.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &ids)
 		if len(ids) == 0 {
 			// 否则只有0
 			ids = append(ids, 0)
@@ -43,44 +42,44 @@ func GetTagList(itemId uint, title string, firstLetter string, currentPage, page
 	return tags, total, nil
 }
 
-func GetTagById(id uint) (*model.Tag, error) {
+func (w *Website) GetTagById(id uint) (*model.Tag, error) {
 	var tag model.Tag
-	if err := dao.DB.Where("id = ?", id).First(&tag).Error; err != nil {
+	if err := w.DB.Where("id = ?", id).First(&tag).Error; err != nil {
 		return nil, err
 	}
 
 	return &tag, nil
 }
 
-func GetTagByUrlToken(urlToken string) (*model.Tag, error) {
+func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	var tag model.Tag
-	if err := dao.DB.Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
+	if err := w.DB.Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
 
 	return &tag, nil
 }
 
-func GetTagByTitle(title string) (*model.Tag, error) {
+func (w *Website) GetTagByTitle(title string) (*model.Tag, error) {
 	var tag model.Tag
-	if err := dao.DB.Where("`title` = ?", title).First(&tag).Error; err != nil {
+	if err := w.DB.Where("`title` = ?", title).First(&tag).Error; err != nil {
 		return nil, err
 	}
 
 	return &tag, nil
 }
 
-func DeleteTag(id uint) error {
-	tag, err := GetTagById(id)
+func (w *Website) DeleteTag(id uint) error {
+	tag, err := w.GetTagById(id)
 	if err != nil {
 		return err
 	}
 
 	//删除记录
-	dao.DB.Unscoped().Where("`tag_id` = ?", tag.Id).Delete(model.TagData{})
+	w.DB.Unscoped().Where("`tag_id` = ?", tag.Id).Delete(model.TagData{})
 
 	//执行删除操作
-	err = dao.DB.Delete(tag).Error
+	err = w.DB.Delete(tag).Error
 
 	if err != nil {
 		return err
@@ -89,10 +88,10 @@ func DeleteTag(id uint) error {
 	return nil
 }
 
-func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
+func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	newPost := false
 	if req.Id > 0 {
-		tag, err = GetTagById(req.Id)
+		tag, err = w.GetTagById(req.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -112,9 +111,9 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	// 判断重复
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
 	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title)
+		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 	}
-	tag.UrlToken = VerifyTagUrlToken(req.UrlToken, tag.Id)
+	tag.UrlToken = w.VerifyTagUrlToken(req.UrlToken, tag.Id)
 
 	if tag.FirstLetter == "" {
 		letter := "A"
@@ -124,26 +123,26 @@ func SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		tag.FirstLetter = strings.ToUpper(letter)
 	}
 
-	err = dao.DB.Save(tag).Error
+	err = w.DB.Save(tag).Error
 
 	if err != nil {
 		return
 	}
 
 	if newPost && tag.Status == config.ContentStatusOK {
-		link := GetUrl("tag", tag, 0)
-		go PushArchive(link)
-		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
+		link := w.GetUrl("tag", tag, 0)
+		go w.PushArchive(link)
+		if w.PluginSitemap.AutoBuild == 1 {
+			_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
 		}
 	}
 
 	return
 }
 
-func SaveTagData(itemId uint, tagNames []string) error {
+func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 	if len(tagNames) == 0 {
-		dao.DB.Where("`item_id` = ?", itemId).Delete(&model.TagData{})
+		w.DB.Where("`item_id` = ?", itemId).Delete(&model.TagData{})
 		return nil
 	}
 	var tagIds = make([]uint, 0, len(tagNames))
@@ -151,10 +150,10 @@ func SaveTagData(itemId uint, tagNames []string) error {
 		if tagName == "" {
 			continue
 		}
-		tag, err := GetTagByTitle(tagName)
+		tag, err := w.GetTagByTitle(tagName)
 		if err != nil {
-			newToken := library.GetPinyin(tagName)
-			newToken = VerifyTagUrlToken(newToken, 0)
+			newToken := library.GetPinyin(tagName, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+			newToken = w.VerifyTagUrlToken(newToken, 0)
 			letter := "A"
 			if newToken != "-" {
 				letter = string(newToken[0])
@@ -165,12 +164,12 @@ func SaveTagData(itemId uint, tagNames []string) error {
 				FirstLetter: strings.ToUpper(letter),
 				Status:      1,
 			}
-			dao.DB.Save(tag)
+			w.DB.Save(tag)
 
-			link := GetUrl("tag", tag, 0)
-			go PushArchive(link)
-			if config.JsonData.PluginSitemap.AutoBuild == 1 {
-				_ = AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
+			link := w.GetUrl("tag", tag, 0)
+			go w.PushArchive(link)
+			if w.PluginSitemap.AutoBuild == 1 {
+				_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
 			}
 		}
 		tagIds = append(tagIds, tag.Id)
@@ -178,28 +177,28 @@ func SaveTagData(itemId uint, tagNames []string) error {
 			TagId:  tag.Id,
 			ItemId: itemId,
 		}
-		dao.DB.Where("`item_id` = ? and `tag_id` = ?", itemId, tagData.TagId).FirstOrCreate(&tagData)
+		w.DB.Where("`item_id` = ? and `tag_id` = ?", itemId, tagData.TagId).FirstOrCreate(&tagData)
 	}
-	dao.DB.Where("`item_id` = ? and `tag_id` not in(?)", itemId, tagIds).Delete(&model.TagData{})
+	w.DB.Where("`item_id` = ? and `tag_id` not in(?)", itemId, tagIds).Delete(&model.TagData{})
 
 	return nil
 }
 
-func GetTagsByItemId(itemId uint) []*model.Tag {
+func (w *Website) GetTagsByItemId(itemId uint) []*model.Tag {
 	var tags []*model.Tag
 	var tagIds []uint
-	err := dao.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &tagIds).Error
+	err := w.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &tagIds).Error
 	if err != nil {
 		return nil
 	}
 	if len(tagIds) > 0 {
-		dao.DB.Where("id IN(?)", tagIds).Find(&tags)
+		w.DB.Where("id IN(?)", tagIds).Find(&tags)
 	}
 
 	return tags
 }
 
-func VerifyTagUrlToken(urlToken string, id uint) string {
+func (w *Website) VerifyTagUrlToken(urlToken string, id uint) string {
 	index := 0
 	for {
 		tmpToken := urlToken
@@ -207,13 +206,13 @@ func VerifyTagUrlToken(urlToken string, id uint) string {
 			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
 		}
 		// 判断分类
-		_, err := GetCategoryByUrlToken(tmpToken)
+		_, err := w.GetCategoryByUrlToken(tmpToken)
 		if err == nil {
 			index++
 			continue
 		}
 		// 判断archive
-		tmpTag, err := GetTagByUrlToken(tmpToken)
+		tmpTag, err := w.GetTagByUrlToken(tmpToken)
 		if err == nil && tmpTag.Id != id {
 			index++
 			continue

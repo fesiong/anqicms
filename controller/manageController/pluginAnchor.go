@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -12,12 +11,13 @@ import (
 )
 
 func PluginAnchorList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 
-	linkList, total, err := provider.GetAnchorList(keyword, currentPage, pageSize)
+	linkList, total, err := currentSite.GetAnchorList(keyword, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -35,9 +35,10 @@ func PluginAnchorList(ctx iris.Context) {
 }
 
 func PluginAnchorDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	anchor, err := provider.GetAnchorById(id)
+	anchor, err := currentSite.GetAnchorById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -54,6 +55,7 @@ func PluginAnchorDetail(ctx iris.Context) {
 }
 
 func PluginAnchorDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginAnchor
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -62,7 +64,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	req.Link = strings.TrimPrefix(req.Link, config.JsonData.System.BaseUrl)
+	req.Link = strings.TrimPrefix(req.Link, currentSite.System.BaseUrl)
 
 	var anchor *model.Anchor
 	var err error
@@ -71,7 +73,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 	var changeLink bool
 
 	if req.Id > 0 {
-		anchor, err = provider.GetAnchorById(req.Id)
+		anchor, err = currentSite.GetAnchorById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -80,7 +82,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 			return
 		}
 		//去重
-		exists, err := provider.GetAnchorByTitle(req.Title)
+		exists, err := currentSite.GetAnchorByTitle(req.Title)
 		if err == nil && exists.Id != anchor.Id {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -97,7 +99,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		}
 
 	} else {
-		anchor, err = provider.GetAnchorByTitle(req.Title)
+		anchor, err = currentSite.GetAnchorByTitle(req.Title)
 		if err != nil {
 			//不存在，则创建它
 			anchor = &model.Anchor{
@@ -110,7 +112,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 	anchor.Link = req.Link
 	anchor.Weight = req.Weight
 
-	err = anchor.Save(dao.DB)
+	err = anchor.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -121,10 +123,10 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 
 	if changeTitle || changeLink {
 		//锚文本名称更改了，不管连接有没有更改，都删掉旧的
-		go provider.ChangeAnchor(anchor, changeTitle)
+		go currentSite.ChangeAnchor(anchor, changeTitle)
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改锚文本：%d => %s", anchor.Id, anchor.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改锚文本：%d => %s", anchor.Id, anchor.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -133,6 +135,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 }
 
 func PluginAnchorReplace(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginAnchor
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -144,7 +147,7 @@ func PluginAnchorReplace(ctx iris.Context) {
 
 	if req.Id > 0 {
 		//更新单个
-		anchor, err := provider.GetAnchorById(req.Id)
+		anchor, err := currentSite.GetAnchorById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -153,12 +156,12 @@ func PluginAnchorReplace(ctx iris.Context) {
 			return
 		}
 
-		go provider.ReplaceAnchor(anchor)
+		go currentSite.ReplaceAnchor(anchor)
 	} else {
-		go provider.ReplaceAnchor(nil)
+		go currentSite.ReplaceAnchor(nil)
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("执行锚文本批量替换"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("执行锚文本批量替换"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -167,6 +170,7 @@ func PluginAnchorReplace(ctx iris.Context) {
 }
 
 func PluginAnchorDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginAnchorDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -178,7 +182,7 @@ func PluginAnchorDelete(ctx iris.Context) {
 
 	if req.Id > 0 {
 		//删一条
-		anchor, err := provider.GetAnchorById(req.Id)
+		anchor, err := currentSite.GetAnchorById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -187,7 +191,7 @@ func PluginAnchorDelete(ctx iris.Context) {
 			return
 		}
 
-		err = provider.DeleteAnchor(anchor)
+		err = currentSite.DeleteAnchor(anchor)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -198,16 +202,16 @@ func PluginAnchorDelete(ctx iris.Context) {
 	} else if len(req.Ids) > 0 {
 		//删除多条
 		for _, id := range req.Ids {
-			anchor, err := provider.GetAnchorById(id)
+			anchor, err := currentSite.GetAnchorById(id)
 			if err != nil {
 				continue
 			}
 
-			_ = provider.DeleteAnchor(anchor)
+			_ = currentSite.DeleteAnchor(anchor)
 		}
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除锚文本：%d, %v", req.Id, req.Ids))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除锚文本：%d, %v", req.Id, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -216,7 +220,8 @@ func PluginAnchorDelete(ctx iris.Context) {
 }
 
 func PluginAnchorExport(ctx iris.Context) {
-	anchors, err := provider.GetAllAnchors()
+	currentSite := provider.CurrentSite(ctx)
+	anchors, err := currentSite.GetAllAnchors()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -233,7 +238,7 @@ func PluginAnchorExport(ctx iris.Context) {
 		content = append(content, []interface{}{v.Title, v.Link, v.Weight})
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导出锚文本"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出锚文本"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -246,6 +251,7 @@ func PluginAnchorExport(ctx iris.Context) {
 }
 
 func PluginAnchorImport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -256,7 +262,7 @@ func PluginAnchorImport(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	result, err := provider.ImportAnchors(file, info)
+	result, err := currentSite.ImportAnchors(file, info)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -265,7 +271,7 @@ func PluginAnchorImport(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导入锚文本：%s", result))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("导入锚文本：%s", result))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -275,7 +281,8 @@ func PluginAnchorImport(ctx iris.Context) {
 }
 
 func PluginAnchorSetting(ctx iris.Context) {
-	pluginAnchor := config.JsonData.PluginAnchor
+	currentSite := provider.CurrentSite(ctx)
+	pluginAnchor := currentSite.PluginAnchor
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -285,6 +292,7 @@ func PluginAnchorSetting(ctx iris.Context) {
 }
 
 func PluginAnchorSettingForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginAnchorConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -298,11 +306,11 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 		req.AnchorDensity = 100
 	}
 
-	config.JsonData.PluginAnchor.AnchorDensity = req.AnchorDensity
-	config.JsonData.PluginAnchor.ReplaceWay = req.ReplaceWay
-	config.JsonData.PluginAnchor.KeywordWay = req.KeywordWay
+	currentSite.PluginAnchor.AnchorDensity = req.AnchorDensity
+	currentSite.PluginAnchor.ReplaceWay = req.ReplaceWay
+	currentSite.PluginAnchor.KeywordWay = req.KeywordWay
 
-	err := provider.SaveSettingValue(provider.AnchorSettingKey, config.JsonData.PluginAnchor)
+	err := currentSite.SaveSettingValue(provider.AnchorSettingKey, currentSite.PluginAnchor)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -311,7 +319,7 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改锚文本设置信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改锚文本设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

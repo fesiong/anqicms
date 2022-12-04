@@ -2,9 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/fesiong/pongo2"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -17,7 +16,8 @@ type tagPageDetailNode struct {
 }
 
 func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -45,7 +45,7 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 
 	if pageDetail == nil && id > 0 {
-		pageDetail = provider.GetCategoryFromCache(id)
+		pageDetail = currentSite.GetCategoryFromCache(id)
 		if pageDetail == nil {
 			return nil
 		}
@@ -57,7 +57,7 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if pageDetail.Type != config.CategoryTypePage {
 		return nil
 	}
-	pageDetail.Link = provider.GetUrl("page", pageDetail, 0)
+	pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
 
 	v := reflect.ValueOf(*pageDetail)
 

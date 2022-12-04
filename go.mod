@@ -10,6 +10,7 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v0.0.0-20220610011842-69c10b41e5e1
 	github.com/fatih/structs v1.1.0
+	github.com/fesiong/pongo2 v0.0.0
 	github.com/flosch/pongo2/v4 v4.0.2
 	github.com/go-pay/gopay v1.5.85
 	github.com/golang-jwt/jwt/v4 v4.4.2
@@ -110,3 +111,5 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	moul.io/http2curl v1.0.0 // indirect
 )
+
+replace github.com/fesiong/pongo2 => /Users/fesion/data/gitpath/pongo2

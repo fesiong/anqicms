@@ -2,8 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/fesiong/pongo2"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
@@ -15,7 +15,8 @@ type tagNextArchiveNode struct {
 }
 
 func (node *tagNextArchiveNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -28,17 +29,14 @@ func (node *tagNextArchiveNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		archiveDetail, _ = provider.GetArchiveById(id)
+		archiveDetail, _ = currentSite.GetArchiveById(id)
 	}
 
 	if archiveDetail != nil {
-		var nextArchive model.Archive
-		if err2 := dao.DB.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").First(&nextArchive).Error; err2 == nil {
-			nextArchive.GetThumb()
-			nextArchive.Link = provider.GetUrl("archive", &nextArchive, 0)
-
-			ctx.Private[node.name] = nextArchive
-		}
+		nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+			return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").Order("`id` ASC")
+		})
+		ctx.Private[node.name] = nextArchive
 	}
 	//execute
 	node.wrapper.Execute(ctx, writer)

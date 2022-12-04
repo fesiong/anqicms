@@ -7,12 +7,6 @@ type AuthResponse struct {
 	Status      int    `json:"status"`
 }
 
-type Statistics struct {
-	Total     int64 `json:"total"`
-	Month     int64 `json:"month"`
-	LastMonth int64 `json:"last_month"`
-}
-
 type SumAmount struct {
 	Total int64 `json:"total"`
 }

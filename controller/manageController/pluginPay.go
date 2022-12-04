@@ -8,11 +8,11 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 func PluginPayConfig(ctx iris.Context) {
-	pluginRewrite := config.JsonData.PluginPay
+	currentSite := provider.CurrentSite(ctx)
+	pluginRewrite := currentSite.PluginPay
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -22,6 +22,7 @@ func PluginPayConfig(ctx iris.Context) {
 }
 
 func PluginPayConfigForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginPayConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -31,33 +32,33 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginPay.AlipayAppId = req.AlipayAppId
-	config.JsonData.PluginPay.AlipayPrivateKey = req.AlipayPrivateKey
+	currentSite.PluginPay.AlipayAppId = req.AlipayAppId
+	currentSite.PluginPay.AlipayPrivateKey = req.AlipayPrivateKey
 	if req.AlipayCertPath != "" {
-		config.JsonData.PluginPay.AlipayCertPath = req.AlipayCertPath
+		currentSite.PluginPay.AlipayCertPath = req.AlipayCertPath
 	}
 	if req.AlipayRootCertPath != "" {
-		config.JsonData.PluginPay.AlipayRootCertPath = req.AlipayRootCertPath
+		currentSite.PluginPay.AlipayRootCertPath = req.AlipayRootCertPath
 	}
 	if req.AlipayPublicCertPath != "" {
-		config.JsonData.PluginPay.AlipayPublicCertPath = req.AlipayPublicCertPath
+		currentSite.PluginPay.AlipayPublicCertPath = req.AlipayPublicCertPath
 	}
 
-	config.JsonData.PluginPay.WechatAppId = req.WechatAppId
-	config.JsonData.PluginPay.WechatAppSecret = req.WechatAppSecret
-	config.JsonData.PluginPay.WeappAppId = req.WeappAppId
-	config.JsonData.PluginPay.WeappAppSecret = req.WeappAppSecret
+	currentSite.PluginPay.WechatAppId = req.WechatAppId
+	currentSite.PluginPay.WechatAppSecret = req.WechatAppSecret
+	currentSite.PluginPay.WeappAppId = req.WeappAppId
+	currentSite.PluginPay.WeappAppSecret = req.WeappAppSecret
 
-	config.JsonData.PluginPay.WechatMchId = req.WechatMchId
-	config.JsonData.PluginPay.WechatApiKey = req.WechatApiKey
+	currentSite.PluginPay.WechatMchId = req.WechatMchId
+	currentSite.PluginPay.WechatApiKey = req.WechatApiKey
 	if req.WechatCertPath != "" {
-		config.JsonData.PluginPay.WechatCertPath = req.WechatCertPath
+		currentSite.PluginPay.WechatCertPath = req.WechatCertPath
 	}
 	if req.WechatKeyPath != "" {
-		config.JsonData.PluginPay.WechatKeyPath = req.WechatKeyPath
+		currentSite.PluginPay.WechatKeyPath = req.WechatKeyPath
 	}
 
-	err := provider.SaveSettingValue(provider.PaySettingKey, config.JsonData.PluginPay)
+	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -65,9 +66,9 @@ func PluginPayConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheIndex()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新支付配置信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新支付配置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -76,6 +77,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 }
 
 func PluginPayUploadFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	name := ctx.PostValue("name")
 	if name != "wechat_cert_path" && name != "wechat_key_path" && name != "alipay_cert_path" && name != "alipay_root_cert_path" && name != "alipay_public_cert_path" {
 		ctx.JSON(iris.Map{
@@ -94,8 +96,8 @@ func PluginPayUploadFile(ctx iris.Context) {
 		return
 	}
 	defer file.Close()
-
-	filePath := fmt.Sprintf("%sdata/cert/%s", config.ExecPath, name+".pem")
+	fileName := name + ".pem"
+	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -122,16 +124,19 @@ func PluginPayUploadFile(ctx iris.Context) {
 		return
 	}
 
-	fileName := strings.TrimPrefix(filePath, config.ExecPath)
 	if name == "wechat_cert_path" {
-		config.JsonData.PluginPay.WechatCertPath = fileName
+		currentSite.PluginPay.WechatCertPath = fileName
 	} else if name == "wechat_key_path" {
-		config.JsonData.PluginPay.WechatKeyPath = fileName
+		currentSite.PluginPay.WechatKeyPath = fileName
 	} else if name == "alipay_cert_path" {
-		config.JsonData.PluginPay.AlipayCertPath = fileName
+		currentSite.PluginPay.AlipayCertPath = fileName
+	} else if name == "alipay_root_cert_path" {
+		currentSite.PluginPay.AlipayRootCertPath = fileName
+	} else if name == "alipay_public_cert_path" {
+		currentSite.PluginPay.AlipayPublicCertPath = fileName
 	}
 
-	err = provider.SaveSettingValue(provider.PaySettingKey, config.JsonData.PluginPay)
+	err = currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -140,7 +145,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("上传支付Cert文件：%s", name))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传支付证书文件：%s", name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

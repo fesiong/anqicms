@@ -6,18 +6,15 @@ import (
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"strings"
 	"time"
 )
 
-var adminLoginError = response.LoginError{}
-
 func AdminLogin(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AdminInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -44,15 +41,15 @@ func AdminLogin(ctx iris.Context) {
 	}
 
 	// 如果连续错了5次，则只能10分钟后再试
-	if adminLoginError.Times >= 5 {
-		if adminLoginError.LastTime > time.Now().Add(-10*time.Minute).Unix() {
+	if currentSite.AdminLoginError.Times >= 5 {
+		if currentSite.AdminLoginError.LastTime > time.Now().Add(-10*time.Minute).Unix() {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  "管理员已被临时锁定，请稍后重试",
 			})
 			return
 		} else {
-			adminLoginError.Times = 0
+			currentSite.AdminLoginError.Times = 0
 		}
 	}
 
@@ -75,10 +72,10 @@ func AdminLogin(ctx iris.Context) {
 		return
 	}
 
-	admin, err := provider.GetAdminByUserName(req.UserName)
+	admin, err := currentSite.GetAdminByUserName(req.UserName)
 	if err != nil {
-		adminLoginError.Times++
-		adminLoginError.LastTime = time.Now().Unix()
+		currentSite.AdminLoginError.Times++
+		currentSite.AdminLoginError.LastTime = time.Now().Unix()
 
 		// 记录日志
 		adminLog := model.AdminLoginLog{
@@ -88,7 +85,7 @@ func AdminLogin(ctx iris.Context) {
 			UserName: req.UserName,
 			Password: req.Password,
 		}
-		dao.DB.Create(&adminLog)
+		currentSite.DB.Create(&adminLog)
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -98,8 +95,8 @@ func AdminLogin(ctx iris.Context) {
 	}
 
 	if !admin.CheckPassword(req.Password) {
-		adminLoginError.Times++
-		adminLoginError.LastTime = time.Now().Unix()
+		currentSite.AdminLoginError.Times++
+		currentSite.AdminLoginError.LastTime = time.Now().Unix()
 
 		// 记录日志
 		adminLog := model.AdminLoginLog{
@@ -109,7 +106,7 @@ func AdminLogin(ctx iris.Context) {
 			UserName: req.UserName,
 			Password: req.Password,
 		}
-		dao.DB.Create(&adminLog)
+		currentSite.DB.Create(&adminLog)
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -119,8 +116,8 @@ func AdminLogin(ctx iris.Context) {
 	}
 
 	// 重置管理员登录失败次数
-	adminLoginError.Times = 0
-	admin.Token = provider.GetAdminAuthToken(admin.Id, req.Remember)
+	currentSite.AdminLoginError.Times = 0
+	admin.Token = currentSite.GetAdminAuthToken(admin.Id, req.Remember)
 
 	// 记录日志
 	adminLog := model.AdminLoginLog{
@@ -130,7 +127,7 @@ func AdminLogin(ctx iris.Context) {
 		UserName: req.UserName,
 		Password: "",
 	}
-	dao.DB.Create(&adminLog)
+	currentSite.DB.Create(&adminLog)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -149,6 +146,7 @@ func AdminLogout(ctx iris.Context) {
 }
 
 func AdminList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	searchId := uint(ctx.URLParamIntDefault("id", 0))
@@ -168,7 +166,7 @@ func AdminList(ctx iris.Context) {
 		tx = tx.Order("id desc")
 		return tx
 	}
-	users, total := provider.GetAdminList(ops, currentPage, pageSize)
+	users, total := currentSite.GetAdminList(ops, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -179,13 +177,14 @@ func AdminList(ctx iris.Context) {
 }
 
 func AdminDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	adminId := ctx.Values().GetUintDefault("adminId", 0)
 	queryId := uint(ctx.URLParamIntDefault("id", 0))
 	if queryId == 0 {
 		queryId = adminId
 	}
 
-	admin, err := provider.GetAdminInfoById(queryId)
+	admin, err := currentSite.GetAdminInfoById(queryId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -193,6 +192,7 @@ func AdminDetail(ctx iris.Context) {
 		})
 		return
 	}
+	admin.SiteId = currentSite.Id
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -202,6 +202,7 @@ func AdminDetail(ctx iris.Context) {
 }
 
 func AdminDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AdminInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -216,7 +217,7 @@ func AdminDetailForm(ctx iris.Context) {
 	var err error
 
 	if req.Id > 0 {
-		admin, err = provider.GetAdminInfoById(req.Id)
+		admin, err = currentSite.GetAdminInfoById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -228,7 +229,7 @@ func AdminDetailForm(ctx iris.Context) {
 			req.Status = 1
 		}
 	} else {
-		admin, err = provider.GetAdminByUserName(req.UserName)
+		admin, err = currentSite.GetAdminByUserName(req.UserName)
 		if err == nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -259,8 +260,7 @@ func AdminDetailForm(ctx iris.Context) {
 		}
 		admin.EncryptPassword(req.Password)
 	}
-
-	err = admin.Save(dao.DB)
+	err = currentSite.DB.Save(admin).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -269,7 +269,7 @@ func AdminDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新管理员信息：%d => %s", admin.Id, admin.UserName))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新管理员信息：%d => %s", admin.Id, admin.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -278,6 +278,7 @@ func AdminDetailForm(ctx iris.Context) {
 }
 
 func AdminDetailDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AdminInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -296,7 +297,7 @@ func AdminDetailDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteAdminInfo(req.Id)
+	err := currentSite.DeleteAdminInfo(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -304,7 +305,7 @@ func AdminDetailDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除管理员：%d => %s", req.Id, req.UserName))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除管理员：%d => %s", req.Id, req.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -313,6 +314,7 @@ func AdminDetailDelete(ctx iris.Context) {
 }
 
 func GetAdminLoginLog(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	if currentPage < 1 {
@@ -322,7 +324,7 @@ func GetAdminLoginLog(ctx iris.Context) {
 
 	var logs []model.AdminLoginLog
 	var total int64
-	dao.DB.Model(&model.AdminLoginLog{}).Count(&total).Limit(pageSize).Offset(offset).Order("id desc").Find(&logs)
+	currentSite.DB.Model(&model.AdminLoginLog{}).Count(&total).Limit(pageSize).Offset(offset).Order("id desc").Find(&logs)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -333,6 +335,7 @@ func GetAdminLoginLog(ctx iris.Context) {
 }
 
 func GetAdminLog(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	if currentPage < 1 {
@@ -342,7 +345,7 @@ func GetAdminLog(ctx iris.Context) {
 
 	var logs []model.AdminLog
 	var total int64
-	dao.DB.Model(&model.AdminLog{}).Count(&total).Limit(pageSize).Offset(offset).Order("id desc").Find(&logs)
+	currentSite.DB.Model(&model.AdminLog{}).Count(&total).Limit(pageSize).Offset(offset).Order("id desc").Find(&logs)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -353,7 +356,8 @@ func GetAdminLog(ctx iris.Context) {
 }
 
 func AdminGroupList(ctx iris.Context) {
-	groups := provider.GetAdminGroups()
+	currentSite := provider.CurrentSite(ctx)
+	groups := currentSite.GetAdminGroups()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -363,9 +367,10 @@ func AdminGroupList(ctx iris.Context) {
 }
 
 func AdminGroupDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	group, err := provider.GetAdminGroupInfo(id)
+	group, err := currentSite.GetAdminGroupInfo(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -382,6 +387,7 @@ func AdminGroupDetail(ctx iris.Context) {
 }
 
 func AdminGroupDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.GroupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -398,7 +404,7 @@ func AdminGroupDetailForm(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveAdminGroupInfo(&req)
+	err := currentSite.SaveAdminGroupInfo(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -406,7 +412,7 @@ func AdminGroupDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新管理员组信息：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新管理员组信息：%d => %s", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -415,6 +421,7 @@ func AdminGroupDetailForm(ctx iris.Context) {
 }
 
 func AdminGroupDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.GroupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -424,7 +431,7 @@ func AdminGroupDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteAdminGroup(req.Id)
+	err := currentSite.DeleteAdminGroup(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -432,7 +439,7 @@ func AdminGroupDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除管理员组：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除管理员组：%d => %s", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

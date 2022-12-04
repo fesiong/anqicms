@@ -2,8 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
+	"github.com/fesiong/pongo2"
+	"kandaoni.com/anqicms/provider"
 )
 
 type tagGuestbookNode struct {
@@ -13,7 +13,11 @@ type tagGuestbookNode struct {
 }
 
 func (node *tagGuestbookNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	fields := config.GetGuestbookFields()
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
+		return nil
+	}
+	fields := currentSite.GetGuestbookFields()
 	for i := range fields {
 		//分割items
 		fields[i].SplitContent()

@@ -3,7 +3,6 @@ package model
 import (
 	"github.com/lib/pq"
 	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
 	"path/filepath"
 	"strings"
 )
@@ -52,63 +51,26 @@ type ArchiveData struct {
 	Content string `json:"content" gorm:"column:content;type:longtext default null"`
 }
 
-func (a *Archive) BeforeSave(tx *gorm.DB) error {
-	if len(a.Images) > 0 {
-		for i := range a.Images {
-			a.Images[i] = strings.TrimPrefix(a.Images[i], config.JsonData.PluginStorage.StorageUrl)
-		}
-	}
-	return nil
-}
-
-func (a *Archive) AfterFind(tx *gorm.DB) error {
-	a.GetThumb()
-	return nil
-}
-
 func (a *Archive) AddViews(db *gorm.DB) error {
 	db.Model(&Archive{}).Where("`id` = ?", a.Id).UpdateColumn("views", gorm.Expr("`views` + 1"))
 	return nil
 }
 
-func (a *Archive) Save(db *gorm.DB) error {
-	if err := db.Save(a).Error; err != nil {
-		return err
-	}
-	if a.ArchiveData != nil {
-		a.ArchiveData.Id = a.Id
-		if err := db.Save(a.ArchiveData).Error; err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func (a *Archive) Delete(db *gorm.DB) error {
-	if err := db.Delete(a).Error; err != nil {
-		return err
-	}
-	// 同时删除对应module的内容
-
-	return nil
-}
-
-func (a *Archive) GetThumb() string {
+func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 	//取第一张
 	if len(a.Images) > 0 {
 		for i := range a.Images {
 			if !strings.HasPrefix(a.Images[i], "http") && !strings.HasPrefix(a.Images[i], "//") {
-				a.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(a.Images[i], "/")
+				a.Images[i] = storageUrl + "/" + strings.TrimPrefix(a.Images[i], "/")
 			}
 		}
 		a.Logo = a.Images[0]
 		paths, fileName := filepath.Split(a.Logo)
 		a.Thumb = paths + "thumb_" + fileName
-	} else if config.JsonData.Content.DefaultThumb != "" {
-		a.Logo = config.JsonData.Content.DefaultThumb
+	} else if defaultThumb != "" {
+		a.Logo = defaultThumb
 		if !strings.HasPrefix(a.Logo, "http") && !strings.HasPrefix(a.Logo, "//") {
-			a.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
+			a.Logo = storageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
 		}
 		a.Thumb = a.Logo
 	}

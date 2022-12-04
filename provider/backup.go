@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/response"
 	"log"
@@ -21,15 +19,9 @@ import (
 const ChunkSizeInMB = 16
 const MaxStmtSize = 1000000
 
-var backupDir string
-
-func init() {
-	backupDir = config.ExecPath + "data/backup/"
-}
-
-func dumpTableSchema(tableName string, file *os.File) error {
+func (w *Website) dumpTableSchema(tableName string, file *os.File) error {
 	var data string
-	err := dao.DB.Raw(fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", config.Server.Mysql.Database, tableName)).Row().Scan(&tableName, &data)
+	err := w.DB.Raw(fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", w.Mysql.Database, tableName)).Row().Scan(&tableName, &data)
 	if err != nil {
 		return err
 	}
@@ -40,11 +32,11 @@ func dumpTableSchema(tableName string, file *os.File) error {
 	return err
 }
 
-func dumpTable(table string, file *os.File) (err error) {
+func (w *Website) dumpTable(table string, file *os.File) (err error) {
 	var allBytes uint64
 	var allRows uint64
 
-	cursor, err := dao.DB.Raw(fmt.Sprintf("SELECT * FROM `%s`.`%s`", config.Server.Mysql.Database, table)).Rows()
+	cursor, err := w.DB.Raw(fmt.Sprintf("SELECT * FROM `%s`.`%s`", w.Mysql.Database, table)).Rows()
 	if err != nil {
 		return err
 	}
@@ -59,14 +51,14 @@ func dumpTable(table string, file *os.File) (err error) {
 	if err != nil {
 		return err
 	}
-	destColNames := dao.DB.Statement.Quote(cols)
+	destColNames := w.DB.Statement.Quote(cols)
 	stmtSize := 0
 	chunkBytes := 0
 	rows := make([]string, 0, 256)
 	inserts := make([]string, 0, 256)
 	for cursor.Next() {
 		var dest map[string]interface{}
-		err = dao.DB.ScanRows(cursor, &dest)
+		err = w.DB.ScanRows(cursor, &dest)
 		if err != nil {
 			return err
 		}
@@ -127,10 +119,10 @@ func dumpTable(table string, file *os.File) (err error) {
 	return nil
 }
 
-func BackupData() error {
-	backupFile := backupDir + time.Now().Format("20060102150405.sql")
+func (w *Website) BackupData() error {
+	backupFile := w.DataPath + "backup/" + time.Now().Format("20060102150405.sql")
 	// create dir
-	_ = os.MkdirAll(backupDir, os.ModePerm)
+	_ = os.MkdirAll(w.DataPath+"backup/", os.ModePerm)
 	outFile, err := os.Create(backupFile)
 	if err != nil {
 		return err
@@ -138,19 +130,19 @@ func BackupData() error {
 
 	t := time.Now()
 
-	tables, err := dao.DB.Migrator().GetTables()
+	tables, err := w.DB.Migrator().GetTables()
 	if err != nil {
 		return err
 	}
 
 	for _, table := range tables {
-		err = dumpTableSchema(table, outFile)
+		err = w.dumpTableSchema(table, outFile)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
-		err = dumpTable(table, outFile)
+		err = w.dumpTable(table, outFile)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -162,11 +154,11 @@ func BackupData() error {
 	return nil
 }
 
-func RestoreData(fileName string) error {
+func (w *Website) RestoreData(fileName string) error {
 	if fileName == "" {
 		return errors.New("备份文件不存在")
 	}
-	backupFile := backupDir + fileName
+	backupFile := w.DataPath + "backup/" + fileName
 	outFile, err := os.Open(backupFile)
 	if err != nil {
 		return err
@@ -182,7 +174,7 @@ func RestoreData(fileName string) error {
 		}
 		tmpStr += line
 		if strings.HasSuffix(line, ";\n") {
-			dao.DB.Exec(tmpStr)
+			w.DB.Exec(tmpStr)
 			tmpStr = ""
 		}
 	}
@@ -190,8 +182,8 @@ func RestoreData(fileName string) error {
 	return nil
 }
 
-func GetBackupList() []response.BackupInfo {
-	files, _ := os.ReadDir(backupDir)
+func (w *Website) GetBackupList() []response.BackupInfo {
+	files, _ := os.ReadDir(w.DataPath + "backup/")
 	var fileList []response.BackupInfo
 	for _, file := range files {
 		if !strings.HasSuffix(file.Name(), ".sql") {
@@ -216,13 +208,13 @@ func GetBackupList() []response.BackupInfo {
 	return fileList
 }
 
-func DeleteBackupData(fileName string) error {
+func (w *Website) DeleteBackupData(fileName string) error {
 	if fileName == "" {
 		return errors.New("备份文件不存在")
 	}
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")
-	backupFile := backupDir + fileName
+	backupFile := w.DataPath + "backup/" + fileName
 
 	_, err := os.Stat(backupFile)
 	if err != nil {
@@ -234,10 +226,10 @@ func DeleteBackupData(fileName string) error {
 	return err
 }
 
-func ImportBackupFile(file multipart.File, fileName string) error {
+func (w *Website) ImportBackupFile(file multipart.File, fileName string) error {
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")
-	backupFile := backupDir + fileName
+	backupFile := w.DataPath + "backup/" + fileName
 
 	outFile, err := os.Create(backupFile)
 	if err != nil {
@@ -250,13 +242,13 @@ func ImportBackupFile(file multipart.File, fileName string) error {
 	return err
 }
 
-func GetBackupFilePath(fileName string) (string, error) {
+func (w *Website) GetBackupFilePath(fileName string) (string, error) {
 	if fileName == "" {
 		return "", errors.New("备份文件不存在")
 	}
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")
-	backupFile := backupDir + fileName
+	backupFile := w.DataPath + "backup/" + fileName
 
 	_, err := os.Stat(backupFile)
 	if err != nil {

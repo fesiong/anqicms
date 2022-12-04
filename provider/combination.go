@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
@@ -18,6 +17,7 @@ import (
 )
 
 type CombinationItem struct {
+	w           *Website
 	Title       string
 	Description string
 	Link        string
@@ -25,10 +25,10 @@ type CombinationItem struct {
 	Image       string
 }
 
-func getCombinationEnginLink(keyword *model.Keyword) string {
+func (w *Website) getCombinationEnginLink(keyword *model.Keyword) string {
 	// default bing
 	var link string
-	switch config.CollectorConfig.FromEngine {
+	switch w.CollectorConfig.FromEngine {
 	case config.Engin360:
 		link = fmt.Sprintf("https://www.so.com/s?ie=utf-8&q=%s", url.QueryEscape(keyword.Title))
 		break
@@ -45,8 +45,8 @@ func getCombinationEnginLink(keyword *model.Keyword) string {
 		link = fmt.Sprintf("https://cn.bing.com/search?q=%s&ensearch=1", url.QueryEscape(keyword.Title))
 		break
 	case config.EnginOther:
-		if strings.Contains(config.KeywordConfig.FromWebsite, "%s") {
-			link = fmt.Sprintf(config.KeywordConfig.FromWebsite, url.QueryEscape(keyword.Title))
+		if strings.Contains(w.KeywordConfig.FromWebsite, "%s") {
+			link = fmt.Sprintf(w.KeywordConfig.FromWebsite, url.QueryEscape(keyword.Title))
 			break
 		}
 	case config.EnginBingCn:
@@ -58,8 +58,8 @@ func getCombinationEnginLink(keyword *model.Keyword) string {
 	return link
 }
 
-func GenerateCombination(keyword *model.Keyword) (int, error) {
-	result, err := collectCombinationMaterials(keyword)
+func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
+	result, err := w.collectCombinationMaterials(keyword)
 	if err != nil {
 		return 0, err
 	}
@@ -75,14 +75,14 @@ func GenerateCombination(keyword *model.Keyword) (int, error) {
 		if result[i].Content != "" {
 			text = result[i].Content
 		}
-		if config.CollectorConfig.InsertImage && result[i].Image != "" && num < 3 && len(config.CollectorConfig.Images) == 0 {
+		if w.CollectorConfig.InsertImage && result[i].Image != "" && num < 3 && len(w.CollectorConfig.Images) == 0 {
 			content = append(content, "<img src='"+result[i].Image+"'/>")
 			num++
 		}
 		content = append(content, "<p>"+text+"</p>")
 	}
-	if config.CollectorConfig.InsertImage && num == 0 && len(config.CollectorConfig.Images) > 0 {
-		img := config.CollectorConfig.Images[rand.Intn(len(config.CollectorConfig.Images))]
+	if w.CollectorConfig.InsertImage && num == 0 && len(w.CollectorConfig.Images) > 0 {
+		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
 		index := 2 + rand.Intn(len(content)-3)
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
@@ -90,26 +90,26 @@ func GenerateCombination(keyword *model.Keyword) (int, error) {
 		num++
 	}
 
-	if config.CollectorConfig.CategoryId == 0 {
+	if w.CollectorConfig.CategoryId == 0 {
 		var category model.Category
-		dao.DB.Where("module_id = 1").Take(&category)
-		config.CollectorConfig.CategoryId = category.Id
+		w.DB.Where("module_id = 1").Take(&category)
+		w.CollectorConfig.CategoryId = category.Id
 	}
 
 	archive := request.Archive{
 		Title:      keyword.Title,
 		ModuleId:   0,
-		CategoryId: config.CollectorConfig.CategoryId,
+		CategoryId: w.CollectorConfig.CategoryId,
 		Keywords:   keyword.Title,
 		Content:    strings.Join(content, "\n"),
 		KeywordId:  keyword.Id,
 	}
-	if config.CollectorConfig.SaveType == 0 {
+	if w.CollectorConfig.SaveType == 0 {
 		archive.Draft = true
 	} else {
 		archive.Draft = false
 	}
-	res, err := SaveArchive(&archive)
+	res, err := w.SaveArchive(&archive)
 	if err != nil {
 		log.Println("保存组合文章出错：", archive.Title, err.Error())
 		return 0, err
@@ -119,8 +119,8 @@ func GenerateCombination(keyword *model.Keyword) (int, error) {
 	return 0, nil
 }
 
-func collectCombinationMaterials(keyword *model.Keyword) ([]CombinationItem, error) {
-	link := getCombinationEnginLink(keyword)
+func (w *Website) collectCombinationMaterials(keyword *model.Keyword) ([]CombinationItem, error) {
+	link := w.getCombinationEnginLink(keyword)
 
 	var ok bool
 	var exists = map[string]struct{}{}
@@ -129,7 +129,7 @@ func collectCombinationMaterials(keyword *model.Keyword) ([]CombinationItem, err
 	page := 1
 	for page <= 4 {
 		var tmpData []CombinationItem
-		tmpData, link, err = getEnginData(link, keyword.Title, page)
+		tmpData, link, err = w.getEnginData(link, keyword.Title, page)
 		if err != nil {
 			break
 		}
@@ -156,7 +156,7 @@ func collectCombinationMaterials(keyword *model.Keyword) ([]CombinationItem, err
 	return result, nil
 }
 
-func getEnginData(link, word string, page int) ([]CombinationItem, string, error) {
+func (w *Website) getEnginData(link, word string, page int) ([]CombinationItem, string, error) {
 	resp, err := library.Request(link, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
@@ -177,7 +177,7 @@ func getEnginData(link, word string, page int) ([]CombinationItem, string, error
 	}
 	doc.Find("script,style,head").Remove()
 
-	result, err := parseSections(doc.Find("body"), word, link)
+	result, err := w.parseSections(doc.Find("body"), word, link)
 	// 尝试获取下一页链接
 	var nextLink string
 	aLinks := doc.Find("a")
@@ -203,7 +203,7 @@ func getEnginData(link, word string, page int) ([]CombinationItem, string, error
 	return result, nextLink, nil
 }
 
-func parseSections(sel *goquery.Selection, word, sourceLink string) ([]CombinationItem, error) {
+func (w *Website) parseSections(sel *goquery.Selection, word, sourceLink string) ([]CombinationItem, error) {
 	var list *goquery.Selection
 
 	if strings.Contains(sourceLink, "www.so.com") {
@@ -226,7 +226,7 @@ func parseSections(sel *goquery.Selection, word, sourceLink string) ([]Combinati
 	list.Find("span,em,i,strong,b,br").Contents().Unwrap()
 	list = filterList(list)
 	if list == nil || list.Nodes == nil {
-		return nil, errors.New(config.Lang("没有可用对象"))
+		return nil, errors.New(w.Lang("没有可用对象"))
 	}
 	list.AddClass("isTop")
 	parsedUrl, err := url.Parse(sourceLink)
@@ -251,7 +251,7 @@ func parseSections(sel *goquery.Selection, word, sourceLink string) ([]Combinati
 		if strings.Contains(title, "   ") {
 			return
 		}
-		if !ContainKeywords(title, word) {
+		if !w.ContainKeywords(title, word) {
 			return
 		}
 		//if _, ok := exists[title]; ok {
@@ -259,10 +259,10 @@ func parseSections(sel *goquery.Selection, word, sourceLink string) ([]Combinati
 		//}
 
 		isEnglish := CheckContentIsEnglish(title)
-		if config.CollectorConfig.Language == config.LanguageEn && !isEnglish {
+		if w.KeywordConfig.Language == config.LanguageEn && !isEnglish {
 			return
 		}
-		if config.CollectorConfig.Language == config.LanguageZh && isEnglish {
+		if w.KeywordConfig.Language == config.LanguageZh && isEnglish {
 			return
 		}
 
@@ -355,14 +355,15 @@ func parseSections(sel *goquery.Selection, word, sourceLink string) ([]Combinati
 		if _, ok = exists[desc]; ok {
 			return
 		}
-		if utf8.RuneCountInString(desc) < 50 || HasContain(desc, config.CollectorConfig.ContentExclude) {
+		if utf8.RuneCountInString(desc) < 50 || HasContain(desc, w.CollectorConfig.ContentExclude) {
 			return
 		}
-		ReplaceContentFromConfig(desc, config.CollectorConfig.ContentReplace)
+		w.ReplaceContentFromConfig(desc, w.CollectorConfig.ContentReplace)
 		//exists[title] = struct{}{}
 		exists[href] = struct{}{}
 		exists[desc] = struct{}{}
 		links = append(links, CombinationItem{
+			w:           w,
 			Title:       title,
 			Description: desc,
 			Link:        href,
@@ -400,7 +401,7 @@ func (ci *CombinationItem) GetSingleLinkData(sourceLink string) error {
 	runeText := []rune(ci.Description)
 	runeLen := len(runeText)
 	if runeLen < 50 {
-		return errors.New(config.Lang("不符合条件"))
+		return errors.New(ci.w.Lang("不符合条件"))
 	}
 	subText := string(runeText[runeLen/2-5 : runeLen/2+5])
 
@@ -427,9 +428,9 @@ func (ci *CombinationItem) GetSingleLinkData(sourceLink string) error {
 	//根据标题判断是否是英文，如果是英文，则采用英文的计数
 	isEnglish := CheckContentIsEnglish(ci.Title)
 	//尝试获取正文内容
-	content, _, _, _ := ParseArticleContent(doc.Find("body"), 0, isEnglish)
+	content, _, _, _ := ci.w.ParseArticleContent(doc.Find("body"), 0, isEnglish)
 	if content != nil {
-		text, _ := CleanTags(content)
+		text, _ := ci.w.CleanTags(content)
 		htmlR = strings.NewReader(text)
 		doc, err = goquery.NewDocumentFromReader(htmlR)
 		if err != nil {

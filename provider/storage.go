@@ -19,19 +19,19 @@ import (
 	"kandaoni.com/anqicms/config"
 )
 
-var Storage *BucketStorage
-
 type BucketStorage struct {
-	storageType         string
+	PublicPath          string
+	config              *config.PluginStorageConfig
 	tencentBucketClient *cos.Client
 	aliyunBucketClient  *oss.Bucket
 	qiniuBucketClient   *qbox.Mac
 	upyunBucketClient   *upyun.UpYun
 }
 
-func GetBucket() (bucket *BucketStorage, err error) {
+func (w *Website) GetBucket() (bucket *BucketStorage, err error) {
 	bucket = &BucketStorage{
-		storageType:         config.JsonData.PluginStorage.StorageType,
+		PublicPath:          w.PublicPath,
+		config:              &w.PluginStorage,
 		tencentBucketClient: nil,
 		aliyunBucketClient:  nil,
 		qiniuBucketClient:   nil,
@@ -43,27 +43,27 @@ func GetBucket() (bucket *BucketStorage, err error) {
 }
 
 func (bs *BucketStorage) initBucket() (err error) {
-	if bs.storageType == config.StorageTypeAliyun {
+	if bs.config.StorageType == config.StorageTypeAliyun {
 		err = bs.initAliyunBucket()
-	} else if bs.storageType == config.StorageTypeTencent {
+	} else if bs.config.StorageType == config.StorageTypeTencent {
 		err = bs.initTencentBucket()
-	} else if bs.storageType == config.StorageTypeQiniu {
+	} else if bs.config.StorageType == config.StorageTypeQiniu {
 		err = bs.initQiniuBucket()
-	} else if bs.storageType == config.StorageTypeUpyun {
+	} else if bs.config.StorageType == config.StorageTypeUpyun {
 		err = bs.initUpyunBucket()
 	} else {
-		bs.storageType = config.StorageTypeLocal
+		bs.config.StorageType = config.StorageTypeLocal
 	}
 
 	return err
 }
 
 func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error) {
-	log.Println("存储到", bs.storageType)
+	log.Println("存储到", bs.config.StorageType)
 	location = strings.TrimLeft(location, "/")
-	if config.JsonData.PluginStorage.KeepLocal || bs.storageType == config.StorageTypeLocal {
+	if bs.config.KeepLocal || bs.config.StorageType == config.StorageTypeLocal {
 		//将文件写入本地
-		basePath := config.ExecPath + "public/"
+		basePath := bs.PublicPath
 		//先判断文件夹是否存在，不存在就先创建
 		_, err := os.Stat(basePath + location)
 		if err != nil && os.IsNotExist(err) {
@@ -79,7 +79,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			return "", err
 		}
 	}
-	if bs.storageType == config.StorageTypeAliyun {
+	if bs.config.StorageType == config.StorageTypeAliyun {
 		if bs.aliyunBucketClient == nil {
 			err := bs.initAliyunBucket()
 			if err != nil {
@@ -91,7 +91,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 		if err != nil {
 			return "", err
 		}
-	} else if bs.storageType == config.StorageTypeTencent {
+	} else if bs.config.StorageType == config.StorageTypeTencent {
 		if bs.tencentBucketClient == nil {
 			err := bs.initTencentBucket()
 			if err != nil {
@@ -102,7 +102,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 		if err != nil {
 			return "", err
 		}
-	} else if bs.storageType == config.StorageTypeQiniu {
+	} else if bs.config.StorageType == config.StorageTypeQiniu {
 		//log.Println("使用七牛云上传")
 		if bs.qiniuBucketClient == nil {
 			err := bs.initQiniuBucket()
@@ -111,7 +111,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			}
 		}
 		putPolicy := storage.PutPolicy{
-			Scope: fmt.Sprintf("%s:%s", config.JsonData.PluginStorage.QiniuBucket, location),
+			Scope: fmt.Sprintf("%s:%s", bs.config.QiniuBucket, location),
 		}
 		upToken := putPolicy.UploadToken(bs.qiniuBucketClient)
 
@@ -120,7 +120,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 		//cfg.UseHTTPS = true
 		// 上传是否使用CDN上传加速
 		cfg.UseCdnDomains = false
-		region, _ := storage.GetRegionByID(storage.RegionID(config.JsonData.PluginStorage.QiniuRegion))
+		region, _ := storage.GetRegionByID(storage.RegionID(bs.config.QiniuRegion))
 		cfg.Zone = &region
 		formUploader := storage.NewFormUploader(&cfg)
 		ret := storage.PutRet{}
@@ -130,7 +130,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			fmt.Println(err)
 			return "", err
 		}
-	} else if bs.storageType == config.StorageTypeUpyun {
+	} else if bs.config.StorageType == config.StorageTypeUpyun {
 		if bs.upyunBucketClient == nil {
 			err := bs.initUpyunBucket()
 			if err != nil {
@@ -152,13 +152,13 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 }
 
 func (bs *BucketStorage) initTencentBucket() error {
-	u, _ := url.Parse(config.JsonData.PluginStorage.TencentBucketUrl)
+	u, _ := url.Parse(bs.config.TencentBucketUrl)
 	b := &cos.BaseURL{BucketURL: u}
 	// Permanent key
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
-			SecretID:  config.JsonData.PluginStorage.TencentSecretId,
-			SecretKey: config.JsonData.PluginStorage.TencentSecretKey,
+			SecretID:  bs.config.TencentSecretId,
+			SecretKey: bs.config.TencentSecretKey,
 		},
 	})
 
@@ -168,12 +168,12 @@ func (bs *BucketStorage) initTencentBucket() error {
 }
 
 func (bs *BucketStorage) initAliyunBucket() error {
-	client, err := oss.New(config.JsonData.PluginStorage.AliyunEndpoint, config.JsonData.PluginStorage.AliyunAccessKeyId, config.JsonData.PluginStorage.AliyunAccessKeySecret)
+	client, err := oss.New(bs.config.AliyunEndpoint, bs.config.AliyunAccessKeyId, bs.config.AliyunAccessKeySecret)
 	if err != nil {
 		return err
 	}
 
-	bucket, err := client.Bucket(config.JsonData.PluginStorage.AliyunBucketName)
+	bucket, err := client.Bucket(bs.config.AliyunBucketName)
 	if err != nil {
 		return err
 	}
@@ -184,7 +184,7 @@ func (bs *BucketStorage) initAliyunBucket() error {
 }
 
 func (bs *BucketStorage) initQiniuBucket() error {
-	mac := qbox.NewMac(config.JsonData.PluginStorage.QiniuAccessKey, config.JsonData.PluginStorage.QiniuSecretKey)
+	mac := qbox.NewMac(bs.config.QiniuAccessKey, bs.config.QiniuSecretKey)
 
 	bs.qiniuBucketClient = mac
 
@@ -193,9 +193,9 @@ func (bs *BucketStorage) initQiniuBucket() error {
 
 func (bs *BucketStorage) initUpyunBucket() error {
 	up := upyun.NewUpYun(&upyun.UpYunConfig{
-		Bucket:   config.JsonData.PluginStorage.UpyunBucket,
-		Operator: config.JsonData.PluginStorage.UpyunOperator,
-		Password: config.JsonData.PluginStorage.UpyunPassword,
+		Bucket:   bs.config.UpyunBucket,
+		Operator: bs.config.UpyunOperator,
+		Password: bs.config.UpyunPassword,
 	})
 
 	bs.upyunBucketClient = up
@@ -203,13 +203,12 @@ func (bs *BucketStorage) initUpyunBucket() error {
 	return nil
 }
 
-func InitBucket() {
-	var err error
-	Storage, err = GetBucket()
-
+func (w *Website) InitBucket() {
+	s, err := w.GetBucket()
 	if err != nil {
 		// 退回到local
 		log.Println(err.Error())
-		Storage.storageType = config.StorageTypeLocal
+		s.config.StorageType = config.StorageTypeLocal
 	}
+	w.Storage = s
 }

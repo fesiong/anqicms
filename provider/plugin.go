@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/parnurzeal/gorequest"
 	"io"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/response"
 	"net/http"
@@ -18,7 +17,7 @@ import (
 
 // SitemapLimit 单个sitemap文件可包含的连接数
 const SitemapLimit = 50000
-const PushLogFile = "push"
+const PushLogFile = "push.log"
 
 type bingData struct {
 	SiteUrl string   `json:"siteUrl"`
@@ -32,15 +31,15 @@ type bingData2 struct {
 	UrlList     []string `json:"urlList"`
 }
 
-func PushArchive(link string) {
-	_ = PushBaidu([]string{link})
-	_ = PushBing([]string{link})
+func (w *Website) PushArchive(link string) {
+	_ = w.PushBaidu([]string{link})
+	_ = w.PushBing([]string{link})
 }
 
-func PushBaidu(list []string) error {
-	baiduApi := config.JsonData.PluginPush.BaiduApi
+func (w *Website) PushBaidu(list []string) error {
+	baiduApi := w.PluginPush.BaiduApi
 	if baiduApi == "" {
-		return errors.New(config.Lang("没有配置百度主动推送"))
+		return errors.New(w.Lang("没有配置百度主动推送"))
 	}
 	urlString := strings.Replace(strings.Trim(fmt.Sprint(list), "[]"), " ", "\n", -1)
 
@@ -52,19 +51,19 @@ func PushBaidu(list []string) error {
 	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
-	logPushResult("baidu", fmt.Sprintf("%v, %s", list, string(body)))
+	w.logPushResult("baidu", fmt.Sprintf("%v, %s", list, string(body)))
 	return nil
 }
 
-func PushBing(list []string) error {
-	bingApi := config.JsonData.PluginPush.BingApi
+func (w *Website) PushBing(list []string) error {
+	bingApi := w.PluginPush.BingApi
 	if bingApi == "" {
-		return errors.New(config.Lang("没有配置必应主动推送"))
+		return errors.New(w.Lang("没有配置必应主动推送"))
 	}
 
 	// bing 推送有2种方式，一种是传统的api，另一种是 IndexNow
 	if strings.HasPrefix(bingApi, "https://www.bing.com/indexnow") {
-		baseUrl, err := url.Parse(config.JsonData.System.BaseUrl)
+		baseUrl, err := url.Parse(w.System.BaseUrl)
 		if err != nil {
 			return err
 		}
@@ -76,7 +75,7 @@ func PushBing(list []string) error {
 		}
 		apiKey := parsedUrl.Query().Get("key")
 
-		txtFile := config.ExecPath + "public/" + apiKey + ".txt"
+		txtFile := w.PublicPath + apiKey + ".txt"
 		_, err = os.Stat(txtFile)
 		if err != nil && os.IsNotExist(err) {
 			// 生成一个
@@ -86,7 +85,7 @@ func PushBing(list []string) error {
 		postData := bingData2{
 			Host:        baseUrl.Host,
 			Key:         apiKey,
-			KeyLocation: config.JsonData.System.BaseUrl + "/" + apiKey + ".txt",
+			KeyLocation: w.System.BaseUrl + "/" + apiKey + ".txt",
 			UrlList:     list,
 		}
 		resp, body, errs := gorequest.New().Timeout(10*time.Second).Set("Content-Type", "application/json; charset=utf-8").Post(bingApi).Send(postData).End()
@@ -97,10 +96,10 @@ func PushBing(list []string) error {
 		if resp.StatusCode == 200 {
 			body = "URL submitted successfully"
 		}
-		logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
+		w.logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
 	} else {
 		postData := bingData{
-			SiteUrl: config.JsonData.System.BaseUrl,
+			SiteUrl: w.System.BaseUrl,
 			UrlList: list,
 		}
 
@@ -109,13 +108,13 @@ func PushBing(list []string) error {
 			fmt.Println(errs)
 			return errs[0]
 		}
-		logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
+		w.logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
 	}
 
 	return nil
 }
 
-func logPushResult(spider string, result string) {
+func (w *Website) logPushResult(spider string, result string) {
 	pushLog := response.PushLog{
 		CreatedTime: time.Now().Unix(),
 		Result:      result,
@@ -125,14 +124,14 @@ func logPushResult(spider string, result string) {
 	content, err := json.Marshal(pushLog)
 
 	if err == nil {
-		library.DebugLog(PushLogFile, string(content))
+		library.DebugLog(w.CachePath, PushLogFile, string(content))
 	}
 }
 
-func GetLastPushList() ([]response.PushLog, error) {
+func (w *Website) GetLastPushList() ([]response.PushLog, error) {
 	var pushLogs []response.PushLog
 	//获取20条数据
-	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, PushLogFile)
+	filePath := w.CachePath + PushLogFile
 	logFile, err := os.Open(filePath)
 	if nil != err {
 		//打开失败
@@ -188,9 +187,9 @@ func GetLastPushList() ([]response.PushLog, error) {
 	return pushLogs, nil
 }
 
-func GetRobots() string {
+func (w *Website) GetRobots() string {
 	//robots 是一个文件，所以直接读取文件
-	robotsPath := fmt.Sprintf("%spublic/robots.txt", config.ExecPath)
+	robotsPath := w.PublicPath + "robots.txt"
 	robots, err := os.ReadFile(robotsPath)
 	if err != nil {
 		//文件不存在
@@ -200,8 +199,8 @@ func GetRobots() string {
 	return string(robots)
 }
 
-func SaveRobots(robots string) error {
-	robotsPath := fmt.Sprintf("%spublic/robots.txt", config.ExecPath)
+func (w *Website) SaveRobots(robots string) error {
+	robotsPath := w.PublicPath + "robots.txt"
 
 	robotsFile, err := os.OpenFile(robotsPath, os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {

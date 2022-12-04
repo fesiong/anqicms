@@ -3,7 +3,7 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"net/url"
@@ -11,7 +11,7 @@ import (
 )
 
 func Install(ctx iris.Context) {
-	if dao.DB != nil {
+	if provider.GetDefaultDB() != nil {
 		ctx.Redirect("/")
 		return
 	}
@@ -186,7 +186,7 @@ func Install(ctx iris.Context) {
 var installRunning bool
 
 func InstallForm(ctx iris.Context) {
-	if dao.DB != nil {
+	if provider.GetDefaultDB() != nil {
 		ShowMessage(ctx, "已初始化完成，无需再处理", []Button{
 			{Name: "点击继续", Link: "/"},
 		})
@@ -223,8 +223,6 @@ func InstallForm(ctx iris.Context) {
 			req.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
-	config.JsonData.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
-	config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 
 	config.Server.Mysql.Database = req.Database
 	config.Server.Mysql.User = req.User
@@ -232,7 +230,7 @@ func InstallForm(ctx iris.Context) {
 	config.Server.Mysql.Host = req.Host
 	config.Server.Mysql.Port = req.Port
 
-	err := dao.InitDB()
+	db, err := provider.InitDB(&config.Server.Mysql)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -240,8 +238,10 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	provider.SetDefaultDB(db)
+
 	//自动迁移数据库
-	err = dao.AutoMigrateDB(dao.DB)
+	err = provider.AutoMigrateDB(db)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -258,18 +258,35 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
-	_ = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
-	_ = provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
+
+	dbWebsite := model.Website{
+		// 首个站点ID为1
+		Model: model.Model{Id: 1},
+		// 收个站点为安装目录
+		RootPath: config.ExecPath,
+		Name:     "安企CMS(AnqiCMS)",
+		Mysql:    config.Server.Mysql,
+		Status:   1,
+	}
+	db.Save(dbWebsite)
+
+	provider.InitWebsite(&dbWebsite)
+	website := provider.GetWebsite(dbWebsite.Id)
+
+	website.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
+	website.PluginStorage.StorageUrl = website.System.BaseUrl
+	_ = website.SaveSettingValue(provider.SystemSettingKey, website.System)
+	_ = website.SaveSettingValue(provider.StorageSettingKey, website.PluginStorage)
 
 	if req.PreviewData {
-		_ = provider.RestoreDesignData(config.JsonData.System.TemplateName)
+		_ = website.RestoreDesignData(website.System.TemplateName)
 	}
 	// 读入配置
-	provider.InitSetting()
+	website.InitSetting()
 	// 初始化数据
-	dao.InitModelData(dao.DB)
+	website.InitModelData()
 	//创建管理员
-	err = provider.InitAdmin(req.AdminUser, req.AdminPassword, true)
+	err = website.InitAdmin(req.AdminUser, req.AdminPassword, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

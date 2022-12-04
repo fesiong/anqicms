@@ -2,9 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
+	"github.com/fesiong/pongo2"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -18,7 +16,8 @@ type tagArchiveDetailNode struct {
 }
 
 func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -42,7 +41,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		archiveDetail, _ = provider.GetArchiveById(id)
+		archiveDetail, _ = currentSite.GetArchiveById(id)
 		// check has Order
 		if fieldName == "HasOrdered" && archiveDetail != nil {
 			// if read level larger than 0, then need to check permission
@@ -55,7 +54,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					archiveDetail.HasOrdered = true
 				}
 				if archiveDetail.Price > 0 {
-					archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
+					archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
 				}
 				if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
 					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
@@ -63,7 +62,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						archiveDetail.HasOrdered = true
 					}
 				}
-				discount := provider.GetUserDiscount(userInfo.Id, userInfo)
+				discount := currentSite.GetUserDiscount(userInfo.Id, userInfo)
 				if discount > 0 {
 					archiveDetail.FavorablePrice = archiveDetail.Price * discount / 100
 				}
@@ -86,18 +85,18 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		}
 		if fieldName == "Link" {
 			// 当是获取链接的时候，再生成
-			archiveDetail.Link = provider.GetUrl("archive", archiveDetail, 0)
+			archiveDetail.Link = currentSite.GetUrl("archive", archiveDetail, 0)
 		}
 		if fieldName == "Content" {
 			// if read level larger than 0, then need to check permission
 			if archiveDetail.ReadLevel > 0 {
 				userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
 				if userGroup == nil || userGroup.Level < archiveDetail.ReadLevel {
-					content = fmt.Sprintf(config.Lang("该内容需要用户等级%d以上才能阅读"), archiveDetail.ReadLevel)
+					content = fmt.Sprintf(currentSite.Lang("该内容需要用户等级%d以上才能阅读"), archiveDetail.ReadLevel)
 				}
 			} else {
 				// 当读取content 的时候，再查询
-				archiveData, err := provider.GetArchiveDataById(archiveDetail.Id)
+				archiveData, err := currentSite.GetArchiveDataById(archiveDetail.Id)
 				if err == nil {
 					content = archiveData.Content
 				}
@@ -109,9 +108,9 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 		var category *model.Category
 		if fieldName == "Category" {
-			category = provider.GetCategoryFromCache(archiveDetail.CategoryId)
+			category = currentSite.GetCategoryFromCache(archiveDetail.CategoryId)
 			if category != nil {
-				category.Link = provider.GetUrl("category", category, 0)
+				category.Link = currentSite.GetUrl("category", category, 0)
 			}
 		}
 

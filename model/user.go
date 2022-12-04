@@ -78,14 +78,6 @@ func (s *UserGroupSetting) Scan(src interface{}) error {
 	return fmt.Errorf("pq: cannot convert %T", src)
 }
 
-func (u *User) BeforeSave(tx *gorm.DB) (err error) {
-	if u.GroupId == 0 {
-		u.GroupId = config.JsonData.PluginUser.DefaultGroupId
-	}
-
-	return
-}
-
 func (u *User) AfterCreate(tx *gorm.DB) (err error) {
 	if u.InviteCode == "" {
 		id := crc32.ChecksumIEEE([]byte(strconv.Itoa(int(u.Id))))
@@ -97,17 +89,12 @@ func (u *User) AfterCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-func (u *User) AfterFind(tx *gorm.DB) error {
-	u.GetThumb()
-	return nil
-}
-
-func (u *User) GetThumb() string {
+func (u *User) GetThumb(storageUrl string) string {
 	u.FullAvatarURL = u.AvatarURL
 	//取第一张
 	if u.FullAvatarURL != "" {
 		if !strings.HasPrefix(u.FullAvatarURL, "http") && !strings.HasPrefix(u.FullAvatarURL, "//") {
-			u.FullAvatarURL = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(u.FullAvatarURL, "/")
+			u.FullAvatarURL = storageUrl + "/" + strings.TrimPrefix(u.FullAvatarURL, "/")
 		}
 	}
 
@@ -131,7 +118,7 @@ func (u *User) CheckPassword(password string) bool {
 
 func (u *User) EncryptPassword(password string) error {
 	if password == "" {
-		return errors.New(config.Lang("密码为空"))
+		return errors.New("密码为空")
 	}
 	pass := []byte(password)
 	hash, err := bcrypt.GenerateFromPassword(pass, bcrypt.MinCost)

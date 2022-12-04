@@ -7,10 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
@@ -25,6 +23,7 @@ import (
 )
 
 type TransferWebsite struct {
+	w        *Website
 	Name     string `json:"name"`
 	BaseUrl  string `json:"base_url"`
 	Token    string `json:"token"`
@@ -142,15 +141,13 @@ type TransferAnchors struct {
 	Data []AnchorData `json:"data"`
 }
 
-var transferWebsite *TransferWebsite
-
-func GetTransferTask() *TransferWebsite {
-
-	return transferWebsite
+func (w *Website) GetTransferTask() *TransferWebsite {
+	return w.transferWebsite
 }
 
-func CreateTransferTask(website *request.TransferWebsite) (*TransferWebsite, error) {
-	transferWebsite = &TransferWebsite{
+func (w *Website) CreateTransferTask(website *request.TransferWebsite) (*TransferWebsite, error) {
+	w.transferWebsite = &TransferWebsite{
+		w:        w,
 		Name:     website.Name,
 		BaseUrl:  strings.TrimRight(website.BaseUrl, "/"),
 		Token:    website.Token,
@@ -159,8 +156,8 @@ func CreateTransferTask(website *request.TransferWebsite) (*TransferWebsite, err
 	}
 
 	// 尝试链接文件
-	remoteUrl := transferWebsite.BaseUrl + "/" + transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms"
-	resp, err := library.Request(remoteUrl, &library.Options{Method: "POST", Type: "json", Data: transferWebsite})
+	remoteUrl := w.transferWebsite.BaseUrl + "/" + w.transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms"
+	resp, err := library.Request(remoteUrl, &library.Options{Method: "POST", Type: "json", Data: w.transferWebsite})
 	if err != nil {
 		return nil, err
 	}
@@ -173,11 +170,11 @@ func CreateTransferTask(website *request.TransferWebsite) (*TransferWebsite, err
 		return nil, errors.New(result.Msg)
 	}
 
-	return transferWebsite, nil
+	return w.transferWebsite, nil
 }
 
-func DeleteTransferTask() {
-	transferWebsite = nil
+func (w *Website) DeleteTransferTask() {
+	w.transferWebsite = nil
 }
 
 // TransferWebData
@@ -236,7 +233,7 @@ func (t *TransferWebsite) TransferWebData() {
 	t.Status = 2
 	t.ErrorMsg = ""
 
-	DeleteCacheIndex()
+	t.w.DeleteCacheIndex()
 }
 
 func (t *TransferWebsite) transferModules() error {
@@ -275,11 +272,12 @@ func (t *TransferWebsite) transferModules() error {
 		if module.UrlToken == "" {
 			module.UrlToken = module.TableName
 		}
-		dao.DB.Save(&module)
-
-		module.Migrate(dao.DB, true)
+		t.w.DB.Save(&module)
+		module.Database = t.w.Mysql.Database
+		tplPath := fmt.Sprintf("%s/%s", t.w.GetTemplateDir(), module.TableName)
+		module.Migrate(t.w.DB, tplPath, true)
 	}
-	DeleteCacheModules()
+	t.w.DeleteCacheModules()
 
 	return nil
 }
@@ -321,13 +319,13 @@ func (t *TransferWebsite) transferCategories() error {
 		category.UrlToken = strings.TrimSuffix(category.UrlToken, ".html")
 		category.Id = result.Data[i].Id
 		if category.UrlToken == "" {
-			category.UrlToken = library.GetPinyin(category.Title)
+			category.UrlToken = library.GetPinyin(category.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		}
-		category.UrlToken = VerifyCategoryUrlToken(category.UrlToken, category.Id)
+		category.UrlToken = t.w.VerifyCategoryUrlToken(category.UrlToken, category.Id)
 
-		dao.DB.Save(&category)
+		t.w.DB.Save(&category)
 	}
-	DeleteCacheCategories()
+	t.w.DeleteCacheCategories()
 	return nil
 }
 
@@ -360,15 +358,15 @@ func (t *TransferWebsite) transferTags() error {
 		}
 		tag.Id = result.Data[i].Id
 		if tag.UrlToken == "" {
-			tag.UrlToken = library.GetPinyin(tag.Title)
+			tag.UrlToken = library.GetPinyin(tag.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		}
-		tag.UrlToken = VerifyTagUrlToken(tag.UrlToken, tag.Id)
+		tag.UrlToken = t.w.VerifyTagUrlToken(tag.UrlToken, tag.Id)
 		letter := "A"
 		if tag.UrlToken != "-" {
 			letter = string(tag.UrlToken[0])
 		}
 		tag.FirstLetter = letter
-		dao.DB.Save(&tag)
+		t.w.DB.Save(&tag)
 	}
 	return nil
 }
@@ -402,7 +400,7 @@ func (t *TransferWebsite) transferKeywords() error {
 			Status:    1,
 		}
 		anchor.Id = result.Data[i].Id
-		dao.DB.Save(&anchor)
+		t.w.DB.Save(&anchor)
 	}
 	return nil
 }
@@ -458,18 +456,18 @@ func (t *TransferWebsite) transferArchives() error {
 			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
 			archive.Id = result.Data[i].Id
 			if archive.UrlToken == "" {
-				archive.UrlToken = library.GetPinyin(archive.Title)
+				archive.UrlToken = library.GetPinyin(archive.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
 			}
-			archive.UrlToken = VerifyArchiveUrlToken(archive.UrlToken, archive.Id)
+			archive.UrlToken = t.w.VerifyArchiveUrlToken(archive.UrlToken, archive.Id)
 			// 保存主表
-			dao.DB.Save(&archive)
+			t.w.DB.Save(&archive)
 			// 保存内容表
 			archiveData := model.ArchiveData{
 				Content: ParseContent(result.Data[i].Content),
 			}
 			archiveData.Id = archive.Id
-			dao.DB.Save(&archiveData)
-			module := GetModuleFromCache(archive.ModuleId)
+			t.w.DB.Save(&archiveData)
+			module := t.w.GetModuleFromCache(archive.ModuleId)
 			if module != nil {
 				//extra
 				extraFields := map[string]interface{}{}
@@ -496,19 +494,19 @@ func (t *TransferWebsite) transferArchives() error {
 				if len(extraFields) > 0 {
 					// 先检查是否存在
 					var existsId uint
-					dao.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Pluck("id", &existsId)
+					t.w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Pluck("id", &existsId)
 					if existsId > 0 {
 						// 已存在
-						dao.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Updates(extraFields)
+						t.w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Updates(extraFields)
 					} else {
 						// 新建
 						extraFields["id"] = archive.Id
-						dao.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Create(extraFields)
+						t.w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Create(extraFields)
 					}
 				}
 			}
 			// tags
-			_ = SaveTagData(archive.Id, result.Data[i].Tags)
+			_ = t.w.SaveTagData(archive.Id, result.Data[i].Tags)
 		}
 	}
 
@@ -554,10 +552,10 @@ func (t *TransferWebsite) transferSinglePages() error {
 		}
 		category.UrlToken = strings.TrimSuffix(category.UrlToken, ".html")
 		// 如果已存在，如果类型不一样，则新增id，如果类型一样，则覆盖
-		exists, err := GetCategoryById(result.Data[i].Id)
+		exists, err := t.w.GetCategoryById(result.Data[i].Id)
 		if err == nil {
 			if exists.Type != config.CategoryTypePage {
-				exists2, err := GetCategoryByTitle(category.Title)
+				exists2, err := t.w.GetCategoryByTitle(category.Title)
 				if err == nil {
 					// 如果名称相同，但类型不同，则跳过当前数据
 					if exists2.Type != config.CategoryTypePage {
@@ -575,20 +573,19 @@ func (t *TransferWebsite) transferSinglePages() error {
 			category.Id = result.Data[i].Id
 		}
 		if category.UrlToken == "" {
-			category.UrlToken = library.GetPinyin(category.Title)
+			category.UrlToken = library.GetPinyin(category.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		}
-		category.UrlToken = VerifyCategoryUrlToken(category.UrlToken, category.Id)
-
-		dao.DB.Save(&category)
+		category.UrlToken = t.w.VerifyCategoryUrlToken(category.UrlToken, category.Id)
+		t.w.DB.Save(&category)
 	}
-	DeleteCacheCategories()
+	t.w.DeleteCacheCategories()
 	return nil
 }
 
 func (t *TransferWebsite) transferStatics() error {
 	t.Current = "static"
 	t.LastId = 0
-	tmpZipPath := config.ExecPath + "cache/transfer.zip"
+	tmpZipPath := t.w.CachePath + "transfer.zip"
 	tmpFile, err := os.Create(tmpZipPath)
 	if err != nil {
 		t.ErrorMsg = err.Error()
@@ -619,7 +616,7 @@ func (t *TransferWebsite) transferStatics() error {
 	// 解压
 	zipReader, err := zip.OpenReader(tmpZipPath)
 	if err != nil {
-		t.ErrorMsg = config.Lang("解压静态文件出错")
+		t.ErrorMsg = "解压静态文件出错"
 		t.Status = 2
 		return errors.New(t.ErrorMsg)
 	}
@@ -628,7 +625,6 @@ func (t *TransferWebsite) transferStatics() error {
 		// 删除压缩包
 		os.Remove(tmpZipPath)
 	}()
-	basePath := config.ExecPath + "public/"
 	for _, f := range zipReader.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -637,7 +633,7 @@ func (t *TransferWebsite) transferStatics() error {
 		if err != nil {
 			continue
 		}
-		realName := filepath.Join(basePath, f.Name)
+		realName := filepath.Join(t.w.PublicPath, f.Name)
 		_ = os.MkdirAll(filepath.Dir(realName), os.ModePerm)
 		newFile, err := os.Create(realName)
 		if err != nil {
@@ -660,10 +656,10 @@ func (t *TransferWebsite) transferStatics() error {
 			strings.HasSuffix(f.Name, ".png") ||
 			strings.HasSuffix(f.Name, ".gif") ||
 			strings.HasSuffix(f.Name, ".webp") {
-			insertAttachment(realName, 1)
+			t.w.insertAttachment(realName, 1)
 		} else if strings.HasSuffix(f.Name, ".mp4") ||
 			strings.HasSuffix(f.Name, ".webm") {
-			insertAttachment(realName, 0)
+			t.w.insertAttachment(realName, 0)
 		}
 	}
 
@@ -672,15 +668,14 @@ func (t *TransferWebsite) transferStatics() error {
 	return nil
 }
 
-func insertAttachment(realName string, isImage int) {
-	basePath := config.ExecPath + "public/"
-	if !strings.HasPrefix(realName, basePath) {
+func (w *Website) insertAttachment(realName string, isImage int) {
+	if !strings.HasPrefix(realName, w.PublicPath) {
 		return
 	}
-	fileLocation := strings.TrimPrefix(realName, basePath)
+	fileLocation := strings.TrimPrefix(realName, w.PublicPath)
 	var exists model.Attachment
 	// location 存在跳过
-	err := dao.DB.Where("`file_location` = ?", fileLocation).Take(&exists).Error
+	err := w.DB.Where("`file_location` = ?", fileLocation).Take(&exists).Error
 	if err == nil {
 		// 已存在，跳过
 		return
@@ -715,18 +710,18 @@ func insertAttachment(realName string, isImage int) {
 		IsImage:      isImage,
 		Status:       1,
 	}
-	err = attachment.Save(dao.DB)
+	err = attachment.Save(w.DB)
 	if err != nil {
 		return
 	}
-
+	attachment.GetThumb(w.PluginStorage.StorageUrl)
 	fileHeader := &multipart.FileHeader{
 		Filename: filepath.Base(realName),
 		Header:   nil,
 		Size:     info.Size(),
 	}
 	// 再走一遍上传流程
-	_, err = AttachmentUpload(file, fileHeader, 0, attachment.Id)
+	_, err = w.AttachmentUpload(file, fileHeader, 0, attachment.Id)
 	if err != nil {
 		log.Println(err)
 		return
@@ -756,72 +751,4 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*librar
 func ParseContent(content string) string {
 	// 已更换编辑器，不需要再做处理
 	return content
-	htmlR := strings.NewReader(content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
-	if err != nil {
-		return content
-	}
-	body := doc.Find("body")
-
-	body.Children().Each(func(i int, item *goquery.Selection) {
-		//只保留 顶层只运行 pre，blockquote,ul,ol,table,p,div
-		if item.Is("blockquote") ||
-			item.Is("pre") ||
-			item.Is("table") ||
-			item.Is("h1") ||
-			item.Is("h2") ||
-			item.Is("h3") ||
-			item.Is("h4") ||
-			item.Is("h5") ||
-			item.Is("h6") ||
-			item.Is("p") ||
-			item.Is("div") {
-			return
-		}
-		if item.Is("figure") {
-			// 重新wrap
-			tmp, _ := item.Html()
-			item.ReplaceWithHtml("<p>" + tmp + "</p>")
-			return
-		}
-		if item.Is("code") {
-			// 重新wrap
-			item.WrapHtml("<pre></pre>")
-			return
-		}
-		if item.Is("img") {
-			src, _ := item.Attr("src")
-			dataSrc, exists2 := item.Attr("data-src")
-			if exists2 {
-				src = dataSrc
-			}
-			dataSrc, exists2 = item.Attr("data-original")
-			if exists2 {
-				src = dataSrc
-			}
-			alt, _ := item.Attr("alt")
-			if src == "" {
-				item.Remove()
-			} else {
-				item.ReplaceWithHtml("<p><img src=\"" + src + "\" alt=\"" + alt + "\"/></p>")
-			}
-			return
-		}
-		//其他情况
-		if item.Is("ul") || item.Is("ol") {
-			if item.Find("li").Length() == 0 {
-				tmp, _ := item.Html()
-				item.WrapInnerHtml("<li>" + tmp + "</li>")
-			}
-		} else {
-			item.WrapHtml("<div></div>")
-		}
-	})
-
-	result, err := body.Html()
-	if err != nil {
-		log.Println("保存错误", err)
-		return content
-	}
-	return result
 }

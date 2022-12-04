@@ -3,21 +3,18 @@ package provider
 import (
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"mime/multipart"
 	"net/url"
 	"strings"
 )
 
-func GetRedirectList(keyword string, currentPage, pageSize int) ([]*model.Redirect, int64, error) {
+func (w *Website) GetRedirectList(keyword string, currentPage, pageSize int) ([]*model.Redirect, int64, error) {
 	var redirects []*model.Redirect
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
-	builder := dao.DB.Model(&model.Redirect{}).Order("id desc")
+	builder := w.DB.Model(&model.Redirect{}).Order("id desc")
 	if keyword != "" {
 		//模糊搜索
 		builder = builder.Where("(`from_url` like ?)", "%"+keyword+"%")
@@ -31,10 +28,10 @@ func GetRedirectList(keyword string, currentPage, pageSize int) ([]*model.Redire
 	return redirects, total, nil
 }
 
-func GetRedirectById(id uint) (*model.Redirect, error) {
+func (w *Website) GetRedirectById(id uint) (*model.Redirect, error) {
 	var redirect model.Redirect
 
-	err := dao.DB.Where("`id` = ?", id).First(&redirect).Error
+	err := w.DB.Where("`id` = ?", id).First(&redirect).Error
 	if err != nil {
 		return nil, err
 	}
@@ -42,10 +39,10 @@ func GetRedirectById(id uint) (*model.Redirect, error) {
 	return &redirect, nil
 }
 
-func GetRedirectByFromUrl(fromUrl string) (*model.Redirect, error) {
+func (w *Website) GetRedirectByFromUrl(fromUrl string) (*model.Redirect, error) {
 	var redirect model.Redirect
 
-	err := dao.DB.Where("`from_url` = ?", fromUrl).First(&redirect).Error
+	err := w.DB.Where("`from_url` = ?", fromUrl).First(&redirect).Error
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +50,7 @@ func GetRedirectByFromUrl(fromUrl string) (*model.Redirect, error) {
 	return &redirect, nil
 }
 
-func ImportRedirects(file multipart.File, info *multipart.FileHeader) (string, error) {
+func (w *Website) ImportRedirects(file multipart.File, info *multipart.FileHeader) (string, error) {
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		return "", err
@@ -85,7 +82,7 @@ func ImportRedirects(file multipart.File, info *multipart.FileHeader) (string, e
 		if fromUrl == toUrl {
 			continue
 		}
-		redirect, err := GetRedirectByFromUrl(fromUrl)
+		redirect, err := w.GetRedirectByFromUrl(fromUrl)
 		if err != nil {
 			//表示不存在
 			redirect = &model.Redirect{
@@ -94,14 +91,14 @@ func ImportRedirects(file multipart.File, info *multipart.FileHeader) (string, e
 			total++
 		}
 		redirect.ToUrl = toUrl
-		dao.DB.Save(redirect)
+		w.DB.Save(redirect)
 	}
 
-	return fmt.Sprintf(config.Lang("成功导入了%d个链接"), total), nil
+	return fmt.Sprintf(w.Lang("成功导入了%d个链接"), total), nil
 }
 
-func DeleteRedirect(redirect *model.Redirect) error {
-	err := dao.DB.Delete(redirect).Error
+func (w *Website) DeleteRedirect(redirect *model.Redirect) error {
+	err := w.DB.Delete(redirect).Error
 	if err != nil {
 		return err
 	}
@@ -109,16 +106,16 @@ func DeleteRedirect(redirect *model.Redirect) error {
 	return nil
 }
 
-func DeleteCacheRedirects() {
-	library.MemCache.Delete("redirects")
+func (w *Website) DeleteCacheRedirects() {
+	w.MemCache.Delete("redirects")
 }
 
-func GetCacheRedirects() map[string]string {
-	if dao.DB == nil {
+func (w *Website) GetCacheRedirects() map[string]string {
+	if w.DB == nil {
 		return nil
 	}
 	var redirects = map[string]string{}
-	result := library.MemCache.Get("redirects")
+	result := w.MemCache.Get("redirects")
 	if result != nil {
 		var ok bool
 		redirects, ok = result.(map[string]string)
@@ -127,13 +124,13 @@ func GetCacheRedirects() map[string]string {
 		}
 	}
 
-	baseUrl, err := url.Parse(config.JsonData.System.BaseUrl)
+	baseUrl, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
 		baseUrl.Host = "127.0.0.1:8001"
 	}
 
 	var tmpData []model.Redirect
-	dao.DB.Where(model.Redirect{}).Find(&tmpData)
+	w.DB.Where(model.Redirect{}).Find(&tmpData)
 	for i := range tmpData {
 		fromUrl := tmpData[i].FromUrl
 		toUrl := tmpData[i].ToUrl
@@ -152,13 +149,13 @@ func GetCacheRedirects() map[string]string {
 		redirects[fromUrl] = toUrl
 	}
 
-	library.MemCache.Set("redirects", redirects, 0)
+	w.MemCache.Set("redirects", redirects, 0)
 
 	return redirects
 }
 
-func GetRedirectFromCache(fromUrl string) string {
-	redirects := GetCacheRedirects()
+func (w *Website) GetRedirectFromCache(fromUrl string) string {
+	redirects := w.GetCacheRedirects()
 
 	if val, ok := redirects[fromUrl]; ok {
 		return val

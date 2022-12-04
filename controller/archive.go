@@ -4,23 +4,24 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 	"strings"
 	"time"
 )
 
 func ArchiveDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := ctx.Params().GetUintDefault("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
 	var err error
 	if urlToken != "" {
 		//优先使用urlToken
-		archive, err = provider.GetArchiveByUrlToken(urlToken)
+		archive, err = currentSite.GetArchiveByUrlToken(urlToken)
 	} else {
-		archive, err = provider.GetArchiveById(id)
+		archive, err = currentSite.GetArchiveById(id)
 	}
 	if err != nil || archive.Status != config.ContentStatusOK {
 		NotFound(ctx)
@@ -31,7 +32,7 @@ func ArchiveDetail(ctx iris.Context) {
 		chunkCatNames := strings.Split(multiCatNames, "/")
 		var prev *model.Category
 		for _, catName := range chunkCatNames {
-			tmpCat := provider.GetCategoryFromCacheByToken(catName)
+			tmpCat := currentSite.GetCategoryFromCacheByToken(catName)
 			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
 				NotFound(ctx)
 				return
@@ -79,10 +80,10 @@ func ArchiveDetail(ctx iris.Context) {
 			archive.HasOrdered = true
 		}
 		if archive.Price > 0 {
-			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
+			archive.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archive.Id)
 			// check price can make any discount？
 			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-			discount := provider.GetUserDiscount(userId, userInfo)
+			discount := currentSite.GetUserDiscount(userId, userInfo)
 			if discount > 0 {
 				archive.FavorablePrice = archive.Price * discount / 100
 			}
@@ -95,29 +96,31 @@ func ArchiveDetail(ctx iris.Context) {
 		}
 	}
 
-	_ = archive.AddViews(dao.DB)
+	_ = archive.AddViews(currentSite.DB)
 
-	webInfo.Title = archive.Title
-	if archive.SeoTitle != "" {
-		webInfo.Title = archive.SeoTitle
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = archive.Title
+		if archive.SeoTitle != "" {
+			webInfo.Title = archive.SeoTitle
+		}
+		webInfo.Keywords = archive.Keywords
+		webInfo.Description = archive.Description
+		webInfo.NavBar = archive.CategoryId
+		//设置页面名称，方便tags识别
+		webInfo.PageName = "archiveDetail"
+		webInfo.CanonicalUrl = archive.CanonicalUrl
+		if webInfo.CanonicalUrl == "" {
+			webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0)
+		}
+		ctx.ViewData("webInfo", webInfo)
 	}
-	webInfo.Keywords = archive.Keywords
-	webInfo.Description = archive.Description
-	webInfo.NavBar = archive.CategoryId
-	//设置页面名称，方便tags识别
-	webInfo.PageName = "archiveDetail"
-	webInfo.CanonicalUrl = archive.CanonicalUrl
-	if webInfo.CanonicalUrl == "" {
-		webInfo.CanonicalUrl = provider.GetUrl("archive", archive, 0)
-	}
-	ctx.ViewData("webInfo", webInfo)
 	ctx.ViewData("archive", archive)
 	//设置页面名称，方便tags识别
 	ctx.ViewData("pageName", "archiveDetail")
 
-	module := provider.GetModuleFromCache(archive.ModuleId)
+	module := currentSite.GetModuleFromCache(archive.ModuleId)
 	if module == nil {
-		ShowMessage(ctx, fmt.Sprintf("%s: %d", config.Lang("未定义模型"), archive.ModuleId), nil)
+		ShowMessage(ctx, fmt.Sprintf("%s: %d", currentSite.Lang("未定义模型"), archive.ModuleId), nil)
 		return
 	}
 	// 默认模板规则：表名 / index,list, detail .html
@@ -126,9 +129,9 @@ func ArchiveDetail(ctx iris.Context) {
 	if archive.Template != "" {
 		tplName = archive.Template
 	} else {
-		category := provider.GetCategoryFromCache(archive.CategoryId)
+		category := currentSite.GetCategoryFromCache(archive.CategoryId)
 		if category != nil {
-			categoryTemplate := provider.GetCategoryTemplate(category)
+			categoryTemplate := currentSite.GetCategoryTemplate(category)
 			if categoryTemplate != nil {
 				tplName = categoryTemplate.DetailTemplate
 			}
@@ -158,20 +161,23 @@ func ArchiveDetail(ctx iris.Context) {
 }
 
 func ArchiveIndex(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	urlToken := ctx.Params().GetString("module")
-	module := provider.GetModuleFromCacheByToken(urlToken)
+	module := currentSite.GetModuleFromCacheByToken(urlToken)
 	if module == nil {
 		NotFound(ctx)
 		return
 	}
 
-	webInfo.Title = module.Title
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = module.Title
 
-	//设置页面名称，方便tags识别
-	webInfo.PageName = "archiveIndex"
-	webInfo.NavBar = module.Id
-	webInfo.CanonicalUrl = provider.GetUrl("archiveIndex", module, 0)
-	ctx.ViewData("webInfo", webInfo)
+		//设置页面名称，方便tags识别
+		webInfo.PageName = "archiveIndex"
+		webInfo.NavBar = module.Id
+		webInfo.CanonicalUrl = currentSite.GetUrl("archiveIndex", module, 0)
+		ctx.ViewData("webInfo", webInfo)
+	}
 	ctx.ViewData("module", module)
 	//设置页面名称，方便tags识别
 	ctx.ViewData("pageName", "archiveIndex")

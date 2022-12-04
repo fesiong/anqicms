@@ -9,10 +9,11 @@ import (
 )
 
 func PluginOrderList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	orders, total := provider.GetOrderList(0, "", currentPage, pageSize)
+	orders, total := currentSite.GetOrderList(0, "", currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -23,9 +24,10 @@ func PluginOrderList(ctx iris.Context) {
 }
 
 func PluginOrderDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	orderId := ctx.URLParam("order_id")
 
-	order, err := provider.GetOrderInfoByOrderId(orderId)
+	order, err := currentSite.GetOrderInfoByOrderId(orderId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -34,12 +36,12 @@ func PluginOrderDetail(ctx iris.Context) {
 		return
 	}
 
-	order.User, _ = provider.GetUserInfoById(order.UserId)
+	order.User, _ = currentSite.GetUserInfoById(order.UserId)
 	if order.ShareUserId > 0 {
-		order.ShareUser, _ = provider.GetUserInfoById(order.ShareUserId)
+		order.ShareUser, _ = currentSite.GetUserInfoById(order.ShareUserId)
 	}
 	if order.ShareParentUserId > 0 {
-		order.ParentUser, _ = provider.GetUserInfoById(order.ShareParentUserId)
+		order.ParentUser, _ = currentSite.GetUserInfoById(order.ShareParentUserId)
 	}
 
 	ctx.JSON(iris.Map{
@@ -50,6 +52,7 @@ func PluginOrderDetail(ctx iris.Context) {
 }
 
 func PluginOrderSetDeliver(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -59,7 +62,7 @@ func PluginOrderSetDeliver(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SetOrderDeliver(&req)
+	err := currentSite.SetOrderDeliver(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -75,6 +78,7 @@ func PluginOrderSetDeliver(ctx iris.Context) {
 }
 
 func PluginOrderSetFinished(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -84,7 +88,7 @@ func PluginOrderSetFinished(ctx iris.Context) {
 		return
 	}
 
-	order, err := provider.GetOrderInfoByOrderId(req.OrderId)
+	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -92,7 +96,7 @@ func PluginOrderSetFinished(ctx iris.Context) {
 		})
 		return
 	}
-	err = provider.SetOrderFinished(order)
+	err = currentSite.SetOrderFinished(order)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -108,6 +112,7 @@ func PluginOrderSetFinished(ctx iris.Context) {
 }
 
 func PluginOrderSetCanceled(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -117,7 +122,7 @@ func PluginOrderSetCanceled(ctx iris.Context) {
 		return
 	}
 
-	order, err := provider.GetOrderInfoByOrderId(req.OrderId)
+	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -126,7 +131,7 @@ func PluginOrderSetCanceled(ctx iris.Context) {
 		return
 	}
 
-	err = provider.SetOrderCanceled(order)
+	err = currentSite.SetOrderCanceled(order)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -142,6 +147,7 @@ func PluginOrderSetCanceled(ctx iris.Context) {
 }
 
 func PluginOrderSetRefund(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderRefundRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -151,7 +157,7 @@ func PluginOrderSetRefund(ctx iris.Context) {
 		return
 	}
 
-	order, err := provider.GetOrderInfoByOrderId(req.OrderId)
+	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -160,7 +166,7 @@ func PluginOrderSetRefund(ctx iris.Context) {
 		return
 	}
 
-	err = provider.SetOrderRefund(order, req.Status)
+	err = currentSite.SetOrderRefund(order, req.Status)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -176,6 +182,7 @@ func PluginOrderSetRefund(ctx iris.Context) {
 }
 
 func PluginOrderApplyRefund(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderRefundRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -185,7 +192,7 @@ func PluginOrderApplyRefund(ctx iris.Context) {
 		return
 	}
 
-	order, err := provider.GetOrderInfoByOrderId(req.OrderId)
+	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -194,7 +201,7 @@ func PluginOrderApplyRefund(ctx iris.Context) {
 		return
 	}
 
-	err = provider.ApplyOrderRefund(order)
+	err = currentSite.ApplyOrderRefund(order)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -203,7 +210,7 @@ func PluginOrderApplyRefund(ctx iris.Context) {
 		return
 	}
 
-	err = provider.SetOrderRefund(order, 1)
+	err = currentSite.SetOrderRefund(order, 1)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -219,7 +226,8 @@ func PluginOrderApplyRefund(ctx iris.Context) {
 }
 
 func PluginOrderConfig(ctx iris.Context) {
-	setting := config.JsonData.PluginOrder
+	currentSite := provider.CurrentSite(ctx)
+	setting := currentSite.PluginOrder
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -229,6 +237,7 @@ func PluginOrderConfig(ctx iris.Context) {
 }
 
 func PluginOrderConfigForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginOrderConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -238,12 +247,12 @@ func PluginOrderConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginOrder.NoProcess = req.NoProcess
-	config.JsonData.PluginOrder.AutoFinishDay = req.AutoFinishDay
-	config.JsonData.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
-	config.JsonData.PluginOrder.SellerPercent = req.SellerPercent
+	currentSite.PluginOrder.NoProcess = req.NoProcess
+	currentSite.PluginOrder.AutoFinishDay = req.AutoFinishDay
+	currentSite.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
+	currentSite.PluginOrder.SellerPercent = req.SellerPercent
 
-	err := provider.SaveSettingValue(provider.OrderSettingKey, config.JsonData.PluginOrder)
+	err := currentSite.SaveSettingValue(provider.OrderSettingKey, currentSite.PluginOrder)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -251,9 +260,9 @@ func PluginOrderConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheIndex()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新订单配置信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新订单配置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -262,6 +271,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 }
 
 func PluginOrderExport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderExportRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -271,9 +281,9 @@ func PluginOrderExport(ctx iris.Context) {
 		return
 	}
 
-	header, content := provider.ExportOrders(&req)
+	header, content := currentSite.ExportOrders(&req)
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导出订单"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出订单"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -4,12 +4,13 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func CommentPublish(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
 	if ok := SafeVerify(ctx, "comment"); !ok {
@@ -38,15 +39,15 @@ func CommentPublish(ctx iris.Context) {
 		req.Ip = ctx.RemoteAddr()
 	}
 	if req.ParentId > 0 {
-		parent, err := provider.GetCommentById(req.ParentId)
+		parent, err := currentSite.GetCommentById(req.ParentId)
 		if err == nil {
 			req.ToUid = parent.UserId
 		}
 	}
 
-	comment, err := provider.SaveComment(&req)
+	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
-		msg := config.Lang("保存失败")
+		msg := currentSite.Lang("保存失败")
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -58,7 +59,7 @@ func CommentPublish(ctx iris.Context) {
 		return
 	}
 
-	msg := config.Lang("发布成功")
+	msg := currentSite.Lang("发布成功")
 	if returnType == "json" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
@@ -71,17 +72,18 @@ func CommentPublish(ctx iris.Context) {
 		if refer.URL != "" {
 			link = refer.URL
 		}
-		ShowMessage(ctx, config.Lang("发布成功"), []Button{
-			{Name: config.Lang("点击继续"), Link: link},
+		ShowMessage(ctx, currentSite.Lang("发布成功"), []Button{
+			{Name: currentSite.Lang("点击继续"), Link: link},
 		})
 	}
 }
 
 func CommentPraise(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginComment
 	req.Id = uint(ctx.PostValueIntDefault("id", 0))
 
-	comment, err := provider.GetCommentById(req.Id)
+	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -91,7 +93,7 @@ func CommentPraise(ctx iris.Context) {
 	}
 
 	comment.VoteCount += 1
-	err = comment.Save(dao.DB)
+	err = comment.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -104,14 +106,15 @@ func CommentPraise(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("点赞成功"),
+		"msg":  currentSite.Lang("点赞成功"),
 		"data": comment,
 	})
 }
 
 func CommentList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.Params().GetIntDefault("id", 0))
-	archive, err := provider.GetArchiveById(archiveId)
+	archive, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -119,15 +122,17 @@ func CommentList(ctx iris.Context) {
 		})
 		return
 	}
-	archive.Link = provider.GetUrl("archive", archive, 0)
+	archive.Link = currentSite.GetUrl("archive", archive, 0)
 	ctx.ViewData("archive", archive)
-	webInfo.Title = config.Lang("评论") + ": " + archive.Title
-	webInfo.Keywords = archive.Keywords
-	webInfo.Description = archive.Description
-	webInfo.PageName = "comments"
-	currentPage := ctx.URLParamIntDefault("page", 1)
-	webInfo.CanonicalUrl = provider.GetUrl(fmt.Sprintf("/comment/%d(?page={page})", archive.Id), nil, currentPage)
-	ctx.ViewData("webInfo", webInfo)
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = currentSite.Lang("评论") + ": " + archive.Title
+		webInfo.Keywords = archive.Keywords
+		webInfo.Description = archive.Description
+		webInfo.PageName = "comments"
+		currentPage := ctx.URLParamIntDefault("page", 1)
+		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/comment/%d(?page={page})", archive.Id), nil, currentPage)
+		ctx.ViewData("webInfo", webInfo)
+	}
 
 	ctx.ViewData("archiveId", archiveId)
 	tplName := "comment/list.html"

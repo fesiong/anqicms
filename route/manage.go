@@ -37,6 +37,14 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
+		website := manage.Party("/website", middleware.ParseAdminToken)
+		{
+			website.Get("/list", manageController.GetWebsiteList)
+			website.Get("/info", manageController.GetWebsiteInfo)
+			website.Post("/save", manageController.SaveWebsiteInfo)
+			website.Post("/delete", manageController.DeleteWebsite)
+		}
+
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			admin.Get("/menus", manageController.AdminMenus)
@@ -86,7 +94,6 @@ func manageRoute(app *iris.Application) {
 			collector.Post("/setting", manageController.HandleSaveCollectSetting)
 			//批量替换文章内容
 			collector.Post("/article/replace", manageController.HandleReplaceArticles)
-			collector.Post("/article/pseudo", manageController.HandleArticlePseudo)
 			collector.Post("/article/collect", manageController.HandleArticleCollect)
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
@@ -396,6 +403,11 @@ func manageRoute(app *iris.Application) {
 				backup.Post("/delete", manageController.PluginBackupDelete)
 				backup.Post("/export", manageController.PluginBackupExport)
 				backup.Post("/import", manageController.PluginBackupImport)
+			}
+
+			replace := plugin.Party("/replace")
+			{
+				replace.Post("/values", manageController.PluginReplaceValues)
 			}
 		}
 	}

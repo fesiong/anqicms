@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestGetDesignList(t *testing.T) {
-	designList := GetDesignList()
+func (w *Website) TestGetDesignList(t *testing.T) {
+	designList := w.GetDesignList()
 
 	log.Printf("%#v", designList)
 }

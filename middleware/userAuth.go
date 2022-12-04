@@ -11,6 +11,7 @@ import (
 )
 
 func ParseUserToken(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	tokenString := ctx.GetHeader("token")
 	if tokenString == "" {
 		// read from cookies
@@ -34,12 +35,12 @@ func ParseUserToken(ctx iris.Context) {
 				if sec >= time.Now().Unix() {
 					// 转换成 int
 					id, _ := strconv.Atoi(userID)
-					userInfo, err := provider.GetUserInfoById(uint(id))
+					userInfo, err := currentSite.GetUserInfoById(uint(id))
 					if err == nil {
 						ctx.Values().Set("userId", userID)
 						ctx.Values().Set("userInfo", userInfo)
 
-						userGroup, _ := provider.GetUserGroupInfo(userInfo.GroupId)
+						userGroup, _ := currentSite.GetUserGroupInfo(userInfo.GroupId)
 						ctx.Values().Set("userGroup", userGroup)
 						// set data to view
 						ctx.ViewData("userGroup", userGroup)
@@ -54,11 +55,12 @@ func ParseUserToken(ctx iris.Context) {
 }
 
 func UserAuth(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  config.Lang("该操作需要登录，请登录后重试"),
+			"msg":  currentSite.Lang("该操作需要登录，请登录后重试"),
 		})
 		return
 	}

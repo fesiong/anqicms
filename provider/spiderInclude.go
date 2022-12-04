@@ -4,8 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"github.com/parnurzeal/gorequest"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"net/url"
 	"regexp"
@@ -16,23 +14,23 @@ import (
 
 // QuerySpiderInclude 记录 网站的收录情况
 // https://www.baidu.com/s?wd=site%3Awww.baidu.com&tn=json&rn=10
-func QuerySpiderInclude() {
-	if dao.DB == nil {
+func (w *Website) QuerySpiderInclude() {
+	if w.DB == nil {
 		return
 	}
-	link, _ := url.Parse(config.JsonData.System.BaseUrl)
+	link, _ := url.Parse(w.System.BaseUrl)
 	includeLog := model.SpiderInclude{
-		BaiduCount:  GetBaiduInclude(link.Host),
-		SogouCount:  GetSogouInclude(link.Host),
-		SoCount:     GetSoInclude(link.Host),
-		BingCount:   GetBingInclude(link.Host),
-		GoogleCount: GetGoogleInclude(link.Host),
+		BaiduCount:  w.GetBaiduInclude(link.Host),
+		SogouCount:  w.GetSogouInclude(link.Host),
+		SoCount:     w.GetSoInclude(link.Host),
+		BingCount:   w.GetBingInclude(link.Host),
+		GoogleCount: w.GetGoogleInclude(link.Host),
 	}
 
-	dao.DB.Create(&includeLog)
+	w.DB.Create(&includeLog)
 }
 
-func GetBaiduInclude(serverHost string) (total int) {
+func (w *Website) GetBaiduInclude(serverHost string) (total int) {
 	link := fmt.Sprintf("https://www.baidu.com/s?wd=site%%3A%s&tn=json&rn=10", serverHost)
 
 	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(5 * time.Second)
@@ -54,7 +52,7 @@ func GetBaiduInclude(serverHost string) (total int) {
 }
 
 // GetSogouInclude https://www.sogou.com/web?query=site%3Awww.baidu.com
-func GetSogouInclude(serverHost string) (total int) {
+func (w *Website) GetSogouInclude(serverHost string) (total int) {
 	link := fmt.Sprintf("https://www.sogou.com/web?query=site%%3A%s", serverHost)
 
 	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(5 * time.Second)
@@ -75,7 +73,7 @@ func GetSogouInclude(serverHost string) (total int) {
 	return total
 }
 
-func GetSoInclude(serverHost string) (total int) {
+func (w *Website) GetSoInclude(serverHost string) (total int) {
 	link := fmt.Sprintf("https://www.so.com/s?q=site%%3A%s", serverHost)
 
 	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(5 * time.Second)
@@ -96,7 +94,7 @@ func GetSoInclude(serverHost string) (total int) {
 	return total
 }
 
-func GetBingInclude(serverHost string) (total int) {
+func (w *Website) GetBingInclude(serverHost string) (total int) {
 	link := fmt.Sprintf("https://www.bing.com/search?q=site%%3A%s", serverHost)
 
 	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(5 * time.Second)
@@ -117,7 +115,7 @@ func GetBingInclude(serverHost string) (total int) {
 	return total
 }
 
-func GetGoogleInclude(serverHost string) (total int) {
+func (w *Website) GetGoogleInclude(serverHost string) (total int) {
 	link := fmt.Sprintf("https://www.google.com/search?q=site%%3A%s", serverHost)
 
 	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(5 * time.Second)

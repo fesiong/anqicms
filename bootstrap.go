@@ -1,17 +1,17 @@
 package anqicms
 
 import (
-	"context"
+	stdContext "context"
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/crond"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/middleware"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/route"
 	"kandaoni.com/anqicms/tags"
+	"kandaoni.com/anqicms/view"
 	"log"
 	"os"
 	"strings"
@@ -40,16 +40,8 @@ func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 
 func (bootstrap *Bootstrap) Serve() {
 	//自动迁移表
-	if dao.DB != nil {
-		_ = dao.AutoMigrateDB(dao.DB)
-		//创建管理员，会先判断有没有的。不用担心重复
-		_ = provider.InitAdmin("admin", "123456", false)
-		// 加载setting
-		provider.InitSetting()
-		// 初始化数据
-		dao.InitModelData(dao.DB)
-		// 初始化索引,异步处理
-		go provider.InitFulltext()
+	if provider.GetDefaultDB() != nil {
+		provider.InitWebsites()
 	}
 
 	//开始计划任务
@@ -58,12 +50,13 @@ func (bootstrap *Bootstrap) Serve() {
 	go bootstrap.Start()
 	go func() {
 		time.Sleep(1 * time.Second)
+		currentSite := provider.CurrentSite(nil)
 		link := fmt.Sprintf("http://127.0.0.1:%d", bootstrap.Port)
-		if config.JsonData.System.BaseUrl != "" {
-			if strings.Contains(config.JsonData.System.BaseUrl, "127.0.0.1") {
-				config.JsonData.System.BaseUrl = link
+		if currentSite != nil && currentSite.System.BaseUrl != "" {
+			if strings.Contains(currentSite.System.BaseUrl, "127.0.0.1") {
+				currentSite.System.BaseUrl = link
 			}
-			link = config.JsonData.System.BaseUrl
+			link = currentSite.System.BaseUrl
 		}
 		err := open.Run(link)
 		if err != nil {
@@ -85,47 +78,49 @@ func (bootstrap *Bootstrap) Serve() {
 
 func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application = iris.New()
+	//bootstrap.Application.ContextPool = context.New(func() interface{} {
+	//	ctx := provider.Context{
+	//		Context: context.NewContext(bootstrap.Application),
+	//		WebInfo: new(provider.WebInfo),
+	//		Site:    new(provider.Website),
+	//	}
+	//	return &ctx
+	//})
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
-	if config.JsonData.System.TemplateName == "" {
-		config.JsonData.System.TemplateName = "default"
-	}
-	pugEngine := iris.Django(fmt.Sprintf("%stemplate/%s", config.ExecPath, config.JsonData.System.TemplateName), ".html")
+
+	pugEngine := view.Django(".html")
 	// 始终动态加载
 	pugEngine.Reload(true)
 
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
-	pugEngine.AddFunc("getUrl", provider.GetUrl)
 
-	pugEngine.RegisterTag("tdk", tags.TagTdkParser)
-	pugEngine.RegisterTag("system", tags.TagSystemParser)
-	pugEngine.RegisterTag("contact", tags.TagContactParser)
-	pugEngine.RegisterTag("navList", tags.TagNavListParser)
-	pugEngine.RegisterTag("categoryList", tags.TagCategoryListParser)
-	pugEngine.RegisterTag("categoryDetail", tags.TagCategoryDetailParser)
-	pugEngine.RegisterTag("archiveDetail", tags.TagArchiveDetailParser)
-	pugEngine.RegisterTag("pageList", tags.TagPageListParser)
-	pugEngine.RegisterTag("pageDetail", tags.TagPageDetailParser)
-	pugEngine.RegisterTag("prevArchive", tags.TagPrevArchiveParser)
-	pugEngine.RegisterTag("nextArchive", tags.TagNextArchiveParser)
-	pugEngine.RegisterTag("archiveList", tags.TagArchiveListParser)
-	pugEngine.RegisterTag("breadcrumb", tags.TagBreadcrumbParser)
-	pugEngine.RegisterTag("pagination", tags.TagPaginationParser)
-	pugEngine.RegisterTag("linkList", tags.TagLinkListParser)
-	pugEngine.RegisterTag("commentList", tags.TagCommentListParser)
-	pugEngine.RegisterTag("guestbook", tags.TagGuestbookParser)
-	pugEngine.RegisterTag("archiveParams", tags.TagArchiveParamsParser)
-	pugEngine.RegisterTag("tagList", tags.TagTagListParser)
-	pugEngine.RegisterTag("tagDetail", tags.TagTagDetailParser)
-	pugEngine.RegisterTag("tagDataList", tags.TagTagDataListParser)
-	pugEngine.RegisterTag("archiveFilters", tags.TagArchiveFiltersParser)
+	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)
+	_ = pugEngine.RegisterTag("system", tags.TagSystemParser)
+	_ = pugEngine.RegisterTag("contact", tags.TagContactParser)
+	_ = pugEngine.RegisterTag("navList", tags.TagNavListParser)
+	_ = pugEngine.RegisterTag("categoryList", tags.TagCategoryListParser)
+	_ = pugEngine.RegisterTag("categoryDetail", tags.TagCategoryDetailParser)
+	_ = pugEngine.RegisterTag("archiveDetail", tags.TagArchiveDetailParser)
+	_ = pugEngine.RegisterTag("pageList", tags.TagPageListParser)
+	_ = pugEngine.RegisterTag("pageDetail", tags.TagPageDetailParser)
+	_ = pugEngine.RegisterTag("prevArchive", tags.TagPrevArchiveParser)
+	_ = pugEngine.RegisterTag("nextArchive", tags.TagNextArchiveParser)
+	_ = pugEngine.RegisterTag("archiveList", tags.TagArchiveListParser)
+	_ = pugEngine.RegisterTag("breadcrumb", tags.TagBreadcrumbParser)
+	_ = pugEngine.RegisterTag("pagination", tags.TagPaginationParser)
+	_ = pugEngine.RegisterTag("linkList", tags.TagLinkListParser)
+	_ = pugEngine.RegisterTag("commentList", tags.TagCommentListParser)
+	_ = pugEngine.RegisterTag("guestbook", tags.TagGuestbookParser)
+	_ = pugEngine.RegisterTag("archiveParams", tags.TagArchiveParamsParser)
+	_ = pugEngine.RegisterTag("tagList", tags.TagTagListParser)
+	_ = pugEngine.RegisterTag("tagDetail", tags.TagTagDetailParser)
+	_ = pugEngine.RegisterTag("tagDataList", tags.TagTagDataListParser)
+	_ = pugEngine.RegisterTag("archiveFilters", tags.TagArchiveFiltersParser)
 
 	// 模板在最后加载，避免因为模板而导致程序无法运行
-	go func() {
-		time.Sleep(1 * time.Second)
-		bootstrap.Application.RegisterView(pugEngine)
-	}()
+	bootstrap.Application.RegisterView(pugEngine)
 
 	err := bootstrap.Application.Run(
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
@@ -148,7 +143,7 @@ func TimestampToDate(in int64, layout string) string {
 }
 
 func (bootstrap *Bootstrap) Shutdown() error {
-	bootstrap.Application.Shutdown(context.Background())
+	bootstrap.Application.Shutdown(stdContext.Background())
 
 	return nil
 }

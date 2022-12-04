@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -12,9 +11,10 @@ import (
 )
 
 func PluginCommentList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	comments, total, err := provider.GetCommentList(0, "id desc", currentPage, pageSize, 0)
+	comments, total, err := currentSite.GetCommentList(0, "id desc", currentPage, pageSize, 0)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -28,7 +28,7 @@ func PluginCommentList(ctx iris.Context) {
 	}
 	for i, v := range comments {
 		var article miniArticle
-		err := dao.DB.Model(&model.Archive{}).Where("id = ?", v.ArchiveId).Scan(&article).Error
+		err := currentSite.DB.Model(&model.Archive{}).Where("id = ?", v.ArchiveId).Scan(&article).Error
 		if err == nil {
 			comments[i].ItemTitle = article.Title
 		}
@@ -43,8 +43,9 @@ func PluginCommentList(ctx iris.Context) {
 }
 
 func PluginCommentDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
-	comment, err := provider.GetCommentById(id)
+	comment, err := currentSite.GetCommentById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -61,6 +62,7 @@ func PluginCommentDetail(ctx iris.Context) {
 }
 
 func PluginCommentDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginComment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -70,7 +72,7 @@ func PluginCommentDetailForm(ctx iris.Context) {
 		return
 	}
 
-	comment, err := provider.GetCommentById(req.Id)
+	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -89,7 +91,7 @@ func PluginCommentDetailForm(ctx iris.Context) {
 	}
 	comment.Ip = req.Ip
 
-	err = comment.Save(dao.DB)
+	err = comment.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -98,7 +100,7 @@ func PluginCommentDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改评论内容：%d", comment.Id))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改评论内容：%d", comment.Id))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -107,6 +109,7 @@ func PluginCommentDetailForm(ctx iris.Context) {
 }
 
 func PluginCommentDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginComment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -115,7 +118,7 @@ func PluginCommentDelete(ctx iris.Context) {
 		})
 		return
 	}
-	comment, err := provider.GetCommentById(req.Id)
+	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -124,7 +127,7 @@ func PluginCommentDelete(ctx iris.Context) {
 		return
 	}
 
-	err = comment.Delete(dao.DB)
+	err = comment.Delete(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -133,7 +136,7 @@ func PluginCommentDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", comment.Id, comment.Content))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", comment.Id, comment.Content))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -141,8 +144,9 @@ func PluginCommentDelete(ctx iris.Context) {
 	})
 }
 
-//处理审核状态
+// 处理审核状态
 func PluginCommentCheck(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginComment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -151,7 +155,7 @@ func PluginCommentCheck(ctx iris.Context) {
 		})
 		return
 	}
-	comment, err := provider.GetCommentById(req.Id)
+	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -165,7 +169,7 @@ func PluginCommentCheck(ctx iris.Context) {
 	} else {
 		comment.Status = model.StatusWait
 	}
-	err = comment.Save(dao.DB)
+	err = comment.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -174,7 +178,7 @@ func PluginCommentCheck(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("审核通过锚文本：%d", comment.Id))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("审核通过锚文本：%d", comment.Id))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -5,14 +5,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"os"
 	"strings"
 	"time"
 )
 
-const MailLogFile = "mail"
+const MailLogFile = "mail.log"
 
 type MailLog struct {
 	CreatedTime int64  `json:"created_time"`
@@ -20,10 +19,10 @@ type MailLog struct {
 	Status      string `json:"status"`
 }
 
-func GetLastSendmailList() ([]*MailLog, error) {
+func (w *Website) GetLastSendmailList() ([]*MailLog, error) {
 	var mailLogs []*MailLog
 	//获取20条数据
-	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, MailLogFile)
+	filePath := w.CachePath + MailLogFile
 	logFile, err := os.Open(filePath)
 	if nil != err {
 		//打开失败
@@ -79,8 +78,8 @@ func GetLastSendmailList() ([]*MailLog, error) {
 	return mailLogs, nil
 }
 
-func SendMail(subject, content string) error {
-	setting := config.JsonData.PluginSendmail
+func (w *Website) SendMail(subject, content string) error {
+	setting := w.PluginSendmail
 	port := setting.Port
 	if port == 0 {
 		//默认使用25端口
@@ -93,7 +92,7 @@ func SendMail(subject, content string) error {
 
 	if setting.Account == "" {
 		//成功配置，则跳过
-		return errors.New(config.Lang("请配置发件人信息"))
+		return errors.New(w.Lang("请配置发件人信息"))
 	}
 
 	//开始发送
@@ -126,14 +125,14 @@ func SendMail(subject, content string) error {
 	email.Text = content
 
 	if err := email.Send(); err != nil {
-		logMailError(subject, err.Error())
+		w.logMailError(subject, err.Error())
 		return err
 	}
-	logMailError(subject, config.Lang("发送成功"))
+	w.logMailError(subject, w.Lang("发送成功"))
 	return nil
 }
 
-func logMailError(subject, status string) {
+func (w *Website) logMailError(subject, status string) {
 	mailLog := MailLog{
 		CreatedTime: time.Now().Unix(),
 		Subject:     subject,
@@ -143,6 +142,6 @@ func logMailError(subject, status string) {
 	content, err := json.Marshal(mailLog)
 
 	if err == nil {
-		library.DebugLog(MailLogFile, string(content))
+		library.DebugLog(w.CachePath, MailLogFile, string(content))
 	}
 }

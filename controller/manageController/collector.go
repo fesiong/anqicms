@@ -10,7 +10,8 @@ import (
 
 // HandleCollectSetting 全局配置
 func HandleCollectSetting(ctx iris.Context) {
-	collector := provider.GetUserCollectorSetting()
+	currentSite := provider.CurrentSite(ctx)
+	collector := currentSite.GetUserCollectorSetting()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -21,6 +22,7 @@ func HandleCollectSetting(ctx iris.Context) {
 
 // HandleSaveCollectSetting 全局配置保存
 func HandleSaveCollectSetting(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.CollectorJson
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -31,7 +33,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 	}
 
 	//将现有配置写回文件
-	err := provider.SaveUserCollectorSetting(req, true)
+	err := currentSite.SaveUserCollectorSetting(req, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -40,7 +42,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改采集配置"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改采集配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -49,6 +51,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 }
 
 func HandleReplaceArticles(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchiveReplaceRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -69,7 +72,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 	collectorJson := config.CollectorJson{
 		ContentReplace: req.ContentReplace,
 	}
-	err := provider.SaveUserCollectorSetting(collectorJson, false)
+	err := currentSite.SaveUserCollectorSetting(collectorJson, false)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -80,9 +83,9 @@ func HandleReplaceArticles(ctx iris.Context) {
 
 	if req.Replace {
 
-		provider.AddAdminLog(ctx, fmt.Sprintf("批量替换文档内容"))
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("批量替换文档内容"))
 
-		go provider.ReplaceArticles()
+		go currentSite.ReplaceArticles()
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "替换任务已触发",
@@ -90,7 +93,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新替换关键词配置"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新替换关键词配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -98,46 +101,11 @@ func HandleReplaceArticles(ctx iris.Context) {
 	})
 }
 
-func HandleArticlePseudo(ctx iris.Context) {
-	var req request.Archive
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	archiveData, err := provider.GetArchiveDataById(req.Id)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	err = provider.PseudoOriginalArticle(archiveData)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("文档伪原创操作：%d => %s", archiveData.Id, ""))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "伪原创已完成",
-	})
-}
-
 func HandleDigKeywords(ctx iris.Context) {
-	go provider.StartDigKeywords(true)
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.StartDigKeywords(true)
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("手动触发关键词拓词任务"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动触发关键词拓词任务"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -147,6 +115,7 @@ func HandleDigKeywords(ctx iris.Context) {
 
 // HandleArticleCollect 手动采集不受时间限制，并且需要指定关键词
 func HandleArticleCollect(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.KeywordRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -156,7 +125,7 @@ func HandleArticleCollect(ctx iris.Context) {
 		return
 	}
 
-	keyword, err := provider.GetKeywordById(req.Id)
+	keyword, err := currentSite.GetKeywordById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -165,7 +134,7 @@ func HandleArticleCollect(ctx iris.Context) {
 		return
 	}
 
-	go provider.CollectArticlesByKeyword(*keyword, true)
+	go currentSite.CollectArticlesByKeyword(*keyword, true)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

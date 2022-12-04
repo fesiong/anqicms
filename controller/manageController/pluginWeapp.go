@@ -8,7 +8,8 @@ import (
 )
 
 func PluginWeappConfig(ctx iris.Context) {
-	pluginRewrite := config.JsonData.PluginWeapp
+	currentSite := provider.CurrentSite(ctx)
+	pluginRewrite := currentSite.PluginWeapp
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -18,6 +19,7 @@ func PluginWeappConfig(ctx iris.Context) {
 }
 
 func PluginWeappConfigForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginWeappConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -27,12 +29,12 @@ func PluginWeappConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginWeapp.AppID = req.AppID
-	config.JsonData.PluginWeapp.AppSecret = req.AppSecret
-	config.JsonData.PluginWeapp.Token = req.Token
-	config.JsonData.PluginWeapp.EncodingAESKey = req.EncodingAESKey
+	currentSite.PluginWeapp.AppID = req.AppID
+	currentSite.PluginWeapp.AppSecret = req.AppSecret
+	currentSite.PluginWeapp.Token = req.Token
+	currentSite.PluginWeapp.EncodingAESKey = req.EncodingAESKey
 
-	err := provider.SaveSettingValue(provider.WeappSettingKey, config.JsonData.PluginWeapp)
+	err := currentSite.SaveSettingValue(provider.WeappSettingKey, currentSite.PluginWeapp)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -41,9 +43,9 @@ func PluginWeappConfigForm(ctx iris.Context) {
 		return
 	}
 	// 强制更新信息
-	provider.GetWeappClient(true)
+	currentSite.GetWeappClient(true)
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新小程序信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新小程序信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
