@@ -22,6 +22,7 @@ type Bootstrap struct {
 	Application *iris.Application
 	Port        int
 	LoggerLevel string
+	viewEngine  *view.DjangoEngine
 }
 
 func New(port int, loggerLevel string) *Bootstrap {
@@ -66,33 +67,33 @@ func (bootstrap *Bootstrap) Serve() {
 	// 伪静态规则和模板更改变化
 	for {
 		select {
-		case <-config.RestartChan:
-			fmt.Println("监听到路由更改")
-			_ = bootstrap.Shutdown()
-			log.Println("进程结束，开始重启")
-			// 重启
-			_ = provider.Restart()
+		case restart := <-config.RestartChan:
+			if restart {
+				fmt.Println("监听到路由更改")
+				_ = bootstrap.Shutdown()
+				log.Println("进程结束，开始重启")
+				// 重启
+				_ = provider.Restart()
+			} else {
+				// reload template
+				fmt.Println("重载模板")
+				bootstrap.viewEngine.Load()
+			}
 		}
 	}
 }
 
 func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application = iris.New()
-	//bootstrap.Application.ContextPool = context.New(func() interface{} {
-	//	ctx := provider.Context{
-	//		Context: context.NewContext(bootstrap.Application),
-	//		WebInfo: new(provider.WebInfo),
-	//		Site:    new(provider.Website),
-	//	}
-	//	return &ctx
-	//})
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
 
 	pugEngine := view.Django(".html")
-	// 始终动态加载
-	pugEngine.Reload(true)
+	// 开发模式下动态加载
+	if config.Server.Server.Env == "development" {
+		pugEngine.Reload(true)
+	}
 
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
 
@@ -119,6 +120,7 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("tagDataList", tags.TagTagDataListParser)
 	_ = pugEngine.RegisterTag("archiveFilters", tags.TagArchiveFiltersParser)
 
+	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行
 	bootstrap.Application.RegisterView(pugEngine)
 

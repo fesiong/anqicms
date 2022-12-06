@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"net/url"
 	"strconv"
 	"strings"
@@ -78,7 +79,8 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 	}
 	var total int64
 
-	builder := w.DB.Model(&model.Archive{})
+	log.Printf("%#v, %#v, %#v", currentPage, pageSize, offsets)
+	builder := w.DB.Model(&model.Archive{}).Debug()
 
 	if ops != nil {
 		builder = ops(builder)

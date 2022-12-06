@@ -80,6 +80,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	listType := "list"
 	flag := ""
 	q := ""
+	argQ := ""
 	child := true
 
 	if args["type"] != nil {
@@ -96,6 +97,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if args["q"] != nil {
 		q = strings.TrimSpace(args["q"].String())
+		argQ = q
 	}
 
 	// 支持更多的参数搜索，
@@ -142,6 +144,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		if limit < 1 {
 			limit = 1
+		}
+	}
+	if listType == "page" {
+		if currentPage > 1 {
+			offset = (currentPage - 1) * limit
 		}
 	}
 
@@ -205,6 +212,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 		var fulltextSearch bool
 		var fulltextTotal int64
+		var err2 error
+		var ids []uint
+		if (listType == "page" && len(q) > 0) || argQ != "" {
+			ids, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			if err2 == nil {
+				fulltextSearch = true
+				if len(ids) == 0 {
+					ids = append(ids, 0)
+				}
+				offset = 0
+			}
+		}
 		ops := func(tx *gorm.DB) *gorm.DB {
 			tx.Where("`status` = 1")
 			if authorId > 0 {
@@ -243,24 +262,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if order != "" {
 				tx = tx.Order(order)
 			}
-			if listType == "page" {
-				if currentPage > 1 {
-					offset = (currentPage - 1) * limit
-				}
-				if q != "" {
-					ids, total2, err2 := currentSite.Search(q, moduleId, currentPage, limit)
-					if err2 != nil {
-						tx = tx.Where("`title` like ?", "%"+q+"%")
-					} else {
-						fulltextSearch = true
-						if len(ids) == 0 {
-							ids = append(ids, 0)
-						}
-						tx = tx.Where("`id` IN(?)", ids)
-						fulltextTotal = total2
-						offset = 0
-					}
-				}
+			if len(ids) > 0 {
+				tx = tx.Where("`id` IN(?)", ids)
+			} else if q != "" {
+				tx = tx.Where("`title` like ?", "%"+q+"%")
 			}
 			return tx
 		}

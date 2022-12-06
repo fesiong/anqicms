@@ -85,6 +85,8 @@ func initJSON() {
 var ExecPath string
 var Server ServerJson
 var AnqiUser AnqiUserConfig
+
+// RestartChan true to restart app, false to reload template
 var RestartChan = make(chan bool, 1)
 var Languages = map[string]map[string]string{}
 

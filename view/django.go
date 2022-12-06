@@ -215,7 +215,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 	for _, site := range websites {
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
-		return walk(sfs, "", func(path string, info os.FileInfo, err error) error {
+		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				log.Println("view error1", err.Error())
 				if throw {

@@ -168,7 +168,7 @@ func AnqiSendFeedback(ctx iris.Context) {
 
 func RestartAnqicms(ctx iris.Context) {
 	// first need to stop iris
-	config.RestartChan <- false
+	config.RestartChan <- true
 
 	time.Sleep(3 * time.Second)
 

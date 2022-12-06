@@ -229,34 +229,39 @@ func Common(ctx iris.Context) {
 
 func Inspect(ctx iris.Context) {
 	uri := ctx.RequestPath(false)
-	if provider.GetDefaultDB() == nil && !strings.HasPrefix(uri, "/static") && !strings.HasPrefix(uri, "/install") {
-		ctx.Redirect("/install")
-		return
-	}
 	website := provider.CurrentSite(ctx)
-	if website == nil {
-		ShowMessage(ctx, "网站配置错误，请检查配置", nil)
-		return
-	}
-	if !website.Initialed {
-		ShowMessage(ctx, "网站已关闭", nil)
-		return
-	}
-	ctx.Values().Set("webInfo", &response.WebInfo{Title: website.System.SiteName, NavBar: 0})
-	ctx.ViewData("website", website)
+	var siteName string
+	if !strings.HasPrefix(uri, "/static") && !strings.HasPrefix(uri, "/install") {
+		if provider.GetDefaultDB() == nil {
+			ctx.Redirect("/install")
+			return
+		}
 
-	// 如果有后台域名，则后台后台将链接跳转到后台
-	if strings.HasPrefix(website.System.AdminUrl, "http") {
-		parsedUrl, err := url.Parse(website.System.AdminUrl)
-		// 如果解析失败，则跳过
-		if err == nil {
-			if parsedUrl.Host == ctx.Host() && !strings.HasPrefix(uri, "/system") {
-				// 来自后端的域名，但访问的不是后端的业务，则强制跳转到后端。
-				ctx.Redirect(strings.TrimRight(website.System.AdminUrl, "/") + "/system")
-				return
+		if website == nil {
+			ShowMessage(ctx, "网站配置错误，请检查配置", nil)
+			return
+		}
+		if !website.Initialed {
+			ShowMessage(ctx, "网站已关闭", nil)
+			return
+		}
+		siteName = website.System.SiteName
+		// 如果有后台域名，则后台后台将链接跳转到后台
+		if strings.HasPrefix(website.System.AdminUrl, "http") {
+			parsedUrl, err := url.Parse(website.System.AdminUrl)
+			// 如果解析失败，则跳过
+			if err == nil {
+				if parsedUrl.Host == ctx.Host() && !strings.HasPrefix(uri, "/system") {
+					// 来自后端的域名，但访问的不是后端的业务，则强制跳转到后端。
+					ctx.Redirect(strings.TrimRight(website.System.AdminUrl, "/") + "/system")
+					return
+				}
 			}
 		}
 	}
+
+	ctx.Values().Set("webInfo", &response.WebInfo{Title: siteName, NavBar: 0})
+	ctx.ViewData("website", website)
 
 	ctx.Next()
 }

@@ -33,37 +33,37 @@ type RewritePatten struct {
 }
 
 var rewriteNumberModePatten = RewritePatten{
-	Archive:      "/{module}/{id}.html",
+	Archive:      "/{module}/{id}(_{page}).html",
 	Category:     "/{module}/{catid}(/{page})",
 	Page:         "/{id}.html",
-	ArchiveIndex: "/{module}",
+	ArchiveIndex: "/{module}(_{page})",
 	TagIndex:     "/tags(/{page})",
 	Tag:          "/tag/{id}(/{page})",
 }
 
 var rewriteStringMode1Patten = RewritePatten{
-	Archive:      "/{module}/{filename}.html",
+	Archive:      "/{module}/{filename}(_{page}).html",
 	Category:     "/{module}/{catname}(/{page})",
 	Page:         "/{filename}.html",
-	ArchiveIndex: "/{module}",
+	ArchiveIndex: "/{module}(_{page})",
 	TagIndex:     "/tags(/{page})",
 	Tag:          "/tag/{filename}(/{page})",
 }
 
 var rewriteStringMode2Patten = RewritePatten{
-	Archive:      "/{catname}/{id}.html",
+	Archive:      "/{catname}/{id}(_{page}).html",
 	Category:     "/{catname}(/{page})",
 	Page:         "/{filename}.html",
-	ArchiveIndex: "/{module}",
+	ArchiveIndex: "/{module}(_{page})",
 	TagIndex:     "/tags(/{page})",
 	Tag:          "/tag/{id}(/{page})",
 }
 
 var rewriteStringMode3Patten = RewritePatten{
-	Archive:      "/{catname}/{filename}.html",
+	Archive:      "/{catname}/{filename}(_{page}).html",
 	Category:     "/{catname}(/{page})",
 	Page:         "/{filename}.html",
-	ArchiveIndex: "/{module}",
+	ArchiveIndex: "/{module}(_{page})",
 	TagIndex:     "/tags(/{page})",
 	Tag:          "/tag/{filename}(/{page})",
 }
@@ -117,6 +117,16 @@ func (w *Website) GetRewritePatten(focus bool) *RewritePatten {
 		w.parsedPatten = &rewriteStringMode3Patten
 	} else if w.PluginRewrite.Mode == config.RewritePattenMode {
 		w.parsedPatten = parseRewritePatten(w.PluginRewrite.Patten)
+	}
+	// 强制加page
+	if !strings.Contains(w.parsedPatten.Archive, "{page}") {
+		if strings.HasSuffix(w.parsedPatten.ArchiveIndex, ".html") {
+			strings.ReplaceAll(w.parsedPatten.ArchiveIndex, ".html", "(_{page}).html")
+		} else if strings.HasSuffix(w.parsedPatten.ArchiveIndex, "/") {
+			w.parsedPatten.ArchiveIndex = strings.TrimRight(w.parsedPatten.ArchiveIndex, "/") + "(_{page})/"
+		} else {
+			w.parsedPatten.ArchiveIndex += "(_{page})"
+		}
 	}
 
 	return w.parsedPatten

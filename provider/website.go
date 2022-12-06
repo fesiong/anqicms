@@ -139,7 +139,18 @@ func GetWebsites() map[uint]*Website {
 
 func CurrentSite(ctx iris.Context) *Website {
 	if len(websites) == 0 {
-		return nil
+		return &Website{
+			Id:         0,
+			Initialed:  false,
+			RootPath:   config.ExecPath,
+			CachePath:  config.ExecPath + "cache/",
+			DataPath:   config.ExecPath + "data/",
+			PublicPath: config.ExecPath + "public/",
+			System: config.SystemConfig{
+				SiteName:     "AnQiCMS",
+				TemplateName: "default",
+			},
+		}
 	}
 	if ctx != nil {
 		// 获取到当前website
@@ -181,6 +192,9 @@ func RemoveWebsite(siteId uint) {
 }
 
 func (w *Website) GetTemplateDir() string {
+	if w == nil {
+		return config.ExecPath + "template/default"
+	}
 	if len(w.System.TemplateName) == 0 {
 		w.System.TemplateName = "default"
 	}

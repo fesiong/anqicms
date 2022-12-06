@@ -281,7 +281,8 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			}
 		}
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新多站点信息：%d => %s", dbSite.Id, dbSite.Name))
 
 	ctx.JSON(iris.Map{
@@ -325,7 +326,9 @@ func DeleteWebsite(ctx iris.Context) {
 	}
 	// 只删除数据库记录，不删除实际文件
 	provider.GetDefaultDB().Delete(dbSite)
-
+	provider.RemoveWebsite(dbSite.Id)
+	// 重载模板
+	config.RestartChan <- false
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "删除成功",

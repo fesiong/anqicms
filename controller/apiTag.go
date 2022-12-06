@@ -235,6 +235,11 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	}
+	if listType == "page" {
+		if currentPage > 1 {
+			offset = (currentPage - 1) * limit
+		}
+	}
 
 	var archives []*model.Archive
 	var total int64
@@ -296,6 +301,18 @@ func ApiArchiveList(ctx iris.Context) {
 
 		var fulltextSearch bool
 		var fulltextTotal int64
+		var err2 error
+		var ids []uint
+		if listType == "page" && len(q) > 0 {
+			ids, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			if err2 == nil {
+				fulltextSearch = true
+				if len(ids) == 0 {
+					ids = append(ids, 0)
+				}
+				offset = 0
+			}
+		}
 		ops := func(tx *gorm.DB) *gorm.DB {
 			tx.Where("`status` = 1")
 			if authorId > 0 {
@@ -334,24 +351,10 @@ func ApiArchiveList(ctx iris.Context) {
 			if order != "" {
 				tx = tx.Order(order)
 			}
-			if listType == "page" {
-				if currentPage > 1 {
-					offset = (currentPage - 1) * limit
-				}
-				if q != "" {
-					ids, total2, err2 := currentSite.Search(q, moduleId, currentPage, limit)
-					if err2 != nil {
-						tx = tx.Where("`title` like ?", "%"+q+"%")
-					} else {
-						fulltextSearch = true
-						if len(ids) == 0 {
-							ids = append(ids, 0)
-						}
-						tx = tx.Where("`id` IN(?)", ids)
-						fulltextTotal = total2
-						offset = 0
-					}
-				}
+			if len(ids) > 0 {
+				tx = tx.Where("`id` IN(?)", ids)
+			} else if q != "" {
+				tx = tx.Where("`title` like ?", "%"+q+"%")
 			}
 			return tx
 		}

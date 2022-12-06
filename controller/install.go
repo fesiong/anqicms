@@ -58,10 +58,10 @@ func Install(ctx iris.Context) {
       flex: 1;
     }
 
-	.layui-form-text {
-		padding: 6px 0;
-		flex: 1;
-	}
+    .layui-form-text {
+      padding: 6px 0;
+      flex: 1;
+    }
 
     .layui-input {
       box-sizing: border-box;
@@ -88,6 +88,7 @@ func Install(ctx iris.Context) {
     }
 
     .layui-btn {
+      display: inline-block;
       cursor: pointer;
       border-radius: 2px;
       color: #555;
@@ -105,13 +106,73 @@ func Install(ctx iris.Context) {
     .submit-buttons {
       text-align: center;
     }
+
+    a {
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    #loading {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      margin-left: -120px;
+      margin-top: -40px;
+      padding: 30px;
+      width: 180px;
+      background: #ffffff;
+      box-shadow: 0 1px 5px rgb(0 0 0 / 30%);
+      border-radius: 5px;
+    }
+
+    .loading-icon {
+      margin-left: 5px;
+      -webkit-animation-name: typing;
+      animation-name: typing;
+      -webkit-animation-duration: 3s;
+      animation-duration: 3s;
+      -webkit-animation-timing-function: steps(14, end);
+      animation-timing-function: steps(14, end);
+      -webkit-animation-iteration-count: infinite;
+      animation-iteration-count: infinite;
+      display: inline-block;
+      width: 24px;
+      overflow: hidden;
+      vertical-align: middle;
+    }
+
+    @keyframes typing {
+      from {
+        width: 0
+      }
+    }
+
+    #alert {
+      display: none;
+      position: fixed;
+      width: 560px;
+      top: 50%;
+      left: 50%;
+      margin-top: -66px;
+      margin-left: -300px;
+      padding: 20px;
+      box-shadow: 0 1px 5px rgb(0 0 0 / 30%);
+      border-radius: 5px;
+      background: #fff;
+    }
+
+    .alert-buttons {
+      margin-top: 30px;
+      text-align: right;
+    }
   </style>
 </head>
 
 <body>
   <div class="container">
     <h1 class="title">安企CMS(AnqiCMS)初始化安装</h1>
-    <form class="layui-form" action="/install" method="post">
+    <form class="layui-form" id="install-form" action="/install" method="post" onsubmit="return checkSubmit(this);">
       <div>
         <div class="layui-form-item">
           <label class="layui-form-label">数据库地址</label>
@@ -179,7 +240,51 @@ func Install(ctx iris.Context) {
       </div>
     </form>
   </div>
+  <div id="loading">正在安装中，请稍候<span class="loading-icon">···</span></div>
+  <div id="alert"></div>
 </body>
+<script>
+  let installing = false;
+  function checkSubmit(form) {
+    if (installing) {
+      return false;
+    }
+    let el = document.getElementById("loading");
+    el.style.display = "block";
+    installing = true;
+    let formData = new FormData(form);
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/install");
+    xhr.send(formData);
+    xhr.onload = function () {
+      let res = JSON.parse(xhr.responseText);
+      if (res.code !== 0) {
+        showAlert(res.msg, []);
+      } else {
+        showAlert(res.msg, [{ name: '访问管理后台', link: '/system/' }, { name: '访问首页', link: '/' }]);
+      }
+      el.style.display = "none";
+      installing = false;
+    }
+    return false;
+  }
+  function closeAlert() {
+    let el = document.getElementById("alert");
+    el.style.display = "none";
+  }
+  function showAlert(message, buttons) {
+    let el = document.getElementById("alert");
+    el.style.display = "block";
+    let text = "<div>" + message + "</div><div class=\"alert-buttons\"><a class=\"layui-btn\" href=\"javascript:closeAlert();\">确定</a>";
+    if (buttons.length > 0) {
+      for (let i in buttons) {
+        text += "<a class=\"layui-btn btn-primary\" href=\"" + buttons[i].link + "\">" + buttons[i].name + "</a>";
+      }
+    }
+    el.innerHTML = text;
+  }
+</script>
+
 </html>`)
 }
 
@@ -187,13 +292,17 @@ var installRunning bool
 
 func InstallForm(ctx iris.Context) {
 	if provider.GetDefaultDB() != nil {
-		ShowMessage(ctx, "已初始化完成，无需再处理", []Button{
-			{Name: "点击继续", Link: "/"},
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "已初始化完成，无需再处理",
 		})
 		return
 	}
 	if installRunning {
-		ShowMessage(ctx, "已初始化任务正在进行中", nil)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "已初始化任务正在进行中",
+		})
 		return
 	}
 	installRunning = true
@@ -213,7 +322,10 @@ func InstallForm(ctx iris.Context) {
 	req.PreviewData, _ = ctx.PostValueBool("preview_data")
 
 	if len(req.AdminPassword) < 6 {
-		ShowMessage(ctx, "请填写6位以上的管理员密码", nil)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请填写6位以上的管理员密码",
+		})
 		return
 	}
 
@@ -224,13 +336,15 @@ func InstallForm(ctx iris.Context) {
 		}
 	}
 
-	config.Server.Mysql.Database = req.Database
-	config.Server.Mysql.User = req.User
-	config.Server.Mysql.Password = req.Password
-	config.Server.Mysql.Host = req.Host
-	config.Server.Mysql.Port = req.Port
+	var mysqlConfig = config.MysqlConfig{
+		Database: req.Database,
+		User:     req.User,
+		Password: req.Password,
+		Host:     req.Host,
+		Port:     req.Port,
+	}
 
-	db, err := provider.InitDB(&config.Server.Mysql)
+	db, err := provider.InitDB(&mysqlConfig)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -238,6 +352,7 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	config.Server.Mysql = mysqlConfig
 	provider.SetDefaultDB(db)
 
 	//自动迁移数据库
@@ -268,7 +383,7 @@ func InstallForm(ctx iris.Context) {
 		Mysql:    config.Server.Mysql,
 		Status:   1,
 	}
-	db.Save(dbWebsite)
+	db.Save(&dbWebsite)
 
 	provider.InitWebsite(&dbWebsite)
 	website := provider.GetWebsite(dbWebsite.Id)
@@ -294,9 +409,10 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	config.RestartChan <- false
 
-	ShowMessage(ctx, "AnqiCMS安装成功", []Button{
-		{Name: "访问管理后台", Link: "/system/"},
-		{Name: "访问首页", Link: "/"},
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "AnqiCMS安装成功",
 	})
 }

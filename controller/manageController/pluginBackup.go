@@ -66,7 +66,7 @@ func PluginBackupRestore(ctx iris.Context) {
 	go func() {
 		time.Sleep(50 * time.Millisecond)
 		// 如果切换了模板，则重载模板
-		config.RestartChan <- true
+		config.RestartChan <- false
 
 		time.Sleep(2 * time.Second)
 		// 删除索引

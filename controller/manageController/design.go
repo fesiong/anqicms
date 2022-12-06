@@ -8,7 +8,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"time"
 )
 
 func GetDesignList(ctx iris.Context) {
@@ -77,7 +76,8 @@ func SaveDesignInfo(ctx iris.Context) {
 			}
 		}
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改模板信息：%s", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -117,17 +117,9 @@ func UseDesignInfo(ctx iris.Context) {
 			})
 			return
 		}
-
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			// 如果切换了模板，则重载模板
-			config.RestartChan <- true
-
-			time.Sleep(2 * time.Second)
-			currentSite.DeleteCacheIndex()
-		}()
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -155,7 +147,8 @@ func DeleteDesignInfo(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -312,7 +305,8 @@ func UploadDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.DeleteCacheIndex()
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传模板文件：%s", info.Filename))
 
@@ -408,7 +402,8 @@ func RestoreDesignFile(ctx iris.Context) {
 	}
 
 	fileInfo, _ := currentSite.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.DeleteCacheIndex()
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
 
@@ -438,7 +433,8 @@ func SaveDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.DeleteCacheIndex()
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改模板文件：%s => %s", req.Package, req.Path))
@@ -468,7 +464,8 @@ func CopyDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("复制模板文件：%s => %s", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
@@ -496,7 +493,8 @@ func DeleteDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 重载模板
+	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除模板文件：%s => %s", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
