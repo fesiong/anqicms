@@ -195,7 +195,11 @@ func VersionUpgrade(ctx iris.Context) {
 			continue
 		}
 		// 模板文件不更新
-		if strings.Contains(f.Name, "static/") || strings.Contains(f.Name, "template/") || strings.Contains(f.Name, "favicon.ico") {
+		if strings.Contains(f.Name, "static/") ||
+			strings.Contains(f.Name, "template/") ||
+			strings.Contains(f.Name, ".sh") ||
+			strings.Contains(f.Name, ".bat") ||
+			strings.Contains(f.Name, "favicon.ico") {
 			continue
 		}
 		reader, err := f.Open()
