@@ -4,7 +4,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"log"
 )
 
 func IndexPage(ctx iris.Context) {
@@ -21,7 +20,7 @@ func IndexPage(ctx iris.Context) {
 	if currentPage == 1 && ctx.GetHeader("Cache-Control") != "no-cache" && userId == 0 {
 		body := currentSite.GetIndexCache(ua)
 		if body != nil {
-			log.Println("Load index from cache.")
+			//log.Println("Load index from cache.")
 			ctx.Write(body)
 			return
 		}

@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -49,7 +50,7 @@ func (w *Website) getCombinationEnginLink(keyword *model.Keyword) string {
 			link = fmt.Sprintf(w.KeywordConfig.FromWebsite, url.QueryEscape(keyword.Title))
 			break
 		}
-	case config.EnginBingCn:
+	//case config.EnginBingCn:
 	default:
 		link = fmt.Sprintf("https://cn.bing.com/search?q=%s", url.QueryEscape(keyword.Title))
 		break
@@ -66,10 +67,13 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	if len(result) < 5 {
 		return 0, errors.New(fmt.Sprintf("有效内容不足: %d", len(result)))
 	}
-
+	var title = keyword.Title
 	var content = make([]string, 0, len(result)*2+3)
 	num := 0
 	for i := range result {
+		if utf8.RuneCountInString(title) < 10 {
+			title = result[i].Title
+		}
 		content = append(content, "<h3>"+result[i].Title+"</h3>")
 		text := result[i].Description
 		if result[i].Content != "" {
@@ -97,12 +101,13 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	}
 
 	archive := request.Archive{
-		Title:      keyword.Title,
+		Title:      title,
 		ModuleId:   0,
 		CategoryId: w.CollectorConfig.CategoryId,
 		Keywords:   keyword.Title,
 		Content:    strings.Join(content, "\n"),
 		KeywordId:  keyword.Id,
+		OriginUrl:  keyword.Title,
 	}
 	if w.CollectorConfig.SaveType == 0 {
 		archive.Draft = true
@@ -151,6 +156,8 @@ func (w *Website) collectCombinationMaterials(keyword *model.Keyword) ([]Combina
 			break
 		}
 		page++
+		// 每一页都需要等待10秒以上
+		time.Sleep(time.Duration(10*rand.Intn(10)) * time.Second)
 	}
 
 	return result, nil

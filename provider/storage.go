@@ -59,7 +59,7 @@ func (bs *BucketStorage) initBucket() (err error) {
 }
 
 func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error) {
-	log.Println("存储到", bs.config.StorageType)
+	//log.Println("存储到", bs.config.StorageType)
 	location = strings.TrimLeft(location, "/")
 	if bs.config.KeepLocal || bs.config.StorageType == config.StorageTypeLocal {
 		//将文件写入本地

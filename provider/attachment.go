@@ -181,7 +181,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	// 保存裁剪的图片
 	if imgType == "webp" {
 		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
-		log.Println("webp:", quality)
+		//log.Println("webp:", quality)
 	} else if imgType == "jpg" {
 		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
 	} else if imgType == "png" {

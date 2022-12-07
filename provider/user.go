@@ -9,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -295,7 +294,7 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 	if err != nil {
 		return nil, err
 	}
-	log.Printf("%#v", loginRs)
+	//log.Printf("%#v", loginRs)
 	if loginRs.OpenID == "" {
 		//openid 不在？
 		return nil, errors.New("无法获取openid")

@@ -21,12 +21,15 @@ func (w *Website) TestCollectSingleArticle(t *testing.T) {
 	log.Printf("%#v", result.Content)
 }
 
-func (w *Website) TestCollectArticlesByKeyword(t *testing.T) {
+func TestCollectArticlesByKeyword(t *testing.T) {
 	keyword := model.Keyword{
-		Title:  "负氧离子",
+		Title:  "golang语言和JAVA对比",
 		Status: 1,
 	}
-
+	GetDefaultDB()
+	dbSite, _ := GetDBWebsiteInfo(1)
+	InitWebsite(dbSite)
+	w := CurrentSite(nil)
 	num, err := w.CollectArticlesByKeyword(keyword, true)
 	if err != nil {
 		t.Fatal(err)

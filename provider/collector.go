@@ -173,8 +173,12 @@ func (w *Website) CollectArticles() {
 			if w.GetTodayArticleCount() > int64(w.CollectorConfig.DailyLimit) {
 				return
 			}
+			// 每个关键词都需要间隔30秒以上
+			time.Sleep(time.Duration(30*rand.Intn(30)) * time.Second)
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
+				// 延时 1小时
+				time.Sleep(time.Duration(30*rand.Intn(30)) * time.Minute)
 				break
 			}
 		}
@@ -204,7 +208,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	archive.OriginTitle = archive.Title
 
 	if w.checkArticleExists(archive.OriginUrl, archive.OriginTitle) {
-		log.Println("已存在于数据库", archive.OriginTitle)
+		//log.Println("已存在于数据库", archive.OriginTitle)
 		return errors.New(w.Lang("已存在于数据库"))
 	}
 
@@ -219,7 +223,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 		w.DB.Where("module_id = 1").Take(&category)
 		archive.CategoryId = category.Id
 	}
-	log.Println("draft:", w.CollectorConfig.SaveType)
+	//log.Println("draft:", w.CollectorConfig.SaveType)
 	// 如果不是正常发布，则存到草稿
 	if w.CollectorConfig.SaveType == 0 {
 		archive.Draft = true
@@ -322,11 +326,11 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 	}
 	_ = w.ParseArticleDetail(archive)
 	if len(archive.Content) == 0 {
-		log.Println("链接无文章", archive.OriginUrl)
+		//log.Println("链接无文章", archive.OriginUrl)
 		return nil, errors.New(w.Lang("链接无文章"))
 	}
 	if archive.Title == "" {
-		log.Println("链接无文章", archive.OriginUrl)
+		//log.Println("链接无文章", archive.OriginUrl)
 		return nil, errors.New(w.Lang("链接无文章"))
 	}
 	//对乱码的跳过
@@ -343,7 +347,7 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		return nil, errors.New(w.Lang("乱码"))
 	}
 
-	log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
+	//log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
 
 	return archive, nil
 }

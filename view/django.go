@@ -8,7 +8,6 @@ import (
 	"io"
 	"io/fs"
 	"kandaoni.com/anqicms/provider"
-	"log"
 	"os"
 	stdPath "path"
 	"strings"
@@ -217,7 +216,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 		rootDirName := getRootDirName(sfs)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
-				log.Println("view error1", err.Error())
+				//log.Println("view error1", err.Error())
 				if throw {
 					return err
 				}
@@ -240,7 +239,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 
 			contents, err := asset(sfs, path)
 			if err != nil {
-				log.Println("view error2", err.Error())
+				//log.Println("view error2", err.Error())
 				if throw {
 					return err
 				}
@@ -248,7 +247,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 
 			err = s.ParseTemplate(site, path, contents)
 			if err != nil && throw {
-				log.Println("view error3", err.Error())
+				//log.Println("view error3", err.Error())
 				return err
 			}
 			return nil

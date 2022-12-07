@@ -8,7 +8,6 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"log"
 	"math/rand"
 	"mime/multipart"
 	"net/url"
@@ -236,7 +235,6 @@ func (w *Website) collectKeyword(existsWords *sync.Map, keyword *model.Keyword) 
 	links := w.CollectKeywords(resp.Body)
 	rootWords := w.GetRootWords()
 	for _, k := range links {
-		log.Println(k.Title)
 		// 判断是否包含核心词
 		if !w.ContainRootWords(rootWords, k.Title) {
 			continue
@@ -280,7 +278,7 @@ func (w *Website) getKeywordEnginLink(keyword *model.Keyword) string {
 			link = fmt.Sprintf(w.KeywordConfig.FromWebsite, url.QueryEscape(keyword.Title))
 			break
 		}
-	case config.EnginBaidu:
+	//case config.EnginBaidu:
 	default:
 		link = fmt.Sprintf("http://www.baidu.com/sugrec?prod=pc&wd=%s", url.QueryEscape(keyword.Title))
 		break
