@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"time"
 )
 
 func GetDesignList(ctx iris.Context) {
@@ -118,9 +119,10 @@ func UseDesignInfo(ctx iris.Context) {
 			return
 		}
 	}
-	// 重载模板
-	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
+	// 重载模板
+	config.RestartChan <- true
+	time.Sleep(2 * time.Second)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

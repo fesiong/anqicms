@@ -281,9 +281,9 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			}
 		}
 	}
-	// 重载模板
-	config.RestartChan <- false
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新多站点信息：%d => %s", dbSite.Id, dbSite.Name))
+	// 重启
+	config.RestartChan <- true
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -97,14 +97,14 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
-	// 如果切换了模板，则重载模板
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新系统配置"))
+
+	// 如果切换了模板，则需要重启
 	if changed {
-		config.RestartChan <- false
+		config.RestartChan <- true
 		time.Sleep(2 * time.Second)
 	}
 	currentSite.DeleteCacheIndex()
-
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新系统配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
