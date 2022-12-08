@@ -64,11 +64,10 @@ func PluginBackupRestore(ctx iris.Context) {
 	currentSite.InitSetting()
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("从备份中恢复数据"))
 	go func() {
-		time.Sleep(50 * time.Millisecond)
 		// 如果切换了模板，需要重启
-		config.RestartChan <- true
+		config.RestartChan <- false
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		// 删除索引
 		currentSite.DeleteCache()
 		currentSite.CloseFulltext()

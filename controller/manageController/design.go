@@ -121,8 +121,8 @@ func UseDesignInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
 	// 重载模板
-	config.RestartChan <- true
-	time.Sleep(2 * time.Second)
+	config.RestartChan <- false
+	time.Sleep(1 * time.Second)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

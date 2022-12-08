@@ -78,7 +78,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 	}
 	var total int64
 
-	builder := w.DB.Model(&model.Archive{}).Debug()
+	builder := w.DB.Model(&model.Archive{})
 
 	if ops != nil {
 		builder = ops(builder)

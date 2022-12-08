@@ -212,6 +212,10 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 	websites := provider.GetWebsites()
 	var err error
 	for _, site := range websites {
+		if !throw {
+			s.Set[site.Id] = nil
+			s.templateCache[site.Id] = nil
+		}
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {

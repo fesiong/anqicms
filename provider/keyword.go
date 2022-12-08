@@ -484,7 +484,7 @@ func (w *Website) ContainRootWords(rootWords [][]string, word string) bool {
 }
 
 func (w *Website) ContainKeywords(title, keyword string) bool {
-	if title == "" {
+	if len(title) <= 2 {
 		return false
 	}
 	title = strings.ToLower(title)

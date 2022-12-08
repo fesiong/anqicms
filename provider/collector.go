@@ -92,6 +92,9 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 	_ = w.SaveSettingValue(CollectorSettingKey, collector)
 	//重新读取配置
 	w.LoadCollectorSetting()
+	if collector.AutoCollect {
+		go w.CollectArticles()
+	}
 
 	return nil
 }
@@ -167,18 +170,23 @@ func (w *Website) CollectArticles() {
 		lastId = keywords[len(keywords)-1].Id
 		for i := 0; i < len(keywords); i++ {
 			keyword := keywords[i]
+			// 检查是否采集过
+			if w.checkArticleExists(keyword.Title, "") {
+				//log.Println("已存在于数据库", keyword.Title)
+				continue
+			}
 			total, err := w.CollectArticlesByKeyword(*keyword, false)
-			log.Printf("关键词：%s 采集了 %d 篇文章", keyword.Title, total)
+			log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
 			// 达到数量了，退出
 			if w.GetTodayArticleCount() > int64(w.CollectorConfig.DailyLimit) {
 				return
 			}
 			// 每个关键词都需要间隔30秒以上
-			time.Sleep(time.Duration(30*rand.Intn(30)) * time.Second)
+			time.Sleep(time.Duration(20+rand.Intn(30)) * time.Second)
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
-				// 延时 1小时
-				time.Sleep(time.Duration(30*rand.Intn(30)) * time.Minute)
+				// 延时 10分钟以上
+				time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
 				break
 			}
 		}
@@ -194,6 +202,9 @@ func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (t
 
 	if err != nil {
 		return total, err
+	}
+	if total == 0 {
+		return total, nil
 	}
 
 	keyword.ArticleCount = w.GetArticleTotalByKeywordId(keyword.Id)
@@ -1086,13 +1097,17 @@ func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {
 
 func (w *Website) checkArticleExists(originUrl, originTitle string) bool {
 	var total int64
-	w.DB.Model(&model.Archive{}).Where("origin_url = ?", originUrl).Count(&total)
-	if total > 0 {
-		return true
+	if len(originUrl) > 0 {
+		w.DB.Model(&model.Archive{}).Where("origin_url = ?", originUrl).Count(&total)
+		if total > 0 {
+			return true
+		}
 	}
-	w.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
-	if total > 0 {
-		return true
+	if len(originTitle) > 0 {
+		w.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
+		if total > 0 {
+			return true
+		}
 	}
 
 	return false

@@ -23,7 +23,7 @@ func (w *Website) TestCollectSingleArticle(t *testing.T) {
 
 func TestCollectArticlesByKeyword(t *testing.T) {
 	keyword := model.Keyword{
-		Title:  "golang语言和JAVA对比",
+		Title:  "golang面试题",
 		Status: 1,
 	}
 	GetDefaultDB()

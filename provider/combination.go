@@ -60,12 +60,21 @@ func (w *Website) getCombinationEnginLink(keyword *model.Keyword) string {
 }
 
 func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
+	// 检查是否采集过
+	if w.checkArticleExists(keyword.Title, "") {
+		//log.Println("已存在于数据库", keyword.Title)
+		return 1, nil
+	}
 	result, err := w.collectCombinationMaterials(keyword)
 	if err != nil {
 		return 0, err
 	}
+	if len(result) == 0 {
+		return 0, errors.New("错误，可能出现验证码了")
+	}
 	if len(result) < 5 {
-		return 0, errors.New(fmt.Sprintf("有效内容不足: %d", len(result)))
+		log.Println(fmt.Sprintf("有效内容不足: %d", len(result)))
+		return 0, nil
 	}
 	var title = keyword.Title
 	var content = make([]string, 0, len(result)*2+3)
@@ -117,11 +126,11 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	res, err := w.SaveArchive(&archive)
 	if err != nil {
 		log.Println("保存组合文章出错：", archive.Title, err.Error())
-		return 0, err
+		return 0, nil
 	}
 	log.Println(res.Id, res.Title)
 
-	return 0, nil
+	return 1, nil
 }
 
 func (w *Website) collectCombinationMaterials(keyword *model.Keyword) ([]CombinationItem, error) {
@@ -157,7 +166,7 @@ func (w *Website) collectCombinationMaterials(keyword *model.Keyword) ([]Combina
 		}
 		page++
 		// 每一页都需要等待10秒以上
-		time.Sleep(time.Duration(10*rand.Intn(10)) * time.Second)
+		time.Sleep(time.Duration(10+rand.Intn(10)) * time.Second)
 	}
 
 	return result, nil
@@ -227,7 +236,8 @@ func (w *Website) parseSections(sel *goquery.Selection, word, sourceLink string)
 		list.Find(".b_attribution,.algoSlug_icon,.news_dt").Remove()
 	} else if strings.Contains(sourceLink, "google.com") {
 		list = sel.Find("#search")
-	} else {
+	}
+	if list.Length() == 0 {
 		list = sel
 	}
 	list.Find("span,em,i,strong,b,br").Contents().Unwrap()

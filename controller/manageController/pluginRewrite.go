@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"time"
 )
 
 func PluginRewrite(ctx iris.Context) {
@@ -43,8 +42,6 @@ func PluginRewriteForm(ctx iris.Context) {
 		}
 
 		currentSite.ParsePatten(true)
-		config.RestartChan <- true
-		time.Sleep(2 * time.Second)
 		currentSite.DeleteCacheIndex()
 	}
 

@@ -283,7 +283,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新多站点信息：%d => %s", dbSite.Id, dbSite.Name))
 	// 重启
-	config.RestartChan <- true
+	config.RestartChan <- false
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

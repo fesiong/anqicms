@@ -101,8 +101,8 @@ func SettingSystemForm(ctx iris.Context) {
 
 	// 如果切换了模板，则需要重启
 	if changed {
-		config.RestartChan <- true
-		time.Sleep(2 * time.Second)
+		config.RestartChan <- false
+		time.Sleep(1 * time.Second)
 	}
 	currentSite.DeleteCacheIndex()
 
