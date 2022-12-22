@@ -495,7 +495,7 @@ func (w *Website) ParseNormalDetail(archive *request.Archive, doc *goquery.Docum
 	w.ParseLinking(doc, archive.OriginUrl)
 	title := w.ParseArticleTitle(doc)
 
-	otherItems := doc.Find("input,textarea,select,radio,form,button,header,aside,footer,.footer,noscript,meta,nav,hr")
+	otherItems := doc.Find("input,textarea,select,radio,form,button,header,aside,footer,.footer,noscript,meta,nav,hr.modal")
 	if otherItems.Length() > 0 {
 		otherItems.Remove()
 	}
