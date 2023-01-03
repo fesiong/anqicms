@@ -96,6 +96,7 @@ func InitWebsite(mw *model.Website) {
 	if mw.Id == 1 {
 		// 站点 1的数据库信息使用 defaultDB
 		db = defaultDB
+		mw.RootPath = config.ExecPath
 	} else {
 		if mw.Mysql.UseDefault {
 			mw.Mysql.User = config.Server.Mysql.User
