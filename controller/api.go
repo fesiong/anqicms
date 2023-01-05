@@ -212,18 +212,23 @@ func ApiImportGetCategories(ctx iris.Context) {
 	tmpModuleId := ctx.FormValue("module_id")
 	moduleId, _ := strconv.Atoi(tmpModuleId)
 
-	module := currentSite.GetModuleFromCache(uint(moduleId))
+	if moduleId > 0 {
+		module := currentSite.GetModuleFromCache(uint(moduleId))
 
-	if module == nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  currentSite.Lang("未定义模型"),
-		})
-		return
+		if module == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.Lang("未定义模型"),
+			})
+			return
+		}
 	}
 
 	tmpCategories, _ := currentSite.GetCategories(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`module_id` = ?", moduleId)
+		if moduleId > 0 {
+			tx = tx.Where("`module_id` = ?", moduleId)
+		}
+		return tx
 	}, 0)
 
 	var categories []response.ApiCategory
