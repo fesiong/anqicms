@@ -7,6 +7,8 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"reflect"
+	"regexp"
+	"strings"
 	"time"
 )
 
@@ -35,6 +37,11 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	format := "2006-01-02"
 	if args["format"] != nil {
 		format = args["format"].String()
+	}
+
+	lazy := ""
+	if args["lazy"] != nil {
+		lazy = args["lazy"].String()
 	}
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
@@ -99,6 +106,19 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				archiveData, err := currentSite.GetArchiveDataById(archiveDetail.Id)
 				if err == nil {
 					content = archiveData.Content
+					// lazyload
+					if lazy != "" {
+						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+						content = re.ReplaceAllStringFunc(content, func(s string) string {
+							match := re.FindStringSubmatch(s)
+							if len(match) < 2 {
+								return s
+							}
+							res := fmt.Sprintf("%s\" %s=\"%s", currentSite.Content.DefaultThumb, lazy, match[1])
+							s = strings.Replace(s, match[1], res, 1)
+							return s
+						})
+					}
 				}
 			}
 		}

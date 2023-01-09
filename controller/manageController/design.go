@@ -297,7 +297,11 @@ func UploadDesignFile(ctx iris.Context) {
 
 	packageName := ctx.PostValue("package")
 	filePath := ctx.PostValue("path")
+	fileName := ctx.PostValue("name")
 	fileType := ctx.PostValue("type")
+	if fileName != "" {
+		info.Filename = fileName
+	}
 
 	err = currentSite.UploadDesignFile(file, info, packageName, fileType, filePath)
 	if err != nil {

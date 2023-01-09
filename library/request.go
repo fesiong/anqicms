@@ -210,6 +210,9 @@ func GetURLData(url, refer string) (*RequestData, error) {
 	//log.Println(url)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("User-Agent", getUserAgent(false))
 	req.Header.Set("Referer", refer)
 

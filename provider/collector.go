@@ -1033,37 +1033,50 @@ func ParsePlanText(content string, planText string) string {
 		}
 	}()
 
-	htmlR := strings.NewReader(content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
-	if err != nil {
-		return content
+	if !strings.Contains(content, "</") {
+		// 如果不是html，则直接返回
+		if planText == "" {
+			return content
+		}
+		return planText
 	}
 
 	if planText == "" {
 		var contents []string
-		doc.Find("body").Contents().Each(func(i int, item *goquery.Selection) {
-			text := item.Text()
-			if item.Children().Length() == 0 && text != "" {
-				contents = append(contents, item.Text())
+		reg, _ := regexp.Compile("(?s)>(.+?)<")
+		matches := reg.FindAllStringSubmatch(content, -1)
+		for _, match := range matches {
+			text := strings.TrimSpace(match[1])
+			if strings.HasPrefix(text, "<") {
+				continue
 			}
-		})
+			if len(text) > 0 {
+				contents = append(contents, text)
+			}
+		}
 
 		return strings.Join(contents, "\n")
 	} else {
 		contents := strings.Split(planText, "\n")
 		index := 0
-		doc.Find("body").Contents().Each(func(i int, item *goquery.Selection) {
-			text := item.Text()
-
-			if item.Children().Length() == 0 && text != "" {
+		reg, _ := regexp.Compile("(?s)>(.+?)<")
+		content = reg.ReplaceAllStringFunc(content, func(s string) string {
+			match := reg.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			text := strings.TrimSpace(match[1])
+			if strings.HasPrefix(text, "<") {
+				return s
+			}
+			if len(text) > 0 {
 				if index < len(contents) {
-					item.SetText(contents[index])
+					s = strings.Replace(s, text, contents[index], 1)
 					index++
 				}
 			}
+			return s
 		})
-
-		content, _ = doc.Find("body").Html()
 
 		return content
 	}
