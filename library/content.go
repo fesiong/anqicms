@@ -1,6 +1,8 @@
 package library
 
 import (
+	"github.com/kataras/iris/v12"
+	"net"
 	"reflect"
 	"regexp"
 	"strings"
@@ -138,4 +140,25 @@ func EscapeString(v string) string {
 		}
 	}
 	return string(buf[:pos])
+}
+
+func GetHost(ctx iris.Context) string {
+	// maybe real host in X-Host
+	host := ctx.GetHeader("X-Host")
+	if host == "" {
+		host = ctx.Host()
+	}
+	// remove port from host
+	if tmp, _, err := net.SplitHostPort(host); err == nil {
+		host = tmp
+	}
+
+	switch host {
+	// We could use the netutil.LoopbackRegex but leave it as it's for now, it's faster.
+	case "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]", "0:0:0:0:0:0:0:0", "0:0:0:0:0:0:0:1":
+		// loopback.
+		return "localhost"
+	default:
+		return host
+	}
 }

@@ -138,6 +138,7 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/release", manageController.ArchiveRelease)
 			archive.Post("/recommend", manageController.UpdateArchiveRecommend)
 			archive.Post("/status", manageController.UpdateArchiveStatus)
+			archive.Post("/time", manageController.UpdateArchiveTime)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 		}
 

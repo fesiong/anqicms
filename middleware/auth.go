@@ -5,6 +5,7 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"net/url"
 	"strconv"
@@ -68,7 +69,7 @@ func ParseAdminUrl(ctx iris.Context) {
 		parsedUrl, err := url.Parse(currentSite.System.AdminUrl)
 		// 如果解析失败，则跳过
 		if err == nil {
-			if parsedUrl.Host != ctx.Host() {
+			if parsedUrl.Hostname() != library.GetHost(ctx) {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
 					"msg":  "请使用正确的入口访问。 Please use the correct entry to visit.",
@@ -143,7 +144,7 @@ func Check301(ctx iris.Context) {
 		// 验证hosts
 		if strings.HasPrefix(val, "http") {
 			urlParsed, err := url.Parse(val)
-			if err == nil && ctx.Host() == urlParsed.Host && uri == urlParsed.RequestURI() {
+			if err == nil && library.GetHost(ctx) == urlParsed.Hostname() && uri == urlParsed.RequestURI() {
 				// 相同，跳过
 				val = ""
 			}

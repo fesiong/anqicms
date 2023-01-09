@@ -353,6 +353,34 @@ func UpdateArchiveStatus(ctx iris.Context) {
 	})
 }
 
+func UpdateArchiveTime(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.UpdateArchiveTime(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档时间：%v => %d", req.Ids, req.Time))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
 func UpdateArchiveCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchivesUpdateRequest

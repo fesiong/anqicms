@@ -46,4 +46,5 @@ type ArchivesUpdateRequest struct {
 	CategoryId uint   `json:"category_id"`
 	Status     uint   `json:"status"`
 	Flag       string `json:"flag"`
+	Time       uint   `json:"time"`
 }

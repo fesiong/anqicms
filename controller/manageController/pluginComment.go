@@ -155,6 +155,26 @@ func PluginCommentCheck(ctx iris.Context) {
 		})
 		return
 	}
+
+	if len(req.Ids) > 0 {
+		err := currentSite.DB.Model(&model.Comment{}).Where("`id` IN (?)", req.Ids).UpdateColumn("status", req.Status).Error
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("批量审核评论：%v", req.Ids))
+
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "评论已更新",
+		})
+		return
+	}
+
 	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -178,7 +198,7 @@ func PluginCommentCheck(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("审核通过锚文本：%d", comment.Id))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("审核评论：%d", comment.Id))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

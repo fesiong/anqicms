@@ -8,6 +8,7 @@ import (
 	"github.com/medivhzhan/weapp/v3"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
 	"net/url"
@@ -155,22 +156,22 @@ func CurrentSite(ctx iris.Context) *Website {
 	}
 	if ctx != nil {
 		// 获取到当前website
-		host := ctx.Host()
+		host := library.GetHost(ctx)
 		for _, w := range websites {
 			// 判断内容，base_url,mobile_url,admin_url
 			parsed, err := url.Parse(w.System.BaseUrl)
-			if err == nil && parsed.Host == host {
+			if err == nil && parsed.Hostname() == host {
 				return w
 			}
 			if w.System.MobileUrl != "" {
 				parsed, err = url.Parse(w.System.MobileUrl)
-				if err == nil && parsed.Host == host {
+				if err == nil && parsed.Hostname() == host {
 					return w
 				}
 			}
 			if w.System.AdminUrl != "" {
 				parsed, err = url.Parse(w.System.AdminUrl)
-				if err == nil && parsed.Host == host {
+				if err == nil && parsed.Hostname() == host {
 					return w
 				}
 			}

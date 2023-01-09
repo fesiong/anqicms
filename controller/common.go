@@ -6,6 +6,7 @@ import (
 	"github.com/kataras/iris/v12"
 	captcha "github.com/mojocn/base64Captcha"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -251,7 +252,7 @@ func Inspect(ctx iris.Context) {
 			parsedUrl, err := url.Parse(website.System.AdminUrl)
 			// 如果解析失败，则跳过
 			if err == nil {
-				if parsedUrl.Host == ctx.Host() && !strings.HasPrefix(uri, "/system") {
+				if parsedUrl.Hostname() == library.GetHost(ctx) && !strings.HasPrefix(uri, "/system") {
 					// 来自后端的域名，但访问的不是后端的业务，则强制跳转到后端。
 					ctx.Redirect(strings.TrimRight(website.System.AdminUrl, "/") + "/system")
 					return
@@ -547,7 +548,7 @@ func CheckTemplateType(ctx iris.Context) {
 			break
 		}
 
-		if !strings.EqualFold(ctx.Host(), mobileUrl.Hostname()) {
+		if !strings.EqualFold(library.GetHost(ctx), mobileUrl.Hostname()) {
 			// 电脑端访问，检查是否需要301
 			if ctx.IsMobile() {
 				ctx.Redirect(currentSite.System.MobileUrl, 301)

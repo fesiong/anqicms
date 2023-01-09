@@ -497,6 +497,20 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 	return err
 }
 
+func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Lang("无可操作的文档"))
+	}
+	var err error
+	if req.Time == 2 {
+		// updated_time
+		err = w.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("updated_time", time.Now().Unix()).Error
+	} else {
+		err = w.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("created_time", time.Now().Unix()).Error
+	}
+	return err
+}
+
 func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Lang("无可操作的文档"))
