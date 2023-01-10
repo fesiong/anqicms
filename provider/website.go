@@ -12,12 +12,14 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
 	"net/url"
+	"strings"
 )
 
 type Website struct {
 	Id                      uint
 	Mysql                   *config.MysqlConfig
 	Initialed               bool
+	BaseURI                 string
 	RootPath                string
 	DataPath                string
 	CachePath               string
@@ -115,6 +117,7 @@ func InitWebsite(mw *model.Website) {
 		Mysql:      &mw.Mysql,
 		Initialed:  initialed,
 		DB:         db,
+		BaseURI:    "/",
 		RootPath:   mw.RootPath,
 		CachePath:  mw.RootPath + "cache/",
 		DataPath:   mw.RootPath + "data/",
@@ -144,6 +147,7 @@ func CurrentSite(ctx iris.Context) *Website {
 		return &Website{
 			Id:         0,
 			Initialed:  false,
+			BaseURI:    "/",
 			RootPath:   config.ExecPath,
 			CachePath:  config.ExecPath + "cache/",
 			DataPath:   config.ExecPath + "data/",
@@ -155,24 +159,85 @@ func CurrentSite(ctx iris.Context) *Website {
 		}
 	}
 	if ctx != nil {
+		if siteId, err := ctx.Values().GetUint("siteId"); err == nil {
+			w, ok := websites[siteId]
+			if ok {
+				return w
+			}
+		}
 		// 获取到当前website
+		uri := ctx.RequestPath(false)
 		host := library.GetHost(ctx)
+		// check exist uri first
+		if uri != "/" {
+			for _, w := range websites {
+				parsed, err := url.Parse(w.System.BaseUrl)
+				if err != nil {
+					continue
+				}
+				if parsed.RequestURI() != "/" {
+					if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
+						w.BaseURI = parsed.RequestURI()
+						ctx.Values().Set("siteId", w.Id)
+						return w
+					}
+				}
+				if w.System.MobileUrl != "" {
+					parsed, err = url.Parse(w.System.MobileUrl)
+					if err == nil {
+						if parsed.RequestURI() != "/" {
+							if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
+								w.BaseURI = parsed.RequestURI()
+								ctx.Values().Set("siteId", w.Id)
+								return w
+							}
+						}
+					}
+				}
+				if w.System.AdminUrl != "" {
+					parsed, err = url.Parse(w.System.AdminUrl)
+					if err == nil {
+						if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
+							w.BaseURI = parsed.RequestURI()
+							ctx.Values().Set("siteId", w.Id)
+							return w
+						}
+					}
+				}
+			}
+		}
 		for _, w := range websites {
 			// 判断内容，base_url,mobile_url,admin_url
 			parsed, err := url.Parse(w.System.BaseUrl)
+			if parsed.RequestURI() != "/" {
+				continue
+			}
 			if err == nil && parsed.Hostname() == host {
+				ctx.Values().Set("siteId", w.Id)
 				return w
 			}
 			if w.System.MobileUrl != "" {
 				parsed, err = url.Parse(w.System.MobileUrl)
-				if err == nil && parsed.Hostname() == host {
-					return w
+				if err == nil {
+					if parsed.RequestURI() != "/" {
+						continue
+					}
+					if parsed.Hostname() == host {
+						ctx.Values().Set("siteId", w.Id)
+						return w
+					}
 				}
 			}
 			if w.System.AdminUrl != "" {
 				parsed, err = url.Parse(w.System.AdminUrl)
-				if err == nil && parsed.Hostname() == host {
-					return w
+				if err == nil {
+					if parsed.RequestURI() != "/" {
+						continue
+					}
+					if parsed.Hostname() == host {
+						ctx.Values().Set("siteId", w.Id)
+						return w
+					}
 				}
 			}
 		}

@@ -13,6 +13,12 @@ import (
 
 func GuestbookPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	base := ctx.Params().Get("base")
+	if base != strings.TrimLeft(currentSite.BaseURI, "/") {
+		ShowMessage(ctx, "Not Found", nil)
+		return
+	}
+
 	fields := currentSite.GetGuestbookFields()
 
 	ctx.ViewData("fields", fields)
@@ -36,6 +42,13 @@ func GuestbookPage(ctx iris.Context) {
 
 func GuestbookForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Not Found",
+		})
+		return
+	}
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
 	if ok := SafeVerify(ctx, "guestbook"); !ok {

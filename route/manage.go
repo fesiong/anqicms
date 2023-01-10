@@ -18,6 +18,7 @@ func manageRoute(app *iris.Application) {
 	{
 		manage.Post("/login", manageController.AdminLogin)
 		manage.Get("/captcha", controller.GenerateCaptcha)
+		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
 
 		version := manage.Party("/version")
 		{

@@ -18,25 +18,22 @@ func Register(app *iris.Application) {
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath)
 	app.Get("/{path:path}", middleware.Check301, middleware.ParseUserToken, controller.ReRouteContext)
-	app.Get("/", controller.LogAccess, middleware.ParseUserToken, controller.IndexPage)
 
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
 
-	attachment := app.Party("/attachment", middleware.ParseUserToken)
-	{
-		attachment.Post("/upload", controller.AttachmentUpload)
-	}
+	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, controller.AttachmentUpload)
 
-	comment := app.Party("/comment", controller.LogAccess, middleware.ParseUserToken)
-	{
-		comment.Post("/publish", controller.CommentPublish)
-		comment.Post("/praise", controller.CommentPraise)
-		comment.Get("/{id:uint}", controller.CommentList)
-	}
+	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, controller.CommentPublish)
+	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, controller.CommentPraise)
+	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, controller.CommentList)
 
-	app.Get("/guestbook.html", controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
-	app.Post("/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
+	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
+	app.HandleMany(iris.MethodPost, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
+
+	// 内容导入API
+	app.HandleMany(iris.MethodPost, "/api/import/archive /{base:string}/api/import/archive", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportArchive)
+	app.HandleMany("GET POST", "/api/import/categories /{base:string}/api/import/categories", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportGetCategories)
 
 	// login and register
 	app.Get("/login", controller.LoginPage)
@@ -53,10 +50,6 @@ func Register(app *iris.Application) {
 		api.Get("/wechat", controller.WechatApi)
 		api.Post("/wechat", controller.WechatApi)
 
-		// 内容导入API
-		api.Post("/import/archive", controller.VerifyApiToken, controller.ApiImportArchive)
-		api.Get("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
-		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		// 友链API
 		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)
 		api.Post("/friendlink/delete", controller.VerifyApiLinkToken, controller.ApiImportDeleteFriendLink)

@@ -17,16 +17,27 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func AdminFileServ(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	tmpSiteId := ctx.GetHeader("Site-Id")
+	if len(tmpSiteId) > 0 {
+		siteId, _ := strconv.Atoi(tmpSiteId)
+		if siteId > 0 {
+			// 只有二级目录安装的站点允许这么操作
+			website := provider.GetWebsite(uint(siteId))
+			if len(website.BaseURI) > 1 {
+				ctx.Values().Set("siteId", uint(siteId))
+			}
+		}
+	}
+
 	uri := ctx.RequestPath(false)
 	if uri != "/" {
-		baseDir := currentSite.RootPath
-		uriFile := baseDir + uri
+		uriFile := config.ExecPath + strings.TrimLeft(uri, "/")
 		_, err := os.Stat(uriFile)
 		if err == nil {
 			ctx.ServeFile(uriFile)
@@ -34,7 +45,7 @@ func AdminFileServ(ctx iris.Context) {
 		}
 
 		if !strings.Contains(filepath.Base(uri), ".") {
-			uriFile = uriFile + "/index.html"
+			uriFile = strings.TrimRight(uriFile, "/") + "/index.html"
 			_, err = os.Stat(uriFile)
 			if err == nil {
 				ctx.ServeFile(uriFile)

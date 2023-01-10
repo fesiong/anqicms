@@ -188,6 +188,8 @@ func Common(ctx iris.Context) {
 		if err == nil {
 			if ctx.GetHeader("X-Server-Port") == "443" {
 				urlPath.Scheme = "https"
+			} else if ctx.GetHeader("X-Scheme") == "https" {
+				urlPath.Scheme = "https"
 			}
 			currentSite.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 			currentSite.PluginStorage.StorageUrl = currentSite.System.BaseUrl
@@ -270,9 +272,9 @@ func Inspect(ctx iris.Context) {
 func FileServe(ctx iris.Context) bool {
 	currentSite := provider.CurrentSite(ctx)
 	uri := ctx.RequestPath(false)
-	if uri != "/" {
+	if uri != currentSite.BaseURI {
 		baseDir := fmt.Sprintf("%spublic", currentSite.RootPath)
-		uriFile := baseDir + uri
+		uriFile := baseDir + strings.TrimPrefix(uri, strings.TrimRight(currentSite.BaseURI, "/"))
 		_, err := os.Stat(uriFile)
 		if err == nil {
 			ctx.ServeFile(uriFile)
@@ -321,6 +323,9 @@ func ReRouteContext(ctx iris.Context) {
 	case "tag":
 		TagPage(ctx)
 		return
+	case "index":
+		IndexPage(ctx)
+		return
 	}
 
 	//如果没有合适的路由，则报错
@@ -333,6 +338,12 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
 	matchMap := map[string]string{}
 	paramValue := ctx.Params().Get("path")
+	paramValue = strings.TrimLeft(strings.TrimPrefix(paramValue, strings.Trim(currentSite.BaseURI, "/")), "/")
+	// index
+	if paramValue == "" {
+		matchMap["match"] = "index"
+		return matchMap, true
+	}
 	// 静态资源直接返回
 	if strings.HasPrefix(paramValue, "uploads/") ||
 		strings.HasPrefix(paramValue, "static/") ||

@@ -7,10 +7,18 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"strings"
 )
 
 func CommentPublish(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Not Found",
+		})
+		return
+	}
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
 	if ok := SafeVerify(ctx, "comment"); !ok {
@@ -80,6 +88,13 @@ func CommentPublish(ctx iris.Context) {
 
 func CommentPraise(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Not Found",
+		})
+		return
+	}
 	var req request.PluginComment
 	req.Id = uint(ctx.PostValueIntDefault("id", 0))
 
@@ -113,13 +128,18 @@ func CommentPraise(ctx iris.Context) {
 
 func CommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Not Found",
+		})
+		return
+	}
+
 	archiveId := uint(ctx.Params().GetIntDefault("id", 0))
 	archive, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+		ShowMessage(ctx, "Not Found", nil)
 		return
 	}
 	archive.Link = currentSite.GetUrl("archive", archive, 0)

@@ -101,8 +101,36 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			})
 			return
 		}
+		if req.Id != 1 {
+			req.RootPath = strings.TrimRight(strings.TrimSpace(strings.ReplaceAll(req.RootPath, "\\", "/")), "/")
+			// 全新安装
+			if req.RootPath == currentSite.RootPath {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  "不能使用默认站点目录",
+				})
+				return
+			}
+			if !strings.Contains(req.RootPath, "/") {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  "请填写站点正确的目录",
+				})
+				return
+			}
+			req.RootPath = req.RootPath + "/"
+			_, err = os.Stat(req.RootPath)
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  "站点目录读取失败",
+				})
+				return
+			}
+		}
+
 		current := provider.GetWebsite(dbSite.Id)
-		//修改站点，只能修改名称、状态、管理员用户名密码
+		//修改站点，可以修改全部信息，但是不再同步内容
 		dbSite.Name = req.Name
 		dbSite.Status = req.Status
 		err = provider.GetDefaultDB().Save(dbSite).Error
@@ -114,7 +142,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			return
 		}
 		// 修改数据库信息，只有在数据库无法访问的时候才能修改
-		if current.Initialed == false {
+		if req.Id != 1 {
 			// mysql 检查是否与第一个库重名
 			if req.Mysql.Database == config.Server.Mysql.Database {
 				ctx.JSON(iris.Map{
@@ -332,5 +360,26 @@ func DeleteWebsite(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "删除成功",
+	})
+}
+
+func GetCurrentSiteInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	website, err := provider.GetDBWebsiteInfo(currentSite.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"id":       website.Id,
+			"base_url": currentSite.System.BaseUrl,
+			"name":     website.Name,
+		},
 	})
 }
