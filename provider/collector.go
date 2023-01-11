@@ -1043,7 +1043,7 @@ func ParsePlanText(content string, planText string) string {
 
 	if planText == "" {
 		var contents []string
-		reg, _ := regexp.Compile("(?s)>(.+?)<")
+		reg, _ := regexp.Compile("(?s)>(.*?)<")
 		matches := reg.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
 			text := strings.TrimSpace(match[1])
@@ -1059,7 +1059,7 @@ func ParsePlanText(content string, planText string) string {
 	} else {
 		contents := strings.Split(planText, "\n")
 		index := 0
-		reg, _ := regexp.Compile("(?s)>(.+?)<")
+		reg, _ := regexp.Compile("(?s)>(.*?)<")
 		content = reg.ReplaceAllStringFunc(content, func(s string) string {
 			match := reg.FindStringSubmatch(s)
 			if len(match) < 2 {
