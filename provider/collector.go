@@ -1040,13 +1040,17 @@ func ParsePlanText(content string, planText string) string {
 		}
 		return planText
 	}
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "<") {
+		content = "<>" + content + "</>"
+	}
 
 	if planText == "" {
 		var contents []string
 		reg, _ := regexp.Compile("(?s)>(.*?)<")
 		matches := reg.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
-			text := strings.TrimSpace(match[1])
+			text := strings.TrimSpace(strings.ReplaceAll(match[1], "\n", " "))
 			if strings.HasPrefix(text, "<") {
 				continue
 			}
@@ -1077,6 +1081,8 @@ func ParsePlanText(content string, planText string) string {
 			}
 			return s
 		})
+		// trim content = "<>" + content + "</>"
+		content = strings.TrimPrefix(strings.TrimSuffix(content, "</>"), "<>")
 
 		return content
 	}
