@@ -39,12 +39,25 @@ func AnqiLogin(ctx iris.Context) {
 
 func GetAnqiInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	go currentSite.AnqiCheckLogin()
-	authUser := config.AnqiUser
+	go currentSite.AnqiCheckLogin(false)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": authUser,
+		"data": provider.GetAuthInfo(),
+	})
+
+	return
+}
+
+func CheckAnqiInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentSite.AnqiCheckLogin(true)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": provider.GetAuthInfo(),
 	})
 
 	return
@@ -163,6 +176,78 @@ func AnqiSendFeedback(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "提交成功",
+	})
+}
+
+func AnqiPseudoArticle(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.Archive
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	archive, err := currentSite.GetArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err = currentSite.AnqiPseudoArticle(archive)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "伪原创成功",
+	})
+}
+
+func AnqiTranslateArticle(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.Archive
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	archive, err := currentSite.GetArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err = currentSite.AnqiTranslateArticle(archive)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "翻译成功",
 	})
 }
 

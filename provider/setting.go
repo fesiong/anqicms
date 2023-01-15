@@ -275,7 +275,7 @@ func (w *Website) LoadAnqiUser() {
 		_ = json.Unmarshal([]byte(value), &config.AnqiUser)
 	}
 
-	go w.AnqiCheckLogin()
+	go w.AnqiCheckLogin(false)
 }
 
 func (w *Website) LoadCollectorSetting() {

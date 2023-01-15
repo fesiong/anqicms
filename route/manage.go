@@ -30,11 +30,14 @@ func manageRoute(app *iris.Application) {
 		anqi := manage.Party("/anqi", middleware.ParseAdminToken)
 		{
 			anqi.Get("/info", manageController.GetAnqiInfo)
+			anqi.Get("/check", manageController.CheckAnqiInfo)
 			anqi.Post("/login", manageController.AnqiLogin)
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
 			anqi.Post("/feedback", manageController.AnqiSendFeedback)
+			anqi.Post("/pseudo", manageController.AnqiPseudoArticle)
+			anqi.Post("/translate", manageController.AnqiTranslateArticle)
 			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 

@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
 	"net/url"
+	"os"
 	"strings"
 )
 
@@ -19,6 +20,7 @@ type Website struct {
 	Id                      uint
 	Mysql                   *config.MysqlConfig
 	Initialed               bool
+	ErrorMsg                string // 错误提示
 	BaseURI                 string
 	RootPath                string
 	DataPath                string
@@ -94,8 +96,8 @@ func InitWebsites() {
 }
 
 func InitWebsite(mw *model.Website) {
-	initialed := false
 	var db *gorm.DB
+	var err error
 	if mw.Id == 1 {
 		// 站点 1的数据库信息使用 defaultDB
 		db = defaultDB
@@ -107,21 +109,32 @@ func InitWebsite(mw *model.Website) {
 			mw.Mysql.Host = config.Server.Mysql.Host
 			mw.Mysql.Port = config.Server.Mysql.Port
 		}
-		db, _ = InitDB(&mw.Mysql)
-	}
-	if db != nil && mw.Status == 1 {
-		initialed = true
+		db, err = InitDB(&mw.Mysql)
 	}
 	w := Website{
 		Id:         mw.Id,
 		Mysql:      &mw.Mysql,
-		Initialed:  initialed,
 		DB:         db,
 		BaseURI:    "/",
 		RootPath:   mw.RootPath,
 		CachePath:  mw.RootPath + "cache/",
 		DataPath:   mw.RootPath + "data/",
 		PublicPath: mw.RootPath + "public/",
+	}
+	if db != nil && mw.Status == 1 {
+		w.Initialed = true
+	}
+	if db == nil {
+		w.ErrorMsg = "数据库连接失败"
+		if err != nil {
+			w.ErrorMsg = "：" + err.Error()
+		}
+	}
+	// 先判断目录是否存在。对于迁移的站点，这个地方可能是会出错的
+	_, err = os.Stat(mw.RootPath)
+	if err != nil {
+		w.Initialed = false
+		w.ErrorMsg = "站点路径错误：" + err.Error()
 	}
 	if mw.Id == 1 {
 		w.Mysql = &config.Server.Mysql
@@ -131,6 +144,8 @@ func InitWebsite(mw *model.Website) {
 		_ = AutoMigrateDB(db)
 		w.InitSetting()
 		w.InitModelData()
+	}
+	if w.Initialed {
 		w.InitBucket()
 		w.InitMemCache()
 		// 初始化索引,异步处理
@@ -284,6 +299,12 @@ func GetDBWebsites(page, pageSize int) ([]*model.Website, int64) {
 			currentSite := GetWebsite(sites[i].Id)
 			if currentSite != nil {
 				sites[i].BaseUrl = currentSite.System.BaseUrl
+				sites[i].ErrorMsg = currentSite.ErrorMsg
+				if !currentSite.Initialed {
+					sites[i].Status = 0
+				}
+			} else {
+				sites[i].Status = 0
 			}
 		}
 	}

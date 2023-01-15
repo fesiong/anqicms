@@ -8,6 +8,7 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"mime/multipart"
@@ -22,9 +23,9 @@ import (
 const AnqiApi = "https://www.anqicms.com/auth"
 
 type AnqiLoginResult struct {
-	Code int                   `json:"code"`
-	Msg  string                `json:"msg"`
-	Data config.AnqiUserConfig `json:"data"`
+	Code int                    `json:"code"`
+	Msg  string                 `json:"msg"`
+	Data *config.AnqiUserConfig `json:"data"`
 }
 
 type AnqiTemplateResult struct {
@@ -56,6 +57,35 @@ type AnqiAttachmentResult struct {
 	Data AnqiAttachment `json:"data"`
 }
 
+type AnqiPseudoRequest struct {
+	Title        string `json:"title"`
+	Content      string `json:"content"`
+	TextLength   int64  `json:"text_length"`
+	PseudoRemain int64  `json:"pseudo_remain"`
+}
+
+type AnqiPseudoResult struct {
+	Code int               `json:"code"`
+	Msg  string            `json:"msg"`
+	Data AnqiPseudoRequest `json:"data"`
+}
+
+type AnqiTranslateRequest struct {
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	From       string `json:"from"`
+	To         string `json:"to"`
+	TextLength int64  `json:"text_length"`
+	TextRemain int64  `json:"text_remain"`
+	Cost       bool   `json:"cost"`
+}
+
+type AnqiTranslateResult struct {
+	Code int                  `json:"code"`
+	Msg  string               `json:"msg"`
+	Data AnqiTranslateRequest `json:"data"`
+}
+
 // AnqiLogin
 // anqi 账号只需要登录一次，全部站点通用，信息记录在
 func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
@@ -79,7 +109,7 @@ func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
 	}
 
 	// login success
-	config.AnqiUser = result.Data
+	config.AnqiUser = *result.Data
 	config.AnqiUser.LoginTime = time.Now().Unix()
 	config.AnqiUser.CheckTime = config.AnqiUser.LoginTime
 	err := defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
@@ -90,11 +120,11 @@ func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
 	return nil
 }
 
-func (w *Website) AnqiCheckLogin() {
+func (w *Website) AnqiCheckLogin(force bool) {
 	if config.AnqiUser.AuthId == 0 {
 		return
 	}
-	if config.AnqiUser.CheckTime > time.Now().Add(-86400*time.Second).Unix() {
+	if !force && config.AnqiUser.CheckTime > time.Now().Add(-3600*time.Second).Unix() {
 		return
 	}
 	defaultSite := CurrentSite(nil)
@@ -118,8 +148,23 @@ func (w *Website) AnqiCheckLogin() {
 	}
 
 	// login success
+	if result.Data != nil {
+		config.AnqiUser.AuthId = result.Data.AuthId
+		config.AnqiUser.UserName = result.Data.UserName
+		config.AnqiUser.ExpireTime = result.Data.ExpireTime
+		config.AnqiUser.PseudoRemain = result.Data.PseudoRemain
+		config.AnqiUser.TranslateRemain = result.Data.TranslateRemain
+		config.AnqiUser.FreeTransRemain = result.Data.FreeTransRemain
+		config.AnqiUser.Status = result.Data.Status
+	}
 	config.AnqiUser.CheckTime = time.Now().Unix()
 	_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+}
+
+func GetAuthInfo() *config.AnqiUserConfig {
+	config.AnqiUser.Valid = config.AnqiUser.ExpireTime > time.Now().Unix()
+
+	return &config.AnqiUser
 }
 
 func (w *Website) AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
@@ -246,6 +291,69 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (w *Website) AnqiPseudoArticle(archive *model.Archive) error {
+	archiveData, err := w.GetArchiveDataById(archive.Id)
+	if err != nil {
+		return err
+	}
+	req := &AnqiPseudoRequest{
+		Title:   archive.Title,
+		Content: archiveData.Content,
+	}
+	var result AnqiPseudoResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/pseudo").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+	archive.Title = result.Data.Title
+	if len(result.Data.Content) > 250 {
+		archive.Description = string([]rune(result.Data.Content)[:250])
+	} else if len(result.Data.Content) > 0 {
+		archive.Description = result.Data.Content
+	}
+	archive.HasPseudo = 1
+	err = w.DB.Save(archive).Error
+	// 再保存内容
+	archiveData.Content = result.Data.Content
+	w.DB.Save(archiveData)
+
+	return nil
+}
+
+func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
+	archiveData, err := w.GetArchiveDataById(archive.Id)
+	if err != nil {
+		return err
+	}
+	req := &AnqiTranslateRequest{
+		Title:   archive.Title,
+		Content: archiveData.Content,
+	}
+	var result AnqiTranslateResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+	archive.Title = result.Data.Title
+	if len(result.Data.Content) > 250 {
+		archive.Description = string([]rune(result.Data.Content)[:250])
+	} else if len(result.Data.Content) > 0 {
+		archive.Description = result.Data.Content
+	}
+	err = w.DB.Save(archive).Error
+	// 再保存内容
+	archiveData.Content = result.Data.Content
+	w.DB.Save(archiveData)
 
 	return nil
 }

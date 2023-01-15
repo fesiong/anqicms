@@ -3,6 +3,8 @@ package crond
 import (
 	"github.com/robfig/cron/v3"
 	"kandaoni.com/anqicms/provider"
+	"math/rand"
+	"time"
 )
 
 func Crond() {
@@ -23,6 +25,8 @@ func Crond() {
 	crontab.AddFunc("1 * * * * *", AutoCheckOrders)
 	// 每天检查VIP
 	crontab.AddFunc("@daily", CleanUserVip)
+	// 每小时检查一次账号状态
+	crontab.AddFunc("1 30 * * * *", CheckAuthValid)
 	crontab.Start()
 }
 
@@ -114,4 +118,11 @@ func CleanUserVip() {
 		}
 		w.CleanUserVip()
 	}
+}
+
+func CheckAuthValid() {
+	rand.Seed(time.Now().UnixNano())
+	time.Sleep(time.Duration(rand.Intn(600)+1) * time.Second)
+	defaultSite := provider.CurrentSite(nil)
+	defaultSite.AnqiCheckLogin(false)
 }
