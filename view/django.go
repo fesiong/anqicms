@@ -216,6 +216,9 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 			s.Set[site.Id] = nil
 			s.templateCache[site.Id] = nil
 		}
+		if !site.Initialed {
+			continue
+		}
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
