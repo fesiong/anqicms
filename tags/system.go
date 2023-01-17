@@ -2,9 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 	"reflect"
 	"strings"
 )
@@ -15,6 +15,10 @@ type tagSystemNode struct {
 }
 
 func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
+		return nil
+	}
 	args, err := parseArgs(node.args, ctx)
 	if err != nil {
 		return err
@@ -30,17 +34,17 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 
 	// TemplateUrl 实时算出来, 它的计算方式是 /static/{TemplateName}
 	if fieldName == "TemplateUrl" {
-		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(config.JsonData.System.BaseUrl, "/"), config.JsonData.System.TemplateName)
-	} else if config.JsonData.System.ExtraFields != nil {
-		for i := range config.JsonData.System.ExtraFields {
-			if config.JsonData.System.ExtraFields[i].Name == fieldName {
-				content = config.JsonData.System.ExtraFields[i].Value
+		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(currentSite.System.BaseUrl, "/"), currentSite.System.TemplateName)
+	} else if currentSite.System.ExtraFields != nil {
+		for i := range currentSite.System.ExtraFields {
+			if currentSite.System.ExtraFields[i].Name == fieldName {
+				content = currentSite.System.ExtraFields[i].Value
 				break
 			}
 		}
 	}
 	if content == "" {
-		v := reflect.ValueOf(config.JsonData.System)
+		v := reflect.ValueOf(currentSite.System)
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)

@@ -5,14 +5,13 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
-	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"time"
 )
 
 func ArchiveList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
@@ -22,10 +21,9 @@ func ArchiveList(ctx iris.Context) {
 	recycle, _ := ctx.URLParamBool("recycle")
 	// 采集的
 	collect, _ := ctx.URLParamBool("collect")
-
-	var archives []*model.Archive
-	var total int64
-	var err error
+	if currentPage < 1 {
+		currentPage = 1
+	}
 
 	var ops func(tx *gorm.DB) *gorm.DB
 	if recycle {
@@ -60,7 +58,7 @@ func ArchiveList(ctx iris.Context) {
 			return tx
 		}
 	}
-	archives, total, _ = provider.GetArchiveList(ops, currentPage, pageSize)
+	archives, total, err := currentSite.GetArchiveList(ops, currentPage, pageSize)
 
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -70,9 +68,9 @@ func ArchiveList(ctx iris.Context) {
 		return
 	}
 	//读取列表的分类
-	categories := provider.GetCacheCategories()
+	categories := currentSite.GetCacheCategories()
 	// 模型
-	modules := provider.GetCacheModules()
+	modules := currentSite.GetCacheModules()
 	for i, v := range archives {
 		if v.CategoryId > 0 {
 			for _, c := range categories {
@@ -89,11 +87,6 @@ func ArchiveList(ctx iris.Context) {
 		}
 	}
 
-	// 给文章生成链接
-	for i := range archives {
-		archives[i].Link = provider.GetUrl("archive", archives[i], 0)
-	}
-
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
@@ -103,9 +96,10 @@ func ArchiveList(ctx iris.Context) {
 }
 
 func ArchiveDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	archive, err := provider.GetArchiveById(id)
+	archive, err := currentSite.GetArchiveById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -115,11 +109,11 @@ func ArchiveDetail(ctx iris.Context) {
 	}
 
 	// 读取data
-	archive.ArchiveData, err = provider.GetArchiveDataById(archive.Id)
+	archive.ArchiveData, err = currentSite.GetArchiveDataById(archive.Id)
 	// 读取 extraDat
-	archive.Extra = provider.GetArchiveExtra(archive.ModuleId, archive.Id)
+	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id)
 
-	tags := provider.GetTagsByItemId(archive.Id)
+	tags := currentSite.GetTagsByItemId(archive.Id)
 	if len(tags) > 0 {
 		var tagNames = make([]string, 0, len(tags))
 		for _, v := range tags {
@@ -136,6 +130,7 @@ func ArchiveDetail(ctx iris.Context) {
 }
 
 func ArchiveDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -147,7 +142,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 
 	// 检查是否有重名
 	if !req.ForceSave {
-		exists, err := provider.GetArchiveByTitle(req.Title)
+		exists, err := currentSite.GetArchiveByTitle(req.Title)
 		if err == nil && exists.Id != req.Id {
 			// 做提示
 			ctx.JSON(iris.Map{
@@ -160,7 +155,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 	}
 	// 检查 fixed_link
 	if req.FixedLink != "" {
-		exists, err := provider.GetArchiveByFixedLink(req.FixedLink)
+		exists, err := currentSite.GetArchiveByFixedLink(req.FixedLink)
 		if err == nil && exists.Id != req.Id {
 			// 做提示
 			ctx.JSON(iris.Map{
@@ -171,7 +166,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 		}
 	}
 
-	archive, err := provider.SaveArchive(&req)
+	archive, err := currentSite.SaveArchive(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -180,7 +175,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新文档：%d => %s", archive.Id, archive.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新文档：%d => %s", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -190,6 +185,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 }
 
 func ArchiveRecover(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -198,7 +194,7 @@ func ArchiveRecover(ctx iris.Context) {
 		})
 		return
 	}
-	archive, err := provider.GetUnscopedArchiveById(req.Id)
+	archive, err := currentSite.GetUnscopedArchiveById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -207,7 +203,7 @@ func ArchiveRecover(ctx iris.Context) {
 		return
 	}
 
-	err = provider.RecoverArchive(archive)
+	err = currentSite.RecoverArchive(archive)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -216,7 +212,7 @@ func ArchiveRecover(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("恢复文档：%d => %s", archive.Id, archive.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("恢复文档：%d => %s", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -225,6 +221,7 @@ func ArchiveRecover(ctx iris.Context) {
 }
 
 func ArchiveRelease(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -233,7 +230,7 @@ func ArchiveRelease(ctx iris.Context) {
 		})
 		return
 	}
-	archive, err := provider.GetUnscopedArchiveById(req.Id)
+	archive, err := currentSite.GetUnscopedArchiveById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -246,8 +243,8 @@ func ArchiveRelease(ctx iris.Context) {
 	if archive.Status == config.ContentStatusDraft {
 		archive.Status = config.ContentStatusOK
 		archive.CreatedTime = time.Now().Unix()
-		dao.DB.Save(archive)
-		err = provider.SuccessReleaseArchive(archive, true)
+		currentSite.DB.Save(archive)
+		err = currentSite.SuccessReleaseArchive(archive, true)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -255,7 +252,7 @@ func ArchiveRelease(ctx iris.Context) {
 			})
 			return
 		}
-		provider.AddAdminLog(ctx, fmt.Sprintf("发布文档：%d => %s", archive.Id, archive.Title))
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("发布文档：%d => %s", archive.Id, archive.Title))
 	}
 
 	ctx.JSON(iris.Map{
@@ -265,6 +262,7 @@ func ArchiveRelease(ctx iris.Context) {
 }
 
 func ArchiveDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -273,7 +271,7 @@ func ArchiveDelete(ctx iris.Context) {
 		})
 		return
 	}
-	archive, err := provider.GetUnscopedArchiveById(req.Id)
+	archive, err := currentSite.GetUnscopedArchiveById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -282,7 +280,7 @@ func ArchiveDelete(ctx iris.Context) {
 		return
 	}
 
-	err = provider.DeleteArchive(archive)
+	err = currentSite.DeleteArchive(archive)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -291,7 +289,7 @@ func ArchiveDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档：%d => %s", archive.Id, archive.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档：%d => %s", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -300,6 +298,7 @@ func ArchiveDelete(ctx iris.Context) {
 }
 
 func UpdateArchiveRecommend(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -309,8 +308,7 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 		return
 	}
 
-
-	err := provider.UpdateArchiveRecommend(&req)
+	err := currentSite.UpdateArchiveRecommend(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -319,7 +317,7 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档Flag：%v => %s", req.Ids, req.Flag))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档Flag：%v => %s", req.Ids, req.Flag))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -328,6 +326,7 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 }
 
 func UpdateArchiveStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -337,8 +336,7 @@ func UpdateArchiveStatus(ctx iris.Context) {
 		return
 	}
 
-
-	err := provider.UpdateArchiveStatus(&req)
+	err := currentSite.UpdateArchiveStatus(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -347,7 +345,35 @@ func UpdateArchiveStatus(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档状态：%v => %d", req.Ids, req.Status))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档状态：%v => %d", req.Ids, req.Status))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
+func UpdateArchiveTime(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.UpdateArchiveTime(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档时间：%v => %d", req.Ids, req.Time))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -356,6 +382,7 @@ func UpdateArchiveStatus(ctx iris.Context) {
 }
 
 func UpdateArchiveCategory(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -365,8 +392,7 @@ func UpdateArchiveCategory(ctx iris.Context) {
 		return
 	}
 
-
-	err := provider.UpdateArchiveCategory(&req)
+	err := currentSite.UpdateArchiveCategory(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -375,7 +401,7 @@ func UpdateArchiveCategory(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档分类：%v => %d", req.Ids, req.CategoryId))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档分类：%v => %d", req.Ids, req.CategoryId))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

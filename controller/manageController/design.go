@@ -12,8 +12,9 @@ import (
 )
 
 func GetDesignList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	// 读取 设计列表
-	designList := provider.GetDesignList()
+	designList := currentSite.GetDesignList()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -23,9 +24,10 @@ func GetDesignList(ctx iris.Context) {
 }
 
 func GetDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	packageName := ctx.URLParam("package")
 
-	designInfo, err := provider.GetDesignInfo(packageName, true)
+	designInfo, err := currentSite.GetDesignInfo(packageName, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -42,6 +44,7 @@ func GetDesignInfo(ctx iris.Context) {
 }
 
 func SaveDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -51,7 +54,7 @@ func SaveDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveDesignInfo(req)
+	err := currentSite.SaveDesignInfo(req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -60,11 +63,11 @@ func SaveDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	if config.JsonData.System.TemplateName == req.Package {
+	if currentSite.System.TemplateName == req.Package {
 		// 更改当前
-		if config.JsonData.System.TemplateType != req.TemplateType {
-			config.JsonData.System.TemplateType = req.TemplateType
-			err = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
+		if currentSite.System.TemplateType != req.TemplateType {
+			currentSite.System.TemplateType = req.TemplateType
+			err = currentSite.SaveSettingValue(provider.SystemSettingKey, currentSite.System)
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -74,8 +77,9 @@ func SaveDesignInfo(ctx iris.Context) {
 			}
 		}
 	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板信息：%s", req.Package))
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改模板信息：%s", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -84,6 +88,7 @@ func SaveDesignInfo(ctx iris.Context) {
 }
 
 func UseDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -93,7 +98,7 @@ func UseDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	_, err := provider.GetDesignInfo(req.Package, false)
+	_, err := currentSite.GetDesignInfo(req.Package, false)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -102,10 +107,10 @@ func UseDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	if config.JsonData.System.TemplateName != req.Package {
-		config.JsonData.System.TemplateName = req.Package
-		config.JsonData.System.TemplateType = req.TemplateType
-		err = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
+	if currentSite.System.TemplateName != req.Package {
+		currentSite.System.TemplateName = req.Package
+		currentSite.System.TemplateType = req.TemplateType
+		err = currentSite.SaveSettingValue(provider.SystemSettingKey, currentSite.System)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -113,18 +118,11 @@ func UseDesignInfo(ctx iris.Context) {
 			})
 			return
 		}
-
-		go func() {
-			time.Sleep(50 * time.Millisecond)
-			// 如果切换了模板，则重载模板
-			config.RestartChan <- true
-
-			time.Sleep(2 * time.Second)
-			provider.DeleteCacheIndex()
-		}()
 	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
+	// 重载模板
+	config.RestartChan <- false
+	time.Sleep(1 * time.Second)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -133,6 +131,7 @@ func UseDesignInfo(ctx iris.Context) {
 }
 
 func DeleteDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -142,7 +141,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteDesignInfo(req.Package)
+	err := currentSite.DeleteDesignInfo(req.Package)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -150,8 +149,9 @@ func DeleteDesignInfo(ctx iris.Context) {
 		})
 		return
 	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", req.Package))
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -160,6 +160,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 }
 
 func DownloadDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -169,7 +170,7 @@ func DownloadDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	data, err := provider.CreateDesignZip(req.Package)
+	data, err := currentSite.CreateDesignZip(req.Package)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -184,6 +185,7 @@ func DownloadDesignInfo(ctx iris.Context) {
 }
 
 func UploadDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -194,7 +196,7 @@ func UploadDesignInfo(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	err = provider.UploadDesignZip(file, info)
+	err = currentSite.UploadDesignZip(file, info)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -203,7 +205,7 @@ func UploadDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("上传模板：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传模板：%s", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -212,6 +214,7 @@ func UploadDesignInfo(ctx iris.Context) {
 }
 
 func BackupDesignData(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.DesignDataRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -221,7 +224,7 @@ func BackupDesignData(ctx iris.Context) {
 		return
 	}
 
-	err := provider.BackupDesignData(req.Package)
+	err := currentSite.BackupDesignData(req.Package)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -230,7 +233,7 @@ func BackupDesignData(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("备份模板数据：%s", req.Package))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("备份模板数据：%s", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -239,6 +242,7 @@ func BackupDesignData(ctx iris.Context) {
 }
 
 func RestoreDesignData(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.DesignDataRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -250,7 +254,7 @@ func RestoreDesignData(ctx iris.Context) {
 
 	if req.AutoBackup {
 		// 如果用户勾选了自动备份
-		err := provider.BackupData()
+		err := currentSite.BackupData()
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -260,7 +264,7 @@ func RestoreDesignData(ctx iris.Context) {
 		}
 	}
 
-	err := provider.RestoreDesignData(req.Package)
+	err := currentSite.RestoreDesignData(req.Package)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -269,9 +273,9 @@ func RestoreDesignData(ctx iris.Context) {
 		return
 	}
 
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheIndex()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("初始化模板数据：%s", req.Package))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("初始化模板数据：%s", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -280,6 +284,7 @@ func RestoreDesignData(ctx iris.Context) {
 }
 
 func UploadDesignFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -292,9 +297,13 @@ func UploadDesignFile(ctx iris.Context) {
 
 	packageName := ctx.PostValue("package")
 	filePath := ctx.PostValue("path")
+	fileName := ctx.PostValue("name")
 	fileType := ctx.PostValue("type")
+	if fileName != "" {
+		info.Filename = fileName
+	}
 
-	err = provider.UploadDesignFile(file, info, packageName, fileType, filePath)
+	err = currentSite.UploadDesignFile(file, info, packageName, fileType, filePath)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -302,9 +311,10 @@ func UploadDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
-	provider.DeleteCacheIndex()
-	provider.AddAdminLog(ctx, fmt.Sprintf("上传模板文件：%s", info.Filename))
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.DeleteCacheIndex()
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传模板文件：%s", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -313,11 +323,12 @@ func UploadDesignFile(ctx iris.Context) {
 }
 
 func GetDesignFileDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	packageName := ctx.URLParam("package")
 	fileName := ctx.URLParam("path")
 	fileType := ctx.URLParam("type")
 
-	fileInfo, err := provider.GetDesignFileDetail(packageName, fileName, fileType, true)
+	fileInfo, err := currentSite.GetDesignFileDetail(packageName, fileName, fileType, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -334,11 +345,12 @@ func GetDesignFileDetail(ctx iris.Context) {
 }
 
 func GetDesignFileHistories(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	packageName := ctx.URLParam("package")
 	fileName := ctx.URLParam("path")
 	fileType := ctx.URLParam("type")
 
-	histories := provider.GetDesignFileHistories(packageName, fileName, fileType)
+	histories := currentSite.GetDesignFileHistories(packageName, fileName, fileType)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -348,6 +360,7 @@ func GetDesignFileHistories(ctx iris.Context) {
 }
 
 func DeleteDesignFileHistories(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.RestoreDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -357,7 +370,7 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteDesignHistoryFile(req.Package, req.Filepath, req.Hash, req.Type)
+	err := currentSite.DeleteDesignHistoryFile(req.Package, req.Filepath, req.Hash, req.Type)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -366,7 +379,7 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板文件历史：%s => %s", req.Package, req.Filepath))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除模板文件历史：%s => %s", req.Package, req.Filepath))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -375,6 +388,7 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 }
 
 func RestoreDesignFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.RestoreDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -384,7 +398,7 @@ func RestoreDesignFile(ctx iris.Context) {
 		return
 	}
 
-	err := provider.RestoreDesignFile(req.Package, req.Filepath, req.Hash, req.Type)
+	err := currentSite.RestoreDesignFile(req.Package, req.Filepath, req.Hash, req.Type)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -393,10 +407,11 @@ func RestoreDesignFile(ctx iris.Context) {
 		return
 	}
 
-	fileInfo, _ := provider.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
-
-	provider.DeleteCacheIndex()
-	provider.AddAdminLog(ctx, fmt.Sprintf("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
+	fileInfo, _ := currentSite.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.DeleteCacheIndex()
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -406,6 +421,7 @@ func RestoreDesignFile(ctx iris.Context) {
 }
 
 func SaveDesignFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.SaveDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -415,7 +431,7 @@ func SaveDesignFile(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveDesignFile(req)
+	err := currentSite.SaveDesignFile(req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -423,10 +439,11 @@ func SaveDesignFile(ctx iris.Context) {
 		})
 		return
 	}
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.DeleteCacheIndex()
 
-	provider.DeleteCacheIndex()
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板文件：%s => %s", req.Package, req.Path))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改模板文件：%s => %s", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -435,6 +452,7 @@ func SaveDesignFile(ctx iris.Context) {
 }
 
 func CopyDesignFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.CopyDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -444,7 +462,7 @@ func CopyDesignFile(ctx iris.Context) {
 		return
 	}
 
-	err := provider.CopyDesignFile(req)
+	err := currentSite.CopyDesignFile(req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -452,8 +470,9 @@ func CopyDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("复制模板文件：%s => %s", req.Package, req.Path))
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("复制模板文件：%s => %s", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -462,6 +481,7 @@ func CopyDesignFile(ctx iris.Context) {
 }
 
 func DeleteDesignFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.SaveDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -471,7 +491,7 @@ func DeleteDesignFile(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteDesignFile(req.Package, req.Path, req.Type)
+	err := currentSite.DeleteDesignFile(req.Package, req.Path, req.Type)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -479,8 +499,9 @@ func DeleteDesignFile(ctx iris.Context) {
 		})
 		return
 	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板文件：%s => %s", req.Package, req.Path))
+	// 重载模板
+	config.RestartChan <- false
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除模板文件：%s => %s", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -489,8 +510,9 @@ func DeleteDesignFile(ctx iris.Context) {
 }
 
 func GetDesignTemplateFiles(ctx iris.Context) {
-	packageName := config.JsonData.System.TemplateName
-	templates, err := provider.GetDesignTemplateFiles(packageName)
+	currentSite := provider.CurrentSite(ctx)
+	packageName := currentSite.System.TemplateName
+	templates, err := currentSite.GetDesignTemplateFiles(packageName)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

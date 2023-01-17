@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
@@ -15,7 +14,8 @@ type tagArchiveParamsNode struct {
 }
 
 func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -33,11 +33,11 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		archiveDetail, _ = provider.GetArchiveById(id)
+		archiveDetail, _ = currentSite.GetArchiveById(id)
 	}
 
 	if archiveDetail != nil {
-		archiveParams := provider.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
+		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
 		if len(archiveParams) > 0 {
 			// if read level larger than 0, then need to check permission
 			if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
@@ -49,7 +49,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					archiveDetail.HasOrdered = true
 				}
 				if archiveDetail.Price > 0 {
-					archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
+					archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
 				}
 				if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
 					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
@@ -68,7 +68,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			}
 			if sorted {
 				var extraFields []*model.CustomField
-				module := provider.GetModuleFromCache(archiveDetail.ModuleId)
+				module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 				if module != nil && len(module.Fields) > 0 {
 					for _, v := range module.Fields {
 						extraFields = append(extraFields, archiveParams[v.FieldName])

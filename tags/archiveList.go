@@ -2,9 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
-	"kandaoni.com/anqicms/dao"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -21,7 +21,8 @@ type tagArchiveListNode struct {
 }
 
 func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -43,14 +44,14 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
 	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 	if ok {
-		categoryDetail = provider.GetCategoryFromCache(archiveDetail.CategoryId)
+		categoryDetail = currentSite.GetCategoryFromCache(archiveDetail.CategoryId)
 	}
 	if args["categoryId"] != nil {
 		tmpIds := strings.Split(args["categoryId"].String(), ",")
 		for _, v := range tmpIds {
 			tmpId, _ := strconv.Atoi(v)
 			if tmpId > 0 {
-				categoryDetail = provider.GetCategoryFromCache(uint(tmpId))
+				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
 				if categoryDetail != nil {
 					categoryIds = append(categoryIds, categoryDetail.Id)
 					moduleId = categoryDetail.ModuleId
@@ -64,7 +65,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		moduleId = categoryDetail.ModuleId
 	}
 
-	module := provider.GetModuleFromCache(moduleId)
+	module := currentSite.GetModuleFromCache(moduleId)
 	if module == nil {
 		module, _ = ctx.Public["module"].(*model.Module)
 		if module != nil {
@@ -79,6 +80,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	listType := "list"
 	flag := ""
 	q := ""
+	argQ := ""
 	child := true
 
 	if args["type"] != nil {
@@ -95,6 +97,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if args["q"] != nil {
 		q = strings.TrimSpace(args["q"].String())
+		argQ = q
 	}
 
 	// 支持更多的参数搜索，
@@ -143,6 +146,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			limit = 1
 		}
 	}
+	if listType == "page" {
+		if currentPage > 1 {
+			offset = (currentPage - 1) * limit
+		}
+	}
 
 	var archives []*model.Archive
 	var total int64
@@ -157,32 +165,37 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if ok {
 			archiveId = archiveDetail.Id
 			categoryId = archiveDetail.CategoryId
-			category := provider.GetCategoryFromCache(categoryId)
+			category := currentSite.GetCategoryFromCache(categoryId)
 			if category != nil {
 				moduleId = category.ModuleId
 			}
 		}
 
-		var archives2 []*model.Archive
-		db := dao.DB
 		newLimit := int(math.Ceil(float64(limit) / 2))
-		if err := db.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).Order("id ASC").Limit(newLimit).Offset(offset).Find(&archives).Error; err != nil {
-			//no
-		}
+		archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+			tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
+				Order("id ASC")
+			return tx
+		}, 0, newLimit, offset)
 		preCount := len(archives)
 		newLimit += newLimit - len(archives)
-		if err := db.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).Order("id DESC").Limit(newLimit).Offset(offset).Find(&archives2).Error; err != nil {
-			//no
-		}
+		archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+			tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).
+				Order("id DESC")
+			return tx
+		}, 0, newLimit, offset)
 		//列表不返回content
 		if len(archives2) > 0 {
 			archives = append(archives, archives2...)
 		}
 		// 如果量不够，则再补充
 		if len(archives) < limit {
-			var archives3 []*model.Archive
 			newLimit = limit - len(archives)
-			db.Model(&model.Archive{}).Where("`status` = 1").Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).Order("id ASC").Limit(newLimit).Offset(offset + preCount).Find(&archives3)
+			archives3, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
+					Order("id ASC")
+				return tx
+			}, 0, newLimit, offset+preCount)
 			if len(archives3) > 0 {
 				archives = append(archives, archives3...)
 			}
@@ -192,85 +205,80 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			archives = archives[:limit]
 		}
 	} else {
-		builder := dao.DB.Model(&model.Archive{}).Where("`status` = 1")
-		if authorId > 0 {
-			builder = builder.Where("user_id = ?", authorId)
-		}
-		if moduleId > 0 {
-			builder = builder.Where("module_id = ?", moduleId)
-		}
-
-		if flag != "" {
-			builder = builder.Where("FIND_IN_SET(?,`flag`)", flag)
-		}
-
 		extraFields := map[uint]map[string]*model.CustomField{}
 		var results []map[string]interface{}
 		var fields []string
 		fields = append(fields, "id")
 
-		if module != nil && len(module.Fields) > 0 {
-			for _, v := range module.Fields {
-				fields = append(fields, "`"+v.FieldName+"`")
-				// 如果有筛选条件，从这里开始筛选
-				if param, ok := extraParams[v.FieldName]; ok {
-					builder = builder.Where("`"+v.FieldName+"` = ?", param)
-				}
-			}
-		}
-
-		if len(categoryIds) > 0 {
-			if child {
-				var subIds []uint
-				for _, v := range categoryIds {
-					tmpIds := provider.GetSubCategoryIds(v, nil)
-					subIds = append(subIds, tmpIds...)
-					subIds = append(subIds, v)
-				}
-				builder = builder.Where("`category_id` IN(?)", subIds)
-			} else if len(categoryIds) == 1 {
-				builder = builder.Where("`category_id` = ?", categoryIds[0])
-			} else {
-				builder = builder.Where("`category_id` IN(?)", categoryIds)
-			}
-		}
-		if order != "" {
-			builder = builder.Order(order)
-		}
 		var fulltextSearch bool
-		if listType == "page" {
-			if currentPage > 1 {
-				offset = (currentPage - 1) * limit
-			}
-			if q != "" {
-				ids, total2, err2 := provider.Search(q, moduleId, currentPage, limit)
-				if err2 != nil {
-					builder = builder.Where("`title` like ?", "%"+q+"%")
-					builder.Count(&total)
-				} else {
-					fulltextSearch = true
-					if len(ids) == 0 {
-						ids = append(ids, 0)
-					}
-					builder = builder.Where("`id` IN(?)", ids)
-					total = total2
+		var fulltextTotal int64
+		var err2 error
+		var ids []uint
+		if (listType == "page" && len(q) > 0) || argQ != "" {
+			ids, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			if err2 == nil {
+				fulltextSearch = true
+				if len(ids) == 0 {
+					ids = append(ids, 0)
 				}
-			} else {
-				builder.Count(&total)
+				offset = 0
 			}
 		}
-		if !fulltextSearch {
-			builder = builder.Limit(limit).Offset(offset)
+		ops := func(tx *gorm.DB) *gorm.DB {
+			tx.Where("`status` = 1")
+			if authorId > 0 {
+				tx = tx.Where("user_id = ?", authorId)
+			}
+			if moduleId > 0 {
+				tx = tx.Where("`module_id` = ?", moduleId)
+			}
+			if flag != "" {
+				tx = tx.Where("FIND_IN_SET(?,`flag`)", flag)
+			}
+			if module != nil && len(module.Fields) > 0 {
+				for _, v := range module.Fields {
+					fields = append(fields, "`"+v.FieldName+"`")
+					// 如果有筛选条件，从这里开始筛选
+					if param, ok := extraParams[v.FieldName]; ok {
+						tx = tx.Where("`"+v.FieldName+"` = ?", param)
+					}
+				}
+			}
+			if len(categoryIds) > 0 {
+				if child {
+					var subIds []uint
+					for _, v := range categoryIds {
+						tmpIds := currentSite.GetSubCategoryIds(v, nil)
+						subIds = append(subIds, tmpIds...)
+						subIds = append(subIds, v)
+					}
+					tx = tx.Where("`category_id` IN(?)", subIds)
+				} else if len(categoryIds) == 1 {
+					tx = tx.Where("`category_id` = ?", categoryIds[0])
+				} else {
+					tx = tx.Where("`category_id` IN(?)", categoryIds)
+				}
+			}
+			if order != "" {
+				tx = tx.Order(order)
+			}
+			if len(ids) > 0 {
+				tx = tx.Where("`id` IN(?)", ids)
+			} else if q != "" {
+				tx = tx.Where("`title` like ?", "%"+q+"%")
+			}
+			return tx
 		}
-		if err2 := builder.Find(&archives).Error; err2 != nil {
-			return nil
+		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
+		if fulltextSearch {
+			total = fulltextTotal
 		}
 		var archiveIds = make([]uint, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
 		}
 		if module != nil && len(fields) > 0 && len(archiveIds) > 0 {
-			dao.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select(strings.Join(fields, ",")).Scan(&results)
+			currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select(strings.Join(fields, ",")).Scan(&results)
 			for _, field := range results {
 				item := map[string]*model.CustomField{}
 				for _, v := range module.Fields {
@@ -291,26 +299,22 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 
-	for i := range archives {
-		archives[i].Link = provider.GetUrl("archive", archives[i], 0)
-	}
-
 	if listType == "page" {
 		var urlPatten string
 		if categoryDetail != nil {
 			urlMatch := "category"
-			urlPatten = provider.GetUrl(urlMatch, categoryDetail, -1)
+			urlPatten = currentSite.GetUrl(urlMatch, categoryDetail, -1)
 		} else {
-			webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
+			webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
 			if ok && webInfo.PageName == "archiveIndex" {
 				urlMatch := "archiveIndex"
-				urlPatten = provider.GetUrl(urlMatch, module, -1)
+				urlPatten = currentSite.GetUrl(urlMatch, module, -1)
 			} else {
 				// 其他地方
 				urlPatten = ""
 			}
 		}
-		ctx.Public["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 	}
 	ctx.Private[node.name] = archives
 

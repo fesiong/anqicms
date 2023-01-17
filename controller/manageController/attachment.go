@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -16,12 +15,13 @@ func AttachmentUpload(ctx iris.Context) {
 }
 
 func AttachmentList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	q := ctx.URLParam("q")
 
-	attachments, total, err := provider.GetAttachmentList(categoryId, q, currentPage, pageSize)
+	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -40,6 +40,7 @@ func AttachmentList(ctx iris.Context) {
 }
 
 func AttachmentDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Attachment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -48,7 +49,7 @@ func AttachmentDelete(ctx iris.Context) {
 		})
 		return
 	}
-	attach, err := provider.GetAttachmentById(req.Id)
+	attach, err := currentSite.GetAttachmentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -57,7 +58,7 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	err = attach.Delete(dao.DB)
+	err = attach.Delete(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -66,7 +67,7 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除图片：%d => %s", attach.Id, attach.FileLocation))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除图片：%d => %s", attach.Id, attach.FileLocation))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -75,6 +76,7 @@ func AttachmentDelete(ctx iris.Context) {
 }
 
 func AttachmentEdit(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Attachment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -83,7 +85,7 @@ func AttachmentEdit(ctx iris.Context) {
 		})
 		return
 	}
-	attach, err := provider.GetAttachmentById(req.Id)
+	attach, err := currentSite.GetAttachmentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -93,7 +95,7 @@ func AttachmentEdit(ctx iris.Context) {
 	}
 
 	attach.FileName = req.FileName
-	err = dao.DB.Save(attach).Error
+	err = currentSite.DB.Save(attach).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -102,7 +104,7 @@ func AttachmentEdit(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改图片名称：%d => %s", attach.Id, attach.FileName))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改图片名称：%d => %s", attach.Id, attach.FileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -111,6 +113,7 @@ func AttachmentEdit(ctx iris.Context) {
 }
 
 func AttachmentChangeCategory(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ChangeAttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -120,7 +123,7 @@ func AttachmentChangeCategory(ctx iris.Context) {
 		return
 	}
 
-	err := provider.ChangeAttachmentCategory(req.CategoryId, req.Ids)
+	err := currentSite.ChangeAttachmentCategory(req.CategoryId, req.Ids)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -129,7 +132,7 @@ func AttachmentChangeCategory(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更改图片的分类：%d => %v", req.CategoryId, req.Ids))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更改图片的分类：%d => %v", req.CategoryId, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -138,8 +141,9 @@ func AttachmentChangeCategory(ctx iris.Context) {
 }
 
 func AttachmentCategoryList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 
-	categories, err := provider.GetAttachmentCategories()
+	categories, err := currentSite.GetAttachmentCategories()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -156,6 +160,7 @@ func AttachmentCategoryList(ctx iris.Context) {
 }
 
 func AttachmentCategoryDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -165,7 +170,7 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	category, err := provider.SaveAttachmentCategory(&req)
+	category, err := currentSite.SaveAttachmentCategory(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -174,7 +179,7 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("保存图片分类：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("保存图片分类：%d => %s", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -184,6 +189,7 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 }
 
 func AttachmentCategoryDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -193,7 +199,7 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteAttachmentCategory(req.Id)
+	err := currentSite.DeleteAttachmentCategory(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -202,7 +208,7 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除图片分类：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除图片分类：%d => %s", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -211,9 +217,10 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 }
 
 func ConvertImageToWebp(ctx iris.Context) {
-	go provider.StartConvertImageToWebp()
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.StartConvertImageToWebp()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("批量转换图片为webp"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量转换图片为webp"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -11,12 +11,13 @@ import (
 )
 
 func PluginGuestbookList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 
-	guestbookList, total, err := provider.GetGuestbookList(keyword, currentPage, pageSize)
+	guestbookList, total, err := currentSite.GetGuestbookList(keyword, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -34,6 +35,7 @@ func PluginGuestbookList(ctx iris.Context) {
 }
 
 func PluginGuestbookDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginGuestbookDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -45,7 +47,7 @@ func PluginGuestbookDelete(ctx iris.Context) {
 
 	if req.Id > 0 {
 		//删一条
-		guestbook, err := provider.GetGuestbookById(req.Id)
+		guestbook, err := currentSite.GetGuestbookById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -54,7 +56,7 @@ func PluginGuestbookDelete(ctx iris.Context) {
 			return
 		}
 
-		err = provider.DeleteGuestbook(guestbook)
+		err = currentSite.DeleteGuestbook(guestbook)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -65,16 +67,16 @@ func PluginGuestbookDelete(ctx iris.Context) {
 	} else if len(req.Ids) > 0 {
 		//删除多条
 		for _, id := range req.Ids {
-			guestbook, err := provider.GetGuestbookById(id)
+			guestbook, err := currentSite.GetGuestbookById(id)
 			if err != nil {
 				continue
 			}
 
-			_ = provider.DeleteGuestbook(guestbook)
+			_ = currentSite.DeleteGuestbook(guestbook)
 		}
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除留言：%d, %v", req.Id, req.Ids))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除留言：%d, %v", req.Id, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -83,7 +85,8 @@ func PluginGuestbookDelete(ctx iris.Context) {
 }
 
 func PluginGuestbookExport(ctx iris.Context) {
-	guestbooks, err := provider.GetAllGuestbooks()
+	currentSite := provider.CurrentSite(ctx)
+	guestbooks, err := currentSite.GetAllGuestbooks()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -92,7 +95,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 		return
 	}
 
-	fields := config.GetGuestbookFields()
+	fields := currentSite.GetGuestbookFields()
 	//header
 	var header []string
 	for _, v := range fields {
@@ -122,7 +125,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 		content = append(content, item)
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导出留言"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出留言"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -135,17 +138,19 @@ func PluginGuestbookExport(ctx iris.Context) {
 }
 
 func PluginGuestbookSetting(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"return_message": config.JsonData.PluginGuestbook.ReturnMessage,
-			"fields":         config.GetGuestbookFields(),
+			"return_message": currentSite.PluginGuestbook.ReturnMessage,
+			"fields":         currentSite.GetGuestbookFields(),
 		},
 	})
 }
 
 func PluginGuestbookSettingForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginGuestbookConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -160,7 +165,7 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 	for _, v := range req.Fields {
 		if !v.IsSystem {
 			if v.FieldName == "" {
-				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name), "-", "_")
+				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name, currentSite.Content.UrlTokenType == config.UrlTokenTypeSort), "-", "_")
 			}
 		}
 		if _, ok := existsFields[v.FieldName]; !ok {
@@ -169,10 +174,10 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 		}
 	}
 
-	config.JsonData.PluginGuestbook.ReturnMessage = req.ReturnMessage
-	config.JsonData.PluginGuestbook.Fields = fields
+	currentSite.PluginGuestbook.ReturnMessage = req.ReturnMessage
+	currentSite.PluginGuestbook.Fields = fields
 
-	err := provider.SaveSettingValue(provider.GuestbookSettingKey, config.JsonData.PluginGuestbook)
+	err := currentSite.SaveSettingValue(provider.GuestbookSettingKey, currentSite.PluginGuestbook)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -181,7 +186,7 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改留言设置信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改留言设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

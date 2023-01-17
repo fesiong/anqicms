@@ -1,5 +1,7 @@
 package request
 
+import "kandaoni.com/anqicms/config"
+
 type PluginRobotsConfig struct {
 	Robots string `json:"robots"`
 }
@@ -29,6 +31,9 @@ type PluginComment struct {
 	ParentId  uint   `json:"parent_id"`
 	ToUid     uint   `json:"to_uid"`
 	Status    uint   `json:"status"`
+
+	// 批量更新
+	Ids []uint `json:"ids"`
 }
 
 type PluginAnchor struct {
@@ -104,4 +109,10 @@ type PluginRedirectsRequest struct {
 
 type PluginBackupRequest struct {
 	Name string `json:"name"`
+}
+
+type PluginReplaceRequest struct {
+	ReplaceTag bool                    `json:"replace_tag"`
+	Places     []string                `json:"places"`
+	Keywords   []config.ReplaceKeyword `json:"keywords"`
 }

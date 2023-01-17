@@ -1,11 +1,11 @@
 package library
 
 import (
-	"math/rand"
+	"github.com/kataras/iris/v12"
+	"net"
 	"reflect"
 	"regexp"
 	"strings"
-	"time"
 	"unsafe"
 )
 
@@ -26,16 +26,6 @@ func StripTags(src string) string {
 	re, _ = regexp.Compile("\\s{2,}")
 	src = re.ReplaceAllString(src, "\n")
 	return strings.TrimSpace(src)
-}
-
-func GenerateRandString(length int) string {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	bytes := make([]byte, length)
-	for i := 0; i < length; i++ {
-		b := r.Intn(26) + 65
-		bytes[i] = byte(b)
-	}
-	return strings.ToLower(string(bytes))
 }
 
 func Case2Camel(name string) string {
@@ -150,4 +140,25 @@ func EscapeString(v string) string {
 		}
 	}
 	return string(buf[:pos])
+}
+
+func GetHost(ctx iris.Context) string {
+	// maybe real host in X-Host
+	host := ctx.GetHeader("X-Host")
+	if host == "" {
+		host = ctx.Host()
+	}
+	// remove port from host
+	if tmp, _, err := net.SplitHostPort(host); err == nil {
+		host = tmp
+	}
+
+	switch host {
+	// We could use the netutil.LoopbackRegex but leave it as it's for now, it's faster.
+	case "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]", "0:0:0:0:0:0:0:0", "0:0:0:0:0:0:0:1":
+		// loopback.
+		return "localhost"
+	default:
+		return host
+	}
 }

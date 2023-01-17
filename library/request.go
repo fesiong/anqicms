@@ -71,7 +71,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	//定义默认的refer
 	parsedUrl, err := url.Parse(urlPath)
 	if err != nil {
-		log.Println(err)
+		//log.Println(err)
 		return nil, nil
 	}
 	parsedUrl.Path = ""
@@ -207,9 +207,12 @@ func getUserAgent(isMobile bool) string {
 }
 
 func GetURLData(url, refer string) (*RequestData, error) {
-	log.Println(url)
+	//log.Println(url)
 	client := &http.Client{}
 	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
 	req.Header.Set("User-Agent", getUserAgent(false))
 	req.Header.Set("Referer", refer)
 

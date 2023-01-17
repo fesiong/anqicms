@@ -6,12 +6,12 @@ import (
 	"testing"
 )
 
-func TestGenerateCombination(t *testing.T) {
+func (w *Website) TestGenerateCombination(t *testing.T) {
 	keyword := &model.Keyword{Title: "sunglasses"}
-	config.CollectorConfig.FromEngine = config.EnginBing
-	config.CollectorConfig.InsertImage = true
-	config.CollectorConfig.Language = config.LanguageEn
-	_, err := GenerateCombination(keyword)
+	w.CollectorConfig.FromEngine = config.EnginBing
+	w.CollectorConfig.InsertImage = true
+	w.CollectorConfig.Language = config.LanguageEn
+	_, err := w.GenerateCombination(keyword)
 	if err != nil {
 		t.Fatal(err)
 	}

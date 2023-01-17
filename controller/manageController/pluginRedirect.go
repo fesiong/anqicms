@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -12,12 +11,13 @@ import (
 )
 
 func PluginRedirectList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	fromUrl := ctx.URLParam("from_url")
 
-	redirectList, total, err := provider.GetRedirectList(fromUrl, currentPage, pageSize)
+	redirectList, total, err := currentSite.GetRedirectList(fromUrl, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -27,14 +27,15 @@ func PluginRedirectList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
+		"code":  config.StatusOK,
+		"msg":   "",
 		"total": total,
-		"data": redirectList,
+		"data":  redirectList,
 	})
 }
 
 func PluginRedirectDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginRedirectRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -62,7 +63,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 	var err error
 
 	if req.Id > 0 {
-		redirect, err = provider.GetRedirectById(req.Id)
+		redirect, err = currentSite.GetRedirectById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -71,7 +72,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 			return
 		}
 		//去重
-		exists, err := provider.GetRedirectByFromUrl(req.FromUrl)
+		exists, err := currentSite.GetRedirectByFromUrl(req.FromUrl)
 		if err == nil && exists.Id != redirect.Id {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -81,7 +82,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 		}
 	} else {
 		//新增支持批量插入
-		redirect, err = provider.GetRedirectByFromUrl(req.FromUrl)
+		redirect, err = currentSite.GetRedirectByFromUrl(req.FromUrl)
 		if err != nil {
 			//不存在
 			redirect = &model.Redirect{
@@ -93,7 +94,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 	redirect.FromUrl = req.FromUrl
 	redirect.ToUrl = req.ToUrl
 
-	err = dao.DB.Save(redirect).Error
+	err = currentSite.DB.Save(redirect).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -102,9 +103,9 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
 
-	provider.DeleteCacheRedirects()
+	currentSite.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -113,6 +114,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 }
 
 func PluginRedirectDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginRedirectRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -122,7 +124,7 @@ func PluginRedirectDelete(ctx iris.Context) {
 		return
 	}
 
-	redirect, err := provider.GetRedirectById(req.Id)
+	redirect, err := currentSite.GetRedirectById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -131,7 +133,7 @@ func PluginRedirectDelete(ctx iris.Context) {
 		return
 	}
 
-	err = provider.DeleteRedirect(redirect)
+	err = currentSite.DeleteRedirect(redirect)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -140,9 +142,9 @@ func PluginRedirectDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
 
-	provider.DeleteCacheRedirects()
+	currentSite.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -151,28 +153,29 @@ func PluginRedirectDelete(ctx iris.Context) {
 }
 
 func PluginRedirectImport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
 	defer file.Close()
 
-	result, err := provider.ImportRedirects(file, info)
+	result, err := currentSite.ImportRedirects(file, info)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导入301跳转链接"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("导入301跳转链接"))
 
-	provider.DeleteCacheRedirects()
+	currentSite.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

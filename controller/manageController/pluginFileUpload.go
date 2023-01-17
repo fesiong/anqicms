@@ -15,10 +15,11 @@ import (
 )
 
 func PluginFileUploadList(ctx iris.Context) {
-	uploadFiles := config.JsonData.PluginUploadFiles
+	currentSite := provider.CurrentSite(ctx)
+	uploadFiles := currentSite.PluginUploadFiles
 
 	for i := range uploadFiles {
-		uploadFiles[i].Link = config.JsonData.System.BaseUrl + "/" + uploadFiles[i].FileName
+		uploadFiles[i].Link = currentSite.System.BaseUrl + "/" + uploadFiles[i].FileName
 	}
 
 	ctx.JSON(iris.Map{
@@ -29,6 +30,7 @@ func PluginFileUploadList(ctx iris.Context) {
 }
 
 func PluginFileUploadDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginFileUploadDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -38,14 +40,14 @@ func PluginFileUploadDelete(ctx iris.Context) {
 		return
 	}
 
-	uploadFiles := config.JsonData.PluginUploadFiles
+	uploadFiles := currentSite.PluginUploadFiles
 
 	fileName := ""
 	for i, v := range uploadFiles {
 		if v.Hash == req.Hash {
 			fileName = v.FileName
 
-			config.JsonData.PluginUploadFiles = append(config.JsonData.PluginUploadFiles[:i], config.JsonData.PluginUploadFiles[i+1:]...)
+			currentSite.PluginUploadFiles = append(currentSite.PluginUploadFiles[:i], currentSite.PluginUploadFiles[i+1:]...)
 		}
 	}
 
@@ -58,7 +60,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	}
 
 	//执行物理删除
-	err := os.Remove(fmt.Sprintf("%spublic/%s", config.ExecPath, fileName))
+	err := os.Remove(currentSite.PublicPath + fileName)
 
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -69,7 +71,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	}
 
 	//更新文件列表
-	err = provider.SaveSettingValue(provider.UploadFilesSettingKey, config.JsonData.PluginUploadFiles)
+	err = currentSite.SaveSettingValue(provider.UploadFilesSettingKey, currentSite.PluginUploadFiles)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -78,7 +80,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除上传验证文件：%s", fileName))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除上传验证文件：%s", fileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -88,6 +90,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 
 // 上传，只允许上传txt,htm,html
 func PluginFileUploadUpload(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -112,7 +115,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		return
 	}
 
-	filePath := fmt.Sprintf("%spublic/%s", config.ExecPath, info.Filename)
+	filePath := fmt.Sprintf(currentSite.PublicPath + info.Filename)
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -133,7 +136,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 
 	//检查是否已经在
 	exists := false
-	for _, v := range config.JsonData.PluginUploadFiles {
+	for _, v := range currentSite.PluginUploadFiles {
 		if v.FileName == info.Filename {
 			exists = true
 		}
@@ -141,14 +144,14 @@ func PluginFileUploadUpload(ctx iris.Context) {
 
 	if !exists {
 		//追加
-		config.JsonData.PluginUploadFiles = append(config.JsonData.PluginUploadFiles, config.PluginUploadFile{
+		currentSite.PluginUploadFiles = append(currentSite.PluginUploadFiles, config.PluginUploadFile{
 			Hash:        library.Md5(info.Filename),
 			FileName:    info.Filename,
 			CreatedTime: time.Now().Unix(),
 		})
 	}
 
-	err = provider.SaveSettingValue(provider.UploadFilesSettingKey, config.JsonData.PluginUploadFiles)
+	err = currentSite.SaveSettingValue(provider.UploadFilesSettingKey, currentSite.PluginUploadFiles)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -157,7 +160,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("上传验证文件：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传验证文件：%s", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

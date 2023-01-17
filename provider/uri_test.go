@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-func TestGetUrl(t *testing.T) {
-	archive, err := GetArchiveById(12)
+func (w *Website) TestGetUrl(t *testing.T) {
+	archive, err := w.GetArchiveById(12)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	link := GetUrl("archive", archive, 0)
+	link := w.GetUrl("archive", archive, 0)
 	log.Println(link)
 }

@@ -1,4 +1,4 @@
-package dao
+package provider
 
 import (
 	"fmt"
@@ -10,65 +10,70 @@ import (
 	"strings"
 )
 
-// DB connection
-var DB *gorm.DB
+var defaultDB *gorm.DB
 
-func init() {
-	if config.Server.Mysql.Database != "" {
-		err := InitDB()
-		if err != nil {
-			fmt.Println("Failed To Connect Database: ", err.Error())
-			os.Exit(-1)
-		}
-	}
+func SetDefaultDB(db *gorm.DB) {
+	defaultDB = db
 }
 
-func InitDB() error {
+func GetDefaultDB() *gorm.DB {
+	if defaultDB == nil {
+		if config.Server.Mysql.Database != "" {
+			db, err := InitDB(&config.Server.Mysql)
+			if err != nil {
+				fmt.Println("Failed To Connect Database: ", err.Error())
+				os.Exit(-1)
+			}
+
+			defaultDB = db
+		}
+	}
+
+	return defaultDB
+}
+
+func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	var db *gorm.DB
 	var err error
-	url := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		config.Server.Mysql.User, config.Server.Mysql.Password, config.Server.Mysql.Host, config.Server.Mysql.Port, config.Server.Mysql.Database)
-	config.Server.Mysql.Url = url
-	db, err = gorm.Open(mysql.Open(url), &gorm.Config{
+	cfgUrl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {
 			url2 := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
-				config.Server.Mysql.User, config.Server.Mysql.Password, config.Server.Mysql.Host, config.Server.Mysql.Port)
+				cfg.User, cfg.Password, cfg.Host, cfg.Port)
 			db, err = gorm.Open(mysql.Open(url2), &gorm.Config{
 				DisableForeignKeyConstraintWhenMigrating: true,
 			})
 			if err != nil {
-				return err
+				return nil, err
 			}
-			err = db.Exec(fmt.Sprintf("CREATE DATABASE %s DEFAULT CHARACTER SET utf8mb4", config.Server.Mysql.Database)).Error
+			err = db.Exec(fmt.Sprintf("CREATE DATABASE %s DEFAULT CHARACTER SET utf8mb4", cfg.Database)).Error
 			if err != nil {
-				return err
+				return nil, err
 			}
 			//重新连接db
-			db, err = gorm.Open(mysql.Open(url), &gorm.Config{
+			db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
 				DisableForeignKeyConstraintWhenMigrating: true,
 			})
 			if err != nil {
-				return err
+				return nil, err
 			}
 		} else {
-			return err
+			return nil, err
 		}
 	}
-
 	sqlDB, err := db.DB()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	sqlDB.SetMaxIdleConns(1000)
-	sqlDB.SetMaxOpenConns(100000)
+	sqlDB.SetMaxOpenConns(10000)
 	sqlDB.SetConnMaxLifetime(-1)
 
-	DB = db
-
-	return nil
+	return db, nil
 }
 
 func AutoMigrateDB(db *gorm.DB) error {
@@ -101,6 +106,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.ArchiveData{},
 		&model.SpiderInclude{},
 		&model.Setting{},
+		&model.Website{},
 
 		&model.User{},
 		&model.UserGroup{},
@@ -126,7 +132,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 	return nil
 }
 
-func InitModelData(db *gorm.DB) {
+func (w *Website) InitModelData() {
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
 	var modules = []model.Module{
 		{
@@ -151,23 +157,27 @@ func InitModelData(db *gorm.DB) {
 		},
 	}
 	for _, m := range modules {
+		m.Database = w.Mysql.Database
 		var exists int64
-		db.Model(&model.Module{}).Where("`id` = ?", m.Id).Count(&exists)
+		w.DB.Model(&model.Module{}).Where("`id` = ?", m.Id).Count(&exists)
 		if exists == 0 {
-			db.Create(&m)
+			w.DB.Create(&m)
 			// 并生成表
-			m.Migrate(db, false)
+			tplPath := fmt.Sprintf("%s/%s", w.GetTemplateDir(), m.TableName)
+			m.Migrate(w.DB, tplPath, false)
 		}
 	}
 	// 表字段重新检查
-	db.Model(&model.Module{}).Find(&modules)
+	w.DB.Model(&model.Module{}).Find(&modules)
 	for _, m := range modules {
-		m.Migrate(db, false)
+		m.Database = w.Mysql.Database
+		tplPath := fmt.Sprintf("%s/%s", w.GetTemplateDir(), m.TableName)
+		m.Migrate(w.DB, tplPath, false)
 	}
 	// 检查导航类别
 	navType := model.NavType{Title: "默认导航"}
 	navType.Id = 1
-	db.Model(&model.NavType{}).FirstOrCreate(&navType)
+	w.DB.Model(&model.NavType{}).FirstOrCreate(&navType)
 	// 检查分组
 	adminGroup := model.AdminGroup{
 		Model:       model.Model{Id: 1},
@@ -176,7 +186,7 @@ func InitModelData(db *gorm.DB) {
 		Status:      1,
 		Setting:     model.GroupSetting{},
 	}
-	db.Where("`id` = 1").FirstOrCreate(&adminGroup)
+	w.DB.Where("`id` = 1").FirstOrCreate(&adminGroup)
 
 	// set default user groups
 	userGeroups := []model.UserGroup{
@@ -201,8 +211,8 @@ func InitModelData(db *gorm.DB) {
 	}
 	// check if groups not exist
 	var groupNum int64
-	db.Model(&model.UserGroup{}).Count(&groupNum)
+	w.DB.Model(&model.UserGroup{}).Count(&groupNum)
 	if groupNum == 0 {
-		db.CreateInBatches(userGeroups, 10)
+		w.DB.CreateInBatches(userGeroups, 10)
 	}
 }

@@ -2,9 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"reflect"
 )
@@ -15,6 +15,10 @@ type tagTdkNode struct {
 }
 
 func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
+		return nil
+	}
 	args, err := parseArgs(node.args, ctx)
 	if err != nil {
 		return err
@@ -31,12 +35,12 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
+	webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
 	if !ok {
 		return nil
 	}
 
-	v := reflect.ValueOf(webInfo)
+	v := reflect.ValueOf(*webInfo)
 
 	f := v.FieldByName(fieldName)
 
@@ -45,11 +49,11 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		if content != "" {
 			content += " - "
 		}
-		content += config.JsonData.System.SiteName
+		content += currentSite.System.SiteName
 	}
 	if fieldName == "Title" && content == "" {
 		// 保持标题至少是网站名称
-		content = config.JsonData.System.SiteName
+		content = currentSite.System.SiteName
 	}
 
 	// output

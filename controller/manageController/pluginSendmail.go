@@ -8,8 +8,9 @@ import (
 )
 
 func PluginSendmailList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//不需要分页，只显示最后20条
-	list, err := provider.GetLastSendmailList()
+	list, err := currentSite.GetLastSendmailList()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -26,7 +27,8 @@ func PluginSendmailList(ctx iris.Context) {
 }
 
 func PluginSendmailTest(ctx iris.Context) {
-	setting := config.JsonData.PluginSendmail
+	currentSite := provider.CurrentSite(ctx)
+	setting := currentSite.PluginSendmail
 	if setting.Account == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -38,7 +40,7 @@ func PluginSendmailTest(ctx iris.Context) {
 	subject := "测试邮件"
 	content := "这是一封测试邮件。收到邮件表示配置正常"
 
-	err := provider.SendMail(subject, content)
+	err := currentSite.SendMail(subject, content)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -54,7 +56,8 @@ func PluginSendmailTest(ctx iris.Context) {
 }
 
 func PluginSendmailSetting(ctx iris.Context) {
-	setting := config.JsonData.PluginSendmail
+	currentSite := provider.CurrentSite(ctx)
+	setting := currentSite.PluginSendmail
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -64,6 +67,7 @@ func PluginSendmailSetting(ctx iris.Context) {
 }
 
 func PluginSendmailSettingForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginSendmail
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -73,14 +77,14 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginSendmail.Server = req.Server
-	config.JsonData.PluginSendmail.UseSSL = req.UseSSL
-	config.JsonData.PluginSendmail.Port = req.Port
-	config.JsonData.PluginSendmail.Account = req.Account
-	config.JsonData.PluginSendmail.Password = req.Password
-	config.JsonData.PluginSendmail.Recipient = req.Recipient
+	currentSite.PluginSendmail.Server = req.Server
+	currentSite.PluginSendmail.UseSSL = req.UseSSL
+	currentSite.PluginSendmail.Port = req.Port
+	currentSite.PluginSendmail.Account = req.Account
+	currentSite.PluginSendmail.Password = req.Password
+	currentSite.PluginSendmail.Recipient = req.Recipient
 
-	err := provider.SaveSettingValue(provider.SendmailSettingKey, config.JsonData.PluginSendmail)
+	err := currentSite.SaveSettingValue(provider.SendmailSettingKey, currentSite.PluginSendmail)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -89,7 +93,7 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新发送邮件配置"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新发送邮件配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

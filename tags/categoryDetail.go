@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -16,7 +15,8 @@ type tagCategoryDetailNode struct {
 }
 
 func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -34,16 +34,16 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
 	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 	if ok && archiveDetail != nil {
-		categoryDetail = provider.GetCategoryFromCache(archiveDetail.CategoryId)
+		categoryDetail = currentSite.GetCategoryFromCache(archiveDetail.CategoryId)
 	}
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		categoryDetail = provider.GetCategoryFromCache(id)
+		categoryDetail = currentSite.GetCategoryFromCache(id)
 	}
 
 	if categoryDetail != nil {
-		categoryDetail.Link = provider.GetUrl("category", categoryDetail, 0)
+		categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
 
 		v := reflect.ValueOf(*categoryDetail)
 

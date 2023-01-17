@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/xml"
 	"fmt"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"math"
 	"os"
@@ -14,8 +12,8 @@ import (
 	"time"
 )
 
-func UpdateSitemapTime() error {
-	path := fmt.Sprintf("%scache/sitemap-time.log", config.ExecPath)
+func (w *Website) UpdateSitemapTime() error {
+	path := w.CachePath + "sitemap-time.log"
 
 	nowTime := fmt.Sprintf("%d", time.Now().Unix())
 	err := os.WriteFile(path, []byte(nowTime), 0666)
@@ -27,8 +25,8 @@ func UpdateSitemapTime() error {
 	return nil
 }
 
-func GetSitemapTime() int64 {
-	path := fmt.Sprintf("%scache/sitemap-time.log", config.ExecPath)
+func (w *Website) GetSitemapTime() int64 {
+	path := w.CachePath + "sitemap-time.log"
 	timeBytes, err := os.ReadFile(path)
 	if err != nil {
 		return 0
@@ -43,27 +41,26 @@ func GetSitemapTime() int64 {
 }
 
 // BuildSitemap 手动生成sitemap
-func BuildSitemap() error {
+func (w *Website) BuildSitemap() error {
 	//每一个sitemap包含50000条记录
 	//当所有数量少于50000的时候，生成到sitemap.txt文件中
 	//如果所有数量多于50000，则按种类生成。
 	//sitemap将包含首页、分类首页、文章页、产品页
-	basePath := fmt.Sprintf("%spublic/", config.ExecPath)
-	baseUrl := config.JsonData.System.BaseUrl
+	baseUrl := w.System.BaseUrl
 	var categoryCount int64
 	var archiveCount int64
 	var tagCount int64
-	categoryBuilder := dao.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Count(&categoryCount)
-	archiveBuilder := dao.DB.Model(&model.Archive{}).Where("`status` = 1").Order("id asc").Count(&archiveCount)
-	tagBuilder := dao.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
+	categoryBuilder := w.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Count(&categoryCount)
+	archiveBuilder := w.DB.Model(&model.Archive{}).Where("`status` = 1").Order("id asc").Count(&archiveCount)
+	tagBuilder := w.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
 
 	//index 和 category 存放在同一个文件，文章单独一个文件
-	indexFile := NewSitemapIndexGenerator(config.JsonData.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", basePath, config.JsonData.PluginSitemap.Type), false)
+	indexFile := NewSitemapIndexGenerator(w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
 	defer indexFile.Save()
 
-	indexFile.AddIndex(fmt.Sprintf("%s/category.%s", baseUrl, config.JsonData.PluginSitemap.Type))
+	indexFile.AddIndex(fmt.Sprintf("%s/category.%s", baseUrl, w.PluginSitemap.Type))
 
-	categoryFile := NewSitemapGenerator(config.JsonData.PluginSitemap.Type, fmt.Sprintf("%scategory.%s", basePath, config.JsonData.PluginSitemap.Type), false)
+	categoryFile := NewSitemapGenerator(w.PluginSitemap.Type, fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
 	defer categoryFile.Save()
 	//写入首页
 	categoryFile.AddLoc(baseUrl, time.Now().Format("2006-01-02"))
@@ -71,21 +68,21 @@ func BuildSitemap() error {
 	var categories []*model.Category
 	categoryBuilder.Find(&categories)
 	for _, v := range categories {
-		categoryFile.AddLoc(GetUrl("category", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+		categoryFile.AddLoc(w.GetUrl("category", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
 	}
 	//写入文章
 	pager := int(math.Ceil(float64(archiveCount) / float64(SitemapLimit)))
 	var archives []*model.Archive
 	for i := 1; i <= pager; i++ {
 		//写入index
-		indexFile.AddIndex(fmt.Sprintf("%s/archive-%d.%s", baseUrl, i, config.JsonData.PluginSitemap.Type))
+		indexFile.AddIndex(fmt.Sprintf("%s/archive-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
 		//写入archive-sitemap
-		archiveFile := NewSitemapGenerator(config.JsonData.PluginSitemap.Type, fmt.Sprintf("%sarchive-%d.%s", basePath, i, config.JsonData.PluginSitemap.Type), false)
+		archiveFile := NewSitemapGenerator(w.PluginSitemap.Type, fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
 		err := archiveBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&archives).Error
 		if err == nil {
 			for _, v := range archives {
-				archiveFile.AddLoc(GetUrl("archive", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+				archiveFile.AddLoc(w.GetUrl("archive", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
 			}
 		}
 		archiveFile.Save()
@@ -95,41 +92,39 @@ func BuildSitemap() error {
 	var tags []*model.Tag
 	for i := 1; i <= pager; i++ {
 		//写入index
-		indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, i, config.JsonData.PluginSitemap.Type))
+		indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
 		//写入tag-sitemap
-		tagFile := NewSitemapGenerator(config.JsonData.PluginSitemap.Type, fmt.Sprintf("%stag-%d.%s", basePath, i, config.JsonData.PluginSitemap.Type), false)
+		tagFile := NewSitemapGenerator(w.PluginSitemap.Type, fmt.Sprintf("%stag-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
 		err := tagBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&tags).Error
 		if err == nil {
 			for _, v := range tags {
-				tagFile.AddLoc(GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+				tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
 			}
 		}
 		tagFile.Save()
 	}
 
-	_ = UpdateSitemapTime()
+	_ = w.UpdateSitemapTime()
 
 	return nil
 }
 
 // AddonSitemap 追加sitemap
-func AddonSitemap(itemType string, link string, lastmod string) error {
-	basePath := fmt.Sprintf("%spublic/", config.ExecPath)
-
+func (w *Website) AddonSitemap(itemType string, link string, lastmod string) error {
 	//index 和 category 存放在同一个文件，文章单独一个文件
 	if itemType == "category" {
-		categoryPath := fmt.Sprintf("%scategory.%s", basePath, config.JsonData.PluginSitemap.Type)
+		categoryPath := fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type)
 		_, err := os.Stat(categoryPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return BuildSitemap()
+				return w.BuildSitemap()
 			} else {
 				return err
 			}
 		}
 
-		categoryFile := NewSitemapGenerator(config.JsonData.PluginSitemap.Type, categoryPath, true)
+		categoryFile := NewSitemapGenerator(w.PluginSitemap.Type, categoryPath, w.System.BaseUrl, true)
 		if err != nil {
 			return err
 		}
@@ -138,48 +133,48 @@ func AddonSitemap(itemType string, link string, lastmod string) error {
 		categoryFile.AddLoc(link, lastmod)
 
 		if err == nil {
-			_ = UpdateSitemapTime()
+			_ = w.UpdateSitemapTime()
 		}
 	} else if itemType == "archive" {
 		var archiveCount int64
-		dao.DB.Model(&model.Archive{}).Where("`status` = 1").Count(&archiveCount)
+		w.DB.Model(&model.Archive{}).Where("`status` = 1").Count(&archiveCount)
 		//文章，由于本次统计的时候，这个文章已经存在，可以直接使用统计数量
 		pager := int(math.Ceil(float64(archiveCount) / float64(SitemapLimit)))
-		archivePath := fmt.Sprintf("%sarchive-%d.%s", basePath, pager, config.JsonData.PluginSitemap.Type)
+		archivePath := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, pager, w.PluginSitemap.Type)
 		_, err := os.Stat(archivePath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return BuildSitemap()
+				return w.BuildSitemap()
 			} else {
 				return err
 			}
 		}
-		archiveFile := NewSitemapGenerator(config.JsonData.PluginSitemap.Type, archivePath, true)
+		archiveFile := NewSitemapGenerator(w.PluginSitemap.Type, archivePath, w.System.BaseUrl, true)
 		defer archiveFile.Save()
 		archiveFile.AddLoc(link, lastmod)
 
 		if err == nil {
-			_ = UpdateSitemapTime()
+			_ = w.UpdateSitemapTime()
 		}
 	} else if itemType == "tag" {
 		var tagCount int64
-		dao.DB.Model(&model.Tag{}).Where("`status` = 1").Count(&tagCount)
+		w.DB.Model(&model.Tag{}).Where("`status` = 1").Count(&tagCount)
 		//tag
 		pager := int(math.Ceil(float64(tagCount) / float64(SitemapLimit)))
-		tagPath := fmt.Sprintf("%stag-%d.%s", basePath, pager, config.JsonData.PluginSitemap.Type)
+		tagPath := fmt.Sprintf("%stag-%d.%s", w.PublicPath, pager, w.PluginSitemap.Type)
 		_, err := os.Stat(tagPath)
 		if err != nil {
 			if os.IsNotExist(err) {
-				return BuildSitemap()
+				return w.BuildSitemap()
 			} else {
 				return err
 			}
 		}
-		tagFile := NewSitemapGenerator(config.JsonData.PluginSitemap.Type, tagPath, true)
+		tagFile := NewSitemapGenerator(w.PluginSitemap.Type, tagPath, w.System.BaseUrl, true)
 		defer tagFile.Save()
 		tagFile.AddLoc(link, lastmod)
 
-		_ = UpdateSitemapTime()
+		_ = w.UpdateSitemapTime()
 	}
 
 	return nil
@@ -198,6 +193,7 @@ type SitemapGenerator struct {
 	Urls     []SitemapUrl `xml:"url"`
 	Type     string       `xml:"-"`
 	FilePath string       `xml:"-"`
+	BaseUrl  string       `json:"-"`
 }
 
 type SitemapIndexGenerator struct {
@@ -206,12 +202,14 @@ type SitemapIndexGenerator struct {
 	Type     string       `xml:"-"`
 	Sitemaps []SitemapUrl `xml:"sitemap"`
 	FilePath string       `xml:"-"`
+	BaseUrl  string       `json:"-"`
 }
 
-func NewSitemapGenerator(sitemapType string, filePath string, load bool) *SitemapGenerator {
+func NewSitemapGenerator(sitemapType string, filePath, baseUrl string, load bool) *SitemapGenerator {
 	generator := &SitemapGenerator{
 		Type:     sitemapType,
 		FilePath: filePath,
+		BaseUrl:  baseUrl,
 		Xmlns:    "http://www.sitemaps.org/schemas/sitemap/0.9",
 	}
 	if load {
@@ -270,7 +268,7 @@ func (g *SitemapGenerator) Save() error {
 				return err
 			}
 			_, err = f.WriteString(xml.Header)
-			_, err = f.WriteString("<?xml-stylesheet type=\"text/xsl\" href=\"" + config.JsonData.System.BaseUrl + "/anqi-style.xsl\" ?>\n")
+			_, err = f.WriteString("<?xml-stylesheet type=\"text/xsl\" href=\"" + g.BaseUrl + "/anqi-style.xsl\" ?>\n")
 			_, err = f.Write(output)
 			if err1 := f.Close(); err1 != nil && err == nil {
 				err = err1
@@ -290,11 +288,12 @@ func (g *SitemapGenerator) Save() error {
 	}
 }
 
-func NewSitemapIndexGenerator(sitemapType string, filePath string, load bool) *SitemapIndexGenerator {
+func NewSitemapIndexGenerator(sitemapType string, filePath, baseUrl string, load bool) *SitemapIndexGenerator {
 	generator := &SitemapIndexGenerator{
 		Type:     sitemapType,
 		Xmlns:    "http://www.sitemaps.org/schemas/sitemap/0.9",
 		FilePath: filePath,
+		BaseUrl:  baseUrl,
 	}
 	if load {
 		generator.Load()
@@ -349,7 +348,7 @@ func (s *SitemapIndexGenerator) Save() error {
 				return err
 			}
 			_, err = f.WriteString(xml.Header)
-			_, err = f.WriteString("<?xml-stylesheet type=\"text/xsl\" href=\"" + config.JsonData.System.BaseUrl + "/anqi-index.xsl\" ?>\n")
+			_, err = f.WriteString("<?xml-stylesheet type=\"text/xsl\" href=\"" + s.BaseUrl + "/anqi-index.xsl\" ?>\n")
 			_, err = f.Write(output)
 			if err1 := f.Close(); err1 != nil && err == nil {
 				err = err1

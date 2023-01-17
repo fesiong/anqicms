@@ -2,13 +2,12 @@ package library
 
 import (
 	"github.com/mozillazg/go-pinyin"
-	"kandaoni.com/anqicms/config"
 	"strings"
 )
 
 var py pinyin.Args
 
-func GetPinyin(hans string) string {
+func GetPinyin(hans string, isSort bool) string {
 	var result = make([]string, 0, len(hans))
 	tmpHans := []rune(hans)
 	var tmp string
@@ -28,7 +27,7 @@ func GetPinyin(hans string) string {
 	}
 
 	var str string
-	if config.JsonData.Content.UrlTokenType == config.UrlTokenTypeSort {
+	if isSort {
 		// 采用首字母模式
 		var bt = make([]byte, 0, len(result))
 		for _, v := range result {

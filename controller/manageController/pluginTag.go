@@ -9,10 +9,11 @@ import (
 )
 
 func PluginTagList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	title := ctx.URLParam("title")
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	tags, total, err := provider.GetTagList(0, title, "", currentPage, pageSize, 0)
+	tags, total, err := currentSite.GetTagList(0, title, "", currentPage, pageSize, 0)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -23,7 +24,7 @@ func PluginTagList(ctx iris.Context) {
 
 	// 生成链接
 	for i := range tags {
-		tags[i].Link = provider.GetUrl("tag", tags[i], 0)
+		tags[i].Link = currentSite.GetUrl("tag", tags[i], 0)
 	}
 
 	ctx.JSON(iris.Map{
@@ -35,9 +36,10 @@ func PluginTagList(ctx iris.Context) {
 }
 
 func PluginTagDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := ctx.Params().GetUintDefault("id", 0)
 
-	tag, err := provider.GetTagById(id)
+	tag, err := currentSite.GetTagById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -54,6 +56,7 @@ func PluginTagDetail(ctx iris.Context) {
 }
 
 func PluginTagDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginTag
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -63,7 +66,7 @@ func PluginTagDetailForm(ctx iris.Context) {
 		return
 	}
 
-	tag, err := provider.SaveTag(&req)
+	tag, err := currentSite.SaveTag(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -72,7 +75,7 @@ func PluginTagDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新文档标签：%d => %s", tag.Id, tag.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新文档标签：%d => %s", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -82,6 +85,7 @@ func PluginTagDetailForm(ctx iris.Context) {
 }
 
 func PluginTagDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginTag
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -90,7 +94,7 @@ func PluginTagDelete(ctx iris.Context) {
 		})
 		return
 	}
-	tag, err := provider.GetTagById(req.Id)
+	tag, err := currentSite.GetTagById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -99,8 +103,7 @@ func PluginTagDelete(ctx iris.Context) {
 		return
 	}
 
-
-	err = provider.DeleteTag(tag.Id)
+	err = currentSite.DeleteTag(tag.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -109,11 +112,10 @@ func PluginTagDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档标签：%d => %s", tag.Id, tag.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档标签：%d => %s", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "标签已删除",
 	})
 }
-

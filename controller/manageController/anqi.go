@@ -4,18 +4,16 @@ import (
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"time"
 )
 
 func AnqiLogin(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AnqiLoginRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -23,7 +21,7 @@ func AnqiLogin(ctx iris.Context) {
 		return
 	}
 
-	err = provider.AnqiLogin(&req)
+	err = currentSite.AnqiLogin(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -40,18 +38,33 @@ func AnqiLogin(ctx iris.Context) {
 }
 
 func GetAnqiInfo(ctx iris.Context) {
-	go provider.AnqiCheckLogin()
-	authUser := config.AnqiUser
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.AnqiCheckLogin(false)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": authUser,
+		"data": provider.GetAuthInfo(),
+	})
+
+	return
+}
+
+func CheckAnqiInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentSite.AnqiCheckLogin(true)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": provider.GetAuthInfo(),
 	})
 
 	return
 }
 
 func AnqiUploadAttachment(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -69,7 +82,7 @@ func AnqiUploadAttachment(ctx iris.Context) {
 		})
 		return
 	}
-	attachment, err := provider.AnqiUploadAttachment(fileBytes, info.Filename)
+	attachment, err := currentSite.AnqiUploadAttachment(fileBytes, info.Filename)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -86,11 +99,10 @@ func AnqiUploadAttachment(ctx iris.Context) {
 }
 
 func AnqiShareTemplate(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AnqiTemplateRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -98,7 +110,7 @@ func AnqiShareTemplate(ctx iris.Context) {
 		return
 	}
 
-	err = provider.AnqiShareTemplate(&req)
+	err = currentSite.AnqiShareTemplate(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -114,11 +126,10 @@ func AnqiShareTemplate(ctx iris.Context) {
 }
 
 func AnqiDownloadTemplate(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AnqiTemplateRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -126,7 +137,7 @@ func AnqiDownloadTemplate(ctx iris.Context) {
 		return
 	}
 
-	err = provider.AnqiDownloadTemplate(&req)
+	err = currentSite.AnqiDownloadTemplate(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -142,11 +153,10 @@ func AnqiDownloadTemplate(ctx iris.Context) {
 }
 
 func AnqiSendFeedback(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AnqiFeedbackRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -154,7 +164,7 @@ func AnqiSendFeedback(ctx iris.Context) {
 		return
 	}
 
-	err = provider.AnqiSendFeedback(&req)
+	err = currentSite.AnqiSendFeedback(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -169,9 +179,81 @@ func AnqiSendFeedback(ctx iris.Context) {
 	})
 }
 
+func AnqiPseudoArticle(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.Archive
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	archive, err := currentSite.GetArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err = currentSite.AnqiPseudoArticle(archive)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "伪原创成功",
+	})
+}
+
+func AnqiTranslateArticle(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.Archive
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	archive, err := currentSite.GetArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err = currentSite.AnqiTranslateArticle(archive)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "翻译成功",
+	})
+}
+
 func RestartAnqicms(ctx iris.Context) {
 	// first need to stop iris
-	config.RestartChan <- false
+	config.RestartChan <- true
 
 	time.Sleep(3 * time.Second)
 

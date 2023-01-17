@@ -6,10 +6,12 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 	"strings"
 )
 
 func CategoryPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	categoryId := ctx.Params().GetUintDefault("id", 0)
 	catId := ctx.Params().GetUintDefault("catid", 0)
@@ -23,7 +25,7 @@ func CategoryPage(ctx iris.Context) {
 		urlToken = chunkCatNames[len(chunkCatNames)-1]
 		var prev *model.Category
 		for _, catName := range chunkCatNames {
-			tmpCat := provider.GetCategoryFromCacheByToken(catName)
+			tmpCat := currentSite.GetCategoryFromCacheByToken(catName)
 			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
 				NotFound(ctx)
 				return
@@ -36,9 +38,9 @@ func CategoryPage(ctx iris.Context) {
 	var err error
 	if urlToken != "" {
 		//优先使用urlToken
-		category, err = provider.GetCategoryByUrlToken(urlToken)
+		category, err = currentSite.GetCategoryByUrlToken(urlToken)
 	} else {
-		category, err = provider.GetCategoryById(categoryId)
+		category, err = currentSite.GetCategoryById(categoryId)
 	}
 	if err != nil {
 		NotFound(ctx)
@@ -48,27 +50,28 @@ func CategoryPage(ctx iris.Context) {
 	//修正，如果这里读到的的page，则跳到page中
 	if category.Type == config.CategoryTypePage {
 		ctx.StatusCode(301)
-		ctx.Redirect(provider.GetUrl("page", category, 0))
+		ctx.Redirect(currentSite.GetUrl("page", category, 0))
 		return
 	}
 
-	module := provider.GetModuleFromCache(category.ModuleId)
+	module := currentSite.GetModuleFromCache(category.ModuleId)
 	if module == nil {
-		ShowMessage(ctx, config.Lang("未定义模型"), nil)
+		ShowMessage(ctx, currentSite.Lang("未定义模型"), nil)
 		return
 	}
 
-	webInfo.Title = category.Title
-	if category.SeoTitle != "" {
-		webInfo.Title = category.SeoTitle
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = category.Title
+		if category.SeoTitle != "" {
+			webInfo.Title = category.SeoTitle
+		}
+		webInfo.Keywords = category.Keywords
+		webInfo.Description = category.Description
+		webInfo.NavBar = category.Id
+		webInfo.PageName = "archiveList"
+		webInfo.CanonicalUrl = currentSite.GetUrl("category", category, currentPage)
+		ctx.ViewData("webInfo", webInfo)
 	}
-	webInfo.Keywords = category.Keywords
-	webInfo.Description = category.Description
-	webInfo.NavBar = category.Id
-	webInfo.PageName = "archiveList"
-	webInfo.CanonicalUrl = provider.GetUrl("category", category, currentPage)
-
-	ctx.ViewData("webInfo", webInfo)
 
 	ctx.ViewData("category", category)
 
@@ -83,7 +86,7 @@ func CategoryPage(ctx iris.Context) {
 	} else if ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
 		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	} else {
-		categoryTemplate := provider.GetCategoryTemplate(category)
+		categoryTemplate := currentSite.GetCategoryTemplate(category)
 		if categoryTemplate != nil {
 			tplName = categoryTemplate.Template
 		}
@@ -99,26 +102,30 @@ func CategoryPage(ctx iris.Context) {
 }
 
 func SearchPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	q := strings.TrimSpace(ctx.URLParam("q"))
-	if config.JsonData.Safe.ContentForbidden != "" {
-		forbiddens := strings.Split(config.JsonData.Safe.ContentForbidden, "\n")
+	if currentSite.Safe.ContentForbidden != "" {
+		forbiddens := strings.Split(currentSite.Safe.ContentForbidden, "\n")
 		for _, v := range forbiddens {
 			v = strings.TrimSpace(v)
 			if v == "" {
 				continue
 			}
 			if strings.Contains(q, v) {
-				ShowMessage(ctx, config.Lang("您搜索的关键词包含有不允许的字符"), nil)
+				ShowMessage(ctx, currentSite.Lang("您搜索的关键词包含有不允许的字符"), nil)
 				return
 			}
 		}
 	}
 
-	webInfo.Title = fmt.Sprintf("%s: %s", config.Lang("搜索"), q)
-	webInfo.PageName = "search"
-	currentPage := ctx.Values().GetIntDefault("page", 1)
-	webInfo.CanonicalUrl = provider.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)
-	ctx.ViewData("webInfo", webInfo)
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = fmt.Sprintf("%s: %s", currentSite.Lang("搜索"), q)
+		webInfo.PageName = "search"
+		currentPage := ctx.Values().GetIntDefault("page", 1)
+		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)
+		ctx.ViewData("webInfo", webInfo)
+	}
+
 	ctx.ViewData("q", q)
 
 	tplName := "search/index.html"

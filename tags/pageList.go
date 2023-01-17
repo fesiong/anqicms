@@ -2,9 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -15,12 +14,13 @@ type tagPageListNode struct {
 }
 
 func (node *tagPageListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
-	pageList := provider.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
+	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
 	for i := range pageList {
-		pageList[i].Link = provider.GetUrl("page", pageList[i], 0)
+		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
 	}
 
 	ctx.Private[node.name] = pageList

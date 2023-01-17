@@ -90,22 +90,16 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/tag",
 			},
 			{
-				Path:     "/archive/module",
-				GroupKey: "archive",
-				Name:     "内容模型",
-				Backend:  "/module",
-			},
-		},
-	},
-	{
-		Key:  "content",
-		Name: "页面资源",
-		Menus: []*Menu{
-			{
 				Path:     "/content/page",
 				GroupKey: "content",
 				Name:     "单页面管理",
 				Backend:  "/category/list",
+			},
+			{
+				Path:     "/archive/module",
+				GroupKey: "archive",
+				Name:     "内容模型",
+				Backend:  "/module",
 			},
 			{
 				Path:     "/content/attachment",
@@ -224,8 +218,14 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/plugin/user/group",
 				GroupKey: "plugin",
-				Name:     "用户组管理",
+				Name:     "用户组VIP",
 				Backend:  "/plugin/user/group",
+			},
+			{
+				Path:     "/plugin/wechat",
+				GroupKey: "plugin",
+				Name:     "微信公众号",
+				Backend:  "/plugin/wechat",
 			},
 			{
 				Path:     "/plugin/weapp",
@@ -246,10 +246,40 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/order",
 			},
 			{
-				Path:     "/plugin/withdraw",
+				Path:     "/plugin/pay",
 				GroupKey: "plugin",
-				Name:     "提现管理",
-				Backend:  "/plugin/withdraw",
+				Name:     "支付配置",
+				Backend:  "/plugin/pay",
+			},
+			{
+				Path:     "/plugin/finance",
+				GroupKey: "plugin",
+				Name:     "财务管理",
+				Backend:  "/plugin/finance",
+			},
+			{
+				Path:     "/plugin/retailer",
+				GroupKey: "plugin",
+				Name:     "分销管理",
+				Backend:  "/plugin/retailer",
+			},
+			{
+				Path:     "/plugin/fulltext",
+				GroupKey: "plugin",
+				Name:     "全文搜索",
+				Backend:  "/plugin/fulltext",
+			},
+			{
+				Path:     "/plugin/backup",
+				GroupKey: "plugin",
+				Name:     "备份与恢复",
+				Backend:  "/plugin/backup",
+			},
+			{
+				Path:     "/plugin/replace",
+				GroupKey: "plugin",
+				Name:     "全站替换",
+				Backend:  "/plugin/replace",
 			},
 		},
 	},

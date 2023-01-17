@@ -1,4 +1,4 @@
-package library
+package provider
 
 import (
 	"sync"
@@ -23,8 +23,6 @@ type memCache struct {
 	tail *cacheData
 	size int
 }
-
-var MemCache memCache
 
 func (m *memCache) Set(key string, val interface{}, expire int64) {
 	if expire == 0 {
@@ -82,6 +80,17 @@ func (m *memCache) Delete(key string) {
 	m.mu.Unlock()
 }
 
+func (m *memCache) CleanAll() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.list = map[string]*cacheData{}
+	m.size = 0
+	m.head = &cacheData{}
+	m.tail = &cacheData{}
+	m.head.next = m.tail
+	m.tail.prev = m.head
+}
+
 func (m *memCache) moveToHead(node *cacheData) {
 	//先删
 	m.removeNode(node)
@@ -124,13 +133,13 @@ func (m *memCache) GC() {
 	}
 }
 
-func init() {
+func (w *Website) InitMemCache() {
 	head := &cacheData{}
 	tail := &cacheData{}
 	head.next = tail
 	tail.prev = head
 
-	MemCache = memCache{
+	w.MemCache = &memCache{
 		size: 0,
 		list: map[string]*cacheData{},
 		head: head,
@@ -138,5 +147,5 @@ func init() {
 	}
 
 	//执行回收
-	go MemCache.GC()
+	go w.MemCache.GC()
 }

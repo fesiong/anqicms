@@ -2,9 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"strconv"
@@ -18,7 +17,8 @@ type tagTagListNode struct {
 }
 
 func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -83,15 +83,15 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		}
 	}
 
-	tagList, total, _ := provider.GetTagList(itemId, "", letter, currentPage, limit, offset)
+	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset)
 	for i := range tagList {
-		tagList[i].Link = provider.GetUrl("tag", tagList[i], 0)
+		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 	}
 
 	if listType == "page" {
 		// 分页
-		urlPatten := provider.GetUrl("tagIndex", nil, -1)
-		ctx.Public["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+		urlPatten := currentSite.GetUrl("tagIndex", nil, -1)
+		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 	}
 
 	ctx.Private[node.name] = tagList

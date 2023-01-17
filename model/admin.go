@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
 )
 
 type Admin struct {
@@ -19,6 +17,7 @@ type Admin struct {
 	GroupId   uint        `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
 	Token     string      `json:"token" gorm:"-"`
 	Group     *AdminGroup `json:"group" gorm:"-"`
+	SiteId    uint        `json:"site_id" gorm:"-"`
 }
 
 type AdminGroup struct {
@@ -88,7 +87,7 @@ func (admin *Admin) CheckPassword(password string) bool {
 
 func (admin *Admin) EncryptPassword(password string) error {
 	if password == "" {
-		return errors.New(config.Lang("密码为空"))
+		return errors.New("密码为空")
 	}
 	pass := []byte(password)
 	hash, err := bcrypt.GenerateFromPassword(pass, bcrypt.MinCost)
@@ -97,14 +96,6 @@ func (admin *Admin) EncryptPassword(password string) error {
 	}
 
 	admin.Password = string(hash)
-
-	return nil
-}
-
-func (admin *Admin) Save(db *gorm.DB) error {
-	if err := db.Save(admin).Error; err != nil {
-		return err
-	}
 
 	return nil
 }

@@ -2,7 +2,6 @@ package model
 
 import (
 	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -46,7 +45,7 @@ func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 
-func (attachment *Attachment) GetThumb() {
+func (attachment *Attachment) GetThumb(storageUrl string) {
 	// 如果不是图片
 	ext := filepath.Ext(attachment.FileLocation)
 	if ext != ".jpg" &&
@@ -55,7 +54,7 @@ func (attachment *Attachment) GetThumb() {
 		ext != ".png" &&
 		ext != ".bmp" &&
 		ext != ".webp" {
-		attachment.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + attachment.FileLocation
+		attachment.Logo = storageUrl + "/" + attachment.FileLocation
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
@@ -67,7 +66,7 @@ func (attachment *Attachment) GetThumb() {
 		if strings.HasPrefix(attachment.FileLocation, "20") {
 			attachment.FileLocation = "uploads/" + attachment.FileLocation
 		}
-		attachment.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + attachment.FileLocation
+		attachment.Logo = storageUrl + "/" + attachment.FileLocation
 		paths, fileName := filepath.Split(attachment.Logo)
 		attachment.Thumb = paths + "thumb_" + fileName
 	}
@@ -91,7 +90,6 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 		db.Model(&Attachment{}).Where("`category_id` = ?", attachment.CategoryId).Count(&attachCount)
 		db.Model(&AttachmentCategory{}).Where("`id` = ?", attachment.CategoryId).UpdateColumn("attach_count", attachCount)
 	}
-	attachment.GetThumb()
 
 	return nil
 }

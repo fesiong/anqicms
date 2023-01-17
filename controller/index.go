@@ -2,12 +2,12 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"log"
+	"kandaoni.com/anqicms/response"
 )
 
 func IndexPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	var ua string
 	if ctx.IsMobile() {
@@ -18,34 +18,35 @@ func IndexPage(ctx iris.Context) {
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	// 只缓存首页
 	if currentPage == 1 && ctx.GetHeader("Cache-Control") != "no-cache" && userId == 0 {
-		body := provider.GetIndexCache(ua)
+		body := currentSite.GetIndexCache(ua)
 		if body != nil {
-			log.Println("Load index from cache.")
+			//log.Println("Load index from cache.")
 			ctx.Write(body)
 			return
 		}
 	}
+	webTitle := currentSite.Index.SeoTitle
 
-	webTitle := config.JsonData.Index.SeoTitle
-	webInfo.Title = webTitle
-	webInfo.Keywords = config.JsonData.Index.SeoKeywords
-	webInfo.Description = config.JsonData.Index.SeoDescription
-	//设置页面名称，方便tags识别
-	webInfo.PageName = "index"
-	webInfo.CanonicalUrl = provider.GetUrl("", nil, 0)
-	ctx.ViewData("webInfo", webInfo)
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = webTitle
+		webInfo.Keywords = currentSite.Index.SeoKeywords
+		webInfo.Description = currentSite.Index.SeoDescription
+		//设置页面名称，方便tags识别
+		webInfo.PageName = "index"
+		webInfo.CanonicalUrl = currentSite.GetUrl("", nil, 0)
+		ctx.ViewData("webInfo", webInfo)
+	}
 
 	// 支持2种文件结构，一种是目录式的，一种是扁平式的
 	tplName := "index/index.html"
 	if ViewExists(ctx, "index.html") {
 		tplName = "index.html"
 	}
-
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else if currentPage == 1 && userId == 0 {
-		provider.CacheIndex(ua, recorder.Body())
+		currentSite.CacheIndex(ua, recorder.Body())
 	}
 }

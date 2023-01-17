@@ -3,25 +3,43 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
 
 func CategoryList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	categoryType := uint(ctx.URLParamIntDefault("type", 0))
 	title := ctx.URLParam("title")
 
 	var categories []*model.Category
 	var err error
+	var ops func(tx *gorm.DB) *gorm.DB
 	if categoryType == config.CategoryTypePage {
-		categories, err = provider.GetPages(title)
+		ops = func(tx *gorm.DB) *gorm.DB {
+			tx = tx.Where("`type` = ? and `status` = ?", config.CategoryTypePage, 1).Order("sort asc")
+			if title != "" {
+				tx = tx.Where("`title` like ?", "%"+title+"%")
+			}
+			return tx
+		}
 	} else {
-		categories, err = provider.GetCategories(moduleId, title, 0)
+		ops = func(tx *gorm.DB) *gorm.DB {
+			tx = tx.Where("`type` = ? and `status` = ?", config.CategoryTypeArchive, 1).Order("module_id asc,sort asc")
+			if moduleId > 0 {
+				tx = tx.Where("`module_id` = ?", moduleId)
+			}
+			if title != "" {
+				tx = tx.Where("`title` like ?", "%"+title+"%")
+			}
+			return tx
+		}
 	}
+	categories, err = currentSite.GetCategories(ops, 0)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -31,7 +49,7 @@ func CategoryList(ctx iris.Context) {
 	}
 
 	for i := range categories {
-		categories[i].Link = provider.GetUrl("category", categories[i], 0)
+		categories[i].Link = currentSite.GetUrl("category", categories[i], 0)
 	}
 
 	ctx.JSON(iris.Map{
@@ -42,9 +60,10 @@ func CategoryList(ctx iris.Context) {
 }
 
 func CategoryDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	category, err := provider.GetCategoryById(id)
+	category, err := currentSite.GetCategoryById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -61,6 +80,7 @@ func CategoryDetail(ctx iris.Context) {
 }
 
 func CategoryDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Category
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -70,7 +90,7 @@ func CategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	category, err := provider.SaveCategory(&req)
+	category, err := currentSite.SaveCategory(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -79,7 +99,7 @@ func CategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("保存文档分类：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("保存文档分类：%d => %s", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -89,6 +109,7 @@ func CategoryDetailForm(ctx iris.Context) {
 }
 
 func CategoryDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Category
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -97,7 +118,7 @@ func CategoryDelete(ctx iris.Context) {
 		})
 		return
 	}
-	category, err := provider.GetCategoryById(req.Id)
+	category, err := currentSite.GetCategoryById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -106,7 +127,7 @@ func CategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	err = category.Delete(dao.DB)
+	err = category.Delete(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -115,10 +136,10 @@ func CategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档分类：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档分类：%d => %s", category.Id, category.Title))
 
-	provider.DeleteCacheCategories()
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheCategories()
+	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -18,6 +18,7 @@ func manageRoute(app *iris.Application) {
 	{
 		manage.Post("/login", manageController.AdminLogin)
 		manage.Get("/captcha", controller.GenerateCaptcha)
+		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
 
 		version := manage.Party("/version")
 		{
@@ -29,12 +30,23 @@ func manageRoute(app *iris.Application) {
 		anqi := manage.Party("/anqi", middleware.ParseAdminToken)
 		{
 			anqi.Get("/info", manageController.GetAnqiInfo)
+			anqi.Get("/check", manageController.CheckAnqiInfo)
 			anqi.Post("/login", manageController.AnqiLogin)
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
 			anqi.Post("/feedback", manageController.AnqiSendFeedback)
+			anqi.Post("/pseudo", manageController.AnqiPseudoArticle)
+			anqi.Post("/translate", manageController.AnqiTranslateArticle)
 			anqi.Post("/restart", manageController.RestartAnqicms)
+		}
+
+		website := manage.Party("/website", middleware.ParseAdminToken)
+		{
+			website.Get("/list", manageController.GetWebsiteList)
+			website.Get("/info", manageController.GetWebsiteInfo)
+			website.Post("/save", manageController.SaveWebsiteInfo)
+			website.Post("/delete", manageController.DeleteWebsite)
 		}
 
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -86,7 +98,6 @@ func manageRoute(app *iris.Application) {
 			collector.Post("/setting", manageController.HandleSaveCollectSetting)
 			//批量替换文章内容
 			collector.Post("/article/replace", manageController.HandleReplaceArticles)
-			collector.Post("/article/pseudo", manageController.HandleArticlePseudo)
 			collector.Post("/article/collect", manageController.HandleArticleCollect)
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
@@ -131,6 +142,7 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/release", manageController.ArchiveRelease)
 			archive.Post("/recommend", manageController.UpdateArchiveRecommend)
 			archive.Post("/status", manageController.UpdateArchiveStatus)
+			archive.Post("/time", manageController.UpdateArchiveTime)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 		}
 
@@ -396,6 +408,11 @@ func manageRoute(app *iris.Application) {
 				backup.Post("/delete", manageController.PluginBackupDelete)
 				backup.Post("/export", manageController.PluginBackupExport)
 				backup.Post("/import", manageController.PluginBackupImport)
+			}
+
+			replace := plugin.Party("/replace")
+			{
+				replace.Post("/values", manageController.PluginReplaceValues)
 			}
 		}
 	}
