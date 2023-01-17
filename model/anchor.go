@@ -6,9 +6,9 @@ import (
 
 type Anchor struct {
 	Model
-	Title        string `json:"title" gorm:"column:title;type:varchar(250) unique not null;default:'';index"`
+	Title        string `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';unique"`
 	ArchiveId    uint   `json:"archive_id" gorm:"column:archive_id;type:int(10) not null;default:0"`
-	Link         string `json:"link" gorm:"column:link;type:varchar(250) not null;default:'';index"`
+	Link         string `json:"link" gorm:"column:link;type:varchar(190) not null;default:'';index"`
 	Weight       int    `json:"weight" gorm:"column:weight;type:int(10) not null;default:0;index:idx_weight"`
 	ReplaceCount int64  `json:"replace_count" gorm:"column:replace_count;type:int(10) not null;default:0"`
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`

@@ -110,10 +110,10 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	category.Images = req.Images
 	category.Logo = req.Logo
 	for i, v := range category.Images {
-		category.Images[i] = strings.TrimPrefix(v, config.JsonData.System.BaseUrl)
+		category.Images[i] = strings.TrimPrefix(v, config.JsonData.PluginStorage.StorageUrl)
 	}
 	if category.Logo != "" {
-		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.System.BaseUrl)
+		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.PluginStorage.StorageUrl)
 	}
 	//增加判断上级，强制类型与上级同步
 	if category.ParentId > 0 {
@@ -129,7 +129,12 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 		req.UrlToken = library.GetPinyin(req.Title)
 	}
 	category.UrlToken = VerifyCategoryUrlToken(req.UrlToken, category.Id)
-
+	if category.ModuleId == 0 {
+		modules := GetCacheModules()
+		if len(modules) > 0 {
+			category.ModuleId = modules[0].Id
+		}
+	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
@@ -160,7 +165,7 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)
 					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, config.JsonData.PluginStorage.StorageUrl) {
 							//外链
 							attachment, err := DownloadRemoteImage(src, alt)
 							if err == nil {

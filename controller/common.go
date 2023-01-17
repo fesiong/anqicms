@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"net/url"
 	"os"
@@ -35,18 +36,26 @@ func NotFound(ctx iris.Context) {
 	ctx.StatusCode(404)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
+		ctx.StatusCode(404)
 		ShowMessage(ctx, "404 Not Found", nil)
 	}
 }
 
 func ShowMessage(ctx iris.Context, message string, buttons []Button) {
-	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + config.Lang("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + config.Lang("返回") + "</a>"
+	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + config.Lang("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + config.Lang("返回") + "</a>"
 
 	if len(buttons) > 0 {
 		for _, btn := range buttons {
 			str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + btn.Link + "\">" + config.Lang(btn.Name) + "</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + btn.Link + "\"}, 3000);</script>"
 		}
 		str += "<script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + buttons[0].Link + "\"}, 3000);</script>"
+	}
+	var jsCodes string
+	for _, v := range config.JsonData.PluginPush.JsCodes {
+		jsCodes += v.Value + "\n"
+	}
+	if jsCodes != "" {
+		str += jsCodes
 	}
 
 	str += "</div></body></html>"
@@ -154,6 +163,7 @@ func Common(ctx iris.Context) {
 				urlPath.Scheme = "https"
 			}
 			config.JsonData.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+			config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 		}
 	}
 	//js code
@@ -170,6 +180,23 @@ func Common(ctx iris.Context) {
 		currentPage = paramPage
 	}
 	ctx.Values().Set("page", currentPage)
+
+	// invite code
+	inviteCode := ctx.URLParam("invite")
+	if inviteCode != "" {
+		_, err := provider.CheckUserInviteCode(inviteCode)
+		if err != nil {
+			inviteCode = ""
+		}
+	}
+	if inviteCode != "" {
+		// 生成一个cookie
+		ctx.SetCookieKV("invite", inviteCode, iris.CookiePath("/"), iris.CookieExpires(24*30*time.Hour))
+	} else {
+		// 尝试读取cookie中的数据
+		inviteCode = ctx.GetCookie("invite")
+	}
+	ctx.ViewData("inviteCode", inviteCode)
 
 	webInfo.NavBar = 0
 	ctx.Next()
@@ -192,7 +219,7 @@ func FileServe(ctx iris.Context) bool {
 		uriFile := baseDir + uri
 		_, err := os.Stat(uriFile)
 		if err == nil {
-			ctx.ServeFile(uriFile, false)
+			ctx.ServeFile(uriFile)
 			return true
 		}
 	}
@@ -251,7 +278,6 @@ func GetViewPath(ctx iris.Context, tplName string) string {
 	if mobileTemplate {
 		tplName = fmt.Sprintf("mobile/%s", tplName)
 	}
-
 	return tplName
 }
 
@@ -357,11 +383,16 @@ func LogAccess(ctx iris.Context) {
 	spider := GetSpider(ctx)
 	//获取设备
 	device := GetDevice(ctx)
+	// 最多只存储250字符
+	uri := ctx.Request().RequestURI
+	if len(uri) > 250 {
+		uri = uri[:250]
+	}
 
 	statistic := &model.Statistic{
 		Spider:    spider,
 		Host:      ctx.Request().Host,
-		Url:       ctx.Request().RequestURI,
+		Url:       uri,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
 		HttpCode:  ctx.GetStatusCode(),

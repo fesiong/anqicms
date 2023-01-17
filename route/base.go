@@ -23,36 +23,115 @@ func Register(app *iris.Application) {
 	app.Use(controller.Common)
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath))
-	app.Get("/{params:rewrite}", middleware.FrontendCheck, middleware.Check301, controller.ReRouteContext)
-	app.Get("/", middleware.FrontendCheck, controller.LogAccess, controller.IndexPage)
+	app.Get("/{params:rewrite}", middleware.FrontendCheck, middleware.Check301, middleware.ParseUserToken, controller.ReRouteContext)
+	app.Get("/", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken, controller.IndexPage)
 
 	app.Get("/install", middleware.FrontendCheck, controller.Install)
 	app.Post("/install", middleware.FrontendCheck, controller.InstallForm)
 
-	attachment := app.Party("/attachment", middleware.FrontendCheck)
+	attachment := app.Party("/attachment", middleware.FrontendCheck, middleware.ParseUserToken)
 	{
 		attachment.Post("/upload", controller.AttachmentUpload)
 	}
 
-	comment := app.Party("/comment", middleware.FrontendCheck, controller.LogAccess)
+	comment := app.Party("/comment", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken)
 	{
 		comment.Post("/publish", controller.CommentPublish)
 		comment.Post("/praise", controller.CommentPraise)
 		comment.Get("/{id:uint}", controller.CommentList)
 	}
 
-	app.Get("/guestbook.html", middleware.FrontendCheck, controller.LogAccess, controller.GuestbookPage)
-	app.Post("/guestbook.html", middleware.FrontendCheck, controller.GuestbookForm)
+	app.Get("/guestbook.html", middleware.FrontendCheck, controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
+	app.Post("/guestbook.html", middleware.FrontendCheck, middleware.ParseUserToken, controller.GuestbookForm)
 
-	api := app.Party("/api", middleware.FrontendCheck)
+	// login and register
+	app.Get("/login", middleware.FrontendCheck, controller.LoginPage)
+	app.Get("/register", middleware.FrontendCheck, controller.RegisterPage)
+	app.Get("/logout", middleware.FrontendCheck, middleware.ParseUserToken, controller.AccountLogout)
+	// account party
+	app.Get("/account/{route:path}", middleware.FrontendCheck, middleware.ParseUserToken, controller.AccountIndexPage)
+
+	api := app.Party("/api", middleware.FrontendCheck, middleware.ParseUserToken)
 	{
 		api.Get("/captcha", controller.GenerateCaptcha)
+		// WeChat official account api
+		api.Get("/wechat/auth", controller.WechatAuthApi)
+		api.Get("/wechat", controller.WechatApi)
+		api.Post("/wechat", controller.WechatApi)
 
 		// 内容导入API
 		api.Post("/import/archive", controller.VerifyApiToken, controller.ApiImportArchive)
+		api.Get("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
 		api.Post("/import/categories", controller.VerifyApiToken, controller.ApiImportGetCategories)
-		api.Post("/friendlink/create", controller.VerifyApiToken, controller.ApiImportCreateFriendLink)
-		api.Post("/friendlink/delete", controller.VerifyApiToken, controller.ApiImportDeleteFriendLink)
+		// 友链API
+		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)
+		api.Post("/friendlink/delete", controller.VerifyApiLinkToken, controller.ApiImportDeleteFriendLink)
+		api.Get("/friendlink/list", controller.VerifyApiLinkToken, controller.ApiImportGetFriendLinks)
+		api.Post("/friendlink/list", controller.VerifyApiLinkToken, controller.ApiImportGetFriendLinks)
+		api.Get("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
+		api.Post("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
+		// 前端api
+		api.Post("/login", controller.ApiLogin)
+		api.Post("/register", controller.ApiRegister)
+		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
+		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
+		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
+		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
+		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
+		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
+		api.Post("/order/create", middleware.UserAuth, controller.ApiCreateOrder)
+		api.Get("/order/address", middleware.UserAuth, controller.ApiGetOrderAddress)
+		api.Post("/order/address", middleware.UserAuth, controller.ApiSaveOrderAddress)
+		api.Get("/order/detail", middleware.UserAuth, controller.ApiGetOrderDetail)
+		api.Post("/order/cancel", middleware.UserAuth, controller.ApiCancelOrder)
+		api.Post("/order/refund", middleware.UserAuth, controller.ApiApplyRefundOrder)
+		api.Post("/order/finish", middleware.UserAuth, controller.ApiFinishedOrder)
+		api.Post("/order/payment", middleware.UserAuth, controller.ApiCreateOrderPayment)
+		api.Post("/weapp/qrcode", middleware.UserAuth, controller.ApiCreateWeappQrcode)
+		//检查支付情况
+		api.Get("/archive/order/check", controller.ApiArchiveOrderCheck)
+		api.Get("/payment/check", controller.ApiPaymentCheck)
+		api.Get("/retailer/info", controller.ApiGetRetailerInfo)
+		api.Get("/retailer/statistics", middleware.UserAuth, controller.ApiGetRetailerStatistics)
+		api.Post("/retailer/update", middleware.UserAuth, controller.ApiUpdateRetailerInfo)
+		api.Get("/retailer/orders", middleware.UserAuth, controller.ApiGetRetailerOrders)
+		api.Get("/retailer/withdraw", middleware.UserAuth, controller.ApiGetRetailerWithdraws)
+		api.Post("/retailer/withdraw", middleware.UserAuth, controller.ApiRetailerWithdraw)
+		api.Get("/retailer/members", middleware.UserAuth, controller.ApiGetRetailerMembers)
+		api.Get("/retailer/commissions", middleware.UserAuth, controller.ApiGetRetailerCommissions)
+		// 发布文档
+		api.Post("/archive/publish", middleware.UserAuth, controller.ApiArchivePublish)
+		// common api
+		api.Get("/archive/detail", controller.CheckApiOpen, controller.ApiArchiveDetail)
+		api.Get("/archive/filters", controller.CheckApiOpen, controller.ApiArchiveFilters)
+		api.Get("/archive/list", controller.CheckApiOpen, controller.ApiArchiveList)
+		api.Get("/archive/params", controller.CheckApiOpen, controller.ApiArchiveParams)
+		api.Get("/category/detail", controller.CheckApiOpen, controller.ApiCategoryDetail)
+		api.Get("/category/list", controller.CheckApiOpen, controller.ApiCategoryList)
+		api.Get("/comment/list", controller.CheckApiOpen, controller.ApiCommentList)
+		api.Get("/setting/contact", controller.CheckApiOpen, controller.ApiContact)
+		api.Get("/setting/system", controller.CheckApiOpen, controller.ApiSystem)
+		api.Get("/guestbook/fields", controller.CheckApiOpen, controller.CheckApiOpen, controller.ApiGuestbook)
+		api.Get("/friendlink/list", controller.CheckApiOpen, controller.ApiLinkList)
+		api.Get("/nav/list", controller.CheckApiOpen, controller.ApiNavList)
+		api.Get("/archive/next", controller.CheckApiOpen, controller.ApiNextArchive)
+		api.Get("/archive/prev", controller.CheckApiOpen, controller.ApiPrevArchive)
+		api.Get("/page/detail", controller.CheckApiOpen, controller.ApiPageDetail)
+		api.Get("/page/list", controller.CheckApiOpen, controller.ApiPageList)
+		api.Get("/tag/detail", controller.CheckApiOpen, controller.ApiTagDetail)
+		api.Get("/tag/data/list", controller.CheckApiOpen, controller.ApiTagDataList)
+		api.Get("/tag/list", controller.CheckApiOpen, controller.ApiTagList)
+		api.Post("/attachment/upload", controller.CheckApiOpen, controller.ApiAttachmentUpload)
+		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
+		api.Post("/comment/praise", controller.CheckApiOpen, controller.ApiCommentPraise)
+		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
+	}
+
+	notify := app.Party("/notify")
+	{
+		notify.Get("/weapp/msg", controller.NotifyWeappMsg)
+		notify.Post("/wechat/pay", controller.NotifyWechatPay)
+		notify.Post("/alipay/pay", controller.NotifyAlipay)
 	}
 
 	//后台管理路由相关

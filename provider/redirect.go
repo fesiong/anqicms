@@ -2,7 +2,7 @@ package provider
 
 import (
 	"fmt"
-	"io/ioutil"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -54,7 +54,7 @@ func GetRedirectByFromUrl(fromUrl string) (*model.Redirect, error) {
 }
 
 func ImportRedirects(file multipart.File, info *multipart.FileHeader) (string, error) {
-	buff, err := ioutil.ReadAll(file)
+	buff, err := io.ReadAll(file)
 	if err != nil {
 		return "", err
 	}

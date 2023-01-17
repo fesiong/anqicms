@@ -165,7 +165,7 @@ func HandleArticleCollect(ctx iris.Context) {
 		return
 	}
 
-	go provider.CollectArticlesByKeyword(keyword, true)
+	go provider.CollectArticlesByKeyword(*keyword, true)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

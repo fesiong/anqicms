@@ -154,7 +154,7 @@ func SaveTagData(itemId uint, tagNames []string) error {
 		tag, err := GetTagByTitle(tagName)
 		if err != nil {
 			newToken := library.GetPinyin(tagName)
-			tag.UrlToken = VerifyTagUrlToken(newToken, 0)
+			newToken = VerifyTagUrlToken(newToken, 0)
 			letter := "A"
 			if newToken != "-" {
 				letter = string(newToken[0])

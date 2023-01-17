@@ -3,7 +3,7 @@ package provider
 import (
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
-	"io/ioutil"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
@@ -73,7 +73,7 @@ func GetAnchorByTitle(title string) (*model.Anchor, error) {
 }
 
 func ImportAnchors(file multipart.File, info *multipart.FileHeader) (string, error) {
-	buff, err := ioutil.ReadAll(file)
+	buff, err := io.ReadAll(file)
 	if err != nil {
 		return "", err
 	}

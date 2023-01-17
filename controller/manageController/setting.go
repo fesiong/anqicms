@@ -3,11 +3,9 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"os"
 	"strings"
 	"time"
@@ -15,13 +13,13 @@ import (
 
 func SettingSystem(ctx iris.Context) {
 	system := config.JsonData.System
-	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") {
-		system.SiteLogo = config.JsonData.System.BaseUrl + system.SiteLogo
+	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") && !strings.HasPrefix(system.SiteLogo, "//") {
+		system.SiteLogo = config.JsonData.PluginStorage.StorageUrl + system.SiteLogo
 	}
 
 	// 读取language列表
 	var languages []string
-	readerInfos, err := ioutil.ReadDir(fmt.Sprintf("%slanguage", config.ExecPath))
+	readerInfos, err := os.ReadDir(fmt.Sprintf("%slanguage", config.ExecPath))
 	if err == nil {
 		for _, info := range readerInfos {
 			if strings.HasSuffix(info.Name(), ".yml") {
@@ -41,7 +39,7 @@ func SettingSystem(ctx iris.Context) {
 }
 
 func SettingSystemForm(ctx iris.Context) {
-	var req request.SystemConfig
+	var req config.SystemConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -59,24 +57,7 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
-	req.SiteLogo = strings.TrimPrefix(req.SiteLogo, config.JsonData.System.BaseUrl)
-
-	////进行一些限制
-	//if req.TemplateType == config.TemplateTypeSeparate {
-	//	if req.MobileUrl == req.BaseUrl {
-	//		ctx.JSON(iris.Map{
-	//			"code": config.StatusFailed,
-	//			"msg":  "手机端域名不能和电脑端域名一样",
-	//		})
-	//		return
-	//	} else if req.MobileUrl == "" {
-	//		ctx.JSON(iris.Map{
-	//			"code": config.StatusFailed,
-	//			"msg":  "你选择了电脑+手机模板类型，请填写手机端域名",
-	//		})
-	//		return
-	//	}
-	//}
+	req.SiteLogo = strings.TrimPrefix(req.SiteLogo, config.JsonData.PluginStorage.StorageUrl)
 
 	changed := false
 	if config.JsonData.System.AdminUrl != req.AdminUrl {
@@ -87,7 +68,7 @@ func SettingSystemForm(ctx iris.Context) {
 			req.ExtraFields[i].Name = library.Case2Camel(req.ExtraFields[i].Name)
 		}
 	}
-
+	req.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
 	config.JsonData.System.SiteName = req.SiteName
 	config.JsonData.System.SiteLogo = req.SiteLogo
 	config.JsonData.System.SiteIcp = req.SiteIcp
@@ -95,14 +76,17 @@ func SettingSystemForm(ctx iris.Context) {
 	config.JsonData.System.AdminUrl = req.AdminUrl
 	config.JsonData.System.SiteClose = req.SiteClose
 	config.JsonData.System.SiteCloseTips = req.SiteCloseTips
-	//config.JsonData.System.TemplateName = req.TemplateName
-	//config.JsonData.System.TemplateType = req.TemplateType
+	// 如果本来storageUrl = baseUrl
+	if config.JsonData.PluginStorage.StorageUrl == config.JsonData.System.BaseUrl {
+		config.JsonData.PluginStorage.StorageUrl = req.BaseUrl
+		provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
+	}
 	config.JsonData.System.BaseUrl = req.BaseUrl
 	config.JsonData.System.MobileUrl = req.MobileUrl
 	config.JsonData.System.Language = req.Language
 	config.JsonData.System.ExtraFields = req.ExtraFields
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -131,8 +115,8 @@ func SettingSystemForm(ctx iris.Context) {
 
 func SettingContent(ctx iris.Context) {
 	system := config.JsonData.Content
-	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") {
-		system.DefaultThumb = config.JsonData.System.BaseUrl + system.DefaultThumb
+	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") && !strings.HasPrefix(system.DefaultThumb, "//") {
+		system.DefaultThumb = config.JsonData.PluginStorage.StorageUrl + system.DefaultThumb
 	}
 
 	ctx.JSON(iris.Map{
@@ -143,7 +127,7 @@ func SettingContent(ctx iris.Context) {
 }
 
 func SettingContentForm(ctx iris.Context) {
-	var req request.ContentConfig
+	var req config.ContentConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -152,11 +136,12 @@ func SettingContentForm(ctx iris.Context) {
 		return
 	}
 
-	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, config.JsonData.System.BaseUrl)
+	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, config.JsonData.PluginStorage.StorageUrl)
 
 	config.JsonData.Content.RemoteDownload = req.RemoteDownload
 	config.JsonData.Content.FilterOutlink = req.FilterOutlink
 	config.JsonData.Content.UrlTokenType = req.UrlTokenType
+	config.JsonData.Content.UseWebp = req.UseWebp
 	config.JsonData.Content.Quality = req.Quality
 	config.JsonData.Content.ResizeImage = req.ResizeImage
 	config.JsonData.Content.ResizeWidth = req.ResizeWidth
@@ -165,7 +150,7 @@ func SettingContentForm(ctx iris.Context) {
 	config.JsonData.Content.ThumbHeight = req.ThumbHeight
 	config.JsonData.Content.DefaultThumb = req.DefaultThumb
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.ContentSettingKey, config.JsonData.Content)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -183,7 +168,7 @@ func SettingContentForm(ctx iris.Context) {
 	})
 }
 
-//重建所有的thumb
+// 重建所有的thumb
 func SettingThumbRebuild(ctx iris.Context) {
 	go provider.ThumbRebuild()
 
@@ -206,7 +191,7 @@ func SettingIndex(ctx iris.Context) {
 }
 
 func SettingIndexForm(ctx iris.Context) {
-	var req request.IndexConfig
+	var req config.IndexConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -219,7 +204,7 @@ func SettingIndexForm(ctx iris.Context) {
 	config.JsonData.Index.SeoKeywords = req.SeoKeywords
 	config.JsonData.Index.SeoDescription = req.SeoDescription
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.IndexSettingKey, config.JsonData.Index)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -239,8 +224,8 @@ func SettingIndexForm(ctx iris.Context) {
 
 func SettingContact(ctx iris.Context) {
 	system := config.JsonData.Contact
-	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") {
-		system.Qrcode = config.JsonData.System.BaseUrl + system.Qrcode
+	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") && !strings.HasPrefix(system.Qrcode, "//") {
+		system.Qrcode = config.JsonData.PluginStorage.StorageUrl + system.Qrcode
 	}
 
 	ctx.JSON(iris.Map{
@@ -251,7 +236,7 @@ func SettingContact(ctx iris.Context) {
 }
 
 func SettingContactForm(ctx iris.Context) {
-	var req request.ContactConfig
+	var req config.ContactConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -260,7 +245,7 @@ func SettingContactForm(ctx iris.Context) {
 		return
 	}
 
-	req.Qrcode = strings.TrimPrefix(req.Qrcode, config.JsonData.System.BaseUrl)
+	req.Qrcode = strings.TrimPrefix(req.Qrcode, config.JsonData.PluginStorage.StorageUrl)
 
 	if req.ExtraFields != nil {
 		for i := range req.ExtraFields {
@@ -276,7 +261,7 @@ func SettingContactForm(ctx iris.Context) {
 	config.JsonData.Contact.Qrcode = req.Qrcode
 	config.JsonData.Contact.ExtraFields = req.ExtraFields
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.ContactSettingKey, config.JsonData.Contact)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -312,15 +297,7 @@ func SettingCache(ctx iris.Context) {
 }
 
 func SettingCacheForm(ctx iris.Context) {
-	// todo, 清理缓存
-	provider.DeleteCacheCategories()
-	provider.DeleteCacheFixedLinks()
-	provider.DeleteCacheModules()
-	provider.DeleteCacheRedirects()
-	provider.DeleteCacheIndex()
-	// 记录
-	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, "cache_clear")
-	ioutil.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+	provider.DeleteCache()
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("手动更新缓存"))
 
@@ -341,7 +318,7 @@ func SettingSafe(ctx iris.Context) {
 }
 
 func SettingSafeForm(ctx iris.Context) {
-	var req request.SafeConfig
+	var req config.SafeConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -357,8 +334,10 @@ func SettingSafeForm(ctx iris.Context) {
 	config.JsonData.Safe.ContentForbidden = req.ContentForbidden
 	config.JsonData.Safe.IPForbidden = req.IPForbidden
 	config.JsonData.Safe.UAForbidden = req.UAForbidden
+	config.JsonData.Safe.APIOpen = req.APIOpen
+	config.JsonData.Safe.APIPublish = req.APIPublish
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.SafeSettingKey, config.JsonData.Safe)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

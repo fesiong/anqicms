@@ -1,13 +1,10 @@
 package manageController
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"time"
 )
 
 func PluginImportApi(ctx iris.Context) {
@@ -17,19 +14,37 @@ func PluginImportApi(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"token":    importApi.Token,
-			"base_url": config.JsonData.System.BaseUrl,
+			"token":      importApi.Token,
+			"link_token": importApi.LinkToken,
+			"base_url":   config.JsonData.System.BaseUrl,
 		},
 	})
 }
 
 func PluginUpdateApiToken(ctx iris.Context) {
-	h := md5.New()
-	h.Write([]byte(fmt.Sprintf("%d", time.Now().Nanosecond())))
-	config.JsonData.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
+	var req config.PluginImportApiConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Token != "" {
+		config.JsonData.PluginImportApi.Token = req.Token
+	}
+	if req.LinkToken != "" {
+		config.JsonData.PluginImportApi.LinkToken = req.LinkToken
+	}
 	// 回写
-	_ = config.WriteConfig()
-
+	err := provider.SaveSettingValue(provider.ImportApiSettingKey, config.JsonData.PluginImportApi)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	provider.AddAdminLog(ctx, fmt.Sprintf("更新API导入Token"))
 
 	ctx.JSON(iris.Map{

@@ -9,11 +9,11 @@
     <div class="page-content">
       <div class="contact-item">
         <div class="contact-info">
-          <h2><i class="fa fa-building"></i>{% system with name="SiteName" %}</h2>
-          <p><i class="fa fa-user"></i>{% contact with name="UserName" %}</p>
-          <p><i class="fa fa-phone"></i>{% contact with name="Cellphone" %}</p>
-          <p><i class="fa fa-envelope"></i>{% contact with name="Email" %}</p>
-          <p><i class="fa fa-map-marker"></i>{% contact with name="Address" %}</p>
+          <h2><i class="layui-icon layui-icon-vercode"></i>{% system with name="SiteName" %}</h2>
+          <p><i class="layui-icon layui-icon-username"></i>{% contact with name="UserName" %}</p>
+          <p><i class="layui-icon layui-icon-cellphone"></i>{% contact with name="Cellphone" %}</p>
+          <p><i class="layui-icon layui-icon-email"></i>{% contact with name="Email" %}</p>
+          <p><i class="layui-icon layui-icon-home"></i>{% contact with name="Address" %}</p>
         </div>
         <div class="contact-img">
           <h3>扫码加微信</h3>
@@ -48,9 +48,37 @@
           {% elif item.Type == "image" %}
           <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %}
             placeholder="{{item.Name}}, {{item.Content}}">
+          {% elif item.Type == "file" %}
+          <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %}
+                 placeholder="{{item.Name}}, {{item.Content}}">
           {% endif %}
           {% endfor %}
           {% endguestbook %}
+          <div style="display: flex; clear: both">
+            <input type="hidden" name="captcha_id" id="captcha_id">
+            <input type="text" name="captcha" required placeholder="请填写验证码" class="layui-input" style="flex: 1">
+            <img src="" id="get-captcha" style="width: 150px;height: 56px;cursor: pointer;" />
+            <script>
+              document.getElementById('get-captcha').addEventListener("click", function (e) {
+                fetch('/api/captcha')
+                        .then(response => {
+                          return response.json()
+                        })
+                        .then(res => {
+                          document.getElementById('captcha_id').setAttribute("value", res.data.captcha_id)
+                          document.getElementById('get-captcha').setAttribute("src", res.data.captcha)
+                        }).catch(err =>{console.log(err)})
+              });
+              document.getElementById('get-captcha').click();
+              // jquery 调用方式
+              $('#get-captcha').onclick(function (e) {
+                $.get('/api/captcha', function(res) {
+                  $('#captcha_id').attr("value", res.data.captcha_id)
+                  $('#get-captcha').attr("src", res.data.captcha)
+                }, 'json')
+              })
+            </script>
+          </div>
           <button class="form-btn">提交</button>
         </form>
       </div>

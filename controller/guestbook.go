@@ -38,7 +38,6 @@ func GuestbookForm(ctx iris.Context) {
 		return
 	}
 
-
 	fields := config.GetGuestbookFields()
 	var req = map[string]string{}
 	// 采用post接收
@@ -46,14 +45,17 @@ func GuestbookForm(ctx iris.Context) {
 	for _, item := range fields {
 		var val string
 		if item.Type == config.CustomFieldTypeCheckbox {
-			tmpVal := ctx.PostValues(item.FieldName + "[]")
+			tmpVal, _ := ctx.PostValues(item.FieldName + "[]")
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
-		} else if item.Type == config.CustomFieldTypeImage {
+		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
 				attach, err := provider.AttachmentUpload(file, info, 0, 0)
 				if err == nil {
 					val = attach.Logo
+					if attach.Logo == "" {
+						val = attach.FileLocation
+					}
 				}
 			}
 		} else {
@@ -136,7 +138,7 @@ func GuestbookForm(ctx iris.Context) {
 		}
 
 		ShowMessage(ctx, msg, []Button{
-			{Name: "点击继续", Link: link},
+			{Name: config.Lang("点击继续"), Link: link},
 		})
 	}
 }

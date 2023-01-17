@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
@@ -11,8 +11,8 @@ import (
 )
 
 type tagBreadcrumbNode struct {
-	name string
-	args map[string]pongo2.IEvaluator
+	name    string
+	args    map[string]pongo2.IEvaluator
 	wrapper *pongo2.NodeWrapper
 }
 

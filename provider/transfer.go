@@ -2,9 +2,12 @@ package provider
 
 import (
 	"archive/zip"
+	"crypto/md5"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -12,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"log"
+	"mime/multipart"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -99,6 +103,7 @@ type ArchiveData struct {
 	Content      string                 `json:"content"`
 	Template     string                 `json:"template"`
 	Images       []string               `json:"images"`
+	Logo         string                 `json:"logo"`
 	Extra        map[string]interface{} `json:"extra"`
 	Status       uint                   `json:"status"`
 	CreatedTime  int64                  `json:"created_time"`
@@ -246,9 +251,13 @@ func (t *TransferWebsite) transferModules() error {
 	var result TransferModules
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 
@@ -268,7 +277,7 @@ func (t *TransferWebsite) transferModules() error {
 		}
 		dao.DB.Save(&module)
 
-		module.Migrate(dao.DB)
+		module.Migrate(dao.DB, true)
 	}
 	DeleteCacheModules()
 
@@ -286,9 +295,13 @@ func (t *TransferWebsite) transferCategories() error {
 	var result TransferCategories
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -298,7 +311,7 @@ func (t *TransferWebsite) transferCategories() error {
 			Keywords:    result.Data[i].Keywords,
 			UrlToken:    result.Data[i].UrlToken,
 			Description: result.Data[i].Description,
-			Content:     result.Data[i].Content,
+			Content:     ParseContent(result.Data[i].Content),
 			ModuleId:    result.Data[i].ModuleId,
 			ParentId:    result.Data[i].ParentId,
 			Type:        config.CategoryTypeArchive,
@@ -329,9 +342,13 @@ func (t *TransferWebsite) transferTags() error {
 	var result TransferTags
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -367,9 +384,13 @@ func (t *TransferWebsite) transferKeywords() error {
 	var result TransferAnchors
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -399,9 +420,13 @@ func (t *TransferWebsite) transferArchives() error {
 		var result TransferArchives
 		err = json.Unmarshal([]byte(resp.Body), &result)
 		if err != nil {
+			t.ErrorMsg = err.Error()
+			t.Status = 2 // done
 			return errors.New(resp.Body)
 		}
 		if result.Code != 0 {
+			t.ErrorMsg = result.Msg
+			t.Status = 2 // done
 			return errors.New(result.Msg)
 		}
 		if len(result.Data) == 0 {
@@ -422,6 +447,12 @@ func (t *TransferWebsite) transferArchives() error {
 				Status:      result.Data[i].Status,
 				Flag:        result.Data[i].Flag,
 			}
+			if result.Data[i].Logo != "" {
+				archive.Images = append(archive.Images, result.Data[i].Logo)
+			}
+			for x := range archive.Images {
+				archive.Images[x] = strings.Replace(archive.Images[x], t.BaseUrl, "", 1)
+			}
 			archive.CreatedTime = result.Data[i].CreatedTime
 			archive.UpdatedTime = result.Data[i].UpdatedTime
 			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
@@ -434,7 +465,7 @@ func (t *TransferWebsite) transferArchives() error {
 			dao.DB.Save(&archive)
 			// 保存内容表
 			archiveData := model.ArchiveData{
-				Content: result.Data[i].Content,
+				Content: ParseContent(result.Data[i].Content),
 			}
 			archiveData.Id = archive.Id
 			dao.DB.Save(&archiveData)
@@ -495,9 +526,13 @@ func (t *TransferWebsite) transferSinglePages() error {
 	var result TransferCategories
 	err = json.Unmarshal([]byte(resp.Body), &result)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return errors.New(resp.Body)
 	}
 	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
@@ -507,24 +542,34 @@ func (t *TransferWebsite) transferSinglePages() error {
 			Keywords:    result.Data[i].Keywords,
 			UrlToken:    result.Data[i].UrlToken,
 			Description: result.Data[i].Description,
-			Content:     result.Data[i].Content,
+			Content:     ParseContent(result.Data[i].Content),
 			ModuleId:    result.Data[i].ModuleId,
 			ParentId:    result.Data[i].ParentId,
 			Type:        config.CategoryTypePage,
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
 		}
+		if result.Data[i].Logo != "" {
+			category.Logo = strings.Replace(result.Data[i].Logo, t.BaseUrl, "", 1)
+		}
 		category.UrlToken = strings.TrimSuffix(category.UrlToken, ".html")
-		// 如果已存在
+		// 如果已存在，如果类型不一样，则新增id，如果类型一样，则覆盖
 		exists, err := GetCategoryById(result.Data[i].Id)
 		if err == nil {
-			if exists.Id == result.Data[i].Id {
-				category.Id = result.Data[i].Id
-			} else {
-				exists, err = GetCategoryByTitle(category.Title)
-				if err == nil && exists.Type == config.CategoryTypePage {
-					category.Id = result.Data[i].Id
+			if exists.Type != config.CategoryTypePage {
+				exists2, err := GetCategoryByTitle(category.Title)
+				if err == nil {
+					// 如果名称相同，但类型不同，则跳过当前数据
+					if exists2.Type != config.CategoryTypePage {
+						continue
+					} else {
+						category.Id = exists2.Id
+					}
+				} else {
+					// 不用旧ID，按新内容写入
 				}
+			} else {
+				category.Id = result.Data[i].Id
 			}
 		} else {
 			category.Id = result.Data[i].Id
@@ -546,6 +591,8 @@ func (t *TransferWebsite) transferStatics() error {
 	tmpZipPath := config.ExecPath + "cache/transfer.zip"
 	tmpFile, err := os.Create(tmpZipPath)
 	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
 		return err
 	}
 	defer tmpFile.Close()
@@ -572,7 +619,7 @@ func (t *TransferWebsite) transferStatics() error {
 	// 解压
 	zipReader, err := zip.OpenReader(tmpZipPath)
 	if err != nil {
-		t.ErrorMsg = "解压静态文件出错"
+		t.ErrorMsg = config.Lang("解压静态文件出错")
 		t.Status = 2
 		return errors.New(t.ErrorMsg)
 	}
@@ -606,11 +653,84 @@ func (t *TransferWebsite) transferStatics() error {
 
 		reader.Close()
 		_ = newFile.Close()
+
+		// 如果是图片，入库到attachment
+		if strings.HasSuffix(f.Name, ".jpg") ||
+			strings.HasSuffix(f.Name, ".jpeg") ||
+			strings.HasSuffix(f.Name, ".png") ||
+			strings.HasSuffix(f.Name, ".gif") ||
+			strings.HasSuffix(f.Name, ".webp") {
+			insertAttachment(realName, 1)
+		} else if strings.HasSuffix(f.Name, ".mp4") ||
+			strings.HasSuffix(f.Name, ".webm") {
+			insertAttachment(realName, 0)
+		}
 	}
 
 	t.Status = 2
 
 	return nil
+}
+
+func insertAttachment(realName string, isImage int) {
+	basePath := config.ExecPath + "public/"
+	if !strings.HasPrefix(realName, basePath) {
+		return
+	}
+	fileLocation := strings.TrimPrefix(realName, basePath)
+	var exists model.Attachment
+	// location 存在跳过
+	err := dao.DB.Where("`file_location` = ?", fileLocation).Take(&exists).Error
+	if err == nil {
+		// 已存在，跳过
+		return
+	}
+
+	file, err := os.OpenFile(realName, os.O_RDWR, 0666)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	defer file.Close()
+
+	info, err := file.Stat()
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	md5hash := md5.New()
+	_, err = io.Copy(md5hash, file)
+	file.Seek(0, 0)
+	if err != nil {
+		return
+	}
+	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+
+	attachment := &model.Attachment{
+		FileName:     filepath.Base(fileLocation),
+		FileLocation: fileLocation,
+		FileSize:     info.Size(),
+		FileMd5:      md5Str,
+		CategoryId:   0,
+		IsImage:      isImage,
+		Status:       1,
+	}
+	err = attachment.Save(dao.DB)
+	if err != nil {
+		return
+	}
+
+	fileHeader := &multipart.FileHeader{
+		Filename: filepath.Base(realName),
+		Header:   nil,
+		Size:     info.Size(),
+	}
+	// 再走一遍上传流程
+	_, err = AttachmentUpload(file, fileHeader, 0, attachment.Id)
+	if err != nil {
+		log.Println(err)
+		return
+	}
 }
 
 func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*library.RequestData, error) {
@@ -630,4 +750,78 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*librar
 	}
 
 	return resp, err
+}
+
+// ParseContent 转换content内容，使它符合编辑器使用。
+func ParseContent(content string) string {
+	// 已更换编辑器，不需要再做处理
+	return content
+	htmlR := strings.NewReader(content)
+	doc, err := goquery.NewDocumentFromReader(htmlR)
+	if err != nil {
+		return content
+	}
+	body := doc.Find("body")
+
+	body.Children().Each(func(i int, item *goquery.Selection) {
+		//只保留 顶层只运行 pre，blockquote,ul,ol,table,p,div
+		if item.Is("blockquote") ||
+			item.Is("pre") ||
+			item.Is("table") ||
+			item.Is("h1") ||
+			item.Is("h2") ||
+			item.Is("h3") ||
+			item.Is("h4") ||
+			item.Is("h5") ||
+			item.Is("h6") ||
+			item.Is("p") ||
+			item.Is("div") {
+			return
+		}
+		if item.Is("figure") {
+			// 重新wrap
+			tmp, _ := item.Html()
+			item.ReplaceWithHtml("<p>" + tmp + "</p>")
+			return
+		}
+		if item.Is("code") {
+			// 重新wrap
+			item.WrapHtml("<pre></pre>")
+			return
+		}
+		if item.Is("img") {
+			src, _ := item.Attr("src")
+			dataSrc, exists2 := item.Attr("data-src")
+			if exists2 {
+				src = dataSrc
+			}
+			dataSrc, exists2 = item.Attr("data-original")
+			if exists2 {
+				src = dataSrc
+			}
+			alt, _ := item.Attr("alt")
+			if src == "" {
+				item.Remove()
+			} else {
+				item.ReplaceWithHtml("<p><img src=\"" + src + "\" alt=\"" + alt + "\"/></p>")
+			}
+			return
+		}
+		//其他情况
+		if item.Is("ul") || item.Is("ol") {
+			if item.Find("li").Length() == 0 {
+				tmp, _ := item.Html()
+				item.WrapInnerHtml("<li>" + tmp + "</li>")
+			}
+		} else {
+			item.WrapHtml("<div></div>")
+		}
+	})
+
+	result, err := body.Html()
+	if err != nil {
+		log.Println("保存错误", err)
+		return content
+	}
+	return result
 }

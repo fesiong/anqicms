@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/parnurzeal/gorequest"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/response"
@@ -41,7 +40,7 @@ func PushArchive(link string) {
 func PushBaidu(list []string) error {
 	baiduApi := config.JsonData.PluginPush.BaiduApi
 	if baiduApi == "" {
-		return errors.New("没有配置百度主动推送")
+		return errors.New(config.Lang("没有配置百度主动推送"))
 	}
 	urlString := strings.Replace(strings.Trim(fmt.Sprint(list), "[]"), " ", "\n", -1)
 
@@ -51,7 +50,7 @@ func PushBaidu(list []string) error {
 		return err
 	}
 	defer resp.Body.Close()
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	logPushResult("baidu", fmt.Sprintf("%v, %s", list, string(body)))
 	return nil
@@ -60,7 +59,7 @@ func PushBaidu(list []string) error {
 func PushBing(list []string) error {
 	bingApi := config.JsonData.PluginPush.BingApi
 	if bingApi == "" {
-		return errors.New("没有配置必应主动推送")
+		return errors.New(config.Lang("没有配置必应主动推送"))
 	}
 
 	// bing 推送有2种方式，一种是传统的api，另一种是 IndexNow
@@ -81,14 +80,14 @@ func PushBing(list []string) error {
 		_, err = os.Stat(txtFile)
 		if err != nil && os.IsNotExist(err) {
 			// 生成一个
-			_ = ioutil.WriteFile(txtFile, []byte(apiKey), os.ModePerm)
+			_ = os.WriteFile(txtFile, []byte(apiKey), os.ModePerm)
 		}
 		// 开始推送
 		postData := bingData2{
-			Host: baseUrl.Host,
-			Key: apiKey,
+			Host:        baseUrl.Host,
+			Key:         apiKey,
 			KeyLocation: config.JsonData.System.BaseUrl + "/" + apiKey + ".txt",
-			UrlList: list,
+			UrlList:     list,
 		}
 		resp, body, errs := gorequest.New().Timeout(10*time.Second).Set("Content-Type", "application/json; charset=utf-8").Post(bingApi).Send(postData).End()
 		if errs != nil {
@@ -192,7 +191,7 @@ func GetLastPushList() ([]response.PushLog, error) {
 func GetRobots() string {
 	//robots 是一个文件，所以直接读取文件
 	robotsPath := fmt.Sprintf("%spublic/robots.txt", config.ExecPath)
-	robots, err := ioutil.ReadFile(robotsPath)
+	robots, err := os.ReadFile(robotsPath)
 	if err != nil {
 		//文件不存在
 		return ""

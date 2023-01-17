@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -14,8 +14,8 @@ import (
 )
 
 type tagArchiveFiltersNode struct {
-	name string
-	args map[string]pongo2.IEvaluator
+	name    string
+	args    map[string]pongo2.IEvaluator
 	wrapper *pongo2.NodeWrapper
 }
 
@@ -52,7 +52,7 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		}
 	}
 
-	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉
+	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉，并且不是跟随阅读等级
 	var filterFields []config.CustomField
 	var filterGroups []response.FilterGroup
 	var newParams = make(url.Values)

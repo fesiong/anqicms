@@ -2,7 +2,6 @@ package manageController
 
 import (
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -10,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strings"
 	"time"
 )
 
@@ -118,29 +116,6 @@ func ArchiveDetail(ctx iris.Context) {
 
 	// 读取data
 	archive.ArchiveData, err = provider.GetArchiveDataById(archive.Id)
-	if err == nil {
-		// 重新解析，保证不会被编辑器报错
-		htmlR := strings.NewReader(archive.ArchiveData.Content)
-		doc, err := goquery.NewDocumentFromReader(htmlR)
-		if err == nil {
-			doc.Find("body").Children().Each(func(i int, item *goquery.Selection) {
-				//只保留 img,code,blockquote,pre
-				if item.Is("img") {
-					src, _ := item.Attr("src")
-					item.ReplaceWithHtml("<p><img src=\""+src+"\"/></p>")
-				} else if item.Is("code") {
-					tmp := item.Text()
-					item.ReplaceWithHtml("<pre><code>"+tmp+"</code></pre>")
-				}
-			})
-			doc.Find("ul,ol").Each(func(i int, inner *goquery.Selection) {
-				if inner.Find("li").Length() == 0 {
-					inner.SetHtml("<li>"+inner.Text()+"</li>")
-				}
-			})
-			archive.ArchiveData.Content, _ = doc.Find("body").Html()
-		}
-	}
 	// 读取 extraDat
 	archive.Extra = provider.GetArchiveExtra(archive.ModuleId, archive.Id)
 
@@ -321,5 +296,89 @@ func ArchiveDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "文章已删除",
+	})
+}
+
+func UpdateArchiveRecommend(ctx iris.Context) {
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+
+	err := provider.UpdateArchiveRecommend(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档Flag：%v => %s", req.Ids, req.Flag))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
+func UpdateArchiveStatus(ctx iris.Context) {
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+
+	err := provider.UpdateArchiveStatus(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档状态：%v => %d", req.Ids, req.Status))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
+func UpdateArchiveCategory(ctx iris.Context) {
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+
+	err := provider.UpdateArchiveCategory(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("批量更新文档分类：%v => %d", req.Ids, req.CategoryId))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
 	})
 }

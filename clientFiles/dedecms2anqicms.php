@@ -2,7 +2,7 @@
 /**
  * dedecms 数据转 anqicms 接口文件
  * 仅支持 php 5.3 以上
- * 版权保护，如需使用，请访问 https://www.kandaoni.com。
+ * 版权保护，如需使用，请访问 https://www.anqicms.com/。
  * @author anqicms
  * 微信：17620331155
  */
@@ -190,8 +190,8 @@ class anqicms
         
           case 'keyword':
             $keywords = $this->db->select("*", "keywords");
-            foreach($tags as $key => $val) {
-              $tags[$key] = array(
+            foreach($keywords as $key => $val) {
+              $keywords[$key] = array(
                 "id" => $val['aid'],
                 "title" => $val['keyword'],
                 'weight' => $val['rank'],
@@ -219,7 +219,7 @@ class anqicms
                   'status' => 1,
                   'created_time' => $val['pubdate'],
                   'updated_time' => $val['senddate'],
-                  'logo' => $val['litpic'],
+                  'images' => [$val['litpic']],
                   'url_token' => $val['filename'],
                   'module_id' => $val['channel'],
                   'flag' => $val['flag'],
@@ -363,8 +363,10 @@ class anqicms
     function formatType($type) {
       if($type == 'datetime' || $type == 'stepselect' || $type == 'float' || $type == 'textchar' || $type == 'textdata') {
         $type = 'text';
-      } else if($type == 'img' || $type == 'media' || $type == 'addon' || $type == 'imgfile') {
+      } else if($type == 'img' || $type == 'media' || $type == 'imgfile') {
         $type = 'image';
+      } else if($type == 'addon') {
+        $type = 'file';
       } else if($type == 'multitext' || $type == 'htmltext' || $type == 'textarea') {
         $type = 'textarea';
       } else if ($type == 'int') {
@@ -835,4 +837,28 @@ function showMessage($msg, $code = -1)
     @header('Content-Type:text/html;charset=UTF-8');
     echo "<div style='padding: 50px;text-align: center;'>$msg</div>";
     die;
+}
+
+function baseUrl()
+{
+    static $baseUrl;
+    if ($baseUrl) {
+        return $baseUrl;
+    }
+    $isHttps = false;
+    if (!empty($_SERVER['HTTPS']) && strtolower($_SERVER['HTTPS']) !== 'off') {
+        $isHttps = true;
+    } elseif (isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && $_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
+        $isHttps = true;
+    } elseif (!empty($_SERVER['HTTP_FRONT_END_HTTPS']) && strtolower($_SERVER['HTTP_FRONT_END_HTTPS']) !== 'off') {
+        $isHttps = true;
+    }
+
+    $dirNameArr = explode('/', $_SERVER['REQUEST_URI']);
+    array_pop($dirNameArr);
+    $dirName = implode("/", $dirNameArr) . "/";
+
+    $baseUrl = ($isHttps ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"] . $dirName;
+
+    return $baseUrl;
 }

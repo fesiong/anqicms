@@ -1,6 +1,8 @@
 package response
 
 type DesignPackage struct {
+	TemplateId   uint         `json:"template_id"`
+	AuthId       uint         `json:"auth_id"`
 	Name         string       `json:"name"`
 	Package      string       `json:"package"`
 	Version      string       `json:"version"`
@@ -12,6 +14,7 @@ type DesignPackage struct {
 	Status       int          `json:"status"`
 	TplFiles     []DesignFile `json:"tpl_files"`
 	StaticFiles  []DesignFile `json:"static_files"`
+	PreviewData  bool         `json:"preview_data"`
 }
 
 type DesignFile struct {

@@ -99,7 +99,7 @@ func CategoryPage(ctx iris.Context) {
 }
 
 func SearchPage(ctx iris.Context) {
-	q := ctx.URLParam("q")
+	q := strings.TrimSpace(ctx.URLParam("q"))
 	if config.JsonData.Safe.ContentForbidden != "" {
 		forbiddens := strings.Split(config.JsonData.Safe.ContentForbidden, "\n")
 		for _, v := range forbiddens {

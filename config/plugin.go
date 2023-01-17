@@ -10,40 +10,41 @@ type CodeItem struct {
 	Value string `json:"value"`
 }
 
-type pluginPushConfig struct {
+type PluginPushConfig struct {
 	BaiduApi string     `json:"baidu_api"`
 	BingApi  string     `json:"bing_api"`
 	JsCode   string     `json:"js_code"`
 	JsCodes  []CodeItem `json:"js_codes"`
 }
 
-type pluginSitemapConfig struct {
+type PluginSitemapConfig struct {
 	AutoBuild   int    `json:"auto_build"`
 	Type        string `json:"type"`
 	UpdatedTime int64  `json:"updated_time"`
 	SitemapURL  string `json:"sitemap_url"`
 }
 
-type pluginAnchorConfig struct {
+type PluginAnchorConfig struct {
 	AnchorDensity int `json:"anchor_density"`
 	ReplaceWay    int `json:"replace_way"`
 	KeywordWay    int `json:"keyword_way"`
 }
 
-type pluginGuestbookConfig struct {
+type PluginGuestbookConfig struct {
 	ReturnMessage string         `json:"return_message"`
 	Fields        []*CustomField `json:"fields"`
 }
 
 type CustomField struct {
-	Name      string   `json:"name"`
-	FieldName string   `json:"field_name"`
-	Type      string   `json:"type"`
-	Required  bool     `json:"required"`
-	IsSystem  bool     `json:"is_system"`
-	IsFilter  bool     `json:"is_filter"`
-	Content   string   `json:"content"`
-	Items     []string `json:"-"`
+	Name        string   `json:"name"`
+	FieldName   string   `json:"field_name"`
+	Type        string   `json:"type"`
+	Required    bool     `json:"required"`
+	IsSystem    bool     `json:"is_system"`
+	IsFilter    bool     `json:"is_filter"`
+	FollowLevel bool     `json:"follow_level"`
+	Content     string   `json:"content"`
+	Items       []string `json:"-"`
 }
 
 type PluginUploadFile struct {
@@ -53,7 +54,7 @@ type PluginUploadFile struct {
 	Link        string `json:"link"`
 }
 
-type pluginSendmail struct {
+type PluginSendmail struct {
 	Server    string `json:"server"`
 	UseSSL    int    `json:"use_ssl"`
 	Port      int    `json:"port"`
@@ -62,8 +63,37 @@ type pluginSendmail struct {
 	Recipient string `json:"recipient"`
 }
 
-type pluginImportApiConfig struct {
-	Token string `json:"token"`
+type PluginImportApiConfig struct {
+	Token     string `json:"token"`      // 文档导入token
+	LinkToken string `json:"link_token"` // 友情链接token
+}
+
+type PluginStorageConfig struct {
+	StorageUrl  string `json:"storage_url"`
+	StorageType string `json:"storage_type"`
+	KeepLocal   bool   `json:"keep_local"`
+
+	AliyunEndpoint        string `json:"aliyun_endpoint"`
+	AliyunAccessKeyId     string `json:"aliyun_access_key_id"`
+	AliyunAccessKeySecret string `json:"aliyun_access_key_secret"`
+	AliyunBucketName      string `json:"aliyun_bucket_name"`
+
+	TencentSecretId  string `json:"tencent_secret_id"`
+	TencentSecretKey string `json:"tencent_secret_key"`
+	TencentBucketUrl string `json:"tencent_bucket_url"`
+
+	QiniuAccessKey string `json:"qiniu_access_key"`
+	QiniuSecretKey string `json:"qiniu_secret_key"`
+	QiniuBucket    string `json:"qiniu_bucket"`
+	QiniuRegion    string `json:"qiniu_region"`
+
+	UpyunBucket   string `json:"upyun_bucket"`
+	UpyunOperator string `json:"upyun_operator"`
+	UpyunPassword string `json:"upyun_password"`
+}
+
+type PluginFulltextConfig struct {
+	Open bool `json:"open"`
 }
 
 func (g *CustomField) SplitContent() []string {
@@ -87,6 +117,10 @@ func (g *CustomField) CheckSetFilter() bool {
 		g.IsFilter = false
 		return false
 	}
+	if g.FollowLevel {
+		g.IsFilter = false
+		return false
+	}
 
 	return true
 }
@@ -99,7 +133,8 @@ func (g *CustomField) GetFieldColumn() string {
 	} else if g.Type == CustomFieldTypeTextarea {
 		column += " text"
 	} else {
-		column += " varchar(250)"
+		// mysql 5.6 下，utf8mb4 索引只能用190
+		column += " varchar(190)"
 	}
 
 	//if g.Required {
@@ -129,6 +164,20 @@ func GetGuestbookFields() []*CustomField {
 			Type:      "text",
 			Required:  false,
 			IsSystem:  true,
+		},
+		{
+			Name:      Lang("Email"),
+			FieldName: "email",
+			Type:      "text",
+			Required:  false,
+			IsSystem:  false,
+		},
+		{
+			Name:      Lang("WhatsApp"),
+			FieldName: "whatsapp",
+			Type:      "text",
+			Required:  false,
+			IsSystem:  false,
 		},
 		{
 			Name:      Lang("留言内容"),

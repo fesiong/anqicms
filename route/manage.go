@@ -26,16 +26,34 @@ func manageRoute(app *iris.Application) {
 			version.Post("/upgrade", manageController.VersionUpgrade)
 		}
 
-		user := manage.Party("/admin", middleware.ParseAdminToken)
+		anqi := manage.Party("/anqi", middleware.ParseAdminToken)
 		{
-			user.Get("/detail", manageController.UserDetail)
-			user.Post("/detail", manageController.UserDetailForm)
-			user.Post("/logout", manageController.UserLogout)
-			user.Get("/logs/login", manageController.GetAdminLoginLog)
-			user.Get("/logs/action", manageController.GetAdminLog)
+			anqi.Get("/info", manageController.GetAnqiInfo)
+			anqi.Post("/login", manageController.AnqiLogin)
+			anqi.Post("/upload", manageController.AnqiUploadAttachment)
+			anqi.Post("/template/share", manageController.AnqiShareTemplate)
+			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
+			anqi.Post("/feedback", manageController.AnqiSendFeedback)
+			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
-		setting := manage.Party("/setting", middleware.ParseAdminToken)
+		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
+		{
+			admin.Get("/menus", manageController.AdminMenus)
+			admin.Get("/list", manageController.AdminList)
+			admin.Get("/detail", manageController.AdminDetail)
+			admin.Post("/detail", manageController.AdminDetailForm)
+			admin.Post("/delete", manageController.AdminDetailDelete)
+			admin.Post("/logout", manageController.AdminLogout)
+			admin.Get("/logs/login", manageController.GetAdminLoginLog)
+			admin.Get("/logs/action", manageController.GetAdminLog)
+			admin.Get("/group/list", manageController.AdminGroupList)
+			admin.Get("/group/detail", manageController.AdminGroupDetail)
+			admin.Post("/group/detail", manageController.AdminGroupDetailForm)
+			admin.Post("/group/delete", manageController.AdminGroupDelete)
+		}
+
+		setting := manage.Party("/setting", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			setting.Get("/system", manageController.SettingSystem)
 			setting.Get("/content", manageController.SettingContent)
@@ -61,7 +79,7 @@ func manageRoute(app *iris.Application) {
 
 		}
 
-		collector := manage.Party("/collector", middleware.ParseAdminToken)
+		collector := manage.Party("/collector", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			//采集全局设置
 			collector.Get("/setting", manageController.HandleCollectSetting)
@@ -73,11 +91,12 @@ func manageRoute(app *iris.Application) {
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
 
-		attachment := manage.Party("/attachment", middleware.ParseAdminToken)
+		attachment := manage.Party("/attachment", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			attachment.Get("/list", manageController.AttachmentList)
 			attachment.Post("/upload", manageController.AttachmentUpload)
 			attachment.Post("/delete", manageController.AttachmentDelete)
+			attachment.Post("/edit", manageController.AttachmentEdit)
 
 			attachment.Post("/category", manageController.AttachmentChangeCategory)
 			attachment.Get("/category/list", manageController.AttachmentCategoryList)
@@ -85,7 +104,7 @@ func manageRoute(app *iris.Application) {
 			attachment.Post("/category/delete", manageController.AttachmentCategoryDelete)
 		}
 
-		module := manage.Party("/module", middleware.ParseAdminToken)
+		module := manage.Party("/module", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			module.Get("/list", manageController.ModuleList)
 			module.Get("/detail", manageController.ModuleDetail)
@@ -94,7 +113,7 @@ func manageRoute(app *iris.Application) {
 			module.Post("/field/delete", manageController.ModuleFieldsDelete)
 		}
 
-		category := manage.Party("/category", middleware.ParseAdminToken)
+		category := manage.Party("/category", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			category.Get("/list", manageController.CategoryList)
 			category.Get("/detail", manageController.CategoryDetail)
@@ -102,7 +121,7 @@ func manageRoute(app *iris.Application) {
 			category.Post("/delete", manageController.CategoryDelete)
 		}
 
-		archive := manage.Party("/archive", middleware.ParseAdminToken)
+		archive := manage.Party("/archive", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			archive.Get("/list", manageController.ArchiveList)
 			archive.Get("/detail", manageController.ArchiveDetail)
@@ -110,9 +129,12 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/delete", manageController.ArchiveDelete)
 			archive.Post("/recover", manageController.ArchiveRecover)
 			archive.Post("/release", manageController.ArchiveRelease)
+			archive.Post("/recommend", manageController.UpdateArchiveRecommend)
+			archive.Post("/status", manageController.UpdateArchiveStatus)
+			archive.Post("/category", manageController.UpdateArchiveCategory)
 		}
 
-		statistic := manage.Party("/statistic", middleware.ParseAdminToken)
+		statistic := manage.Party("/statistic", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
@@ -123,7 +145,7 @@ func manageRoute(app *iris.Application) {
 			statistic.Get("/dashboard", manageController.GetStatisticsDashboard)
 		}
 
-		design := manage.Party("/design", middleware.ParseAdminToken)
+		design := manage.Party("/design", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			design.Get("/list", manageController.GetDesignList)
 			design.Get("/info", manageController.GetDesignInfo)
@@ -132,17 +154,21 @@ func manageRoute(app *iris.Application) {
 			design.Post("/download", manageController.DownloadDesignInfo)
 			design.Post("/upload", manageController.UploadDesignInfo)
 			design.Post("/use", manageController.UseDesignInfo)
+			design.Post("/data/restore", manageController.RestoreDesignData)
+			design.Post("/data/backup", manageController.BackupDesignData)
 			design.Get("/file/info", manageController.GetDesignFileDetail)
 			design.Get("/file/histories", manageController.GetDesignFileHistories)
 			design.Post("/file/history/delete", manageController.DeleteDesignFileHistories)
 			design.Post("/file/restore", manageController.RestoreDesignFile)
 			design.Post("/file/save", manageController.SaveDesignFile)
+			design.Post("/file/copy", manageController.CopyDesignFile)
 			design.Post("/file/upload", manageController.UploadDesignFile)
 			design.Post("/file/delete", manageController.DeleteDesignFile)
 			design.Get("/docs", manageController.GetDesignDocs)
+			design.Get("/file/templates", manageController.GetDesignTemplateFiles)
 		}
 
-		plugin := manage.Party("/plugin", middleware.ParseAdminToken)
+		plugin := manage.Party("/plugin", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			plugin.Get("/push", manageController.PluginPush)
 			plugin.Post("/push", manageController.PluginPushForm)
@@ -157,6 +183,9 @@ func manageRoute(app *iris.Application) {
 
 			plugin.Get("/rewrite", manageController.PluginRewrite)
 			plugin.Post("/rewrite", manageController.PluginRewriteForm)
+
+			plugin.Get("/storage", manageController.PluginStorageConfig)
+			plugin.Post("/storage", manageController.PluginStorageConfigForm)
 
 			link := plugin.Party("/link")
 			{
@@ -199,6 +228,8 @@ func manageRoute(app *iris.Application) {
 
 			keyword := plugin.Party("/keyword")
 			{
+				keyword.Get("/setting", manageController.PluginKeywordSetting)
+				keyword.Post("/setting", manageController.PluginSaveKeywordSetting)
 				keyword.Get("/list", manageController.PluginKeywordList)
 				keyword.Post("/detail", manageController.PluginKeywordDetailForm)
 				keyword.Post("/delete", manageController.PluginKeywordDelete)
@@ -262,6 +293,109 @@ func manageRoute(app *iris.Application) {
 				transfer.Post("/download", manageController.DownloadClientFile)
 				transfer.Post("/create", manageController.CreateTransferTask)
 				transfer.Post("/start", manageController.TransferWebData)
+			}
+
+			user := plugin.Party("/user")
+			{
+				user.Get("/fields", manageController.PluginUserFieldsSetting)
+				user.Post("/fields", manageController.PluginUserFieldsSettingForm)
+				user.Get("/list", manageController.PluginUserList)
+				user.Get("/detail", manageController.PluginUserDetail)
+				user.Post("/detail", manageController.PluginUserDetailForm)
+				user.Post("/delete", manageController.PluginUserDelete)
+				user.Get("/group/list", manageController.PluginUserGroupList)
+				user.Get("/group/detail", manageController.PluginUserGroupDetail)
+				user.Post("/group/detail", manageController.PluginUserGroupDetailForm)
+				user.Post("/group/delete", manageController.PluginUserGroupDelete)
+			}
+
+			weapp := plugin.Party("/weapp")
+			{
+				weapp.Get("/config", manageController.PluginWeappConfig)
+				weapp.Post("/config", manageController.PluginWeappConfigForm)
+			}
+
+			wechat := plugin.Party("/wechat")
+			{
+				wechat.Get("/config", manageController.PluginWechatConfig)
+				wechat.Post("/config", manageController.PluginWechatConfigForm)
+				wechat.Get("/message/list", manageController.PluginWechatMessages)
+				wechat.Post("/message/delete", manageController.PluginWechatMessageDelete)
+				wechat.Post("/message/reply", manageController.PluginWechatMessageReply)
+				wechat.Get("/reply/rule/list", manageController.PluginWechatReplyRules)
+				wechat.Post("/reply/rule/delete", manageController.PluginWechatReplyRuleDelete)
+				wechat.Post("/reply/rule/save", manageController.PluginWechatReplyRuleForm)
+				wechat.Get("/menu/list", manageController.PluginWechatMenus)
+				wechat.Post("/menu/save", manageController.PluginWechatMenuSave)
+				wechat.Post("/menu/delete", manageController.PluginWechatMenuDelete)
+				wechat.Post("/menu/sync", manageController.PluginWechatMenuSync)
+			}
+
+			retailer := plugin.Party("/retailer")
+			{
+				retailer.Get("/list", manageController.PluginGetRetailers)
+				retailer.Get("/config", manageController.PluginRetailerConfig)
+				retailer.Post("/config", manageController.PluginRetailerConfigForm)
+				retailer.Post("/realname", manageController.PluginRetailerSetRealName)
+				retailer.Post("/apply", manageController.PluginRetailerApply)
+			}
+
+			pay := plugin.Party("/pay")
+			{
+				pay.Get("/config", manageController.PluginPayConfig)
+				pay.Post("/config", manageController.PluginPayConfigForm)
+				pay.Post("/upload", manageController.PluginPayUploadFile)
+			}
+
+			order := plugin.Party("/order")
+			{
+				order.Get("/config", manageController.PluginOrderConfig)
+				order.Post("/config", manageController.PluginOrderConfigForm)
+				order.Get("/list", manageController.PluginOrderList)
+				order.Get("/detail", manageController.PluginOrderDetail)
+				order.Post("/deliver", manageController.PluginOrderSetDeliver)
+				order.Post("/finished", manageController.PluginOrderSetFinished)
+				order.Post("/canceled", manageController.PluginOrderSetCanceled)
+				order.Post("/refund", manageController.PluginOrderSetRefund)
+				order.Post("/refund/apply", manageController.PluginOrderApplyRefund)
+				order.Post("/export", manageController.PluginOrderExport)
+			}
+
+			withdraw := plugin.Party("/withdraw")
+			{
+				withdraw.Get("/list", manageController.PluginWithdrawList)
+				withdraw.Get("/detail", manageController.PluginWithdrawDetail)
+				withdraw.Post("/approval", manageController.PluginWithdrawSetApproval)
+				withdraw.Post("/finished", manageController.PluginWithdrawSetFinished)
+			}
+
+			commission := plugin.Party("/commission")
+			{
+				commission.Get("/list", manageController.PluginCommissionList)
+				commission.Get("/detail", manageController.PluginCommissionDetail)
+			}
+
+			finance := plugin.Party("/finance")
+			{
+				finance.Get("/list", manageController.PluginFinanceList)
+				finance.Get("/detail", manageController.PluginFinanceDetail)
+			}
+
+			// 全文索引
+			fulltext := plugin.Party("/fulltext")
+			{
+				fulltext.Get("/config", manageController.PluginFulltextConfig)
+				fulltext.Post("/config", manageController.PluginFulltextConfigForm)
+			}
+
+			backup := plugin.Party("/backup")
+			{
+				backup.Get("/list", manageController.PluginBackupList)
+				backup.Post("/dump", manageController.PluginBackupDump)
+				backup.Post("/restore", manageController.PluginBackupRestore)
+				backup.Post("/delete", manageController.PluginBackupDelete)
+				backup.Post("/export", manageController.PluginBackupExport)
+				backup.Post("/import", manageController.PluginBackupImport)
 			}
 		}
 	}

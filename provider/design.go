@@ -6,10 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"gorm.io/gorm/clause"
 	"io"
-	"io/ioutil"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"mime/multipart"
@@ -52,7 +54,7 @@ func GetDesignList() []response.DesignPackage {
 				}
 				hasChange = true
 			} else {
-				data, err := ioutil.ReadFile(configFile)
+				data, err := os.ReadFile(configFile)
 				if err != nil {
 					// 无法读取，只能跳过
 					continue
@@ -85,6 +87,13 @@ func GetDesignList() []response.DesignPackage {
 			} else {
 				designInfo.Status = 0
 			}
+			dataPath := config.ExecPath + "template/" + designInfo.Package + "/data.db"
+			_, err = os.Stat(dataPath)
+			if err == nil {
+				designInfo.PreviewData = true
+			} else {
+				designInfo.PreviewData = false
+			}
 
 			designLists = append(designLists, designInfo)
 		}
@@ -103,7 +112,7 @@ func SaveDesignInfo(req request.DesignInfoRequest) error {
 		}
 	}
 	if designIndex == -1 {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	designInfo := designList[designIndex]
@@ -123,31 +132,29 @@ func SaveDesignInfo(req request.DesignInfoRequest) error {
 
 // DeleteDesignInfo 删除的模板，会被移动到 cache
 func DeleteDesignInfo(packageName string) error {
-	designList := GetDesignList()
-	var designIndex = -1
-	for i := range designList {
-		if designList[i].Package == packageName {
-			designIndex = i
-			break
-		}
+	if packageName == "" {
+		return errors.New(config.Lang("模板不存在"))
 	}
-	if designIndex == -1 {
-		return errors.New("模板不存在")
-	}
-
 	if packageName == "default" {
-		return errors.New("默认模板不能删除")
+		return errors.New(config.Lang("默认模板不能删除"))
 	}
 
 	basePath := config.ExecPath + "template/" + packageName
-	cachePath := config.ExecPath + "cache/" + ".history/" + packageName + "/.template"
-	os.RemoveAll(cachePath)
-	os.Rename(basePath, cachePath)
+	basePath = filepath.Clean(basePath)
+	if !strings.HasPrefix(basePath, config.ExecPath+"template/") {
+		return errors.New(config.Lang("模板不存在"))
+	}
+
+	cachePath := config.ExecPath + "cache/" + ".history/" + packageName
+	os.MkdirAll(cachePath, os.ModePerm)
+
+	os.RemoveAll(cachePath + "/template")
+	os.Rename(basePath, cachePath+"/template")
 	// 读取静态文件
 	staticPath := config.ExecPath + "public/static/" + packageName
-	cachePath = config.ExecPath + "cache/" + ".history/" + packageName + "/.static"
-	os.RemoveAll(cachePath)
-	os.Rename(staticPath, cachePath)
+	os.RemoveAll(cachePath + "/static")
+	os.MkdirAll(cachePath, os.ModePerm)
+	os.Rename(staticPath, cachePath+"/static")
 
 	return nil
 }
@@ -162,7 +169,7 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		}
 	}
 	if designIndex == -1 {
-		return nil, errors.New("模板不存在")
+		return nil, errors.New(config.Lang("模板不存在"))
 	}
 
 	if !scan {
@@ -179,7 +186,7 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		hasChange = true
 	}
 	for i := range files {
-		if strings.HasSuffix(files[i].Path, "config.json") {
+		if strings.HasSuffix(files[i].Path, "config.json") || strings.HasSuffix(files[i].Path, "data.db") {
 			continue
 		}
 		fullPath := strings.TrimPrefix(files[i].Path, basePath+"/")
@@ -195,9 +202,9 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		}
 		if !exists {
 			designInfo.TplFiles = append(designInfo.TplFiles, response.DesignFile{
-				Path:   fullPath,
-				Remark: "",
-				Size: files[i].Size,
+				Path:    fullPath,
+				Remark:  "",
+				Size:    files[i].Size,
 				LastMod: files[i].LastMod,
 			})
 			hasChange = true
@@ -223,9 +230,9 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 		}
 		if !exists {
 			designInfo.StaticFiles = append(designInfo.StaticFiles, response.DesignFile{
-				Path:   fullPath,
-				Remark: "",
-				Size: files[i].Size,
+				Path:    fullPath,
+				Remark:  "",
+				Size:    files[i].Size,
 				LastMod: files[i].LastMod,
 			})
 			hasChange = true
@@ -240,7 +247,24 @@ func GetDesignInfo(packageName string, scan bool) (*response.DesignPackage, erro
 	return &designInfo, nil
 }
 
-func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
+func GetDesignTemplateFiles(packageName string) ([]response.DesignFile, error) {
+
+	basePath := config.ExecPath + "template/" + packageName
+	// 尝试读取模板文件
+	files := readAllFiles(basePath)
+	var templates = make([]response.DesignFile, 0, len(files))
+	for i := range files {
+		if strings.HasSuffix(files[i].Path, "config.json") || strings.HasSuffix(files[i].Path, "data.db") {
+			continue
+		}
+		files[i].Path = strings.TrimPrefix(files[i].Path, basePath+"/")
+		templates = append(templates, files[i])
+	}
+
+	return templates, nil
+}
+
+func UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
 	// 解压
 	zipReader, err := zip.NewReader(file, info.Size)
 	if err != nil {
@@ -250,10 +274,10 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 	packageName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
 	// 先尝试读取config.json
 	tmpFile, err := zipReader.Open("template/config.json")
+	var designInfo response.DesignPackage
 	if err == nil {
-		data, err := ioutil.ReadAll(tmpFile)
+		data, err := io.ReadAll(tmpFile)
 		if err == nil {
-			var designInfo response.DesignPackage
 			err = json.Unmarshal(data, &designInfo)
 			if err == nil {
 				packageName = designInfo.Package
@@ -290,11 +314,11 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 		var realName string
 		// 模板文件
 		if strings.HasPrefix(f.Name, "template/") {
-			if fileExt != ".html" && fileExt != ".json" {
+			if fileExt != ".html" && fileExt != ".json" && fileExt != ".db" {
 				continue
 			}
 			basePath := filepath.Join(config.ExecPath, "template", packageName)
-			realName = filepath.Clean(basePath + strings.TrimPrefix(f.Name, "template/"))
+			realName = filepath.Clean(basePath + "/" + strings.TrimPrefix(f.Name, "template/"))
 			if !strings.HasPrefix(realName, basePath) {
 				continue
 			}
@@ -302,7 +326,7 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 		// static
 		if strings.HasPrefix(f.Name, "static/") {
 			basePath := filepath.Join(config.ExecPath, "public/static", packageName)
-			realName = filepath.Clean(basePath + strings.TrimPrefix(f.Name, "static/"))
+			realName = filepath.Clean(basePath + "/" + strings.TrimPrefix(f.Name, "static/"))
 			if !strings.HasPrefix(realName, basePath) {
 				continue
 			}
@@ -328,6 +352,9 @@ func UploadDesignZip(file multipart.File, info *multipart.FileHeader) error {
 		reader.Close()
 		_ = newFile.Close()
 	}
+	designInfo.Package = packageName
+	designInfo.Created = time.Now().Format("2006-01-02 15:04:05")
+	_ = writeDesignInfo(&designInfo)
 
 	return nil
 }
@@ -341,7 +368,7 @@ func CreateDesignZip(packageName string) (*bytes.Buffer, error) {
 	// 读取模板
 	basePath := config.ExecPath + "template/" + packageName
 	// 尝试读取模板文件
-	files, err := ioutil.ReadDir(basePath)
+	files, err := os.ReadDir(basePath)
 	if err != nil {
 		return nil, err
 	}
@@ -358,7 +385,7 @@ func CreateDesignZip(packageName string) (*bytes.Buffer, error) {
 	}
 	// 读取静态文件
 	staticPath := config.ExecPath + "public/static/" + packageName
-	files, err = ioutil.ReadDir(staticPath)
+	files, err = os.ReadDir(staticPath)
 	if err != nil {
 		return nil, err
 	}
@@ -442,16 +469,16 @@ func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageNa
 		basePath = filepath.Join(config.ExecPath, "public/static", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return errors.New("不能越级上传模板")
+			return errors.New(config.Lang("不能越级上传模板"))
 		}
 	} else {
 		if fileExt != ".html" && fileExt != ".zip" {
-			return errors.New("请上传html模板")
+			return errors.New(config.Lang("请上传html模板"))
 		}
 		basePath = filepath.Join(config.ExecPath, "template", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return errors.New("不能越级上传模板")
+			return errors.New(config.Lang("不能越级上传模板"))
 		}
 	}
 	realPath = strings.TrimRight(realPath, "/")
@@ -504,7 +531,7 @@ func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageNa
 		info.Filename = strings.ReplaceAll(info.Filename, "\\", "")
 		realFile := filepath.Clean(realPath + "/" + info.Filename)
 		if !strings.HasPrefix(realFile, basePath) {
-			return errors.New("不能越级上传文件")
+			return errors.New(config.Lang("不能越级上传文件"))
 		}
 		// 单独文件处理
 		newFile, err := os.Create(realFile)
@@ -526,7 +553,7 @@ func UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageNa
 func GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*response.DesignFile, error) {
 	designInfo, err := GetDesignInfo(packageName, false)
 	if err != nil {
-		return nil, errors.New("模板不存在")
+		return nil, errors.New(config.Lang("模板不存在"))
 	}
 
 	filePath = strings.ReplaceAll(filePath, "..", "")
@@ -561,24 +588,24 @@ func GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*re
 		basePath = filepath.Join(config.ExecPath, "public/static", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return nil, errors.New("文件不存在")
+			return nil, errors.New(config.Lang("文件不存在"))
 		}
 	} else {
 		basePath = filepath.Join(config.ExecPath, "template", designInfo.Package)
 		realPath = filepath.Clean(basePath + "/" + filePath)
 		if !strings.HasPrefix(realPath, basePath) {
-			return nil, errors.New("文件不存在")
+			return nil, errors.New(config.Lang("文件不存在"))
 		}
 	}
 
 	_, err = os.Stat(realPath)
 	if err != nil && os.IsNotExist(err) {
-		return nil, errors.New("文件不存在")
+		return nil, errors.New(config.Lang("文件不存在"))
 	}
 
 	if !exists {
 		designFileDetail = response.DesignFile{
-			Path:    filePath,
+			Path: filePath,
 		}
 	}
 
@@ -599,13 +626,11 @@ func GetDesignTplFileDetail(packageName string, designFileDetail response.Design
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
 	}
 
-	data, err := ioutil.ReadFile(fullPath)
+	data, err := os.ReadFile(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
 	}
 
 	designFileDetail.LastMod = info.ModTime().Unix()
@@ -620,14 +645,9 @@ func GetDesignStaticFileDetail(packageName string, designFileDetail response.Des
 	info, err := os.Stat(fullPath)
 	if err != nil {
 		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
 	}
 
-	data, err := ioutil.ReadFile(fullPath)
-	if err != nil {
-		return &designFileDetail, nil
-		//return nil, errors.New("模板文件读取失败")
-	}
+	data, err := os.ReadFile(fullPath)
 
 	designFileDetail.LastMod = info.ModTime().Unix()
 	designFileDetail.Content = string(data)
@@ -655,7 +675,7 @@ func GetDesignFileHistories(packageName, filePath, fileType string) []response.D
 		histories = append(histories, response.DesignFileHistory{
 			Hash:    filepath.Base(files[i].Path),
 			LastMod: files[i].LastMod,
-			Size: files[i].Size,
+			Size:    files[i].Size,
 		})
 	}
 
@@ -676,7 +696,7 @@ func StoreDesignHistory(packageName string, filePath string, content []byte) err
 		}
 	}
 	// 开始写入文件
-	err = ioutil.WriteFile(historyPath+"/"+historyHash, content, os.ModePerm)
+	err = os.WriteFile(historyPath+"/"+historyHash, content, os.ModePerm)
 
 	return err
 }
@@ -760,7 +780,7 @@ func DeleteDesignFile(packageName, filePath, fileType string) error {
 	// 先验证文件名是否合法
 	designInfo, err := GetDesignInfo(packageName, false)
 	if err != nil {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	if fileType == "static" {
@@ -811,7 +831,7 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 	// 先验证文件名是否合法
 	designInfo, err := GetDesignInfo(req.Package, false)
 	if err != nil {
-		return errors.New("模板不存在")
+		return errors.New(config.Lang("模板不存在"))
 	}
 
 	// 先检查文件是否存在
@@ -823,7 +843,7 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 	}
 	fullPath := filepath.Clean(basePath + req.Path)
 	if !strings.HasPrefix(fullPath, basePath) {
-		return errors.New("模板文件不存在")
+		return errors.New(config.Lang("模板文件不存在"))
 	}
 
 	if req.UpdateContent {
@@ -858,7 +878,7 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 		if req.RenamePath != "" && req.RenamePath != req.Path {
 			newPath := filepath.Clean(basePath + req.RenamePath)
 			if !strings.HasPrefix(newPath, basePath) {
-				return errors.New("模板文件保存失败")
+				return errors.New(config.Lang("模板文件保存失败"))
 			}
 			req.Path = strings.TrimPrefix(newPath, basePath)
 			// 移动
@@ -903,6 +923,86 @@ func SaveDesignFile(req request.SaveDesignFileRequest) error {
 	}
 }
 
+func CopyDesignFile(req request.CopyDesignFileRequest) error {
+	if req.NewPath == "" && req.NewPath == req.Path {
+		return errors.New("新文件名和被复制文件一致，请重新填写")
+	}
+	// 先验证文件名是否合法
+	designInfo, err := GetDesignInfo(req.Package, false)
+	if err != nil {
+		return errors.New(config.Lang("模板不存在"))
+	}
+
+	// 先检查文件是否存在
+	var basePath string
+	if req.Type == "static" {
+		basePath = config.ExecPath + "public/static/" + req.Package + "/"
+	} else {
+		basePath = config.ExecPath + "template/" + req.Package + "/"
+	}
+	fullPath := filepath.Clean(basePath + req.Path)
+	if !strings.HasPrefix(fullPath, basePath) {
+		return errors.New(config.Lang("模板文件不存在"))
+	}
+
+	// 修改备注名称等
+	var designFileDetail response.DesignFile
+	var existsIndex = -1
+	if req.Type == "static" {
+		for i := range designInfo.StaticFiles {
+			if designInfo.StaticFiles[i].Path == req.Path {
+				designFileDetail = designInfo.StaticFiles[i]
+				existsIndex = i
+				break
+			}
+		}
+	} else {
+		for i := range designInfo.TplFiles {
+			if designInfo.TplFiles[i].Path == req.Path {
+				designFileDetail = designInfo.TplFiles[i]
+				existsIndex = i
+				break
+			}
+		}
+	}
+	if existsIndex != -1 {
+		// 文件已存在
+		return errors.New(config.Lang("新文件已存在，无法完成复制"))
+	}
+	// 如果进行了重命名
+	newPath := filepath.Clean(basePath + req.NewPath)
+	if !strings.HasPrefix(newPath, basePath) {
+		return errors.New(config.Lang("模板文件保存失败"))
+	}
+	req.Path = strings.TrimPrefix(newPath, basePath)
+	// 开始复制
+	oldFile, err := os.ReadFile(fullPath)
+	if err != nil {
+		return err
+	}
+	err = os.WriteFile(newPath, oldFile, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	//
+	// 写入文件
+	designFileDetail = response.DesignFile{
+		Path:    req.NewPath,
+		Remark:  req.Remark,
+		Content: "",
+		LastMod: 0,
+	}
+	if req.Type != "static" {
+		designInfo.TplFiles = append(designInfo.TplFiles, designFileDetail)
+	} else {
+		designInfo.StaticFiles = append(designInfo.StaticFiles, designFileDetail)
+	}
+	// 更新文件
+	err = writeDesignInfo(designInfo)
+
+	return err
+}
+
 func writeDesignInfo(designInfo *response.DesignPackage) error {
 	// 更新文件
 	basePath := config.ExecPath + "template/" + designInfo.Package + "/"
@@ -934,7 +1034,7 @@ func writeDesignInfo(designInfo *response.DesignPackage) error {
 	buf, err := json.MarshalIndent(designInfo, "", "\t")
 	if err == nil {
 		// 解析失败
-		err = ioutil.WriteFile(configFile, buf, os.ModePerm)
+		err = os.WriteFile(configFile, buf, os.ModePerm)
 	}
 
 	return err
@@ -949,7 +1049,7 @@ func SaveDesignTplFile(req request.SaveDesignFileRequest) error {
 	_, err := os.Stat(fullPath)
 	if err == nil {
 		// 文件存在，验证内容的md5, 如果一致，就不保存
-		oldBytes, _ := ioutil.ReadFile(fullPath)
+		oldBytes, _ := os.ReadFile(fullPath)
 		oldMd5 := library.Md5Bytes(oldBytes)
 		newMd5 := library.Md5(req.Content)
 
@@ -972,7 +1072,7 @@ func SaveDesignTplFile(req request.SaveDesignFileRequest) error {
 		}
 	}
 
-	err = ioutil.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
+	err = os.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
 	if err != nil {
 		return err
 	}
@@ -989,7 +1089,7 @@ func SaveDesignStaticFile(req request.SaveDesignFileRequest) error {
 	_, err := os.Stat(fullPath)
 	if err == nil {
 		// 文件存在，验证内容的md5, 如果一致，就不保存
-		oldBytes, _ := ioutil.ReadFile(fullPath)
+		oldBytes, _ := os.ReadFile(fullPath)
 		oldMd5 := library.Md5Bytes(oldBytes)
 		newMd5 := library.Md5(req.Content)
 
@@ -1012,7 +1112,533 @@ func SaveDesignStaticFile(req request.SaveDesignFileRequest) error {
 		}
 	}
 
-	err = ioutil.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
+	err = os.WriteFile(fullPath, []byte(req.Content), os.ModePerm)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func RestoreDesignData(packageName string) error {
+	dataPath := config.ExecPath + "template/" + packageName + "/data.db"
+	_, err := os.Stat(dataPath)
+	if err != nil {
+		return errors.New("无可初始化的数据")
+	}
+
+	zipReader, err := zip.OpenReader(dataPath)
+	if err != nil {
+		return errors.New("读取数据失败")
+	}
+	defer zipReader.Close()
+
+	settings, err := zipReader.Open("settings")
+	if err == nil {
+		restoreSingleData("settings", settings)
+	}
+	modules, err := zipReader.Open("modules")
+	if err == nil {
+		restoreSingleData("modules", modules)
+	}
+	// 需要先处理 settings 和 modules，再开始处理其他表
+	for _, f := range zipReader.File {
+		if f.FileInfo().IsDir() || f.Name == "settings" || f.Name == "modules" {
+			continue
+		}
+		reader, err := f.Open()
+		if err != nil {
+			continue
+		}
+		restoreSingleData(f.Name, reader)
+		reader.Close()
+	}
+
+	return nil
+}
+
+// restoreSingleData
+//
+//	    	anchors              []model.Anchor
+//			anchorData           []model.AnchorData
+//			archives             []model.Archive
+//			archiveData          []model.ArchiveData
+//			attachments          []model.Attachment
+//			attachmentCategories []model.AttachmentCategory
+//			categories           []model.Category
+//			comments             []model.Comment
+//			guestbooks           []model.Guestbook
+//			keywords             []model.Keyword
+//			links                []model.Link
+//			materials            []model.Material
+//			materialCategories   []model.MaterialCategory
+//			materialData         []model.MaterialData
+//			modules              []model.Module
+//			navs                 []model.Nav
+//			navTypes             []model.NavType
+//			redirects            []model.Redirect
+//			settings             []model.Setting
+//			tags                 []model.Tag
+//			tagData              []model.TagData
+//			userGroups           []model.UserGroup
+func restoreSingleData(name string, reader io.ReadCloser) {
+	data, err := io.ReadAll(reader)
+	if err != nil {
+		return
+	}
+	if name == "settings" {
+		var settings []model.Setting
+		err = json.Unmarshal(data, &settings)
+		if err != nil {
+			return
+		}
+		for _, v := range settings {
+			// 处理system,防止域名覆盖
+			if v.Key == SystemSettingKey {
+				var systemSetting config.SystemConfig
+				_ = json.Unmarshal([]byte(v.Value), &systemSetting)
+				systemSetting.TemplateName = config.JsonData.System.TemplateName
+				systemSetting.BaseUrl = config.JsonData.System.BaseUrl
+				systemSetting.MobileUrl = config.JsonData.System.MobileUrl
+				systemSetting.AdminUrl = config.JsonData.System.AdminUrl
+				buf, err := json.Marshal(systemSetting)
+				if err == nil {
+					v.Value = string(buf)
+				}
+			} else if v.Key == StorageSettingKey || v.Key == ImportApiSettingKey || v.Key == AnqiSettingKey {
+				continue
+			}
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		InitSetting()
+	} else if name == "modules" {
+		var modules []model.Module
+		err = json.Unmarshal(data, &modules)
+		if err != nil {
+			return
+		}
+		for _, v := range modules {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+			// 更新模型数据
+			v.Migrate(dao.DB, true)
+		}
+		DeleteCacheModules()
+	} else if name == "categories" {
+		var categories []model.Category
+		err = json.Unmarshal(data, &categories)
+		if err != nil {
+			return
+		}
+		for _, v := range categories {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheCategories()
+	} else if name == "archives" {
+		var archives []model.Archive
+		err = json.Unmarshal(data, &archives)
+		if err != nil {
+			return
+		}
+		for _, v := range archives {
+			// archive 还有 附加表数据
+			if v.Extra != nil {
+				module, err := GetModuleById(v.ModuleId)
+				if err == nil {
+					extraFields := map[string]interface{}{
+						"id": v.Id,
+					}
+					for ek, ev := range v.Extra {
+						extraFields[ek] = ev.Value
+					}
+					// 先检查是否存在
+					var existsId uint
+					dao.DB.Table(module.TableName).Where("`id` = ?", v.Id).Pluck("id", &existsId)
+					if existsId > 0 {
+						// 已存在
+						dao.DB.Table(module.TableName).Where("`id` = ?", v.Id).Updates(extraFields)
+					} else {
+						// 新建
+						extraFields["id"] = v.Id
+						dao.DB.Table(module.TableName).Where("`id` = ?", v.Id).Create(extraFields)
+					}
+				}
+			}
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheFixedLinks()
+	} else if name == "archiveData" {
+		var archiveData []model.ArchiveData
+		err = json.Unmarshal(data, &archiveData)
+		if err != nil {
+			return
+		}
+		for _, v := range archiveData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "tags" {
+		var tags []model.Tag
+		err = json.Unmarshal(data, &tags)
+		if err != nil {
+			return
+		}
+		for _, v := range tags {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "tagData" {
+		var tagData []model.TagData
+		err = json.Unmarshal(data, &tagData)
+		if err != nil {
+			return
+		}
+		for _, v := range tagData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "anchors" {
+		var anchors []model.Anchor
+		err = json.Unmarshal(data, &anchors)
+		if err != nil {
+			return
+		}
+		for _, v := range anchors {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "anchorData" {
+		var anchorData []model.AnchorData
+		err = json.Unmarshal(data, &anchorData)
+		if err != nil {
+			return
+		}
+		for _, v := range anchorData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "attachments" {
+		var attachments []model.Attachment
+		err = json.Unmarshal(data, &attachments)
+		if err != nil {
+			return
+		}
+		for _, v := range attachments {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "attachmentCategories" {
+		var attachmentCategories []model.AttachmentCategory
+		err = json.Unmarshal(data, &attachmentCategories)
+		if err != nil {
+			return
+		}
+		for _, v := range attachmentCategories {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "comments" {
+		var comments []model.Comment
+		err = json.Unmarshal(data, &comments)
+		if err != nil {
+			return
+		}
+		for _, v := range comments {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "guestbooks" {
+		var guestbooks []model.Guestbook
+		err = json.Unmarshal(data, &guestbooks)
+		if err != nil {
+			return
+		}
+		for _, v := range guestbooks {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "keywords" {
+		var keywords []model.Keyword
+		err = json.Unmarshal(data, &keywords)
+		if err != nil {
+			return
+		}
+		for _, v := range keywords {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "links" {
+		var links []model.Link
+		err = json.Unmarshal(data, &links)
+		if err != nil {
+			return
+		}
+		for _, v := range links {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "materials" {
+		var materials []model.Material
+		err = json.Unmarshal(data, &materials)
+		if err != nil {
+			return
+		}
+		for _, v := range materials {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "materialCategories" {
+		var materialCategories []model.MaterialCategory
+		err = json.Unmarshal(data, &materialCategories)
+		if err != nil {
+			return
+		}
+		for _, v := range materialCategories {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "materialData" {
+		var materialData []model.MaterialData
+		err = json.Unmarshal(data, &materialData)
+		if err != nil {
+			return
+		}
+		for _, v := range materialData {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "navTypes" {
+		var navTypes []model.NavType
+		err = json.Unmarshal(data, &navTypes)
+		if err != nil {
+			return
+		}
+		for _, v := range navTypes {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "navs" {
+		var navs []model.Nav
+		err = json.Unmarshal(data, &navs)
+		if err != nil {
+			return
+		}
+		for _, v := range navs {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheNavs()
+	} else if name == "redirects" {
+		var redirects []model.Redirect
+		err = json.Unmarshal(data, &redirects)
+		if err != nil {
+			return
+		}
+		for _, v := range redirects {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+		DeleteCacheRedirects()
+	} else if name == "userGroups" {
+		var userGroups []model.UserGroup
+		err = json.Unmarshal(data, &userGroups)
+		if err != nil {
+			return
+		}
+		for _, v := range userGroups {
+			dao.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else {
+		name = strings.ReplaceAll(name, "..", "")
+		name = strings.ReplaceAll(name, "\\", "")
+		realFile := filepath.Clean(config.ExecPath + "public/" + name)
+
+		_ = os.MkdirAll(filepath.Dir(realFile), os.ModePerm)
+		os.WriteFile(realFile, data, os.ModePerm)
+	}
+}
+
+func BackupDesignData(packageName string) error {
+	dataPath := config.ExecPath + "template/" + packageName + "/data.db"
+	zipFile, err := os.Create(dataPath)
+	if err != nil {
+		return err
+	}
+	defer zipFile.Close()
+	zw := zip.NewWriter(zipFile)
+	defer zw.Close()
+
+	// 每项数据不超过200条
+	var maxLimit = 200
+
+	// 开始逐个写入数据
+	var anchors []model.Anchor
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&anchors)
+	if len(anchors) > 0 {
+		_ = writeDataToZip("anchors", anchors, zw)
+		var anchorIds = make([]uint, 0, len(anchors))
+		for i := range anchors {
+			anchorIds = append(anchorIds, anchors[i].Id)
+		}
+		var anchorData []model.AnchorData
+		dao.DB.Where("`anchor_id` IN(?)", anchorIds).Find(&anchorData)
+		if len(anchorData) > 0 {
+			_ = writeDataToZip("anchorData", anchorData, zw)
+		}
+	}
+	var archives []model.Archive
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&archives)
+	if len(archives) > 0 {
+		var archiveIds = make([]uint, 0, len(archives))
+		for i := range archives {
+			archiveIds = append(archiveIds, archives[i].Id)
+			archives[i].Extra = GetArchiveExtra(archives[i].ModuleId, archives[i].Id)
+		}
+		_ = writeDataToZip("archives", archives, zw)
+		var archiveData []model.ArchiveData
+		dao.DB.Where("`id` IN(?)", archiveIds).Find(&archiveData)
+		if len(archiveData) > 0 {
+			_ = writeDataToZip("archiveData", archiveData, zw)
+		}
+	}
+	var attachments []model.Attachment
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&attachments)
+	if len(attachments) > 0 {
+		_ = writeDataToZip("attachments", attachments, zw)
+		for i := range attachments {
+			// read file from local, real file and thumb file
+			fullPath := config.ExecPath + "public/" + attachments[i].FileLocation
+			_ = writeFileToZip(attachments[i].FileLocation, fullPath, zw)
+			// thumb file
+			thumbName := filepath.Dir(attachments[i].FileLocation) + "/thumb_" + filepath.Base(attachments[i].FileLocation)
+			thumbPath := config.ExecPath + "public/" + thumbName
+			_ = writeFileToZip(thumbName, thumbPath, zw)
+		}
+	}
+	var attachmentCategories []model.AttachmentCategory
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&attachmentCategories)
+	if len(attachmentCategories) > 0 {
+		_ = writeDataToZip("attachmentCategories", attachmentCategories, zw)
+	}
+	var categories []model.Category
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&categories)
+	if len(categories) > 0 {
+		_ = writeDataToZip("categories", categories, zw)
+	}
+	var comments []model.Comment
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&comments)
+	if len(comments) > 0 {
+		_ = writeDataToZip("comments", comments, zw)
+	}
+	var guestbooks []model.Guestbook
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&guestbooks)
+	if len(guestbooks) > 0 {
+		_ = writeDataToZip("guestbooks", guestbooks, zw)
+	}
+	var keywords []model.Keyword
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&keywords)
+	if len(keywords) > 0 {
+		_ = writeDataToZip("keywords", keywords, zw)
+	}
+	var links []model.Link
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&links)
+	if len(links) > 0 {
+		_ = writeDataToZip("links", links, zw)
+	}
+	var materials []model.Material
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&materials)
+	if len(materials) > 0 {
+		_ = writeDataToZip("materials", materials, zw)
+		var materialIds = make([]uint, 0, len(materials))
+		for i := range materials {
+			materialIds = append(materialIds, materials[i].Id)
+		}
+		var materialData []model.MaterialData
+		dao.DB.Where("`material_id` IN(?)", materialIds).Find(&materialData)
+		if len(materialData) > 0 {
+			_ = writeDataToZip("materialData", materialData, zw)
+		}
+	}
+	var materialCategories []model.MaterialCategory
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&materialCategories)
+	if len(materialCategories) > 0 {
+		_ = writeDataToZip("materialCategories", materialCategories, zw)
+	}
+	var modules []model.Module
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&modules)
+	if len(modules) > 0 {
+		_ = writeDataToZip("modules", modules, zw)
+	}
+	var navs []model.Nav
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&navs)
+	if len(navs) > 0 {
+		_ = writeDataToZip("navs", navs, zw)
+	}
+	var navTypes []model.NavType
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&navTypes)
+	if len(navTypes) > 0 {
+		_ = writeDataToZip("navTypes", navTypes, zw)
+	}
+	var redirects []model.Redirect
+	dao.DB.Order("`id` desc").Limit(maxLimit).Find(&redirects)
+	if len(redirects) > 0 {
+		_ = writeDataToZip("redirects", redirects, zw)
+	}
+	var settings []model.Setting
+	dao.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey, AnqiSettingKey}).Find(&settings)
+	if len(settings) > 0 {
+		_ = writeDataToZip("settings", settings, zw)
+	}
+	var tags []model.Tag
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&tags)
+	if len(tags) > 0 {
+		_ = writeDataToZip("tags", tags, zw)
+		var tagIds = make([]uint, 0, len(tags))
+		for i := range tags {
+			tagIds = append(tagIds, tags[i].Id)
+		}
+		var tagData []model.TagData
+		dao.DB.Where("`tag_id` IN(?)", tagIds).Find(&tagData)
+		if len(tagData) > 0 {
+			_ = writeDataToZip("tagData", tagData, zw)
+		}
+	}
+	var userGroups []model.UserGroup
+	dao.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&userGroups)
+	if len(userGroups) > 0 {
+		_ = writeDataToZip("userGroups", userGroups, zw)
+	}
+	return nil
+}
+
+func writeFileToZip(name string, filePath string, zw *zip.Writer) error {
+	fullName := filePath
+	file, err := os.Open(fullName)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	info, _ := file.Stat()
+	header, err := zip.FileInfoHeader(info)
+	header.Name = name
+	if err != nil {
+		return err
+	}
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	_, _ = io.Copy(writer, file)
+	_ = file.Close()
+
+	return nil
+}
+
+func writeDataToZip(name string, data interface{}, zw *zip.Writer) error {
+	buf, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	// 全局替换 域名
+	buf = bytes.ReplaceAll(buf, []byte(config.JsonData.System.BaseUrl), []byte{})
+	if config.JsonData.PluginStorage.StorageUrl != config.JsonData.System.BaseUrl {
+		buf = bytes.ReplaceAll(buf, []byte(config.JsonData.PluginStorage.StorageUrl), []byte{})
+	}
+	size := len(buf)
+	header := &zip.FileHeader{
+		Name:               name,
+		UncompressedSize64: uint64(size),
+	}
+	header.Modified = time.Now()
+	header.SetMode(os.ModePerm)
+
+	writer, err := zw.CreateHeader(header)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(buf)
 	if err != nil {
 		return err
 	}
@@ -1025,7 +1651,7 @@ func readAllFiles(dir string) []response.DesignFile {
 		return []response.DesignFile{}
 	}
 
-	files, _ := ioutil.ReadDir(dir)
+	files, _ := os.ReadDir(dir)
 	var fileList []response.DesignFile
 	for _, file := range files {
 		// .开头的，除了 .htaccess 其他都排除
@@ -1038,10 +1664,14 @@ func readAllFiles(dir string) []response.DesignFile {
 		if file.IsDir() {
 			fileList = append(fileList, readAllFiles(fullName)...)
 		} else {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
 			fileList = append(fileList, response.DesignFile{
 				Path:    fullName,
-				LastMod: file.ModTime().Unix(),
-				Size:    file.Size(),
+				LastMod: info.ModTime().Unix(),
+				Size:    info.Size(),
 			})
 		}
 	}

@@ -2,10 +2,13 @@
 .DS_Store
 .vscode
 vendor
-config.json
+/config.json
 goblog
 /doc
 /docs
 /test
+/data
 /system
+/release
 collector.json
+keyword.json

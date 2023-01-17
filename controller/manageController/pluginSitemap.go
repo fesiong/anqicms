@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 )
 
 func PluginSitemap(ctx iris.Context) {
@@ -24,7 +23,7 @@ func PluginSitemap(ctx iris.Context) {
 }
 
 func PluginSitemapForm(ctx iris.Context) {
-	var req request.PluginSitemapConfig
+	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -38,7 +37,7 @@ func PluginSitemapForm(ctx iris.Context) {
 	config.JsonData.PluginSitemap.AutoBuild = req.AutoBuild
 	config.JsonData.PluginSitemap.Type = req.Type
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.SitemapSettingKey, config.JsonData.PluginSitemap)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -56,7 +55,7 @@ func PluginSitemapForm(ctx iris.Context) {
 }
 
 func PluginSitemapBuild(ctx iris.Context) {
-	var req request.PluginSitemapConfig
+	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -71,7 +70,7 @@ func PluginSitemapBuild(ctx iris.Context) {
 	config.JsonData.PluginSitemap.AutoBuild = req.AutoBuild
 	config.JsonData.PluginSitemap.Type = req.Type
 
-	err := config.WriteConfig()
+	err := provider.SaveSettingValue(provider.SitemapSettingKey, config.JsonData.PluginSitemap)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

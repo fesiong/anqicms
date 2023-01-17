@@ -20,7 +20,11 @@ type Archive struct {
 	CanonicalUrl string                 `json:"canonical_url"`
 	FixedLink    string                 `json:"fixed_link"`
 	Flag         string                 `json:"flag"`
-	Draft        bool                   `json:"draft"` // 是否是存草稿
+	UserId       uint                   `json:"user_id"`
+	Price        int64                  `json:"price"`
+	Stock        int64                  `json:"stock"`
+	ReadLevel    int                    `json:"read_level"` // 阅读关联 group level
+	Draft        bool                   `json:"draft"`      // 是否是存草稿
 
 	// 是否强制保存
 	ForceSave bool `json:"force_save"`
@@ -34,4 +38,12 @@ type Archive struct {
 type ArchiveReplaceRequest struct {
 	Replace        bool                    `json:"replace"`
 	ContentReplace []config.ReplaceKeyword `json:"content_replace"`
+}
+
+type ArchivesUpdateRequest struct {
+	Ids []uint `json:"ids"`
+
+	CategoryId uint   `json:"category_id"`
+	Status     uint   `json:"status"`
+	Flag       string `json:"flag"`
 }

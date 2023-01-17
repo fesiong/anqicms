@@ -10,15 +10,29 @@ import (
 )
 
 func TestCollectSingleArticle(t *testing.T) {
-	link := &response.WebLink{Url: "https://www.techug.com/post/golang-python-php-c-java-nodejs/"}
-	keyword  := &model.Keyword{Title: "golang"}
+	link := &response.WebLink{Url: "http://blog.niunan.net/blog/show/1295"}
+	keyword := &model.Keyword{Title: "PHP 报错"}
 	result, err := CollectSingleArticle(link, keyword)
 
 	if err != nil {
-		log.Println(err)
+		t.Fatal(err)
 	}
 
 	log.Printf("%#v", result.Content)
+}
+
+func TestCollectArticlesByKeyword(t *testing.T) {
+	keyword := model.Keyword{
+		Title:  "负氧离子",
+		Status: 1,
+	}
+
+	num, err := CollectArticlesByKeyword(keyword, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	log.Println(num)
 }
 
 func TestGoquery(t *testing.T) {

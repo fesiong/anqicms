@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
@@ -47,6 +47,19 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 	} else if categoryDetail != nil {
 		parentId = categoryDetail.Id
 	}
+	if parentId > 0 {
+		// fix moduleId
+		parentCategory := provider.GetCategoryFromCache(parentId)
+		if parentCategory != nil {
+			moduleId = parentCategory.ModuleId
+		}
+	}
+	if moduleId == 0 {
+		module, _ := ctx.Public["module"].(*model.Module)
+		if module != nil {
+			moduleId = module.Id
+		}
+	}
 
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")
@@ -72,7 +85,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		if offset > i {
 			continue
 		}
-		if limit > 0 && i >= (limit + offset) {
+		if limit > 0 && i >= (limit+offset) {
 			break
 		}
 		categoryList[i].Link = provider.GetUrl("category", categoryList[i], 0)
@@ -115,7 +128,7 @@ func TagCategoryListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *p
 	for arguments.Remaining() > 0 {
 		return nil, arguments.Error("Malformed categoryList-tag arguments.", nil)
 	}
-	
+
 	wrapper, endtagargs, err := doc.WrapUntilTag("endcategoryList")
 	if err != nil {
 		return nil, err

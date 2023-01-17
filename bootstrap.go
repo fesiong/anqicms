@@ -14,6 +14,7 @@ import (
 	"kandaoni.com/anqicms/tags"
 	"log"
 	"os"
+	"strings"
 	"time"
 )
 
@@ -34,7 +35,7 @@ func New(port int, loggerLevel string) *Bootstrap {
 func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 	bootstrap.Application.Use(middleware.NewRecover())
 	bootstrap.Application.Use(middleware.Cors)
-	bootstrap.Application.Options("*", middleware.Cors)
+	bootstrap.Application.Options("{path:path}", middleware.Cors)
 }
 
 func (bootstrap *Bootstrap) Serve() {
@@ -43,6 +44,12 @@ func (bootstrap *Bootstrap) Serve() {
 		_ = dao.AutoMigrateDB(dao.DB)
 		//创建管理员，会先判断有没有的。不用担心重复
 		_ = provider.InitAdmin("admin", "123456", false)
+		// 加载setting
+		provider.InitSetting()
+		// 初始化数据
+		dao.InitModelData(dao.DB)
+		// 初始化索引,异步处理
+		go provider.InitFulltext()
 	}
 
 	//开始计划任务
@@ -53,6 +60,9 @@ func (bootstrap *Bootstrap) Serve() {
 		time.Sleep(1 * time.Second)
 		link := fmt.Sprintf("http://127.0.0.1:%d", bootstrap.Port)
 		if config.JsonData.System.BaseUrl != "" {
+			if strings.Contains(config.JsonData.System.BaseUrl, "127.0.0.1") {
+				config.JsonData.System.BaseUrl = link
+			}
 			link = config.JsonData.System.BaseUrl
 		}
 		err := open.Run(link)
@@ -62,12 +72,14 @@ func (bootstrap *Bootstrap) Serve() {
 	}()
 	// 伪静态规则和模板更改变化
 	for {
-		<-config.RestartChan
-		fmt.Println("监听到路由更改")
-		bootstrap.Application.Shutdown(context.Background())
-		log.Println("进程结束，开始重启")
-		// 重启
-		go bootstrap.Start()
+		select {
+		case <-config.RestartChan:
+			fmt.Println("监听到路由更改")
+			_ = bootstrap.Shutdown()
+			log.Println("进程结束，开始重启")
+			// 重启
+			_ = provider.Restart()
+		}
 	}
 }
 
@@ -76,7 +88,9 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
-
+	if config.JsonData.System.TemplateName == "" {
+		config.JsonData.System.TemplateName = "default"
+	}
 	pugEngine := iris.Django(fmt.Sprintf("%stemplate/%s", config.ExecPath, config.JsonData.System.TemplateName), ".html")
 	// 始终动态加载
 	pugEngine.Reload(true)

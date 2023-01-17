@@ -1,0 +1,16 @@
+{
+	"template_id": 179,
+	"auth_id": 1000,
+	"name": "默认模板",
+	"package": "default",
+	"version": "1.0.1",
+	"description": "安企cms官方网站",
+	"author": "anqicms",
+	"homepage": "https://www.anqicms.com",
+	"created": "2022-08-01 09:26:46",
+	"template_type": 0,
+	"status": 0,
+	"tpl_files": null,
+	"static_files": null,
+	"preview_data": false
+}

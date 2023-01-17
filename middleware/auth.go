@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/dgrijalva/jwt-go"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/dao"
@@ -21,13 +21,13 @@ func ParseAdminToken(ctx iris.Context) {
 			// can not parse the token
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(config.JsonData.Server.TokenSecret), nil
+		return []byte(config.Server.Server.TokenSecret), nil
 	})
 
 	if tokenErr != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  "该操作需要登录，请登录后重试",
+			"msg":  config.Lang("该操作需要登录，请登录后重试"),
 		})
 		return
 	} else {
@@ -37,7 +37,7 @@ func ParseAdminToken(ctx iris.Context) {
 			if !ok || !ok2 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
-					"msg":  "该操作需要登录，请登录后重试",
+					"msg":  config.Lang("该操作需要登录，请登录后重试"),
 				})
 				return
 			}
@@ -45,7 +45,7 @@ func ParseAdminToken(ctx iris.Context) {
 			if sec < time.Now().Unix() {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
-					"msg":  "该操作需要登录，请登录后重试",
+					"msg":  config.Lang("该操作需要登录，请登录后重试"),
 				})
 				return
 			}
@@ -53,7 +53,7 @@ func ParseAdminToken(ctx iris.Context) {
 		} else {
 			ctx.JSON(iris.Map{
 				"code": config.StatusNoLogin,
-				"msg":  "该操作需要登录，请登录后重试",
+				"msg":  config.Lang("该操作需要登录，请登录后重试"),
 			})
 			return
 		}
@@ -78,6 +78,59 @@ func ParseAdminUrl(ctx iris.Context) {
 	}
 
 	ctx.Next()
+}
+
+func AdminPermission(ctx iris.Context) {
+	adminId := ctx.Values().GetUintDefault("adminId", 0)
+	if adminId == 1 {
+		ctx.Next()
+		return
+	}
+	uri := strings.TrimPrefix(ctx.RequestPath(false), "/system/api")
+
+	// 检查后台对应的前端
+	var front string
+	for _, g := range config.DefaultMenuGroups {
+		exists := false
+		for _, m := range g.Menus {
+			if m.Backend != "" && strings.HasPrefix(uri, m.Backend) {
+				front = m.Path
+				exists = true
+				break
+			}
+		}
+		if exists {
+			break
+		}
+	}
+
+	// 如果一个链接不在menu里，则不用拦截
+	if front == "" {
+		ctx.Next()
+		return
+	}
+
+	admin, err := provider.GetAdminInfoById(adminId)
+	if err == nil {
+		if admin.GroupId == 1 {
+			ctx.Next()
+			return
+		}
+		if admin.Group != nil {
+			permissions := admin.Group.Setting.Permissions
+			for i := range permissions {
+				if strings.HasPrefix(front, permissions[i]) {
+					ctx.Next()
+					return
+				}
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusNoAccess,
+		"msg":  "权限不足。Permission denied.",
+	})
 }
 
 func FrontendCheck(ctx iris.Context) {
@@ -113,7 +166,7 @@ func Check301(ctx iris.Context) {
 			urlParsed, err := url.Parse(val)
 			if err == nil && ctx.Host() == urlParsed.Host && uri == urlParsed.RequestURI() {
 				// 相同，跳过
-				val  = ""
+				val = ""
 			}
 		} else {
 			if val == uri {

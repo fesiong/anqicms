@@ -13,8 +13,8 @@ type Category struct {
 	Title          string         `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	SeoTitle       string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	Keywords       string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
-	UrlToken       string         `json:"url_token" gorm:"column:url_token;type:varchar(250) not null;default:'';index"`
-	Description    string         `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	UrlToken       string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
+	Description    string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Content        string         `json:"content" gorm:"column:content;type:longtext default null"`
 	ModuleId       uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:0;index:idx_module_id"`
 	ParentId       uint           `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
@@ -36,11 +36,11 @@ type Category struct {
 func (category *Category) BeforeSave(tx *gorm.DB) error {
 	if len(category.Images) > 0 {
 		for i := range category.Images {
-			category.Images[i] = strings.TrimPrefix(category.Images[i], config.JsonData.System.BaseUrl)
+			category.Images[i] = strings.TrimPrefix(category.Images[i], config.JsonData.PluginStorage.StorageUrl)
 		}
 	}
 	if category.Logo != "" {
-		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.System.BaseUrl)
+		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.PluginStorage.StorageUrl)
 	}
 	return nil
 }
@@ -54,20 +54,25 @@ func (category *Category) GetThumb() string {
 	//取第一张
 	if len(category.Images) > 0 {
 		for i := range category.Images {
-			category.Images[i] = config.JsonData.System.BaseUrl + category.Images[i]
+			if !strings.HasPrefix(category.Images[i], "http") && !strings.HasPrefix(category.Images[i], "//") {
+				category.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Images[i], "/")
+			}
 		}
 	}
 	if category.Logo != "" {
 		//如果是一个远程地址，则缩略图和原图地址一致
-		if strings.HasPrefix(category.Logo, "http") {
+		if strings.HasPrefix(category.Logo, "http") || strings.HasPrefix(category.Logo, "//") {
 			category.Thumb = category.Logo
 		} else {
+			category.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
 			paths, fileName := filepath.Split(category.Logo)
-			category.Thumb = config.JsonData.System.BaseUrl + paths + "thumb_" + fileName
-			category.Logo = config.JsonData.System.BaseUrl + category.Logo
+			category.Thumb = paths + "thumb_" + fileName
 		}
 	} else if config.JsonData.Content.DefaultThumb != "" {
-		category.Thumb = config.JsonData.System.BaseUrl + config.JsonData.Content.DefaultThumb
+		category.Thumb = config.JsonData.Content.DefaultThumb
+		if !strings.HasPrefix(category.Thumb, "http") && !strings.HasPrefix(category.Thumb, "//") {
+			category.Thumb = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
+		}
 	}
 
 	return category.Thumb

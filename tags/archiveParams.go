@@ -2,7 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
 	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -38,11 +38,32 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if archiveDetail != nil {
 		archiveParams := provider.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
-
 		if len(archiveParams) > 0 {
+			// if read level larger than 0, then need to check permission
+			if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
+				archiveDetail.HasOrdered = true
+			}
+			userInfo, ok := ctx.Public["userInfo"].(*model.User)
+			if ok && userInfo.Id > 0 {
+				if archiveDetail.UserId == userInfo.Id {
+					archiveDetail.HasOrdered = true
+				}
+				if archiveDetail.Price > 0 {
+					archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
+				}
+				if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
+					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+					if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
+						archiveDetail.HasOrdered = true
+					}
+				}
+			}
 			for i := range archiveParams {
 				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 					archiveParams[i].Value = archiveParams[i].Default
+				}
+				if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
+					delete(archiveParams, i)
 				}
 			}
 			if sorted {

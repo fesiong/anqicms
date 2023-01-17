@@ -118,16 +118,17 @@ func GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
 			dao.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
-				if v.Type == config.CustomFieldTypeImage {
+				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
 					value, ok := result[v.FieldName].(string)
-					if ok && value != "" && !strings.HasPrefix(value, "http") {
-						result[v.FieldName] = config.JsonData.System.BaseUrl + value
+					if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
+						result[v.FieldName] = config.JsonData.PluginStorage.StorageUrl + value
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
-					Name:    v.Name,
-					Value:   result[v.FieldName],
-					Default: v.Content,
+					Name:        v.Name,
+					Value:       result[v.FieldName],
+					Default:     v.Content,
+					FollowLevel: v.FollowLevel,
 				}
 			}
 		}
@@ -189,6 +190,12 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 	archive.Flag = req.Flag
 	oldFixedLink := archive.FixedLink
 	archive.FixedLink = req.FixedLink
+	archive.Price = req.Price
+	archive.Stock = req.Stock
+	archive.ReadLevel = req.ReadLevel
+	if req.UserId > 0 {
+		archive.UserId = req.UserId
+	}
 
 	if req.KeywordId > 0 {
 		archive.KeywordId = req.KeywordId
@@ -229,7 +236,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
-							extraFields[v.FieldName] = strings.TrimPrefix(value, config.JsonData.System.BaseUrl)
+							extraFields[v.FieldName] = strings.TrimPrefix(value, config.JsonData.PluginStorage.StorageUrl)
 						} else {
 							extraFields[v.FieldName] = extraValue["value"]
 						}
@@ -276,7 +283,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 					alt := s.AttrOr("alt", "")
 					imgUrl, err := url.Parse(src)
 					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, config.JsonData.PluginStorage.StorageUrl) {
 							//外链
 							attachment, err := DownloadRemoteImage(src, alt)
 							if err == nil {
@@ -301,7 +308,7 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 			}
 		}
 		for i, v := range archive.Images {
-			archive.Images[i] = strings.TrimPrefix(v, config.JsonData.System.BaseUrl)
+			archive.Images[i] = strings.TrimPrefix(v, config.JsonData.PluginStorage.StorageUrl)
 		}
 
 		//过滤外链
@@ -386,6 +393,15 @@ func SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
 		DeleteCacheFixedLinks()
 	}
 
+	// 尝试添加全文索引
+	AddFulltextIndex(&TinyArchive{
+		Id:       archive.Id,
+		ModuleId: archive.ModuleId,
+		Title:    archive.Title,
+		Keywords: archive.Keywords,
+		Content:  archiveData.Content,
+	})
+
 	err = SuccessReleaseArchive(archive, newPost)
 	return
 }
@@ -436,6 +452,10 @@ func RecoverArchive(archive *model.Archive) error {
 		DeleteCacheFixedLinks()
 	}
 	DeleteCacheIndex()
+	var doc TinyArchive
+	dao.DB.Table("`archives` as a").Joins("left join `archive_data` as d on a.id=d.id").Select("a.id,a.title,a.keywords,a.module_id,d.content").Where("a.`id` > ?", archive.Id).Take(&doc)
+	// 尝试添加全文索引
+	AddFulltextIndex(&doc)
 
 	return nil
 }
@@ -455,8 +475,39 @@ func DeleteArchive(archive *model.Archive) error {
 		DeleteCacheFixedLinks()
 	}
 	DeleteCacheIndex()
+	RemoveFulltextIndex(archive.Id)
 
 	return nil
+}
+
+func UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New("无可操作的文档")
+	}
+	err := dao.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumn("flag", req.Flag).Error
+
+	return err
+}
+
+func UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(config.Lang("无可操作的文档"))
+	}
+	err := dao.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("status", req.Status).Error
+	// 如果选择的有待发布的内容，则将时间更新为当前时间
+	if req.Status == config.ContentStatusOK {
+		dao.DB.Model(&model.Archive{}).Where("`id` IN (?) and `created_time` > ?", req.Ids, time.Now().Unix()).UpdateColumn("created_time", time.Now().Unix())
+	}
+	return err
+}
+
+func UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(config.Lang("无可操作的文档"))
+	}
+	err := dao.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumn("category_id", req.CategoryId).Error
+
+	return err
 }
 
 // DeleteCacheFixedLinks 固定链接
@@ -573,4 +624,32 @@ func VerifyArchiveUrlToken(urlToken string, id uint) string {
 	}
 
 	return urlToken
+}
+
+func CheckArchiveHasOrder(userId uint, archiveId uint) bool {
+	if userId == 0 || archiveId == 0 {
+		return false
+	}
+	var exist int64
+	dao.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archiveId).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+		config.OrderStatusPaid,
+		config.OrderStatusDelivering,
+		config.OrderStatusCompleted}).Count(&exist)
+	if exist > 0 {
+		return true
+	}
+
+	//var orderIds []string
+	//dao.DB.Model(&model.OrderDetail{}).Where("`user_id` = ? and `goods_id` = ?", userId, archiveId).Pluck("order_id", &orderIds)
+	//if len(orderIds) == 0 {
+	//	return false
+	//}
+	//
+	//var exist int64
+	//dao.DB.Model(&model.Order{}).Where("`order_id` IN(?) and `status` > ?", orderIds, 0).Count(&exist)
+	//if exist > 0 {
+	//	return true
+	//}
+
+	return false
 }

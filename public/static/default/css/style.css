@@ -423,14 +423,14 @@ textarea{
 }
 .menu-sidebarmenu-container .menu-item::after{
 	position: absolute;
-	content:"\f0ab";
-	font-family: "FontAwesome";
+	content:"\e602";
+	font-family: "layui-icon";
 	color:#3f90f9;
 	right: 10px;
 	top: 15px;
 }
 .side-nav-show.menu-item::after{
-	content:"\f0aa";
+	content:"\e602";
 }
 .menu-sidebarmenu-container .sub-menu{
 	display: none;
@@ -458,8 +458,8 @@ textarea{
 	background: #f9f9f9;
 }
 .menu-sidebarmenu-container .sub-menu .menu-item a::before{
-	content:"\f101";
-	font-family: "FontAwesome";
+	content:"\e65b";
+	font-family: "layui-icon";
 	margin-right:2px;
 }
 .side-nav-show .sub-menu {
@@ -835,7 +835,6 @@ textarea{
     }
     .head-phone i{
         font-size: 40px;
-        width: 15%;
         flex-shrink: 0;
         color:#b81b32;
         text-align: center;

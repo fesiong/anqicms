@@ -2,7 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/iris-contrib/pongo2"
+	"github.com/flosch/pongo2/v4"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/response"
 	"math"
 	"net/url"
@@ -26,16 +27,16 @@ type pagination struct {
 	urlPatten    string
 	maxPagesShow int
 
-	FirstPage   *pageItem
-	LastPage    *pageItem
-	PrevPage    *pageItem
-	NextPage    *pageItem
-	Pages       []*pageItem
+	FirstPage *pageItem
+	LastPage  *pageItem
+	PrevPage  *pageItem
+	NextPage  *pageItem
+	Pages     []*pageItem
 }
 
 type tagPaginationNode struct {
-	name string
-	args map[string]pongo2.IEvaluator
+	name    string
+	args    map[string]pongo2.IEvaluator
 	wrapper *pongo2.NodeWrapper
 }
 
@@ -94,7 +95,7 @@ func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 				urlQuery.Set(k, v)
 			}
 			urlPatten.RawQuery = urlQuery.Encode()
-			paginator.urlPatten = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(urlPatten.String(), "%7Bpage%7D", PagePlaceholder), "%28","("),"%29", ")")
+			paginator.urlPatten = strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(urlPatten.String(), "%7Bpage%7D", PagePlaceholder), "%28", "("), "%29", ")")
 		}
 	}
 
@@ -182,7 +183,7 @@ func makePagination(TotalItems int64, currentPage, pageSize int, urlPatten strin
 
 func (p *pagination) getFirstPage() *pageItem {
 	item := &pageItem{
-		Name: "第一页",
+		Name: config.Lang("第一页"),
 		Link: p.getPageUrl(1),
 	}
 
@@ -195,7 +196,7 @@ func (p *pagination) getFirstPage() *pageItem {
 
 func (p *pagination) getLastPage() *pageItem {
 	item := &pageItem{
-		Name: "尾页",
+		Name: config.Lang("尾页"),
 		Link: p.getPageUrl(p.TotalPages),
 	}
 
@@ -212,7 +213,7 @@ func (p *pagination) getPrevPage() *pageItem {
 	}
 
 	item := &pageItem{
-		Name: "上一页",
+		Name: config.Lang("上一页"),
 		Link: p.getPageUrl(p.CurrentPage - 1),
 	}
 
@@ -224,7 +225,7 @@ func (p *pagination) getNextPage() *pageItem {
 		return nil
 	}
 	item := &pageItem{
-		Name: "下一页",
+		Name: config.Lang("下一页"),
 		Link: p.getPageUrl(p.CurrentPage + 1),
 	}
 

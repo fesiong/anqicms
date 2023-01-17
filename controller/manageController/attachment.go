@@ -19,8 +19,9 @@ func AttachmentList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
+	q := ctx.URLParam("q")
 
-	attachments, total, err := provider.GetAttachmentList(categoryId, currentPage, pageSize)
+	attachments, total, err := provider.GetAttachmentList(categoryId, q, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -30,11 +31,11 @@ func AttachmentList(ctx iris.Context) {
 	}
 
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
+		"code":  config.StatusOK,
+		"msg":   "",
 		"total": total,
 		"limit": pageSize,
-		"data": attachments,
+		"data":  attachments,
 	})
 }
 
@@ -70,6 +71,42 @@ func AttachmentDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "图片已删除",
+	})
+}
+
+func AttachmentEdit(ctx iris.Context) {
+	var req request.Attachment
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	attach, err := provider.GetAttachmentById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	attach.FileName = req.FileName
+	err = dao.DB.Save(attach).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("修改图片名称：%d => %s", attach.Id, attach.FileName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "图片名称已修改",
 	})
 }
 

@@ -60,6 +60,21 @@ func SaveDesignInfo(ctx iris.Context) {
 		return
 	}
 
+	if config.JsonData.System.TemplateName == req.Package {
+		// 更改当前
+		if config.JsonData.System.TemplateType != req.TemplateType {
+			config.JsonData.System.TemplateType = req.TemplateType
+			err = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  err.Error(),
+				})
+				return
+			}
+		}
+	}
+
 	provider.AddAdminLog(ctx, fmt.Sprintf("修改模板信息：%s", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -89,8 +104,8 @@ func UseDesignInfo(ctx iris.Context) {
 
 	if config.JsonData.System.TemplateName != req.Package {
 		config.JsonData.System.TemplateName = req.Package
-
-		err = config.WriteConfig()
+		config.JsonData.System.TemplateType = req.TemplateType
+		err = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -99,12 +114,14 @@ func UseDesignInfo(ctx iris.Context) {
 			return
 		}
 
-		// 如果切换了模板，则重载模板
-		config.RestartChan <- true
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			// 如果切换了模板，则重载模板
+			config.RestartChan <- true
 
-		time.Sleep(2 * time.Second)
-
-		provider.DeleteCacheIndex()
+			time.Sleep(2 * time.Second)
+			provider.DeleteCacheIndex()
+		}()
 	}
 
 	provider.AddAdminLog(ctx, fmt.Sprintf("启用新模板：%s", req.Package))
@@ -116,9 +133,16 @@ func UseDesignInfo(ctx iris.Context) {
 }
 
 func DeleteDesignInfo(ctx iris.Context) {
-	packageName := ctx.URLParam("package")
+	var req request.DesignInfoRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
-	err := provider.DeleteDesignInfo(packageName)
+	err := provider.DeleteDesignInfo(req.Package)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -127,7 +151,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", packageName))
+	provider.AddAdminLog(ctx, fmt.Sprintf("删除模板：%s", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -164,7 +188,7 @@ func UploadDesignInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -174,14 +198,84 @@ func UploadDesignInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
 
+	provider.AddAdminLog(ctx, fmt.Sprintf("上传模板：%s", info.Filename))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":    "上传成功",
+		"msg":  "上传成功",
+	})
+}
+
+func BackupDesignData(ctx iris.Context) {
+	var req request.DesignDataRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.BackupDesignData(req.Package)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("备份模板数据：%s", req.Package))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "数据备份成功",
+	})
+}
+
+func RestoreDesignData(ctx iris.Context) {
+	var req request.DesignDataRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.AutoBackup {
+		// 如果用户勾选了自动备份
+		err := provider.BackupData()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+
+	err := provider.RestoreDesignData(req.Package)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.DeleteCacheIndex()
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("初始化模板数据：%s", req.Package))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "数据初始化成功",
 	})
 }
 
@@ -190,7 +284,7 @@ func UploadDesignFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
@@ -204,14 +298,17 @@ func UploadDesignFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":    err.Error(),
+			"msg":  err.Error(),
 		})
 		return
 	}
 
+	provider.DeleteCacheIndex()
+	provider.AddAdminLog(ctx, fmt.Sprintf("上传模板文件：%s", info.Filename))
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":    "上传成功",
+		"msg":  "上传成功",
 	})
 }
 
@@ -298,6 +395,7 @@ func RestoreDesignFile(ctx iris.Context) {
 
 	fileInfo, _ := provider.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
 
+	provider.DeleteCacheIndex()
 	provider.AddAdminLog(ctx, fmt.Sprintf("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
 
 	ctx.JSON(iris.Map{
@@ -336,6 +434,33 @@ func SaveDesignFile(ctx iris.Context) {
 	})
 }
 
+func CopyDesignFile(ctx iris.Context) {
+	var req request.CopyDesignFileRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := provider.CopyDesignFile(req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	provider.AddAdminLog(ctx, fmt.Sprintf("复制模板文件：%s => %s", req.Package, req.Path))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "复制成功",
+	})
+}
+
 func DeleteDesignFile(ctx iris.Context) {
 	var req request.SaveDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
@@ -363,6 +488,24 @@ func DeleteDesignFile(ctx iris.Context) {
 	})
 }
 
+func GetDesignTemplateFiles(ctx iris.Context) {
+	packageName := config.JsonData.System.TemplateName
+	templates, err := provider.GetDesignTemplateFiles(packageName)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": templates,
+	})
+}
+
 func GetDesignDocs(ctx iris.Context) {
 	docs := []response.DesignDocGroup{
 		{
@@ -370,15 +513,15 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "一些基本约定",
-					Link: "https://www.kandaoni.com/article/116",
+					Link:  "https://www.anqicms.com/help-design/116.html",
 				},
 				{
 					Title: "目录和模板",
-					Link: "https://www.kandaoni.com/article/117",
+					Link:  "https://www.anqicms.com/help-design/117.html",
 				},
 				{
 					Title: "标签和使用方法",
-					Link: "https://www.kandaoni.com/article/118",
+					Link:  "https://www.anqicms.com/help-design/118.html",
 				},
 			},
 		},
@@ -387,27 +530,27 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "系统设置标签",
-					Link: "https://www.kandaoni.com/article/73",
+					Link:  "https://www.anqicms.com/manual-normal/73.html",
 				},
 				{
 					Title: "联系方式标签",
-					Link: "https://www.kandaoni.com/article/74",
+					Link:  "https://www.anqicms.com/manual-normal/74.html",
 				},
 				{
 					Title: "万能TDK标签",
-					Link: "https://www.kandaoni.com/article/75",
+					Link:  "https://www.anqicms.com/manual-normal/75.html",
 				},
 				{
 					Title: "导航列表标签",
-					Link: "https://www.kandaoni.com/article/76",
+					Link:  "https://www.anqicms.com/manual-normal/76.html",
 				},
 				{
 					Title: "面包屑导航标签",
-					Link: "https://www.kandaoni.com/article/87",
+					Link:  "https://www.anqicms.com/manual-normal/87.html",
 				},
 				{
 					Title: "统计代码标签",
-					Link: "https://www.kandaoni.com/article/91",
+					Link:  "https://www.anqicms.com/manual-normal/91.html",
 				},
 			},
 		},
@@ -416,19 +559,19 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "分类列表标签",
-					Link: "https://www.kandaoni.com/article/77",
+					Link:  "https://www.anqicms.com/manual-category/77.html",
 				},
 				{
 					Title: "分类详情标签",
-					Link: "https://www.kandaoni.com/article/78",
+					Link:  "https://www.anqicms.com/manual-category/78.html",
 				},
 				{
 					Title: "单页列表标签",
-					Link: "https://www.kandaoni.com/article/83",
+					Link:  "https://www.anqicms.com/manual-category/83.html",
 				},
 				{
 					Title: "单页详情标签",
-					Link: "https://www.kandaoni.com/article/84",
+					Link:  "https://www.anqicms.com/manual-category/84.html",
 				},
 			},
 		},
@@ -437,31 +580,31 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "文档列表标签",
-					Link: "https://www.kandaoni.com/article/79",
+					Link:  "https://www.anqicms.com/manual-archive/79.html",
 				},
 				{
 					Title: "文档详情标签",
-					Link: "https://www.kandaoni.com/article/80",
+					Link:  "https://www.anqicms.com/manual-archive/80.html",
 				},
 				{
 					Title: "上一篇文档标签",
-					Link: "https://www.kandaoni.com/article/88",
+					Link:  "https://www.anqicms.com/manual-archive/88.html",
 				},
 				{
 					Title: "下一篇文档标签",
-					Link: "https://www.kandaoni.com/article/89",
+					Link:  "https://www.anqicms.com/manual-archive/89.html",
 				},
 				{
 					Title: "相关文档标签",
-					Link: "https://www.kandaoni.com/article/92",
+					Link:  "https://www.anqicms.com/manual-archive/92.html",
 				},
 				{
 					Title: "文档参数标签",
-					Link: "https://www.kandaoni.com/article/95",
+					Link:  "https://www.anqicms.com/manual-archive/95.html",
 				},
 				{
 					Title: "文档参数筛选标签",
-					Link: "https://www.kandaoni.com/article/96",
+					Link:  "https://www.anqicms.com/manual-archive/96.html",
 				},
 			},
 		},
@@ -470,15 +613,15 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "文档Tag列表标签",
-					Link: "https://www.kandaoni.com/article/81",
+					Link:  "https://www.anqicms.com/manual-tag/81.html",
 				},
 				{
 					Title: "Tag文档列表标签",
-					Link: "https://www.kandaoni.com/article/82",
+					Link:  "https://www.anqicms.com/manual-tag/82.html",
 				},
 				{
 					Title: "Tag详情标签",
-					Link: "https://www.kandaoni.com/article/90",
+					Link:  "https://www.anqicms.com/manual-tag/90.html",
 				},
 			},
 		},
@@ -487,19 +630,23 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "评论标列表签",
-					Link: "https://www.kandaoni.com/article/85",
+					Link:  "https://www.anqicms.com/manual-other/85.html",
 				},
 				{
 					Title: "留言表单标签",
-					Link: "https://www.kandaoni.com/article/86",
+					Link:  "https://www.anqicms.com/manual-other/86.html",
 				},
 				{
 					Title: "分页标签",
-					Link: "https://www.kandaoni.com/article/94",
+					Link:  "https://www.anqicms.com/manual-other/94.html",
 				},
 				{
 					Title: "友情链接标签",
-					Link: "https://www.kandaoni.com/article/97",
+					Link:  "https://www.anqicms.com/manual-other/97.html",
+				},
+				{
+					Title: "留言验证码使用标签",
+					Link:  "https://www.anqicms.com/manual-other/139.html",
 				},
 			},
 		},
@@ -508,35 +655,35 @@ func GetDesignDocs(ctx iris.Context) {
 			Docs: []response.DesignDoc{
 				{
 					Title: "其他辅助标签",
-					Link: "https://www.kandaoni.com/article/93",
+					Link:  "https://www.anqicms.com/manual-common/93.html",
 				},
 				{
 					Title: "更多过滤器",
-					Link: "https://www.kandaoni.com/article/98",
+					Link:  "https://www.anqicms.com/manual-common/98.html",
 				},
 				{
 					Title: "定义变量赋值标签",
-					Link: "https://www.kandaoni.com/article/99",
+					Link:  "https://www.anqicms.com/manual-common/99.html",
 				},
 				{
 					Title: "格式化时间戳标签",
-					Link: "https://www.kandaoni.com/article/100",
+					Link:  "https://www.anqicms.com/manual-common/100.html",
 				},
 				{
 					Title: "for循环遍历标签",
-					Link: "https://www.kandaoni.com/article/101",
+					Link:  "https://www.anqicms.com/manual-common/101.html",
 				},
 				{
 					Title: "移除逻辑标签占用行",
-					Link: "https://www.kandaoni.com/article/102",
+					Link:  "https://www.anqicms.com/manual-common/102.html",
 				},
 				{
 					Title: "算术运算标签",
-					Link: "https://www.kandaoni.com/article/103",
+					Link:  "https://www.anqicms.com/manual-common/103.html",
 				},
 				{
 					Title: "if逻辑判断标签",
-					Link: "https://www.kandaoni.com/article/104",
+					Link:  "https://www.anqicms.com/manual-common/104.html",
 				},
 			},
 		},

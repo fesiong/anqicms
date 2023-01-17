@@ -5,7 +5,7 @@ import (
 	"crypto/tls"
 	"github.com/parnurzeal/gorequest"
 	"golang.org/x/net/html/charset"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -135,10 +135,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 		}
 		charsetName = strings.ToLower(charsetName)
 		//log.Println("当前页面编码:", charsetName)
-		charSet, exist := CharsetMap[charsetName]
-		if !exist {
-			log.Println("未找到匹配的编码")
-		}
+		charSet, _ := CharsetMap[charsetName]
 		if charSet != nil {
 			utf8Coutent, err := DecodeToUTF8([]byte(body), charSet)
 			if err != nil {
@@ -220,7 +217,7 @@ func GetURLData(url, refer string) (*RequestData, error) {
 	if err != nil {
 		return &RequestData{}, err
 	}
-	body, _ := ioutil.ReadAll(resp.Body)
+	body, _ := io.ReadAll(resp.Body)
 
 	contentType := resp.Header.Get("Content-Type")
 	if strings.Contains(contentType, "html") {

@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"net/url"
+	"strings"
 )
 
 func Install(ctx iris.Context) {
@@ -56,6 +57,11 @@ func Install(ctx iris.Context) {
     .layui-input-block {
       flex: 1;
     }
+
+	.layui-form-text {
+		padding: 6px 0;
+		flex: 1;
+	}
 
     .layui-input {
       box-sizing: border-box;
@@ -155,7 +161,14 @@ func Install(ctx iris.Context) {
         <label class="layui-form-label">网站地址</label>
         <div class="layui-input-block">
           <input type="text" name="base_url" value="" autocomplete="off" class="layui-input">
-          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：https://www.kandaoni.com，用来生成全站的绝对地址</div>
+          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：http://www.anqicms.com，如本地测试请勿填写。</div>
+        </div>
+      </div>
+      <div class="layui-form-item">
+        <label class="layui-form-label">演示数据</label>
+        <div class="layui-form-text">
+          <label><input type="checkbox" name="preview_data" value="1" checked>安装</label>
+          <span class="layui-form-mid layui-aux-word">勾选后，将安装默认演示数据</span>
         </div>
       </div>
       <div class="layui-form-item">
@@ -167,11 +180,11 @@ func Install(ctx iris.Context) {
     </form>
   </div>
 </body>
-
 </html>`)
 }
 
 var installRunning bool
+
 func InstallForm(ctx iris.Context) {
 	if dao.DB != nil {
 		ShowMessage(ctx, "已初始化完成，无需再处理", []Button{
@@ -197,6 +210,7 @@ func InstallForm(ctx iris.Context) {
 	req.AdminUser = ctx.PostValueTrim("admin_user")
 	req.AdminPassword = ctx.PostValueTrim("admin_password")
 	req.BaseUrl = ctx.PostValueTrim("base_url")
+	req.PreviewData, _ = ctx.PostValueBool("preview_data")
 
 	if len(req.AdminPassword) < 6 {
 		ShowMessage(ctx, "请填写6位以上的管理员密码", nil)
@@ -209,13 +223,14 @@ func InstallForm(ctx iris.Context) {
 			req.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
-	config.JsonData.System.BaseUrl = req.BaseUrl
+	config.JsonData.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
+	config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 
-	config.JsonData.Mysql.Database = req.Database
-	config.JsonData.Mysql.User = req.User
-	config.JsonData.Mysql.Password = req.Password
-	config.JsonData.Mysql.Host = req.Host
-	config.JsonData.Mysql.Port = req.Port
+	config.Server.Mysql.Database = req.Database
+	config.Server.Mysql.User = req.User
+	config.Server.Mysql.Password = req.Password
+	config.Server.Mysql.Host = req.Host
+	config.Server.Mysql.Port = req.Port
 
 	err := dao.InitDB()
 	if err != nil {
@@ -243,7 +258,16 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	_ = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
+	_ = provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
 
+	if req.PreviewData {
+		_ = provider.RestoreDesignData(config.JsonData.System.TemplateName)
+	}
+	// 读入配置
+	provider.InitSetting()
+	// 初始化数据
+	dao.InitModelData(dao.DB)
 	//创建管理员
 	err = provider.InitAdmin(req.AdminUser, req.AdminPassword, true)
 	if err != nil {

@@ -72,7 +72,7 @@ func CommentPublish(ctx iris.Context) {
 			link = refer.URL
 		}
 		ShowMessage(ctx, config.Lang("发布成功"), []Button{
-			{Name: "点击继续", Link: link},
+			{Name: config.Lang("点击继续"), Link: link},
 		})
 	}
 }

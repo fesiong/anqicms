@@ -20,6 +20,12 @@ func Crond() {
 	crontab.AddFunc("30 30 8 * * *", provider.QuerySpiderInclude)
 	// 每分钟检查一次需要发布的文章
 	crontab.AddFunc("1 * * * * *", PublishPlanContents)
+	// 每分钟提现
+	crontab.AddFunc("1 * * * * *", provider.CheckWithdrawToWechat)
+	// 每分钟定期检查订单
+	crontab.AddFunc("1 * * * * *", provider.AutoCheckOrders)
+	// 每天检查VIP
+	crontab.AddFunc("@daily", provider.CleanUserVip)
 	crontab.Start()
 }
 
@@ -37,7 +43,6 @@ func cleanStatistics() {
 	//清理一个月前的记录
 	agoStamp := time.Now().AddDate(0, 0, -30).Unix()
 	dao.DB.Unscoped().Where("`created_time` < ?", agoStamp).Delete(model.Statistic{})
-
 }
 
 func PublishPlanContents() {
