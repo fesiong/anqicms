@@ -2,7 +2,7 @@
 .DS_Store
 .vscode
 vendor
-config.json
+/config.json
 goblog
 /doc
 /docs
