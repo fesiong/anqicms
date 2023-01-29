@@ -543,6 +543,7 @@ func ApiCategoryList(ctx iris.Context) {
 func ApiCommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	userId := uint(ctx.URLParamIntDefault("user_id", 0))
 	order := ctx.URLParamDefault("order", "id desc")
 	limit := 10
 	offset := 0
@@ -566,7 +567,7 @@ func ApiCommentList(ctx iris.Context) {
 		}
 	}
 
-	commentList, total, _ := currentSite.GetCommentList(archiveId, order, currentPage, limit, offset)
+	commentList, total, _ := currentSite.GetCommentList(archiveId, userId, order, currentPage, limit, offset)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
