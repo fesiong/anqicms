@@ -14,7 +14,7 @@ func PluginCommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	comments, total, err := currentSite.GetCommentList(0, "id desc", currentPage, pageSize, 0)
+	comments, total, err := currentSite.GetCommentList(0, 0, "id desc", currentPage, pageSize, 0)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

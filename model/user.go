@@ -37,6 +37,7 @@ type User struct {
 	Token         string     `json:"token" gorm:"-"`
 	Group         *UserGroup `json:"group" gorm:"-"`
 	FullAvatarURL string     `json:"full_avatar_url" gorm:"-"`
+	Link          string     `json:"link" gorm:"-"`
 }
 
 type UserGroup struct {

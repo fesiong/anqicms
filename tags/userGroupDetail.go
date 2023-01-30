@@ -3,19 +3,18 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"reflect"
 )
 
-type tagPageDetailNode struct {
+type tagUserGroupDetailNode struct {
 	args map[string]pongo2.IEvaluator
 	name string
 }
 
-func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
 	currentSite, _ := ctx.Public["website"].(*provider.Website)
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
@@ -35,59 +34,47 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	pageDetail, ok := ctx.Public["page"].(*model.Category)
+	groupDetail, ok := ctx.Public["userGroup"].(*model.UserGroup)
 	if !ok && id == 0 {
 		return nil
 	}
 	//不是同一个，重新获取
-	if pageDetail != nil && (id > 0 && pageDetail.Id != id) {
-		pageDetail = nil
+	if groupDetail != nil && (id > 0 && groupDetail.Id != id) {
+		groupDetail = nil
 	}
 
-	if pageDetail == nil && id > 0 {
-		pageDetail = currentSite.GetCategoryFromCache(id)
-		if pageDetail == nil {
+	if groupDetail == nil && id > 0 {
+		groupDetail, _ = currentSite.GetUserGroupInfo(id)
+		if groupDetail == nil {
 			return nil
 		}
 	}
-	if pageDetail == nil {
+	if groupDetail == nil {
 		return nil
 	}
 
-	if pageDetail.Type != config.CategoryTypePage {
-		return nil
-	}
-	pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
-
-	v := reflect.ValueOf(*pageDetail)
+	v := reflect.ValueOf(*groupDetail)
 
 	f := v.FieldByName(fieldName)
 
 	content := fmt.Sprintf("%v", f)
-	if content == "" && fieldName == "SeoTitle" {
-		content = pageDetail.Title
-	}
 	if node.name == "" {
 		writer.WriteString(content)
 	} else {
-		if fieldName == "Images" {
-			ctx.Private[node.name] = pageDetail.Images
-		} else {
-			ctx.Private[node.name] = content
-		}
+		ctx.Private[node.name] = content
 	}
 
 	return nil
 }
 
-func TagPageDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
+func TagUserGroupDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
 	tagNode := &tagPageDetailNode{
 		args: make(map[string]pongo2.IEvaluator),
 	}
 
 	nameToken := arguments.MatchType(pongo2.TokenIdentifier)
 	if nameToken == nil {
-		return nil, arguments.Error("pageDetail-tag needs a page field name.", nil)
+		return nil, arguments.Error("userGroupDetail-tag needs a userGroup field name.", nil)
 	}
 
 	if nameToken.Val == "with" {
@@ -104,7 +91,7 @@ func TagPageDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pon
 	tagNode.args = args
 
 	for arguments.Remaining() > 0 {
-		return nil, arguments.Error("Malformed pageDetail-tag arguments.", nil)
+		return nil, arguments.Error("Malformed userGroupDetail-tag arguments.", nil)
 	}
 
 	return tagNode, nil

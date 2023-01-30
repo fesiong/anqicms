@@ -119,6 +119,8 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("tagDetail", tags.TagTagDetailParser)
 	_ = pugEngine.RegisterTag("tagDataList", tags.TagTagDataListParser)
 	_ = pugEngine.RegisterTag("archiveFilters", tags.TagArchiveFiltersParser)
+	_ = pugEngine.RegisterTag("userDetail", tags.TagUserDetailParser)
+	_ = pugEngine.RegisterTag("userGroupDetail", tags.TagUserGroupDetailParser)
 
 	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行

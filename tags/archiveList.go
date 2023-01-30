@@ -40,6 +40,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["authorId"] != nil {
 		authorId = uint(args["authorId"].Integer())
 	}
+	if args["userId"] != nil {
+		authorId = uint(args["userId"].Integer())
+	}
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
 	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)

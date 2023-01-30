@@ -75,8 +75,15 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["type"] != nil {
 		listType = args["type"].String()
 	}
+	var authorId = uint(0)
+	if args["authorId"] != nil {
+		authorId = uint(args["authorId"].Integer())
+	}
+	if args["userId"] != nil {
+		authorId = uint(args["userId"].Integer())
+	}
 
-	commentList, total, _ := currentSite.GetCommentList(archiveId, order, currentPage, limit, offset)
+	commentList, total, _ := currentSite.GetCommentList(archiveId, authorId, order, currentPage, limit, offset)
 
 	if listType == "page" {
 		// 如果评论是在文章详情页或产品详情页，则根据具体来判断页码

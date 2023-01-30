@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -326,6 +327,9 @@ func ReRouteContext(ctx iris.Context) {
 	case "index":
 		IndexPage(ctx)
 		return
+	case "user":
+		UserPage(ctx)
+		return
 	}
 
 	//如果没有合适的路由，则报错
@@ -381,6 +385,21 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 			return matchMap, true
 		}
 		matchMap = map[string]string{}
+	}
+	// people
+	reg = regexp.MustCompile("people/([\\d]+).html")
+	match = reg.FindStringSubmatch(paramValue)
+	log.Println(match)
+	if len(match) > 1 {
+		matchMap["match"] = "user"
+		for i, v := range match {
+			key := "id"
+			if i == 0 {
+				key = "route"
+			}
+			matchMap[key] = v
+		}
+		return matchMap, true
 	}
 	//tagIndex
 	reg = regexp.MustCompile(rewritePattern.TagIndexRule)

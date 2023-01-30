@@ -200,6 +200,25 @@ func (w *Website) GetUrl(match string, data interface{}, page int) string {
 				uri = item.Link
 			}
 		}
+	case "user":
+		uri = "/people/{id}.html"
+		item, ok := data.(*model.User)
+		if !ok {
+			item2, ok2 := data.(model.User)
+			if ok2 {
+				item = &item2
+				ok = ok2
+			}
+		}
+		if ok && item != nil {
+			for _, v := range rewritePattern.PageTags {
+				if v == "id" {
+					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+				} else if v == "filename" || v == "catname" {
+					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UserName)
+				}
+			}
+		}
 	case "tagIndex":
 		uri = rewritePattern.TagIndex
 	case "tag":

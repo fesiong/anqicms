@@ -159,7 +159,7 @@ func TagArchiveDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *
 
 	nameToken := arguments.MatchType(pongo2.TokenIdentifier)
 	if nameToken == nil {
-		return nil, arguments.Error("System-tag needs a system config name.", nil)
+		return nil, arguments.Error("archiveDetail-tag needs a archive field name.", nil)
 	}
 
 	if nameToken.Val == "with" {

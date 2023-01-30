@@ -1,5 +1,12 @@
 # 更新日志
 
+## v3.0.6 `anqicms`
+
+- [新增] 新增用户页面
+- [新增] 增加用户信息、用户组信息模板标签
+- [新增] 增加文档、评论支持按用户ID筛选
+- [新增] 增加模板标签过滤器：contain、trim、trimLeft、trimRight、replace、list、fields、count、index、replace
+
 ## v3.0.5 `anqicms` `2023-01-15`
 
 - [新增] 文档详情支持图片 lazyload
