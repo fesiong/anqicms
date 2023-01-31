@@ -204,7 +204,9 @@ func (s *DjangoEngine) RegisterTag(tagName string, fn TagParser) error {
 //
 // Returns an error if something bad happens, user is responsible to catch it.
 func (s *DjangoEngine) Load() error {
-	return s.LoadStart(false)
+	_ = s.LoadStart(false)
+	// 不返回错误，否则出错了程序无法启动
+	return nil
 }
 
 func (s *DjangoEngine) LoadStart(throw bool) error {
@@ -226,6 +228,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 				if throw {
 					return err
 				}
+				return nil
 			}
 
 			if info == nil || info.IsDir() {
@@ -248,6 +251,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 				if throw {
 					return err
 				}
+				return nil
 			}
 
 			err = s.ParseTemplate(site, path, contents)
