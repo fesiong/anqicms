@@ -77,6 +77,11 @@ func initJSON() {
 	} else {
 		if err = json.Unmarshal(rawConfig, &Server); err != nil {
 			fmt.Println("Invalid Config: ", err.Error())
+			logFile, err := os.OpenFile(ExecPath+"error.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766)
+			if nil == err {
+				logFile.WriteString(fmt.Sprintln(time.Now().Format("2006-01-02 15:04:05"), "Invalid Config", err.Error()))
+				defer logFile.Close()
+			}
 			os.Exit(-1)
 		}
 	}

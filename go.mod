@@ -15,12 +15,15 @@ require (
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
 	github.com/huichen/wukong v0.0.0-20210824074240-ecbd39fa0b56
 	github.com/jinzhu/now v1.1.5
+	github.com/jlaffaye/ftp v0.1.0
 	github.com/kataras/iris/v12 v12.2.0-beta6
 	github.com/lib/pq v1.10.7
 	github.com/medivhzhan/weapp/v3 v3.6.13
+	github.com/melbahja/goph v1.3.0
 	github.com/mojocn/base64Captcha v1.3.5
 	github.com/mozillazg/go-pinyin v0.19.0
 	github.com/parnurzeal/gorequest v0.2.16
+	github.com/pkg/sftp v1.13.5
 	github.com/qiniu/go-sdk/v7 v7.13.0
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
@@ -65,6 +68,8 @@ require (
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect
+	github.com/hashicorp/errwrap v1.0.0 // indirect
+	github.com/hashicorp/go-multierror v1.1.1 // indirect
 	github.com/huichen/murmur v0.0.0-20130808212358-e0489551cf51 // indirect
 	github.com/iris-contrib/schema v0.0.6 // indirect
 	github.com/jinzhu/inflection v1.0.0 // indirect
@@ -76,6 +81,7 @@ require (
 	github.com/kataras/sitemap v0.0.6 // indirect
 	github.com/kataras/tunnel v0.0.4 // indirect
 	github.com/klauspost/compress v1.15.11 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/mailgun/raymond/v2 v2.0.47 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.9 // indirect
@@ -85,7 +91,7 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421 // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
-	github.com/pkg/errors v0.8.1 // indirect
+	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect

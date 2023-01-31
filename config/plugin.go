@@ -90,6 +90,19 @@ type PluginStorageConfig struct {
 	UpyunBucket   string `json:"upyun_bucket"`
 	UpyunOperator string `json:"upyun_operator"`
 	UpyunPassword string `json:"upyun_password"`
+
+	FTPHost     string `json:"ftp_host"`
+	FTPPort     int    `json:"ftp_port"`
+	FTPUsername string `json:"ftp_username"`
+	FTPPassword string `json:"ftp_password"`
+	FTPWebroot  string `json:"ftp_webroot"`
+
+	SSHHost       string `json:"ssh_host"`
+	SSHPort       int    `json:"ssh_port"`
+	SSHUsername   string `json:"ssh_username"`
+	SSHPassword   string `json:"ssh_password"`
+	SSHPrivateKey string `json:"ssh_private_key"` // 私钥文件名
+	SSHWebroot    string `json:"ssh_webroot"`
 }
 
 type PluginFulltextConfig struct {

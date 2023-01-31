@@ -3,8 +3,11 @@ package manageController
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -52,6 +55,19 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	currentSite.PluginStorage.UpyunOperator = req.UpyunOperator
 	currentSite.PluginStorage.UpyunPassword = req.UpyunPassword
 
+	currentSite.PluginStorage.FTPHost = req.FTPHost
+	currentSite.PluginStorage.FTPPort = req.FTPPort
+	currentSite.PluginStorage.FTPUsername = req.FTPUsername
+	currentSite.PluginStorage.FTPPassword = req.FTPPassword
+	currentSite.PluginStorage.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+
+	currentSite.PluginStorage.SSHHost = req.SSHHost
+	currentSite.PluginStorage.SSHPort = req.SSHPort
+	currentSite.PluginStorage.SSHUsername = req.SSHUsername
+	currentSite.PluginStorage.SSHPassword = req.SSHPassword
+	currentSite.PluginStorage.SSHPrivateKey = req.SSHPrivateKey
+	currentSite.PluginStorage.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+
 	err := currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -68,5 +84,64 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
+	})
+}
+
+func PluginStorageUploadFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	file, _, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+	fileName := "ssh_private_key.key"
+	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
+	buff, err := io.ReadAll(file)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "读取失败",
+		})
+		return
+	}
+
+	err = os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "目录创建失败",
+		})
+		return
+	}
+	err = os.WriteFile(filePath, buff, 0644)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "文件保存失败",
+		})
+		return
+	}
+	currentSite.PluginStorage.SSHPrivateKey = fileName
+
+	err = currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传ssh证书文件：%s", fileName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文件已上传完成",
+		"data": fileName,
 	})
 }

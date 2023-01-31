@@ -3,15 +3,23 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/jlaffaye/ftp"
+	"github.com/melbahja/goph"
+	"github.com/pkg/sftp"
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/tencentyun/cos-go-sdk-v5"
@@ -20,21 +28,28 @@ import (
 )
 
 type BucketStorage struct {
+	DataPath            string
 	PublicPath          string
 	config              *config.PluginStorageConfig
 	tencentBucketClient *cos.Client
 	aliyunBucketClient  *oss.Bucket
 	qiniuBucketClient   *qbox.Mac
 	upyunBucketClient   *upyun.UpYun
+	ftpClient           *ftp.ServerConn
+	sshClient           *sftp.Client
+	tryTimes            int
+	connectTime         int64
 }
 
 func (w *Website) GetBucket() (bucket *BucketStorage, err error) {
 	bucket = &BucketStorage{
+		DataPath:            w.DataPath,
 		PublicPath:          w.PublicPath,
 		config:              &w.PluginStorage,
 		tencentBucketClient: nil,
 		aliyunBucketClient:  nil,
 		qiniuBucketClient:   nil,
+		tryTimes:            0,
 	}
 
 	err = bucket.initBucket()
@@ -43,6 +58,7 @@ func (w *Website) GetBucket() (bucket *BucketStorage, err error) {
 }
 
 func (bs *BucketStorage) initBucket() (err error) {
+	bs.tryTimes = 0
 	if bs.config.StorageType == config.StorageTypeAliyun {
 		err = bs.initAliyunBucket()
 	} else if bs.config.StorageType == config.StorageTypeTencent {
@@ -51,6 +67,10 @@ func (bs *BucketStorage) initBucket() (err error) {
 		err = bs.initQiniuBucket()
 	} else if bs.config.StorageType == config.StorageTypeUpyun {
 		err = bs.initUpyunBucket()
+	} else if bs.config.StorageType == config.StorageTypeFTP {
+		err = bs.initFTP()
+	} else if bs.config.StorageType == config.StorageTypeSSH {
+		err = bs.initSSH()
 	} else {
 		bs.config.StorageType = config.StorageTypeLocal
 	}
@@ -146,6 +166,79 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			fmt.Println(err)
 			return "", err
 		}
+	} else if bs.config.StorageType == config.StorageTypeFTP {
+		if bs.ftpClient == nil {
+			err := bs.initFTP()
+			if err != nil {
+				return "", err
+			}
+		}
+		// 尝试创建目录
+		remoteDir := path.Dir(location)
+		dirs := strings.Split(remoteDir, "/")
+		addonDir := bs.config.FTPWebroot
+		for _, v := range dirs {
+			addonDir += "/" + v
+			//尝试切换到目录，如果切换不成功，则尝试创建
+			err := bs.ftpClient.ChangeDir(addonDir)
+			if err != nil {
+				//无法切换，则尝试创建
+				err = bs.ftpClient.MakeDir(addonDir)
+				if err != nil {
+					err = bs.initSSH()
+					if err != nil {
+						return "", err
+					}
+					err = bs.ftpClient.MakeDir(addonDir)
+					if err != nil {
+						return "", err
+					}
+				}
+			}
+		}
+		remoteFile := bs.config.FTPWebroot + "/" + strings.TrimLeft(location, "/")
+		err := bs.ftpClient.Stor(remoteFile, bytes.NewReader(buff))
+		if err != nil {
+			log.Println("尝试重连：", err)
+			err = bs.initFTP()
+			if err == nil {
+				return bs.UploadFile(location, buff)
+			}
+			return "", errors.New(fmt.Sprintf("上传文件 %s 失败：%s", remoteFile, err.Error()))
+		}
+	} else if bs.config.StorageType == config.StorageTypeSSH {
+		if bs.sshClient == nil {
+			err := bs.initSSH()
+			if err != nil {
+				return "", err
+			}
+		}
+		// 尝试创建目录
+		remoteDir := bs.config.SSHWebroot + "/" + path.Dir(location)
+		err := bs.sshClient.MkdirAll(remoteDir)
+		if err != nil {
+			log.Println(err)
+			err = bs.initSSH()
+			if err != nil {
+				return "", err
+			}
+			err = bs.sshClient.MkdirAll(remoteDir)
+			if err != nil {
+				return "", err
+			}
+		}
+		remoteFile := bs.config.SSHWebroot + "/" + strings.TrimLeft(location, "/")
+		file, err := bs.sshClient.Create(remoteFile)
+		if err != nil {
+			log.Println("尝试重连：", err.Error())
+			err = bs.initSSH()
+			if err == nil {
+				return bs.UploadFile(location, buff)
+			}
+			return "", errors.New(fmt.Sprintf("上传文件 %s 失败：%s", remoteFile, err.Error()))
+		}
+		file.Write(buff)
+		file.Close()
 	}
 
 	return location, nil
@@ -199,6 +292,105 @@ func (bs *BucketStorage) initUpyunBucket() error {
 	})
 
 	bs.upyunBucketClient = up
+
+	return nil
+}
+
+func (bs *BucketStorage) initFTP() error {
+	if bs.tryTimes >= 3 || time.Now().Unix() < bs.connectTime+120 {
+		return errors.New("重试超过3次，放弃重试")
+	}
+	var c *ftp.ServerConn
+	var err error
+	bs.tryTimes++
+	tlsConfig := &tls.Config{
+		ServerName:         bs.config.FTPHost,
+		InsecureSkipVerify: true,
+	}
+	c, err = ftp.Dial(
+		fmt.Sprintf("%s:%d", bs.config.FTPHost, bs.config.FTPPort),
+		ftp.DialWithTimeout(5*time.Second),
+		ftp.DialWithDebugOutput(os.Stdout),
+		//ftp.DialWithExplicitTLS(tlsConfig),
+		ftp.DialWithTLS(tlsConfig),
+	)
+	if err != nil {
+		log.Println("尝试TLS 链接失败，重试普通链接：", err.Error())
+		//再尝试使用普通链接
+		c, err = ftp.Dial(
+			fmt.Sprintf("%s:%d", bs.config.FTPHost, bs.config.FTPPort),
+			ftp.DialWithTimeout(5*time.Second),
+			ftp.DialWithDebugOutput(os.Stdout),
+		)
+		if err != nil {
+			return err
+		}
+	}
+
+	err = c.Login(bs.config.FTPUsername, bs.config.FTPPassword)
+	if err != nil {
+		return err
+	}
+
+	err = c.ChangeDir(bs.config.FTPWebroot)
+	if err != nil {
+		return err
+	}
+	bs.ftpClient = c
+	bs.tryTimes = 0
+	bs.connectTime = time.Now().Unix()
+
+	return nil
+}
+
+func (bs *BucketStorage) initSSH() error {
+	if bs.tryTimes >= 3 || time.Now().Unix() < bs.connectTime+120 {
+		return errors.New("重试超过3次，放弃重试")
+	}
+	var auth goph.Auth
+	var err error
+	bs.tryTimes++
+
+	if bs.config.SSHPrivateKey != "" {
+		//尝试使用私钥连接
+		filePath := fmt.Sprintf(bs.DataPath + "cert/" + bs.config.SSHPrivateKey)
+		auth, err = goph.Key(filePath, bs.config.SSHPassword)
+		if err != nil {
+			return err
+		}
+	} else {
+		auth = goph.Password(bs.config.SSHPassword)
+	}
+	client, err := goph.NewConn(&goph.Config{
+		User:     bs.config.SSHUsername,
+		Addr:     bs.config.SSHHost,
+		Port:     uint(bs.config.SSHPort),
+		Auth:     auth,
+		Timeout:  goph.DefaultTimeout,
+		Callback: ssh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		log.Println(11, err, client)
+		return err
+	}
+	sshClient, err := client.NewSftp()
+	if err != nil {
+		log.Println(22, err, sshClient)
+		return err
+	}
+	// 验证权限
+	tmpFile := bs.config.SSHWebroot + "/tmp.tmp"
+	file, err := sshClient.Create(tmpFile)
+	if err != nil {
+		log.Println(33, err)
+		return err
+	}
+	file.Close()
+	sshClient.Remove(tmpFile)
+
+	bs.sshClient = sshClient
+	bs.tryTimes = 0
+	bs.connectTime = time.Now().Unix()
 
 	return nil
 }

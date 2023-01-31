@@ -5,9 +5,11 @@ import (
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"os"
 	"strings"
+	"time"
 )
 
 var defaultDB *gorm.DB
@@ -22,6 +24,7 @@ func GetDefaultDB() *gorm.DB {
 			db, err := InitDB(&config.Server.Mysql)
 			if err != nil {
 				fmt.Println("Failed To Connect Database: ", err.Error())
+				library.DebugLog(config.ExecPath, "error.log", time.Now().Format("2006-01-02 15:04:05"), "连接数据库失败", err.Error())
 				os.Exit(-1)
 			}
 

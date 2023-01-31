@@ -198,6 +198,7 @@ func manageRoute(app *iris.Application) {
 
 			plugin.Get("/storage", manageController.PluginStorageConfig)
 			plugin.Post("/storage", manageController.PluginStorageConfigForm)
+			plugin.Post("/storage/upload", manageController.PluginStorageUploadFile)
 
 			link := plugin.Party("/link")
 			{

@@ -212,7 +212,7 @@ func (w *Website) GetCategoryTemplate(category *model.Category) *response.Catego
 		return nil
 	}
 
-	if category.Template != "" {
+	if category.Template != "" || category.DetailTemplate != "" {
 		return &response.CategoryTemplate{
 			Template:       category.Template,
 			DetailTemplate: category.DetailTemplate,

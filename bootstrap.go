@@ -7,6 +7,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/crond"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/middleware"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/route"
@@ -137,6 +138,7 @@ func (bootstrap *Bootstrap) Start() {
 
 	if err != nil {
 		log.Println(err.Error())
+		library.DebugLog(config.ExecPath, "error.log", time.Now().Format("2006-01-02 15:04:05"), "启动服务出错", err.Error())
 		os.Exit(0)
 	}
 }

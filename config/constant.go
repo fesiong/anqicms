@@ -43,6 +43,8 @@ const (
 	StorageTypeTencent = "tencent"
 	StorageTypeQiniu   = "qiniu"
 	StorageTypeUpyun   = "upyun"
+	StorageTypeFTP     = "ftp"
+	StorageTypeSSH     = "ssh"
 )
 
 // 支付状态， 0 待支付，1 已支付待发货，2 已发货待收货，3 已收货，8 申请退款中，9 已退款，-1 订单已关闭
