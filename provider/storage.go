@@ -310,7 +310,7 @@ func (bs *BucketStorage) initFTP() error {
 	c, err = ftp.Dial(
 		fmt.Sprintf("%s:%d", bs.config.FTPHost, bs.config.FTPPort),
 		ftp.DialWithTimeout(5*time.Second),
-		ftp.DialWithDebugOutput(os.Stdout),
+		//ftp.DialWithDebugOutput(os.Stdout),
 		//ftp.DialWithExplicitTLS(tlsConfig),
 		ftp.DialWithTLS(tlsConfig),
 	)
@@ -320,7 +320,7 @@ func (bs *BucketStorage) initFTP() error {
 		c, err = ftp.Dial(
 			fmt.Sprintf("%s:%d", bs.config.FTPHost, bs.config.FTPPort),
 			ftp.DialWithTimeout(5*time.Second),
-			ftp.DialWithDebugOutput(os.Stdout),
+			//ftp.DialWithDebugOutput(os.Stdout),
 		)
 		if err != nil {
 			return err
