@@ -35,6 +35,11 @@ type Archive struct {
 	ContentText string `json:"-" gorm:"-"`
 }
 
+type ArchiveImageDeleteRequest struct {
+	Id         uint `json:"id"`
+	ImageIndex int  `json:"image_index"`
+}
+
 type ArchiveReplaceRequest struct {
 	Replace        bool                    `json:"replace"`
 	ContentReplace []config.ReplaceKeyword `json:"content_replace"`

@@ -109,6 +109,17 @@ type PluginFulltextConfig struct {
 	Open bool `json:"open"`
 }
 
+type PluginTitleImageConfig struct {
+	Open      bool   `json:"open"`
+	BgImage   string `json:"bg_image"`
+	FontPath  string `json:"font_path"`
+	FontSize  int    `json:"font_size"`
+	FontColor string `json:"font_color"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Noise     bool   `json:"noise"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

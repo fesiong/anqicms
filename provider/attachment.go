@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"github.com/chai2010/webp"
 	"github.com/parnurzeal/gorequest"
+	"github.com/ultimate-guitar/go-imagequant"
 	"image"
 	"image/gif"
 	"image/jpeg"
@@ -171,7 +172,6 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		// 默认质量是90
 		quality = webp.DefaulQuality
 	}
-	buff := &bytes.Buffer{}
 
 	if w.Content.ResizeImage == 1 && width > resizeWidth && imgType != "gif" {
 		img = library.Resize(img, resizeWidth, 0)
@@ -179,40 +179,23 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		height = img.Bounds().Dy()
 	}
 	// 保存裁剪的图片
-	if imgType == "webp" {
-		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
-		//log.Println("webp:", quality)
-	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
-	} else if imgType == "png" {
-		_ = png.Encode(buff, img)
-	} else if imgType == "gif" {
-		_ = gif.Encode(buff, img, nil)
-	}
-	fileSize = int64(buff.Len())
+	buf, _ := encodeImage(img, imgType, quality)
+	fileSize = int64(len(buf))
 
 	// 上传原图
-	_, err = w.Storage.UploadFile(filePath+tmpName, buff.Bytes())
+	_, err = w.Storage.UploadFile(filePath+tmpName, buf)
 	if err != nil {
 		return nil, err
 	}
-	buff.Reset()
+
 	//生成宽度为250的缩略图
 	thumbName := "thumb_" + tmpName
 
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
-	if imgType == "webp" {
-		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
-	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality})
-	} else if imgType == "png" {
-		_ = png.Encode(buff, newImg)
-	} else if imgType == "gif" {
-		_ = gif.Encode(buff, newImg, nil)
-	}
+	buf, _ = encodeImage(newImg, imgType, quality)
 
 	// 上传原图
-	_, err = w.Storage.UploadFile(filePath+thumbName, buff.Bytes())
+	_, err = w.Storage.UploadFile(filePath+thumbName, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -378,19 +361,10 @@ func (w *Website) BuildThumb(attachment *model.Attachment) error {
 		quality = webp.DefaulQuality
 	}
 
-	buff := &bytes.Buffer{}
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
+	buf, _ := encodeImage(newImg, imgType, quality)
 
-	if imgType == "webp" {
-		_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
-	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality})
-	} else if imgType == "png" {
-		_ = png.Encode(buff, newImg)
-	} else if imgType == "gif" {
-		_ = gif.Encode(buff, newImg, nil)
-	}
-	_, err = w.Storage.UploadFile(thumbPath, buff.Bytes())
+	_, err = w.Storage.UploadFile(thumbPath, buf)
 	if err != nil {
 		return err
 	}
@@ -711,4 +685,44 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	}
 
 	return nil
+}
+
+func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
+	buff := &bytes.Buffer{}
+
+	if imgType == "webp" {
+		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
+		// 先返回，不用再compress
+		return buff.Bytes(), nil
+	} else if imgType == "jpg" {
+		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
+	} else if imgType == "png" {
+		_ = png.Encode(buff, img)
+	} else if imgType == "gif" {
+		_ = gif.Encode(buff, img, nil)
+	}
+	// 再压缩
+	buf, err := compressImage(buff.Bytes(), quality)
+	if err == nil {
+		return buf, nil
+	}
+
+	return buff.Bytes(), err
+}
+
+// compressImage 只能压缩png/jpg
+func compressImage(img []byte, quality int) ([]byte, error) {
+	speed := 1
+	if quality < 100 {
+		speed = 10 - quality/10
+	}
+	compression := png.BestCompression
+	if quality >= 90 {
+		compression = png.DefaultCompression
+	}
+	optiImage, err := imagequant.Crush(img, speed, compression)
+	if err != nil {
+		return img, err
+	}
+	return optiImage, nil
 }

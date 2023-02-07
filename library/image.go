@@ -1,9 +1,12 @@
 package library
 
 import (
+	"encoding/hex"
 	"github.com/disintegration/imaging"
 	"image"
+	"image/color"
 	"image/draw"
+	"strings"
 )
 
 func ThumbnailCrop(minWidth, minHeight int, img image.Image, thumbCrop int) image.Image {
@@ -40,4 +43,22 @@ func ResizeFill(img image.Image, width, height int) image.Image {
 	rgba := image.NewRGBA(image.Rect(0, 0, width, height))
 	draw.Draw(rgba, rgba.Bounds(), image.White, image.Point{}, draw.Src)
 	return imaging.PasteCenter(rgba, img)
+}
+
+func HEXToRGB(h string) color.Color {
+	h = strings.Trim(h, "#")
+	if h == "" {
+		return color.RGBA{}
+	}
+	if len(h) == 3 {
+		h = string(h[0] + h[0] + h[1] + h[1] + h[2] + h[2])
+	}
+	bs, err := hex.DecodeString(h)
+	if err != nil {
+		return color.RGBA{}
+	}
+	if len(bs) != 3 {
+		return color.RGBA{}
+	}
+	return color.RGBA{R: bs[0], G: bs[1], B: bs[2], A: 255}
 }

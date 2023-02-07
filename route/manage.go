@@ -138,6 +138,7 @@ func manageRoute(app *iris.Application) {
 			archive.Get("/detail", manageController.ArchiveDetail)
 			archive.Post("/detail", manageController.ArchiveDetailForm)
 			archive.Post("/delete", manageController.ArchiveDelete)
+			archive.Post("/delete/image", manageController.ArchiveDeleteImage)
 			archive.Post("/recover", manageController.ArchiveRecover)
 			archive.Post("/release", manageController.ArchiveRelease)
 			archive.Post("/recommend", manageController.UpdateArchiveRecommend)
@@ -414,6 +415,14 @@ func manageRoute(app *iris.Application) {
 			replace := plugin.Party("/replace")
 			{
 				replace.Post("/values", manageController.PluginReplaceValues)
+			}
+
+			titleImage := plugin.Party("/titleimage")
+			{
+				titleImage.Get("/config", manageController.PluginTitleImageConfig)
+				titleImage.Post("/config", manageController.PluginTitleImageConfigForm)
+				titleImage.Get("/preview", manageController.PluginTitleImagePreview)
+				titleImage.Post("/upload", manageController.PluginTitleImageUploadFile)
 			}
 		}
 	}

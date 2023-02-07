@@ -127,6 +127,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 				})
 				return
 			}
+			dbSite.RootPath = req.RootPath
 		}
 
 		current := provider.GetWebsite(dbSite.Id)

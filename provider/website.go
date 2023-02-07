@@ -45,22 +45,23 @@ type Website struct {
 	Contact config.ContactConfig `json:"contact"`
 	Safe    config.SafeConfig    `json:"safe"`
 	//plugin
-	PluginPush        config.PluginPushConfig      `json:"plugin_push"`
-	PluginSitemap     config.PluginSitemapConfig   `json:"plugin_sitemap"`
-	PluginRewrite     config.PluginRewriteConfig   `json:"plugin_rewrite"`
-	PluginAnchor      config.PluginAnchorConfig    `json:"plugin_anchor"`
-	PluginGuestbook   config.PluginGuestbookConfig `json:"plugin_guestbook"`
-	PluginUploadFiles []config.PluginUploadFile    `json:"plugin_upload_file"`
-	PluginSendmail    config.PluginSendmail        `json:"plugin_sendmail"`
-	PluginImportApi   config.PluginImportApiConfig `json:"plugin_import_api"`
-	PluginStorage     config.PluginStorageConfig   `json:"plugin_storage"`
-	PluginPay         config.PluginPayConfig       `json:"plugin_pay"`
-	PluginWeapp       config.PluginWeappConfig     `json:"plugin_weapp"`
-	PluginWechat      config.PluginWeappConfig     `json:"plugin_wechat"`
-	PluginRetailer    config.PluginRetailerConfig  `json:"plugin_retailer"`
-	PluginUser        config.PluginUserConfig      `json:"plugin_user"`
-	PluginOrder       config.PluginOrderConfig     `json:"plugin_order"`
-	PluginFulltext    config.PluginFulltextConfig  `json:"plugin_fulltext"`
+	PluginPush        config.PluginPushConfig       `json:"plugin_push"`
+	PluginSitemap     config.PluginSitemapConfig    `json:"plugin_sitemap"`
+	PluginRewrite     config.PluginRewriteConfig    `json:"plugin_rewrite"`
+	PluginAnchor      config.PluginAnchorConfig     `json:"plugin_anchor"`
+	PluginGuestbook   config.PluginGuestbookConfig  `json:"plugin_guestbook"`
+	PluginUploadFiles []config.PluginUploadFile     `json:"plugin_upload_file"`
+	PluginSendmail    config.PluginSendmail         `json:"plugin_sendmail"`
+	PluginImportApi   config.PluginImportApiConfig  `json:"plugin_import_api"`
+	PluginStorage     config.PluginStorageConfig    `json:"plugin_storage"`
+	PluginPay         config.PluginPayConfig        `json:"plugin_pay"`
+	PluginWeapp       config.PluginWeappConfig      `json:"plugin_weapp"`
+	PluginWechat      config.PluginWeappConfig      `json:"plugin_wechat"`
+	PluginRetailer    config.PluginRetailerConfig   `json:"plugin_retailer"`
+	PluginUser        config.PluginUserConfig       `json:"plugin_user"`
+	PluginOrder       config.PluginOrderConfig      `json:"plugin_order"`
+	PluginFulltext    config.PluginFulltextConfig   `json:"plugin_fulltext"`
+	PluginTitleImage  config.PluginTitleImageConfig `json:"plugin_title_image"`
 
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson
@@ -144,6 +145,13 @@ func InitWebsite(mw *model.Website) {
 		_ = AutoMigrateDB(db)
 		w.InitSetting()
 		w.InitModelData()
+		// fix BaseUri
+		parsed, err := url.Parse(w.System.BaseUrl)
+		if err == nil {
+			if parsed.RequestURI() != "/" {
+				w.BaseURI = parsed.RequestURI()
+			}
+		}
 	}
 	if w.Initialed {
 		w.InitBucket()

@@ -9,9 +9,11 @@ require (
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v0.0.0-20220610011842-69c10b41e5e1
 	github.com/fatih/structs v1.1.0
+	github.com/flopp/go-findfont v0.1.0
 	github.com/flosch/pongo2/v6 v6.0.0
 	github.com/go-pay/gopay v1.5.85
 	github.com/golang-jwt/jwt/v4 v4.4.2
+	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
 	github.com/huichen/wukong v0.0.0-20210824074240-ecbd39fa0b56
 	github.com/jinzhu/now v1.1.5
@@ -29,6 +31,7 @@ require (
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.39
+	github.com/ultimate-guitar/go-imagequant v0.0.0-20201216103743-29e607cca148
 	github.com/upyun/go-sdk/v3 v3.0.3
 	golang.org/x/crypto v0.1.0
 	golang.org/x/image v0.1.0
@@ -63,7 +66,6 @@ require (
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/flosch/pongo2/v4 v4.0.2 // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
-	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect

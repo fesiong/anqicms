@@ -6,6 +6,9 @@
 - [新增] 增加用户信息、用户组信息模板标签
 - [新增] 增加文档、评论支持按用户ID筛选
 - [新增] 增加模板标签过滤器：contain、trim、trimLeft、trimRight、replace、list、fields、count、index、replace
+- [新增] 增加 PNG/JPEG 图片压缩器，可以大幅减少图片大小。
+- [新增] 增加生成简单的标题图片功能
+- [修复] 修复安装到二级目录后，登录不正常的问题
 
 ## v3.0.5 `anqicms` `2023-01-15`
 

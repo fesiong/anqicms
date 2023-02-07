@@ -297,6 +297,45 @@ func ArchiveDelete(ctx iris.Context) {
 	})
 }
 
+func ArchiveDeleteImage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ArchiveImageDeleteRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	archive, err := currentSite.GetUnscopedArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if len(archive.Images) > req.ImageIndex {
+		archive.Images = append(archive.Images[:req.ImageIndex], archive.Images[req.ImageIndex+1:]...)
+	} else {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "图片不存在",
+		})
+		return
+	}
+
+	currentSite.DB.Save(archive)
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档图片：%d => %s", archive.Id, archive.Title))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章图片已删除",
+	})
+}
+
 func UpdateArchiveRecommend(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchivesUpdateRequest

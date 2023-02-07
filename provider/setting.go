@@ -35,6 +35,7 @@ const (
 	UserSettingKey        = "user"
 	OrderSettingKey       = "order"
 	FulltextSettingKey    = "fulltext"
+	TitleImageSettingKey  = "title_image"
 	AnqiSettingKey        = "anqi"
 
 	CollectorSettingKey = "collector"
@@ -65,6 +66,7 @@ func (w *Website) InitSetting() {
 	w.LoadUserSetting()
 	w.LoadOrderSetting()
 	w.LoadFulltextSetting()
+	w.LoadTitleImageSetting()
 	w.LoadAnqiUser()
 
 	w.LoadCollectorSetting()
@@ -266,6 +268,25 @@ func (w *Website) LoadFulltextSetting() {
 	value := w.GetSettingValue(FulltextSettingKey)
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginFulltext)
+	}
+}
+
+func (w *Website) LoadTitleImageSetting() {
+	value := w.GetSettingValue(TitleImageSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &w.PluginTitleImage)
+	}
+	if w.PluginTitleImage.Width == 0 {
+		w.PluginTitleImage.Width = 800
+	}
+	if w.PluginTitleImage.Height == 0 {
+		w.PluginTitleImage.Height = 600
+	}
+	if w.PluginTitleImage.FontSize == 0 {
+		w.PluginTitleImage.FontSize = 32
+	}
+	if w.PluginTitleImage.FontColor == "" {
+		w.PluginTitleImage.FontColor = "#ffffff"
 	}
 }
 
