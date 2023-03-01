@@ -91,6 +91,8 @@ var ExecPath string
 var Server ServerJson
 var AnqiUser AnqiUserConfig
 
+var GoogleValid bool // can visit google or not
+
 // RestartChan true to restart app, false to reload template
 var RestartChan = make(chan bool, 1)
 var Languages = map[string]map[string]string{}

@@ -739,7 +739,7 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*librar
 	query.Set("type", transferType)
 	query.Set("last_id", fmt.Sprintf("%d", lastId))
 
-	resp, err := library.GetURLData(remoteUrl+query.Encode(), "")
+	resp, err := library.GetURLData(remoteUrl+query.Encode(), "", 100)
 	if err != nil {
 		return nil, err
 	}

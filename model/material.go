@@ -14,6 +14,8 @@ type Material struct {
 	Title         string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	CategoryId    uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
 	Content       string `json:"content" gorm:"column:content;type:longtext default null"`
+	OriginUrl     string `json:"origin_url" gorm:"column:origin_url;type:varchar(255) not null;default:'';index"`
+	Keyword       string `json:"keyword" gorm:"column:keyword;type:varchar(250) not null;default:'';index"`
 	Status        uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	AutoUpdate    uint   `json:"auto_update" gorm:"column:auto_update;type:tinyint(1) unsigned not null;default:0"`
 	UseCount      uint   `json:"use_count" gorm:"column:use_count;type:int(10) unsigned not null;default:0"`

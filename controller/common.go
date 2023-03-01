@@ -10,7 +10,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -389,7 +388,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	// people
 	reg = regexp.MustCompile("people/([\\d]+).html")
 	match = reg.FindStringSubmatch(paramValue)
-	log.Println(match)
+
 	if len(match) > 1 {
 		matchMap["match"] = "user"
 		for i, v := range match {

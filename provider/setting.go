@@ -335,7 +335,6 @@ func (w *Website) LoadCollectorSetting() {
 	w.CollectorConfig.FromWebsite = collector.FromWebsite
 	w.CollectorConfig.CollectMode = collector.CollectMode
 	w.CollectorConfig.SaveType = collector.SaveType
-	w.CollectorConfig.FromEngine = collector.FromEngine
 	w.CollectorConfig.Language = collector.Language
 	w.CollectorConfig.InsertImage = collector.InsertImage
 	w.CollectorConfig.Images = collector.Images
@@ -438,9 +437,8 @@ func (w *Website) LoadKeywordSetting() {
 	}
 
 	w.KeywordConfig.AutoDig = keyword.AutoDig
-	w.KeywordConfig.FromEngine = keyword.FromEngine
-	w.KeywordConfig.FromWebsite = keyword.FromWebsite
 	w.KeywordConfig.Language = keyword.Language
+	w.KeywordConfig.MaxCount = keyword.MaxCount
 
 	for _, v := range keyword.TitleExclude {
 		exists := false

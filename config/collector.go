@@ -5,7 +5,6 @@ type CollectorJson struct {
 	ErrorTimes         int              `json:"error_times"`  //预留
 	Channels           int              `json:"channels"`     //预留
 	CollectMode        int              `json:"collect_mode"` // 0: 采集, 1: 组合
-	FromEngine         string           `json:"from_engine"`
 	Language           string           `json:"language"`     // zh|en|cr
 	InsertImage        bool             `json:"insert_image"` // 是否插入图片
 	Images             []string         `json:"images"`

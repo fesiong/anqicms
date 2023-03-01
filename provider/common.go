@@ -1,5 +1,11 @@
 package provider
 
+import (
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"log"
+)
+
 const (
 	IndexCacheKey = "index"
 
@@ -29,4 +35,16 @@ func (w *Website) GetIndexCache(ua string) []byte {
 func (w *Website) DeleteCacheIndex() {
 	w.MemCache.Delete(IndexCacheKey + UserAgentPc)
 	w.MemCache.Delete(IndexCacheKey + UserAgentMobile)
+}
+
+func init() {
+	// check what if this server can visit google
+	go func() {
+		resp, err := library.GetURLData("https://www.google.com", "", 5)
+		if err != nil {
+			config.GoogleValid = true
+		} else {
+			log.Println("google-status", resp.StatusCode)
+		}
+	}()
 }

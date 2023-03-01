@@ -19,7 +19,7 @@ func (w *Website) GetWechatServer(focus bool) *wechat.Server {
 		Secret:         w.PluginWechat.AppSecret,
 		EncodingAESKey: w.PluginWechat.EncodingAESKey,
 		AppType:        0,
-		DateFormat:     "XML",
+		DataFormat:     "XML",
 	}
 
 	if w.wechatServer == nil || focus {

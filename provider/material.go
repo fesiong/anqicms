@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 )
 
 func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, pageSize int) ([]*model.Material, int64, error) {
@@ -345,4 +346,37 @@ func (w *Website) SaveMaterials(materials []*request.PluginMaterial) error {
 	}
 
 	return nil
+}
+
+func (w *Website) GetMaterialByTitle(title string) (*model.Material, error) {
+	// title 可能包含标签
+	title = library.StripTags(title)
+	// 取前30个字符
+	if utf8.RuneCountInString(title) > 30 {
+		title = string([]rune(title)[:30])
+	}
+	var material model.Material
+	err := w.DB.Where("`title` like ?", title+"%").Take(&material).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &material, nil
+}
+
+func (w *Website) GetMaterialByOriginUrl(originUrl string) (*model.Material, error) {
+	var material model.Material
+	err := w.DB.Where("`origin_url` = ?", originUrl).Take(&material).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &material, nil
+}
+
+func (w *Website) GetMaterialsByKeyword(keyword string) []*model.Material {
+	var materials []*model.Material
+	w.DB.Where("`keyword` = ?", keyword).Find(&materials)
+
+	return materials
 }

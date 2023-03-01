@@ -56,7 +56,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 		options = &Options{
 			Method:    "GET",
 			Timeout:   10,
-			UserAgent: getUserAgent(false),
+			UserAgent: GetUserAgent(false),
 		}
 	}
 	if options.Timeout == 0 {
@@ -100,7 +100,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	}
 
 	if options.UserAgent == "" {
-		options.UserAgent = getUserAgent(options.IsMobile)
+		options.UserAgent = GetUserAgent(options.IsMobile)
 	}
 	req = req.Set("User-Agent", options.UserAgent)
 
@@ -198,7 +198,7 @@ func getPageCharset(content, contentType string) (charSet string, err error) {
 	return
 }
 
-func getUserAgent(isMobile bool) string {
+func GetUserAgent(isMobile bool) string {
 	if isMobile {
 		return "Mozilla/5.0 (iPhone; CPU iPhone OS 10_3_1 like Mac OS X) AppleWebKit/603.1.30 (KHTML, like Gecko) Version/10.0 Mobile/14E304 Safari/602.1"
 	}
@@ -206,14 +206,19 @@ func getUserAgent(isMobile bool) string {
 	return "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/97.0.4692.71 Safari/537.36"
 }
 
-func GetURLData(url, refer string) (*RequestData, error) {
+func GetURLData(url, refer string, timeout int) (*RequestData, error) {
 	//log.Println(url)
 	client := &http.Client{}
+	if timeout > 0 {
+		client.Timeout = time.Duration(timeout) * time.Second
+	} else if timeout < 0 {
+		client.Timeout = 10 * time.Second
+	}
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("User-Agent", getUserAgent(false))
+	req.Header.Set("User-Agent", GetUserAgent(false))
 	req.Header.Set("Referer", refer)
 
 	resp, err := client.Do(req)
