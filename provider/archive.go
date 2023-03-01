@@ -341,8 +341,8 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	}
 	// 限制数量
 	descRunes := []rune(archive.Description)
-	if len(descRunes) > 250 {
-		archive.Description = string(descRunes[:250])
+	if len(descRunes) > 1000 {
+		archive.Description = string(descRunes[:1000])
 	}
 	for i, v := range archive.Images {
 		archive.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)

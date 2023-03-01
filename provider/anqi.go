@@ -313,8 +313,8 @@ func (w *Website) AnqiPseudoArticle(archive *model.Archive) error {
 		return errors.New(result.Msg)
 	}
 	archive.Title = result.Data.Title
-	if len(result.Data.Content) > 250 {
-		archive.Description = string([]rune(result.Data.Content)[:250])
+	if len(result.Data.Content) > 1000 {
+		archive.Description = string([]rune(result.Data.Content)[:1000])
 	} else if len(result.Data.Content) > 0 {
 		archive.Description = result.Data.Content
 	}
@@ -345,8 +345,8 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 		return errors.New(result.Msg)
 	}
 	archive.Title = result.Data.Title
-	if len(result.Data.Content) > 250 {
-		archive.Description = string([]rune(result.Data.Content)[:250])
+	if len(result.Data.Content) > 1000 {
+		archive.Description = string([]rune(result.Data.Content)[:1000])
 	} else if len(result.Data.Content) > 0 {
 		archive.Description = result.Data.Content
 	}

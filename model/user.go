@@ -43,7 +43,7 @@ type User struct {
 type UserGroup struct {
 	Model
 	Title          string           `json:"title" gorm:"column:title;type:varchar(32) not null;default:''"`
-	Description    string           `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Description    string           `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Level          int              `json:"level" gorm:"column:level;type:int(10) not null;default:0"` // group level
 	Status         int              `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
 	Price          int64            `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`

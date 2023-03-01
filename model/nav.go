@@ -14,7 +14,7 @@ type Nav struct {
 	Model
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	SubTitle    string `json:"sub_title" gorm:"column:sub_title;type:varchar(250) not null;default:''"`
-	Description string `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Description string `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	ParentId    uint   `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
 	NavType     uint   `json:"nav_type" gorm:"column:nav_type;type:int(10) unsigned not null;default:0;index:idx_nav_type"`
 	PageId      uint   `json:"page_id" gorm:"column:page_id;type:int(10) unsigned not null;default:0;index:idx_page_id"`

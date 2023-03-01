@@ -23,7 +23,7 @@ type Admin struct {
 type AdminGroup struct {
 	Model
 	Title       string       `json:"title" gorm:"column:title;type:varchar(32) not null;default:''"`
-	Description string       `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Description string       `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Status      int          `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
 	Setting     GroupSetting `json:"setting" gorm:"setting;type:text DEFAULT NULL; COMMENT '配置信息'"` //配置
 }
