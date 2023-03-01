@@ -297,7 +297,7 @@ func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (i
 		}
 
 		//预判标题是否相关
-		if !w.ContainKeywords(link.Name, keyword.Title) {
+		if !ContainKeywords(link.Name, keyword.Title) {
 			continue
 		}
 
