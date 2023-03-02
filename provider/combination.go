@@ -85,17 +85,20 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		content[index] = "<img src='" + img + "'/>"
 		num++
 	}
-
-	if w.CollectorConfig.CategoryId == 0 {
-		var category model.Category
-		w.DB.Where("module_id = 1").Take(&category)
-		w.CollectorConfig.CategoryId = category.Id
+	categoryId := keyword.CategoryId
+	if categoryId == 0 {
+		if w.CollectorConfig.CategoryId == 0 {
+			var category model.Category
+			w.DB.Where("module_id = 1").Take(&category)
+			w.CollectorConfig.CategoryId = category.Id
+		}
+		categoryId = w.CollectorConfig.CategoryId
 	}
 
 	archive := request.Archive{
 		Title:      title,
 		ModuleId:   0,
-		CategoryId: w.CollectorConfig.CategoryId,
+		CategoryId: categoryId,
 		Keywords:   keyword.Title,
 		Content:    strings.Join(content, "\n"),
 		KeywordId:  keyword.Id,
