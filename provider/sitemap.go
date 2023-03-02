@@ -193,7 +193,7 @@ type SitemapGenerator struct {
 	Urls     []SitemapUrl `xml:"url"`
 	Type     string       `xml:"-"`
 	FilePath string       `xml:"-"`
-	BaseUrl  string       `json:"-"`
+	BaseUrl  string       `xml:"-"`
 }
 
 type SitemapIndexGenerator struct {
@@ -202,7 +202,7 @@ type SitemapIndexGenerator struct {
 	Type     string       `xml:"-"`
 	Sitemaps []SitemapUrl `xml:"sitemap"`
 	FilePath string       `xml:"-"`
-	BaseUrl  string       `json:"-"`
+	BaseUrl  string       `xml:"-"`
 }
 
 func NewSitemapGenerator(sitemapType string, filePath, baseUrl string, load bool) *SitemapGenerator {
