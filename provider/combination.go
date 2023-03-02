@@ -149,9 +149,27 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 	if err != nil {
 		return nil, err
 	}
+	// 分析360隐藏的标签
+	re, _ := regexp.Compile(`(?s)<style.*?>(.*?)</style>`)
+	styleMatches := re.FindAllString(body, -1)
+	var hiddenClass = map[string]struct{}{}
+	re1, _ := regexp.Compile(`\.[a-z0-9]+`)
+	for _, match := range styleMatches {
+		lines := strings.Split(match, "\n")
+		for _, x := range lines {
+			if strings.Contains(x, "visibility:hidden") || strings.Contains(x, "display:none") {
+				x2 := strings.SplitN(x, "{", 2)
+				m := re1.FindAllString(x2[0], -1)
+				for _, v := range m {
+					hiddenClass[v] = struct{}{}
+				}
+			}
+		}
+	}
+	// end
 	// 提取链接
 	var links []*model.Material
-	re, _ := regexp.Compile(`(?s)<a.*?href="(/q/.*?)".*?>(.*?)</a>`)
+	re, _ = regexp.Compile(`(?s)<a.*?href="(/q/.*?)".*?>(.*?)</a>`)
 	matches := re.FindAllStringSubmatch(body, -1)
 	var existLinks = map[string]struct{}{}
 	var count int
@@ -161,8 +179,15 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 		}
 		// 如果标题不合格，则要抛弃
 		// 360 会添加随机字符
-		re2, _ := regexp.Compile(`<[a-z0-9]+\sclass=".+?".*?>.*?</.+?>`)
-		title := re2.ReplaceAllString(v[2], "")
+		re2, _ := regexp.Compile(`<[a-z0-9]+ class="([^"]+)"[^>]*>[^<]+?</[a-z0-9]+>`)
+		title := re2.ReplaceAllStringFunc(v[2], func(s string) string {
+			match := re2.FindStringSubmatch(s)
+			if _, ok := hiddenClass[match[1]]; ok {
+				return ""
+			}
+			return s
+		})
+		//end
 		title = strings.ReplaceAll(library.StripTags(title), "\n", "")
 		if _, ok := existLinks[v[1]]; ok {
 			continue
@@ -343,6 +368,26 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 	if err != nil {
 		return nil, false, err
 	}
+	// 分析360隐藏的标签
+	var hiddenClass = map[string]struct{}{}
+	if strings.Contains(link, "wenda.so.com") {
+		re, _ := regexp.Compile(`(?s)<style.*?>(.*?)</style>`)
+		styleMatches := re.FindAllString(body, -1)
+		re1, _ := regexp.Compile(`\.[a-z0-9]+`)
+		for _, match := range styleMatches {
+			lines := strings.Split(match, "\n")
+			for _, x := range lines {
+				if strings.Contains(x, "visibility:hidden") || strings.Contains(x, "display:none") {
+					x2 := strings.SplitN(x, "{", 2)
+					m := re1.FindAllString(x2[0], -1)
+					for _, v := range m {
+						hiddenClass[v] = struct{}{}
+					}
+				}
+			}
+		}
+	}
+	// end
 	htmlR := strings.NewReader(body)
 	doc, err := goquery.NewDocumentFromReader(htmlR)
 	if err != nil {
@@ -360,6 +405,16 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 		text2, _ := doc.Find(".answer-content").Eq(0).Html()
 
 		item.Content = text1 + text2
+		// 360 会添加随机字符
+		re2, _ := regexp.Compile(`<[a-z0-9]+ class="([^"]+)"[^>]*>[^<]+?</[a-z0-9]+>`)
+		item.Content = re2.ReplaceAllStringFunc(item.Content, func(s string) string {
+			match := re2.FindStringSubmatch(s)
+			if _, ok := hiddenClass[match[1]]; ok {
+				return ""
+			}
+			return s
+		})
+		//end
 	} else if strings.Contains(link, "zhidao.baidu.com") {
 		item.Content = doc.Find(".rich-content-container").Eq(0).Text()
 	} else if strings.Contains(link, "wenwen.sogou.com") || strings.Contains(link, "www.sogou.com") {
