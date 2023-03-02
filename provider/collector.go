@@ -224,16 +224,16 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	}
 
 	archive.KeywordId = keyword.Id
-	archive.CategoryId = keyword.CategoryId
-	if archive.CategoryId == 0 && w.CollectorConfig.CategoryId > 0 {
-		archive.CategoryId = w.CollectorConfig.CategoryId
+	categoryId := keyword.CategoryId
+	if categoryId == 0 {
+		if w.CollectorConfig.CategoryId == 0 {
+			var category model.Category
+			w.DB.Where("module_id = 1").Take(&category)
+			w.CollectorConfig.CategoryId = category.Id
+		}
+		categoryId = w.CollectorConfig.CategoryId
 	}
-	// 必须有一个分类，如果都没有，则获取第一个
-	if archive.CategoryId == 0 {
-		var category model.Category
-		w.DB.Where("module_id = 1").Take(&category)
-		archive.CategoryId = category.Id
-	}
+	archive.CategoryId = categoryId
 	//log.Println("draft:", w.CollectorConfig.SaveType)
 	// 如果不是正常发布，则存到草稿
 	if w.CollectorConfig.SaveType == 0 {
