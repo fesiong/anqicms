@@ -6,9 +6,15 @@ import (
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
+	"log"
+	"net"
+	"net/url"
+	"os"
 	"strings"
 	"time"
 )
@@ -454,5 +460,169 @@ func AdminMenus(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": config.DefaultMenuGroups,
+	})
+}
+
+func FindPasswordChooseWay(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.FindPasswordChooseRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 支持2种方式找回，file 文件上传验证, dns 解析验证
+	if req.Way != config.PasswordFindWayFile && req.Way != config.PasswordFindWayDNS {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "无效的验证方式",
+		})
+		return
+	}
+	var host = ""
+	if req.Way == config.PasswordFindWayDNS {
+		parsed, err := url.Parse(currentSite.System.BaseUrl)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "域名解析失败",
+			})
+			return
+		}
+
+		host = "_anqicms" + "." + parsed.Hostname()
+	}
+
+	if currentSite.FindPasswordInfo == nil {
+		currentSite.FindPasswordInfo = &response.FindPasswordInfo{
+			Token: library.Md5(config.Server.Server.TokenSecret + fmt.Sprintf("%d", time.Now().UnixNano())),
+		}
+	} else {
+		currentSite.FindPasswordInfo.Timer.Stop()
+	}
+	currentSite.FindPasswordInfo.Host = host
+	currentSite.FindPasswordInfo.Way = req.Way
+	currentSite.FindPasswordInfo.End = time.Now().Add(59 * time.Minute)
+	currentSite.FindPasswordInfo.Timer = time.AfterFunc(1*time.Hour, func() {
+		currentSite.FindPasswordInfo = nil
+	})
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": currentSite.FindPasswordInfo,
+	})
+}
+
+func FindPasswordVerify(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	if currentSite.FindPasswordInfo == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "验证已失效",
+		})
+		return
+	}
+
+	if currentSite.FindPasswordInfo.Way == config.PasswordFindWayFile {
+		filePath := currentSite.PublicPath + currentSite.FindPasswordInfo.Token + ".txt"
+		log.Println(filePath)
+		buf, err := os.ReadFile(filePath)
+		text := strings.TrimSpace(string(buf))
+
+		log.Println(err, len(text), len(currentSite.FindPasswordInfo.Token), strings.TrimSpace(string(buf)) != currentSite.FindPasswordInfo.Token)
+		if err != nil || strings.TrimSpace(string(buf)) != currentSite.FindPasswordInfo.Token {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "文件不存在或内容不正确",
+			})
+			return
+		}
+	} else {
+		txt, err := net.LookupTXT(currentSite.FindPasswordInfo.Host)
+		if err != nil || len(txt) == 0 || txt[0] != currentSite.FindPasswordInfo.Token {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "DNS解析不存在或内容不正确",
+			})
+			return
+		}
+	}
+	currentSite.FindPasswordInfo.Verified = true
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "验证成功",
+		"data": currentSite.FindPasswordInfo,
+	})
+}
+
+func FindPasswordReset(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	if currentSite.FindPasswordInfo == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "验证已失效",
+		})
+		return
+	}
+	if !currentSite.FindPasswordInfo.Verified {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "权限验证失败",
+		})
+		return
+	}
+	var req request.FindPasswordReset
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.UserName == "" || len(req.Password) < 6 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请填写管理员账号和6位以上的密码",
+		})
+		return
+	}
+	admin, err := currentSite.GetAdminInfoById(1)
+	if err != nil {
+		admin = &model.Admin{
+			Model: model.Model{
+				Id: 1,
+			},
+		}
+	}
+	admin.UserName = req.UserName
+	err = admin.EncryptPassword(req.Password)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "密码设置失败",
+		})
+		return
+	}
+	err = currentSite.DB.Save(admin).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "更新信息出错",
+		})
+		return
+	}
+	currentSite.FindPasswordInfo.Timer.Stop()
+	currentSite.FindPasswordInfo = nil
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("重置管理员账号和密码：%d => %s", admin.Id, admin.UserName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "管理员账号和密码已重置",
 	})
 }

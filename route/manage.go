@@ -20,6 +20,13 @@ func manageRoute(app *iris.Application) {
 		manage.Get("/captcha", controller.GenerateCaptcha)
 		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
 
+		password := manage.Party("/password")
+		{
+			password.Post("/choose", manageController.FindPasswordChooseWay)
+			password.Get("/verify", manageController.FindPasswordVerify)
+			password.Post("/reset", manageController.FindPasswordReset)
+		}
+
 		version := manage.Party("/version")
 		{
 			version.Get("/info", manageController.Version)

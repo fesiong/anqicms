@@ -1,5 +1,7 @@
 package response
 
+import "time"
+
 type AuthResponse struct {
 	HashKey     string `json:"hash_key"`
 	CreatedTime int64  `json:"created_time"`
@@ -44,4 +46,13 @@ type PushLog struct {
 	CreatedTime int64  `json:"created_time"`
 	Spider      string `json:"spider"`
 	Result      string `json:"result"`
+}
+
+type FindPasswordInfo struct {
+	Way      string      `json:"way"`
+	Token    string      `json:"token"`
+	Host     string      `json:"host"`
+	Verified bool        `json:"verified"`
+	End      time.Time   `json:"-"`
+	Timer    *time.Timer `json:"-"`
 }

@@ -126,3 +126,8 @@ const (
 	OrderTypeGoods = "goods"
 	OrderTypeVip   = "vip"
 )
+
+const (
+	PasswordFindWayFile = "file"
+	PasswordFindWayDNS  = "dns"
+)

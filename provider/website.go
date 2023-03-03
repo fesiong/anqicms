@@ -66,6 +66,8 @@ type Website struct {
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson
 
+	FindPasswordInfo *response.FindPasswordInfo
+
 	// 一些缓存内容
 	languages map[string]string
 }
