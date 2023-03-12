@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
 	"gorm.io/gorm"
@@ -43,6 +44,9 @@ func (w *Website) GetCategoryById(id uint) (*model.Category, error) {
 }
 
 func (w *Website) GetCategoryByUrlToken(urlToken string) (*model.Category, error) {
+	if urlToken == "" {
+		return nil, errors.New("empty token")
+	}
 	return w.GetCategoryByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`url_token` = ?", urlToken)
 	})

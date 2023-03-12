@@ -40,6 +40,9 @@ func (w *Website) GetArchiveByFixedLink(link string) (*model.Archive, error) {
 }
 
 func (w *Website) GetArchiveByUrlToken(urlToken string) (*model.Archive, error) {
+	if urlToken == "" {
+		return nil, errors.New("empty token")
+	}
 	return w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`url_token` = ?", urlToken)
 	})
@@ -170,6 +173,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
 	if req.UrlToken == "" {
 		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+	}
+	if req.UrlToken == "" {
+		req.UrlToken = time.Now().Format("a-20060102150405")
 	}
 	archive.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, archive.Id)
 

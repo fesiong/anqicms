@@ -42,8 +42,9 @@ func init() {
 	go func() {
 		resp, err := library.GetURLData("https://www.google.com", "", 5)
 		if err != nil {
-			config.GoogleValid = true
+			config.GoogleValid = false
 		} else {
+			config.GoogleValid = false
 			log.Println("google-status", resp.StatusCode)
 		}
 	}()
