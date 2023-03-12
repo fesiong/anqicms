@@ -44,7 +44,7 @@ func init() {
 		if err != nil {
 			config.GoogleValid = false
 		} else {
-			config.GoogleValid = false
+			config.GoogleValid = true
 			log.Println("google-status", resp.StatusCode)
 		}
 	}()
