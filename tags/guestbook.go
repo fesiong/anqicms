@@ -17,6 +17,16 @@ func (node *tagGuestbookNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
+	args, err := parseArgs(node.args, ctx)
+	if err != nil {
+		return err
+	}
+
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	fields := currentSite.GetGuestbookFields()
 	for i := range fields {
 		//分割items

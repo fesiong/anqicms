@@ -11,6 +11,15 @@ import (
 )
 
 func ParseUserToken(ctx iris.Context) {
+	// 允许 API 重新设置siteID
+	tmpSiteId := ctx.URLParamIntDefault("site_id", 0)
+	if tmpSiteId > 0 {
+		tmpSite := provider.GetWebsite(uint(tmpSiteId))
+		if tmpSite != nil {
+			ctx.Values().Set("siteId", tmpSite.Id)
+		}
+	}
+
 	currentSite := provider.CurrentSite(ctx)
 	tokenString := ctx.GetHeader("token")
 	if tokenString == "" {

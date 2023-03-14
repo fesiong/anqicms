@@ -30,6 +30,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		return err
 	}
 
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	moduleId := uint(0)
 	var categoryIds []uint
 	var authorId = uint(0)

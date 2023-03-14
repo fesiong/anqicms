@@ -44,6 +44,7 @@ type Website struct {
 	Index   config.IndexConfig   `json:"index"`
 	Contact config.ContactConfig `json:"contact"`
 	Safe    config.SafeConfig    `json:"safe"`
+	Banner  config.BannerConfig  `json:"banner"`
 	//plugin
 	PluginPush        config.PluginPushConfig       `json:"plugin_push"`
 	PluginSitemap     config.PluginSitemapConfig    `json:"plugin_sitemap"`

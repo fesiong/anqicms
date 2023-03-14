@@ -26,6 +26,11 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		return err
 	}
 
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	limit := 10
 	offset := 0
 	currentPage := 1

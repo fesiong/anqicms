@@ -29,6 +29,11 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return err
 	}
 
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	index := currentSite.Lang("首页")
 	if args["index"] != nil {
 		index = args["index"].String()

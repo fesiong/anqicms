@@ -18,6 +18,7 @@ const (
 	IndexSettingKey   = "index"
 	ContactSettingKey = "contact"
 	SafeSettingKey    = "safe"
+	BannerSettingKey  = "banner"
 
 	PushSettingKey        = "push"
 	SitemapSettingKey     = "sitemap"
@@ -49,6 +50,7 @@ func (w *Website) InitSetting() {
 	w.LoadIndexSetting()
 	w.LoadContactSetting()
 	w.LoadSafeSetting()
+	w.LoadBannerSetting()
 
 	w.LoadPushSetting()
 	w.LoadSitemapSetting()
@@ -98,6 +100,13 @@ func (w *Website) LoadIndexSetting() {
 	value := w.GetSettingValue(IndexSettingKey)
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Index)
+	}
+}
+
+func (w *Website) LoadBannerSetting() {
+	value := w.GetSettingValue(BannerSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &w.Banner)
 	}
 }
 

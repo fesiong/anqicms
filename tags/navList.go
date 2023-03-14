@@ -24,6 +24,11 @@ func (node *tagNavListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		return err
 	}
 
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	typeId := uint(1)
 	if args["typeId"] != nil {
 		typeId = uint(args["typeId"].Integer())

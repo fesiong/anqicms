@@ -95,7 +95,11 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/cache", manageController.SettingCacheForm)
 			setting.Post("/convert/webp", manageController.ConvertImageToWebp)
 			setting.Post("/safe", manageController.SettingSafeForm)
-
+			setting.Post("/favicon", manageController.SaveSystemFavicon)
+			setting.Post("/favicon/delete", manageController.DeleteSystemFavicon)
+			setting.Get("/banner", manageController.SettingBanner)
+			setting.Post("/banner", manageController.SettingBannerForm)
+			setting.Post("/banner/delete", manageController.DeleteSettingBanner)
 		}
 
 		collector := manage.Party("/collector", middleware.ParseAdminToken, middleware.AdminPermission)

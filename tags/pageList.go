@@ -18,6 +18,16 @@ func (node *tagPageListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
+	args, err := parseArgs(node.args, ctx)
+	if err != nil {
+		return err
+	}
+
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
 	for i := range pageList {
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)

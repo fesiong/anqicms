@@ -24,6 +24,11 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		return err
 	}
 
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+	
 	fieldName := ""
 	if args["name"] != nil {
 		fieldName = args["name"].String()

@@ -4,46 +4,44 @@ import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/provider"
+	"strings"
 )
 
-type tagLinkListNode struct {
+type tagBannerListNode struct {
 	name    string
 	args    map[string]pongo2.IEvaluator
 	wrapper *pongo2.NodeWrapper
 }
 
-func (node *tagLinkListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+func (node *tagBannerListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
 	currentSite, _ := ctx.Public["website"].(*provider.Website)
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
-	args, err := parseArgs(node.args, ctx)
-	if err != nil {
-		return err
+
+	bannerList := currentSite.Banner
+	for i := range bannerList {
+		if !strings.HasPrefix(bannerList[i].Logo, "http") && !strings.HasPrefix(bannerList[i].Logo, "//") {
+			bannerList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(bannerList[i].Logo, "/")
+		}
 	}
 
-	if args["site_id"] != nil {
-		siteId := args["site_id"].Integer()
-		currentSite = provider.GetWebsite(uint(siteId))
-	}
+	ctx.Private[node.name] = bannerList
 
-	linkList, _ := currentSite.GetLinkList()
-
-	ctx.Private[node.name] = linkList
 	//execute
 	node.wrapper.Execute(ctx, writer)
 
 	return nil
 }
 
-func TagLinkListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
-	tagNode := &tagLinkListNode{
+func TagBannerListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
+	tagNode := &tagBannerListNode{
 		args: make(map[string]pongo2.IEvaluator),
 	}
 
 	nameToken := arguments.MatchType(pongo2.TokenIdentifier)
 	if nameToken == nil {
-		return nil, arguments.Error("linkList-tag needs a accept name.", nil)
+		return nil, arguments.Error("bannerList-tag needs a accept name.", nil)
 	}
 
 	tagNode.name = nameToken.Val
@@ -56,9 +54,10 @@ func TagLinkListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo
 	tagNode.args = args
 
 	for arguments.Remaining() > 0 {
-		return nil, arguments.Error("Malformed linkList-tag arguments.", nil)
+		return nil, arguments.Error("Malformed bannerList-tag arguments.", nil)
 	}
-	wrapper, endtagargs, err := doc.WrapUntilTag("endlinkList")
+
+	wrapper, endtagargs, err := doc.WrapUntilTag("endbannerList")
 	if err != nil {
 		return nil, err
 	}
@@ -66,13 +65,13 @@ func TagLinkListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo
 		endtagnameToken := endtagargs.MatchType(pongo2.TokenIdentifier)
 		if endtagnameToken != nil {
 			if endtagnameToken.Val != nameToken.Val {
-				return nil, endtagargs.Error(fmt.Sprintf("Name for 'endlinkList' must equal to 'linkList'-tag's name ('%s' != '%s').",
+				return nil, endtagargs.Error(fmt.Sprintf("Name for 'endbannerList' must equal to 'bannerList'-tag's name ('%s' != '%s').",
 					nameToken.Val, endtagnameToken.Val), nil)
 			}
 		}
 
 		if endtagnameToken == nil || endtagargs.Remaining() > 0 {
-			return nil, endtagargs.Error("Either no or only one argument (identifier) allowed for 'endlinkList'.", nil)
+			return nil, endtagargs.Error("Either no or only one argument (identifier) allowed for 'endbannerList'.", nil)
 		}
 	}
 	tagNode.wrapper = wrapper

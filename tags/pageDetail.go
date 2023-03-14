@@ -26,6 +26,11 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 	id := uint(0)
 
+	if args["site_id"] != nil {
+		siteId := args["site_id"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+	
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
 	}

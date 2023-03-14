@@ -24,6 +24,7 @@ type SystemConfig struct {
 	TemplateUrl   string       `json:"template_url"` // template 的静态文件目录
 	Language      string       `json:"language"`     // 语言包引用
 	ExtraFields   []ExtraField `json:"extra_fields"` // 用户自定义字段
+	Favicon       string       `json:"favicon"`
 }
 
 type ContentConfig struct {
@@ -73,3 +74,13 @@ type ExtraField struct {
 	Value  string `json:"value"`
 	Remark string `json:"remark"`
 }
+
+type BannerItem struct {
+	Logo        string `json:"logo"`
+	Id          int    `json:"id"`
+	Link        string `json:"link"`
+	Alt         string `json:"alt"`
+	Description string `json:"description"`
+}
+
+type BannerConfig []BannerItem

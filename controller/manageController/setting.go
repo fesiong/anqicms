@@ -18,6 +18,13 @@ func SettingSystem(ctx iris.Context) {
 		system.SiteLogo = currentSite.PluginStorage.StorageUrl + system.SiteLogo
 	}
 
+	// 检测Favicon
+	system.Favicon = ""
+	_, err := os.Stat(currentSite.PublicPath + "favicon.ico")
+	if err == nil {
+		system.Favicon = currentSite.System.BaseUrl + "/favicon.ico"
+	}
+
 	// 读取language列表
 	var languages []string
 	readerInfos, err := os.ReadDir(fmt.Sprintf("%slanguage", config.ExecPath))
@@ -358,6 +365,170 @@ func SettingSafeForm(ctx iris.Context) {
 	currentSite.DeleteCacheIndex()
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新安全设置"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
+	})
+}
+
+func SaveSystemFavicon(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	file, _, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+
+	err = currentSite.SaveFavicon(file)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Favicon上传失败",
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传Favicon"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文件已上传完成",
+	})
+}
+
+func DeleteSystemFavicon(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	_, err := os.Stat(currentSite.PublicPath + "favicon.ico")
+	if err == nil {
+		err = os.Remove(currentSite.PublicPath + "favicon.ico")
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "Favicon删除失败",
+			})
+			return
+		}
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除Favicon"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Ico图标已删除",
+	})
+}
+
+func SettingBanner(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	banners := currentSite.Banner
+	for i := range banners {
+		if !strings.HasPrefix(banners[i].Logo, "http") && !strings.HasPrefix(banners[i].Logo, "//") {
+			banners[i].Logo = currentSite.PluginStorage.StorageUrl + banners[i].Logo
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": banners,
+	})
+}
+
+func DeleteSettingBanner(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req config.BannerItem
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Id == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Banner 不存在",
+		})
+		return
+	}
+	for i := range currentSite.Banner {
+		if currentSite.Banner[i].Id == req.Id {
+			currentSite.Banner = append(currentSite.Banner[:i], currentSite.Banner[i+1:]...)
+			break
+		}
+	}
+
+	err := currentSite.SaveSettingValue(provider.BannerSettingKey, currentSite.Banner)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DeleteCacheIndex()
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除Banner"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "配置已更新",
+	})
+}
+
+func SettingBannerForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req config.BannerItem
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Logo == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请选择图片",
+		})
+		return
+	}
+	req.Logo = strings.TrimPrefix(req.Logo, currentSite.PluginStorage.StorageUrl)
+	if req.Id == 0 {
+		if len(currentSite.Banner) > 0 {
+			req.Id = currentSite.Banner[len(currentSite.Banner)-1].Id + 1
+		} else {
+			req.Id = 1
+		}
+		currentSite.Banner = append(currentSite.Banner, req)
+	} else {
+		for i := range currentSite.Banner {
+			if currentSite.Banner[i].Id == req.Id {
+				currentSite.Banner[i] = req
+				break
+			}
+		}
+	}
+
+	err := currentSite.SaveSettingValue(provider.BannerSettingKey, currentSite.Banner)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DeleteCacheIndex()
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新Banner"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
