@@ -281,7 +281,9 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 		}
 		s.templateCache[site.Id][name] = tmpl
 	} else {
-		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
+		if _, ok := s.templateCache[site.Id]; ok {
+			s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
+		}
 	}
 
 	return nil
