@@ -275,15 +275,13 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 
 	name = strings.TrimPrefix(name, "/")
 	tmpl, err := s.Set[site.Id].FromBytes(contents)
+	if s.templateCache[site.Id] == nil {
+		s.templateCache[site.Id] = make(map[string]*pongo2.Template)
+	}
 	if err == nil {
-		if s.templateCache[site.Id] == nil {
-			s.templateCache[site.Id] = make(map[string]*pongo2.Template)
-		}
 		s.templateCache[site.Id][name] = tmpl
 	} else {
-		if _, ok := s.templateCache[site.Id]; ok {
-			s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
-		}
+		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
 	}
 
 	return nil
