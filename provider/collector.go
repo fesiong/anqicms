@@ -182,7 +182,7 @@ func (w *Website) CollectArticles() {
 				return
 			}
 			// 每个关键词都需要间隔30秒以上
-			time.Sleep(time.Duration(20+rand.Intn(30)) * time.Second)
+			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
 				// 延时 10分钟以上
@@ -198,6 +198,8 @@ func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (t
 		total, err = w.GenerateCombination(&keyword)
 	} else if w.CollectorConfig.CollectMode == config.CollectModeCollect {
 		total, err = w.CollectArticleFromBaidu(&keyword, focus)
+	} else if w.CollectorConfig.CollectMode == config.CollectModeAiGen {
+		total, err = w.AnqiAiGenerateArticle(&keyword)
 	}
 
 	if err != nil {
@@ -241,10 +243,14 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	} else {
 		archive.Draft = false
 	}
-	_, err := w.SaveArchive(archive)
+	res, err := w.SaveArchive(archive)
 	if err != nil {
 		log.Println("保存文章出错：", archive.Title, err.Error())
 		return err
+	}
+	if w.CollectorConfig.AutoPseudo {
+		// AI 改写
+		_ = w.AnqiAiPseudoArticle(res)
 	}
 
 	//文章计数

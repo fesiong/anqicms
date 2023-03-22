@@ -4,7 +4,7 @@ type CollectorJson struct {
 	AutoCollect        bool             `json:"auto_collect"` // 是否自动采集
 	ErrorTimes         int              `json:"error_times"`  //预留
 	Channels           int              `json:"channels"`     //预留
-	CollectMode        int              `json:"collect_mode"` // 0: 采集, 1: 组合
+	CollectMode        int              `json:"collect_mode"` // 0: 采集, 1: 组合, 2: AI 生成
 	Language           string           `json:"language"`     // zh|en|cr
 	InsertImage        bool             `json:"insert_image"` // 是否插入图片
 	Images             []string         `json:"images"`

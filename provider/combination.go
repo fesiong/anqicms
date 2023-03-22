@@ -78,6 +78,7 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		}
 	}
 	if w.CollectorConfig.InsertImage && num == 0 && len(w.CollectorConfig.Images) > 0 {
+		rand.Seed(time.Now().UnixMicro())
 		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
 		index := 2 + rand.Intn(len(content)-3)
 		content = append(content, "")
@@ -115,6 +116,10 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		return 0, nil
 	}
 	log.Println(res.Id, res.Title)
+	if w.CollectorConfig.AutoPseudo {
+		// AI 改写
+		_ = w.AnqiAiPseudoArticle(res)
+	}
 
 	return 1, nil
 }

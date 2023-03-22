@@ -11,16 +11,20 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"log"
+	"math/rand"
 	"mime/multipart"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
 
-const AnqiApi = "https://www.anqicms.com/auth"
+// const AnqiApi = "https://www.anqicms.com/auth"
+const AnqiApi = "http://127.0.0.1:8001/auth"
 
 type AnqiLoginResult struct {
 	Code int                    `json:"code"`
@@ -84,6 +88,21 @@ type AnqiTranslateResult struct {
 	Code int                  `json:"code"`
 	Msg  string               `json:"msg"`
 	Data AnqiTranslateRequest `json:"data"`
+}
+
+type AnqiAiRequest struct {
+	Keyword    string `json:"keyword"`
+	Language   string `json:"language"`
+	Title      string `json:"title"`
+	Content    string `json:"content"`
+	TextLength int64  `json:"text_length"`
+	AiRemain   int64  `json:"ai_remain"`
+}
+
+type AnqiAiResult struct {
+	Code int           `json:"code"`
+	Msg  string        `json:"msg"`
+	Data AnqiAiRequest `json:"data"`
 }
 
 // AnqiLogin
@@ -313,11 +332,7 @@ func (w *Website) AnqiPseudoArticle(archive *model.Archive) error {
 		return errors.New(result.Msg)
 	}
 	archive.Title = result.Data.Title
-	if len(result.Data.Content) > 1000 {
-		archive.Description = string([]rune(result.Data.Content)[:1000])
-	} else if len(result.Data.Content) > 0 {
-		archive.Description = result.Data.Content
-	}
+	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "))
 	archive.HasPseudo = 1
 	err = w.DB.Save(archive).Error
 	// 再保存内容
@@ -345,17 +360,106 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 		return errors.New(result.Msg)
 	}
 	archive.Title = result.Data.Title
-	if len(result.Data.Content) > 1000 {
-		archive.Description = string([]rune(result.Data.Content)[:1000])
-	} else if len(result.Data.Content) > 0 {
-		archive.Description = result.Data.Content
-	}
+	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "))
 	err = w.DB.Save(archive).Error
 	// 再保存内容
 	archiveData.Content = result.Data.Content
 	w.DB.Save(archiveData)
 
 	return nil
+}
+
+func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
+	archiveData, err := w.GetArchiveDataById(archive.Id)
+	if err != nil {
+		return err
+	}
+	req := &AnqiAiRequest{
+		Title:    archive.Title,
+		Content:  archiveData.Content,
+		Language: w.System.Language, // 以系统语言为标准
+	}
+	var result AnqiAiResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/pseudo").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+	archive.Title = result.Data.Title
+	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "))
+	archive.HasPseudo = 1
+	err = w.DB.Save(archive).Error
+	// 再保存内容
+	archiveData.Content = result.Data.Content
+	w.DB.Save(archiveData)
+
+	return nil
+}
+
+func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
+	// 检查是否采集过
+	if w.checkArticleExists(keyword.Title, "") {
+		//log.Println("已存在于数据库", keyword.Title)
+		return 1, nil
+	}
+
+	req := &AnqiAiRequest{
+		Keyword:  keyword.Title,
+		Language: w.System.Language, // 以系统语言为标准
+	}
+	var result AnqiAiResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/generate").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return 0, errs[0]
+	}
+	if result.Code != 0 {
+		return 0, errors.New(result.Msg)
+	}
+
+	var content = strings.Split(result.Data.Content, "\n")
+	if w.CollectorConfig.InsertImage && len(w.CollectorConfig.Images) > 0 {
+		rand.Seed(time.Now().UnixMicro())
+		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		index := 2 + rand.Intn(len(content)-3)
+		content = append(content, "")
+		copy(content[index+1:], content[index:])
+		content[index] = "<img src='" + img + "'/>"
+	}
+	categoryId := keyword.CategoryId
+	if categoryId == 0 {
+		if w.CollectorConfig.CategoryId == 0 {
+			var category model.Category
+			w.DB.Where("module_id = 1").Take(&category)
+			w.CollectorConfig.CategoryId = category.Id
+		}
+		categoryId = w.CollectorConfig.CategoryId
+	}
+
+	archive := request.Archive{
+		Title:      result.Data.Title,
+		ModuleId:   0,
+		CategoryId: categoryId,
+		Keywords:   keyword.Title,
+		Content:    strings.Join(content, "\n"),
+		KeywordId:  keyword.Id,
+		OriginUrl:  keyword.Title,
+		ForceSave:  true,
+	}
+	if w.CollectorConfig.SaveType == 0 {
+		archive.Draft = true
+	} else {
+		archive.Draft = false
+	}
+	res, err := w.SaveArchive(&archive)
+	if err != nil {
+		log.Println("保存AI文章出错：", archive.Title, err.Error())
+		return 0, nil
+	}
+	log.Println(res.Id, res.Title)
+
+	return 1, nil
 }
 
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {

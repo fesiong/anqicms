@@ -48,6 +48,12 @@ func (w *Website) GetArchiveByUrlToken(urlToken string) (*model.Archive, error) 
 	})
 }
 
+func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) {
+	return w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`origin_url` = ?", keyword).Order("id desc")
+	})
+}
+
 func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
 	var archive model.Archive
 	err := ops(w.DB).Take(&archive).Error
@@ -269,12 +275,7 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 
 		//提取描述
 		if req.Description == "" {
-			textRune := []rune(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
-			if len(textRune) > 150 {
-				archive.Description = string(textRune[:150])
-			} else {
-				archive.Description = string(textRune)
-			}
+			archive.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
 		}
 		//下载远程图片
 		if w.Content.RemoteDownload == 1 {

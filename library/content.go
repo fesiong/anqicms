@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -161,4 +162,19 @@ func GetHost(ctx iris.Context) string {
 	default:
 		return host
 	}
+}
+
+// ParseDescription 对于超过250字的描述，截取的时候，以标点符号为准
+func ParseDescription(content string) (description string) {
+	if utf8.RuneCountInString(content) > 200 {
+		content = string([]rune(content)[:200])
+	}
+	lastIndex := strings.LastIndexAny(content, " !,.:;?~。？！，、；：…")
+	if lastIndex >= 150 {
+		description = content[:lastIndex]
+	} else {
+		description = content
+	}
+
+	return
 }

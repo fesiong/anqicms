@@ -132,12 +132,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 
 		//提取描述
 		if category.Description == "" {
-			textRune := []rune(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
-			if len(textRune) > 150 {
-				category.Description = string(textRune[:150])
-			} else {
-				category.Description = string(textRune)
-			}
+			category.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
 		}
 		//下载远程图片
 		if w.Content.RemoteDownload == 1 {

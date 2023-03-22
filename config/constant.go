@@ -108,6 +108,7 @@ const (
 
 	CollectModeCollect = 0
 	CollectModeCombine = 1
+	CollectModeAiGen   = 2
 )
 
 // login platform
