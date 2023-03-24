@@ -47,6 +47,10 @@ func IndexPage(ctx iris.Context) {
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else if currentPage == 1 && userId == 0 {
-		currentSite.CacheIndex(ua, recorder.Body())
+		body := recorder.Body()
+		body = currentSite.ReplaceSensitiveWords(body)
+		currentSite.CacheIndex(ua, body)
+		recorder.ResetBody()
+		ctx.Write(body)
 	}
 }

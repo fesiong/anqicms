@@ -154,9 +154,15 @@ func ArchiveDetail(ctx iris.Context) {
 		tplName = tmpTpl
 	}
 
+	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		body := recorder.Body()
+		body = currentSite.ReplaceSensitiveWords(body)
+		recorder.ResetBody()
+		ctx.Write(body)
 	}
 }
 

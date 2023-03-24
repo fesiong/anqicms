@@ -102,6 +102,10 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/banner", manageController.SettingBanner)
 			setting.Post("/banner", manageController.SettingBannerForm)
 			setting.Post("/banner/delete", manageController.DeleteSettingBanner)
+			setting.Get("/sensitive/words", manageController.SettingSensitiveWords)
+			setting.Post("/sensitive/words", manageController.SettingSensitiveWordsForm)
+			setting.Post("/sensitive/check", manageController.SettingSensitiveWordsCheck)
+			setting.Post("/sensitive/sync", manageController.SettingSensitiveWordsSync)
 		}
 
 		collector := manage.Party("/collector", middleware.ParseAdminToken, middleware.AdminPermission)

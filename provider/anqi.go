@@ -105,6 +105,12 @@ type AnqiAiResult struct {
 	Data AnqiAiRequest `json:"data"`
 }
 
+type AnqiSensitiveResult struct {
+	Code int      `json:"code"`
+	Msg  string   `json:"msg"`
+	Data []string `json:"data"`
+}
+
 // AnqiLogin
 // anqi 账号只需要登录一次，全部站点通用，信息记录在
 func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
@@ -460,6 +466,24 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	log.Println(res.Id, res.Title)
 
 	return 1, nil
+}
+
+func (w *Website) AnqiSyncSensitiveWords() error {
+	var result AnqiSensitiveResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/sensitive/sync").EndStruct(&result)
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+
+	if len(result.Data) > 0 {
+		w.SensitiveWords = result.Data
+		w.SaveSettingValue(SensitiveWordsKey, w.SensitiveWords)
+	}
+
+	return nil
 }
 
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {

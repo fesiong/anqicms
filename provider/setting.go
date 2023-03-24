@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"crypto/md5"
 	"encoding/hex"
 	"encoding/json"
@@ -9,7 +10,10 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"os"
+	"regexp"
+	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 const (
@@ -19,6 +23,7 @@ const (
 	ContactSettingKey = "contact"
 	SafeSettingKey    = "safe"
 	BannerSettingKey  = "banner"
+	SensitiveWordsKey = "sensitive_words"
 
 	PushSettingKey        = "push"
 	SitemapSettingKey     = "sitemap"
@@ -51,6 +56,7 @@ func (w *Website) InitSetting() {
 	w.LoadContactSetting()
 	w.LoadSafeSetting()
 	w.LoadBannerSetting()
+	w.LoadSensitiveWords()
 
 	w.LoadPushSetting()
 	w.LoadSitemapSetting()
@@ -107,6 +113,13 @@ func (w *Website) LoadBannerSetting() {
 	value := w.GetSettingValue(BannerSettingKey)
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Banner)
+	}
+}
+
+func (w *Website) LoadSensitiveWords() {
+	value := w.GetSettingValue(SensitiveWordsKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &w.SensitiveWords)
 	}
 }
 
@@ -515,4 +528,62 @@ func (w *Website) DeleteCache() {
 	// 记录
 	filePath := w.CachePath + "cache_clear.log"
 	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+}
+
+func (w *Website) MatchSensitiveWords(content string) (matches []string) {
+	if len(w.SensitiveWords) == 0 || len(content) == 0 {
+		return
+	}
+	// content 需要移除代码
+	content = library.StripTags(content)
+	for _, word := range w.SensitiveWords {
+		if len(word) == 0 {
+			continue
+		}
+		if strings.Contains(content, word) {
+			matches = append(matches, word)
+		}
+	}
+
+	return
+}
+
+func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
+	if len(w.SensitiveWords) == 0 || len(content) == 0 {
+		return content
+	}
+
+	type replaceType struct {
+		Key   []byte
+		Value []byte
+	}
+	var replacedMatch []*replaceType
+	numCount := 0
+	//过滤所有属性
+	reg, _ := regexp.Compile("(?i)</?[a-z0-9]+(\\s+[^>]+)>")
+	content = reg.ReplaceAllFunc(content, func(s []byte) []byte {
+		key := []byte(fmt.Sprintf("{$%d}", numCount))
+		replacedMatch = append(replacedMatch, &replaceType{
+			Key:   key,
+			Value: s,
+		})
+		numCount++
+
+		return key
+	})
+	// 替换所有敏感词为星号
+	for _, word := range w.SensitiveWords {
+		if len(word) == 0 {
+			continue
+		}
+		if bytes.Contains(content, []byte(word)) {
+			content = bytes.ReplaceAll(content, []byte(word), bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
+		}
+	}
+	// 替换回来
+	for i := len(replacedMatch) - 1; i >= 0; i-- {
+		content = bytes.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)
+	}
+
+	return content
 }
