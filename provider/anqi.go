@@ -178,7 +178,6 @@ func (w *Website) AnqiCheckLogin(force bool) {
 		config.AnqiUser.ExpireTime = result.Data.ExpireTime
 		config.AnqiUser.PseudoRemain = result.Data.PseudoRemain
 		config.AnqiUser.TranslateRemain = result.Data.TranslateRemain
-		config.AnqiUser.FreeTransRemain = result.Data.FreeTransRemain
 		config.AnqiUser.Status = result.Data.Status
 	}
 	config.AnqiUser.CheckTime = time.Now().Unix()

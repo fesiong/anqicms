@@ -8,7 +8,6 @@ type AnqiUserConfig struct {
 	ExpireTime      int64  `json:"expire_time"`
 	PseudoRemain    int64  `json:"pseudo_remain"`
 	TranslateRemain int64  `json:"translate_remain"`
-	FreeTransRemain int64  `json:"free_trans_remain"`
 	Status          int    `json:"status"`
 	Token           string `json:"token"`
 
