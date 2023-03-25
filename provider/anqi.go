@@ -23,8 +23,7 @@ import (
 	"time"
 )
 
-// const AnqiApi = "https://www.anqicms.com/auth"
-const AnqiApi = "http://127.0.0.1:8001/auth"
+const AnqiApi = "https://www.anqicms.com/auth"
 
 type AnqiLoginResult struct {
 	Code int                    `json:"code"`
