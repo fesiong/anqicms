@@ -897,6 +897,22 @@ func ApiTagList(ctx iris.Context) {
 	})
 }
 
+func ApiBannerList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	bannerList := currentSite.Banner
+	for i := range bannerList {
+		if !strings.HasPrefix(bannerList[i].Logo, "http") && !strings.HasPrefix(bannerList[i].Logo, "//") {
+			bannerList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(bannerList[i].Logo, "/")
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": bannerList,
+	})
+}
+
 func ApiAttachmentUpload(ctx iris.Context) {
 	AttachmentUpload(ctx)
 }

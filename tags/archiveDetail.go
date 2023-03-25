@@ -29,7 +29,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	id := uint(0)
 
 	if args["site_id"] != nil {
-		siteId := args["site_id"].Integer()
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
 

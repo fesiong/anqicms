@@ -5,18 +5,10 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"strings"
 )
 
 func AttachmentUpload(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "Not Found",
-		})
-		return
-	}
 	// 增加分类
 	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
 	attachId := uint(ctx.PostValueIntDefault("id", 0))

@@ -25,10 +25,13 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 	}
 
 	if args["site_id"] != nil {
-		siteId := args["site_id"].Integer()
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
-	
+
 	fieldName := ""
 	if args["name"] != nil {
 		fieldName = args["name"].String()

@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -272,7 +273,7 @@ func Inspect(ctx iris.Context) {
 func FileServe(ctx iris.Context) bool {
 	currentSite := provider.CurrentSite(ctx)
 	uri := ctx.RequestPath(false)
-	if uri != currentSite.BaseURI {
+	if uri != currentSite.BaseURI && !strings.HasSuffix(uri, "/") {
 		baseDir := fmt.Sprintf("%spublic", currentSite.RootPath)
 		uriFile := baseDir + strings.TrimPrefix(uri, strings.TrimRight(currentSite.BaseURI, "/"))
 		_, err := os.Stat(uriFile)
@@ -293,6 +294,8 @@ func ReRouteContext(ctx iris.Context) {
 	if exists {
 		return
 	}
+	log.Println(ctx.FullRequestURI())
+	log.Printf("%#v", params)
 
 	for i, v := range params {
 		ctx.Params().Set(i, v)

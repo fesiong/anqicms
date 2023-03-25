@@ -108,6 +108,7 @@ func Register(app *iris.Application) {
 		api.Get("/tag/detail", controller.CheckApiOpen, controller.ApiTagDetail)
 		api.Get("/tag/data/list", controller.CheckApiOpen, controller.ApiTagDataList)
 		api.Get("/tag/list", controller.CheckApiOpen, controller.ApiTagList)
+		api.Get("/banner/list", controller.CheckApiOpen, controller.ApiBannerList)
 		api.Post("/attachment/upload", controller.CheckApiOpen, controller.ApiAttachmentUpload)
 		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
 		api.Post("/comment/praise", controller.CheckApiOpen, controller.ApiCommentPraise)
