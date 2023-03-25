@@ -10,7 +10,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"log"
 	"net/url"
 	"os"
 	"regexp"
@@ -294,8 +293,6 @@ func ReRouteContext(ctx iris.Context) {
 	if exists {
 		return
 	}
-	log.Println(ctx.FullRequestURI())
-	log.Printf("%#v", params)
 
 	for i, v := range params {
 		ctx.Params().Set(i, v)
