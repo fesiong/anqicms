@@ -986,12 +986,13 @@ func CheckContentIsEnglish(content string) bool {
 	}
 
 	enCount := 0
-	for i := 0; i < len(content); i++ {
-		if content[i] < 128 {
+	contents := []rune(content)
+	for i := 0; i < len(contents); i++ {
+		if contents[i] < 2000 {
 			enCount++
 		}
 	}
-	if float64(enCount) > float64(len(content))*0.95 {
+	if float64(enCount) > float64(len(contents))*0.9 {
 		return true
 	}
 
