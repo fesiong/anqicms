@@ -21,6 +21,7 @@ func IndexPage(ctx iris.Context) {
 		body := currentSite.GetIndexCache(ua)
 		if body != nil {
 			//log.Println("Load index from cache.")
+			ctx.ResponseWriter().FlushResponse()
 			ctx.Write(body)
 			return
 		}
