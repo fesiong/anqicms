@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -45,15 +46,37 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 	f := v.FieldByName(fieldName)
 
 	content := fmt.Sprintf("%v", f)
-	if siteName && fieldName == "Title" {
-		if content != "" {
-			content += " - "
+	if fieldName == "Title" {
+		var pateText string
+		// 增加分页
+		paginator, ok := ctx.Public["pagination"].(*pagination)
+		if ok {
+			// 从第二页开始，增加分页
+			if paginator.CurrentPage > 1 {
+				if currentSite.System.Language == config.LanguageEn {
+					pateText = fmt.Sprintf("Page %d", paginator.CurrentPage)
+				} else {
+					pateText = fmt.Sprintf("第%d页", paginator.CurrentPage)
+				}
+			}
+			return nil
 		}
-		content += currentSite.System.SiteName
-	}
-	if fieldName == "Title" && content == "" {
-		// 保持标题至少是网站名称
-		content = currentSite.System.SiteName
+		if len(pateText) > 0 {
+			if content != "" {
+				content += " - "
+			}
+			content += pateText
+		}
+		if siteName {
+			if content != "" {
+				content += " - "
+			}
+			content += currentSite.System.SiteName
+		}
+		if content == "" {
+			// 保持标题至少是网站名称
+			content = currentSite.System.SiteName
+		}
 	}
 
 	// output
