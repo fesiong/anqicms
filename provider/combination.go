@@ -50,26 +50,22 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		}
 		materials = append(result, materials...)
 	}
-	result, err := w.collectCombinationMaterials(keyword)
-	if err != nil {
-		return 0, err
-	}
-	if len(result) == 0 {
+	if len(materials) == 0 {
 		return 0, errors.New("错误，可能出现验证码了")
 	}
-	if len(result) < 5 {
-		log.Println(fmt.Sprintf("有效内容不足: %d", len(result)))
+	if len(materials) < 3 {
+		log.Println(fmt.Sprintf("有效内容不足: %d", len(materials)))
 		return 0, nil
 	}
 	var title = keyword.Title
-	var content = make([]string, 0, len(result)*2+3)
+	var content = make([]string, 0, len(materials)*2+3)
 	num := 0
-	for i := range result {
+	for i := range materials {
 		if utf8.RuneCountInString(title) < 10 {
-			title = result[i].Title
+			title = materials[i].Title
 		}
-		content = append(content, "<h3>"+result[i].Title+"</h3>")
-		text := result[i].Content
+		content = append(content, "<h3>"+materials[i].Title+"</h3>")
+		text := materials[i].Content
 		content = append(content, "<p>"+text+"</p>")
 		re, _ := regexp.Compile(`(?i)<img\s.*?>`)
 		exist := re.MatchString(text)
@@ -122,6 +118,61 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	}
 
 	return 1, nil
+}
+
+func (w *Website) GetCombinationArticle(keyword *model.Keyword) (*request.Archive, error) {
+	// 检查是否已经有素材
+	materials := w.GetMaterialsByKeyword(keyword.Title)
+	if len(materials) < 3 {
+		result, err := w.collectCombinationMaterials(keyword)
+		if err != nil {
+			return nil, err
+		}
+		materials = append(result, materials...)
+	}
+	if len(materials) == 0 {
+		return nil, errors.New("错误，可能出现验证码了")
+	}
+	if len(materials) < 3 {
+		log.Println(fmt.Sprintf("有效内容不足: %d", len(materials)))
+		return nil, errors.New("有效内容不足")
+	}
+	var title = keyword.Title
+	var content = make([]string, 0, len(materials)*2+3)
+	num := 0
+	for i := range materials {
+		if utf8.RuneCountInString(title) < 10 {
+			title = materials[i].Title
+		}
+		content = append(content, "<h3>"+materials[i].Title+"</h3>")
+		text := materials[i].Content
+		content = append(content, "<p>"+text+"</p>")
+		re, _ := regexp.Compile(`(?i)<img\s.*?>`)
+		exist := re.MatchString(text)
+		if exist {
+			num++
+		}
+	}
+	if w.CollectorConfig.InsertImage && num == 0 && len(w.CollectorConfig.Images) > 0 {
+		rand.Seed(time.Now().UnixMicro())
+		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		index := 2 + rand.Intn(len(content)-3)
+		content = append(content, "")
+		copy(content[index+1:], content[index:])
+		content[index] = "<img src='" + img + "'/>"
+		num++
+	}
+
+	archive := request.Archive{
+		Title:     title,
+		ModuleId:  0,
+		Keywords:  keyword.Title,
+		Content:   strings.Join(content, "\n"),
+		KeywordId: keyword.Id,
+		OriginUrl: keyword.Title,
+	}
+
+	return &archive, nil
 }
 
 func (w *Website) collectCombinationMaterials(keyword *model.Keyword) ([]*model.Material, error) {
@@ -214,7 +265,7 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 		}
 		// 360 需要停顿
 		if fetch {
-			time.Sleep(15 * time.Second)
+			time.Sleep(5 * time.Second)
 		}
 	}
 
@@ -248,7 +299,7 @@ func (w *Website) getDataFromBaidu(keyword *model.Keyword) ([]*model.Material, e
 			count++
 			links = append(links, item)
 		}
-		if count > 5 {
+		if count >= 5 {
 			break
 		}
 		if fetch {
@@ -288,7 +339,7 @@ func (w *Website) getDataFromSogou(keyword *model.Keyword) ([]*model.Material, e
 			count++
 			links = append(links, item)
 		}
-		if count > 5 {
+		if count >= 5 {
 			break
 		}
 		if fetch {
@@ -315,7 +366,7 @@ func (w *Website) getDataFromToutiao(keyword *model.Keyword) ([]*model.Material,
 			count++
 			items = append(items, item)
 		}
-		if count > 5 {
+		if count >= 5 {
 			break
 		}
 		if fetch {
@@ -446,6 +497,24 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 		match := re.FindStringSubmatch(body)
 		if len(match) > 1 {
 			item.Content = match[1]
+		} else {
+			// 尝试从json中解析
+			re, _ = regexp.Compile(`(?s)"content":\s*"(.+?)"`)
+			match = re.FindStringSubmatch(body)
+			if len(match) > 1 {
+				err = json.Unmarshal([]byte("\""+match[1]+"\""), &item.Content)
+				if err != nil {
+					item.Content = match[1]
+				}
+			}
+			re, _ = regexp.Compile(`(?s)"title":\s*"(.+?)"`)
+			match = re.FindStringSubmatch(body)
+			if len(match) > 1 {
+				err = json.Unmarshal([]byte("\""+match[1]+"\""), &item.Title)
+				if err != nil {
+					item.Title = match[1]
+				}
+			}
 		}
 	} else {
 		content, _, _, _ := w.ParseArticleContent(doc.Find("body"), 0, false)

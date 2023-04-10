@@ -117,6 +117,7 @@ func manageRoute(app *iris.Application) {
 			//批量替换文章内容
 			collector.Post("/article/replace", manageController.HandleReplaceArticles)
 			collector.Post("/article/collect", manageController.HandleArticleCollect)
+			collector.Post("/article/combination/get", manageController.HandleArticleCombinationGet)
 			collector.Post("/keyword/dig", manageController.HandleDigKeywords)
 		}
 

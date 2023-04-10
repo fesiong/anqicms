@@ -351,6 +351,7 @@ func (w *Website) SaveMaterials(materials []*request.PluginMaterial) error {
 func (w *Website) GetMaterialByTitle(title string) (*model.Material, error) {
 	// title 可能包含标签
 	title = library.StripTags(title)
+	title = strings.ReplaceAll(title, "\n", "")
 	// 取前30个字符
 	if utf8.RuneCountInString(title) > 30 {
 		title = string([]rune(title)[:30])

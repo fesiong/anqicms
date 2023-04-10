@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -139,5 +140,34 @@ func HandleArticleCollect(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "采集任务已触发，预计1分钟后即可查看采集结果",
+	})
+}
+
+// HandleArticleCombinationGet 获取问答组合文章
+func HandleArticleCombinationGet(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.KeywordRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	keyword := model.Keyword{Title: req.Title}
+	archive, err := currentSite.GetCombinationArticle(&keyword)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": archive,
 	})
 }
