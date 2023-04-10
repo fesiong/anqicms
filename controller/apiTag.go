@@ -246,6 +246,7 @@ func ApiArchiveList(ctx iris.Context) {
 	if listType == "related" {
 		//获取id
 		var categoryId = uint(0)
+		var keywords string
 		if len(categoryIds) > 0 {
 			categoryId = categoryIds[0]
 		}
@@ -253,32 +254,47 @@ func ApiArchiveList(ctx iris.Context) {
 			archive, err := currentSite.GetArchiveById(archiveId)
 			if err == nil {
 				categoryId = archive.CategoryId
+				keywords = strings.Split(strings.ReplaceAll(archive.Keywords, "，", ","), ",")[0]
 				category := currentSite.GetCategoryFromCache(categoryId)
 				if category != nil {
 					moduleId = category.ModuleId
 				}
 			}
 		}
-
-		newLimit := int(math.Ceil(float64(limit) / 2))
-		archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-			tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
-				Order("id ASC")
-			return tx
-		}, 0, newLimit, offset)
-		newLimit += newLimit - len(archives)
-		archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-			tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).
-				Order("id DESC")
-			return tx
-		}, 0, newLimit, offset)
-		//列表不返回content
-		if len(archives2) > 0 {
-			archives = append(archives, archives2...)
+		// 允许通过keywords调用
+		like := ctx.URLParam("like")
+		tmpKeyword := ctx.URLParam("keywords")
+		if len(tmpKeyword) > 0 {
+			keywords = tmpKeyword
 		}
-		// 如果数量超过，则截取
-		if len(archives) > limit {
-			archives = archives[:limit]
+
+		if like == "keywords" {
+			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
+					Order("id ASC")
+				return tx
+			}, 0, limit, offset)
+		} else {
+			newLimit := int(math.Ceil(float64(limit) / 2))
+			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
+					Order("id ASC")
+				return tx
+			}, 0, newLimit, offset)
+			newLimit += newLimit - len(archives)
+			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).
+					Order("id DESC")
+				return tx
+			}, 0, newLimit, offset)
+			//列表不返回content
+			if len(archives2) > 0 {
+				archives = append(archives, archives2...)
+			}
+			// 如果数量超过，则截取
+			if len(archives) > limit {
+				archives = archives[:limit]
+			}
 		}
 	} else {
 		extraFields := map[uint]map[string]*model.CustomField{}
