@@ -21,7 +21,7 @@ type Nav struct {
 	TypeId      uint   `json:"type_id" gorm:"column:type_id;type:int(10) unsigned not null;default:1;index:idx_type_id"`
 	Link        string `json:"link" gorm:"column:link;type:varchar(250) not null;default:''"`
 	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
-	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	NavList     []*Nav `json:"nav_list" gorm:"-"`
 	IsCurrent   bool   `json:"is_current" gorm:"-"`
 }

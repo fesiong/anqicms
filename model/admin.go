@@ -12,8 +12,8 @@ type Admin struct {
 	Model
 	UserName  string      `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:'';index:idx_user_name"`
 	Password  string      `json:"-" gorm:"column:password;type:varchar(128) not null;default:''"`
-	Status    uint        `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
-	LoginTime int64       `json:"login_time" gorm:"column:login_time;type:int(11);default:0;index:idx_login_time"` //用户登录时间
+	Status    uint        `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+	LoginTime int64       `json:"login_time" gorm:"column:login_time;type:int(11);default:0"` //用户登录时间
 	GroupId   uint        `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
 	Token     string      `json:"token" gorm:"-"`
 	Group     *AdminGroup `json:"group" gorm:"-"`

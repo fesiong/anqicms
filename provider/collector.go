@@ -1124,12 +1124,18 @@ func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {
 func (w *Website) checkArticleExists(originUrl, originTitle, title string) bool {
 	var total int64
 	if len(originUrl) > 0 {
+		if utf8.RuneCountInString(originUrl) > 190 {
+			originUrl = string([]rune(originUrl)[:190])
+		}
 		w.DB.Model(&model.Archive{}).Where("origin_url = ?", originUrl).Count(&total)
 		if total > 0 {
 			return true
 		}
 	}
 	if len(originTitle) > 0 {
+		if utf8.RuneCountInString(originTitle) > 190 {
+			originTitle = string([]rune(originTitle)[:190])
+		}
 		w.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
 		if total > 0 {
 			return true

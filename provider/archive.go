@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 func (w *Website) GetArchiveById(id uint) (*model.Archive, error) {
@@ -208,9 +209,15 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		archive.KeywordId = req.KeywordId
 	}
 	if req.OriginUrl != "" {
+		if utf8.RuneCountInString(req.OriginUrl) > 190 {
+			req.OriginUrl = string([]rune(req.OriginUrl)[:190])
+		}
 		archive.OriginUrl = req.OriginUrl
 	}
 	if req.OriginTitle != "" {
+		if utf8.RuneCountInString(req.OriginTitle) > 190 {
+			req.OriginTitle = string([]rune(req.OriginTitle)[:190])
+		}
 		archive.OriginTitle = req.OriginTitle
 	}
 

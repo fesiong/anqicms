@@ -24,7 +24,7 @@ type Category struct {
 	IsInherit      uint           `json:"is_inherit" gorm:"column:is_inherit;type:int(1) unsigned not null;default:0"` // 模板是否被继承
 	Images         pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Logo           string         `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
-	Status         uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Status         uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	Spacer         string         `json:"spacer" gorm:"-"`
 	HasChildren    bool           `json:"has_children" gorm:"-"`
 	Link           string         `json:"link" gorm:"-"`
