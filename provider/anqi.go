@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/parnurzeal/gorequest"
@@ -14,6 +15,7 @@ import (
 	"log"
 	"math/rand"
 	"mime/multipart"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,6 +95,7 @@ type AnqiAiRequest struct {
 	Keyword    string `json:"keyword"`
 	Language   string `json:"language"`
 	Title      string `json:"title"`
+	Demand     string `json:"demand,omitempty"`
 	Content    string `json:"content"`
 	TextLength int64  `json:"text_length"`
 	AiRemain   int64  `json:"ai_remain"`
@@ -102,6 +105,12 @@ type AnqiAiResult struct {
 	Code int           `json:"code"`
 	Msg  string        `json:"msg"`
 	Data AnqiAiRequest `json:"data"`
+}
+
+type AnqiAiStreamResult struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data string `json:"data"`
 }
 
 type AnqiSensitiveResult struct {
@@ -466,6 +475,32 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	log.Println(res.Id, res.Title)
 
 	return 1, nil
+}
+
+func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (*http.Response, error) {
+	req := &AnqiAiRequest{
+		Keyword:  keyword.Title,
+		Demand:   keyword.Demand,
+		Language: w.System.Language, // 以系统语言为标准
+	}
+	buf, _ := json.Marshal(req)
+
+	client := &http.Client{
+		Timeout: 120 * time.Second,
+	}
+	anqiReq, err := http.NewRequest("POST", AnqiApi+"/ai/stream", bytes.NewReader(buf))
+	if err != nil {
+		return nil, err
+	}
+	anqiReq.Header.Add("token", config.AnqiUser.Token)
+	anqiReq.Header.Add("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
+	anqiReq.Header.Add("domain", w.System.BaseUrl)
+	resp, err := client.Do(anqiReq)
+	if err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }
 
 func (w *Website) AnqiSyncSensitiveWords() error {

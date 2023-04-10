@@ -1,12 +1,15 @@
 package manageController
 
 import (
+	"bufio"
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"time"
 )
 
@@ -321,6 +324,72 @@ func AnqiAiGenerateArticle(ctx iris.Context) {
 		"msg":  "AI创作成功",
 		"data": archive,
 	})
+}
+
+func AuthAiGenerateStream(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.KeywordRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	resp, err := currentSite.AnqiAiGenerateStream(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 发送标记
+	ctx.StatusCode(201)
+	// 开始处理
+	defer resp.Body.Close()
+	reader := bufio.NewReader(resp.Body)
+	for {
+		line, err := reader.ReadBytes('\n')
+		if err != nil {
+			log.Println(err)
+			// log.Println("is eof", errors.Is(err, io.EOF))
+			break
+		}
+		log.Println(string(line))
+		var aiResponse provider.AnqiAiStreamResult
+		err = json.Unmarshal(line, &aiResponse)
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+		if aiResponse.Code != 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  aiResponse.Msg,
+			})
+			return
+		}
+
+		buf2, _ := json.Marshal(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": aiResponse.Data,
+		})
+		ctx.Write(buf2)
+		ctx.Write([]byte("\n"))
+		ctx.ResponseWriter().Flush()
+	}
+
+	buf2, _ := json.Marshal(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "finished",
+		"data": nil,
+	})
+	ctx.Write(buf2)
+	ctx.Write([]byte("\n"))
 }
 
 func RestartAnqicms(ctx iris.Context) {
