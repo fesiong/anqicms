@@ -188,7 +188,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				Order("id ASC")
 			return tx
 		}, 0, newLimit, offset)
-		preCount := len(archives)
 		newLimit += newLimit - len(archives)
 		archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 			tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).
@@ -198,18 +197,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		//列表不返回content
 		if len(archives2) > 0 {
 			archives = append(archives, archives2...)
-		}
-		// 如果量不够，则再补充
-		if len(archives) < limit {
-			newLimit = limit - len(archives)
-			archives3, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
-					Order("id ASC")
-				return tx
-			}, 0, newLimit, offset+preCount)
-			if len(archives3) > 0 {
-				archives = append(archives, archives3...)
-			}
 		}
 		// 如果数量超过，则截取
 		if len(archives) > limit {
