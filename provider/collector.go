@@ -171,7 +171,7 @@ func (w *Website) CollectArticles() {
 		for i := 0; i < len(keywords); i++ {
 			keyword := keywords[i]
 			// 检查是否采集过
-			if w.checkArticleExists(keyword.Title, "") {
+			if w.checkArticleExists(keyword.Title, "", "") {
 				//log.Println("已存在于数据库", keyword.Title)
 				continue
 			}
@@ -220,7 +220,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	//原始标题
 	archive.OriginTitle = archive.Title
 
-	if w.checkArticleExists(archive.OriginUrl, archive.OriginTitle) {
+	if w.checkArticleExists(archive.OriginUrl, archive.OriginTitle, archive.Title) {
 		//log.Println("已存在于数据库", archive.OriginTitle)
 		return errors.New(w.Lang("已存在于数据库"))
 	}
@@ -1121,7 +1121,7 @@ func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {
 	return total
 }
 
-func (w *Website) checkArticleExists(originUrl, originTitle string) bool {
+func (w *Website) checkArticleExists(originUrl, originTitle, title string) bool {
 	var total int64
 	if len(originUrl) > 0 {
 		w.DB.Model(&model.Archive{}).Where("origin_url = ?", originUrl).Count(&total)
@@ -1131,6 +1131,12 @@ func (w *Website) checkArticleExists(originUrl, originTitle string) bool {
 	}
 	if len(originTitle) > 0 {
 		w.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
+		if total > 0 {
+			return true
+		}
+	}
+	if len(title) > 0 {
+		w.DB.Model(&model.Archive{}).Where("`title` = ?", title).Count(&total)
 		if total > 0 {
 			return true
 		}

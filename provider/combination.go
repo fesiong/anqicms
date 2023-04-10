@@ -37,7 +37,7 @@ var sogouForbid = false
 
 func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	// 检查是否采集过
-	if w.checkArticleExists(keyword.Title, "") {
+	if w.checkArticleExists(keyword.Title, "", "") {
 		//log.Println("已存在于数据库", keyword.Title)
 		return 1, nil
 	}
@@ -105,6 +105,10 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		archive.Draft = true
 	} else {
 		archive.Draft = false
+	}
+	// 保存前再检查一次
+	if w.checkArticleExists(keyword.Title, "", archive.Title) {
+		return 1, nil
 	}
 	res, err := w.SaveArchive(&archive)
 	if err != nil {

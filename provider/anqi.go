@@ -415,7 +415,7 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 
 func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	// 检查是否采集过
-	if w.checkArticleExists(keyword.Title, "") {
+	if w.checkArticleExists(keyword.Title, "", "") {
 		//log.Println("已存在于数据库", keyword.Title)
 		return 1, nil
 	}
