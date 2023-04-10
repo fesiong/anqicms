@@ -517,7 +517,13 @@ func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
 		return errors.New(w.Lang("无可操作的文档"))
 	}
 	var err error
-	if req.Time == 2 {
+	if req.Time == 4 {
+		// updated_time 所有文档
+		err = w.DB.Model(&model.Archive{}).UpdateColumn("updated_time", time.Now().Unix()).Error
+	} else if req.Time == 3 {
+		// created_time 所有文档
+		err = w.DB.Model(&model.Archive{}).UpdateColumn("created_time", time.Now().Unix()).Error
+	} else if req.Time == 2 {
 		// updated_time
 		err = w.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("updated_time", time.Now().Unix()).Error
 	} else {
