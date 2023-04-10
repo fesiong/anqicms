@@ -9,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"log"
 	"time"
 )
 
@@ -354,15 +353,14 @@ func AuthAiGenerateStream(ctx iris.Context) {
 	for {
 		line, err := reader.ReadBytes('\n')
 		if err != nil {
-			log.Println(err)
+			//log.Println(err)
 			// log.Println("is eof", errors.Is(err, io.EOF))
 			break
 		}
-		log.Println(string(line))
 		var aiResponse provider.AnqiAiStreamResult
 		err = json.Unmarshal(line, &aiResponse)
 		if err != nil {
-			log.Println(err)
+			//log.Println(err)
 			continue
 		}
 		if aiResponse.Code != 0 {
