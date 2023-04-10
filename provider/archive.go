@@ -536,7 +536,14 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 	if len(req.Ids) == 0 {
 		return errors.New(w.Lang("无可操作的文档"))
 	}
-	err := w.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumn("category_id", req.CategoryId).Error
+	category, err := w.GetCategoryById(req.CategoryId)
+	if err != nil {
+		return err
+	}
+	err = w.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumns(map[string]interface{}{
+		"category_id": req.CategoryId,
+		"module_id":   category.ModuleId,
+	}).Error
 
 	return err
 }
