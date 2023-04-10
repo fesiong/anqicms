@@ -486,7 +486,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (*http.R
 	buf, _ := json.Marshal(req)
 
 	client := &http.Client{
-		Timeout: 120 * time.Second,
+		Timeout: 180 * time.Second,
 	}
 	anqiReq, err := http.NewRequest("POST", AnqiApi+"/ai/stream", bytes.NewReader(buf))
 	if err != nil {
