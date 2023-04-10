@@ -352,10 +352,12 @@ func AuthAiGenerateStream(ctx iris.Context) {
 	reader := bufio.NewReader(resp.Body)
 	for {
 		line, err := reader.ReadBytes('\n')
+		var isEof bool
 		if err != nil {
+			isEof = true
 			//log.Println(err)
 			// log.Println("is eof", errors.Is(err, io.EOF))
-			break
+			//break
 		}
 		var aiResponse provider.AnqiAiStreamResult
 		err = json.Unmarshal(line, &aiResponse)
@@ -379,6 +381,9 @@ func AuthAiGenerateStream(ctx iris.Context) {
 		ctx.Write(buf2)
 		ctx.Write([]byte("\n"))
 		ctx.ResponseWriter().Flush()
+		if isEof {
+			break
+		}
 	}
 
 	buf2, _ := json.Marshal(iris.Map{
