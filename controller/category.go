@@ -87,7 +87,7 @@ func CategoryPage(ctx iris.Context) {
 		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	} else {
 		categoryTemplate := currentSite.GetCategoryTemplate(category)
-		if categoryTemplate != nil {
+		if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
 			tplName = categoryTemplate.Template
 		}
 	}
