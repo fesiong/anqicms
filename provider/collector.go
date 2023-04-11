@@ -99,37 +99,6 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 	return nil
 }
 
-// getBetweenSeconds 根据发布量获取每天发布间隔
-// 根据设置的时间，随机休息秒数
-func (w *Website) getBetweenSeconds() time.Duration {
-	limit := w.CollectorConfig.DailyLimit
-	if limit == 0 {
-		limit = 1000
-	}
-	if w.CollectorConfig.EndHour > 24 {
-		w.CollectorConfig.EndHour = 24
-	}
-	hour := w.CollectorConfig.EndHour - w.CollectorConfig.StartHour
-	if hour > 24 || hour <= 0 {
-		hour = 24
-	}
-	seconds := hour * 3600
-
-	between := seconds/limit*2 - 1
-	if w.CollectorConfig.AutoPseudo {
-		between -= 1
-	}
-
-	//返回随机正负5秒的实际
-	between += rand.Intn(11) - 5
-
-	if between <= 0 {
-		between = 1
-	}
-
-	return time.Duration(between) * time.Second
-}
-
 var runningCollectArticles = false
 
 func (w *Website) CollectArticles() {
@@ -186,7 +155,7 @@ func (w *Website) CollectArticles() {
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
 				// 延时 10分钟以上
-				time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
+				// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
 				break
 			}
 		}
@@ -314,8 +283,8 @@ func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (i
 			if err == nil {
 				total++
 				if !focus {
-					//根据设置的时间，随机休息秒数
-					time.Sleep(w.getBetweenSeconds())
+					//根据设置的时间，休息一定秒数
+					time.Sleep(15 * time.Second)
 				}
 			}
 		}
@@ -364,6 +333,22 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		return nil, errors.New(w.Lang("乱码"))
 	}
 
+	// 替换图片
+	if w.CollectorConfig.InsertImage != config.CollectImageRetain {
+		re, _ := regexp.Compile(`(?i)<img\s.*?>`)
+		archive.Content = RemoveTags(re.ReplaceAllString(archive.Content, ""))
+	}
+	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
+		rand.Seed(time.Now().UnixMicro())
+		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		content := strings.SplitAfter(archive.Content, ">")
+
+		index := len(content) / 2
+		content = append(content, "")
+		copy(content[index+1:], content[index:])
+		content[index] = "<img src='" + img + "'/>"
+		archive.Content = strings.Join(content, "")
+	}
 	//log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
 
 	return archive, nil

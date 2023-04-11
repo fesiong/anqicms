@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
@@ -59,28 +60,26 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	}
 	var title = keyword.Title
 	var content = make([]string, 0, len(materials)*2+3)
-	num := 0
 	for i := range materials {
 		if utf8.RuneCountInString(title) < 10 {
 			title = materials[i].Title
 		}
 		content = append(content, "<h3>"+materials[i].Title+"</h3>")
 		text := materials[i].Content
-		content = append(content, "<p>"+text+"</p>")
-		re, _ := regexp.Compile(`(?i)<img\s.*?>`)
-		exist := re.MatchString(text)
-		if exist {
-			num++
+		if w.CollectorConfig.InsertImage != config.CollectImageRetain {
+			re, _ := regexp.Compile(`(?i)<img\s.*?>`)
+			text = RemoveTags(re.ReplaceAllString(text, ""))
 		}
+		content = append(content, "<p>"+text+"</p>")
+
 	}
-	if w.CollectorConfig.InsertImage && num == 0 && len(w.CollectorConfig.Images) > 0 {
+	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
 		rand.Seed(time.Now().UnixMicro())
 		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
 		index := 2 + rand.Intn(len(content)-3)
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
 		content[index] = "<img src='" + img + "'/>"
-		num++
 	}
 	categoryId := keyword.CategoryId
 	if categoryId == 0 {
@@ -143,28 +142,25 @@ func (w *Website) GetCombinationArticle(keyword *model.Keyword) (*request.Archiv
 	}
 	var title = keyword.Title
 	var content = make([]string, 0, len(materials)*2+3)
-	num := 0
 	for i := range materials {
 		if utf8.RuneCountInString(title) < 10 {
 			title = materials[i].Title
 		}
 		content = append(content, "<h3>"+materials[i].Title+"</h3>")
 		text := materials[i].Content
-		content = append(content, "<p>"+text+"</p>")
-		re, _ := regexp.Compile(`(?i)<img\s.*?>`)
-		exist := re.MatchString(text)
-		if exist {
-			num++
+		if w.CollectorConfig.InsertImage != config.CollectImageRetain {
+			re, _ := regexp.Compile(`(?i)<img\s.*?>`)
+			text = RemoveTags(re.ReplaceAllString(text, ""))
 		}
+		content = append(content, "<p>"+text+"</p>")
 	}
-	if w.CollectorConfig.InsertImage && num == 0 && len(w.CollectorConfig.Images) > 0 {
+	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
 		rand.Seed(time.Now().UnixMicro())
 		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
 		index := 2 + rand.Intn(len(content)-3)
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
 		content[index] = "<img src='" + img + "'/>"
-		num++
 	}
 
 	archive := request.Archive{

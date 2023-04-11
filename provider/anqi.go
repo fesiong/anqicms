@@ -434,7 +434,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	}
 
 	var content = strings.Split(result.Data.Content, "\n")
-	if w.CollectorConfig.InsertImage && len(w.CollectorConfig.Images) > 0 {
+	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
 		rand.Seed(time.Now().UnixMicro())
 		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
 		index := 2 + rand.Intn(len(content)-3)

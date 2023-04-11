@@ -143,6 +143,16 @@ func HandleArticleCollect(ctx iris.Context) {
 	})
 }
 
+func HandleStartArticleCollect(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.CollectArticles()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "采集任务已触发，预计1分钟后即可查看采集结果",
+	})
+}
+
 // HandleArticleCombinationGet 获取问答组合文章
 func HandleArticleCombinationGet(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)

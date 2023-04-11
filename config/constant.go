@@ -109,6 +109,10 @@ const (
 	CollectModeCollect = 0
 	CollectModeCombine = 1
 	CollectModeAiGen   = 2
+
+	CollectImageRemove = 0 // 移除
+	CollectImageRetain = 1 // 保留
+	CollectImageInsert = 2 // 自定义插入
 )
 
 // login platform

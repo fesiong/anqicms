@@ -6,7 +6,7 @@ type CollectorJson struct {
 	Channels           int              `json:"channels"`     //预留
 	CollectMode        int              `json:"collect_mode"` // 0: 采集, 1: 组合, 2: AI 生成
 	Language           string           `json:"language"`     // zh|en|cr
-	InsertImage        bool             `json:"insert_image"` // 是否插入图片
+	InsertImage        int              `json:"insert_image"` // 是否插入图片, 0 移除图片，1 保留图片，2 插入自定义图片
 	Images             []string         `json:"images"`
 	FromWebsite        string           `json:"from_website"`
 	TitleMinLength     int              `json:"title_min_length"`
