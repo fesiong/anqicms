@@ -145,11 +145,14 @@ func CommentList(ctx iris.Context) {
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		currentPage := ctx.URLParamIntDefault("page", 1)
 		webInfo.Title = currentSite.Lang("评论") + ": " + archive.Title
+		if currentPage > 1 {
+			webInfo.Title += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
+		}
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
 		webInfo.PageName = "comments"
-		currentPage := ctx.URLParamIntDefault("page", 1)
 		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/comment/%d(?page={page})", archive.Id), nil, currentPage)
 		ctx.ViewData("webInfo", webInfo)
 	}

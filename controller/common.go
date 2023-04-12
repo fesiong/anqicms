@@ -295,7 +295,13 @@ func ReRouteContext(ctx iris.Context) {
 	}
 
 	for i, v := range params {
+		if len(i) == 0 {
+			continue
+		}
 		ctx.Params().Set(i, v)
+		if i == "page" && v > "0" {
+			ctx.Values().Set("page", v)
+		}
 	}
 
 	switch params["match"] {
