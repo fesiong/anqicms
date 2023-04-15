@@ -562,6 +562,9 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 		return nil, true, errors.New("没有内容")
 	}
 	// 保存它
+	if utf8.RuneCountInString(link) > 190 {
+		link = string([]rune(link)[:190])
+	}
 	item.OriginUrl = link
 	item.Keyword = keyword.Title
 	w.DB.Save(&item)
