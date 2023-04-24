@@ -155,7 +155,7 @@ func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 			newToken := library.GetPinyin(tagName, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 			newToken = w.VerifyTagUrlToken(newToken, 0)
 			letter := "A"
-			if newToken != "-" {
+			if len(newToken) > 0 && newToken != "-" {
 				letter = string(newToken[0])
 			}
 			tag = &model.Tag{
