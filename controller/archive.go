@@ -120,6 +120,7 @@ func ArchiveDetail(ctx iris.Context) {
 
 	module := currentSite.GetModuleFromCache(archive.ModuleId)
 	if module == nil {
+		ctx.StatusCode(404)
 		ShowMessage(ctx, fmt.Sprintf("%s: %d", currentSite.Lang("未定义模型"), archive.ModuleId), nil)
 		return
 	}

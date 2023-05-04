@@ -367,14 +367,19 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 		return matchMap, true
 	}
 	// 搜索
-	if paramValue == "search" {
+	reg := regexp.MustCompile(`^search(/([^/]+?))?$`)
+	match := reg.FindStringSubmatch(paramValue)
+	if len(match) > 0 {
 		matchMap["match"] = "search"
+		if len(match) == 3 {
+			matchMap["module"] = match[2]
+		}
 		return matchMap, true
 	}
 	rewritePattern := currentSite.ParsePatten(false)
 	//archivePage
-	reg := regexp.MustCompile(rewritePattern.ArchiveIndexRule)
-	match := reg.FindStringSubmatch(paramValue)
+	reg = regexp.MustCompile(rewritePattern.ArchiveIndexRule)
+	match = reg.FindStringSubmatch(paramValue)
 	if len(match) > 0 {
 		matchMap["match"] = "archiveIndex"
 		for i, v := range match {
@@ -392,7 +397,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 		matchMap = map[string]string{}
 	}
 	// people
-	reg = regexp.MustCompile("people/([\\d]+).html")
+	reg = regexp.MustCompile("^people/([\\d]+).html$")
 	match = reg.FindStringSubmatch(paramValue)
 
 	if len(match) > 1 {

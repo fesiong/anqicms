@@ -56,6 +56,7 @@ func CategoryPage(ctx iris.Context) {
 
 	module := currentSite.GetModuleFromCache(category.ModuleId)
 	if module == nil {
+		ctx.StatusCode(404)
 		ShowMessage(ctx, currentSite.Lang("未定义模型"), nil)
 		return
 	}
@@ -107,6 +108,17 @@ func CategoryPage(ctx iris.Context) {
 func SearchPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	q := strings.TrimSpace(ctx.URLParam("q"))
+	moduleToken := ctx.Params().GetString("module")
+	var module *model.Module
+	if len(moduleToken) > 0 {
+		module = currentSite.GetModuleFromCacheByToken(moduleToken)
+		if module == nil {
+			ctx.StatusCode(404)
+			ShowMessage(ctx, currentSite.Lang("未定义模型"), nil)
+			return
+		}
+		ctx.ViewData("module", module)
+	}
 	if currentSite.Safe.ContentForbidden != "" {
 		forbiddens := strings.Split(currentSite.Safe.ContentForbidden, "\n")
 		for _, v := range forbiddens {
@@ -124,6 +136,9 @@ func SearchPage(ctx iris.Context) {
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = fmt.Sprintf("%s: %s", currentSite.Lang("搜索"), q)
+		if module != nil {
+			webInfo.Title = module.Title + webInfo.Title
+		}
 		if currentPage > 1 {
 			webInfo.Title += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
 		}
@@ -137,6 +152,13 @@ func SearchPage(ctx iris.Context) {
 	tplName := "search/index.html"
 	if ViewExists(ctx, "search.html") {
 		tplName = "search.html"
+	}
+	if module != nil {
+		if ViewExists(ctx, "search/"+module.UrlToken+".html") {
+			tplName = "search/" + module.UrlToken + ".html"
+		} else if ViewExists(ctx, "search_"+module.UrlToken+".html") {
+			tplName = "search_" + module.UrlToken + ".html"
+		}
 	}
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {

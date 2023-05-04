@@ -15,6 +15,7 @@ func GuestbookPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	base := ctx.Params().Get("base")
 	if base != strings.TrimLeft(currentSite.BaseURI, "/") {
+		ctx.StatusCode(404)
 		ShowMessage(ctx, "Not Found", nil)
 		return
 	}
