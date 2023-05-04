@@ -30,6 +30,8 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.PluginFulltext.Open = req.Open
+	currentSite.PluginFulltext.UseContent = req.UseContent
+	currentSite.PluginFulltext.Modules = req.Modules
 
 	err := currentSite.SaveSettingValue(provider.FulltextSettingKey, currentSite.PluginFulltext)
 	if err != nil {
@@ -42,6 +44,7 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新全文索引配置信息"))
 	if req.Open {
+		currentSite.CloseFulltext()
 		go currentSite.InitFulltext()
 	} else {
 		currentSite.CloseFulltext()

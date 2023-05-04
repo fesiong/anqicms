@@ -15,11 +15,12 @@ const (
 )
 
 type TinyArchive struct {
-	Id       uint   `json:"id"`
-	ModuleId uint   `json:"module_id"`
-	Title    string `json:"title"`
-	Keywords string `json:"keywords"`
-	Content  string `json:"content"`
+	Id          uint   `json:"id"`
+	ModuleId    uint   `json:"module_id"`
+	Title       string `json:"title"`
+	Keywords    string `json:"keywords"`
+	Description string `json:"description"`
+	Content     string `json:"content"`
 }
 
 func (w *Website) GetFullTextStatus() int {
@@ -27,7 +28,7 @@ func (w *Website) GetFullTextStatus() int {
 }
 
 func (w *Website) InitFulltext() {
-	if !w.PluginFulltext.Open || w.searcher != nil {
+	if !w.PluginFulltext.Open || len(w.PluginFulltext.Modules) == 0 || w.searcher != nil {
 		return
 	}
 	w.fulltextStatus = 1
@@ -36,11 +37,15 @@ func (w *Website) InitFulltext() {
 	w.searcher.Init(types.EngineInitOptions{SegmenterDictionaries: config.ExecPath + "dictionary.txt"})
 
 	var archiveCount int
-	// 导入索引：仅导入标题/关键词和内容
+	// 导入索引：仅导入标题/关键词/描述和内容
 	var lastId uint = 0
 	for {
 		var archives = make([]*TinyArchive, 0, InitSqlLimit)
-		w.DB.Table("`archives` as a").Joins("left join `archive_data` as d on a.id=d.id").Select("a.id,a.title,a.keywords,a.module_id,d.content").Where("a.`id` > ? and `status` = ?", lastId, config.ContentStatusOK).Order("a.id asc").Limit(InitSqlLimit).Scan(&archives)
+		if w.PluginFulltext.UseContent {
+			w.DB.Table("`archives` as a").Joins("left join `archive_data` as d on a.id=d.id").Select("a.id,a.title,a.keywords,a.description,a.module_id,d.content").Where("a.`id` > ? and a.`module_id` IN(?) and a.`status` = ?", lastId, w.PluginFulltext.Modules, config.ContentStatusOK).Order("a.id asc").Limit(InitSqlLimit).Scan(&archives)
+		} else {
+			w.DB.Table("`archives` as a").Select("a.id,a.title,a.keywords,a.description,a.module_id").Where("a.`id` > ? and a.`module_id` IN(?) and a.`status` = ?", lastId, w.PluginFulltext.Modules, config.ContentStatusOK).Order("a.id asc").Limit(InitSqlLimit).Scan(&archives)
+		}
 		if len(archives) == 0 {
 			break
 		}
@@ -81,6 +86,10 @@ func (w *Website) AddFulltextIndex(doc *TinyArchive) {
 	content := doc.Title
 	if doc.Keywords != "" {
 		content += " " + doc.Keywords
+	}
+	if doc.Description != "" {
+		// 内容搜索的时候，需要去除html标签
+		content += " " + library.StripTags(doc.Description)
 	}
 	if doc.Content != "" {
 		// 内容搜索的时候，需要去除html标签
