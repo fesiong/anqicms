@@ -573,8 +573,7 @@ func ApiArchiveOrderCheck(ctx iris.Context) {
 	if userId > 0 {
 		if archiveDetail.UserId == userId {
 			archiveDetail.HasOrdered = true
-		}
-		if archiveDetail.Price > 0 {
+		} else if archiveDetail.Price > 0 {
 			archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archiveDetail.Id)
 		}
 		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
