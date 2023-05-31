@@ -12,3 +12,4 @@ goblog
 /release
 collector.json
 keyword.json
+*.log

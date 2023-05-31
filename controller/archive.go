@@ -34,7 +34,8 @@ func ArchiveDetail(ctx iris.Context) {
 		for _, catName := range chunkCatNames {
 			tmpCat := currentSite.GetCategoryFromCacheByToken(catName)
 			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
-				NotFound(ctx)
+				// 则跳到正确的链接上
+				ctx.Redirect(currentSite.GetUrl("archive", archive, 0), 301)
 				return
 			}
 			prev = tmpCat
