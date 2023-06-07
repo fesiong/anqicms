@@ -52,8 +52,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	if userId > 0 {
 		if archive.UserId == userId {
 			archive.HasOrdered = true
-		}
-		if archive.Price > 0 {
+		} else if archive.Price > 0 {
 			archive.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archive.Id)
 			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
 			discount := currentSite.GetUserDiscount(userId, userInfo)
@@ -438,8 +437,7 @@ func ApiArchiveParams(ctx iris.Context) {
 	if userId > 0 {
 		if archiveDetail.UserId == userId {
 			archiveDetail.HasOrdered = true
-		}
-		if archiveDetail.Price > 0 {
+		} else if archiveDetail.Price > 0 {
 			archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archiveDetail.Id)
 		}
 		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
