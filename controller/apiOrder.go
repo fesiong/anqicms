@@ -567,22 +567,8 @@ func ApiArchiveOrderCheck(ctx iris.Context) {
 			"data": false,
 		})
 	}
-	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-		archiveDetail.HasOrdered = true
-	}
-	if userId > 0 {
-		if archiveDetail.UserId == userId {
-			archiveDetail.HasOrdered = true
-		} else if archiveDetail.Price > 0 {
-			archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archiveDetail.Id)
-		}
-		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-				archiveDetail.HasOrdered = true
-			}
-		}
-	}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

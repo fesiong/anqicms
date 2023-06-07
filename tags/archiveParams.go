@@ -54,24 +54,14 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
 			// if read level larger than 0, then need to check permission
-			if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-				archiveDetail.HasOrdered = true
-			}
+			userId := uint(0)
 			userInfo, ok := ctx.Public["userInfo"].(*model.User)
 			if ok && userInfo.Id > 0 {
-				if archiveDetail.UserId == userInfo.Id {
-					archiveDetail.HasOrdered = true
-				}
-				if archiveDetail.Price > 0 {
-					archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
-				}
-				if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-					if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-						archiveDetail.HasOrdered = true
-					}
-				}
+				userId = userInfo.Id
 			}
+			userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+			archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+
 			for i := range archiveParams {
 				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 					archiveParams[i].Value = archiveParams[i].Default

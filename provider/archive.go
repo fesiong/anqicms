@@ -747,30 +747,31 @@ func (w *Website) VerifyArchiveUrlToken(urlToken string, id uint) string {
 	return urlToken
 }
 
-func (w *Website) CheckArchiveHasOrder(userId uint, archiveId uint) bool {
-	if userId == 0 || archiveId == 0 {
-		return false
+func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, userGroup *model.UserGroup) *model.Archive {
+	if archive.Price == 0 && archive.ReadLevel == 0 {
+		archive.HasOrdered = true
 	}
-	var exist int64
-	w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archiveId).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
-		config.OrderStatusPaid,
-		config.OrderStatusDelivering,
-		config.OrderStatusCompleted}).Count(&exist)
-	if exist > 0 {
-		return true
+	if userId > 0 {
+		if archive.UserId == userId {
+			archive.HasOrdered = true
+		} else if archive.Price > 0 {
+			var exist int64
+			w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+				config.OrderStatusPaid,
+				config.OrderStatusDelivering,
+				config.OrderStatusCompleted}).Count(&exist)
+			if exist > 0 {
+				archive.HasOrdered = true
+			}
+
+			archive.HasOrdered = false
+		}
+		if archive.ReadLevel > 0 && !archive.HasOrdered {
+			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
+				archive.HasOrdered = true
+			}
+		}
 	}
 
-	//var orderIds []string
-	//w.DB.Model(&model.OrderDetail{}).Where("`user_id` = ? and `goods_id` = ?", userId, archiveId).Pluck("order_id", &orderIds)
-	//if len(orderIds) == 0 {
-	//	return false
-	//}
-	//
-	//var exist int64
-	//w.DB.Model(&model.Order{}).Where("`order_id` IN(?) and `status` > ?", orderIds, 0).Count(&exist)
-	//if exist > 0 {
-	//	return true
-	//}
-
-	return false
+	return archive
 }

@@ -46,27 +46,16 @@ func ApiArchiveDetail(ctx iris.Context) {
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
-	if archive.Price == 0 && archive.ReadLevel == 0 {
-		archive.HasOrdered = true
-	}
-	if userId > 0 {
-		if archive.UserId == userId {
-			archive.HasOrdered = true
-		} else if archive.Price > 0 {
-			archive.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archive.Id)
-			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-			discount := currentSite.GetUserDiscount(userId, userInfo)
-			if discount > 0 {
-				archive.FavorablePrice = archive.Price * discount / 100
-			}
-		}
-		if archive.ReadLevel > 0 && !archive.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
-				archive.HasOrdered = true
-			}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archive = currentSite.CheckArchiveHasOrder(userId, archive, userGroup)
+	if archive.Price > 0 {
+		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+		discount := currentSite.GetUserDiscount(userId, userInfo)
+		if discount > 0 {
+			archive.FavorablePrice = archive.Price * discount / 100
 		}
 	}
+
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
@@ -431,22 +420,9 @@ func ApiArchiveParams(ctx iris.Context) {
 	archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
-	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-		archiveDetail.HasOrdered = true
-	}
-	if userId > 0 {
-		if archiveDetail.UserId == userId {
-			archiveDetail.HasOrdered = true
-		} else if archiveDetail.Price > 0 {
-			archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archiveDetail.Id)
-		}
-		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-				archiveDetail.HasOrdered = true
-			}
-		}
-	}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+
 	for i := range archiveParams {
 		if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 			archiveParams[i].Value = archiveParams[i].Default
