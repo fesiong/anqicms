@@ -186,7 +186,7 @@ func (w *Website) GetCacheModules() []model.Module {
 		}
 	}
 
-	w.DB.Where(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules)
+	w.DB.Model(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules)
 
 	w.MemCache.Set("modules", modules, 0)
 

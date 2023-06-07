@@ -10,23 +10,23 @@ import (
 func IndexPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
-	//var ua string
-	//if ctx.IsMobile() {
-	//	ua = provider.UserAgentMobile
-	//} else {
-	//	ua = provider.UserAgentPc
-	//}
+	var ua string
+	if ctx.IsMobile() {
+		ua = provider.UserAgentMobile
+	} else {
+		ua = provider.UserAgentPc
+	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	// 只缓存首页
-	//if currentPage == 1 && ctx.GetHeader("Cache-Control") != "no-cache" && userId == 0 {
-	//	body := currentSite.GetIndexCache(ua)
-	//	if body != nil {
-	//		//log.Println("Load index from cache.")
-	//		ctx.ResponseWriter().FlushResponse()
-	//		ctx.Write(body)
-	//		return
-	//	}
-	//}
+	if currentPage == 1 && ctx.GetHeader("Cache-Control") != "no-cache" && userId == 0 {
+		body := currentSite.GetIndexCache(ua)
+		if body != nil {
+			//log.Println("Load index from cache.")
+			ctx.ResponseWriter().FlushResponse()
+			ctx.Write(body)
+			return
+		}
+	}
 	webTitle := currentSite.Index.SeoTitle
 	if currentPage > 1 {
 		webTitle += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
@@ -47,15 +47,9 @@ func IndexPage(ctx iris.Context) {
 	if ViewExists(ctx, "index.html") {
 		tplName = "index.html"
 	}
-	recorder := ctx.Recorder()
+	//recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
-	} else if currentPage == 1 && userId == 0 {
-		body := recorder.Body()
-		body = currentSite.ReplaceSensitiveWords(body)
-		//currentSite.CacheIndex(ua, body)
-		recorder.ResetBody()
-		ctx.Write(body)
 	}
 }

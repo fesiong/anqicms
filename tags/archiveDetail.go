@@ -56,7 +56,13 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		archiveDetail, _ = currentSite.GetArchiveById(id)
+		archiveDetail = currentSite.GetArchiveByIdFromCache(id)
+		if archiveDetail == nil {
+			archiveDetail, _ = currentSite.GetArchiveById(id)
+			if archiveDetail != nil {
+				currentSite.AddArchiveCache(archiveDetail)
+			}
+		}
 		// check has Order
 		if fieldName == "HasOrdered" && archiveDetail != nil {
 			// if read level larger than 0, then need to check permission

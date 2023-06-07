@@ -16,6 +16,27 @@ import (
 	"unicode/utf8"
 )
 
+func (w *Website) GetArchiveByIdFromCache(id uint) (archive *model.Archive) {
+	result := w.MemCache.Get(fmt.Sprintf("archive-%d", id))
+	if result != nil {
+		var ok bool
+		archive, ok = result.(*model.Archive)
+		if ok {
+			return archive
+		}
+	}
+
+	return nil
+}
+
+func (w *Website) AddArchiveCache(archive *model.Archive) {
+	w.MemCache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
+}
+
+func (w *Website) DeleteArchiveCache(id uint) {
+	w.MemCache.Delete(fmt.Sprintf("archive-%d", id))
+}
+
 func (w *Website) GetArchiveById(id uint) (*model.Archive, error) {
 	return w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", id)
@@ -87,7 +108,25 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 		offset = offsets[0]
 	}
 	var total int64
-
+	// 对于没有分页的list，则缓存
+	var cacheKey = ""
+	if currentPage == 0 {
+		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			if ops != nil {
+				tx = ops(tx).Limit(pageSize).Offset(offset)
+			}
+			return tx.Find(&[]*model.Archive{})
+		})
+		cacheKey = "archive-list-" + library.Md5(sql)[8:24]
+		result := w.MemCache.Get(cacheKey)
+		if result != nil {
+			var ok bool
+			archives, ok = result.([]*model.Archive)
+			if ok {
+				return archives, int64(len(archives)), nil
+			}
+		}
+	}
 	builder := w.DB.Model(&model.Archive{})
 
 	if ops != nil {
@@ -105,10 +144,41 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 		archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 		archives[i].Link = w.GetUrl("archive", archives[i], 0)
 	}
+	// 对于没有分页的list，则缓存
+	if currentPage == 0 {
+		w.MemCache.Set(cacheKey, archives, 300)
+	}
 	return archives, total, nil
 }
 
-func (w *Website) GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
+func (w *Website) GetArchiveExtraFromCache(archiveId uint) (archive map[string]*model.CustomField) {
+	result := w.MemCache.Get(fmt.Sprintf("archive-extra-%d", archiveId))
+	if result != nil {
+		var ok bool
+		archive, ok = result.(map[string]*model.CustomField)
+		if ok {
+			return archive
+		}
+	}
+
+	return nil
+}
+
+func (w *Website) AddArchiveExtraCache(archiveId uint, extra map[string]*model.CustomField) {
+	w.MemCache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 300)
+}
+
+func (w *Website) DeleteArchiveExtraCache(archiveId uint) {
+	w.MemCache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
+}
+
+func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]*model.CustomField {
+	if loadCache {
+		cached := w.GetArchiveExtraFromCache(id)
+		if cached != nil {
+			return cached
+		}
+	}
 	//读取extra
 	result := map[string]interface{}{}
 	extraFields := map[string]*model.CustomField{}
@@ -136,6 +206,9 @@ func (w *Website) GetArchiveExtra(moduleId, id uint) map[string]*model.CustomFie
 					FollowLevel: v.FollowLevel,
 				}
 			}
+		}
+		if loadCache {
+			w.AddArchiveExtraCache(id, extraFields)
 		}
 	}
 
@@ -409,6 +482,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	if oldFixedLink != "" || archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
 	}
+	// 清除缓存
+	w.DeleteArchiveCache(archive.Id)
+	w.DeleteArchiveExtraCache(archive.Id)
 
 	// 尝试添加全文索引
 	w.AddFulltextIndex(&TinyArchive{

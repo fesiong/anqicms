@@ -22,7 +22,15 @@ func ApiArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-	archive, err := currentSite.GetArchiveById(id)
+	var archive *model.Archive
+	var err error
+	archive = currentSite.GetArchiveByIdFromCache(id)
+	if archive == nil {
+		archive, err = currentSite.GetArchiveById(id)
+		if archive != nil {
+			currentSite.AddArchiveCache(archive)
+		}
+	}
 	if err != nil {
 		if filename != "" {
 			archive, err = currentSite.GetArchiveByUrlToken(filename)
@@ -72,7 +80,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// 读取分类
 	archive.Category = currentSite.GetCategoryFromCache(archive.CategoryId)
 	// 读取 extraDate
-	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id)
+	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
 	for i := range archive.Extra {
 		if archive.Extra[i].Value == nil || archive.Extra[i].Value == "" {
 			archive.Extra[i].Value = archive.Extra[i].Default
@@ -361,6 +369,10 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 			return tx
 		}
+		if listType != "page" {
+			// 如果不是分页，则不查询count
+			currentPage = 0
+		}
 		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
@@ -417,7 +429,7 @@ func ApiArchiveParams(ctx iris.Context) {
 		return
 	}
 
-	archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
+	archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
 	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {

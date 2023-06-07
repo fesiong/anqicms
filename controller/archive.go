@@ -97,7 +97,7 @@ func ArchiveDetail(ctx iris.Context) {
 		}
 	}
 
-	_ = archive.AddViews(currentSite.DB)
+	go archive.AddViews(currentSite.DB)
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = archive.Title
@@ -156,15 +156,10 @@ func ArchiveDetail(ctx iris.Context) {
 		tplName = tmpTpl
 	}
 
-	recorder := ctx.Recorder()
+	//recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
-	} else {
-		body := recorder.Body()
-		body = currentSite.ReplaceSensitiveWords(body)
-		recorder.ResetBody()
-		ctx.Write(body)
 	}
 }
 

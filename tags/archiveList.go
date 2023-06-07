@@ -221,8 +221,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	} else {
-		extraFields := map[uint]map[string]*model.CustomField{}
-		var results []map[string]interface{}
 		var fields []string
 		fields = append(fields, "id")
 
@@ -285,33 +283,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			return tx
 		}
+		if listType != "page" {
+			// 如果不是分页，则不查询count
+			currentPage = 0
+		}
 		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
-		}
-		var archiveIds = make([]uint, 0, len(archives))
-		for i := range archives {
-			archiveIds = append(archiveIds, archives[i].Id)
-		}
-		if module != nil && len(fields) > 0 && len(archiveIds) > 0 {
-			currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select(strings.Join(fields, ",")).Scan(&results)
-			for _, field := range results {
-				item := map[string]*model.CustomField{}
-				for _, v := range module.Fields {
-					item[v.FieldName] = &model.CustomField{
-						Name:  v.Name,
-						Value: field[v.FieldName],
-					}
-				}
-				if id, ok := field["id"].(uint32); ok {
-					extraFields[uint(id)] = item
-				}
-			}
-			for i := range archives {
-				if extraFields[archives[i].Id] != nil {
-					archives[i].Extra = extraFields[archives[i].Id]
-				}
-			}
 		}
 	}
 
