@@ -95,7 +95,11 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				Order(order)
 			return tx
 		}, currentPage, limit, offset)
-
+		for i := range archives {
+			if len(archives[i].Password) > 0 {
+				archives[i].HasPassword = true
+			}
+		}
 		ctx.Private[node.name] = archives
 		if listType == "page" {
 			// 分页

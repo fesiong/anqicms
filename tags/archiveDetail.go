@@ -136,6 +136,9 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				category.Link = currentSite.GetUrl("category", category, 0)
 			}
 		}
+		if len(archiveDetail.Password) > 0 {
+			archiveDetail.HasPassword = true
+		}
 
 		// output
 		if node.name == "" {

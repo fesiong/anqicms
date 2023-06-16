@@ -85,7 +85,12 @@ func ApiArchiveDetail(ctx iris.Context) {
 		}
 		archive.Tags = tagNames
 	}
-
+	if len(archive.Password) > 0 {
+		// password is not visible for user
+		archive.Password = ""
+		archive.HasPassword = true
+		archive.ArchiveData = nil
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -390,7 +395,12 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	}
-
+	for i := range archives {
+		if len(archives[i].Password) > 0 {
+			archives[i].Password = ""
+			archives[i].HasPassword = true
+		}
+	}
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
@@ -677,7 +687,11 @@ func ApiNextArchive(ctx iris.Context) {
 	nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").Order("`id` ASC")
 	})
-
+	if nextArchive != nil && len(nextArchive.Password) > 0 {
+		// password is not visible for user
+		nextArchive.Password = ""
+		nextArchive.HasPassword = true
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -700,7 +714,11 @@ func ApiPrevArchive(ctx iris.Context) {
 	prevArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Where("`status` = 1").Order("`id` DESC")
 	})
-
+	if prevArchive != nil && len(prevArchive.Password) > 0 {
+		// password is not visible for user
+		prevArchive.Password = ""
+		prevArchive.HasPassword = true
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -832,7 +850,12 @@ func ApiTagDataList(ctx iris.Context) {
 			Order(order)
 		return tx
 	}, currentPage, limit, offset)
-
+	for i := range archives {
+		if len(archives[i].Password) > 0 {
+			archives[i].Password = ""
+			archives[i].HasPassword = true
+		}
+	}
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",

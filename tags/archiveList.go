@@ -292,6 +292,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			total = fulltextTotal
 		}
 	}
+	for i := range archives {
+		if len(archives[i].Password) > 0 {
+			archives[i].HasPassword = true
+		}
+	}
 
 	if listType == "page" {
 		var urlPatten string
