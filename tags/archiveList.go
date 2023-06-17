@@ -181,6 +181,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			category := currentSite.GetCategoryFromCache(categoryId)
 			if category != nil {
 				moduleId = category.ModuleId
+			} else {
+				categoryId = 0
 			}
 		}
 		// 允许通过keywords调用
@@ -193,8 +195,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 
 		if like == "keywords" {
+			if args["siteId"] != nil {
+				moduleId = 0
+				categoryId = 0
+			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
+				if moduleId > 0 {
+					tx = tx.Where("`module_id` = ?", moduleId)
+				}
+				if categoryId > 0 {
+					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				tx = tx.Where("`status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
 					Order("id ASC")
 				return tx
 			}, 0, limit, offset)
