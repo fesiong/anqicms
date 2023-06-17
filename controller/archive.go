@@ -13,6 +13,11 @@ import (
 
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	id := ctx.Params().GetUintDefault("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
@@ -144,16 +149,24 @@ func ArchiveDetail(ctx iris.Context) {
 	if ViewExists(ctx, tmpTpl) {
 		tplName = tmpTpl
 	}
-
-	//recorder := ctx.Recorder()
+	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }
 
 func ArchiveIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	urlToken := ctx.Params().GetString("module")
 	module := currentSite.GetModuleFromCacheByToken(urlToken)
 	if module == nil {
@@ -181,9 +194,13 @@ func ArchiveIndex(ctx iris.Context) {
 	if ViewExists(ctx, tplName2) {
 		tplName = tplName2
 	}
-
+	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }

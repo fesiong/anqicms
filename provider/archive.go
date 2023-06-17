@@ -570,6 +570,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 		w.DeleteCacheFixedLinks()
 	}
 	w.DeleteCacheIndex()
+	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
 	w.RemoveFulltextIndex(archive.Id)
 
 	return nil

@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// MaxSize 最多存储 1000 个对象
-const MaxSize = 1000
+// MaxSize 最多存储 5000 个对象
+const MaxSize = 5000
 
 type cacheData struct {
 	Expire int64

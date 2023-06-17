@@ -444,6 +444,15 @@ func manageRoute(app *iris.Application) {
 				titleImage.Get("/preview", manageController.PluginTitleImagePreview)
 				titleImage.Post("/upload", manageController.PluginTitleImageUploadFile)
 			}
+
+			htmlcache := plugin.Party("/htmlcache")
+			{
+				htmlcache.Get("/config", manageController.PluginHtmlCacheConfig)
+				htmlcache.Post("/config", manageController.PluginHtmlCacheConfigForm)
+				htmlcache.Post("/build", manageController.PluginHtmlCacheBuild)
+				htmlcache.Get("/build/status", manageController.PluginHtmlCacheBuildStatus)
+				htmlcache.Post("/clean", manageController.PluginCleanHtmlCache)
+			}
 		}
 	}
 }

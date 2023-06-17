@@ -111,7 +111,7 @@ func SettingSystemForm(ctx iris.Context) {
 		config.RestartChan <- false
 		time.Sleep(1 * time.Second)
 	}
-	currentSite.DeleteCacheIndex()
+	currentSite.RemoveHtmlCache()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

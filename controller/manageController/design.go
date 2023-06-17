@@ -273,7 +273,7 @@ func RestoreDesignData(ctx iris.Context) {
 		return
 	}
 
-	currentSite.DeleteCacheIndex()
+	currentSite.RemoveHtmlCache()
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("初始化模板数据：%s", req.Package))
 
@@ -313,7 +313,7 @@ func UploadDesignFile(ctx iris.Context) {
 	}
 	// 重载模板
 	config.RestartChan <- false
-	currentSite.DeleteCacheIndex()
+	currentSite.RemoveHtmlCache()
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传模板文件：%s", info.Filename))
 
 	ctx.JSON(iris.Map{

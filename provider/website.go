@@ -21,6 +21,7 @@ type Website struct {
 	Mysql                   *config.MysqlConfig
 	Initialed               bool
 	ErrorMsg                string // 错误提示
+	Host                    string
 	BaseURI                 string
 	RootPath                string
 	DataPath                string
@@ -38,6 +39,7 @@ type Website struct {
 	CachedStatistics        *response.Statistics
 	AdminLoginError         response.LoginError
 	MemCache                *memCache
+	HtmlCacheStatus         *HtmlCacheStatus
 
 	System  config.SystemConfig  `json:"system"`
 	Content config.ContentConfig `json:"content"`
@@ -63,6 +65,7 @@ type Website struct {
 	PluginOrder       config.PluginOrderConfig      `json:"plugin_order"`
 	PluginFulltext    config.PluginFulltextConfig   `json:"plugin_fulltext"`
 	PluginTitleImage  config.PluginTitleImageConfig `json:"plugin_title_image"`
+	PluginHtmlCache   config.PluginHtmlCache        `json:"plugin_html_cache"`
 	SensitiveWords    []string                      `json:"sensitive_words"`
 
 	CollectorConfig config.CollectorJson
@@ -155,6 +158,7 @@ func InitWebsite(mw *model.Website) {
 			if parsed.RequestURI() != "/" {
 				w.BaseURI = parsed.RequestURI()
 			}
+			w.Host = parsed.Host
 		}
 	}
 	if w.Initialed {

@@ -33,8 +33,7 @@ func (w *Website) GetIndexCache(ua string) []byte {
 }
 
 func (w *Website) DeleteCacheIndex() {
-	w.MemCache.Delete(IndexCacheKey + UserAgentPc)
-	w.MemCache.Delete(IndexCacheKey + UserAgentMobile)
+	w.RemoveHtmlCache("/")
 }
 
 func init() {

@@ -70,6 +70,7 @@ func PluginBackupRestore(ctx iris.Context) {
 		time.Sleep(1 * time.Second)
 		// 删除索引
 		currentSite.DeleteCache()
+		currentSite.RemoveHtmlCache()
 		currentSite.CloseFulltext()
 		currentSite.InitFulltext()
 	}()

@@ -122,6 +122,14 @@ type PluginTitleImageConfig struct {
 	Noise     bool   `json:"noise"`
 }
 
+type PluginHtmlCache struct {
+	Open          bool  `json:"open"`
+	IndexCache    int64 `json:"index_cache"`     // 首页缓存时间
+	ListCache     int64 `json:"category_cache"`  // 列表页缓存时间
+	DetailCache   int64 `json:"detail_cache"`    // 详情页缓存时间
+	LastBuildTime int64 `json:"last_build_time"` // 上一次手动生成时间
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

@@ -12,6 +12,11 @@ import (
 
 func CategoryPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	categoryId := ctx.Params().GetUintDefault("id", 0)
 	catId := ctx.Params().GetUintDefault("catid", 0)
@@ -98,15 +103,24 @@ func CategoryPage(ctx iris.Context) {
 	if !strings.HasSuffix(tplName, ".html") {
 		tplName += ".html"
 	}
-
+	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }
 
 func SearchPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	q := strings.TrimSpace(ctx.URLParam("q"))
 	moduleToken := ctx.Params().GetString("module")
 	var module *model.Module
@@ -160,8 +174,13 @@ func SearchPage(ctx iris.Context) {
 			tplName = "search_" + module.UrlToken + ".html"
 		}
 	}
+	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }

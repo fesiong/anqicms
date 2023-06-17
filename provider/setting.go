@@ -42,6 +42,7 @@ const (
 	OrderSettingKey       = "order"
 	FulltextSettingKey    = "fulltext"
 	TitleImageSettingKey  = "title_image"
+	HtmlCacheSettingKey   = "html_cache"
 	AnqiSettingKey        = "anqi"
 
 	CollectorSettingKey = "collector"
@@ -75,6 +76,7 @@ func (w *Website) InitSetting() {
 	w.LoadOrderSetting()
 	w.LoadFulltextSetting()
 	w.LoadTitleImageSetting()
+	w.LoadHtmlCacheSetting()
 	w.LoadAnqiUser()
 
 	w.LoadCollectorSetting()
@@ -310,6 +312,23 @@ func (w *Website) LoadTitleImageSetting() {
 	if w.PluginTitleImage.FontColor == "" {
 		w.PluginTitleImage.FontColor = "#ffffff"
 	}
+}
+
+func (w *Website) LoadHtmlCacheSetting() {
+	value := w.GetSettingValue(HtmlCacheSettingKey)
+	if value != "" {
+		err := json.Unmarshal([]byte(value), &w.PluginHtmlCache)
+		if err == nil {
+			return
+		}
+	}
+	// if no item, set to default
+	// index default cache 5 minutes
+	w.PluginHtmlCache.IndexCache = 300
+	// list default cache 60 minutes
+	w.PluginHtmlCache.ListCache = 3600
+	// detail default cache 24 hours
+	w.PluginHtmlCache.DetailCache = 86400
 }
 
 func (w *Website) LoadAnqiUser() {
