@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"github.com/chai2010/webp"
 	"github.com/parnurzeal/gorequest"
-	"github.com/ultimate-guitar/go-imagequant"
+	"gopkg.in/gographics/imagick.v3/imagick"
 	"image"
 	"image/gif"
 	"image/jpeg"
@@ -712,17 +712,20 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 
 // compressImage 只能压缩png/jpg
 func compressImage(img []byte, quality int) ([]byte, error) {
-	speed := 1
-	if quality < 100 {
-		speed = 10 - quality/10
+	imagick.Initialize()
+	defer imagick.Terminate()
+	mw := imagick.NewMagickWand()
+	defer mw.Destroy()
+
+	mw.ReadImageBlob(img)
+	if err := mw.SetImageCompressionQuality(uint(quality)); err != nil {
+		return nil, err
 	}
-	compression := png.BestCompression
-	if quality >= 90 {
-		compression = png.DefaultCompression
+	if err := mw.SetImageFormat("PNG"); err != nil {
+		return nil, err
 	}
-	optiImage, err := imagequant.Crush(img, speed, compression)
-	if err != nil {
-		return img, err
-	}
-	return optiImage, nil
+	image := mw.GetImage()
+	defer image.Destroy() // 销毁当前帧图片对应实例
+
+	return mw.GetImageBlob(), nil
 }
