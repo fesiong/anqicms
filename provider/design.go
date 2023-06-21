@@ -1428,7 +1428,7 @@ func (w *Website) BackupDesignData(packageName string) error {
 		var archiveIds = make([]uint, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
-			archives[i].Extra = w.GetArchiveExtra(archives[i].ModuleId, archives[i].Id)
+			archives[i].Extra = w.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, false)
 		}
 		_ = w.writeDataToZip("archives", archives, zw)
 		var archiveData []model.ArchiveData

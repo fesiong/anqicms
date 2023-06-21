@@ -16,6 +16,27 @@ import (
 	"unicode/utf8"
 )
 
+func (w *Website) GetArchiveByIdFromCache(id uint) (archive *model.Archive) {
+	result := w.MemCache.Get(fmt.Sprintf("archive-%d", id))
+	if result != nil {
+		var ok bool
+		archive, ok = result.(*model.Archive)
+		if ok {
+			return archive
+		}
+	}
+
+	return nil
+}
+
+func (w *Website) AddArchiveCache(archive *model.Archive) {
+	w.MemCache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
+}
+
+func (w *Website) DeleteArchiveCache(id uint) {
+	w.MemCache.Delete(fmt.Sprintf("archive-%d", id))
+}
+
 func (w *Website) GetArchiveById(id uint) (*model.Archive, error) {
 	return w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", id)
@@ -87,7 +108,25 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 		offset = offsets[0]
 	}
 	var total int64
-
+	// 对于没有分页的list，则缓存
+	var cacheKey = ""
+	if currentPage == 0 {
+		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			if ops != nil {
+				tx = ops(tx).Limit(pageSize).Offset(offset)
+			}
+			return tx.Find(&[]*model.Archive{})
+		})
+		cacheKey = "archive-list-" + library.Md5(sql)[8:24]
+		result := w.MemCache.Get(cacheKey)
+		if result != nil {
+			var ok bool
+			archives, ok = result.([]*model.Archive)
+			if ok {
+				return archives, int64(len(archives)), nil
+			}
+		}
+	}
 	builder := w.DB.Model(&model.Archive{})
 
 	if ops != nil {
@@ -105,10 +144,41 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 		archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 		archives[i].Link = w.GetUrl("archive", archives[i], 0)
 	}
+	// 对于没有分页的list，则缓存
+	if currentPage == 0 {
+		w.MemCache.Set(cacheKey, archives, 300)
+	}
 	return archives, total, nil
 }
 
-func (w *Website) GetArchiveExtra(moduleId, id uint) map[string]*model.CustomField {
+func (w *Website) GetArchiveExtraFromCache(archiveId uint) (archive map[string]*model.CustomField) {
+	result := w.MemCache.Get(fmt.Sprintf("archive-extra-%d", archiveId))
+	if result != nil {
+		var ok bool
+		archive, ok = result.(map[string]*model.CustomField)
+		if ok {
+			return archive
+		}
+	}
+
+	return nil
+}
+
+func (w *Website) AddArchiveExtraCache(archiveId uint, extra map[string]*model.CustomField) {
+	w.MemCache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 300)
+}
+
+func (w *Website) DeleteArchiveExtraCache(archiveId uint) {
+	w.MemCache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
+}
+
+func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]*model.CustomField {
+	if loadCache {
+		cached := w.GetArchiveExtraFromCache(id)
+		if cached != nil {
+			return cached
+		}
+	}
 	//读取extra
 	result := map[string]interface{}{}
 	extraFields := map[string]*model.CustomField{}
@@ -136,6 +206,9 @@ func (w *Website) GetArchiveExtra(moduleId, id uint) map[string]*model.CustomFie
 					FollowLevel: v.FollowLevel,
 				}
 			}
+		}
+		if loadCache {
+			w.AddArchiveExtraCache(id, extraFields)
 		}
 	}
 
@@ -201,6 +274,7 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	archive.Price = req.Price
 	archive.Stock = req.Stock
 	archive.ReadLevel = req.ReadLevel
+	archive.Password = req.Password
 	if req.UserId > 0 {
 		archive.UserId = req.UserId
 	}
@@ -409,6 +483,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	if oldFixedLink != "" || archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
 	}
+	// 清除缓存
+	w.DeleteArchiveCache(archive.Id)
+	w.DeleteArchiveExtraCache(archive.Id)
 
 	// 尝试添加全文索引
 	w.AddFulltextIndex(&TinyArchive{
@@ -493,6 +570,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 		w.DeleteCacheFixedLinks()
 	}
 	w.DeleteCacheIndex()
+	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
 	w.RemoveFulltextIndex(archive.Id)
 
 	return nil
@@ -671,30 +749,31 @@ func (w *Website) VerifyArchiveUrlToken(urlToken string, id uint) string {
 	return urlToken
 }
 
-func (w *Website) CheckArchiveHasOrder(userId uint, archiveId uint) bool {
-	if userId == 0 || archiveId == 0 {
-		return false
+func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, userGroup *model.UserGroup) *model.Archive {
+	if archive.Price == 0 && archive.ReadLevel == 0 {
+		archive.HasOrdered = true
 	}
-	var exist int64
-	w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archiveId).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
-		config.OrderStatusPaid,
-		config.OrderStatusDelivering,
-		config.OrderStatusCompleted}).Count(&exist)
-	if exist > 0 {
-		return true
+	if userId > 0 {
+		if archive.UserId == userId {
+			archive.HasOrdered = true
+		} else if archive.Price > 0 {
+			var exist int64
+			w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+				config.OrderStatusPaid,
+				config.OrderStatusDelivering,
+				config.OrderStatusCompleted}).Count(&exist)
+			if exist > 0 {
+				archive.HasOrdered = true
+			}
+
+			archive.HasOrdered = false
+		}
+		if archive.ReadLevel > 0 && !archive.HasOrdered {
+			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
+				archive.HasOrdered = true
+			}
+		}
 	}
 
-	//var orderIds []string
-	//w.DB.Model(&model.OrderDetail{}).Where("`user_id` = ? and `goods_id` = ?", userId, archiveId).Pluck("order_id", &orderIds)
-	//if len(orderIds) == 0 {
-	//	return false
-	//}
-	//
-	//var exist int64
-	//w.DB.Model(&model.Order{}).Where("`order_id` IN(?) and `status` > ?", orderIds, 0).Count(&exist)
-	//if exist > 0 {
-	//	return true
-	//}
-
-	return false
+	return archive
 }

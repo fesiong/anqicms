@@ -78,6 +78,7 @@ func Register(app *iris.Application) {
 		//检查支付情况
 		api.Get("/archive/order/check", controller.ApiArchiveOrderCheck)
 		api.Get("/payment/check", controller.ApiPaymentCheck)
+		api.Post("/archive/password/check", controller.ApiCheckArchivePassword)
 		api.Get("/retailer/info", controller.ApiGetRetailerInfo)
 		api.Get("/retailer/statistics", middleware.UserAuth, controller.ApiGetRetailerStatistics)
 		api.Post("/retailer/update", middleware.UserAuth, controller.ApiUpdateRetailerInfo)

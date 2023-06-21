@@ -233,7 +233,7 @@ func (t *TransferWebsite) TransferWebData() {
 	t.Status = 2
 	t.ErrorMsg = ""
 
-	t.w.DeleteCacheIndex()
+	t.w.RemoveHtmlCache()
 }
 
 func (t *TransferWebsite) transferModules() error {

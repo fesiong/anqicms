@@ -12,6 +12,11 @@ import (
 
 func PagePage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	categoryId := ctx.Params().GetUintDefault("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	catId := ctx.Params().GetUintDefault("catid", 0)
@@ -71,9 +76,13 @@ func PagePage(ctx iris.Context) {
 	if !strings.HasSuffix(tplName, ".html") {
 		tplName += ".html"
 	}
-
+	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }

@@ -42,7 +42,7 @@ func PluginRewriteForm(ctx iris.Context) {
 		}
 
 		currentSite.ParsePatten(true)
-		currentSite.DeleteCacheIndex()
+		currentSite.RemoveHtmlCache()
 	}
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("调整伪静态配置：%d", req.Mode))

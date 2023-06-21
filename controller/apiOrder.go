@@ -567,22 +567,8 @@ func ApiArchiveOrderCheck(ctx iris.Context) {
 			"data": false,
 		})
 	}
-	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-		archiveDetail.HasOrdered = true
-	}
-	if userId > 0 {
-		if archiveDetail.UserId == userId {
-			archiveDetail.HasOrdered = true
-		} else if archiveDetail.Price > 0 {
-			archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archiveDetail.Id)
-		}
-		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-				archiveDetail.HasOrdered = true
-			}
-		}
-	}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -590,4 +576,55 @@ func ApiArchiveOrderCheck(ctx iris.Context) {
 		"data": archiveDetail.HasOrdered,
 	})
 	return
+}
+
+func ApiCheckArchivePassword(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ArchivePasswordRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		req.Id, _ = ctx.PostValueUint("id")
+		req.Password = ctx.PostValueTrim("password")
+		if req.Id == 0 || len(req.Password) == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+
+	archiveDetail, err := currentSite.GetArchiveById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if len(archiveDetail.Password) == 0 || archiveDetail.Password == req.Password {
+		var content string
+		archiveData, err := currentSite.GetArchiveDataById(archiveDetail.Id)
+		if err == nil {
+			content = archiveData.Content
+		}
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": iris.Map{
+				"status":  true,
+				"content": content,
+			},
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"status":  false,
+			"content": "",
+		},
+	})
 }

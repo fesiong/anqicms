@@ -281,6 +281,18 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "全站替换",
 				Backend:  "/plugin/replace",
 			},
+			{
+				Path:     "/plugin/titleimage",
+				GroupKey: "plugin",
+				Name:     "标题自动配图",
+				Backend:  "/plugin/titleimage",
+			},
+			{
+				Path:     "/plugin/htmlcache",
+				GroupKey: "plugin",
+				Name:     "静态页面缓存",
+				Backend:  "/plugin/htmlcache",
+			},
 		},
 	},
 	{

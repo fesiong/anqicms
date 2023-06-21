@@ -181,6 +181,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			category := currentSite.GetCategoryFromCache(categoryId)
 			if category != nil {
 				moduleId = category.ModuleId
+			} else {
+				categoryId = 0
 			}
 		}
 		// 允许通过keywords调用
@@ -193,8 +195,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 
 		if like == "keywords" {
+			if args["siteId"] != nil {
+				moduleId = 0
+				categoryId = 0
+			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
+				if moduleId > 0 {
+					tx = tx.Where("`module_id` = ?", moduleId)
+				}
+				if categoryId > 0 {
+					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				tx = tx.Where("`status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
 					Order("id ASC")
 				return tx
 			}, 0, limit, offset)
@@ -221,8 +233,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	} else {
-		extraFields := map[uint]map[string]*model.CustomField{}
-		var results []map[string]interface{}
 		var fields []string
 		fields = append(fields, "id")
 
@@ -285,33 +295,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			return tx
 		}
+		if listType != "page" {
+			// 如果不是分页，则不查询count
+			currentPage = 0
+		}
 		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
 		}
-		var archiveIds = make([]uint, 0, len(archives))
-		for i := range archives {
-			archiveIds = append(archiveIds, archives[i].Id)
-		}
-		if module != nil && len(fields) > 0 && len(archiveIds) > 0 {
-			currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select(strings.Join(fields, ",")).Scan(&results)
-			for _, field := range results {
-				item := map[string]*model.CustomField{}
-				for _, v := range module.Fields {
-					item[v.FieldName] = &model.CustomField{
-						Name:  v.Name,
-						Value: field[v.FieldName],
-					}
-				}
-				if id, ok := field["id"].(uint32); ok {
-					extraFields[uint(id)] = item
-				}
-			}
-			for i := range archives {
-				if extraFields[archives[i].Id] != nil {
-					archives[i].Extra = extraFields[archives[i].Id]
-				}
-			}
+	}
+	for i := range archives {
+		if len(archives[i].Password) > 0 {
+			archives[i].HasPassword = true
 		}
 	}
 

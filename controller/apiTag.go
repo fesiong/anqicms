@@ -22,7 +22,15 @@ func ApiArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-	archive, err := currentSite.GetArchiveById(id)
+	var archive *model.Archive
+	var err error
+	archive = currentSite.GetArchiveByIdFromCache(id)
+	if archive == nil {
+		archive, err = currentSite.GetArchiveById(id)
+		if archive != nil {
+			currentSite.AddArchiveCache(archive)
+		}
+	}
 	if err != nil {
 		if filename != "" {
 			archive, err = currentSite.GetArchiveByUrlToken(filename)
@@ -38,28 +46,16 @@ func ApiArchiveDetail(ctx iris.Context) {
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
-	if archive.Price == 0 && archive.ReadLevel == 0 {
-		archive.HasOrdered = true
-	}
-	if userId > 0 {
-		if archive.UserId == userId {
-			archive.HasOrdered = true
-		}
-		if archive.Price > 0 {
-			archive.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archive.Id)
-			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-			discount := currentSite.GetUserDiscount(userId, userInfo)
-			if discount > 0 {
-				archive.FavorablePrice = archive.Price * discount / 100
-			}
-		}
-		if archive.ReadLevel > 0 && !archive.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
-				archive.HasOrdered = true
-			}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archive = currentSite.CheckArchiveHasOrder(userId, archive, userGroup)
+	if archive.Price > 0 {
+		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+		discount := currentSite.GetUserDiscount(userId, userInfo)
+		if discount > 0 {
+			archive.FavorablePrice = archive.Price * discount / 100
 		}
 	}
+
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
@@ -72,7 +68,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// 读取分类
 	archive.Category = currentSite.GetCategoryFromCache(archive.CategoryId)
 	// 读取 extraDate
-	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id)
+	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
 	for i := range archive.Extra {
 		if archive.Extra[i].Value == nil || archive.Extra[i].Value == "" {
 			archive.Extra[i].Value = archive.Extra[i].Default
@@ -89,7 +85,12 @@ func ApiArchiveDetail(ctx iris.Context) {
 		}
 		archive.Tags = tagNames
 	}
-
+	if len(archive.Password) > 0 {
+		// password is not visible for user
+		archive.Password = ""
+		archive.HasPassword = true
+		archive.ArchiveData = nil
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -361,6 +362,10 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 			return tx
 		}
+		if listType != "page" {
+			// 如果不是分页，则不查询count
+			currentPage = 0
+		}
 		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
@@ -390,7 +395,12 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	}
-
+	for i := range archives {
+		if len(archives[i].Password) > 0 {
+			archives[i].Password = ""
+			archives[i].HasPassword = true
+		}
+	}
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
@@ -417,26 +427,12 @@ func ApiArchiveParams(ctx iris.Context) {
 		return
 	}
 
-	archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
+	archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
-	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-		archiveDetail.HasOrdered = true
-	}
-	if userId > 0 {
-		if archiveDetail.UserId == userId {
-			archiveDetail.HasOrdered = true
-		}
-		if archiveDetail.Price > 0 {
-			archiveDetail.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archiveDetail.Id)
-		}
-		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-				archiveDetail.HasOrdered = true
-			}
-		}
-	}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+
 	for i := range archiveParams {
 		if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 			archiveParams[i].Value = archiveParams[i].Default
@@ -691,7 +687,11 @@ func ApiNextArchive(ctx iris.Context) {
 	nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").Order("`id` ASC")
 	})
-
+	if nextArchive != nil && len(nextArchive.Password) > 0 {
+		// password is not visible for user
+		nextArchive.Password = ""
+		nextArchive.HasPassword = true
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -714,7 +714,11 @@ func ApiPrevArchive(ctx iris.Context) {
 	prevArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Where("`status` = 1").Order("`id` DESC")
 	})
-
+	if prevArchive != nil && len(prevArchive.Password) > 0 {
+		// password is not visible for user
+		prevArchive.Password = ""
+		prevArchive.HasPassword = true
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -846,7 +850,12 @@ func ApiTagDataList(ctx iris.Context) {
 			Order(order)
 		return tx
 	}, currentPage, limit, offset)
-
+	for i := range archives {
+		if len(archives[i].Password) > 0 {
+			archives[i].Password = ""
+			archives[i].HasPassword = true
+		}
+	}
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",

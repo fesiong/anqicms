@@ -13,6 +13,11 @@ import (
 
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	id := ctx.Params().GetUintDefault("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
@@ -76,28 +81,17 @@ func ArchiveDetail(ctx iris.Context) {
 
 	// check the archive had paid if the archive need to pay.
 	userId := ctx.Values().GetUintDefault("userId", 0)
-	if userId > 0 {
-		if archive.UserId == userId {
-			archive.HasOrdered = true
-		}
-		if archive.Price > 0 {
-			archive.HasOrdered = currentSite.CheckArchiveHasOrder(userId, archive.Id)
-			// check price can make any discount？
-			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-			discount := currentSite.GetUserDiscount(userId, userInfo)
-			if discount > 0 {
-				archive.FavorablePrice = archive.Price * discount / 100
-			}
-		}
-		if archive.ReadLevel > 0 && !archive.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
-				archive.HasOrdered = true
-			}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archive = currentSite.CheckArchiveHasOrder(userId, archive, userGroup)
+	if archive.Price > 0 {
+		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+		discount := currentSite.GetUserDiscount(userId, userInfo)
+		if discount > 0 {
+			archive.FavorablePrice = archive.Price * discount / 100
 		}
 	}
 
-	_ = archive.AddViews(currentSite.DB)
+	go archive.AddViews(currentSite.DB)
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = archive.Title
@@ -155,21 +149,24 @@ func ArchiveDetail(ctx iris.Context) {
 	if ViewExists(ctx, tmpTpl) {
 		tplName = tmpTpl
 	}
-
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {
-		body := recorder.Body()
-		body = currentSite.ReplaceSensitiveWords(body)
-		recorder.ResetBody()
-		ctx.Write(body)
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }
 
 func ArchiveIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	urlToken := ctx.Params().GetString("module")
 	module := currentSite.GetModuleFromCacheByToken(urlToken)
 	if module == nil {
@@ -197,9 +194,13 @@ func ArchiveIndex(ctx iris.Context) {
 	if ViewExists(ctx, tplName2) {
 		tplName = tplName2
 	}
-
+	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		}
 	}
 }
