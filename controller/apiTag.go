@@ -5,6 +5,7 @@ import (
 	"gorm.io/gorm"
 	"math"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -84,6 +85,20 @@ func ApiArchiveDetail(ctx iris.Context) {
 			tagNames = append(tagNames, v.Title)
 		}
 		archive.Tags = tagNames
+	}
+	if archive.ArchiveData != nil {
+		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		archive.ArchiveData.Content = re.ReplaceAllStringFunc(archive.ArchiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			if !strings.HasPrefix(match[1], "http") {
+				res := currentSite.System.BaseUrl + match[1]
+				s = strings.Replace(s, match[1], res, 1)
+			}
+			return s
+		})
 	}
 	if len(archive.Password) > 0 {
 		// password is not visible for user
