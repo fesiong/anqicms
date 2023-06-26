@@ -113,9 +113,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 	if currentPage == 0 {
 		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
-				tx = ops(tx).Limit(pageSize).Offset(offset)
+				tx = ops(tx)
 			}
-			return tx.Find(&[]*model.Archive{})
+			return tx.Limit(pageSize).Offset(offset).Find(&[]*model.Archive{})
 		})
 		cacheKey = "archive-list-" + library.Md5(sql)[8:24]
 		result := w.MemCache.Get(cacheKey)
@@ -146,7 +146,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 	}
 	// 对于没有分页的list，则缓存
 	if currentPage == 0 {
-		w.MemCache.Set(cacheKey, archives, 300)
+		w.MemCache.Set(cacheKey, archives, 60)
 	}
 	return archives, total, nil
 }
@@ -165,7 +165,7 @@ func (w *Website) GetArchiveExtraFromCache(archiveId uint) (archive map[string]*
 }
 
 func (w *Website) AddArchiveExtraCache(archiveId uint, extra map[string]*model.CustomField) {
-	w.MemCache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 300)
+	w.MemCache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 60)
 }
 
 func (w *Website) DeleteArchiveExtraCache(archiveId uint) {
