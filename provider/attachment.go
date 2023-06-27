@@ -10,6 +10,8 @@ import (
 	"github.com/parnurzeal/gorequest"
 	"gopkg.in/gographics/imagick.v3/imagick"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -695,19 +697,25 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 		// 先返回，不用再compress
 		return buff.Bytes(), nil
 	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
+		if err := jpeg.Encode(buff, img, &jpeg.Options{Quality: quality}); err != nil {
+			return nil, err
+		}
 	} else if imgType == "png" {
-		_ = png.Encode(buff, img)
+		newImg := image.NewRGBA(img.Bounds())
+		draw.Draw(newImg, newImg.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+		draw.Draw(newImg, newImg.Bounds(), img, img.Bounds().Min, draw.Over)
+		if err := jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality}); err != nil {
+			encoder := png.Encoder{CompressionLevel: png.BestCompression}
+			if err := encoder.Encode(buff, img); err != nil {
+				return nil, err
+			}
+		}
 	} else if imgType == "gif" {
-		_ = gif.Encode(buff, img, nil)
+		if err := gif.Encode(buff, img, nil); err != nil {
+			return nil, err
+		}
 	}
-	// 再压缩
-	buf, err := compressImage(buff.Bytes(), quality)
-	if err == nil {
-		return buf, nil
-	}
-
-	return buff.Bytes(), err
+	return buff.Bytes(), nil
 }
 
 // compressImage 只能压缩png/jpg
