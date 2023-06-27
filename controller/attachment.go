@@ -14,11 +14,14 @@ func AttachmentUpload(ctx iris.Context) {
 	attachId := uint(ctx.PostValueIntDefault("id", 0))
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+		file, info, err = ctx.FormFile("file1")
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 	}
 	defer file.Close()
 
