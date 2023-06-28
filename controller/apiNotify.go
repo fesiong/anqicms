@@ -99,7 +99,7 @@ func NotifyWechatPay(ctx iris.Context) {
 				refund.Status = config.OrderRefundStatusFailed
 			}
 			refund.Remark = notifyReq.GetString("refund_status")
-			parsedTime, err := time.Parse("2006-01-02 15:04:05", notifyReq.GetString("success_time"))
+			parsedTime, err := time.ParseInLocation("2006-01-02 15:04:05", notifyReq.GetString("success_time"), time.Local)
 			if err != nil {
 				parsedTime = time.Now()
 			}
@@ -215,7 +215,7 @@ func NotifyAlipay(ctx iris.Context) {
 				refund.Status = config.OrderRefundStatusFailed
 			}
 			refund.Remark = bm.GetString("refund_status")
-			parsedTime, err := time.Parse("2006-01-02 15:04:05", bm.GetString("success_time"))
+			parsedTime, err := time.ParseInLocation("2006-01-02 15:04:05", bm.GetString("success_time"), time.Local)
 			if err != nil {
 				parsedTime = time.Now()
 			}

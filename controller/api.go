@@ -146,7 +146,7 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 
 	if publishTime != "" {
-		timeStamp, err := time.Parse("2006-01-02 15:04:05", publishTime)
+		timeStamp, err := time.ParseInLocation("2006-01-02 15:04:05", publishTime, time.Local)
 		if err == nil {
 			req.CreatedTime = timeStamp.Unix()
 		}
