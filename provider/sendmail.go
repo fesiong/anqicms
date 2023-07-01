@@ -78,7 +78,7 @@ func (w *Website) GetLastSendmailList() ([]*MailLog, error) {
 	return mailLogs, nil
 }
 
-func (w *Website) SendMail(subject, content string) error {
+func (w *Website) SendMail(subject, content string, recipients ...string) error {
 	setting := w.PluginSendmail
 	port := setting.Port
 	if port == 0 {
@@ -106,18 +106,19 @@ func (w *Website) SendMail(subject, content string) error {
 	}
 	email.Password = setting.Password
 
-	var recipients []string
-	if setting.Recipient != "" {
-		tmp := strings.Split(setting.Recipient, ",")
-		for _, v := range tmp {
-			v = strings.TrimSpace(v)
-			if v != "" {
-				recipients = append(recipients, v)
+	if len(recipients) == 0 {
+		if setting.Recipient != "" {
+			tmp := strings.Split(setting.Recipient, ",")
+			for _, v := range tmp {
+				v = strings.TrimSpace(v)
+				if v != "" {
+					recipients = append(recipients, v)
+				}
 			}
 		}
-	}
-	if len(recipients) == 0 {
-		recipients = append(recipients, setting.Account)
+		if len(recipients) == 0 {
+			recipients = append(recipients, setting.Account)
+		}
 	}
 
 	email.To = recipients
@@ -129,6 +130,18 @@ func (w *Website) SendMail(subject, content string) error {
 		return err
 	}
 	w.logMailError(subject, w.Lang("发送成功"))
+	return nil
+}
+
+// ReplyMail 如果设置了回复邮件，则尝试回复给用户
+func (w *Website) ReplyMail(recipient string) error {
+	if !strings.Contains(recipient, "@") {
+		return errors.New(w.Lang("收件地址不正确"))
+	}
+	if w.PluginSendmail.AutoReply && w.PluginSendmail.ReplySubject != "" && w.PluginSendmail.ReplyMessage != "" {
+		return w.SendMail(w.PluginSendmail.ReplySubject, w.PluginSendmail.ReplyMessage, recipient)
+	}
+
 	return nil
 }
 

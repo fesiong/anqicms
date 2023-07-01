@@ -1103,6 +1103,12 @@ func ApiGuestbookForm(ctx iris.Context) {
 
 	// 后台发信
 	go currentSite.SendMail(subject, strings.Join(contents, ""))
+	// 回复客户
+	recipient, ok := result["email"]
+	if !ok {
+		recipient = result["contact"]
+	}
+	go currentSite.ReplyMail(recipient)
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {

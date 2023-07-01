@@ -61,6 +61,10 @@ type PluginSendmail struct {
 	Account   string `json:"account"`
 	Password  string `json:"password"`
 	Recipient string `json:"recipient"`
+
+	AutoReply    bool   `json:"auto_reply"`
+	ReplySubject string `json:"reply_subject"`
+	ReplyMessage string `json:"reply_message"` // 自动回复内容
 }
 
 type PluginImportApiConfig struct {
