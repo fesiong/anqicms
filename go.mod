@@ -6,7 +6,6 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/aliyun/aliyun-oss-go-sdk v2.2.6+incompatible
 	github.com/chai2010/webp v1.1.2-0.20220219151144-e81c7511b15a
-	github.com/chromedp/chromedp v0.9.1
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v1.1.2
 	github.com/fatih/structs v1.1.0
@@ -26,7 +25,10 @@ require (
 	github.com/melbahja/goph v1.3.1
 	github.com/mojocn/base64Captcha v1.3.5
 	github.com/mozillazg/go-pinyin v0.19.0
+<<<<<<< HEAD
 	github.com/otiai10/openaigo v1.4.0
+=======
+>>>>>>> db0a3f16707b4e63c139797a883bbf11715acf0e
 	github.com/parnurzeal/gorequest v0.2.16
 	github.com/pkg/sftp v1.13.5
 	github.com/qiniu/go-sdk/v7 v7.14.0
@@ -39,6 +41,7 @@ require (
 	golang.org/x/image v0.5.0
 	golang.org/x/net v0.7.0
 	golang.org/x/text v0.7.0
+	gopkg.in/gographics/imagick.v3 v3.4.2
 	gorm.io/driver/mysql v1.4.7
 	gorm.io/gorm v1.24.5
 )
@@ -79,6 +82,7 @@ require (
 	github.com/getlantern/hidden v0.0.0-20190325191715-f02dbb02be55 // indirect
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
+
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
@@ -119,7 +123,11 @@ require (
 	github.com/sirupsen/logrus v1.8.1 // indirect
 	github.com/smartystreets/goconvey v1.7.2 // indirect
 	github.com/tdewolff/minify/v2 v2.12.4 // indirect
+<<<<<<< HEAD
 	github.com/tdewolff/parse/v2 v2.6.4
+=======
+	github.com/tdewolff/parse/v2 v2.6.4 // indirect
+>>>>>>> db0a3f16707b4e63c139797a883bbf11715acf0e
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/vmihailenco/msgpack/v5 v5.3.5 // indirect
 	github.com/vmihailenco/tagparser/v2 v2.0.0 // indirect

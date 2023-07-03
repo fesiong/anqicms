@@ -99,6 +99,14 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 |:---------|:-------:|
 | golang  |  1.13 (及以上) |
 | mysql  |  5.6.35 (及以上) |
+| imagemagick  |  7.x |
+
+* 第三方图片处理 imagemagick 安装与支持
+  * 信息参考 https://github.com/gographics/imagick
+  * Ubuntu / Debian
+    * sudo apt-get install libmagickwand-dev
+  * 其他系统
+    * brew search imagemagick
 
 ### 克隆代码
 将`AnqiCMS`的代码克隆到本地任意目录，并进入该目录操作  
