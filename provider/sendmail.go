@@ -17,6 +17,7 @@ type MailLog struct {
 	CreatedTime int64  `json:"created_time"`
 	Subject     string `json:"subject"`
 	Status      string `json:"status"`
+	Address     string `json:"address"`
 }
 
 func (w *Website) GetLastSendmailList() ([]*MailLog, error) {
@@ -120,16 +121,19 @@ func (w *Website) SendMail(subject, content string, recipients ...string) error 
 			recipients = append(recipients, setting.Account)
 		}
 	}
+	// 多个收件地址的时候，分开发送
+	var err error
+	for _, to := range recipients {
+		email.To = []string{to}
+		email.Subject = subject
+		email.Text = content
 
-	email.To = recipients
-	email.Subject = subject
-	email.Text = content
-
-	if err := email.Send(); err != nil {
-		w.logMailError(subject, err.Error())
-		return err
+		if err = email.Send(); err != nil {
+			w.logMailError(to, subject, err.Error())
+			continue
+		}
+		w.logMailError(to, subject, w.Lang("发送成功"))
 	}
-	w.logMailError(subject, w.Lang("发送成功"))
 	return nil
 }
 
@@ -145,11 +149,12 @@ func (w *Website) ReplyMail(recipient string) error {
 	return nil
 }
 
-func (w *Website) logMailError(subject, status string) {
+func (w *Website) logMailError(address, subject, status string) {
 	mailLog := MailLog{
 		CreatedTime: time.Now().Unix(),
 		Subject:     subject,
 		Status:      status,
+		Address:     address,
 	}
 
 	content, err := json.Marshal(mailLog)
