@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"github.com/chai2010/webp"
 	"github.com/parnurzeal/gorequest"
-	"github.com/ultimate-guitar/go-imagequant"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -694,35 +695,59 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
 		// 先返回，不用再compress
 		return buff.Bytes(), nil
-	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
-	} else if imgType == "png" {
-		_ = png.Encode(buff, img)
 	} else if imgType == "gif" {
-		_ = gif.Encode(buff, img, nil)
+		if err := gif.Encode(buff, img, nil); err != nil {
+			return nil, err
+		}
+	} else {
+		return compressImage(img, quality)
 	}
-	// 再压缩
-	buf, err := compressImage(buff.Bytes(), quality)
-	if err == nil {
-		return buf, nil
-	}
-
-	return buff.Bytes(), err
+	return buff.Bytes(), nil
 }
 
 // compressImage 只能压缩png/jpg
-func compressImage(img []byte, quality int) ([]byte, error) {
-	speed := 1
-	if quality < 100 {
-		speed = 10 - quality/10
+// 由于取消引用pngquant，因此有透明度的png图片不再进行压缩。
+func compressImage(img image.Image, quality int) ([]byte, error) {
+	isOpaque := Opaque(img)
+	buff := &bytes.Buffer{}
+	if isOpaque {
+		// 无透明度，按jpeg处理
+		if err := jpeg.Encode(buff, img, &jpeg.Options{Quality: quality}); err != nil {
+			return nil, err
+		}
+	} else {
+		err := png.Encode(buff, img)
+		if err != nil {
+			newImg := image.NewRGBA(img.Bounds())
+			draw.Draw(newImg, newImg.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+			draw.Draw(newImg, newImg.Bounds(), img, img.Bounds().Min, draw.Over)
+			if err = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality}); err != nil {
+				return nil, err
+			}
+		}
 	}
-	compression := png.BestCompression
-	if quality >= 90 {
-		compression = png.DefaultCompression
+
+	return buff.Bytes(), nil
+}
+
+func Opaque(im image.Image) bool {
+	// Check if image has Opaque() method:
+	if oim, ok := im.(interface {
+		Opaque() bool
+	}); ok {
+		return oim.Opaque() // It does, call it and return its result!
 	}
-	optiImage, err := imagequant.Crush(img, speed, compression)
-	if err != nil {
-		return img, err
+
+	// No Opaque() method, we need to loop through all pixels and check manually:
+	rect := im.Bounds()
+	for y := rect.Min.Y; y < rect.Max.Y; y++ {
+		for x := rect.Min.X; x < rect.Max.X; x++ {
+			if _, _, _, a := im.At(x, y).RGBA(); a != 0xffff {
+				return false // Found a non-opaque pixel: image is non-opaque
+			}
+		}
+
 	}
-	return optiImage, nil
+
+	return true // All pixels are opaque, so is the image
 }

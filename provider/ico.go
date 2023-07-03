@@ -25,12 +25,9 @@ func (w *Website) SaveFavicon(file multipart.File) error {
 	}
 	// 先转成32*32
 	img = imaging.Thumbnail(img, 32, 32, imaging.Lanczos)
-	buff := &bytes.Buffer{}
-	// encode to png format
-	png.Encode(buff, img)
-	buf, err := compressImage(buff.Bytes(), 90)
+	buf, err := compressImage(img, 90)
 	if err != nil {
-		buf = buff.Bytes()
+		return err
 	}
 	// 保存为 favcion.ico
 	err = os.WriteFile(w.PublicPath+"favicon.ico", buf, os.ModePerm)
