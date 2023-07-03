@@ -701,6 +701,7 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 			return nil, err
 		}
 	} else if imgType == "png" {
+		//原图信息
 		bounds := img.Bounds()
 		width := bounds.Dx()
 		height := bounds.Dy()
