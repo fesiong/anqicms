@@ -134,7 +134,7 @@ func (w *Website) SendMail(subject, content string, recipients ...string) error 
 		}
 		w.logMailError(to, subject, w.Lang("发送成功"))
 	}
-	return nil
+	return err
 }
 
 // ReplyMail 如果设置了回复邮件，则尝试回复给用户
