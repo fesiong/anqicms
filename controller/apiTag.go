@@ -296,8 +296,10 @@ func ApiArchiveList(ctx iris.Context) {
 				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
 					Order("id ASC")
 				return tx
-			}, 0, newLimit, offset)
-			newLimit += newLimit - len(archives)
+			}, 0, limit, offset)
+			if limit-len(archives) < newLimit {
+				newLimit = limit - len(archives)
+			}
 			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).
 					Order("id DESC")
@@ -305,7 +307,7 @@ func ApiArchiveList(ctx iris.Context) {
 			}, 0, newLimit, offset)
 			//列表不返回content
 			if len(archives2) > 0 {
-				archives = append(archives, archives2...)
+				archives = append(archives2, archives...)
 			}
 			// 如果数量超过，则截取
 			if len(archives) > limit {
