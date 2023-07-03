@@ -701,12 +701,28 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 			return nil, err
 		}
 	} else if imgType == "png" {
-		newImg := image.NewRGBA(img.Bounds())
-		draw.Draw(newImg, newImg.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
-		draw.Draw(newImg, newImg.Bounds(), img, img.Bounds().Min, draw.Over)
-		if err := jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality}); err != nil {
-			encoder := png.Encoder{CompressionLevel: png.BestCompression}
-			if err := encoder.Encode(buff, img); err != nil {
+		bounds := img.Bounds()
+		width := bounds.Dx()
+		height := bounds.Dy()
+		// 创建一个8位全彩图像并保留Alpha通道
+		outputImg := image.NewRGBA(image.Rect(0, 0, width, height))
+		// 使用循环将24位图像的每个像素转换为8位全彩图像
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				pixel := img.At(x, y)
+				originalColor := color.RGBAModel.Convert(pixel).(color.RGBA)
+				alpha := originalColor.A
+				// 将24位图像的RGB颜色和Alpha通道值赋值给8位全彩图像
+				outputImg.Set(x, y, color.RGBA{originalColor.R, originalColor.G, originalColor.B, alpha})
+			}
+		}
+		encoder := png.Encoder{CompressionLevel: png.BestCompression}
+		err := encoder.Encode(buff, outputImg)
+		if err != nil {
+			newImg := image.NewRGBA(img.Bounds())
+			draw.Draw(newImg, newImg.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+			draw.Draw(newImg, newImg.Bounds(), img, img.Bounds().Min, draw.Over)
+			if err := jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality}); err != nil {
 				return nil, err
 			}
 		}
@@ -734,6 +750,5 @@ func compressImage(img []byte, quality int) ([]byte, error) {
 	}
 	image := mw.GetImage()
 	defer image.Destroy() // 销毁当前帧图片对应实例
-
-	return mw.GetImageBlob(), nil
+	return image.GetImageBlob(), nil
 }
