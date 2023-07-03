@@ -39,7 +39,6 @@ require (
 	golang.org/x/image v0.5.0
 	golang.org/x/net v0.7.0
 	golang.org/x/text v0.7.0
-	gopkg.in/gographics/imagick.v3 v3.4.2
 	gorm.io/driver/mysql v1.4.7
 	gorm.io/gorm v1.24.5
 )
