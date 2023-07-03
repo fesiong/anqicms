@@ -164,7 +164,7 @@ func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 				FirstLetter: strings.ToUpper(letter),
 				Status:      1,
 			}
-			w.DB.Save(tag)
+			w.DB.Where("`title` = ?", tag.Title).FirstOrCreate(tag)
 
 			link := w.GetUrl("tag", tag, 0)
 			go w.PushArchive(link)

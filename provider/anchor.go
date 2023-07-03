@@ -424,7 +424,6 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 func (w *Website) AutoInsertAnchor(archiveId uint, keywords, link string) {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	keywords = strings.ReplaceAll(keywords, "，", ",")
-	keywords = strings.ReplaceAll(keywords, " ", ",")
 	keywords = strings.ReplaceAll(keywords, "_", ",")
 
 	keywordArr := strings.Split(keywords, ",")

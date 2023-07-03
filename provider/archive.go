@@ -344,40 +344,19 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	baseHost := ""
+	urls, err := url.Parse(w.System.BaseUrl)
+	if err == nil {
+		baseHost = urls.Host
+	}
+	autoAddImage := false
 	//goquery
 	htmlR := strings.NewReader(req.Content)
 	doc, err := goquery.NewDocumentFromReader(htmlR)
 	if err == nil {
-		baseHost := ""
-		urls, err := url.Parse(w.System.BaseUrl)
-		if err == nil {
-			baseHost = urls.Host
-		}
-
 		//提取描述
 		if req.Description == "" {
 			archive.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
-		}
-		//下载远程图片
-		if w.Content.RemoteDownload == 1 {
-			doc.Find("img").Each(func(i int, s *goquery.Selection) {
-				src, exists := s.Attr("src")
-				if exists && src != "" {
-					alt := s.AttrOr("alt", "")
-					imgUrl, err := url.Parse(src)
-					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, w.PluginStorage.StorageUrl) {
-							//外链
-							attachment, err := w.DownloadRemoteImage(src, alt)
-							if err == nil {
-								s.SetAttr("src", attachment.Logo)
-							}
-						}
-					}
-				} else {
-					s.Remove()
-				}
-			})
 		}
 		//提取缩略图
 		if len(archive.Images) == 0 {
@@ -387,10 +366,10 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 				src := imgSections.Eq(0).AttrOr("src", "")
 				if src != "" {
 					archive.Images = append(archive.Images, src)
+					autoAddImage = true
 				}
 			}
 		}
-
 		//过滤外链
 		doc.Find("a").Each(func(i int, s *goquery.Selection) {
 			href, exists := s.Attr("href")
@@ -459,7 +438,50 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		w.DB.Delete(archive)
 		return nil, err
 	}
-
+	// 自动提取远程图片改成保存后处理
+	go func() {
+		//下载远程图片
+		if w.Content.RemoteDownload == 1 {
+			hasChangeImg := false
+			doc.Find("img").Each(func(i int, s *goquery.Selection) {
+				hasChangeImg = true
+				src, exists := s.Attr("src")
+				if exists && src != "" {
+					alt := s.AttrOr("alt", "")
+					imgUrl, err := url.Parse(src)
+					if err == nil {
+						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, w.PluginStorage.StorageUrl) {
+							//外链
+							attachment, err := w.DownloadRemoteImage(src, alt)
+							if err == nil {
+								s.SetAttr("src", attachment.Logo)
+							}
+						}
+					}
+				} else {
+					s.Remove()
+				}
+			})
+			if hasChangeImg {
+				archiveData.Content, _ = doc.Find("body").Html()
+				w.DB.Model(&archiveData).UpdateColumn("content", archiveData.Content)
+				// 更新data
+				if autoAddImage {
+					//提取缩略图
+					archive.Images = archive.Images[:0]
+					imgSections := doc.Find("img")
+					if imgSections.Length() > 0 {
+						//获取第一条
+						src := imgSections.Eq(0).AttrOr("src", "")
+						if src != "" {
+							archive.Images = append(archive.Images, src)
+						}
+					}
+					w.DB.Model(archive).UpdateColumn("images", archive.Images)
+				}
+			}
+		}
+	}()
 	//extra
 	if len(extraFields) > 0 {
 		//入库
