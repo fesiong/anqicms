@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"github.com/chai2010/webp"
 	"github.com/parnurzeal/gorequest"
-	"github.com/ultimate-guitar/go-imagequant"
+	"gopkg.in/gographics/imagick.v3/imagick"
 	"image"
+	"image/color"
+	"image/draw"
 	"image/gif"
 	"image/jpeg"
 	"image/png"
@@ -695,34 +697,59 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 		// 先返回，不用再compress
 		return buff.Bytes(), nil
 	} else if imgType == "jpg" {
-		_ = jpeg.Encode(buff, img, &jpeg.Options{Quality: quality})
+		if err := jpeg.Encode(buff, img, &jpeg.Options{Quality: quality}); err != nil {
+			return nil, err
+		}
 	} else if imgType == "png" {
-		_ = png.Encode(buff, img)
+		//原图信息
+		bounds := img.Bounds()
+		width := bounds.Dx()
+		height := bounds.Dy()
+		// 创建一个8位全彩图像并保留Alpha通道
+		outputImg := image.NewRGBA(image.Rect(0, 0, width, height))
+		// 使用循环将24位图像的每个像素转换为8位全彩图像
+		for y := 0; y < height; y++ {
+			for x := 0; x < width; x++ {
+				pixel := img.At(x, y)
+				originalColor := color.RGBAModel.Convert(pixel).(color.RGBA)
+				alpha := originalColor.A
+				// 将24位图像的RGB颜色和Alpha通道值赋值给8位全彩图像
+				outputImg.Set(x, y, color.RGBA{originalColor.R, originalColor.G, originalColor.B, alpha})
+			}
+		}
+		encoder := png.Encoder{CompressionLevel: png.BestCompression}
+		err := encoder.Encode(buff, outputImg)
+		if err != nil {
+			newImg := image.NewRGBA(img.Bounds())
+			draw.Draw(newImg, newImg.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
+			draw.Draw(newImg, newImg.Bounds(), img, img.Bounds().Min, draw.Over)
+			if err := jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality}); err != nil {
+				return nil, err
+			}
+		}
 	} else if imgType == "gif" {
-		_ = gif.Encode(buff, img, nil)
+		if err := gif.Encode(buff, img, nil); err != nil {
+			return nil, err
+		}
 	}
-	// 再压缩
-	buf, err := compressImage(buff.Bytes(), quality)
-	if err == nil {
-		return buf, nil
-	}
-
-	return buff.Bytes(), err
+	return buff.Bytes(), nil
 }
 
 // compressImage 只能压缩png/jpg
 func compressImage(img []byte, quality int) ([]byte, error) {
-	speed := 1
-	if quality < 100 {
-		speed = 10 - quality/10
+	imagick.Initialize()
+	defer imagick.Terminate()
+	mw := imagick.NewMagickWand()
+	defer mw.Destroy()
+
+	mw.ReadImageBlob(img)
+	if err := mw.SetImageCompressionQuality(uint(quality)); err != nil {
+		return nil, err
 	}
-	compression := png.BestCompression
-	if quality >= 90 {
-		compression = png.DefaultCompression
+	if err := mw.SetImageFormat("PNG"); err != nil {
+		return nil, err
 	}
-	optiImage, err := imagequant.Crush(img, speed, compression)
-	if err != nil {
-		return img, err
-	}
-	return optiImage, nil
+	image := mw.GetImage()
+	defer image.Destroy() // 销毁当前帧图片对应实例
+	return image.GetImageBlob(), nil
 }
