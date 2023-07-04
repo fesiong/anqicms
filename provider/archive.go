@@ -260,6 +260,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	archive.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, archive.Id)
 	if utf8.RuneCountInString(req.Title) > 250 {
 		req.Title = string([]rune(req.Title)[:250])
+		if strings.Count(req.Title, " ") > 1 {
+			req.Title = req.Title[:strings.LastIndexAny(req.Title, " ")]
+		}
 	}
 	archive.ModuleId = category.ModuleId
 	archive.Title = req.Title
