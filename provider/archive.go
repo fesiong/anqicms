@@ -258,7 +258,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		req.UrlToken = time.Now().Format("a-20060102150405")
 	}
 	archive.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, archive.Id)
-
+	if utf8.RuneCountInString(req.Title) > 250 {
+		req.Title = string([]rune(req.Title)[:250])
+	}
 	archive.ModuleId = category.ModuleId
 	archive.Title = req.Title
 	archive.SeoTitle = req.SeoTitle
