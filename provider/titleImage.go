@@ -6,6 +6,7 @@ import (
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"golang.org/x/image/font"
+	"golang.org/x/image/math/fixed"
 	"image"
 	"image/color"
 	"image/draw"
@@ -15,7 +16,6 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -173,18 +173,18 @@ func (t *TitleImage) drawTitle() {
 	c.SetFontSize(float64(realSize))
 	c.SetSrc(image.NewUniform(library.HEXToRGB(t.config.FontColor)))
 
-	textWidth := countLetter(t.title) * float64(c.PointToFixed(float64(realSize)).Round())
-	lineLen := int(math.Ceil(textWidth / float64(t.config.Width-gap)))
+	textWidth := t.getLettersLen([]rune(t.title), realSize)
+	lineLen := int(math.Ceil(float64(textWidth) / float64(t.config.Width-gap)))
 	// 行高 size * 1.6
 	runeText := []rune(t.title)
 	start := 0
 	startY := t.config.Height/2 - (int(float64(realSize)/1.5) + int(float64((lineLen-1)*realSize)*1.6)/2) + realSize
 	for i := 0; i < lineLen; i++ {
-		tmpWidth := float64(0)
+		tmpWidth := int(0)
 		tmpText := string(runeText[start:])
 		for j := start; j < len(runeText); j++ {
-			tmpWidth += countLetter(string(runeText[j])) * float64(c.PointToFixed(float64(realSize)).Round())
-			if tmpWidth > float64(t.config.Width-gap) {
+			tmpWidth += t.getLettersLen([]rune{runeText[j]}, realSize)
+			if tmpWidth > (t.config.Width - gap) {
 				// 退回一个
 				tmpText = string(runeText[start:j])
 				start = j
@@ -192,7 +192,8 @@ func (t *TitleImage) drawTitle() {
 			}
 		}
 		if len(tmpText) > 0 {
-			tmpWidth = countLetter(tmpText) * float64(c.PointToFixed(float64(realSize)).Round())
+			tmpWidth = t.getLettersLen([]rune(tmpText), realSize)
+
 			startX := (t.config.Width - int(tmpWidth)) / 2
 			if i > 0 {
 				startY += int(float64(realSize) * 1.6)
@@ -206,13 +207,14 @@ func (t *TitleImage) drawTitle() {
 	t.img = m
 }
 
-// countLetter 计算中英文，中文算1个，英文算半个
-func countLetter(s string) float64 {
-	re, _ := regexp.Compile(`[\w ]`)
-	letters := re.FindAllString(s, -1)
-	total := float64(utf8.RuneCountInString(s)) - float64(len(letters))/2
-
-	return total
+// countLetter 计算字体宽度
+func (t *TitleImage) getLettersLen(ss []rune, fontSize int) int {
+	var width int
+	for _, s := range ss {
+		hm := t.font.HMetric(fixed.Int26_6(fontSize), t.font.Index(s))
+		width += int(hm.AdvanceWidth)
+	}
+	return width
 }
 
 func (t *TitleImage) RandDeepColor(addon int) color.RGBA {
@@ -276,7 +278,7 @@ func loadLocalFont(diyPath string) *truetype.Font {
 		}
 	}
 	for _, path := range fontPaths {
-		info, err := os.Stat(path)
+		info, err = os.Stat(path)
 		if err == nil {
 			if info.Size() > 1024*1024*2 {
 				phtf, err := os.ReadFile(path)
@@ -288,6 +290,17 @@ func loadLocalFont(diyPath string) *truetype.Font {
 				return phtft
 			}
 		}
+	}
+	// 英文状态下的默认字体
+	for _, path := range fontPaths {
+		// 选择解析成功的第一个
+		phtf, err := os.ReadFile(path)
+		phtft, err := freetype.ParseFont(phtf)
+		if err != nil {
+			continue
+		}
+
+		return phtft
 	}
 
 	return nil
