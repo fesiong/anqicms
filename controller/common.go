@@ -751,9 +751,8 @@ func GenerateCaptcha(ctx iris.Context) {
 	})
 }
 
-func SafeVerify(ctx iris.Context, from string) bool {
+func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from string) bool {
 	currentSite := provider.CurrentSite(ctx)
-	returnType := ctx.PostValueTrim("return")
 	// 检查验证码
 	if currentSite.Safe.Captcha == 1 {
 		captchaId := ctx.PostValueTrim("captcha_id")
@@ -845,7 +844,31 @@ func SafeVerify(ctx iris.Context, from string) bool {
 		if currentSite.Safe.IntervalLimit > 0 {
 			var lastTime int64
 			if from == "guestbook" {
-				currentSite.DB.Model(&model.Guestbook{}).Where("`ip` = ?", ip).Order("id desc").Pluck("created_time", &lastTime)
+				if userName, ok := req["user_name"]; ok {
+					// if username is longer then normal
+					if len(userName) > 50 {
+						if returnType == "json" {
+							ctx.JSON(iris.Map{
+								"code": config.StatusFailed,
+								"msg":  currentSite.Lang("请不要在短时间内多次提交"),
+							})
+						} else {
+							ShowMessage(ctx, currentSite.Lang("请不要在短时间内多次提交"), nil)
+						}
+						return false
+					}
+				}
+				err := currentSite.DB.Model(&model.Guestbook{}).Where("`ip` = ?", ip).Order("id desc").Pluck("created_time", &lastTime).Error
+				if err != nil {
+					if contact, ok := req["contact"]; ok {
+						err = currentSite.DB.Model(&model.Guestbook{}).Where("`contact` = ?", contact).Order("id desc").Pluck("created_time", &lastTime).Error
+					}
+				}
+				if err != nil {
+					if userName, ok := req["user_name"]; ok {
+						currentSite.DB.Model(&model.Guestbook{}).Where("`user_name` = ?", userName).Order("id desc").Pluck("created_time", &lastTime)
+					}
+				}
 			} else if from == "comment" {
 				currentSite.DB.Model(&model.Comment{}).Where("`ip` = ?", ip).Order("id desc").Pluck("created_time", &lastTime)
 			}

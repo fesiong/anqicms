@@ -21,7 +21,7 @@ func CommentPublish(ctx iris.Context) {
 	}
 	// 支持返回为 json 或html， 默认 html
 	returnType := ctx.PostValueTrim("return")
-	if ok := SafeVerify(ctx, "comment"); !ok {
+	if ok := SafeVerify(ctx, nil, returnType, "comment"); !ok {
 		return
 	}
 

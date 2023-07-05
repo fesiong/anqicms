@@ -957,6 +957,9 @@ func ApiCommentPublish(ctx iris.Context) {
 		})
 		return
 	}
+	if ok := SafeVerify(ctx, nil, "json", "comment"); !ok {
+		return
+	}
 
 	userId := ctx.Values().GetIntDefault("userId", 0)
 	if userId > 0 {
@@ -1068,6 +1071,9 @@ func ApiGuestbookForm(ctx iris.Context) {
 		if !item.IsSystem {
 			extraData[item.Name] = val
 		}
+	}
+	if ok := SafeVerify(ctx, result, "json", "guestbook"); !ok {
+		return
 	}
 
 	//先填充默认字段
