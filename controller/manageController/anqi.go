@@ -7,7 +7,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"log"
 	"time"
 )
 
@@ -322,7 +321,6 @@ func AuthAiGenerateStreamData(ctx iris.Context) {
 
 	content, msg, finished := currentSite.AnqiLoadStreamData(streamId)
 
-	log.Println(content, msg, finished)
 	if msg != "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
