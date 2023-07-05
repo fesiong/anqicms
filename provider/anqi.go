@@ -1,12 +1,14 @@
 package provider
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/parnurzeal/gorequest"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -19,8 +21,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -60,19 +64,6 @@ type AnqiAttachmentResult struct {
 	Code int            `json:"code"`
 	Msg  string         `json:"msg"`
 	Data AnqiAttachment `json:"data"`
-}
-
-type AnqiPseudoRequest struct {
-	Title        string `json:"title"`
-	Content      string `json:"content"`
-	TextLength   int64  `json:"text_length"`
-	PseudoRemain int64  `json:"pseudo_remain"`
-}
-
-type AnqiPseudoResult struct {
-	Code int               `json:"code"`
-	Msg  string            `json:"msg"`
-	Data AnqiPseudoRequest `json:"data"`
 }
 
 type AnqiTranslateRequest struct {
@@ -185,7 +176,6 @@ func (w *Website) AnqiCheckLogin(force bool) {
 		config.AnqiUser.AuthId = result.Data.AuthId
 		config.AnqiUser.UserName = result.Data.UserName
 		config.AnqiUser.ExpireTime = result.Data.ExpireTime
-		config.AnqiUser.PseudoRemain = result.Data.PseudoRemain
 		config.AnqiUser.TranslateRemain = result.Data.TranslateRemain
 		config.AnqiUser.AiRemain = result.Data.AiRemain
 		config.AnqiUser.Integral = result.Data.Integral
@@ -329,34 +319,6 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	return nil
 }
 
-func (w *Website) AnqiPseudoArticle(archive *model.Archive) error {
-	archiveData, err := w.GetArchiveDataById(archive.Id)
-	if err != nil {
-		return err
-	}
-	req := &AnqiPseudoRequest{
-		Title:   archive.Title,
-		Content: archiveData.Content,
-	}
-	var result AnqiPseudoResult
-	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/pseudo").Send(req).EndStruct(&result)
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	if result.Code != 0 {
-		return errors.New(result.Msg)
-	}
-	archive.Title = result.Data.Title
-	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "))
-	archive.HasPseudo = 1
-	err = w.DB.Save(archive).Error
-	// 再保存内容
-	archiveData.Content = result.Data.Content
-	w.DB.Save(archiveData)
-
-	return nil
-}
-
 func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 	archiveData, err := w.GetArchiveDataById(archive.Id)
 	if err != nil {
@@ -394,20 +356,28 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		Content:  archiveData.Content,
 		Language: w.System.Language, // 以系统语言为标准
 	}
-	var result AnqiAiResult
-	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/pseudo").Send(req).EndStruct(&result)
-	if len(errs) > 0 {
-		return errs[0]
+	if w.AiGenerateConfig.Open {
+		req, err = w.SelfAiPseudoResult(req)
+		if err != nil {
+			return err
+		}
+	} else {
+		var result AnqiAiResult
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/pseudo").Send(req).EndStruct(&result)
+		if len(errs) > 0 {
+			return errs[0]
+		}
+		if result.Code != 0 {
+			return errors.New(result.Msg)
+		}
+		req = &result.Data
 	}
-	if result.Code != 0 {
-		return errors.New(result.Msg)
-	}
-	archive.Title = result.Data.Title
-	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "))
+	archive.Title = req.Title
+	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
 	archive.HasPseudo = 1
 	err = w.DB.Save(archive).Error
 	// 再保存内容
-	archiveData.Content = result.Data.Content
+	archiveData.Content = req.Content
 	w.DB.Save(archiveData)
 
 	return nil
@@ -420,20 +390,29 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		return 1, nil
 	}
 
+	var err error
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
 	}
-	var result AnqiAiResult
-	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/generate").Send(req).EndStruct(&result)
-	if len(errs) > 0 {
-		return 0, errs[0]
-	}
-	if result.Code != 0 {
-		return 0, errors.New(result.Msg)
+	if w.AiGenerateConfig.Open {
+		req, err = w.SelfAiGenerateResult(req)
+		if err != nil {
+			return 0, err
+		}
+	} else {
+		var result AnqiAiResult
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/generate").Send(req).EndStruct(&result)
+		if len(errs) > 0 {
+			return 0, errs[0]
+		}
+		if result.Code != 0 {
+			return 0, errors.New(result.Msg)
+		}
+		req = &result.Data
 	}
 
-	var content = strings.Split(result.Data.Content, "\n")
+	var content = strings.Split(req.Content, "\n")
 	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
 		rand.Seed(time.Now().UnixMicro())
 		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
@@ -453,7 +432,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	}
 
 	archive := request.Archive{
-		Title:      result.Data.Title,
+		Title:      req.Title,
 		ModuleId:   0,
 		CategoryId: categoryId,
 		Keywords:   keyword.Title,
@@ -477,30 +456,172 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	return 1, nil
 }
 
-func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (*http.Response, error) {
+type StreamData struct {
+	Content  string `json:"content"`
+	Err      string `json:"err"`
+	Finished bool   `json:"finished"`
+}
+
+type AiStreamStore struct {
+	mu   sync.Mutex
+	list map[string]*StreamData
+}
+
+func (a *AiStreamStore) UpdateStreamData(streamId, content, err string, finished bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	data, ok := a.list[streamId]
+	if !ok {
+		data = &StreamData{}
+		a.list[streamId] = data
+	}
+	data.Content = data.Content + content
+	data.Err = err
+	data.Finished = finished
+}
+
+func (a *AiStreamStore) LoadStreamData(streamId string) (content, err string, finished bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	data, ok := a.list[streamId]
+	if !ok {
+		return "", "", true
+	}
+	content = data.Content
+	err = data.Err
+	finished = data.Finished
+	data.Content = ""
+
+	return
+}
+
+func (a *AiStreamStore) DeleteStreamData(streamId string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	delete(a.list, streamId)
+}
+
+var AiStreamResults = AiStreamStore{
+	mu:   sync.Mutex{},
+	list: map[string]*StreamData{},
+}
+
+func (w *Website) AnqiLoadStreamData(streamId string) (content, err string, finished bool) {
+	return AiStreamResults.LoadStreamData(streamId)
+}
+
+func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string, error) {
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Demand:   keyword.Demand,
 		Language: w.System.Language, // 以系统语言为标准
 	}
-	buf, _ := json.Marshal(req)
 
-	client := &http.Client{
-		Timeout: 180 * time.Second,
-	}
-	anqiReq, err := http.NewRequest("POST", AnqiApi+"/ai/stream", bytes.NewReader(buf))
-	if err != nil {
-		return nil, err
-	}
-	anqiReq.Header.Add("token", config.AnqiUser.Token)
-	anqiReq.Header.Add("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
-	anqiReq.Header.Add("domain", w.System.BaseUrl)
-	resp, err := client.Do(anqiReq)
-	if err != nil {
-		return nil, err
+	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
+	if w.AiGenerateConfig.Open {
+		if !w.AiGenerateConfig.ApiValid {
+			return "", errors.New("接口不可用")
+		}
+		key := w.GetOpenAIKey()
+		if key == "" {
+			return "", errors.New("无可用Key")
+		}
+		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
+		if req.Language == config.LanguageEn {
+			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
+		}
+		if len(req.Demand) > 0 {
+			prompt += "\n" + req.Demand
+		}
+		stream, err := GetOpenAIStreamResponse(key, prompt)
+		if err != nil {
+			msg := err.Error()
+			re, _ := regexp.Compile(`code: (\d+),`)
+			match := re.FindStringSubmatch(msg)
+			if len(match) > 1 {
+				if match[1] == "401" || match[1] == "429" {
+					// Key 已失效
+					w.SetOpenAIKeyInvalid(key)
+				}
+			}
+			return "", err
+		}
+		go func() {
+			defer stream.Close()
+			for {
+				resp, err2 := stream.Recv()
+				if errors.Is(err2, io.EOF) {
+					break
+				}
+				if err2 != nil {
+					err = err2
+					fmt.Printf("\nStream error: %v\n", err2)
+					break
+				}
+				AiStreamResults.UpdateStreamData(streamId, resp.Choices[0].Delta.Content, "", false)
+			}
+			if err != nil {
+				if strings.Contains(err.Error(), "You exceeded your current quota") {
+					w.SetOpenAIKeyInvalid(key)
+				}
+
+				AiStreamResults.UpdateStreamData(streamId, "", err.Error(), true)
+			} else {
+				AiStreamResults.UpdateStreamData(streamId, "", "", true)
+			}
+
+			time.AfterFunc(10*time.Second, func() {
+				AiStreamResults.DeleteStreamData(streamId)
+			})
+		}()
+	} else {
+		buf, _ := json.Marshal(req)
+
+		client := &http.Client{
+			Timeout: 180 * time.Second,
+		}
+		anqiReq, err := http.NewRequest("POST", AnqiApi+"/ai/stream", bytes.NewReader(buf))
+		if err != nil {
+			return "", err
+		}
+		anqiReq.Header.Add("token", config.AnqiUser.Token)
+		anqiReq.Header.Add("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
+		anqiReq.Header.Add("domain", w.System.BaseUrl)
+		resp, err := client.Do(anqiReq)
+		if err != nil {
+			return "", err
+		}
+
+		go func() {
+			// 开始处理
+			defer resp.Body.Close()
+			reader := bufio.NewReader(resp.Body)
+			for {
+				line, err2 := reader.ReadBytes('\n')
+				var isEof bool
+				if err2 != nil {
+					isEof = true
+				}
+				var aiResponse AnqiAiStreamResult
+				err2 = json.Unmarshal(line, &aiResponse)
+				if err2 != nil {
+					if isEof {
+						break
+					}
+					continue
+				}
+				AiStreamResults.UpdateStreamData(streamId, aiResponse.Data, "", isEof)
+
+				if aiResponse.Code != 0 {
+					AiStreamResults.UpdateStreamData(streamId, "", aiResponse.Msg, true)
+					return
+				}
+			}
+		}()
 	}
 
-	return resp, nil
+	return streamId, nil
 }
 
 func (w *Website) AnqiSyncSensitiveWords() error {

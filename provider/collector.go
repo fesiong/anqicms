@@ -125,7 +125,7 @@ func (w *Website) CollectArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.GetTodayArticleCount() > int64(w.CollectorConfig.DailyLimit) {
+	if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
 		return
 	}
 
@@ -141,13 +141,19 @@ func (w *Website) CollectArticles() {
 			keyword := keywords[i]
 			// 检查是否采集过
 			if w.checkArticleExists(keyword.Title, "", "") {
+				// 跳过这个关键词
+				if keyword.ArticleCount == 0 {
+					keyword.ArticleCount = 1
+				}
+				keyword.LastTime = time.Now().Unix()
+				w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
 				//log.Println("已存在于数据库", keyword.Title)
 				continue
 			}
 			total, err := w.CollectArticlesByKeyword(*keyword, false)
 			log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
 			// 达到数量了，退出
-			if w.GetTodayArticleCount() > int64(w.CollectorConfig.DailyLimit) {
+			if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
 				return
 			}
 			// 每个关键词都需要间隔30秒以上
@@ -165,10 +171,8 @@ func (w *Website) CollectArticles() {
 func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (total int, err error) {
 	if w.CollectorConfig.CollectMode == config.CollectModeCombine {
 		total, err = w.GenerateCombination(&keyword)
-	} else if w.CollectorConfig.CollectMode == config.CollectModeCollect {
+	} else {
 		total, err = w.CollectArticleFromBaidu(&keyword, focus)
-	} else if w.CollectorConfig.CollectMode == config.CollectModeAiGen {
-		total, err = w.AnqiAiGenerateArticle(&keyword)
 	}
 
 	if err != nil {
@@ -1080,23 +1084,31 @@ func ParsePlanText(content string, planText string) string {
 	}
 }
 
-func (w *Website) GetTodayArticleCount() int64 {
+func (w *Website) GetTodayArticleCount(from int) int64 {
 	today := now.BeginningOfDay()
 	if w.cachedTodayArticleCount.Day == today.Day() {
-		return w.cachedTodayArticleCount.Count
+		if from == config.ArchiveFromAi {
+			return w.cachedTodayArticleCount.AiGenerateCount
+		}
+		return w.cachedTodayArticleCount.CollectCount
 	}
 
 	w.cachedTodayArticleCount.Day = today.Day()
-	w.cachedTodayArticleCount.Count = 0
+	w.cachedTodayArticleCount.CollectCount = 0
+	w.cachedTodayArticleCount.AiGenerateCount = 0
 
 	todayUnix := today.Unix()
-	w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.Count)
+	w.DB.Model(&model.Archive{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromCollect, todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.CollectCount)
+	w.DB.Model(&model.Archive{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromAi, todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.AiGenerateCount)
 
-	return w.cachedTodayArticleCount.Count
+	if from == config.ArchiveFromAi {
+		return w.cachedTodayArticleCount.AiGenerateCount
+	}
+	return w.cachedTodayArticleCount.CollectCount
 }
 
 func (w *Website) UpdateTodayArticleCount(addNum int) {
-	w.cachedTodayArticleCount.Count += int64(addNum)
+	w.cachedTodayArticleCount.CollectCount += int64(addNum)
 }
 
 func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {

@@ -108,7 +108,6 @@ const (
 
 	CollectModeCollect = 0
 	CollectModeCombine = 1
-	CollectModeAiGen   = 2
 
 	CollectImageRemove = 0 // 移除
 	CollectImageRetain = 1 // 保留
@@ -135,4 +134,10 @@ const (
 const (
 	PasswordFindWayFile = "file"
 	PasswordFindWayDNS  = "dns"
+)
+
+const (
+	ArchiveFromDefault = 0
+	ArchiveFromCollect = 1 // 采集的文章
+	ArchiveFromAi      = 2 // AI生成的文章
 )

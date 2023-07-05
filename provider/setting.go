@@ -44,6 +44,7 @@ const (
 	TitleImageSettingKey  = "title_image"
 	HtmlCacheSettingKey   = "html_cache"
 	AnqiSettingKey        = "anqi"
+	AiGenerateSettingKey  = "ai_generate"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -78,9 +79,11 @@ func (w *Website) InitSetting() {
 	w.LoadTitleImageSetting()
 	w.LoadHtmlCacheSetting()
 	w.LoadAnqiUser()
-
+	w.LoadAiGenerateSetting()
 	w.LoadCollectorSetting()
 	w.LoadKeywordSetting()
+	// 检查OpenAIAPI是否可用
+	go w.CheckOpenAIAPIValid()
 }
 
 func (w *Website) LoadSystemSetting() {
@@ -338,6 +341,17 @@ func (w *Website) LoadAnqiUser() {
 	}
 
 	go w.AnqiCheckLogin(false)
+}
+
+func (w *Website) LoadAiGenerateSetting() {
+	value := w.GetSettingValue(AiGenerateSettingKey)
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), &w.AiGenerateConfig); err != nil {
+		return
+	}
 }
 
 func (w *Website) LoadCollectorSetting() {

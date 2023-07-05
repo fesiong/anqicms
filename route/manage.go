@@ -43,11 +43,11 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
 			anqi.Post("/feedback", manageController.AnqiSendFeedback)
-			anqi.Post("/pseudo", manageController.AnqiPseudoArticle)
 			anqi.Post("/translate", manageController.AnqiTranslateArticle)
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
 			anqi.Post("/ai/generate", manageController.AnqiAiGenerateArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
+			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
 			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
@@ -452,6 +452,16 @@ func manageRoute(app *iris.Application) {
 				htmlcache.Post("/build", manageController.PluginHtmlCacheBuild)
 				htmlcache.Get("/build/status", manageController.PluginHtmlCacheBuildStatus)
 				htmlcache.Post("/clean", manageController.PluginCleanHtmlCache)
+			}
+
+			aiGenerate := manage.Party("/aigenerate", middleware.ParseAdminToken, middleware.AdminPermission)
+			{
+				//采集全局设置
+				aiGenerate.Get("/setting", manageController.HandleAiGenerateSetting)
+				aiGenerate.Post("/setting", manageController.HandleAiGenerateSettingSave)
+				//批量替换文章内容
+				aiGenerate.Post("/article/collect", manageController.HandleArticleAiGenerate)
+				aiGenerate.Post("/article/start", manageController.HandleStartArticleAiGenerate)
 			}
 		}
 	}

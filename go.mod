@@ -26,11 +26,11 @@ require (
 	github.com/melbahja/goph v1.3.1
 	github.com/mojocn/base64Captcha v1.3.5
 	github.com/mozillazg/go-pinyin v0.19.0
-	github.com/otiai10/openaigo v1.4.0
 	github.com/parnurzeal/gorequest v0.2.16
 	github.com/pkg/sftp v1.13.5
 	github.com/qiniu/go-sdk/v7 v7.14.0
 	github.com/robfig/cron/v3 v3.0.1
+	github.com/sashabaranov/go-openai v1.12.0
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.41
