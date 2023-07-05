@@ -571,7 +571,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 				AiStreamResults.UpdateStreamData(streamId, "", "", true)
 			}
 
-			time.AfterFunc(10*time.Second, func() {
+			time.AfterFunc(5*time.Second, func() {
 				AiStreamResults.DeleteStreamData(streamId)
 			})
 		}()
@@ -607,6 +607,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 				err2 = json.Unmarshal(line, &aiResponse)
 				if err2 != nil {
 					if isEof {
+						AiStreamResults.UpdateStreamData(streamId, "", "", true)
 						break
 					}
 					continue
