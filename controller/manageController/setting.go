@@ -85,6 +85,7 @@ func SettingSystemForm(ctx iris.Context) {
 	currentSite.System.AdminUrl = req.AdminUrl
 	currentSite.System.SiteClose = req.SiteClose
 	currentSite.System.SiteCloseTips = req.SiteCloseTips
+	currentSite.System.BanSpider = req.BanSpider
 	// 如果本来storageUrl = baseUrl
 	if currentSite.PluginStorage.StorageUrl == currentSite.System.BaseUrl {
 		currentSite.PluginStorage.StorageUrl = req.BaseUrl

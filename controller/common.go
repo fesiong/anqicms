@@ -129,6 +129,15 @@ func CheckCloseSite(ctx iris.Context) {
 			}
 			return
 		}
+		// 禁止蜘蛛抓取
+		if currentSite.System.BanSpider == 1 {
+			ua := ctx.GetHeader("User-Agent")
+			if strings.Contains(ua, "spider") || strings.Contains(ua, "bot") {
+				ctx.StatusCode(400)
+				ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
+				return
+			}
+		}
 		// UA 禁止
 		if currentSite.Safe.UAForbidden != "" {
 			ua := ctx.GetHeader("User-Agent")

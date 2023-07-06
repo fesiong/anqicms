@@ -19,6 +19,7 @@ type SystemConfig struct {
 	AdminUrl      string       `json:"admin_url"`
 	SiteClose     int          `json:"site_close"`
 	SiteCloseTips string       `json:"site_close_tips"`
+	BanSpider     int          `json:"ban_spider"`
 	TemplateName  string       `json:"template_name"`
 	TemplateType  int          `json:"template_type"`
 	TemplateUrl   string       `json:"template_url"` // template 的静态文件目录
