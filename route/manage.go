@@ -463,6 +463,12 @@ func manageRoute(app *iris.Application) {
 				aiGenerate.Post("/article/collect", manageController.HandleArticleAiGenerate)
 				aiGenerate.Post("/article/start", manageController.HandleStartArticleAiGenerate)
 			}
+
+			timeFactor := plugin.Party("/timefactor")
+			{
+				timeFactor.Get("/setting", manageController.PluginTimeFactorSetting)
+				timeFactor.Post("/setting", manageController.PluginTimeFactorSettingSave)
+			}
 		}
 	}
 }

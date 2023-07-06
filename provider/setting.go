@@ -45,6 +45,7 @@ const (
 	HtmlCacheSettingKey   = "html_cache"
 	AnqiSettingKey        = "anqi"
 	AiGenerateSettingKey  = "ai_generate"
+	TimeFactorKey         = "time_factor"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -517,6 +518,19 @@ func (w *Website) LoadKeywordSetting() {
 			w.KeywordConfig.TitleReplace = append(w.KeywordConfig.TitleReplace, v)
 		}
 	}
+}
+
+func (w *Website) GetTimeFactorSetting() (setting config.PluginTimeFactor) {
+	value := w.GetSettingValue(TimeFactorKey)
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), &setting); err != nil {
+		return
+	}
+
+	return
 }
 
 func (w *Website) Lang(str string) string {

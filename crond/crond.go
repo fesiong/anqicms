@@ -27,6 +27,8 @@ func Crond() {
 	crontab.AddFunc("@daily", CleanUserVip)
 	// 每小时检查一次账号状态
 	crontab.AddFunc("1 30 * * * *", CheckAuthValid)
+	// 每小时检查一次时间因子
+	crontab.AddFunc("1 10 * * * *", UpdateTimeFactor)
 	crontab.Start()
 }
 
@@ -125,4 +127,14 @@ func CheckAuthValid() {
 	time.Sleep(time.Duration(rand.Intn(600)+1) * time.Second)
 	defaultSite := provider.CurrentSite(nil)
 	defaultSite.AnqiCheckLogin(false)
+}
+
+func UpdateTimeFactor() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.TryToRunTimeFactor()
+	}
 }

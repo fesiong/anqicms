@@ -134,6 +134,15 @@ type PluginHtmlCache struct {
 	LastBuildTime int64 `json:"last_build_time"` // 上一次手动生成时间
 }
 
+type PluginTimeFactor struct {
+	Open        bool     `json:"open"`
+	ModuleIds   []int64  `json:"module_ids"`
+	Types       []string `json:"Types"`
+	StartDay    int      `json:"start_day"`
+	EndDay      int      `json:"end_day"`
+	CategoryIds []int64  `json:"category_ids"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")
