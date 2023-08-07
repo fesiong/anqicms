@@ -354,6 +354,7 @@ func SettingSafeForm(ctx iris.Context) {
 	currentSite.Safe.UAForbidden = req.UAForbidden
 	currentSite.Safe.APIOpen = req.APIOpen
 	currentSite.Safe.APIPublish = req.APIPublish
+	currentSite.Safe.AdminCaptchaOff = req.AdminCaptchaOff
 
 	err := currentSite.SaveSettingValue(provider.SafeSettingKey, currentSite.Safe)
 	if err != nil {

@@ -159,6 +159,15 @@ textarea{
 .menu-headermenu-container > .menu > .menu-item > .sub-menu > .menu-item > .sub-menu{
 	display: none;
 }
+.banner {
+    width: 100%;
+}
+.banner-item {
+    display: block;
+}
+.banner-item img {
+    width: 100%;
+}
 .index-title{
 	background: url(../img/p.webp) no-repeat center;
 	text-align: center;

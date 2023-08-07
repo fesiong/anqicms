@@ -1,8 +1,16 @@
 {% extends 'base.html' %}
 {% block container %}
 <!-- banner -->
-<div class="banner">
-	<img src="{% system with name='TemplateUrl' %}img/banner.webp" alt="">
+<div class="layui-carousel banner" id="index-banner">
+	<div carousel-item>
+		{% bannerList banners %}
+			{% for item in banners %}
+			<a class="banner-item" href="{{item.Link}}" target="_blank">
+				<img src="{{item.Logo}}" alt="{{item.Alt}}" />
+			</a>
+			{% endfor %}
+		{% endbannerList %}
+	</div>
 </div>
 <!-- banner -->
 <!-- products -->

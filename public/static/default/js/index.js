@@ -3,6 +3,7 @@ layui.define(function (exports) {
   var layer = layui.layer;
   var form = layui.form;
   var laytpl = layui.laytpl;
+  var carousel = layui.carousel;
 
   //扩展jquery的格式化方法
   $.fn.parseForm = function () {
@@ -99,7 +100,15 @@ layui.define(function (exports) {
     }
   });
 
-  
+  // 首页banner
+  carousel.render({
+    elem: '#index-banner',
+    width: '100%',
+    height: '600px',
+    change: function(obj){ // 注：v2.7.0 新增
+      console.log(obj); // 返回结果跟上述 change 事件相同
+    }
+  })
 
   // $("#login-container")
   //   .find("form")

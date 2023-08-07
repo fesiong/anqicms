@@ -290,6 +290,14 @@ func FileServe(ctx iris.Context) bool {
 			return true
 		}
 	}
+	// 自动生成Sitemap
+	if ((strings.HasSuffix(uri, "sitemap.xml") && currentSite.PluginSitemap.Type == "xml") ||
+		(strings.HasSuffix(uri, "sitemap.txt") && currentSite.PluginSitemap.Type == "txt")) &&
+		!ctx.Values().GetBoolDefault("sitemap", false) {
+		_ = currentSite.BuildSitemap()
+		ctx.Values().Set("sitemap", true)
+		return FileServe(ctx)
+	}
 
 	return false
 }
@@ -742,6 +750,19 @@ func NewDriver() *captcha.DriverString {
 }
 
 func GenerateCaptcha(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	safeSetting := currentSite.Safe
+	if safeSetting.AdminCaptchaOff == 1 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": iris.Map{
+				"captcha_off": true,
+			},
+		})
+		return
+	}
+
 	var driver = NewDriver().ConvertFonts()
 	c := captcha.NewCaptcha(driver, Store)
 	id, content, answer := c.Driver.GenerateIdQuestionAnswer()
@@ -754,8 +775,9 @@ func GenerateCaptcha(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"captcha_id": id,
-			"captcha":    bs64,
+			"captcha_off": false,
+			"captcha_id":  id,
+			"captcha":     bs64,
 		},
 	})
 }

@@ -9,8 +9,8 @@
 	"homepage": "https://www.anqicms.com",
 	"created": "2022-08-01 09:26:46",
 	"template_type": 0,
-	"status": 0,
+	"status": 1,
 	"tpl_files": null,
 	"static_files": null,
-	"preview_data": false
+	"preview_data": true
 }

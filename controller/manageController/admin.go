@@ -30,20 +30,23 @@ func AdminLogin(ctx iris.Context) {
 		return
 	}
 
-	// 验证 captcha
-	if req.CaptchaId == "" {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "验证码不正确",
-		})
-		return
-	}
-	if ok := controller.Store.Verify(req.CaptchaId, req.Captcha, true); !ok {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "验证码不正确",
-		})
-		return
+	safeSetting := currentSite.Safe
+	if safeSetting.AdminCaptchaOff != 1 {
+		// 验证 captcha
+		if req.CaptchaId == "" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "验证码不正确",
+			})
+			return
+		}
+		if ok := controller.Store.Verify(req.CaptchaId, req.Captcha, true); !ok {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "验证码不正确",
+			})
+			return
+		}
 	}
 
 	// 如果连续错了5次，则只能10分钟后再试

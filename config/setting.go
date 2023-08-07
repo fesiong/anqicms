@@ -68,6 +68,7 @@ type SafeConfig struct {
 	UAForbidden      string `json:"ua_forbidden"`
 	APIOpen          int    `json:"api_open"`
 	APIPublish       int    `json:"api_publish"`
+	AdminCaptchaOff  int    `json:"admin_captcha_off"`
 }
 
 type ExtraField struct {
