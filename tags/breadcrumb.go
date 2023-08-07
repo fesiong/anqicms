@@ -43,8 +43,14 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 
 	showTitle := true
+	var titleText string
 	if args["title"] != nil {
-		showTitle = args["title"].Bool()
+		tmpText := args["title"].String()
+		if tmpText == "False" || tmpText == "false" {
+			showTitle = false
+		} else if tmpText != "True" && tmpText != "true" {
+			titleText = tmpText
+		}
 	}
 
 	var crumbs []*crumb
@@ -77,19 +83,21 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 			}
 			break
 		case "archiveDetail":
-			archive, ok := ctx.Public["archive"].(*model.Archive)
-			if ok {
-				//检查是否存在分类
-				crumbs = append(crumbs, buildCategoryCrumbs(currentSite, archive.CategoryId)...)
+			if showTitle {
+				archive, ok := ctx.Public["archive"].(*model.Archive)
+				if ok {
+					//检查是否存在分类
+					crumbs = append(crumbs, buildCategoryCrumbs(currentSite, archive.CategoryId)...)
 
-				title := archive.Title
-				if !showTitle {
-					title = currentSite.Lang("正文")
+					title := archive.Title
+					if titleText != "" {
+						title = titleText
+					}
+					crumbs = append(crumbs, &crumb{
+						Name: title,
+						Link: "",
+					})
 				}
-				crumbs = append(crumbs, &crumb{
-					Name: title,
-					Link: "",
-				})
 			}
 			break
 		case "comments":
