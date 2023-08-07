@@ -38,7 +38,7 @@
 "成功导入了%d个关键词": "Successfully import %d keywords"
 "成功导入了%d个链接": "Successfully import %d links"
 "请删除分类下的素材，才能删除分类": "Please delete the materials under this category first"
-"首页": "Index"
+"首页": "Home"
 "没有配置百度主动推送": "Baidu token does not configured"
 "没有配置必应主动推送": "Bing token does not configured"
 "%s必填": "%s is required"
