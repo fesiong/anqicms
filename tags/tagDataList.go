@@ -87,6 +87,8 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if currentPage > 1 {
 				offset = (currentPage - 1) * limit
 			}
+		} else {
+			currentPage = 1
 		}
 		archives, total, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 			tx = tx.Table("`archives` as a").

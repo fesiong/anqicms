@@ -6,6 +6,7 @@ import (
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"log"
 	"strconv"
 	"strings"
 )
@@ -53,7 +54,8 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 			itemId = archiveDetail.Id
 		}
 	}
-
+	log.Printf("%#v", args)
+	log.Println(itemId)
 	letter := ""
 	if args["letter"] != nil {
 		letter = strings.ToUpper(args["letter"].String())
@@ -89,6 +91,8 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		if currentPage > 1 {
 			offset = (currentPage - 1) * limit
 		}
+	} else {
+		currentPage = 1
 	}
 
 	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset)

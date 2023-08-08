@@ -161,6 +161,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if currentPage > 1 {
 			offset = (currentPage - 1) * limit
 		}
+	} else {
+		currentPage = 1
 	}
 
 	var archives []*model.Archive

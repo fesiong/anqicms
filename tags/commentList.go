@@ -90,7 +90,9 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["userId"] != nil {
 		authorId = uint(args["userId"].Integer())
 	}
-
+	if listType != "page" {
+		currentPage = 1
+	}
 	commentList, total, _ := currentSite.GetCommentList(archiveId, authorId, order, currentPage, limit, offset)
 
 	if listType == "page" {

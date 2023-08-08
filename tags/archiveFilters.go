@@ -61,7 +61,7 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉，并且不是跟随阅读等级
-	var filterFields []config.CustomField
+	var fields []config.CustomField
 	var filterGroups []response.FilterGroup
 	var newParams = make(url.Values)
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
@@ -95,12 +95,12 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if len(module.Fields) > 0 {
 		for _, v := range module.Fields {
 			if v.IsFilter {
-				filterFields = append(filterFields, v)
+				fields = append(fields, v)
 			}
 		}
 
 		// 所有参数的url都附着到query中
-		for _, v := range filterFields {
+		for _, v := range fields {
 			values := v.SplitContent()
 			if len(values) == 0 {
 				continue
