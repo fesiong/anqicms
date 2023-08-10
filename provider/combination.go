@@ -220,6 +220,7 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 				x2 := strings.SplitN(x, "{", 2)
 				m := re1.FindAllString(x2[0], -1)
 				for _, v := range m {
+					v = strings.TrimPrefix(v, ".")
 					hiddenClass[v] = struct{}{}
 				}
 			}
@@ -440,6 +441,7 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 					x2 := strings.SplitN(x, "{", 2)
 					m := re1.FindAllString(x2[0], -1)
 					for _, v := range m {
+						v = strings.TrimPrefix(v, ".")
 						hiddenClass[v] = struct{}{}
 					}
 				}
