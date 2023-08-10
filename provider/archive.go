@@ -111,7 +111,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 	// 对于没有分页的list，则缓存
 	var cacheKey = ""
 	if currentPage == 0 {
-		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql := w.DB.Debug().ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
 				tx = ops(tx)
 			}
@@ -127,7 +127,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 			}
 		}
 	}
-	builder := w.DB.Model(&model.Archive{})
+	builder := w.DB.Model(&model.Archive{}).Debug()
 
 	if ops != nil {
 		builder = ops(builder)

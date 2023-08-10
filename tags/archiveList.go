@@ -237,9 +237,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	} else {
-		var fields []string
-		fields = append(fields, "id")
-
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
@@ -266,11 +263,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				tx = tx.Where("FIND_IN_SET(?,`flag`)", flag)
 			}
 			if module != nil && len(module.Fields) > 0 {
+				var fields [][2]string
 				for _, v := range module.Fields {
-					fields = append(fields, "`"+v.FieldName+"`")
 					// 如果有筛选条件，从这里开始筛选
-					if param, ok := extraParams[v.FieldName]; ok {
-						tx = tx.Where("`"+v.FieldName+"` = ?", param)
+					if extraParams.Has(v.FieldName) {
+						param := extraParams.Get(v.FieldName)
+						fields = append(fields, [2]string{"`" + module.TableName + "`.`" + v.FieldName + "` = ?", param})
+					}
+				}
+				if len(fields) > 0 {
+					tx = tx.InnerJoins(fmt.Sprintf("INNER JOIN `%s` on `%s`.id = `archives`.id", module.TableName, module.TableName))
+					for _, field := range fields {
+						tx = tx.Where(field[0], field[1])
 					}
 				}
 			}
