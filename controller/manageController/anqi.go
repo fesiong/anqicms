@@ -4,7 +4,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"time"
@@ -249,41 +248,6 @@ func AnqiAiPseudoArticle(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "AI伪原创成功",
-	})
-}
-
-func AnqiAiGenerateArticle(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
-	var req request.KeywordRequest
-	var err error
-	if err = ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-	keyword := &model.Keyword{Title: req.Title}
-	keyword.Id = req.Id
-
-	_, err = currentSite.AnqiAiGenerateArticle(keyword)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	archive, err := currentSite.GetArchiveByOriginUrl(keyword.Title)
-	if err == nil {
-		archive.ArchiveData, _ = currentSite.GetArchiveDataById(archive.Id)
-	}
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "AI创作成功",
-		"data": archive,
 	})
 }
 

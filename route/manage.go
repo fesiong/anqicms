@@ -45,7 +45,6 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/feedback", manageController.AnqiSendFeedback)
 			anqi.Post("/translate", manageController.AnqiTranslateArticle)
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
-			anqi.Post("/ai/generate", manageController.AnqiAiGenerateArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
 			anqi.Post("/restart", manageController.RestartAnqicms)
