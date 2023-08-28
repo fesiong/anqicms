@@ -457,6 +457,7 @@ func manageRoute(app *iris.Application) {
 			aiGenerate := manage.Party("/aigenerate", middleware.ParseAdminToken, middleware.AdminPermission)
 			{
 				//采集全局设置
+				aiGenerate.Get("/checkapi", manageController.HandleAiGenerateCheckApi)
 				aiGenerate.Get("/setting", manageController.HandleAiGenerateSetting)
 				aiGenerate.Post("/setting", manageController.HandleAiGenerateSettingSave)
 				//批量替换文章内容

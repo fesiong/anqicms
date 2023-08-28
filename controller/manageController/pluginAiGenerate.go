@@ -86,3 +86,19 @@ func HandleStartArticleAiGenerate(ctx iris.Context) {
 		"msg":  "AI生成任务已触发，预计1分钟后即可查看生成结果",
 	})
 }
+
+func HandleAiGenerateCheckApi(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	result := currentSite.CheckOpenAIAPIValid()
+	if result {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "该服务器可以正常访问 OpenAI 接口地址",
+		})
+	} else {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "该服务器无法正常访问 OpenAI 接口地址",
+		})
+	}
+}

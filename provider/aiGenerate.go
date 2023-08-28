@@ -56,8 +56,8 @@ func (w *Website) SaveAiGenerateSetting(req config.AiGenerateConfig, focus bool)
 	//重新读取配置
 	w.LoadAiGenerateSetting()
 	go func() {
+		w.CheckOpenAIAPIValid()
 		if setting.Open {
-			w.CheckOpenAIAPIValid()
 			go w.AiGenerateArticles()
 		}
 	}()
@@ -152,7 +152,7 @@ func (w *Website) AiGenerateArticlesByKeyword(keyword model.Keyword, focus bool)
 
 func (w *Website) CheckOpenAIAPIValid() bool {
 	// check what if this server can visit chatgpt
-	ops := &library.Options{Timeout: 5}
+	ops := &library.Options{Timeout: 10}
 	link := "https://api.openai.com/v1"
 	_, err := library.Request(link, ops)
 	if err == nil {
@@ -161,7 +161,7 @@ func (w *Website) CheckOpenAIAPIValid() bool {
 		w.AiGenerateConfig.ApiValid = false
 	}
 
-	return false
+	return w.AiGenerateConfig.ApiValid
 }
 
 // GetOpenAIKey 尝试获取一个可用的key

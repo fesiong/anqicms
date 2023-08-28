@@ -355,7 +355,7 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		Content:  archiveData.Content,
 		Language: w.System.Language, // 以系统语言为标准
 	}
-	if w.AiGenerateConfig.Open {
+	if w.AiGenerateConfig.UseSelfKey {
 		req, err = w.SelfAiPseudoResult(req)
 		if err != nil {
 			return err
@@ -394,7 +394,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
 	}
-	if w.AiGenerateConfig.Open {
+	if w.AiGenerateConfig.UseSelfKey {
 		req, err = w.SelfAiGenerateResult(req)
 		if err != nil {
 			return 0, err
@@ -518,7 +518,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 	}
 
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
-	if w.AiGenerateConfig.Open {
+	if w.AiGenerateConfig.UseSelfKey {
 		if !w.AiGenerateConfig.ApiValid {
 			return "", errors.New("接口不可用")
 		}
@@ -578,7 +578,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 		buf, _ := json.Marshal(req)
 
 		client := &http.Client{
-			Timeout: 180 * time.Second,
+			Timeout: 300 * time.Second,
 		}
 		anqiReq, err := http.NewRequest("POST", AnqiApi+"/ai/stream", bytes.NewReader(buf))
 		if err != nil {
