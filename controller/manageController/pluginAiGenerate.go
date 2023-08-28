@@ -97,7 +97,7 @@ func HandleAiGenerateCheckApi(ctx iris.Context) {
 		})
 	} else {
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusOK,
 			"msg":  "该服务器无法正常访问 OpenAI 接口地址",
 		})
 	}
