@@ -339,7 +339,17 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 	ctx := w.(iris.Context)
 	currentSite := provider.CurrentSite(ctx)
 	if tmpl := s.fromCache(currentSite.Id, filename); tmpl != nil {
-		return tmpl.ExecuteWriter(getPongoContext(bindingData), w)
+		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
+		if err != nil {
+			return err
+		}
+		// 对data进行敏感词替换
+		data = currentSite.ReplaceSensitiveWords(data)
+		buf := bytes.NewBuffer(data)
+		_, err = buf.WriteTo(w)
+		if err != nil {
+			return err
+		}
 	}
 
 	return view2.ErrNotExist{Name: filename, IsLayout: false, Data: bindingData}
