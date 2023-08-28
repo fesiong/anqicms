@@ -176,7 +176,6 @@ func (w *Website) AnqiCheckLogin(force bool) {
 		config.AnqiUser.AuthId = result.Data.AuthId
 		config.AnqiUser.UserName = result.Data.UserName
 		config.AnqiUser.ExpireTime = result.Data.ExpireTime
-		config.AnqiUser.TranslateRemain = result.Data.TranslateRemain
 		config.AnqiUser.AiRemain = result.Data.AiRemain
 		config.AnqiUser.Integral = result.Data.Integral
 		config.AnqiUser.Status = result.Data.Status
@@ -647,7 +646,7 @@ func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
 	req := gorequest.New().
 		SetDoNotClearSuperAgent(true).
 		TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		Timeout(30*time.Second).
+		Timeout(300*time.Second).
 		Type(contentType).
 		Set("token", config.AnqiUser.Token).
 		//set key header
