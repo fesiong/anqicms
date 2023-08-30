@@ -29,6 +29,8 @@ func Crond() {
 	crontab.AddFunc("1 30 * * * *", CheckAuthValid)
 	// 每小时检查一次时间因子
 	crontab.AddFunc("1 10 * * * *", UpdateTimeFactor)
+	// 每分钟检查一次 AI文章计划
+	crontab.AddFunc("1 * * * * *", AiArticlePlan)
 	crontab.Start()
 }
 
@@ -136,5 +138,15 @@ func UpdateTimeFactor() {
 			continue
 		}
 		w.TryToRunTimeFactor()
+	}
+}
+
+func AiArticlePlan() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.SyncAiArticlePlan()
 	}
 }

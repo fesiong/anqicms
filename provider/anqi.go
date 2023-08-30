@@ -31,6 +31,8 @@ import (
 
 const AnqiApi = "https://www.anqicms.com/auth"
 
+var ErrDoing = errors.New("doing")
+
 type AnqiLoginResult struct {
 	Code int                    `json:"code"`
 	Msg  string                 `json:"msg"`
@@ -66,36 +68,46 @@ type AnqiAttachmentResult struct {
 	Data AnqiAttachment `json:"data"`
 }
 
-type AnqiTranslateRequest struct {
-	Title      string `json:"title"`
-	Content    string `json:"content"`
-	From       string `json:"from"`
-	To         string `json:"to"`
-	TextLength int64  `json:"text_length"`
-	TextRemain int64  `json:"text_remain"`
-	Cost       bool   `json:"cost"`
-}
-
-type AnqiTranslateResult struct {
-	Code int                  `json:"code"`
-	Msg  string               `json:"msg"`
-	Data AnqiTranslateRequest `json:"data"`
-}
-
 type AnqiAiRequest struct {
 	Keyword    string `json:"keyword"`
+	Demand     string `json:"demand"`
 	Language   string `json:"language"`
 	Title      string `json:"title"`
-	Demand     string `json:"demand,omitempty"`
 	Content    string `json:"content"`
 	TextLength int64  `json:"text_length"`
 	AiRemain   int64  `json:"ai_remain"`
+	Async      bool   `json:"async"` // 是否异步处理
+	Cost       bool   `json:"cost"`  // 支付需要支付
+
+	Type  int  `json:"type"`
+	ReqId uint `json:"req_id"`
 }
 
+type AnqiAiPlanRequest struct {
+	ReqId uint `json:"req_id"`
+}
+
+// AnqiAiResult 是结合了2中结构体的内容，一种是plan，一种是article
 type AnqiAiResult struct {
-	Code int           `json:"code"`
-	Msg  string        `json:"msg"`
-	Data AnqiAiRequest `json:"data"`
+	Id          uint   `json:"id"`
+	CreatedTime int64  `json:"created_time"`
+	Type        int    `json:"type"`
+	Language    string `json:"language"`
+	Keyword     string `json:"keyword"`
+	Demand      string `json:"demand"`
+	PayCount    int64  `json:"pay_count"`
+	Status      int    `json:"status"`
+
+	Title     string `json:"title"`
+	Content   string `json:"content"`
+	ReqId     uint   `json:"req_id"`
+	ArticleId uint   `json:"-"`
+}
+
+type AnqiAiResponse struct {
+	Code int          `json:"code"`
+	Msg  string       `json:"msg"`
+	Data AnqiAiResult `json:"data"`
 }
 
 type AnqiAiStreamResult struct {
@@ -323,11 +335,13 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 	if err != nil {
 		return err
 	}
-	req := &AnqiTranslateRequest{
+	req := &AnqiAiRequest{
 		Title:   archive.Title,
 		Content: archiveData.Content,
+		Async:   true, // 异步返回结果
 	}
-	var result AnqiTranslateResult
+
+	var result AnqiAiResponse
 	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
 		return errs[0]
@@ -335,12 +349,12 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 	if result.Code != 0 {
 		return errors.New(result.Msg)
 	}
-	archive.Title = result.Data.Title
-	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "))
-	err = w.DB.Save(archive).Error
-	// 再保存内容
-	archiveData.Content = result.Data.Content
-	w.DB.Save(archiveData)
+	// 添加到plan中
+	result.Data.ArticleId = archive.Id
+	_, err = w.SaveAiArticlePlan(&result.Data)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
@@ -350,18 +364,27 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 	if err != nil {
 		return err
 	}
+
 	req := &AnqiAiRequest{
 		Title:    archive.Title,
 		Content:  archiveData.Content,
 		Language: w.System.Language, // 以系统语言为标准
+		Async:    true,              // 异步返回结果
 	}
 	if w.AiGenerateConfig.UseSelfKey {
 		req, err = w.SelfAiPseudoResult(req)
 		if err != nil {
 			return err
 		}
+		archive.Title = req.Title
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
+		archive.HasPseudo = 1
+		err = w.DB.Save(archive).Error
+		// 再保存内容
+		archiveData.Content = req.Content
+		w.DB.Save(archiveData)
 	} else {
-		var result AnqiAiResult
+		var result AnqiAiResponse
 		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/pseudo").Send(req).EndStruct(&result)
 		if len(errs) > 0 {
 			return errs[0]
@@ -369,19 +392,18 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		if result.Code != 0 {
 			return errors.New(result.Msg)
 		}
-		req = &result.Data
+		// 添加到plan中
+		result.Data.ArticleId = archive.Id
+		_, err = w.SaveAiArticlePlan(&result.Data)
+		if err != nil {
+			return err
+		}
 	}
-	archive.Title = req.Title
-	archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
-	archive.HasPseudo = 1
-	err = w.DB.Save(archive).Error
-	// 再保存内容
-	archiveData.Content = req.Content
-	w.DB.Save(archiveData)
 
 	return nil
 }
 
+// AnqiAiGenerateArticle 该函数尝试采用同步返回
 func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	// 检查是否采集过
 	if w.checkArticleExists(keyword.Title, "", "") {
@@ -393,14 +415,54 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
+		Async:    true,
 	}
 	if w.AiGenerateConfig.UseSelfKey {
 		req, err = w.SelfAiGenerateResult(req)
 		if err != nil {
 			return 0, err
 		}
+		var content = strings.Split(req.Content, "\n")
+		if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
+			rand.Seed(time.Now().UnixMicro())
+			img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+			index := 2 + rand.Intn(len(content)-3)
+			content = append(content, "")
+			copy(content[index+1:], content[index:])
+			content[index] = "<img src='" + img + "'/>"
+		}
+		categoryId := keyword.CategoryId
+		if categoryId == 0 {
+			if w.CollectorConfig.CategoryId == 0 {
+				var category model.Category
+				w.DB.Where("module_id = 1").Take(&category)
+				w.CollectorConfig.CategoryId = category.Id
+			}
+			categoryId = w.CollectorConfig.CategoryId
+		}
+
+		archive := request.Archive{
+			Title:      req.Title,
+			ModuleId:   0,
+			CategoryId: categoryId,
+			Keywords:   keyword.Title,
+			Content:    strings.Join(content, "\n"),
+			KeywordId:  keyword.Id,
+			OriginUrl:  keyword.Title,
+			ForceSave:  true,
+		}
+		if w.CollectorConfig.SaveType == 0 {
+			archive.Draft = true
+		} else {
+			archive.Draft = false
+		}
+		_, err = w.SaveArchive(&archive)
+		if err != nil {
+			log.Println("保存AI文章出错：", archive.Title, err.Error())
+			return 0, nil
+		}
 	} else {
-		var result AnqiAiResult
+		var result AnqiAiResponse
 		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/generate").Send(req).EndStruct(&result)
 		if len(errs) > 0 {
 			return 0, errs[0]
@@ -408,51 +470,143 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		if result.Code != 0 {
 			return 0, errors.New(result.Msg)
 		}
-		req = &result.Data
-	}
-
-	var content = strings.Split(req.Content, "\n")
-	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
-		rand.Seed(time.Now().UnixMicro())
-		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
-		index := 2 + rand.Intn(len(content)-3)
-		content = append(content, "")
-		copy(content[index+1:], content[index:])
-		content[index] = "<img src='" + img + "'/>"
-	}
-	categoryId := keyword.CategoryId
-	if categoryId == 0 {
-		if w.CollectorConfig.CategoryId == 0 {
-			var category model.Category
-			w.DB.Where("module_id = 1").Take(&category)
-			w.CollectorConfig.CategoryId = category.Id
+		// 添加到plan中
+		plan, err2 := w.SaveAiArticlePlan(&result.Data)
+		if err2 != nil {
+			return 0, err2
 		}
-		categoryId = w.CollectorConfig.CategoryId
+		// 同步等待数据, 最多等待5分钟, 10秒检查一次
+		for i := 0; i < 30; i++ {
+			time.Sleep(10 * time.Second)
+			err = w.AnqiSyncAiPlanResult(plan)
+			if err == nil {
+				break
+			}
+			if !errors.Is(err, ErrDoing) {
+				// 不是继续等待的类型，跳出
+				break
+			}
+		}
 	}
-
-	archive := request.Archive{
-		Title:      req.Title,
-		ModuleId:   0,
-		CategoryId: categoryId,
-		Keywords:   keyword.Title,
-		Content:    strings.Join(content, "\n"),
-		KeywordId:  keyword.Id,
-		OriginUrl:  keyword.Title,
-		ForceSave:  true,
-	}
-	if w.CollectorConfig.SaveType == 0 {
-		archive.Draft = true
-	} else {
-		archive.Draft = false
-	}
-	res, err := w.SaveArchive(&archive)
-	if err != nil {
-		log.Println("保存AI文章出错：", archive.Title, err.Error())
-		return 0, nil
-	}
-	log.Println(res.Id, res.Title)
 
 	return 1, nil
+}
+
+func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
+	var err error
+	// 重新检查状态
+	plan, err = w.GetAiArticlePlanByReqId(plan.ReqId)
+	if err != nil {
+		return err
+	}
+	if plan.Status != config.AiArticleStatusDoing {
+		return errors.New("该plan已经处理过了")
+	}
+	req := &AnqiAiRequest{
+		ReqId: plan.ReqId,
+	}
+	var result AnqiAiResponse
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/syncplan").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	if result.Code != 0 {
+		plan.Status = config.AiArticleStatusError
+		w.DB.Model(plan).UpdateColumn("status", plan.Status)
+		return errors.New(result.Msg)
+	}
+	if result.Data.Status == config.AiArticleStatusDoing || result.Data.Status == config.AiArticleStatusWaiting {
+		// 进行中，跳过
+		return ErrDoing
+	}
+	if result.Data.Status == config.AiArticleStatusCompleted {
+		// 成功
+		if plan.ArticleId > 0 {
+			// 更新文章
+			w.DB.Model(&model.Archive{}).Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
+				"title":       result.Data.Title,
+				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " ")),
+			})
+			// 再保存内容
+			w.DB.Model(&model.ArchiveData{}).Where("`id` = ?", plan.ArticleId).UpdateColumn("content", result.Data.Content)
+			// 更新plan
+			plan.Status = config.AiArticleStatusCompleted
+			w.DB.Model(plan).UpdateColumn("status", plan.Status)
+		} else {
+			// 先检查是否已经入库过了
+			_, err2 := w.GetArchiveByTitle(result.Data.Title)
+			if err2 == nil {
+				// 已存在
+				plan.Status = config.AiArticleStatusCompleted
+				w.DB.Model(plan).UpdateColumn("status", plan.Status)
+				return nil
+			}
+			var content = strings.Split(req.Content, "\n")
+			if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
+				rand.Seed(time.Now().UnixMicro())
+				img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+				index := 2 + rand.Intn(len(content)-3)
+				content = append(content, "")
+				copy(content[index+1:], content[index:])
+				content[index] = "<img src='" + img + "'/>"
+			}
+			var keyword *model.Keyword
+			categoryId := w.CollectorConfig.CategoryId
+			keyword, err = w.GetKeywordByTitle(plan.Keyword)
+			if err == nil {
+				if keyword.CategoryId > 0 {
+					categoryId = keyword.CategoryId
+				}
+			}
+			if categoryId == 0 {
+				var category model.Category
+				w.DB.Where("module_id = 1").Take(&category)
+				w.CollectorConfig.CategoryId = category.Id
+			}
+			categoryId = w.CollectorConfig.CategoryId
+
+			archive := request.Archive{
+				Title:      result.Data.Title,
+				ModuleId:   0,
+				CategoryId: categoryId,
+				Keywords:   result.Data.Keyword,
+				Content:    result.Data.Content,
+				ForceSave:  true,
+			}
+			if keyword != nil {
+				archive.KeywordId = keyword.Id
+				archive.OriginUrl = keyword.Title
+			}
+			if w.CollectorConfig.SaveType == 0 {
+				archive.Draft = true
+			} else {
+				archive.Draft = false
+			}
+			res, err := w.SaveArchive(&archive)
+			if err != nil {
+				log.Println("保存AI文章出错：", archive.Title, err.Error())
+				return err
+			}
+			// 更新plan
+			plan.ArticleId = res.Id
+			plan.Status = config.AiArticleStatusCompleted
+			w.DB.Model(plan).UpdateColumns(map[string]interface{}{
+				"status":     plan.Status,
+				"article_id": plan.ArticleId,
+			})
+		}
+		// 如果是AI改写
+		if plan.Type == config.AiArticleTypeAiPseudo {
+			w.DB.Model(&model.Archive{}).Where("`id` = ?", plan.ArticleId).UpdateColumn("has_pseudo", 1)
+		}
+	} else {
+		// 其它类型
+		plan.Status = result.Data.Status
+		w.DB.Model(plan).UpdateColumn("status", plan.Status)
+		return errors.New("其他错误")
+	}
+
+	return nil
 }
 
 type StreamData struct {

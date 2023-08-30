@@ -462,6 +462,8 @@ func manageRoute(app *iris.Application) {
 				//批量替换文章内容
 				aiGenerate.Post("/article/collect", manageController.HandleArticleAiGenerate)
 				aiGenerate.Post("/article/start", manageController.HandleStartArticleAiGenerate)
+				// 获取AI plan
+				aiGenerate.Get("/plans", manageController.HandleAiGenerateGetPlans)
 			}
 
 			timeFactor := plugin.Party("/timefactor")

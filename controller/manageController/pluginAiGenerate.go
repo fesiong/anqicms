@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -101,4 +102,43 @@ func HandleAiGenerateCheckApi(ctx iris.Context) {
 			"msg":  "该服务器无法正常访问 OpenAI 接口地址",
 		})
 	}
+}
+
+func HandleAiGenerateGetPlans(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	aiType := uint(ctx.URLParamIntDefault("type", 0))
+	status := ctx.URLParamIntDefault("status", 0)
+
+	var total int64
+	var plans []*model.AiArticlePlan
+	tx := currentSite.DB.Model(&model.AiArticlePlan{})
+	if aiType > 0 {
+		tx = tx.Where("`type` = ?", aiType)
+	}
+	if status != 0 {
+		tx = tx.Where("`status` = ?", status)
+	}
+	offset := 0
+	if currentPage > 0 {
+		offset = (currentPage - 1) * pageSize
+	}
+	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&plans)
+	for i := range plans {
+		// 获取文章
+		if plans[i].ArticleId > 0 {
+			archive, err := currentSite.GetArchiveById(plans[i].ArticleId)
+			if err == nil {
+				plans[i].Title = archive.Title
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  plans,
+	})
 }

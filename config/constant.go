@@ -141,3 +141,22 @@ const (
 	ArchiveFromCollect = 1 // 采集的文章
 	ArchiveFromAi      = 2 // AI生成的文章
 )
+
+const (
+	AiArticleTypeDefault   = 0
+	AiArticleTypeGenerate  = 1
+	AiArticleTypeTranslate = 2
+	AiArticleTypeAiPseudo  = 3
+	AiArticleTypeSelfMedia = 4
+)
+
+// SingleArticleCount AI 改写使用， 1000 字一篇
+const SingleArticleCount = 1000
+
+const (
+	AiArticleStatusCanceled  = -1
+	AiArticleStatusWaiting   = 0
+	AiArticleStatusDoing     = 1
+	AiArticleStatusCompleted = 2
+	AiArticleStatusError     = 4
+)
