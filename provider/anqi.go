@@ -29,7 +29,7 @@ import (
 	"time"
 )
 
-const AnqiApi = "https://www.anqicms.com/auth"
+const AnqiApi = "https://auth.anqicms.com/auth"
 
 var ErrDoing = errors.New("doing")
 
@@ -342,7 +342,7 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 	}
 
 	var result AnqiAiResponse
-	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).SetDebug(true).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
 		return errs[0]
 	}
@@ -351,6 +351,7 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 	}
 	// 添加到plan中
 	result.Data.ArticleId = archive.Id
+	log.Println(result.Data)
 	_, err = w.SaveAiArticlePlan(&result.Data)
 	if err != nil {
 		return err
