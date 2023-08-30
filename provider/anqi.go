@@ -426,7 +426,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
 			rand.Seed(time.Now().UnixMicro())
 			img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
-			index := 2 + rand.Intn(len(content)-3)
+			index := len(content) / 3
 			content = append(content, "")
 			copy(content[index+1:], content[index:])
 			content[index] = "<img src='" + img + "'/>"
@@ -545,7 +545,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
 				rand.Seed(time.Now().UnixMicro())
 				img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
-				index := 2 + rand.Intn(len(content)-3)
+				index := len(content) / 3
 				content = append(content, "")
 				copy(content[index+1:], content[index:])
 				content[index] = "<img src='" + img + "'/>"

@@ -347,7 +347,7 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
 		content := strings.SplitAfter(archive.Content, ">")
 
-		index := len(content) / 2
+		index := len(content) / 3
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
 		content[index] = "<img src='" + img + "'/>"
