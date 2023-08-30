@@ -124,7 +124,7 @@ func HandleAiGenerateGetPlans(ctx iris.Context) {
 	if currentPage > 0 {
 		offset = (currentPage - 1) * pageSize
 	}
-	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&plans)
+	tx.Count(&total).Order("id desc").Limit(pageSize).Offset(offset).Find(&plans)
 	for i := range plans {
 		// 获取文章
 		if plans[i].ArticleId > 0 {
