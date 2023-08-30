@@ -110,6 +110,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.SpiderInclude{},
 		&model.Setting{},
 		&model.Website{},
+		&model.AiArticlePlan{},
 
 		&model.User{},
 		&model.UserGroup{},
