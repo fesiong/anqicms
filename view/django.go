@@ -347,9 +347,7 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		data = currentSite.ReplaceSensitiveWords(data)
 		buf := bytes.NewBuffer(data)
 		_, err = buf.WriteTo(w)
-		if err != nil {
-			return err
-		}
+		return err
 	}
 
 	return view2.ErrNotExist{Name: filename, IsLayout: false, Data: bindingData}
