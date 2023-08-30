@@ -211,7 +211,7 @@ func AnqiTranslateArticle(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "翻译成功",
+		"msg":  "翻译已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度",
 	})
 }
 
@@ -247,7 +247,7 @@ func AnqiAiPseudoArticle(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "AI伪原创成功",
+		"msg":  "AI伪原创已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度",
 	})
 }
 
