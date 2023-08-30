@@ -969,7 +969,7 @@ func (w *Website) GetRetailerCommissions(retailerId uint, page, pageSize int) ([
 	var commissions []*model.Commission
 	var total int64
 	offset := (page - 1) * pageSize
-	tx := w.DB.Debug().Model(&model.Commission{}).Where("`user_id` = ?", retailerId)
+	tx := w.DB.Model(&model.Commission{}).Where("`user_id` = ?", retailerId)
 	tx.Count(&total).Order("id desc").Limit(pageSize).Offset(offset).Find(&commissions)
 
 	return commissions, total
