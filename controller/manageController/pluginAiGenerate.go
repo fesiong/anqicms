@@ -11,7 +11,7 @@ import (
 
 func HandleAiGenerateSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	setting := currentSite.GetAiGenerateSetting()
+	setting := currentSite.AiGenerateConfig
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -93,12 +93,12 @@ func HandleAiGenerateCheckApi(ctx iris.Context) {
 	result := currentSite.CheckOpenAIAPIValid()
 	if result {
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusOK,
 			"msg":  "该服务器可以正常访问 OpenAI 接口地址",
 		})
 	} else {
 		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
+			"code": config.StatusFailed,
 			"msg":  "该服务器无法正常访问 OpenAI 接口地址",
 		})
 	}

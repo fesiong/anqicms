@@ -340,21 +340,54 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
 		Content: archiveData.Content,
 		Async:   true, // 异步返回结果
 	}
+	if req.Language == "" {
+		isEnglish := CheckContentIsEnglish(req.Title)
+		if isEnglish {
+			req.Language = config.LanguageEn
+		} else {
+			req.Language = config.LanguageZh
+		}
+	}
 
-	var result AnqiAiResponse
-	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).SetDebug(true).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	if result.Code != 0 {
-		return errors.New(result.Msg)
-	}
-	// 添加到plan中
-	result.Data.ArticleId = archive.Id
-	log.Println(result.Data)
-	_, err = w.SaveAiArticlePlan(&result.Data)
-	if err != nil {
-		return err
+	if w.AiGenerateConfig.UseSelfKey {
+		req, err = w.SelfAiTranslateResult(req)
+		if err != nil {
+			return err
+		}
+		archive.Title = req.Title
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
+		err = w.DB.Save(archive).Error
+		// 再保存内容
+		archiveData.Content = req.Content
+		w.DB.Save(archiveData)
+		// 添加到plan，并标记完成
+		result := AnqiAiResult{
+			Type:      config.AiArticleTypeTranslate,
+			Language:  req.Language,
+			Keyword:   req.Keyword,
+			Demand:    req.Demand,
+			Status:    config.AiArticleStatusCompleted,
+			Title:     req.Title,
+			Content:   req.Content,
+			ArticleId: archive.Id,
+		}
+		_, err = w.SaveAiArticlePlan(&result, true)
+	} else {
+		var result AnqiAiResponse
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
+		if len(errs) > 0 {
+			return errs[0]
+		}
+		if result.Code != 0 {
+			return errors.New(result.Msg)
+		}
+		// 添加到plan中
+		result.Data.Status = config.AiArticleStatusDoing
+		result.Data.ArticleId = archive.Id
+		_, err = w.SaveAiArticlePlan(&result.Data, false)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -384,6 +417,18 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		// 再保存内容
 		archiveData.Content = req.Content
 		w.DB.Save(archiveData)
+		// 添加到plan，并标记完成
+		result := AnqiAiResult{
+			Type:      config.AiArticleTypeAiPseudo,
+			Language:  req.Language,
+			Keyword:   req.Keyword,
+			Demand:    req.Demand,
+			Status:    config.AiArticleStatusCompleted,
+			Title:     req.Title,
+			Content:   req.Content,
+			ArticleId: archive.Id,
+		}
+		_, err = w.SaveAiArticlePlan(&result, true)
 	} else {
 		var result AnqiAiResponse
 		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/pseudo").Send(req).EndStruct(&result)
@@ -394,8 +439,9 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 			return errors.New(result.Msg)
 		}
 		// 添加到plan中
+		result.Data.Status = config.AiArticleStatusDoing
 		result.Data.ArticleId = archive.Id
-		_, err = w.SaveAiArticlePlan(&result.Data)
+		_, err = w.SaveAiArticlePlan(&result.Data, false)
 		if err != nil {
 			return err
 		}
@@ -442,7 +488,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			categoryId = w.CollectorConfig.CategoryId
 		}
 
-		archive := request.Archive{
+		archiveReq := request.Archive{
 			Title:      req.Title,
 			ModuleId:   0,
 			CategoryId: categoryId,
@@ -453,15 +499,27 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			ForceSave:  true,
 		}
 		if w.CollectorConfig.SaveType == 0 {
-			archive.Draft = true
+			archiveReq.Draft = true
 		} else {
-			archive.Draft = false
+			archiveReq.Draft = false
 		}
-		_, err = w.SaveArchive(&archive)
-		if err != nil {
-			log.Println("保存AI文章出错：", archive.Title, err.Error())
+		archive, err2 := w.SaveArchive(&archiveReq)
+		if err2 != nil {
+			log.Println("保存AI文章出错：", archiveReq.Title, err2.Error())
 			return 0, nil
 		}
+		// 添加到plan，并标记完成
+		result := AnqiAiResult{
+			Type:      config.AiArticleTypeGenerate,
+			Language:  req.Language,
+			Keyword:   req.Keyword,
+			Demand:    req.Demand,
+			Status:    config.AiArticleStatusCompleted,
+			Title:     req.Title,
+			Content:   req.Content,
+			ArticleId: archive.Id,
+		}
+		_, err = w.SaveAiArticlePlan(&result, true)
 	} else {
 		var result AnqiAiResponse
 		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/generate").Send(req).EndStruct(&result)
@@ -472,7 +530,8 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			return 0, errors.New(result.Msg)
 		}
 		// 添加到plan中
-		plan, err2 := w.SaveAiArticlePlan(&result.Data)
+		result.Data.Status = config.AiArticleStatusDoing
+		plan, err2 := w.SaveAiArticlePlan(&result.Data, false)
 		if err2 != nil {
 			return 0, err2
 		}

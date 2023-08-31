@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"log"
 	"math/rand"
+	"os"
 	"time"
 )
 
@@ -153,6 +154,10 @@ func (w *Website) AiGenerateArticlesByKeyword(keyword model.Keyword, focus bool)
 func (w *Website) CheckOpenAIAPIValid() bool {
 	// check what if this server can visit chatgpt
 	ops := &library.Options{Timeout: 10}
+	proxy := os.Getenv("HTTP_PROXY")
+	if len(proxy) > 0 {
+		ops.Proxy = proxy
+	}
 	link := "https://api.openai.com/v1"
 	_, err := library.Request(link, ops)
 	if err == nil {
@@ -160,7 +165,6 @@ func (w *Website) CheckOpenAIAPIValid() bool {
 	} else {
 		w.AiGenerateConfig.ApiValid = false
 	}
-
 	return w.AiGenerateConfig.ApiValid
 }
 

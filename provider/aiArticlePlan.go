@@ -16,14 +16,16 @@ func (w *Website) GetAiArticlePlanByReqId(reqId uint) (*model.AiArticlePlan, err
 	return &plan, nil
 }
 
-func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult) (*model.AiArticlePlan, error) {
-	plan, err := w.GetAiArticlePlanByReqId(resp.ReqId)
-	if err == nil {
-		// 已存在
-		return plan, nil
+func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult, useSelf bool) (*model.AiArticlePlan, error) {
+	if resp.ReqId > 0 {
+		plan, err := w.GetAiArticlePlanByReqId(resp.ReqId)
+		if err == nil {
+			// 已存在
+			return plan, nil
+		}
 	}
 
-	plan = &model.AiArticlePlan{
+	plan := &model.AiArticlePlan{
 		Type:      resp.Type,
 		ReqId:     resp.ReqId,
 		Language:  resp.Language,
@@ -31,10 +33,11 @@ func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult) (*model.AiArticlePlan, e
 		Demand:    resp.Demand,
 		ArticleId: resp.ArticleId,
 		PayCount:  resp.PayCount,
-		Status:    config.AiArticleStatusDoing,
+		UseSelf:   useSelf,
+		Status:    resp.Status,
 	}
 
-	err = w.DB.Save(plan).Error
+	err := w.DB.Save(plan).Error
 	if err != nil {
 		return nil, err
 	}

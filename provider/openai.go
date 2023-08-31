@@ -5,6 +5,9 @@ import (
 	"errors"
 	"github.com/sashabaranov/go-openai"
 	"kandaoni.com/anqicms/config"
+	"net/http"
+	"net/url"
+	"os"
 	"regexp"
 	"strconv"
 	"strings"
@@ -17,7 +20,7 @@ type OpenAIResult struct {
 	Code    int    `json:"code"`
 }
 
-func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
+func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
 	if !w.AiGenerateConfig.ApiValid {
 		return nil, errors.New("接口不可用")
 	}
@@ -25,6 +28,23 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 	if key == "" {
 		return nil, errors.New("无可用Key")
 	}
+	// 翻译标题
+	prompt := "请将下列文字翻译成英文：\n" + req.Title
+	if req.Language == config.LanguageEn {
+		prompt = "Please translate the following text into Chinese:\n" + req.Title
+	}
+	result, err := GetOpenAIResponse(key, prompt)
+	if err != nil {
+		if result.Code == 401 || result.Code == 429 {
+			w.SetOpenAIKeyInvalid(key)
+		}
+		return nil, err
+	}
+	if len(result.Content) == 0 {
+		return nil, errors.New("文本内容不足")
+	}
+	req.Title = result.Content
+
 	// 先获取文章img，如果有的话
 	re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 	images := re.FindAllString(req.Content, -1)
@@ -48,11 +68,104 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 	}
 	for i := range contentTexts {
 		// before replace
-		prompt := "请根据提供的内容完成内容重构，并保持段落结构：\n" + contentTexts[i]
+		prompt = "请将下列文字翻译成英文：\n" + contentTexts[i]
+		if req.Language == config.LanguageEn {
+			prompt = "Please translate the following text into Chinese:\n" + contentTexts[i]
+		}
+		result, err = GetOpenAIResponse(key, prompt)
+		if err != nil {
+			if result.Code == 401 || result.Code == 429 {
+				w.SetOpenAIKeyInvalid(key)
+			}
+			return nil, err
+		}
+		if len(result.Content) == 0 {
+			return nil, errors.New("文本内容不足")
+		}
+
+		contentTexts[i] = result.Content
+	}
+	translated := strings.Join(contentTexts, "\n")
+
+	results := strings.Split(translated, "\n")
+	for i := 0; i < len(results); i++ {
+		results[i] = strings.TrimSpace(results[i])
+		if len(results[i]) == 0 {
+			results = append(results[:i], results[i+1:]...)
+			i--
+		} else {
+			results[i] = "<p>" + results[i] + "</p>"
+		}
+	}
+	// 如果有图片，则需要重新插入图片
+	if len(images) > 0 {
+		for i := range images {
+			insertIndex := i*2 + 1
+			if len(results) >= insertIndex {
+				results = append(results[:insertIndex], results[insertIndex-1:]...)
+				results[insertIndex] = images[i]
+			}
+		}
+	}
+
+	req.Content = strings.Join(results, "\n")
+
+	return req, nil
+}
+
+func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
+	if !w.AiGenerateConfig.ApiValid {
+		return nil, errors.New("接口不可用")
+	}
+	key := w.GetOpenAIKey()
+	if key == "" {
+		return nil, errors.New("无可用Key")
+	}
+	// 标题则采用另一种方式
+	prompt := "请重写这个标题：\n" + req.Title
+	if req.Language == config.LanguageEn {
+		prompt = "Please rewrite this title:\n" + req.Title
+	}
+	result, err := GetOpenAIResponse(key, prompt)
+	if err != nil {
+		if result.Code == 401 || result.Code == 429 {
+			w.SetOpenAIKeyInvalid(key)
+		}
+		return nil, err
+	}
+	if len(result.Content) == 0 {
+		return nil, errors.New("文本内容不足")
+	}
+	req.Title = result.Content
+
+	// 先获取文章img，如果有的话
+	re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+	images := re.FindAllString(req.Content, -1)
+
+	contentText := ParsePlanText(req.Content, "")
+	texts := strings.Split(contentText, "\n")
+	start := 0
+	var contentTexts []string
+	if utf8.RuneCountInString(contentText) > 1000 {
+		for i := 1; i <= len(texts); i++ {
+			if utf8.RuneCountInString(strings.Join(texts[start:i], "\n")) > 1000 {
+				tmpText := strings.Join(texts[start:i-1], "\n")
+				contentTexts = append(contentTexts, tmpText)
+				start = i - 1
+			}
+		}
+		tmpText := strings.Join(texts[start:], "\n")
+		contentTexts = append(contentTexts, tmpText)
+	} else {
+		contentTexts = append(contentTexts, contentText)
+	}
+	for i := range contentTexts {
+		// before replace
+		prompt = "请根据提供的内容完成内容重构，并保持段落结构：\n" + contentTexts[i]
 		if req.Language == config.LanguageEn {
 			prompt = "Please complete the content reconstruction according to the provided content, and keep the paragraph structure:\n" + contentTexts[i]
 		}
-		result, err := GetOpenAIResponse(key, prompt)
+		result, err = GetOpenAIResponse(key, prompt)
 		if err != nil {
 			if result.Code == 401 || result.Code == 429 {
 				w.SetOpenAIKeyInvalid(key)
@@ -167,7 +280,19 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 }
 
 func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
-	client := openai.NewClient(apiKey)
+	cfg := openai.DefaultConfig(apiKey)
+	transport := &http.Transport{}
+	proxy := os.Getenv("HTTP_PROXY")
+	if len(proxy) > 0 {
+		proxyUrl, err := url.Parse(proxy)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyUrl)
+		}
+	}
+	cfg.HTTPClient = &http.Client{
+		Transport: transport,
+	}
+	client := openai.NewClientWithConfig(cfg)
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
@@ -199,7 +324,19 @@ func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 }
 
 func GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStream, error) {
-	c := openai.NewClient(apiKey)
+	cfg := openai.DefaultConfig(apiKey)
+	transport := &http.Transport{}
+	proxy := os.Getenv("HTTP_PROXY")
+	if len(proxy) > 0 {
+		proxyUrl, err := url.Parse(proxy)
+		if err == nil {
+			transport.Proxy = http.ProxyURL(proxyUrl)
+		}
+	}
+	cfg.HTTPClient = &http.Client{
+		Transport: transport,
+	}
+	client := openai.NewClientWithConfig(cfg)
 	ctx := context.Background()
 
 	req := openai.ChatCompletionRequest{
@@ -212,5 +349,5 @@ func GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStrea
 		},
 		Stream: true,
 	}
-	return c.CreateChatCompletionStream(ctx, req)
+	return client.CreateChatCompletionStream(ctx, req)
 }
