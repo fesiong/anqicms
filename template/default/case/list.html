@@ -9,16 +9,6 @@
 			<ul class="case-list-ul">
 				{% archiveList products with type="page" limit="9" %}
 				{% for item in products %}
-				<li class="products-list-li">
-					<div class="item">
-						<div class="item-img">
-							<a href="{{item.Link}}"><img src="{{item.Thumb}}" alt="{{item.Title}}"></a>
-						</div>
-						<div class="item-text">
-							<h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
-						</div>
-					</div>
-				</li>
 				<li class="case-list-li">
 					<div class="item">
 						<div class="item-img">
