@@ -83,12 +83,12 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 			}
 			break
 		case "archiveDetail":
-			if showTitle {
-				archive, ok := ctx.Public["archive"].(*model.Archive)
-				if ok {
-					//检查是否存在分类
-					crumbs = append(crumbs, buildCategoryCrumbs(currentSite, archive.CategoryId)...)
+			archive, ok := ctx.Public["archive"].(*model.Archive)
+			if ok {
+				//检查是否存在分类
+				crumbs = append(crumbs, buildCategoryCrumbs(currentSite, archive.CategoryId)...)
 
+				if showTitle {
 					title := archive.Title
 					if titleText != "" {
 						title = titleText
