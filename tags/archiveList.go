@@ -84,7 +84,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 
-	order := "id desc"
+	order := "`sort` desc, `id` desc"
 	limit := 10
 	offset := 0
 	currentPage := 1

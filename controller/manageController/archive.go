@@ -5,8 +5,10 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"strings"
 	"time"
 )
 
@@ -17,6 +19,15 @@ func ArchiveList(ctx iris.Context) {
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	status := ctx.URLParam("status") // 支持 '':all，draft:0, ok:1, plan:2
+	sort := ctx.URLParamDefault("sort", "id")
+	order := strings.ToLower(ctx.URLParamDefault("order", "desc"))
+	if order != "asc" {
+		order = "desc"
+	}
+	if sort == "" {
+		sort = "id"
+	}
+	orderBy := sort + " " + order
 	// 回收站
 	recycle, _ := ctx.URLParamBool("recycle")
 	// 采集的
@@ -28,11 +39,11 @@ func ArchiveList(ctx iris.Context) {
 	var ops func(tx *gorm.DB) *gorm.DB
 	if recycle {
 		ops = func(tx *gorm.DB) *gorm.DB {
-			return tx.Unscoped().Where("`deleted_at` is not null").Order("id desc")
+			return tx.Unscoped().Where("`deleted_at` is not null").Order(orderBy)
 		}
 	} else if collect {
 		ops = func(tx *gorm.DB) *gorm.DB {
-			return tx.Where("`origin_url` != ''").Order("id desc")
+			return tx.Where("`origin_url` != ''").Order(orderBy)
 		}
 	} else {
 		// 必须传递分类
@@ -54,7 +65,7 @@ func ArchiveList(ctx iris.Context) {
 			if title != "" {
 				tx = tx.Where("`title` like ?", "%"+title+"%")
 			}
-			tx = tx.Order("id desc")
+			tx = tx.Order(orderBy)
 			return tx
 		}
 	}
@@ -417,6 +428,34 @@ func UpdateArchiveTime(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "文章已更新",
+	})
+}
+
+func UpdateArchiveSort(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.Archive
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.DB.Model(&model.Archive{}).Where("id = ?", req.Id).UpdateColumn("sort", req.Sort).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新文档自定义排序：%v => %d", req.Id, req.Sort))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "排序已更新",
 	})
 }
 

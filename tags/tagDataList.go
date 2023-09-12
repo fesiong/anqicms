@@ -38,7 +38,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "id desc"
+	order := "a.`sort` desc, a.`id` desc"
 	tagId := uint(0)
 	listType := "list"
 

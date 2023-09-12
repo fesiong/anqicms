@@ -280,6 +280,7 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	archive.Stock = req.Stock
 	archive.ReadLevel = req.ReadLevel
 	archive.Password = req.Password
+	archive.Sort = req.Sort
 	if req.UserId > 0 {
 		archive.UserId = req.UserId
 	}

@@ -371,6 +371,8 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 			if order != "" {
 				tx = tx.Order(order)
+			} else {
+				tx = tx.Order("`sort` desc, `id` desc")
 			}
 			if len(ids) > 0 {
 				tx = tx.Where("`id` IN(?)", ids)
@@ -838,7 +840,7 @@ func ApiTagDataList(ctx iris.Context) {
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
-	order := ctx.URLParamDefault("order", "id desc")
+	order := ctx.URLParamDefault("order", "a.`sort` desc, a.`id` desc")
 	listType := ctx.URLParamDefault("type", "list")
 
 	limitTmp := ctx.URLParam("limit")

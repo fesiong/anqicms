@@ -37,6 +37,7 @@ func ApiImportArchive(ctx iris.Context) {
 	price := ctx.PostValueInt64Default("price", 0)
 	stock := ctx.PostValueInt64Default("stock", 0)
 	readLevel := ctx.PostValueIntDefault("read_level", 0)
+	sort := uint(ctx.PostValueIntDefault("sort", 0))
 
 	category := currentSite.GetCategoryFromCache(categoryId)
 	if category == nil || category.Type != config.CategoryTypeArchive {
@@ -88,6 +89,7 @@ func ApiImportArchive(ctx iris.Context) {
 		UrlToken:     urlToken,
 		Extra:        map[string]interface{}{},
 		Draft:        draft,
+		Sort:         sort,
 	}
 
 	// 如果传了ID，则采用覆盖的形式
@@ -105,6 +107,11 @@ func ApiImportArchive(ctx iris.Context) {
 				CategoryId:  categoryId,
 				Status:      0,
 				Logo:        logo,
+				Flag:        flag,
+				Price:       price,
+				Stock:       stock,
+				ReadLevel:   readLevel,
+				Sort:        sort,
 			}
 			archive.Id = id
 			err = currentSite.DB.Create(&archive).Error
