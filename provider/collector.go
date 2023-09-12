@@ -75,6 +75,12 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 		if req.AutoPseudo {
 			collector.AutoPseudo = req.AutoPseudo
 		}
+		if req.AutoTranslate {
+			collector.AutoTranslate = req.AutoTranslate
+		}
+		if len(req.ToLanguage) > 0 {
+			collector.ToLanguage = req.ToLanguage
+		}
 		if req.CategoryId > 0 {
 			collector.CategoryId = req.CategoryId
 		}
@@ -224,6 +230,10 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
 		_ = w.AnqiAiPseudoArticle(res)
+	}
+	if w.CollectorConfig.AutoTranslate {
+		// AI 改写
+		_ = w.AnqiTranslateArticle(res, w.CollectorConfig.ToLanguage)
 	}
 
 	//文章计数

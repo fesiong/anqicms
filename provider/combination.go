@@ -119,6 +119,10 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		// AI 改写
 		_ = w.AnqiAiPseudoArticle(res)
 	}
+	if w.CollectorConfig.AutoTranslate {
+		// AI 改写
+		_ = w.AnqiTranslateArticle(res, w.CollectorConfig.ToLanguage)
+	}
 
 	return 1, nil
 }

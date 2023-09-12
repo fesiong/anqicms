@@ -72,6 +72,7 @@ type AnqiAiRequest struct {
 	Keyword    string `json:"keyword"`
 	Demand     string `json:"demand"`
 	Language   string `json:"language"`
+	ToLanguage string `json:"to_language"`
 	Title      string `json:"title"`
 	Content    string `json:"content"`
 	TextLength int64  `json:"text_length"`
@@ -330,15 +331,16 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	return nil
 }
 
-func (w *Website) AnqiTranslateArticle(archive *model.Archive) error {
+func (w *Website) AnqiTranslateArticle(archive *model.Archive, toLanguage string) error {
 	archiveData, err := w.GetArchiveDataById(archive.Id)
 	if err != nil {
 		return err
 	}
 	req := &AnqiAiRequest{
-		Title:   archive.Title,
-		Content: archiveData.Content,
-		Async:   true, // 异步返回结果
+		Title:      archive.Title,
+		Content:    archiveData.Content,
+		ToLanguage: toLanguage,
+		Async:      true, // 异步返回结果
 	}
 	if req.Language == "" {
 		isEnglish := CheckContentIsEnglish(req.Title)

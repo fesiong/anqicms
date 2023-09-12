@@ -200,7 +200,7 @@ func AnqiTranslateArticle(ctx iris.Context) {
 		return
 	}
 
-	err = currentSite.AnqiTranslateArticle(archive)
+	err = currentSite.AnqiTranslateArticle(archive, req.ToLanguage)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

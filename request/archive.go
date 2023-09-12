@@ -28,12 +28,13 @@ type Archive struct {
 	Draft        bool                   `json:"draft"` // 是否是存草稿
 
 	// 是否强制保存
-	ForceSave bool `json:"force_save"`
+	ForceSave  bool   `json:"force_save"`
+	ToLanguage string `json:"to_language"`
 
 	KeywordId   uint   `json:"keyword_id"`
 	OriginUrl   string `json:"origin_url"`
 	OriginTitle string `json:"origin_title"`
-	ContentText string `json:"-" gorm:"-"`
+	ContentText string `json:"-"`
 }
 
 type ArchiveImageDeleteRequest struct {

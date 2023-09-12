@@ -385,6 +385,8 @@ func (w *Website) LoadCollectorSetting() {
 
 	w.CollectorConfig.AutoCollect = collector.AutoCollect
 	w.CollectorConfig.AutoPseudo = collector.AutoPseudo
+	w.CollectorConfig.AutoTranslate = collector.AutoTranslate
+	w.CollectorConfig.ToLanguage = collector.ToLanguage
 	w.CollectorConfig.CategoryId = collector.CategoryId
 	w.CollectorConfig.StartHour = collector.StartHour
 	w.CollectorConfig.EndHour = collector.EndHour

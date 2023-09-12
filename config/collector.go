@@ -18,13 +18,15 @@ type CollectorJson struct {
 	ContentExclude     []string         `json:"content_exclude"`
 	LinkExclude        []string         `json:"link_exclude"`
 	ContentReplace     []ReplaceKeyword `json:"content_replace"`
-	AutoPseudo         bool             `json:"auto_pseudo"`   //是否伪原创
-	CategoryId         uint             `json:"category_id"`   //默认分类
-	SaveType           uint             `json:"save_type"`     // 文档处理方式
-	StartHour          int              `json:"start_hour"`    //每天开始时间
-	EndHour            int              `json:"end_hour"`      //每天结束时间
-	DailyLimit         int              `json:"daily_limit"`   //每日限额
-	CustomPatten       []*CustomPatten  `json:"custom_patten"` // 自定义采集匹配
+	AutoPseudo         bool             `json:"auto_pseudo"`    //是否伪原创
+	AutoTranslate      bool             `json:"auto_translate"` //是否翻译
+	ToLanguage         string           `json:"to_language"`    // 支持谷歌翻译列表语言
+	CategoryId         uint             `json:"category_id"`    //默认分类
+	SaveType           uint             `json:"save_type"`      // 文档处理方式
+	StartHour          int              `json:"start_hour"`     //每天开始时间
+	EndHour            int              `json:"end_hour"`       //每天结束时间
+	DailyLimit         int              `json:"daily_limit"`    //每日限额
+	CustomPatten       []*CustomPatten  `json:"custom_patten"`  // 自定义采集匹配
 }
 
 type ReplaceKeyword struct {
