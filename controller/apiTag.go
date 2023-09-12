@@ -503,6 +503,7 @@ func ApiCategoryDetail(ctx iris.Context) {
 		})
 		return
 	}
+	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -761,6 +762,7 @@ func ApiPageDetail(ctx iris.Context) {
 		})
 		return
 	}
+	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -774,6 +776,7 @@ func ApiPageList(ctx iris.Context) {
 	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
 	for i := range pageList {
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
+		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	}
 
 	ctx.JSON(iris.Map{

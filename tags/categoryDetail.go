@@ -52,7 +52,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 
 	if categoryDetail != nil {
 		categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
-
+		categoryDetail.Thumb = categoryDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 		v := reflect.ValueOf(*categoryDetail)
 
 		f := v.FieldByName(fieldName)

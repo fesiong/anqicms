@@ -97,6 +97,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 			break
 		}
 		categoryList[i].Link = currentSite.GetUrl("category", categoryList[i], 0)
+		categoryList[i].Thumb = categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 		categoryList[i].IsCurrent = false
 		if webOk {
 			if (webInfo.PageName == "archiveList" || webInfo.PageName == "archiveDetail") && categoryList[i].Id == webInfo.NavBar {

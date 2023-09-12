@@ -66,6 +66,7 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return nil
 	}
 	pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
+	pageDetail.Thumb = pageDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 
 	v := reflect.ValueOf(*pageDetail)
 
