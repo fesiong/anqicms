@@ -8,6 +8,7 @@ type Archive struct {
 	SeoTitle     string                 `json:"seo_title"`
 	ModuleId     uint                   `json:"module_id"`
 	CategoryId   uint                   `json:"category_id"`
+	CategoryIds  []uint                 `json:"category_ids"`
 	Keywords     string                 `json:"keywords"`
 	Description  string                 `json:"description"`
 	Content      string                 `json:"content"`
@@ -51,10 +52,14 @@ type ArchiveReplaceRequest struct {
 type ArchivesUpdateRequest struct {
 	Ids []uint `json:"ids"`
 
-	CategoryId uint   `json:"category_id"`
-	Status     uint   `json:"status"`
-	Flag       string `json:"flag"`
-	Time       uint   `json:"time"`
+	CategoryId  uint   `json:"category_id"`
+	CategoryIds []uint `json:"category_ids"`
+	Status      uint   `json:"status"`
+	Flag        string `json:"flag"`
+	Time        uint   `json:"time"`
+	DailyLimit  int    `json:"daily_limit"` //每日限额
+	StartHour   int    `json:"start_hour"`  //每天开始时间
+	EndHour     int    `json:"end_hour"`    //每天结束时间
 }
 
 type ArchivePasswordRequest struct {

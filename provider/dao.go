@@ -111,6 +111,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.Setting{},
 		&model.Website{},
 		&model.AiArticlePlan{},
+		&model.ArchiveCategory{},
 
 		&model.User{},
 		&model.UserGroup{},
@@ -218,5 +219,35 @@ func (w *Website) InitModelData() {
 	w.DB.Model(&model.UserGroup{}).Count(&groupNum)
 	if groupNum == 0 {
 		w.DB.CreateInBatches(userGeroups, 10)
+	}
+	// 升级多分类
+	upgradeTime := w.GetSettingValue("upgrade_archive_category")
+	if len(upgradeTime) == 0 {
+		// 没升级
+		go func() {
+			defer func() {
+				_ = w.SaveSettingValue("upgrade_archive_category", time.Now().Format("2006-01-02 15:04:05"))
+			}()
+			type tinyArchive struct {
+				Id         uint `json:"id"`
+				CategoryId uint `json:"category_id"`
+			}
+			var lastId uint = 0
+			for {
+				var archives []*tinyArchive
+				w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Order("id asc").Limit(1000).Scan(&archives)
+				if len(archives) == 0 {
+					break
+				}
+				lastId = archives[len(archives)-1].Id
+				for _, arc := range archives {
+					arcCategory := model.ArchiveCategory{
+						CategoryId: arc.CategoryId,
+						ArchiveId:  arc.Id,
+					}
+					w.DB.Model(&model.ArchiveCategory{}).Where("`category_id` = ? and `archive_id` = ?", arc.CategoryId, arc.Id).FirstOrCreate(&arcCategory)
+				}
+			}
+		}()
 	}
 }

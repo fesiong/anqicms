@@ -191,6 +191,8 @@ func Common(ctx iris.Context) {
 	ctx.ViewData("urlParams", ctx.URLParams())
 	//version
 	ctx.ViewData("version", config.Version)
+	// is mobile
+	ctx.ViewData("isMobile", ctx.IsMobile())
 	//修正baseUrl
 	if currentSite.System.BaseUrl == "" {
 		urlPath, err := url.Parse(ctx.FullRequestURI())

@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"strings"
+	"unicode/utf8"
 )
 
 func (w *Website) InitAdmin(userName string, password string, force bool) error {
@@ -222,6 +223,9 @@ func (w *Website) UpdateAdminInfo(adminId uint, req request.AdminInfoRequest) (*
 }
 
 func (w *Website) AddAdminLog(ctx iris.Context, logData string) {
+	if utf8.RuneCountInString(logData) > 250 {
+		logData = string([]rune(logData)[:250])
+	}
 	adminLog := model.AdminLog{
 		Log: logData,
 	}

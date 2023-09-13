@@ -40,6 +40,7 @@ type ContentConfig struct {
 	ThumbWidth     int    `json:"thumb_width"`
 	ThumbHeight    int    `json:"thumb_height"`
 	DefaultThumb   string `json:"default_thumb"`
+	MultiCategory  int    `json:"multi_category"` // 是否启用多分类支持
 }
 
 type IndexConfig struct {

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/PuerkitoBio/goquery"
+	"github.com/jinzhu/now"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -216,6 +217,27 @@ func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]
 }
 
 func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err error) {
+	if len(req.CategoryIds) > 0 {
+		for i := 0; i < len(req.CategoryIds); i++ {
+			// 防止 0
+			if req.CategoryIds[i] == 0 {
+				req.CategoryIds = append(req.CategoryIds[:i], req.CategoryIds[i+1:]...)
+			}
+		}
+	}
+	if len(req.CategoryIds) == 0 && req.CategoryId > 0 {
+		req.CategoryIds = append(req.CategoryIds, req.CategoryId)
+	}
+	if len(req.CategoryIds) == 0 {
+		return nil, errors.New(w.Lang("请选择一个栏目"))
+	}
+	for _, catId := range req.CategoryIds {
+		category := w.GetCategoryFromCache(catId)
+		if category == nil || category.Type != config.CategoryTypeArchive {
+			return nil, errors.New(w.Lang("请选择一个栏目"))
+		}
+	}
+	req.CategoryId = req.CategoryIds[0]
 	category, err := w.GetCategoryById(req.CategoryId)
 	if err != nil {
 		return nil, errors.New(w.Lang("请选择一个栏目"))
@@ -444,6 +466,17 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		w.DB.Delete(archive)
 		return nil, err
 	}
+	// 保存分类ID
+	for _, catId := range req.CategoryIds {
+		arcCategory := model.ArchiveCategory{
+			CategoryId: catId,
+			ArchiveId:  archive.Id,
+		}
+		w.DB.Model(&model.ArchiveCategory{}).Where("`category_id` = ? and `archive_id` = ?", catId, archive.Id).FirstOrCreate(&arcCategory)
+	}
+	// 删除额外的
+	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archive.Id, req.CategoryIds).Delete(&model.ArchiveCategory{})
+	// end
 	// 自动提取远程图片改成保存后处理
 	go func() {
 		//下载远程图片
@@ -570,6 +603,8 @@ func (w *Website) RecoverArchive(archive *model.Archive) error {
 	if err != nil {
 		return err
 	}
+	// 恢复 文档分类
+	w.DB.Unscoped().Model(&model.ArchiveCategory{}).Where("`archive_id` = ?", archive.Id).UpdateColumn("deleted_at", nil)
 
 	if archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
@@ -588,10 +623,15 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 		if err := w.DB.Unscoped().Delete(archive).Error; err != nil {
 			return err
 		}
+		w.DB.Unscoped().Where("`id` = ?", archive.Id).Delete(&model.ArchiveData{})
+		// 删除 文档分类
+		w.DB.Unscoped().Where("`archive_id` = ?", archive.Id).Delete(&model.ArchiveCategory{})
 	} else {
 		if err := w.DB.Delete(archive).Error; err != nil {
 			return err
 		}
+		// 删除 文档分类
+		w.DB.Where("`archive_id` = ?", archive.Id).Delete(&model.ArchiveCategory{})
 	}
 
 	if archive.FixedLink != "" {
@@ -645,20 +685,93 @@ func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
 	return err
 }
 
+func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Lang("无可操作的文档"))
+	}
+	num := 0
+	if req.EndHour <= req.StartHour {
+		// 大一小时
+		req.EndHour = req.StartHour + 1
+	}
+	if req.DailyLimit < 1 {
+		req.DailyLimit = len(req.Ids)
+	}
+	// 间隔用秒
+	gap := (req.EndHour - req.StartHour) * 3600 / req.DailyLimit
+	// 从第0天开始
+	dayNum := 0
+	h := time.Now().Hour()
+	if req.EndHour < h {
+		// 当天不发布
+		dayNum++
+	}
+	startTime := now.BeginningOfDay().AddDate(0, 0, dayNum).Add(time.Duration(req.StartHour) * time.Hour)
+	if startTime.Before(time.Now()) {
+		startTime = time.Now()
+	}
+	for _, id := range req.Ids {
+		archive, err := w.GetArchiveById(id)
+		if err != nil {
+			// 文档不存在，跳过
+			continue
+		}
+		if archive.Status == config.ContentStatusOK {
+			// 正常的文档跳过
+			continue
+		}
+		num++
+		w.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumns(map[string]interface{}{
+			"created_time": startTime.Unix(),
+			"updated_time": startTime.Unix(),
+			"status":       config.ContentStatusPlan,
+		})
+		startTime = startTime.Add(time.Duration(gap) * time.Second)
+		if startTime.Hour() >= req.EndHour {
+			// 达到数量加一天
+			dayNum++
+			// 重置时间
+			startTime = now.BeginningOfDay().AddDate(0, 0, dayNum).Add(time.Duration(req.StartHour) * time.Hour)
+		}
+
+	}
+
+	return nil
+}
+
 func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Lang("无可操作的文档"))
 	}
-	category, err := w.GetCategoryById(req.CategoryId)
-	if err != nil {
-		return err
+	// 保存分类ID
+	if len(req.CategoryIds) == 0 && req.CategoryId > 0 {
+		req.CategoryIds = append(req.CategoryIds, req.CategoryId)
 	}
-	err = w.DB.Model(&model.Archive{}).Where("id IN (?)", req.Ids).UpdateColumns(map[string]interface{}{
-		"category_id": req.CategoryId,
-		"module_id":   category.ModuleId,
-	}).Error
+	for _, catId := range req.CategoryIds {
+		_, err := w.GetCategoryById(catId)
+		if err != nil {
+			return errors.New("分类不存在")
+		}
+	}
+	if len(req.CategoryIds) == 0 {
+		return errors.New("请选择分类")
+	}
+	for _, arcId := range req.Ids {
+		for _, catId := range req.CategoryIds {
+			arcCategory := model.ArchiveCategory{
+				CategoryId: catId,
+				ArchiveId:  arcId,
+			}
+			w.DB.Model(&model.ArchiveCategory{}).Where("`category_id` = ? and `archive_id` = ?", catId, arcId).FirstOrCreate(&arcCategory)
+		}
+		// 删除额外的
+		w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", arcId, req.CategoryIds).Delete(&model.ArchiveCategory{})
+		// 更新主分类ID
+		w.DB.Model(&model.Archive{}).Where("`id` = ?", arcId).UpdateColumn("category_id", req.CategoryIds[0])
+	}
+	// end
 
-	return err
+	return nil
 }
 
 // DeleteCacheFixedLinks 固定链接

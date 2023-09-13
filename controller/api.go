@@ -38,7 +38,37 @@ func ApiImportArchive(ctx iris.Context) {
 	stock := ctx.PostValueInt64Default("stock", 0)
 	readLevel := ctx.PostValueIntDefault("read_level", 0)
 	sort := uint(ctx.PostValueIntDefault("sort", 0))
-
+	tmpCategoryIds, _ := ctx.PostValues("category_ids[]")
+	var categoryIds []uint
+	if len(tmpCategoryIds) > 0 {
+		for i := range tmpCategoryIds {
+			tmpCatId, _ := strconv.Atoi(tmpCategoryIds[i])
+			if tmpCatId > 0 {
+				categoryIds = append(categoryIds, uint(tmpCatId))
+			}
+		}
+	}
+	if len(categoryIds) == 0 && categoryId > 0 {
+		categoryIds = append(categoryIds, categoryId)
+	}
+	if len(categoryIds) == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Lang("请选择一个栏目"),
+		})
+		return
+	}
+	for _, catId := range categoryIds {
+		category := currentSite.GetCategoryFromCache(catId)
+		if category == nil || category.Type != config.CategoryTypeArchive {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.Lang("请选择一个栏目"),
+			})
+			return
+		}
+	}
+	categoryId = categoryIds[0]
 	category := currentSite.GetCategoryFromCache(categoryId)
 	if category == nil || category.Type != config.CategoryTypeArchive {
 		ctx.JSON(iris.Map{
@@ -75,6 +105,7 @@ func ApiImportArchive(ctx iris.Context) {
 		Title:        title,
 		SeoTitle:     seoTitle,
 		CategoryId:   categoryId,
+		CategoryIds:  categoryIds,
 		Keywords:     keywords,
 		Description:  description,
 		Content:      content,

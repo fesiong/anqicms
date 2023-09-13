@@ -286,23 +286,41 @@ func ApiArchiveList(ctx iris.Context) {
 
 		if like == "keywords" {
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
-					Order("id ASC")
+				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
+				if currentSite.Content.MultiCategory == 1 {
+					// 多分类支持
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+				} else {
+					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				tx = tx.Where("`keywords` like ? AND `id` != ?", "%"+keywords+"%", archiveId).Order("id ASC")
 				return tx
 			}, 0, limit, offset)
 		} else {
 			newLimit := int(math.Ceil(float64(limit) / 2))
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).
-					Order("id ASC")
+				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
+				if currentSite.Content.MultiCategory == 1 {
+					// 多分类支持
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+				} else {
+					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				tx = tx.Where("`id` > ?", archiveId).Order("id ASC")
 				return tx
 			}, 0, limit, offset)
 			if limit-len(archives) < newLimit {
 				newLimit = limit - len(archives)
 			}
 			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).
-					Order("id DESC")
+				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
+				if currentSite.Content.MultiCategory == 1 {
+					// 多分类支持
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+				} else {
+					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				tx = tx.Where("`id` < ?", archiveId).Order("id DESC")
 				return tx
 			}, 0, newLimit, offset)
 			//列表不返回content
@@ -362,11 +380,23 @@ func ApiArchiveList(ctx iris.Context) {
 						subIds = append(subIds, tmpIds...)
 						subIds = append(subIds, v)
 					}
-					tx = tx.Where("`category_id` IN(?)", subIds)
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
+					} else {
+						tx = tx.Where("`category_id` IN(?)", subIds)
+					}
 				} else if len(categoryIds) == 1 {
-					tx = tx.Where("`category_id` = ?", categoryIds[0])
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryIds[0])
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryIds[0])
+					}
 				} else {
-					tx = tx.Where("`category_id` IN(?)", categoryIds)
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", categoryIds)
+					} else {
+						tx = tx.Where("`category_id` IN(?)", categoryIds)
+					}
 				}
 			}
 			if order != "" {

@@ -48,6 +48,8 @@ type Archive struct {
 	HasOrdered     bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
 	FavorablePrice int64                   `json:"favorable_price" gorm:"-"`
 	HasPassword    bool                    `json:"has_password" gorm:"-"` // 需要密码的时候，这个字段为true
+	CategoryTitles []string                `json:"category_titles" gorm:"-"`
+	CategoryIds    []uint                  `json:"category_ids" gorm:"-"`
 }
 
 type ArchiveData struct {

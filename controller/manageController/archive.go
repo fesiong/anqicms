@@ -53,7 +53,13 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Where("`module_id` = ?", moduleId)
 			}
 			if categoryId > 0 {
-				tx = tx.Where("`category_id` = ?", categoryId)
+				subIds := currentSite.GetSubCategoryIds(categoryId, nil)
+				subIds = append(subIds, categoryId)
+				if currentSite.Content.MultiCategory == 1 {
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
+				} else {
+					tx = tx.Where("`category_id` IN(?)", subIds)
+				}
 			}
 			if status == "draft" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDraft)
@@ -83,10 +89,20 @@ func ArchiveList(ctx iris.Context) {
 	// 模型
 	modules := currentSite.GetCacheModules()
 	for i, v := range archives {
-		if v.CategoryId > 0 {
+		if currentSite.Content.MultiCategory == 1 {
+			var catIds []uint
+			currentSite.DB.Model(&model.ArchiveCategory{}).Where("`archive_id` = ?", v.Id).Pluck("category_id", &catIds)
+			for _, catId := range catIds {
+				for _, cat := range categories {
+					if cat.Id == catId {
+						archives[i].CategoryTitles = append(archives[i].CategoryTitles, cat.Title)
+					}
+				}
+			}
+		} else if v.CategoryId > 0 {
 			for _, c := range categories {
 				if c.Id == v.CategoryId {
-					archives[i].Category = &c
+					archives[i].CategoryTitles = []string{c.Title}
 					break
 				}
 			}
@@ -117,6 +133,12 @@ func ArchiveDetail(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 读取分类
+	if currentSite.Content.MultiCategory == 1 {
+		var catIds []uint
+		currentSite.DB.Model(&model.ArchiveCategory{}).Where("`archive_id` = ?", archive.Id).Pluck("category_id", &catIds)
+		archive.CategoryIds = catIds
 	}
 
 	// 读取data
@@ -431,6 +453,34 @@ func UpdateArchiveTime(ctx iris.Context) {
 	})
 }
 
+func UpdateArchiveReleasePlan(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.UpdateArchiveReleasePlan(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档定时发布：%v => %d", req.Ids, req.DailyLimit))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "文章已更新",
+	})
+}
+
 func UpdateArchiveSort(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive
@@ -479,7 +529,7 @@ func UpdateArchiveCategory(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档分类：%v => %d", req.Ids, req.CategoryId))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("批量更新文档分类：%v => %d", req.Ids, req.CategoryIds))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
