@@ -238,22 +238,28 @@ func (w *Website) DeleteCacheCategories() {
 	w.MemCache.Delete("categories")
 }
 
-func (w *Website) GetCacheCategories() []model.Category {
+func (w *Website) GetCacheCategories() []*model.Category {
 	if w.DB == nil {
 		return nil
 	}
-	var categories []model.Category
+	var categories []*model.Category
 
 	result := w.MemCache.Get("categories")
 	if result != nil {
 		var ok bool
-		categories, ok = result.([]model.Category)
+		categories, ok = result.([]*model.Category)
 		if ok {
 			return categories
 		}
 	}
 
-	w.DB.Where(model.Category{}).Order("sort asc").Find(&categories)
+	w.DB.Model(model.Category{}).Order("sort asc").Find(&categories)
+	for i := range categories {
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].Link = w.GetUrl("category", categories[i], 0)
+	}
+	categoryTree := NewCategoryTree(categories)
+	categories = categoryTree.GetTree(0, "")
 
 	w.MemCache.Set("categories", categories, 0)
 
@@ -261,7 +267,7 @@ func (w *Website) GetCacheCategories() []model.Category {
 }
 
 // GetSubCategoryIds 获取分类的子分类
-func (w *Website) GetSubCategoryIds(categoryId uint, categories []model.Category) []uint {
+func (w *Website) GetSubCategoryIds(categoryId uint, categories []*model.Category) []uint {
 	var subIds []uint
 	if categories == nil {
 		categories = w.GetCacheCategories()
@@ -284,7 +290,7 @@ func (w *Website) GetCategoryFromCache(categoryId uint) *model.Category {
 	categories := w.GetCacheCategories()
 	for i := range categories {
 		if categories[i].Id == categoryId {
-			return &categories[i]
+			return categories[i]
 		}
 	}
 
@@ -295,7 +301,7 @@ func (w *Website) GetCategoryFromCacheByToken(urlToken string) *model.Category {
 	categories := w.GetCacheCategories()
 	for i := range categories {
 		if categories[i].UrlToken == urlToken {
-			return &categories[i]
+			return categories[i]
 		}
 	}
 
@@ -316,7 +322,7 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int) 
 			}
 		}
 		if categories[i].ParentId == parentId {
-			tmpCategories = append(tmpCategories, &categories[i])
+			tmpCategories = append(tmpCategories, categories[i])
 		}
 	}
 
