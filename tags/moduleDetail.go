@@ -24,6 +24,10 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		return err
 	}
 	id := uint(0)
+	token := ""
+	if args["token"] != nil {
+		token = args["token"].String()
+	}
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -38,7 +42,11 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 	module, _ := ctx.Public["module"].(*model.Module)
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
+	}
+	if id > 0 {
 		module = currentSite.GetModuleFromCache(id)
+	} else if token != "" {
+		module = currentSite.GetModuleFromCacheByToken(token)
 	}
 
 	fieldName := ""
