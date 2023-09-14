@@ -9,12 +9,12 @@ import (
 	"reflect"
 )
 
-type tagTagDetailNode struct {
+type tagModuleDetailNode struct {
 	args map[string]pongo2.IEvaluator
 	name string
 }
 
-func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
 	currentSite, _ := ctx.Public["website"].(*provider.Website)
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
@@ -24,10 +24,6 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		return err
 	}
 	id := uint(0)
-	token := ""
-	if args["token"] != nil {
-		token = args["token"].String()
-	}
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -36,15 +32,13 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
-
-	tagDetail, _ := ctx.Public["tag"].(*model.Tag)
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
 	}
-	if id > 0 {
-		tagDetail, _ = currentSite.GetTagById(id)
-	} else if token != "" {
-		tagDetail, _ = currentSite.GetTagByUrlToken(token)
+	module, _ := ctx.Public["module"].(*model.Module)
+	if args["id"] != nil {
+		id = uint(args["id"].Integer())
+		module = currentSite.GetModuleFromCache(id)
 	}
 
 	fieldName := ""
@@ -55,16 +49,16 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 
 	var content string
 
-	if tagDetail != nil {
-		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
+	if module != nil {
+		module.Link = currentSite.GetUrl("archiveIndex", module, 0)
 
-		v := reflect.ValueOf(*tagDetail)
+		v := reflect.ValueOf(*module)
 
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)
 		if content == "" && fieldName == "SeoTitle" {
-			content = tagDetail.Title
+			content = module.Title
 		}
 	}
 
@@ -78,14 +72,14 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	return nil
 }
 
-func TagTagDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
-	tagNode := &tagTagDetailNode{
+func TagModuleDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
+	tagNode := &tagModuleDetailNode{
 		args: make(map[string]pongo2.IEvaluator),
 	}
 
 	nameToken := arguments.MatchType(pongo2.TokenIdentifier)
 	if nameToken == nil {
-		return nil, arguments.Error("tagDetail-tag needs a accept name.", nil)
+		return nil, arguments.Error("moduleDetail-tag needs a accept name.", nil)
 	}
 
 	if nameToken.Val == "with" {
@@ -102,7 +96,7 @@ func TagTagDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pong
 	tagNode.args = args
 
 	for arguments.Remaining() > 0 {
-		return nil, arguments.Error("Malformed tagDetail-tag arguments.", nil)
+		return nil, arguments.Error("Malformed moduleDetail-tag arguments.", nil)
 	}
 
 	return tagNode, nil

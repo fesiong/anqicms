@@ -20,6 +20,7 @@ type Module struct {
 	Status    uint         `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 
 	Database string `json:"-" gorm:"-"`
+	Link     string `json:"link" gorm:"-"`
 }
 
 type moduleFields []config.CustomField

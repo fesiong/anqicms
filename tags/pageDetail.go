@@ -25,6 +25,10 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return err
 	}
 	id := uint(0)
+	token := ""
+	if args["token"] != nil {
+		token = args["token"].String()
+	}
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -43,20 +47,11 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	pageDetail, ok := ctx.Public["page"].(*model.Category)
-	if !ok && id == 0 {
-		return nil
-	}
-	//不是同一个，重新获取
-	if pageDetail != nil && (id > 0 && pageDetail.Id != id) {
-		pageDetail = nil
-	}
-
-	if pageDetail == nil && id > 0 {
+	pageDetail, _ := ctx.Public["page"].(*model.Category)
+	if id > 0 {
 		pageDetail = currentSite.GetCategoryFromCache(id)
-		if pageDetail == nil {
-			return nil
-		}
+	} else if token != "" {
+		pageDetail = currentSite.GetCategoryFromCacheByToken(token)
 	}
 	if pageDetail == nil {
 		return nil

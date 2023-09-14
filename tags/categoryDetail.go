@@ -24,6 +24,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		return err
 	}
 	id := uint(0)
+	token := ""
+	if args["token"] != nil {
+		token = args["token"].String()
+	}
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -47,7 +51,11 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
+	}
+	if id > 0 {
 		categoryDetail = currentSite.GetCategoryFromCache(id)
+	} else if token != "" {
+		categoryDetail = currentSite.GetCategoryFromCacheByToken(token)
 	}
 
 	if categoryDetail != nil {

@@ -27,6 +27,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		return err
 	}
 	id := uint(0)
+	token := ""
+	if args["token"] != nil {
+		token = args["token"].String()
+	}
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -63,8 +67,22 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				currentSite.AddArchiveCache(archiveDetail)
 			}
 		}
+	}
+	if id > 0 {
+		archiveDetail = currentSite.GetArchiveByIdFromCache(id)
+		if archiveDetail == nil {
+			archiveDetail, _ = currentSite.GetArchiveById(id)
+			if archiveDetail != nil {
+				currentSite.AddArchiveCache(archiveDetail)
+			}
+		}
+	} else if token != "" {
+		archiveDetail, _ = currentSite.GetArchiveByUrlToken(token)
+	}
+
+	if archiveDetail != nil {
 		// check has Order
-		if fieldName == "HasOrdered" && archiveDetail != nil {
+		if fieldName == "HasOrdered" {
 			// if read level larger than 0, then need to check permission
 			userId := uint(0)
 			userInfo, ok := ctx.Public["userInfo"].(*model.User)
@@ -78,9 +96,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
 			archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 		}
-	}
 
-	if archiveDetail != nil {
 		v := reflect.ValueOf(*archiveDetail)
 
 		f := v.FieldByName(fieldName)
