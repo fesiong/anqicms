@@ -1,36 +1,35 @@
 {% extends 'base.html' %}
 
 {% block container %}
-{% include "partial/breadcrumb.html" %}
-<div class="blog-list container clearfix">
-	<h1 class="index-news-title">新闻中心</h1>
-	<div class="blog-list-content clearfix">
-		<div class="page-content">
-			<ul class="blog-list-ul clearfix">
-				{% archiveList articles with type="page" limit="10" %}
-				{% for item in articles %}
-				<li class="blog-list-li">
-					<div class="blog-list-li-item">
-						<div class="blog-list-img">
-							<a href="{{item.Link}}"><img src="{{item.Thumb}}" alt="{{item.Title}}"></a>
-						</div>
-						<div class="blog-list-text">
-							<h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
-							<div class="time">
-								<span>发布时间：{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
-								<span>作者：<a>{% system with name="SiteName" %}</a></span>
-							</div>
-							<p>{{item.Description}}</p>
-							<a href="{{item.Link}}" class="btn" rel="nofollow">了解详情</a>
-						</div>
-					</div>
-				</li>
-				{% endfor %}
-				{% endarchiveList %}
-			</ul>
-			{% include "partial/pagination.html" %}
-		</div>
-		{% include "partial/sidebar.html" %}
-	</div>
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">{% moduleDetail with name="Title" %}</div>
+                <ul class="list-blog-ul">
+                    {% archiveList articles with type="page" limit="10" %}
+                    {% for item in articles %}
+                    <li>
+                        <div class="info">
+                            <span>来源：<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name="Title" %}</a></span> /
+                            <span>时间: {{ stampToDate(item.CreatedTime, "2006-01-02") }}</span>
+                        </div>
+                        <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        <p>{{item.Description}}</p>
+                        <a href="{{item.Link}}" class="more">详情</a>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+                {% include "partial/pagination.html" %}
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
 </div>
 {% endblock %}

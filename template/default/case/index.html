@@ -1,54 +1,38 @@
 {% extends 'base.html' %}
 
 {% block container %}
-{% include "partial/breadcrumb.html" %}
-<div class="products-index clearfix">
-	<div class="index-title">客户案例</div>
-	<div class="products-index-menu clearfix">
-		<div class="container">
-			{% categoryList productCategories with parentId="0" %}
-			{% for item in productCategories %}
-			<a href="{{item.Link}}">{{item.Title}}</a>
-			{% endfor %}
-			{% endcategoryList %}
-		</div>
-	</div>
-	<!-- products list -->
-	{% categoryList productCategories with parentId="0" %}
-	{% for item in productCategories %}
-	<div class="container clearfix">
-		<div class="products-title clearfix">
-			<h2>{{item.Title}}</h2>
-			<a href="{{item.Link}}" class="btn">查看更多</a>
-		</div>
-	</div>
-	<div class="products-title-bg">
-		<div class="container">
-			<img src="{% system with name='TemplateUrl' %}img/jt.webp" alt="">
-		</div>
-	</div>
-	<div class="products-list">
-		<div class="container">
-			<ul class="products-ul">
-				{% archiveList products with categoryId=item.Id type="list" limit="4" %}
-				{% for inner in products %}
-				<li class="products-li">
-					<div class="item">
-						<div class="item-img">
-							<a href="{{inner.Link}}"><img src="{{inner.Thumb}}" alt="{{inner.Title}}"></a>
-						</div>
-						<div class="item-text">
-							<h3><a href="{{inner.Link}}">{{inner.Title}}</a></h3>
-						</div>
-					</div>
-				</li>
-				{% endfor %}
-				{% endarchiveList %}
-			</ul>
-		</div>
-	</div>
-	{% endfor %}
-	{% endcategoryList %}
-	<!-- products list -->
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">{% moduleDetail with name="Title" %}</div>
+                <ul class="list-case-ul">
+                    {% archiveList products with type="page" limit="12" %}
+                    {% for item in products %}
+                    <li>
+                        <div class="list-item">
+                            <div class="list-item-img"><a href="{{item.Link}}">
+                                    <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                                </a></div>
+                            <div class="list-item-text">
+                                <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                                <p>{{item.Description}}</p>
+                                <a href="{{item.Link}}" class="more">详情</a>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+                {% include "partial/pagination.html" %}
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
 </div>
 {% endblock %}

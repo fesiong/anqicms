@@ -1,65 +1,79 @@
 {% extends 'base.html' %}
 
 {% block container %}
-{% include "partial/breadcrumb.html" %}
-<div class="blog-index clearfix">
-  <!-- single content -->
-  <div class="container clearfix">
-    <!-- single cotnent -->
-    <div class="blog-cotnent clearfix">
-      <div class="page-content">
-        <div class="single-title">
-          <h1>{% archiveDetail with name="Title" %}</h1>
-          <div class="time">
-            <span>发布时间：{% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
-            <span>作者：<a>{% system with name="SiteName" %}</a></span>
-          </div>
-        </div>
-        <div class="arc clearfix">
-          {% archiveDetail productContent with name="Content" %}
-          {{productContent|safe}}
-        </div>
-        <!-- relpro -->
-        <div class="relpro clearfix">
-          <h3 class="rel-title"><i></i>相关产品</h3>
-          <ul class="relpro-ul">
-            {% archiveList products with moduleId=2 type="list" limit="4" %}
-            {% for inner in products %}
-            <li class="relpro-li">
-              <div class="relpro-item">
-                <div class="relpro-img">
-                  <a href="{{inner.Link}}"><img src="{{inner.Thumb}}" alt="{{inner.Title}}"></a>
+
+{% include "partial/banner.html" %}
+<!-- crumb -->
+{% include "partial/crumb.html" %}
+<!-- crumb -->
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-title">
+                    <h1>{% archiveDetail with name="Title" %}</h1>
+                    <div class="info">
+                        <span>来源：<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name='Title' %}</a></span> /
+                        <span>时间: {% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
+                    </div>
                 </div>
-                <div class="relpro-text">
-                  <h4><a href="{{inner.Link}}">{{inner.Title}}</a></h4>
+                <div class="single-arc">
+                    {% archiveDetail articleContent with name="Content" %}
+                    {{articleContent|safe}}
                 </div>
-              </div>
-            </li>
-            {% endfor %}
-            {% endarchiveList %}
-          </ul>
+                <div class="tags">
+                    {% tagList tags with limit="5" %}
+                    {% if tags %}
+                    <span>标签：
+                        {% for item in tags %}
+                        <a href="{{item.Link}}">{{item.Title}}</a>
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                    {% endtagList %}
+                </div>
+                <div class="prenext">
+                    {% prevArchive prev %}
+                    {% if prev %}
+                    <p><span>上一篇: </span> <a href="{{prev.Link}}">{{prev.Title}}</a></p>
+                    {% endif %}
+                    {% endprevArchive %}
+                    {% nextArchive next %}
+                    {% if next %}
+                    <p><span>下一篇: </span> <a href="{{next.Link}}">{{next.Title}}</a></p>
+                    {% endif %}
+                    {% endnextArchive %}
+                </div>
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
         </div>
-        <!-- relpro -->
-        <!-- relblog -->
-        <div class="relblog clearfix">
-          <h3 class="rel-title"><i></i>相关文章</h3>
-          <ul class="relblog-ul">
-            {% archiveList articles with moduleId=1 type="related" limit="10" %}
-            {% for inner in articles %}
-            <li class="relblog-li">
-              <h3><a href="{{inner.Link}}">{{inner.Title}}</a></h3>
-              <span>{{stampToDate(inner.CreatedTime, "2006-01-02")}}</span>
-            </li>
-            {% endfor %}
-            {% endarchiveList %}
-          </ul>
-        </div>
-        <!-- relblog -->
-      </div>
-      {% include "partial/sidebar.html" %}
     </div>
-    <!-- single cotnent -->
-  </div>
-  <!-- single content -->
+    <!-- rel-pro -->
+    <div class="rel">
+        <div class="container">
+            <h2>相关产品</h2>
+            <ul class="rel-pro-ul">
+                {% archiveList products with type="list" limit="4" %}
+                {% for item in products %}
+                <li>
+                    <div class="list-item">
+                        <div class="list-item-img"><a href="{{item.Link}}">
+                                <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                            </a></div>
+                        <div class="list-item-text">
+                            <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+    </div>
+    <!-- rel-pro -->
 </div>
 {% endblock %}
