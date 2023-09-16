@@ -86,7 +86,7 @@ func (w *Website) GetCacheNavs() []model.Nav {
 		}
 	}
 
-	w.DB.Where(model.Nav{}).Order("sort asc").Find(&navs)
+	w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs)
 
 	w.MemCache.Set("navs", navs, 0)
 

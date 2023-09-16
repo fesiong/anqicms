@@ -1119,6 +1119,7 @@ func (w *Website) RestoreDesignData(packageName string) error {
 //			attachments          []model.Attachment
 //			attachmentCategories []model.AttachmentCategory
 //			categories           []model.Category
+//			archiveCategories    []model.ArchiveCategory
 //			comments             []model.Comment
 //			guestbooks           []model.Guestbook
 //			keywords             []model.Keyword
@@ -1228,6 +1229,15 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 			return
 		}
 		for _, v := range archiveData {
+			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "archiveCategories" {
+		var archiveCategories []model.ArchiveCategory
+		err = json.Unmarshal(data, &archiveCategories)
+		if err != nil {
+			return
+		}
+		for _, v := range archiveCategories {
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 		}
 	} else if name == "tags" {
@@ -1435,6 +1445,12 @@ func (w *Website) BackupDesignData(packageName string) error {
 		w.DB.Where("`id` IN(?)", archiveIds).Find(&archiveData)
 		if len(archiveData) > 0 {
 			_ = w.writeDataToZip("archiveData", archiveData, zw)
+		}
+		// 文档关联分类
+		var archiveCategories []model.ArchiveCategory
+		w.DB.Where("`archive_id` IN(?)", archiveIds).Find(&archiveCategories)
+		if len(archiveCategories) > 0 {
+			_ = w.writeDataToZip("archiveCategories", archiveCategories, zw)
 		}
 	}
 	var attachments []model.Attachment
