@@ -37,6 +37,7 @@ type RequestData struct {
 
 type Options struct {
 	Timeout     time.Duration
+	Debug       bool
 	Method      string
 	Type        string
 	Query       interface{}
@@ -68,6 +69,9 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	options.Method = strings.ToUpper(options.Method)
 
 	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
+	if options.Debug {
+		req = req.SetDebug(true)
+	}
 	//定义默认的refer
 	parsedUrl, err := url.Parse(urlPath)
 	if err != nil {

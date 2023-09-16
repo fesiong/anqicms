@@ -154,7 +154,6 @@ func (w *Website) CreateTransferTask(website *request.TransferWebsite) (*Transfe
 		Provider: website.Provider,
 		Status:   0,
 	}
-
 	// 尝试链接文件
 	remoteUrl := w.transferWebsite.BaseUrl + "/" + w.transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms"
 	resp, err := library.Request(remoteUrl, &library.Options{Method: "POST", Type: "json", Data: w.transferWebsite})
