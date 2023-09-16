@@ -246,7 +246,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	if module == nil {
 		return nil, errors.New(w.Lang("未定义模型"))
 	}
-
+	if len(req.Title) == 0 {
+		return nil, errors.New(w.Lang("请填写文章标题"))
+	}
 	newPost := false
 	if req.Id > 0 {
 		archive, err = w.GetArchiveById(req.Id)

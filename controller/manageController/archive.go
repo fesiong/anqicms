@@ -139,6 +139,8 @@ func ArchiveDetail(ctx iris.Context) {
 		var catIds []uint
 		currentSite.DB.Model(&model.ArchiveCategory{}).Where("`archive_id` = ?", archive.Id).Pluck("category_id", &catIds)
 		archive.CategoryIds = catIds
+	} else {
+		archive.CategoryIds = []uint{archive.CategoryId}
 	}
 
 	// 读取data

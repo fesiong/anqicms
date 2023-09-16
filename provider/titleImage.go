@@ -151,6 +151,9 @@ func (t *TitleImage) EncodeB64string() string {
 }
 
 func (t *TitleImage) drawTitle() {
+	if len(t.title) == 0 {
+		return
+	}
 	c := freetype.NewContext()
 	c.SetDPI(72)
 	c.SetClip(t.img.Bounds())

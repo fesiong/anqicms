@@ -183,6 +183,8 @@ func (w *Website) InitModelData() {
 	navType := model.NavType{Title: "默认导航"}
 	navType.Id = 1
 	w.DB.Model(&model.NavType{}).FirstOrCreate(&navType)
+	// 默认管理员
+	_ = w.InitAdmin("admin", "123456", false)
 	// 检查分组
 	adminGroup := model.AdminGroup{
 		Model:       model.Model{Id: 1},
