@@ -178,6 +178,7 @@ func PluginBackupCleanup(ctx iris.Context) {
 	}
 
 	currentSite.CleanupWebsiteData(req.CleanUploads)
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("一键清空网站数据"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
