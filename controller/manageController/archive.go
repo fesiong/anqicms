@@ -56,7 +56,7 @@ func ArchiveList(ctx iris.Context) {
 				subIds := currentSite.GetSubCategoryIds(categoryId, nil)
 				subIds = append(subIds, categoryId)
 				if currentSite.Content.MultiCategory == 1 {
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON Archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
 				} else {
 					tx = tx.Where("`category_id` IN(?)", subIds)
 				}
