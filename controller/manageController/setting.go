@@ -144,6 +144,11 @@ func SettingContentForm(ctx iris.Context) {
 		})
 		return
 	}
+	needUpgrade := false
+	// 如果切换到多分类，则更新多分类
+	if req.MultiCategory == 1 && currentSite.Content.MultiCategory != req.MultiCategory {
+		needUpgrade = true
+	}
 
 	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, currentSite.PluginStorage.StorageUrl)
 
@@ -169,6 +174,9 @@ func SettingContentForm(ctx iris.Context) {
 		return
 	}
 	currentSite.DeleteCacheIndex()
+	if needUpgrade {
+		go currentSite.UpgradeMultiCategory()
+	}
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新内容配置"))
 

@@ -920,3 +920,26 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 
 	return archive
 }
+
+func (w *Website) UpgradeMultiCategory() {
+	type tinyArchive struct {
+		Id         uint `json:"id"`
+		CategoryId uint `json:"category_id"`
+	}
+	var lastId uint = 0
+	for {
+		var archives []*tinyArchive
+		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Order("id asc").Limit(1000).Scan(&archives)
+		if len(archives) == 0 {
+			break
+		}
+		lastId = archives[len(archives)-1].Id
+		for _, arc := range archives {
+			arcCategory := model.ArchiveCategory{
+				CategoryId: arc.CategoryId,
+				ArchiveId:  arc.Id,
+			}
+			w.DB.Model(&model.ArchiveCategory{}).Where("`category_id` = ? and `archive_id` = ?", arc.CategoryId, arc.Id).FirstOrCreate(&arcCategory)
+		}
+	}
+}
