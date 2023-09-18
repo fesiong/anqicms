@@ -282,6 +282,15 @@ func SettingContactForm(ctx iris.Context) {
 	currentSite.Contact.Email = req.Email
 	currentSite.Contact.Wechat = req.Wechat
 	currentSite.Contact.Qrcode = req.Qrcode
+	currentSite.Contact.QQ = req.QQ
+	currentSite.Contact.WhatsApp = req.WhatsApp
+	currentSite.Contact.Facebook = req.Facebook
+	currentSite.Contact.Twitter = req.Twitter
+	currentSite.Contact.Tiktok = req.Tiktok
+	currentSite.Contact.Pinterest = req.Pinterest
+	currentSite.Contact.Linkedin = req.Linkedin
+	currentSite.Contact.Instagram = req.Instagram
+	currentSite.Contact.Youtube = req.Youtube
 	currentSite.Contact.ExtraFields = req.ExtraFields
 
 	err := currentSite.SaveSettingValue(provider.ContactSettingKey, currentSite.Contact)

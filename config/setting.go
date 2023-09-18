@@ -55,6 +55,15 @@ type ContactConfig struct {
 	Address     string       `json:"address"`
 	Email       string       `json:"email"`
 	Wechat      string       `json:"wechat"`
+	QQ          string       `json:"qq"`
+	WhatsApp    string       `json:"whats_app"`
+	Facebook    string       `json:"facebook"`
+	Twitter     string       `json:"twitter"`
+	Tiktok      string       `json:"tiktok"`
+	Pinterest   string       `json:"pinterest"`
+	Linkedin    string       `json:"linkedin"`
+	Instagram   string       `json:"instagram"`
+	Youtube     string       `json:"youtube"`
 	Qrcode      string       `json:"qrcode"`
 	ExtraFields []ExtraField `json:"extra_fields"` // 用户自定义字段
 }
