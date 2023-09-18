@@ -212,7 +212,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 				}
-				tx = tx.Where("`status` = 1 AND `keywords` like ? AND `id` != ?", moduleId, categoryId, "%"+keywords+"%", archiveId).
+				tx = tx.Where("`status` = 1 AND `keywords` like ? AND `id` != ?", "%"+keywords+"%", archiveId).
 					Order("id ASC")
 				return tx
 			}, 0, limit, offset)
