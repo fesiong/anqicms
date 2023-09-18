@@ -257,3 +257,39 @@ func (w *Website) GetBackupFilePath(fileName string) (string, error) {
 
 	return backupFile, nil
 }
+
+func (w *Website) CleanupWebsiteData(cleanUploads bool) {
+	t := time.Now()
+
+	tables, err := w.DB.Migrator().GetTables()
+	if err != nil {
+		return
+	}
+
+	for _, table := range tables {
+		// 排除几个表
+		if table == "admin_groups" ||
+			table == "admin_login_logs" ||
+			table == "admin_logs" ||
+			table == "admins" ||
+			table == "settings" ||
+			table == "websites" {
+			continue
+		}
+		err = w.DB.Exec(fmt.Sprintf("TRUNCATE `%s`.`%s`", w.Mysql.Database, table)).Error
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+	}
+	if cleanUploads {
+		_ = os.RemoveAll(w.PublicPath + "uploads/")
+	}
+	// 清理cache
+	w.DeleteCache()
+	w.RemoveHtmlCache()
+	// 重新初始化
+	w.InitModelData()
+
+	log.Printf("清空整站数据.用时[%s]", time.Since(t).String())
+}

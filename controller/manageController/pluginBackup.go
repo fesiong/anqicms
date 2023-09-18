@@ -165,3 +165,22 @@ func PluginBackupExport(ctx iris.Context) {
 
 	ctx.SendFile(filePath, "")
 }
+
+func PluginBackupCleanup(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PluginBackupRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.CleanupWebsiteData(req.CleanUploads)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "清理完成",
+	})
+}

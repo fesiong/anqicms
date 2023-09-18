@@ -108,7 +108,8 @@ type PluginRedirectsRequest struct {
 }
 
 type PluginBackupRequest struct {
-	Name string `json:"name"`
+	Name         string `json:"name"`
+	CleanUploads bool   `json:"clean_uploads"`
 }
 
 type PluginReplaceRequest struct {
