@@ -84,7 +84,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 
-	order := "`sort` desc, `id` desc"
+	order := "archives.`sort` desc, archives.`id` desc"
 	limit := 10
 	offset := 0
 	currentPage := 1
@@ -140,7 +140,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	if args["order"] != nil {
-		order = args["order"].String()
+		order = "archives." + args["order"].String()
 	}
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")
@@ -212,8 +212,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 				}
-				tx = tx.Where("`status` = 1 AND `keywords` like ? AND `id` != ?", "%"+keywords+"%", archiveId).
-					Order("id ASC")
+				tx = tx.Where("`status` = 1 AND `keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId).
+					Order("archives.id ASC")
 				return tx
 			}, 0, limit, offset)
 		} else {
@@ -226,7 +226,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
-				tx = tx.Where("`id` > ?", archiveId).Order("id ASC")
+				tx = tx.Where("archives.`id` > ?", archiveId).Order("archives.id ASC")
 				return tx
 			}, 0, limit, offset)
 			if limit-len(archives) < newLimit {
@@ -240,7 +240,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
-				tx = tx.Where("`id` < ?", archiveId).Order("id DESC")
+				tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
 				return tx
 			}, 0, newLimit, offset)
 			//列表不返回content
@@ -325,7 +325,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				tx = tx.Order(order)
 			}
 			if len(ids) > 0 {
-				tx = tx.Where("`id` IN(?)", ids)
+				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if q != "" {
 				tx = tx.Where("`title` like ?", "%"+q+"%")
 			}

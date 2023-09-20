@@ -293,7 +293,7 @@ func ApiArchiveList(ctx iris.Context) {
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
-				tx = tx.Where("`keywords` like ? AND `id` != ?", "%"+keywords+"%", archiveId).Order("id ASC")
+				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId).Order("archives.id ASC")
 				return tx
 			}, 0, limit, offset)
 		} else {
@@ -306,7 +306,7 @@ func ApiArchiveList(ctx iris.Context) {
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
-				tx = tx.Where("`id` > ?", archiveId).Order("id ASC")
+				tx = tx.Where("archives.`id` > ?", archiveId).Order("archives.id ASC")
 				return tx
 			}, 0, limit, offset)
 			if limit-len(archives) < newLimit {
@@ -320,7 +320,7 @@ func ApiArchiveList(ctx iris.Context) {
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
-				tx = tx.Where("`id` < ?", archiveId).Order("id DESC")
+				tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
 				return tx
 			}, 0, newLimit, offset)
 			//列表不返回content
@@ -400,12 +400,12 @@ func ApiArchiveList(ctx iris.Context) {
 				}
 			}
 			if order != "" {
-				tx = tx.Order(order)
+				tx = tx.Order("archives." + order)
 			} else {
-				tx = tx.Order("`sort` desc, `id` desc")
+				tx = tx.Order("archives.`sort` desc, archives.`id` desc")
 			}
 			if len(ids) > 0 {
-				tx = tx.Where("`id` IN(?)", ids)
+				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if q != "" {
 				tx = tx.Where("`title` like ?", "%"+q+"%")
 			}
