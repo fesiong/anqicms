@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type TransferWebsite struct {
@@ -79,6 +80,8 @@ type CategoryData struct {
 type TagData struct {
 	Id          uint   `json:"id"`
 	Title       string `json:"title"`
+	SeoTitle    string `json:"seo_title"`
+	Keywords    string `json:"keywords"`
 	UrlToken    string `json:"url_token"`
 	Description string `json:"description"`
 	CreatedTime int64  `json:"created_time"`
@@ -315,6 +318,21 @@ func (t *TransferWebsite) transferCategories() error {
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
 		}
+		if utf8.RuneCountInString(category.Title) > 250 {
+			category.Title = string([]rune(category.Title)[:250])
+		}
+		if utf8.RuneCountInString(category.Keywords) > 250 {
+			category.Keywords = string([]rune(category.Keywords)[:250])
+		}
+		if utf8.RuneCountInString(category.SeoTitle) > 250 {
+			category.SeoTitle = string([]rune(category.SeoTitle)[:250])
+		}
+		if category.Description == "" {
+			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "))
+		} else if utf8.RuneCountInString(category.Description) > 1000 {
+			// 字段最大支持1000
+			category.Description = string([]rune(category.Description)[:1000])
+		}
 		category.UrlToken = strings.TrimSuffix(category.UrlToken, ".html")
 		category.Id = result.Data[i].Id
 		if category.UrlToken == "" {
@@ -351,9 +369,24 @@ func (t *TransferWebsite) transferTags() error {
 	for i := range result.Data {
 		tag := model.Tag{
 			Title:       result.Data[i].Title,
+			Keywords:    result.Data[i].Keywords,
+			SeoTitle:    result.Data[i].SeoTitle,
 			UrlToken:    result.Data[i].UrlToken,
 			Description: result.Data[i].Description,
 			Status:      1,
+		}
+		if utf8.RuneCountInString(tag.Title) > 250 {
+			tag.Title = string([]rune(tag.Title)[:250])
+		}
+		if utf8.RuneCountInString(tag.Keywords) > 250 {
+			tag.Keywords = string([]rune(tag.Keywords)[:250])
+		}
+		if utf8.RuneCountInString(tag.SeoTitle) > 250 {
+			tag.SeoTitle = string([]rune(tag.SeoTitle)[:250])
+		}
+		if utf8.RuneCountInString(tag.Description) > 1000 {
+			// 字段最大支持1000
+			tag.Description = string([]rune(tag.Description)[:1000])
 		}
 		tag.Id = result.Data[i].Id
 		if tag.UrlToken == "" {
@@ -443,6 +476,21 @@ func (t *TransferWebsite) transferArchives() error {
 				Images:      result.Data[i].Images,
 				Status:      result.Data[i].Status,
 				Flag:        result.Data[i].Flag,
+			}
+			if utf8.RuneCountInString(archive.Title) > 250 {
+				archive.Title = string([]rune(archive.Title)[:250])
+			}
+			if utf8.RuneCountInString(archive.Keywords) > 250 {
+				archive.Keywords = string([]rune(archive.Keywords)[:250])
+			}
+			if utf8.RuneCountInString(archive.SeoTitle) > 250 {
+				archive.SeoTitle = string([]rune(archive.SeoTitle)[:250])
+			}
+			if archive.Description == "" {
+				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "))
+			} else if utf8.RuneCountInString(archive.Description) > 1000 {
+				// 字段最大支持1000
+				archive.Description = string([]rune(archive.Description)[:1000])
 			}
 			if result.Data[i].Logo != "" {
 				archive.Images = append(archive.Images, result.Data[i].Logo)
@@ -545,6 +593,21 @@ func (t *TransferWebsite) transferSinglePages() error {
 			Type:        config.CategoryTypePage,
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
+		}
+		if utf8.RuneCountInString(category.Title) > 250 {
+			category.Title = string([]rune(category.Title)[:250])
+		}
+		if utf8.RuneCountInString(category.Keywords) > 250 {
+			category.Keywords = string([]rune(category.Keywords)[:250])
+		}
+		if utf8.RuneCountInString(category.SeoTitle) > 250 {
+			category.SeoTitle = string([]rune(category.SeoTitle)[:250])
+		}
+		if category.Description == "" {
+			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "))
+		} else if utf8.RuneCountInString(category.Description) > 1000 {
+			// 字段最大支持1000
+			category.Description = string([]rune(category.Description)[:1000])
 		}
 		if result.Data[i].Logo != "" {
 			category.Logo = strings.Replace(result.Data[i].Logo, t.BaseUrl, "", 1)

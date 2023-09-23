@@ -331,6 +331,10 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int) 
 
 func (w *Website) VerifyCategoryUrlToken(urlToken string, id uint) string {
 	index := 0
+	// 防止超出长度
+	if len(urlToken) > 150 {
+		urlToken = urlToken[:150]
+	}
 	for {
 		tmpToken := urlToken
 		if index > 0 {

@@ -200,6 +200,10 @@ func (w *Website) GetTagsByItemId(itemId uint) []*model.Tag {
 
 func (w *Website) VerifyTagUrlToken(urlToken string, id uint) string {
 	index := 0
+	// 防止超出长度
+	if len(urlToken) > 150 {
+		urlToken = urlToken[:150]
+	}
 	for {
 		tmpToken := urlToken
 		if index > 0 {

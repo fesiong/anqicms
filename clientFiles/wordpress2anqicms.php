@@ -224,11 +224,15 @@ class anqicms
                         }
                     }
                 }
-                
+
+              $url_token = $val['post_name'];
+              if (strlen($url_token) > 150) {
+                $url_token = substr($url_token, 0, 150);
+              }
               $archive = array(
                 'id' => $val['ID'],
                 'title' => $val['post_title'],
-                'url_token' => $val['post_name'],
+                'url_token' => $url_token,
                 'created_time' => strtotime($val['post_date']),
                 'updated_time' => strtotime($val['post_modified']),
                 'content' => $val['post_content'],
