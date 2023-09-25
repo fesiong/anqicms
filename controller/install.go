@@ -409,7 +409,7 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
-	config.RestartChan <- false
+	config.RestartChan <- 0
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

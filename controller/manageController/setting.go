@@ -109,7 +109,7 @@ func SettingSystemForm(ctx iris.Context) {
 
 	// 如果切换了模板，则需要重启
 	if changed {
-		config.RestartChan <- false
+		config.RestartChan <- 0
 		time.Sleep(1 * time.Second)
 	}
 	currentSite.RemoveHtmlCache()

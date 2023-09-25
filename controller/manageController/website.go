@@ -312,7 +312,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新多站点信息：%d => %s", dbSite.Id, dbSite.Name))
 	// 重启
-	config.RestartChan <- false
+	config.RestartChan <- 0
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -357,7 +357,7 @@ func DeleteWebsite(ctx iris.Context) {
 	provider.GetDefaultDB().Delete(dbSite)
 	provider.RemoveWebsite(dbSite.Id)
 	// 重载模板
-	config.RestartChan <- false
+	config.RestartChan <- 0
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "删除成功",

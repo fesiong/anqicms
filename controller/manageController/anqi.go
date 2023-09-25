@@ -310,7 +310,7 @@ func AuthAiGenerateStreamData(ctx iris.Context) {
 
 func RestartAnqicms(ctx iris.Context) {
 	// first need to stop iris
-	config.RestartChan <- true
+	config.RestartChan <- 1
 
 	time.Sleep(3 * time.Second)
 

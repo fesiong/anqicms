@@ -69,12 +69,16 @@ func (bootstrap *Bootstrap) Serve() {
 	for {
 		select {
 		case restart := <-config.RestartChan:
-			if restart {
+			if restart == 1 {
 				fmt.Println("监听到路由更改")
 				_ = bootstrap.Shutdown()
 				log.Println("进程结束，开始重启")
 				// 重启
 				_ = provider.Restart()
+			} else if restart == 2 {
+				fmt.Println("监听到退出信号")
+				_ = bootstrap.Shutdown()
+				os.Exit(0)
 			} else {
 				// reload template
 				fmt.Println("重载模板")

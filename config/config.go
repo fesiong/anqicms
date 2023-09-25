@@ -93,8 +93,8 @@ var AnqiUser AnqiUserConfig
 
 var GoogleValid bool // can visit google or not
 
-// RestartChan true to restart app, false to reload template
-var RestartChan = make(chan bool, 1)
+// RestartChan 1 to restart app, 0 to reload template, 2 to exit app
+var RestartChan = make(chan int)
 var Languages = map[string]map[string]string{}
 
 func init() {
