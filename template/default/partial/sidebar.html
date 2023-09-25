@@ -32,7 +32,7 @@
         <h2>推荐产品</h2>
         <div class="side-item">
             <ul class="side-pro-ul">
-                {% archiveList products with type="list" moduleId="2" limit="4" %}
+                {% archiveList products with type="list" moduleId="2" categoryId=0 limit="4" %}
                 {% for item in products %}
                 <li>
                     <div class="list-item">
@@ -53,7 +53,7 @@
         <h2>热门文章</h2>
         <div class="side-item">
             <ul class="side-blog-ul">
-                {% archiveList articles with type="list" moduleId="1" limit="8" %}
+                {% archiveList articles with type="list" moduleId="1" categoryId=0 limit="8" %}
                 {% for item in articles %}
                 <li><a href="{{item.Link}}">{{item.Title}}</a></li>
                 {% endfor %}

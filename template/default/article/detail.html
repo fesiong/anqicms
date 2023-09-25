@@ -57,7 +57,7 @@
         <div class="container">
             <h2>相关产品</h2>
             <ul class="rel-pro-ul">
-                {% archiveList products with type="list" limit="4" %}
+                {% archiveList products with type="list" moduleId="2" categoryId=0 limit="4" %}
                 {% for item in products %}
                 <li>
                     <div class="list-item">
