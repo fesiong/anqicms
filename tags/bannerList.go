@@ -18,6 +18,18 @@ func (node *tagBannerListNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
+	args, err := parseArgs(node.args, ctx)
+	if err != nil {
+		return err
+	}
+
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
 
 	bannerList := currentSite.Banner
 	for i := range bannerList {
