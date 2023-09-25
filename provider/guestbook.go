@@ -79,6 +79,13 @@ func (w *Website) GetGuestbookFields() []*config.CustomField {
 			IsSystem:  false,
 		},
 		{
+			Name:      w.Lang("QQ"),
+			FieldName: "qq",
+			Type:      "text",
+			Required:  false,
+			IsSystem:  false,
+		},
+		{
 			Name:      w.Lang("WhatsApp"),
 			FieldName: "whatsapp",
 			Type:      "text",
