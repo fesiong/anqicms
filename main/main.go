@@ -68,7 +68,6 @@ func checkProcesses() {
 			}
 		}
 	}
-	log.Println(string(output))
 }
 
 func killProcess(pid int) error {

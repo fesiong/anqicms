@@ -879,6 +879,10 @@ func Restart() error {
 	if err != nil {
 		return err
 	}
+	// if the file is old
+	if strings.HasSuffix(self, ".old") {
+		self = strings.TrimRight(self, ".old")
+	}
 	args := os.Args
 	env := os.Environ()
 	// Windows does not support exec syscall.
