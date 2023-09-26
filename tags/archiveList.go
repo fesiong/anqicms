@@ -125,11 +125,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	extraParams := map[string]string{}
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
 	if ok {
-		for k, v := range urlParams {
-			if k == "page" {
-				continue
-			}
-			if listType == "page" {
+		if listType == "page" {
+			for k, v := range urlParams {
+				if k == "page" {
+					continue
+				}
 				if v != "" {
 					extraParams[k] = v
 				}
