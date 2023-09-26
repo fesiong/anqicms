@@ -9,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"math"
-	"net/url"
 	"strconv"
 	"strings"
 )
@@ -38,9 +37,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
 
+	// 如果手工指定了moduleId，并且当前module 不是指定的，则不自动获取分类
 	moduleId := uint(0)
+	defaultModuleId := uint(0)
 	var categoryIds []uint
+	var defaultCategoryId uint
 	var authorId = uint(0)
+	var categoryDetail *model.Category
 
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
@@ -51,12 +54,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["userId"] != nil {
 		authorId = uint(args["userId"].Integer())
 	}
-
-	categoryDetail, _ := ctx.Public["category"].(*model.Category)
-	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
-	if ok {
-		categoryDetail = currentSite.GetCategoryFromCache(archiveDetail.CategoryId)
+	module, _ := ctx.Public["module"].(*model.Module)
+	if module != nil {
+		defaultModuleId = module.Id
 	}
+	// 如果指定了分类ID
 	if args["categoryId"] != nil {
 		tmpIds := strings.Split(args["categoryId"].String(), ",")
 		for _, v := range tmpIds {
@@ -69,18 +71,26 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 			}
 		}
-	} else if categoryDetail != nil {
-		if len(categoryIds) == 0 {
-			categoryIds = append(categoryIds, categoryDetail.Id)
+	} else {
+		// 否则尝试自动获取分类
+		categoryDetail, _ = ctx.Public["category"].(*model.Category)
+		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
+		if ok {
+			categoryDetail = currentSite.GetCategoryFromCache(archiveDetail.CategoryId)
 		}
-		moduleId = categoryDetail.ModuleId
+		if categoryDetail != nil {
+			defaultCategoryId = categoryDetail.Id
+			defaultModuleId = categoryDetail.ModuleId
+		}
 	}
-
-	module := currentSite.GetModuleFromCache(moduleId)
-	if module == nil {
-		module, _ = ctx.Public["module"].(*model.Module)
-		if module != nil {
-			moduleId = module.Id
+	if moduleId > 0 && defaultModuleId > 0 && moduleId != defaultModuleId {
+		// 指定的模型与自动获取的模型不一致，则不自动获取分类
+	} else {
+		if len(categoryIds) == 0 && defaultCategoryId > 0 {
+			categoryIds = append(categoryIds, defaultCategoryId)
+		}
+		if defaultModuleId > 0 {
+			moduleId = defaultModuleId
 		}
 	}
 
@@ -112,7 +122,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	// 支持更多的参数搜索，
-	extraParams := make(url.Values)
+	extraParams := map[string]string{}
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
 	if ok {
 		for k, v := range urlParams {
@@ -121,7 +131,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			if listType == "page" {
 				if v != "" {
-					extraParams.Set(k, v)
+					extraParams[k] = v
 				}
 			}
 		}
@@ -171,7 +181,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		//获取id
 		archiveId := uint(0)
 		var keywords string
-		archiveDetail, ok = ctx.Public["archive"].(*model.Archive)
+		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 		var categoryId = uint(0)
 		if len(categoryIds) > 0 {
 			categoryId = categoryIds[0]
@@ -278,19 +288,21 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if flag != "" {
 				tx = tx.Where("FIND_IN_SET(?,`flag`)", flag)
 			}
-			if module != nil && len(module.Fields) > 0 {
-				var fields [][2]string
-				for _, v := range module.Fields {
-					// 如果有筛选条件，从这里开始筛选
-					if extraParams.Has(v.FieldName) {
-						param := extraParams.Get(v.FieldName)
-						fields = append(fields, [2]string{"`" + module.TableName + "`.`" + v.FieldName + "` = ?", param})
+			if len(extraParams) > 0 {
+				module = currentSite.GetModuleFromCache(moduleId)
+				if module != nil && len(module.Fields) > 0 {
+					var fields [][2]string
+					for _, v := range module.Fields {
+						// 如果有筛选条件，从这里开始筛选
+						if param, ok := extraParams[v.FieldName]; ok {
+							fields = append(fields, [2]string{"`" + module.TableName + "`.`" + v.FieldName + "` = ?", param})
+						}
 					}
-				}
-				if len(fields) > 0 {
-					tx = tx.InnerJoins(fmt.Sprintf("INNER JOIN `%s` on `%s`.id = `archives`.id", module.TableName, module.TableName))
-					for _, field := range fields {
-						tx = tx.Where(field[0], field[1])
+					if len(fields) > 0 {
+						tx = tx.InnerJoins(fmt.Sprintf("INNER JOIN `%s` on `%s`.id = `archives`.id", module.TableName, module.TableName))
+						for _, field := range fields {
+							tx = tx.Where(field[0], field[1])
+						}
 					}
 				}
 			}
@@ -366,12 +378,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	ctx.Private[node.name] = archives
 
 	//execute
-	node.wrapper.Execute(ctx, writer)
+	_ = node.wrapper.Execute(ctx, writer)
 
 	return nil
 }
 
-func TagArchiveListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
+func TagArchiveListParser(doc *pongo2.Parser, _ *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
 	tagNode := &tagArchiveListNode{
 		args: make(map[string]pongo2.IEvaluator),
 	}
@@ -383,7 +395,7 @@ func TagArchiveListParser(doc *pongo2.Parser, start *pongo2.Token, arguments *po
 
 	tagNode.name = nameToken.Val
 
-	// After having parsed the name we're gonna parse the with options
+	// After having parsed the name we're going to parse the with options
 	args, err := parseWith(arguments)
 	if err != nil {
 		return nil, err
