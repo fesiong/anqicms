@@ -1287,6 +1287,7 @@ textarea:focus {
 		width: 2rem;
 		background: #f6f6f6;
 		box-shadow: 0 0.05rem 0.05rem rgba(0, 0, 0, .1);
+		z-index: 99;
 	}
 
 	.nav-menu-child-child>li {

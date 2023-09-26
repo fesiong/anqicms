@@ -108,7 +108,7 @@
                 <div class="foot">
                     <h2>热门产品</h2>
                     <ul class="footer-ul">
-                        {% archiveList products with type="list" moduleId="2" limit="5" %}
+                        {% archiveList products with type="list" moduleId="2" categoryId=0 limit="5" %}
                         {% for item in products %}
                         <li><a href="{{item.Link}}">{{item.Title}}</a></li>
                         {% endfor %}
