@@ -46,6 +46,11 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		fieldName = args["name"].String()
 		fieldName = library.Case2Camel(fieldName)
 	}
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 
 	pageDetail, _ := ctx.Public["page"].(*model.Category)
 	if id > 0 {
@@ -70,6 +75,10 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	content := fmt.Sprintf("%v", f)
 	if content == "" && fieldName == "SeoTitle" {
 		content = pageDetail.Title
+	}
+	// convert markdown to html
+	if fieldName == "Content" && render {
+		content = library.MarkdownToHTML(content)
 	}
 	if node.name == "" {
 		writer.WriteString(content)

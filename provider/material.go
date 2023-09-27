@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"net/url"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 )
@@ -69,58 +70,49 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
-	//goquery
-	htmlR := strings.NewReader(req.Content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
+	baseHost := ""
+	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
-		baseHost := ""
-		urls, err := url.Parse(w.System.BaseUrl)
-		if err == nil {
-			baseHost = urls.Host
-		}
-
-		//下载远程图片
-		if w.Content.RemoteDownload == 1 {
-			doc.Find("img").Each(func(i int, s *goquery.Selection) {
-				src, exists := s.Attr("src")
-				if exists {
-					alt := s.AttrOr("alt", "")
-					imgUrl, err := url.Parse(src)
-					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, w.PluginStorage.StorageUrl) {
-							//外链
-							attachment, err := w.DownloadRemoteImage(src, alt)
-							if err == nil {
-								s.SetAttr("src", attachment.Logo)
-							}
-						}
-					}
+		baseHost = urls.Host
+	}
+	// 过滤外链
+	if w.Content.FilterOutlink == 1 {
+		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			aUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[2]
 				}
-			})
-		}
-
-		//过滤外链
-		doc.Find("a").Each(func(i int, s *goquery.Selection) {
-			href, exists := s.Attr("href")
-			if exists {
-				aUrl, err := url.Parse(href)
-				if err == nil {
-					if aUrl.Host != "" && aUrl.Host != baseHost {
-						//外链
-						if w.Content.FilterOutlink == 1 {
-							//过滤外链
-							s.Contents().Unwrap()
-						} else {
-							//增加nofollow
-							s.SetAttr("rel", "nofollow")
-						}
+			}
+			return s
+		})
+	}
+	if w.Content.RemoteDownload == 1 {
+		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					if err2 == nil {
+						// 下载完成
+						s = strings.Replace(s, match[1], attachment.Logo, 1)
 					}
 				}
 			}
+			return s
 		})
-
-		//返回最终可用的内容
-		req.Content, _ = doc.Find("body").Html()
 	}
 	material.Content = req.Content
 

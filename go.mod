@@ -16,6 +16,7 @@ require (
 	github.com/go-pay/gopay v1.5.89
 	github.com/golang-jwt/jwt/v4 v4.5.0
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
+	github.com/gomarkdown/markdown v0.0.0-20230922105210-14b16010c2ee
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
 	github.com/huichen/wukong v0.0.0-20210824074240-ecbd39fa0b56
 	github.com/jinzhu/now v1.1.5
@@ -81,7 +82,6 @@ require (
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.3.0 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/gomarkdown/markdown v0.0.0-20230922105210-14b16010c2ee // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/gorilla/css v1.0.0 // indirect

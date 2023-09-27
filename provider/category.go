@@ -3,7 +3,6 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -11,6 +10,8 @@ import (
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -120,70 +121,76 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
-	//goquery
-	htmlR := strings.NewReader(req.Content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
+	baseHost := ""
+	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
-		baseHost := ""
-		urls, err := url.Parse(w.System.BaseUrl)
-		if err == nil {
-			baseHost = urls.Host
+		baseHost = urls.Host
+	}
+	autoAddImage := false
+	//提取描述
+	if category.Description == "" {
+		tmpContent := req.Content
+		if w.Content.Editor == "markdown" {
+			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-
-		//提取描述
-		if category.Description == "" {
-			category.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
-		}
-		//下载远程图片
-		if w.Content.RemoteDownload == 1 {
-			doc.Find("img").Each(func(i int, s *goquery.Selection) {
-				src, exists := s.Attr("src")
-				if exists {
-					alt := s.AttrOr("alt", "")
-					imgUrl, err := url.Parse(src)
-					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, w.PluginStorage.StorageUrl) {
-							//外链
-							attachment, err := w.DownloadRemoteImage(src, alt)
-							if err == nil {
-								s.SetAttr("src", attachment.Logo)
-							}
-						}
-					}
-				}
-			})
-		}
-		//提取缩略图
-		if len(category.Logo) == 0 {
-			imgSections := doc.Find("img")
-			if imgSections.Length() > 0 {
-				//获取第一条
-				category.Logo = imgSections.Eq(0).AttrOr("src", "")
+		category.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
+	}
+	//提取缩略图
+	if len(category.Logo) == 0 {
+		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		match := re.FindStringSubmatch(req.Content)
+		if len(match) > 1 {
+			//提取缩略图
+			category.Logo = match[1]
+			autoAddImage = true
+		} else {
+			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+			match = re.FindStringSubmatch(req.Content)
+			if len(match) > 2 {
+				category.Logo = match[2]
+				autoAddImage = true
 			}
 		}
-
-		//过滤外链
-		doc.Find("a").Each(func(i int, s *goquery.Selection) {
-			href, exists := s.Attr("href")
-			if exists {
-				aUrl, err := url.Parse(href)
-				if err == nil {
-					if aUrl.Host != "" && aUrl.Host != baseHost {
-						//外链
-						if w.Content.FilterOutlink == 1 {
-							//过滤外链
-							s.Contents().Unwrap()
-						} else {
-							//增加nofollow
-							s.SetAttr("rel", "nofollow")
-						}
-					}
+	}
+	// 过滤外链
+	if w.Content.FilterOutlink == 1 {
+		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			aUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[2]
 				}
 			}
+			return s
 		})
-
-		//返回最终可用的内容
-		req.Content, _ = doc.Find("body").Html()
+		// 匹配Markdown [link](url)
+		// 由于不支持零宽断言，因此匹配所有
+		re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			// 过滤掉 ! 开头的
+			if strings.HasPrefix(s, "!") {
+				return s
+			}
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			aUrl, err2 := url.Parse(match[2])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[1]
+				}
+			}
+			return s
+		})
 	}
 	category.Content = req.Content
 
@@ -191,6 +198,86 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if err != nil {
 		return
 	}
+	//检查有多少个material
+	var materialIds []uint
+	re, _ := regexp.Compile(`(?i)<div.*?data-material="(\d+)".*?>`)
+	matches := re.FindAllStringSubmatch(req.Content, -1)
+	if len(matches) > 0 {
+		for _, match := range matches {
+			//记录material
+			materialId, _ := strconv.Atoi(match[1])
+			if materialId > 0 {
+				materialIds = append(materialIds, uint(materialId))
+			}
+		}
+	}
+	go w.LogMaterialData(materialIds, "category", category.Id)
+	// 自动提取远程图片改成保存后处理
+	if w.Content.RemoteDownload == 1 {
+		hasChangeImg := false
+		re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		category.Content = re.ReplaceAllStringFunc(category.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					if err2 == nil {
+						// 下载完成
+						hasChangeImg = true
+						s = strings.Replace(s, match[1], attachment.Logo, 1)
+					}
+				}
+			}
+			return s
+		})
+		// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+		re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+		category.Content = re.ReplaceAllStringFunc(category.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[2])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					if err2 == nil {
+						// 下载完成
+						hasChangeImg = true
+						s = strings.Replace(s, match[2], attachment.Logo, 1)
+					}
+				}
+			}
+			return s
+		})
+		if hasChangeImg {
+			w.DB.Model(category).UpdateColumn("content", category.Content)
+			// 更新data
+			if autoAddImage {
+				//提取缩略图
+				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+				match := re.FindStringSubmatch(req.Content)
+				if len(match) > 1 {
+					category.Logo = match[1]
+				} else {
+					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+					match = re.FindStringSubmatch(req.Content)
+					if len(match) > 2 {
+						category.Logo = match[2]
+					}
+				}
+				w.DB.Model(category).UpdateColumn("logo", category.Logo)
+			}
+		}
+	}
+
 	if newPost && category.Status == config.ContentStatusOK {
 		link := w.GetUrl("category", category, 0)
 		go w.PushArchive(link)

@@ -2,7 +2,6 @@ package provider
 
 import (
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"io"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -137,25 +136,40 @@ func (w *Website) CleanAnchor(anchorId uint) {
 		if err != nil {
 			continue
 		}
-		htmlR := strings.NewReader(archiveData.Content)
-		doc, err := goquery.NewDocumentFromReader(htmlR)
-		if err == nil {
-			clean := false
-			doc.Find("a,strong").Each(func(i int, s *goquery.Selection) {
-				existsId, exists := s.Attr("data-anchor")
-
-				if exists && existsId == anchorIdStr {
-					//清理它
-					s.Contents().Unwrap()
-					clean = true
-				}
-			})
-			//清理完毕，更新
-			if clean {
-				//更新内容
-				archiveData.Content, _ = doc.Find("body").Html()
-				w.DB.Save(archiveData)
+		// 清理 anchor，由于不支持匹配模式 \1 ，因此，需要分开执行
+		clean := false
+		// a
+		re, _ := regexp.Compile(`(?i)<a.*?data-anchor="(\d+)".*?>(.*?)</a>`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
 			}
+			if match[1] == anchorIdStr {
+				//清理它
+				clean = true
+				return match[2]
+			}
+			return s
+		})
+		// strong
+		re, _ = regexp.Compile(`(?i)<strong.*?data-anchor="(\d+)".*?>(.*?)</strong>`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			if match[1] == anchorIdStr {
+				//清理它
+				clean = true
+				return match[2]
+			}
+			return s
+		})
+		//清理完毕，更新
+		if clean {
+			//更新内容
+			w.DB.Save(archiveData)
 		}
 		//删除当前item
 		w.DB.Unscoped().Delete(data)
@@ -189,25 +203,28 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 		if err != nil {
 			continue
 		}
-		htmlR := strings.NewReader(archiveData.Content)
-		doc, err := goquery.NewDocumentFromReader(htmlR)
-		if err == nil {
-			update := false
-			doc.Find("a").Each(func(i int, s *goquery.Selection) {
-				existsId, exists := s.Attr("data-anchor")
-
-				if exists && existsId == anchorIdStr {
-					//换成新的链接
-					s.SetAttr("href", anchor.Link)
-					update = true
-				}
-			})
-			//更新完毕，更新
-			if update {
-				//更新内容
-				archiveData.Content, _ = doc.Find("body").Html()
-				w.DB.Save(archiveData)
+		update := false
+		re, _ := regexp.Compile(`(?i)<a.*?data-anchor="(\d+)".*?>(.*?)</a>`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
 			}
+			if match[1] == anchorIdStr {
+				// 更换链接
+				re2, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+				match = re2.FindStringSubmatch(s)
+				if len(match) > 2 {
+					update = true
+					s = strings.Replace(s, match[1], anchor.Link, 1)
+				}
+			}
+			return s
+		})
+		//更新完毕，更新
+		if update {
+			//更新内容
+			w.DB.Save(archiveData)
 		}
 	}
 }

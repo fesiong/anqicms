@@ -36,6 +36,11 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 
 	fieldName := ""
 	if args["name"] != nil {
@@ -68,6 +73,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		content := fmt.Sprintf("%v", f)
 		if content == "" && fieldName == "SeoTitle" {
 			content = categoryDetail.Title
+		}
+		// convert markdown to html
+		if fieldName == "Content" && render {
+			content = library.MarkdownToHTML(content)
 		}
 		// output
 		if node.name == "" {

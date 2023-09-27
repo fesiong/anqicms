@@ -1,6 +1,10 @@
 package library
 
 import (
+	"bytes"
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/html"
+	"github.com/gomarkdown/markdown/parser"
 	"github.com/kataras/iris/v12"
 	"net"
 	"reflect"
@@ -177,4 +181,34 @@ func ParseDescription(content string) (description string) {
 	}
 
 	return
+}
+
+func MarkdownToHTML(mdStr string) string {
+	md := []byte(mdStr)
+	// create markdown parser with extensions
+	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	p := parser.NewWithExtensions(extensions)
+	doc := p.Parse(md)
+
+	// create HTML renderer with extensions
+	htmlFlags := html.CommonFlags | html.HrefTargetBlank
+	opts := html.RendererOptions{Flags: htmlFlags}
+	renderer := html.NewRenderer(opts)
+
+	md = markdown.Render(doc, renderer)
+	// 不转换 mermaid 的 code
+	re, _ := regexp.Compile(`(?is)<pre><code class="language-mermaid">(.*?)</code></pre>`)
+	md = re.ReplaceAllFunc(md, func(bs []byte) []byte {
+		match := re.FindSubmatch(bs)
+		if len(match) < 2 {
+			return bs
+		}
+		buff := bytes.NewBuffer(nil)
+		buff.WriteString("<pre class=\"mermaid\">")
+		buff.Write(match[1])
+		buff.WriteString("</pre>")
+		return buff.Bytes()
+	})
+
+	return string(md)
 }

@@ -55,6 +55,11 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if args["lazy"] != nil {
 		lazy = args["lazy"].String()
 	}
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
@@ -125,6 +130,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				archiveData, err := currentSite.GetArchiveDataById(archiveDetail.Id)
 				if err == nil {
 					content = archiveData.Content
+					// convert markdown to html
+					if render {
+						content = library.MarkdownToHTML(content)
+					}
 					// lazyload
 					if lazy != "" {
 						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)

@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
 	"math"
 	"net/url"
 	"regexp"
@@ -23,6 +24,11 @@ func ApiArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
 	var archive *model.Archive
 	var err error
 	archive = currentSite.GetArchiveByIdFromCache(id)
@@ -86,7 +92,17 @@ func ApiArchiveDetail(ctx iris.Context) {
 		}
 		archive.Tags = tagNames
 	}
+	if len(archive.Password) > 0 {
+		// password is not visible for user
+		archive.Password = ""
+		archive.HasPassword = true
+		archive.ArchiveData = nil
+	}
 	if archive.ArchiveData != nil {
+		// convert markdown to html
+		if render {
+			archive.ArchiveData.Content = library.MarkdownToHTML(archive.ArchiveData.Content)
+		}
 		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 		archive.ArchiveData.Content = re.ReplaceAllStringFunc(archive.ArchiveData.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -99,12 +115,6 @@ func ApiArchiveDetail(ctx iris.Context) {
 			}
 			return s
 		})
-	}
-	if len(archive.Password) > 0 {
-		// password is not visible for user
-		archive.Password = ""
-		archive.HasPassword = true
-		archive.ArchiveData = nil
 	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -522,6 +532,11 @@ func ApiCategoryDetail(ctx iris.Context) {
 	if catname != "" {
 		filename = catname
 	}
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
 	category, err := currentSite.GetCategoryById(id)
 	if err != nil {
 		if filename != "" {
@@ -536,7 +551,10 @@ func ApiCategoryDetail(ctx iris.Context) {
 		return
 	}
 	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
-
+	// convert markdown to html
+	if render {
+		category.Content = library.MarkdownToHTML(category.Content)
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -780,7 +798,11 @@ func ApiPageDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
 	category, err := currentSite.GetCategoryById(id)
 	if err != nil {
 		if filename != "" {
@@ -795,7 +817,10 @@ func ApiPageDetail(ctx iris.Context) {
 		return
 	}
 	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
-
+	// convert markdown to html
+	if render {
+		category.Content = library.MarkdownToHTML(category.Content)
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",

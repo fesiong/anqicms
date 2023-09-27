@@ -41,6 +41,7 @@ type ContentConfig struct {
 	ThumbHeight    int    `json:"thumb_height"`
 	DefaultThumb   string `json:"default_thumb"`
 	MultiCategory  int    `json:"multi_category"` // 是否启用多分类支持
+	Editor         string `json:"editor"`         // 使用的editor，默认为空，支持 空值|default|markdown
 }
 
 type IndexConfig struct {

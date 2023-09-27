@@ -164,6 +164,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.ThumbWidth = req.ThumbWidth
 	currentSite.Content.ThumbHeight = req.ThumbHeight
 	currentSite.Content.DefaultThumb = req.DefaultThumb
+	currentSite.Content.Editor = req.Editor
 
 	err := currentSite.SaveSettingValue(provider.ContentSettingKey, currentSite.Content)
 	if err != nil {

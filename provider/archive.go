@@ -3,7 +3,6 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/now"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -11,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -380,62 +380,71 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		baseHost = urls.Host
 	}
 	autoAddImage := false
-	//goquery
-	htmlR := strings.NewReader(req.Content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
-	if err == nil {
-		//提取描述
-		if req.Description == "" {
-			archive.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
+	//提取描述
+	if req.Description == "" {
+		tmpContent := req.Content
+		if w.Content.Editor == "markdown" {
+			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-		//提取缩略图
-		if len(archive.Images) == 0 {
-			imgSections := doc.Find("img")
-			if imgSections.Length() > 0 {
-				//获取第一条
-				src := imgSections.Eq(0).AttrOr("src", "")
-				if src != "" {
-					archive.Images = append(archive.Images, src)
-					autoAddImage = true
-				}
-			}
-		}
-		//过滤外链
-		doc.Find("a").Each(func(i int, s *goquery.Selection) {
-			href, exists := s.Attr("href")
-			if exists {
-				aUrl, err := url.Parse(href)
-				if err == nil {
-					if aUrl.Host != "" && aUrl.Host != baseHost {
-						//外链
-						if w.Content.FilterOutlink == 1 {
-							//过滤外链
-							s.Contents().Unwrap()
-						} else {
-							//增加nofollow
-							s.SetAttr("rel", "nofollow")
-						}
-					}
-				}
-			}
-		})
-		//检查有多少个material
-		var materialIds []uint
-		doc.Find("div[data-material]").Each(func(i int, s *goquery.Selection) {
-			tmpId, exists := s.Attr("data-material")
-			if exists {
-				//记录material
-				materialId, err := strconv.Atoi(tmpId)
-				if err == nil {
-					materialIds = append(materialIds, uint(materialId))
-				}
-			}
-		})
-		go w.LogMaterialData(materialIds, "archive", archive.Id)
-
-		//返回最终可用的内容
-		req.Content, _ = doc.Find("body").Html()
+		archive.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
 	}
+	//提取缩略图
+	if len(archive.Images) == 0 {
+		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		match := re.FindStringSubmatch(req.Content)
+		if len(match) > 1 {
+			archive.Images = append(archive.Images, match[1])
+			autoAddImage = true
+		} else {
+			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+			match = re.FindStringSubmatch(req.Content)
+			if len(match) > 2 {
+				archive.Images = append(archive.Images, match[2])
+				autoAddImage = true
+			}
+		}
+	}
+	// 过滤外链
+	if w.Content.FilterOutlink == 1 {
+		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			aUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[2]
+				}
+			}
+			return s
+		})
+		// 匹配Markdown [link](url)
+		// 由于不支持零宽断言，因此匹配所有
+		re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			// 过滤掉 ! 开头的
+			if strings.HasPrefix(s, "!") {
+				return s
+			}
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			aUrl, err2 := url.Parse(match[2])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[1]
+				}
+			}
+			return s
+		})
+	}
+
 	// 限制数量
 	descRunes := []rune(archive.Description)
 	if len(descRunes) > 1000 {
@@ -479,50 +488,86 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	// 删除额外的
 	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archive.Id, req.CategoryIds).Delete(&model.ArchiveCategory{})
 	// end
-	// 自动提取远程图片改成保存后处理
-	go func() {
-		//下载远程图片
-		if w.Content.RemoteDownload == 1 {
-			hasChangeImg := false
-			doc.Find("img").Each(func(i int, s *goquery.Selection) {
-				hasChangeImg = true
-				src, exists := s.Attr("src")
-				if exists && src != "" {
-					alt := s.AttrOr("alt", "")
-					imgUrl, err := url.Parse(src)
-					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, w.PluginStorage.StorageUrl) {
-							//外链
-							attachment, err := w.DownloadRemoteImage(src, alt)
-							if err == nil {
-								s.SetAttr("src", attachment.Logo)
-							}
-						}
-					}
-				} else {
-					s.Remove()
-				}
-			})
-			if hasChangeImg {
-				archiveData.Content, _ = doc.Find("body").Html()
-				w.DB.Model(&archiveData).UpdateColumn("content", archiveData.Content)
-				// 更新data
-				if autoAddImage {
-					//提取缩略图
-					archive.Images = archive.Images[:0]
-					imgSections := doc.Find("img")
-					if imgSections.Length() > 0 {
-						//获取第一条
-						src := imgSections.Eq(0).AttrOr("src", "")
-						if src != "" {
-							archive.Images = append(archive.Images, src)
-						}
-					}
-					w.DB.Model(archive).UpdateColumn("images", archive.Images)
-				}
+	//检查有多少个material
+	var materialIds []uint
+	re, _ := regexp.Compile(`(?i)<div.*?data-material="(\d+)".*?>`)
+	matches := re.FindAllStringSubmatch(req.Content, -1)
+	if len(matches) > 0 {
+		for _, match := range matches {
+			//记录material
+			materialId, _ := strconv.Atoi(match[1])
+			if materialId > 0 {
+				materialIds = append(materialIds, uint(materialId))
 			}
 		}
-	}()
+	}
+	go w.LogMaterialData(materialIds, "archive", archive.Id)
+	// 自动提取远程图片改成保存后处理
+	if w.Content.RemoteDownload == 1 {
+		hasChangeImg := false
+		re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					if err2 == nil {
+						// 下载完成
+						hasChangeImg = true
+						s = strings.Replace(s, match[1], attachment.Logo, 1)
+					}
+				}
+			}
+			return s
+		})
+		// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+		re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[2])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					if err2 == nil {
+						// 下载完成
+						hasChangeImg = true
+						s = strings.Replace(s, match[2], attachment.Logo, 1)
+					}
+				}
+			}
+			return s
+		})
+		if hasChangeImg {
+			w.DB.Model(&archiveData).UpdateColumn("content", archiveData.Content)
+			// 更新data
+			if autoAddImage {
+				//提取缩略图
+				archive.Images = archive.Images[:0]
+				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+				match := re.FindStringSubmatch(req.Content)
+				if len(match) > 1 {
+					archive.Images = append(archive.Images, match[1])
+				} else {
+					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+					match = re.FindStringSubmatch(req.Content)
+					if len(match) > 2 {
+						archive.Images = append(archive.Images, match[2])
+					}
+				}
+				w.DB.Model(archive).UpdateColumn("images", archive.Images)
+			}
+		}
+	}
 	//extra
 	if len(extraFields) > 0 {
 		//入库
