@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"net/url"
 	"strings"
+	"time"
 )
 
 func Install(ctx iris.Context) {
@@ -377,7 +378,7 @@ func InstallForm(ctx iris.Context) {
 	dbWebsite := model.Website{
 		// 首个站点ID为1
 		Model: model.Model{Id: 1},
-		// 收个站点为安装目录
+		// 首个站点为安装目录
 		RootPath: config.ExecPath,
 		Name:     "安企CMS(AnqiCMS)",
 		Mysql:    config.Server.Mysql,
@@ -396,6 +397,8 @@ func InstallForm(ctx iris.Context) {
 	if req.PreviewData {
 		_ = website.RestoreDesignData(website.System.TemplateName)
 	}
+	// 安装时间
+	_ = website.SaveSettingValue(provider.InstallTimeKey, time.Now().Unix())
 	// 读入配置
 	website.InitSetting()
 	// 初始化数据

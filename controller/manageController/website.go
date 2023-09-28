@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"os"
 	"strings"
+	"time"
 )
 
 func GetWebsiteList(ctx iris.Context) {
@@ -296,6 +297,8 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			if req.PreviewData {
 				_ = current.RestoreDesignData(current.System.TemplateName)
 			}
+			// 安装时间
+			_ = current.SaveSettingValue(provider.InstallTimeKey, time.Now().Unix())
 			//创建管理员
 			err = current.InitAdmin(req.AdminUser, req.AdminPassword, true)
 			if err != nil {

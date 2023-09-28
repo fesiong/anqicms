@@ -3,6 +3,7 @@ package response
 import "kandaoni.com/anqicms/model"
 
 type ModuleCount struct {
+	Id    uint   `json:"id"`
 	Name  string `json:"name"`
 	Total int64  `json:"total"`
 }
@@ -18,6 +19,7 @@ type SplitCount struct {
 }
 type Statistics struct {
 	CacheTime       int64
+	ShowGuide       bool                `json:"show_guide"`
 	ModuleCounts    []ModuleCount       `json:"archive_counts"`
 	ArchiveCount    ArchiveCount        `json:"archive_count"`
 	CategoryCount   int64               `json:"category_count"`

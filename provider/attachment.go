@@ -31,7 +31,7 @@ import (
 func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId uint) (*model.Attachment, error) {
 	db := w.DB
 
-	fileExt := filepath.Ext(info.Filename)
+	fileExt := strings.ToLower(filepath.Ext(info.Filename))
 	if fileExt == ".php" {
 		return nil, errors.New("不允许上传php文件")
 	}
@@ -228,7 +228,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 	resp, body, errs := gorequest.New().Set("referer", src).Timeout(15 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
-		contentType := resp.Header.Get("content-type")
+		contentType := strings.ToLower(resp.Header.Get("content-type"))
 		if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/png" || contentType == "image/gif" || contentType == "image/webp" {
 			if fileName == "" {
 				fileName = "image"

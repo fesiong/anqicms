@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"github.com/jinzhu/now"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -141,6 +142,7 @@ func (w *Website) GetStatisticsSummary() *response.Statistics {
 		modules := w.GetCacheModules()
 		for _, v := range modules {
 			counter := response.ModuleCount{
+				Id:   v.Id,
 				Name: v.Title,
 			}
 			w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
@@ -172,6 +174,12 @@ func (w *Website) GetStatisticsSummary() *response.Statistics {
 		result.IncludeCount = lastInclude
 
 		result.CacheTime = time.Now().Unix()
+
+		// 安装时间
+		var installTime int64
+		_ = json.Unmarshal([]byte(w.GetSettingValue(InstallTimeKey)), &installTime)
+		// show guide 安装的第一天，还没设置站点名称，还没创建分类，没有发布文章，则show guide
+		result.ShowGuide = (installTime+86400) > time.Now().Unix() || result.CategoryCount == 0 || result.ArchiveCount.Total == 0 || len(w.System.SiteName) == 0
 
 		w.CachedStatistics = result
 	}
