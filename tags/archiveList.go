@@ -93,6 +93,17 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			moduleId = defaultModuleId
 		}
 	}
+	var combineMode = "to"
+	var combineArchive *model.Archive
+	if args["combineId"] != nil {
+		combineId := uint(args["combineId"].Integer())
+		combineArchive, _ = currentSite.GetArchiveById(combineId)
+	}
+	if args["combineFromId"] != nil {
+		combineMode = "from"
+		combineId := uint(args["combineFromId"].Integer())
+		combineArchive, _ = currentSite.GetArchiveById(combineId)
+	}
 
 	order := "archives.`sort` desc, archives.`id` desc"
 	limit := 10
@@ -356,6 +367,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if len(archives[i].Password) > 0 {
 			archives[i].HasPassword = true
 		}
+		if combineArchive != nil {
+			if combineMode == "from" {
+				archives[i].Link = currentSite.GetUrl("archive", combineArchive, 0, archives[i])
+			} else {
+				archives[i].Link = currentSite.GetUrl("archive", archives[i], 0, combineArchive)
+			}
+		}
 	}
 
 	if listType == "page" {
@@ -376,6 +394,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 	}
 	ctx.Private[node.name] = archives
+	ctx.Private["combine"] = combineArchive
 
 	//execute
 	_ = node.wrapper.Execute(ctx, writer)

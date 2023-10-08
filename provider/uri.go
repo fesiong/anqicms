@@ -12,7 +12,7 @@ import (
 // GetUrl 生成url
 // 支持的规则：getUrl("archive"|"category"|"page"|"nav"|"archiveIndex", item, int)
 // 如果page == -1，则不对page进行转换。
-func (w *Website) GetUrl(match string, data interface{}, page int) string {
+func (w *Website) GetUrl(match string, data interface{}, page int, args ...interface{}) string {
 	rewritePattern := w.ParsePatten(false)
 	uri := ""
 	switch match {
@@ -39,10 +39,20 @@ func (w *Website) GetUrl(match string, data interface{}, page int) string {
 			for _, v := range rewritePattern.ArchiveTags {
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+					if len(args) > 0 {
+						if combine, ok := args[0].(*model.Archive); ok && combine != nil {
+							uri = strings.ReplaceAll(uri, "(/c-{combine})", fmt.Sprintf("/c-%d", combine.Id))
+						}
+					}
 				} else if v == "catid" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.CategoryId))
 				} else if v == "filename" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+					if len(args) > 0 {
+						if combine, ok := args[0].(*model.Archive); ok && combine != nil {
+							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+combine.UrlToken)
+						}
+					}
 				} else if v == "catname" {
 					catName := ""
 					if item.Category != nil {

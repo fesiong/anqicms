@@ -10,12 +10,6 @@
     <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/font-awesome.min.css" />
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/style.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown.min.css" integrity="sha512-Ya9H+OPj8NgcQk34nCrbehaA0atbzGdZCI2uCbqVRELgnlrh8vQ2INMnkadVMSniC54HChLIh5htabVuKJww8g==" crossorigin="anonymous" referrerpolicy="no-referrer" />
-    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
-        mermaid.initialize({ startOnLoad: true });
-    </script>
     {%- tdk canonical with name="CanonicalUrl" %}
     {%- if canonical %}
     <link rel="canonical" href="{{canonical}}" />
@@ -136,6 +130,10 @@
         </div>
         <div class="footer-bottom">
             Copyright &copy; {% now "2006" %} {% system with name="SiteName" %}.版权所有 All Rights Reserved, Created By <a href="https://www.anqicms.com/" target="_blank">安企内容管理系统(AnqiCMS)</a>
+            {% system siteIcp with name="SiteIcp" %}
+            {% if siteIcp %}
+            <a href="https://beian.miit.gov.cn/" rel="nofollow" target="_blank">{{siteIcp}}</a>
+            {% endif %}
         </div>
     </div>
     <!-- footer -->

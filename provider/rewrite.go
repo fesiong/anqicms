@@ -99,6 +99,7 @@ var replaceParams = map[string]string{
 	"{minute}":       "([\\d]+)",
 	"{second}":       "([\\d]+)",
 	"{page}":         "([\\d]+)",
+	"{combine}":      "([^\\/]+?)",
 }
 
 //var parsedPatten *RewritePatten
@@ -181,6 +182,13 @@ func (w *Website) ParsePatten(focus bool) *RewritePatten {
 		return w.parsedPatten
 	}
 
+	// archive 支持combine
+	if strings.Contains(w.parsedPatten.Archive, "{id}") {
+		w.parsedPatten.Archive = strings.Replace(w.parsedPatten.Archive, "{id}", "{id}(/c-{combine})", 1)
+	} else if strings.Contains(w.parsedPatten.Archive, "{filename}") {
+		w.parsedPatten.Archive = strings.Replace(w.parsedPatten.Archive, "{filename}", "{filename}(/c-{combine})", 1)
+	}
+
 	w.parsedPatten.ArchiveTags = map[int]string{}
 	w.parsedPatten.CategoryTags = map[int]string{}
 	w.parsedPatten.PageTags = map[int]string{}
@@ -206,7 +214,7 @@ func (w *Website) ParsePatten(focus bool) *RewritePatten {
 				str += string(v)
 			} else if v == '}' {
 				str = strings.TrimLeft(str, "{")
-				if str == "page" {
+				if str == "page" || str == "combine" {
 					//page+1
 					n++
 				}

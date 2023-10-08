@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -78,6 +79,25 @@ func ArchiveDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	// 支持 combine
+	combineName := ctx.Params().GetString("combine")
+	var combineArchive *model.Archive
+	if combineName != "" {
+		// 需要先验证是否是archive
+		tmpId, err := strconv.Atoi(combineName)
+		if err == nil {
+			combineArchive, err = currentSite.GetArchiveById(uint(tmpId))
+		} else {
+			combineArchive, err = currentSite.GetArchiveByUrlToken(combineName)
+		}
+		if err != nil {
+			// 不存在
+			NotFound(ctx)
+			return
+		}
+		ctx.ViewData("combineId", combineArchive.Id)
+	}
+	ctx.ViewData("combineArchive", combineArchive)
 
 	// check the archive had paid if the archive need to pay.
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -105,7 +125,11 @@ func ArchiveDetail(ctx iris.Context) {
 		webInfo.PageName = "archiveDetail"
 		webInfo.CanonicalUrl = archive.CanonicalUrl
 		if webInfo.CanonicalUrl == "" {
-			webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0)
+			if combineArchive != nil {
+				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0, combineArchive)
+			} else {
+				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0)
+			}
 		}
 		ctx.ViewData("webInfo", webInfo)
 	}
