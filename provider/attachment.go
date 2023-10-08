@@ -100,6 +100,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		filePath = filepath.Dir(attachment.FileLocation) + "/"
 		tmpName = filepath.Base(attachment.FileLocation)
 	}
+	filePath = strings.ReplaceAll(filePath, "\\", "/")
 
 	// 不是图片的时候的处理方法
 	if isImage != 1 {
