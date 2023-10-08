@@ -697,6 +697,34 @@ func (w *Website) DeleteDesignHistoryFile(packageName, filePath, historyHash, fi
 	return nil
 }
 
+func (w *Website) GetDesignFileHistoryInfo(packageName, filePath, historyHash, fileType string) (string, error) {
+	designFileDetail, err := w.GetDesignFileDetail(packageName, filePath, fileType, false)
+	if err != nil {
+		return "", err
+	}
+
+	histories := w.GetDesignFileHistories(packageName, filePath, fileType)
+	var exists = false
+	for i := range histories {
+		if histories[i].Hash == historyHash {
+			exists = true
+		}
+	}
+	if !exists {
+		return "", errors.New("未找到历史记录")
+	}
+
+	pathMd5 := library.Md5(designFileDetail.Path)
+	historyPath := w.CachePath + ".history/" + packageName + "/" + pathMd5 + "/" + historyHash
+
+	buf, err := os.ReadFile(historyPath)
+	if err != nil {
+		return "", err
+	}
+
+	return string(buf), nil
+}
+
 func (w *Website) RestoreDesignFile(packageName, filePath, historyHash, fileType string) error {
 	designFileDetail, err := w.GetDesignFileDetail(packageName, filePath, fileType, false)
 	if err != nil {

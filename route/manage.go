@@ -192,6 +192,7 @@ func manageRoute(app *iris.Application) {
 			design.Post("/data/backup", manageController.BackupDesignData)
 			design.Get("/file/info", manageController.GetDesignFileDetail)
 			design.Get("/file/histories", manageController.GetDesignFileHistories)
+			design.Get("/file/history/info", manageController.GetDesignFileHistoryDetail)
 			design.Post("/file/history/delete", manageController.DeleteDesignFileHistories)
 			design.Post("/file/restore", manageController.RestoreDesignFile)
 			design.Post("/file/save", manageController.SaveDesignFile)

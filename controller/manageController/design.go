@@ -359,6 +359,29 @@ func GetDesignFileHistories(ctx iris.Context) {
 	})
 }
 
+func GetDesignFileHistoryDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	packageName := ctx.URLParam("package")
+	fileName := ctx.URLParam("path")
+	fileType := ctx.URLParam("type")
+	historyHash := ctx.URLParam("hash")
+
+	fileInfo, err := currentSite.GetDesignFileHistoryInfo(packageName, fileName, historyHash, fileType)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": fileInfo,
+	})
+}
+
 func DeleteDesignFileHistories(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.RestoreDesignFileRequest
