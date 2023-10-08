@@ -32,6 +32,7 @@ type Archive struct {
 	// 是否强制保存
 	ForceSave  bool   `json:"force_save"`
 	ToLanguage string `json:"to_language"`
+	QuickSave  bool   `json:"quick_save"`
 
 	KeywordId   uint   `json:"keyword_id"`
 	OriginUrl   string `json:"origin_url"`

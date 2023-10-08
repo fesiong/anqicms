@@ -100,6 +100,7 @@ func ArchiveList(ctx iris.Context) {
 					}
 				}
 			}
+			archives[i].CategoryIds = catIds
 		} else if v.CategoryId > 0 {
 			for _, c := range categories {
 				if c.Id == v.CategoryId {
@@ -107,6 +108,7 @@ func ArchiveList(ctx iris.Context) {
 					break
 				}
 			}
+			archives[i].CategoryIds = []uint{archives[i].CategoryId}
 		}
 		for _, c := range modules {
 			if c.Id == v.ModuleId {

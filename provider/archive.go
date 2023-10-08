@@ -265,7 +265,9 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	if req.CreatedTime > 0 {
 		archive.CreatedTime = req.CreatedTime
 	}
-	archive.Status = config.ContentStatusOK
+	if !req.QuickSave {
+		archive.Status = config.ContentStatusOK
+	}
 	if req.Draft {
 		archive.Status = config.ContentStatusDraft
 	}
@@ -287,6 +289,53 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		if strings.Count(req.Title, " ") > 1 {
 			req.Title = req.Title[:strings.LastIndexAny(req.Title, " ")]
 		}
+	}
+	//提取描述
+	if req.Description == "" {
+		tmpContent := req.Content
+		if w.Content.Editor == "markdown" {
+			tmpContent = library.MarkdownToHTML(tmpContent)
+		}
+		req.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
+	}
+	// 限制数量
+	descRunes := []rune(req.Description)
+	if len(descRunes) > 1000 {
+		req.Description = string(descRunes[:1000])
+	}
+
+	if req.QuickSave {
+		// quick save 只支持6个字段
+		archive.ModuleId = category.ModuleId
+		archive.Title = req.Title
+		archive.Keywords = req.Keywords
+		archive.Description = req.Description
+		archive.CategoryId = req.CategoryId
+		archive.Flag = req.Flag
+		// 保存主表
+		err = w.DB.Save(archive).Error
+		if err != nil {
+			return nil, err
+		}
+		// 保存分类ID
+		for _, catId := range req.CategoryIds {
+			arcCategory := model.ArchiveCategory{
+				CategoryId: catId,
+				ArchiveId:  archive.Id,
+			}
+			w.DB.Model(&model.ArchiveCategory{}).Where("`category_id` = ? and `archive_id` = ?", catId, archive.Id).FirstOrCreate(&arcCategory)
+		}
+		// 删除额外的
+		w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archive.Id, req.CategoryIds).Delete(&model.ArchiveCategory{})
+		// end
+		// tags
+		_ = w.SaveTagData(archive.Id, req.Tags)
+
+		// 清除缓存
+		w.DeleteArchiveCache(archive.Id)
+		w.DeleteArchiveExtraCache(archive.Id)
+
+		err = w.SuccessReleaseArchive(archive, newPost)
 	}
 	archive.ModuleId = category.ModuleId
 	archive.Title = req.Title
@@ -380,14 +429,6 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		baseHost = urls.Host
 	}
 	autoAddImage := false
-	//提取描述
-	if req.Description == "" {
-		tmpContent := req.Content
-		if w.Content.Editor == "markdown" {
-			tmpContent = library.MarkdownToHTML(tmpContent)
-		}
-		archive.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
-	}
 	//提取缩略图
 	if len(archive.Images) == 0 {
 		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
@@ -445,11 +486,6 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		})
 	}
 
-	// 限制数量
-	descRunes := []rune(archive.Description)
-	if len(descRunes) > 1000 {
-		archive.Description = string(descRunes[:1000])
-	}
 	for i, v := range archive.Images {
 		archive.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)
 	}
