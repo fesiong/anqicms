@@ -98,6 +98,8 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				}
 			}
 		}
+		//否则删除combine
+		uri = strings.ReplaceAll(uri, "(/c-{combine})", "")
 	case "archiveIndex":
 		uri = rewritePattern.ArchiveIndex
 		item, ok := data.(*model.Module)

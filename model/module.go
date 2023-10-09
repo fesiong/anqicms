@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"os"
 )
@@ -43,10 +44,10 @@ func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 		column := field.GetFieldColumn()
 		if !m.HasColumn(tx, field.FieldName) {
 			//创建语句
-			tx.Exec("ALTER TABLE ? ADD COLUMN ?", gorm.Expr(m.TableName), gorm.Expr(column))
+			tx.Exec("ALTER TABLE ? ADD COLUMN ?", clause.Table{Name: m.TableName}, gorm.Expr(column))
 		} else if focus {
 			//更新语句
-			tx.Exec("ALTER TABLE ? MODIFY COLUMN ?", gorm.Expr(m.TableName), gorm.Expr(column))
+			tx.Exec("ALTER TABLE ? MODIFY COLUMN ?", clause.Table{Name: m.TableName}, gorm.Expr(column))
 		}
 
 		if field.IsFilter {

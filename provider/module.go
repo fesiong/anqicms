@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 
-	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -133,7 +132,7 @@ func (w *Website) DeleteModuleField(moduleId uint, fieldName string) error {
 	for i, val := range module.Fields {
 		if val.FieldName == fieldName {
 			if module.HasColumn(w.DB, val.FieldName) {
-				w.DB.Exec("ALTER TABLE ? DROP COLUMN ?", gorm.Expr(module.TableName), clause.Column{Name: val.FieldName})
+				w.DB.Exec("ALTER TABLE ? DROP COLUMN ?", clause.Table{Name: module.TableName}, clause.Column{Name: val.FieldName})
 			}
 
 			module.Fields = append(module.Fields[:i], module.Fields[i+1:]...)
