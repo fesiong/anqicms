@@ -28,13 +28,18 @@ var DefaultMenuGroups = []*MenuGroup{
 				Path:     "/setting/content",
 				GroupKey: "setting",
 				Name:     "内容设置",
-				Backend:  "/setting/content",
 			},
 			{
 				Path:     "/setting/safe",
 				GroupKey: "setting",
 				Name:     "内容安全设置",
 				Backend:  "/setting/safe",
+			},
+			{
+				Path:     "/setting/sensitive",
+				GroupKey: "setting",
+				Name:     "敏感词设置",
+				Backend:  "/setting/sensitive",
 			},
 			{
 				Path:     "/setting/contact",
@@ -47,6 +52,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				GroupKey: "setting",
 				Name:     "首页TDK设置",
 				Backend:  "/setting/index",
+			},
+			{
+				Path:     "/setting/banner",
+				GroupKey: "setting",
+				Name:     "首页幻灯片",
+				Backend:  "/setting/banner",
 			},
 			{
 				Path:     "/setting/nav",
@@ -90,19 +101,17 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/tag",
 			},
 			{
-				Path:     "/content/page",
+				Path:     "/archive/page",
 				GroupKey: "content",
 				Name:     "单页面管理",
-				Backend:  "/category/list",
 			},
 			{
 				Path:     "/archive/module",
 				GroupKey: "archive",
 				Name:     "内容模型",
-				Backend:  "/module",
 			},
 			{
-				Path:     "/content/attachment",
+				Path:     "/archive/attachment",
 				GroupKey: "content",
 				Name:     "图片资源管理",
 				Backend:  "/attachment",
@@ -156,6 +165,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/comment",
 			},
 			{
+				Path:     "/plugin/anchor",
+				GroupKey: "plugin",
+				Name:     "锚文本管理",
+				Backend:  "/plugin/anchor",
+			},
+			{
 				Path:     "/plugin/guestbook",
 				GroupKey: "plugin",
 				Name:     "网站留言管理",
@@ -174,6 +189,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/material",
 			},
 			{
+				Path:     "/plugin/fileupload",
+				GroupKey: "plugin",
+				Name:     "验证文件上传",
+				Backend:  "/plugin/fileupload",
+			},
+			{
 				Path:     "/plugin/sendmail",
 				GroupKey: "plugin",
 				Name:     "邮件提醒",
@@ -183,7 +204,6 @@ var DefaultMenuGroups = []*MenuGroup{
 				Path:     "/plugin/collector",
 				GroupKey: "plugin",
 				Name:     "内容采集管理",
-				Backend:  "/collector",
 			},
 			{
 				Path:     "/plugin/importapi",
@@ -232,12 +252,6 @@ var DefaultMenuGroups = []*MenuGroup{
 				GroupKey: "plugin",
 				Name:     "小程序配置",
 				Backend:  "/plugin/weapp",
-			},
-			{
-				Path:     "/plugin/pay",
-				GroupKey: "plugin",
-				Name:     "支付配置",
-				Backend:  "/plugin/pay",
 			},
 			{
 				Path:     "/plugin/order",
@@ -292,6 +306,18 @@ var DefaultMenuGroups = []*MenuGroup{
 				GroupKey: "plugin",
 				Name:     "静态页面缓存",
 				Backend:  "/plugin/htmlcache",
+			},
+			{
+				Path:     "/plugin/aigenerate",
+				GroupKey: "plugin",
+				Name:     "静态页面缓存",
+				Backend:  "/plugin/aigenerate",
+			},
+			{
+				Path:     "/plugin/timefactor",
+				GroupKey: "plugin",
+				Name:     "文档时间因子",
+				Backend:  "/plugin/timefactor",
 			},
 		},
 	},
@@ -373,11 +399,6 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/admin/list",
 			},
 			{
-				Path:     "/account/index",
-				GroupKey: "account",
-				Name:     "管理员信息",
-			},
-			{
 				Path:     "/account/group/list",
 				GroupKey: "account",
 				Name:     "管理员分组列表",
@@ -410,7 +431,7 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/tool/upgrade",
 				GroupKey: "tool",
-				Name:     "操作记录",
+				Name:     "系统升级",
 				Backend:  "/version/upgrade",
 			},
 			{
