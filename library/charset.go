@@ -21,7 +21,7 @@ var CharsetMap = map[string]encoding.Encoding{
 
 // DecodeToUTF8 从输入的byte数组中按照指定的字符集解析出对应的utf8格式的内容并返回.
 func DecodeToUTF8(input []byte, charset encoding.Encoding) (output []byte, err error) {
-	if charset == unicode.UTF8 {
+	if charset == nil || charset == unicode.UTF8 {
 		output = input
 		return
 	}

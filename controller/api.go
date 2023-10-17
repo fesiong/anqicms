@@ -263,6 +263,7 @@ func ApiImportGetCategories(ctx iris.Context) {
 	}
 
 	tmpCategories, _ := currentSite.GetCategories(func(tx *gorm.DB) *gorm.DB {
+		tx = tx.Where("`type` = ?", config.CategoryTypeArchive)
 		if moduleId > 0 {
 			tx = tx.Where("`module_id` = ?", moduleId)
 		}
