@@ -121,6 +121,7 @@ func ArchiveDetail(ctx iris.Context) {
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
 		webInfo.NavBar = archive.CategoryId
+		webInfo.PageId = archive.Id
 		//设置页面名称，方便tags识别
 		webInfo.PageName = "archiveDetail"
 		webInfo.CanonicalUrl = archive.CanonicalUrl

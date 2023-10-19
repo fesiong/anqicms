@@ -38,6 +38,11 @@ func SettingNavForm(ctx iris.Context) {
 			if category != nil {
 				req.Title = category.Title
 			}
+		} else if req.NavType == model.NavTypeArchive {
+			archive, _ := currentSite.GetArchiveById(req.PageId)
+			if archive != nil {
+				req.Title = archive.Title
+			}
 		}
 	}
 	if req.Title == "" {

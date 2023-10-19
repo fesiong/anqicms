@@ -207,6 +207,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				if category != nil {
 					uri = w.GetUrl("category", category, 0)
 				}
+			} else if item.NavType == model.NavTypeArchive {
+				archive, _ := w.GetArchiveById(item.PageId)
+				if archive != nil {
+					uri = w.GetUrl("archive", archive, 0)
+				}
 			} else if item.NavType == model.NavTypeOutlink {
 				//外链
 				uri = item.Link
