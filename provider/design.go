@@ -17,6 +17,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -237,6 +238,16 @@ func (w *Website) GetDesignInfo(packageName string, scan bool) (*response.Design
 			hasChange = true
 		}
 	}
+	// 对内容进行排序
+	sort.Slice(designInfo.TplFiles, func(i, j int) bool {
+		first, second := designInfo.TplFiles[i], designInfo.TplFiles[j]
+		return first.Path < second.Path
+	})
+	// 对内容进行排序
+	sort.Slice(designInfo.StaticFiles, func(i, j int) bool {
+		first, second := designInfo.StaticFiles[i], designInfo.StaticFiles[j]
+		return first.Path < second.Path
+	})
 
 	if hasChange {
 		saveFile := designInfo
@@ -506,6 +517,7 @@ func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHead
 		info.Filename = strings.ReplaceAll(strings.ReplaceAll(info.Filename, "..", ""), "\\", "/")
 		realFile := realPath + "/" + info.Filename
 		// 单独文件处理
+		_ = os.MkdirAll(filepath.Dir(realFile), os.ModePerm)
 		newFile, err := os.Create(realFile)
 		if err != nil {
 			return err
@@ -870,11 +882,12 @@ func (w *Website) SaveDesignFile(req request.SaveDesignFileRequest) error {
 			if err != nil {
 				return err
 			}
+			_ = os.MkdirAll(filepath.Dir(newPath), os.ModePerm)
 			err = os.Rename(fullPath, newPath)
 			if err != nil {
 				return err
 			}
-
+			designFileDetail.Path = req.RenamePath
 		}
 		//
 		if existsIndex == -1 {
@@ -955,6 +968,7 @@ func (w *Website) CopyDesignFile(req request.CopyDesignFileRequest) error {
 	newPath := basePath + req.NewPath
 	req.Path = strings.TrimPrefix(newPath, basePath)
 	// 开始复制
+	_ = os.MkdirAll(filepath.Dir(newPath), os.ModePerm)
 	oldFile, err := os.ReadFile(fullPath)
 	if err != nil {
 		return err
