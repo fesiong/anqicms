@@ -7,7 +7,7 @@
         <div class="section page-item">
             <!-- content -->
             <div class="page-content">
-                <div class="single-content-title">{% categoryDetail with name="Title" %}</div>
+                <div class="single-content-title">搜索：{{urlParams.q}}</div>
                 <ul class="list-blog-ul">
                     {% archiveList articles with type="page" limit="10" %}
                     {% for item in articles %}
