@@ -161,7 +161,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	if args["order"] != nil {
-		order = "archives." + args["order"].String()
+		if !strings.Contains(order, "rand") {
+			order = "archives." + args["order"].String()
+		}
 	}
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")

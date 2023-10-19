@@ -410,7 +410,11 @@ func ApiArchiveList(ctx iris.Context) {
 				}
 			}
 			if order != "" {
-				tx = tx.Order("archives." + order)
+				if strings.Contains(order, "rand") {
+					tx = tx.Order(order)
+				} else {
+					tx = tx.Order("archives." + order)
+				}
 			} else {
 				tx = tx.Order("archives.`sort` desc, archives.`id` desc")
 			}
