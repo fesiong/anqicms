@@ -817,10 +817,9 @@ func (w *Website) DeleteDesignFile(packageName, filePath, fileType string) error
 	pathMd5 := library.Md5(filePath)
 	historyPath := w.CachePath + ".history/" + packageName + "/" + pathMd5
 	_, err = os.Stat(historyPath)
-	if err != nil {
-		return nil
+	if err == nil {
+		_ = os.RemoveAll(historyPath)
 	}
-	_ = os.RemoveAll(historyPath)
 	// 更新文件
 	err = w.writeDesignInfo(designInfo)
 
@@ -945,7 +944,7 @@ func (w *Website) CopyDesignFile(req request.CopyDesignFileRequest) error {
 	var existsIndex = -1
 	if req.Type == "static" {
 		for i := range designInfo.StaticFiles {
-			if designInfo.StaticFiles[i].Path == req.Path {
+			if designInfo.StaticFiles[i].Path == req.NewPath {
 				designFileDetail = designInfo.StaticFiles[i]
 				existsIndex = i
 				break
@@ -953,7 +952,7 @@ func (w *Website) CopyDesignFile(req request.CopyDesignFileRequest) error {
 		}
 	} else {
 		for i := range designInfo.TplFiles {
-			if designInfo.TplFiles[i].Path == req.Path {
+			if designInfo.TplFiles[i].Path == req.NewPath {
 				designFileDetail = designInfo.TplFiles[i]
 				existsIndex = i
 				break
