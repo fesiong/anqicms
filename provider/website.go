@@ -286,8 +286,20 @@ func GetWebsite(siteId uint) *Website {
 	return website
 }
 
-func RemoveWebsite(siteId uint) {
-	delete(websites, siteId)
+func RemoveWebsite(siteId uint, removeFile bool) {
+	defer delete(websites, siteId)
+	site := GetWebsite(siteId)
+	if site != nil {
+		if removeFile {
+			// 仅删除模板和public目录
+			_ = os.RemoveAll(site.RootPath + "template")
+			_ = os.RemoveAll(site.RootPath + "public")
+			// 删除数据库
+			if site.DB != nil {
+				site.DB.Exec("DROP DATABASE `?`", gorm.Expr(site.Mysql.Database))
+			}
+		}
+	}
 }
 
 func (w *Website) GetTemplateDir() string {

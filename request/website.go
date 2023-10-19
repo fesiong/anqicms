@@ -13,4 +13,5 @@ type WebsiteRequest struct {
 	BaseUrl       string             `json:"base_url"`
 	PreviewData   bool               `json:"preview_data"`
 	Initialed     bool               `json:"initialed"`
+	RemoveFile    bool               `json:"remove_file"`
 }

@@ -219,6 +219,14 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			})
 			return
 		}
+		// 如果没有填写数据库名称
+		if len(req.Mysql.Database) == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "请填写数据库名称",
+			})
+			return
+		}
 		req.RootPath = strings.TrimRight(strings.TrimSpace(strings.ReplaceAll(req.RootPath, "\\", "/")), "/")
 		// 全新安装
 		if req.RootPath == currentSite.RootPath {
@@ -235,6 +243,27 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			})
 			return
 		}
+		// 先检查数据库
+		dbSite = &model.Website{
+			RootPath: req.RootPath,
+			Name:     req.Name,
+			Status:   req.Status,
+		}
+		if req.Mysql.UseDefault {
+			req.Mysql.User = config.Server.Mysql.User
+			req.Mysql.Password = config.Server.Mysql.Password
+			req.Mysql.Host = config.Server.Mysql.Host
+			req.Mysql.Port = config.Server.Mysql.Port
+		}
+		_, err := provider.InitDB(&req.Mysql)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "数据库信息错误",
+			})
+			return
+		}
+
 		req.RootPath = req.RootPath + "/"
 		_, err = os.Stat(req.RootPath)
 		if err != nil && os.IsNotExist(err) {
@@ -264,25 +293,6 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		srcStaticDir := config.ExecPath + "public/static/default"
 		_ = library.CopyDir(dstStaticDir, srcStaticDir)
 
-		dbSite = &model.Website{
-			RootPath: req.RootPath,
-			Name:     req.Name,
-			Status:   req.Status,
-		}
-		if req.Mysql.UseDefault {
-			req.Mysql.User = config.Server.Mysql.User
-			req.Mysql.Password = config.Server.Mysql.Password
-			req.Mysql.Host = config.Server.Mysql.Host
-			req.Mysql.Port = config.Server.Mysql.Port
-		}
-		_, err := provider.InitDB(&req.Mysql)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  "数据库信息错误",
-			})
-			return
-		}
 		// 检查通过
 		dbSite.Mysql = req.Mysql
 		provider.GetDefaultDB().Save(dbSite)
@@ -358,7 +368,7 @@ func DeleteWebsite(ctx iris.Context) {
 	}
 	// 只删除数据库记录，不删除实际文件
 	provider.GetDefaultDB().Delete(dbSite)
-	provider.RemoveWebsite(dbSite.Id)
+	provider.RemoveWebsite(dbSite.Id, req.RemoveFile)
 	// 重载模板
 	config.RestartChan <- 0
 	ctx.JSON(iris.Map{
