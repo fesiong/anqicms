@@ -96,7 +96,11 @@ func ArchiveList(ctx iris.Context) {
 			for _, catId := range catIds {
 				for _, cat := range categories {
 					if cat.Id == catId {
-						archives[i].CategoryTitles = append(archives[i].CategoryTitles, cat.Title)
+						title := cat.Title
+						if cat.Status != config.ContentStatusOK {
+							title += "(隐藏)"
+						}
+						archives[i].CategoryTitles = append(archives[i].CategoryTitles, title)
 					}
 				}
 			}
@@ -104,7 +108,11 @@ func ArchiveList(ctx iris.Context) {
 		} else if v.CategoryId > 0 {
 			for _, c := range categories {
 				if c.Id == v.CategoryId {
-					archives[i].CategoryTitles = []string{c.Title}
+					title := c.Title
+					if c.Status != config.ContentStatusOK {
+						title += "(隐藏)"
+					}
+					archives[i].CategoryTitles = []string{title}
 					break
 				}
 			}

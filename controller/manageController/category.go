@@ -21,7 +21,7 @@ func CategoryList(ctx iris.Context) {
 	var ops func(tx *gorm.DB) *gorm.DB
 	if categoryType == config.CategoryTypePage {
 		ops = func(tx *gorm.DB) *gorm.DB {
-			tx = tx.Where("`type` = ? and `status` = ?", config.CategoryTypePage, 1).Order("sort asc")
+			tx = tx.Where("`type` = ?", config.CategoryTypePage).Order("sort asc")
 			if title != "" {
 				tx = tx.Where("`title` like ?", "%"+title+"%")
 			}
@@ -29,7 +29,7 @@ func CategoryList(ctx iris.Context) {
 		}
 	} else {
 		ops = func(tx *gorm.DB) *gorm.DB {
-			tx = tx.Where("`type` = ? and `status` = ?", config.CategoryTypeArchive, 1).Order("module_id asc,sort asc")
+			tx = tx.Where("`type` = ?", config.CategoryTypeArchive).Order("module_id asc,sort asc")
 			if moduleId > 0 {
 				tx = tx.Where("`module_id` = ?", moduleId)
 			}

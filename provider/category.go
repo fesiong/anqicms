@@ -86,7 +86,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	category.ModuleId = req.ModuleId
 	category.ParentId = req.ParentId
 	category.Sort = req.Sort
-	category.Status = 1
+	category.Status = req.Status
 	category.Template = req.Template
 	category.DetailTemplate = req.DetailTemplate
 	category.IsInherit = req.IsInherit
@@ -277,6 +277,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			}
 		}
 	}
+	// 如果隐藏的分类有下级，则下级也隐藏
+	if category.Status == config.ContentStatusDraft {
+		w.DB.Model(&model.Category{}).Where("`parent_id` = ?", category.Id).UpdateColumn("status", config.ContentStatusDraft)
+	} else if category.Status == config.ContentStatusOK && category.ParentId > 0 {
+		w.DB.Model(&model.Category{}).Where("`id` = ?", category.ParentId).UpdateColumn("status", config.ContentStatusOK)
+	}
 
 	if newPost && category.Status == config.ContentStatusOK {
 		link := w.GetUrl("category", category, 0)
@@ -361,6 +367,9 @@ func (w *Website) GetSubCategoryIds(categoryId uint, categories []*model.Categor
 	}
 
 	for i := range categories {
+		if categories[i].Status != config.ContentStatusOK {
+			continue
+		}
 		if categories[i].ParentId == categoryId {
 			subIds = append(subIds, categories[i].Id)
 			subIds = append(subIds, w.GetSubCategoryIds(categories[i].Id, categories)...)
@@ -399,6 +408,10 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int) 
 	var tmpCategories []*model.Category
 	categories := w.GetCacheCategories()
 	for i := range categories {
+		if categories[i].Status != config.ContentStatusOK {
+			// 跳过隐藏的分类
+			continue
+		}
 		if pageType == config.CategoryTypePage {
 			if categories[i].Type != config.CategoryTypePage {
 				continue

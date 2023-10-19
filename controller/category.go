@@ -47,7 +47,7 @@ func CategoryPage(ctx iris.Context) {
 	} else {
 		category, err = currentSite.GetCategoryById(categoryId)
 	}
-	if err != nil {
+	if err != nil || category.Status != config.ContentStatusOK {
 		NotFound(ctx)
 		return
 	}
