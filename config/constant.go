@@ -160,3 +160,8 @@ const (
 	AiArticleStatusCompleted = 2
 	AiArticleStatusError     = 4
 )
+
+const (
+	InterferenceModeClass = 0 // 添加随机class
+	InterferenceModeText  = 1 // 添加随机隐藏文字
+)

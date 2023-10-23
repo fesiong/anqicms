@@ -143,6 +143,14 @@ type PluginTimeFactor struct {
 	CategoryIds []int64  `json:"category_ids"`
 }
 
+type PluginInterference struct {
+	Open              bool `json:"open"`
+	Mode              int  `json:"mode"`
+	DisableSelection  bool `json:"disable_selection"`
+	DisableCopy       bool `json:"disable_copy"`
+	DisableRightClick bool `json:"disable_right_click"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

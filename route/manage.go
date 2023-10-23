@@ -475,6 +475,12 @@ func manageRoute(app *iris.Application) {
 				timeFactor.Get("/setting", manageController.PluginTimeFactorSetting)
 				timeFactor.Post("/setting", manageController.PluginTimeFactorSettingSave)
 			}
+
+			interference := plugin.Party("/interference")
+			{
+				interference.Get("/config", manageController.PluginInterferenceConfig)
+				interference.Post("/config", manageController.PluginInterferenceConfigForm)
+			}
 		}
 	}
 }

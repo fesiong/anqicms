@@ -5,11 +5,17 @@ import (
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	view2 "github.com/kataras/iris/v12/view"
+	"hash/crc32"
 	"io"
 	"io/fs"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 	"os"
 	stdPath "path"
+	"regexp"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -342,6 +348,78 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
 		if err != nil {
 			return err
+		}
+		// 如果启用了防采集
+		if currentSite.PluginInterference.Open {
+			if currentSite.PluginInterference.DisableSelection ||
+				currentSite.PluginInterference.DisableCopy ||
+				currentSite.PluginInterference.DisableRightClick {
+				addonText := "<script type=\"text/javascript\">\nwindow.onload = function() {\n"
+				if currentSite.PluginInterference.DisableSelection {
+					addonText += "document.onselectstart = function (e) {e.preventDefault();};\n"
+				}
+				if currentSite.PluginInterference.DisableCopy {
+					addonText += "document.oncopy = function(e) {e.preventDefault();}\n"
+				}
+				if currentSite.PluginInterference.DisableRightClick {
+					addonText += "document.oncontextmenu = function(e){e.preventDefault();}\n"
+				}
+				addonText += "}</script>"
+				if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+					tmpData := make([]byte, len(data)+len(addonText))
+					copy(tmpData, data[:index])
+					copy(tmpData[index:], addonText)
+					copy(tmpData[len(data):], data[index:])
+					data = tmpData
+				} else {
+					data = append(data, addonText...)
+				}
+			}
+			// 基于每个页面独立不变，则这里需要根据页面URL确定唯一值
+			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok && len(webInfo.CanonicalUrl) > 0 {
+				if currentSite.PluginInterference.Mode == config.InterferenceModeClass {
+					// 添加随机class
+					re, _ := regexp.Compile(`(?i)<(a|article|div|h1|h2|h3|h4|h5|h6|img|p|span|table|section)[\S\s]*?>`)
+					classRe, _ := regexp.Compile(`(?i)class="(.*?)"`)
+					index := 0
+					data = re.ReplaceAllFunc(data, func(b []byte) []byte {
+						index++
+						randClass := crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(index)))
+						match := classRe.FindSubmatch(b)
+						if len(match) == 2 {
+							tmpB := make([]byte, len(match[0]))
+							copy(tmpB, match[0])
+							tmpB = append(tmpB[:len(tmpB)-1], " "+library.DecimalToLetter(int64(randClass))+"\""...)
+							b = bytes.Replace(b, match[0], tmpB, 1)
+						} else {
+							b = bytes.Replace(b, []byte{'>'}, []byte(" class=\""+library.DecimalToLetter(int64(randClass))+"\">"), 1)
+						}
+						return b
+					})
+				} else if currentSite.PluginInterference.Mode == config.InterferenceModeText {
+					// 生成10个隐藏的class
+					addonStyle := "<style type=\"text/css\">\n"
+					hiddenStyles := []string{
+						"{display: inline-block;width: .1px;height: .1px;overflow: hidden;visibility: hidden;}\n",
+						"{display: inline-block;font-size: 0!important;width: 1em;height: 1em;visibility: hidden;line-height: 0;}\n",
+						"{display: none!important;}\n",
+					}
+					for i := 0; i < 5; i++ {
+						tmpClass := library.DecimalToLetter(int64(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(i)))))
+						addonStyle += "    ." + tmpClass + hiddenStyles[i%len(hiddenStyles)]
+					}
+					addonStyle += "</style>\n"
+					if index := bytes.Index(data, []byte("</head>")); index != -1 {
+						tmpData := make([]byte, len(data)+len(addonStyle))
+						copy(tmpData, data[:index])
+						copy(tmpData[index:], addonStyle)
+						copy(tmpData[index+len(addonStyle):], data[index:])
+						data = tmpData
+					} else {
+						data = append(data, addonStyle...)
+					}
+				}
+			}
 		}
 		// 对data进行敏感词替换
 		data = currentSite.ReplaceSensitiveWords(data)

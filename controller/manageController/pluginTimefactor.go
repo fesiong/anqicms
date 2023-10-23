@@ -38,7 +38,7 @@ func PluginTimeFactorSettingSave(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新文档时间因子配置"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新时间因子-定时发布配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

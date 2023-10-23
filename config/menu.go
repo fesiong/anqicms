@@ -316,8 +316,14 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/plugin/timefactor",
 				GroupKey: "plugin",
-				Name:     "文档时间因子",
+				Name:     "时间因子-定时发布",
 				Backend:  "/plugin/timefactor",
+			},
+			{
+				Path:     "/plugin/interference",
+				GroupKey: "plugin",
+				Name:     "防采集干扰码",
+				Backend:  "/plugin/interference",
 			},
 		},
 	},

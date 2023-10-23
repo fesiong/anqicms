@@ -3,11 +3,16 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"hash/crc32"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
+	"log"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -134,7 +139,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					if render {
 						content = library.MarkdownToHTML(content)
 					}
-					// lazyload
+					// lazy load
 					if lazy != "" {
 						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 						content = re.ReplaceAllStringFunc(content, func(s string) string {
@@ -146,6 +151,75 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 							s = strings.Replace(s, match[1], res, 1)
 							return s
 						})
+					}
+					if currentSite.PluginInterference.Open && currentSite.PluginInterference.Mode == config.InterferenceModeText {
+						webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
+						if ok {
+							var classes = make([]string, 0, 10)
+							for i := 0; i < 10; i++ {
+								tmpClass := library.DecimalToLetter(int64(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(i)))))
+								classes = append(classes, tmpClass)
+							}
+							// 给随机位置添加隐藏标签
+							crcNum := int(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl)))
+							first := 2
+							var tmpData []string
+							var tmpRune = []rune(content)
+							var start = 0
+							for i := 0; i < len(tmpRune); i++ {
+								if tmpRune[i] == '>' {
+									tmpData = append(tmpData, string(tmpRune[start:i+1]))
+									start = i + 1
+									num := crcNum%10*first/2 + 2
+									first = crcNum % 10
+									crcNum = crcNum / 10
+									j := i + 1
+									for ; j < len(tmpRune)-1; j++ {
+										if tmpRune[j] == '<' {
+											sepLen := j - i - 1
+											if sepLen > num {
+												tmpData = append(tmpData, string(tmpRune[i+1:i+1+num]))
+												if j%2 == 0 {
+													var addText []rune
+													for k := 0; k < sepLen/2; k++ {
+														addText = append(addText, tmpRune[j-k-1])
+														if k > first+1 {
+															break
+														}
+														log.Println("hidden", string(addText))
+													}
+													tmpData = append(tmpData, "<span class=\""+classes[i%5]+"\">"+string(addText)+"</span>")
+													tmpData = append(tmpData, string(tmpRune[i+1+num:j]))
+												} else {
+													var addText []rune
+													for k := num; k < sepLen; k++ {
+														addText = append(addText, tmpRune[i+1+k])
+														if k > num+first+1 {
+															break
+														}
+													}
+													log.Println("default", string(addText))
+													tmpData = append(tmpData, "<span class=\""+classes[i%5+5]+"\">"+string(addText)+"</span>")
+													tmpData = append(tmpData, string(tmpRune[i+1+num+len(addText):j]))
+												}
+											} else {
+												tmpData = append(tmpData, string(tmpRune[i+1:j]))
+											}
+											start = j
+											break
+										}
+									}
+									i = j
+									continue
+								}
+
+								if crcNum == 0 || i == len(tmpRune)-1 {
+									tmpData = append(tmpData, string(tmpRune[start:]))
+									break
+								}
+							}
+							content = strings.Join(tmpData, "")
+						}
 					}
 				}
 			}

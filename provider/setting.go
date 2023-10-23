@@ -50,6 +50,7 @@ const (
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
+	InterferenceKey     = "interference"
 )
 
 func (w *Website) InitSetting() {
@@ -84,6 +85,7 @@ func (w *Website) InitSetting() {
 	w.LoadAiGenerateSetting()
 	w.LoadCollectorSetting()
 	w.LoadKeywordSetting()
+	w.LoadInterferenceSetting()
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -636,4 +638,11 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 	}
 
 	return content
+}
+
+func (w *Website) LoadInterferenceSetting() {
+	value := w.GetSettingValue(InterferenceKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &w.PluginInterference)
+	}
 }
