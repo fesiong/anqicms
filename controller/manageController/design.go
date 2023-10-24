@@ -252,6 +252,9 @@ func RestoreDesignData(ctx iris.Context) {
 		return
 	}
 
+	if req.AutoCleanup {
+		req.AutoBackup = true
+	}
 	if req.AutoBackup {
 		// 如果用户勾选了自动备份
 		err := currentSite.BackupData()
@@ -262,6 +265,11 @@ func RestoreDesignData(ctx iris.Context) {
 			})
 			return
 		}
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("备份数据"))
+	}
+	if req.AutoCleanup {
+		currentSite.CleanupWebsiteData(false)
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("一键清空网站数据"))
 	}
 
 	err := currentSite.RestoreDesignData(req.Package)

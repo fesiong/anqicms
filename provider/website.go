@@ -121,6 +121,9 @@ func InitWebsite(mw *model.Website) {
 		}
 		db, err = InitDB(&mw.Mysql)
 	}
+	if strings.HasSuffix(mw.RootPath, "/") {
+		mw.RootPath = mw.RootPath + "/"
+	}
 	w := Website{
 		Id:         mw.Id,
 		Mysql:      &mw.Mysql,

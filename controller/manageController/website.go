@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"os"
 	"strings"
 	"time"
@@ -228,18 +229,19 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			return
 		}
 		req.RootPath = strings.TrimRight(strings.TrimSpace(strings.ReplaceAll(req.RootPath, "\\", "/")), "/")
+		if !strings.Contains(req.RootPath, "/") {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "请填写站点正确的目录",
+			})
+			return
+		}
+		req.RootPath = req.RootPath + "/"
 		// 全新安装
 		if req.RootPath == currentSite.RootPath {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  "不能使用默认站点目录",
-			})
-			return
-		}
-		if !strings.Contains(req.RootPath, "/") {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  "请填写站点正确的目录",
 			})
 			return
 		}
@@ -264,7 +266,6 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			return
 		}
 
-		req.RootPath = req.RootPath + "/"
 		_, err = os.Stat(req.RootPath)
 		if err != nil && os.IsNotExist(err) {
 			err = os.MkdirAll(req.RootPath, os.ModePerm)
@@ -286,12 +287,30 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		srcXslFile2 := config.ExecPath + "public/anqi-style.xsl"
 		_, _ = library.CopyFile(dstXslFile2, srcXslFile2)
 		// 创建站点的模板信息
-		dstTplDir := req.RootPath + "template/default"
-		srcTplDir := config.ExecPath + "template/default"
-		_ = library.CopyDir(dstTplDir, srcTplDir)
-		dstStaticDir := req.RootPath + "public/static/default"
-		srcStaticDir := config.ExecPath + "public/static/default"
-		_ = library.CopyDir(dstStaticDir, srcStaticDir)
+		copyTemplate := req.Template
+		if copyTemplate == "" {
+			// 从模板中选择一套
+			copyTemplate = "default"
+		}
+		designList := currentSite.GetDesignList()
+		var designInfo *response.DesignPackage
+		for i := range designList {
+			if designList[i].Package == copyTemplate {
+				designInfo = &designList[i]
+				break
+			}
+		}
+		if designInfo == nil && len(designList) > 0 {
+			designInfo = &designList[0]
+		}
+		if copyTemplate != "" {
+			dstTplDir := req.RootPath + "template/" + designInfo.Package
+			srcTplDir := config.ExecPath + "template/" + designInfo.Package
+			_ = library.CopyDir(dstTplDir, srcTplDir)
+			dstStaticDir := req.RootPath + "public/static/" + designInfo.Package
+			srcStaticDir := config.ExecPath + "public/static/" + designInfo.Package
+			_ = library.CopyDir(dstStaticDir, srcStaticDir)
+		}
 
 		// 检查通过
 		dbSite.Mysql = req.Mysql
@@ -300,6 +319,10 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		current := provider.GetWebsite(dbSite.Id)
 		if current.Initialed {
 			// 修改 baseUrl
+			if designInfo != nil {
+				current.System.TemplateName = designInfo.Package
+				current.System.TemplateType = designInfo.TemplateType
+			}
 			current.System.BaseUrl = req.BaseUrl
 			_ = current.SaveSettingValue(provider.SystemSettingKey, current.System)
 			current.PluginStorage.StorageUrl = current.System.BaseUrl
