@@ -29,6 +29,9 @@ func PluginTimeFactorSettingSave(ctx iris.Context) {
 		return
 	}
 
+	setting := currentSite.GetTimeFactorSetting()
+	req.TodayCount = setting.TodayCount
+	req.LastSent = setting.LastSent
 	err := currentSite.SaveSettingValue(provider.TimeFactorKey, &req)
 	if err != nil {
 		ctx.JSON(iris.Map{

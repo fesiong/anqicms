@@ -137,10 +137,17 @@ type PluginHtmlCache struct {
 type PluginTimeFactor struct {
 	Open        bool     `json:"open"`
 	ModuleIds   []int64  `json:"module_ids"`
-	Types       []string `json:"Types"`
+	Types       []string `json:"types"`
 	StartDay    int      `json:"start_day"`
 	EndDay      int      `json:"end_day"`
 	CategoryIds []int64  `json:"category_ids"`
+	DoPublish   bool     `json:"do_publish"`
+	ReleaseOpen bool     `json:"release_open"`
+	DailyLimit  int      `json:"daily_limit"`
+	StartTime   int      `json:"start_time"`
+	EndTime     int      `json:"end_time"`
+	TodayCount  int      `json:"today_count"`
+	LastSent    int64    `json:"last_sent"`
 }
 
 type PluginInterference struct {

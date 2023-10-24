@@ -27,8 +27,8 @@ func Crond() {
 	crontab.AddFunc("@daily", CleanUserVip)
 	// 每小时检查一次账号状态
 	crontab.AddFunc("1 30 * * * *", CheckAuthValid)
-	// 每小时检查一次时间因子
-	crontab.AddFunc("1 10 * * * *", UpdateTimeFactor)
+	// 每分钟检查一次时间因子
+	crontab.AddFunc("1 * * * * *", UpdateTimeFactor)
 	// 每分钟检查一次 AI文章计划
 	crontab.AddFunc("1 * * * * *", AiArticlePlan)
 	crontab.Start()
