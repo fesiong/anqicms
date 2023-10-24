@@ -25,6 +25,7 @@ type Nav struct {
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	NavList     []*Nav `json:"nav_list" gorm:"-"`
 	IsCurrent   bool   `json:"is_current" gorm:"-"`
+	Spacer      string `json:"spacer" gorm:"-"`
 }
 
 type NavType struct {

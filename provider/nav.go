@@ -23,8 +23,17 @@ func (w *Website) GetNavList(typeId uint) ([]*model.Nav, error) {
 			navList = append(navList, v)
 			for _, nv := range tmpList {
 				if nv.ParentId == v.Id {
+					nv.Spacer = "└  "
 					nv.Link = w.GetUrl("nav", nv, 0)
 					navList = append(navList, nv)
+					// 增加三级
+					for _, nv3 := range tmpList {
+						if nv3.ParentId == nv.Id {
+							nv3.Spacer = "└  └  "
+							nv3.Link = w.GetUrl("nav", nv3, 0)
+							navList = append(navList, nv3)
+						}
+					}
 				}
 			}
 		}
@@ -105,7 +114,17 @@ func (w *Website) GetNavsFromCache(typeId uint) []*model.Nav {
 			navs[i].NavList = nil
 			for j := range navs {
 				if navs[j].ParentId == navs[i].Id {
+					navs[j].Spacer = "└  "
 					navs[j].Link = w.GetUrl("nav", &navs[j], 0)
+					// 增加三级
+					navs[j].NavList = nil
+					for k := range navs {
+						if navs[k].ParentId == navs[j].Id {
+							navs[k].Spacer = "└  └  "
+							navs[k].Link = w.GetUrl("nav", &navs[k], 0)
+							navs[j].NavList = append(navs[j].NavList, &navs[k])
+						}
+					}
 					navs[i].NavList = append(navs[i].NavList, &navs[j])
 				}
 			}
