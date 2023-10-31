@@ -201,14 +201,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		if ok {
 			archiveId = archiveDetail.Id
-			categoryId = archiveDetail.CategoryId
 			keywords = strings.Split(strings.ReplaceAll(archiveDetail.Keywords, "，", ","), ",")[0]
-			category := currentSite.GetCategoryFromCache(categoryId)
-			if category != nil {
-				moduleId = category.ModuleId
-			} else {
-				categoryId = 0
-			}
 		}
 		// 允许通过keywords调用
 		like := ""
@@ -255,24 +248,26 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if limit-len(archives) < newLimit {
 				newLimit = limit - len(archives)
 			}
-			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
-				if currentSite.Content.MultiCategory == 1 {
-					// 多分类支持
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
-				} else {
-					tx = tx.Where("`category_id` = ?", categoryId)
+			if newLimit > 0 {
+				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
+					if currentSite.Content.MultiCategory == 1 {
+						// 多分类支持
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
+					return tx
+				}, 0, newLimit, offset)
+				//列表不返回content
+				if len(archives2) > 0 {
+					archives = append(archives2, archives...)
 				}
-				tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
-				return tx
-			}, 0, newLimit, offset)
-			//列表不返回content
-			if len(archives2) > 0 {
-				archives = append(archives2, archives...)
-			}
-			// 如果数量超过，则截取
-			if len(archives) > limit {
-				archives = archives[:limit]
+				// 如果数量超过，则截取
+				if len(archives) > limit {
+					archives = archives[:limit]
+				}
 			}
 		}
 	} else {

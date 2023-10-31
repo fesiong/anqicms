@@ -6,7 +6,7 @@ import (
 )
 
 // MaxSize 最多存储 5000 个对象
-const MaxSize = 5000
+const MaxSize = 2000
 
 type cacheData struct {
 	Expire int64
@@ -55,6 +55,8 @@ func (m *memCache) Set(key string, val interface{}, expire int64) {
 }
 
 func (m *memCache) Get(key string) interface{} {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.list[key]; !ok {
 		//数据不存在
 		return nil
@@ -62,22 +64,20 @@ func (m *memCache) Get(key string) interface{} {
 	if m.list[key].Expire < time.Now().Unix() {
 		return nil
 	}
-	m.mu.Lock()
 	m.moveToHead(m.list[key])
-	m.mu.Unlock()
 	return m.list[key].val
 }
 
 func (m *memCache) Delete(key string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if _, ok := m.list[key]; !ok {
 		//数据不存在
 		return
 	}
-	m.mu.Lock()
 	m.removeNode(m.list[key])
 	delete(m.list, key)
 	m.size--
-	m.mu.Unlock()
 }
 
 func (m *memCache) CleanAll() {

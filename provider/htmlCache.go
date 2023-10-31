@@ -254,7 +254,7 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 	cacheFile = cacheFile + localPath
 
 	info, err := os.Stat(cacheFile)
-	if os.IsNotExist(err) {
+	if err != nil {
 		return "", false
 	}
 	// 检查是否过期
