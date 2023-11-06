@@ -91,7 +91,7 @@ func (w *Website) AddFulltextIndex(doc *TinyArchive) {
 		// 内容搜索的时候，需要去除html标签
 		content += " " + library.StripTags(doc.Description)
 	}
-	if doc.Content != "" {
+	if w.PluginFulltext.UseContent && doc.Content != "" {
 		// 内容搜索的时候，需要去除html标签
 		content += " " + library.StripTags(doc.Content)
 	}
