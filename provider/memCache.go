@@ -25,6 +25,9 @@ type memCache struct {
 }
 
 func (m *memCache) Set(key string, val interface{}, expire int64) {
+	if m == nil {
+		return
+	}
 	if expire == 0 {
 		expire = 7200
 	}
@@ -55,6 +58,9 @@ func (m *memCache) Set(key string, val interface{}, expire int64) {
 }
 
 func (m *memCache) Get(key string) interface{} {
+	if m == nil {
+		return nil
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.list[key]; !ok {

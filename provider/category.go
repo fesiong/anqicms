@@ -112,11 +112,14 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 	}
 	category.UrlToken = w.VerifyCategoryUrlToken(req.UrlToken, category.Id)
-	if category.ModuleId == 0 {
+	if category.ModuleId == 0 && category.Type == config.CategoryTypeArchive {
 		modules := w.GetCacheModules()
 		if len(modules) > 0 {
 			category.ModuleId = modules[0].Id
 		}
+	}
+	if category.Type == config.CategoryTypePage {
+		category.ModuleId = 0
 	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
