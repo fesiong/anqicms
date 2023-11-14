@@ -420,6 +420,9 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int) 
 				continue
 			}
 		} else if parentId == 0 {
+			if categories[i].Type == config.CategoryTypePage {
+				continue
+			}
 			if categories[i].ModuleId != moduleId {
 				continue
 			}
