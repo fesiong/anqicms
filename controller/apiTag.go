@@ -572,6 +572,7 @@ func ApiCategoryList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	parentId := uint(ctx.URLParamIntDefault("parentId", 0))
+	all := ctx.URLParamBoolDefault("all", false)
 	limit := 0
 	offset := 0
 	limitTmp := ctx.URLParam("limit")
@@ -591,7 +592,7 @@ func ApiCategoryList(ctx iris.Context) {
 		}
 	}
 
-	categoryList := currentSite.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive)
+	categoryList := currentSite.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive, all)
 	var resultList []*model.Category
 	for i := 0; i < len(categoryList); i++ {
 		if offset > i {
@@ -836,7 +837,7 @@ func ApiPageDetail(ctx iris.Context) {
 
 func ApiPageList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
+	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage, true)
 	for i := range pageList {
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
 		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)

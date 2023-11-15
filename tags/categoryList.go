@@ -34,6 +34,10 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
+	all := false
+	if args["all"] != nil {
+		all = args["all"].Bool()
+	}
 
 	limit := 0
 	offset := 0
@@ -87,7 +91,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 
 	webInfo, webOk := ctx.Public["webInfo"].(*response.WebInfo)
 
-	categoryList := currentSite.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive)
+	categoryList := currentSite.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive, all)
 	var resultList []*model.Category
 	for i := 0; i < len(categoryList); i++ {
 		if offset > i {

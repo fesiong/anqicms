@@ -31,7 +31,7 @@ func (node *tagPageListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
 
-	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
+	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage, true)
 	for i := range pageList {
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
 		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)

@@ -407,27 +407,23 @@ func (w *Website) GetCategoryFromCacheByToken(urlToken string) *model.Category {
 	return nil
 }
 
-func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int) []*model.Category {
-	var tmpCategories []*model.Category
+func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int, all bool) []*model.Category {
 	categories := w.GetCacheCategories()
+	var tmpCategories = make([]*model.Category, 0, len(categories))
 	for i := range categories {
 		if categories[i].Status != config.ContentStatusOK {
 			// 跳过隐藏的分类
 			continue
 		}
-		if pageType == config.CategoryTypePage {
-			if categories[i].Type != config.CategoryTypePage {
-				continue
-			}
-		} else if parentId == 0 {
-			if categories[i].Type == config.CategoryTypePage {
-				continue
-			}
+		if categories[i].Type != uint(pageType) {
+			continue
+		}
+		if moduleId > 0 && pageType != config.CategoryTypePage {
 			if categories[i].ModuleId != moduleId {
 				continue
 			}
 		}
-		if categories[i].ParentId == parentId {
+		if all || categories[i].ParentId == parentId {
 			tmpCategories = append(tmpCategories, categories[i])
 		}
 	}
