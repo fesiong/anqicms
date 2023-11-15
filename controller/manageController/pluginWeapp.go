@@ -9,12 +9,14 @@ import (
 
 func PluginWeappConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	pluginRewrite := currentSite.PluginWeapp
+	setting := currentSite.PluginWeapp
+	// 增加serverUrl
+	setting.ServerUrl = currentSite.System.BaseUrl + "/api/wechat"
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": pluginRewrite,
+		"data": setting,
 	})
 }
 

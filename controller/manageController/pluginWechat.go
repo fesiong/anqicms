@@ -11,6 +11,8 @@ import (
 func PluginWechatConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginWechat
+	// 增加serverUrl
+	setting.ServerUrl = currentSite.System.BaseUrl + "/api/wechat"
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
