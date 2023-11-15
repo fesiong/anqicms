@@ -117,6 +117,7 @@ type PluginFulltextConfig struct {
 
 type PluginTitleImageConfig struct {
 	Open      bool   `json:"open"`
+	DrawSub   bool   `json:"draw_sub"`
 	BgImage   string `json:"bg_image"`
 	FontPath  string `json:"font_path"`
 	FontSize  int    `json:"font_size"`

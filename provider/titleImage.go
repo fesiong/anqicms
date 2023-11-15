@@ -12,10 +12,12 @@ import (
 	"image/draw"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"math"
 	"math/rand"
 	"mime/multipart"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -30,14 +32,12 @@ type TitleImage struct {
 	PublicPath string
 	config     *config.PluginTitleImageConfig
 	useWebp    int
-	title      string
-	sum        string
+	article    *model.Archive
 	font       *truetype.Font
 	fontSize   int
-	img        image.Image
 }
 
-func (w *Website) NewTitleImage(title string) *TitleImage {
+func (w *Website) NewTitleImage(article *model.Archive) *TitleImage {
 	rand.Seed(time.Now().UnixNano())
 	f := loadLocalFont(w.PublicPath + w.PluginTitleImage.FontPath)
 	fontSize := w.PluginTitleImage.FontSize
@@ -48,17 +48,70 @@ func (w *Website) NewTitleImage(title string) *TitleImage {
 		PublicPath: w.PublicPath,
 		config:     &w.PluginTitleImage,
 		useWebp:    w.Content.UseWebp,
-		title:      title,
-		sum:        sumTitle(title),
+		article:    article,
 		font:       f,
 		fontSize:   fontSize,
 	}
 
-	t.makeBackground()
-
-	t.drawTitle()
-
 	return &t
+}
+
+func (t *TitleImage) DrawTitles(w *Website) error {
+	// 先draw title
+	img := t.makeBackground(t.article.Title)
+	img = t.drawTitle(img, t.article.Title)
+	// 开始保存
+	location, err := t.Save(w, img, t.article.Title)
+	if err != nil {
+		return err
+	}
+	// 写入 article
+	t.article.Images = append(t.article.Images, strings.TrimPrefix(location, w.PluginStorage.StorageUrl))
+	if t.article.Id > 0 {
+		w.DB.Model(t.article).UpdateColumn("images", t.article.Images)
+	}
+	if t.config.DrawSub && t.article.ArchiveData != nil {
+		// 尝试解析h2标签
+		re, _ := regexp.Compile(`(?i)<h2.*?>(.*?)</h2>`)
+		result := re.FindAllStringSubmatch(t.article.ArchiveData.Content, -1)
+		if len(result) == 0 {
+			// 不存在h2,则尝试查找h3
+			re, _ = regexp.Compile(`(?i)<h3.*?>(.*?)</h3>`)
+			result = re.FindAllStringSubmatch(t.article.ArchiveData.Content, -1)
+		}
+		if len(result) > 0 {
+			for _, v := range result {
+				title := strings.ReplaceAll(library.StripTags(v[1]), "\n", " ")
+				img = t.makeBackground(title)
+				img = t.drawTitle(img, title)
+				// 开始保存
+				location, err = t.Save(w, img, title)
+				if err != nil {
+					continue
+				}
+				newString := v[0] + "\n" + "<p><img src=\"" + location + "\" alt=\"" + title + "\" /></p>"
+				t.article.ArchiveData.Content = strings.Replace(t.article.ArchiveData.Content, v[0], newString, 1)
+			}
+		}
+		// 生成完毕，写入数据库
+		if t.article.Id > 0 {
+			w.DB.Model(model.ArchiveData{}).Where("`id` = ?", t.article.Id).UpdateColumn("content", t.article.ArchiveData.Content)
+		}
+	}
+
+	return nil
+}
+
+func (t *TitleImage) DrawPreview() string {
+	if len(t.article.Title) == 0 {
+		return ""
+	}
+	img := t.makeBackground(t.article.Title)
+	img = t.drawTitle(img, t.article.Title)
+
+	data := t.EncodeB64string(img)
+
+	return data
 }
 
 func sumTitle(title string) string {
@@ -74,21 +127,22 @@ func sumTitle(title string) string {
 	return string(newStr)
 }
 
-func (t *TitleImage) makeBackground() {
+func (t *TitleImage) makeBackground(title string) (newImg image.Image) {
+	titleSum := sumTitle(title)
 	if len(t.config.BgImage) > 0 {
 		file, err := os.Open(t.PublicPath + t.config.BgImage)
 		defer file.Close()
 		if err == nil {
 			img, _, err := image.Decode(file)
 			if err == nil {
-				t.img = imaging.Resize(img, t.config.Width, t.config.Height, imaging.Lanczos)
+				newImg = library.ThumbnailCrop(t.config.Width, t.config.Height, img, 2)
 				return
 			} else {
 				file.Seek(0, 0)
 				if strings.HasSuffix(t.config.BgImage, "webp") {
 					img, err = webp.Decode(file)
 					if err == nil {
-						t.img = imaging.Resize(img, t.config.Width, t.config.Height, imaging.Lanczos)
+						newImg = library.ThumbnailCrop(t.config.Width, t.config.Height, img, 2)
 						return
 					}
 				}
@@ -98,36 +152,38 @@ func (t *TitleImage) makeBackground() {
 	// auto generate
 	tmpH := 6
 	tmpW := int(float64(t.config.Width) / float64(t.config.Height) * float64(tmpH))
-	bgColor := t.RandDeepColor(0)
+	bgColor := t.RandDeepColor(0, titleSum)
 	m := image.NewRGBA(image.Rect(0, 0, tmpW, tmpH))
 
 	draw.Draw(m, m.Bounds(), &image.Uniform{C: bgColor}, image.Point{}, draw.Src)
 	if t.config.Noise {
 		n := 0
 		for i := 0; i < tmpH; i++ {
-			if t.sum[i]%2 != 0 {
+			if titleSum[i]%2 != 0 {
 				continue
 			}
 			for j := 0; j < tmpW; j++ {
 				n = (n + 1) % 32
-				if t.sum[n]%3 == 0 {
-					m.Set(j, i, t.RandDeepColor(int(t.sum[n])%22))
+				if titleSum[n]%3 == 0 {
+					m.Set(j, i, t.RandDeepColor(int(titleSum[n])%22, titleSum))
 				}
 			}
 		}
 	}
-	t.img = imaging.Resize(m, t.config.Width, t.config.Height, imaging.Gaussian)
+	newImg = imaging.Resize(m, t.config.Width, t.config.Height, imaging.Gaussian)
+	return
 }
 
-func (t *TitleImage) Save(w *Website) (string, error) {
+func (t *TitleImage) Save(w *Website, img image.Image, title string) (string, error) {
 	imgType := "png"
 	if t.useWebp == 1 {
 		imgType = "webp"
 	}
-	buf, _ := encodeImage(t.img, imgType, 100)
+
+	buf, _ := encodeImage(img, imgType, 100)
 
 	fileHeader := &multipart.FileHeader{
-		Filename: library.Md5(t.title) + "." + imgType,
+		Filename: library.Md5(title) + "." + imgType,
 		Header:   nil,
 		Size:     int64(len(buf)),
 	}
@@ -141,24 +197,22 @@ func (t *TitleImage) Save(w *Website) (string, error) {
 		return "", err
 	}
 
-	return attachment.FileLocation, nil
+	return attachment.Logo, nil
 }
 
-func (t *TitleImage) EncodeB64string() string {
-	buf, _ := encodeImage(t.img, "png", 85)
+func (t *TitleImage) EncodeB64string(img image.Image) string {
+	buf, _ := encodeImage(img, "webp", 85)
 
-	return fmt.Sprintf("data:%s;base64,%s", "image/png", base64.StdEncoding.EncodeToString(buf))
+	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
 }
 
-func (t *TitleImage) drawTitle() {
-	if len(t.title) == 0 {
-		return
-	}
+// drawTitle 采用分词方式优化文字排版
+func (t *TitleImage) drawTitle(img image.Image, title string) image.Image {
 	c := freetype.NewContext()
 	c.SetDPI(72)
-	c.SetClip(t.img.Bounds())
-	m := image.NewNRGBA(t.img.Bounds())
-	draw.Draw(m, t.img.Bounds(), t.img, image.Point{}, draw.Src)
+	c.SetClip(img.Bounds())
+	m := image.NewNRGBA(img.Bounds())
+	draw.Draw(m, img.Bounds(), img, image.Point{}, draw.Src)
 	c.SetDst(m)
 	c.SetHinting(font.HintingFull)
 	c.SetFont(t.font)
@@ -166,8 +220,8 @@ func (t *TitleImage) drawTitle() {
 	minSize := t.fontSize
 	maxSize := 100
 	gap := 100
-
-	realSize := (t.config.Width - gap) / utf8.RuneCountInString(t.title)
+	maxTextWidth := t.config.Width - gap
+	realSize := maxTextWidth / utf8.RuneCountInString(title)
 	if realSize < minSize {
 		realSize = minSize
 	} else if realSize > maxSize {
@@ -176,38 +230,45 @@ func (t *TitleImage) drawTitle() {
 	c.SetFontSize(float64(realSize))
 	c.SetSrc(image.NewUniform(library.HEXToRGB(t.config.FontColor)))
 
-	textWidth := t.getLettersLen([]rune(t.title), realSize)
-	lineLen := int(math.Ceil(float64(textWidth) / float64(t.config.Width-gap)))
-	// 行高 size * 1.6
-	runeText := []rune(t.title)
-	start := 0
-	startY := t.config.Height/2 - (int(float64(realSize)/1.5) + int(float64((lineLen-1)*realSize)*1.6)/2) + realSize
-	for i := 0; i < lineLen; i++ {
-		tmpWidth := int(0)
-		tmpText := string(runeText[start:])
-		for j := start; j < len(runeText); j++ {
-			tmpWidth += t.getLettersLen([]rune{runeText[j]}, realSize)
-			if tmpWidth > (t.config.Width - gap) {
-				// 退回一个
-				tmpText = string(runeText[start:j])
-				start = j
-				break
+	words := library.WordSplit(title, true)
+	var lineWords []string
+	var tmpWords string
+	var tmpWidth int
+	for i, v := range words {
+		vWidth := t.getLettersLen([]rune(v), realSize)
+		tmpWidth += vWidth
+		if tmpWidth <= maxTextWidth {
+			tmpWords += v
+		}
+		if tmpWidth >= maxTextWidth {
+			lineWords = append(lineWords, tmpWords)
+			if tmpWidth > maxTextWidth {
+				tmpWidth = vWidth
+				tmpWords = v
+			} else {
+				tmpWords = ""
+				tmpWidth = 0
 			}
 		}
-		if len(tmpText) > 0 {
-			tmpWidth = t.getLettersLen([]rune(tmpText), realSize)
-
-			startX := (t.config.Width - int(tmpWidth)) / 2
-			if i > 0 {
-				startY += int(float64(realSize) * 1.6)
-			}
-			pt := freetype.Pt(startX, startY)
-			_, _ = c.DrawString(tmpText, pt)
+		if i == len(words)-1 && len(tmpWords) > 0 {
+			lineWords = append(lineWords, tmpWords)
 		}
 	}
 
-	// replace the img source to new source
-	t.img = m
+	lineLen := len(lineWords)
+	// 行高 size * 1.6
+	startY := t.config.Height/2 - (int(float64(realSize)/1.5) + int(float64((lineLen-1)*realSize)*1.6)/2) + realSize
+	for i, tmpText := range lineWords {
+		tmpWidth = t.getLettersLen([]rune(tmpText), realSize)
+		startX := (t.config.Width - tmpWidth) / 2
+		if i > 0 {
+			startY += int(float64(realSize) * 1.6)
+		}
+		pt := freetype.Pt(startX, startY)
+		_, _ = c.DrawString(tmpText, pt)
+	}
+
+	return m
 }
 
 // countLetter 计算字体宽度
@@ -220,9 +281,9 @@ func (t *TitleImage) getLettersLen(ss []rune, fontSize int) int {
 	return width
 }
 
-func (t *TitleImage) RandDeepColor(addon int) color.RGBA {
-	randColor := t.RandColor(addon)
-	num, _ := strconv.Atoi(t.sum[22-addon : 22-addon+9])
+func (t *TitleImage) RandDeepColor(addon int, titleSum string) color.RGBA {
+	randColor := t.RandColor(addon, titleSum)
+	num, _ := strconv.Atoi(titleSum[22-addon : 22-addon+9])
 	increase := float64(30 + num%255)
 
 	red := math.Abs(math.Min(float64(randColor.R)-increase, 255))
@@ -234,8 +295,8 @@ func (t *TitleImage) RandDeepColor(addon int) color.RGBA {
 }
 
 // RandColor get random color. 生成随机颜色.
-func (t *TitleImage) RandColor(addon int) color.RGBA {
-	num, _ := strconv.Atoi(t.sum[addon : addon+9])
+func (t *TitleImage) RandColor(addon int, titleSum string) color.RGBA {
+	num, _ := strconv.Atoi(titleSum[addon : addon+9])
 	red := num % 255
 	green := num / 1000 % 255
 	var blue int

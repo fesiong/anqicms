@@ -7,6 +7,7 @@ import (
 	"image"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
@@ -45,6 +46,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.PluginTitleImage.Open = req.Open
+	currentSite.PluginTitleImage.DrawSub = req.DrawSub
 	currentSite.PluginTitleImage.BgImage = req.BgImage
 	currentSite.PluginTitleImage.FontPath = req.FontPath
 	currentSite.PluginTitleImage.FontSize = req.FontSize
@@ -74,7 +76,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 func PluginTitleImagePreview(ctx iris.Context) {
 	text := ctx.URLParamDefault("text", "欢迎使用安企内容管理系统")
 	currentSite := provider.CurrentSite(ctx)
-	str := currentSite.NewTitleImage(text).EncodeB64string()
+	str := currentSite.NewTitleImage(&model.Archive{Title: text}).DrawPreview()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -9,20 +9,42 @@ import (
 
 var segmenter sego.Segmenter
 var dictLoaded = false
+
 const removeWord = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~。？！，、；：“ ” ‘ ’「」『』（）〔〕【】《》〈〉—…·～"
 
-func WordSplit(s string, searchMode bool) []string {
+func WordSplit(s string, contain bool) []string {
 	if !dictLoaded {
 		initDict()
 	}
 	segments := segmenter.Segment([]byte(s))
 
-	words := sego.SegmentsToSlice(segments, searchMode)
+	words := sego.SegmentsToSlice(segments, false)
 	// 移除标点、空格等
-	for i := 0; i < len(words); i++ {
-		if len(words[i]) == 1 && strings.ContainsAny(words[i], removeWord) {
-			words = append(words[:i], words[i+1:]...)
-			i--
+	x := 0
+	// 对大小写字母进行还原
+	ss := []rune(s)
+	l := len(ss)
+	if contain {
+		for i := 0; i < len(words); i++ {
+			ws := []rune(words[i])
+			change := false
+			for j := range ws {
+				if x < l && ss[x] != ws[j] {
+					change = true
+					ws[j] = ss[x]
+				}
+				x++
+			}
+			if change {
+				words[i] = string(ws)
+			}
+		}
+	} else {
+		for i := 0; i < len(words); i++ {
+			if len(words[i]) == 1 && strings.ContainsAny(words[i], removeWord) {
+				words = append(words[:i], words[i+1:]...)
+				i--
+			}
 		}
 	}
 

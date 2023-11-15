@@ -489,14 +489,6 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 	for i, v := range archive.Images {
 		archive.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)
 	}
-	// 如果没有图片
-	if len(archive.Images) == 0 && w.PluginTitleImage.Open {
-		// 自动生成一个
-		logo, err := w.NewTitleImage(archive.Title).Save(w)
-		if err == nil {
-			archive.Images = append(archive.Images, logo)
-		}
-	}
 
 	// 保存主表
 	err = w.DB.Save(archive).Error
@@ -618,6 +610,14 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 			extraFields["id"] = archive.Id
 			w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Create(extraFields)
 		}
+	}
+	// 如果没有图片
+	if len(archive.Images) == 0 && w.PluginTitleImage.Open {
+		archive.ArchiveData = &archiveData
+		// 自动生成一个
+		go func() {
+			_ = w.NewTitleImage(archive).DrawTitles(w)
+		}()
 	}
 
 	// tags
