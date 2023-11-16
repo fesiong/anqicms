@@ -48,10 +48,12 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
 	parentId := uint(0)
+	excludeId := uint(0)
 	if args["parentId"] != nil {
 		if args["parentId"].String() == "parent" {
 			if categoryDetail != nil {
 				parentId = categoryDetail.ParentId
+				excludeId = categoryDetail.Id
 			}
 		} else {
 			parentId = uint(args["parentId"].Integer())
@@ -94,7 +96,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 	categoryList := currentSite.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive, all)
 	var resultList []*model.Category
 	for i := 0; i < len(categoryList); i++ {
-		if offset > i {
+		if offset > i || categoryList[i].Id == excludeId {
 			continue
 		}
 		if limit > 0 && i >= (limit+offset) {
