@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"strings"
 )
@@ -23,6 +24,10 @@ func (node *tagBannerListNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return err
 	}
 
+	bannerType := "default"
+	if args["type"] != nil {
+		bannerType = args["type"].String()
+	}
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
 	}
@@ -31,10 +36,17 @@ func (node *tagBannerListNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
 
-	bannerList := currentSite.Banner
-	for i := range bannerList {
-		if !strings.HasPrefix(bannerList[i].Logo, "http") && !strings.HasPrefix(bannerList[i].Logo, "//") {
-			bannerList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(bannerList[i].Logo, "/")
+	tmpList := currentSite.Banner
+	var bannerList = make([]*config.BannerItem, 0, len(tmpList))
+	for i := range tmpList {
+		if tmpList[i].Type == "" {
+			tmpList[i].Type = "default"
+		}
+		if tmpList[i].Type == bannerType {
+			if !strings.HasPrefix(tmpList[i].Logo, "http") && !strings.HasPrefix(tmpList[i].Logo, "//") {
+				tmpList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(tmpList[i].Logo, "/")
+			}
+			bannerList = append(bannerList, &tmpList[i])
 		}
 	}
 

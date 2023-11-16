@@ -447,10 +447,35 @@ func DeleteSystemFavicon(ctx iris.Context) {
 
 func SettingBanner(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	banners := currentSite.Banner
-	for i := range banners {
-		if !strings.HasPrefix(banners[i].Logo, "http") && !strings.HasPrefix(banners[i].Logo, "//") {
-			banners[i].Logo = currentSite.PluginStorage.StorageUrl + banners[i].Logo
+	type Banner struct {
+		Type string              `json:"type"`
+		List []config.BannerItem `json:"list"`
+	}
+	var banners []*Banner
+	var mapBanners = map[string][]config.BannerItem{}
+
+	for i := range currentSite.Banner {
+		if currentSite.Banner[i].Type == "" {
+			currentSite.Banner[i].Type = "default"
+		}
+	}
+	for _, v := range currentSite.Banner {
+		if !strings.HasPrefix(v.Logo, "http") && !strings.HasPrefix(v.Logo, "//") {
+			v.Logo = currentSite.PluginStorage.StorageUrl + v.Logo
+		}
+		if _, ok := mapBanners[v.Type]; !ok {
+			mapBanners[v.Type] = []config.BannerItem{}
+		}
+		mapBanners[v.Type] = append(mapBanners[v.Type], v)
+	}
+	for i := range currentSite.Banner {
+		if item, ok := mapBanners[currentSite.Banner[i].Type]; ok {
+			banner := &Banner{
+				Type: currentSite.Banner[i].Type,
+				List: item,
+			}
+			banners = append(banners, banner)
+			delete(mapBanners, currentSite.Banner[i].Type)
 		}
 	}
 

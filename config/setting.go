@@ -94,6 +94,7 @@ type BannerItem struct {
 	Link        string `json:"link"`
 	Alt         string `json:"alt"`
 	Description string `json:"description"`
+	Type        string `json:"type"` // 增加类型
 }
 
 type BannerConfig []BannerItem
