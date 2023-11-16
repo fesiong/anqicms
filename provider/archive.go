@@ -639,6 +639,7 @@ func (w *Website) SaveArchive(req *request.Archive) (archive *model.Archive, err
 		Keywords: archive.Keywords,
 		Content:  archiveData.Content,
 	})
+	w.FlushIndex()
 
 	err = w.SuccessReleaseArchive(archive, newPost)
 	return
