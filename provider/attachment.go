@@ -157,7 +157,8 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	if attachId == 0 {
-		if w.Content.UseWebp == 1 {
+		// gif 不转成 webp，因为使用的webp库还不支持
+		if w.Content.UseWebp == 1 && imgType != "gif" {
 			imgType = "webp"
 		}
 		tmpName = md5Str[8:24] + "." + imgType
@@ -181,7 +182,14 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		height = img.Bounds().Dy()
 	}
 	// 保存裁剪的图片
-	buf, _ := encodeImage(img, imgType, quality)
+	var buf []byte
+	if imgType == "gif" {
+		// gif 直接使用原始数据
+		file.Seek(0, 0)
+		buf, _ = io.ReadAll(file)
+	} else {
+		buf, _ = encodeImage(img, imgType, quality)
+	}
 	fileSize = int64(len(buf))
 
 	// 上传原图
@@ -196,7 +204,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
 	buf, _ = encodeImage(newImg, imgType, quality)
 
-	// 上传原图
+	// 上传缩略图
 	_, err = w.Storage.UploadFile(filePath+thumbName, buf)
 	if err != nil {
 		return nil, err
