@@ -9,7 +9,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"log"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -186,7 +185,6 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 														if k > first+1 {
 															break
 														}
-														log.Println("hidden", string(addText))
 													}
 													tmpData = append(tmpData, "<span class=\""+classes[i%5]+"\">"+string(addText)+"</span>")
 													tmpData = append(tmpData, string(tmpRune[i+1+num:j]))
@@ -198,7 +196,6 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 															break
 														}
 													}
-													log.Println("default", string(addText))
 													tmpData = append(tmpData, "<span class=\""+classes[i%5+5]+"\">"+string(addText)+"</span>")
 													tmpData = append(tmpData, string(tmpRune[i+1+num+len(addText):j]))
 												}

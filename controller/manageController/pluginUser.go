@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"regexp"
 	"strings"
 )
 
@@ -41,6 +42,16 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name, currentSite.Content.UrlTokenType == config.UrlTokenTypeSort), "-", "_")
 			}
 		}
+		// 检查fields
+		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, v.FieldName)
+		if err != nil || !match {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  v.FieldName + currentSite.Lang("命名不正确"),
+			})
+			return
+		}
+		v.Required = false
 		if _, ok := existsFields[v.FieldName]; !ok {
 			existsFields[v.FieldName] = struct{}{}
 			fields = append(fields, v)
@@ -57,12 +68,43 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 		})
 		return
 	}
+	// sync table
+	currentSite.MigrateUserTable(fields, true)
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改用户额外字段设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
+	})
+}
+
+func PluginUserFieldsDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ModuleFieldRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.DeleteUserField(req.FieldName)
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除用户字段：%d => %s", req.Id, req.FieldName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "字段已删除",
 	})
 }
 

@@ -29,9 +29,10 @@ func (node *tagUserDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		id = uint(args["id"].Integer())
 	}
 	fieldName := ""
+	inputName := ""
 	if args["name"] != nil {
-		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		inputName = args["name"].String()
+		fieldName = library.Case2Camel(inputName)
 	}
 	// 规定某些字段不能返回内容
 	if fieldName == "Password" {
@@ -59,11 +60,21 @@ func (node *tagUserDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 
 	userDetail.Link = currentSite.GetUrl("user", userDetail, 0)
 
+	if len(node.name) > 0 && len(fieldName) == 0 {
+		ctx.Private[node.name] = userDetail
+		return nil
+	}
+
 	v := reflect.ValueOf(*userDetail)
 
 	f := v.FieldByName(fieldName)
 
 	content := fmt.Sprintf("%v", f)
+	// 检查 extra field
+	if extra, ok := userDetail.Extra[inputName]; ok {
+		content = fmt.Sprintf("%v", extra.Value)
+	}
+
 	if node.name == "" {
 		writer.WriteString(content)
 	} else {
@@ -74,7 +85,7 @@ func (node *tagUserDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 }
 
 func TagUserDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
-	tagNode := &tagPageDetailNode{
+	tagNode := &tagUserDetailNode{
 		args: make(map[string]pongo2.IEvaluator),
 	}
 

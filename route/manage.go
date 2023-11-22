@@ -335,6 +335,7 @@ func manageRoute(app *iris.Application) {
 			{
 				user.Get("/fields", manageController.PluginUserFieldsSetting)
 				user.Post("/fields", manageController.PluginUserFieldsSettingForm)
+				user.Post("/field/delete", manageController.PluginUserFieldsDelete)
 				user.Get("/list", manageController.PluginUserList)
 				user.Get("/detail", manageController.PluginUserDetail)
 				user.Post("/detail", manageController.PluginUserDetailForm)

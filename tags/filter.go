@@ -1,6 +1,7 @@
 package tags
 
 import (
+	"fmt"
 	"github.com/flosch/pongo2/v6"
 	"strings"
 )
@@ -16,6 +17,7 @@ func init() {
 	pongo2.RegisterFilter("count", filterCount)
 	pongo2.RegisterFilter("index", filterIndex)
 	pongo2.RegisterFilter("repeat", filterRepeat)
+	pongo2.RegisterFilter("dump", filterDump)
 }
 
 func filterContain(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
@@ -143,4 +145,8 @@ func filterIndex(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.
 
 func filterRepeat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
 	return pongo2.AsValue(strings.Repeat(in.String(), param.Integer())), nil
+}
+
+func filterDump(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	return pongo2.AsValue(fmt.Sprintf("%#v", in.Interface())), nil
 }

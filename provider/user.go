@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"github.com/medivhzhan/weapp/v3"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -40,59 +42,49 @@ func (w *Website) GetUserList(ops func(tx *gorm.DB) *gorm.DB, page, pageSize int
 	return users, total
 }
 
-func (w *Website) GetUserInfoById(userId uint) (*model.User, error) {
+func (w *Website) GetUserByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.User, error) {
 	var user model.User
-	err := w.DB.Where("`id` = ?", userId).Take(&user).Error
-
+	err := ops(w.DB).Take(&user).Error
 	if err != nil {
 		return nil, err
 	}
 	user.GetThumb(w.PluginStorage.StorageUrl)
+	user.Link = w.GetUrl("user", &user, 0)
+	user.Extra = w.GetUserExtra(user.Id)
 	return &user, nil
+}
+
+func (w *Website) GetUserInfoById(userId uint) (*model.User, error) {
+	if userId == 0 {
+		return nil, errors.New("no user")
+	}
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`id` = ?", userId)
+	})
 }
 
 func (w *Website) GetUserInfoByUserName(userName string) (*model.User, error) {
-	var user model.User
-	err := w.DB.Where("`user_name` = ?", userName).Take(&user).Error
-
-	if err != nil {
-		return nil, err
-	}
-	user.GetThumb(w.PluginStorage.StorageUrl)
-	return &user, nil
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`user_name` = ?", userName)
+	})
 }
 
 func (w *Website) GetUserInfoByEmail(email string) (*model.User, error) {
-	var user model.User
-	err := w.DB.Where("`email` = ?", email).Take(&user).Error
-
-	if err != nil {
-		return nil, err
-	}
-	user.GetThumb(w.PluginStorage.StorageUrl)
-	return &user, nil
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`email` = ?", email)
+	})
 }
 
 func (w *Website) GetUserInfoByPhone(phone string) (*model.User, error) {
-	var user model.User
-	err := w.DB.Where("`phone` = ?", phone).Take(&user).Error
-
-	if err != nil {
-		return nil, err
-	}
-	user.GetThumb(w.PluginStorage.StorageUrl)
-	return &user, nil
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`phone` = ?", phone)
+	})
 }
 
 func (w *Website) CheckUserInviteCode(inviteCode string) (*model.User, error) {
-	var user model.User
-	err := w.DB.Where("`invite_code` = ?", inviteCode).Take(&user).Error
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &user, nil
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`invite_code` = ?", inviteCode)
+	})
 }
 
 func (w *Website) GetUsersInfoByIds(userIds []uint) []*model.User {
@@ -135,7 +127,50 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 		user.Id = req.Id
 	}
 	err := w.DB.Save(&user).Error
+	//extra
+	extraFields := map[string]interface{}{}
+	if len(w.PluginUser.Fields) > 0 {
+		for _, v := range w.PluginUser.Fields {
+			if req.Extra[v.FieldName] != nil {
+				extraValue, ok := req.Extra[v.FieldName].(map[string]interface{})
+				if ok {
+					if v.Type == config.CustomFieldTypeCheckbox {
+						//只有这个类型的数据是数组,数组转成,分隔字符串
+						if val, ok := extraValue["value"].([]interface{}); ok {
+							var val2 []string
+							for _, v2 := range val {
+								val2 = append(val2, v2.(string))
+							}
+							extraFields[v.FieldName] = strings.Join(val2, ",")
+						}
+					} else if v.Type == config.CustomFieldTypeNumber {
+						//只有这个类型的数据是数字，转成数字
+						extraFields[v.FieldName], _ = strconv.Atoi(fmt.Sprintf("%v", extraValue["value"]))
+					} else {
+						value, ok := extraValue["value"].(string)
+						if ok {
+							extraFields[v.FieldName] = strings.TrimPrefix(value, w.PluginStorage.StorageUrl)
+						} else {
+							extraFields[v.FieldName] = extraValue["value"]
+						}
+					}
+				}
+			} else {
+				if v.Type == config.CustomFieldTypeNumber {
+					//只有这个类型的数据是数字，转成数字
+					extraFields[v.FieldName] = 0
+				} else {
+					extraFields[v.FieldName] = ""
+				}
+			}
+		}
+	}
 
+	//extra
+	if len(extraFields) > 0 {
+		//入库
+		w.DB.Model(model.User{}).Where("`id` = ?", user.Id).Updates(extraFields)
+	}
 	return err
 }
 
@@ -585,4 +620,67 @@ func (w *Website) GetUserFields() []*config.CustomField {
 	fields := w.PluginUser.Fields
 
 	return fields
+}
+
+func (w *Website) MigrateUserTable(fields []*config.CustomField, focus bool) {
+	tableName := "users"
+	// 根据表单字段，生成数据
+	for _, field := range fields {
+		field.CheckSetFilter()
+		column := field.GetFieldColumn()
+		if !w.DB.Debug().Migrator().HasColumn(model.User{}, field.FieldName) {
+			//创建语句
+			w.DB.Debug().Exec("ALTER TABLE ? ADD COLUMN ?", clause.Table{Name: tableName}, gorm.Expr(column))
+		} else if focus {
+			//更新语句
+			w.DB.Debug().Exec("ALTER TABLE ? MODIFY COLUMN ?", clause.Table{Name: tableName}, gorm.Expr(column))
+		}
+	}
+}
+
+func (w *Website) DeleteUserField(fieldName string) error {
+	for i, val := range w.PluginUser.Fields {
+		if val.FieldName == fieldName {
+			if w.DB.Debug().Migrator().HasColumn(model.User{}, val.FieldName) {
+				w.DB.Debug().Migrator().DropColumn(model.User{}, val.FieldName)
+			}
+
+			w.PluginUser.Fields = append(w.PluginUser.Fields[:i], w.PluginUser.Fields[i+1:]...)
+			break
+		}
+	}
+	// 回写
+	err := w.SaveSettingValue(UserSettingKey, w.PluginUser)
+	return err
+}
+
+func (w *Website) GetUserExtra(id uint) map[string]*model.CustomField {
+	//读取extra
+	result := map[string]interface{}{}
+	extraFields := map[string]*model.CustomField{}
+	var fields []string
+	for _, v := range w.PluginUser.Fields {
+		fields = append(fields, "`"+v.FieldName+"`")
+	}
+	//从数据库中取出来
+	if len(fields) > 0 {
+		w.DB.Model(model.User{}).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
+		//extra的CheckBox的值
+		for _, v := range w.PluginUser.Fields {
+			if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
+				value, ok := result[v.FieldName].(string)
+				if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
+					result[v.FieldName] = w.PluginStorage.StorageUrl + value
+				}
+			}
+			extraFields[v.FieldName] = &model.CustomField{
+				Name:        v.Name,
+				Value:       result[v.FieldName],
+				Default:     v.Content,
+				FollowLevel: v.FollowLevel,
+			}
+		}
+	}
+
+	return extraFields
 }

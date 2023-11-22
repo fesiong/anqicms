@@ -170,7 +170,7 @@ func InitWebsite(mw *model.Website) {
 		w.InitBucket()
 		w.InitMemCache()
 		// 初始化索引,异步处理
-		go w.InitFulltext()
+		//go w.InitFulltext()
 	}
 }
 

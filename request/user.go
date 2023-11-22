@@ -19,6 +19,8 @@ type UserRequest struct {
 	Password   string `json:"password"`
 	InviteCode string `json:"invite_code"`
 	ExpireTime int64  `json:"expire_time"`
+
+	Extra map[string]interface{} `json:"extra"`
 }
 
 type UserPasswordRequest struct {

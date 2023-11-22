@@ -68,7 +68,7 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 }
 
 func TagUserGroupDetailParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pongo2.Parser) (pongo2.INodeTag, *pongo2.Error) {
-	tagNode := &tagPageDetailNode{
+	tagNode := &tagUserGroupDetailNode{
 		args: make(map[string]pongo2.IEvaluator),
 	}
 

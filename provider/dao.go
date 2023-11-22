@@ -194,7 +194,8 @@ func (w *Website) InitModelData() {
 		Setting:     model.GroupSetting{},
 	}
 	w.DB.Where("`id` = 1").FirstOrCreate(&adminGroup)
-
+	// user table
+	w.MigrateUserTable(w.PluginUser.Fields, false)
 	// set default user groups
 	userGeroups := []model.UserGroup{
 		{
