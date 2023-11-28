@@ -55,7 +55,11 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		if args["id"].String() == "parent" && categoryDetail != nil {
+			id = categoryDetail.Id
+		} else {
+			id = uint(args["id"].Integer())
+		}
 	}
 	if id > 0 {
 		categoryDetail = currentSite.GetCategoryFromCache(id)

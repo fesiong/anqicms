@@ -93,6 +93,17 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			moduleId = defaultModuleId
 		}
 	}
+	// 增加支持 excludeCategoryId
+	var excludeCategoryIds []uint
+	if args["excludeCategoryId"] != nil {
+		tmpIds := strings.Split(args["excludeCategoryId"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				excludeCategoryIds = append(excludeCategoryIds, uint(tmpId))
+			}
+		}
+	}
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
@@ -228,6 +239,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 				}
+				if len(excludeCategoryIds) > 0 {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+					} else {
+						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+					}
+				}
 				tx = tx.Where("`status` = 1 AND `keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId).
 					Order("archives.id ASC")
 				return tx
@@ -241,6 +259,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				if len(excludeCategoryIds) > 0 {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+					} else {
+						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+					}
 				}
 				tx = tx.Where("archives.`id` > ?", archiveId).Order("archives.id ASC")
 				return tx
@@ -256,6 +281,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+						}
 					}
 					tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
 					return tx
@@ -339,6 +371,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					} else {
 						tx = tx.Where("`category_id` IN(?)", categoryIds)
 					}
+				}
+			}
+			if len(excludeCategoryIds) > 0 {
+				if currentSite.Content.MultiCategory == 1 {
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+				} else {
+					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 				}
 			}
 			if order != "" {
