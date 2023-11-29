@@ -31,6 +31,8 @@ func Crond() {
 	crontab.AddFunc("1 * * * * *", UpdateTimeFactor)
 	// 每分钟检查一次 AI文章计划
 	crontab.AddFunc("1 * * * * *", AiArticlePlan)
+	// 每天8点下发前一天网站数据到邮箱
+	crontab.AddFunc("1 1 8 * * *", SendStatisticsMail)
 	crontab.Start()
 }
 
@@ -148,5 +150,15 @@ func AiArticlePlan() {
 			continue
 		}
 		w.SyncAiArticlePlan()
+	}
+}
+
+func SendStatisticsMail() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.SendStatisticsMail()
 	}
 }

@@ -81,6 +81,18 @@ func (w *Website) GetLastSendmailList() ([]*MailLog, error) {
 
 func (w *Website) SendMail(subject, content string, recipients ...string) error {
 	setting := w.PluginSendmail
+	if setting.Account == "" {
+		//成功配置，则跳过
+		return errors.New(w.Lang("请配置发件人信息"))
+	}
+
+	err := w.sendMail(subject, content, recipients, false, true)
+
+	return err
+}
+
+func (w *Website) sendMail(subject, content string, recipients []string, useHtml bool, setLog bool) error {
+	setting := w.PluginSendmail
 	port := setting.Port
 	if port == 0 {
 		//默认使用25端口
@@ -126,13 +138,21 @@ func (w *Website) SendMail(subject, content string, recipients ...string) error 
 	for _, to := range recipients {
 		email.To = []string{to}
 		email.Subject = subject
-		email.Text = content
+		if useHtml {
+			email.HTML = content
+		} else {
+			email.Text = content
+		}
 
 		if err = email.Send(); err != nil {
-			w.logMailError(to, subject, err.Error())
+			if setLog {
+				w.logMailError(to, subject, err.Error())
+			}
 			continue
 		}
-		w.logMailError(to, subject, w.Lang("发送成功"))
+		if setLog {
+			w.logMailError(to, subject, w.Lang("发送成功"))
+		}
 	}
 	return err
 }

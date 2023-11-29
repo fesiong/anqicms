@@ -2,10 +2,12 @@ package provider
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/jinzhu/now"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
+	"strconv"
 	"time"
 )
 
@@ -25,7 +27,7 @@ func (w *Website) StatisticSpider(separate string) []response.ChartData {
 		todayStamp := now.BeginningOfDay().Unix()
 		var tmpResult []*SpiderData
 		w.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` != ''").
-			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%h:00') AS statistic_date,spider").
+			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%H:00') AS statistic_date,spider").
 			Group("statistic_date,spider").Order("statistic_date asc").Find(&tmpResult)
 
 		for _, v := range tmpResult {
@@ -67,7 +69,7 @@ func (w *Website) StatisticTraffic(separate string) []response.ChartData {
 		todayStamp := now.BeginningOfDay().Unix()
 		var tmpResult []*SpiderData
 		w.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` = ''").
-			Select("count(1) AS total, count(distinct ip) as ips FROM_UNIXTIME(created_time, '%h:00') AS statistic_date").
+			Select("count(1) AS total, count(distinct ip) as ips FROM_UNIXTIME(created_time, '%H:00') AS statistic_date").
 			Group("statistic_date").Order("statistic_date asc").Find(&tmpResult)
 
 		for _, v := range tmpResult {
@@ -185,4 +187,210 @@ func (w *Website) GetStatisticsSummary() *response.Statistics {
 	}
 
 	return w.CachedStatistics
+}
+
+func (w *Website) SendStatisticsMail() {
+	setting := w.PluginSendmail
+	if setting.Account == "" {
+		//成功配置，则跳过
+		return
+	}
+	// 开始统计数据
+	// 需要发送以下数据
+	// 各个搜索引擎收录数据
+	// 访问数据
+	todayStamp := now.BeginningOfDay().Unix()
+
+	// 收录量
+	var engineIndex model.SpiderInclude
+	err := w.DB.Where("`created_time` >= ?", todayStamp-86400).Order("id desc").Take(&engineIndex).Error
+	if err != nil {
+		w.QuerySpiderInclude()
+		// 重新查询
+		w.DB.Where("`created_time` >= ?", todayStamp-86400).Order("id desc").Take(&engineIndex)
+	}
+	// 蜘蛛
+	var spiderResult []*SpiderData
+	var totalSpider int64
+	w.DB.Model(&model.Statistic{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Where("`spider` != ''").
+		Select("count(1) AS total, spider").
+		Group("spider").Find(&spiderResult)
+	for _, v := range spiderResult {
+		totalSpider += v.Total
+	}
+	// 访问量
+	var visitResult []*SpiderData
+	var totalVisit int64
+	w.DB.Debug().Model(&model.Statistic{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Where("`spider` = ''").
+		Select("count(1) AS total, FROM_UNIXTIME(created_time, '%H:00') AS statistic_date").
+		Group("statistic_date").Order("statistic_date asc").Find(&visitResult)
+	for _, v := range visitResult {
+		totalVisit += v.Total
+	}
+	// 文档等数据
+	var archiveCount int64
+	var allArchiveCount int64
+	w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", todayStamp-86400, todayStamp).Count(&archiveCount)
+	w.DB.Model(&model.Archive{}).Count(&allArchiveCount)
+	var categoryCount int64
+	w.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&categoryCount)
+	var pageCount int64
+	w.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&pageCount)
+	var linkCount int64
+	w.DB.Model(&model.Link{}).Count(&linkCount)
+	var guestbookCount int64
+	w.DB.Model(&model.Guestbook{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&guestbookCount)
+	var commentCount int64
+	w.DB.Model(&model.Comment{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&commentCount)
+	var userCount int64
+	w.DB.Model(&model.User{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&userCount)
+	// 后台操作记录
+	var loginCount int64
+	w.DB.Model(&model.AdminLoginLog{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&loginCount)
+	var adminLogCount int64
+	w.DB.Model(&model.AdminLog{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&adminLogCount)
+
+	// 开始写邮件内容
+	subject := fmt.Sprintf(time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.System.SiteName + "站点数据")
+	content := `<html>
+<head>
+  <style>
+    body {
+      text-align: center;
+      width: 90%;
+      margin: 30px auto;
+    }
+    table {
+      border-collapse: collapse;
+      border-spacing: 0;
+      width: 100%;
+      background-color: #fff;
+      color: #333
+    }
+    table tr {
+      transition: all .3s;
+      -webkit-transition: all .3s
+    }
+    table th {
+      text-align: left;
+      font-weight: 400
+    }
+    table tbody tr:hover,
+    table thead tr {
+      background-color: #FAFAFA
+    }
+    table td,
+    table th {
+      border-width: 1px;
+      border-style: solid;
+      border-color: #ccc
+    }
+    table td,
+    table th {
+      position: relative;
+      padding: 9px 15px;
+      min-height: 20px;
+      line-height: 20px;
+      font-size: 14px
+    }
+  </style>
+</head>
+<body>`
+	content += "<h1>" + subject + "</h1>\n"
+	content += `<h2>收录量</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>百度</th>
+        <th>搜狗</th>
+        <th>360</th>
+        <th>必应</th>
+        <th>谷歌</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>`
+	content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
+	content += `</tr>
+    </tbody>
+  </table>`
+	content += `<h2>蜘蛛爬行</h2>
+  <table>
+    <thead>
+      <tr>`
+	for _, v := range spiderResult {
+		content += "<th>" + v.Spider + "</th>"
+	}
+	content += `
+      </tr>
+    </thead>
+    <tfoot>
+      <tr>
+        <td>合计</td>`
+	content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
+	content += `</tr>
+    </tfoot>
+    <tbody>
+      <tr>`
+	for _, v := range spiderResult {
+		content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
+	}
+	content += `
+      </tr>
+    </tbody>
+  </table>
+  <h2>访问量</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>时间</th>
+        <th>访问</th>
+      </tr>
+    </thead>
+    <tfoot>
+      <tr>
+        <td>合计</td>`
+	content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
+	content += `
+      </tr>
+    </tfoot>
+    <tbody>`
+	for i := 0; i < len(visitResult); i++ {
+		content += "<tr>\n        <td>" + visitResult[i].StatisticDate + "</td>\n        <td>" + strconv.Itoa(int(visitResult[i].Total)) + "</td>\n</tr>"
+	}
+	content += `
+    </tbody>
+  </table>
+  <h2>站点数据</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>条目</th>
+        <th>数量</th>
+      </tr>
+    </thead>
+    <tbody>`
+	content += "<tr>\n        <td>文档</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>新增文档</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>分类</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>单页</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>友情链接</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>新增留言</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>新增评论</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>新增用户</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>后台登录</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>后台操作</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
+	content += `
+    </tbody>
+  </table>
+</body>
+
+</html>`
+
+	// 不记录错误
+	_ = w.sendMail(subject, content, nil, true, false)
 }
