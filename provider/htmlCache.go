@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/v12"
@@ -178,8 +179,8 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	ua := library.GetUserAgent(isMobile)
 	baseUrl := fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port)
 	_, err := library.Request(baseUrl+urlPath, &library.Options{Header: map[string]string{
-		"host":  w.Host,
-		"cache": "true",
+		"host":          w.Host,
+		"Cache-Control": "no-cache",
 	}, UserAgent: ua})
 	if err != nil {
 		return err
@@ -189,14 +190,29 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 }
 
 func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []byte) error {
-	cacheFile := w.CachePath
+	cachePath := w.CachePath
 	if isMobile {
-		cacheFile += "mobile"
+		cachePath += "mobile"
 	} else {
-		cacheFile += "pc"
+		cachePath += "pc"
 	}
 
-	cacheFile = cacheFile + transToLocalPath(oriPath, oriQuery)
+	cacheFile := cachePath + transToLocalPath(oriPath, oriQuery)
+	if len(oriQuery) > 0 {
+		// 有查询，判断是否无效查询
+		tmpLocalPath := transToLocalPath(oriPath, "")
+		cacheNoQueryFile := cachePath + tmpLocalPath
+		_, err := os.Stat(cacheNoQueryFile)
+		if err == nil {
+			// 对比文件内容是否一致，一致则引用
+			cacheNoQueryData, err := os.ReadFile(cacheNoQueryFile)
+			if err == nil {
+				if bytes.Equal(body, cacheNoQueryData) {
+					body = []byte(tmpLocalPath)
+				}
+			}
+		}
+	}
 
 	// 创建目录
 	info, err := os.Stat(filepath.Dir(cacheFile))
@@ -242,20 +258,34 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 		return "", false
 	}
 
-	cacheFile = w.CachePath
+	cachePath := w.CachePath
 	// 根据实际情况读取缓存
 	mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
 	if mobileTemplate {
-		cacheFile += "mobile"
+		cachePath += "mobile"
 	} else {
-		cacheFile += "pc"
+		cachePath += "pc"
 	}
 	localPath := transToLocalPath(ctx.RequestPath(false), ctx.Request().URL.RawQuery)
-	cacheFile = cacheFile + localPath
+	cacheFile = cachePath + localPath
 
 	info, err := os.Stat(cacheFile)
 	if err != nil {
 		return "", false
+	}
+	// 部分缓存文件是引用别的文件，文件长度小于 500 的就做引用检查，只有有query的时候，才会有可能是引用文件，引用文件内容开头是 /
+	if len(ctx.Request().URL.RawQuery) > 0 && info.Size() < 500 {
+		tmpData, err := os.ReadFile(cacheFile)
+		if err != nil {
+			return "", false
+		}
+		if bytes.HasPrefix(tmpData, []byte{'/'}) {
+			cacheFile = cachePath + string(tmpData)
+			info, err = os.Stat(cacheFile)
+			if err != nil {
+				return "", false
+			}
+		}
 	}
 	// 检查是否过期
 	if match == "index" {
