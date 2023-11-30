@@ -41,7 +41,8 @@ func IndexPage(ctx iris.Context) {
 		ctx.Values().Set("message", err.Error())
 	} else {
 		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
-			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, mobileTemplate, recorder.Body())
 		}
 	}
 }

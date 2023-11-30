@@ -81,8 +81,9 @@ func PagePage(ctx iris.Context) {
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {
-		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.IndexCache > 0 {
-			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, ctx.IsMobile(), recorder.Body())
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.DetailCache > 0 {
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, mobileTemplate, recorder.Body())
 		}
 	}
 }

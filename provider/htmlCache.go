@@ -177,15 +177,13 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	}
 	ua := library.GetUserAgent(isMobile)
 	baseUrl := fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port)
-	resp, err := library.Request(baseUrl+urlPath, &library.Options{Header: map[string]string{
+	_, err := library.Request(baseUrl+urlPath, &library.Options{Header: map[string]string{
 		"host":  w.Host,
 		"cache": "true",
 	}, UserAgent: ua})
 	if err != nil {
 		return err
 	}
-
-	err = w.CacheHtmlData(urlPath, "", isMobile, []byte(resp.Body))
 
 	return err
 }
@@ -245,7 +243,9 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 	}
 
 	cacheFile = w.CachePath
-	if ctx.IsMobile() {
+	// 根据实际情况读取缓存
+	mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+	if mobileTemplate {
 		cacheFile += "mobile"
 	} else {
 		cacheFile += "pc"
