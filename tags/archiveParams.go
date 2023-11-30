@@ -36,6 +36,13 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if args["sorted"] != nil {
 		sorted = args["sorted"].Bool()
 	}
+	name := ""
+	if args["name"] != nil {
+		name = args["name"].String()
+		if len(name) > 0 {
+			sorted = false
+		}
+	}
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
@@ -81,7 +88,15 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 				ctx.Private[node.name] = extraFields
 			} else {
-				ctx.Private[node.name] = archiveParams
+				if len(name) > 0 {
+					var content interface{}
+					if item, ok := archiveParams[name]; ok {
+						content = item.Value
+					}
+					ctx.Private[node.name] = content
+				} else {
+					ctx.Private[node.name] = archiveParams
+				}
 			}
 		}
 	}

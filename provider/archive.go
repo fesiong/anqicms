@@ -200,11 +200,20 @@ func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]
 						result[v.FieldName] = w.PluginStorage.StorageUrl + value
 					}
 				}
+				// render
+				if v.Type == config.CustomFieldTypeEditor && w.Content.Editor == "markdown" {
+					value, ok := result[v.FieldName].(string)
+					if ok {
+						result[v.FieldName] = library.MarkdownToHTML(value)
+					}
+				}
 				extraFields[v.FieldName] = &model.CustomField{
 					Name:        v.Name,
 					Value:       result[v.FieldName],
 					Default:     v.Content,
 					FollowLevel: v.FollowLevel,
+					Type:        v.Type,
+					FieldName:   v.FieldName,
 				}
 			}
 		}

@@ -14,6 +14,7 @@ const (
 	CustomFieldTypeText     = "text"
 	CustomFieldTypeNumber   = "number"
 	CustomFieldTypeTextarea = "textarea"
+	CustomFieldTypeEditor   = "editor"
 	CustomFieldTypeRadio    = "radio"
 	CustomFieldTypeCheckbox = "checkbox"
 	CustomFieldTypeSelect   = "select"

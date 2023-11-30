@@ -24,4 +24,6 @@ type CustomField struct {
 	Value       interface{} `json:"value"`
 	Default     interface{} `json:"default"`
 	FollowLevel bool        `json:"follow_level"`
+	Type        string      `json:"-"`
+	FieldName   string      `json:"-"`
 }

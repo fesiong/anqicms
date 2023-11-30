@@ -193,7 +193,7 @@ func (g *CustomField) GetFieldColumn() string {
 
 	if g.Type == CustomFieldTypeNumber {
 		column += " int(10)"
-	} else if g.Type == CustomFieldTypeTextarea {
+	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor {
 		column += " text"
 	} else {
 		// mysql 5.6 下，utf8mb4 索引只能用190
