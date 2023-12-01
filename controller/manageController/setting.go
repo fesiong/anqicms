@@ -478,6 +478,11 @@ func SettingBanner(ctx iris.Context) {
 			delete(mapBanners, currentSite.Banner[i].Type)
 		}
 	}
+	if len(banners) == 0 {
+		banners = append(banners, &Banner{
+			Type: "default",
+		})
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
