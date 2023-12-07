@@ -55,6 +55,7 @@ func (w *Website) BuildHtmlCache() {
 	w.BuildCategoryCache()
 	// 生成详情页
 	w.BuildTagCache()
+	w.BuildArchiveCache()
 	w.HtmlCacheStatus.Current = "全部生成完成"
 	w.HtmlCacheStatus.FinishedTime = time.Now().Unix()
 }
