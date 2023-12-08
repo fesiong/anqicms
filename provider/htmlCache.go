@@ -8,6 +8,9 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,7 +43,7 @@ func (w *Website) GetHtmlCacheStatus() *HtmlCacheStatus {
 	return w.HtmlCacheStatus
 }
 
-func (w *Website) BuildHtmlCache() {
+func (w *Website) BuildHtmlCache(ctx iris.Context) {
 	if w.PluginHtmlCache.Open == false {
 		return
 	}
@@ -51,10 +54,13 @@ func (w *Website) BuildHtmlCache() {
 
 	// 先生成首页
 	w.BuildIndexCache()
+	// 生成模型
+	w.BuildModuleCache(ctx)
 	// 生成栏目页
-	w.BuildCategoryCache()
+	w.BuildCategoryCache(ctx)
 	// 生成详情页
-	w.BuildTagCache()
+	w.BuildTagIndexCache(ctx)
+	w.BuildTagCache(ctx)
 	w.BuildArchiveCache()
 	w.HtmlCacheStatus.Current = "全部生成完成"
 	w.HtmlCacheStatus.FinishedTime = time.Now().Unix()
@@ -69,18 +75,101 @@ func (w *Website) BuildIndexCache() {
 	// 先生成首页
 	err := w.GetAndCacheHtmlData("/", false)
 	if err != nil {
-		w.HtmlCacheStatus.ErrorMsg = "生成首页失败"
+		w.HtmlCacheStatus.ErrorMsg = "生成首页失败" + err.Error()
 		return
 	}
-	if w.System.TemplateType != config.TemplateTypeAuto {
-		_ = w.GetAndCacheHtmlData("/", true)
-	}
-	// 生成PC后再生成mobile的
 	w.HtmlCacheStatus.FinishedCount += 1
+	if w.System.TemplateType != config.TemplateTypeAuto {
+		w.HtmlCacheStatus.Total += 1
+		err = w.GetAndCacheHtmlData("/", true)
+		if err == nil {
+			w.HtmlCacheStatus.FinishedCount += 1
+		} else {
+			w.HtmlCacheStatus.ErrorMsg = "生成首页失败" + err.Error()
+		}
+	}
 	w.HtmlCacheStatus.Current = "首页生成完成"
 }
 
-func (w *Website) BuildCategoryCache() {
+func (w *Website) BuildModuleCache(ctx iris.Context) {
+	if w.PluginHtmlCache.Open == false {
+		return
+	}
+	// 生成栏目
+	w.HtmlCacheStatus.Current = "开始生成模型"
+	var modules []*model.Module
+	w.DB.Model(&model.Module{}).Where("`status` = 1").Order("id asc").Find(&modules)
+	w.HtmlCacheStatus.Total += len(modules)
+	for _, module := range modules {
+		w.HtmlCacheStatus.Current = "正在生成模型：" + module.Title
+		// 模型只生成第一页
+		link := w.GetUrl("archiveIndex", module, 0)
+		link = strings.TrimPrefix(link, w.System.BaseUrl)
+		err := w.GetAndCacheHtmlData(link, false)
+		if err != nil {
+			w.HtmlCacheStatus.ErrorMsg = "生成模型" + module.Title + "失败" + err.Error()
+			continue
+		}
+		w.HtmlCacheStatus.FinishedCount += 1
+		// 检查模型是否有分页，如果有，则继续生成分页
+		newCtx := ctx.Clone()
+		newCtx.ViewData("module", module)
+		newCtx.ViewData("pageName", "archiveIndex")
+		webInfo := &response.WebInfo{
+			Title:    module.Title,
+			PageName: "archiveIndex",
+			NavBar:   module.Id,
+		}
+		newCtx.ViewData("webInfo", webInfo)
+		tplName := module.TableName + "/index.html"
+		tplName2 := module.TableName + "_index.html"
+		if ViewExists(newCtx, tplName2) {
+			tplName = tplName2
+		}
+		_ = newCtx.View(tplName)
+		if webInfo.TotalPages > 1 {
+			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			// 当存在多页的时候，则循环生成
+			for page := 1; page <= webInfo.TotalPages; page++ {
+				link = w.GetUrl("archiveIndex", module, page)
+				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				err = w.GetAndCacheHtmlData(link, false)
+				if err != nil {
+					w.HtmlCacheStatus.ErrorMsg = "生成模型" + module.Title + "失败" + err.Error()
+					continue
+				}
+				w.HtmlCacheStatus.FinishedCount += 1
+			}
+		}
+		// mobile
+		if w.System.TemplateType != config.TemplateTypeAuto {
+			w.HtmlCacheStatus.Total += 1
+			err = w.GetAndCacheHtmlData(link, true)
+			if err == nil {
+				w.HtmlCacheStatus.FinishedCount += 1
+			}
+			tplName = "mobile/" + tplName
+			_ = newCtx.View(tplName)
+			if webInfo.TotalPages > 1 {
+				w.HtmlCacheStatus.Total += webInfo.TotalPages
+				// 当存在多页的时候，则循环生成
+				for page := 1; page <= webInfo.TotalPages; page++ {
+					link = w.GetUrl("archiveIndex", module, page)
+					link = strings.TrimPrefix(link, w.System.BaseUrl)
+					err = w.GetAndCacheHtmlData(link, true)
+					if err != nil {
+						w.HtmlCacheStatus.ErrorMsg = "生成模型" + module.Title + "失败" + err.Error()
+						continue
+					}
+					w.HtmlCacheStatus.FinishedCount += 1
+				}
+			}
+		}
+	}
+	w.HtmlCacheStatus.Current = "模型生成完成"
+}
+
+func (w *Website) BuildCategoryCache(ctx iris.Context) {
 	if w.PluginHtmlCache.Open == false {
 		return
 	}
@@ -96,13 +185,83 @@ func (w *Website) BuildCategoryCache() {
 		link = strings.TrimPrefix(link, w.System.BaseUrl)
 		err := w.GetAndCacheHtmlData(link, false)
 		if err != nil {
-			w.HtmlCacheStatus.ErrorMsg = "生成栏目" + category.Title + "失败"
+			w.HtmlCacheStatus.ErrorMsg = "生成栏目" + category.Title + "失败" + err.Error()
 			continue
 		}
-		if w.System.TemplateType != config.TemplateTypeAuto {
-			_ = w.GetAndCacheHtmlData(link, true)
-		}
 		w.HtmlCacheStatus.FinishedCount += 1
+		// 检查模型是否有分页，如果有，则继续生成分页
+		module := w.GetModuleFromCache(category.ModuleId)
+		if module == nil {
+			continue
+		}
+		newCtx := ctx.Clone()
+		newCtx.ViewData("category", category)
+		newCtx.ViewData("pageName", "archiveList")
+		webInfo := &response.WebInfo{
+			Title:    category.Title,
+			PageName: "archiveList",
+			NavBar:   category.Id,
+		}
+		newCtx.ViewData("webInfo", webInfo)
+		tplName := module.TableName + "/list.html"
+		tplName2 := module.TableName + "_list.html"
+		if ViewExists(newCtx, tplName2) {
+			tplName = tplName2
+		}
+		//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
+		if category.Template != "" {
+			tplName = category.Template
+		} else if ViewExists(newCtx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
+			tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
+		} else {
+			categoryTemplate := w.GetCategoryTemplate(category)
+			if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
+				tplName = categoryTemplate.Template
+			}
+		}
+		if !strings.HasSuffix(tplName, ".html") {
+			tplName += ".html"
+		}
+		_ = newCtx.View(tplName)
+		if webInfo.TotalPages > 1 {
+			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			// 当存在多页的时候，则循环生成
+			for page := 1; page <= webInfo.TotalPages; page++ {
+				link = w.GetUrl("category", category, page)
+				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				err = w.GetAndCacheHtmlData(link, false)
+				if err != nil {
+					w.HtmlCacheStatus.ErrorMsg = "生成栏目" + category.Title + "失败" + err.Error()
+					continue
+				}
+				w.HtmlCacheStatus.FinishedCount += 1
+			}
+		}
+		// mobile
+		if w.System.TemplateType != config.TemplateTypeAuto {
+			w.HtmlCacheStatus.Total += 1
+			err = w.GetAndCacheHtmlData(link, true)
+			if err == nil {
+				w.HtmlCacheStatus.FinishedCount += 1
+			}
+			tplName = "mobile/" + tplName
+			webInfo.TotalPages = 0
+			err = newCtx.View(tplName)
+			if webInfo.TotalPages > 1 {
+				w.HtmlCacheStatus.Total += webInfo.TotalPages
+				// 当存在多页的时候，则循环生成
+				for page := 1; page <= webInfo.TotalPages; page++ {
+					link = w.GetUrl("category", category, page)
+					link = strings.TrimPrefix(link, w.System.BaseUrl)
+					err = w.GetAndCacheHtmlData(link, true)
+					if err != nil {
+						w.HtmlCacheStatus.ErrorMsg = "生成栏目" + category.Title + "失败" + err.Error()
+						continue
+					}
+					w.HtmlCacheStatus.FinishedCount += 1
+				}
+			}
+		}
 	}
 	w.HtmlCacheStatus.Current = "栏目生成完成"
 }
@@ -128,19 +287,94 @@ func (w *Website) BuildArchiveCache() {
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err := w.GetAndCacheHtmlData(link, false)
 			if err != nil {
-				w.HtmlCacheStatus.ErrorMsg = "生成文档" + arc.Title + "失败"
+				w.HtmlCacheStatus.ErrorMsg = "生成文档" + arc.Title + "失败" + err.Error()
 				continue
 			}
-			if w.System.TemplateType != config.TemplateTypeAuto {
-				_ = w.GetAndCacheHtmlData(link, true)
-			}
 			w.HtmlCacheStatus.FinishedCount += 1
+			if w.System.TemplateType != config.TemplateTypeAuto {
+				w.HtmlCacheStatus.Total += 1
+				err = w.GetAndCacheHtmlData(link, true)
+				if err == nil {
+					w.HtmlCacheStatus.FinishedCount += 1
+				}
+			}
 		}
 	}
 	w.HtmlCacheStatus.Current = "文档生成完成"
 }
 
-func (w *Website) BuildTagCache() {
+func (w *Website) BuildTagIndexCache(ctx iris.Context) {
+	if w.PluginHtmlCache.Open == false {
+		return
+	}
+	w.HtmlCacheStatus.Current = "开始生成标签首页"
+	w.HtmlCacheStatus.Total += 1
+	link := w.GetUrl("tagIndex", nil, 0)
+	// 先生成首页
+	err := w.GetAndCacheHtmlData(link, false)
+	if err != nil {
+		w.HtmlCacheStatus.ErrorMsg = "生成标签首页失败" + err.Error()
+		return
+	}
+	// 检查模型是否有分页，如果有，则继续生成分页
+	newCtx := ctx.Clone()
+	newCtx.ViewData("pageName", "tagIndex")
+	webInfo := &response.WebInfo{
+		Title:    w.Lang("标签列表"),
+		PageName: "tagIndex",
+	}
+	newCtx.ViewData("webInfo", webInfo)
+	tplName := "tag/index.html"
+	if ViewExists(newCtx, "tag_index.html") {
+		tplName = "tag_index.html"
+	}
+	_ = newCtx.View(tplName)
+	if webInfo.TotalPages > 1 {
+		w.HtmlCacheStatus.Total += webInfo.TotalPages
+		// 当存在多页的时候，则循环生成
+		for page := 1; page <= webInfo.TotalPages; page++ {
+			link = w.GetUrl("tagIndex", nil, page)
+			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			err = w.GetAndCacheHtmlData(link, false)
+			if err != nil {
+				w.HtmlCacheStatus.ErrorMsg = "生成标签首页失败" + err.Error()
+				continue
+			}
+			w.HtmlCacheStatus.FinishedCount += 1
+		}
+	}
+	// mobile
+	if w.System.TemplateType != config.TemplateTypeAuto {
+		w.HtmlCacheStatus.Total += 1
+		err = w.GetAndCacheHtmlData(link, true)
+		if err == nil {
+			w.HtmlCacheStatus.FinishedCount += 1
+		}
+		// 检查模型是否有分页，如果有，则继续生成分页
+		tplName = "mobile/" + tplName
+		webInfo.TotalPages = 0
+		_ = newCtx.View(tplName)
+		if webInfo.TotalPages > 1 {
+			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			// 当存在多页的时候，则循环生成
+			for page := 1; page <= webInfo.TotalPages; page++ {
+				link = w.GetUrl("tagIndex", nil, page)
+				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				err = w.GetAndCacheHtmlData(link, true)
+				if err != nil {
+					w.HtmlCacheStatus.ErrorMsg = "生成标签首页失败" + err.Error()
+					continue
+				}
+				w.HtmlCacheStatus.FinishedCount += 1
+			}
+		}
+	}
+	// end
+	w.HtmlCacheStatus.FinishedCount += 1
+	w.HtmlCacheStatus.Current = "首页生成标签完成"
+}
+
+func (w *Website) BuildTagCache(ctx iris.Context) {
 	if w.PluginHtmlCache.Open == false {
 		return
 	}
@@ -161,13 +395,64 @@ func (w *Website) BuildTagCache() {
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err := w.GetAndCacheHtmlData(link, false)
 			if err != nil {
-				w.HtmlCacheStatus.ErrorMsg = "生成标签" + tag.Title + "失败"
+				w.HtmlCacheStatus.ErrorMsg = "生成标签" + tag.Title + "失败" + err.Error()
 				continue
 			}
-			if w.System.TemplateType != config.TemplateTypeAuto {
-				_ = w.GetAndCacheHtmlData(link, true)
-			}
 			w.HtmlCacheStatus.FinishedCount += 1
+			// 检查模型是否有分页，如果有，则继续生成分页
+			newCtx := ctx.Clone()
+			newCtx.ViewData("tag", tag)
+			newCtx.ViewData("pageName", "tag")
+			webInfo := &response.WebInfo{
+				Title:    tag.Title,
+				PageName: "tag",
+				NavBar:   tag.Id,
+			}
+			newCtx.ViewData("webInfo", webInfo)
+			tplName := "tag/list.html"
+			if ViewExists(ctx, "tag_list.html") {
+				tplName = "tag_list.html"
+			}
+			_ = newCtx.View(tplName)
+			if webInfo.TotalPages > 1 {
+				w.HtmlCacheStatus.Total += webInfo.TotalPages
+				// 当存在多页的时候，则循环生成
+				for page := 1; page <= webInfo.TotalPages; page++ {
+					link = w.GetUrl("tag", tag, page)
+					link = strings.TrimPrefix(link, w.System.BaseUrl)
+					err = w.GetAndCacheHtmlData(link, false)
+					if err != nil {
+						w.HtmlCacheStatus.ErrorMsg = "生成标签" + tag.Title + "失败" + err.Error()
+						continue
+					}
+					w.HtmlCacheStatus.FinishedCount += 1
+				}
+			}
+			// mobile
+			if w.System.TemplateType != config.TemplateTypeAuto {
+				w.HtmlCacheStatus.Total += 1
+				err = w.GetAndCacheHtmlData(link, true)
+				if err == nil {
+					w.HtmlCacheStatus.FinishedCount += 1
+				}
+				tplName = "mobile/" + tplName
+				webInfo.TotalPages = 0
+				_ = newCtx.View(tplName)
+				if webInfo.TotalPages > 1 {
+					w.HtmlCacheStatus.Total += webInfo.TotalPages
+					// 当存在多页的时候，则循环生成
+					for page := 1; page <= webInfo.TotalPages; page++ {
+						link = w.GetUrl("tag", tag, page)
+						link = strings.TrimPrefix(link, w.System.BaseUrl)
+						err = w.GetAndCacheHtmlData(link, true)
+						if err != nil {
+							w.HtmlCacheStatus.ErrorMsg = "生成标签" + tag.Title + "失败" + err.Error()
+							continue
+						}
+						w.HtmlCacheStatus.FinishedCount += 1
+					}
+				}
+			}
 		}
 	}
 	w.HtmlCacheStatus.Current = "标签生成完成"
@@ -177,15 +462,51 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if w.PluginHtmlCache.Open == false {
 		return errors.New("没开启静态缓存功能")
 	}
+	if strings.HasPrefix(urlPath, "http") {
+		parsed, err := url.Parse(urlPath)
+		if err == nil {
+			urlPath = parsed.Path
+			if len(parsed.RawQuery) > 0 {
+				urlPath += "?" + parsed.RawQuery
+			}
+		}
+	}
+	host := w.Host
+	if isMobile && w.System.TemplateType == config.TemplateTypeSeparate {
+		mobileUrl, err := url.Parse(w.System.MobileUrl)
+		if err != nil {
+			return errors.New("移动端域名解析失败")
+		}
+		host = mobileUrl.Hostname()
+	}
 	ua := library.GetUserAgent(isMobile)
 	baseUrl := fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port)
-	_, err := library.Request(baseUrl+urlPath, &library.Options{Header: map[string]string{
-		"host":          w.Host,
-		"Cache-Control": "no-cache",
-	}, UserAgent: ua})
+
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+	req, err := http.NewRequest("GET", baseUrl, nil)
 	if err != nil {
 		return err
 	}
+	req.Header.Set("User-Agent", ua)
+	req.Header.Set("X-Host", host)
+	req.Header.Set("Cache-Control", "no-cache")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	//
+	//
+	//resp, err := library.Request(baseUrl+urlPath, &library.Options{Header: map[string]string{
+	//	"host":          host,
+	//	"Cache-Control": "no-cache",
+	//}, UserAgent: ua})
+	//log.Println(resp, err)
+	//if err != nil {
+	//	return err
+	//}
 
 	return err
 }
@@ -342,4 +663,32 @@ func transToLocalPath(oriPath string, oriQuery string) string {
 	}
 
 	return localLink
+}
+
+func ViewExists(ctx iris.Context, tplName string) bool {
+	//tpl 存放目录，在bootstrap中有
+	currentSite := CurrentSite(ctx)
+	baseDir := currentSite.GetTemplateDir()
+	tplFile := baseDir + "/" + tplName
+
+	_, err := os.Stat(tplFile)
+	if err == nil {
+		return true
+	}
+	if os.IsNotExist(err) {
+		return false
+	}
+
+	return false
+}
+
+// SyncHtmlCacheToStorage
+// todo
+func (w *Website) SyncHtmlCacheToStorage(localPath string) error {
+	if localPath == "" {
+		// 只传输单个
+	} else {
+		// 整站传输
+	}
+	return nil
 }

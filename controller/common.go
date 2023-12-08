@@ -610,7 +610,7 @@ func CheckTemplateType(ctx iris.Context) {
 		if !strings.EqualFold(library.GetHost(ctx), mobileUrl.Hostname()) {
 			// 电脑端访问，检查是否需要301
 			if ctx.IsMobile() {
-				ctx.Redirect(currentSite.System.MobileUrl, 301)
+				ctx.Redirect(currentSite.System.MobileUrl+ctx.Request().RequestURI, 301)
 				return
 			}
 		} else {

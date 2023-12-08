@@ -414,12 +414,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if listType == "page" {
 		var urlPatten string
+		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
 		if categoryDetail != nil {
 			urlMatch := "category"
 			urlPatten = currentSite.GetUrl(urlMatch, categoryDetail, -1)
 		} else {
-			webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
-			if ok && webInfo.PageName == "archiveIndex" {
+			if ok2 && webInfo.PageName == "archiveIndex" {
 				urlMatch := "archiveIndex"
 				urlPatten = currentSite.GetUrl(urlMatch, module, -1)
 			} else {
@@ -427,7 +427,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				urlPatten = ""
 			}
 		}
-		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
+		pager := makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
+		webInfo.TotalPages = pager.TotalPages
+		ctx.Public["pagination"] = pager
 	}
 	ctx.Private[node.name] = archives
 	ctx.Private["combine"] = combineArchive

@@ -133,6 +133,7 @@ type PluginHtmlCache struct {
 	ListCache     int64 `json:"category_cache"`  // 列表页缓存时间
 	DetailCache   int64 `json:"detail_cache"`    // 详情页缓存时间
 	LastBuildTime int64 `json:"last_build_time"` // 上一次手动生成时间
+	PluginStorageConfig
 }
 
 type PluginTimeFactor struct {
