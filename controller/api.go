@@ -15,6 +15,11 @@ import (
 )
 
 func ApiImportArchive(ctx iris.Context) {
+	if ctx.Method() == "GET" {
+		// 用于检查待发布的文章是否存在
+		ApiImportGetArchive(ctx)
+		return
+	}
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.PostValueIntDefault("id", 0))
 	title := ctx.PostValueTrim("title")
@@ -38,6 +43,7 @@ func ApiImportArchive(ctx iris.Context) {
 	stock := ctx.PostValueInt64Default("stock", 0)
 	readLevel := ctx.PostValueIntDefault("read_level", 0)
 	sort := uint(ctx.PostValueIntDefault("sort", 0))
+	originUrl := ctx.PostValueTrim("origin_url")
 	tmpCategoryIds, _ := ctx.PostValues("category_ids[]")
 	var categoryIds []uint
 	if len(tmpCategoryIds) > 0 {
@@ -121,6 +127,7 @@ func ApiImportArchive(ctx iris.Context) {
 		Extra:        map[string]interface{}{},
 		Draft:        draft,
 		Sort:         sort,
+		OriginUrl:    originUrl,
 	}
 
 	// 如果传了ID，则采用覆盖的形式
@@ -143,6 +150,7 @@ func ApiImportArchive(ctx iris.Context) {
 				Stock:       stock,
 				ReadLevel:   readLevel,
 				Sort:        sort,
+				OriginUrl:   originUrl,
 			}
 			archive.Id = id
 			err = currentSite.DB.Create(&archive).Error
@@ -179,6 +187,21 @@ func ApiImportArchive(ctx iris.Context) {
 					"msg":  currentSite.Lang("文档标题重复，不允许重复导入"),
 				})
 				return
+			}
+		}
+		if len(originUrl) > 0 {
+			// 标题重复的不允许导入
+			exists, err = currentSite.GetArchiveByOriginUrl(originUrl)
+			if err == nil {
+				if cover {
+					req.Id = exists.Id
+				} else {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  currentSite.Lang("文档重复，不允许重复导入"),
+					})
+					return
+				}
 			}
 		}
 	}
@@ -243,6 +266,61 @@ func ApiImportArchive(ctx iris.Context) {
 			"id":  archive.Id,
 		},
 	})
+}
+
+func ApiImportGetArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := uint(ctx.URLParamIntDefault("id", 0))
+	title := ctx.URLParam("title")
+	urlToken := ctx.URLParam("url_token")
+	originUrl := ctx.URLParam("origin_url")
+
+	if id > 0 {
+		archive, err := currentSite.GetArchiveById(id)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archive,
+			})
+			return
+		}
+	}
+	if len(title) > 0 {
+		archive, err := currentSite.GetArchiveByTitle(title)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archive,
+			})
+			return
+		}
+	}
+	if len(urlToken) > 0 {
+		archive, err := currentSite.GetArchiveByUrlToken(urlToken)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archive,
+			})
+			return
+		}
+	}
+	if len(originUrl) > 0 {
+		archive, err := currentSite.GetArchiveByOriginUrl(originUrl)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archive,
+			})
+			return
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusFailed,
+		"msg":  "文档不存在",
+	})
+	return
 }
 
 func ApiImportGetCategories(ctx iris.Context) {
