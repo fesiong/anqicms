@@ -10,6 +10,11 @@ import (
 
 func TagIndexPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = currentSite.Lang("标签列表")
@@ -25,14 +30,25 @@ func TagIndexPage(ctx iris.Context) {
 	if ViewExists(ctx, "tag_index.html") {
 		tplName = "tag_index.html"
 	}
+	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.ListCache > 0 {
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, mobileTemplate, recorder.Body())
+		}
 	}
 }
 
 func TagPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	if ok {
+		ctx.ServeFile(cacheFile)
+		return
+	}
 	tagId := ctx.Params().GetUintDefault("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var tag *model.Tag
@@ -73,9 +89,14 @@ func TagPage(ctx iris.Context) {
 	if ViewExists(ctx, "tag_list.html") {
 		tplName = "tag_list.html"
 	}
-
+	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
+	} else {
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.ListCache > 0 {
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, mobileTemplate, recorder.Body())
+		}
 	}
 }

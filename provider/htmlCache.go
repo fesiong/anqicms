@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"io"
 	"io/fs"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -66,7 +67,7 @@ func (w *Website) BuildHtmlCache(ctx iris.Context) {
 	w.BuildIndexCache()
 	// 生成模型
 	w.BuildModuleCache(ctx)
-	// 生成栏目页
+	//// 生成栏目页
 	w.BuildCategoryCache(ctx)
 	// 生成详情页
 	w.BuildTagIndexCache(ctx)
@@ -141,6 +142,9 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		w.HtmlCacheStatus.FinishedCount += 1
 		// 检查模型是否有分页，如果有，则继续生成分页
 		newCtx := ctx.Clone()
+		writer := newResponseWriter()
+		respWriter := &responseWriter{ResponseWriter: writer}
+		newCtx.ResetResponseWriter(respWriter)
 		newCtx.ViewData("module", module)
 		newCtx.ViewData("pageName", "archiveIndex")
 		webInfo := &response.WebInfo{
@@ -154,11 +158,11 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		if ViewExists(newCtx, tplName2) {
 			tplName = tplName2
 		}
-		_ = newCtx.View(tplName)
+		_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
 		if webInfo.TotalPages > 1 {
-			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 			// 当存在多页的时候，则循环生成
-			for page := 1; page <= webInfo.TotalPages; page++ {
+			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("archiveIndex", module, page)
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				err = w.GetAndCacheHtmlData(link, false)
@@ -179,9 +183,9 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 			tplName = "mobile/" + tplName
 			_ = newCtx.View(tplName)
 			if webInfo.TotalPages > 1 {
-				w.HtmlCacheStatus.Total += webInfo.TotalPages
+				w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 				// 当存在多页的时候，则循环生成
-				for page := 1; page <= webInfo.TotalPages; page++ {
+				for page := 2; page <= webInfo.TotalPages; page++ {
 					link = w.GetUrl("archiveIndex", module, page)
 					link = strings.TrimPrefix(link, w.System.BaseUrl)
 					err = w.GetAndCacheHtmlData(link, true)
@@ -241,6 +245,9 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		return
 	}
 	newCtx := ctx.Clone()
+	writer := newResponseWriter()
+	respWriter := &responseWriter{ResponseWriter: writer}
+	newCtx.ResetResponseWriter(respWriter)
 	newCtx.ViewData("category", category)
 	newCtx.ViewData("pageName", "archiveList")
 	webInfo := &response.WebInfo{
@@ -268,13 +275,13 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	if !strings.HasSuffix(tplName, ".html") {
 		tplName += ".html"
 	}
-	_ = newCtx.View(tplName)
+	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
 	if webInfo.TotalPages > 1 {
 		if w.HtmlCacheStatus != nil {
-			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 		}
 		// 当存在多页的时候，则循环生成
-		for page := 1; page <= webInfo.TotalPages; page++ {
+		for page := 2; page <= webInfo.TotalPages; page++ {
 			link = w.GetUrl("category", category, page)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err = w.GetAndCacheHtmlData(link, false)
@@ -305,10 +312,10 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		err = newCtx.View(tplName)
 		if webInfo.TotalPages > 1 {
 			if w.HtmlCacheStatus != nil {
-				w.HtmlCacheStatus.Total += webInfo.TotalPages
+				w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 			}
 			// 当存在多页的时候，则循环生成
-			for page := 1; page <= webInfo.TotalPages; page++ {
+			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("category", category, page)
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				err = w.GetAndCacheHtmlData(link, true)
@@ -390,6 +397,9 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	}
 	// 检查模型是否有分页，如果有，则继续生成分页
 	newCtx := ctx.Clone()
+	writer := newResponseWriter()
+	respWriter := &responseWriter{ResponseWriter: writer}
+	newCtx.ResetResponseWriter(respWriter)
 	newCtx.ViewData("pageName", "tagIndex")
 	webInfo := &response.WebInfo{
 		Title:    w.Lang("标签列表"),
@@ -400,11 +410,11 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	if ViewExists(newCtx, "tag_index.html") {
 		tplName = "tag_index.html"
 	}
-	_ = newCtx.View(tplName)
+	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
 	if webInfo.TotalPages > 1 {
-		w.HtmlCacheStatus.Total += webInfo.TotalPages
+		w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 		// 当存在多页的时候，则循环生成
-		for page := 1; page <= webInfo.TotalPages; page++ {
+		for page := 2; page <= webInfo.TotalPages; page++ {
 			link = w.GetUrl("tagIndex", nil, page)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err = w.GetAndCacheHtmlData(link, false)
@@ -427,9 +437,9 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 		webInfo.TotalPages = 0
 		_ = newCtx.View(tplName)
 		if webInfo.TotalPages > 1 {
-			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 			// 当存在多页的时候，则循环生成
-			for page := 1; page <= webInfo.TotalPages; page++ {
+			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("tagIndex", nil, page)
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				err = w.GetAndCacheHtmlData(link, true)
@@ -495,6 +505,9 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	}
 	// 检查模型是否有分页，如果有，则继续生成分页
 	newCtx := ctx.Clone()
+	writer := newResponseWriter()
+	respWriter := &responseWriter{ResponseWriter: writer}
+	newCtx.ResetResponseWriter(respWriter)
 	newCtx.ViewData("tag", tag)
 	newCtx.ViewData("pageName", "tag")
 	webInfo := &response.WebInfo{
@@ -507,13 +520,13 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	if ViewExists(ctx, "tag_list.html") {
 		tplName = "tag_list.html"
 	}
-	_ = newCtx.View(tplName)
+	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
 	if webInfo.TotalPages > 1 {
 		if w.HtmlCacheStatus != nil {
-			w.HtmlCacheStatus.Total += webInfo.TotalPages
+			w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 		}
 		// 当存在多页的时候，则循环生成
-		for page := 1; page <= webInfo.TotalPages; page++ {
+		for page := 2; page <= webInfo.TotalPages; page++ {
 			link = w.GetUrl("tag", tag, page)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err = w.GetAndCacheHtmlData(link, false)
@@ -544,10 +557,10 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 		_ = newCtx.View(tplName)
 		if webInfo.TotalPages > 1 {
 			if w.HtmlCacheStatus != nil {
-				w.HtmlCacheStatus.Total += webInfo.TotalPages
+				w.HtmlCacheStatus.Total += webInfo.TotalPages - 1
 			}
 			// 当存在多页的时候，则循环生成
-			for page := 1; page <= webInfo.TotalPages; page++ {
+			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("tag", tag, page)
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				err = w.GetAndCacheHtmlData(link, true)
@@ -993,4 +1006,33 @@ func (w *Website) GetHtmlPushLog(localFile string) (*model.HtmlPushLog, error) {
 	}
 
 	return &pushLog, nil
+}
+
+type responseWriterJustWriter struct {
+	buf *bytes.Buffer
+	io.Writer
+}
+
+func newResponseWriter() responseWriterJustWriter {
+	buf := &bytes.Buffer{}
+	return responseWriterJustWriter{
+		buf:    buf,
+		Writer: buf,
+	}
+}
+
+func (responseWriterJustWriter) Header() http.Header {
+	log.Println("should not be called")
+	return nil
+}
+func (responseWriterJustWriter) WriteHeader(int) {
+	log.Println("should not be called")
+}
+
+func (r responseWriterJustWriter) Bytes() []byte {
+	return r.buf.Bytes()
+}
+
+func (r responseWriterJustWriter) Reset() {
+	r.buf.Reset()
 }
