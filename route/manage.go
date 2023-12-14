@@ -454,9 +454,16 @@ func manageRoute(app *iris.Application) {
 				htmlcache.Get("/config", manageController.PluginHtmlCacheConfig)
 				htmlcache.Post("/config", manageController.PluginHtmlCacheConfigForm)
 				htmlcache.Post("/build", manageController.PluginHtmlCacheBuild)
+				htmlcache.Post("/build/index", manageController.PluginHtmlCacheBuildIndex)
+				htmlcache.Post("/build/category", manageController.PluginHtmlCacheBuildCategory)
+				htmlcache.Post("/build/archive", manageController.PluginHtmlCacheBuildArchive)
+				htmlcache.Post("/build/tag", manageController.PluginHtmlCacheBuildTag)
 				htmlcache.Get("/build/status", manageController.PluginHtmlCacheBuildStatus)
 				htmlcache.Post("/clean", manageController.PluginCleanHtmlCache)
 				htmlcache.Post("/upload", manageController.PluginHtmlCacheUploadFile)
+				htmlcache.Post("/push", manageController.PluginHtmlCachePush)
+				htmlcache.Get("/push/status", manageController.PluginHtmlCachePushStatus)
+				htmlcache.Get("/push/logs", manageController.PluginHtmlCachePushLogs)
 			}
 
 			aiGenerate := manage.Party("/aigenerate", middleware.ParseAdminToken, middleware.AdminPermission)

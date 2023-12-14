@@ -242,8 +242,6 @@ func (w *Website) LoadStorageSetting() {
 	if w.PluginStorage.StorageType == "" {
 		w.PluginStorage.StorageType = config.StorageTypeLocal
 	}
-	// 初始化存储桶
-	w.InitBucket()
 }
 
 func (w *Website) LoadPaySetting() {
@@ -324,18 +322,17 @@ func (w *Website) LoadTitleImageSetting() {
 func (w *Website) LoadHtmlCacheSetting() {
 	value := w.GetSettingValue(HtmlCacheSettingKey)
 	if value != "" {
-		err := json.Unmarshal([]byte(value), &w.PluginHtmlCache)
-		if err == nil {
-			return
-		}
+		_ = json.Unmarshal([]byte(value), &w.PluginHtmlCache)
 	}
 	// if no item, set to default
 	// index default cache 5 minutes
-	w.PluginHtmlCache.IndexCache = 300
-	// list default cache 60 minutes
-	w.PluginHtmlCache.ListCache = 3600
-	// detail default cache 24 hours
-	w.PluginHtmlCache.DetailCache = 86400
+	if w.PluginHtmlCache.Open == false {
+		w.PluginHtmlCache.IndexCache = 300
+		// list default cache 60 minutes
+		w.PluginHtmlCache.ListCache = 3600
+		// detail default cache 24 hours
+		w.PluginHtmlCache.DetailCache = 86400
+	}
 }
 
 func (w *Website) LoadAnqiUser() {

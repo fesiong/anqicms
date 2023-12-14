@@ -32,6 +32,9 @@ func (w *Website) SaveFavicon(file multipart.File) error {
 	// 保存为 favcion.ico
 	err = os.WriteFile(w.PublicPath+"favicon.ico", buf, os.ModePerm)
 
+	// 上传到静态服务器
+	_ = w.SyncHtmlCacheToStorage(w.PublicPath+"favicon.ico", "favicon.ico")
+
 	return err
 }
 

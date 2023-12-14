@@ -5,10 +5,13 @@ import (
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 func PluginHtmlCacheConfig(ctx iris.Context) {
@@ -37,6 +40,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	currentSite.PluginHtmlCache.ListCache = req.ListCache
 	currentSite.PluginHtmlCache.DetailCache = req.DetailCache
 	// storage 部分
+	currentSite.PluginHtmlCache.KeepLocal = false
 	currentSite.PluginHtmlCache.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
 	currentSite.PluginHtmlCache.StorageType = req.StorageType
 
@@ -82,6 +86,8 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新缓存配置"))
 
+	currentSite.InitCacheBucket()
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
@@ -110,9 +116,85 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 	})
 }
 
+func PluginHtmlCacheBuildIndex(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	go func() {
+		currentSite.BuildIndexCache()
+		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := currentSite.CachePath + "pc"
+		_ = currentSite.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
+	}()
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成首页缓存"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "生成任务执行中",
+	})
+}
+
+func PluginHtmlCacheBuildCategory(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	go func() {
+		currentSite.BuildModuleCache(ctx)
+		currentSite.BuildCategoryCache(ctx)
+		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := currentSite.CachePath + "pc"
+		// 更新的html
+		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+	}()
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成栏目缓存"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "生成任务执行中",
+	})
+}
+
+func PluginHtmlCacheBuildArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	go func() {
+		currentSite.BuildArchiveCache()
+		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := currentSite.CachePath + "pc"
+		// 更新的html
+		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+	}()
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成文档缓存"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "生成任务执行中",
+	})
+}
+
+func PluginHtmlCacheBuildTag(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	go func() {
+		currentSite.BuildTagIndexCache(ctx)
+		currentSite.BuildTagCache(ctx)
+		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := currentSite.CachePath + "pc"
+		// 更新的html
+		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+	}()
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成标签缓存"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "生成任务执行中",
+	})
+}
+
 func PluginHtmlCacheBuildStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	status := currentSite.GetHtmlCacheStatus()
+
+	if status != nil && status.FinishedTime > 0 && !status.Removing {
+		status.Removing = true
+		time.AfterFunc(30*time.Second, func() {
+			currentSite.HtmlCacheStatus = nil
+		})
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -187,5 +269,94 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "文件已上传完成",
 		"data": fileName,
+	})
+}
+
+func PluginHtmlCachePush(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PluginHtmlCachePushRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 开始执行推送
+	if len(req.Paths) > 0 {
+		// 逐个进行
+		for _, v := range req.Paths {
+			fullName := currentSite.RootPath + v
+			var remotePath string
+			if strings.HasPrefix(fullName, currentSite.PublicPath) {
+				// 来自public目录
+				remotePath = strings.TrimPrefix(fullName, currentSite.PublicPath)
+			} else {
+				// 来自cache目录, 只传PC目录
+				cachePath := currentSite.CachePath + "pc"
+				remotePath = strings.TrimPrefix(fullName, cachePath)
+			}
+			_ = currentSite.SyncHtmlCacheToStorage(fullName, remotePath)
+		}
+	} else {
+		go func() {
+			if req.All {
+				// 全量推送，重置所有推送数据
+				currentSite.CleanHtmlPushLog()
+			}
+			_ = currentSite.SyncHtmlCacheToStorage("", "")
+		}()
+	}
+
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动推送文件到静态服务器"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "推送任务执行中",
+	})
+}
+
+func PluginHtmlCachePushStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	status := currentSite.GetHtmlCachePushStatus()
+
+	if status != nil && status.FinishedTime > 0 && !status.Removing {
+		status.Removing = true
+		time.AfterFunc(30*time.Second, func() {
+			currentSite.HtmlCachePushStatus = nil
+		})
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
+	})
+}
+
+func PluginHtmlCachePushLogs(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	//需要支持分页，还要支持搜索
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	status := ctx.URLParam("status")
+
+	var list []*model.HtmlPushLog
+	offset := (currentPage - 1) * pageSize
+	var total int64
+
+	tx := currentSite.DB.Model(&model.HtmlPushLog{}).Order("created_time desc")
+	if status == "error" {
+		//模糊搜索
+		tx = tx.Where("`status` = 0")
+	}
+
+	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&list)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  list,
 	})
 }

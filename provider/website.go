@@ -29,6 +29,7 @@ type Website struct {
 	PublicPath              string
 	DB                      *gorm.DB
 	Storage                 *BucketStorage
+	CacheStorage            *BucketStorage
 	parsedPatten            *RewritePatten
 	searcher                *engine.Engine
 	fulltextStatus          int // 0 未启用，1初始化中，2 初始化完成
@@ -40,6 +41,7 @@ type Website struct {
 	AdminLoginError         response.LoginError
 	MemCache                *memCache
 	HtmlCacheStatus         *HtmlCacheStatus
+	HtmlCachePushStatus     *HtmlCacheStatus
 
 	System  config.SystemConfig  `json:"system"`
 	Content config.ContentConfig `json:"content"`
@@ -121,7 +123,7 @@ func InitWebsite(mw *model.Website) {
 		}
 		db, err = InitDB(&mw.Mysql)
 	}
-	if strings.HasSuffix(mw.RootPath, "/") {
+	if !strings.HasSuffix(mw.RootPath, "/") {
 		mw.RootPath = mw.RootPath + "/"
 	}
 	w := Website{
@@ -168,6 +170,7 @@ func InitWebsite(mw *model.Website) {
 	}
 	if w.Initialed {
 		w.InitBucket()
+		w.InitCacheBucket()
 		w.InitMemCache()
 		// 初始化索引,异步处理
 		go w.InitFulltext()

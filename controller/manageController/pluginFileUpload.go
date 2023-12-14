@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -88,6 +89,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	})
 }
 
+// PluginFileUploadUpload
 // 上传，只允许上传txt,htm,html
 func PluginFileUploadUpload(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
@@ -159,6 +161,9 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		})
 		return
 	}
+
+	// 上传到静态服务器
+	_ = currentSite.SyncHtmlCacheToStorage(filePath, filepath.Base(filePath))
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传验证文件：%s", info.Filename))
 

@@ -676,6 +676,56 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
 		}
 	}
+	// 更新缓存
+	go func() {
+		// 生成文章页，生成栏目页，生成首页，生成tag
+		// 上传到静态服务器
+		cachePath := w.CachePath + "pc"
+		// 生成文章页
+		link := w.GetUrl("archive", archive, 0)
+		link = strings.TrimPrefix(link, w.System.BaseUrl)
+		_ = w.GetAndCacheHtmlData(link, false)
+		if w.System.TemplateType != config.TemplateTypeAuto {
+			_ = w.GetAndCacheHtmlData(link, true)
+		}
+		archivePath := cachePath + transToLocalPath(link, "")
+		_ = w.SyncHtmlCacheToStorage(archivePath, link)
+		// 生成栏目页，只生成第一页
+		category := w.GetCategoryFromCache(archive.CategoryId)
+		if category != nil {
+			link = w.GetUrl("category", category, 0)
+			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			_ = w.GetAndCacheHtmlData(link, false)
+			if w.System.TemplateType != config.TemplateTypeAuto {
+				_ = w.GetAndCacheHtmlData(link, true)
+			}
+			categoryPath := cachePath + transToLocalPath(link, "")
+			_ = w.SyncHtmlCacheToStorage(categoryPath, link)
+		}
+		// 生成Tag，只生成第一页
+		tags := w.GetTagsByItemId(archive.Id)
+		if len(tags) > 0 {
+			link = w.GetUrl("tagIndex", nil, 0)
+			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			// 先生成首页
+			_ = w.GetAndCacheHtmlData(link, false)
+			if w.System.TemplateType != config.TemplateTypeAuto {
+				_ = w.GetAndCacheHtmlData(link, true)
+			}
+			tagPath := cachePath + transToLocalPath(link, "")
+			_ = w.SyncHtmlCacheToStorage(tagPath, link)
+			for _, tag := range tags {
+				link = w.GetUrl("tag", tag, 0)
+				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				_ = w.GetAndCacheHtmlData(link, false)
+				if w.System.TemplateType != config.TemplateTypeAuto {
+					_ = w.GetAndCacheHtmlData(link, true)
+				}
+				tagPath = cachePath + transToLocalPath(link, "")
+				_ = w.SyncHtmlCacheToStorage(tagPath, link)
+			}
+		}
+	}()
 
 	return nil
 }
@@ -707,6 +757,20 @@ func (w *Website) RecoverArchive(archive *model.Archive) error {
 	w.DB.Table("`archives` as a").Joins("left join `archive_data` as d on a.id=d.id").Select("a.id,a.title,a.keywords,a.module_id,d.content").Where("a.`id` > ?", archive.Id).Take(&doc)
 	// 尝试添加全文索引
 	w.AddFulltextIndex(&doc)
+	go func() {
+		// 生成文章页，生成栏目页，生成首页，生成tag
+		// 上传到静态服务器
+		cachePath := w.CachePath + "pc"
+		// 生成文章页
+		link := w.GetUrl("archive", archive, 0)
+		link = strings.TrimPrefix(link, w.System.BaseUrl)
+		_ = w.GetAndCacheHtmlData(link, false)
+		if w.System.TemplateType != config.TemplateTypeAuto {
+			_ = w.GetAndCacheHtmlData(link, true)
+		}
+		archivePath := cachePath + transToLocalPath(link, "")
+		_ = w.SyncHtmlCacheToStorage(archivePath, link)
+	}()
 
 	return nil
 }

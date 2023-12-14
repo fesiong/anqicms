@@ -112,6 +112,7 @@ func AutoMigrateDB(db *gorm.DB) error {
 		&model.Website{},
 		&model.AiArticlePlan{},
 		&model.ArchiveCategory{},
+		&model.HtmlPushLog{},
 
 		&model.User{},
 		&model.UserGroup{},

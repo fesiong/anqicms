@@ -98,6 +98,13 @@ func CategoryDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 更新缓存
+	go func() {
+		currentSite.BuildModuleCache(ctx)
+		currentSite.BuildSingleCategoryCache(ctx, category)
+		// 上传到静态服务器
+		_ = currentSite.SyncHtmlCacheToStorage("", "")
+	}()
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("保存文档分类：%d => %s", category.Id, category.Title))
 

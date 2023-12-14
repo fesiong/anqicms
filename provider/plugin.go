@@ -213,6 +213,8 @@ func (w *Website) SaveRobots(robots string) error {
 	if err != nil {
 		return err
 	}
+	// 上传到静态服务器
+	_ = w.SyncHtmlCacheToStorage(robotsPath, "robots.txt")
 
 	return nil
 }

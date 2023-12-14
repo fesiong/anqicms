@@ -30,6 +30,7 @@ import (
 type BucketStorage struct {
 	DataPath            string
 	PublicPath          string
+	w                   *Website
 	config              *config.PluginStorageConfig
 	tencentBucketClient *cos.Client
 	aliyunBucketClient  *oss.Bucket
@@ -45,6 +46,7 @@ func (w *Website) GetBucket() (bucket *BucketStorage, err error) {
 	bucket = &BucketStorage{
 		DataPath:            w.DataPath,
 		PublicPath:          w.PublicPath,
+		w:                   w,
 		config:              &w.PluginStorage,
 		tencentBucketClient: nil,
 		aliyunBucketClient:  nil,
@@ -98,6 +100,9 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			//无法创建
 			return "", err
 		}
+		// 如果是本地存储，则
+		// 上传到静态服务器
+		_ = bs.w.SyncHtmlCacheToStorage(basePath+location, location)
 	}
 	if bs.config.StorageType == config.StorageTypeAliyun {
 		if bs.aliyunBucketClient == nil {

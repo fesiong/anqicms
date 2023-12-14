@@ -84,6 +84,12 @@ func ModuleDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 更新缓存
+	go func() {
+		currentSite.BuildModuleCache(ctx)
+		// 上传到静态服务器
+		_ = currentSite.SyncHtmlCacheToStorage("", "")
+	}()
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", module.Id, module.Title))
 

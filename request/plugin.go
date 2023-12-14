@@ -117,3 +117,8 @@ type PluginReplaceRequest struct {
 	Places     []string                `json:"places"`
 	Keywords   []config.ReplaceKeyword `json:"keywords"`
 }
+
+type PluginHtmlCachePushRequest struct {
+	All   bool     `json:"all"`
+	Paths []string `json:"paths"`
+}

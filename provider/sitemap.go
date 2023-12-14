@@ -55,12 +55,12 @@ func (w *Website) BuildSitemap() error {
 	tagBuilder := w.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
 
 	//index 和 category 存放在同一个文件，文章单独一个文件
-	indexFile := NewSitemapIndexGenerator(w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
+	indexFile := NewSitemapIndexGenerator(w, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
 	defer indexFile.Save()
 
 	indexFile.AddIndex(fmt.Sprintf("%s/category.%s", baseUrl, w.PluginSitemap.Type))
 
-	categoryFile := NewSitemapGenerator(w.PluginSitemap.Type, fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
+	categoryFile := NewSitemapGenerator(w, fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
 	defer categoryFile.Save()
 	//写入首页
 	categoryFile.AddLoc(baseUrl, time.Now().Format("2006-01-02"))
@@ -78,7 +78,7 @@ func (w *Website) BuildSitemap() error {
 		indexFile.AddIndex(fmt.Sprintf("%s/archive-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
 		//写入archive-sitemap
-		archiveFile := NewSitemapGenerator(w.PluginSitemap.Type, fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
+		archiveFile := NewSitemapGenerator(w, fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
 		err := archiveBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&archives).Error
 		if err == nil {
 			for _, v := range archives {
@@ -95,7 +95,7 @@ func (w *Website) BuildSitemap() error {
 		indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
 		//写入tag-sitemap
-		tagFile := NewSitemapGenerator(w.PluginSitemap.Type, fmt.Sprintf("%stag-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
+		tagFile := NewSitemapGenerator(w, fmt.Sprintf("%stag-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
 		err := tagBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&tags).Error
 		if err == nil {
 			for _, v := range tags {
@@ -124,7 +124,7 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 			}
 		}
 
-		categoryFile := NewSitemapGenerator(w.PluginSitemap.Type, categoryPath, w.System.BaseUrl, true)
+		categoryFile := NewSitemapGenerator(w, categoryPath, w.System.BaseUrl, true)
 		if err != nil {
 			return err
 		}
@@ -149,7 +149,7 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 				return err
 			}
 		}
-		archiveFile := NewSitemapGenerator(w.PluginSitemap.Type, archivePath, w.System.BaseUrl, true)
+		archiveFile := NewSitemapGenerator(w, archivePath, w.System.BaseUrl, true)
 		defer archiveFile.Save()
 		archiveFile.AddLoc(link, lastmod)
 
@@ -170,7 +170,7 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 				return err
 			}
 		}
-		tagFile := NewSitemapGenerator(w.PluginSitemap.Type, tagPath, w.System.BaseUrl, true)
+		tagFile := NewSitemapGenerator(w, tagPath, w.System.BaseUrl, true)
 		defer tagFile.Save()
 		tagFile.AddLoc(link, lastmod)
 
@@ -194,6 +194,7 @@ type SitemapGenerator struct {
 	Type     string       `xml:"-"`
 	FilePath string       `xml:"-"`
 	BaseUrl  string       `xml:"-"`
+	w        *Website
 }
 
 type SitemapIndexGenerator struct {
@@ -203,11 +204,13 @@ type SitemapIndexGenerator struct {
 	Sitemaps []SitemapUrl `xml:"sitemap"`
 	FilePath string       `xml:"-"`
 	BaseUrl  string       `xml:"-"`
+	w        *Website
 }
 
-func NewSitemapGenerator(sitemapType string, filePath, baseUrl string, load bool) *SitemapGenerator {
+func NewSitemapGenerator(w *Website, filePath, baseUrl string, load bool) *SitemapGenerator {
 	generator := &SitemapGenerator{
-		Type:     sitemapType,
+		w:        w,
+		Type:     w.PluginSitemap.Type,
 		FilePath: filePath,
 		BaseUrl:  baseUrl,
 		Xmlns:    "http://www.sitemaps.org/schemas/sitemap/0.9",
@@ -273,6 +276,9 @@ func (g *SitemapGenerator) Save() error {
 			if err1 := f.Close(); err1 != nil && err == nil {
 				err = err1
 			}
+			// 上传到静态服务器
+			remotePath := strings.TrimPrefix(g.FilePath, g.w.PublicPath)
+			_ = g.w.SyncHtmlCacheToStorage(g.FilePath, remotePath)
 			return err
 		}
 
@@ -283,14 +289,17 @@ func (g *SitemapGenerator) Save() error {
 			links = append(links, g.Urls[i].Loc)
 		}
 		err := os.WriteFile(g.FilePath, []byte(strings.Join(links, "\r\n")), os.ModePerm)
-
+		// 上传到静态服务器
+		remotePath := strings.TrimPrefix(g.FilePath, g.w.PublicPath)
+		_ = g.w.SyncHtmlCacheToStorage(g.FilePath, remotePath)
 		return err
 	}
 }
 
-func NewSitemapIndexGenerator(sitemapType string, filePath, baseUrl string, load bool) *SitemapIndexGenerator {
+func NewSitemapIndexGenerator(w *Website, filePath, baseUrl string, load bool) *SitemapIndexGenerator {
 	generator := &SitemapIndexGenerator{
-		Type:     sitemapType,
+		w:        w,
+		Type:     w.PluginSitemap.Type,
 		Xmlns:    "http://www.sitemaps.org/schemas/sitemap/0.9",
 		FilePath: filePath,
 		BaseUrl:  baseUrl,
@@ -353,6 +362,9 @@ func (s *SitemapIndexGenerator) Save() error {
 			if err1 := f.Close(); err1 != nil && err == nil {
 				err = err1
 			}
+			// 上传到静态服务器
+			remotePath := strings.TrimPrefix(s.FilePath, s.w.PublicPath)
+			_ = s.w.SyncHtmlCacheToStorage(s.FilePath, remotePath)
 			return err
 		}
 
@@ -363,7 +375,9 @@ func (s *SitemapIndexGenerator) Save() error {
 			links = append(links, s.Sitemaps[i].Loc)
 		}
 		err := os.WriteFile(s.FilePath, []byte(strings.Join(links, "\r\n")), os.ModePerm)
-
+		// 上传到静态服务器
+		remotePath := strings.TrimPrefix(s.FilePath, s.w.PublicPath)
+		_ = s.w.SyncHtmlCacheToStorage(s.FilePath, remotePath)
 		return err
 	}
 }

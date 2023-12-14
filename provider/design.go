@@ -356,6 +356,9 @@ func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) 
 	designInfo.Package = packageName
 	designInfo.Created = time.Now().Format("2006-01-02 15:04:05")
 	_ = w.writeDesignInfo(&designInfo)
+	// 仅需上传static部分
+	// 上传到静态服务器
+	_ = w.ReadAndSendLocalFiles(w.PublicPath + "static/" + packageName)
 
 	return nil
 }
@@ -513,6 +516,10 @@ func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHead
 			reader.Close()
 			_ = newFile.Close()
 		}
+		if fileType == "static" {
+			// 上传到静态服务器
+			_ = w.ReadAndSendLocalFiles(realPath)
+		}
 	} else {
 		info.Filename = strings.ReplaceAll(strings.ReplaceAll(info.Filename, "..", ""), "\\", "/")
 		realFile := realPath + "/" + info.Filename
@@ -529,6 +536,11 @@ func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHead
 		}
 
 		_ = newFile.Close()
+		if fileType == "static" {
+			remotePath := strings.TrimSuffix(realFile, w.PublicPath)
+			// 上传到静态服务器
+			_ = w.SyncHtmlCacheToStorage(realFile, remotePath)
+		}
 	}
 
 	return nil
@@ -775,7 +787,11 @@ func (w *Website) RestoreDesignFile(packageName, filePath, historyHash, fileType
 	if err != nil {
 		return err
 	}
-
+	if fileType == "static" {
+		remotePath := strings.TrimSuffix(fullPath, w.PublicPath)
+		// 上传到静态服务器
+		_ = w.SyncHtmlCacheToStorage(fullPath, remotePath)
+	}
 	return nil
 }
 
@@ -887,6 +903,11 @@ func (w *Website) SaveDesignFile(req request.SaveDesignFileRequest) error {
 				return err
 			}
 			designFileDetail.Path = req.RenamePath
+			if req.Type == "static" {
+				remotePath := strings.TrimSuffix(newPath, w.PublicPath)
+				// 上传到静态服务器
+				_ = w.SyncHtmlCacheToStorage(newPath, remotePath)
+			}
 		}
 		//
 		if existsIndex == -1 {
@@ -914,6 +935,11 @@ func (w *Website) SaveDesignFile(req request.SaveDesignFileRequest) error {
 		}
 		// 更新文件
 		err = w.writeDesignInfo(designInfo)
+		if req.Type == "static" {
+			remotePath := strings.TrimSuffix(fullPath, w.PublicPath)
+			// 上传到静态服务器
+			_ = w.SyncHtmlCacheToStorage(fullPath, remotePath)
+		}
 
 		return err
 	}
@@ -991,6 +1017,11 @@ func (w *Website) CopyDesignFile(req request.CopyDesignFileRequest) error {
 	}
 	// 更新文件
 	err = w.writeDesignInfo(designInfo)
+	if req.Type == "static" {
+		remotePath := strings.TrimSuffix(newPath, w.PublicPath)
+		// 上传到静态服务器
+		_ = w.SyncHtmlCacheToStorage(newPath, remotePath)
+	}
 
 	return err
 }
@@ -1110,7 +1141,12 @@ func (w *Website) SaveDesignStaticFile(req request.SaveDesignFileRequest) error 
 	if err != nil {
 		return err
 	}
-
+	// 更新文件
+	if req.Type == "static" {
+		remotePath := strings.TrimSuffix(fullPath, w.PublicPath)
+		// 上传到静态服务器
+		_ = w.SyncHtmlCacheToStorage(fullPath, remotePath)
+	}
 	return nil
 }
 

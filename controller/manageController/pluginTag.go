@@ -74,6 +74,13 @@ func PluginTagDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 更新缓存
+	go func() {
+		currentSite.BuildTagIndexCache(ctx)
+		currentSite.BuildSingleTagCache(ctx, tag)
+		// 上传到静态服务器
+		_ = currentSite.SyncHtmlCacheToStorage("", "")
+	}()
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新文档标签：%d => %s", tag.Id, tag.Title))
 
