@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -163,7 +164,7 @@ func PluginBackupExport(ctx iris.Context) {
 		return
 	}
 
-	ctx.SendFile(filePath, "")
+	ctx.SendFile(filePath, currentSite.Host+"-"+filepath.Base(filePath))
 }
 
 func PluginBackupCleanup(ctx iris.Context) {
