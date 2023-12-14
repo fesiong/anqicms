@@ -102,6 +102,10 @@ func (w *Website) LoadSystemSetting() {
 	if w.System.Language == "" {
 		w.System.Language = "zh"
 	}
+	// 默认站点
+	if w.Id == 1 {
+		w.System.DefaultSite = true
+	}
 }
 
 func (w *Website) LoadContentSetting() {

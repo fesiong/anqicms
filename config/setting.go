@@ -26,6 +26,7 @@ type SystemConfig struct {
 	Language      string       `json:"language"`     // 语言包引用
 	ExtraFields   []ExtraField `json:"extra_fields"` // 用户自定义字段
 	Favicon       string       `json:"favicon"`
+	DefaultSite   bool         `json:"default_site"` // 是否是默认站点，每次读取的时候会检查
 }
 
 type ContentConfig struct {
