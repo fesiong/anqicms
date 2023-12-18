@@ -904,13 +904,17 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 	if len(req.CategoryIds) == 0 && req.CategoryId > 0 {
 		req.CategoryIds = append(req.CategoryIds, req.CategoryId)
 	}
+	var defaultCategory *model.Category
 	for _, catId := range req.CategoryIds {
-		_, err := w.GetCategoryById(catId)
+		category, err := w.GetCategoryById(catId)
 		if err != nil {
 			return errors.New("分类不存在")
 		}
+		if defaultCategory == nil {
+			defaultCategory = category
+		}
 	}
-	if len(req.CategoryIds) == 0 {
+	if len(req.CategoryIds) == 0 || defaultCategory == nil {
 		return errors.New("请选择分类")
 	}
 	for _, arcId := range req.Ids {
@@ -924,7 +928,10 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 		// 删除额外的
 		w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", arcId, req.CategoryIds).Delete(&model.ArchiveCategory{})
 		// 更新主分类ID
-		w.DB.Model(&model.Archive{}).Where("`id` = ?", arcId).UpdateColumn("category_id", req.CategoryIds[0])
+		w.DB.Model(&model.Archive{}).Where("`id` = ?", arcId).UpdateColumns(map[string]interface{}{
+			"category_id": defaultCategory.Id,
+			"module_id":   defaultCategory.ModuleId,
+		})
 	}
 	// end
 
