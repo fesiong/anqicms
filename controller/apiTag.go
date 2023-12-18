@@ -325,8 +325,8 @@ func ApiArchiveList(ctx iris.Context) {
 				return tx
 			}, 0, limit, offset)
 		} else {
-			newLimit := int(math.Ceil(float64(limit) / 2))
-			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+			halfLimit := int(math.Ceil(float64(limit) / 2))
+			archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
 				if currentSite.Content.MultiCategory == 1 {
 					// 多分类支持
@@ -344,36 +344,38 @@ func ApiArchiveList(ctx iris.Context) {
 				tx = tx.Where("archives.`id` > ?", archiveId).Order("archives.id ASC")
 				return tx
 			}, 0, limit, offset)
-			if limit-len(archives) < newLimit {
-				newLimit = limit - len(archives)
-			}
-			if newLimit > 0 {
-				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
+			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
+				if currentSite.Content.MultiCategory == 1 {
+					// 多分类支持
+					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+				} else {
+					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						// 多分类支持
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
-						tx = tx.Where("`category_id` = ?", categoryId)
+						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
-					if len(excludeCategoryIds) > 0 {
-						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
-						} else {
-							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
-						}
-					}
-					tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
-					return tx
-				}, 0, newLimit, offset)
-				//列表不返回content
-				if len(archives2) > 0 {
-					archives = append(archives2, archives...)
 				}
-				// 如果数量超过，则截取
-				if len(archives) > limit {
-					archives = archives[:limit]
+				tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
+				return tx
+			}, 0, limit, offset)
+			if len(archives1)+len(archives2) > limit {
+				if len(archives1) > halfLimit && len(archives2) > halfLimit {
+					archives1 = archives1[:halfLimit]
+					archives2 = archives2[:halfLimit]
+				} else if len(archives1) > len(archives2) {
+					archives1 = archives1[:limit-len(archives2)]
+				} else if len(archives2) > len(archives1) {
+					archives2 = archives2[:limit-len(archives1)]
 				}
+			}
+			archives = append(archives2, archives1...)
+			// 如果数量超过，则截取
+			if len(archives) > limit {
+				archives = archives[:limit]
 			}
 		}
 	} else {
