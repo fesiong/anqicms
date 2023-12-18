@@ -612,6 +612,7 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	req.Header.Set("User-Agent", ua)
 	req.Header.Set("X-Host", host)
 	req.Header.Set("Cache-Control", "no-cache")
+	req.Header.Set("Cache", "true")
 	resp, err := client.Do(req)
 	if err != nil {
 		return err

@@ -641,6 +641,11 @@ func LogAccess(ctx iris.Context) {
 		ctx.Next()
 		return
 	}
+	// html cache 步骤不做记录
+	if ctx.GetHeader("Cache") == "true" {
+		ctx.Next()
+		return
+	}
 	currentPath := ctx.Request().RequestURI
 	//后台不做记录
 	if strings.HasPrefix(currentPath, "/system") {
@@ -674,6 +679,11 @@ func LogAccess(ctx iris.Context) {
 	if len(currentPath) > 250 {
 		currentPath = currentPath[:250]
 	}
+	// 最多只存储250字符
+	userAgent := ctx.GetHeader("User-Agent")
+	if len(userAgent) > 250 {
+		userAgent = userAgent[:250]
+	}
 
 	statistic := &model.Statistic{
 		Spider:    spider,
@@ -682,7 +692,7 @@ func LogAccess(ctx iris.Context) {
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
 		HttpCode:  ctx.GetStatusCode(),
-		UserAgent: ctx.GetHeader("User-Agent"),
+		UserAgent: userAgent,
 	}
 	// 这里不需要等待
 	go currentSite.DB.Save(statistic)

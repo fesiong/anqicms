@@ -653,6 +653,44 @@ func ApiCategoryList(ctx iris.Context) {
 	})
 }
 
+func ApiModuleDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := uint(ctx.URLParamIntDefault("id", 0))
+	filename := ctx.URLParam("filename")
+
+	module := currentSite.GetModuleFromCache(id)
+	if module == nil {
+		if filename != "" {
+			module = currentSite.GetModuleFromCacheByToken(filename)
+		}
+	}
+	if module == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "模型不存在",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": module,
+	})
+}
+
+func ApiModuleList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	moduleList := currentSite.GetCacheModules()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": moduleList,
+	})
+}
+
 func ApiCommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
@@ -1053,6 +1091,24 @@ func ApiBannerList(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": bannerList,
+	})
+}
+
+func ApiIndexTdk(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var settings = map[string]interface{}{}
+
+	reflectFields := structs.Fields(currentSite.Index)
+
+	for _, v := range reflectFields {
+		value := v.Value()
+		settings[v.Name()] = value
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": settings,
 	})
 }
 
