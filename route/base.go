@@ -53,8 +53,6 @@ func Register(app *iris.Application) {
 		// 友链API
 		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)
 		api.Post("/friendlink/delete", controller.VerifyApiLinkToken, controller.ApiImportDeleteFriendLink)
-		api.Get("/friendlink/list", controller.VerifyApiLinkToken, controller.ApiImportGetFriendLinks)
-		api.Post("/friendlink/list", controller.VerifyApiLinkToken, controller.ApiImportGetFriendLinks)
 		api.Get("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
 		api.Post("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
 		// 前端api

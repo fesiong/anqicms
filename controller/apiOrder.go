@@ -254,7 +254,7 @@ func ApiSaveOrderAddress(ctx iris.Context) {
 	}
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	address, err := currentSite.GetOrderAddressByUserId(userId)
+	address, err := currentSite.SaveOrderAddress(currentSite.DB, userId, &req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -536,7 +536,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 	}
 
 	for i := 0; i < 20; i++ {
-		order, _ := currentSite.GetOrderInfoByOrderId(orderId)
+		order, _ = currentSite.GetOrderInfoByOrderId(orderId)
 		if order.Status != config.OrderStatusWaiting {
 			//支付成功
 			ctx.JSON(iris.Map{

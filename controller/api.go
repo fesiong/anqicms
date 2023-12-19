@@ -497,16 +497,6 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	})
 }
 
-func ApiImportGetFriendLinks(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
-	links, _ := currentSite.GetLinkList()
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"data": links,
-	})
-}
-
 func ApiImportCheckFriendLink(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	ctx.JSON(iris.Map{
