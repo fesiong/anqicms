@@ -366,10 +366,11 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 				}
 				addonText += "}</script>"
 				if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+					index = index + 7
 					tmpData := make([]byte, len(data)+len(addonText))
 					copy(tmpData, data[:index])
 					copy(tmpData[index:], addonText)
-					copy(tmpData[len(data):], data[index:])
+					copy(tmpData[index+len(addonText):], data[index:])
 					data = tmpData
 				} else {
 					data = append(data, addonText...)
