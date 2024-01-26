@@ -1,35 +1,43 @@
-# 在linux下运行
-all: open
+# only for linux and macos
+BINARY_NAME := anqicms
+GO := go
+GOOS := $(shell $(GO) env GOOS)
+ifeq ($(version),)
+	version := $(shell git describe --tags --always --dirty="-dev")
+endif
+LDFLAGS := -ldflags '-w -s'
 
-build: clean
-	mkdir -p -v ./release/linux/cache
-	cp -r ./doc ./release/linux/
-	cp -r ./public ./release/linux/
-	rm -rf ./release/linux/public/uploads
-	rm -rf ./release/linux/public/*.txt
-	rm -rf ./release/linux/public/*.xml
-	cp -r ./template ./release/linux/
-	cp -r ./system ./release/linux/
-	cp -r ./language ./release/linux/
-	cp -r ./CHANGELOG.md ./release/linux/
-	find ./release/linux -name '.DS_Store' | xargs rm -f
-	cp -r ./start.sh ./release/linux/
-	cp -r ./stop.sh ./release/linux/
-	cp -r ./License ./release/linux/
-	cp -r ./clientFiles ./release/linux/
-	cp -r ./README.md ./release/linux/
-	cp -r ./dictionary.txt ./release/linux/
-	dos2unix ./release/linux/start.sh
-	dos2unix ./release/linux/stop.sh
-	GOOS=linux GOARCH=amd64 go build -ldflags '-w -s' -o ./release/linux/anqicms kandaoni.com/anqicms/main
+.PHONY: all clean tidy build archive
 
-open: build
+all: clean tidy build archive
 
 clean:
-	rm -rf ./release/linux
+	@echo "🧹 Cleaning..."
+	@rm -rf ./release
 
-start:
-	go run kandaoni.com/anqicms/main
+tiny:
+	@echo "🧼 Tidying up dependencies..."
+	$(GO) mod tidy
+	$(GO) mod vendor
 
-vet:
-	go vet $(shell glide nv)
+build:
+	@echo "🔨 Building for current platform..."
+	mkdir -p -v ./release/$(GOOS)/cache
+	mkdir -p -v ./release/$(GOOS)/public
+	cp -r ./doc ./release/$(GOOS)/
+	cp -r ./public/static ./release/$(GOOS)/public/
+	cp -r ./public/*.xsl ./release/$(GOOS)/public/
+	cp -r ./template ./release/$(GOOS)/
+	cp -r ./system ./release/$(GOOS)/
+	cp -r ./language ./release/$(GOOS)/
+	cp -r ./CHANGELOG.md ./release/$(GOOS)/
+	cp -r ./License ./release/$(GOOS)/
+	cp -r ./clientFiles ./release/$(GOOS)/
+	cp -r ./README.md ./release/$(GOOS)/
+	cp -r ./dictionary.txt ./release/$(GOOS)/
+	find ./release/$(GOOS) -name '.DS_Store' | xargs rm -f
+	$(GO) build -trimpath $(LDFLAGS) -o ./release/$(GOOS)/$(BINARY_NAME) kandaoni.com/anqicms/main
+
+archive:
+	@echo "📦 Creating archive..."
+	@(cd ./release/$(GOOS)/ && zip -r -9 ../$(BINARY_NAME)-$(GOOS)-$(version).zip .)

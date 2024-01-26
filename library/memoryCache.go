@@ -1,33 +1,31 @@
-package provider
+package library
 
 import (
+	"encoding/json"
+	"errors"
+	"reflect"
 	"sync"
 	"time"
 )
 
-// MaxSize 最多存储 5000 个对象
-const MaxSize = 2000
-
 type cacheData struct {
 	Expire int64
 	key    string
-	val    interface{}
+	val    any
 	prev   *cacheData
 	next   *cacheData
 }
 
-type memCache struct {
+type MemoryCache struct {
 	mu   sync.Mutex
 	list map[string]*cacheData
 	head *cacheData
 	tail *cacheData
 	size int
+	cap  int
 }
 
-func (m *memCache) Set(key string, val interface{}, expire int64) {
-	if m == nil {
-		return
-	}
+func (m *MemoryCache) Set(key string, val any, expire int64) error {
 	if expire == 0 {
 		expire = 7200
 	}
@@ -44,7 +42,7 @@ func (m *memCache) Set(key string, val interface{}, expire int64) {
 		m.addToHead(node)
 		m.list[key] = node
 		m.size++
-		if m.size > MaxSize {
+		if m.size > m.cap {
 			delKey := m.removeTail()
 			delete(m.list, delKey)
 			m.size--
@@ -55,41 +53,46 @@ func (m *memCache) Set(key string, val interface{}, expire int64) {
 		m.moveToHead(m.list[key])
 	}
 	m.mu.Unlock()
+
+	return nil
 }
 
-func (m *memCache) Get(key string) interface{} {
-	if m == nil {
-		return nil
+func (m *MemoryCache) Get(key string, val any) error {
+	rv := reflect.ValueOf(val)
+	if rv.Kind() != reflect.Pointer || rv.IsNil() {
+		return &json.InvalidUnmarshalError{Type: reflect.TypeOf(val)}
 	}
+
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if _, ok := m.list[key]; !ok {
 		//数据不存在
-		return nil
+		return errors.New("没有缓存数据")
 	}
 	if m.list[key].Expire < time.Now().Unix() {
-		return nil
+		return errors.New("缓存数据已过期")
 	}
 	m.moveToHead(m.list[key])
-	return m.list[key].val
+
+	rv.Elem().Set(reflect.ValueOf(m.list[key].val))
+
+	return nil
 }
 
-func (m *memCache) Delete(key string) {
+func (m *MemoryCache) Delete(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.list[key]; !ok {
-		//数据不存在
-		return
+	if _, ok := m.list[key]; ok {
+		m.removeNode(m.list[key])
+		delete(m.list, key)
+		m.size--
 	}
-	m.removeNode(m.list[key])
-	delete(m.list, key)
-	m.size--
 }
 
-func (m *memCache) CleanAll() {
+func (m *MemoryCache) CleanAll() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.list = map[string]*cacheData{}
+	m.list = make(map[string]*cacheData)
 	m.size = 0
 	m.head = &cacheData{}
 	m.tail = &cacheData{}
@@ -97,32 +100,32 @@ func (m *memCache) CleanAll() {
 	m.tail.prev = m.head
 }
 
-func (m *memCache) moveToHead(node *cacheData) {
+func (m *MemoryCache) moveToHead(node *cacheData) {
 	//先删
 	m.removeNode(node)
 	m.addToHead(node)
 }
 
-func (m *memCache) addToHead(node *cacheData) {
+func (m *MemoryCache) addToHead(node *cacheData) {
 	m.head.next.prev = node
 	node.next = m.head.next
 	node.prev = m.head
 	m.head.next = node
 }
 
-func (m *memCache) removeNode(node *cacheData) {
+func (m *MemoryCache) removeNode(node *cacheData) {
 	node.prev.next = node.next
 	node.next.prev = node.prev
 }
 
-func (m *memCache) removeTail() string {
+func (m *MemoryCache) removeTail() string {
 	//拿到最后一个元素
 	node := m.tail.prev
 	m.removeNode(node)
 	return node.key
 }
 
-func (m *memCache) GC() {
+func (m *MemoryCache) GC() {
 	for {
 		timestamp := time.Now().Unix()
 		m.mu.Lock()
@@ -139,13 +142,15 @@ func (m *memCache) GC() {
 	}
 }
 
-func (w *Website) InitMemCache() {
+func InitMemoryCache() Cache {
 	head := &cacheData{}
 	tail := &cacheData{}
 	head.next = tail
 	tail.prev = head
 
-	w.MemCache = &memCache{
+	// 初始化一个1万容量的内存缓存
+	cache := &MemoryCache{
+		cap:  10000,
 		size: 0,
 		list: map[string]*cacheData{},
 		head: head,
@@ -153,5 +158,7 @@ func (w *Website) InitMemCache() {
 	}
 
 	//执行回收
-	go w.MemCache.GC()
+	go cache.GC()
+
+	return cache
 }

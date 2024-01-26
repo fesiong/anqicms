@@ -167,7 +167,7 @@ func (w *Website) DeleteModule(module *model.Module) error {
 }
 
 func (w *Website) DeleteCacheModules() {
-	w.MemCache.Delete("modules")
+	w.Cache.Delete("modules")
 }
 
 func (w *Website) GetCacheModules() []model.Module {
@@ -176,18 +176,14 @@ func (w *Website) GetCacheModules() []model.Module {
 	}
 	var modules []model.Module
 
-	result := w.MemCache.Get("modules")
-	if result != nil {
-		var ok bool
-		modules, ok = result.([]model.Module)
-		if ok {
-			return modules
-		}
+	err := w.Cache.Get("modules", &modules)
+	if err == nil {
+		return modules
 	}
 
 	w.DB.Model(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules)
 
-	w.MemCache.Set("modules", modules, 0)
+	_ = w.Cache.Set("modules", modules, 0)
 
 	return modules
 }

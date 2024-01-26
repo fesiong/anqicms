@@ -77,7 +77,7 @@ func (w *Website) GetNavTypeByTitle(title string) (*model.NavType, error) {
 }
 
 func (w *Website) DeleteCacheNavs() {
-	w.MemCache.Delete("navs")
+	w.Cache.Delete("navs")
 }
 
 func (w *Website) GetCacheNavs() []model.Nav {
@@ -86,18 +86,14 @@ func (w *Website) GetCacheNavs() []model.Nav {
 	}
 	var navs []model.Nav
 
-	result := w.MemCache.Get("navs")
-	if result != nil {
-		var ok bool
-		navs, ok = result.([]model.Nav)
-		if ok {
-			return navs
-		}
+	err := w.Cache.Get("navs", &navs)
+	if err == nil {
+		return navs
 	}
 
 	w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs)
 
-	w.MemCache.Set("navs", navs, 0)
+	_ = w.Cache.Set("navs", navs, 0)
 
 	return navs
 }

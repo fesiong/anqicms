@@ -331,7 +331,7 @@ func (w *Website) GetCategoryTemplate(category *model.Category) *response.Catego
 }
 
 func (w *Website) DeleteCacheCategories() {
-	w.MemCache.Delete("categories")
+	w.Cache.Delete("categories")
 }
 
 func (w *Website) GetCacheCategories() []*model.Category {
@@ -340,13 +340,9 @@ func (w *Website) GetCacheCategories() []*model.Category {
 	}
 	var categories []*model.Category
 
-	result := w.MemCache.Get("categories")
-	if result != nil {
-		var ok bool
-		categories, ok = result.([]*model.Category)
-		if ok {
-			return categories
-		}
+	err := w.Cache.Get("categories", &categories)
+	if err == nil {
+		return categories
 	}
 
 	w.DB.Model(model.Category{}).Order("sort asc").Find(&categories)
@@ -357,7 +353,7 @@ func (w *Website) GetCacheCategories() []*model.Category {
 	categoryTree := NewCategoryTree(categories)
 	categories = categoryTree.GetTree(0, "")
 
-	w.MemCache.Set("categories", categories, 0)
+	_ = w.Cache.Set("categories", categories, 0)
 
 	return categories
 }

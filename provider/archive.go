@@ -18,24 +18,20 @@ import (
 )
 
 func (w *Website) GetArchiveByIdFromCache(id uint) (archive *model.Archive) {
-	result := w.MemCache.Get(fmt.Sprintf("archive-%d", id))
-	if result != nil {
-		var ok bool
-		archive, ok = result.(*model.Archive)
-		if ok {
-			return archive
-		}
+	err := w.Cache.Get(fmt.Sprintf("archive-%d", id), archive)
+	if err != nil {
+		return nil
 	}
 
-	return nil
+	return archive
 }
 
 func (w *Website) AddArchiveCache(archive *model.Archive) {
-	w.MemCache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
+	_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
 }
 
 func (w *Website) DeleteArchiveCache(id uint) {
-	w.MemCache.Delete(fmt.Sprintf("archive-%d", id))
+	w.Cache.Delete(fmt.Sprintf("archive-%d", id))
 }
 
 func (w *Website) GetArchiveById(id uint) (*model.Archive, error) {
@@ -119,13 +115,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 			return tx.Limit(pageSize).Offset(offset).Find(&[]*model.Archive{})
 		})
 		cacheKey = "archive-list-" + library.Md5(sql)[8:24]
-		result := w.MemCache.Get(cacheKey)
-		if result != nil {
-			var ok bool
-			archives, ok = result.([]*model.Archive)
-			if ok {
-				return archives, int64(len(archives)), nil
-			}
+		err := w.Cache.Get(cacheKey, &archives)
+		if err == nil {
+			return archives, int64(len(archives)), nil
 		}
 	}
 	builder := w.DB.Model(&model.Archive{})
@@ -147,30 +139,26 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pa
 	}
 	// 对于没有分页的list，则缓存
 	if currentPage == 0 {
-		w.MemCache.Set(cacheKey, archives, 60)
+		_ = w.Cache.Set(cacheKey, archives, 60)
 	}
 	return archives, total, nil
 }
 
-func (w *Website) GetArchiveExtraFromCache(archiveId uint) (archive map[string]*model.CustomField) {
-	result := w.MemCache.Get(fmt.Sprintf("archive-extra-%d", archiveId))
-	if result != nil {
-		var ok bool
-		archive, ok = result.(map[string]*model.CustomField)
-		if ok {
-			return archive
-		}
+func (w *Website) GetArchiveExtraFromCache(archiveId uint) (extra map[string]*model.CustomField) {
+	err := w.Cache.Get(fmt.Sprintf("archive-extra-%d", archiveId), &extra)
+	if err != nil {
+		return nil
 	}
 
-	return nil
+	return extra
 }
 
 func (w *Website) AddArchiveExtraCache(archiveId uint, extra map[string]*model.CustomField) {
-	w.MemCache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 60)
+	_ = w.Cache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 60)
 }
 
 func (w *Website) DeleteArchiveExtraCache(archiveId uint) {
-	w.MemCache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
+	w.Cache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
 }
 
 func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]*model.CustomField {
@@ -940,7 +928,7 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 
 // DeleteCacheFixedLinks 固定链接
 func (w *Website) DeleteCacheFixedLinks() {
-	w.MemCache.Delete("fixedLinks")
+	w.Cache.Delete("fixedLinks")
 }
 
 func (w *Website) GetCacheFixedLinks() map[string]uint {
@@ -949,13 +937,9 @@ func (w *Website) GetCacheFixedLinks() map[string]uint {
 	}
 	var fixedLinks = map[string]uint{}
 
-	result := w.MemCache.Get("fixedLinks")
-	if result != nil {
-		var ok bool
-		fixedLinks, ok = result.(map[string]uint)
-		if ok {
-			return fixedLinks
-		}
+	err := w.Cache.Get("fixedLinks", &fixedLinks)
+	if err == nil {
+		return fixedLinks
 	}
 
 	var archives []model.Archive
@@ -964,7 +948,7 @@ func (w *Website) GetCacheFixedLinks() map[string]uint {
 		fixedLinks[archives[i].FixedLink] = archives[i].Id
 	}
 
-	w.MemCache.Set("fixedLinks", fixedLinks, 0)
+	_ = w.Cache.Set("fixedLinks", fixedLinks, 0)
 
 	return fixedLinks
 }

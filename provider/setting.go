@@ -575,7 +575,7 @@ func (w *Website) SaveSettingValue(key string, value interface{}) error {
 
 func (w *Website) DeleteCache() {
 	// todo, 清理缓存
-	w.MemCache.CleanAll()
+	w.Cache.CleanAll()
 	// 释放词典
 	library.DictClose()
 	// 记录

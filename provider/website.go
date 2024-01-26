@@ -39,7 +39,7 @@ type Website struct {
 	wechatServer            *wechat.Server
 	CachedStatistics        *response.Statistics
 	AdminLoginError         response.LoginError
-	MemCache                *memCache
+	Cache                   library.Cache
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus
 
@@ -171,7 +171,7 @@ func InitWebsite(mw *model.Website) {
 	if w.Initialed {
 		w.InitBucket()
 		w.InitCacheBucket()
-		w.InitMemCache()
+		w.InitCache()
 		// 初始化索引,异步处理
 		go w.InitFulltext()
 	}

@@ -107,7 +107,7 @@ func (w *Website) DeleteRedirect(redirect *model.Redirect) error {
 }
 
 func (w *Website) DeleteCacheRedirects() {
-	w.MemCache.Delete("redirects")
+	w.Cache.Delete("redirects")
 }
 
 func (w *Website) GetCacheRedirects() map[string]string {
@@ -115,13 +115,9 @@ func (w *Website) GetCacheRedirects() map[string]string {
 		return nil
 	}
 	var redirects = map[string]string{}
-	result := w.MemCache.Get("redirects")
-	if result != nil {
-		var ok bool
-		redirects, ok = result.(map[string]string)
-		if ok {
-			return redirects
-		}
+	err := w.Cache.Get("redirects", &redirects)
+	if err == nil {
+		return redirects
 	}
 
 	baseUrl, err := url.Parse(w.System.BaseUrl)
@@ -149,7 +145,7 @@ func (w *Website) GetCacheRedirects() map[string]string {
 		redirects[fromUrl] = toUrl
 	}
 
-	w.MemCache.Set("redirects", redirects, 0)
+	_ = w.Cache.Set("redirects", redirects, 0)
 
 	return redirects
 }
