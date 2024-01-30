@@ -614,7 +614,7 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 	var replacedMatch []*replaceType
 	numCount := 0
 	//过滤所有属性
-	reg, _ := regexp.Compile("(?i)</?[a-z0-9]+(\\s+[^>]+)>")
+	reg, _ := regexp.Compile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
 	content = reg.ReplaceAllFunc(content, func(s []byte) []byte {
 		key := []byte(fmt.Sprintf("{$%d}", numCount))
 		replacedMatch = append(replacedMatch, &replaceType{
