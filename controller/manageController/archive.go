@@ -598,6 +598,7 @@ func UpdateArchiveSort(ctx iris.Context) {
 	}
 
 	err := currentSite.DB.Model(&model.Archive{}).Where("id = ?", req.Id).UpdateColumn("sort", req.Sort).Error
+	err = currentSite.DB.Model(&model.ArchiveDraft{}).Where("id = ?", req.Id).UpdateColumn("sort", req.Sort).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

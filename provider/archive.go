@@ -976,8 +976,10 @@ func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
 	} else if req.Time == 2 {
 		// updated_time
 		err = w.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("updated_time", time.Now().Unix()).Error
+		err = w.DB.Model(&model.ArchiveDraft{}).Where("`id` IN (?)", req.Ids).UpdateColumn("updated_time", time.Now().Unix()).Error
 	} else {
 		err = w.DB.Model(&model.Archive{}).Where("`id` IN (?)", req.Ids).UpdateColumn("created_time", time.Now().Unix()).Error
+		err = w.DB.Model(&model.ArchiveDraft{}).Where("`id` IN (?)", req.Ids).UpdateColumn("created_time", time.Now().Unix()).Error
 	}
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
