@@ -6,5 +6,5 @@ type Cache interface {
 	Get(key string, val any) error
 	Set(key string, val any, expire int64) error
 	Delete(key string)
-	CleanAll()
+	CleanAll(prefix ...string)
 }

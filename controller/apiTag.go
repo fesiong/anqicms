@@ -72,6 +72,8 @@ func ApiArchiveDetail(ctx iris.Context) {
 		// 读取data
 		archive.ArchiveData, _ = currentSite.GetArchiveDataById(archive.Id)
 	}
+	// 读取flag
+	archive.Flag = currentSite.GetArchiveFlags(archive.Id)
 	// 读取分类
 	archive.Category = currentSite.GetCategoryFromCache(archive.CategoryId)
 	// 读取 extraDate
@@ -278,6 +280,15 @@ func ApiArchiveList(ctx iris.Context) {
 		}
 	}
 
+	extraFields := map[uint]map[string]*model.CustomField{}
+	var fields []string
+	fields = append(fields, "id")
+	if module != nil && len(module.Fields) > 0 {
+		for _, v := range module.Fields {
+			fields = append(fields, v.FieldName)
+		}
+	}
+
 	var archives []*model.Archive
 	var total int64
 	if listType == "related" {
@@ -307,61 +318,61 @@ func ApiArchiveList(ctx iris.Context) {
 
 		if like == "keywords" {
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
-				if currentSite.Content.MultiCategory == 1 {
-					// 多分类支持
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
-				} else {
-					tx = tx.Where("`category_id` = ?", categoryId)
+				if categoryId > 0 {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+				} else if moduleId > 0 {
+					tx = tx.Where("`module_id` = ?", moduleId)
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId).Order("archives.id ASC")
+				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId)
 				return tx
-			}, 0, limit, offset)
+			}, "archives.id ASC", 0, limit, offset)
 		} else {
 			halfLimit := int(math.Ceil(float64(limit) / 2))
 			archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
 				if currentSite.Content.MultiCategory == 1 {
 					// 多分类支持
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				tx = tx.Where("archives.`id` > ?", archiveId).Order("archives.id ASC")
+				tx = tx.Where("archives.`id` > ?", archiveId)
 				return tx
-			}, 0, limit, offset)
+			}, "archives.id ASC", 0, limit, offset)
 			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
 				if currentSite.Content.MultiCategory == 1 {
 					// 多分类支持
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
+				tx = tx.Where("archives.`id` < ?", archiveId)
 				return tx
-			}, 0, limit, offset)
+			}, "archives.id DESC", 0, limit, offset)
 			if len(archives1)+len(archives2) > limit {
 				if len(archives1) > halfLimit && len(archives2) > halfLimit {
 					archives1 = archives1[:halfLimit]
@@ -379,11 +390,6 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	} else {
-		extraFields := map[uint]map[string]*model.CustomField{}
-		var results []map[string]interface{}
-		var fields []string
-		fields = append(fields, "id")
-
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
@@ -399,22 +405,17 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 		ops := func(tx *gorm.DB) *gorm.DB {
-			tx.Where("`status` = 1")
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
 			}
-			if moduleId > 0 {
-				tx = tx.Where("`module_id` = ?", moduleId)
-			}
 			if flag != "" {
-				tx = tx.Where("FIND_IN_SET(?,`flag`)", flag)
+				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
 			}
-			if module != nil && len(module.Fields) > 0 {
-				for _, v := range module.Fields {
-					fields = append(fields, "`"+v.FieldName+"`")
+			if len(fields) > 1 {
+				for _, v := range fields {
 					// 如果有筛选条件，从这里开始筛选
-					if param, ok := extraParams[v.FieldName]; ok {
-						tx = tx.Where("`"+v.FieldName+"` = ?", param)
+					if param, ok := extraParams[v]; ok {
+						tx = tx.Where("`"+v+"` = ?", param)
 					}
 				}
 			}
@@ -427,39 +428,36 @@ func ApiArchiveList(ctx iris.Context) {
 						subIds = append(subIds, v)
 					}
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
 					} else {
-						tx = tx.Where("`category_id` IN(?)", subIds)
+						if len(subIds) == 1 {
+							tx = tx.Where("`category_id` = ?", subIds[0])
+						} else {
+							tx = tx.Where("`category_id` IN(?)", subIds)
+						}
 					}
 				} else if len(categoryIds) == 1 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryIds[0])
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryIds[0])
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryIds[0])
 					}
 				} else {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", categoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", categoryIds)
 					} else {
 						tx = tx.Where("`category_id` IN(?)", categoryIds)
 					}
 				}
+			} else if moduleId > 0 {
+				tx = tx.Where("`module_id` = ?", moduleId)
 			}
 			if len(excludeCategoryIds) > 0 {
 				if currentSite.Content.MultiCategory == 1 {
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 				} else {
 					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 				}
-			}
-			if order != "" {
-				if strings.Contains(order, "rand") {
-					tx = tx.Order(order)
-				} else {
-					tx = tx.Order("archives." + order)
-				}
-			} else {
-				tx = tx.Order("archives.`sort` desc, archives.`id` desc")
 			}
 			if len(ids) > 0 {
 				tx = tx.Where("archives.`id` IN(?)", ids)
@@ -472,41 +470,66 @@ func ApiArchiveList(ctx iris.Context) {
 			// 如果不是分页，则不查询count
 			currentPage = 0
 		}
-		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
+		if order != "" {
+			if !strings.Contains(order, "rand") {
+				order = "archives." + order
+			}
+		} else {
+			if currentSite.Content.UseSort == 1 {
+				order = "archives.`sort` desc, archives.`id` desc"
+			} else {
+				order = "archives.`id` desc"
+			}
+		}
+		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
 		}
-		var archiveIds = make([]uint, 0, len(archives))
-		for i := range archives {
-			archiveIds = append(archiveIds, archives[i].Id)
-		}
-		if module != nil && len(fields) > 0 && len(archiveIds) > 0 {
-			currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select(strings.Join(fields, ",")).Scan(&results)
-			for _, field := range results {
-				item := map[string]*model.CustomField{}
-				for _, v := range module.Fields {
-					item[v.FieldName] = &model.CustomField{
-						Name:  v.Name,
-						Value: field[v.FieldName],
-					}
-				}
-				if id, ok := field["id"].(uint32); ok {
-					extraFields[uint(id)] = item
-				}
-			}
-			for i := range archives {
-				if extraFields[archives[i].Id] != nil {
-					archives[i].Extra = extraFields[archives[i].Id]
-				}
-			}
-		}
 	}
+	var archiveIds = make([]uint, 0, len(archives))
 	for i := range archives {
+		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
 			archives[i].Password = ""
 			archives[i].HasPassword = true
 		}
 	}
+
+	if module != nil && len(fields) > 1 && len(archiveIds) > 0 {
+		var results []map[string]interface{}
+		currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select("`" + strings.Join(fields, "`,`") + "`").Scan(&results)
+		for _, field := range results {
+			item := map[string]*model.CustomField{}
+			for _, v := range module.Fields {
+				item[v.FieldName] = &model.CustomField{
+					Name:  v.Name,
+					Value: field[v.FieldName],
+				}
+			}
+			if id, ok := field["id"].(uint32); ok {
+				extraFields[uint(id)] = item
+			}
+		}
+		for i := range archives {
+			if extraFields[archives[i].Id] != nil {
+				archives[i].Extra = extraFields[archives[i].Id]
+			}
+		}
+	}
+	// 读取flags
+	if len(archiveIds) > 0 {
+		var flags []*model.ArchiveFlags
+		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		for i := range archives {
+			for _, f := range flags {
+				if f.ArchiveId == archives[i].Id {
+					archives[i].Flag = f.Flags
+					break
+				}
+			}
+		}
+	}
+
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
@@ -839,7 +862,7 @@ func ApiNextArchive(ctx iris.Context) {
 	}
 
 	nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").Order("`id` ASC")
+		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Order("`id` ASC")
 	})
 	if nextArchive != nil && len(nextArchive.Password) > 0 {
 		// password is not visible for user
@@ -866,7 +889,7 @@ func ApiPrevArchive(ctx iris.Context) {
 	}
 
 	prevArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Where("`status` = 1").Order("`id` DESC")
+		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Order("`id` DESC")
 	})
 	if prevArchive != nil && len(prevArchive.Password) > 0 {
 		// password is not visible for user
@@ -981,7 +1004,14 @@ func ApiTagDataList(ctx iris.Context) {
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
-	order := ctx.URLParamDefault("order", "a.`sort` desc, a.`id` desc")
+	order := ctx.URLParamDefault("order", "")
+	if order == "" {
+		if currentSite.Content.UseSort == 1 {
+			order = "archives.`sort` desc, archives.`id` desc"
+		} else {
+			order = "archives.`id` desc"
+		}
+	}
 	listType := ctx.URLParamDefault("type", "list")
 
 	limitTmp := ctx.URLParam("limit")
@@ -1007,16 +1037,29 @@ func ApiTagDataList(ctx iris.Context) {
 		}
 	}
 	archives, total, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-		tx = tx.Table("`archives` as a").
-			Joins("INNER JOIN `tag_data` as t ON a.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id).
-			Where("a.`status` = 1").
-			Order(order)
+		tx = tx.Table("`archives` as archives").
+			Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
 		return tx
-	}, currentPage, limit, offset)
+	}, order, currentPage, limit, offset)
+	var archiveIds = make([]uint, 0, len(archives))
 	for i := range archives {
+		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
 			archives[i].Password = ""
 			archives[i].HasPassword = true
+		}
+	}
+	// 读取flags
+	if len(archiveIds) > 0 {
+		var flags []*model.ArchiveFlags
+		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		for i := range archives {
+			for _, f := range flags {
+				if f.ArchiveId == archives[i].Id {
+					archives[i].Flag = f.Flags
+					break
+				}
+			}
 		}
 	}
 	ctx.JSON(iris.Map{

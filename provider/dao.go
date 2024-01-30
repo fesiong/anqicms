@@ -1,12 +1,14 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -80,59 +82,145 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 }
 
 func AutoMigrateDB(db *gorm.DB) error {
-	//自动迁移数据库
-	err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
-		&model.Admin{},
-		&model.AdminGroup{},
-		&model.AdminLoginLog{},
-		&model.AdminLog{},
-		&model.Attachment{},
-		&model.AttachmentCategory{},
-		&model.Category{},
-		&model.Nav{},
-		&model.NavType{},
-		&model.Link{},
-		&model.Comment{},
-		&model.Anchor{},
-		&model.AnchorData{},
-		&model.Guestbook{},
-		&model.Keyword{},
-		&model.Material{},
-		&model.MaterialCategory{},
-		&model.MaterialData{},
-		&model.Statistic{},
-		&model.Tag{},
-		&model.TagData{},
-		&model.Redirect{},
-		&model.Module{},
-		&model.Archive{},
-		&model.ArchiveData{},
-		&model.SpiderInclude{},
-		&model.Setting{},
-		&model.Website{},
-		&model.AiArticlePlan{},
-		&model.ArchiveCategory{},
-		&model.HtmlPushLog{},
+	var lastVersion string
+	db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
+	if lastVersion < config.Version {
+		// 强制转换archive表的title字段
+		forceChangeArchiveTitle(db)
 
-		&model.User{},
-		&model.UserGroup{},
-		&model.UserWechat{},
-		&model.UserWithdraw{},
-		&model.WeappQrcode{},
-		&model.Order{},
-		&model.OrderDetail{},
-		&model.OrderAddress{},
-		&model.OrderRefund{},
-		&model.Payment{},
-		&model.Finance{},
-		&model.Commission{},
-		&model.WechatMenu{},
-		&model.WechatMessage{},
-		&model.WechatReplyRule{},
-	)
+		//自动迁移数据库
+		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
+			&model.Admin{},
+			&model.AdminGroup{},
+			&model.AdminLoginLog{},
+			&model.AdminLog{},
+			&model.Attachment{},
+			&model.AttachmentCategory{},
+			&model.Category{},
+			&model.Nav{},
+			&model.NavType{},
+			&model.Link{},
+			&model.Comment{},
+			&model.Anchor{},
+			&model.AnchorData{},
+			&model.Guestbook{},
+			&model.Keyword{},
+			&model.Material{},
+			&model.MaterialCategory{},
+			&model.MaterialData{},
+			&model.Statistic{},
+			&model.Tag{},
+			&model.TagData{},
+			&model.Redirect{},
+			&model.Module{},
+			&model.ArchiveData{},
+			&model.SpiderInclude{},
+			&model.Setting{},
+			&model.Website{},
+			&model.AiArticlePlan{},
+			&model.ArchiveCategory{},
+			&model.ArchiveFlag{},
+			&model.HtmlPushLog{},
 
-	if err != nil {
-		return err
+			&model.User{},
+			&model.UserGroup{},
+			&model.UserWechat{},
+			&model.UserWithdraw{},
+			&model.WeappQrcode{},
+			&model.Order{},
+			&model.OrderDetail{},
+			&model.OrderAddress{},
+			&model.OrderRefund{},
+			&model.Payment{},
+			&model.Finance{},
+			&model.Commission{},
+			&model.WechatMenu{},
+			&model.WechatMessage{},
+			&model.WechatReplyRule{},
+		)
+
+		if err != nil {
+			log.Println("migrate table error ", err)
+			return err
+		}
+		// 部分表强制使用MyISAM引擎
+		err = db.Set("gorm:table_options", "ENGINE=MyISAM DEFAULT CHARSET=utf8mb4").AutoMigrate(
+			&model.Archive{},
+			&model.ArchiveDraft{},
+		)
+		if err != nil {
+			log.Println("migrate table error ", err)
+			return err
+		}
+		// 升级转换部分
+		engine, _ := getTableEngine(db, "archives")
+		if engine != "MyISAM" {
+			db.Exec("ALTER TABLE archives ENGINE=MyISAM")
+		}
+		engine, _ = getTableEngine(db, "archive_drafts")
+		if engine != "MyISAM" {
+			db.Exec("ALTER TABLE archive_drafts ENGINE=MyISAM")
+		}
+		// 先删除deleteAt
+		if db.Migrator().HasColumn(&model.Archive{}, "deleted_at") {
+			db.Unscoped().Where("`deleted_at` is not null").Delete(model.Archive{})
+			_ = db.Migrator().DropColumn(&model.Archive{}, "deleted_at")
+		}
+		// 转换archives的草稿部分数据到archive_drafts
+		if db.Migrator().HasColumn(&model.Archive{}, "status") {
+			archiveColumns, err1 := getColumns(db, &model.Archive{})
+			draftColumns, err2 := getColumns(db, &model.ArchiveDraft{})
+			// 取得交集
+			var columns []string
+			if err1 == nil && err2 == nil {
+				seen := make(map[string]bool)
+				for _, column := range archiveColumns {
+					seen[column] = true
+				}
+				for _, column := range draftColumns {
+					if seen[column] {
+						columns = append(columns, column)
+					}
+				}
+			}
+			columnString := "`" + strings.Join(columns, "`,`") + "`"
+			db.Exec("INSERT INTO `archive_drafts` (?) SELECT ? FROM `archives` WHERE `status` != 1", gorm.Expr(columnString), gorm.Expr(columnString))
+			db.Where("`status` != 1").Delete(model.Archive{})
+			_ = db.Migrator().DropColumn(&model.Archive{}, "status")
+		}
+		if db.Migrator().HasColumn(&model.Archive{}, "flag") {
+			var tinyArcs []struct {
+				Id   uint   `json:"id"`
+				Flag string `json:"flag"`
+			}
+			db.Model(&model.Archive{}).Where("flag IS NOT NULL AND flag != ''").Scan(&tinyArcs)
+			for _, tinyArc := range tinyArcs {
+				if len(tinyArc.Flag) == 0 {
+					continue
+				}
+				flags := strings.Split(tinyArc.Flag, ",")
+				for _, flag := range flags {
+					if len(flag) == 0 {
+						continue
+					}
+					arcFlag := model.ArchiveFlag{
+						Flag:      flag,
+						ArchiveId: tinyArc.Id,
+					}
+					db.Model(&model.ArchiveFlag{}).Where("`archive_id` = ? AND `flag` = ?", arcFlag.ArchiveId, arcFlag.Flag).FirstOrCreate(&arcFlag)
+				}
+			}
+			// 移除字段
+			_ = db.Migrator().DropColumn(&model.Archive{}, "flag")
+		}
+		// end 升级转换部分
+
+		setting := model.Setting{
+			Key:   LastRunVersionKey,
+			Value: config.Version,
+		}
+
+		return db.Save(&setting).Error
 	}
 
 	return nil
@@ -198,7 +286,7 @@ func (w *Website) InitModelData() {
 	// user table
 	w.MigrateUserTable(w.PluginUser.Fields, false)
 	// set default user groups
-	userGeroups := []model.UserGroup{
+	userGroups := []model.UserGroup{
 		{
 
 			Title:  "普通用户",
@@ -222,7 +310,7 @@ func (w *Website) InitModelData() {
 	var groupNum int64
 	w.DB.Model(&model.UserGroup{}).Count(&groupNum)
 	if groupNum == 0 {
-		w.DB.CreateInBatches(userGeroups, 10)
+		w.DB.CreateInBatches(userGroups, 10)
 	}
 	// 升级多分类
 	upgradeTime := w.GetSettingValue("upgrade_archive_category")
@@ -234,5 +322,47 @@ func (w *Website) InitModelData() {
 			}()
 			w.UpgradeMultiCategory()
 		}()
+	}
+}
+
+func getTableEngine(db *gorm.DB, tableName string) (string, error) {
+	var tableStatus = make(map[string]interface{})
+	db.Raw(fmt.Sprintf("SHOW TABLE STATUS LIKE '%s'", tableName)).Scan(&tableStatus)
+	if engine, ok := tableStatus["Engine"].(string); ok {
+		return engine, nil
+	}
+	return "", errors.New("not found engine")
+}
+
+func getColumns(db *gorm.DB, dst interface{}) ([]string, error) {
+	columnsTypes, err := db.Migrator().ColumnTypes(dst)
+	if err != nil {
+		return nil, err
+	}
+
+	var columns []string
+	for _, column := range columnsTypes {
+		columns = append(columns, column.Name())
+	}
+
+	return columns, nil
+}
+
+// forceChangeArchiveTitle
+// 强制修改标题，使其符合mysql 5.6的190长度
+func forceChangeArchiveTitle(db *gorm.DB) {
+	columnsTypes, err := db.Migrator().ColumnTypes(&model.Archive{})
+	if err != nil {
+		return
+	}
+
+	for _, column := range columnsTypes {
+		if column.Name() == "title" {
+			if colLen, _ := column.Length(); colLen > 190 {
+				// 修改title的长度
+				db.Exec("UPDATE `archives` SET `title` = LEFT(`title`, 190) WHERE CHAR_LENGTH(`title`) > 190")
+			}
+			break
+		}
 	}
 }

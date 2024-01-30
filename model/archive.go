@@ -8,22 +8,23 @@ import (
 )
 
 type Archive struct {
-	Model
-	Title        string         `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	//默认字段
+	Id           uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey;index:idx_category_archive_id,priority:2;index:idx_module_archive_id,priority:2"`
+	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime  int64          `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	Title        string         `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';index"`
 	SeoTitle     string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	UrlToken     string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
 	Keywords     string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
 	Description  string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
-	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_id"`
-	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
+	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_archive_id,priority:1"`
+	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_archive_id,priority:1"`
 	Views        uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	CommentCount uint           `json:"comment_count" gorm:"column:comment_count;type:int(10) unsigned not null;default:0"`
 	Images       pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Template     string         `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
-	Status       uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
-	CanonicalUrl string         `json:"canonical_url" gorm:"column:canonical_url;type:varchar(250) not null;default:''"`      // 规范链接
-	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null"`                   // 固化的链接
-	Flag         string         `json:"flag" gorm:"column:flag;type:set('c','h','p','f','s','j','a','b') default null;index"` //推荐标签
+	CanonicalUrl string         `json:"canonical_url" gorm:"column:canonical_url;type:varchar(250) not null;default:''"` // 规范链接
+	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null"`              // 固化的链接
 	UserId       uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Price        int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	Stock        int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`
@@ -50,11 +51,20 @@ type Archive struct {
 	HasPassword    bool                    `json:"has_password" gorm:"-"` // 需要密码的时候，这个字段为true
 	CategoryTitles []string                `json:"category_titles" gorm:"-"`
 	CategoryIds    []uint                  `json:"category_ids" gorm:"-"`
+	Flag           string                  `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
 }
 
 type ArchiveData struct {
-	Model
+	Id      uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	Content string `json:"content" gorm:"column:content;type:longtext default null"`
+}
+
+// ArchiveDraft
+// 表结构和 archives一致，但是存放的是草稿，已删除的文章，待发布的文章，用于发布时，将数据复制到 archives 表
+// 所有文章的ID都从ArchiveDraft中生成
+type ArchiveDraft struct {
+	Archive
+	Status uint `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 }
 
 func (a *Archive) AddViews(db *gorm.DB) error {

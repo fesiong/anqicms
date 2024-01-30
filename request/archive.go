@@ -21,6 +21,7 @@ type Archive struct {
 	CanonicalUrl string                 `json:"canonical_url"`
 	FixedLink    string                 `json:"fixed_link"`
 	Flag         string                 `json:"flag"`
+	Flags        []string               `json:"flags"`
 	UserId       uint                   `json:"user_id"`
 	Price        int64                  `json:"price"`
 	Stock        int64                  `json:"stock"`

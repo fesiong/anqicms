@@ -375,19 +375,16 @@ func (bs *BucketStorage) initSSH() error {
 		Callback: ssh.InsecureIgnoreHostKey(),
 	})
 	if err != nil {
-		log.Println(11, err, client)
 		return err
 	}
 	sshClient, err := client.NewSftp()
 	if err != nil {
-		log.Println(22, err, sshClient)
 		return err
 	}
 	// 验证权限
 	tmpFile := bs.config.SSHWebroot + "/tmp.tmp"
 	file, err := sshClient.Create(tmpFile)
 	if err != nil {
-		log.Println(33, err)
 		return err
 	}
 	file.Close()

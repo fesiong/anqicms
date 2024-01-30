@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
@@ -12,7 +13,6 @@ import (
 	"image/draw"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"math"
 	"math/rand"
 	"mime/multipart"
@@ -29,15 +29,17 @@ import (
 )
 
 type TitleImage struct {
+	w          *Website
 	PublicPath string
 	config     *config.PluginTitleImageConfig
 	useWebp    int
-	article    *model.Archive
+	title      string
+	content    string
 	font       *truetype.Font
 	fontSize   int
 }
 
-func (w *Website) NewTitleImage(article *model.Archive) *TitleImage {
+func (w *Website) NewTitleImage() *TitleImage {
 	rand.Seed(time.Now().UnixNano())
 	f := loadLocalFont(w.PublicPath + w.PluginTitleImage.FontPath)
 	fontSize := w.PluginTitleImage.FontSize
@@ -45,10 +47,10 @@ func (w *Website) NewTitleImage(article *model.Archive) *TitleImage {
 		fontSize = 32
 	}
 	t := TitleImage{
+		w:          w,
 		PublicPath: w.PublicPath,
 		config:     &w.PluginTitleImage,
 		useWebp:    w.Content.UseWebp,
-		article:    article,
 		font:       f,
 		fontSize:   fontSize,
 	}
@@ -56,58 +58,52 @@ func (w *Website) NewTitleImage(article *model.Archive) *TitleImage {
 	return &t
 }
 
-func (t *TitleImage) DrawTitles(w *Website) error {
+func (t *TitleImage) DrawTitles(title, content string) (logo string, newContent string, err error) {
+	if len(title) == 0 {
+		return "", content, errors.New("no title")
+	}
 	// 先draw title
-	img := t.makeBackground(t.article.Title)
-	img = t.drawTitle(img, t.article.Title)
+	img := t.makeBackground(title)
+	img = t.drawTitle(img, title)
 	// 开始保存
-	location, err := t.Save(w, img, t.article.Title)
+	logo, err = t.Save(img, title)
 	if err != nil {
-		return err
+		return "", content, err
 	}
-	// 写入 article
-	t.article.Images = append(t.article.Images, strings.TrimPrefix(location, w.PluginStorage.StorageUrl))
-	if t.article.Id > 0 {
-		w.DB.Model(t.article).UpdateColumn("images", t.article.Images)
-	}
-	if t.config.DrawSub && t.article.ArchiveData != nil {
+	if t.config.DrawSub && len(content) > 0 {
 		// 尝试解析h2标签
 		re, _ := regexp.Compile(`(?i)<h2.*?>(.*?)</h2>`)
-		result := re.FindAllStringSubmatch(t.article.ArchiveData.Content, -1)
+		result := re.FindAllStringSubmatch(content, -1)
 		if len(result) == 0 {
 			// 不存在h2,则尝试查找h3
 			re, _ = regexp.Compile(`(?i)<h3.*?>(.*?)</h3>`)
-			result = re.FindAllStringSubmatch(t.article.ArchiveData.Content, -1)
+			result = re.FindAllStringSubmatch(content, -1)
 		}
 		if len(result) > 0 {
 			for _, v := range result {
-				title := strings.ReplaceAll(library.StripTags(v[1]), "\n", " ")
-				img = t.makeBackground(title)
-				img = t.drawTitle(img, title)
+				tit := strings.ReplaceAll(library.StripTags(v[1]), "\n", " ")
+				img = t.makeBackground(tit)
+				img = t.drawTitle(img, tit)
 				// 开始保存
-				location, err = t.Save(w, img, title)
+				location, err := t.Save(img, tit)
 				if err != nil {
 					continue
 				}
-				newString := v[0] + "\n" + "<p><img src=\"" + location + "\" alt=\"" + title + "\" /></p>"
-				t.article.ArchiveData.Content = strings.Replace(t.article.ArchiveData.Content, v[0], newString, 1)
+				newString := v[0] + "\n" + "<p><img src=\"" + location + "\" alt=\"" + tit + "\" /></p>"
+				content = strings.Replace(content, v[0], newString, 1)
 			}
 		}
-		// 生成完毕，写入数据库
-		if t.article.Id > 0 {
-			w.DB.Model(model.ArchiveData{}).Where("`id` = ?", t.article.Id).UpdateColumn("content", t.article.ArchiveData.Content)
-		}
 	}
 
-	return nil
+	return logo, content, nil
 }
 
-func (t *TitleImage) DrawPreview() string {
-	if len(t.article.Title) == 0 {
+func (t *TitleImage) DrawPreview(title string) string {
+	if len(title) == 0 {
 		return ""
 	}
-	img := t.makeBackground(t.article.Title)
-	img = t.drawTitle(img, t.article.Title)
+	img := t.makeBackground(title)
+	img = t.drawTitle(img, title)
 
 	data := t.EncodeB64string(img)
 
@@ -174,7 +170,7 @@ func (t *TitleImage) makeBackground(title string) (newImg image.Image) {
 	return
 }
 
-func (t *TitleImage) Save(w *Website, img image.Image, title string) (string, error) {
+func (t *TitleImage) Save(img image.Image, title string) (string, error) {
 	imgType := "png"
 	if t.useWebp == 1 {
 		imgType = "webp"
@@ -192,7 +188,7 @@ func (t *TitleImage) Save(w *Website, img image.Image, title string) (string, er
 	defer os.Remove(tmpfile.Name()) // clean up
 	tmpfile.Write(buf)
 
-	attachment, err := w.AttachmentUpload(tmpfile, fileHeader, 0, 0)
+	attachment, err := t.w.AttachmentUpload(tmpfile, fileHeader, 0, 0)
 	if err != nil {
 		return "", err
 	}

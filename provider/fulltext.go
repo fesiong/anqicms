@@ -42,9 +42,9 @@ func (w *Website) InitFulltext() {
 	for {
 		var archives = make([]*TinyArchive, 0, InitSqlLimit)
 		if w.PluginFulltext.UseContent {
-			w.DB.Table("`archives` as a").Joins("left join `archive_data` as d on a.id=d.id").Select("a.id,a.title,a.keywords,a.description,a.module_id,d.content").Where("a.`id` > ? and a.`module_id` IN(?) and a.`status` = ?", lastId, w.PluginFulltext.Modules, config.ContentStatusOK).Order("a.id asc").Limit(InitSqlLimit).Scan(&archives)
+			w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ? and archives.`module_id` IN(?)", lastId, w.PluginFulltext.Modules).Order("archives.id asc").Limit(InitSqlLimit).Scan(&archives)
 		} else {
-			w.DB.Table("`archives` as a").Select("a.id,a.title,a.keywords,a.description,a.module_id").Where("a.`id` > ? and a.`module_id` IN(?) and a.`status` = ?", lastId, w.PluginFulltext.Modules, config.ContentStatusOK).Order("a.id asc").Limit(InitSqlLimit).Scan(&archives)
+			w.DB.Table("`archives` as archives").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id").Where("archives.`id` > ? and archives.`module_id` IN(?)", lastId, w.PluginFulltext.Modules).Order("archives.id asc").Limit(InitSqlLimit).Scan(&archives)
 		}
 		if len(archives) == 0 {
 			break

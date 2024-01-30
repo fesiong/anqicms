@@ -235,6 +235,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		if len(archiveDetail.Password) > 0 {
 			archiveDetail.HasPassword = true
 		}
+		// 读取flag
+		if fieldName == "Flags" || fieldName == "Flag" {
+			archiveDetail.Flag = currentSite.GetArchiveFlags(archiveDetail.Id)
+		}
 
 		// output
 		if node.name == "" {

@@ -51,7 +51,7 @@ func (w *Website) BuildSitemap() error {
 	var archiveCount int64
 	var tagCount int64
 	categoryBuilder := w.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Count(&categoryCount)
-	archiveBuilder := w.DB.Model(&model.Archive{}).Where("`status` = 1").Order("id asc").Count(&archiveCount)
+	archiveBuilder := w.DB.Model(&model.Archive{}).Order("id asc").Count(&archiveCount)
 	tagBuilder := w.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
 
 	//index 和 category 存放在同一个文件，文章单独一个文件
@@ -137,7 +137,7 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 		}
 	} else if itemType == "archive" {
 		var archiveCount int64
-		w.DB.Model(&model.Archive{}).Where("`status` = 1").Count(&archiveCount)
+		w.DB.Model(&model.Archive{}).Count(&archiveCount)
 		//文章，由于本次统计的时候，这个文章已经存在，可以直接使用统计数量
 		pager := int(math.Ceil(float64(archiveCount) / float64(SitemapLimit)))
 		archivePath := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, pager, w.PluginSitemap.Type)

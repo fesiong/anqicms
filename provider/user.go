@@ -628,12 +628,12 @@ func (w *Website) MigrateUserTable(fields []*config.CustomField, focus bool) {
 	for _, field := range fields {
 		field.CheckSetFilter()
 		column := field.GetFieldColumn()
-		if !w.DB.Debug().Migrator().HasColumn(model.User{}, field.FieldName) {
+		if !w.DB.Migrator().HasColumn(model.User{}, field.FieldName) {
 			//创建语句
-			w.DB.Debug().Exec("ALTER TABLE ? ADD COLUMN ?", clause.Table{Name: tableName}, gorm.Expr(column))
+			w.DB.Exec("ALTER TABLE ? ADD COLUMN ?", clause.Table{Name: tableName}, gorm.Expr(column))
 		} else if focus {
 			//更新语句
-			w.DB.Debug().Exec("ALTER TABLE ? MODIFY COLUMN ?", clause.Table{Name: tableName}, gorm.Expr(column))
+			w.DB.Exec("ALTER TABLE ? MODIFY COLUMN ?", clause.Table{Name: tableName}, gorm.Expr(column))
 		}
 	}
 }
@@ -641,8 +641,8 @@ func (w *Website) MigrateUserTable(fields []*config.CustomField, focus bool) {
 func (w *Website) DeleteUserField(fieldName string) error {
 	for i, val := range w.PluginUser.Fields {
 		if val.FieldName == fieldName {
-			if w.DB.Debug().Migrator().HasColumn(model.User{}, val.FieldName) {
-				w.DB.Debug().Migrator().DropColumn(model.User{}, val.FieldName)
+			if w.DB.Migrator().HasColumn(model.User{}, val.FieldName) {
+				w.DB.Migrator().DropColumn(model.User{}, val.FieldName)
 			}
 
 			w.PluginUser.Fields = append(w.PluginUser.Fields[:i], w.PluginUser.Fields[i+1:]...)

@@ -34,7 +34,7 @@ func (node *tagNextArchiveNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if archiveDetail != nil {
 		nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-			return tx.Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").Order("`id` ASC")
+			return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Order("`id` ASC")
 		})
 		if nextArchive != nil && len(nextArchive.Password) > 0 {
 			nextArchive.HasPassword = true

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 )
 
 type FileCache struct {
@@ -63,12 +65,24 @@ func (m *FileCache) Delete(key string) {
 	_ = os.Remove(cacheFile)
 }
 
-func (m *FileCache) CleanAll() {
+func (m *FileCache) CleanAll(prefix ...string) {
 	if len(m.cachePath) == 0 {
 		return
 	}
-
-	_ = os.RemoveAll(m.cachePath)
+	if len(prefix) > 0 {
+		// 遍历cachePath，删除prefix[0]前缀的的文件
+		_ = filepath.Walk(m.cachePath, func(path string, info os.FileInfo, err error) error {
+			if info.IsDir() {
+				return nil
+			}
+			if strings.HasPrefix(path, prefix[0]) {
+				_ = os.Remove(path)
+			}
+			return nil
+		})
+	} else {
+		_ = os.RemoveAll(m.cachePath)
+	}
 }
 
 func InitFileCache(cachePath string) Cache {

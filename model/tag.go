@@ -13,7 +13,7 @@ type Tag struct {
 }
 
 type TagData struct {
-	Model
+	Id     uint `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	TagId  uint `json:"tag_id" gorm:"column:tag_id;type:int(10) not null;default:0;index"`
 	ItemId uint `json:"item_id" gorm:"column:item_id;type:int(10) unsigned not null;default:0;index:idx_item_id"`
 }

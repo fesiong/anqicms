@@ -34,7 +34,12 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 		return
 	}
 
-	db := w.DB.Model(&model.Archive{}).Where("`status` = 1 and module_id IN (?)", setting.ModuleIds).Limit(100)
+	db := w.DB.Model(&model.Archive{}).Limit(100)
+	if len(setting.ModuleIds) == 1 {
+		db = db.Where("module_id = ?", setting.ModuleIds[0])
+	} else {
+		db = db.Where("module_id IN (?)", setting.ModuleIds)
+	}
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
@@ -82,7 +87,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if setting.TodayCount > 0 && time.Unix(setting.LastSent, 0).Day() != time.Now().Day() {
 		setting.TodayCount = 0
 		// 更新数量
-		w.SaveSettingValue(TimeFactorKey, setting)
+		_ = w.SaveSettingValue(TimeFactorKey, setting)
 	}
 	if setting.StartTime > 0 && time.Now().Hour() < setting.StartTime {
 		return
@@ -107,21 +112,27 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 		return
 	}
 
-	db := w.DB.Model(&model.Archive{}).Where("`status` = 0 and module_id IN (?)", setting.ModuleIds)
+	// 从草稿箱发布
+	db := w.DB.Model(&model.ArchiveDraft{}).Where("`status` = 0")
+	if len(setting.ModuleIds) == 1 {
+		db = db.Where("module_id = ?", setting.ModuleIds[0])
+	} else {
+		db = db.Where("module_id IN (?)", setting.ModuleIds)
+	}
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
-	var archive *model.Archive
+	var draft *model.ArchiveDraft
 	// 一次最多读取1个
-	err := db.Order("id asc").Take(&archive).Error
+	err := db.Order("id asc").Take(&draft).Error
 	if err != nil {
 		// 没文章
 		return
 	}
+	archive := &draft.Archive
 	archive.CreatedTime = nowStamp
 	archive.UpdatedTime = nowStamp
-	archive.Status = config.ContentStatusOK
-	w.DB.Updates(archive)
+	w.DB.Save(archive)
 	_ = w.SuccessReleaseArchive(archive, true)
 	// 清除缓存
 	w.DeleteArchiveCache(archive.Id)
@@ -129,5 +140,5 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 
 	setting.TodayCount++
 	setting.LastSent = nowStamp
-	w.SaveSettingValue(TimeFactorKey, setting)
+	_ = w.SaveSettingValue(TimeFactorKey, setting)
 }

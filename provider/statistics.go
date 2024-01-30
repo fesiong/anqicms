@@ -221,7 +221,7 @@ func (w *Website) SendStatisticsMail() {
 	// 访问量
 	var visitResult []*SpiderData
 	var totalVisit int64
-	w.DB.Debug().Model(&model.Statistic{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Where("`spider` = ''").
+	w.DB.Model(&model.Statistic{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Where("`spider` = ''").
 		Select("count(1) AS total, FROM_UNIXTIME(created_time, '%H:00') AS statistic_date").
 		Group("statistic_date").Order("statistic_date asc").Find(&visitResult)
 	for _, v := range visitResult {

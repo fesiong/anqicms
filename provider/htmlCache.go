@@ -348,7 +348,7 @@ func (w *Website) BuildArchiveCache() {
 	lastId := uint(0)
 	for {
 		var archives []*model.Archive
-		w.DB.Model(&model.Archive{}).Where("`status` = 1 and `id` > ?", lastId).Limit(1000).Order("id asc").Find(&archives)
+		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Limit(1000).Order("id asc").Find(&archives)
 		if len(archives) == 0 {
 			break
 		}

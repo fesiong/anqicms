@@ -116,7 +116,21 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 
-	order := "archives.`sort` desc, archives.`id` desc"
+	var order string
+	if args["order"] != nil {
+		if !strings.Contains(order, "rand") {
+			order = "archives." + args["order"].String()
+		} else {
+			order = args["order"].String()
+		}
+	} else {
+		if currentSite.Content.UseSort == 1 {
+			order = "archives.`sort` desc, archives.`id` desc"
+		} else {
+			order = "archives.`id` desc"
+		}
+	}
+
 	limit := 10
 	offset := 0
 	currentPage := 1
@@ -171,11 +185,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		currentPage = 1
 	}
 
-	if args["order"] != nil {
-		if !strings.Contains(order, "rand") {
-			order = "archives." + args["order"].String()
-		}
-	}
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")
 		if len(limitArgs) == 2 {
@@ -229,65 +238,61 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				categoryId = 0
 			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				if moduleId > 0 {
-					tx = tx.Where("`module_id` = ?", moduleId)
-				}
 				if categoryId > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
+				} else if moduleId > 0 {
+					tx = tx.Where("`module_id` = ?", moduleId)
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				tx = tx.Where("`status` = 1 AND `keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId).
-					Order("archives.id ASC")
+				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId)
 				return tx
-			}, 0, limit, offset)
+			}, "archives.id ASC", 0, limit, offset)
 		} else {
 			halfLimit := int(math.Ceil(float64(limit) / 2))
 			archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
 				if currentSite.Content.MultiCategory == 1 {
 					// 多分类支持
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				tx = tx.Where("archives.`id` > ?", archiveId).Order("archives.id ASC")
-				return tx.Debug()
-			}, 0, limit, offset)
+				tx = tx.Where("archives.`id` > ?", archiveId)
+				return tx
+			}, "archives.id ASC", 0, limit, offset)
 			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				tx = tx.Where("`module_id` = ? AND `status` = 1", moduleId)
 				if currentSite.Content.MultiCategory == 1 {
 					// 多分类支持
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				tx = tx.Where("archives.`id` < ?", archiveId).Order("archives.id DESC")
-				return tx.Debug()
-			}, 0, limit, offset)
+				tx = tx.Where("archives.`id` < ?", archiveId)
+				return tx
+			}, "archives.id DESC", 0, limit, offset)
 			if len(archives1)+len(archives2) > limit {
 				if len(archives1) > halfLimit && len(archives2) > halfLimit {
 					archives1 = archives1[:halfLimit]
@@ -320,15 +325,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 		ops := func(tx *gorm.DB) *gorm.DB {
-			tx.Where("`status` = 1")
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
 			}
-			if moduleId > 0 {
-				tx = tx.Where("`module_id` = ?", moduleId)
-			}
 			if flag != "" {
-				tx = tx.Where("FIND_IN_SET(?,`flag`)", flag)
+				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
 			}
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)
@@ -357,33 +358,36 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						subIds = append(subIds, v)
 					}
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
 					} else {
-						tx = tx.Where("`category_id` IN(?)", subIds)
+						if len(subIds) == 1 {
+							tx = tx.Where("`category_id` = ?", subIds[0])
+						} else {
+							tx = tx.Where("`category_id` IN(?)", subIds)
+						}
 					}
 				} else if len(categoryIds) == 1 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryIds[0])
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryIds[0])
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryIds[0])
 					}
 				} else {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", categoryIds)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", categoryIds)
 					} else {
 						tx = tx.Where("`category_id` IN(?)", categoryIds)
 					}
 				}
+			} else if moduleId > 0 {
+				tx = tx.Where("`module_id` = ?", moduleId)
 			}
 			if len(excludeCategoryIds) > 0 {
 				if currentSite.Content.MultiCategory == 1 {
-					tx = tx.Joins("STRAIGHT_JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 				} else {
 					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 				}
-			}
-			if order != "" {
-				tx = tx.Order(order)
 			}
 			if len(ids) > 0 {
 				tx = tx.Where("archives.`id` IN(?)", ids)
@@ -396,12 +400,14 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			// 如果不是分页，则不查询count
 			currentPage = 0
 		}
-		archives, total, _ = currentSite.GetArchiveList(ops, currentPage, limit, offset)
+		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
 		}
 	}
+	var archiveIds = make([]uint, 0, len(archives))
 	for i := range archives {
+		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
 			archives[i].HasPassword = true
 		}
@@ -410,6 +416,19 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives[i].Link = currentSite.GetUrl("archive", combineArchive, 0, archives[i])
 			} else {
 				archives[i].Link = currentSite.GetUrl("archive", archives[i], 0, combineArchive)
+			}
+		}
+	}
+	// 读取flags
+	if len(archiveIds) > 0 {
+		var flags []*model.ArchiveFlags
+		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		for i := range archives {
+			for _, f := range flags {
+				if f.ArchiveId == archives[i].Id {
+					archives[i].Flag = f.Flags
+					break
+				}
 			}
 		}
 	}

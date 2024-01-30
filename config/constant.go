@@ -28,9 +28,10 @@ const (
 )
 
 const (
-	ContentStatusDraft = 0 // 草稿
-	ContentStatusOK    = 1 // 正式内容
-	ContentStatusPlan  = 2 // 计划内容，等待发布
+	ContentStatusDraft  = 0  // 草稿
+	ContentStatusOK     = 1  // 正式内容
+	ContentStatusPlan   = 2  // 计划内容，等待发布
+	ContentStatusDelete = 99 // 已删除
 )
 
 const (

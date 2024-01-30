@@ -318,8 +318,8 @@ func (t *TransferWebsite) transferCategories() error {
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
 		}
-		if utf8.RuneCountInString(category.Title) > 250 {
-			category.Title = string([]rune(category.Title)[:250])
+		if utf8.RuneCountInString(category.Title) > 190 {
+			category.Title = string([]rune(category.Title)[:190])
 		}
 		if utf8.RuneCountInString(category.Keywords) > 250 {
 			category.Keywords = string([]rune(category.Keywords)[:250])
@@ -375,8 +375,8 @@ func (t *TransferWebsite) transferTags() error {
 			Description: result.Data[i].Description,
 			Status:      1,
 		}
-		if utf8.RuneCountInString(tag.Title) > 250 {
-			tag.Title = string([]rune(tag.Title)[:250])
+		if utf8.RuneCountInString(tag.Title) > 190 {
+			tag.Title = string([]rune(tag.Title)[:190])
 		}
 		if utf8.RuneCountInString(tag.Keywords) > 250 {
 			tag.Keywords = string([]rune(tag.Keywords)[:250])
@@ -464,21 +464,22 @@ func (t *TransferWebsite) transferArchives() error {
 		}
 		t.LastId = int64(result.Data[len(result.Data)-1].Id)
 		for i := range result.Data {
-			archive := model.Archive{
-				Title:       result.Data[i].Title,
-				SeoTitle:    result.Data[i].SeoTitle,
-				UrlToken:    result.Data[i].UrlToken,
-				Keywords:    result.Data[i].Keywords,
-				Description: result.Data[i].Description,
-				ModuleId:    result.Data[i].ModuleId,
-				CategoryId:  result.Data[i].CategoryId,
-				Views:       result.Data[i].Views,
-				Images:      result.Data[i].Images,
-				Status:      result.Data[i].Status,
-				Flag:        result.Data[i].Flag,
+			archive := model.ArchiveDraft{
+				Archive: model.Archive{
+					Title:       result.Data[i].Title,
+					SeoTitle:    result.Data[i].SeoTitle,
+					UrlToken:    result.Data[i].UrlToken,
+					Keywords:    result.Data[i].Keywords,
+					Description: result.Data[i].Description,
+					ModuleId:    result.Data[i].ModuleId,
+					CategoryId:  result.Data[i].CategoryId,
+					Views:       result.Data[i].Views,
+					Images:      result.Data[i].Images,
+				},
+				Status: result.Data[i].Status,
 			}
-			if utf8.RuneCountInString(archive.Title) > 250 {
-				archive.Title = string([]rune(archive.Title)[:250])
+			if utf8.RuneCountInString(archive.Title) > 190 {
+				archive.Title = string([]rune(archive.Title)[:190])
 			}
 			if utf8.RuneCountInString(archive.Keywords) > 250 {
 				archive.Keywords = string([]rune(archive.Keywords)[:250])
@@ -506,8 +507,16 @@ func (t *TransferWebsite) transferArchives() error {
 				archive.UrlToken = library.GetPinyin(archive.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
 			}
 			archive.UrlToken = t.w.VerifyArchiveUrlToken(archive.UrlToken, archive.Id)
-			// 保存主表
+			// 先保存为草稿
 			t.w.DB.Save(&archive)
+			// 如果status == 1，则保存为正式表
+			if archive.Status == config.ContentStatusOK {
+				realArchive := &archive.Archive
+				// 保存到正式表
+				t.w.DB.Save(&realArchive)
+				// 并删除草稿
+				t.w.DB.Delete(&archive)
+			}
 			// 保存内容表
 			archiveData := model.ArchiveData{
 				Content: ParseContent(result.Data[i].Content),
@@ -552,8 +561,16 @@ func (t *TransferWebsite) transferArchives() error {
 					}
 				}
 			}
+			// categories
+			if result.Data[i].CategoryId > 0 {
+				_ = t.w.SaveArchiveCategories(archive.Id, []uint{result.Data[i].CategoryId})
+			}
 			// tags
 			_ = t.w.SaveTagData(archive.Id, result.Data[i].Tags)
+			// flags
+			if len(result.Data[i].Flag) > 0 {
+				_ = t.w.SaveArchiveFlags(archive.Id, strings.Split(result.Data[i].Flag, ","))
+			}
 		}
 	}
 
@@ -594,8 +611,8 @@ func (t *TransferWebsite) transferSinglePages() error {
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
 		}
-		if utf8.RuneCountInString(category.Title) > 250 {
-			category.Title = string([]rune(category.Title)[:250])
+		if utf8.RuneCountInString(category.Title) > 190 {
+			category.Title = string([]rune(category.Title)[:190])
 		}
 		if utf8.RuneCountInString(category.Keywords) > 250 {
 			category.Keywords = string([]rune(category.Keywords)[:250])

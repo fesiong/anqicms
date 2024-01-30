@@ -11,7 +11,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"log"
 	"net"
 	"net/url"
 	"os"
@@ -532,11 +531,8 @@ func FindPasswordVerify(ctx iris.Context) {
 
 	if currentSite.FindPasswordInfo.Way == config.PasswordFindWayFile {
 		filePath := currentSite.PublicPath + currentSite.FindPasswordInfo.Token + ".txt"
-		log.Println(filePath)
 		buf, err := os.ReadFile(filePath)
-		text := strings.TrimSpace(string(buf))
 
-		log.Println(err, len(text), len(currentSite.FindPasswordInfo.Token), strings.TrimSpace(string(buf)) != currentSite.FindPasswordInfo.Token)
 		if err != nil || strings.TrimSpace(string(buf)) != currentSite.FindPasswordInfo.Token {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,

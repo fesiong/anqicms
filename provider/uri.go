@@ -24,6 +24,12 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			if ok2 {
 				item = &item2
 				ok = ok2
+			} else {
+				item3, ok3 := data.(*model.ArchiveDraft)
+				if ok3 {
+					item = &item3.Archive
+					ok = ok3
+				}
 			}
 		}
 		if ok && item != nil {

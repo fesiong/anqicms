@@ -3,7 +3,6 @@ package controller
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -29,7 +28,7 @@ func ArchiveDetail(ctx iris.Context) {
 	} else {
 		archive, err = currentSite.GetArchiveById(id)
 	}
-	if err != nil || archive.Status != config.ContentStatusOK {
+	if err != nil {
 		NotFound(ctx)
 		return
 	}

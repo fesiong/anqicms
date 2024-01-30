@@ -7,7 +7,6 @@ import (
 	"image"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
@@ -76,7 +75,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 func PluginTitleImagePreview(ctx iris.Context) {
 	text := ctx.URLParamDefault("text", "欢迎使用安企内容管理系统")
 	currentSite := provider.CurrentSite(ctx)
-	str := currentSite.NewTitleImage(&model.Archive{Title: text}).DrawPreview()
+	str := currentSite.NewTitleImage().DrawPreview(text)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

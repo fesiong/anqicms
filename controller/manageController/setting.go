@@ -156,6 +156,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.FilterOutlink = req.FilterOutlink
 	currentSite.Content.UrlTokenType = req.UrlTokenType
 	currentSite.Content.MultiCategory = req.MultiCategory
+	currentSite.Content.UseSort = req.UseSort
 	currentSite.Content.UseWebp = req.UseWebp
 	currentSite.Content.Quality = req.Quality
 	currentSite.Content.ResizeImage = req.ResizeImage

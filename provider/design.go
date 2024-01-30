@@ -1510,7 +1510,7 @@ func (w *Website) BackupDesignData(packageName string) error {
 		}
 	}
 	var archives []model.Archive
-	w.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&archives)
+	w.DB.Order("`id` desc").Limit(maxLimit).Find(&archives)
 	if len(archives) > 0 {
 		var archiveIds = make([]uint, 0, len(archives))
 		for i := range archives {

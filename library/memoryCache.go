@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"strings"
 	"sync"
 	"time"
 )
@@ -89,15 +90,25 @@ func (m *MemoryCache) Delete(key string) {
 	}
 }
 
-func (m *MemoryCache) CleanAll() {
+func (m *MemoryCache) CleanAll(prefix ...string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.list = make(map[string]*cacheData)
-	m.size = 0
-	m.head = &cacheData{}
-	m.tail = &cacheData{}
-	m.head.next = m.tail
-	m.tail.prev = m.head
+	if len(prefix) > 0 {
+		for k := range m.list {
+			if strings.HasPrefix(k, prefix[0]) {
+				m.removeNode(m.list[k])
+				delete(m.list, k)
+				m.size--
+			}
+		}
+	} else {
+		m.list = make(map[string]*cacheData)
+		m.size = 0
+		m.head = &cacheData{}
+		m.tail = &cacheData{}
+		m.head.next = m.tail
+		m.tail.prev = m.head
+	}
 }
 
 func (m *MemoryCache) moveToHead(node *cacheData) {

@@ -63,7 +63,7 @@ func (w *Website) GetOrderList(userId uint, status string, page, pageSize int) (
 			}
 			archives, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				return tx.Where("`id` IN(?)", archiveIds)
-			}, 0, len(archiveIds))
+			}, "", 0, len(archiveIds))
 			for i := range details {
 				for x := range archives {
 					if archives[x].Id == details[i].GoodsId {
@@ -120,7 +120,7 @@ func (w *Website) GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 			}
 			archives, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				return tx.Where("`id` IN(?)", archiveIds)
-			}, 0, len(archiveIds))
+			}, "", 0, len(archiveIds))
 			for i := range details {
 				for x := range archives {
 					if archives[x].Id == details[i].GoodsId {
@@ -920,7 +920,7 @@ func (w *Website) GetRetailerOrders(retailerId uint, page, pageSize int) ([]*mod
 			}
 			archives, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				return tx.Where("`id` IN(?)", archiveIds)
-			}, 0, len(archiveIds))
+			}, "", 0, len(archiveIds))
 			for i := range details {
 				for x := range archives {
 					if archives[x].Id == details[i].GoodsId {
@@ -1090,7 +1090,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 			}
 			archives, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				return tx.Where("`id` IN(?)", archiveIds)
-			}, 0, len(archiveIds))
+			}, "", 0, len(archiveIds))
 			for i := range details {
 				for x := range archives {
 					if archives[x].Id == details[i].GoodsId {

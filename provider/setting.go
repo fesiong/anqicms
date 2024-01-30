@@ -51,6 +51,7 @@ const (
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
 	InterferenceKey     = "interference"
+	LastRunVersionKey   = "last_run_version"
 )
 
 func (w *Website) InitSetting() {

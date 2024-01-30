@@ -133,27 +133,28 @@ func ApiImportArchive(ctx iris.Context) {
 	// 如果传了ID，则采用覆盖的形式
 	if id > 0 {
 		_, err := currentSite.GetArchiveById(id)
-		if err != nil {
+		_, err2 := currentSite.GetArchiveDraftById(id)
+		if err != nil && err2 == nil {
 			// 不存在，创建一个
-			archive := model.Archive{
-				Title:       title,
-				SeoTitle:    seoTitle,
-				UrlToken:    urlToken,
-				Keywords:    keywords,
-				Description: description,
-				ModuleId:    category.ModuleId,
-				CategoryId:  categoryId,
-				Status:      0,
-				Logo:        logo,
-				Flag:        flag,
-				Price:       price,
-				Stock:       stock,
-				ReadLevel:   readLevel,
-				Sort:        sort,
-				OriginUrl:   originUrl,
+			archiveDraft := model.ArchiveDraft{
+				Archive: model.Archive{
+					Title:       title,
+					SeoTitle:    seoTitle,
+					UrlToken:    urlToken,
+					Keywords:    keywords,
+					Description: description,
+					ModuleId:    category.ModuleId,
+					CategoryId:  categoryId,
+					Logo:        logo,
+					Price:       price,
+					Stock:       stock,
+					ReadLevel:   readLevel,
+					Sort:        sort,
+					OriginUrl:   originUrl,
+				},
 			}
-			archive.Id = id
-			err = currentSite.DB.Create(&archive).Error
+			archiveDraft.Id = id
+			err = currentSite.DB.Create(&archiveDraft).Error
 
 			if err != nil {
 				ctx.JSON(iris.Map{

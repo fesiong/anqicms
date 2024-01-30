@@ -38,7 +38,10 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "a.`sort` desc, a.`id` desc"
+	order := "archives.`id` desc"
+	if currentSite.Content.UseSort == 1 {
+		order = "archives.`sort` desc, archives.`id` desc"
+	}
 	tagId := uint(0)
 	listType := "list"
 
@@ -91,15 +94,28 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			currentPage = 1
 		}
 		archives, total, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-			tx = tx.Table("`archives` as a").
-				Joins("INNER JOIN `tag_data` as t ON a.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id).
-				Where("a.`status` = 1").
-				Order(order)
+			tx = tx.Table("`archives` as archives").
+				Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
 			return tx
-		}, currentPage, limit, offset)
+		}, order, currentPage, limit, offset)
+		var archiveIds = make([]uint, 0, len(archives))
 		for i := range archives {
+			archiveIds = append(archiveIds, archives[i].Id)
 			if len(archives[i].Password) > 0 {
 				archives[i].HasPassword = true
+			}
+		}
+		// 读取flags
+		if len(archiveIds) > 0 {
+			var flags []*model.ArchiveFlags
+			currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			for i := range archives {
+				for _, f := range flags {
+					if f.ArchiveId == archives[i].Id {
+						archives[i].Flag = f.Flags
+						break
+					}
+				}
 			}
 		}
 		ctx.Private[node.name] = archives
