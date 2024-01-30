@@ -84,6 +84,13 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if ok && categoryDetail != nil {
 		matchData = categoryDetail
 		urlMatch = "category"
+	} else {
+		// 在 module 下
+		moduleDetail, ok := ctx.Public["module"].(*model.Module)
+		if ok && moduleDetail != nil {
+			matchData = moduleDetail
+			urlMatch = "archiveIndex"
+		}
 	}
 	urlPatten := currentSite.GetUrl(urlMatch, matchData, 1)
 	if strings.Contains(urlPatten, "?") {

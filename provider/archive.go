@@ -1257,7 +1257,7 @@ func (w *Website) GetArchiveFlags(archiveId uint) string {
 
 func (w *Website) SaveArchiveFlags(archiveId uint, flags []string) error {
 	if len(flags) == 0 {
-		w.DB.Debug().Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveFlag{})
+		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveFlag{})
 		return nil
 	}
 	for _, flag := range flags {
