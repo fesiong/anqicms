@@ -209,6 +209,10 @@ class anqicms
             $moduleTables = $this->getModuleTables();
             // 增加附加表
             foreach ($archives as $key => $val) {
+                $images = array();
+                if (!empty($val['litpic'])) {
+                    $images = array($val['litpic']);
+                }
                 $archive = array(
                   'id' => $val['id'],
                   'title' => $val['title'],
@@ -219,7 +223,7 @@ class anqicms
                   'status' => 1,
                   'created_time' => $val['pubdate'],
                   'updated_time' => $val['senddate'],
-                  'images' => [$val['litpic']],
+                  'images' => $images,
                   'url_token' => $val['filename'],
                   'module_id' => $val['channel'],
                   'flag' => $val['flag'],
