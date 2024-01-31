@@ -200,6 +200,7 @@ func manageRoute(app *iris.Application) {
 			design.Post("/file/upload", manageController.UploadDesignFile)
 			design.Post("/file/delete", manageController.DeleteDesignFile)
 			design.Get("/docs", manageController.GetDesignDocs)
+			design.Get("/helpers", manageController.GetDesignTplHelpers)
 			design.Get("/file/templates", manageController.GetDesignTemplateFiles)
 		}
 

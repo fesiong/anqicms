@@ -34,11 +34,20 @@ type DesignFileHistory struct {
 }
 type DesignDocGroup struct {
 	Title string      `json:"title"`
+	Type  string      `json:"type"` // tag,filter
 	Docs  []DesignDoc `json:"docs"`
 }
 
+type DocOption struct {
+	Title string `json:"title"`
+	Code  string `json:"code"`
+}
+
 type DesignDoc struct {
-	Title   string `json:"title"`
-	Link    string `json:"link"`
-	Content string `json:"content"`
+	Title   string      `json:"title"`
+	Link    string      `json:"link"`
+	Code    string      `json:"code"`
+	Content string      `json:"content,omitempty"`
+	Docs    []DesignDoc `json:"docs,omitempty"`
+	Options []DocOption `json:"options,omitempty"`
 }
