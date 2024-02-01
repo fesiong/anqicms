@@ -1,10 +1,12 @@
 package model
 
 import (
+	"fmt"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 type Archive struct {
@@ -65,6 +67,42 @@ type ArchiveData struct {
 type ArchiveDraft struct {
 	Archive
 	Status uint `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+}
+
+func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
+	a.Id = GetNextArchiveId(tx)
+	return
+}
+
+var nextArchiveId uint = 0
+var nextArchiveIdTime int64 = 0
+
+// GetNextArchiveId
+// ArchiveId 同时检查 archives表和archive_drafts表
+// 每次获取，自动加 1
+func GetNextArchiveId(tx *gorm.DB) uint {
+	// 仅缓存60秒
+	if nextArchiveIdTime+60 > time.Now().Unix() {
+		nextArchiveId += 1
+		return nextArchiveId
+	}
+	// 从数据库读取
+	var autoIncrementValue int64
+	var tableStatus = make(map[string]interface{})
+	tx.Raw(fmt.Sprintf("SHOW TABLE STATUS LIKE '%s'", "archives")).Scan(&tableStatus)
+	if increment, ok := tableStatus["Auto_increment"].(int64); ok {
+		autoIncrementValue = increment
+	}
+	tx.Raw(fmt.Sprintf("SHOW TABLE STATUS LIKE '%s'", "archive_drafts")).Scan(&tableStatus)
+	if increment, ok := tableStatus["Auto_increment"].(int64); ok {
+		if autoIncrementValue < increment {
+			autoIncrementValue = increment
+		}
+	}
+	nextArchiveId = uint(autoIncrementValue)
+	nextArchiveIdTime = time.Now().Unix()
+
+	return nextArchiveId
 }
 
 func (a *Archive) AddViews(db *gorm.DB) error {
