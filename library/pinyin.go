@@ -46,7 +46,7 @@ func GetPinyin(hans string, isSort bool) string {
 		str = strings.Trim(str, "-")
 	}
 
-	return str
+	return strings.ToLower(str)
 }
 
 func init() {

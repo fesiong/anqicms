@@ -465,7 +465,6 @@ func (t *TransferWebsite) transferArchives() error {
 		t.LastId = int64(result.Data[len(result.Data)-1].Id)
 		for i := range result.Data {
 			// 迁移过来需要保持ID不变
-			// todo
 			archive := model.ArchiveDraft{
 				Archive: model.Archive{
 					Title:       result.Data[i].Title,

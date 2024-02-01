@@ -204,6 +204,7 @@ func (w *Website) VerifyTagUrlToken(urlToken string, id uint) string {
 	if len(urlToken) > 150 {
 		urlToken = urlToken[:150]
 	}
+	urlToken = strings.ToLower(urlToken)
 	for {
 		tmpToken := urlToken
 		if index > 0 {
