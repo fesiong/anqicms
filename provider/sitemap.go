@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"encoding/xml"
 	"fmt"
 	"kandaoni.com/anqicms/model"
@@ -73,34 +74,50 @@ func (w *Website) BuildSitemap() error {
 	//写入文章
 	pager := int(math.Ceil(float64(archiveCount) / float64(SitemapLimit)))
 	var archives []*model.Archive
+	lastId := uint(0)
 	for i := 1; i <= pager; i++ {
 		//写入index
 		indexFile.AddIndex(fmt.Sprintf("%s/archive-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
 		//写入archive-sitemap
 		archiveFile := NewSitemapGenerator(w, fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
-		err := archiveBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&archives).Error
-		if err == nil {
+		remainNum := SitemapLimit
+		for remainNum > 0 {
+			// 单次查询2000条
+			archiveBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(2000).Find(&archives)
+			if len(archives) == 0 {
+				break
+			}
 			for _, v := range archives {
 				archiveFile.AddLoc(w.GetUrl("archive", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
 			}
+			remainNum -= len(archives)
+			lastId = archives[len(archives)-1].Id
 		}
 		archiveFile.Save()
 	}
 	//写入tag
 	pager = int(math.Ceil(float64(tagCount) / float64(SitemapLimit)))
 	var tags []*model.Tag
+	lastId = uint(0)
 	for i := 1; i <= pager; i++ {
 		//写入index
 		indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
 		//写入tag-sitemap
 		tagFile := NewSitemapGenerator(w, fmt.Sprintf("%stag-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
-		err := tagBuilder.Limit(SitemapLimit).Offset((i - 1) * SitemapLimit).Find(&tags).Error
-		if err == nil {
+		remainNum := SitemapLimit
+		for remainNum > 0 {
+			// 单次查询2000条
+			tagBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(2000).Find(&tags)
+			if len(tags) == 0 {
+				break
+			}
 			for _, v := range tags {
 				tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
 			}
+			remainNum -= len(tags)
+			lastId = tags[len(tags)-1].Id
 		}
 		tagFile.Save()
 	}
