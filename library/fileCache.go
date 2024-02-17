@@ -72,7 +72,7 @@ func (m *FileCache) CleanAll(prefix ...string) {
 	if len(prefix) > 0 {
 		// 遍历cachePath，删除prefix[0]前缀的的文件
 		_ = filepath.Walk(m.cachePath, func(path string, info os.FileInfo, err error) error {
-			if info.IsDir() {
+			if info == nil || info.IsDir() {
 				return nil
 			}
 			if strings.HasPrefix(path, prefix[0]) {
