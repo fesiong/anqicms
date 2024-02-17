@@ -185,18 +185,21 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		if len(archiveIds) > 0 {
 			w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
 		}
+		for i := range archives {
+			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archives[i].Link = w.GetUrl("archive", archives[i], 0)
+		}
 	} else {
 		builder = builder.Limit(pageSize).Offset(offset)
 		if err := builder.Find(&archives).Error; err != nil {
 			return nil, 0, err
 		}
+		for i := range archives {
+			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archives[i].Link = w.GetUrl("archive", archives[i], 0)
+		}
 		// 对于没有分页的list，则缓存
 		_ = w.Cache.Set(cacheKey, archives, 300)
-	}
-
-	for i := range archives {
-		archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
-		archives[i].Link = w.GetUrl("archive", archives[i], 0)
 	}
 
 	return archives, total, nil
