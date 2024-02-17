@@ -25,6 +25,7 @@ const (
 	BannerSettingKey  = "banner"
 	SensitiveWordsKey = "sensitive_words"
 	InstallTimeKey    = "install_time"
+	CacheTypeKey      = "cache_type"
 
 	PushSettingKey        = "push"
 	SitemapSettingKey     = "sitemap"

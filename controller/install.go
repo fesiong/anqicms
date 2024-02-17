@@ -357,7 +357,7 @@ func InstallForm(ctx iris.Context) {
 	provider.SetDefaultDB(db)
 
 	//自动迁移数据库
-	err = provider.AutoMigrateDB(db)
+	err = provider.AutoMigrateDB(db, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

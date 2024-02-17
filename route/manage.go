@@ -106,6 +106,7 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/sensitive/words", manageController.SettingSensitiveWordsForm)
 			setting.Post("/sensitive/check", manageController.SettingSensitiveWordsCheck)
 			setting.Post("/sensitive/sync", manageController.SettingSensitiveWordsSync)
+			setting.Post("/migratedb", manageController.SettingMigrateDB)
 		}
 
 		collector := manage.Party("/collector", middleware.ParseAdminToken, middleware.AdminPermission)

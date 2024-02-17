@@ -5,6 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"os"
 	"strings"
@@ -327,20 +328,45 @@ func SettingCache(ctx iris.Context) {
 		"msg":  "",
 		"data": iris.Map{
 			"last_update": lastUpdate,
+			"cache_type":  currentSite.GetSettingValue(provider.CacheTypeKey),
 		},
 	})
 }
 
 func SettingCacheForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	currentSite.DeleteCache()
+	var req config.CacheConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动更新缓存"))
+	if req.Update {
+		// 更新
+		oldCacheType := currentSite.GetSettingValue(provider.CacheTypeKey)
+		setting := model.Setting{
+			Key:   provider.CacheTypeKey,
+			Value: req.CacheType,
+		}
+		currentSite.DB.Save(&setting)
+		if oldCacheType != req.CacheType {
+			// 重新初始化缓存
+			currentSite.InitCache()
+		}
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("更改缓存类型"))
+	} else {
+		currentSite.DeleteCache()
 
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "缓存已更新",
-	})
+		currentSite.AddAdminLog(ctx, fmt.Sprintf("手动更新缓存"))
+
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "缓存已更新",
+		})
+	}
 }
 
 func SettingSafe(ctx iris.Context) {
@@ -585,5 +611,24 @@ func SettingBannerForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "配置已更新",
+	})
+}
+
+func SettingMigrateDB(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	err := provider.AutoMigrateDB(currentSite.DB, true)
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "数据库表已更新",
 	})
 }

@@ -100,3 +100,8 @@ type BannerItem struct {
 }
 
 type BannerConfig []BannerItem
+
+type CacheConfig struct {
+	CacheType string `json:"cache_type"`
+	Update    bool   `json:"update"`
+}

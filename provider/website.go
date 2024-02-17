@@ -156,7 +156,7 @@ func InitWebsite(mw *model.Website) {
 	}
 	websites[mw.Id] = &w
 	if db != nil {
-		_ = AutoMigrateDB(db)
+		_ = AutoMigrateDB(db, false)
 		w.InitSetting()
 		w.InitModelData()
 		// fix BaseUri

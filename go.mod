@@ -1,8 +1,6 @@
 module kandaoni.com/anqicms
 
-go 1.21
-
-toolchain go1.21.6
+go 1.20
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
@@ -23,7 +21,7 @@ require (
 	github.com/huichen/wukong v0.0.0-20210824074240-ecbd39fa0b56
 	github.com/jinzhu/now v1.1.5
 	github.com/jlaffaye/ftp v0.2.0
-	github.com/kataras/iris/v12 v12.2.10
+	github.com/kataras/iris/v12 v12.2.7
 	github.com/lib/pq v1.10.9
 	github.com/medivhzhan/weapp/v3 v3.8.1
 	github.com/melbahja/goph v1.4.0
@@ -96,7 +94,7 @@ require (
 	github.com/jinzhu/inflection v1.0.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kataras/blocks v0.0.8 // indirect
-	github.com/kataras/golog v0.1.11 // indirect
+	github.com/kataras/golog v0.1.9 // indirect
 	github.com/kataras/pio v0.0.13 // indirect
 	github.com/kataras/sitemap v0.0.6 // indirect
 	github.com/kataras/tunnel v0.0.4 // indirect
@@ -107,7 +105,7 @@ require (
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/microcosm-cc/bluemonday v1.0.26 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/mozillazg/go-httpheader v0.2.1 // indirect
 	github.com/oxtoacart/bpool v0.0.0-20190530202638-03653db5a59c // indirect
