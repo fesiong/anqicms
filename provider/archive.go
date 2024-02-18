@@ -150,7 +150,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			if ops != nil {
 				tx = ops(tx)
 			}
-			return tx.Limit(pageSize).Offset(offset).Find(&[]*model.Archive{})
+			return tx.Order(order).Limit(pageSize).Offset(offset).Find(&[]*model.Archive{})
 		})
 		cacheKey = "archive-list-" + library.Md5(sql)[8:24]
 		err := w.Cache.Get(cacheKey, &archives)
@@ -158,7 +158,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			return archives, int64(len(archives)), nil
 		}
 	}
-	builder := w.DB.Model(&model.Archive{})
+	builder := w.DB.Model(&model.Archive{}).Order(order)
 
 	if ops != nil {
 		builder = ops(builder)
@@ -170,7 +170,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			if ops != nil {
 				tx = ops(tx)
 			}
-			return tx.Find(&[]*model.Archive{})
+			return tx.Order(order).Find(&[]*model.Archive{})
 		})
 		cacheKeyCount := "archive-list-count" + library.Md5(sqlCount)[8:24]
 		err := w.Cache.Get(cacheKeyCount, &total)
