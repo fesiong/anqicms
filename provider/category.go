@@ -289,10 +289,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 
 	if newPost && category.Status == config.ContentStatusOK {
 		link := w.GetUrl("category", category, 0)
-		go w.PushArchive(link)
-		if w.PluginSitemap.AutoBuild == 1 {
-			_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
-		}
+		go func() {
+			w.PushArchive(link)
+			if w.PluginSitemap.AutoBuild == 1 {
+				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
+			}
+		}()
 	}
 	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 	w.DeleteCacheCategories()
