@@ -1,11 +1,11 @@
 package model
 
 import (
-	"fmt"
 	"github.com/lib/pq"
 	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -76,30 +76,29 @@ func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
 
 var nextArchiveId uint = 0
 var nextArchiveIdTime int64 = 0
+var nextArchiveIdMutex sync.Mutex
 
 // GetNextArchiveId
 // ArchiveId 同时检查 archives表和archive_drafts表
 // 每次获取，自动加 1
 func GetNextArchiveId(tx *gorm.DB) uint {
+	nextArchiveIdMutex.Lock()
+	defer nextArchiveIdMutex.Unlock()
 	// 仅缓存60秒
 	if nextArchiveIdTime+60 > time.Now().Unix() {
 		nextArchiveId += 1
 		return nextArchiveId
 	}
 	// 从数据库读取
-	var autoIncrementValue int64
-	var tableStatus = make(map[string]interface{})
-	tx.Raw(fmt.Sprintf("SHOW TABLE STATUS LIKE '%s'", "archives")).Scan(&tableStatus)
-	if increment, ok := tableStatus["Auto_increment"].(int64); ok {
-		autoIncrementValue = increment
+	var lastId int64
+	tx.Model(Archive{}).Order("id desc").Limit(1).Pluck("id", &lastId)
+	var lastIdTmp int64
+	tx.Model(ArchiveDraft{}).Order("id desc").Limit(1).Pluck("id", &lastIdTmp)
+	if lastId < lastIdTmp {
+		lastId = lastIdTmp
 	}
-	tx.Raw(fmt.Sprintf("SHOW TABLE STATUS LIKE '%s'", "archive_drafts")).Scan(&tableStatus)
-	if increment, ok := tableStatus["Auto_increment"].(int64); ok {
-		if autoIncrementValue < increment {
-			autoIncrementValue = increment
-		}
-	}
-	nextArchiveId = uint(autoIncrementValue)
+	// 下一个ID
+	nextArchiveId = uint(lastId) + 1
 	nextArchiveIdTime = time.Now().Unix()
 
 	return nextArchiveId
