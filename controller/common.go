@@ -300,6 +300,13 @@ func FileServe(ctx iris.Context) bool {
 		ctx.Values().Set("sitemap", true)
 		return FileServe(ctx)
 	}
+	// 自动生成robots.txt
+	if strings.HasSuffix(uri, "robots.txt") && !ctx.Values().GetBoolDefault("robots", false) {
+		robots := "User-agent: *\nDisallow: /system\nDisallow: /static\nSitemap: "
+		_ = currentSite.SaveRobots(robots)
+		ctx.Values().Set("robots", true)
+		return FileServe(ctx)
+	}
 
 	return false
 }
