@@ -48,7 +48,6 @@ const (
 	AnqiSettingKey        = "anqi"
 	AiGenerateSettingKey  = "ai_generate"
 	TimeFactorKey         = "time_factor"
-	GoogleIndexingJsonKey = "google_indexing_json"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"

@@ -8,12 +8,8 @@ import (
 	"google.golang.org/api/option"
 )
 
-func (w *Website) SaveGoogleIndexingAccount(content string) error {
-	return w.SaveSettingValueRaw(GoogleIndexingJsonKey, content)
-}
-
 func (w *Website) GetGoogleIndexingAccess() (*indexing.Service, error) {
-	content := w.GetSettingValue(GoogleIndexingJsonKey)
+	content := w.PluginPush.GoogleJson
 
 	if len(content) == 0 {
 		return nil, errors.New("账号错误")

@@ -50,6 +50,7 @@ func PluginPushForm(ctx iris.Context) {
 
 	currentSite.PluginPush.BaiduApi = req.BaiduApi
 	currentSite.PluginPush.BingApi = req.BingApi
+	currentSite.PluginPush.GoogleJson = req.GoogleJson
 	currentSite.PluginPush.JsCodes = req.JsCodes
 
 	err := currentSite.SaveSettingValue(provider.PushSettingKey, currentSite.PluginPush)

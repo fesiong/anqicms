@@ -11,10 +11,11 @@ type CodeItem struct {
 }
 
 type PluginPushConfig struct {
-	BaiduApi string     `json:"baidu_api"`
-	BingApi  string     `json:"bing_api"`
-	JsCode   string     `json:"js_code"`
-	JsCodes  []CodeItem `json:"js_codes"`
+	BaiduApi   string     `json:"baidu_api"`
+	BingApi    string     `json:"bing_api"`
+	GoogleJson string     `json:"google_json"`
+	JsCode     string     `json:"js_code"`
+	JsCodes    []CodeItem `json:"js_codes"`
 }
 
 type PluginSitemapConfig struct {
