@@ -48,6 +48,7 @@ const (
 	AnqiSettingKey        = "anqi"
 	AiGenerateSettingKey  = "ai_generate"
 	TimeFactorKey         = "time_factor"
+	GoogleIndexingJsonKey = "google_indexing_json"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -571,6 +572,18 @@ func (w *Website) SaveSettingValue(key string, value interface{}) error {
 		return err
 	}
 	setting.Value = string(buf)
+
+	return w.DB.Save(&setting).Error
+}
+
+func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
+	if w.DB == nil {
+		return nil
+	}
+	setting := model.Setting{
+		Key:   key,
+		Value: fmt.Sprintf("%v", value),
+	}
 
 	return w.DB.Save(&setting).Error
 }

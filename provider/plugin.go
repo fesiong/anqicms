@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/parnurzeal/gorequest"
 	"io"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/response"
 	"net/http"
@@ -34,6 +35,9 @@ type bingData2 struct {
 func (w *Website) PushArchive(link string) {
 	_ = w.PushBaidu([]string{link})
 	_ = w.PushBing([]string{link})
+	if config.GoogleValid {
+		_ = w.PushGoogle([]string{link})
+	}
 }
 
 func (w *Website) PushBaidu(list []string) error {

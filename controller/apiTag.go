@@ -199,6 +199,15 @@ func ApiArchiveList(ctx iris.Context) {
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	tmpUserId := ctx.URLParam("userId")
+	if tmpUserId == "self" {
+		// 获取自己的文章
+		userId = ctx.Values().GetUintDefault("userId", 0)
+	}
+	if userId > 0 {
+		authorId = userId
+	}
 	var categoryIds []uint
 	var categoryDetail *model.Category
 	tmpCatId := ctx.URLParam("categoryId")
@@ -1356,7 +1365,6 @@ func ApiArchivePublish(ctx iris.Context) {
 	}
 	if currentSite.Safe.APIPublish != 1 {
 		req.Draft = true
-		return
 	}
 	userId := ctx.Values().GetIntDefault("userId", 0)
 	req.UserId = uint(userId)
@@ -1385,11 +1393,15 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
+	msg := "发布成功"
+	if req.Draft {
+		msg += "，已进入审核"
+	}
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  currentSite.Lang("发布成功，已进入审核"),
+		"msg":  msg,
 		"data": archive,
 	})
 }
