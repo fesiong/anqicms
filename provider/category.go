@@ -340,9 +340,12 @@ func (w *Website) GetCacheCategories() []*model.Category {
 	if w.DB == nil {
 		return nil
 	}
+	mu.Lock()
+	defer mu.Unlock()
 	var categories []*model.Category
 
 	err := w.Cache.Get("categories", &categories)
+
 	if err == nil {
 		return categories
 	}
@@ -350,7 +353,6 @@ func (w *Website) GetCacheCategories() []*model.Category {
 	w.DB.Model(model.Category{}).Order("sort asc").Find(&categories)
 	for i := range categories {
 		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
-		categories[i].Link = w.GetUrl("category", categories[i], 0)
 	}
 	categoryTree := NewCategoryTree(categories)
 	categories = categoryTree.GetTree(0, "")

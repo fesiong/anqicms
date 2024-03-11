@@ -176,9 +176,9 @@ var mu sync.Mutex
 
 func (w *Website) ParsePatten(focus bool) *RewritePatten {
 	mu.Lock()
+	defer mu.Unlock()
 	w.GetRewritePatten(focus)
 	if w.parsedPatten.Parsed {
-		mu.Unlock()
 		return w.parsedPatten
 	}
 
@@ -299,7 +299,6 @@ func (w *Website) ParsePatten(focus bool) *RewritePatten {
 
 	//标记替换过
 	w.parsedPatten.Parsed = true
-	mu.Unlock()
 
 	return w.parsedPatten
 }

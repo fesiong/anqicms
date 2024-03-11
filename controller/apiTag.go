@@ -76,6 +76,9 @@ func ApiArchiveDetail(ctx iris.Context) {
 	archive.Flag = currentSite.GetArchiveFlags(archive.Id)
 	// 读取分类
 	archive.Category = currentSite.GetCategoryFromCache(archive.CategoryId)
+	if archive.Category != nil {
+		archive.Category.Link = currentSite.GetUrl("category", archive.Category, 0)
+	}
 	// 读取 extraDate
 	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
 	for i := range archive.Extra {

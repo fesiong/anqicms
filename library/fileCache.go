@@ -7,9 +7,11 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"sync"
 )
 
 type FileCache struct {
+	mu        sync.Mutex
 	suffix    string
 	cachePath string
 }
