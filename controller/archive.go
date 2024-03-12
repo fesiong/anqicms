@@ -32,18 +32,18 @@ func ArchiveDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	var category *model.Category
 	multiCatNames := ctx.Params().GetString("multicatname")
 	if multiCatNames != "" {
 		chunkCatNames := strings.Split(multiCatNames, "/")
-		var prev *model.Category
 		for _, catName := range chunkCatNames {
-			tmpCat := currentSite.GetCategoryFromCacheByToken(catName)
-			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
+			tmpCat := currentSite.GetCategoryFromCacheByToken(catName, category)
+			if tmpCat == nil || (category != nil && tmpCat.ParentId != category.Id) {
 				// 则跳到正确的链接上
 				ctx.Redirect(currentSite.GetUrl("archive", archive, 0), 301)
 				return
 			}
-			prev = tmpCat
+			category = tmpCat
 		}
 	}
 
@@ -149,7 +149,9 @@ func ArchiveDetail(ctx iris.Context) {
 	if archive.Template != "" {
 		tplName = archive.Template
 	} else {
-		category := currentSite.GetCategoryFromCache(archive.CategoryId)
+		if category == nil {
+			category = currentSite.GetCategoryFromCache(archive.CategoryId)
+		}
 		if category != nil {
 			categoryTemplate := currentSite.GetCategoryTemplate(category)
 			if categoryTemplate != nil {

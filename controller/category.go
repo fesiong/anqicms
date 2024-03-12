@@ -23,29 +23,28 @@ func CategoryPage(ctx iris.Context) {
 	if catId > 0 {
 		categoryId = catId
 	}
+	var category *model.Category
+	var err error
 	urlToken := ctx.Params().GetString("filename")
 	multiCatNames := ctx.Params().GetString("multicatname")
 	if multiCatNames != "" {
 		chunkCatNames := strings.Split(multiCatNames, "/")
 		urlToken = chunkCatNames[len(chunkCatNames)-1]
-		var prev *model.Category
 		for _, catName := range chunkCatNames {
-			tmpCat := currentSite.GetCategoryFromCacheByToken(catName)
-			if tmpCat == nil || (prev != nil && tmpCat.ParentId != prev.Id) {
+			tmpCat := currentSite.GetCategoryFromCacheByToken(catName, category)
+			if tmpCat == nil || (category != nil && tmpCat.ParentId != category.Id) {
 				NotFound(ctx)
 				return
 			}
-			prev = tmpCat
+			category = tmpCat
 		}
-	}
-
-	var category *model.Category
-	var err error
-	if urlToken != "" {
-		//优先使用urlToken
-		category, err = currentSite.GetCategoryByUrlToken(urlToken)
 	} else {
-		category, err = currentSite.GetCategoryById(categoryId)
+		if urlToken != "" {
+			//优先使用urlToken
+			category, err = currentSite.GetCategoryByUrlToken(urlToken)
+		} else {
+			category, err = currentSite.GetCategoryById(categoryId)
+		}
 	}
 	if err != nil || category.Status != config.ContentStatusOK {
 		NotFound(ctx)

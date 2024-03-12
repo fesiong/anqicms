@@ -108,10 +108,20 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	}
 	// 判断重复
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
+	if !req.Force && len(req.UrlToken) > 0 {
+		// 检查是否重复
+		tmpCat, err := w.GetCategoryByUrlToken(req.UrlToken)
+		if err == nil && tmpCat.Id != category.Id {
+			return nil, errors.New("token duplication")
+		}
+	}
 	if req.UrlToken == "" {
 		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 	}
-	category.UrlToken = w.VerifyCategoryUrlToken(req.UrlToken, category.Id)
+	if !req.Force {
+		req.UrlToken = w.VerifyCategoryUrlToken(req.UrlToken, category.Id)
+	}
+	category.UrlToken = req.UrlToken
 	if category.ModuleId == 0 && category.Type == config.CategoryTypeArchive {
 		modules := w.GetCacheModules()
 		if len(modules) > 0 {
@@ -396,11 +406,23 @@ func (w *Website) GetCategoryFromCache(categoryId uint) *model.Category {
 	return nil
 }
 
-func (w *Website) GetCategoryFromCacheByToken(urlToken string) *model.Category {
+func (w *Website) GetCategoryFromCacheByToken(urlToken string, parents ...*model.Category) *model.Category {
 	categories := w.GetCacheCategories()
-	for i := range categories {
-		if categories[i].UrlToken == urlToken {
-			return categories[i]
+	var parent *model.Category
+	if len(parents) > 0 {
+		parent = parents[0]
+	}
+	if parent != nil {
+		for i := range categories {
+			if categories[i].UrlToken == urlToken && parent.Id == categories[i].ParentId {
+				return categories[i]
+			}
+		}
+	} else {
+		for i := range categories {
+			if categories[i].UrlToken == urlToken {
+				return categories[i]
+			}
 		}
 	}
 

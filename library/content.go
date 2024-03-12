@@ -62,6 +62,9 @@ func ParseUrlToken(name string) string {
 	//去除连续的换行符
 	re, _ := regexp.Compile("-{2,}")
 	name = re.ReplaceAllString(name, "-")
+	if len(name) > 150 {
+		name = name[:150]
+	}
 	return name
 }
 
