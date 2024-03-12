@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/library"
@@ -24,6 +25,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
+	userId := ctx.Values().GetUintDefault("userId", 0)
 	// 只有content字段有效
 	render := currentSite.Content.Editor == "markdown"
 	if ctx.URLParamExists("render") {
@@ -43,6 +45,18 @@ func ApiArchiveDetail(ctx iris.Context) {
 			archive, err = currentSite.GetArchiveByUrlToken(filename)
 		}
 	}
+	// 支持读取草稿，只有登录了才能读取草稿
+	if err != nil && userId > 0 {
+		archiveDraft, err2 := currentSite.GetArchiveDraftById(id)
+		if err2 == nil {
+			if archiveDraft.UserId != userId {
+				err = errors.New("record not found")
+			} else {
+				archive = &archiveDraft.Archive
+				err = nil
+			}
+		}
+	}
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -51,7 +65,6 @@ func ApiArchiveDetail(ctx iris.Context) {
 		return
 	}
 
-	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
 	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
 	archive = currentSite.CheckArchiveHasOrder(userId, archive, userGroup)
@@ -203,6 +216,11 @@ func ApiArchiveList(ctx iris.Context) {
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	draft := ctx.URLParamBoolDefault("draft", false)
+	draftInt := 0
+	if draft {
+		draftInt = 1
+	}
 	tmpUserId := ctx.URLParam("userId")
 	if tmpUserId == "self" {
 		// 获取自己的文章
@@ -493,7 +511,7 @@ func ApiArchiveList(ctx iris.Context) {
 				order = "archives.`id` desc"
 			}
 		}
-		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset)
+		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset, draftInt)
 		if fulltextSearch {
 			total = fulltextTotal
 		}

@@ -139,13 +139,17 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	if currentPage > 0 {
 		offset = (currentPage - 1) * pageSize
 	}
+	var draft = false
 	if len(offsets) > 0 {
 		offset = offsets[0]
+		if len(offsets) > 1 {
+			draft = offsets[1] == 1
+		}
 	}
 	var total int64
 	// 对于没有分页的list，则缓存
 	var cacheKey = ""
-	if currentPage == 0 {
+	if currentPage == 0 && !draft {
 		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
 				tx = ops(tx)
@@ -158,7 +162,12 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			return archives, int64(len(archives)), nil
 		}
 	}
-	builder := w.DB.Model(&model.Archive{}).Order(order)
+	var builder *gorm.DB
+	if draft {
+		builder = w.DB.Table("`archive_drafts` as archives").Order(order)
+	} else {
+		builder = w.DB.Model(&model.Archive{}).Order(order)
+	}
 
 	if ops != nil {
 		builder = ops(builder)
@@ -183,7 +192,11 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		var archiveIds []uint
 		builder.Limit(pageSize).Offset(offset).Select("archives.id").Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
-			w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			if draft {
+				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			} else {
+				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			}
 		}
 		for i := range archives {
 			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
