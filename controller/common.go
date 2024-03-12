@@ -25,6 +25,38 @@ type Button struct {
 	Link string
 }
 
+type NameVal struct {
+	Name string
+	Val  string
+}
+
+var SpiderNames = []NameVal{
+	{Name: "googlebot", Val: "google"},
+	{Name: "bingbot", Val: "bing"},
+	{Name: "baiduspider", Val: "baidu"},
+	{Name: "360spider", Val: "360"},
+	{Name: "yahoo!", Val: "yahoo"},
+	{Name: "sogou", Val: "sogou"},
+	{Name: "bytespider", Val: "byte"},
+	{Name: "yisouspider", Val: "Yisou"},
+	{Name: "spider", Val: "other"},
+	{Name: "bot", Val: "other"},
+}
+
+var DeviceNames = []NameVal{
+	{Name: "android", Val: "android"},
+	{Name: "iphone", Val: "iphone"},
+	{Name: "windows", Val: "windows"},
+	{Name: "macintosh", Val: "mac"},
+	{Name: "linux", Val: "linux"},
+	{Name: "mobile", Val: "mobile"},
+	{Name: "curl", Val: "curl"},
+	{Name: "python", Val: "python"},
+	{Name: "client", Val: "client"},
+	{Name: "spider", Val: "spider"},
+	{Name: "bot", Val: "spider"},
+}
+
 func NotFound(ctx iris.Context) {
 	webInfo := &response.WebInfo{}
 	currentSite := provider.CurrentSite(ctx)
@@ -678,16 +710,16 @@ func LogAccess(ctx iris.Context) {
 		return
 	}
 
+	userAgent := ctx.GetHeader("User-Agent")
 	//获取蜘蛛
-	spider := GetSpider(ctx)
+	spider := GetSpider(userAgent)
 	//获取设备
-	device := GetDevice(ctx)
+	device := GetDevice(userAgent)
 	// 最多只存储250字符
 	if len(currentPath) > 250 {
 		currentPath = currentPath[:250]
 	}
 	// 最多只存储250字符
-	userAgent := ctx.GetHeader("User-Agent")
 	if len(userAgent) > 250 {
 		userAgent = userAgent[:250]
 	}
@@ -707,48 +739,24 @@ func LogAccess(ctx iris.Context) {
 	ctx.Next()
 }
 
-func GetSpider(ctx iris.Context) string {
-	ua := strings.ToLower(ctx.GetHeader("User-Agent"))
+func GetSpider(ua string) string {
+	ua = strings.ToLower(ua)
 	//获取蜘蛛
-	spiders := map[string]string{
-		"googlebot":   "google",
-		"bingbot":     "bing",
-		"baiduspider": "baidu",
-		"360spider":   "360",
-		"yahoo!":      "yahoo",
-		"sogou":       "sogou",
-		"bytespider":  "byte",
-		"spider":      "other",
-		"bot":         "other",
-	}
-
-	for k, v := range spiders {
-		if strings.Contains(ua, k) {
-			return v
+	for _, v := range SpiderNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
 		}
 	}
 
 	return ""
 }
 
-func GetDevice(ctx iris.Context) string {
-	ua := strings.ToLower(ctx.GetHeader("User-Agent"))
+func GetDevice(ua string) string {
+	ua = strings.ToLower(ua)
 
-	devices := map[string]string{
-		"android":   "android",
-		"iphone":    "iphone",
-		"windows":   "windows",
-		"macintosh": "mac",
-		"linux":     "linux",
-		"mobile":    "mobile",
-		//其他设备
-		"spider": "spider",
-		"bot":    "spider",
-	}
-
-	for k, v := range devices {
-		if strings.Contains(ua, k) {
-			return v
+	for _, v := range DeviceNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
 		}
 	}
 
