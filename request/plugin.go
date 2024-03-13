@@ -122,3 +122,9 @@ type PluginHtmlCachePushRequest struct {
 	All   bool     `json:"all"`
 	Paths []string `json:"paths"`
 }
+
+type PluginTestSendmailRequest struct {
+	Recipient string `json:"recipient"`
+	Subject   string `json:"subject"`
+	Message   string `json:"message"`
+}

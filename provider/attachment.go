@@ -38,6 +38,9 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	if fileExt == ".jpeg" {
 		fileExt = ".jpg"
 	}
+	if fileExt == ".ico" || fileExt == ".bmp" {
+		fileExt = ".png"
+	}
 	if fileExt == "." {
 		fileExt = ""
 	}
@@ -151,6 +154,10 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	if imgType == "jpeg" {
 		imgType = "jpg"
 	}
+	oriImgType := imgType
+	if imgType == "ico" || imgType == "bmp" {
+		imgType = "png"
+	}
 	//只允许上传jpg,jpeg,gif,png,webp
 	if imgType != "jpg" && imgType != "jpeg" && imgType != "gif" && imgType != "png" && imgType != "webp" {
 		return nil, errors.New(fmt.Sprintf("%s: %s。", w.Lang("不支持的图片格式"), imgType))
@@ -174,6 +181,15 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	if quality == 0 {
 		// 默认质量是90
 		quality = webp.DefaulQuality
+	}
+	if oriImgType == "jpg" {
+		j, err2 := library.NewQuality(file)
+		file.Seek(0, 0)
+		if err2 == nil {
+			if j.Quality() < quality {
+				quality = j.Quality()
+			}
+		}
 	}
 
 	if w.Content.ResizeImage == 1 && width > resizeWidth && imgType != "gif" {

@@ -5,6 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginSendmailList(ctx iris.Context) {
@@ -33,6 +34,37 @@ func PluginSendmailTest(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  "请先设置邮件发送账号",
+		})
+		return
+	}
+	var req request.PluginTestSendmailRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Recipient != "" {
+		if req.Subject == "" || req.Message == "" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "请填写回复标题和内容",
+			})
+			return
+		}
+		err := currentSite.SendMail(req.Subject, req.Message, req.Recipient)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "邮件发送成功",
 		})
 		return
 	}
