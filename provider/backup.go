@@ -230,6 +230,8 @@ func (w *Website) ImportBackupFile(file multipart.File, fileName string) error {
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")
 	backupFile := w.DataPath + "backup/" + fileName
+	// create dir
+	_ = os.MkdirAll(w.DataPath+"backup/", os.ModePerm)
 
 	outFile, err := os.Create(backupFile)
 	if err != nil {
