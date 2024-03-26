@@ -238,9 +238,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				categoryId = 0
 			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+				}
 				if categoryId > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Where("archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
@@ -249,7 +252,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
@@ -268,7 +271,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
@@ -285,7 +288,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 				if len(excludeCategoryIds) > 0 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 					} else {
 						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
@@ -349,6 +352,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					}
 				}
 			}
+			if currentSite.Content.MultiCategory == 1 && (len(categoryIds) > 0 || len(excludeCategoryIds) > 0) {
+				tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+			}
 			if len(categoryIds) > 0 {
 				if child {
 					var subIds []uint
@@ -358,7 +364,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						subIds = append(subIds, v)
 					}
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", subIds)
+						tx = tx.Where("archive_categories.category_id IN (?)", subIds)
 					} else {
 						if len(subIds) == 1 {
 							tx = tx.Where("`category_id` = ?", subIds[0])
@@ -368,13 +374,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					}
 				} else if len(categoryIds) == 1 {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryIds[0])
+						tx = tx.Where("archive_categories.category_id = ?", categoryIds[0])
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryIds[0])
 					}
 				} else {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id IN (?)", categoryIds)
+						tx = tx.Where("archive_categories.category_id IN (?)", categoryIds)
 					} else {
 						tx = tx.Where("`category_id` IN(?)", categoryIds)
 					}
@@ -384,7 +390,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			if len(excludeCategoryIds) > 0 {
 				if currentSite.Content.MultiCategory == 1 {
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+					tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 				} else {
 					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 				}
