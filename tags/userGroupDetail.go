@@ -56,10 +56,12 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 	v := reflect.ValueOf(*groupDetail)
 
 	f := v.FieldByName(fieldName)
-
-	content := fmt.Sprintf("%v", f)
+	var content interface{}
+	if f.IsValid() {
+		content = f.Interface()
+	}
 	if node.name == "" {
-		writer.WriteString(content)
+		writer.WriteString(fmt.Sprintf("%v", content))
 	} else {
 		ctx.Private[node.name] = content
 	}

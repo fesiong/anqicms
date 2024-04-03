@@ -45,9 +45,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	}
 
 	fieldName := ""
+	inputName := ""
 	if args["name"] != nil {
-		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		inputName = args["name"].String()
+		fieldName = library.Case2Camel(inputName)
 	}
 
 	format := "2006-01-02"
@@ -106,21 +107,46 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 		}
 
-		v := reflect.ValueOf(*archiveDetail)
-
-		f := v.FieldByName(fieldName)
-
-		content := fmt.Sprintf("%v", f)
-		if content == "" && fieldName == "SeoTitle" {
-			content = archiveDetail.Title
+		if len(archiveDetail.Password) > 0 {
+			archiveDetail.HasPassword = true
 		}
-
-		if fieldName == "CreatedTime" || fieldName == "UpdatedTime" {
-			content = time.Unix(f.Int(), 0).Format(format)
+		// 读取flag
+		if fieldName == "Flags" || fieldName == "Flag" {
+			archiveDetail.Flag = currentSite.GetArchiveFlags(archiveDetail.Id)
 		}
 		if fieldName == "Link" {
 			// 当是获取链接的时候，再生成
 			archiveDetail.Link = currentSite.GetUrl("archive", archiveDetail, 0)
+		}
+
+		v := reflect.ValueOf(*archiveDetail)
+
+		f := v.FieldByName(fieldName)
+		var content interface{}
+		if f.IsValid() {
+			content = f.Interface()
+		} else {
+			// 数据可能来自自定义字段
+			archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
+			if len(archiveParams) > 0 {
+				for i := range archiveParams {
+					if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
+						archiveParams[i].Value = archiveParams[i].Default
+					}
+				}
+				if item, ok := archiveParams[inputName]; ok {
+					content = item.Value
+				}
+			}
+		}
+		if archiveDetail.SeoTitle == "" && fieldName == "SeoTitle" {
+			content = archiveDetail.Title
+		}
+
+		if fieldName == "CreatedTime" {
+			content = time.Unix(archiveDetail.CreatedTime, 0).Format(format)
+		} else if fieldName == "UpdatedTime" {
+			content = time.Unix(archiveDetail.UpdatedTime, 0).Format(format)
 		}
 		if fieldName == "Content" {
 			// if read level larger than 0, then need to check permission
@@ -130,18 +156,19 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					content = fmt.Sprintf(currentSite.Lang("该内容需要用户等级%d以上才能阅读"), archiveDetail.ReadLevel)
 				}
 			} else {
+				var tmpContent string
 				// 当读取content 的时候，再查询
 				archiveData, err := currentSite.GetArchiveDataById(archiveDetail.Id)
 				if err == nil {
-					content = archiveData.Content
+					tmpContent = archiveData.Content
 					// convert markdown to html
 					if render {
-						content = library.MarkdownToHTML(content)
+						tmpContent = library.MarkdownToHTML(archiveData.Content)
 					}
 					// lazy load
 					if lazy != "" {
 						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-						content = re.ReplaceAllStringFunc(content, func(s string) string {
+						tmpContent = re.ReplaceAllStringFunc(tmpContent, func(s string) string {
 							match := re.FindStringSubmatch(s)
 							if len(match) < 2 {
 								return s
@@ -163,7 +190,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 							crcNum := int(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl)))
 							first := 2
 							var tmpData []string
-							var tmpRune = []rune(content)
+							var tmpRune = []rune(tmpContent)
 							var start = 0
 							for i := 0; i < len(tmpRune); i++ {
 								if tmpRune[i] == '>' {
@@ -215,10 +242,11 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 									break
 								}
 							}
-							content = strings.Join(tmpData, "")
+							tmpContent = strings.Join(tmpData, "")
 						}
 					}
 				}
+				content = tmpContent
 			}
 		}
 		if fieldName == "Images" || fieldName == "Category" {
@@ -232,17 +260,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				category.Link = currentSite.GetUrl("category", category, 0)
 			}
 		}
-		if len(archiveDetail.Password) > 0 {
-			archiveDetail.HasPassword = true
-		}
-		// 读取flag
-		if fieldName == "Flags" || fieldName == "Flag" {
-			archiveDetail.Flag = currentSite.GetArchiveFlags(archiveDetail.Id)
-		}
 
 		// output
 		if node.name == "" {
-			writer.WriteString(content)
+			writer.WriteString(fmt.Sprintf("%v", content))
 		} else {
 			//不是所有都是字符串
 			if fieldName == "Images" {

@@ -68,15 +68,17 @@ func (node *tagUserDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	v := reflect.ValueOf(*userDetail)
 
 	f := v.FieldByName(fieldName)
-
-	content := fmt.Sprintf("%v", f)
+	var content interface{}
+	if f.IsValid() {
+		content = f.Interface()
+	}
 	// 检查 extra field
 	if extra, ok := userDetail.Extra[inputName]; ok {
-		content = fmt.Sprintf("%v", extra.Value)
+		content = extra.Value
 	}
 
 	if node.name == "" {
-		writer.WriteString(content)
+		writer.WriteString(fmt.Sprintf("%v", content))
 	} else {
 		ctx.Private[node.name] = content
 	}

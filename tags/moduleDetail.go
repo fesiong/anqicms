@@ -55,7 +55,7 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	var content string
+	var content interface{}
 
 	if module != nil {
 		module.Link = currentSite.GetUrl("archiveIndex", module, 0)
@@ -63,8 +63,9 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		v := reflect.ValueOf(*module)
 
 		f := v.FieldByName(fieldName)
-
-		content = fmt.Sprintf("%v", f)
+		if f.IsValid() {
+			content = f.Interface()
+		}
 		if content == "" && fieldName == "SeoTitle" {
 			content = module.Title
 		}
@@ -72,7 +73,7 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 
 	// output
 	if node.name == "" {
-		writer.WriteString(content)
+		writer.WriteString(fmt.Sprintf("%v", content))
 	} else {
 		ctx.Private[node.name] = content
 	}

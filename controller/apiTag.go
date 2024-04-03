@@ -1114,6 +1114,7 @@ func ApiTagList(ctx iris.Context) {
 	itemId := uint(ctx.URLParamIntDefault("itemId", 0))
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
+	order := ctx.URLParamDefault("order", "id desc")
 
 	limitTmp := ctx.URLParam("limit")
 	if limitTmp != "" {
@@ -1138,7 +1139,7 @@ func ApiTagList(ctx iris.Context) {
 		}
 	}
 
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset)
+	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 	}

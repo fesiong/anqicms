@@ -10,14 +10,14 @@ import (
 	"time"
 )
 
-func (w *Website) GetTagList(itemId uint, title string, firstLetter string, currentPage, pageSize int, offset int) ([]*model.Tag, int64, error) {
+func (w *Website) GetTagList(itemId uint, title string, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
 	var tags []*model.Tag
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
 	}
 	var total int64
 
-	builder := w.DB.Model(&model.Tag{}).Order("id desc")
+	builder := w.DB.Model(&model.Tag{}).Order(order)
 	if firstLetter != "" {
 		builder = builder.Where("`first_letter` = ?", firstLetter)
 	}

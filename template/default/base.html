@@ -54,15 +54,27 @@
                                 {%- for inner in item.NavList %}
                                 <li>
                                     <a href="{{ inner.Link }}">{{inner.Title}}</a>
-                                    {% archiveList products with type="list" categoryId=inner.PageId limit="8" %}
-                                    {% if products %}
-                                    <ul class="nav-menu-child-child">
-                                        {% for item in products %}
-                                        <li><a href="{{item.Link}}">{{item.Title}}</a></li>
-                                        {% endfor %}
-                                    </ul>
+                                    {% if inner.NavType == 1 %}
+                                        {% categoryList innerCategories with parentId=inner.PageId %}
+                                        {% if innerCategories %}
+                                        <ul class="nav-menu-child-child">
+                                            {% for item in innerCategories %}
+                                            <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% else %}
+                                            {% archiveList products with type="list" categoryId=inner.PageId limit="8" %}
+                                            {% if products %}
+                                            <ul class="nav-menu-child-child">
+                                                {% for item in products %}
+                                                <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                                                {% endfor %}
+                                            </ul>
+                                            {% endif %}
+                                            {% endarchiveList %}
+                                        {% endif %}
+                                        {% endcategoryList %}
                                     {% endif %}
-                                    {% endarchiveList %}
                                 </li>
                                 {% endfor %}
                             </ul>

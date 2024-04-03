@@ -71,17 +71,20 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	v := reflect.ValueOf(*pageDetail)
 
 	f := v.FieldByName(fieldName)
+	var content interface{}
+	if f.IsValid() {
+		content = f.Interface()
+	}
 
-	content := fmt.Sprintf("%v", f)
-	if content == "" && fieldName == "SeoTitle" {
+	if pageDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 		content = pageDetail.Title
 	}
 	// convert markdown to html
 	if fieldName == "Content" && render {
-		content = library.MarkdownToHTML(content)
+		content = library.MarkdownToHTML(pageDetail.Content)
 	}
 	if node.name == "" {
-		writer.WriteString(content)
+		writer.WriteString(fmt.Sprintf("%v", content))
 	} else {
 		if fieldName == "Images" {
 			ctx.Private[node.name] = pageDetail.Images

@@ -39,6 +39,11 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	currentPage := 1
 	itemId := uint(0)
 	listType := "list"
+	order := "id desc"
+
+	if args["order"] != nil {
+		order = args["order"].String()
+	}
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -92,7 +97,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		currentPage = 1
 	}
 
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset)
+	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 	}

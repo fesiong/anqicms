@@ -53,7 +53,7 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	var content string
+	var content interface{}
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
@@ -61,16 +61,17 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		v := reflect.ValueOf(*tagDetail)
 
 		f := v.FieldByName(fieldName)
-
-		content = fmt.Sprintf("%v", f)
-		if content == "" && fieldName == "SeoTitle" {
+		if f.IsValid() {
+			content = f.Interface()
+		}
+		if tagDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = tagDetail.Title
 		}
 	}
 
 	// output
 	if node.name == "" {
-		writer.WriteString(content)
+		writer.WriteString(fmt.Sprintf("%v", content))
 	} else {
 		ctx.Private[node.name] = content
 	}

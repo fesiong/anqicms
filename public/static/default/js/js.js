@@ -44,3 +44,6 @@ $("button.accordion-item").click(function () {
   }
 });
 $("button.accordion-item").first().click();
+$('.tool-item').click(function() {
+  $(this).addClass('active').siblings().removeClass('active');
+})

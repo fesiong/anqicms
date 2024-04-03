@@ -13,7 +13,7 @@ func PluginTagList(ctx iris.Context) {
 	title := ctx.URLParam("title")
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	tags, total, err := currentSite.GetTagList(0, title, "", currentPage, pageSize, 0)
+	tags, total, err := currentSite.GetTagList(0, title, "", currentPage, pageSize, 0, "id desc")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

@@ -44,6 +44,10 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	tagId := uint(0)
 	listType := "list"
+	moduleId := uint(0)
+	if args["moduleId"] != nil {
+		moduleId = uint(args["moduleId"].Integer())
+	}
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -96,6 +100,9 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		archives, total, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 			tx = tx.Table("`archives` as archives").
 				Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
+			if moduleId > 0 {
+				tx = tx.Where("archives.`module_id` = ?", moduleId)
+			}
 			return tx
 		}, order, currentPage, limit, offset)
 		var archiveIds = make([]uint, 0, len(archives))

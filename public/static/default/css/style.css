@@ -188,7 +188,7 @@ textarea:focus {
 	transition: opacity .2s, visibility .2s
 }
 
-.tool-item:hover .tool-item-sub {
+.tool-item:hover .tool-item-sub, .tool-item.active .tool-item-sub {
 	visibility: visible;
 	opacity: 1
 }
@@ -873,6 +873,8 @@ textarea:focus {
 
 .single-arc img {
 	margin-top: 0.15rem;
+	max-width: 100%;
+	width: auto;
 }
 
 .single-arc iframe {
@@ -1351,6 +1353,7 @@ textarea:focus {
 	.nav-menu>li:hover .nav-menu-child {
 		display: block;
 		position: absolute;
+		z-index: 99;
 		width: 120%;
 		left: 0;
 		background: #f6f6f6;

@@ -73,18 +73,21 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		v := reflect.ValueOf(*categoryDetail)
 
 		f := v.FieldByName(fieldName)
+		var content interface{}
+		if f.IsValid() {
+			content = f.Interface()
+		}
 
-		content := fmt.Sprintf("%v", f)
-		if content == "" && fieldName == "SeoTitle" {
+		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = categoryDetail.Title
 		}
 		// convert markdown to html
 		if fieldName == "Content" && render {
-			content = library.MarkdownToHTML(content)
+			content = library.MarkdownToHTML(categoryDetail.Content)
 		}
 		// output
 		if node.name == "" {
-			writer.WriteString(content)
+			writer.WriteString(fmt.Sprintf("%v", content))
 		} else {
 			if fieldName == "Images" {
 				ctx.Private[node.name] = categoryDetail.Images
