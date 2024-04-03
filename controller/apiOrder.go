@@ -11,6 +11,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -607,6 +608,10 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 		archiveData, err := currentSite.GetArchiveDataById(archiveDetail.Id)
 		if err == nil {
 			content = archiveData.Content
+			// render
+			if currentSite.Content.Editor == "markdown" {
+				content = library.MarkdownToHTML(archiveData.Content)
+			}
 		}
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
