@@ -213,6 +213,9 @@ func (w *Website) LoadSendmailSetting() {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginSendmail)
 	}
+	if len(w.PluginSendmail.SendType) == 0 {
+		w.PluginSendmail.SendType = []int{SendTypeGuestbook}
+	}
 }
 
 func (w *Website) LoadImportApiSetting() {

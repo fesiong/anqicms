@@ -16,7 +16,7 @@ import (
 	"time"
 )
 
-func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint) ([]*model.Category, error) {
+func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
 	err := ops(w.DB).Find(&categories).Error
 	if err != nil {
@@ -27,7 +27,12 @@ func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint) (
 		categories[i].Link = w.GetUrl("category", categories[i], 0)
 	}
 	categoryTree := NewCategoryTree(categories)
-	categories = categoryTree.GetTree(parentId, "")
+
+	if showType == config.CategoryShowTypeNode {
+		categories = categoryTree.GetTreeNode(0, "")
+	} else {
+		categories = categoryTree.GetTree(parentId, "")
+	}
 
 	return categories, nil
 }

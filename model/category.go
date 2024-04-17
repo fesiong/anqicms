@@ -30,6 +30,8 @@ type Category struct {
 	Link           string         `json:"link" gorm:"-"`
 	Thumb          string         `json:"thumb" gorm:"-"`
 	IsCurrent      bool           `json:"is_current" gorm:"-"`
+
+	Children []*Category `json:"children,omitempty" gorm:"-"`
 }
 
 func (category *Category) GetThumb(storageUrl, defaultThumb string) string {

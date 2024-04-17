@@ -25,6 +25,9 @@ const (
 const (
 	CategoryTypeArchive = 1
 	CategoryTypePage    = 3
+
+	CategoryShowTypeTree = 0
+	CategoryShowTypeNode = 1
 )
 
 const (

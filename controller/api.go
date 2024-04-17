@@ -328,6 +328,7 @@ func ApiImportGetCategories(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	tmpModuleId := ctx.FormValue("module_id")
 	moduleId, _ := strconv.Atoi(tmpModuleId)
+	showType, _ := strconv.Atoi(ctx.FormValue("show_type"))
 
 	if moduleId > 0 {
 		module := currentSite.GetModuleFromCache(uint(moduleId))
@@ -347,7 +348,7 @@ func ApiImportGetCategories(ctx iris.Context) {
 			tx = tx.Where("`module_id` = ?", moduleId)
 		}
 		return tx
-	}, 0)
+	}, 0, showType)
 
 	var categories []response.ApiCategory
 	for i := range tmpCategories {

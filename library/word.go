@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/huichen/sego"
 	"kandaoni.com/anqicms/config"
+	"log"
 	"strings"
 )
 
@@ -15,6 +16,9 @@ const removeWord = " !\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~。？！，、；：“ 
 func WordSplit(s string, contain bool) []string {
 	if !dictLoaded {
 		initDict()
+	}
+	if !dictLoaded {
+		return []string{s}
 	}
 	segments := segmenter.Segment([]byte(s))
 
@@ -56,6 +60,11 @@ func DictClose() {
 }
 
 func initDict() {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("初始化 sego 失败:", err)
+		}
+	}()
 	dictFile := fmt.Sprintf("%s%s.txt", config.ExecPath, "dictionary")
 	segmenter.LoadDictionary(dictFile)
 	dictLoaded = true

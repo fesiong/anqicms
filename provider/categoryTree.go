@@ -69,6 +69,25 @@ func (ct *CategoryTree) GetTree(rootId uint, add string) []*model.Category {
 	return categories
 }
 
+func (ct *CategoryTree) GetTreeNode(rootId uint, add string) []*model.Category {
+	var tree []*model.Category
+
+	// 遍历分类列表
+	for _, category := range ct.categories {
+		// 找到当前节点的子节点
+		if category.ParentId == rootId {
+			category.Spacer = add
+			// 递归构建子节点的子树
+			space := add + ct.icons[0]
+			category.Children = ct.GetTreeNode(category.Id, space)
+			// 将当前节点加入到父节点的Children中
+			tree = append(tree, category)
+		}
+	}
+
+	return tree
+}
+
 func (ct *CategoryTree) getChildren(rootId uint) []*model.Category {
 	if len(ct.tmp) == 0 {
 		for _, v := range ct.categories {

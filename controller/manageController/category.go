@@ -14,6 +14,7 @@ func CategoryList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	categoryType := uint(ctx.URLParamIntDefault("type", 0))
+	showType := ctx.URLParamIntDefault("show_type", 0)
 	title := ctx.URLParam("title")
 
 	var categories []*model.Category
@@ -39,7 +40,7 @@ func CategoryList(ctx iris.Context) {
 			return tx
 		}
 	}
-	categories, err = currentSite.GetCategories(ops, 0)
+	categories, err = currentSite.GetCategories(ops, 0, showType)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

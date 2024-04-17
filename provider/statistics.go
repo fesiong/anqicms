@@ -250,9 +250,10 @@ func (w *Website) SendStatisticsMail() {
 	var adminLogCount int64
 	w.DB.Model(&model.AdminLog{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&adminLogCount)
 
-	// 开始写邮件内容
-	subject := fmt.Sprintf(time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.System.SiteName + "站点数据")
-	content := `<html>
+	if w.SendTypeValid(SendTypeDaily) {
+		// 开始写邮件内容
+		subject := fmt.Sprintf(time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.System.SiteName + "(" + w.System.BaseUrl + ")站点数据")
+		content := `<html>
 <head>
   <style>
     body {
@@ -296,8 +297,8 @@ func (w *Website) SendStatisticsMail() {
   </style>
 </head>
 <body>`
-	content += "<h1>" + subject + "</h1>\n"
-	content += `<h2>收录量</h2>
+		content += "<h1>" + subject + "</h1>\n"
+		content += `<h2>收录量</h2>
   <table>
     <thead>
       <tr>
@@ -310,36 +311,36 @@ func (w *Website) SendStatisticsMail() {
     </thead>
     <tbody>
       <tr>`
-	content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
-		"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
-		"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
-		"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
-		"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
-	content += `</tr>
+		content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
+			"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
+			"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
+			"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
+			"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
+		content += `</tr>
     </tbody>
   </table>`
-	content += `<h2>蜘蛛爬行</h2>
+		content += `<h2>蜘蛛爬行</h2>
   <table>
     <thead>
       <tr>`
-	for _, v := range spiderResult {
-		content += "<th>" + v.Spider + "</th>"
-	}
-	content += `
+		for _, v := range spiderResult {
+			content += "<th>" + v.Spider + "</th>"
+		}
+		content += `
       </tr>
     </thead>
     <tfoot>
       <tr>
         <td>合计</td>`
-	content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
-	content += `</tr>
+		content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
+		content += `</tr>
     </tfoot>
     <tbody>
       <tr>`
-	for _, v := range spiderResult {
-		content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
-	}
-	content += `
+		for _, v := range spiderResult {
+			content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
+		}
+		content += `
       </tr>
     </tbody>
   </table>
@@ -354,15 +355,15 @@ func (w *Website) SendStatisticsMail() {
     <tfoot>
       <tr>
         <td>合计</td>`
-	content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
-	content += `
+		content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
+		content += `
       </tr>
     </tfoot>
     <tbody>`
-	for i := 0; i < len(visitResult); i++ {
-		content += "<tr>\n        <td>" + visitResult[i].StatisticDate + "</td>\n        <td>" + strconv.Itoa(int(visitResult[i].Total)) + "</td>\n</tr>"
-	}
-	content += `
+		for i := 0; i < len(visitResult); i++ {
+			content += "<tr>\n        <td>" + visitResult[i].StatisticDate + "</td>\n        <td>" + strconv.Itoa(int(visitResult[i].Total)) + "</td>\n</tr>"
+		}
+		content += `
     </tbody>
   </table>
   <h2>站点数据</h2>
@@ -374,23 +375,24 @@ func (w *Website) SendStatisticsMail() {
       </tr>
     </thead>
     <tbody>`
-	content += "<tr>\n        <td>文档</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>新增文档</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>分类</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>单页</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>友情链接</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>新增留言</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>新增评论</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>新增用户</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>后台登录</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
-	content += "<tr>\n        <td>后台操作</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
-	content += `
+		content += "<tr>\n        <td>文档</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>新增文档</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>分类</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>单页</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>友情链接</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>新增留言</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>新增评论</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>新增用户</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>后台登录</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
+		content += "<tr>\n        <td>后台操作</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
+		content += `
     </tbody>
   </table>
 </body>
 
 </html>`
 
-	// 不记录错误
-	_ = w.sendMail(subject, content, nil, true, false)
+		// 不记录错误
+		_ = w.sendMail(subject, content, nil, true, false)
+	}
 }

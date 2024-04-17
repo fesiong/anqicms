@@ -13,6 +13,13 @@ import (
 
 const MailLogFile = "mail.log"
 
+const (
+	SendTypeGuestbook = 1 // 新留言
+	SendTypeDaily     = 2 // 网站日报
+	SendTypeNewOrder  = 3 // 新订单
+	SendTypePayOrder  = 4 // 新订单
+)
+
 type MailLog struct {
 	CreatedTime int64  `json:"created_time"`
 	Subject     string `json:"subject"`
@@ -155,6 +162,21 @@ func (w *Website) sendMail(subject, content string, recipients []string, useHtml
 		}
 	}
 	return err
+}
+
+// SendTypeValid 检查发送类型是否可发送
+func (w *Website) SendTypeValid(sendType int) bool {
+	// 默认支持新留言发送
+	if len(w.PluginSendmail.SendType) == 0 && sendType == SendTypeGuestbook {
+		return true
+	}
+	for _, v := range w.PluginSendmail.SendType {
+		if v == sendType {
+			return true
+		}
+	}
+
+	return false
 }
 
 // ReplyMail 如果设置了回复邮件，则尝试回复给用户

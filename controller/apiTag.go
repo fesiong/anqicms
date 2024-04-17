@@ -1361,14 +1361,16 @@ func ApiGuestbookForm(ctx iris.Context) {
 	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.Lang("来源页面"), guestbook.Refer))
 	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.Lang("提交时间"), time.Now().Format("2006-01-02 15:04:05")))
 
-	// 后台发信
-	go currentSite.SendMail(subject, strings.Join(contents, ""))
-	// 回复客户
-	recipient, ok := result["email"]
-	if !ok {
-		recipient = result["contact"]
+	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
+		// 后台发信
+		go currentSite.SendMail(subject, strings.Join(contents, ""))
+		// 回复客户
+		recipient, ok := result["email"]
+		if !ok {
+			recipient = result["contact"]
+		}
+		go currentSite.ReplyMail(recipient)
 	}
-	go currentSite.ReplyMail(recipient)
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {

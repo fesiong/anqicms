@@ -15,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/response"
 	"log"
 	"os"
+	"strconv"
 	"time"
 )
 
@@ -572,6 +573,16 @@ func (w *Website) SuccessPaidOrder(order *model.Order) error {
 
 	db.Commit()
 
+	// 支付成功
+	if w.SendTypeValid(SendTypePayOrder) {
+		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")订单支付成功通知"
+		content := "订单支付成功通知：\n订单号：" + order.OrderId +
+			"\n金额：" + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
+			"\n支付时间：" + time.Unix(order.PaidTime, 0).Format("2006-01-02 15:04:05") +
+			"\n支付会员ID：" + strconv.Itoa(int(order.UserId))
+		_ = w.sendMail(subject, content, nil, false, false)
+	}
+
 	if w.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
 		// 如果订单自动完成，则在这里处理
 		w.SetOrderFinished(order)
@@ -838,6 +849,17 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	tx.Save(&order)
 
 	tx.Commit()
+
+	// 下单
+	if w.SendTypeValid(SendTypeNewOrder) {
+		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")新订单通知"
+		content := "新订单通知：\n订单号：" + order.OrderId +
+			"\n金额：" + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
+			"\n下单时间：" + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
+			"\n下单会员：" + user.UserName +
+			"\n下单会员ID：" + strconv.Itoa(int(order.UserId))
+		_ = w.sendMail(subject, content, nil, false, false)
+	}
 
 	return &order, nil
 }
