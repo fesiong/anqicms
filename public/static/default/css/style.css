@@ -770,6 +770,12 @@ textarea:focus {
 	background: #f6f6f6;
 }
 
+.list-pro-ul .list-item-text h3 {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
 /* list-product */
 /* pagination */
 .pagnavi {
