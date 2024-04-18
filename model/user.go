@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"hash/crc32"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"strconv"
 	"strings"
@@ -133,17 +131,7 @@ func (u *User) EncryptPassword(password string) error {
 	return nil
 }
 
-func (u *User) EncodeToken(tx *gorm.DB) error {
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": fmt.Sprintf("%d", u.Id),
-		"t":      fmt.Sprintf("%d", time.Now().AddDate(0, 0, 30).Unix()),
-	})
-	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.Server.Server.TokenSecret))
-	if err != nil {
-		return err
-	}
-	u.Token = tokenString
+func (u *User) LogLogin(tx *gorm.DB) error {
 	u.LastLogin = time.Now().Unix()
 	tx.Model(u).UpdateColumn("last_login", u.LastLogin)
 

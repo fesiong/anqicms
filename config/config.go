@@ -69,11 +69,9 @@ func initJSON() {
 	rawConfig, err := os.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		tokenSecret := GenerateRandString(32)
 		Server.Server.Env = "production"
 		Server.Server.Port = 8001
 		Server.Server.LogLevel = "error"
-		Server.Server.TokenSecret = tokenSecret
 	} else {
 		if err = json.Unmarshal(rawConfig, &Server); err != nil {
 			fmt.Println("Invalid Config: ", err.Error())
@@ -155,7 +153,7 @@ func initLanguage() {
 }
 
 func GenerateRandString(length int) string {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
 	buf := make([]byte, length)
 	for i := 0; i < length; i++ {
 		b := r.Intn(26) + 65

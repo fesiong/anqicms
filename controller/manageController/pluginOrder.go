@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"time"
 )
 
 func PluginOrderList(ctx iris.Context) {
@@ -48,6 +50,98 @@ func PluginOrderDetail(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": order,
+	})
+}
+
+func PluginOrderSetPay(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PaymentRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.PayWay == "" {
+		req.PayWay = config.PayWayOffline
+	}
+
+	payment, err := currentSite.GetPaymentInfoByOrderId(req.OrderId)
+	if err == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if payment.PaidTime > 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "该订单已经支付过，无需再处理",
+		})
+		return
+	}
+	order, err := currentSite.GetOrderInfoByOrderId(payment.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "订单不存在",
+		})
+		return
+	}
+	if order.PaidTime > 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "该订单已经支付过，无需再处理",
+		})
+		return
+	}
+
+	// this is a pay order
+	payment.PayWay = req.PayWay
+	payment.PaidTime = time.Now().Unix()
+	payment.TerraceId = fmt.Sprintf("%d", payment.PaidTime)
+	currentSite.DB.Save(payment)
+	order.PaymentId = payment.PaymentId
+	currentSite.DB.Save(order)
+
+	//生成用户支付记录
+	var userBalance int64
+	err = currentSite.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
+	//状态更改了，增加一条记录到用户
+	finance := model.Finance{
+		UserId:      payment.UserId,
+		Direction:   config.FinanceOutput,
+		Amount:      payment.Amount,
+		AfterAmount: userBalance,
+		Action:      config.FinanceActionBuy,
+		OrderId:     payment.OrderId,
+		Status:      1,
+	}
+	err = currentSite.DB.Create(&finance).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "支付失败",
+		})
+		return
+	}
+
+	//支付成功逻辑处理
+	err = currentSite.SuccessPaidOrder(order)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "支付失败",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "已支付成功",
 	})
 }
 

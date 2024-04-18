@@ -3,6 +3,8 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/jinzhu/now"
 	"github.com/medivhzhan/weapp/v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -319,7 +321,8 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	user.EncryptPassword(req.Password)
 	w.DB.Save(&user)
 
-	_ = user.EncodeToken(w.DB)
+	user.Token = w.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(w.DB)
 
 	return &user, nil
 }
@@ -408,7 +411,8 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 		}
 	}
 
-	_ = user.EncodeToken(w.DB)
+	user.Token = w.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(w.DB)
 
 	return user, nil
 }
@@ -446,7 +450,8 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 		w.DB.Save(user)
 	}
 
-	_ = user.EncodeToken(w.DB)
+	user.Token = w.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(w.DB)
 
 	return user, nil
 }
@@ -478,7 +483,8 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 		return nil, errors.New(w.Lang("密码错误"))
 	}
 
-	_ = user.EncodeToken(w.DB)
+	user.Token = w.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(w.DB)
 
 	return &user, nil
 }
@@ -683,4 +689,23 @@ func (w *Website) GetUserExtra(id uint) map[string]*model.CustomField {
 	}
 
 	return extraFields
+}
+
+func (w *Website) GetUserAuthToken(userId uint, remember bool) string {
+	t := now.BeginningOfDay().AddDate(0, 0, 1)
+	// 记住会记住30天
+	if remember {
+		t = t.AddDate(0, 0, 29)
+	}
+	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"userId": fmt.Sprintf("%d", userId),
+		"t":      fmt.Sprintf("%d", t.Unix()),
+	})
+	// 获取签名字符串
+	tokenString, err := jwtToken.SignedString([]byte(w.TokenSecret + "-user-token"))
+	if err != nil {
+		return ""
+	}
+
+	return tokenString
 }

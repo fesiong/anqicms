@@ -2,7 +2,7 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -22,7 +22,7 @@ func ParseAdminToken(ctx iris.Context) {
 			// can not parse the token
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
-		return []byte(config.Server.Server.TokenSecret), nil
+		return []byte(currentSite.TokenSecret + "-admin-token"), nil
 	})
 
 	if tokenErr != nil {

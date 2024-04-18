@@ -3,11 +3,10 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v4"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"strings"
@@ -178,7 +177,7 @@ func (w *Website) GetAdminAuthToken(userId uint, remember bool) string {
 		"t":       fmt.Sprintf("%d", t.Unix()),
 	})
 	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.Server.Server.TokenSecret))
+	tokenString, err := jwtToken.SignedString([]byte(w.TokenSecret + "-admin-token"))
 	if err != nil {
 		return ""
 	}

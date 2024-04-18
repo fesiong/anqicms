@@ -18,6 +18,7 @@ import (
 
 type Website struct {
 	Id                      uint
+	TokenSecret             string
 	Mysql                   *config.MysqlConfig
 	Initialed               bool
 	ErrorMsg                string // 错误提示
@@ -127,14 +128,15 @@ func InitWebsite(mw *model.Website) {
 		mw.RootPath = mw.RootPath + "/"
 	}
 	w := Website{
-		Id:         mw.Id,
-		Mysql:      &mw.Mysql,
-		DB:         db,
-		BaseURI:    "/",
-		RootPath:   mw.RootPath,
-		CachePath:  mw.RootPath + "cache/",
-		DataPath:   mw.RootPath + "data/",
-		PublicPath: mw.RootPath + "public/",
+		Id:          mw.Id,
+		TokenSecret: config.GenerateRandString(32),
+		Mysql:       &mw.Mysql,
+		DB:          db,
+		BaseURI:     "/",
+		RootPath:    mw.RootPath,
+		CachePath:   mw.RootPath + "cache/",
+		DataPath:    mw.RootPath + "data/",
+		PublicPath:  mw.RootPath + "public/",
 	}
 	if db != nil && mw.Status == 1 {
 		w.Initialed = true

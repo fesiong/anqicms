@@ -1,8 +1,7 @@
 package config
 
 type ServerConfig struct {
-	Env         string `json:"env"`
-	Port        int    `json:"port"`
-	LogLevel    string `json:"log_level"`
-	TokenSecret string `json:"token_secret"`
+	Env      string `json:"env"`
+	Port     int    `json:"port"`
+	LogLevel string `json:"log_level"`
 }

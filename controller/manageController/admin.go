@@ -500,7 +500,7 @@ func FindPasswordChooseWay(ctx iris.Context) {
 
 	if currentSite.FindPasswordInfo == nil {
 		currentSite.FindPasswordInfo = &response.FindPasswordInfo{
-			Token: library.Md5(config.Server.Server.TokenSecret + fmt.Sprintf("%d", time.Now().UnixNano())),
+			Token: library.Md5(currentSite.TokenSecret + fmt.Sprintf("%d", time.Now().UnixNano())),
 		}
 	} else {
 		currentSite.FindPasswordInfo.Timer.Stop()

@@ -392,6 +392,7 @@ func manageRoute(app *iris.Application) {
 				order.Post("/config", manageController.PluginOrderConfigForm)
 				order.Get("/list", manageController.PluginOrderList)
 				order.Get("/detail", manageController.PluginOrderDetail)
+				order.Post("/pay", manageController.PluginOrderSetPay)
 				order.Post("/deliver", manageController.PluginOrderSetDeliver)
 				order.Post("/finished", manageController.PluginOrderSetFinished)
 				order.Post("/canceled", manageController.PluginOrderSetCanceled)
@@ -406,6 +407,7 @@ func manageRoute(app *iris.Application) {
 				withdraw.Get("/detail", manageController.PluginWithdrawDetail)
 				withdraw.Post("/approval", manageController.PluginWithdrawSetApproval)
 				withdraw.Post("/finished", manageController.PluginWithdrawSetFinished)
+				withdraw.Post("/apply", manageController.PluginWithdrawSetApply)
 			}
 
 			commission := plugin.Party("/commission")
@@ -468,7 +470,7 @@ func manageRoute(app *iris.Application) {
 				htmlcache.Get("/push/logs", manageController.PluginHtmlCachePushLogs)
 			}
 
-			aiGenerate := manage.Party("/aigenerate", middleware.ParseAdminToken, middleware.AdminPermission)
+			aiGenerate := manage.Party("/aigenerate")
 			{
 				//采集全局设置
 				aiGenerate.Get("/checkapi", manageController.HandleAiGenerateCheckApi)

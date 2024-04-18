@@ -42,6 +42,32 @@ func PluginWithdrawDetail(ctx iris.Context) {
 	})
 }
 
+func PluginWithdrawSetApply(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.UserWithdrawRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.RetailerApplyWithdraw(req.UserId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "申请成功",
+	})
+}
+
 func PluginWithdrawSetApproval(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.UserWithdrawRequest

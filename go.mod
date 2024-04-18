@@ -14,7 +14,7 @@ require (
 	github.com/flosch/pongo2/v6 v6.0.0
 	github.com/getlantern/systray v1.2.2
 	github.com/go-pay/gopay v1.5.98
-	github.com/golang-jwt/jwt/v4 v4.5.0
+	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
