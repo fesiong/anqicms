@@ -1222,15 +1222,15 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 			archive.HasOrdered = true
 		} else if archive.Price > 0 {
 			var exist int64
-			w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+			w.DB.Debug().Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
 				config.OrderStatusPaid,
 				config.OrderStatusDelivering,
 				config.OrderStatusCompleted}).Count(&exist)
 			if exist > 0 {
 				archive.HasOrdered = true
+			} else {
+				archive.HasOrdered = false
 			}
-
-			archive.HasOrdered = false
 		}
 		if archive.ReadLevel > 0 && !archive.HasOrdered {
 			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
