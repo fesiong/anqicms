@@ -112,6 +112,18 @@ func AttachmentEdit(ctx iris.Context) {
 	})
 }
 
+func AttachmentScanUploads(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	// 仅扫描uploads目录
+	go currentSite.AttachmentScanUploads(currentSite.PublicPath + "uploads")
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "已提交后台处理，稍后将呈现结果",
+	})
+}
+
 func AttachmentChangeCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.ChangeAttachmentCategory
