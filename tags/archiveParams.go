@@ -48,11 +48,22 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		archiveDetail = currentSite.GetArchiveByIdFromCache(id)
-		if archiveDetail == nil {
-			archiveDetail, _ = currentSite.GetArchiveById(id)
-			if archiveDetail != nil {
-				currentSite.AddArchiveCache(archiveDetail)
+		if archiveDetail == nil || archiveDetail.Id != id {
+			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
+			if archiveDetail == nil {
+				archiveDetail, _ = currentSite.GetArchiveById(id)
+				if archiveDetail != nil {
+					// if read level larger than 0, then need to check permission
+					userId := uint(0)
+					userInfo, ok := ctx.Public["userInfo"].(*model.User)
+					if ok && userInfo.Id > 0 {
+						userId = userInfo.Id
+					}
+					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+					archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+
+					currentSite.AddArchiveCache(archiveDetail)
+				}
 			}
 		}
 	}
@@ -60,15 +71,6 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if archiveDetail != nil {
 		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
-			// if read level larger than 0, then need to check permission
-			userId := uint(0)
-			userInfo, ok := ctx.Public["userInfo"].(*model.User)
-			if ok && userInfo.Id > 0 {
-				userId = userInfo.Id
-			}
-			userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-			archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
-
 			for i := range archiveParams {
 				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 					archiveParams[i].Value = archiveParams[i].Default

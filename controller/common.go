@@ -142,7 +142,15 @@ func CheckCloseSite(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	if !strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
 		// 闭站
-		if currentSite.System.SiteClose == 1 {
+		siteClose := currentSite.System.SiteClose == 1
+		if currentSite.System.SiteClose == 2 {
+			ua := strings.ToLower(ctx.GetHeader("User-Agent"))
+			if !strings.Contains(ua, "spider") && !strings.Contains(ua, "bot") {
+				// 仅蜘蛛可见
+				siteClose = true
+			}
+		}
+		if siteClose {
 			closeTips := currentSite.System.SiteCloseTips
 			ctx.ViewData("closeTips", closeTips)
 			tplName := "errors/close.html"
@@ -163,7 +171,7 @@ func CheckCloseSite(ctx iris.Context) {
 		}
 		// 禁止蜘蛛抓取
 		if currentSite.System.BanSpider == 1 {
-			ua := ctx.GetHeader("User-Agent")
+			ua := strings.ToLower(ctx.GetHeader("User-Agent"))
 			if strings.Contains(ua, "spider") || strings.Contains(ua, "bot") {
 				ctx.StatusCode(400)
 				ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
