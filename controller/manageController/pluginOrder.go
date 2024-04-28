@@ -68,7 +68,7 @@ func PluginOrderSetPay(ctx iris.Context) {
 	}
 
 	payment, err := currentSite.GetPaymentInfoByOrderId(req.OrderId)
-	if err == nil {
+	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),

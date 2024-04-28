@@ -109,10 +109,10 @@ func PluginFileUploadUpload(ctx iris.Context) {
 
 	ext := path.Ext(info.Filename)
 
-	if ext != ".txt" && ext != ".htm" && ext != ".html" {
+	if ext != ".txt" && ext != ".htm" && ext != ".html" && ext != ".xml" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "只允许上传txt/htm/html",
+			"msg":  "只允许上传txt/htm/html/xml",
 		})
 		return
 	}
