@@ -139,6 +139,13 @@ func AdminPermission(ctx iris.Context) {
 func Check301(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	uri := ctx.Request().RequestURI
+	// 顶级域名301
+	host := library.GetHost(ctx)
+	if strings.HasSuffix(currentSite.Host, "."+host) {
+		// 301 到主域名
+		ctx.Redirect(currentSite.System.BaseUrl+uri, 301)
+		return
+	}
 	val := currentSite.GetRedirectFromCache(uri)
 	if val != "" {
 		// 验证hosts

@@ -350,16 +350,16 @@ func (w *Website) ThumbRebuild() {
 		err := attachmentBuilder.Limit(limit).Offset(offset).Scan(&attachments).Error
 		if err == nil {
 			for _, v := range attachments {
-				_ = w.BuildThumb(v)
+				_ = w.BuildThumb(v.FileLocation)
 			}
 		}
 	}
 }
 
-func (w *Website) BuildThumb(attachment *model.Attachment) error {
-	originPath := w.PublicPath + attachment.FileLocation
+func (w *Website) BuildThumb(fileLocation string) error {
+	originPath := w.PublicPath + fileLocation
 
-	paths, fileName := filepath.Split(attachment.FileLocation)
+	paths, fileName := filepath.Split(fileLocation)
 	thumbPath := paths + "thumb_" + fileName
 
 	f, err := os.Open(originPath)
@@ -711,6 +711,67 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	}
 
 	return nil
+}
+
+// AttachmentScanUploads 扫描上传目录，所有文件类型
+func (w *Website) AttachmentScanUploads(baseDir string) {
+	baseDir = strings.TrimRight(baseDir, "/\\")
+	files, err := os.ReadDir(baseDir)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+	for _, fi := range files {
+		name := baseDir + "/" + fi.Name()
+		if fi.IsDir() {
+			w.AttachmentScanUploads(name)
+		} else {
+			// 是否是thumb
+			if strings.HasPrefix(fi.Name(), "thumb_") {
+				// 跳过
+				continue
+			}
+			fileInfo, err := fi.Info()
+			if err != nil {
+				continue
+			}
+			var fileLocation = strings.TrimPrefix(name, w.PublicPath)
+			fileExt := filepath.Ext(fi.Name())
+			// 如果是图片，则生成缩略图
+			isImage := 0
+			if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" {
+				isImage = 1
+				thumbName := baseDir + "/" + "thumb_" + fi.Name()
+				_, err = os.Stat(thumbName)
+				if err != nil {
+					// 不存在
+					_ = w.BuildThumb(fileLocation)
+				}
+			}
+
+			// 检查是否存在数据库
+			var existNum int64
+			w.DB.Model(&model.Attachment{}).Where("`file_location` = ?", fileLocation).Count(&existNum)
+			if existNum > 0 {
+				continue
+			}
+			md5Str, err := library.Md5File(name)
+			if err != nil {
+				continue
+			}
+			//记录文件到数据库
+			attachment := &model.Attachment{
+				FileName:     fi.Name(),
+				FileLocation: fileLocation,
+				FileSize:     fileInfo.Size(),
+				FileMd5:      md5Str,
+				CategoryId:   0,
+				IsImage:      isImage,
+				Status:       1,
+			}
+			_ = attachment.Save(w.DB)
+		}
+	}
 }
 
 func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {

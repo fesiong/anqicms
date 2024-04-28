@@ -250,12 +250,19 @@ func CurrentSite(ctx iris.Context) *Website {
 		for _, w := range websites {
 			// 判断内容，base_url,mobile_url,admin_url
 			parsed, err := url.Parse(w.System.BaseUrl)
-			if parsed.RequestURI() != "/" {
-				continue
-			}
-			if err == nil && parsed.Hostname() == host {
-				ctx.Values().Set("siteId", w.Id)
-				return w
+			if err == nil {
+				if parsed.RequestURI() != "/" {
+					continue
+				}
+				if parsed.Hostname() == host {
+					ctx.Values().Set("siteId", w.Id)
+					return w
+				}
+				// 顶级域名
+				if strings.HasSuffix(parsed.Hostname(), "."+host) {
+					ctx.Values().Set("siteId", w.Id)
+					return w
+				}
 			}
 			if w.System.MobileUrl != "" {
 				parsed, err = url.Parse(w.System.MobileUrl)
