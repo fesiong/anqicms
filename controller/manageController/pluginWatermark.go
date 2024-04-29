@@ -13,9 +13,9 @@ import (
 	"strings"
 )
 
-func PluginTitleImageConfig(ctx iris.Context) {
+func PluginWatermarkConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	setting := currentSite.PluginTitleImage
+	setting := currentSite.PluginWatermark
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -24,9 +24,9 @@ func PluginTitleImageConfig(ctx iris.Context) {
 	})
 }
 
-func PluginTitleImageConfigForm(ctx iris.Context) {
+func PluginWatermarkConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req config.PluginTitleImageConfig
+	var req config.PluginWatermark
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -34,27 +34,33 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	if req.Width == 0 {
-		req.Width = 800
+	if req.Size == 0 {
+		req.Size = 20
 	}
-	if req.Height == 0 {
-		req.Width = 600
+	if req.Position == 0 {
+		req.Position = 9
 	}
-	if req.FontSize == 0 {
-		req.FontSize = 28
+	if req.Opacity == 0 {
+		req.Opacity = 100
+	}
+	if req.MinSize == 0 {
+		req.MinSize = 400
+	}
+	if req.Color == "" {
+		req.Color = "#ffffff"
 	}
 
-	currentSite.PluginTitleImage.Open = req.Open
-	currentSite.PluginTitleImage.DrawSub = req.DrawSub
-	currentSite.PluginTitleImage.BgImage = req.BgImage
-	currentSite.PluginTitleImage.FontPath = req.FontPath
-	currentSite.PluginTitleImage.FontSize = req.FontSize
-	currentSite.PluginTitleImage.Width = req.Width
-	currentSite.PluginTitleImage.Height = req.Height
-	currentSite.PluginTitleImage.Noise = req.Noise
-	currentSite.PluginTitleImage.FontColor = req.FontColor
+	currentSite.PluginWatermark.Open = req.Open
+	currentSite.PluginWatermark.Type = req.Type
+	currentSite.PluginWatermark.ImagePath = req.ImagePath
+	currentSite.PluginWatermark.Text = req.Text
+	currentSite.PluginWatermark.FontPath = req.FontPath
+	currentSite.PluginWatermark.Size = req.Size
+	currentSite.PluginWatermark.Color = req.Color
+	currentSite.PluginWatermark.Position = req.Position
+	currentSite.PluginWatermark.Opacity = req.Opacity
 
-	err := currentSite.SaveSettingValue(provider.TitleImageSettingKey, currentSite.PluginTitleImage)
+	err := currentSite.SaveSettingValue(provider.WatermarkSettingKey, currentSite.PluginWatermark)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -64,7 +70,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新标题图片配置信息"))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新水印配置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -72,10 +78,20 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 	})
 }
 
-func PluginTitleImagePreview(ctx iris.Context) {
-	text := ctx.URLParamDefault("text", "欢迎使用安企内容管理系统")
+func PluginWatermarkPreview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	str := currentSite.NewTitleImage().DrawPreview(text)
+
+	cfg := currentSite.PluginWatermark
+	cfg.Open = true
+	wm := currentSite.NewWatermark(&cfg)
+	if wm == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "watermark error",
+		})
+		return
+	}
+	str := wm.DrawWatermarkPreview()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -83,11 +99,11 @@ func PluginTitleImagePreview(ctx iris.Context) {
 	})
 }
 
-func PluginTitleImageUploadFile(ctx iris.Context) {
+func PluginWatermarkUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	name := ctx.PostValue("name")
 	// allow upload font and image
-	if name != "font_path" && name != "bg_image" {
+	if name != "font_path" && name != "image_path" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  "文件名无效",
@@ -114,7 +130,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 			})
 			return
 		}
-		fileName = "uploads/titleimage/title_font.ttf"
+		fileName = "uploads/watermark/watermark_font.ttf"
 	} else {
 		// image
 		_, _, err := image.Decode(file)
@@ -132,7 +148,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 			}
 		}
 		file.Seek(0, 0)
-		fileName = "uploads/titleimage/bg_image" + filepath.Ext(info.Filename)
+		fileName = "uploads/watermark/watermark_image" + filepath.Ext(info.Filename)
 	}
 	buff, err := io.ReadAll(file)
 	if err != nil {
@@ -161,9 +177,9 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	}
 
 	if name == "font_path" {
-		currentSite.PluginTitleImage.FontPath = fileName
+		currentSite.PluginWatermark.FontPath = fileName
 	} else {
-		currentSite.PluginTitleImage.BgImage = fileName
+		currentSite.PluginWatermark.ImagePath = fileName
 	}
 	err = currentSite.SaveSettingValue(provider.TitleImageSettingKey, currentSite.PluginTitleImage)
 	if err != nil {
@@ -174,7 +190,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传标题图片资源：%s", name))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传水印图片资源：%s", name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -183,10 +199,10 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	})
 }
 
-func PluginTitleImageGenerate(ctx iris.Context) {
+func PluginWatermarkGenerate(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 
-	currentSite.GenerateAllTitleImages()
+	currentSite.GenerateAllWatermark()
 
 	currentSite.AddAdminLog(ctx, "批量生成水印图片")
 

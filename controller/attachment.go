@@ -26,6 +26,14 @@ func AttachmentUpload(ctx iris.Context) {
 	defer file.Close()
 
 	if attachId > 0 {
+		adminId := ctx.Values().GetUintDefault("adminId", 0)
+		if adminId == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.Lang("无法修改图片"),
+			})
+			return
+		}
 		_, err := currentSite.GetAttachmentById(attachId)
 		if err != nil {
 			ctx.JSON(iris.Map{

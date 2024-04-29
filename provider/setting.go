@@ -44,6 +44,7 @@ const (
 	OrderSettingKey       = "order"
 	FulltextSettingKey    = "fulltext"
 	TitleImageSettingKey  = "title_image"
+	WatermarkSettingKey   = "watermark"
 	HtmlCacheSettingKey   = "html_cache"
 	AnqiSettingKey        = "anqi"
 	AiGenerateSettingKey  = "ai_generate"
@@ -88,6 +89,7 @@ func (w *Website) InitSetting() {
 	w.LoadCollectorSetting()
 	w.LoadKeywordSetting()
 	w.LoadInterferenceSetting()
+	w.LoadWatermarkSetting()
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -325,6 +327,28 @@ func (w *Website) LoadTitleImageSetting() {
 	}
 	if w.PluginTitleImage.FontColor == "" {
 		w.PluginTitleImage.FontColor = "#ffffff"
+	}
+}
+
+func (w *Website) LoadWatermarkSetting() {
+	value := w.GetSettingValue(WatermarkSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &w.PluginWatermark)
+	}
+	if w.PluginWatermark.Size == 0 {
+		w.PluginWatermark.Size = 20
+	}
+	if w.PluginWatermark.Position == 0 {
+		w.PluginWatermark.Position = 9
+	}
+	if w.PluginWatermark.Opacity == 0 {
+		w.PluginWatermark.Opacity = 100
+	}
+	if w.PluginWatermark.MinSize == 0 {
+		w.PluginWatermark.MinSize = 400
+	}
+	if w.PluginWatermark.Color == "" {
+		w.PluginWatermark.Color = "#ffffff"
 	}
 }
 

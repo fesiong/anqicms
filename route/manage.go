@@ -452,6 +452,16 @@ func manageRoute(app *iris.Application) {
 				titleImage.Post("/config", manageController.PluginTitleImageConfigForm)
 				titleImage.Get("/preview", manageController.PluginTitleImagePreview)
 				titleImage.Post("/upload", manageController.PluginTitleImageUploadFile)
+				titleImage.Post("/generate", manageController.PluginTitleImageGenerate)
+			}
+
+			watermark := plugin.Party("/watermark")
+			{
+				watermark.Get("/config", manageController.PluginWatermarkConfig)
+				watermark.Post("/config", manageController.PluginWatermarkConfigForm)
+				watermark.Get("/preview", manageController.PluginWatermarkPreview)
+				watermark.Post("/upload", manageController.PluginWatermarkUploadFile)
+				watermark.Post("/generate", manageController.PluginWatermarkGenerate)
 			}
 
 			htmlcache := plugin.Party("/htmlcache")

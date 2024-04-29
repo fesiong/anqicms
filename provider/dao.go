@@ -84,7 +84,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 func AutoMigrateDB(db *gorm.DB, focus bool) error {
 	var lastVersion string
 	db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
-	if focus || lastVersion < config.Version {
+	if focus || lastVersion != config.Version {
 		// 强制转换archive表的title字段
 		forceChangeArchiveTitle(db)
 

@@ -68,6 +68,7 @@ type Website struct {
 	PluginOrder        config.PluginOrderConfig      `json:"plugin_order"`
 	PluginFulltext     config.PluginFulltextConfig   `json:"plugin_fulltext"`
 	PluginTitleImage   config.PluginTitleImageConfig `json:"plugin_title_image"`
+	PluginWatermark    config.PluginWatermark        `json:"plugin_watermark"`
 	PluginHtmlCache    config.PluginHtmlCache        `json:"plugin_html_cache"`
 	SensitiveWords     []string                      `json:"sensitive_words"`
 	AiGenerateConfig   config.AiGenerateConfig       `json:"ai_generate_config"`

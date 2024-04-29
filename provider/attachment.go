@@ -198,12 +198,23 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		height = img.Bounds().Dy()
 	}
 	// 保存裁剪的图片
+	addWatermark := uint(0)
 	var buf []byte
 	if imgType == "gif" {
 		// gif 直接使用原始数据
 		file.Seek(0, 0)
 		buf, _ = io.ReadAll(file)
 	} else {
+		// 如果开启图片水印功能，则加水印,gif 不处理
+		if w.PluginWatermark.Open {
+			wm := w.NewWatermark(&w.PluginWatermark)
+			if wm != nil {
+				img, err = wm.DrawWatermark(img)
+				if err == nil {
+					addWatermark = 1
+				}
+			}
+		}
 		buf, _ = encodeImage(img, imgType, quality)
 	}
 	fileSize = int64(len(buf))
@@ -236,6 +247,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		Height:       height,
 		CategoryId:   categoryId,
 		IsImage:      1,
+		Watermark:    addWatermark,
 		Status:       1,
 	}
 	attachment.Id = attachId
@@ -724,6 +736,10 @@ func (w *Website) AttachmentScanUploads(baseDir string) {
 	for _, fi := range files {
 		name := baseDir + "/" + fi.Name()
 		if fi.IsDir() {
+			// 排除 watermark and titleimage
+			if fi.Name() == "watermark" || fi.Name() == "titleimage" {
+				continue
+			}
 			w.AttachmentScanUploads(name)
 		} else {
 			// 是否是thumb

@@ -164,6 +164,19 @@ type PluginInterference struct {
 	DisableRightClick bool `json:"disable_right_click"`
 }
 
+type PluginWatermark struct {
+	Open      bool   `json:"open"`
+	Type      int    `json:"type"` // 0 image, 1 text
+	ImagePath string `json:"image_path"`
+	Text      string `json:"text,omitempty"`
+	FontPath  string `json:"font_path"`
+	Size      int    `json:"size"`
+	Color     string `json:"color"`
+	Position  int    `json:"position"` // 5 居中，1 左上角，3 右上角 7 左下角 9 右下角
+	Opacity   int    `json:"opacity"`
+	MinSize   int    `json:"min_size"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

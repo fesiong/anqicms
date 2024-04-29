@@ -13,6 +13,8 @@ import (
 	"image/draw"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"log"
 	"math"
 	"math/rand"
 	"mime/multipart"
@@ -56,6 +58,72 @@ func (w *Website) NewTitleImage() *TitleImage {
 	}
 
 	return &t
+}
+
+func (w *Website) GenerateAllTitleImages() {
+	// 根据attachment表读取每一张图片
+	lastId := uint(0)
+	limit := 500
+	ti := w.NewTitleImage()
+	// archive
+	for {
+		var archives []*model.Archive
+		w.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&archives)
+		if len(archives) == 0 {
+			break
+		}
+		lastId = archives[len(archives)-1].Id
+		for _, arc := range archives {
+			if len(arc.Images) > 0 {
+				continue
+			}
+			archiveData, err := w.GetArchiveDataById(arc.Id)
+			if err != nil {
+				continue
+			}
+			logo, content, err := ti.DrawTitles(arc.Title, archiveData.Content)
+			if err == nil {
+				if content != archiveData.Content {
+					w.DB.Model(&archiveData).UpdateColumn("content", content)
+				}
+				if len(logo) > 0 {
+					arc.Images = append(arc.Images, strings.TrimPrefix(logo, w.PluginStorage.StorageUrl))
+				}
+				w.DB.Model(arc).UpdateColumn("images", arc.Images)
+			}
+		}
+	}
+	// archiveDraft
+	lastId = 0
+	for {
+		var drafts []*model.ArchiveDraft
+		w.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&drafts)
+		if len(drafts) == 0 {
+			break
+		}
+		lastId = drafts[len(drafts)-1].Id
+		for _, arc := range drafts {
+			if len(arc.Images) > 0 {
+				continue
+			}
+			archiveData, err := w.GetArchiveDataById(arc.Id)
+			if err != nil {
+				continue
+			}
+			logo, content, err := ti.DrawTitles(arc.Title, archiveData.Content)
+			if err == nil {
+				if content != archiveData.Content {
+					w.DB.Model(&archiveData).UpdateColumn("content", content)
+				}
+				if len(logo) > 0 {
+					arc.Images = append(arc.Images, strings.TrimPrefix(logo, w.PluginStorage.StorageUrl))
+				}
+				w.DB.Model(arc).UpdateColumn("images", arc.Images)
+			}
+		}
+	}
+
+	log.Println("finished generate title image")
 }
 
 func (t *TitleImage) DrawTitles(title, content string) (logo string, newContent string, err error) {

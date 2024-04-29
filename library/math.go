@@ -4,7 +4,9 @@ import (
 	"crypto/md5"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"math/rand"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -62,6 +64,23 @@ func Md5Bytes(bytes []byte) string {
 	h := md5.New()
 	h.Write(bytes)
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func Md5File(filePath string) (string, error) {
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	// 获取md5
+	md5hash := md5.New()
+	_, err = io.Copy(md5hash, file)
+	if err != nil {
+		return "", err
+	}
+	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+
+	return md5Str, nil
 }
 
 // VersionCompare 对比两个版本，a > b = 1; a < b = -1;
