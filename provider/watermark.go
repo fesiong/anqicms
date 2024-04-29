@@ -179,6 +179,9 @@ func (t *Watermark) DrawWatermark(m image.Image) (image.Image, error) {
 	maxHeight := m.Bounds().Dy() * t.fontSize / 100
 	maxWidth := m.Bounds().Dx() * t.fontSize / 100
 	edge := m.Bounds().Dx() / 15
+	if edge > 50 {
+		edge = 50
+	}
 	// position = 5 居中，1 左上角，3 右上角 7 左下角 9 右下角
 	// 开始绘制图片或文字
 	var markImg draw.Image
