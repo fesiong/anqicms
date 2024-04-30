@@ -74,6 +74,52 @@ func CreateTransferTask(ctx iris.Context) {
 	})
 }
 
+func GetTransferModules(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	task := currentSite.GetTransferTask()
+	if task == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "没有可执行的任务",
+		})
+		return
+	}
+
+	modules, err := task.GetModules()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// * 需要执行的操作type：
+	// -. 同步模型 module
+	// -. 同步分类 category
+	// -. 同步标签 tag
+	// -. 同步锚文本 keyword
+	// -. 同步文档 archive
+	// -. 同步单页 singlepage
+	// -. 同步静态资源 static
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"modules": modules,
+			"types": []string{
+				"module",
+				"category",
+				"tag",
+				"keyword",
+				"archive",
+				"singlepage",
+				"static",
+			},
+		},
+	})
+}
+
 func TransferWebData(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	task := currentSite.GetTransferTask()
@@ -84,7 +130,16 @@ func TransferWebData(ctx iris.Context) {
 		})
 		return
 	}
-	go task.TransferWebData()
+	var req request.TransferTypes
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	go task.TransferWebData(&req)
 
 	time.Sleep(1 * time.Second)
 	ctx.JSON(iris.Map{

@@ -4,7 +4,7 @@
  * 仅支持 php 5.3 以上
  * 版权保护，如需使用，请访问 https://www.anqicms.com/。
  * @author anqicms
- * 微信：17620331155
+ * 微信：websafety
  */
 
 use app\api\model\CmsModel;

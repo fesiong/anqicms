@@ -1,6 +1,6 @@
 <?php
 /**
- * wordpress 数据转 anqicms 接口文件
+ * empire 数据转 anqicms 接口文件
  * 仅支持 php 5.3 以上
  * 版权保护，如需使用，请访问 https://www.anqicms.com/。
  * @author anqicms
@@ -65,7 +65,7 @@ class anqicms
     function verify() {
       $checkToken = $_GET['token'];
       $checkTime  = $_GET['_t'];
-      
+
       if (md5($this->config['token'] . $checkTime) != $checkToken && $this->action != 'config') {
           res(1001, "访问受限");
       }
@@ -98,8 +98,8 @@ class anqicms
             //配置异常
             res(1002, "接口配置异常，无法正常读取配置信息");
         }
-        
-        
+
+
         $funcName = $this->action . "Action";
         if (!method_exists($this, $funcName)) {
             res(-1, '错误的入口');
@@ -129,147 +129,151 @@ class anqicms
      */
     public function syncDataAction() {
       $type = $_GET['type'];
-      
+
       switch($type) {
           case 'module':
-            // wordpress 没有模型，默认是 1
-            $modules = [];
+            $modules = $this->db->select("*", "enewsmod");
+            foreach($modules as $key => $val) {
+              $fields = $this->getModuleFields($val);
+              $tbName = $val['tbname'];
+              if ($val['tbname'] == 'news') {
+                $tbName = "article";
+              } else if ($val['tbname'] == 'article') {
+                $tbName = "doc";
+              }
+
+              $modules[$key] = array(
+                'id' => $val['mid'],
+                'table_name' => $tbName,
+                'title' => $val['qmname'],
+                'is_system' => $val['isdefault'],
+                'title_name' => $val['titlename'],
+                'status' => 1,
+                'fields' => $fields,
+              );
+            }
 
             res(0, '', $modules);
             break;
         case 'category':
-            $taxonomy = $this->db->select("*", "term_taxonomy", "taxonomy = 'category'");
-            $terms = $this->db->select("*", "terms");
-            $categories = array();
-            foreach($taxonomy as $key => $val) {
-                foreach($terms as $inner) {
-                    if($val['term_id'] == $inner['term_id']) {
-                        $val['name'] = $inner['name'];
-                        $val['slug'] = $inner['slug'];
-                        break;
-                    }
-                }
-
-              $categories[] = array(
-                'id' => $val['term_id'],
-                'parent_id' => $val['parent'],
-                'title' => $val['name'],
-                'description' => $val['description'],
+            $categories = $this->db->select("*", "enewsclass");
+            foreach($categories as $key => $val) {
+              $typedir = explode('/', $val['classpath']);
+              $typedir = end($typedir);
+              $categories[$key] = array(
+                'id' => $val['classid'],
+                'parent_id' => $val['bclassid'],
+                'title' => $val['classname'],
+                'description' => '',
                 'content' => '',
                 'status' => 1,
                 'type' => 1,
-                'url_token' => $val['slug'],
-                'module_id' => 1,
+                'sort' => 0,
+                'url_token' => $typedir,
+                'seo_title' => '',
+                'keywords' => '',
+                'module_id' => $val['modid'],
               );
             }
-              
+
             res(0, '', $categories);
             break;
         case 'tag':
-            $taxonomy = $this->db->select("*", "term_taxonomy", "taxonomy = 'post_tag'");
-            $terms = $this->db->select("*", "terms");
-            $tags = array();
-            foreach($taxonomy as $key => $val) {
-                foreach($terms as $inner) {
-                    if($val['term_id'] == $inner['term_id']) {
-                        $val['name'] = $inner['name'];
-                        $val['slug'] = $inner['slug'];
-                        break;
-                    }
-                }
-
-              $tags[] = array(
-                'id' => $val['term_id'],
-                'title' => $val['name'],
-                'description' => $val['description'],
-                'url_token' => $val['slug'],
+            $tags = $this->db->select("*", "enewstags");
+            foreach($tags as $key => $val) {
+              $tags[$key] = array(
+                "id" => $val['tagid'],
+                "title" => $val['tagname'],
+                'created_time' => 0
               );
             }
-            
+
             res(0, '', $tags);
             break;
-        
+
           case 'keyword':
-            $keywords = [];
-            
+            $keywords = array();
+
             res(0, '', $keywords);
             break;
         case 'archive':
             $lastId = intval($_GET['last_id']);
+            $lastMod = $_GET['last_mod'];
             $limit = 100;
-
-            $archives = $this->db->select("*", "posts", "post_type = 'post' and post_status = 'publish' and ID > " . $lastId, $limit, "ID asc");
-            foreach($archives as $key => $val) {
-                $categoryId = 0;
-                $tags = array();
-                $relations = $this->db->select("*", "term_relationships", "object_id = " . $val['ID']);
-                $term_taxonomy_ids = array();
-                foreach ($relations as $inner) {
-                    $term_taxonomy_ids[] = $inner['term_taxonomy_id'];
-                }
-                if (!empty($term_taxonomy_ids)) {
-                    $taxonomy = $this->db->select("*", "term_taxonomy", "taxonomy = 'category' and term_taxonomy_id IN(".implode(',', $term_taxonomy_ids).")");
-                    if(!empty($taxonomy)) {
-                        $categoryId = $taxonomy[0]['term_id'];
-                    }
-                    $taxonomy = $this->db->select("*", "term_taxonomy", "taxonomy = 'post_tag' and term_taxonomy_id IN(".implode(',', $term_taxonomy_ids).")");
-                    if(!empty($taxonomy)) {
-                        $tagIds = array();
-                        foreach($taxonomy as $inner) {
-                            $tagIds[] = $inner['term_id'];
-                        }
-                        $terms = $this->db->select("*", "terms", "term_id IN(".implode(',', $tagIds).")");
-                        foreach($terms as $inner) {
-                            $tags[] = $inner['name'];
-                        }
-                    }
-                }
-
-              $url_token = $val['post_name'];
-              if (strlen($url_token) > 150) {
-                $url_token = substr($url_token, 0, 150);
-              }
-              $archive = array(
-                'id' => $val['ID'],
-                'title' => $val['post_title'],
-                'url_token' => $url_token,
-                'created_time' => strtotime($val['post_date']),
-                'updated_time' => strtotime($val['post_modified']),
-                'content' => $val['post_content'],
-                'category_id' => $categoryId,
-                'tags' => $tags,
-                'module_id' => 1,
-                'status' => 1,
-              );
-              $archive['content'] = $this->parseContent($archive['content']);
-              $archive = $this->getThumb($archive);
-              $archives[$key] = $archive;
+            $moduleId = 0;
+            $moduleIndex = 0;
+            // 根据模型来查询
+            $modules = $this->db->select("*", "enewsmod");
+            if ($lastMod == "") {
+                $lastMod = $modules[0]['tbname'];
             }
-            
-            res(0, '', $archives);
+            $tableName = "";
+            foreach($modules as $key => $val) {
+                if ($val['tbname'] == $lastMod) {
+                    $tableName = "ecms_" . $val['tbname'];
+                    $moduleId = $val['mid'];
+                    $moduleIndex = $key;
+                    break;
+                }
+            }
+            if (!$tableName) {
+                res(0, '', array());
+                break;
+            }
+
+            $archives = $this->db->select("*", $tableName, "id > " . $lastId, $limit, "id asc");
+            if (count($archives) == 0) {
+                $moduleIndex++;
+                if ($modules[$moduleIndex]) {
+                    $lastMod = $modules[$moduleIndex]['tbname'];
+                    $moduleId = $modules[$moduleIndex]['mid'];
+                    $tableName = "ecms_" . $modules[$moduleIndex]['tbname'];
+                    $lastId = 0;
+                    $archives = $this->db->select("*", $tableName, "id > " . $lastId, $limit, "id asc");
+                }
+            }
+            // 增加附加表
+            foreach ($archives as $key => $val) {
+                $images = array();
+                if (!empty($val['titlepic'])) {
+                    $images = array($val['titlepic']);
+                }
+                $archive = array(
+                  'id' => $val['id'],
+                  'title' => $val['title'],
+                  'keywords' => '',
+                  'description' => $val['smalltext'],
+                  'category_id' => $val['classid'],
+                  'views' => 0,
+                  'status' => 1,
+                  'created_time' => $val['newstime'],
+                  'updated_time' => $val['lastdotime'],
+                  'images' => $images,
+                  'url_token' => $lastMod.$val['filename'],
+                  'module_id' => $moduleId,
+                  'flag' => $val['flag'],
+                  'content' => $val['newstext'] ? $val['newstext'] : $val['smalltext'],
+                );
+
+                $addonTable = $tableName . "_data_1";
+
+                $addonData = $this->db->getOne("*", $addonTable, "id = " . $val['id']);
+                $archive['content'] = $addonData['newstext'];
+                $archives[$key] = $archive;
+            }
+
+            res(0, '', $archives, array("last_mod" => $lastMod));
             break;
         case 'singlepage':
-            $singlepages = $this->db->select("*", "posts", "post_type = 'page' and post_status = 'publish'");
-            foreach($singlepages as $key => $val) {
-              $val['post_content'] = $this->parseContent($val['post_content']);
-              $singlepages[$key] = array(
-                'id' => $val['ID'],
-                'title' => $val['post_title'],
-                'url_token' => $val['post_name'],
-                'created_time' => strtotime($val['post_date']),
-                'content' => $val['post_content'],
-                'type' => 3,
-                'status' => 1,
-              );
-            }
-            
+            $singlepages = array();
+
             res(0, '', $singlepages);
             break;
         case 'static':
             // 打包静态文件，包括模板静态文件、上传的文件
             $file = APP_PATH.'anqitmp.zip';
             if(!file_exists($file)) {
-              $dir = APP_PATH.'wp-content/uploads';
+              $dir = APP_PATH.'/d/file/';
                 $this->create_zip(rtrim(APP_PATH, "/"), $dir, $file);
             }
             $lastId = $_GET['last_id'];
@@ -291,48 +295,6 @@ class anqicms
             break;
       }
 
-    }
-
-    /**
-     * 内容处理
-     *
-     * @param [type] $content
-     * @return void
-     */
-    private function parseContent($content) {
-        if(empty($content)){
-            return $content;
-        }
-
-        // 新版的WordPress 有不使用p标签的，这里增加检测
-        $content = nl2p($content);
-
-        $content = str_replace(array('[video','][/video]','mp4="'),array('<video','></video>','src="'),$content);
-
-        $content = str_replace(array("\r", "\n", "\t"), '', $content);
-        $content = str_replace('&middot;', '·', $content);
-        $content = str_replace('&hellip;', '…', $content);
-        $content = str_replace('&ldquo;', '“', $content);
-        $content = str_replace('&rdquo;', '”', $content);
-        
-        return $content;
-    }
-
-    private function getThumb($article) {
-        $baseDir = $this->setting['base_url'] . 'wp-content/uploads/';
-        //查找 _thumbnail_id
-        $thumbId = $this->db->getOneCol("meta_value", "postmeta", "meta_key = '_thumbnail_id' and post_id = '{$article['id']}'");
-        //处理默认缩略图等
-        if ($thumbId) {
-            //查找 _wp_attachment_metadata
-            $thumb = $this->db->getOneCol("meta_value", "postmeta", "meta_key = '_wp_attachment_metadata' and post_id = '{$thumbId}'");
-            if ($thumb) {
-                $thumb = unserialize($thumb);
-                $article['images']  = [$baseDir . $thumb['file']];
-            }
-        }
-
-        return $article;
     }
 
     function create_zip($baseDir, $sourceDir, $zipFile) {
@@ -364,8 +326,34 @@ class anqicms
                 }
             }
         }
-        
+
         closedir($dh);
+    }
+
+    function getModuleFields($fieldset) {
+        $fields = array();
+
+        return $fields;
+    }
+
+    function formatType($type) {
+      if($type == 'datetime' || $type == 'stepselect' || $type == 'float' || $type == 'textchar' || $type == 'textdata') {
+        $type = 'text';
+      } else if($type == 'img' || $type == 'media' || $type == 'imgfile') {
+        $type = 'image';
+      } else if($type == 'addon') {
+        $type = 'file';
+      } else if($type == 'multitext' || $type == 'htmltext' || $type == 'textarea') {
+        $type = 'textarea';
+      } else if ($type == 'int') {
+        $type = 'number';
+      } else if( $type == 'select' || $type == 'checkbox' || $type == 'radio') {
+        $type = $type;
+      } else {
+        $type = 'text';
+      }
+
+      return $type;
     }
 
     /**
@@ -398,7 +386,6 @@ class anqicms
                 $this->config[$key] = $item;
             }
         }
-
         //检查配置是否正确
         $this->checkConfig();
 
@@ -419,42 +406,30 @@ class anqicms
             $this->config['base_url'] = rtrim($this->config['base_url'], "/") . "/";
         }
 
-        $this->checkWordpress();
+        $this->checkEmpire();
 
         $this->writeConfig();
     }
 
-    private function checkWordpress()
+    private function checkEmpire()
     {
         if (empty($this->config['database'])) {
-            $configFile = APP_PATH . "wp-config.php";
+            define('InEmpireCMS', true);
+            $configFile = APP_PATH . "e/config/config.php";
             if (!file_exists($configFile)) {
                 res(1002, "接口配置异常，无法正常读取配置信息");
             }
-            $table_prefix = '';
-            $contents = file_get_contents($configFile);
-            preg_match('/\$table_prefix\s*=\s*[\'|"](.+)[\'|"]/', $contents, $match);
-            $table_prefix = $match[1];
-            preg_match('/define\(\s*[\'|"]DB_NAME[\'|"],\s*[\'|"](.+)[\'|"]/', $contents, $match);
-            $dbName = $match[1];
-            preg_match('/define\(\s*[\'|"]DB_USER[\'|"],\s*[\'|"](.+)[\'|"]/', $contents, $match);
-            $dbUser = $match[1];
-            preg_match('/define\(\s*[\'|"]DB_PASSWORD[\'|"],\s*[\'|"](.+)[\'|"]/', $contents, $match);
-            $dbPassword = $match[1];
-            preg_match('/define\(\s*[\'|"]DB_HOST[\'|"],\s*[\'|"](.+)[\'|"]/', $contents, $match);
-            $dbHost = $match[1];
-            preg_match('/define\(\s*[\'|"]DB_CHARSET[\'|"],\s*[\'|"](.+)[\'|"]/', $contents, $match);
-            $dbCharset = $match[1];
+            $ecms_config = array();
+            require_once($configFile);
 
-            $hostArr = explode(":", $dbHost);
             $this->config['database'] = array(
-                'host'     => $hostArr[0],
-                'port'     => empty($hostArr[1]) ? '3306' : $hostArr[1],
-                'user'     => $dbUser,
-                'password' => $dbPassword,
-                'database' => $dbName,
-                'charset'  => $dbCharset,
-                'prefix'   => $table_prefix
+                'host'     => $ecms_config['db']['dbserver'],
+                'port'     => $ecms_config['db']['dbport'] ? $ecms_config['db']['dbport'] : '3306',
+                'user'     => $ecms_config['db']['dbusername'],
+                'password' => $ecms_config['db']['dbpassword'],
+                'database' => $ecms_config['db']['dbname'],
+                'charset'  => $ecms_config['db']['dbchar'],
+                'prefix'   => $ecms_config['db']['dbtbpre']
             );
         }
 
@@ -818,19 +793,6 @@ function showMessage($msg, $code = -1)
     @header('Content-Type:text/html;charset=UTF-8');
     echo "<div style='padding: 50px;text-align: center;'>$msg</div>";
     die;
-}
-
-function nl2p($text)
-{
-    $text = preg_replace_callback('/(.*)\r?\n\s*/', function($matches){
-        if (substr(trim($matches[1]), -1) != ">") {
-            return "<p>{$matches[1]}</p>\n";
-        } else {
-            $str = $matches[0];
-        }
-        return $str;
-    }, $text);
-    return $text;
 }
 
 function baseUrl()

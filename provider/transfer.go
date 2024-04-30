@@ -33,6 +33,7 @@ type TransferWebsite struct {
 	ErrorMsg string `json:"error_msg"`
 	Current  string `json:"current"`
 	LastId   int64  `json:"last_id"`
+	LastMod  string `json:"last_mod"`
 }
 
 type TransferBase struct {
@@ -131,7 +132,8 @@ type TransferCategories struct {
 
 type TransferArchives struct {
 	TransferBase
-	Data []ArchiveData `json:"data"`
+	LastMod string        `json:"last_mod"`
+	Data    []ArchiveData `json:"data"`
 }
 
 type TransferTags struct {
@@ -188,49 +190,67 @@ func (w *Website) DeleteTransferTask() {
 // -. 同步文档 archive
 // -. 同步单页 singlepage
 // -. 同步静态资源 static
-func (t *TransferWebsite) TransferWebData() {
+func (t *TransferWebsite) TransferWebData(req *request.TransferTypes) {
 	t.Status = 1
+	var typeMap = map[string]bool{}
+	for _, v := range req.Types {
+		typeMap[v] = true
+	}
 	// 1，module
-	log.Println("正在同步模型数据")
-	err := t.transferModules()
-	if err != nil {
-		return
+	if typeMap["module"] {
+		log.Println("正在同步模型数据")
+		err := t.transferModules(req.ModuleIds)
+		if err != nil {
+			return
+		}
 	}
 	// 2 category
-	log.Println("正在同步分类数据")
-	err = t.transferCategories()
-	if err != nil {
-		return
+	if typeMap["category"] {
+		log.Println("正在同步分类数据")
+		err := t.transferCategories()
+		if err != nil {
+			return
+		}
 	}
 	// 3 tag
 	log.Println("正在同步标签数据")
-	err = t.transferTags()
-	if err != nil {
-		return
+	if typeMap["tag"] {
+		err := t.transferTags()
+		if err != nil {
+			return
+		}
 	}
 	// 4 keyword
-	log.Println("正在同步锚文本数据")
-	err = t.transferKeywords()
-	if err != nil {
-		return
+	if typeMap["keyword"] {
+		log.Println("正在同步锚文本数据")
+		err := t.transferKeywords()
+		if err != nil {
+			return
+		}
 	}
 	// 5 archive
-	log.Println("正在同步文档数据")
-	err = t.transferArchives()
-	if err != nil {
-		return
+	if typeMap["archive"] {
+		log.Println("正在同步文档数据")
+		err := t.transferArchives(req.ModuleIds)
+		if err != nil {
+			return
+		}
 	}
 	// 6 singlepage
-	log.Println("正在同步单页数据")
-	err = t.transferSinglePages()
-	if err != nil {
-		return
+	if typeMap["singlepage"] {
+		log.Println("正在同步单页数据")
+		err := t.transferSinglePages()
+		if err != nil {
+			return
+		}
 	}
 	// 7 static
-	log.Println("正在同步静态资源数据")
-	err = t.transferStatics()
-	if err != nil {
-		return
+	if typeMap["static"] {
+		log.Println("正在同步静态资源数据")
+		err := t.transferStatics()
+		if err != nil {
+			return
+		}
 	}
 	t.Status = 2
 	t.ErrorMsg = ""
@@ -238,9 +258,33 @@ func (t *TransferWebsite) TransferWebData() {
 	t.w.RemoveHtmlCache()
 }
 
-func (t *TransferWebsite) transferModules() error {
+func (t *TransferWebsite) GetModules() ([]ModuleData, error) {
+	resp, err := t.getWebData("module", 0, "")
+	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
+		return nil, err
+	}
+
+	var result TransferModules
+	err = json.Unmarshal([]byte(resp.Body), &result)
+	if err != nil {
+		t.ErrorMsg = err.Error()
+		t.Status = 2 // done
+		return nil, errors.New(resp.Body)
+	}
+	if result.Code != 0 {
+		t.ErrorMsg = result.Msg
+		t.Status = 2 // done
+		return nil, errors.New(result.Msg)
+	}
+
+	return result.Data, nil
+}
+
+func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 	t.Current = "module"
-	resp, err := t.getWebData("module", 0)
+	resp, err := t.getWebData("module", 0, "")
 	if err != nil {
 		t.ErrorMsg = err.Error()
 		t.Status = 2 // done
@@ -261,6 +305,17 @@ func (t *TransferWebsite) transferModules() error {
 	}
 
 	for i := range result.Data {
+		// 如果选择了模块，则只导入对应模块
+		exist := false
+		for _, tmpModId := range moduleIds {
+			if tmpModId == result.Data[i].Id {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			continue
+		}
 		module := model.Module{
 			TableName: result.Data[i].TableName,
 			UrlToken:  result.Data[i].UrlToken,
@@ -286,7 +341,7 @@ func (t *TransferWebsite) transferModules() error {
 
 func (t *TransferWebsite) transferCategories() error {
 	t.Current = "category"
-	resp, err := t.getWebData("category", 0)
+	resp, err := t.getWebData("category", 0, "")
 	if err != nil {
 		t.ErrorMsg = err.Error()
 		t.Status = 2 // done
@@ -348,7 +403,7 @@ func (t *TransferWebsite) transferCategories() error {
 
 func (t *TransferWebsite) transferTags() error {
 	t.Current = "tag"
-	resp, err := t.getWebData("tag", 0)
+	resp, err := t.getWebData("tag", 0, "")
 	if err != nil {
 		t.ErrorMsg = err.Error()
 		t.Status = 2 // done
@@ -405,7 +460,7 @@ func (t *TransferWebsite) transferTags() error {
 
 func (t *TransferWebsite) transferKeywords() error {
 	t.Current = "keyword"
-	resp, err := t.getWebData("keyword", 0)
+	resp, err := t.getWebData("keyword", 0, "")
 	if err != nil {
 		t.ErrorMsg = err.Error()
 		t.Status = 2 // done
@@ -437,11 +492,12 @@ func (t *TransferWebsite) transferKeywords() error {
 	return nil
 }
 
-func (t *TransferWebsite) transferArchives() error {
+func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 	t.Current = "archive"
 	t.LastId = 0
+	t.LastMod = ""
 	for {
-		resp, err := t.getWebData("archive", t.LastId)
+		resp, err := t.getWebData("archive", t.LastId, t.LastMod)
 		if err != nil {
 			t.ErrorMsg = err.Error()
 			t.Status = 2 // done
@@ -462,8 +518,22 @@ func (t *TransferWebsite) transferArchives() error {
 		if len(result.Data) == 0 {
 			break
 		}
+		t.LastMod = result.LastMod
 		t.LastId = int64(result.Data[len(result.Data)-1].Id)
 		for i := range result.Data {
+			// 如果选择了模块，则只导入对应模块
+			if len(moduleIds) > 0 {
+				exist := false
+				for _, tmpModId := range moduleIds {
+					if tmpModId == result.Data[i].ModuleId {
+						exist = true
+						break
+					}
+				}
+				if !exist {
+					continue
+				}
+			}
 			// 迁移过来需要保持ID不变
 			archive := model.ArchiveDraft{
 				Archive: model.Archive{
@@ -580,7 +650,7 @@ func (t *TransferWebsite) transferArchives() error {
 
 func (t *TransferWebsite) transferSinglePages() error {
 	t.Current = "singlepage"
-	resp, err := t.getWebData("singlepage", 0)
+	resp, err := t.getWebData("singlepage", 0, "")
 	if err != nil {
 		t.ErrorMsg = err.Error()
 		t.Status = 2 // done
@@ -674,7 +744,7 @@ func (t *TransferWebsite) transferStatics() error {
 	}
 	defer tmpFile.Close()
 	for {
-		resp, err := t.getWebData("static", t.LastId)
+		resp, err := t.getWebData("static", t.LastId, "")
 		if err != nil {
 			t.ErrorMsg = err.Error()
 			t.Status = 2 // done
@@ -808,7 +878,7 @@ func (w *Website) insertAttachment(realName string, isImage int) {
 	}
 }
 
-func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*library.RequestData, error) {
+func (t *TransferWebsite) getWebData(transferType string, lastId int64, lastMod string) (*library.RequestData, error) {
 	remoteUrl := t.BaseUrl + "/" + t.Provider + "2anqicms.php?"
 	query := make(url.Values)
 	query.Set("a", "syncData")
@@ -818,7 +888,7 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64) (*librar
 	query.Set("token", library.Md5(t.Token+_t))
 	query.Set("type", transferType)
 	query.Set("last_id", fmt.Sprintf("%d", lastId))
-
+	query.Set("last_mod", lastMod)
 	resp, err := library.GetURLData(remoteUrl+query.Encode(), "", 100)
 	if err != nil {
 		return nil, err

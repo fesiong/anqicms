@@ -331,6 +331,7 @@ func manageRoute(app *iris.Application) {
 				transfer.Get("/task", manageController.GetTransferTask)
 				transfer.Post("/download", manageController.DownloadClientFile)
 				transfer.Post("/create", manageController.CreateTransferTask)
+				transfer.Post("/modules", manageController.GetTransferModules)
 				transfer.Post("/start", manageController.TransferWebData)
 			}
 
