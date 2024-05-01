@@ -48,14 +48,11 @@ func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
 
 func (attachment *Attachment) GetThumb(storageUrl string) {
 	// 如果不是图片
-	ext := filepath.Ext(attachment.FileLocation)
-	if ext != ".jpg" &&
-		ext != ".jpeg" &&
-		ext != ".gif" &&
-		ext != ".png" &&
-		ext != ".bmp" &&
-		ext != ".webp" {
+	if attachment.IsImage == 0 {
 		attachment.Logo = storageUrl + "/" + attachment.FileLocation
+		if strings.HasSuffix(attachment.FileLocation, ".svg") {
+			attachment.Thumb = attachment.Logo
+		}
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
@@ -70,6 +67,9 @@ func (attachment *Attachment) GetThumb(storageUrl string) {
 		attachment.Logo = storageUrl + "/" + attachment.FileLocation
 		paths, fileName := filepath.Split(attachment.Logo)
 		attachment.Thumb = paths + "thumb_" + fileName
+		if strings.HasSuffix(attachment.FileLocation, ".svg") {
+			attachment.Thumb = attachment.Logo
+		}
 	}
 }
 

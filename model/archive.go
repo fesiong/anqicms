@@ -120,6 +120,9 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 		a.Logo = a.Images[0]
 		paths, fileName := filepath.Split(a.Logo)
 		a.Thumb = paths + "thumb_" + fileName
+		if strings.HasSuffix(a.Logo, ".svg") {
+			a.Thumb = a.Logo
+		}
 	} else if defaultThumb != "" {
 		a.Logo = defaultThumb
 		if !strings.HasPrefix(a.Logo, "http") && !strings.HasPrefix(a.Logo, "//") {

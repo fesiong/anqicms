@@ -51,6 +51,9 @@ func (category *Category) GetThumb(storageUrl, defaultThumb string) string {
 			category.Logo = storageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
 			paths, fileName := filepath.Split(category.Logo)
 			category.Thumb = paths + "thumb_" + fileName
+			if strings.HasSuffix(category.Logo, ".svg") {
+				category.Thumb = category.Logo
+			}
 		}
 	} else if defaultThumb != "" {
 		category.Thumb = defaultThumb
