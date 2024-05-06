@@ -684,13 +684,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 				//提取缩略图
 				draft.Images = draft.Images[:0]
 				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-				match := re.FindStringSubmatch(req.Content)
+				match := re.FindStringSubmatch(archiveData.Content)
 				if len(match) > 1 {
 					draft.Images = append(draft.Images, match[1])
 				} else {
 					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-					match = re.FindStringSubmatch(req.Content)
+					match = re.FindStringSubmatch(archiveData.Content)
 					if len(match) > 2 {
 						draft.Images = append(draft.Images, match[2])
 					}
