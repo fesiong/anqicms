@@ -203,7 +203,7 @@ func Install(ctx iris.Context) {
         <div class="layui-form-item">
           <label class="layui-form-label">数据库密码</label>
           <div class="layui-input-block">
-            <input type="password" name="password" required placeholder="填写数据库密码" autocomplete="off" class="layui-input">
+            <input type="password" name="password" placeholder="填写数据库密码" autocomplete="off" class="layui-input">
           </div>
         </div>
       </div>
@@ -229,7 +229,7 @@ func Install(ctx iris.Context) {
       <div class="layui-form-item">
         <label class="layui-form-label">演示数据</label>
         <div class="layui-form-text">
-          <label><input type="checkbox" name="preview_data" value="1" checked>安装</label>
+          <label><input type="checkbox" name="preview_data" value="1">安装</label>
           <span class="layui-form-mid layui-aux-word">勾选后，将安装默认演示数据</span>
         </div>
       </div>
