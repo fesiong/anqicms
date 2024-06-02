@@ -138,7 +138,7 @@ func InternalServerError(ctx iris.Context) {
 	}
 }
 
-func CheckCloseSite(ctx iris.Context) {
+func CheckCloseSite(ctx iris.Context) bool {
 	currentSite := provider.CurrentSite(ctx)
 	if !strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
 		// 闭站
@@ -163,19 +163,20 @@ func CheckCloseSite(ctx iris.Context) {
 				ctx.ViewData("webInfo", webInfo)
 			}
 
+			ctx.StatusCode(403)
 			err := ctx.View(GetViewPath(ctx, tplName))
 			if err != nil {
 				ShowMessage(ctx, closeTips, nil)
 			}
-			return
+			return true
 		}
 		// 禁止蜘蛛抓取
 		if currentSite.System.BanSpider == 1 {
 			ua := strings.ToLower(ctx.GetHeader("User-Agent"))
 			if strings.Contains(ua, "spider") || strings.Contains(ua, "bot") {
-				ctx.StatusCode(400)
+				ctx.StatusCode(403)
 				ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
-				return
+				return true
 			}
 		}
 		// UA 禁止
@@ -188,9 +189,9 @@ func CheckCloseSite(ctx iris.Context) {
 					continue
 				}
 				if strings.Contains(ua, v) {
-					ctx.StatusCode(400)
+					ctx.StatusCode(403)
 					ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
-					return
+					return true
 				}
 			}
 		}
@@ -212,16 +213,16 @@ func CheckCloseSite(ctx iris.Context) {
 						v = strings.TrimSuffix(v, ".0")
 					}
 					if strings.HasPrefix(ip, v) {
-						ctx.StatusCode(400)
+						ctx.StatusCode(403)
 						ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
-						return
+						return true
 					}
 				}
 			}
 		}
 	}
 
-	ctx.Next()
+	return false
 }
 
 func Common(ctx iris.Context) {
@@ -316,7 +317,6 @@ func Inspect(ctx iris.Context) {
 
 	ctx.Values().Set("webInfo", &response.WebInfo{Title: siteName, NavBar: 0})
 	ctx.ViewData("website", website)
-
 	ctx.Next()
 }
 
@@ -353,13 +353,16 @@ func FileServe(ctx iris.Context) bool {
 
 func ReRouteContext(ctx iris.Context) {
 	params, _ := parseRoute(ctx)
-	defer LogAccess(ctx)
 	// 先验证文件是否真的存在，如果存在，则fileServe
 	exists := FileServe(ctx)
 	if exists {
 		return
 	}
-
+	defer LogAccess(ctx)
+	closed := CheckCloseSite(ctx)
+	if closed {
+		return
+	}
 	for i, v := range params {
 		if len(i) == 0 {
 			continue
@@ -823,6 +826,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	if currentSite.Safe.Captcha == 1 {
 		captchaId := ctx.PostValueTrim("captcha_id")
 		captchaValue := ctx.PostValueTrim("captcha")
+		if req != nil {
+			captchaId = req["captcha_id"]
+			captchaValue = req["captcha"]
+		}
 		// 验证 captcha
 		if captchaId == "" {
 			if returnType == "json" {
@@ -849,6 +856,9 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	}
 	// 内容长度现在 ContentLimit
 	content := ctx.PostValueTrim("content")
+	if req != nil {
+		content = req["content"]
+	}
 	if currentSite.Safe.ContentLimit > 0 {
 		if utf8.RuneCountInString(content) < currentSite.Safe.ContentLimit {
 			if returnType == "json" {
@@ -880,6 +890,24 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 					ShowMessage(ctx, currentSite.Lang("您提交的内容包含有不允许的字符"), nil)
 				}
 				return false
+			}
+			if req != nil {
+				// 对于req的所有内容都进行判断
+				for _, rv := range req {
+					if len(rv) == 0 {
+						continue
+					}
+					if strings.Contains(rv, v) {
+						if returnType == "json" {
+							ctx.JSON(iris.Map{
+								"code": config.StatusFailed,
+								"msg":  currentSite.Lang("您提交的内容包含有不允许的字符"),
+							})
+						} else {
+							ShowMessage(ctx, currentSite.Lang("您提交的内容包含有不允许的字符"), nil)
+						}
+					}
+				}
 			}
 		}
 	}
@@ -916,10 +944,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  currentSite.Lang("请不要在短时间内多次提交"),
+								"msg":  currentSite.Lang("非法请求"),
 							})
 						} else {
-							ShowMessage(ctx, currentSite.Lang("请不要在短时间内多次提交"), nil)
+							ShowMessage(ctx, currentSite.Lang("非法请求"), nil)
 						}
 						return false
 					}

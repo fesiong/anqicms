@@ -21,25 +21,45 @@ type OpenAIResult struct {
 }
 
 func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
-	if !w.AiGenerateConfig.ApiValid {
-		return nil, errors.New("接口不可用")
-	}
-	key := w.GetOpenAIKey()
-	if key == "" {
-		return nil, errors.New("无可用Key")
-	}
+	var result *OpenAIResult
+	var err error
 	// 翻译标题
 	prompt := "请将下列文字翻译成英文：\n" + req.Title
 	if req.Language == config.LanguageEn {
 		prompt = "Please translate the following text into Chinese:\n" + req.Title
 	}
-	result, err := GetOpenAIResponse(key, prompt)
-	if err != nil {
-		if result.Code == 401 || result.Code == 429 {
-			w.SetOpenAIKeyInvalid(key)
+
+	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+		if !w.AiGenerateConfig.ApiValid {
+			return nil, errors.New("接口不可用")
 		}
-		return nil, err
+		key := w.GetOpenAIKey()
+		if key == "" {
+			return nil, errors.New("无可用Key")
+		}
+
+		result, err = GetOpenAIResponse(key, prompt)
+		if err != nil {
+			if result.Code == 401 || result.Code == 429 {
+				w.SetOpenAIKeyInvalid(key)
+			}
+			return nil, err
+		}
+	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+		content, err := w.GetSparkResponse(prompt)
+		if err != nil {
+			return nil, err
+		}
+		result = &OpenAIResult{
+			Content: content,
+			Usage:   0,
+			Code:    200,
+		}
+	} else {
+		// 错误
+		return nil, errors.New("没有选择AI生成来源")
 	}
+
 	if len(result.Content) == 0 {
 		return nil, errors.New("文本内容不足")
 	}
@@ -72,13 +92,30 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 		if req.Language == config.LanguageEn {
 			prompt = "Please translate the following text into Chinese:\n" + contentTexts[i]
 		}
-		result, err = GetOpenAIResponse(key, prompt)
-		if err != nil {
-			if result.Code == 401 || result.Code == 429 {
-				w.SetOpenAIKeyInvalid(key)
+		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+			key := w.GetOpenAIKey()
+			if key == "" {
+				return nil, errors.New("无可用Key")
 			}
-			return nil, err
+			result, err = GetOpenAIResponse(key, prompt)
+			if err != nil {
+				if result.Code == 401 || result.Code == 429 {
+					w.SetOpenAIKeyInvalid(key)
+				}
+				return nil, err
+			}
+		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+			content, err := w.GetSparkResponse(prompt)
+			if err != nil {
+				return nil, err
+			}
+			result = &OpenAIResult{
+				Content: content,
+				Usage:   0,
+				Code:    200,
+			}
 		}
+
 		if len(result.Content) == 0 {
 			return nil, errors.New("文本内容不足")
 		}
@@ -114,25 +151,44 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 }
 
 func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
-	if !w.AiGenerateConfig.ApiValid {
-		return nil, errors.New("接口不可用")
-	}
-	key := w.GetOpenAIKey()
-	if key == "" {
-		return nil, errors.New("无可用Key")
-	}
+	var result *OpenAIResult
+	var err error
 	// 标题则采用另一种方式
 	prompt := "请重写这个标题：\n" + req.Title
 	if req.Language == config.LanguageEn {
 		prompt = "Please rewrite this title:\n" + req.Title
 	}
-	result, err := GetOpenAIResponse(key, prompt)
-	if err != nil {
-		if result.Code == 401 || result.Code == 429 {
-			w.SetOpenAIKeyInvalid(key)
+	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+		if !w.AiGenerateConfig.ApiValid {
+			return nil, errors.New("接口不可用")
 		}
-		return nil, err
+		key := w.GetOpenAIKey()
+		if key == "" {
+			return nil, errors.New("无可用Key")
+		}
+
+		result, err = GetOpenAIResponse(key, prompt)
+		if err != nil {
+			if result.Code == 401 || result.Code == 429 {
+				w.SetOpenAIKeyInvalid(key)
+			}
+			return nil, err
+		}
+	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+		content, err := w.GetSparkResponse(prompt)
+		if err != nil {
+			return nil, err
+		}
+		result = &OpenAIResult{
+			Content: content,
+			Usage:   0,
+			Code:    200,
+		}
+	} else {
+		// 错误
+		return nil, errors.New("没有选择AI生成来源")
 	}
+
 	if len(result.Content) == 0 {
 		return nil, errors.New("文本内容不足")
 	}
@@ -165,13 +221,34 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 		if req.Language == config.LanguageEn {
 			prompt = "Please complete the content reconstruction according to the provided content, and keep the paragraph structure:\n" + contentTexts[i]
 		}
-		result, err = GetOpenAIResponse(key, prompt)
-		if err != nil {
-			if result.Code == 401 || result.Code == 429 {
-				w.SetOpenAIKeyInvalid(key)
+		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+			if !w.AiGenerateConfig.ApiValid {
+				return nil, errors.New("接口不可用")
 			}
-			return nil, err
+			key := w.GetOpenAIKey()
+			if key == "" {
+				return nil, errors.New("无可用Key")
+			}
+
+			result, err = GetOpenAIResponse(key, prompt)
+			if err != nil {
+				if result.Code == 401 || result.Code == 429 {
+					w.SetOpenAIKeyInvalid(key)
+				}
+				return nil, err
+			}
+		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+			content, err := w.GetSparkResponse(prompt)
+			if err != nil {
+				return nil, err
+			}
+			result = &OpenAIResult{
+				Content: content,
+				Usage:   0,
+				Code:    200,
+			}
 		}
+
 		if len(result.Content) == 0 {
 			return nil, errors.New("文本内容不足")
 		}
@@ -207,14 +284,8 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 }
 
 func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
-	if !w.AiGenerateConfig.ApiValid {
-		return nil, errors.New("接口不可用")
-	}
-	key := w.GetOpenAIKey()
-	if key == "" {
-		return nil, errors.New("无可用Key")
-	}
-
+	var result *OpenAIResult
+	var err error
 	prompt := "请根据关键词生成一篇中文文章，将文章标题放在第一行。关键词：" + req.Keyword
 	if req.Language == config.LanguageEn {
 		prompt = "Please generate an English article based on the keywords, and put the article title on the first line. Keywords: " + req.Keyword
@@ -222,13 +293,37 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	if len(req.Demand) > 0 {
 		prompt += "\n" + req.Demand
 	}
-	result, err := GetOpenAIResponse(key, prompt)
-	if err != nil {
-		if result.Code == 401 || result.Code == 429 {
-			w.SetOpenAIKeyInvalid(key)
+	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+		if !w.AiGenerateConfig.ApiValid {
+			return nil, errors.New("接口不可用")
 		}
-		return nil, err
+		key := w.GetOpenAIKey()
+		if key == "" {
+			return nil, errors.New("无可用Key")
+		}
+
+		result, err = GetOpenAIResponse(key, prompt)
+		if err != nil {
+			if result.Code == 401 || result.Code == 429 {
+				w.SetOpenAIKeyInvalid(key)
+			}
+			return nil, err
+		}
+	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+		content, err := w.GetSparkResponse(prompt)
+		if err != nil {
+			return nil, err
+		}
+		result = &OpenAIResult{
+			Content: content,
+			Usage:   0,
+			Code:    200,
+		}
+	} else {
+		// 错误
+		return nil, errors.New("没有选择AI生成来源")
 	}
+
 	if len(result.Content) < 2 {
 		return nil, errors.New("生成内容不足")
 	}

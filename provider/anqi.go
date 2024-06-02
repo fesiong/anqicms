@@ -351,7 +351,7 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive, toLanguage string
 		}
 	}
 
-	if w.AiGenerateConfig.UseSelfKey {
+	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		req, err = w.SelfAiTranslateResult(req)
 		if err != nil {
 			return err
@@ -407,7 +407,7 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		Language: w.System.Language, // 以系统语言为标准
 		Async:    true,              // 异步返回结果
 	}
-	if w.AiGenerateConfig.UseSelfKey {
+	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		req, err = w.SelfAiPseudoResult(req)
 		if err != nil {
 			return err
@@ -454,27 +454,27 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 
 // AnqiAiGenerateArticle 该函数尝试采用同步返回
 func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
-	// 检查是否采集过
-	if w.checkArticleExists(keyword.Title, "", "") {
+	// 检查是否生成过
+	_, err := w.GetAiArticlePlanByKeyword(config.AiArticleTypeGenerate, keyword.Title)
+	if err == nil {
 		//log.Println("已存在于数据库", keyword.Title)
 		return 1, nil
 	}
 
-	var err error
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
 		Async:    true,
 	}
-	if w.AiGenerateConfig.UseSelfKey {
+	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		req, err = w.SelfAiGenerateResult(req)
 		if err != nil {
 			return 0, err
 		}
 		var content = strings.Split(req.Content, "\n")
-		if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
+		if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
 			rand.Seed(time.Now().UnixMicro())
-			img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+			img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
 			index := len(content) / 3
 			content = append(content, "")
 			copy(content[index+1:], content[index:])
@@ -482,12 +482,12 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		}
 		categoryId := keyword.CategoryId
 		if categoryId == 0 {
-			if w.CollectorConfig.CategoryId == 0 {
+			if w.AiGenerateConfig.CategoryId == 0 {
 				var category model.Category
 				w.DB.Where("module_id = 1").Take(&category)
-				w.CollectorConfig.CategoryId = category.Id
+				w.AiGenerateConfig.CategoryId = category.Id
 			}
-			categoryId = w.CollectorConfig.CategoryId
+			categoryId = w.AiGenerateConfig.CategoryId
 		}
 
 		archiveReq := request.Archive{
@@ -500,7 +500,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			OriginUrl:  keyword.Title,
 			ForceSave:  true,
 		}
-		if w.CollectorConfig.SaveType == 0 {
+		if w.AiGenerateConfig.SaveType == 0 {
 			archiveReq.Draft = true
 		} else {
 			archiveReq.Draft = false
@@ -604,16 +604,16 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				return nil
 			}
 			var content = strings.Split(req.Content, "\n")
-			if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
+			if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
 				rand.Seed(time.Now().UnixMicro())
-				img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+				img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
 				index := len(content) / 3
 				content = append(content, "")
 				copy(content[index+1:], content[index:])
 				content[index] = "<img src='" + img + "'/>"
 			}
 			var keyword *model.Keyword
-			categoryId := w.CollectorConfig.CategoryId
+			categoryId := w.AiGenerateConfig.CategoryId
 			keyword, err = w.GetKeywordByTitle(plan.Keyword)
 			if err == nil {
 				if keyword.CategoryId > 0 {
@@ -623,9 +623,9 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			if categoryId == 0 {
 				var category model.Category
 				w.DB.Where("module_id = 1").Take(&category)
-				w.CollectorConfig.CategoryId = category.Id
+				w.AiGenerateConfig.CategoryId = category.Id
 			}
-			categoryId = w.CollectorConfig.CategoryId
+			categoryId = w.AiGenerateConfig.CategoryId
 
 			archive := request.Archive{
 				Title:      result.Data.Title,
@@ -639,7 +639,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				archive.KeywordId = keyword.Id
 				archive.OriginUrl = keyword.Title
 			}
-			if w.CollectorConfig.SaveType == 0 {
+			if w.AiGenerateConfig.SaveType == 0 {
 				archive.Draft = true
 			} else {
 				archive.Draft = false
@@ -734,14 +734,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 	}
 
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
-	if w.AiGenerateConfig.UseSelfKey {
-		if !w.AiGenerateConfig.ApiValid {
-			return "", errors.New("接口不可用")
-		}
-		key := w.GetOpenAIKey()
-		if key == "" {
-			return "", errors.New("无可用Key")
-		}
+	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
 		if req.Language == config.LanguageEn {
 			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
@@ -749,47 +742,80 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 		if len(req.Demand) > 0 {
 			prompt += "\n" + req.Demand
 		}
-		stream, err := GetOpenAIStreamResponse(key, prompt)
-		if err != nil {
-			msg := err.Error()
-			re, _ := regexp.Compile(`code: (\d+),`)
-			match := re.FindStringSubmatch(msg)
-			if len(match) > 1 {
-				if match[1] == "401" || match[1] == "429" {
-					// Key 已失效
-					w.SetOpenAIKeyInvalid(key)
-				}
+		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+			if !w.AiGenerateConfig.ApiValid {
+				return "", errors.New("接口不可用")
 			}
-			return "", err
-		}
-		go func() {
-			defer stream.Close()
-			for {
-				resp, err2 := stream.Recv()
-				if errors.Is(err2, io.EOF) {
-					break
-				}
-				if err2 != nil {
-					err = err2
-					fmt.Printf("\nStream error: %v\n", err2)
-					break
-				}
-				AiStreamResults.UpdateStreamData(streamId, resp.Choices[0].Delta.Content, "", false)
+			key := w.GetOpenAIKey()
+			if key == "" {
+				return "", errors.New("无可用Key")
 			}
+			stream, err := GetOpenAIStreamResponse(key, prompt)
 			if err != nil {
-				if strings.Contains(err.Error(), "You exceeded your current quota") {
-					w.SetOpenAIKeyInvalid(key)
+				msg := err.Error()
+				re, _ := regexp.Compile(`code: (\d+),`)
+				match := re.FindStringSubmatch(msg)
+				if len(match) > 1 {
+					if match[1] == "401" || match[1] == "429" {
+						// Key 已失效
+						w.SetOpenAIKeyInvalid(key)
+					}
+				}
+				return "", err
+			}
+			go func() {
+				defer stream.Close()
+				for {
+					resp, err2 := stream.Recv()
+					if errors.Is(err2, io.EOF) {
+						break
+					}
+					if err2 != nil {
+						err = err2
+						fmt.Printf("\nStream error: %v\n", err2)
+						break
+					}
+					AiStreamResults.UpdateStreamData(streamId, resp.Choices[0].Delta.Content, "", false)
+				}
+				if err != nil {
+					if strings.Contains(err.Error(), "You exceeded your current quota") {
+						w.SetOpenAIKeyInvalid(key)
+					}
+
+					AiStreamResults.UpdateStreamData(streamId, "", err.Error(), true)
+				} else {
+					AiStreamResults.UpdateStreamData(streamId, "", "", true)
 				}
 
-				AiStreamResults.UpdateStreamData(streamId, "", err.Error(), true)
-			} else {
-				AiStreamResults.UpdateStreamData(streamId, "", "", true)
+				time.AfterFunc(5*time.Second, func() {
+					AiStreamResults.DeleteStreamData(streamId)
+				})
+			}()
+		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+			buf, err := w.GetSparkStream(prompt)
+			if err != nil {
+				return "", err
 			}
+			go func() {
+				for {
+					line := <-buf
 
-			time.AfterFunc(5*time.Second, func() {
-				AiStreamResults.DeleteStreamData(streamId)
-			})
-		}()
+					if line == "EOF" {
+						break
+					}
+
+					AiStreamResults.UpdateStreamData(streamId, line, "", false)
+				}
+				AiStreamResults.UpdateStreamData(streamId, "", "", true)
+
+				time.AfterFunc(5*time.Second, func() {
+					AiStreamResults.DeleteStreamData(streamId)
+				})
+			}()
+		} else {
+			// 错误
+			return "", errors.New("没有选择AI生成来源")
+		}
 	} else {
 		buf, _ := json.Marshal(req)
 

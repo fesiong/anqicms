@@ -11,6 +11,7 @@ type ArchiveCount struct {
 	Total     int64 `json:"total"`
 	LastWeek  int64 `json:"last_week"`
 	UnRelease int64 `json:"un_release"`
+	Draft     int64 `json:"draft"`
 	Today     int64 `json:"today"`
 }
 type SplitCount struct {

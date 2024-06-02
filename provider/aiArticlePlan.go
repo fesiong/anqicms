@@ -16,6 +16,17 @@ func (w *Website) GetAiArticlePlanByReqId(reqId uint) (*model.AiArticlePlan, err
 	return &plan, nil
 }
 
+func (w *Website) GetAiArticlePlanByKeyword(planType int, keyword string) (*model.AiArticlePlan, error) {
+	var plan model.AiArticlePlan
+	err := w.DB.Where("`type` = ? and `keyword` = ?", planType, keyword).Take(&plan).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &plan, nil
+}
+
 func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult, useSelf bool) (*model.AiArticlePlan, error) {
 	if resp.ReqId > 0 {
 		plan, err := w.GetAiArticlePlanByReqId(resp.ReqId)

@@ -8,7 +8,11 @@ import (
 func (w *Website) InitCache() {
 	// 判断内存大小
 	vm, _ := mem.VirtualMemory()
-	if vm.Total < 2*1024*1024*1024 {
+	cacheType := w.GetSettingValue(CacheTypeKey)
+	if cacheType == "" && vm.Total <= 1*1024*1024*1024 {
+		cacheType = "file"
+	}
+	if cacheType == "file" {
 		w.Cache = library.InitFileCache(w.CachePath)
 	} else {
 		w.Cache = library.InitMemoryCache()

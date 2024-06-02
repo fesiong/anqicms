@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"kandaoni.com/anqicms/model"
 	"math"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -41,6 +42,26 @@ func (w *Website) GetSitemapTime() int64 {
 	return int64(timeInt)
 }
 
+func (w *Website) DeleteSitemap(sitemapType string) {
+	sitemapIndex := NewSitemapIndexGenerator(w, sitemapType, fmt.Sprintf("%ssitemap.%s", w.PublicPath, sitemapType), w.System.BaseUrl, true)
+	defer func() {
+		_ = os.Remove(sitemapIndex.FilePath)
+	}()
+	if len(sitemapIndex.Sitemaps) == 0 {
+		return
+	}
+	for _, sitemapUrl := range sitemapIndex.Sitemaps {
+		parsed, err := url.Parse(sitemapUrl.Loc)
+		if err != nil {
+			continue
+		}
+		sitemapFile := w.PublicPath + strings.TrimPrefix(parsed.Path, "/")
+		if err = os.Remove(sitemapFile); err != nil {
+			continue
+		}
+	}
+}
+
 // BuildSitemap 手动生成sitemap
 func (w *Website) BuildSitemap() error {
 	//每一个sitemap包含50000条记录
@@ -56,7 +77,7 @@ func (w *Website) BuildSitemap() error {
 	tagBuilder := w.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
 
 	//index 和 category 存放在同一个文件，文章单独一个文件
-	indexFile := NewSitemapIndexGenerator(w, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
+	indexFile := NewSitemapIndexGenerator(w, w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
 	defer indexFile.Save()
 
 	indexFile.AddIndex(fmt.Sprintf("%s/category.%s", baseUrl, w.PluginSitemap.Type))
@@ -313,10 +334,10 @@ func (g *SitemapGenerator) Save() error {
 	}
 }
 
-func NewSitemapIndexGenerator(w *Website, filePath, baseUrl string, load bool) *SitemapIndexGenerator {
+func NewSitemapIndexGenerator(w *Website, sitemapType, filePath, baseUrl string, load bool) *SitemapIndexGenerator {
 	generator := &SitemapIndexGenerator{
 		w:        w,
-		Type:     w.PluginSitemap.Type,
+		Type:     sitemapType,
 		Xmlns:    "http://www.sitemaps.org/schemas/sitemap/0.9",
 		FilePath: filePath,
 		BaseUrl:  baseUrl,

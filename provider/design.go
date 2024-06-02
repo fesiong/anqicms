@@ -665,6 +665,10 @@ func (w *Website) GetDesignFileHistories(packageName, filePath, fileType string)
 			Size:    files[i].Size,
 		})
 	}
+	// 按时间排序
+	sort.Slice(histories, func(i, j int) bool {
+		return histories[i].LastMod > histories[j].LastMod
+	})
 
 	return histories
 }

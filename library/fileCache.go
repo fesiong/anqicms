@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"sync"
+	"time"
 )
 
 type FileCache struct {
@@ -28,6 +29,10 @@ func (m *FileCache) Get(key string, val any) error {
 	}
 
 	cacheFile := m.cachePath + key + m.suffix
+	info, err := os.Stat(cacheFile)
+	if err != nil {
+		return err
+	}
 
 	buf, err := os.ReadFile(cacheFile)
 	if err != nil {
@@ -35,11 +40,17 @@ func (m *FileCache) Get(key string, val any) error {
 	}
 	var fileData FileCacheData
 	if err = json.Unmarshal(buf, &fileData); err != nil {
+		_ = os.Remove(cacheFile)
 		return err
+	}
+	if fileData.Expire > 0 && info.ModTime().Before(time.Now().Add(-time.Duration(fileData.Expire)*time.Second)) {
+		err = os.Remove(cacheFile)
+		return errors.New("cache-expire")
 	}
 	// 这里实际上应该还需要对数据进行还原
 	err = json.Unmarshal(fileData.Data, val)
 	if err != nil {
+		_ = os.Remove(cacheFile)
 		return err
 	}
 	return nil

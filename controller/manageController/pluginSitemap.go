@@ -36,6 +36,7 @@ func PluginSitemapForm(ctx iris.Context) {
 	if req.Type != "xml" {
 		req.Type = "txt"
 	}
+	oldType := currentSite.PluginSitemap.Type
 	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
 	currentSite.PluginSitemap.Type = req.Type
 
@@ -46,6 +47,10 @@ func PluginSitemapForm(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 当新旧Sitemap不一致的时候，就清理Sitemap
+	if oldType != req.Type {
+		currentSite.DeleteSitemap(oldType)
 	}
 
 	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新SItemap配置"))

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -90,16 +91,23 @@ func (w *Website) DeleteTag(id uint) error {
 
 func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	newPost := false
+	req.Title = strings.TrimSpace(req.Title)
+	if len(req.Title) == 0 {
+		return nil, errors.New("标签名称不能为空")
+	}
 	if req.Id > 0 {
 		tag, err = w.GetTagById(req.Id)
 		if err != nil {
 			return nil, err
 		}
 	} else {
-		tag = &model.Tag{
-			Status: 1,
+		tag, err = w.GetTagByTitle(req.Title)
+		if err != nil {
+			tag = &model.Tag{
+				Status: 1,
+			}
+			newPost = true
 		}
-		newPost = true
 	}
 	tag.Title = req.Title
 	tag.SeoTitle = req.SeoTitle

@@ -1030,6 +1030,38 @@ func (w *Website) ReplaceArticles() {
 			}
 		}
 	}
+	// 草稿
+	startId = 0
+	var archiveDrafts []*model.ArchiveDraft
+	for {
+		tx := w.DB.Model(&model.ArchiveDraft{})
+		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&archiveDrafts)
+		if len(archiveDrafts) == 0 {
+			break
+		}
+		startId = archiveDrafts[len(archiveDrafts)-1].Id
+		for _, archive := range archiveDrafts {
+			var archiveData model.ArchiveData
+			title := w.ReplaceContentFromConfig(archive.Title, w.CollectorConfig.ContentReplace)
+			w.DB.Where("id = ?", archive.Id).Take(&archiveData)
+			content := w.ReplaceContentFromConfig(archiveData.Content, w.CollectorConfig.ContentReplace)
+
+			//替换完了
+			hasReplace := false
+			if title != archive.Title {
+				hasReplace = true
+				w.DB.Model(archive).UpdateColumn("title", title)
+			}
+			if content != archiveData.Content {
+				hasReplace = true
+				archiveData.Content = content
+				w.DB.Model(&archiveData).UpdateColumns(archiveData)
+			}
+			if hasReplace {
+				log.Println("替换文章：" + archive.Title)
+			}
+		}
+	}
 }
 
 func ParsePlanText(content string, planText string) string {
@@ -1108,8 +1140,14 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 	w.cachedTodayArticleCount.AiGenerateCount = 0
 
 	todayUnix := today.Unix()
+	var collectCount int64
+	var aiCount int64
 	w.DB.Model(&model.Archive{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromCollect, todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.CollectCount)
+	w.DB.Model(&model.ArchiveDraft{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromCollect, todayUnix, todayUnix+86400).Count(&collectCount)
+	w.cachedTodayArticleCount.CollectCount += collectCount
 	w.DB.Model(&model.Archive{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromAi, todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.AiGenerateCount)
+	w.DB.Model(&model.ArchiveDraft{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromAi, todayUnix, todayUnix+86400).Count(&aiCount)
+	w.cachedTodayArticleCount.AiGenerateCount += aiCount
 
 	if from == config.ArchiveFromAi {
 		return w.cachedTodayArticleCount.AiGenerateCount
@@ -1124,8 +1162,9 @@ func (w *Website) UpdateTodayArticleCount(addNum int) {
 func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {
 	var total int64
 	w.DB.Model(&model.Archive{}).Where("keyword_id = ?", id).Count(&total)
-
-	return total
+	var total2 int64
+	w.DB.Model(&model.ArchiveDraft{}).Where("keyword_id = ?", id).Count(&total2)
+	return total + total2
 }
 
 func (w *Website) checkArticleExists(originUrl, originTitle, title string) bool {
@@ -1138,6 +1177,10 @@ func (w *Website) checkArticleExists(originUrl, originTitle, title string) bool 
 		if total > 0 {
 			return true
 		}
+		w.DB.Model(&model.ArchiveDraft{}).Where("origin_url = ?", originUrl).Count(&total)
+		if total > 0 {
+			return true
+		}
 	}
 	if len(originTitle) > 0 {
 		if utf8.RuneCountInString(originTitle) > 190 {
@@ -1147,9 +1190,17 @@ func (w *Website) checkArticleExists(originUrl, originTitle, title string) bool 
 		if total > 0 {
 			return true
 		}
+		w.DB.Model(&model.ArchiveDraft{}).Where("origin_title = ?", originTitle).Count(&total)
+		if total > 0 {
+			return true
+		}
 	}
 	if len(title) > 0 {
 		w.DB.Model(&model.Archive{}).Where("`title` = ?", title).Count(&total)
+		if total > 0 {
+			return true
+		}
+		w.DB.Model(&model.ArchiveDraft{}).Where("`title` = ?", title).Count(&total)
 		if total > 0 {
 			return true
 		}

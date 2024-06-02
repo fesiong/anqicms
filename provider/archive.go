@@ -885,7 +885,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 		return err
 	}
 	// 从 archives 表删除
-	if err := w.DB.Unscoped().Delete(archive).Error; err != nil {
+	if err = w.DB.Unscoped().Delete(archive).Error; err != nil {
 		return err
 	}
 
@@ -897,6 +897,10 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	w.Cache.CleanAll("archive-list")
 	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
 	w.RemoveFulltextIndex(archive.Id)
+	// 每次删除文档，都清理一次Sitemap
+	if w.PluginSitemap.AutoBuild == 1 {
+		w.DeleteSitemap(w.PluginSitemap.Type)
+	}
 
 	return nil
 }

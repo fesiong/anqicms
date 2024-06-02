@@ -13,7 +13,6 @@ func Register(app *iris.Application) {
 	app.OnErrorCode(iris.StatusNotFound, controller.NotFound)
 	app.OnErrorCode(iris.StatusInternalServerError, controller.InternalServerError)
 	app.Use(controller.CheckTemplateType)
-	app.Use(controller.CheckCloseSite)
 	app.Use(controller.Common)
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath)

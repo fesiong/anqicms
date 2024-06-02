@@ -17,6 +17,7 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47
+	github.com/gorilla/websocket v1.5.0
 	github.com/huichen/sego v0.0.0-20210824061530-c87651ea5c76
 	github.com/huichen/wukong v0.0.0-20210824074240-ecbd39fa0b56
 	github.com/jinzhu/now v1.1.5

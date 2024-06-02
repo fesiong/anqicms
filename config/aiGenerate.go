@@ -12,13 +12,27 @@ type AiGenerateConfig struct {
 	StartHour      int              `json:"start_hour"`   //每天开始时间
 	EndHour        int              `json:"end_hour"`     //每天结束时间
 	DailyLimit     int              `json:"daily_limit"`  //每日限额
-	UseSelfKey     bool             `json:"use_self_key"` // 使用自有key
+	AiEngine       string           `json:"ai_engine"`    // ai 引擎，default 官方接口，openai 自定义openai，spark 星火大模型
 	OpenAIKeys     []OpenAIKey      `json:"open_ai_keys"` // self openai key
 	ApiValid       bool             `json:"api_valid"`    // api地址是否可用
 	KeyIndex       int              `json:"-"`            // 上一次调用的key id
+	Spark          SparkSetting     `json:"spark"`
 }
 
 type OpenAIKey struct {
 	Key     string `json:"key"`
 	Invalid bool   `json:"invalid"` // 是否不可用
 }
+
+type SparkSetting struct {
+	Version   string `json:"version"`
+	AppID     string `json:"app_id"`
+	APISecret string `json:"api_secret"`
+	APIKey    string `json:"api_key"`
+}
+
+const (
+	AiEngineDefault = ""
+	AiEngineOpenAI  = "openai"
+	AiEngineSpark   = "spark"
+)

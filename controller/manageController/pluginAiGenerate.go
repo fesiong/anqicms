@@ -110,6 +110,7 @@ func HandleAiGenerateGetPlans(ctx iris.Context) {
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	aiType := uint(ctx.URLParamIntDefault("type", 0))
 	status := ctx.URLParamIntDefault("status", 0)
+	keyword := ctx.URLParam("keyword")
 
 	var total int64
 	var plans []*model.AiArticlePlan
@@ -119,6 +120,9 @@ func HandleAiGenerateGetPlans(ctx iris.Context) {
 	}
 	if status != 0 {
 		tx = tx.Where("`status` = ?", status)
+	}
+	if len(keyword) > 0 {
+		tx = tx.Where("`keyword` like ?", keyword+"%")
 	}
 	offset := 0
 	if currentPage > 0 {
@@ -131,6 +135,12 @@ func HandleAiGenerateGetPlans(ctx iris.Context) {
 			archive, err := currentSite.GetArchiveById(plans[i].ArticleId)
 			if err == nil {
 				plans[i].Title = archive.Title
+			} else {
+				// 来自草稿
+				archiveDraft, err := currentSite.GetArchiveDraftById(plans[i].ArticleId)
+				if err == nil {
+					plans[i].Title = archiveDraft.Title
+				}
 			}
 		}
 	}
