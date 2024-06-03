@@ -28,7 +28,7 @@ func ApiGetOrders(ctx iris.Context) {
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	orders, total := currentSite.GetOrderList(userId, status, currentPage, pageSize)
+	orders, total := currentSite.GetOrderList(userId, "", "", status, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

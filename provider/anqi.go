@@ -736,8 +736,14 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
+		if w.Content.Editor == "markdown" {
+			prompt += "\n请使用 Markdown 格式输出"
+		}
 		if req.Language == config.LanguageEn {
 			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
+			if w.Content.Editor == "markdown" {
+				prompt += "\nPlease output in Markdown format."
+			}
 		}
 		if len(req.Demand) > 0 {
 			prompt += "\n" + req.Demand

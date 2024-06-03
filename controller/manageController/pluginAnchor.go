@@ -16,6 +16,10 @@ func PluginAnchorList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
+	title := ctx.URLParam("title")
+	if title != "" {
+		keyword = title
+	}
 
 	linkList, total, err := currentSite.GetAnchorList(keyword, currentPage, pageSize)
 	if err != nil {

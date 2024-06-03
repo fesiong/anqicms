@@ -287,8 +287,14 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	var result *OpenAIResult
 	var err error
 	prompt := "请根据关键词生成一篇中文文章，将文章标题放在第一行。关键词：" + req.Keyword
+	if w.Content.Editor == "markdown" {
+		prompt += "\n请使用 Markdown 格式输出"
+	}
 	if req.Language == config.LanguageEn {
 		prompt = "Please generate an English article based on the keywords, and put the article title on the first line. Keywords: " + req.Keyword
+		if w.Content.Editor == "markdown" {
+			prompt += "\nPlease output in Markdown format."
+		}
 	}
 	if len(req.Demand) > 0 {
 		prompt += "\n" + req.Demand
@@ -330,7 +336,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	// 解析内容
 	// 获取标题
 	results := strings.Split(result.Content, "\n")
-	title := results[0]
+	title := strings.TrimLeft(results[0], "# ")
 	if req.Language == config.LanguageEn && strings.Count(title, " ") > 20 && !strings.Contains(results[0], "Title:") {
 		title = req.Keyword
 	} else if req.Language == config.LanguageZh && utf8.RuneCountInString(title) > 50 && !strings.Contains(results[0], "标题：") {
@@ -352,9 +358,9 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	}
 	for i := 0; i < len(results); i++ {
 		results[i] = strings.TrimSpace(results[i])
-		for _, w := range removeWords {
-			if strings.HasPrefix(results[i], w) {
-				results[i] = strings.TrimPrefix(results[i], w)
+		for _, w2 := range removeWords {
+			if strings.HasPrefix(results[i], w2) {
+				results[i] = strings.TrimPrefix(results[i], w2)
 				break
 			}
 		}
@@ -366,7 +372,9 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 				results[i] = seps[1]
 			}
 		}
-		results[i] = "<p>" + results[i] + "</p>"
+		if w.Content.Editor != "markdown" {
+			results[i] = "<p>" + results[i] + "</p>"
+		}
 	}
 	req.Title = title
 	req.Content = strings.Join(results, "\n")

@@ -19,13 +19,21 @@ import (
 	"time"
 )
 
-func (w *Website) GetOrderList(userId uint, status string, page, pageSize int) ([]*model.Order, int64) {
+func (w *Website) GetOrderList(userId uint, orderId, userName, status string, page, pageSize int) ([]*model.Order, int64) {
 	var orders []*model.Order
 	var total int64
 	offset := (page - 1) * pageSize
-	tx := w.DB.Model(&model.Order{})
+	tx := w.DB.Model(&model.Order{}).Debug()
 	if userId > 0 {
 		tx = tx.Where("`user_id` = ?", userId)
+	}
+	if orderId != "" {
+		tx = tx.Where("`order_id` = ?", orderId)
+	}
+	if userName != "" {
+		var userIds []uint
+		w.DB.Model(&model.User{}).Where("`user_name` LIKE ?", "%"+userName+"%").Pluck("id", &userIds)
+		tx = tx.Where("`user_id` IN (?)", userIds)
 	}
 	if status != "" {
 		// status 可能会传 waiting,delivery,finished

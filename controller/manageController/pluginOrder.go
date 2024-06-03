@@ -14,8 +14,11 @@ func PluginOrderList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	orderId := ctx.URLParam("order_id")
+	userName := ctx.URLParam("user_name")
+	status := ctx.URLParam("status")
 
-	orders, total := currentSite.GetOrderList(0, "", currentPage, pageSize)
+	orders, total := currentSite.GetOrderList(0, orderId, userName, status, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
