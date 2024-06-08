@@ -72,9 +72,25 @@ func (w *Website) BuildSitemap() error {
 	var categoryCount int64
 	var archiveCount int64
 	var tagCount int64
-	categoryBuilder := w.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Count(&categoryCount)
-	archiveBuilder := w.DB.Model(&model.Archive{}).Order("id asc").Count(&archiveCount)
-	tagBuilder := w.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc").Count(&tagCount)
+
+	categoryBuilder := w.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc")
+	archiveBuilder := w.DB.Model(&model.Archive{}).Order("id asc")
+	tagBuilder := w.DB.Model(&model.Tag{}).Where("`status` = 1").Order("id asc")
+	if len(w.PluginSitemap.ExcludeCategoryIds) > 0 || len(w.PluginSitemap.ExcludePageIds) > 0 {
+		excludeIds := make([]uint, 0)
+		excludeIds = append(excludeIds, w.PluginSitemap.ExcludeCategoryIds...)
+		excludeIds = append(excludeIds, w.PluginSitemap.ExcludePageIds...)
+		categoryBuilder = categoryBuilder.Where("id not in (?)", excludeIds)
+		archiveBuilder = archiveBuilder.Where("category_id not in (?)", excludeIds)
+	}
+	if w.PluginSitemap.ExcludeModuleIds != nil {
+		categoryBuilder = categoryBuilder.Where("module_id not in (?)", w.PluginSitemap.ExcludeModuleIds)
+		archiveBuilder = archiveBuilder.Where("module_id not in (?)", w.PluginSitemap.ExcludeModuleIds)
+	}
+
+	categoryBuilder.Count(&categoryCount)
+	archiveBuilder.Count(&archiveCount)
+	tagBuilder.Count(&tagCount)
 
 	//index 和 category 存放在同一个文件，文章单独一个文件
 	indexFile := NewSitemapIndexGenerator(w, w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
@@ -118,29 +134,31 @@ func (w *Website) BuildSitemap() error {
 		archiveFile.Save()
 	}
 	//写入tag
-	pager = int(math.Ceil(float64(tagCount) / float64(SitemapLimit)))
-	var tags []*model.Tag
-	lastId = uint(0)
-	for i := 1; i <= pager; i++ {
-		//写入index
-		indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, i, w.PluginSitemap.Type))
+	if w.PluginSitemap.ExcludeTag == false {
+		pager = int(math.Ceil(float64(tagCount) / float64(SitemapLimit)))
+		var tags []*model.Tag
+		lastId = uint(0)
+		for i := 1; i <= pager; i++ {
+			//写入index
+			indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, i, w.PluginSitemap.Type))
 
-		//写入tag-sitemap
-		tagFile := NewSitemapGenerator(w, fmt.Sprintf("%stag-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
-		remainNum := SitemapLimit
-		for remainNum > 0 {
-			// 单次查询2000条
-			tagBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(2000).Find(&tags)
-			if len(tags) == 0 {
-				break
+			//写入tag-sitemap
+			tagFile := NewSitemapGenerator(w, fmt.Sprintf("%stag-%d.%s", w.PublicPath, i, w.PluginSitemap.Type), w.System.BaseUrl, false)
+			remainNum := SitemapLimit
+			for remainNum > 0 {
+				// 单次查询2000条
+				tagBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(2000).Find(&tags)
+				if len(tags) == 0 {
+					break
+				}
+				for _, v := range tags {
+					tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+				}
+				remainNum -= len(tags)
+				lastId = tags[len(tags)-1].Id
 			}
-			for _, v := range tags {
-				tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
-			}
-			remainNum -= len(tags)
-			lastId = tags[len(tags)-1].Id
+			tagFile.Save()
 		}
-		tagFile.Save()
 	}
 
 	_ = w.UpdateSitemapTime()

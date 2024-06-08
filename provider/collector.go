@@ -360,7 +360,7 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		index := len(content) / 3
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
-		content[index] = "<img src='" + img + "'/>"
+		content[index] = "<img src='" + img + "' alt='" + archive.Title + "'/>"
 		archive.Content = strings.Join(content, "")
 	}
 	//log.Println(archive.Title, len(archive.Content), archive.OriginUrl)

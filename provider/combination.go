@@ -79,7 +79,7 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		index := len(content) / 3
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
-		content[index] = "<img src='" + img + "'/>"
+		content[index] = "<img src='" + img + "' alt='" + title + "' />"
 	}
 	categoryId := keyword.CategoryId
 	if categoryId == 0 {
@@ -164,7 +164,7 @@ func (w *Website) GetCombinationArticle(keyword *model.Keyword) (*request.Archiv
 		index := len(content) / 3
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
-		content[index] = "<img src='" + img + "'/>"
+		content[index] = "<img src='" + img + "' alt='" + title + "'/>"
 	}
 
 	archive := request.Archive{

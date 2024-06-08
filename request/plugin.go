@@ -62,6 +62,7 @@ type PluginKeyword struct {
 type PluginKeywordDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
+	All bool   `json:"all"`
 }
 
 type PluginFileUploadDelete struct {

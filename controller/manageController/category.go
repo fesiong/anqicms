@@ -5,6 +5,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -49,8 +50,62 @@ func CategoryList(ctx iris.Context) {
 		return
 	}
 
+	modules, _ := currentSite.GetModules()
+	var mapModules = make(map[uint]model.Module)
+	for i := range modules {
+		mapModules[modules[i].Id] = modules[i]
+	}
+
 	for i := range categories {
 		categories[i].Link = currentSite.GetUrl("category", categories[i], 0)
+		// 计算template
+		if categories[i].Template == "" {
+			// 默认的
+			if categories[i].Type == config.CategoryTypePage {
+				categories[i].Template = "(默认) " + "page/detail.html"
+				if controller.ViewExists(ctx, "page_detail.html") {
+					categories[i].Template = "(默认) " + "page_detail.html"
+				}
+				tmpTpl := fmt.Sprintf("page/detail-%d.html", categories[i].Id)
+				if controller.ViewExists(ctx, tmpTpl) {
+					categories[i].Template = "(ID) " + tmpTpl
+				} else if controller.ViewExists(ctx, fmt.Sprintf("page-%d.html", categories[i].Id)) {
+					categories[i].Template = "(ID) " + fmt.Sprintf("page-%d.html", categories[i].Id)
+				} else {
+					categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
+					if categoryTemplate != nil {
+						categories[i].Template = categoryTemplate.Template
+					}
+				}
+			} else {
+				categories[i].Template = "(默认) " + mapModules[categories[i].ModuleId].TableName + "/list.html"
+				tplName2 := mapModules[categories[i].ModuleId].TableName + "_list.html"
+				if controller.ViewExists(ctx, tplName2) {
+					categories[i].Template = "(默认) " + tplName2
+				}
+				if controller.ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)) {
+					categories[i].Template = "(ID) " + fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)
+				}
+				// 跟随上级
+				if categories[i].ParentId > 0 {
+					categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
+					if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
+						categories[i].Template = "(继承) " + categoryTemplate.Template
+					}
+					if categories[i].DetailTemplate == "" && categoryTemplate != nil && len(categoryTemplate.DetailTemplate) > 0 {
+						categories[i].DetailTemplate = "(继承) " + categoryTemplate.DetailTemplate
+					}
+				}
+			}
+		}
+		// 计算内容template
+		if categories[i].DetailTemplate == "" && categories[i].Type != config.CategoryTypePage {
+			categories[i].DetailTemplate = "(默认) " + mapModules[categories[i].ModuleId].TableName + "/detail.html"
+			tplName2 := mapModules[categories[i].ModuleId].TableName + "_detail.html"
+			if controller.ViewExists(ctx, tplName2) {
+				categories[i].DetailTemplate = "(默认) " + tplName2
+			}
+		}
 	}
 
 	ctx.JSON(iris.Map{

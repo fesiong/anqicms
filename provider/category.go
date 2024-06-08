@@ -18,7 +18,7 @@ import (
 
 func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
-	err := ops(w.DB).Find(&categories).Error
+	err := ops(w.DB).Omit("content").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}

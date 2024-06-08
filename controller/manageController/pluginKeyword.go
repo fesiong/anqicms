@@ -188,9 +188,12 @@ func PluginKeywordDelete(ctx iris.Context) {
 
 			_ = currentSite.DeleteKeyword(keyword)
 		}
+	} else if req.All {
+		// 删除所有
+		currentSite.DB.Where("`id` > 0").Delete(model.Keyword{})
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除关键词：%d, %v", req.Id, req.Ids))
+	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除关键词：%d, %v, all=%v", req.Id, req.Ids, req.All))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

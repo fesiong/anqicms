@@ -287,6 +287,9 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	var result *OpenAIResult
 	var err error
 	prompt := "请根据关键词生成一篇中文文章，将文章标题放在第一行。关键词：" + req.Keyword
+	if w.AiGenerateConfig.DoubleTitle {
+		prompt = "请您基于关键词'" + req.Keyword + "'生成一篇双标题文章，输出格式'主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）正文：（在此处输入正文内容）'，要求表意清晰，主题鲜明，分段表述"
+	}
 	if w.Content.Editor == "markdown" {
 		prompt += "\n请使用 Markdown 格式输出"
 	}
@@ -334,12 +337,79 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 		return nil, errors.New("生成内容不足")
 	}
 	// 解析内容
+	if strings.Count(result.Content, "\n") < 3 {
+		replaces := []map[string]string{
+			{"key": "副标题：", "value": "\n副标题："},
+			{"key": "副标题:", "value": "\n副标题："},
+			{"key": "正文：", "value": "\n正文："},
+			{"key": "正文:", "value": "\n正文："},
+			{"key": "内容：", "value": "\n正文："},
+			{"key": "内容:", "value": "\n正文："},
+		}
+		for _, item := range replaces {
+			result.Content = strings.Replace(result.Content, item["key"], item["value"], 1)
+		}
+		var tmpContent []string
+		runes := []rune(result.Content)
+		start := false
+		tmpIndex := 0
+		for i, v := range runes {
+			if v == '\n' {
+				tmpContent = append(tmpContent, string(runes[tmpIndex:i+1]))
+				tmpIndex = i + 1
+			} else if v == '。' || v == '！' || v == '？' || v == '?' || v == '!' {
+				if !start {
+					tmpIndex = i + 1
+					start = true
+				} else if i-tmpIndex >= 200 {
+					tmpContent = append(tmpContent, string(runes[tmpIndex:i+1]))
+					tmpIndex = i + 1
+				}
+			}
+		}
+		if len(runes)-tmpIndex > 1 {
+			tmpContent = append(tmpContent, string(runes[tmpIndex:]))
+		}
+		result.Content = strings.Join(tmpContent, "\n")
+	}
+	replaces := []map[string]string{
+		{"key": "文章标题:", "value": "标题："},
+		{"key": "文章标题：", "value": "标题："},
+		{"key": "[文章标题]", "value": "标题："},
+		{"key": "【文章标题】", "value": "标题："},
+		{"key": "标题:", "value": "标题："},
+		{"key": "[标题]", "value": "标题："},
+		{"key": "【标题】", "value": "标题："},
+		{"key": "主标题:", "value": "主标题："},
+		{"key": "副标题:", "value": "副标题："},
+		{"key": "正文:", "value": "正文："},
+		{"key": "[正文]", "value": "正文："},
+		{"key": "【正文】", "value": "正文："},
+		{"key": "内容:", "value": "正文："},
+		{"key": "内容：", "value": "正文："},
+		{"key": "[内容]", "value": "正文："},
+		{"key": "【内容】", "value": "正文："},
+		{"key": "：：", "value": "："},
+		{"key": ":：", "value": "："},
+	}
+	for _, item := range replaces {
+		result.Content = strings.Replace(result.Content, item["key"], item["value"], 1)
+	}
 	// 获取标题
 	results := strings.Split(result.Content, "\n")
 	title := strings.TrimLeft(results[0], "# ")
+	if w.AiGenerateConfig.DoubleTitle {
+		if strings.Contains(title, "主标题：") {
+			title = strings.TrimPrefix(title, "主标题：")
+		}
+		results = results[1:]
+		if len(results) > 0 && strings.HasPrefix(results[0], "副标题：") {
+			title += "(" + strings.TrimPrefix(results[0], "副标题：") + ")"
+		}
+	}
 	if req.Language == config.LanguageEn && strings.Count(title, " ") > 20 && !strings.Contains(results[0], "Title:") {
 		title = req.Keyword
-	} else if req.Language == config.LanguageZh && utf8.RuneCountInString(title) > 50 && !strings.Contains(results[0], "标题：") {
+	} else if req.Language == config.LanguageZh && w.AiGenerateConfig.DoubleTitle == false && utf8.RuneCountInString(title) > 50 && !strings.Contains(results[0], "标题：") {
 		title = req.Keyword
 	} else {
 		results = results[1:]
@@ -348,13 +418,19 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	title = strings.TrimPrefix(title, "Title:")
 	title = strings.TrimPrefix(title, "标题：")
 	title = strings.TrimPrefix(title, "文章标题：")
+	title = strings.TrimPrefix(title, "主标题：")
+	title = strings.TrimPrefix(title, "副标题：")
 	title = strings.Replace(title, "：", "，", 1)
-
+	if utf8.RuneCountInString(title) > 150 {
+		title = string([]rune(title)[:150])
+	}
 	// 需要移除的关键词：
 	var removeWords = []string{
-		"首先，", "其次，", "再次，", "再者，", "最后，", "接下来，", "前言：", "另外，", "同时，", "因此，", "与此同时，", "事实上，", "除此之外，", "然而，", "此外，",
-		"近年来，", "目前，", "不过，", "众所周知，", "那么，",
-		"总之，", "结语，", "结语：", "结论，", "结论：", "总结，", "总结：", "综上所述，", "简单来说，", "总的来说，", "总结起来，", "总而言之，", "总体来讲，",
+		"作为语言AI，我不能提供对此事件的道德判断和态度", "首先，", "其次，", "最后，", "总之，", "总而言之，", "这不是什么关键词吧，这就是一堆原始材料，给我点时间，我来给你写一篇让你满意的文章！", "【强语气】", "注意：以下内容由AI生成，仅供参考。", "作为AI语言生成器，", "作为语言AI，", "以下是AI生成的文章，仅供参考：", "注意，该文章仅为AI生成，可能存在不当之处，仅供参考。",
+		"AI生成", "作为AI语言模型", "本篇文章是人工智能生成", "作为 AI 语言模型", "不过总的来说，", "最重要的是，", "对于个人而言，", "值得注意的是，", "值得一提的是，", "需要注意的是，", "需要指出的是，", "需要明确的是，", "通过这个活动，", "除了以上几点，", "以上就是关于", "综合以上几点，", "在这个过程中，", "一段时间以来，", "综上所述，", "除此之外，",
+		"众所周知，", "尽管如此，", "一般来说，", "不仅如此，", "总的来说，", "总的来看，", "总体来说，", "通常来说，", "无论如何，", "总体而言，", "总结起来，", "总结一下，", "在游戏中，", "就在这时，", "他们认为，", "有人认为，", "提醒大家，", "只有这样，", "近年来，", "在未来，", "首先是", "其次是", "最后是", "再比如，", "如果说，", "接下来，", "事实上，",
+		"在中国，", "请记住，", "实际上，", "通过它，", "现如今，", "这时候，", "而近日，", "而现在，", "比如说，", "据说，", "据悉，", "这样，", "比如，", "近日，", "未来，", "如果，", "这时，", "然后，", "今天，", "还有，", "最终，", "下面，", "而且，", "然而，", "再次，", "但是，", "再者，", "此外，", "另外，", "现在，", "目前，", "同时，", "最近，",
+		"那么，", "并且，", "因此，", "为此，", "当然，", "其中，", "不过，", "因为，", "所以，", "如今，", "例如，", "接着，", "总结，", "总结：", "结论，", "结语，", "结语：", "好了，", "原来，", "记住，", "九锤", "很抱歉，作为AI助手，", "作为AI助手，", "前言：", "与此同时，", "结论：", "简单来说，", "总体来讲，", "内容：", "标题：", "正文：",
 	}
 	for i := 0; i < len(results); i++ {
 		results[i] = strings.TrimSpace(results[i])

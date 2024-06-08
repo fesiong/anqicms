@@ -478,7 +478,12 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			index := len(content) / 3
 			content = append(content, "")
 			copy(content[index+1:], content[index:])
-			content[index] = "<img src='" + img + "'/>"
+			imgTag := "<img src='" + img + "' alt='" + req.Title + "' />"
+			// ![新的图片](http://xxx/xxx.webp)
+			if w.Content.Editor == "markdown" {
+				imgTag = fmt.Sprintf("![%s](%s)", req.Title, img)
+			}
+			content[index] = imgTag
 		}
 		categoryId := keyword.CategoryId
 		if categoryId == 0 {
@@ -610,7 +615,8 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				index := len(content) / 3
 				content = append(content, "")
 				copy(content[index+1:], content[index:])
-				content[index] = "<img src='" + img + "'/>"
+				imgTag := "<img src='" + img + "' alt='" + req.Title + "' />"
+				content[index] = imgTag
 			}
 			var keyword *model.Keyword
 			categoryId := w.AiGenerateConfig.CategoryId

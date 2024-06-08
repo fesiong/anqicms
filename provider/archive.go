@@ -348,12 +348,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if !req.QuickSave {
 		draft.Status = config.ContentStatusOK
 	}
-	if req.Draft {
-		draft.Status = config.ContentStatusDraft
-	}
 	if draft.CreatedTime > time.Now().Unix() {
 		// 未来时间，设置为待发布
 		draft.Status = config.ContentStatusPlan
+	}
+	if req.Draft {
+		draft.Status = config.ContentStatusDraft
 	}
 	// 判断重复
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
@@ -507,6 +507,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
+	// todo 应该只替换 src,href 中的 baseUrl
 	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
@@ -516,7 +517,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	autoAddImage := false
 	//提取缩略图
 	if len(draft.Images) == 0 {
-		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
 		match := re.FindStringSubmatch(req.Content)
 		if len(match) > 1 {
 			draft.Images = append(draft.Images, match[1])
@@ -576,7 +577,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 如果是 已经发布了的，则保存到正式表
 	if isReleased {
-		err = w.DB.Save(&draft.Archive).Error
+		err = w.DB.Debug().Save(&draft.Archive).Error
 		if err != nil {
 			return nil, err
 		}
@@ -592,7 +593,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 	} else {
 		// 保存到草稿
-		err = w.DB.Save(draft).Error
+		err = w.DB.Debug().Save(draft).Error
 		if err != nil {
 			return nil, err
 		}

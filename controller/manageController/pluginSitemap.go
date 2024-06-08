@@ -10,7 +10,15 @@ import (
 func PluginSitemap(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	pluginSitemap := currentSite.PluginSitemap
-
+	if pluginSitemap.ExcludeModuleIds == nil {
+		pluginSitemap.ExcludeModuleIds = []uint{}
+	}
+	if pluginSitemap.ExcludeCategoryIds == nil {
+		pluginSitemap.ExcludeCategoryIds = []uint{}
+	}
+	if pluginSitemap.ExcludePageIds == nil {
+		pluginSitemap.ExcludePageIds = []uint{}
+	}
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 	pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
 	// 写入Sitemap的url
@@ -39,6 +47,10 @@ func PluginSitemapForm(ctx iris.Context) {
 	oldType := currentSite.PluginSitemap.Type
 	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
 	currentSite.PluginSitemap.Type = req.Type
+	currentSite.PluginSitemap.ExcludeTag = req.ExcludeTag
+	currentSite.PluginSitemap.ExcludeCategoryIds = req.ExcludeCategoryIds
+	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
+	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
 	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
 	if err != nil {
@@ -77,6 +89,10 @@ func PluginSitemapBuild(ctx iris.Context) {
 	//先保存一次
 	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
 	currentSite.PluginSitemap.Type = req.Type
+	currentSite.PluginSitemap.ExcludeTag = req.ExcludeTag
+	currentSite.PluginSitemap.ExcludeCategoryIds = req.ExcludeCategoryIds
+	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
+	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
 	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
 	if err != nil {
