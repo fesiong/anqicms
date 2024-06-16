@@ -28,7 +28,7 @@ func PluginCommentList(ctx iris.Context) {
 	}
 	for i, v := range comments {
 		var article miniArticle
-		err := currentSite.DB.Model(&model.Archive{}).Where("id = ?", v.ArchiveId).Scan(&article).Error
+		err = currentSite.DB.Model(&model.Archive{}).Where("id = ?", v.ArchiveId).Scan(&article).Error
 		if err == nil {
 			comments[i].ItemTitle = article.Title
 		}

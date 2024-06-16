@@ -5,12 +5,14 @@ import (
 	"errors"
 	"github.com/sashabaranov/go-openai"
 	"kandaoni.com/anqicms/config"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
@@ -404,7 +406,29 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 		}
 		results = results[1:]
 		if len(results) > 0 && strings.HasPrefix(results[0], "副标题：") {
-			title += "(" + strings.TrimPrefix(results[0], "副标题：") + ")"
+			splitType := w.AiGenerateConfig.DoubleSplit
+			if splitType == 5 {
+				// 随机 0-4
+				splitType = rand.New(rand.NewSource(time.Now().UnixNano())).Intn(5)
+			}
+			switch splitType {
+			case 0:
+				// 主标题(副标题)
+				title += "(" + strings.TrimPrefix(results[0], "副标题：") + ")"
+			case 1:
+				// 主标题-副标题
+				title += "-" + strings.TrimPrefix(results[0], "副标题：")
+			case 2:
+				// 主标题？副标题
+				title += "，" + strings.TrimPrefix(results[0], "副标题：")
+			case 3:
+				// 主标题，副标题
+				title += "，" + strings.TrimPrefix(results[0], "副标题：")
+			case 4:
+				// 主标题：副标题
+				title += "：" + strings.TrimPrefix(results[0], "副标题：")
+
+			}
 		}
 	}
 	if req.Language == config.LanguageEn && strings.Count(title, " ") > 20 && !strings.Contains(results[0], "Title:") {

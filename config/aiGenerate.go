@@ -4,6 +4,7 @@ type AiGenerateConfig struct {
 	Open           bool             `json:"open"`         // 是否自动写作
 	Language       string           `json:"language"`     // zh|en|cr
 	DoubleTitle    bool             `json:"double_title"` // 是否生成双标题
+	DoubleSplit    int              `json:"double_split"` // 双标题形式
 	Demand         string           `json:"demand"`       // 通用Demand
 	InsertImage    int              `json:"insert_image"` // 是否插入图片, 0 移除图片，2 插入自定义图片
 	Images         []string         `json:"images"`
