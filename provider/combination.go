@@ -81,14 +81,29 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		copy(content[index+1:], content[index:])
 		content[index] = "<img src='" + img + "' alt='" + title + "' />"
 	}
+	if w.CollectorConfig.InsertImage == config.CollectImageCategory {
+		// 根据分类每次只取其中一张
+		img := w.GetRandImageFromCategory(w.CollectorConfig.ImageCategoryId, keyword.Title)
+		if len(img) > 0 {
+			index := len(content) / 3
+			content = append(content, "")
+			copy(content[index+1:], content[index:])
+			content[index] = "<img src='" + img + "' alt='" + title + "'/>"
+		}
+	}
 	categoryId := keyword.CategoryId
 	if categoryId == 0 {
-		if w.CollectorConfig.CategoryId == 0 {
+		if len(w.CollectorConfig.CategoryIds) > 0 {
+			categoryId = w.CollectorConfig.CategoryIds[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(w.CollectorConfig.CategoryIds))]
+		} else if w.CollectorConfig.CategoryId > 0 {
+			categoryId = w.CollectorConfig.CategoryId
+		}
+		if categoryId == 0 {
 			var category model.Category
 			w.DB.Where("module_id = 1").Take(&category)
-			w.CollectorConfig.CategoryId = category.Id
+			w.CollectorConfig.CategoryIds = []uint{category.Id}
+			categoryId = category.Id
 		}
-		categoryId = w.CollectorConfig.CategoryId
 	}
 
 	archive := request.Archive{
@@ -159,12 +174,22 @@ func (w *Website) GetCombinationArticle(keyword *model.Keyword) (*request.Archiv
 		content = append(content, "<p>"+text+"</p>")
 	}
 	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
-		rand.Seed(time.Now().UnixMicro())
-		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		randItem := rand.New(rand.NewSource(time.Now().UnixNano()))
+		img := w.CollectorConfig.Images[randItem.Intn(len(w.CollectorConfig.Images))]
 		index := len(content) / 3
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
 		content[index] = "<img src='" + img + "' alt='" + title + "'/>"
+	}
+	if w.CollectorConfig.InsertImage == config.CollectImageCategory {
+		// 根据分类每次只取其中一张
+		img := w.GetRandImageFromCategory(w.CollectorConfig.ImageCategoryId, keyword.Title)
+		if len(img) > 0 {
+			index := len(content) / 3
+			content = append(content, "")
+			copy(content[index+1:], content[index:])
+			content[index] = "<img src='" + img + "' alt='" + title + "'/>"
+		}
 	}
 
 	archive := request.Archive{

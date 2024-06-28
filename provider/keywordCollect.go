@@ -187,6 +187,20 @@ func (k *KeywordCollect) collectKeyword(keyword *model.Keyword, fix bool) (int, 
 			log.Println(l.Title, "不包含核心词")
 			continue
 		}
+		// 移除排除词
+		if len(k.KeywordConfig.TitleExclude) > 0 {
+			exist := false
+			for _, e := range k.KeywordConfig.TitleExclude {
+				if strings.Contains(l.Title, e) {
+					log.Println(l.Title, "包含排除词", e)
+					exist = true
+					break
+				}
+			}
+			if exist {
+				continue
+			}
+		}
 		if _, ok := k.ExistsWords.Load(l.Title); ok {
 			continue
 		}
@@ -255,7 +269,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result ZhihuJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败1")
 			return words
 		}
 		for _, v := range result.Suggest {
@@ -267,7 +281,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result BaiduSugJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败2")
 			return words
 		}
 		for _, v := range result.G {
@@ -279,7 +293,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result BaiduSugJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败3")
 			return words
 		}
 		for _, v := range result.G {
@@ -291,7 +305,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result SoSugJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败4")
 			return words
 		}
 		for _, v := range result.Result {
@@ -303,19 +317,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result ToutiaoSugJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
-			return words
-		}
-		for _, v := range result.Data {
-			existsWords[v.Keyword] = &model.Keyword{
-				Title: v.Keyword,
-			}
-		}
-	} else if strings.Contains(link, "toutiao.com") {
-		var result ToutiaoSugJson
-		err := json.Unmarshal([]byte(content), &result)
-		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败5")
 			return words
 		}
 		for _, v := range result.Data {
@@ -327,7 +329,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result SmJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败6")
 			return words
 		}
 		for _, v := range result.R {
@@ -352,7 +354,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result BingJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败7")
 			return words
 		}
 		for _, v := range result.AS.Results {
@@ -386,7 +388,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result []DuckDuckGoJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败8")
 			return words
 		}
 		for _, v := range result {
@@ -400,7 +402,7 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		var result YahooJson
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
-			log.Println("解析json失败")
+			log.Println("解析json失败9")
 			return words
 		}
 		for _, v := range result.R {

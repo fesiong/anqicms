@@ -83,7 +83,7 @@ func (w *Website) BuildSitemap() error {
 		categoryBuilder = categoryBuilder.Where("id not in (?)", excludeIds)
 		archiveBuilder = archiveBuilder.Where("category_id not in (?)", excludeIds)
 	}
-	if w.PluginSitemap.ExcludeModuleIds != nil {
+	if len(w.PluginSitemap.ExcludeModuleIds) > 0 {
 		categoryBuilder = categoryBuilder.Where("module_id not in (?)", w.PluginSitemap.ExcludeModuleIds)
 		archiveBuilder = archiveBuilder.Where("module_id not in (?)", w.PluginSitemap.ExcludeModuleIds)
 	}

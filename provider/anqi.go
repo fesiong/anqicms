@@ -485,14 +485,35 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			}
 			content[index] = imgTag
 		}
+		if w.AiGenerateConfig.InsertImage == config.CollectImageCategory {
+			// 根据分类每次只取其中一张
+			img := w.GetRandImageFromCategory(w.AiGenerateConfig.ImageCategoryId, keyword.Title)
+			if len(img) > 0 {
+				index := len(content) / 3
+				content = append(content, "")
+				copy(content[index+1:], content[index:])
+				imgTag := "<img src='" + img + "' alt='" + req.Title + "' />"
+				// ![新的图片](http://xxx/xxx.webp)
+				if w.Content.Editor == "markdown" {
+					imgTag = fmt.Sprintf("![%s](%s)", req.Title, img)
+				}
+				content[index] = imgTag
+			}
+		}
+
 		categoryId := keyword.CategoryId
 		if categoryId == 0 {
-			if w.AiGenerateConfig.CategoryId == 0 {
+			if len(w.AiGenerateConfig.CategoryIds) > 0 {
+				categoryId = w.AiGenerateConfig.CategoryIds[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(w.AiGenerateConfig.CategoryIds))]
+			} else if w.AiGenerateConfig.CategoryId > 0 {
+				categoryId = w.AiGenerateConfig.CategoryId
+			}
+			if categoryId == 0 {
 				var category model.Category
 				w.DB.Where("module_id = 1").Take(&category)
-				w.AiGenerateConfig.CategoryId = category.Id
+				w.AiGenerateConfig.CategoryIds = []uint{category.Id}
+				categoryId = category.Id
 			}
-			categoryId = w.AiGenerateConfig.CategoryId
 		}
 
 		archiveReq := request.Archive{
@@ -618,8 +639,22 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				imgTag := "<img src='" + img + "' alt='" + req.Title + "' />"
 				content[index] = imgTag
 			}
+			if w.AiGenerateConfig.InsertImage == config.CollectImageCategory {
+				// 根据分类每次只取其中一张
+				img := w.GetRandImageFromCategory(w.AiGenerateConfig.ImageCategoryId, result.Data.Keyword)
+				if len(img) > 0 {
+					index := len(content) / 3
+					content = append(content, "")
+					copy(content[index+1:], content[index:])
+					imgTag := "<img src='" + img + "' alt='" + req.Title + "' />"
+					content[index] = imgTag
+				}
+			}
 			var keyword *model.Keyword
 			categoryId := w.AiGenerateConfig.CategoryId
+			if len(w.AiGenerateConfig.CategoryIds) > 0 {
+				categoryId = w.AiGenerateConfig.CategoryIds[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(w.AiGenerateConfig.CategoryIds))]
+			}
 			keyword, err = w.GetKeywordByTitle(plan.Keyword)
 			if err == nil {
 				if keyword.CategoryId > 0 {
@@ -629,9 +664,9 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			if categoryId == 0 {
 				var category model.Category
 				w.DB.Where("module_id = 1").Take(&category)
-				w.AiGenerateConfig.CategoryId = category.Id
+				w.AiGenerateConfig.CategoryIds = []uint{category.Id}
+				categoryId = category.Id
 			}
-			categoryId = w.AiGenerateConfig.CategoryId
 
 			archive := request.Archive{
 				Title:      result.Data.Title,

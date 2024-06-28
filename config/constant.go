@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.3.7"
+const Version = "3.3.8"
 
 const (
 	StatusOK         = 0
@@ -114,9 +114,10 @@ const (
 	CollectModeCollect = 0
 	CollectModeCombine = 1
 
-	CollectImageRemove = 0 // 移除
-	CollectImageRetain = 1 // 保留
-	CollectImageInsert = 2 // 自定义插入
+	CollectImageRemove   = 0 // 移除
+	CollectImageRetain   = 1 // 保留
+	CollectImageInsert   = 2 // 自定义插入
+	CollectImageCategory = 3 // 插入指定分类图片
 )
 
 // login platform

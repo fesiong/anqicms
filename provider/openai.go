@@ -444,6 +444,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	title = strings.TrimPrefix(title, "文章标题：")
 	title = strings.TrimPrefix(title, "主标题：")
 	title = strings.TrimPrefix(title, "副标题：")
+	title = strings.Replace(title, "副标题", "", 1)
 	title = strings.Replace(title, "：", "，", 1)
 	if utf8.RuneCountInString(title) > 150 {
 		title = string([]rune(title)[:150])

@@ -6,8 +6,9 @@ type CollectorJson struct {
 	Channels           int              `json:"channels"`     //预留
 	CollectMode        int              `json:"collect_mode"` // 0: 采集, 1: 组合, 2: AI 生成
 	Language           string           `json:"language"`     // zh|en|cr
-	InsertImage        int              `json:"insert_image"` // 是否插入图片, 0 移除图片，1 保留图片，2 插入自定义图片
+	InsertImage        int              `json:"insert_image"` // 是否插入图片, 0 移除图片，1 保留图片，2 插入自定义图片，3，图片库分类
 	Images             []string         `json:"images"`
+	ImageCategoryId    int              `json:"image_category_id"` // 选定的图片分类
 	FromWebsite        string           `json:"from_website"`
 	TitleMinLength     int              `json:"title_min_length"`
 	ContentMinLength   int              `json:"content_min_length"`
@@ -22,6 +23,7 @@ type CollectorJson struct {
 	AutoTranslate      bool             `json:"auto_translate"` //是否翻译
 	ToLanguage         string           `json:"to_language"`    // 支持谷歌翻译列表语言
 	CategoryId         uint             `json:"category_id"`    //默认分类
+	CategoryIds        []uint           `json:"category_ids"`   // 默认分类，支持多个
 	SaveType           uint             `json:"save_type"`      // 文档处理方式
 	StartHour          int              `json:"start_hour"`     //每天开始时间
 	EndHour            int              `json:"end_hour"`       //每天结束时间

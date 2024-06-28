@@ -421,6 +421,7 @@ func (w *Website) LoadCollectorSetting() {
 	w.CollectorConfig.AutoTranslate = collector.AutoTranslate
 	w.CollectorConfig.ToLanguage = collector.ToLanguage
 	w.CollectorConfig.CategoryId = collector.CategoryId
+	w.CollectorConfig.CategoryIds = collector.CategoryIds
 	w.CollectorConfig.StartHour = collector.StartHour
 	w.CollectorConfig.EndHour = collector.EndHour
 	w.CollectorConfig.FromWebsite = collector.FromWebsite
@@ -429,6 +430,7 @@ func (w *Website) LoadCollectorSetting() {
 	w.CollectorConfig.Language = collector.Language
 	w.CollectorConfig.InsertImage = collector.InsertImage
 	w.CollectorConfig.Images = collector.Images
+	w.CollectorConfig.ImageCategoryId = collector.ImageCategoryId
 
 	if w.CollectorConfig.Language == "" {
 		w.CollectorConfig.Language = config.LanguageZh

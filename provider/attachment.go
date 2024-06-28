@@ -790,6 +790,39 @@ func (w *Website) AttachmentScanUploads(baseDir string) {
 	}
 }
 
+func (w *Website) GetRandImageFromCategory(categoryId int, title string) string {
+	var img string
+	// 根据分类每次只取其中一张
+	var attach model.Attachment
+	if categoryId >= 0 {
+		w.DB.Model(&model.Attachment{}).Where("category_id = ? and is_image = ?", w.CollectorConfig.ImageCategoryId, 1).Order("rand()").Limit(1).Take(&attach)
+	} else if categoryId == -1 {
+		// 全部图片，所以每次只取其中一张
+		w.DB.Model(&model.Attachment{}).Where("is_image = ?", 1).Order("rand()").Limit(1).Take(&attach)
+	} else if categoryId == -2 {
+		// 尝试关键词匹配图片名称
+		// 每次只取其中一张
+		// 先分词
+		keywordSplit := library.WordSplit(title, false)
+		// 查询attachment表，尝试匹配keywordSplit里的关键词
+		tx := w.DB.Model(&model.Attachment{}).Where("is_image = ?", 1)
+		var queries []string
+		var args []interface{}
+		for _, word := range keywordSplit {
+			queries = append(queries, "name like ?")
+			args = append(args, "%"+word+"%")
+		}
+		tx = tx.Where(strings.Join(queries, " OR "), args...)
+
+		tx.Order("rand()").Limit(1).Take(&attach)
+	}
+	if len(attach.FileLocation) > 0 {
+		img = w.PluginStorage.StorageUrl + "/" + attach.FileLocation
+	}
+
+	return img
+}
+
 func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 	buff := &bytes.Buffer{}
 

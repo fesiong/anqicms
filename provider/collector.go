@@ -207,12 +207,17 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	archive.KeywordId = keyword.Id
 	categoryId := keyword.CategoryId
 	if categoryId == 0 {
-		if w.CollectorConfig.CategoryId == 0 {
+		if len(w.CollectorConfig.CategoryIds) > 0 {
+			categoryId = w.CollectorConfig.CategoryIds[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(w.CollectorConfig.CategoryIds))]
+		} else if w.CollectorConfig.CategoryId > 0 {
+			categoryId = w.CollectorConfig.CategoryId
+		}
+		if categoryId == 0 {
 			var category model.Category
 			w.DB.Where("module_id = 1").Take(&category)
-			w.CollectorConfig.CategoryId = category.Id
+			w.CollectorConfig.CategoryIds = []uint{category.Id}
+			categoryId = category.Id
 		}
-		categoryId = w.CollectorConfig.CategoryId
 	}
 	archive.CategoryId = categoryId
 	//log.Println("draft:", w.CollectorConfig.SaveType)
@@ -362,6 +367,18 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		copy(content[index+1:], content[index:])
 		content[index] = "<img src='" + img + "' alt='" + archive.Title + "'/>"
 		archive.Content = strings.Join(content, "")
+	}
+	if w.CollectorConfig.InsertImage == config.CollectImageCategory {
+		// 根据分类每次只取其中一张
+		img := w.GetRandImageFromCategory(w.CollectorConfig.ImageCategoryId, keyword.Title)
+		if len(img) > 0 {
+			content := strings.SplitAfter(archive.Content, ">")
+			index := len(content) / 3
+			content = append(content, "")
+			copy(content[index+1:], content[index:])
+			content[index] = "<img src='" + img + "' alt='" + archive.Title + "'/>"
+			archive.Content = strings.Join(content, "")
+		}
 	}
 	//log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
 

@@ -56,7 +56,7 @@ func (attachment *Attachment) GetThumb(storageUrl string) {
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
-	if strings.HasPrefix(attachment.FileLocation, "http") && !strings.HasPrefix(attachment.FileLocation, "//") {
+	if strings.HasPrefix(attachment.FileLocation, "http") || strings.HasPrefix(attachment.FileLocation, "//") {
 		attachment.Logo = attachment.FileLocation
 		attachment.Thumb = attachment.FileLocation
 	} else {
