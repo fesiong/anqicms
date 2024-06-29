@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/gorilla/websocket"
 	"io"
+	"kandaoni.com/anqicms/config"
 	"log"
 	"net/url"
 	"strings"
@@ -29,8 +30,8 @@ var sparkApiUrls = map[string]string{
 
 var ErrSensitive = errors.New("sensitive")
 
-func (w *Website) GetSparkResponse(prompt string) (string, error) {
-	buf, err := w.GetSparkStream(prompt)
+func GetSparkResponse(sparkKey config.SparkSetting, prompt string) (string, error) {
+	buf, err := GetSparkStream(sparkKey, prompt)
 	if err != nil {
 		if strings.Contains(err.Error(), "非常抱歉，根据相关法律法规，我们无法提供关于以下内容的答案") {
 			return "", ErrSensitive
@@ -67,8 +68,7 @@ func (w *Website) GetSparkResponse(prompt string) (string, error) {
 	return answer, nil
 }
 
-func (w *Website) GetSparkStream(prompt string) (chan string, error) {
-	sparkKey := w.AiGenerateConfig.Spark
+func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, error) {
 	apiHost, ok := sparkApiUrls[sparkKey.Version]
 	if !ok {
 		return nil, errors.New("未选择模型版本")

@@ -17,6 +17,8 @@ import (
 type ServerJson struct {
 	Mysql  MysqlConfig  `json:"mysql"`
 	Server ServerConfig `json:"server"`
+
+	Sparks map[string]SparkSetting `json:"sparks"`
 }
 
 type ConfigJson struct {

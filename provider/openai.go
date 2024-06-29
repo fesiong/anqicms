@@ -48,7 +48,7 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 			return nil, err
 		}
 	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-		content, err := w.GetSparkResponse(prompt)
+		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
 		if err != nil {
 			return nil, err
 		}
@@ -107,7 +107,7 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 				return nil, err
 			}
 		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			content, err := w.GetSparkResponse(prompt)
+			content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
 			if err != nil {
 				return nil, err
 			}
@@ -177,7 +177,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 			return nil, err
 		}
 	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-		content, err := w.GetSparkResponse(prompt)
+		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
 		if err != nil {
 			return nil, err
 		}
@@ -240,7 +240,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 				return nil, err
 			}
 		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			content, err := w.GetSparkResponse(prompt)
+			content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
 			if err != nil {
 				return nil, err
 			}
@@ -321,7 +321,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 			return nil, err
 		}
 	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-		content, err := w.GetSparkResponse(prompt)
+		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
 		if err != nil {
 			return nil, err
 		}
