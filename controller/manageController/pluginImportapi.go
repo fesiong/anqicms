@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -47,10 +46,10 @@ func PluginUpdateApiToken(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新API导入Token"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新API导入Token"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "Token已更新",
+		"msg":  ctx.Tr("Token已更新"),
 	})
 }

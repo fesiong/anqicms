@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -42,7 +41,7 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新全文索引配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新全文索引配置信息"))
 	if req.Open {
 		currentSite.CloseFulltext()
 		go currentSite.InitFulltext()
@@ -52,6 +51,6 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }

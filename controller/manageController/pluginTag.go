@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -82,11 +81,11 @@ func PluginTagDetailForm(ctx iris.Context) {
 		_ = currentSite.SyncHtmlCacheToStorage("", "")
 	}()
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新文档标签：%d => %s", tag.Id, tag.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新文档标签：%d => %s", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 		"data": tag,
 	})
 }
@@ -119,10 +118,10 @@ func PluginTagDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档标签：%d => %s", tag.Id, tag.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除文档标签：%d => %s", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "标签已删除",
+		"msg":  ctx.Tr("标签已删除"),
 	})
 }

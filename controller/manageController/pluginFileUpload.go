@@ -55,7 +55,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	if fileName == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "文件不正确",
+			"msg":  ctx.Tr("文件不正确"),
 		})
 		return
 	}
@@ -81,11 +81,11 @@ func PluginFileUploadDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除上传验证文件：%s", fileName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除上传验证文件：%s", fileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }
 
@@ -112,7 +112,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	if ext != ".txt" && ext != ".htm" && ext != ".html" && ext != ".xml" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "只允许上传txt/htm/html/xml",
+			"msg":  ctx.Tr("只允许上传txt/htm/html/xml"),
 		})
 		return
 	}
@@ -122,7 +122,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "读取失败",
+			"msg":  ctx.Tr("读取失败"),
 		})
 		return
 	}
@@ -131,7 +131,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "文件保存失败",
+			"msg":  ctx.Tr("文件保存失败"),
 		})
 		return
 	}
@@ -165,10 +165,10 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	// 上传到静态服务器
 	_ = currentSite.SyncHtmlCacheToStorage(filePath, filepath.Base(filePath))
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传验证文件：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, ctx.Tr("上传验证文件：%s", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "文件已上传完成",
+		"msg":  ctx.Tr("文件已上传完成"),
 	})
 }

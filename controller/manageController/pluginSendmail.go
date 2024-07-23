@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -33,7 +32,7 @@ func PluginSendmailTest(ctx iris.Context) {
 	if setting.Account == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请先设置邮件发送账号",
+			"msg":  ctx.Tr("请先设置邮件发送账号"),
 		})
 		return
 	}
@@ -50,7 +49,7 @@ func PluginSendmailTest(ctx iris.Context) {
 		if req.Subject == "" || req.Message == "" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "请填写回复标题和内容",
+				"msg":  ctx.Tr("请填写回复标题和内容"),
 			})
 			return
 		}
@@ -64,13 +63,13 @@ func PluginSendmailTest(ctx iris.Context) {
 		}
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "邮件发送成功",
+			"msg":  ctx.Tr("邮件发送成功"),
 		})
 		return
 	}
 
-	subject := "测试邮件"
-	content := "这是一封测试邮件。收到邮件表示配置正常"
+	subject := ctx.Tr("测试邮件")
+	content := ctx.Tr("这是一封测试邮件。收到邮件表示配置正常")
 
 	err := currentSite.SendMail(subject, content)
 	if err != nil {
@@ -83,7 +82,7 @@ func PluginSendmailTest(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "邮件发送成功",
+		"msg":  ctx.Tr("邮件发送成功"),
 	})
 }
 
@@ -129,10 +128,10 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新发送邮件配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新发送邮件配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }

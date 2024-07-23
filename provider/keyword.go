@@ -2,7 +2,6 @@ package provider
 
 import (
 	"encoding/json"
-	"fmt"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -153,7 +152,7 @@ func (w *Website) ImportKeywords(file multipart.File, info *multipart.FileHeader
 		keyword.Save(w.DB)
 	}
 
-	return fmt.Sprintf(w.Lang("成功导入了%d个关键词"), total), nil
+	return w.Tr("SuccessfullyImportedKeywords"), nil
 }
 
 func (w *Website) DeleteKeyword(keyword *model.Keyword) error {

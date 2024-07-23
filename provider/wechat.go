@@ -158,7 +158,7 @@ func (w *Website) ReplyWechatMessage(req *request.WechatMessageRequest) error {
 	}
 
 	if req.Reply == "" {
-		return errors.New(w.Lang("请填写回复内容"))
+		return errors.New(w.Tr("PleaseFillInTheReplyContent"))
 	}
 
 	err2 := w.GetWechatServer(false).SendText(message.Openid, req.Reply)

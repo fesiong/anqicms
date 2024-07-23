@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -100,11 +99,11 @@ func PluginCommentDetailForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改评论内容：%d", comment.Id))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改评论内容：%d", comment.Id))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "评论已更新",
+		"msg":  ctx.Tr("评论已更新"),
 	})
 }
 
@@ -136,11 +135,11 @@ func PluginCommentDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", comment.Id, comment.Content))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改文档模型：%d => %s", comment.Id, comment.Content))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "评论已删除",
+		"msg":  ctx.Tr("评论已删除"),
 	})
 }
 
@@ -166,11 +165,11 @@ func PluginCommentCheck(ctx iris.Context) {
 			return
 		}
 
-		currentSite.AddAdminLog(ctx, fmt.Sprintf("批量审核评论：%v", req.Ids))
+		currentSite.AddAdminLog(ctx, ctx.Tr("批量审核评论：%v", req.Ids))
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "评论已更新",
+			"msg":  ctx.Tr("评论已更新"),
 		})
 		return
 	}
@@ -198,10 +197,10 @@ func PluginCommentCheck(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("审核评论：%d", comment.Id))
+	currentSite.AddAdminLog(ctx, ctx.Tr("审核评论：%d", comment.Id))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "评论已更新",
+		"msg":  ctx.Tr("评论已更新"),
 	})
 }

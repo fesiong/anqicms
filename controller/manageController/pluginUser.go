@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -47,7 +46,7 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 		if err != nil || !match {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  v.FieldName + currentSite.Lang("命名不正确"),
+				"msg":  v.FieldName + ctx.Tr("命名不正确"),
 			})
 			return
 		}
@@ -71,11 +70,11 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 	// sync table
 	currentSite.MigrateUserTable(fields, true)
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改用户额外字段设置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改用户额外字段设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }
 
@@ -100,11 +99,11 @@ func PluginUserFieldsDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除用户字段：%d => %s", req.Id, req.FieldName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除用户字段：%d => %s", req.Id, req.FieldName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "字段已删除",
+		"msg":  ctx.Tr("字段已删除"),
 	})
 }
 
@@ -186,11 +185,11 @@ func PluginUserDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新用户信息：%d => %s", req.Id, req.UserName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新用户信息：%d => %s", req.Id, req.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 	})
 }
 
@@ -213,11 +212,11 @@ func PluginUserDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除用户：%d => %s", req.Id, req.UserName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除用户：%d => %s", req.Id, req.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }
 
@@ -271,11 +270,11 @@ func PluginUserGroupDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新用户组信息：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新用户组信息：%d => %s", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 	})
 }
 
@@ -298,10 +297,10 @@ func PluginUserGroupDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除用户组：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除用户组：%d => %s", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }

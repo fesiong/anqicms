@@ -201,7 +201,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 
 	if w.checkArticleExists(archive.OriginUrl, archive.OriginTitle, archive.Title) {
 		//log.Println("已存在于数据库", archive.OriginTitle)
-		return errors.New(w.Lang("已存在于数据库"))
+		return errors.New(w.Tr("AlreadyExistsInTheDatabase"))
 	}
 
 	archive.KeywordId = keyword.Id
@@ -332,11 +332,11 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 	_ = w.ParseArticleDetail(archive)
 	if len(archive.Content) == 0 {
 		//log.Println("链接无文章", archive.OriginUrl)
-		return nil, errors.New(w.Lang("链接无文章"))
+		return nil, errors.New(w.Tr("LinkHasNoArticle"))
 	}
 	if archive.Title == "" {
 		//log.Println("链接无文章", archive.OriginUrl)
-		return nil, errors.New(w.Lang("链接无文章"))
+		return nil, errors.New(w.Tr("LinkHasNoArticle"))
 	}
 	//对乱码的跳过
 	runeTitle := []rune(archive.Title)
@@ -349,7 +349,7 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 	}
 	if isDeny {
 		log.Println("乱码", archive.OriginUrl)
-		return nil, errors.New(w.Lang("乱码"))
+		return nil, errors.New(w.Tr("GarbledCode"))
 	}
 
 	// 替换图片

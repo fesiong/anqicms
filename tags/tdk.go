@@ -3,7 +3,6 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -53,11 +52,7 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		if ok {
 			// 从第二页开始，增加分页
 			if paginator.CurrentPage > 1 {
-				if currentSite.System.Language == config.LanguageEn {
-					pateText = fmt.Sprintf("Page %d", paginator.CurrentPage)
-				} else {
-					pateText = fmt.Sprintf("第%d页", paginator.CurrentPage)
-				}
+				pateText = currentSite.Tr("第%d页", paginator.CurrentPage)
 			}
 			return nil
 		}

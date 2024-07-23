@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -30,7 +29,7 @@ func AttachmentUpload(ctx iris.Context) {
 		if adminId == 0 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  currentSite.Lang("无法修改图片"),
+				"msg":  ctx.Tr("无法修改图片"),
 			})
 			return
 		}
@@ -38,7 +37,7 @@ func AttachmentUpload(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  currentSite.Lang("需要替换的图片资源不存在"),
+				"msg":  ctx.Tr("需要替换的图片资源不存在"),
 			})
 			return
 		}
@@ -53,7 +52,7 @@ func AttachmentUpload(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传资源附件：%d => %s", attachment.Id, attachment.FileLocation))
+	currentSite.AddAdminLog(ctx, ctx.Tr("上传资源附件：%d => %s", attachment.Id, attachment.FileLocation))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

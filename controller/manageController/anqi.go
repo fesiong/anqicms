@@ -93,7 +93,7 @@ func AnqiUploadAttachment(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "上传成功",
+		"msg":  ctx.Tr("上传成功"),
 		"data": attachment,
 	})
 }
@@ -121,7 +121,7 @@ func AnqiShareTemplate(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "提交成功",
+		"msg":  ctx.Tr("提交成功"),
 	})
 }
 
@@ -148,7 +148,7 @@ func AnqiDownloadTemplate(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "下载成功",
+		"msg":  ctx.Tr("下载成功"),
 	})
 }
 
@@ -175,7 +175,7 @@ func AnqiSendFeedback(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "提交成功",
+		"msg":  ctx.Tr("提交成功"),
 	})
 }
 
@@ -211,7 +211,7 @@ func AnqiTranslateArticle(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "翻译已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度",
+		"msg":  ctx.Tr("翻译已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度"),
 	})
 }
 
@@ -247,7 +247,7 @@ func AnqiAiPseudoArticle(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "AI伪原创已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度",
+		"msg":  ctx.Tr("AI伪原创已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度"),
 	})
 }
 
@@ -316,6 +316,6 @@ func RestartAnqicms(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "重启成功",
+		"msg":  ctx.Tr("重启成功"),
 	})
 }

@@ -82,7 +82,7 @@ func PluginOrderSetPay(ctx iris.Context) {
 	if payment.PaidTime > 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "该订单已经支付过，无需再处理",
+			"msg":  ctx.Tr("该订单已经支付过，无需再处理"),
 		})
 		return
 	}
@@ -90,14 +90,14 @@ func PluginOrderSetPay(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "订单不存在",
+			"msg":  ctx.Tr("订单不存在"),
 		})
 		return
 	}
 	if order.PaidTime > 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "该订单已经支付过，无需再处理",
+			"msg":  ctx.Tr("该订单已经支付过，无需再处理"),
 		})
 		return
 	}
@@ -127,7 +127,7 @@ func PluginOrderSetPay(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "支付失败",
+			"msg":  ctx.Tr("支付失败"),
 		})
 		return
 	}
@@ -137,14 +137,14 @@ func PluginOrderSetPay(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "支付失败",
+			"msg":  ctx.Tr("支付失败"),
 		})
 		return
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已支付成功",
+		"msg":  ctx.Tr("支付成功"),
 	})
 }
 
@@ -170,7 +170,7 @@ func PluginOrderSetDeliver(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已设置成功",
+		"msg":  ctx.Tr("已设置成功"),
 	})
 }
 
@@ -204,7 +204,7 @@ func PluginOrderSetFinished(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已设置成功",
+		"msg":  ctx.Tr("已设置成功"),
 	})
 }
 
@@ -239,7 +239,7 @@ func PluginOrderSetCanceled(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已设置成功",
+		"msg":  ctx.Tr("已设置成功"),
 	})
 }
 
@@ -274,7 +274,7 @@ func PluginOrderSetRefund(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已设置成功",
+		"msg":  ctx.Tr("已设置成功"),
 	})
 }
 
@@ -318,7 +318,7 @@ func PluginOrderApplyRefund(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已申请成功",
+		"msg":  ctx.Tr("申请成功"),
 	})
 }
 
@@ -359,11 +359,11 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新订单配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新订单配置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }
 
@@ -380,7 +380,7 @@ func PluginOrderExport(ctx iris.Context) {
 
 	header, content := currentSite.ExportOrders(&req)
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出订单"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("导出订单"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

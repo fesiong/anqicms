@@ -61,7 +61,7 @@ func CategoryPage(ctx iris.Context) {
 	module := currentSite.GetModuleFromCache(category.ModuleId)
 	if module == nil {
 		ctx.StatusCode(404)
-		ShowMessage(ctx, currentSite.Lang("未定义模型"), nil)
+		ShowMessage(ctx, ctx.Tr("未定义模型"), nil)
 		return
 	}
 
@@ -71,7 +71,7 @@ func CategoryPage(ctx iris.Context) {
 			webInfo.Title = category.SeoTitle
 		}
 		if currentPage > 1 {
-			webInfo.Title += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
+			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
 		}
 		webInfo.Keywords = category.Keywords
 		webInfo.Description = category.Description
@@ -128,7 +128,7 @@ func SearchPage(ctx iris.Context) {
 		module = currentSite.GetModuleFromCacheByToken(moduleToken)
 		if module == nil {
 			ctx.StatusCode(404)
-			ShowMessage(ctx, currentSite.Lang("未定义模型"), nil)
+			ShowMessage(ctx, ctx.Tr("未定义模型"), nil)
 			return
 		}
 		ctx.ViewData("module", module)
@@ -141,7 +141,7 @@ func SearchPage(ctx iris.Context) {
 				continue
 			}
 			if strings.Contains(q, v) {
-				ShowMessage(ctx, currentSite.Lang("您搜索的关键词包含有不允许的字符"), nil)
+				ShowMessage(ctx, ctx.Tr("您搜索的关键词包含有不允许的字符"), nil)
 				return
 			}
 		}
@@ -149,12 +149,12 @@ func SearchPage(ctx iris.Context) {
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.Values().GetIntDefault("page", 1)
-		webInfo.Title = fmt.Sprintf("%s: %s", currentSite.Lang("搜索"), q)
+		webInfo.Title = ctx.Tr("搜索: %s", q)
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}
 		if currentPage > 1 {
-			webInfo.Title += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
+			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
 		}
 		webInfo.PageName = "search"
 		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)

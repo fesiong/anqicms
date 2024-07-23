@@ -80,7 +80,7 @@ func GetTransferModules(ctx iris.Context) {
 	if task == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "没有可执行的任务",
+			"msg":  ctx.Tr("没有可执行的任务"),
 		})
 		return
 	}
@@ -126,7 +126,7 @@ func TransferWebData(ctx iris.Context) {
 	if task == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "没有可执行的任务",
+			"msg":  ctx.Tr("没有可执行的任务"),
 		})
 		return
 	}
@@ -144,6 +144,6 @@ func TransferWebData(ctx iris.Context) {
 	time.Sleep(1 * time.Second)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "任务正在执行中",
+		"msg":  ctx.Tr("任务正在执行中"),
 	})
 }

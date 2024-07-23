@@ -106,7 +106,7 @@ func (w *Website) ImportAnchors(file multipart.File, info *multipart.FileHeader)
 		anchor.Save(w.DB)
 	}
 
-	return fmt.Sprintf(w.Lang("成功导入了%d个锚文本"), total), nil
+	return w.Tr("SuccessfullyImportedAnchorTexts"), nil
 }
 
 func (w *Website) DeleteAnchor(anchor *model.Anchor) error {

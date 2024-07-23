@@ -61,7 +61,7 @@ func NotFound(ctx iris.Context) {
 	webInfo := &response.WebInfo{}
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite != nil {
-		webInfo.Title = currentSite.Lang("404 Not Found")
+		webInfo.Title = ctx.Tr("404 Not Found")
 	} else {
 		webInfo.Title = "404 Not Found"
 	}
@@ -81,19 +81,19 @@ func NotFound(ctx iris.Context) {
 
 func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 	currentSite := provider.CurrentSite(ctx)
-	var lang func(str string) string
+	var tr func(str string, args ...interface{}) string
 	if currentSite != nil {
-		lang = currentSite.Lang
+		tr = currentSite.Tr
 	} else {
-		lang = func(str string) string {
+		tr = func(str string, args ...interface{}) string {
 			return str
 		}
 	}
-	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + lang("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + lang("返回") + "</a>"
+	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + tr("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + tr("返回") + "</a>"
 
 	if len(buttons) > 0 {
 		for _, btn := range buttons {
-			str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + btn.Link + "\">" + lang(btn.Name) + "</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + btn.Link + "\"}, 3000);</script>"
+			str += "<a style=\"display: inline-block;border:1px solid #29d;color: #29d;padding: 8px 16px;margin-left: 16px;\" href=\"" + btn.Link + "\">" + tr(btn.Name) + "</a><script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + btn.Link + "\"}, 3000);</script>"
 		}
 		str += "<script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + buttons[0].Link + "\"}, 3000);</script>"
 	}
@@ -116,7 +116,7 @@ func InternalServerError(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	webInfo := &response.WebInfo{}
 	if currentSite != nil {
-		webInfo.Title = currentSite.Lang("500 Internal Error")
+		webInfo.Title = ctx.Tr("500 Internal Error")
 	} else {
 		webInfo.Title = "500 Internal Error"
 	}
@@ -159,7 +159,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			}
 
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-				webInfo.Title = currentSite.Lang(closeTips)
+				webInfo.Title = ctx.Tr(closeTips)
 				ctx.ViewData("webInfo", webInfo)
 			}
 
@@ -175,7 +175,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			ua := strings.ToLower(ctx.GetHeader("User-Agent"))
 			if strings.Contains(ua, "spider") || strings.Contains(ua, "bot") {
 				ctx.StatusCode(403)
-				ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
+				ShowMessage(ctx, ctx.Tr("您已被禁止访问"), nil)
 				return true
 			}
 		}
@@ -190,7 +190,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 				}
 				if strings.Contains(ua, v) {
 					ctx.StatusCode(403)
-					ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
+					ShowMessage(ctx, ctx.Tr("您已被禁止访问"), nil)
 					return true
 				}
 			}
@@ -214,7 +214,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 					}
 					if strings.HasPrefix(ip, v) {
 						ctx.StatusCode(403)
-						ShowMessage(ctx, currentSite.Lang("您已被禁止访问"), nil)
+						ShowMessage(ctx, ctx.Tr("您已被禁止访问"), nil)
 						return true
 					}
 				}
@@ -293,11 +293,11 @@ func Inspect(ctx iris.Context) {
 		}
 
 		if website == nil {
-			ShowMessage(ctx, "网站配置错误，请检查配置", nil)
+			ShowMessage(ctx, website.Tr("网站配置错误，请检查配置"), nil)
 			return
 		}
 		if !website.Initialed {
-			ShowMessage(ctx, "网站已关闭", nil)
+			ShowMessage(ctx, website.Tr("网站已关闭"), nil)
 			return
 		}
 		siteName = website.System.SiteName
@@ -835,10 +835,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  currentSite.Lang("验证码不正确"),
+					"msg":  ctx.Tr("验证码不正确"),
 				})
 			} else {
-				ShowMessage(ctx, currentSite.Lang("验证码不正确"), nil)
+				ShowMessage(ctx, ctx.Tr("验证码不正确"), nil)
 			}
 			return false
 		}
@@ -846,10 +846,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  currentSite.Lang("验证码不正确"),
+					"msg":  ctx.Tr("验证码不正确"),
 				})
 			} else {
-				ShowMessage(ctx, currentSite.Lang("验证码不正确"), nil)
+				ShowMessage(ctx, ctx.Tr("验证码不正确"), nil)
 			}
 			return false
 		}
@@ -864,10 +864,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  currentSite.Lang("您提交的内容长度过短"),
+					"msg":  ctx.Tr("您提交的内容长度过短"),
 				})
 			} else {
-				ShowMessage(ctx, currentSite.Lang("您提交的内容长度过短"), nil)
+				ShowMessage(ctx, ctx.Tr("您提交的内容长度过短"), nil)
 			}
 			return false
 		}
@@ -884,10 +884,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  currentSite.Lang("您提交的内容包含有不允许的字符"),
+						"msg":  ctx.Tr("您提交的内容包含有不允许的字符"),
 					})
 				} else {
-					ShowMessage(ctx, currentSite.Lang("您提交的内容包含有不允许的字符"), nil)
+					ShowMessage(ctx, ctx.Tr("您提交的内容包含有不允许的字符"), nil)
 				}
 				return false
 			}
@@ -901,10 +901,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  currentSite.Lang("您提交的内容包含有不允许的字符"),
+								"msg":  ctx.Tr("您提交的内容包含有不允许的字符"),
 							})
 						} else {
-							ShowMessage(ctx, currentSite.Lang("您提交的内容包含有不允许的字符"), nil)
+							ShowMessage(ctx, ctx.Tr("您提交的内容包含有不允许的字符"), nil)
 						}
 					}
 				}
@@ -926,10 +926,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  currentSite.Lang("已达到进入允许提交上限"),
+						"msg":  ctx.Tr("已达到进入允许提交上限"),
 					})
 				} else {
-					ShowMessage(ctx, currentSite.Lang("已达到进入允许提交上限"), nil)
+					ShowMessage(ctx, ctx.Tr("已达到进入允许提交上限"), nil)
 				}
 				return false
 			}
@@ -944,10 +944,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  currentSite.Lang("非法请求"),
+								"msg":  ctx.Tr("非法请求"),
 							})
 						} else {
-							ShowMessage(ctx, currentSite.Lang("非法请求"), nil)
+							ShowMessage(ctx, ctx.Tr("非法请求"), nil)
 						}
 						return false
 					}
@@ -970,10 +970,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  currentSite.Lang("请不要在短时间内多次提交"),
+						"msg":  ctx.Tr("请不要在短时间内多次提交"),
 					})
 				} else {
-					ShowMessage(ctx, currentSite.Lang("请不要在短时间内多次提交"), nil)
+					ShowMessage(ctx, ctx.Tr("请不要在短时间内多次提交"), nil)
 				}
 				return false
 			}

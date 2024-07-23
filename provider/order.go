@@ -229,7 +229,7 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 			Amount:      order.SellerAmount,
 			Status:      0,
 			WithdrawId:  0,
-			Remark:      "销售收入",
+			Remark:      w.Tr("SalesRevenue"),
 		}
 		err = tx.Save(&sellerCommission).Error
 		if err != nil {
@@ -543,7 +543,7 @@ func (w *Website) ApplyOrderRefund(order *model.Order) error {
 		UserId:   order.UserId,
 		Amount:   order.Amount,
 		Status:   0,
-		Remark:   w.Lang("用户申请退款"),
+		Remark:   w.Tr("UserAppliesForARefund"),
 	}
 	w.DB.Save(refund)
 
@@ -583,11 +583,11 @@ func (w *Website) SuccessPaidOrder(order *model.Order) error {
 
 	// 支付成功
 	if w.SendTypeValid(SendTypePayOrder) {
-		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")订单支付成功通知"
-		content := "订单支付成功通知：\n订单号：" + order.OrderId +
-			"\n金额：" + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
-			"\n支付时间：" + time.Unix(order.PaidTime, 0).Format("2006-01-02 15:04:05") +
-			"\n支付会员ID：" + strconv.Itoa(int(order.UserId))
+		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("OrderPaymentSuccessNotification")
+		content := w.Tr("OrderPaymentSuccessNotification:") + "\n" + w.Tr("OrderNumber:") + order.OrderId +
+			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
+			"\n" + w.Tr("PaymentTime:") + time.Unix(order.PaidTime, 0).Format("2006-01-02 15:04:05") +
+			"\n" + w.Tr("PayingMemberId:") + strconv.Itoa(int(order.UserId))
 		_ = w.sendMail(subject, content, nil, false, false)
 	}
 
@@ -682,7 +682,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		return nil, err
 	}
 	if len(req.Details) == 0 && req.GoodsId == 0 {
-		return nil, errors.New(w.Lang("请选择商品"))
+		return nil, errors.New(w.Tr("PleaseSelectTheProduct"))
 	}
 	if len(req.Details) == 0 {
 		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, Quantity: req.Quantity}}
@@ -722,11 +722,11 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					}
 					if sellerId != archive.UserId {
 						tx.Rollback()
-						return nil, errors.New(w.Lang("不支持跨店下单"))
+						return nil, errors.New(w.Tr("CrossStoreOrderingIsNotSupported"))
 					}
 				}
 				if remark == "" {
-					remark += archive.Title + w.Lang("等")
+					remark += archive.Title + w.Tr("Wait")
 				}
 			}
 		}
@@ -860,12 +860,12 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 
 	// 下单
 	if w.SendTypeValid(SendTypeNewOrder) {
-		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")新订单通知"
-		content := "新订单通知：\n订单号：" + order.OrderId +
-			"\n金额：" + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
-			"\n下单时间：" + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
-			"\n下单会员：" + user.UserName +
-			"\n下单会员ID：" + strconv.Itoa(int(order.UserId))
+		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("NewOrderNotification")
+		content := w.Tr("NewOrderNotification:") + "\n" + w.Tr("OrderNumber:") + order.OrderId +
+			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
+			"\n" + w.Tr("OrderTime:") + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
+			"\n" + w.Tr("OrderingMember:") + user.UserName +
+			"\n" + w.Tr("OrderingMemberId:") + strconv.Itoa(int(order.UserId))
 		_ = w.sendMail(subject, content, nil, false, false)
 	}
 
@@ -904,7 +904,7 @@ func (w *Website) SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderA
 	if req.Id > 0 {
 		err = tx.Where("`id` = ?", req.Id).Take(&orderAddress).Error
 		if err != nil || orderAddress.UserId != userId {
-			return nil, errors.New(w.Lang("地址不存在"))
+			return nil, errors.New(w.Tr("AddressDoesNotExist"))
 		}
 	} else {
 		orderAddress = model.OrderAddress{
@@ -1015,13 +1015,13 @@ func (w *Website) RetailerApplyWithdraw(retailerId uint) error {
 	}
 
 	if total <= 0 {
-		return errors.New(w.Lang("没有可提现金额"))
+		return errors.New(w.Tr("NoAmountAvailableForWithdrawal"))
 	}
 
 	// todo执行提现操作
 	// 低于2元不可提现到微信
 	if total < 200 {
-		return errors.New("低于2元无法提现到微信零钱")
+		return errors.New(w.Tr("WithdrawalsBelow2YuanCannotBeMadeToWechatChange"))
 	}
 	tx := w.DB.Begin()
 	var err error
@@ -1085,7 +1085,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 	tx.Count(&total)
 
 	//header
-	header = []string{w.Lang("下单时间"), w.Lang("支付时间"), w.Lang("订单ID"), w.Lang("订单状态"), w.Lang("订单金额"), w.Lang("订购商品"), w.Lang("订购数量"), w.Lang("购买用户"), w.Lang("分销用户"), w.Lang("分销佣金"), w.Lang("邀请用户"), w.Lang("邀请奖励"), w.Lang("收件人"), w.Lang("收件人电话"), w.Lang("收件地址"), w.Lang("快递公司"), w.Lang("快递单号")}
+	header = []string{w.Tr("OrderTime"), w.Tr("PaymentTime"), w.Tr("OrderId"), w.Tr("OrderStatus"), w.Tr("OrderAmount"), w.Tr("OrderedGoods"), w.Tr("OrderQuantity"), w.Tr("PurchasingUser"), w.Tr("DistributionUser"), w.Tr("DistributionCommission"), w.Tr("InvitedUser"), w.Tr("InvitationReward"), w.Tr("Recipient"), w.Tr("RecipientPhoneNumber"), w.Tr("ReceivingAddress"), w.Tr("CourierCompany"), w.Tr("CourierNumber")}
 	content = [][]interface{}{}
 	// 一次读取1000条
 	var lastId uint = 0
@@ -1171,9 +1171,9 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 			for d := range orders[i].Details {
 				var goodsTitle string
 				if orders[i].Details[d].Group != nil {
-					goodsTitle = "VIP：" + orders[i].Details[d].Group.Title
+					goodsTitle = w.Tr("Vip:") + orders[i].Details[d].Group.Title
 				} else if orders[i].Details[d].Goods != nil {
-					goodsTitle = w.Lang("商品：") + orders[i].Details[d].Goods.Title
+					goodsTitle = w.Tr("Goods:") + orders[i].Details[d].Goods.Title
 				}
 
 				content = append(content, []interface{}{
@@ -1236,25 +1236,25 @@ func (w *Website) getOrderStatus(status int) string {
 	var text string
 	switch status {
 	case -1:
-		text = w.Lang("订单关闭")
+		text = w.Tr("OrderClosed")
 		break
 	case 0:
-		text = w.Lang("待支付")
+		text = w.Tr("WaitingForPayment")
 		break
 	case 1:
-		text = w.Lang("待发货")
+		text = w.Tr("WaitingForShipment")
 		break
 	case 2:
-		text = w.Lang("待支付")
+		text = w.Tr("WaitingForPayment")
 		break
 	case 3:
-		text = w.Lang("已完成")
+		text = w.Tr("Completed")
 		break
 	case 8:
-		text = w.Lang("退款中")
+		text = w.Tr("RefundInProgress")
 		break
 	case 9:
-		text = w.Lang("已退款")
+		text = w.Tr("Refunded")
 		break
 	}
 

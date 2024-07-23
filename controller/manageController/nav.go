@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -48,7 +47,7 @@ func SettingNavForm(ctx iris.Context) {
 	if req.Title == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请填写导航显示名称",
+			"msg":  ctx.Tr("请填写导航显示名称"),
 		})
 		return
 	}
@@ -90,14 +89,14 @@ func SettingNavForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新导航信息：%d => %s", nav.Id, nav.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新导航信息：%d => %s", nav.Id, nav.Title))
 
 	currentSite.DeleteCacheNavs()
 	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }
 
@@ -129,14 +128,14 @@ func SettingNavDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除导航信息：%d => %s", nav.Id, nav.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除导航信息：%d => %s", nav.Id, nav.Title))
 
 	currentSite.DeleteCacheNavs()
 	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "导航已删除",
+		"msg":  ctx.Tr("导航已删除"),
 	})
 }
 
@@ -192,13 +191,13 @@ func SettingNavTypeForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新导航类别信息：%d => %s", navType.Id, navType.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新导航类别信息：%d => %s", navType.Id, navType.Title))
 
 	currentSite.DeleteCacheNavs()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }
 
@@ -223,7 +222,7 @@ func SettingNavTypeDelete(ctx iris.Context) {
 	if navType.Id == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "不允许删除默认类别",
+			"msg":  ctx.Tr("不允许删除默认类别"),
 		})
 		return
 	}
@@ -240,12 +239,12 @@ func SettingNavTypeDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除导航类别信息：%d => %s", navType.Id, navType.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除导航类别信息：%d => %s", navType.Id, navType.Title))
 
 	currentSite.DeleteCacheNavs()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "导航类别已删除",
+		"msg":  ctx.Tr("导航类别已删除"),
 	})
 }

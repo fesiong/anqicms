@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -44,11 +43,11 @@ func PluginSaveKeywordSetting(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改关键词配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改关键词配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 	})
 }
 
@@ -104,7 +103,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 		if err == nil && exists.Id != keyword.Id {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  fmt.Errorf("已存在关键词%s，修改失败", req.Title),
+				"msg":  ctx.Tr("已存在关键词%s，修改失败", req.Title),
 			})
 			return
 		}
@@ -140,11 +139,11 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 		}
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新关键词：%s", req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新关键词：%s", req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "关键词已更新",
+		"msg":  ctx.Tr("关键词已更新"),
 	})
 }
 
@@ -193,11 +192,11 @@ func PluginKeywordDelete(ctx iris.Context) {
 		currentSite.DB.Where("`id` > 0").Delete(model.Keyword{})
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除关键词：%d, %v, all=%v", req.Id, req.Ids, req.All))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除关键词：%d, %v, all=%v", req.Id, req.Ids, req.All))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已执行删除操作",
+		"msg":  ctx.Tr("已执行删除操作"),
 	})
 }
 
@@ -220,7 +219,7 @@ func PluginKeywordExport(ctx iris.Context) {
 		content = append(content, []interface{}{v.Title, v.CategoryId})
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出关键词"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("导出关键词"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -253,11 +252,11 @@ func PluginKeywordImport(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("导入关键词"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("导入关键词"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "上传完毕",
+		"msg":  ctx.Tr("上传完毕"),
 		"data": result,
 	})
 }

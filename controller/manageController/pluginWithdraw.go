@@ -64,7 +64,7 @@ func PluginWithdrawSetApply(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "申请成功",
+		"msg":  ctx.Tr("申请成功"),
 	})
 }
 
@@ -90,7 +90,7 @@ func PluginWithdrawSetApproval(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已设置成功",
+		"msg":  ctx.Tr("已设置成功"),
 	})
 }
 
@@ -116,6 +116,6 @@ func PluginWithdrawSetFinished(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已设置成功",
+		"msg":  ctx.Tr("已设置成功"),
 	})
 }

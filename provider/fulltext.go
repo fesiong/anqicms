@@ -110,7 +110,7 @@ func (w *Website) RemoveFulltextIndex(id uint) {
 
 func (w *Website) Search(key string, moduleId uint, page, pageSize int) (ids []uint, total int64, err error) {
 	if w.searcher == nil {
-		err = errors.New("未初始化")
+		err = errors.New(w.Tr("未初始化"))
 		return
 	}
 	if page < 1 {

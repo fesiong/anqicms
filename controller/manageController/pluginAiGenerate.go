@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -41,11 +40,11 @@ func HandleAiGenerateSettingSave(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改AI自动写作配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改AI自动写作配置"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 	})
 }
 
@@ -74,7 +73,7 @@ func HandleArticleAiGenerate(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "AI生成任务已触发，预计1分钟后即可查看生成结果",
+		"msg":  ctx.Tr("AI生成任务已触发，预计1分钟后即可查看生成结果"),
 	})
 }
 
@@ -84,7 +83,7 @@ func HandleStartArticleAiGenerate(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "AI生成任务已触发，预计1分钟后即可查看生成结果",
+		"msg":  ctx.Tr("AI生成任务已触发，预计1分钟后即可查看生成结果"),
 	})
 }
 
@@ -94,12 +93,12 @@ func HandleAiGenerateCheckApi(ctx iris.Context) {
 	if result {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "该服务器可以正常访问 OpenAI 接口地址",
+			"msg":  ctx.Tr("该服务器可以正常访问 OpenAI 接口地址"),
 		})
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "该服务器无法正常访问 OpenAI 接口地址",
+			"msg":  ctx.Tr("该服务器无法正常访问 OpenAI 接口地址"),
 		})
 	}
 }

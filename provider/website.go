@@ -98,7 +98,7 @@ func InitWebsites() {
 	defaultSite := model.Website{
 		Model:    model.Model{Id: 1},
 		RootPath: config.ExecPath,
-		Name:     "默认站点",
+		Name:     "Default Website",
 		Status:   1,
 	}
 	db.Where("`id` = 1").FirstOrCreate(&defaultSite)
@@ -143,7 +143,7 @@ func InitWebsite(mw *model.Website) {
 		w.Initialed = true
 	}
 	if db == nil {
-		w.ErrorMsg = "数据库连接失败"
+		w.ErrorMsg = w.Tr("数据库连接失败")
 		if err != nil {
 			w.ErrorMsg = "：" + err.Error()
 		}
@@ -152,7 +152,7 @@ func InitWebsite(mw *model.Website) {
 	_, err = os.Stat(mw.RootPath)
 	if err != nil {
 		w.Initialed = false
-		w.ErrorMsg = "站点路径错误：" + err.Error()
+		w.ErrorMsg = w.Tr("站点路径错误：") + err.Error()
 	}
 	if mw.Id == 1 {
 		w.Mysql = &config.Server.Mysql
@@ -361,7 +361,7 @@ func GetDBWebsites(page, pageSize int) ([]*model.Website, int64) {
 func GetDBWebsiteInfo(id uint) (*model.Website, error) {
 	db := GetDefaultDB()
 	if db == nil {
-		return nil, errors.New("未安装数据库")
+		return nil, errors.New("please initialize the database first")
 	}
 	var website model.Website
 	err := db.Where("`id` = ?", id).Take(&website).Error

@@ -84,13 +84,13 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新缓存配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新缓存配置"))
 
 	currentSite.InitCacheBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }
 
@@ -108,11 +108,11 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 	//开始生成
 	go currentSite.BuildHtmlCache(ctx)
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成缓存"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("手动生成缓存"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "生成任务执行中",
+		"msg":  ctx.Tr("生成任务执行中"),
 	})
 }
 
@@ -124,11 +124,11 @@ func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 		cachePath := currentSite.CachePath + "pc"
 		_ = currentSite.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
 	}()
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成首页缓存"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("手动生成首页缓存"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "生成任务执行中",
+		"msg":  ctx.Tr("生成任务执行中"),
 	})
 }
 
@@ -142,11 +142,11 @@ func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 		// 更新的html
 		_ = currentSite.ReadAndSendLocalFiles(cachePath)
 	}()
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成栏目缓存"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("手动生成栏目缓存"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "生成任务执行中",
+		"msg":  ctx.Tr("生成任务执行中"),
 	})
 }
 
@@ -159,11 +159,11 @@ func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 		// 更新的html
 		_ = currentSite.ReadAndSendLocalFiles(cachePath)
 	}()
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成文档缓存"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("手动生成文档缓存"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "生成任务执行中",
+		"msg":  ctx.Tr("生成任务执行中"),
 	})
 }
 
@@ -177,11 +177,11 @@ func PluginHtmlCacheBuildTag(ctx iris.Context) {
 		// 更新的html
 		_ = currentSite.ReadAndSendLocalFiles(cachePath)
 	}()
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动生成标签缓存"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("手动生成标签缓存"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "生成任务执行中",
+		"msg":  ctx.Tr("生成任务执行中"),
 	})
 }
 
@@ -231,7 +231,7 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "读取失败",
+			"msg":  ctx.Tr("读取失败"),
 		})
 		return
 	}
@@ -240,7 +240,7 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "目录创建失败",
+			"msg":  ctx.Tr("目录创建失败"),
 		})
 		return
 	}
@@ -248,7 +248,7 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "文件保存失败",
+			"msg":  ctx.Tr("文件保存失败"),
 		})
 		return
 	}
@@ -263,11 +263,11 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("上传ssh证书文件：%s", fileName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("上传ssh证书文件：%s", fileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "文件已上传完成",
+		"msg":  ctx.Tr("文件已上传完成"),
 		"data": fileName,
 	})
 }
@@ -308,11 +308,11 @@ func PluginHtmlCachePush(ctx iris.Context) {
 		}()
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("手动推送文件到静态服务器"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("手动推送文件到静态服务器"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "推送任务执行中",
+		"msg":  ctx.Tr("推送任务执行中"),
 	})
 }
 

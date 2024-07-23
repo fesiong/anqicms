@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -76,11 +75,11 @@ func PluginGuestbookDelete(ctx iris.Context) {
 		}
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除留言：%d, %v", req.Id, req.Ids))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除留言：%d, %v", req.Id, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已执行删除操作",
+		"msg":  ctx.Tr("已执行删除操作"),
 	})
 }
 
@@ -125,7 +124,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 		content = append(content, item)
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出留言"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("导出留言"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -186,10 +185,10 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改留言设置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改留言设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }

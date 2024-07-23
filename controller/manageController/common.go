@@ -118,10 +118,10 @@ func CheckVersion(ctx iris.Context) {
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
-		log.Println("获取新版信息失败")
+		log.Println(ctx.Tr("获取新版信息失败"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "检查版本已是最新版",
+			"msg":  ctx.Tr("检查版本已是最新版"),
 		})
 		return
 	}
@@ -133,7 +133,7 @@ func CheckVersion(ctx iris.Context) {
 			// 版本有更新
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
-				"msg":  "发现新版",
+				"msg":  ctx.Tr("发现新版"),
 				"data": lastVersion,
 			})
 			return
@@ -142,7 +142,7 @@ func CheckVersion(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "检查版本已是最新版",
+		"msg":  ctx.Tr("检查版本已是最新版"),
 	})
 }
 
@@ -161,10 +161,10 @@ func VersionUpgrade(ctx iris.Context) {
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
-		log.Println("版本更新失败")
+		log.Println(ctx.Tr("版本更新失败"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  ctx.Tr("版本更新失败"),
 		})
 		return
 	}
@@ -174,7 +174,7 @@ func VersionUpgrade(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  ctx.Tr("版本更新失败"),
 		})
 		return
 	}
@@ -183,7 +183,7 @@ func VersionUpgrade(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  ctx.Tr("版本更新失败"),
 		})
 		return
 	}
@@ -261,13 +261,13 @@ func VersionUpgrade(ctx iris.Context) {
 		log.Println("Upgrade error files: ", errorFiles)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  fmt.Sprintf("版本更新部分失败, 以下文件未更新：%v", errorFiles),
+			"msg":  ctx.Tr("版本更新部分失败, 以下文件未更新：%v", errorFiles),
 		})
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, lastVersion.Version))
-	msg := "已升级版本，请重启软件以使用新版。"
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新系统版本：%s => %s", config.Version, lastVersion.Version))
+	msg := ctx.Tr("已升级版本，请重启软件以使用新版。")
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,

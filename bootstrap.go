@@ -4,6 +4,7 @@ import (
 	stdContext "context"
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/crond"
@@ -93,6 +94,19 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
+	bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
+	bootstrap.Application.I18n.SetDefault("zh-CN")
+	bootstrap.Application.I18n.ExtractFunc = func(ctx *context.Context) string {
+		// 获取默认语言
+		currentSite := provider.CurrentSite(ctx)
+		if currentSite.System.Language != "" {
+			return currentSite.System.Language
+		}
+
+		return ctx.GetHeader("Accept-Language")
+	}
+	// 注入I18n 到 provider
+	provider.SetI18n(bootstrap.Application.I18n)
 
 	pugEngine := view.Django(".html")
 	// 开发模式下动态加载
@@ -102,6 +116,7 @@ func (bootstrap *Bootstrap) Start() {
 
 	pugEngine.AddFunc("stampToDate", TimestampToDate)
 
+	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
 	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)
 	_ = pugEngine.RegisterTag("system", tags.TagSystemParser)
 	_ = pugEngine.RegisterTag("contact", tags.TagContactParser)
@@ -156,6 +171,20 @@ func TimestampToDate(in int64, layout string) string {
 
 func (bootstrap *Bootstrap) Shutdown() error {
 	bootstrap.Application.Shutdown(stdContext.Background())
+
+	return nil
+}
+
+func loadLocales() (languages []string) {
+	// 读取language列表
+	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", config.ExecPath))
+	if err == nil {
+		for _, info := range readerInfos {
+			if info.IsDir() {
+				languages = append(languages, info.Name())
+			}
+		}
+	}
 
 	return nil
 }

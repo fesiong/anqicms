@@ -90,7 +90,7 @@ func (w *Website) SendMail(subject, content string, recipients ...string) error 
 	setting := w.PluginSendmail
 	if setting.Account == "" {
 		//成功配置，则跳过
-		return errors.New(w.Lang("请配置发件人信息"))
+		return errors.New(w.Tr("PleaseConfigureSender"))
 	}
 
 	err := w.sendMail(subject, content, recipients, false, true)
@@ -112,7 +112,7 @@ func (w *Website) sendMail(subject, content string, recipients []string, useHtml
 
 	if setting.Account == "" {
 		//成功配置，则跳过
-		return errors.New(w.Lang("请配置发件人信息"))
+		return errors.New(w.Tr("PleaseConfigureSender"))
 	}
 
 	//开始发送
@@ -158,7 +158,7 @@ func (w *Website) sendMail(subject, content string, recipients []string, useHtml
 			continue
 		}
 		if setLog {
-			w.logMailError(to, subject, w.Lang("发送成功"))
+			w.logMailError(to, subject, w.Tr("SentSuccessfully"))
 		}
 	}
 	return err
@@ -182,7 +182,7 @@ func (w *Website) SendTypeValid(sendType int) bool {
 // ReplyMail 如果设置了回复邮件，则尝试回复给用户
 func (w *Website) ReplyMail(recipient string) error {
 	if !strings.Contains(recipient, "@") {
-		return errors.New(w.Lang("收件地址不正确"))
+		return errors.New(w.Tr("IncorrectRecipientAddress"))
 	}
 	if w.PluginSendmail.AutoReply && w.PluginSendmail.ReplySubject != "" && w.PluginSendmail.ReplyMessage != "" {
 		return w.SendMail(w.PluginSendmail.ReplySubject, w.PluginSendmail.ReplyMessage, recipient)

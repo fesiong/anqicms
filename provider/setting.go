@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/kataras/iris/v12/i18n"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -55,6 +56,13 @@ const (
 	InterferenceKey     = "interference"
 	LastRunVersionKey   = "last_run_version"
 )
+
+// I18n 来自运行中设置的I18n 对象
+var I18n *i18n.I18n
+
+func SetI18n(i *i18n.I18n) {
+	I18n = i
+}
 
 func (w *Website) InitSetting() {
 	// load setting from db
@@ -162,7 +170,7 @@ func (w *Website) LoadPushSetting() {
 	// 兼容旧版 jscode
 	if w.PluginPush.JsCode != "" {
 		w.PluginPush.JsCodes = append(w.PluginPush.JsCodes, config.CodeItem{
-			Name:  "未命名JS",
+			Name:  w.Tr("未命名JS"),
 			Value: w.PluginPush.JsCode,
 		})
 		w.PluginPush.JsCode = ""
@@ -570,12 +578,14 @@ func (w *Website) GetTimeFactorSetting() (setting config.PluginTimeFactor) {
 	return
 }
 
-func (w *Website) Lang(str string) string {
-	if newStr, ok := config.Languages[w.System.Language][str]; ok {
-		return newStr
+// Tr as Translate, formats according to a format specifier and returns the resulting string after translate.
+// 这是一个兼容函数，请使用 ctx.Tr
+func (w *Website) Tr(str string, args ...interface{}) string {
+	if I18n != nil {
+		return I18n.Tr(w.System.Language, str, args...)
 	}
 
-	return str
+	return fmt.Sprintf(str, args...)
 }
 
 func (w *Website) GetSettingValue(key string) string {

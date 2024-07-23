@@ -95,12 +95,10 @@ var GoogleValid bool // can visit google or not
 
 // RestartChan 1 to restart app, 0 to reload template, 2 to exit app
 var RestartChan = make(chan int)
-var Languages = map[string]map[string]string{}
 
 func init() {
 	initPath()
 	initJSON()
-	initLanguage()
 }
 
 func WriteConfig() error {
@@ -126,32 +124,6 @@ func WriteConfig() error {
 	}
 
 	return nil
-}
-
-func initLanguage() {
-	// 重置
-	// 读取language列表
-	readerInfos, err := os.ReadDir(fmt.Sprintf("%slanguage", ExecPath))
-	if err == nil {
-		for _, info := range readerInfos {
-			if strings.HasSuffix(info.Name(), ".yml") {
-				lang := strings.TrimSuffix(info.Name(), ".yml")
-				languagePath := ExecPath + "language/" + info.Name()
-				languages := map[string]string{}
-				yamlFile, err := os.ReadFile(languagePath)
-				if err == nil {
-					strSlice := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(yamlFile), "\r\n", "\n"), "\r", "\n"), "\n")
-					for _, v := range strSlice {
-						vSplit := strings.SplitN(strings.TrimSpace(v), ":", 2)
-						if len(vSplit) == 2 {
-							languages[strings.Trim(vSplit[0], "\" ")] = strings.Trim(vSplit[1], "\" ")
-						}
-					}
-				}
-				Languages[lang] = languages
-			}
-		}
-	}
 }
 
 func GenerateRandString(length int) string {

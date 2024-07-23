@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -17,7 +16,7 @@ func IndexPage(ctx iris.Context) {
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	webTitle := currentSite.Index.SeoTitle
 	if currentPage > 1 {
-		webTitle += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
+		webTitle += " - " + ctx.Tr("第%d页", currentPage)
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {

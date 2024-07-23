@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -80,7 +79,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 	if currentSite.Id != 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "权限不足",
+			"msg":  ctx.Tr("权限不足"),
 		})
 		return
 	}
@@ -89,7 +88,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 	if !strings.HasPrefix(req.BaseUrl, "http") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请填写正确的站点域名",
+			"msg":  ctx.Tr("请填写正确的站点域名"),
 		})
 		return
 	}
@@ -99,7 +98,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "站点不存在",
+				"msg":  ctx.Tr("站点不存在"),
 			})
 			return
 		}
@@ -109,14 +108,14 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			if req.RootPath == currentSite.RootPath {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "不能使用默认站点目录",
+					"msg":  ctx.Tr("不能使用默认站点目录"),
 				})
 				return
 			}
 			if !strings.Contains(req.RootPath, "/") {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "请填写站点正确的目录",
+					"msg":  ctx.Tr("请填写站点正确的目录"),
 				})
 				return
 			}
@@ -125,7 +124,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "站点目录读取失败",
+					"msg":  ctx.Tr("站点目录读取失败"),
 				})
 				return
 			}
@@ -140,7 +139,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "保存站点出错",
+				"msg":  ctx.Tr("保存站点出错"),
 			})
 			return
 		}
@@ -150,7 +149,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			if req.Mysql.Database == config.Server.Mysql.Database {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "不能覆盖默认站点数据库",
+					"msg":  ctx.Tr("不能覆盖默认站点数据库"),
 				})
 				return
 			}
@@ -164,7 +163,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "数据库信息错误",
+					"msg":  ctx.Tr("数据库信息错误"),
 				})
 				return
 			}
@@ -208,7 +207,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if len(req.AdminPassword) < 6 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "请填写6位以上的管理员密码",
+				"msg":  ctx.Tr("请填写6位以上的管理员密码"),
 			})
 			return
 		}
@@ -216,7 +215,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if req.Mysql.Database == config.Server.Mysql.Database {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "不能覆盖默认站点数据库",
+				"msg":  ctx.Tr("不能覆盖默认站点数据库"),
 			})
 			return
 		}
@@ -224,7 +223,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if len(req.Mysql.Database) == 0 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "请填写数据库名称",
+				"msg":  ctx.Tr("请填写数据库名称"),
 			})
 			return
 		}
@@ -232,7 +231,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if !strings.Contains(req.RootPath, "/") {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "请填写站点正确的目录",
+				"msg":  ctx.Tr("请填写站点正确的目录"),
 			})
 			return
 		}
@@ -241,7 +240,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		if req.RootPath == currentSite.RootPath {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "不能使用默认站点目录",
+				"msg":  ctx.Tr("不能使用默认站点目录"),
 			})
 			return
 		}
@@ -257,11 +256,11 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			req.Mysql.Host = config.Server.Mysql.Host
 			req.Mysql.Port = config.Server.Mysql.Port
 		}
-		_, err := provider.InitDB(&req.Mysql)
+		_, err = provider.InitDB(&req.Mysql)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  "数据库信息错误",
+				"msg":  ctx.Tr("数据库信息错误"),
 			})
 			return
 		}
@@ -272,7 +271,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  "创建站点目录失败",
+					"msg":  ctx.Tr("创建站点目录失败"),
 				})
 				return
 			}
@@ -346,13 +345,13 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			}
 		}
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新多站点信息：%d => %s", dbSite.Id, dbSite.Name))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新多站点信息：%d => %s", dbSite.Id, dbSite.Name))
 	// 重启
 	config.RestartChan <- 0
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "站点信息已保存",
+		"msg":  ctx.Tr("站点信息已保存"),
 	})
 }
 
@@ -370,7 +369,7 @@ func DeleteWebsite(ctx iris.Context) {
 	if currentSite.Id != 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "权限不足",
+			"msg":  ctx.Tr("权限不足"),
 		})
 		return
 	}
@@ -385,7 +384,7 @@ func DeleteWebsite(ctx iris.Context) {
 	if dbSite.Id == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "默认站点不可删除",
+			"msg":  ctx.Tr("默认站点不可删除"),
 		})
 		return
 	}
@@ -396,7 +395,7 @@ func DeleteWebsite(ctx iris.Context) {
 	config.RestartChan <- 0
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }
 

@@ -93,7 +93,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	newPost := false
 	req.Title = strings.TrimSpace(req.Title)
 	if len(req.Title) == 0 {
-		return nil, errors.New("标签名称不能为空")
+		return nil, errors.New(w.Tr("TagNameCannotBeEmpty"))
 	}
 	if req.Id > 0 {
 		tag, err = w.GetTagById(req.Id)

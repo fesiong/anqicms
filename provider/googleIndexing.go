@@ -12,7 +12,7 @@ func (w *Website) GetGoogleIndexingAccess() (*indexing.Service, error) {
 	content := w.PluginPush.GoogleJson
 
 	if len(content) == 0 {
-		return nil, errors.New("账号错误")
+		return nil, errors.New(w.Tr("账号错误"))
 	}
 
 	ctx := context.Background()

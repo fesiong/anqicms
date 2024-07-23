@@ -62,9 +62,9 @@ func CategoryList(ctx iris.Context) {
 		if categories[i].Template == "" {
 			// 默认的
 			if categories[i].Type == config.CategoryTypePage {
-				categories[i].Template = "(默认) " + "page/detail.html"
+				categories[i].Template = ctx.Tr("(默认)") + " page/detail.html"
 				if controller.ViewExists(ctx, "page_detail.html") {
-					categories[i].Template = "(默认) " + "page_detail.html"
+					categories[i].Template = ctx.Tr("(默认)") + " page_detail.html"
 				}
 				tmpTpl := fmt.Sprintf("page/detail-%d.html", categories[i].Id)
 				if controller.ViewExists(ctx, tmpTpl) {
@@ -78,10 +78,10 @@ func CategoryList(ctx iris.Context) {
 					}
 				}
 			} else {
-				categories[i].Template = "(默认) " + mapModules[categories[i].ModuleId].TableName + "/list.html"
+				categories[i].Template = ctx.Tr("(默认)") + mapModules[categories[i].ModuleId].TableName + "/list.html"
 				tplName2 := mapModules[categories[i].ModuleId].TableName + "_list.html"
 				if controller.ViewExists(ctx, tplName2) {
-					categories[i].Template = "(默认) " + tplName2
+					categories[i].Template = ctx.Tr("(默认)") + tplName2
 				}
 				if controller.ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)) {
 					categories[i].Template = "(ID) " + fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)
@@ -90,20 +90,20 @@ func CategoryList(ctx iris.Context) {
 				if categories[i].ParentId > 0 {
 					categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
 					if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
-						categories[i].Template = "(继承) " + categoryTemplate.Template
+						categories[i].Template = ctx.Tr("(继承)") + categoryTemplate.Template
 					}
 					if categories[i].DetailTemplate == "" && categoryTemplate != nil && len(categoryTemplate.DetailTemplate) > 0 {
-						categories[i].DetailTemplate = "(继承) " + categoryTemplate.DetailTemplate
+						categories[i].DetailTemplate = ctx.Tr("(继承)") + categoryTemplate.DetailTemplate
 					}
 				}
 			}
 		}
 		// 计算内容template
 		if categories[i].DetailTemplate == "" && categories[i].Type != config.CategoryTypePage {
-			categories[i].DetailTemplate = "(默认) " + mapModules[categories[i].ModuleId].TableName + "/detail.html"
+			categories[i].DetailTemplate = ctx.Tr("(默认)") + mapModules[categories[i].ModuleId].TableName + "/detail.html"
 			tplName2 := mapModules[categories[i].ModuleId].TableName + "_detail.html"
 			if controller.ViewExists(ctx, tplName2) {
-				categories[i].DetailTemplate = "(默认) " + tplName2
+				categories[i].DetailTemplate = ctx.Tr("(默认)") + tplName2
 			}
 		}
 	}
@@ -162,11 +162,11 @@ func CategoryDetailForm(ctx iris.Context) {
 		_ = currentSite.SyncHtmlCacheToStorage("", "")
 	}()
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("保存文档分类：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("保存文档分类：%d => %s", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 		"data": category,
 	})
 }
@@ -199,13 +199,13 @@ func CategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档分类：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除文档分类：%d => %s", category.Id, category.Title))
 
 	currentSite.DeleteCacheCategories()
 	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已删除",
+		"msg":  ctx.Tr("分类已删除"),
 	})
 }

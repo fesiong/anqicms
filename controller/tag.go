@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -17,9 +16,9 @@ func TagIndexPage(ctx iris.Context) {
 	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.Values().GetIntDefault("page", 1)
-		webInfo.Title = currentSite.Lang("标签列表")
+		webInfo.Title = ctx.Tr("标签列表")
 		if currentPage > 1 {
-			webInfo.Title += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
+			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
 		}
 		webInfo.PageName = "tagIndex"
 		webInfo.CanonicalUrl = currentSite.GetUrl("tagIndex", nil, currentPage)
@@ -71,7 +70,7 @@ func TagPage(ctx iris.Context) {
 			webInfo.Title = tag.SeoTitle
 		}
 		if currentPage > 1 {
-			webInfo.Title += " - " + fmt.Sprintf(currentSite.Lang("第%d页"), currentPage)
+			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
 		}
 		webInfo.Keywords = tag.Keywords
 		webInfo.Description = tag.Description

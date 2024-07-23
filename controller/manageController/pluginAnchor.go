@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -90,7 +89,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		if err == nil && exists.Id != anchor.Id {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  fmt.Errorf("已存在锚文本关键词%s，修改失败", req.Title),
+				"msg":  ctx.Tr("已存在锚文本关键词%s，修改失败", req.Title),
 			})
 			return
 		}
@@ -130,11 +129,11 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		go currentSite.ChangeAnchor(anchor, changeTitle)
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改锚文本：%d => %s", anchor.Id, anchor.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改锚文本：%d => %s", anchor.Id, anchor.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "链接已更新",
+		"msg":  ctx.Tr("链接已更新"),
 	})
 }
 
@@ -165,11 +164,11 @@ func PluginAnchorReplace(ctx iris.Context) {
 		go currentSite.ReplaceAnchor(nil)
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("执行锚文本批量替换"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("执行锚文本批量替换"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "锚文本替换任务已执行",
+		"msg":  ctx.Tr("锚文本替换任务已执行"),
 	})
 }
 
@@ -215,11 +214,11 @@ func PluginAnchorDelete(ctx iris.Context) {
 		}
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除锚文本：%d, %v", req.Id, req.Ids))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除锚文本：%d, %v", req.Id, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已执行删除操作",
+		"msg":  ctx.Tr("已执行删除操作"),
 	})
 }
 
@@ -242,7 +241,7 @@ func PluginAnchorExport(ctx iris.Context) {
 		content = append(content, []interface{}{v.Title, v.Link, v.Weight})
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("导出锚文本"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("导出锚文本"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -275,11 +274,11 @@ func PluginAnchorImport(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("导入锚文本：%s", result))
+	currentSite.AddAdminLog(ctx, ctx.Tr("导入锚文本：%s", result))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "上传完毕",
+		"msg":  ctx.Tr("上传完毕"),
 		"data": result,
 	})
 }
@@ -323,10 +322,10 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改锚文本设置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改锚文本设置信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }

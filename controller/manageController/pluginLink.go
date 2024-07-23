@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -77,11 +76,11 @@ func PluginLinkDetailForm(ctx iris.Context) {
 	// 保存完毕，实时监测
 	go currentSite.PluginLinkCheck(link)
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改友情链接：%d => %s", link.Id, link.Link))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改友情链接：%d => %s", link.Id, link.Link))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "链接已更新",
+		"msg":  ctx.Tr("链接已更新"),
 	})
 }
 
@@ -113,11 +112,11 @@ func PluginLinkDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除友情链接：%d => %s", link.Id, link.Link))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除友情链接：%d => %s", link.Id, link.Link))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "链接已删除",
+		"msg":  ctx.Tr("链接已删除"),
 	})
 }
 
@@ -151,7 +150,7 @@ func PluginLinkCheck(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "检查结束",
+		"msg":  ctx.Tr("检查结束"),
 		"data": result,
 	})
 }

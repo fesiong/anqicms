@@ -20,7 +20,7 @@ func ApiGetRetailerInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  currentSite.Lang("查询失败"),
+			"msg":  ctx.Tr("查询失败"),
 		})
 		return
 	}
@@ -40,7 +40,7 @@ func ApiGetRetailerStatistics(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  currentSite.Lang("登录失败"),
+			"msg":  ctx.Tr("登录失败"),
 		})
 		return
 	}
@@ -87,13 +87,13 @@ func ApiUpdateRetailerInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  currentSite.Lang("更新信息失败"),
+			"msg":  ctx.Tr("更新信息失败"),
 		})
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  currentSite.Lang("保存成功"),
+		"msg":  ctx.Tr("保存成功"),
 	})
 }
 
@@ -147,7 +147,7 @@ func ApiRetailerWithdraw(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  currentSite.Lang("提现申请已提交"),
+		"msg":  ctx.Tr("提现申请已提交"),
 	})
 }
 

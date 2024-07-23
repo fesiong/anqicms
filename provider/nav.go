@@ -131,7 +131,7 @@ func (w *Website) GetNavsFromCache(typeId uint) []*model.Nav {
 	if len(tmpNavs) == 0 {
 		return []*model.Nav{
 			{
-				Title:   w.Lang("首页"),
+				Title:   w.Tr("首页"),
 				Status:  1,
 				NavType: model.NavTypeSystem,
 				PageId:  0,

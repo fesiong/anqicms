@@ -197,7 +197,7 @@ func (w *Website) DeleteMaterialCategory(id uint) error {
 	var materialCount int64
 	w.DB.Model(&model.Material{}).Where("`category_id` = ?", category.Id).Count(&materialCount)
 	if materialCount > 0 {
-		return errors.New(w.Lang("请删除分类下的素材，才能删除分类"))
+		return errors.New(w.Tr("PleaseDeleteTheMaterialsUnderTheCategoryBeforeDeletingTheCategory"))
 	}
 
 	//执行删除操作

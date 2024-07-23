@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -62,7 +61,7 @@ func ModuleDetailForm(ctx iris.Context) {
 	if req.TableName == "" || !matched {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请正确填写模型表名",
+			"msg":  ctx.Tr("请正确填写模型表名"),
 		})
 		return
 	}
@@ -71,7 +70,7 @@ func ModuleDetailForm(ctx iris.Context) {
 	if req.UrlToken == "" || !matched {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请正确填写URL别名",
+			"msg":  ctx.Tr("请正确填写URL别名"),
 		})
 		return
 	}
@@ -91,11 +90,11 @@ func ModuleDetailForm(ctx iris.Context) {
 		_ = currentSite.SyncHtmlCacheToStorage("", "")
 	}()
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", module.Id, module.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("修改文档模型：%d => %s", module.Id, module.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("保存成功"),
 		"data": module,
 	})
 }
@@ -121,11 +120,11 @@ func ModuleFieldsDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除模型字段：%d => %s", req.Id, req.FieldName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除模型字段：%d => %s", req.Id, req.FieldName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "字段已删除",
+		"msg":  ctx.Tr("字段已删除"),
 	})
 }
 
@@ -151,7 +150,7 @@ func ModuleDelete(ctx iris.Context) {
 	if module.IsSystem == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "内置模型不能删除",
+			"msg":  ctx.Tr("内置模型不能删除"),
 		})
 		return
 	}
@@ -165,12 +164,12 @@ func ModuleDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除文档模型：%d => %s", module.Id, module.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除文档模型：%d => %s", module.Id, module.Title))
 
 	currentSite.DeleteCacheModules()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "模型已删除",
+		"msg":  ctx.Tr("模型已删除"),
 	})
 }

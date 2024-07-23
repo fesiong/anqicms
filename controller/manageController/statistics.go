@@ -99,23 +99,23 @@ func GetSpiderInclude(ctx iris.Context) {
 		lastDate = date
 		result = append(result, response.ChartData{
 			Date:  date,
-			Label: "百度",
+			Label: ctx.Tr("百度"),
 			Value: v.BaiduCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "搜狗",
+			Label: ctx.Tr("搜狗"),
 			Value: v.SogouCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "搜搜",
+			Label: ctx.Tr("搜搜"),
 			Value: v.SoCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "必应",
+			Label: ctx.Tr("必应"),
 			Value: v.BingCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "谷歌",
+			Label: ctx.Tr("谷歌"),
 			Value: v.GoogleCount,
 		})
 	}

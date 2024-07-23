@@ -64,12 +64,11 @@ func ParseUserToken(ctx iris.Context) {
 }
 
 func UserAuth(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  currentSite.Lang("该操作需要登录，请登录后重试"),
+			"msg":  ctx.Tr("该操作需要登录，请登录后重试"),
 		})
 		return
 	}

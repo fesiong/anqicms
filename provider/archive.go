@@ -300,25 +300,25 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		req.CategoryIds = append(req.CategoryIds, req.CategoryId)
 	}
 	if len(req.CategoryIds) == 0 {
-		return nil, errors.New(w.Lang("请选择一个栏目"))
+		return nil, errors.New(w.Tr("请选择一个栏目"))
 	}
 	for _, catId := range req.CategoryIds {
 		category := w.GetCategoryFromCache(catId)
 		if category == nil || category.Type != config.CategoryTypeArchive {
-			return nil, errors.New(w.Lang("请选择一个栏目"))
+			return nil, errors.New(w.Tr("请选择一个栏目"))
 		}
 	}
 	req.CategoryId = req.CategoryIds[0]
 	category, err := w.GetCategoryById(req.CategoryId)
 	if err != nil {
-		return nil, errors.New(w.Lang("请选择一个栏目"))
+		return nil, errors.New(w.Tr("请选择一个栏目"))
 	}
 	module := w.GetModuleFromCache(category.ModuleId)
 	if module == nil {
-		return nil, errors.New(w.Lang("未定义模型"))
+		return nil, errors.New(w.Tr("未定义模型"))
 	}
 	if len(req.Title) == 0 {
-		return nil, errors.New(w.Lang("请填写文章标题"))
+		return nil, errors.New(w.Tr("请填写文章标题"))
 	}
 	var draft *model.ArchiveDraft
 	newPost := false
@@ -465,13 +465,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		for _, v := range module.Fields {
 			//先检查是否有必填而没有填写的
 			if v.Required && req.Extra[v.FieldName] == nil {
-				return nil, fmt.Errorf(w.Lang("%s必填"), v.Name)
+				return nil, errors.New(w.Tr("%s必填", v.Name))
 			}
 			if req.Extra[v.FieldName] != nil {
 				extraValue, ok := req.Extra[v.FieldName].(map[string]interface{})
 				if ok {
 					if v.Required && extraValue["value"] == nil && extraValue["value"] == "" {
-						return nil, fmt.Errorf(w.Lang("%s必填"), v.Name)
+						return nil, errors.New(w.Tr("%s必填", v.Name))
 					}
 					if v.Type == config.CustomFieldTypeCheckbox {
 						//只有这个类型的数据是数组,数组转成,分隔字符串
@@ -922,7 +922,7 @@ func (w *Website) DeleteArchiveDraft(draft *model.ArchiveDraft) error {
 
 func (w *Website) UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New("无可操作的文档")
+		return errors.New(w.Tr("无可操作的文档"))
 	}
 	for _, id := range req.Ids {
 		_ = w.SaveArchiveFlags(id, strings.Split(req.Flag, ","))
@@ -935,7 +935,7 @@ func (w *Website) UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) err
 
 func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New(w.Lang("无可操作的文档"))
+		return errors.New(w.Tr("无可操作的文档"))
 	}
 	if req.Status == config.ContentStatusOK {
 		// 改成正式发布
@@ -985,7 +985,7 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 
 func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New(w.Lang("无可操作的文档"))
+		return errors.New(w.Tr("无可操作的文档"))
 	}
 	var err error
 	if req.Time == 4 {
@@ -1009,7 +1009,7 @@ func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
 
 func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New(w.Lang("无可操作的文档"))
+		return errors.New(w.Tr("无可操作的文档"))
 	}
 	num := 0
 	if req.EndHour <= req.StartHour {
@@ -1059,7 +1059,7 @@ func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) e
 
 func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
-		return errors.New(w.Lang("无可操作的文档"))
+		return errors.New(w.Tr("无可操作的文档"))
 	}
 	// 保存分类ID
 	if len(req.CategoryIds) == 0 && req.CategoryId > 0 {
@@ -1069,14 +1069,14 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 	for _, catId := range req.CategoryIds {
 		category, err := w.GetCategoryById(catId)
 		if err != nil {
-			return errors.New("分类不存在")
+			return errors.New(w.Tr("分类不存在"))
 		}
 		if defaultCategory == nil {
 			defaultCategory = category
 		}
 	}
 	if len(req.CategoryIds) == 0 || defaultCategory == nil {
-		return errors.New("请选择分类")
+		return errors.New(w.Tr("请选择分类"))
 	}
 	for _, arcId := range req.Ids {
 		_ = w.SaveArchiveCategories(arcId, req.CategoryIds)

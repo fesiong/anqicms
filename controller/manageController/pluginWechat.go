@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -50,11 +49,11 @@ func PluginWechatConfigForm(ctx iris.Context) {
 	// 强制更新信息
 	currentSite.GetWechatServer(true)
 
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新服务号信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新服务号信息"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("配置已更新"),
 	})
 }
 
@@ -92,11 +91,11 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除微信留言：%d => %s", req.Id, req.Content))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除微信留言：%d => %s", req.Id, req.Content))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }
 
@@ -119,11 +118,11 @@ func PluginWechatMessageReply(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("微信留言：%d => %s", req.Id, req.Reply))
+	currentSite.AddAdminLog(ctx, ctx.Tr("微信留言：%d => %s", req.Id, req.Reply))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "操作成功",
+		"msg":  ctx.Tr("操作成功"),
 	})
 }
 
@@ -161,11 +160,11 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除微信自动回复规则：%d => %s", req.Id, req.Keyword))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除微信自动回复规则：%d => %s", req.Id, req.Keyword))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }
 
@@ -188,11 +187,11 @@ func PluginWechatReplyRuleForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新微信自动回复规则：%d => %s", req.Id, req.Keyword))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新微信自动回复规则：%d => %s", req.Id, req.Keyword))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "操作成功",
+		"msg":  ctx.Tr("操作成功"),
 	})
 }
 
@@ -226,11 +225,11 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("删除微信菜单：%d => %s", req.Id, req.Name))
+	currentSite.AddAdminLog(ctx, ctx.Tr("删除微信菜单：%d => %s", req.Id, req.Name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("删除成功"),
 	})
 }
 
@@ -253,11 +252,11 @@ func PluginWechatMenuSave(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("保存微信菜单：%d => %s", req.Id, req.Name))
+	currentSite.AddAdminLog(ctx, ctx.Tr("保存微信菜单：%d => %s", req.Id, req.Name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "操作成功",
+		"msg":  ctx.Tr("操作成功"),
 	})
 }
 
@@ -271,10 +270,10 @@ func PluginWechatMenuSync(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, fmt.Sprintf("更新微信菜单"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("更新微信菜单"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "操作成功",
+		"msg":  ctx.Tr("操作成功"),
 	})
 }

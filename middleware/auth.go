@@ -28,7 +28,7 @@ func ParseAdminToken(ctx iris.Context) {
 	if tokenErr != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  currentSite.Lang("该操作需要登录，请登录后重试"),
+			"msg":  ctx.Tr("该操作需要登录，请登录后重试"),
 		})
 		return
 	} else {
@@ -38,7 +38,7 @@ func ParseAdminToken(ctx iris.Context) {
 			if !ok || !ok2 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
-					"msg":  currentSite.Lang("该操作需要登录，请登录后重试"),
+					"msg":  ctx.Tr("该操作需要登录，请登录后重试"),
 				})
 				return
 			}
@@ -46,7 +46,7 @@ func ParseAdminToken(ctx iris.Context) {
 			if sec < time.Now().Unix() {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
-					"msg":  currentSite.Lang("该操作需要登录，请登录后重试"),
+					"msg":  ctx.Tr("该操作需要登录，请登录后重试"),
 				})
 				return
 			}
@@ -54,7 +54,7 @@ func ParseAdminToken(ctx iris.Context) {
 		} else {
 			ctx.JSON(iris.Map{
 				"code": config.StatusNoLogin,
-				"msg":  currentSite.Lang("该操作需要登录，请登录后重试"),
+				"msg":  ctx.Tr("该操作需要登录，请登录后重试"),
 			})
 			return
 		}
@@ -72,7 +72,7 @@ func ParseAdminUrl(ctx iris.Context) {
 			if parsedUrl.Hostname() != library.GetHost(ctx) {
 				ctx.JSON(iris.Map{
 					"code": config.StatusNoLogin,
-					"msg":  "请使用正确的入口访问。 Please use the correct entry to visit.",
+					"msg":  ctx.Tr("请使用正确的入口访问"),
 				})
 				return
 			}

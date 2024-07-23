@@ -33,11 +33,11 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New("接口不可用")
+			return nil, errors.New(w.Tr("InterfaceUnavailable"))
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
-			return nil, errors.New("无可用Key")
+			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
 
 		result, err = GetOpenAIResponse(key, prompt)
@@ -59,11 +59,11 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 		}
 	} else {
 		// 错误
-		return nil, errors.New("没有选择AI生成来源")
+		return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
 	}
 
 	if len(result.Content) == 0 {
-		return nil, errors.New("文本内容不足")
+		return nil, errors.New(w.Tr("InsufficientTextContent"))
 	}
 	req.Title = result.Content
 
@@ -97,7 +97,7 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 			key := w.GetOpenAIKey()
 			if key == "" {
-				return nil, errors.New("无可用Key")
+				return nil, errors.New(w.Tr("NoAvailableKey"))
 			}
 			result, err = GetOpenAIResponse(key, prompt)
 			if err != nil {
@@ -119,7 +119,7 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 		}
 
 		if len(result.Content) == 0 {
-			return nil, errors.New("文本内容不足")
+			return nil, errors.New(w.Tr("InsufficientTextContent"))
 		}
 
 		contentTexts[i] = result.Content
@@ -162,11 +162,11 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 	}
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New("接口不可用")
+			return nil, errors.New(w.Tr("InterfaceUnavailable"))
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
-			return nil, errors.New("无可用Key")
+			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
 
 		result, err = GetOpenAIResponse(key, prompt)
@@ -188,11 +188,11 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 		}
 	} else {
 		// 错误
-		return nil, errors.New("没有选择AI生成来源")
+		return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
 	}
 
 	if len(result.Content) == 0 {
-		return nil, errors.New("文本内容不足")
+		return nil, errors.New(w.Tr("InsufficientTextContent"))
 	}
 	req.Title = result.Content
 
@@ -225,11 +225,11 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 		}
 		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 			if !w.AiGenerateConfig.ApiValid {
-				return nil, errors.New("接口不可用")
+				return nil, errors.New(w.Tr("InterfaceUnavailable"))
 			}
 			key := w.GetOpenAIKey()
 			if key == "" {
-				return nil, errors.New("无可用Key")
+				return nil, errors.New(w.Tr("NoAvailableKey"))
 			}
 
 			result, err = GetOpenAIResponse(key, prompt)
@@ -252,7 +252,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 		}
 
 		if len(result.Content) == 0 {
-			return nil, errors.New("文本内容不足")
+			return nil, errors.New(w.Tr("InsufficientTextContent"))
 		}
 
 		contentTexts[i] = result.Content
@@ -306,11 +306,11 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	}
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New("接口不可用")
+			return nil, errors.New(w.Tr("InterfaceUnavailable"))
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
-			return nil, errors.New("无可用Key")
+			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
 
 		result, err = GetOpenAIResponse(key, prompt)
@@ -332,11 +332,11 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 		}
 	} else {
 		// 错误
-		return nil, errors.New("没有选择AI生成来源")
+		return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
 	}
 
 	if len(result.Content) < 2 {
-		return nil, errors.New("生成内容不足")
+		return nil, errors.New(w.Tr("InsufficientGeneratedContent"))
 	}
 	// 解析内容
 	if strings.Count(result.Content, "\n") < 3 {

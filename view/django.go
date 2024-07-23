@@ -336,7 +336,7 @@ func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Templ
 // ExecuteWriter executes a templates and write its results to the w writer
 // layout here is useless.
 func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bindingData interface{}) error {
-	// re-parse the templates if reload is enabled.
+	// reparse the templates if reload is enabled.
 	if s.reload {
 		if err := s.LoadStart(true); err != nil {
 			return err
