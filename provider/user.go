@@ -277,35 +277,35 @@ func (w *Website) DeleteUserGroup(groupId uint) error {
 
 func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, error) {
 	if req.UserName == "" || req.Password == "" {
-		return nil, errors.New(w.Tr("PleaseFillInTheUsernameAndPasswordCorrectly"))
+		return nil, errors.New(w.Tr("请正确填写用户名和密码"))
 	}
 	if len(req.Password) < 6 {
-		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
+		return nil, errors.New(w.Tr("请输入6位以上的密码"))
 	}
 	_, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil {
-		return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
+		return nil, errors.New(w.Tr("该用户名已被注册"))
 	}
 	if req.Phone != "" {
 		if !w.VerifyCellphoneFormat(req.Phone) {
-			return nil, errors.New(w.Tr("IncorrectMobilePhoneNumber"))
+			return nil, errors.New(w.Tr("手机号不正确"))
 		}
 		_, err := w.GetUserInfoByPhone(req.Phone)
 		if err == nil {
-			return nil, errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
+			return nil, errors.New(w.Tr("该手机号已被注册"))
 		}
 	}
 	if req.Email != "" {
 		if !w.VerifyEmailFormat(req.Email) {
-			return nil, errors.New(w.Tr("IncorrectEmail"))
+			return nil, errors.New(w.Tr("邮箱不正确"))
 		}
 		_, err := w.GetUserInfoByEmail(req.Email)
 		if err == nil {
-			return nil, errors.New(w.Tr("TheEmailHasBeenRegistered"))
+			return nil, errors.New(w.Tr("该邮箱已被注册"))
 		}
 	}
 	if req.Phone == "" && req.Email == "" {
-		return nil, errors.New(w.Tr("FillInAtLeastOneOfTheEmailAndMobilePhoneNumber"))
+		return nil, errors.New(w.Tr("邮箱和手机号至少填写一个"))
 	}
 
 	user := model.User{
@@ -335,7 +335,7 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 	//log.Printf("%#v", loginRs)
 	if loginRs.OpenID == "" {
 		//openid 不在？
-		return nil, errors.New(w.Tr("UnableToObtainOpenid"))
+		return nil, errors.New(w.Tr("无法获取openid"))
 	}
 
 	var wecahtUserInfo *weapp.UserInfo
@@ -420,12 +420,12 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, error) {
 	openid := library.CodeCache.GetByCode(req.Code, false)
 	if openid == "" {
-		return nil, errors.New(w.Tr("VerificationCodeIsIncorrect"))
+		return nil, errors.New(w.Tr("验证码不正确"))
 	}
 	// auto register
 	userWechat, err := w.GetUserWechatByOpenid(openid)
 	if err != nil {
-		return nil, errors.New(w.Tr("IncompleteUserInfo"))
+		return nil, errors.New(w.Tr("用户信息不完整"))
 	}
 	var user *model.User
 	if userWechat.UserId == 0 {
@@ -442,7 +442,7 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 	} else {
 		user, err = w.GetUserInfoById(userWechat.UserId)
 		if err != nil {
-			return nil, errors.New(w.Tr("IncompleteUserInfo"))
+			return nil, errors.New(w.Tr("用户信息不完整"))
 		}
 	}
 	if req.InviteId > 0 && user.ParentId == 0 {
@@ -480,7 +480,7 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 	//验证密码
 	ok := user.CheckPassword(req.Password)
 	if !ok {
-		return nil, errors.New(w.Tr("WrongPassword"))
+		return nil, errors.New(w.Tr("密码错误"))
 	}
 
 	user.Token = w.GetUserAuthToken(user.Id, true)
@@ -548,7 +548,7 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 
 	exist, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil && exist.Id != user.Id {
-		return errors.New(w.Tr("TheUsernameHasBeenRegistered"))
+		return errors.New(w.Tr("该用户名已被注册"))
 	}
 
 	if user.Phone != "" {
@@ -559,21 +559,21 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	}
 	if req.Phone != "" {
 		if !w.VerifyCellphoneFormat(req.Phone) {
-			return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
+			return errors.New(w.Tr("手机号不正确"))
 		}
 		exist, err = w.GetUserInfoByPhone(req.Phone)
 		if err == nil && exist.Id != user.Id {
-			return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
+			return errors.New(w.Tr("该手机号已被注册"))
 		}
 		user.Phone = req.Phone
 	}
 	if req.Email != "" {
 		if !w.VerifyEmailFormat(req.Email) {
-			return errors.New(w.Tr("IncorrectEmail"))
+			return errors.New(w.Tr("邮箱不正确"))
 		}
 		exist, err = w.GetUserInfoByEmail(req.Email)
 		if err == nil && exist.Id != user.Id {
-			return errors.New(w.Tr("TheEmailHasBeenRegistered"))
+			return errors.New(w.Tr("该邮箱已被注册"))
 		}
 		user.Email = req.Email
 	}

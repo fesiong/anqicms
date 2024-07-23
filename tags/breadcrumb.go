@@ -37,7 +37,7 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
 
-	index := currentSite.Tr("Home")
+	index := currentSite.Tr("首页")
 	if args["index"] != nil {
 		index = args["index"].String()
 	}
@@ -109,13 +109,13 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 				})
 			}
 			crumbs = append(crumbs, &crumb{
-				Name: currentSite.Tr("Comment"),
+				Name: currentSite.Tr("评论"),
 				Link: "",
 			})
 			break
 		case "guestbook":
 			crumbs = append(crumbs, &crumb{
-				Name: currentSite.Tr("MessageBoard"),
+				Name: currentSite.Tr("留言板"),
 				Link: currentSite.GetUrl("/guestbook.html", nil, 0),
 			})
 			break

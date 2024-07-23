@@ -52,7 +52,7 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		materials = append(result, materials...)
 	}
 	if len(materials) == 0 {
-		return 0, errors.New(w.Tr("ErrorAVerificationCodeMayAppear"))
+		return 0, errors.New(w.Tr("错误，可能出现验证码了"))
 	}
 	if len(materials) < 3 {
 		log.Println(fmt.Sprintf("有效内容不足: %d", len(materials)))
@@ -153,11 +153,11 @@ func (w *Website) GetCombinationArticle(keyword *model.Keyword) (*request.Archiv
 		materials = append(result, materials...)
 	}
 	if len(materials) == 0 {
-		return nil, errors.New(w.Tr("ErrorAVerificationCodeMayAppear"))
+		return nil, errors.New(w.Tr("错误，可能出现验证码了"))
 	}
 	if len(materials) < 3 {
 		log.Println(fmt.Sprintf("有效内容不足: %d", len(materials)))
-		return nil, errors.New(w.Tr("InsufficientValidContent"))
+		return nil, errors.New(w.Tr("有效内容不足"))
 	}
 	var title = keyword.Title
 	var content = make([]string, 0, len(materials)*2+3)
@@ -590,7 +590,7 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 	}
 
 	if len(item.Title) == 0 || len(item.Content) < 40 {
-		return nil, true, errors.New(w.Tr("NoContent"))
+		return nil, true, errors.New(w.Tr("没有内容"))
 	}
 	// 保存它
 	if utf8.RuneCountInString(link) > 190 {

@@ -46,7 +46,7 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		return nil
 	}
 
-	allText := currentSite.Tr("All")
+	allText := currentSite.Tr("全部")
 
 	if args["allText"] != nil {
 		if args["allText"].IsBool() {

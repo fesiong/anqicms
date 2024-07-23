@@ -205,7 +205,7 @@ func GetAuthInfo() *config.AnqiUserConfig {
 
 func (w *Website) AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 	if config.AnqiUser.AuthId == 0 {
-		return errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
+		return errors.New(w.Tr("请先登录 AnqiCMS 账号"))
 	}
 	design, err := w.GetDesignInfo(req.Package, false)
 	if err != nil {
@@ -255,7 +255,7 @@ func (w *Website) AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 
 func (w *Website) AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
 	if config.AnqiUser.AuthId == 0 {
-		return errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
+		return errors.New(w.Tr("请先登录 AnqiCMS 账号"))
 	}
 	req.Version = config.Version
 	req.Platform = runtime.GOOS
@@ -277,7 +277,7 @@ func (w *Website) AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
 
 func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachment, error) {
 	if config.AnqiUser.AuthId == 0 {
-		return nil, errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
+		return nil, errors.New(w.Tr("请先登录 AnqiCMS 账号"))
 	}
 
 	var result AnqiAttachmentResult
@@ -307,7 +307,7 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 
 	downloadUrl, ok := result.Data.(string)
 	if !ok {
-		return errors.New(w.Tr("ErrorInReadingDownloadAddress"))
+		return errors.New(w.Tr("读取下载地址错误"))
 	}
 
 	_, body, errs = w.NewAuthReq(gorequest.TypeHTML).Get(downloadUrl).EndBytes()
@@ -588,7 +588,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 		return err
 	}
 	if plan.Status != config.AiArticleStatusDoing {
-		return errors.New(w.Tr("ThePlanHasBeenProcessed"))
+		return errors.New(w.Tr("该plan已经处理过了"))
 	}
 	req := &AnqiAiRequest{
 		ReqId: plan.ReqId,
@@ -706,7 +706,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 		// 其它类型
 		plan.Status = result.Data.Status
 		w.DB.Model(plan).UpdateColumn("status", plan.Status)
-		return errors.New(w.Tr("OtherErrors"))
+		return errors.New(w.Tr("其他错误"))
 	}
 
 	return nil
@@ -791,11 +791,11 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 		}
 		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 			if !w.AiGenerateConfig.ApiValid {
-				return "", errors.New(w.Tr("InterfaceUnavailable"))
+				return "", errors.New(w.Tr("接口不可用"))
 			}
 			key := w.GetOpenAIKey()
 			if key == "" {
-				return "", errors.New(w.Tr("NoAvailableKey"))
+				return "", errors.New(w.Tr("无可用Key"))
 			}
 			stream, err := GetOpenAIStreamResponse(key, prompt)
 			if err != nil {
@@ -861,7 +861,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			}()
 		} else {
 			// 错误
-			return "", errors.New(w.Tr("NoAiGenerationSourceSelected"))
+			return "", errors.New(w.Tr("没有选择AI生成来源"))
 		}
 	} else {
 		buf, _ := json.Marshal(req)

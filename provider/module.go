@@ -67,13 +67,13 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	// 检查tableName
 	exists, err := w.GetModuleByTableName(req.TableName)
 	if err == nil && exists.Id != req.Id {
-		return nil, errors.New(w.Tr("ModelTableNameAlreadyExists"))
+		return nil, errors.New(w.Tr("模型表名已存在，请更换一个"))
 	}
 
 	// 检查tableName
 	exists, err = w.GetModuleByUrlToken(req.UrlToken)
 	if err == nil && exists.Id != req.Id {
-		return nil, errors.New(w.Tr("ModelUrlAliasAlreadyExists"))
+		return nil, errors.New(w.Tr("模型URL别名已存在，请更换一个"))
 	}
 
 	oldTableName := module.TableName
@@ -82,14 +82,14 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if oldTableName != module.TableName {
 		// 表示是新表
 		if w.DB.Migrator().HasTable(module.TableName) {
-			return nil, errors.New(w.Tr("ModelTableNameAlreadyExists"))
+			return nil, errors.New(w.Tr("模型表名已存在，请更换一个"))
 		}
 	}
 	// 检查fields
 	for i := range req.Fields {
 		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.Fields[i].FieldName)
 		if err != nil || !match {
-			return nil, errors.New(req.Fields[i].FieldName + w.Tr("IncorrectNaming"))
+			return nil, errors.New(req.Fields[i].FieldName + w.Tr("命名不正确"))
 		}
 	}
 

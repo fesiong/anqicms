@@ -172,7 +172,7 @@ func (w *Website) CheckWithdrawToWechat() {
 		if err != nil {
 			// 这种情况一般不会出现
 			withdraw.Status = -1
-			withdraw.Remark = w.Tr("UserDoesNotExist")
+			withdraw.Remark = w.Tr("用户不存在")
 			w.DB.Save(&withdraw)
 			continue
 		}
@@ -180,14 +180,14 @@ func (w *Website) CheckWithdrawToWechat() {
 		if err != nil {
 			// 这种情况一般不会出现
 			withdraw.Status = -1
-			withdraw.Remark = w.Tr("UserDoesNotExist")
+			withdraw.Remark = w.Tr("用户不存在")
 			w.DB.Save(&withdraw)
 			continue
 		}
 		if userWechat.Openid == "" || user.RealName == "" {
 			// 这种情况一般不会出现
 			withdraw.ErrorTimes++
-			withdraw.Remark = w.Tr("UserIsNotBoundToWechatOrReal-NameAuthenticationIsNotAvailable")
+			withdraw.Remark = w.Tr("用户未绑定微信或未实名认证")
 			withdraw.LastTime = nowStamp
 			w.DB.Save(&withdraw)
 			continue
@@ -200,14 +200,14 @@ func (w *Website) CheckWithdrawToWechat() {
 			Set("check_name", "FORCE_CHECK").
 			Set("re_user_name", user.RealName).
 			Set("amount", withdraw.Amount).
-			Set("desc", w.Tr("CommissionWithdrawal")).
+			Set("desc", w.Tr("佣金提现")).
 			Set("sign_type", wechat.SignType_HMAC_SHA256)
 
 		var wxRsp *wechat.TransfersResponse
 		if userWechat.Platform == config.PlatformWeapp {
 			if weapp2Client == nil {
 				withdraw.ErrorTimes++
-				withdraw.Remark = w.Tr("Error")
+				withdraw.Remark = w.Tr("出错")
 				withdraw.LastTime = nowStamp
 				w.DB.Save(&withdraw)
 				continue
@@ -223,7 +223,7 @@ func (w *Website) CheckWithdrawToWechat() {
 		} else {
 			if wechatClient == nil {
 				withdraw.ErrorTimes++
-				withdraw.Remark = w.Tr("Error")
+				withdraw.Remark = w.Tr("出错")
 				withdraw.LastTime = nowStamp
 				w.DB.Save(&withdraw)
 				continue
