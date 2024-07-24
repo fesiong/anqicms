@@ -546,7 +546,7 @@
 "IfYouWantToCustomizeTheFormDisplayYouCanAlsoUseRegularInputToOrganizeTheDisplay": "Se quiser personalizar a exibição do formulário, você também pode usar entradas regulares para organizar a exibição"
 "FilterFilter": "Filtro filtro"
 "JudgeWhetherItContainsACertainKeyword": "Determine se uma determinada palavra-chave está incluída"
-"ContainTheFilterCanDetermineWhetherAKeywordIsContainedInALineOfStringArrayMapStructAndTheResultWillReturnABooleanValue": "O filtro contém pode determinar se uma palavra-chave está contida em uma linha de string, matriz (fatia), par de valores-chave (mapa) ou estrutura (estrutura), e o" "resultado retornará um valor booleano (bool)"
+"ContainTheFilterCanDetermineWhetherAKeywordIsContainedInALineOfStringArrayMapStructAndTheResultWillReturnABooleanValue": "O filtro contém pode determinar se uma palavra-chave está contida em uma linha de string, matriz (fatia), par de valores-chave (mapa) ou estrutura (estrutura), e o' 'resultado retornará um valor booleano (bool)"
 "DeleteLeadingAndTrailingSpacesKeywords": "Remover espaços/palavras-chave iniciais e finais"
 "CountTheNumberOfTimesAKeywordAppears": "Contar ocorrências de palavras-chave"
 "GetThePositionOfAKeyword": "Obtenha a posição de ocorrência da palavra-chave"

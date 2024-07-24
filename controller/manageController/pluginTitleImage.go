@@ -63,17 +63,17 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新标题图片配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateTitleImageConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
 func PluginTitleImagePreview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	text := ctx.URLParamDefault("text", ctx.Tr("欢迎使用安企内容管理系统"))
+	text := ctx.URLParamDefault("text", ctx.Tr("WelcomeToAnqiCMS"))
 	str := currentSite.NewTitleImage().DrawPreview(text)
 
 	ctx.JSON(iris.Map{
@@ -89,7 +89,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	if name != "font_path" && name != "bg_image" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件名无效"),
+			"msg":  ctx.Tr("FileNameInvalid"),
 		})
 		return
 	}
@@ -109,7 +109,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 		if !strings.HasSuffix(info.Filename, ".ttf") {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("仅支持 .ttf 格式的字体文件"),
+				"msg":  ctx.Tr("OnlySupportsTtfFormat"),
 			})
 			return
 		}
@@ -125,7 +125,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("不支持的图片格式"),
+					"msg":  ctx.Tr("UnsupportedImageFormat"),
 				})
 				return
 			}
@@ -137,7 +137,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("读取失败"),
+			"msg":  ctx.Tr("ReadFailed"),
 		})
 		return
 	}
@@ -146,7 +146,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("目录创建失败"),
+			"msg":  ctx.Tr("DirectoryCreationFailed"),
 		})
 		return
 	}
@@ -154,7 +154,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件保存失败"),
+			"msg":  ctx.Tr("FileSaveFailed"),
 		})
 		return
 	}
@@ -173,11 +173,11 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传标题图片资源：%s", name))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTitleImageResourcesLog", name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文件已上传完成"),
+		"msg":  ctx.Tr("FileUploadCompleted"),
 		"data": fileName,
 	})
 }
@@ -187,10 +187,10 @@ func PluginTitleImageGenerate(ctx iris.Context) {
 
 	currentSite.GenerateAllTitleImages()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量生成水印图片"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchGenerateWatermarkImages"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("已提交后台处理，请稍后查看结果"),
+		"msg":  ctx.Tr("SubmittedForBackgroundProcessing"),
 	})
 }

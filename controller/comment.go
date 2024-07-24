@@ -55,7 +55,7 @@ func CommentPublish(ctx iris.Context) {
 
 	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
-		msg := ctx.Tr("保存失败")
+		msg := ctx.Tr("SaveFailed")
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -67,7 +67,7 @@ func CommentPublish(ctx iris.Context) {
 		return
 	}
 
-	msg := ctx.Tr("发布成功")
+	msg := ctx.Tr("PublishSuccessfully")
 	if returnType == "json" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
@@ -80,8 +80,8 @@ func CommentPublish(ctx iris.Context) {
 		if refer.URL != "" {
 			link = refer.URL
 		}
-		ShowMessage(ctx, ctx.Tr("发布成功"), []Button{
-			{Name: ctx.Tr("点击继续"), Link: link},
+		ShowMessage(ctx, ctx.Tr("PublishSuccessfully"), []Button{
+			{Name: ctx.Tr("ClickToContinue"), Link: link},
 		})
 	}
 }
@@ -121,7 +121,7 @@ func CommentPraise(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("点赞成功"),
+		"msg":  ctx.Tr("LikeSuccessfully"),
 		"data": comment,
 	})
 }
@@ -146,9 +146,9 @@ func CommentList(ctx iris.Context) {
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.URLParamIntDefault("page", 1)
-		webInfo.Title = ctx.Tr("评论：%s", archive.Title)
+		webInfo.Title = ctx.Tr("CommentShow", archive.Title)
 		if currentPage > 1 {
-			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
+			webInfo.Title += " - " + ctx.Tr("PageNum", currentPage)
 		}
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description

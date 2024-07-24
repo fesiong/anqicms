@@ -152,7 +152,7 @@ func (w *Website) ImportKeywords(file multipart.File, info *multipart.FileHeader
 		keyword.Save(w.DB)
 	}
 
-	return w.Tr("成功导入了%d个关键词", total), nil
+	return w.Tr("SuccessfullyImportedKeywords", total), nil
 }
 
 func (w *Website) DeleteKeyword(keyword *model.Keyword) error {

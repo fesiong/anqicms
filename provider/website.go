@@ -143,7 +143,7 @@ func InitWebsite(mw *model.Website) {
 		w.Initialed = true
 	}
 	if db == nil {
-		w.ErrorMsg = w.Tr("数据库连接失败")
+		w.ErrorMsg = w.Tr("DatabaseConnectionFailed")
 		if err != nil {
 			w.ErrorMsg = "：" + err.Error()
 		}
@@ -152,7 +152,7 @@ func InitWebsite(mw *model.Website) {
 	_, err = os.Stat(mw.RootPath)
 	if err != nil {
 		w.Initialed = false
-		w.ErrorMsg = w.Tr("站点路径错误：") + err.Error()
+		w.ErrorMsg = w.Tr("SitePathError:") + err.Error()
 	}
 	if mw.Id == 1 {
 		w.Mysql = &config.Server.Mysql

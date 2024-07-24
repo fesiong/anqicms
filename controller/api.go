@@ -60,7 +60,7 @@ func ApiImportArchive(ctx iris.Context) {
 	if len(categoryIds) == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("请选择一个栏目"),
+			"msg":  ctx.Tr("PleaseSelectAColumn"),
 		})
 		return
 	}
@@ -69,7 +69,7 @@ func ApiImportArchive(ctx iris.Context) {
 		if category == nil || category.Type != config.CategoryTypeArchive {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("请选择一个栏目"),
+				"msg":  ctx.Tr("PleaseSelectAColumn"),
 			})
 			return
 		}
@@ -79,7 +79,7 @@ func ApiImportArchive(ctx iris.Context) {
 	if category == nil || category.Type != config.CategoryTypeArchive {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("请选择一个栏目"),
+			"msg":  ctx.Tr("PleaseSelectAColumn"),
 		})
 		return
 	}
@@ -87,7 +87,7 @@ func ApiImportArchive(ctx iris.Context) {
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("未定义模型"),
+			"msg":  ctx.Tr("UndefinedModel"),
 		})
 		return
 	}
@@ -95,14 +95,14 @@ func ApiImportArchive(ctx iris.Context) {
 	if title == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("请填写文章标题"),
+			"msg":  ctx.Tr("PleaseFillInTheArticleTitle"),
 		})
 		return
 	}
 	if content == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("请填写文章内容"),
+			"msg":  ctx.Tr("PleaseFillInTheArticleContent"),
 		})
 		return
 	}
@@ -159,7 +159,7 @@ func ApiImportArchive(ctx iris.Context) {
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("导入文章失败"),
+					"msg":  ctx.Tr("FailedToImportTheArticle"),
 				})
 				return
 			}
@@ -171,7 +171,7 @@ func ApiImportArchive(ctx iris.Context) {
 			} else {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("文档ID重复，不允许重复导入"),
+					"msg":  ctx.Tr("DocumentIdIsRepeated"),
 				})
 				return
 			}
@@ -185,7 +185,7 @@ func ApiImportArchive(ctx iris.Context) {
 			} else {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("文档标题重复，不允许重复导入"),
+					"msg":  ctx.Tr("DocumentTitleIsRepeated"),
 				})
 				return
 			}
@@ -199,7 +199,7 @@ func ApiImportArchive(ctx iris.Context) {
 				} else {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("文档重复，不允许重复导入"),
+						"msg":  ctx.Tr("DocumentIsRepeated"),
 					})
 					return
 				}
@@ -261,7 +261,7 @@ func ApiImportArchive(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("发布成功"),
+		"msg":  ctx.Tr("PublishSuccessfully"),
 		"data": iris.Map{
 			"url": currentSite.GetUrl("archive", archive, 0),
 			"id":  archive.Id,
@@ -319,7 +319,7 @@ func ApiImportGetArchive(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  ctx.Tr("文档不存在"),
+		"msg":  ctx.Tr("DocumentDoesNotExist"),
 	})
 	return
 }
@@ -336,7 +336,7 @@ func ApiImportGetCategories(ctx iris.Context) {
 		if module == nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("未定义模型"),
+				"msg":  ctx.Tr("UndefinedModel"),
 			})
 			return
 		}
@@ -361,7 +361,7 @@ func ApiImportGetCategories(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusApiSuccess,
-		"msg":  ctx.Tr("获取成功"),
+		"msg":  ctx.Tr("SuccessfulAcquisition"),
 		"data": categories,
 	})
 }
@@ -389,7 +389,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  ctx.Tr("链接已保存"),
+			"msg":  ctx.Tr("LinkSaved"),
 		})
 		return
 	}
@@ -454,7 +454,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("链接已保存"),
+		"msg":  ctx.Tr("LinkSaved"),
 	})
 }
 
@@ -468,7 +468,7 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	if link == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("link必填"),
+			"msg":  ctx.Tr("LinkRequired"),
 		})
 		return
 	}
@@ -477,7 +477,7 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("链接不存在"),
+			"msg":  ctx.Tr("LinkDoesNotExist"),
 		})
 		return
 	}
@@ -495,14 +495,14 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("链接已删除"),
+		"msg":  ctx.Tr("LinkDeleted"),
 	})
 }
 
 func ApiImportCheckFriendLink(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("验证成功"),
+		"msg":  ctx.Tr("VerificationSuccessful"),
 	})
 }
 
@@ -512,7 +512,7 @@ func VerifyApiToken(ctx iris.Context) {
 	if token != currentSite.PluginImportApi.Token {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("Token错误"),
+			"msg":  ctx.Tr("TokenError"),
 		})
 		return
 	}
@@ -529,7 +529,7 @@ func VerifyApiLinkToken(ctx iris.Context) {
 	if token != currentSite.PluginImportApi.LinkToken {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("Token错误"),
+			"msg":  ctx.Tr("TokenError"),
 		})
 		return
 	}
@@ -542,7 +542,7 @@ func CheckApiOpen(ctx iris.Context) {
 	if 1 != currentSite.Safe.APIOpen {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("API接口功能未开放"),
+			"msg":  ctx.Tr("ApiInterfaceFunctionIsNotOpen"),
 		})
 		return
 	}

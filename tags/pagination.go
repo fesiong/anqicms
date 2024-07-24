@@ -189,7 +189,7 @@ func makePagination(currentSite *provider.Website, TotalItems int64, currentPage
 
 func (p *pagination) getFirstPage() *pageItem {
 	item := &pageItem{
-		Name: p.w.Tr("第一页"),
+		Name: p.w.Tr("FirstPage"),
 		Link: p.getPageUrl(1),
 	}
 
@@ -202,7 +202,7 @@ func (p *pagination) getFirstPage() *pageItem {
 
 func (p *pagination) getLastPage() *pageItem {
 	item := &pageItem{
-		Name: p.w.Tr("尾页"),
+		Name: p.w.Tr("LastPage"),
 		Link: p.getPageUrl(p.TotalPages),
 	}
 
@@ -219,7 +219,7 @@ func (p *pagination) getPrevPage() *pageItem {
 	}
 
 	item := &pageItem{
-		Name: p.w.Tr("上一页"),
+		Name: p.w.Tr("PreviousPage"),
 		Link: p.getPageUrl(p.CurrentPage - 1),
 	}
 
@@ -231,7 +231,7 @@ func (p *pagination) getNextPage() *pageItem {
 		return nil
 	}
 	item := &pageItem{
-		Name: p.w.Tr("下一页"),
+		Name: p.w.Tr("NextPage"),
 		Link: p.getPageUrl(p.CurrentPage + 1),
 	}
 

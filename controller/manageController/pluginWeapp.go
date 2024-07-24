@@ -46,10 +46,10 @@ func PluginWeappConfigForm(ctx iris.Context) {
 	// 强制更新信息
 	currentSite.GetWeappClient(true)
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新小程序信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMiniProgram"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

@@ -132,7 +132,7 @@ func ArchiveList(ctx iris.Context) {
 					if cat.Id == catId {
 						title := cat.Title
 						if cat.Status != config.ContentStatusOK {
-							title += ctx.Tr("(隐藏)")
+							title += ctx.Tr("(Hide)")
 						}
 						archives[i].CategoryTitles = append(archives[i].CategoryTitles, title)
 					}
@@ -144,7 +144,7 @@ func ArchiveList(ctx iris.Context) {
 				if c.Id == v.CategoryId {
 					title := c.Title
 					if c.Status != config.ContentStatusOK {
-						title += ctx.Tr("(隐藏)")
+						title += ctx.Tr("(Hide)")
 					}
 					archives[i].CategoryTitles = []string{title}
 					break
@@ -250,7 +250,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 			// 做提示
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("相同标题的内容已存在"),
+				"msg":  ctx.Tr("ContentWithTheSameTitleAlreadyExists"),
 				"data": exists,
 			})
 			return
@@ -261,7 +261,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 			// 做提示
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("相同标题的内容已存在"),
+				"msg":  ctx.Tr("ContentWithTheSameTitleAlreadyExists"),
 				"data": exists,
 			})
 			return
@@ -274,7 +274,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 			// 做提示
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("已存在相同的固定链接，请更换一个固定链接再提交"),
+				"msg":  ctx.Tr("TheSameFixedLinkAlreadyExists"),
 			})
 			return
 		}
@@ -284,7 +284,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 			// 做提示
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("已存在相同的固定链接，请更换一个固定链接再提交"),
+				"msg":  ctx.Tr("TheSameFixedLinkAlreadyExists"),
 			})
 			return
 		}
@@ -299,11 +299,11 @@ func ArchiveDetailForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新文档：%d => %s", archive.Id, archive.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDocumentLog", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文档已更新"),
+		"msg":  ctx.Tr("DocumentUpdated"),
 		"data": archive,
 	})
 }
@@ -338,11 +338,11 @@ func ArchiveRecover(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("恢复文档：%d => %s", archive.Id, archive.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDocumentLog", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已恢复"),
+		"msg":  ctx.Tr("ArticleRestored"),
 	})
 }
 
@@ -368,11 +368,11 @@ func ArchiveRelease(ctx iris.Context) {
 	archive.CreatedTime = time.Now().Unix()
 	currentSite.PublishPlanArchive(archive)
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("发布文档：%d => %s", archive.Id, archive.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("PublishDocumentLog", archive.Id, archive.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已发布"),
+		"msg":  ctx.Tr("ArticlePublished"),
 	})
 }
 
@@ -400,7 +400,7 @@ func ArchiveDelete(ctx iris.Context) {
 			return
 		}
 
-		currentSite.AddAdminLog(ctx, ctx.Tr("删除文档：%d => %s", archive.Id, archive.Title))
+		currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentLog", archive.Id, archive.Title))
 	} else {
 		// 从草稿表删除
 		archiveDraft, err := currentSite.GetArchiveDraftById(req.Id)
@@ -413,13 +413,13 @@ func ArchiveDelete(ctx iris.Context) {
 				})
 				return
 			}
-			currentSite.AddAdminLog(ctx, ctx.Tr("删除文档：%d => %s", archiveDraft.Id, archiveDraft.Title))
+			currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentLog", archiveDraft.Id, archiveDraft.Title))
 		}
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已删除"),
+		"msg":  ctx.Tr("ArticleDeleted"),
 	})
 }
 
@@ -456,7 +456,7 @@ func ArchiveDeleteImage(ctx iris.Context) {
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("图片不存在"),
+			"msg":  ctx.Tr("ImageDoesNotExist"),
 		})
 		return
 	}
@@ -467,11 +467,11 @@ func ArchiveDeleteImage(ctx iris.Context) {
 		currentSite.DB.Save(archiveDraft)
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除文档图片：%d => %s", archiveDraft.Id, archiveDraft.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentImageLog", archiveDraft.Id, archiveDraft.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章图片已删除"),
+		"msg":  ctx.Tr("ArticleImagesHaveBeenDeleted"),
 	})
 }
 
@@ -495,11 +495,11 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量更新文档Flag：%v => %s", req.Ids, req.Flag))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentFlagLog", req.Ids, req.Flag))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已更新"),
+		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
 
@@ -523,11 +523,11 @@ func UpdateArchiveStatus(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量更新文档状态：%v => %d", req.Ids, req.Status))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentStatusLog", req.Ids, req.Status))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已更新"),
+		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
 
@@ -551,11 +551,11 @@ func UpdateArchiveTime(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量更新文档时间：%v => %d", req.Ids, req.Time))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentTimeLog", req.Ids, req.Time))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已更新"),
+		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
 
@@ -579,11 +579,11 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量更新文档定时发布：%v => %d", req.Ids, req.DailyLimit))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentScheduledReleaseLog", req.Ids, req.DailyLimit))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已更新"),
+		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
 
@@ -610,11 +610,11 @@ func UpdateArchiveSort(ctx iris.Context) {
 	// 删除列表缓存
 	currentSite.Cache.CleanAll("archive-list")
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新文档自定义排序：%v => %d", req.Id, req.Sort))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDocumentCustomSortLog", req.Id, req.Sort))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("排序已更新"),
+		"msg":  ctx.Tr("SortingUpdated"),
 	})
 }
 
@@ -638,10 +638,10 @@ func UpdateArchiveCategory(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量更新文档分类：%v => %d", req.Ids, req.CategoryIds))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentCategoryLog", req.Ids, req.CategoryIds))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文章已更新"),
+		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }

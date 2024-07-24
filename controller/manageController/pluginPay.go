@@ -68,11 +68,11 @@ func PluginPayConfigForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新支付配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -82,7 +82,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 	if name != "wechat_cert_path" && name != "wechat_key_path" && name != "alipay_cert_path" && name != "alipay_root_cert_path" && name != "alipay_public_cert_path" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件名无效"),
+			"msg":  ctx.Tr("FileNameInvalid"),
 		})
 		return
 	}
@@ -102,7 +102,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("读取失败"),
+			"msg":  ctx.Tr("ReadFailed"),
 		})
 		return
 	}
@@ -111,7 +111,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("目录创建失败"),
+			"msg":  ctx.Tr("DirectoryCreationFailed"),
 		})
 		return
 	}
@@ -119,7 +119,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件保存失败"),
+			"msg":  ctx.Tr("FileSaveFailed"),
 		})
 		return
 	}
@@ -145,11 +145,11 @@ func PluginPayUploadFile(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传支付证书文件：%s", name))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadPaymentCertificateLog", name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文件已上传完成"),
+		"msg":  ctx.Tr("FileUploadCompleted"),
 		"data": fileName,
 	})
 }

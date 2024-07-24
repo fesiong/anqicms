@@ -94,7 +94,7 @@ func (w *Website) ImportRedirects(file multipart.File, info *multipart.FileHeade
 		w.DB.Save(redirect)
 	}
 
-	return fmt.Sprintf(w.Tr("成功导入了%d个链接"), total), nil
+	return fmt.Sprintf(w.Tr("SuccessfullyImportedLinks"), total), nil
 }
 
 func (w *Website) DeleteRedirect(redirect *model.Redirect) error {

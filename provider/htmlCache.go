@@ -74,7 +74,7 @@ func (w *Website) BuildHtmlCache(ctx iris.Context) {
 	w.BuildTagCache(ctx)
 	w.BuildArchiveCache()
 	if w.HtmlCacheStatus != nil {
-		w.HtmlCacheStatus.Current = w.Tr("全部生成完成")
+		w.HtmlCacheStatus.Current = w.Tr("AllGenerated")
 		w.HtmlCacheStatus.FinishedTime = time.Now().Unix()
 	}
 	w.PluginHtmlCache.LastBuildTime = time.Now().Unix()
@@ -93,12 +93,12 @@ func (w *Website) BuildIndexCache() {
 		}
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
-	w.HtmlCacheStatus.Current = w.Tr("开始生成首页")
+	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingHomepage")
 	w.HtmlCacheStatus.Total += 1
 	// 先生成首页
 	err := w.GetAndCacheHtmlData("/", false)
 	if err != nil {
-		w.HtmlCacheStatus.ErrorMsg = w.Tr("生成首页失败") + err.Error()
+		w.HtmlCacheStatus.ErrorMsg = w.Tr("FailedToGenerateHomepage") + err.Error()
 		return
 	}
 	w.HtmlCacheStatus.FinishedCount += 1
@@ -108,10 +108,10 @@ func (w *Website) BuildIndexCache() {
 		if err == nil {
 			w.HtmlCacheStatus.FinishedCount += 1
 		} else {
-			w.HtmlCacheStatus.ErrorMsg = w.Tr("生成首页失败") + err.Error()
+			w.HtmlCacheStatus.ErrorMsg = w.Tr("FailedToGenerateHomepage") + err.Error()
 		}
 	}
-	w.HtmlCacheStatus.Current = w.Tr("首页生成完成")
+	w.HtmlCacheStatus.Current = w.Tr("HomepageGenerationCompleted")
 }
 
 func (w *Website) BuildModuleCache(ctx iris.Context) {
@@ -125,18 +125,18 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
 	// 生成栏目
-	w.HtmlCacheStatus.Current = w.Tr("开始生成模型")
+	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingModel")
 	var modules []*model.Module
 	w.DB.Model(&model.Module{}).Where("`status` = 1").Order("id asc").Find(&modules)
 	w.HtmlCacheStatus.Total += len(modules)
 	for _, module := range modules {
-		w.HtmlCacheStatus.Current = w.Tr("正在生成模型：%s", module.Title)
+		w.HtmlCacheStatus.Current = w.Tr("GeneratingModelLog", module.Title)
 		// 模型只生成第一页
 		link := w.GetUrl("archiveIndex", module, 0)
 		link = strings.TrimPrefix(link, w.System.BaseUrl)
 		err := w.GetAndCacheHtmlData(link, false)
 		if err != nil {
-			w.HtmlCacheStatus.ErrorMsg = w.Tr("生成模型 %s 失败 %s", module.Title, err.Error())
+			w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
 			continue
 		}
 		w.HtmlCacheStatus.FinishedCount += 1
@@ -167,7 +167,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				err = w.GetAndCacheHtmlData(link, false)
 				if err != nil {
-					w.HtmlCacheStatus.ErrorMsg = w.Tr("生成模型 %s 失败 %s", module.Title, err.Error())
+					w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
 					continue
 				}
 				w.HtmlCacheStatus.FinishedCount += 1
@@ -190,7 +190,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 					link = strings.TrimPrefix(link, w.System.BaseUrl)
 					err = w.GetAndCacheHtmlData(link, true)
 					if err != nil {
-						w.HtmlCacheStatus.ErrorMsg = w.Tr("生成模型 %s 失败 %s", module.Title, err.Error())
+						w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
 						continue
 					}
 					w.HtmlCacheStatus.FinishedCount += 1
@@ -198,7 +198,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 			}
 		}
 	}
-	w.HtmlCacheStatus.Current = w.Tr("模型生成完成")
+	w.HtmlCacheStatus.Current = w.Tr("ModelGenerationCompleted")
 }
 
 func (w *Website) BuildCategoryCache(ctx iris.Context) {
@@ -212,19 +212,19 @@ func (w *Website) BuildCategoryCache(ctx iris.Context) {
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
 	// 生成栏目
-	w.HtmlCacheStatus.Current = w.Tr("开始生成栏目")
+	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingColumns")
 	var categories []*model.Category
 	w.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Find(&categories)
 	w.HtmlCacheStatus.Total += len(categories)
 	for _, category := range categories {
 		w.BuildSingleCategoryCache(ctx, category)
 	}
-	w.HtmlCacheStatus.Current = w.Tr("栏目生成完成")
+	w.HtmlCacheStatus.Current = w.Tr("ColumnGenerationCompleted")
 }
 
 func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Category) {
 	if w.HtmlCacheStatus != nil {
-		w.HtmlCacheStatus.Current = w.Tr("正在生成栏目：%s", category.Title)
+		w.HtmlCacheStatus.Current = w.Tr("GeneratingColumnsLog", category.Title)
 	}
 	// 栏目只生成第一页
 	link := w.GetUrl("category", category, 0)
@@ -232,7 +232,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
 		if w.HtmlCacheStatus != nil {
-			w.HtmlCacheStatus.ErrorMsg = w.Tr("生成栏目 %s 失败 %s", category.Title, err.Error())
+			w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingColumnFailed", category.Title, err.Error())
 		}
 		return
 	}
@@ -287,7 +287,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 			err = w.GetAndCacheHtmlData(link, false)
 			if err != nil {
 				if w.HtmlCacheStatus != nil {
-					w.HtmlCacheStatus.ErrorMsg = w.Tr("生成栏目 %s 失败 %s", category.Title, err.Error())
+					w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingColumnFailed", category.Title, err.Error())
 				}
 				continue
 			}
@@ -321,7 +321,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 				err = w.GetAndCacheHtmlData(link, true)
 				if err != nil {
 					if w.HtmlCacheStatus != nil {
-						w.HtmlCacheStatus.ErrorMsg = w.Tr("生成栏目 %s 失败 %s", category.Title, err.Error())
+						w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingColumnFailed", category.Title, err.Error())
 					}
 					continue
 				}
@@ -343,7 +343,7 @@ func (w *Website) BuildArchiveCache() {
 		}
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
-	w.HtmlCacheStatus.Current = w.Tr("开始生成文档")
+	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingDocuments")
 	// 生成详情
 	lastId := uint(0)
 	for {
@@ -355,12 +355,12 @@ func (w *Website) BuildArchiveCache() {
 		w.HtmlCacheStatus.Total += len(archives)
 		lastId = archives[len(archives)-1].Id
 		for _, arc := range archives {
-			w.HtmlCacheStatus.Current = w.Tr("正在生成文档：%s", arc.Title)
+			w.HtmlCacheStatus.Current = w.Tr("GeneratingDocuments:s", arc.Title)
 			link := w.GetUrl("archive", arc, 0)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err := w.GetAndCacheHtmlData(link, false)
 			if err != nil {
-				w.HtmlCacheStatus.ErrorMsg = w.Tr("生成文档 %s 失败 %s", arc.Title, err.Error())
+				w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingDocumentFailed", arc.Title, err.Error())
 				continue
 			}
 			w.HtmlCacheStatus.FinishedCount += 1
@@ -373,7 +373,7 @@ func (w *Website) BuildArchiveCache() {
 			}
 		}
 	}
-	w.HtmlCacheStatus.Current = w.Tr("文档生成完成")
+	w.HtmlCacheStatus.Current = w.Tr("DocumentGenerationCompleted")
 }
 
 func (w *Website) BuildTagIndexCache(ctx iris.Context) {
@@ -386,13 +386,13 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 		}
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
-	w.HtmlCacheStatus.Current = w.Tr("开始生成标签首页")
+	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingTagHomepage")
 	w.HtmlCacheStatus.Total += 1
 	link := w.GetUrl("tagIndex", nil, 0)
 	// 先生成首页
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
-		w.HtmlCacheStatus.ErrorMsg = w.Tr("生成标签首页失败") + err.Error()
+		w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagHomepageFailed") + err.Error()
 		return
 	}
 	// 检查模型是否有分页，如果有，则继续生成分页
@@ -402,7 +402,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	newCtx.ResetResponseWriter(respWriter)
 	newCtx.ViewData("pageName", "tagIndex")
 	webInfo := &response.WebInfo{
-		Title:    w.Tr("标签列表"),
+		Title:    w.Tr("TagList"),
 		PageName: "tagIndex",
 	}
 	newCtx.ViewData("webInfo", webInfo)
@@ -419,7 +419,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			err = w.GetAndCacheHtmlData(link, false)
 			if err != nil {
-				w.HtmlCacheStatus.ErrorMsg = w.Tr("生成标签首页失败") + err.Error()
+				w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagHomepageFailed") + err.Error()
 				continue
 			}
 			w.HtmlCacheStatus.FinishedCount += 1
@@ -444,7 +444,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				err = w.GetAndCacheHtmlData(link, true)
 				if err != nil {
-					w.HtmlCacheStatus.ErrorMsg = w.Tr("生成标签首页失败") + err.Error()
+					w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagHomepageFailed") + err.Error()
 					continue
 				}
 				w.HtmlCacheStatus.FinishedCount += 1
@@ -453,7 +453,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 	}
 	// end
 	w.HtmlCacheStatus.FinishedCount += 1
-	w.HtmlCacheStatus.Current = w.Tr("首页生成标签完成")
+	w.HtmlCacheStatus.Current = w.Tr("HomepageTagGenerationCompleted")
 }
 
 func (w *Website) BuildTagCache(ctx iris.Context) {
@@ -466,7 +466,7 @@ func (w *Website) BuildTagCache(ctx iris.Context) {
 		}
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
-	w.HtmlCacheStatus.Current = w.Tr("开始生成标签")
+	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingTags")
 	// 生成标签
 	lastId := uint(0)
 	for {
@@ -481,7 +481,7 @@ func (w *Website) BuildTagCache(ctx iris.Context) {
 			w.BuildSingleTagCache(ctx, tag)
 		}
 	}
-	w.HtmlCacheStatus.Current = w.Tr("标签生成完成")
+	w.HtmlCacheStatus.Current = w.Tr("TagGenerationCompleted")
 }
 
 func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
@@ -489,14 +489,14 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 		return
 	}
 	if w.HtmlCacheStatus != nil {
-		w.HtmlCacheStatus.Current = w.Tr("正在生成标签：%s", tag.Title)
+		w.HtmlCacheStatus.Current = w.Tr("GeneratingTagsLog", tag.Title)
 	}
 	link := w.GetUrl("tag", tag, 0)
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
 		if w.HtmlCacheStatus != nil {
-			w.HtmlCacheStatus.ErrorMsg = w.Tr("生成标签 %s 失败 %s", tag.Title, err.Error())
+			w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagsFailed", tag.Title, err.Error())
 		}
 		return
 	}
@@ -532,7 +532,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 			err = w.GetAndCacheHtmlData(link, false)
 			if err != nil {
 				if w.HtmlCacheStatus != nil {
-					w.HtmlCacheStatus.ErrorMsg = w.Tr("生成标签 %s 失败 %s", tag.Title, err.Error())
+					w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagsFailed", tag.Title, err.Error())
 				}
 				continue
 			}
@@ -566,7 +566,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 				err = w.GetAndCacheHtmlData(link, true)
 				if err != nil {
 					if w.HtmlCacheStatus != nil {
-						w.HtmlCacheStatus.ErrorMsg = w.Tr("生成标签 %s 失败 %s", tag.Title, err.Error())
+						w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagsFailed", tag.Title, err.Error())
 					}
 					continue
 				}
@@ -580,7 +580,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 
 func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if w.PluginHtmlCache.Open == false {
-		return errors.New(w.Tr("没开启静态缓存功能"))
+		return errors.New(w.Tr("StaticCacheFunctionIsNotEnabled"))
 	}
 	if strings.HasPrefix(urlPath, "http") {
 		parsed, err := url.Parse(urlPath)
@@ -595,7 +595,7 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if isMobile && w.System.TemplateType == config.TemplateTypeSeparate {
 		mobileUrl, err := url.Parse(w.System.MobileUrl)
 		if err != nil {
-			return errors.New(w.Tr("移动端域名解析失败"))
+			return errors.New(w.Tr("MobileDomainNameResolutionFailed"))
 		}
 		host = mobileUrl.Hostname()
 	}
@@ -812,13 +812,13 @@ func (w *Website) SyncHtmlCacheToStorage(localPath, remotePath string) error {
 			err = w.ReadAndSendLocalFiles(w.CachePath + "pc")
 
 			if w.HtmlCachePushStatus != nil {
-				w.HtmlCachePushStatus.Current = w.Tr("全部推送完成")
+				w.HtmlCachePushStatus.Current = w.Tr("AllPushesCompleted")
 				w.HtmlCachePushStatus.FinishedTime = time.Now().Unix()
 			}
 			w.PluginHtmlCache.LastPushTime = time.Now().Unix()
 			_ = w.SaveSettingValue(HtmlCacheSettingKey, w.PluginHtmlCache)
 		} else {
-			return errors.New(w.Tr("未定义静态服务器"))
+			return errors.New(w.Tr("StaticServerUndefined"))
 		}
 	} else {
 		// 只传输单个
@@ -848,7 +848,7 @@ func (w *Website) SyncHtmlCacheToStorage(localPath, remotePath string) error {
 			w.DB.Save(&pushLog)
 			return err
 		} else {
-			return errors.New(w.Tr("未定义静态服务器"))
+			return errors.New(w.Tr("StaticServerUndefined"))
 		}
 	}
 	return nil
@@ -856,7 +856,7 @@ func (w *Website) SyncHtmlCacheToStorage(localPath, remotePath string) error {
 
 func (w *Website) ReadAndSendLocalFiles(baseDir string) (err error) {
 	if w.CacheStorage == nil {
-		return errors.New(w.Tr("未定义静态服务器"))
+		return errors.New(w.Tr("StaticServerUndefined"))
 	}
 	if w.HtmlCachePushStatus == nil {
 		w.HtmlCachePushStatus = &HtmlCacheStatus{
@@ -893,7 +893,7 @@ func (w *Website) ReadAndSendLocalFiles(baseDir string) (err error) {
 
 			if len(remotePath) > 0 {
 				w.HtmlCachePushStatus.Total++
-				w.HtmlCachePushStatus.Current = w.Tr("推送：%s", remotePath)
+				w.HtmlCachePushStatus.Current = w.Tr("PushLog", remotePath)
 				remotePath = strings.TrimLeft(remotePath, "/")
 				// log
 				// 如果是记录已存在，并比等待推送的更新，则不推送
@@ -923,7 +923,7 @@ func (w *Website) ReadAndSendLocalFiles(baseDir string) (err error) {
 					w.HtmlCachePushStatus.FinishedCount++
 				} else {
 					w.HtmlCachePushStatus.ErrorCount++
-					w.HtmlCachePushStatus.ErrorMsg = w.Tr("推送失败：") + remotePath + err.Error()
+					w.HtmlCachePushStatus.ErrorMsg = w.Tr("PushFailed:") + remotePath + err.Error()
 					// 记录错误
 					pushLog.Status = 0
 					pushLog.ErrorMsg = err.Error()

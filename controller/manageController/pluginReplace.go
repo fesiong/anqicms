@@ -20,11 +20,11 @@ func PluginReplaceValues(ctx iris.Context) {
 
 	total := currentSite.ReplaceValues(&req)
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("全站替换 %v, %v", req.Places, req.Keywords))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ReplaceTheEntireSiteLog", req.Places, req.Keywords))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("替换已完成"),
+		"msg":  ctx.Tr("ReplacementCompleted"),
 		"data": total,
 	})
 }

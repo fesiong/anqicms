@@ -81,11 +81,11 @@ func PluginTagDetailForm(ctx iris.Context) {
 		_ = currentSite.SyncHtmlCacheToStorage("", "")
 	}()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新文档标签：%d => %s", tag.Id, tag.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDocumentTagLog", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("保存成功"),
+		"msg":  ctx.Tr("SaveSuccessfully"),
 		"data": tag,
 	})
 }
@@ -118,10 +118,10 @@ func PluginTagDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除文档标签：%d => %s", tag.Id, tag.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentTagLog", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("标签已删除"),
+		"msg":  ctx.Tr("TagDeleted"),
 	})
 }

@@ -44,10 +44,10 @@ func PluginRewriteForm(ctx iris.Context) {
 		currentSite.RemoveHtmlCache()
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("调整伪静态配置：%d", req.Mode))
+	currentSite.AddAdminLog(ctx, ctx.Tr("AdjustPseudoStaticConfigurationLog", req.Mode))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

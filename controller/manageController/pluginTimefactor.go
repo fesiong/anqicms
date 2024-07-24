@@ -40,10 +40,10 @@ func PluginTimeFactorSettingSave(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新时间因子-定时发布配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateTimeFactorTimedReleaseConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

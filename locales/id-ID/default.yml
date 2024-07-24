@@ -546,7 +546,7 @@
 "IfYouWantToCustomizeTheFormDisplayYouCanAlsoUseRegularInputToOrganizeTheDisplay": "Jika Anda ingin mengkustomisasi tampilan formulir, Anda juga bisa menggunakan input reguler untuk mengatur tampilan"
 "FilterFilter": "penyaring penyaring"
 "JudgeWhetherItContainsACertainKeyword": "Tentukan apakah kata kunci tertentu disertakan"
-"ContainTheFilterCanDetermineWhetherAKeywordIsContainedInALineOfStringArrayMapStructAndTheResultWillReturnABooleanValue": "Filter berisi dapat menentukan apakah suatu kata kunci terkandung dalam baris string, array (slice), pasangan nilai kunci (peta), atau struktur (struct), dan hasilnya" "akan mengembalikan nilai Boolean (bool)"
+"ContainTheFilterCanDetermineWhetherAKeywordIsContainedInALineOfStringArrayMapStructAndTheResultWillReturnABooleanValue": "Filter berisi dapat menentukan apakah suatu kata kunci terkandung dalam baris string, array (slice), pasangan nilai kunci (peta), atau struktur (struct), dan hasilnya' 'akan mengembalikan nilai Boolean (bool)"
 "DeleteLeadingAndTrailingSpacesKeywords": "Hapus spasi/kata kunci di awal dan akhir"
 "CountTheNumberOfTimesAKeywordAppears": "Hitung kemunculan kata kunci"
 "GetThePositionOfAKeyword": "Dapatkan posisi kemunculan kata kunci"

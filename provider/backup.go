@@ -156,7 +156,7 @@ func (w *Website) BackupData() error {
 
 func (w *Website) RestoreData(fileName string) error {
 	if fileName == "" {
-		return errors.New(w.Tr("备份文件不存在"))
+		return errors.New(w.Tr("BackupFileDoesNotExist"))
 	}
 	backupFile := w.DataPath + "backup/" + fileName
 	outFile, err := os.Open(backupFile)
@@ -210,7 +210,7 @@ func (w *Website) GetBackupList() []response.BackupInfo {
 
 func (w *Website) DeleteBackupData(fileName string) error {
 	if fileName == "" {
-		return errors.New(w.Tr("备份文件不存在"))
+		return errors.New(w.Tr("BackupFileDoesNotExist"))
 	}
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")
@@ -246,7 +246,7 @@ func (w *Website) ImportBackupFile(file multipart.File, fileName string) error {
 
 func (w *Website) GetBackupFilePath(fileName string) (string, error) {
 	if fileName == "" {
-		return "", errors.New(w.Tr("备份文件不存在"))
+		return "", errors.New(w.Tr("BackupFileDoesNotExist"))
 	}
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")

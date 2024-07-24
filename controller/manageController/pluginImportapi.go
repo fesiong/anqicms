@@ -46,10 +46,10 @@ func PluginUpdateApiToken(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新API导入Token"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateApiImportToken"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("Token已更新"),
+		"msg":  ctx.Tr("TokenUpdated"),
 	})
 }

@@ -209,7 +209,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			if err == nil {
 				return bs.UploadFile(location, buff)
 			}
-			return "", errors.New(bs.w.Tr("上传文件 %s 失败：%s", remoteFile, err.Error()))
+			return "", errors.New(bs.w.Tr("UploadFileFailedLog", remoteFile, err.Error()))
 		}
 	} else if bs.config.StorageType == config.StorageTypeSSH {
 		if bs.sshClient == nil {
@@ -240,7 +240,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			if err == nil {
 				return bs.UploadFile(location, buff)
 			}
-			return "", errors.New(bs.w.Tr("上传文件 %s 失败：%s", remoteFile, err.Error()))
+			return "", errors.New(bs.w.Tr("UploadFileFailedLog", remoteFile, err.Error()))
 		}
 		file.Write(buff)
 		file.Close()
@@ -303,7 +303,7 @@ func (bs *BucketStorage) initUpyunBucket() error {
 
 func (bs *BucketStorage) initFTP() error {
 	if bs.tryTimes >= 3 || time.Now().Unix() < bs.connectTime+120 {
-		return errors.New(bs.w.Tr("重试超过3次，放弃重试"))
+		return errors.New(bs.w.Tr("RetryMoreThan3Times"))
 	}
 	var c *ftp.ServerConn
 	var err error
@@ -350,7 +350,7 @@ func (bs *BucketStorage) initFTP() error {
 
 func (bs *BucketStorage) initSSH() error {
 	if bs.tryTimes >= 3 || time.Now().Unix() < bs.connectTime+120 {
-		return errors.New(bs.w.Tr("重试超过3次，放弃重试"))
+		return errors.New(bs.w.Tr("RetryMoreThan3Times"))
 	}
 	var auth goph.Auth
 	var err error

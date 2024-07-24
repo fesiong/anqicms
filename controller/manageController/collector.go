@@ -42,11 +42,11 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("修改采集配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyAcquisitionConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("保存成功"),
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }
 
@@ -64,7 +64,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 	if len(req.ContentReplace) == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("替换关键词为空"),
+			"msg":  ctx.Tr("ReplaceKeywordIsEmpty"),
 		})
 		return
 	}
@@ -83,21 +83,21 @@ func HandleReplaceArticles(ctx iris.Context) {
 
 	if req.Replace {
 
-		currentSite.AddAdminLog(ctx, ctx.Tr("批量替换文档内容"))
+		currentSite.AddAdminLog(ctx, ctx.Tr("BatchReplaceDocumentContent"))
 
 		go currentSite.ReplaceArticles()
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  ctx.Tr("替换任务已触发"),
+			"msg":  ctx.Tr("ReplacementTaskHasBeenTriggered"),
 		})
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新替换关键词配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateReplacementKeywordConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("关键词已保存"),
+		"msg":  ctx.Tr("KeywordsHaveBeenSaved"),
 	})
 }
 
@@ -105,11 +105,11 @@ func HandleDigKeywords(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	go currentSite.StartDigKeywords(true)
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("手动触发关键词拓词任务"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ManuallyTriggerTheKeywordExpansionTask"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("关键词拓词任务已触发"),
+		"msg":  ctx.Tr("KeywordExpansionTaskHasBeenTriggered"),
 	})
 }
 
@@ -138,7 +138,7 @@ func HandleArticleCollect(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("采集任务已触发，预计1分钟后即可查看采集结果"),
+		"msg":  ctx.Tr("CollectionTaskHasBeenTriggered"),
 	})
 }
 
@@ -148,7 +148,7 @@ func HandleStartArticleCollect(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("采集任务已触发，预计1分钟后即可查看采集结果"),
+		"msg":  ctx.Tr("CollectionTaskHasBeenTriggered"),
 	})
 }
 

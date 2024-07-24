@@ -62,7 +62,7 @@ func SettingSystemForm(ctx iris.Context) {
 	if req.AdminUrl != "" && !strings.HasPrefix(req.AdminUrl, "http") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("后台域名请填写正确的域名，并做好解析，否则可能会导致后台无法访问"),
+			"msg":  ctx.Tr("PleaseFillInTheCorrectBackendDomainName"),
 		})
 		return
 	}
@@ -106,7 +106,7 @@ func SettingSystemForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新系统配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 
 	// 如果切换了模板，则需要重启
 	if changed {
@@ -117,7 +117,7 @@ func SettingSystemForm(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -181,11 +181,11 @@ func SettingContentForm(ctx iris.Context) {
 		go currentSite.UpgradeMultiCategory()
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新内容配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateContentConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -194,11 +194,11 @@ func SettingThumbRebuild(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	go currentSite.ThumbRebuild()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("重新生成所有缩略图"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("RegenerateAllThumbnails"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("缩略图正在自动生成中，请稍后查看结果"),
+		"msg":  ctx.Tr("ThumbnailsAreBeingAutomaticallyGenerated"),
 	})
 }
 
@@ -238,11 +238,11 @@ func SettingIndexForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新首页TDK"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateHomepageTdk"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -306,11 +306,11 @@ func SettingContactForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新联系人信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateContact"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -356,15 +356,15 @@ func SettingCacheForm(ctx iris.Context) {
 			// 重新初始化缓存
 			currentSite.InitCache()
 		}
-		currentSite.AddAdminLog(ctx, ctx.Tr("更改缓存类型"))
+		currentSite.AddAdminLog(ctx, ctx.Tr("ChangeCacheType"))
 	} else {
 		currentSite.DeleteCache()
 
-		currentSite.AddAdminLog(ctx, ctx.Tr("手动更新缓存"))
+		currentSite.AddAdminLog(ctx, ctx.Tr("UpdateCacheManually"))
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  ctx.Tr("缓存已更新"),
+			"msg":  ctx.Tr("CacheUpdated"),
 		})
 	}
 }
@@ -412,11 +412,11 @@ func SettingSafeForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新安全设置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSecuritySettings"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -437,15 +437,15 @@ func SaveSystemFavicon(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("Favicon上传失败"),
+			"msg":  ctx.Tr("FaviconUploadFailed"),
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传Favicon"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadFavicon"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文件已上传完成"),
+		"msg":  ctx.Tr("FileUploadCompleted"),
 	})
 }
 
@@ -458,17 +458,17 @@ func DeleteSystemFavicon(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("Favicon删除失败"),
+				"msg":  ctx.Tr("FaviconDeletionFailed"),
 			})
 			return
 		}
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除Favicon"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteFavicon"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("Ico图标已删除"),
+		"msg":  ctx.Tr("IcoIconDeleted"),
 	})
 }
 
@@ -532,7 +532,7 @@ func DeleteSettingBanner(ctx iris.Context) {
 	if req.Id == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("Banner 不存在"),
+			"msg":  ctx.Tr("BannerDoesNotExist"),
 		})
 		return
 	}
@@ -553,11 +553,11 @@ func DeleteSettingBanner(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除Banner"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteBanner"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -575,7 +575,7 @@ func SettingBannerForm(ctx iris.Context) {
 	if req.Logo == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("请选择图片"),
+			"msg":  ctx.Tr("PleaseSelectAnImage"),
 		})
 		return
 	}
@@ -606,11 +606,11 @@ func SettingBannerForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新Banner"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateBanner"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -629,6 +629,6 @@ func SettingMigrateDB(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("数据库表已更新"),
+		"msg":  ctx.Tr("DatabaseTableUpdated"),
 	})
 }

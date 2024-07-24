@@ -13,7 +13,7 @@ func LoginPage(ctx iris.Context) {
 		ctx.Redirect("/")
 	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = ctx.Tr("登录")
+		webInfo.Title = ctx.Tr("Login")
 		ctx.ViewData("webInfo", webInfo)
 	}
 	err := ctx.View(GetViewPath(ctx, "login.html"))
@@ -24,7 +24,7 @@ func LoginPage(ctx iris.Context) {
 
 func RegisterPage(ctx iris.Context) {
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = ctx.Tr("注册")
+		webInfo.Title = ctx.Tr("Register")
 		ctx.ViewData("webInfo", webInfo)
 	}
 	err := ctx.View(GetViewPath(ctx, "register.html"))
@@ -39,12 +39,12 @@ func AccountLogout(ctx iris.Context) {
 	if returnType == "json" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  ctx.Tr("已退出登录"),
+			"msg":  ctx.Tr("LoggedOut"),
 		})
 		return
 	}
 
-	ShowMessage(ctx, ctx.Tr("已退出登录"), []Button{{Name: ctx.Tr("首页"), Link: "/"}})
+	ShowMessage(ctx, ctx.Tr("LoggedOut"), []Button{{Name: ctx.Tr("Home"), Link: "/"}})
 }
 
 func AccountIndexPage(ctx iris.Context) {

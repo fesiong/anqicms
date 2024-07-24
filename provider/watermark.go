@@ -115,7 +115,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 		wf.Seek(0, 0)
 		img, err = webp.Decode(wf)
 		if err != nil {
-			return errors.New(w.Tr("无法获取图片尺寸"))
+			return errors.New(w.Tr("UnableToObtainImageSize"))
 		}
 		imgType = "webp"
 	}
@@ -130,7 +130,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 
 	// gif 不处理
 	if imgType == "gif" {
-		return errors.New(w.Tr("不处理gif"))
+		return errors.New(w.Tr("NotProcessingGif"))
 	}
 	img, err = wm.DrawWatermark(img)
 	if err != nil {

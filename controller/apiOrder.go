@@ -54,7 +54,7 @@ func ApiGetOrderDetail(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("权限不足"),
+			"msg":  ctx.Tr("InsufficientPermissions"),
 		})
 		return
 	}
@@ -117,7 +117,7 @@ func ApiCancelOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("该订单不可操作"),
+			"msg":  ctx.Tr("TheOrderIsNotOperational"),
 		})
 		return
 	}
@@ -133,7 +133,7 @@ func ApiCancelOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("订单已取消"),
+		"msg":  ctx.Tr("OrderCanceled"),
 	})
 }
 
@@ -160,7 +160,7 @@ func ApiApplyRefundOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("该订单不可操作"),
+			"msg":  ctx.Tr("TheOrderIsNotOperational"),
 		})
 		return
 	}
@@ -176,7 +176,7 @@ func ApiApplyRefundOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("退款申请已提交"),
+		"msg":  ctx.Tr("RefundApplicationSubmitted"),
 	})
 }
 
@@ -203,7 +203,7 @@ func ApiFinishedOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("该订单不可操作"),
+			"msg":  ctx.Tr("TheOrderIsNotOperational"),
 		})
 		return
 	}
@@ -219,7 +219,7 @@ func ApiFinishedOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("订单已完成"),
+		"msg":  ctx.Tr("OrderCompleted"),
 	})
 }
 
@@ -316,7 +316,7 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("无法创建支付订单"),
+			"msg":  ctx.Tr("UnableToCreatePaymentOrder"),
 		})
 	}
 }
@@ -531,7 +531,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  ctx.Tr("支付成功"),
+			"msg":  ctx.Tr("PaymentSuccessful"),
 		})
 		return
 	}
@@ -542,7 +542,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 			//支付成功
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
-				"msg":  ctx.Tr("支付成功"),
+				"msg":  ctx.Tr("PaymentSuccessful"),
 			})
 			return
 		}
@@ -551,7 +551,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  ctx.Tr("未支付"),
+		"msg":  ctx.Tr("Unpaid"),
 	})
 }
 

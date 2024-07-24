@@ -79,7 +79,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
-			Content: ctx.Tr("该内容需要用户等级%d以上才能阅读", archive.ReadLevel),
+			Content: ctx.Tr("ThisContentRequiresUserLevelOrAboveToRead", archive.ReadLevel),
 		}
 	} else {
 		// 读取data
@@ -149,12 +149,12 @@ func ApiArchiveFilters(ctx iris.Context) {
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("模型不存在"),
+			"msg":  ctx.Tr("ModelDoesNotExist"),
 		})
 		return
 	}
 
-	allText := ctx.Tr("全部")
+	allText := ctx.Tr("All")
 
 	tmpText := ctx.URLParam("allText")
 	if tmpText != "" {
@@ -728,7 +728,7 @@ func ApiModuleDetail(ctx iris.Context) {
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("模型不存在"),
+			"msg":  ctx.Tr("ModelDoesNotExist"),
 		})
 		return
 	}
@@ -1231,14 +1231,14 @@ func ApiCommentPublish(ctx iris.Context) {
 
 	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
-		msg := ctx.Tr("保存失败")
+		msg := ctx.Tr("SaveFailed")
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  msg,
 		})
 	}
 
-	msg := ctx.Tr("发布成功")
+	msg := ctx.Tr("PublishSuccessfully")
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
@@ -1281,7 +1281,7 @@ func ApiCommentPraise(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("点赞成功"),
+		"msg":  ctx.Tr("LikeSuccessfully"),
 		"data": comment,
 	})
 }
@@ -1340,7 +1340,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 
 	err = currentSite.DB.Save(guestbook).Error
 	if err != nil {
-		msg := ctx.Tr("保存失败")
+		msg := ctx.Tr("SaveFailed")
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  msg,
@@ -1349,17 +1349,17 @@ func ApiGuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := ctx.Tr("%s有来自%s的新留言", currentSite.System.SiteName, guestbook.UserName)
+	subject := ctx.Tr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := ctx.Tr("%s：%s", item.Name, req[item.FieldName]) + "\n"
+		content := ctx.Tr("s:s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
 	// 增加来路和IP返回
-	contents = append(contents, ctx.Tr("提交IP：%s", guestbook.Ip)+"\n")
-	contents = append(contents, ctx.Tr("来源页面：%s", guestbook.Refer)+"\n")
-	contents = append(contents, ctx.Tr("提交时间：%s", time.Now().Format("2006-01-02 15:04:05"))+"\n")
+	contents = append(contents, ctx.Tr("SubmitIpLog", guestbook.Ip)+"\n")
+	contents = append(contents, ctx.Tr("SourcePageLog", guestbook.Refer)+"\n")
+	contents = append(contents, ctx.Tr("SubmitTimeLog", time.Now().Format("2006-01-02 15:04:05"))+"\n")
 
 	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
 		// 后台发信
@@ -1374,7 +1374,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {
-		msg = ctx.Tr("感谢您的留言！")
+		msg = ctx.Tr("ThankYouForYourMessage!")
 	}
 
 	ctx.JSON(iris.Map{
@@ -1423,9 +1423,9 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
-	msg := ctx.Tr("发布成功")
+	msg := ctx.Tr("PublishSuccessfully")
 	if req.Draft {
-		msg += ctx.Tr("，已进入审核")
+		msg += ctx.Tr("ItHasEnteredTheReview")
 	}
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 

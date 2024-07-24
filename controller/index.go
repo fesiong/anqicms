@@ -16,7 +16,7 @@ func IndexPage(ctx iris.Context) {
 	currentPage := ctx.Values().GetIntDefault("page", 1)
 	webTitle := currentSite.Index.SeoTitle
 	if currentPage > 1 {
-		webTitle += " - " + ctx.Tr("第%d页", currentPage)
+		webTitle += " - " + ctx.Tr("PageNum", currentPage)
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {

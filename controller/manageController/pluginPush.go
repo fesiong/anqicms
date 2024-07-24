@@ -62,10 +62,10 @@ func PluginPushForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新搜索引擎推送配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSearchEnginePushConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

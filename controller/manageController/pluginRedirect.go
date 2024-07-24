@@ -47,7 +47,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 	if req.FromUrl == req.ToUrl {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("源链接和跳转链接不能一样。"),
+			"msg":  ctx.Tr("SourceLinkAndJumpLinkCannotBeTheSame"),
 		})
 		return
 	}
@@ -75,7 +75,7 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 		if err == nil && exists.Id != redirect.Id {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("已存在链接%s，修改失败", req.FromUrl),
+				"msg":  ctx.Tr("LinkAlreadyExists", req.FromUrl),
 			})
 			return
 		}
@@ -102,13 +102,13 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
+	currentSite.AddAdminLog(ctx, ctx.Tr("Update301JumpLink", redirect.FromUrl, redirect.ToUrl))
 
 	currentSite.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("链接已更新"),
+		"msg":  ctx.Tr("LinkUpdated"),
 	})
 }
 
@@ -141,13 +141,13 @@ func PluginRedirectDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除301跳转链接：%s => %s", redirect.FromUrl, redirect.ToUrl))
+	currentSite.AddAdminLog(ctx, ctx.Tr("Delete301JumpLink", redirect.FromUrl, redirect.ToUrl))
 
 	currentSite.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("已执行删除操作"),
+		"msg":  ctx.Tr("DeleteOperationHasBeenPerformed"),
 	})
 }
 
@@ -172,13 +172,13 @@ func PluginRedirectImport(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("导入301跳转链接"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("Import301JumpLink"))
 
 	currentSite.DeleteCacheRedirects()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("上传完毕"),
+		"msg":  ctx.Tr("UploadCompleted"),
 		"data": result,
 	})
 }

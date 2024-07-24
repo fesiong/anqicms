@@ -112,7 +112,7 @@ func (w *Website) SaveDesignInfo(req request.DesignInfoRequest) error {
 		}
 	}
 	if designIndex == -1 {
-		return errors.New(w.Tr("模板不存在"))
+		return errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 
 	designInfo := designList[designIndex]
@@ -134,15 +134,15 @@ func (w *Website) SaveDesignInfo(req request.DesignInfoRequest) error {
 func (w *Website) DeleteDesignInfo(packageName string) error {
 	packageName = filepath.Base(packageName)
 	if packageName == "" {
-		return errors.New(w.Tr("模板不存在"))
+		return errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 	if packageName == "default" {
-		return errors.New(w.Tr("默认模板不能删除"))
+		return errors.New(w.Tr("DefaultTemplateCannotBeDeleted"))
 	}
 
 	basePath := w.RootPath + "template/" + packageName
 	if !strings.HasPrefix(basePath, w.RootPath+"template/") {
-		return errors.New(w.Tr("模板不存在"))
+		return errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 
 	cachePath := w.CachePath + ".history/" + packageName
@@ -169,7 +169,7 @@ func (w *Website) GetDesignInfo(packageName string, scan bool) (*response.Design
 		}
 	}
 	if designIndex == -1 {
-		return nil, errors.New(w.Tr("模板不存在"))
+		return nil, errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 
 	if !scan {
@@ -457,7 +457,7 @@ func compress(file *os.File, prefix string, zw *zip.Writer) error {
 func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageName, fileType, filePath string) error {
 	fileExt := filepath.Ext(info.Filename)
 	if fileExt == ".php" {
-		return errors.New(w.Tr("不能上传php文件"))
+		return errors.New(w.Tr("CannotUploadPhpFile"))
 	}
 
 	designInfo, err := w.GetDesignInfo(packageName, false)
@@ -471,7 +471,7 @@ func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHead
 		realPath = w.PublicPath + "static/" + designInfo.Package + "/" + filePath
 	} else {
 		if fileExt != ".html" && fileExt != ".zip" {
-			return errors.New(w.Tr("请上传html模板"))
+			return errors.New(w.Tr("PleaseUploadTheHtmlTemplate"))
 		}
 		realPath = w.RootPath + "template/" + designInfo.Package + "/" + filePath
 	}
@@ -549,7 +549,7 @@ func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHead
 func (w *Website) GetDesignFileDetail(packageName, filePath, fileType string, scan bool) (*response.DesignFile, error) {
 	designInfo, err := w.GetDesignInfo(packageName, false)
 	if err != nil {
-		return nil, errors.New(w.Tr("模板不存在"))
+		return nil, errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 
 	filePath = strings.ReplaceAll(strings.ReplaceAll(filePath, "..", ""), "\\", "/")
@@ -587,7 +587,7 @@ func (w *Website) GetDesignFileDetail(packageName, filePath, fileType string, sc
 
 	_, err = os.Stat(realPath)
 	if err != nil && os.IsNotExist(err) {
-		return nil, errors.New(w.Tr("文件不存在"))
+		return nil, errors.New(w.Tr("FileDoesNotExist"))
 	}
 
 	if !exists {
@@ -739,7 +739,7 @@ func (w *Website) GetDesignFileHistoryInfo(packageName, filePath, historyHash, f
 		}
 	}
 	if !exists {
-		return "", errors.New(w.Tr("未找到历史记录"))
+		return "", errors.New(w.Tr("NoHistoryFound"))
 	}
 
 	pathMd5 := library.Md5(designFileDetail.Path)
@@ -767,7 +767,7 @@ func (w *Website) RestoreDesignFile(packageName, filePath, historyHash, fileType
 		}
 	}
 	if !exists {
-		return errors.New(w.Tr("未找到历史记录"))
+		return errors.New(w.Tr("NoHistoryFound"))
 	}
 
 	pathMd5 := library.Md5(designFileDetail.Path)
@@ -803,7 +803,7 @@ func (w *Website) DeleteDesignFile(packageName, filePath, fileType string) error
 	// 先验证文件名是否合法
 	designInfo, err := w.GetDesignInfo(packageName, false)
 	if err != nil {
-		return errors.New(w.Tr("模板不存在"))
+		return errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 
 	if fileType == "static" {
@@ -850,7 +850,7 @@ func (w *Website) SaveDesignFile(req request.SaveDesignFileRequest) error {
 	// 先验证文件名是否合法
 	designInfo, err := w.GetDesignInfo(req.Package, false)
 	if err != nil {
-		return errors.New(w.Tr("模板不存在"))
+		return errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 
 	req.Path = strings.ReplaceAll(strings.ReplaceAll(req.Path, "..", ""), "\\", "/")
@@ -951,12 +951,12 @@ func (w *Website) SaveDesignFile(req request.SaveDesignFileRequest) error {
 
 func (w *Website) CopyDesignFile(req request.CopyDesignFileRequest) error {
 	if req.NewPath == "" && req.NewPath == req.Path {
-		return errors.New(w.Tr("新文件名和被复制文件一致，请重新填写"))
+		return errors.New(w.Tr("TheNewFileNameIsTheSameAsTheCopiedFile"))
 	}
 	// 先验证文件名是否合法
 	designInfo, err := w.GetDesignInfo(req.Package, false)
 	if err != nil {
-		return errors.New(w.Tr("模板不存在"))
+		return errors.New(w.Tr("TemplateDoesNotExist"))
 	}
 	req.Path = strings.ReplaceAll(strings.ReplaceAll(req.Path, "..", ""), "\\", "/")
 	req.NewPath = strings.ReplaceAll(strings.ReplaceAll(req.NewPath, "..", ""), "\\", "/")
@@ -991,7 +991,7 @@ func (w *Website) CopyDesignFile(req request.CopyDesignFileRequest) error {
 	}
 	if existsIndex != -1 {
 		// 文件已存在
-		return errors.New(w.Tr("新文件已存在，无法完成复制"))
+		return errors.New(w.Tr("TheNewFileAlreadyExists"))
 	}
 	// 如果进行了重命名
 	newPath := basePath + req.NewPath
@@ -1158,12 +1158,12 @@ func (w *Website) RestoreDesignData(packageName string) error {
 	dataPath := w.RootPath + "template/" + packageName + "/data.db"
 	_, err := os.Stat(dataPath)
 	if err != nil {
-		return errors.New(w.Tr("无可初始化的数据"))
+		return errors.New(w.Tr("NoDataToInitialize"))
 	}
 
 	zipReader, err := zip.OpenReader(dataPath)
 	if err != nil {
-		return errors.New(w.Tr("读取数据失败"))
+		return errors.New(w.Tr("FailedToReadData"))
 	}
 	defer zipReader.Close()
 

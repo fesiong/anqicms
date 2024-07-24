@@ -31,7 +31,7 @@ func (w *Website) GetLinkById(id uint) (*model.Link, error) {
 
 func (w *Website) GetLinkByLink(link string) (*model.Link, error) {
 	if link == "" {
-		return nil, errors.New(w.Tr("link必填"))
+		return nil, errors.New(w.Tr("LinkRequired"))
 	}
 
 	var friendLink model.Link

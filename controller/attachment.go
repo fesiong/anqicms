@@ -29,7 +29,7 @@ func AttachmentUpload(ctx iris.Context) {
 		if adminId == 0 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("无法修改图片"),
+				"msg":  ctx.Tr("UnableToModifyTheImage"),
 			})
 			return
 		}
@@ -37,7 +37,7 @@ func AttachmentUpload(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("需要替换的图片资源不存在"),
+				"msg":  ctx.Tr("TheImageResourceToBeReplacedDoesNotExist"),
 			})
 			return
 		}
@@ -52,7 +52,7 @@ func AttachmentUpload(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传资源附件：%d => %s", attachment.Id, attachment.FileLocation))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadResourceAttachmentLog", attachment.Id, attachment.FileLocation))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

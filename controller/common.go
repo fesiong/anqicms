@@ -61,7 +61,7 @@ func NotFound(ctx iris.Context) {
 	webInfo := &response.WebInfo{}
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite != nil {
-		webInfo.Title = ctx.Tr("404 Not Found")
+		webInfo.Title = ctx.Tr("404NotFound")
 	} else {
 		webInfo.Title = "404 Not Found"
 	}
@@ -113,13 +113,8 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 }
 
 func InternalServerError(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
 	webInfo := &response.WebInfo{}
-	if currentSite != nil {
-		webInfo.Title = ctx.Tr("500 Internal Error")
-	} else {
-		webInfo.Title = "500 Internal Error"
-	}
+	webInfo.Title = ctx.Tr("500InternalError")
 	ctx.ViewData("webInfo", webInfo)
 
 	errMessage := ctx.Values().GetString("message")
@@ -175,7 +170,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			ua := strings.ToLower(ctx.GetHeader("User-Agent"))
 			if strings.Contains(ua, "spider") || strings.Contains(ua, "bot") {
 				ctx.StatusCode(403)
-				ShowMessage(ctx, ctx.Tr("您已被禁止访问"), nil)
+				ShowMessage(ctx, ctx.Tr("YouHaveBeenBanned"), nil)
 				return true
 			}
 		}
@@ -190,7 +185,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 				}
 				if strings.Contains(ua, v) {
 					ctx.StatusCode(403)
-					ShowMessage(ctx, ctx.Tr("您已被禁止访问"), nil)
+					ShowMessage(ctx, ctx.Tr("YouHaveBeenBanned"), nil)
 					return true
 				}
 			}
@@ -214,7 +209,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 					}
 					if strings.HasPrefix(ip, v) {
 						ctx.StatusCode(403)
-						ShowMessage(ctx, ctx.Tr("您已被禁止访问"), nil)
+						ShowMessage(ctx, ctx.Tr("YouHaveBeenBanned"), nil)
 						return true
 					}
 				}
@@ -293,11 +288,11 @@ func Inspect(ctx iris.Context) {
 		}
 
 		if website == nil {
-			ShowMessage(ctx, website.Tr("网站配置错误，请检查配置"), nil)
+			ShowMessage(ctx, website.Tr("WebsiteConfigurationError"), nil)
 			return
 		}
 		if !website.Initialed {
-			ShowMessage(ctx, website.Tr("网站已关闭"), nil)
+			ShowMessage(ctx, website.Tr("WebsiteIsClosed"), nil)
 			return
 		}
 		siteName = website.System.SiteName
@@ -835,10 +830,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("验证码不正确"),
+					"msg":  ctx.Tr("VerificationCodeIsIncorrect"),
 				})
 			} else {
-				ShowMessage(ctx, ctx.Tr("验证码不正确"), nil)
+				ShowMessage(ctx, ctx.Tr("VerificationCodeIsIncorrect"), nil)
 			}
 			return false
 		}
@@ -846,10 +841,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("验证码不正确"),
+					"msg":  ctx.Tr("VerificationCodeIsIncorrect"),
 				})
 			} else {
-				ShowMessage(ctx, ctx.Tr("验证码不正确"), nil)
+				ShowMessage(ctx, ctx.Tr("VerificationCodeIsIncorrect"), nil)
 			}
 			return false
 		}
@@ -864,10 +859,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("您提交的内容长度过短"),
+					"msg":  ctx.Tr("TheContentYouSubmittedIsTooShort"),
 				})
 			} else {
-				ShowMessage(ctx, ctx.Tr("您提交的内容长度过短"), nil)
+				ShowMessage(ctx, ctx.Tr("TheContentYouSubmittedIsTooShort"), nil)
 			}
 			return false
 		}
@@ -884,10 +879,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("您提交的内容包含有不允许的字符"),
+						"msg":  ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"),
 					})
 				} else {
-					ShowMessage(ctx, ctx.Tr("您提交的内容包含有不允许的字符"), nil)
+					ShowMessage(ctx, ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
 				}
 				return false
 			}
@@ -901,10 +896,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  ctx.Tr("您提交的内容包含有不允许的字符"),
+								"msg":  ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"),
 							})
 						} else {
-							ShowMessage(ctx, ctx.Tr("您提交的内容包含有不允许的字符"), nil)
+							ShowMessage(ctx, ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
 						}
 					}
 				}
@@ -926,10 +921,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("已达到进入允许提交上限"),
+						"msg":  ctx.Tr("TheUpperLimitOfSubmissionsHasBeenReached"),
 					})
 				} else {
-					ShowMessage(ctx, ctx.Tr("已达到进入允许提交上限"), nil)
+					ShowMessage(ctx, ctx.Tr("TheUpperLimitOfSubmissionsHasBeenReached"), nil)
 				}
 				return false
 			}
@@ -944,10 +939,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  ctx.Tr("非法请求"),
+								"msg":  ctx.Tr("IllegalRequest"),
 							})
 						} else {
-							ShowMessage(ctx, ctx.Tr("非法请求"), nil)
+							ShowMessage(ctx, ctx.Tr("IllegalRequest"), nil)
 						}
 						return false
 					}
@@ -970,10 +965,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("请不要在短时间内多次提交"),
+						"msg":  ctx.Tr("PleaseDoNotSubmitMultipleTimesInAShortPeriodOfTime"),
 					})
 				} else {
-					ShowMessage(ctx, ctx.Tr("请不要在短时间内多次提交"), nil)
+					ShowMessage(ctx, ctx.Tr("PleaseDoNotSubmitMultipleTimesInAShortPeriodOfTime"), nil)
 				}
 				return false
 			}

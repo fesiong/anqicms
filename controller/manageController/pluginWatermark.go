@@ -69,11 +69,11 @@ func PluginWatermarkConfigForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新水印配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateWatermarkConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -105,7 +105,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 	if name != "font_path" && name != "image_path" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件名无效"),
+			"msg":  ctx.Tr("FileNameInvalid"),
 		})
 		return
 	}
@@ -125,7 +125,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 		if !strings.HasSuffix(info.Filename, ".ttf") {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("仅支持 .ttf 格式的字体文件"),
+				"msg":  ctx.Tr("OnlySupportsTtfFormat"),
 			})
 			return
 		}
@@ -141,7 +141,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 			if err != nil {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("不支持的图片格式"),
+					"msg":  ctx.Tr("UnsupportedImageFormat"),
 				})
 				return
 			}
@@ -153,7 +153,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("读取失败"),
+			"msg":  ctx.Tr("ReadFailed"),
 		})
 		return
 	}
@@ -162,7 +162,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("目录创建失败"),
+			"msg":  ctx.Tr("DirectoryCreationFailed"),
 		})
 		return
 	}
@@ -170,7 +170,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件保存失败"),
+			"msg":  ctx.Tr("FileSaveFailed"),
 		})
 		return
 	}
@@ -189,11 +189,11 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传水印图片资源：%s", name))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadWatermarkResourceLog", name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文件已上传完成"),
+		"msg":  ctx.Tr("FileUploadCompleted"),
 		"data": fileName,
 	})
 }
@@ -203,10 +203,10 @@ func PluginWatermarkGenerate(ctx iris.Context) {
 
 	currentSite.GenerateAllWatermark()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("批量生成水印图片"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchGenerateWatermarkImages"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("已提交后台处理，请稍后查看结果"),
+		"msg":  ctx.Tr("SubmittedForBackgroundProcessing"),
 	})
 }

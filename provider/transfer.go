@@ -766,7 +766,7 @@ func (t *TransferWebsite) transferStatics() error {
 	// 解压
 	zipReader, err := zip.OpenReader(tmpZipPath)
 	if err != nil {
-		t.ErrorMsg = t.w.Tr("解压静态文件出错")
+		t.ErrorMsg = t.w.Tr("ErrorInDecompressingStaticFiles")
 		t.Status = 2
 		return errors.New(t.ErrorMsg)
 	}

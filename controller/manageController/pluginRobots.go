@@ -40,10 +40,10 @@ func PluginRobotsForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新Robots信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateRobots"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

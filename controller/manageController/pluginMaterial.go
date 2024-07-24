@@ -75,11 +75,11 @@ func PluginMaterialDetailForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新内容素材：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMaterialLog", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("素材已更新"),
+		"msg":  ctx.Tr("MaterialUpdated"),
 		"data": category,
 	})
 }
@@ -104,11 +104,11 @@ func PluginMaterialDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除内容素材：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteMaterialLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("素材已删除"),
+		"msg":  ctx.Tr("MaterialDeleted"),
 	})
 }
 
@@ -132,11 +132,11 @@ func PluginMaterialCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新内容素材类别：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMaterialCategoryLog", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("分类已更新"),
+		"msg":  ctx.Tr("CategoryUpdated"),
 		"data": category,
 	})
 }
@@ -161,11 +161,11 @@ func PluginMaterialCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除内容素材：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteMaterialLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("分类已删除"),
+		"msg":  ctx.Tr("CategoryDeleted"),
 	})
 }
 
@@ -190,11 +190,11 @@ func PluginMaterialImport(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("导入内容素材"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportMaterial"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("导入成功"),
+		"msg":  ctx.Tr("ImportSuccessful"),
 	})
 }
 

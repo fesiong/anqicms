@@ -94,7 +94,11 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application)
-	bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
+	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
+	if err != nil {
+		log.Println("languages err", err)
+		os.Exit(1)
+	}
 	bootstrap.Application.I18n.SetDefault("zh-CN")
 	bootstrap.Application.I18n.ExtractFunc = func(ctx *context.Context) string {
 		// 获取默认语言
@@ -148,7 +152,7 @@ func (bootstrap *Bootstrap) Start() {
 	// 模板在最后加载，避免因为模板而导致程序无法运行
 	bootstrap.Application.RegisterView(pugEngine)
 
-	err := bootstrap.Application.Run(
+	err = bootstrap.Application.Run(
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
 		iris.WithRemoteAddrHeader("X-Real-IP"),
 		iris.WithRemoteAddrHeader("X-Forwarded-For"),

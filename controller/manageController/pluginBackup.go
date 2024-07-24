@@ -32,11 +32,11 @@ func PluginBackupDump(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("备份数据"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("备份已完成"),
+		"msg":  ctx.Tr("BackupCompleted"),
 	})
 }
 
@@ -62,7 +62,7 @@ func PluginBackupRestore(ctx iris.Context) {
 
 	// 重新读取配置
 	currentSite.InitSetting()
-	currentSite.AddAdminLog(ctx, ctx.Tr("从备份中恢复数据"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
 	go func() {
 		// 如果切换了模板，需要重启
 		config.RestartChan <- 0
@@ -77,7 +77,7 @@ func PluginBackupRestore(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("数据已恢复"),
+		"msg":  ctx.Tr("DataRestored"),
 	})
 }
 
@@ -99,11 +99,11 @@ func PluginBackupDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除备份数据"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteBackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("已处理"),
+		"msg":  ctx.Tr("Processed"),
 	})
 }
 
@@ -122,7 +122,7 @@ func PluginBackupImport(ctx iris.Context) {
 	if !strings.HasSuffix(info.Filename, ".sql") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("导入的文件格式不正确"),
+			"msg":  ctx.Tr("IncorrectImportedFileFormat"),
 		})
 		return
 	}
@@ -131,16 +131,16 @@ func PluginBackupImport(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件保存失败"),
+			"msg":  ctx.Tr("FileSaveFailed"),
 		})
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("导入备份文件：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportBackupFileLog", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("备份文件导入完成"),
+		"msg":  ctx.Tr("BackupFileImportCompleted"),
 	})
 }
 
@@ -178,10 +178,10 @@ func PluginBackupCleanup(ctx iris.Context) {
 	}
 
 	currentSite.CleanupWebsiteData(req.CleanUploads)
-	currentSite.AddAdminLog(ctx, ctx.Tr("一键清空网站数据"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("OneClickClearingOfWebsiteData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("清理完成"),
+		"msg":  ctx.Tr("CleanUpCompleted"),
 	})
 }

@@ -43,10 +43,10 @@ func PluginInterferenceConfigForm(ctx iris.Context) {
 	}
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新防采集干扰码配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateAntiCollectionInterferenceCodeConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

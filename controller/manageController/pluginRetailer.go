@@ -76,11 +76,11 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新分销员信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDistributor"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -104,11 +104,11 @@ func PluginRetailerSetRealName(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新分销员用户信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDistributorUser"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -132,10 +132,10 @@ func PluginRetailerApply(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新分销员用户信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDistributorUser"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

@@ -68,7 +68,7 @@ func UserAuth(ctx iris.Context) {
 	if userId == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  ctx.Tr("该操作需要登录，请登录后重试"),
+			"msg":  ctx.Tr("ThisOperationRequiresLogin"),
 		})
 		return
 	}

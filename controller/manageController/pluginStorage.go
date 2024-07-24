@@ -77,13 +77,13 @@ func PluginStorageConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新Storage配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateStorageConfiguration"))
 
 	currentSite.InitBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -105,7 +105,7 @@ func PluginStorageUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("读取失败"),
+			"msg":  ctx.Tr("ReadFailed"),
 		})
 		return
 	}
@@ -114,7 +114,7 @@ func PluginStorageUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("目录创建失败"),
+			"msg":  ctx.Tr("DirectoryCreationFailed"),
 		})
 		return
 	}
@@ -122,7 +122,7 @@ func PluginStorageUploadFile(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("文件保存失败"),
+			"msg":  ctx.Tr("FileSaveFailed"),
 		})
 		return
 	}
@@ -137,11 +137,11 @@ func PluginStorageUploadFile(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传ssh证书文件：%s", fileName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadSshCertificateFileLog", fileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("文件已上传完成"),
+		"msg":  ctx.Tr("FileUploadCompleted"),
 		"data": fileName,
 	})
 }

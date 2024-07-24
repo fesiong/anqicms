@@ -43,7 +43,7 @@ func (w *Website) PushArchive(link string) {
 func (w *Website) PushBaidu(list []string) error {
 	baiduApi := w.PluginPush.BaiduApi
 	if baiduApi == "" {
-		return errors.New(w.Tr("没有配置百度主动推送"))
+		return errors.New(w.Tr("BaiduActivePushIsNotConfigured"))
 	}
 	urlString := strings.Replace(strings.Trim(fmt.Sprint(list), "[]"), " ", "\n", -1)
 
@@ -62,7 +62,7 @@ func (w *Website) PushBaidu(list []string) error {
 func (w *Website) PushBing(list []string) error {
 	bingApi := w.PluginPush.BingApi
 	if bingApi == "" {
-		return errors.New(w.Tr("没有配置必应主动推送"))
+		return errors.New(w.Tr("BingActivePushIsNotConfigured"))
 	}
 
 	// bing 推送有2种方式，一种是传统的api，另一种是 IndexNow

@@ -25,7 +25,7 @@ func GuestbookPage(ctx iris.Context) {
 	ctx.ViewData("fields", fields)
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = ctx.Tr("在线留言")
+		webInfo.Title = ctx.Tr("OnlineMessage")
 		webInfo.PageName = "guestbook"
 		webInfo.CanonicalUrl = currentSite.GetUrl("/guestbook.html", nil, 0)
 		ctx.ViewData("webInfo", webInfo)
@@ -78,7 +78,7 @@ func GuestbookForm(ctx iris.Context) {
 		}
 
 		if item.Required && val == "" {
-			msg := ctx.Tr("%s必填", item.Name)
+			msg := ctx.Tr("ItIsRequired", item.Name)
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -110,7 +110,7 @@ func GuestbookForm(ctx iris.Context) {
 
 	err := currentSite.DB.Save(guestbook).Error
 	if err != nil {
-		msg := ctx.Tr("保存失败")
+		msg := ctx.Tr("SaveFailed")
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -123,17 +123,17 @@ func GuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := ctx.Tr("%s有来自%s的新留言", currentSite.System.SiteName, guestbook.UserName)
+	subject := ctx.Tr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := ctx.Tr("%s：%s", item.Name, req[item.FieldName]) + "\n"
+		content := ctx.Tr("s:s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
 	// 增加来路和IP返回
-	contents = append(contents, fmt.Sprintf("%s：%s\n", ctx.Tr("提交IP"), guestbook.Ip))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", ctx.Tr("来源页面"), guestbook.Refer))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", ctx.Tr("提交时间"), time.Now().Format("2006-01-02 15:04:05")))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", ctx.Tr("SubmitIp"), guestbook.Ip))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", ctx.Tr("SourcePage"), guestbook.Refer))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", ctx.Tr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
 
 	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
 		// 后台发信
@@ -148,7 +148,7 @@ func GuestbookForm(ctx iris.Context) {
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {
-		msg = ctx.Tr("感谢您的留言！")
+		msg = ctx.Tr("ThankYouForYourMessage!")
 	}
 
 	if returnType == "json" {
@@ -164,7 +164,7 @@ func GuestbookForm(ctx iris.Context) {
 		}
 
 		ShowMessage(ctx, msg, []Button{
-			{Name: ctx.Tr("点击继续"), Link: link},
+			{Name: ctx.Tr("ClickToContinue"), Link: link},
 		})
 	}
 }

@@ -233,20 +233,20 @@ func (w *Website) InitModelData() {
 			Model:     model.Model{Id: 1},
 			TableName: "article",
 			UrlToken:  "news",
-			Title:     w.Tr("文章中心"),
+			Title:     w.Tr("ArticleCenter"),
 			Fields:    nil,
 			IsSystem:  1,
-			TitleName: w.Tr("标题"),
+			TitleName: w.Tr("Title"),
 			Status:    1,
 		},
 		{
 			Model:     model.Model{Id: 2},
 			TableName: "product",
 			UrlToken:  "product",
-			Title:     w.Tr("产品中心"),
+			Title:     w.Tr("ProductCenter"),
 			Fields:    nil,
 			IsSystem:  1,
-			TitleName: w.Tr("产品名称"),
+			TitleName: w.Tr("ProductName"),
 			Status:    1,
 		},
 	}
@@ -269,7 +269,7 @@ func (w *Website) InitModelData() {
 		m.Migrate(w.DB, tplPath, false)
 	}
 	// 检查导航类别
-	navType := model.NavType{Title: w.Tr("默认导航")}
+	navType := model.NavType{Title: w.Tr("DefaultNavigation")}
 	navType.Id = 1
 	w.DB.Model(&model.NavType{}).FirstOrCreate(&navType)
 	// 默认管理员
@@ -277,8 +277,8 @@ func (w *Website) InitModelData() {
 	// 检查分组
 	adminGroup := model.AdminGroup{
 		Model:       model.Model{Id: 1},
-		Title:       w.Tr("超级管理员"),
-		Description: w.Tr("超级管理员分组"),
+		Title:       w.Tr("SuperAdministrator"),
+		Description: w.Tr("SuperAdministratorGroup"),
 		Status:      1,
 		Setting:     model.GroupSetting{},
 	}
@@ -289,19 +289,19 @@ func (w *Website) InitModelData() {
 	userGroups := []model.UserGroup{
 		{
 
-			Title:  w.Tr("普通用户"),
+			Title:  w.Tr("OrdinaryUser"),
 			Level:  0,
 			Status: 1,
 		},
 		{
 			Model:  model.Model{Id: 2},
-			Title:  w.Tr("中级用户"),
+			Title:  w.Tr("IntermediateUser"),
 			Level:  1,
 			Status: 1,
 		},
 		{
 			Model:  model.Model{Id: 3},
-			Title:  w.Tr("高级用户"),
+			Title:  w.Tr("AdvancedUser"),
 			Level:  2,
 			Status: 1,
 		},

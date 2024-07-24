@@ -16,9 +16,9 @@ func TagIndexPage(ctx iris.Context) {
 	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.Values().GetIntDefault("page", 1)
-		webInfo.Title = ctx.Tr("标签列表")
+		webInfo.Title = ctx.Tr("TagList")
 		if currentPage > 1 {
-			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
+			webInfo.Title += " - " + ctx.Tr("PageNum", currentPage)
 		}
 		webInfo.PageName = "tagIndex"
 		webInfo.CanonicalUrl = currentSite.GetUrl("tagIndex", nil, currentPage)
@@ -70,7 +70,7 @@ func TagPage(ctx iris.Context) {
 			webInfo.Title = tag.SeoTitle
 		}
 		if currentPage > 1 {
-			webInfo.Title += " - " + ctx.Tr("第%d页", currentPage)
+			webInfo.Title += " - " + ctx.Tr("PageNum", currentPage)
 		}
 		webInfo.Keywords = tag.Keywords
 		webInfo.Description = tag.Description

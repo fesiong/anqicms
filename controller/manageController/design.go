@@ -78,11 +78,11 @@ func SaveDesignInfo(ctx iris.Context) {
 	}
 	// 重载模板
 	config.RestartChan <- 0
-	currentSite.AddAdminLog(ctx, ctx.Tr("修改模板信息：%s", req.Package))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyTemplateLog", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("修改成功"),
+		"msg":  ctx.Tr("ModifySuccessfully"),
 	})
 }
 
@@ -118,14 +118,14 @@ func UseDesignInfo(ctx iris.Context) {
 			return
 		}
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("启用新模板：%s", req.Package))
+	currentSite.AddAdminLog(ctx, ctx.Tr("EnableNewTemplateLog", req.Package))
 	// 重载模板
 	config.RestartChan <- 0
 	time.Sleep(1 * time.Second)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("切换成功"),
+		"msg":  ctx.Tr("SwitchSuccessfully"),
 	})
 }
 
@@ -150,11 +150,11 @@ func DeleteDesignInfo(ctx iris.Context) {
 	}
 	// 重载模板
 	config.RestartChan <- 0
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除模板：%s", req.Package))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateLog", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("删除成功"),
+		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }
 
@@ -204,11 +204,11 @@ func UploadDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传模板：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateLog", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("上传成功"),
+		"msg":  ctx.Tr("UploadSuccessfully"),
 	})
 }
 
@@ -232,11 +232,11 @@ func BackupDesignData(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("备份模板数据：%s", req.Package))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BackupTemplateDataLog", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("数据备份成功"),
+		"msg":  ctx.Tr("DataBackupSuccessful"),
 	})
 }
 
@@ -264,11 +264,11 @@ func RestoreDesignData(ctx iris.Context) {
 			})
 			return
 		}
-		currentSite.AddAdminLog(ctx, ctx.Tr("备份数据"))
+		currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 	}
 	if req.AutoCleanup {
 		currentSite.CleanupWebsiteData(false)
-		currentSite.AddAdminLog(ctx, ctx.Tr("一键清空网站数据"))
+		currentSite.AddAdminLog(ctx, ctx.Tr("OneClickClearingOfWebsiteData"))
 	}
 
 	err := currentSite.RestoreDesignData(req.Package)
@@ -282,11 +282,11 @@ func RestoreDesignData(ctx iris.Context) {
 
 	currentSite.RemoveHtmlCache()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("初始化模板数据：%s", req.Package))
+	currentSite.AddAdminLog(ctx, ctx.Tr("InitializeTemplateDataLog", req.Package))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("数据初始化成功"),
+		"msg":  ctx.Tr("DataInitializationSuccessful"),
 	})
 }
 
@@ -321,11 +321,11 @@ func UploadDesignFile(ctx iris.Context) {
 	// 重载模板
 	config.RestartChan <- 0
 	currentSite.RemoveHtmlCache()
-	currentSite.AddAdminLog(ctx, ctx.Tr("上传模板文件：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateFileLog", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("上传成功"),
+		"msg":  ctx.Tr("UploadSuccessfully"),
 	})
 }
 
@@ -409,11 +409,11 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除模板文件历史：%s => %s", req.Package, req.Filepath))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateFileHistory", req.Package, req.Filepath))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("删除成功"),
+		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }
 
@@ -441,11 +441,11 @@ func RestoreDesignFile(ctx iris.Context) {
 	// 重载模板
 	config.RestartChan <- 0
 	currentSite.DeleteCacheIndex()
-	currentSite.AddAdminLog(ctx, ctx.Tr("从历史恢复模板文件：%s => %s", req.Package, req.Filepath))
+	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreTemplateFileFromHistory", req.Package, req.Filepath))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("替换成功"),
+		"msg":  ctx.Tr("ReplaceSuccessfully"),
 		"data": fileInfo,
 	})
 }
@@ -473,11 +473,11 @@ func SaveDesignFile(ctx iris.Context) {
 	config.RestartChan <- 0
 	currentSite.DeleteCacheIndex()
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("修改模板文件：%s => %s", req.Package, req.Path))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("修改成功"),
+		"msg":  ctx.Tr("ModifySuccessfully"),
 	})
 }
 
@@ -502,11 +502,11 @@ func CopyDesignFile(ctx iris.Context) {
 	}
 	// 重载模板
 	config.RestartChan <- 0
-	currentSite.AddAdminLog(ctx, ctx.Tr("复制模板文件：%s => %s", req.Package, req.Path))
+	currentSite.AddAdminLog(ctx, ctx.Tr("CopyTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("复制成功"),
+		"msg":  ctx.Tr("CopySuccessfully"),
 	})
 }
 
@@ -531,11 +531,11 @@ func DeleteDesignFile(ctx iris.Context) {
 	}
 	// 重载模板
 	config.RestartChan <- 0
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除模板文件：%s => %s", req.Package, req.Path))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("删除成功"),
+		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }
 

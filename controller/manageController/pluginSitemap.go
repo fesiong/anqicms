@@ -64,11 +64,11 @@ func PluginSitemapForm(ctx iris.Context) {
 		currentSite.DeleteSitemap(oldType)
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新Sitemap配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
@@ -119,11 +119,11 @@ func PluginSitemapBuild(ctx iris.Context) {
 	// 写入Sitemap的url
 	pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("手动更新sitemap"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("Sitemap已更新"),
+		"msg":  ctx.Tr("SitemapUpdated"),
 		"data": pluginSitemap,
 	})
 }

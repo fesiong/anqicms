@@ -33,7 +33,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	fileExt := strings.ToLower(filepath.Ext(info.Filename))
 	if fileExt == ".php" {
-		return nil, errors.New(w.Tr("不允许上传php文件"))
+		return nil, errors.New(w.Tr("NotAllowedToUploadPhpFiles"))
 	}
 	if fileExt == ".jpeg" {
 		fileExt = ".jpg"
@@ -54,7 +54,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	if attachId > 0 {
 		attachment, err = w.GetAttachmentById(attachId)
 		if err != nil {
-			return nil, errors.New(w.Tr("需要替换的图片资源不存在"))
+			return nil, errors.New(w.Tr("TheImageResourceToBeReplacedDoesNotExist"))
 		}
 		isImage = attachment.IsImage
 	}
@@ -73,7 +73,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	exists, _ := w.GetAttachmentByMd5(md5Str)
 	if attachment != nil {
 		if exists != nil && attachment.Id != exists.Id {
-			return nil, errors.New(w.Tr("替换失败，已存在当前上传的资源。"))
+			return nil, errors.New(w.Tr("ReplacementFailedCurrentlyUploadedResourcesAlreadyExist"))
 		}
 		fileName = attachment.FileName
 		fileExt = filepath.Ext(attachment.FileLocation)
@@ -138,13 +138,13 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 			img, err = webp.Decode(file)
 			file.Seek(0, 0)
 			if err != nil {
-				fmt.Println(w.Tr("无法获取图片尺寸"))
+				fmt.Println(w.Tr("UnableToObtainImageSize"))
 				return nil, err
 			}
 			imgType = "webp"
 		} else {
 			//无法获取图片尺寸
-			fmt.Println(w.Tr("无法获取图片尺寸"))
+			fmt.Println(w.Tr("UnableToObtainImageSize"))
 			return nil, err
 		}
 	}
@@ -160,7 +160,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 	//只允许上传jpg,jpeg,gif,png,webp
 	if imgType != "jpg" && imgType != "gif" && imgType != "png" && imgType != "webp" {
-		return nil, errors.New(w.Tr("不支持的图片格式: %s。", imgType))
+		return nil, errors.New(w.Tr("UnsupportedImageFormatLog", imgType))
 	}
 
 	if attachId == 0 {
@@ -290,7 +290,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 
 			return w.AttachmentUpload(tmpfile, fileHeader, 0, 0)
 		} else {
-			return nil, errors.New(w.Tr("不支持的图片格式"))
+			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}
 	}
 
@@ -385,7 +385,7 @@ func (w *Website) BuildThumb(fileLocation string) error {
 		f.Seek(0, 0)
 		img, err = webp.Decode(f)
 		if err != nil {
-			fmt.Println(w.Tr("无法获取图片尺寸"))
+			fmt.Println(w.Tr("UnableToObtainImageSize"))
 			return err
 		}
 		imgType = "webp"
@@ -451,7 +451,7 @@ func (w *Website) DeleteAttachmentCategory(id uint) error {
 	var attachCount int64
 	w.DB.Model(&model.Attachment{}).Where("`category_id` = ?", category.Id).Count(&attachCount)
 	if attachCount > 0 {
-		return errors.New(w.Tr("请删除分类下的图片，才能删除分类"))
+		return errors.New(w.Tr("PleaseDeleteTheImagesUnderTheCategoryBeforeDeletingTheCategory"))
 	}
 
 	//执行删除操作
@@ -681,7 +681,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 
 	img, _, err := image.Decode(f)
 	if err != nil {
-		fmt.Println(w.Tr("无法获取图片尺寸"))
+		fmt.Println(w.Tr("UnableToObtainImageSize"))
 		return err
 	}
 	quality := w.Content.Quality

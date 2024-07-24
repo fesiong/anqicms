@@ -58,14 +58,14 @@ func (w *Website) GetGuestbookFields() []*config.CustomField {
 	//这里有默认的设置
 	defaultFields := []*config.CustomField{
 		{
-			Name:      w.Tr("用户名"),
+			Name:      w.Tr("UserName"),
 			FieldName: "user_name",
 			Type:      "text",
 			Required:  true,
 			IsSystem:  true,
 		},
 		{
-			Name:      w.Tr("联系电话"),
+			Name:      w.Tr("ContactPhoneNumber"),
 			FieldName: "contact",
 			Type:      "text",
 			Required:  false,
@@ -79,21 +79,21 @@ func (w *Website) GetGuestbookFields() []*config.CustomField {
 			IsSystem:  false,
 		},
 		{
-			Name:      w.Tr("QQ"),
+			Name:      w.Tr("Qq"),
 			FieldName: "qq",
 			Type:      "text",
 			Required:  false,
 			IsSystem:  false,
 		},
 		{
-			Name:      w.Tr("WhatsApp"),
+			Name:      w.Tr("Whatsapp"),
 			FieldName: "whatsapp",
 			Type:      "text",
 			Required:  false,
 			IsSystem:  false,
 		},
 		{
-			Name:      w.Tr("留言内容"),
+			Name:      w.Tr("MessageContent"),
 			FieldName: "content",
 			Type:      "textarea",
 			Required:  false,

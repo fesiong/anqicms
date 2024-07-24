@@ -49,7 +49,7 @@ func NotifyWechatPay(ctx iris.Context) {
 	if !ok {
 		library.DebugLog(currentSite.CachePath, "wechat.log", "err", err, fmt.Sprintf("%#v", notifyReq))
 		rsp.ReturnCode = gopay.FAIL
-		rsp.ReturnMsg = ctx.Tr("支付失败")
+		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 		ctx.WriteString(rsp.ToXmlString())
 		return
 	}
@@ -58,7 +58,7 @@ func NotifyWechatPay(ctx iris.Context) {
 	if err != nil {
 		library.DebugLog(currentSite.CachePath, "wechat.log", "err", "payment-not found")
 		rsp.ReturnCode = gopay.FAIL
-		rsp.ReturnMsg = ctx.Tr("支付失败")
+		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 		ctx.WriteString(rsp.ToXmlString())
 		return
 	}
@@ -73,7 +73,7 @@ func NotifyWechatPay(ctx iris.Context) {
 	if err != nil {
 		library.DebugLog(currentSite.CachePath, "wechat.log", "err", "order not found")
 		rsp.ReturnCode = gopay.FAIL
-		rsp.ReturnMsg = ctx.Tr("支付失败")
+		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 		ctx.WriteString(rsp.ToXmlString())
 		return
 	}
@@ -133,7 +133,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		if err != nil {
 			library.DebugLog(currentSite.CachePath, "wechat.log", "err", "order pay failed")
 			rsp.ReturnCode = gopay.FAIL
-			rsp.ReturnMsg = ctx.Tr("支付失败")
+			rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 			ctx.WriteString(rsp.ToXmlString())
 			return
 		}
@@ -143,7 +143,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		if err != nil {
 			library.DebugLog(currentSite.CachePath, "wechat.log", "err", "order pay failed")
 			rsp.ReturnCode = gopay.FAIL
-			rsp.ReturnMsg = ctx.Tr("支付失败")
+			rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 			ctx.WriteString(rsp.ToXmlString())
 			return
 		}

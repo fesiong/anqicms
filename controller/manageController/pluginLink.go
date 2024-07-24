@@ -76,11 +76,11 @@ func PluginLinkDetailForm(ctx iris.Context) {
 	// 保存完毕，实时监测
 	go currentSite.PluginLinkCheck(link)
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("修改友情链接：%d => %s", link.Id, link.Link))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyFriendlyLinkLog", link.Id, link.Link))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("链接已更新"),
+		"msg":  ctx.Tr("LinkUpdated"),
 	})
 }
 
@@ -112,11 +112,11 @@ func PluginLinkDelete(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("删除友情链接：%d => %s", link.Id, link.Link))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteFriendlyLinkLog", link.Id, link.Link))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("链接已删除"),
+		"msg":  ctx.Tr("LinkDeleted"),
 	})
 }
 
@@ -150,7 +150,7 @@ func PluginLinkCheck(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("检查结束"),
+		"msg":  ctx.Tr("CheckCompleted"),
 		"data": result,
 	})
 }

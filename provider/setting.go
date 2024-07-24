@@ -170,7 +170,7 @@ func (w *Website) LoadPushSetting() {
 	// 兼容旧版 jscode
 	if w.PluginPush.JsCode != "" {
 		w.PluginPush.JsCodes = append(w.PluginPush.JsCodes, config.CodeItem{
-			Name:  w.Tr("未命名JS"),
+			Name:  w.Tr("UnnamedJs"),
 			Value: w.PluginPush.JsCode,
 		})
 		w.PluginPush.JsCode = ""

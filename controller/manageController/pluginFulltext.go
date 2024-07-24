@@ -41,7 +41,7 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("更新全文索引配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateFullTextIndexConfiguration"))
 	if req.Open {
 		currentSite.CloseFulltext()
 		go currentSite.InitFulltext()
@@ -51,6 +51,6 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("配置已更新"),
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
