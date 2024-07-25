@@ -1,10 +1,8 @@
 <div align="center"><a name="readme-top"></a>
 
-<img height="180" src="docs/AnQiCMS.svg" />
+<img height="180" src="docs/anqicms.svg" />
 
-[![downloads][download-image]][download-url] [![FOSSA Status][fossa-image]][fossa-url] [![Issues need help][help-wanted-image]][help-wanted-url]
-
-[Changelog](./CHANGELOG.md) · [Report Bug][github-issues-url] · [Request Feature][github-issues-url] · English · [中文](./README-zh_CN.md)
+[Changelog](./CHANGELOG.md) · English · [中文](./README-zh_CN.md)
 
 # AnQiCMS
 

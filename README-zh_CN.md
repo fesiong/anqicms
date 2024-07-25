@@ -2,9 +2,7 @@
 
 <img height="180" src="docs/anqicms.svg" />
 
-[![downloads][download-image]][download-url] [![FOSSA Status][fossa-image]][fossa-url] [![Issues need help][help-wanted-image]][help-wanted-url]
-
-[更新日志](./CHANGELOG.md) · [报告问题][github-issues-url] · [特性需求][github-issues-url] · [English](./README.md) · 中文
+[更新日志](./CHANGELOG.md) · [English](./README.md) · 中文
 
 # AnQiCMS
 
