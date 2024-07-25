@@ -28,7 +28,7 @@ Welcome to use AnQiCMS.
 
 ## Quick Start
 
-[Download AnQiCMS](https://github.com/fesiong/goblog/releases)
+[Download AnQiCMS](https://github.com/fesiong/goblog/releases)  
 [Installation Guide](https://www.AnQiCMS.com/help-basic/210.html)  
 [Template Documentation](https://www.AnQiCMS.com/manual)  
 [Usage Guide](https://www.AnQiCMS.com/help)  

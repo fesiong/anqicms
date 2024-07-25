@@ -28,7 +28,7 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 
 ## 快速开始
 
-[下载最新的 AnqiCMS](https://github.com/fesiong/goblog/releases)
+[下载最新的 AnqiCMS](https://github.com/fesiong/goblog/releases)  
 [安装一个新的站点](https://www.anqicms.com/help-basic/210.html)  
 [查看模板使用教程](https://www.anqicms.com/manual)  
 [查看后台使用帮助](https://www.anqicms.com/help)  
