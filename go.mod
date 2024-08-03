@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
-	github.com/chai2010/webp v1.1.2-0.20220219151144-e81c7511b15a
+	github.com/chai2010/webp v1.1.2-0.20240612091223-aa1b379218b7
 	github.com/chromedp/chromedp v0.9.3
 	github.com/disintegration/imaging v1.6.2
 	github.com/esap/wechat v1.1.2
@@ -39,10 +39,10 @@ require (
 	github.com/tdewolff/parse/v2 v2.7.9
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.45
 	github.com/upyun/go-sdk/v3 v3.0.4
-	golang.org/x/crypto v0.21.0
-	golang.org/x/image v0.15.0
+	golang.org/x/crypto v0.25.0
+	golang.org/x/image v0.18.0
 	golang.org/x/net v0.23.0
-	golang.org/x/text v0.14.0
+	golang.org/x/text v0.16.0
 	google.golang.org/api v0.169.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/gorm v1.25.5
@@ -143,13 +143,13 @@ require (
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
-	golang.org/x/sync v0.6.0 // indirect
-	golang.org/x/sys v0.18.0 // indirect
+	golang.org/x/sync v0.7.0 // indirect
+	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240304161311-37d4d3c04a78 // indirect
 	google.golang.org/grpc v1.62.0 // indirect
-	google.golang.org/protobuf v1.33.0 // indirect
+	google.golang.org/protobuf v1.34.2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	moul.io/http2curl v1.0.0 // indirect
