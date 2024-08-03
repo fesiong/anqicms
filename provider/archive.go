@@ -505,6 +505,18 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 	}
 
+	if len(req.Flags) == 0 {
+		imgRe, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
+		hasImage := imgRe.MatchString(req.Content)
+		if !hasImage {
+			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+			imgRe, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+			hasImage = imgRe.MatchString(req.Content)
+		}
+		if hasImage {
+			req.Flags = append(req.Flags, "p")
+		}
+	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	// todo 应该只替换 src,href 中的 baseUrl
@@ -755,11 +767,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if isReleased {
 		// 尝试添加全文索引
 		w.AddFulltextIndex(&TinyArchive{
-			Id:       draft.Id,
-			ModuleId: draft.ModuleId,
-			Title:    draft.Title,
-			Keywords: draft.Keywords,
-			Content:  archiveData.Content,
+			Id:          uint64(draft.Id),
+			ModuleId:    draft.ModuleId,
+			Title:       draft.Title,
+			Keywords:    draft.Keywords,
+			Description: draft.Description,
+			Content:     archiveData.Content,
 		})
 		w.FlushIndex()
 
@@ -867,7 +880,7 @@ func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 
 	go func() {
 		var doc TinyArchive
-		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
+		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
 		// 尝试添加全文索引
 		w.AddFulltextIndex(&doc)
 	}()
@@ -897,7 +910,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-	w.RemoveFulltextIndex(archive.Id)
+	w.RemoveFulltextIndex(uint64(archive.Id))
 	// 每次删除文档，都清理一次Sitemap
 	if w.PluginSitemap.AutoBuild == 1 {
 		w.DeleteSitemap(w.PluginSitemap.Type)
@@ -970,7 +983,7 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 				hasFixedLink = true
 			}
 			w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-			w.RemoveFulltextIndex(archive.Id)
+			w.RemoveFulltextIndex(uint64(archive.Id))
 		}
 		if hasFixedLink {
 			w.DeleteCacheFixedLinks()

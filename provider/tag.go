@@ -43,6 +43,13 @@ func (w *Website) GetTagList(itemId uint, title string, firstLetter string, curr
 	return tags, total, nil
 }
 
+func (w *Website) GetTagsByIds(ids []uint) []*model.Tag {
+	var tags []*model.Tag
+	w.DB.Model(&model.Tag{}).Where("`id` IN(?)", ids).Find(&tags)
+
+	return tags
+}
+
 func (w *Website) GetTagById(id uint) (*model.Tag, error) {
 	var tag model.Tag
 	if err := w.DB.Where("id = ?", id).First(&tag).Error; err != nil {
@@ -143,6 +150,15 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		if w.PluginSitemap.AutoBuild == 1 {
 			_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
 		}
+	}
+	if w.PluginFulltext.UseTag {
+		w.AddFulltextIndex(&TinyArchive{
+			Id:          TagDivider + uint64(tag.Id),
+			Title:       tag.Title,
+			Keywords:    tag.Keywords,
+			Description: tag.Description,
+		})
+		w.FlushIndex()
 	}
 
 	return

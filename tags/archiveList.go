@@ -208,6 +208,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		currentPage = 1
 	}
 
+	var tmpResult = make([]*model.Archive, 0, limit)
 	var archives []*model.Archive
 	var total int64
 	if listType == "related" {
@@ -316,15 +317,71 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
-		var ids []uint
+		var ids []uint64
+		var searchCatIds []uint
+		var searchTagIds []uint
 		if (listType == "page" && len(q) > 0) || argQ != "" {
-			ids, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			var tmpIds []uint64
+			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
 			if err2 == nil {
 				fulltextSearch = true
-				if len(ids) == 0 {
+				for _, id := range tmpIds {
+					if id < provider.CategoryDivider {
+						ids = append(ids, id)
+					} else if id < provider.TagDivider {
+						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
+					} else if id < provider.TagDividerEnd {
+						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+					} else {
+						// 其他值
+					}
+				}
+				if len(tmpIds) == 0 || len(ids) == 0 {
 					ids = append(ids, 0)
 				}
 				offset = 0
+			}
+		}
+		if len(searchCatIds) > 0 {
+			cats := currentSite.GetCacheCategoriesByIds(searchCatIds)
+			for _, cat := range cats {
+				cat.Link = currentSite.GetUrl("category", cat, 0)
+				tmpResult = append(tmpResult, &model.Archive{
+					Type:        "category",
+					Id:          cat.Id,
+					CreatedTime: cat.CreatedTime,
+					UpdatedTime: cat.UpdatedTime,
+					Title:       cat.Title,
+					SeoTitle:    cat.SeoTitle,
+					UrlToken:    cat.UrlToken,
+					Keywords:    cat.Keywords,
+					Description: cat.Description,
+					ModuleId:    cat.ModuleId,
+					CategoryId:  cat.ParentId,
+					Images:      cat.Images,
+					Logo:        cat.Logo,
+					Link:        cat.Link,
+					Thumb:       cat.Thumb,
+					Sort:        cat.Sort,
+				})
+			}
+		}
+		if len(searchTagIds) > 0 {
+			tags := currentSite.GetTagsByIds(searchTagIds)
+			for _, tag := range tags {
+				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tmpResult = append(tmpResult, &model.Archive{
+					Type:        "tag",
+					Id:          tag.Id,
+					CreatedTime: tag.CreatedTime,
+					UpdatedTime: tag.UpdatedTime,
+					Title:       tag.Title,
+					SeoTitle:    tag.SeoTitle,
+					UrlToken:    tag.UrlToken,
+					Keywords:    tag.Keywords,
+					Description: tag.Description,
+					Link:        tag.Link,
+				})
 			}
 		}
 		ops := func(tx *gorm.DB) *gorm.DB {
@@ -458,7 +515,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		webInfo.TotalPages = pager.TotalPages
 		ctx.Public["pagination"] = pager
 	}
-	ctx.Private[node.name] = archives
+	tmpResult = append(archives, tmpResult...)
+	ctx.Private[node.name] = tmpResult
 	ctx.Private["combine"] = combineArchive
 
 	//execute

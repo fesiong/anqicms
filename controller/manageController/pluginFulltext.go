@@ -31,6 +31,8 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	currentSite.PluginFulltext.Open = req.Open
 	currentSite.PluginFulltext.UseContent = req.UseContent
 	currentSite.PluginFulltext.Modules = req.Modules
+	currentSite.PluginFulltext.UseCategory = req.UseCategory
+	currentSite.PluginFulltext.UseTag = req.UseTag
 
 	err := currentSite.SaveSettingValue(provider.FulltextSettingKey, currentSite.PluginFulltext)
 	if err != nil {

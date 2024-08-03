@@ -311,6 +311,17 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			}
 		}()
 	}
+	if w.PluginFulltext.UseCategory {
+		w.AddFulltextIndex(&TinyArchive{
+			Id:          CategoryDivider + uint64(category.Id),
+			ModuleId:    category.ModuleId,
+			Title:       category.Title,
+			Keywords:    category.Keywords,
+			Description: category.Description,
+			Content:     category.Content,
+		})
+		w.FlushIndex()
+	}
 	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 	w.DeleteCacheCategories()
 	w.DeleteCacheIndex()
@@ -375,6 +386,20 @@ func (w *Website) GetCacheCategories() []*model.Category {
 	_ = w.Cache.Set("categories", categories, 0)
 
 	return categories
+}
+
+func (w *Website) GetCacheCategoriesByIds(ids []uint) []*model.Category {
+	categories := w.GetCacheCategories()
+	var tmpCategories = make([]*model.Category, 0, len(ids))
+	for _, category := range categories {
+		for _, id := range ids {
+			if category.Id == id {
+				tmpCategories = append(tmpCategories, category)
+			}
+		}
+	}
+
+	return tmpCategories
 }
 
 // GetSubCategoryIds 获取分类的子分类

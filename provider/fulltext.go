@@ -6,16 +6,20 @@ import (
 	"github.com/huichen/wukong/types"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"log"
 	"strconv"
 )
 
 const (
-	InitSqlLimit = 100
+	InitSqlLimit    = 100
+	CategoryDivider = 1000000000
+	TagDivider      = 2000000000
+	TagDividerEnd   = 3000000000
 )
 
 type TinyArchive struct {
-	Id          uint   `json:"id"`
+	Id          uint64 `json:"id"` // 小于1000000000=文档ID，1000000000开头是分类ID，2000000000开头标签ID
 	ModuleId    uint   `json:"module_id"`
 	Title       string `json:"title"`
 	Keywords    string `json:"keywords"`
@@ -38,7 +42,7 @@ func (w *Website) InitFulltext() {
 
 	var archiveCount int
 	// 导入索引：仅导入标题/关键词/描述和内容
-	var lastId uint = 0
+	var lastId uint64 = 0
 	for {
 		var archives = make([]*TinyArchive, 0, InitSqlLimit)
 		if w.PluginFulltext.UseContent {
@@ -54,6 +58,33 @@ func (w *Website) InitFulltext() {
 		for _, v := range archives {
 			w.AddFulltextIndex(v)
 		}
+	}
+	// 导入分类
+	if w.PluginFulltext.UseCategory {
+		var categories = make([]*TinyArchive, 0, InitSqlLimit)
+		if w.PluginFulltext.UseContent {
+			w.DB.Model(&model.Category{}).Select("id,title,keywords,description,module_id,content").Order("id asc").Scan(&categories)
+		} else {
+			w.DB.Model(&model.Category{}).Select("id,title,keywords,description,module_id").Order("id asc").Scan(&categories)
+		}
+		archiveCount += len(categories)
+		for _, v := range categories {
+			// 分类ID需 1000000000 开头
+			v.Id = CategoryDivider + v.Id
+			w.AddFulltextIndex(v)
+		}
+	}
+	// 导入标签
+	if w.PluginFulltext.UseTag {
+		var tags = make([]*TinyArchive, 0, InitSqlLimit)
+		w.DB.Model(&model.Tag{}).Select("id,title,keywords,description").Order("id asc").Scan(&tags)
+		archiveCount += len(tags)
+		for _, v := range tags {
+			// 标签ID需 2000000000 开头
+			v.Id = TagDivider + v.Id
+			w.AddFulltextIndex(v)
+		}
+
 	}
 	// 等待索引刷新完毕
 	w.searcher.FlushIndex()
@@ -95,20 +126,20 @@ func (w *Website) AddFulltextIndex(doc *TinyArchive) {
 		// 内容搜索的时候，需要去除html标签
 		content += " " + library.StripTags(doc.Content)
 	}
-	w.searcher.IndexDocument(uint64(doc.Id), types.DocumentIndexData{
+	w.searcher.IndexDocument(doc.Id, types.DocumentIndexData{
 		Content: content,
 		Labels:  []string{strconv.Itoa(int(doc.ModuleId))},
 	}, false)
 }
 
-func (w *Website) RemoveFulltextIndex(id uint) {
+func (w *Website) RemoveFulltextIndex(id uint64) {
 	if w.searcher == nil {
 		return
 	}
-	w.searcher.RemoveDocument(uint64(id), false)
+	w.searcher.RemoveDocument(id, false)
 }
 
-func (w *Website) Search(key string, moduleId uint, page, pageSize int) (ids []uint, total int64, err error) {
+func (w *Website) Search(key string, moduleId uint, page, pageSize int) (ids []uint64, total int64, err error) {
 	if w.searcher == nil {
 		err = errors.New(w.Tr("Uninitialized"))
 		return
@@ -129,16 +160,16 @@ func (w *Website) Search(key string, moduleId uint, page, pageSize int) (ids []u
 			MaxOutputs:   pageSize,
 		}})
 	for _, doc := range output.Docs {
-		ids = append(ids, uint(doc.DocId))
+		ids = append(ids, doc.DocId)
 	}
 	total = int64(output.NumDocs)
 
 	return
 }
 
-func (w *Website) OutputSearchIds(output types.SearchResponse) (ids []uint) {
+func (w *Website) OutputSearchIds(output types.SearchResponse) (ids []uint64) {
 	for _, doc := range output.Docs {
-		ids = append(ids, uint(doc.DocId))
+		ids = append(ids, doc.DocId)
 	}
 	return
 }

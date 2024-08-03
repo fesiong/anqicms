@@ -117,9 +117,11 @@ type PluginStorageConfig struct {
 }
 
 type PluginFulltextConfig struct {
-	Open       bool   `json:"open"`
-	UseContent bool   `json:"use_content"` // 是否索引内容
-	Modules    []uint `json:"modules"`
+	Open        bool   `json:"open"`
+	UseContent  bool   `json:"use_content"`  // 是否索引内容
+	UseCategory bool   `json:"use_category"` // 是否索引分类
+	UseTag      bool   `json:"use_tag"`      // 是否索引标签
+	Modules     []uint `json:"modules"`
 }
 
 type PluginTitleImageConfig struct {

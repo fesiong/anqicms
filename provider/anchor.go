@@ -116,19 +116,19 @@ func (w *Website) DeleteAnchor(anchor *model.Anchor) error {
 	}
 
 	//清理已经存在的anchor
-	go w.CleanAnchor(anchor.Id)
+	go w.CleanAnchor(anchor)
 
 	return nil
 }
 
-func (w *Website) CleanAnchor(anchorId uint) {
+func (w *Website) CleanAnchor(anchor *model.Anchor) {
 	var anchorData []*model.AnchorData
-	err := w.DB.Where("`anchor_id` = ?", anchorId).Find(&anchorData).Error
+	err := w.DB.Where("`anchor_id` = ?", anchor.Id).Find(&anchorData).Error
 	if err != nil {
 		return
 	}
 
-	anchorIdStr := fmt.Sprintf("%d", anchorId)
+	anchorIdStr := fmt.Sprintf("%d", anchor.Id)
 
 	for _, data := range anchorData {
 		//处理archive
@@ -166,6 +166,35 @@ func (w *Website) CleanAnchor(anchorId uint) {
 			}
 			return s
 		})
+		// 清理Markdown
+		// [keyword](url)
+		re, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 4 {
+				return s
+			}
+			if match[2] == anchor.Title && match[3] == anchor.Link {
+				//清理它
+				clean = true
+				return match[2]
+			}
+			return s
+		})
+		// **Keyword**
+		re, _ = regexp.Compile(`(?i)\*\*(.*?)\*\*`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			if match[1] == anchor.Title {
+				//清理它
+				clean = true
+				return match[1]
+			}
+			return s
+		})
 		//清理完毕，更新
 		if clean {
 			//更新内容
@@ -180,7 +209,7 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 	//如果锚文本更改了名称，需要移除已经生成锚文本
 	if changeTitle {
 		//清理anchor
-		w.CleanAnchor(anchor.Id)
+		w.CleanAnchor(anchor)
 
 		//更新替换数量
 		anchor.ReplaceCount = 0
@@ -218,6 +247,19 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 					update = true
 					s = strings.Replace(s, match[1], anchor.Link, 1)
 				}
+			}
+			return s
+		})
+		// [keyword](url)
+		re, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
+		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 4 {
+				return s
+			}
+			if match[2] == anchor.Title && match[1] != "?" {
+				//更换链接
+				s = strings.Replace(s, match[3], anchor.Link, 1)
 			}
 			return s
 		})
@@ -296,6 +338,11 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 		w.PluginAnchor.AnchorDensity = 200
 	}
 
+	// 判断是否是Markdown，如果开头是标签，则认为不是Markdown
+	isMarkdown := false
+	if !strings.HasPrefix(strings.TrimSpace(content), "<") {
+		isMarkdown = true
+	}
 	//最大可以替换的数量
 	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(w.PluginAnchor.AnchorDensity)))
 
@@ -331,6 +378,36 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	})
 	//所有的strong标签替换掉
 	reg, _ = regexp.Compile("(?i)<strong[^>]*>(.*?)</strong>")
+	content = reg.ReplaceAllStringFunc(content, func(s string) string {
+		key := fmt.Sprintf("{$%d}", numCount)
+		replacedMatch = append(replacedMatch, &replaceType{
+			Key:   key,
+			Value: s,
+		})
+		numCount++
+
+		return key
+	})
+	// [keyword](url)
+	reg, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
+	content = reg.ReplaceAllStringFunc(content, func(s string) string {
+		match := reg.FindStringSubmatch(s)
+		if len(match) > 2 && match[1] != "?" {
+			existsKeywords[strings.ToLower(match[2])] = true
+			existsLinks[strings.ToLower(match[3])] = true
+		}
+
+		key := fmt.Sprintf("{$%d}", numCount)
+		replacedMatch = append(replacedMatch, &replaceType{
+			Key:   key,
+			Value: s,
+		})
+		numCount++
+
+		return key
+	})
+	// **Keyword**
+	reg, _ = regexp.Compile(`(?i)\*\*(.*?)\*\*`)
 	content = reg.ReplaceAllStringFunc(content, func(s string) string {
 		key := fmt.Sprintf("{$%d}", numCount)
 		replacedMatch = append(replacedMatch, &replaceType{
@@ -379,7 +456,11 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 				key := ""
 				if replaceNum == 0 {
 					//第一条替换为锚文本
-					replaceHtml = fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, s)
+					if isMarkdown {
+						replaceHtml = fmt.Sprintf("[%s](%s)", s, anchor.Link)
+					} else {
+						replaceHtml = fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, s)
+					}
 					key = fmt.Sprintf("{$%d}", numCount)
 
 					//加入计数
@@ -387,7 +468,11 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 					existsKeywords[anchor.Title] = true
 				} else {
 					//其他则加粗
-					replaceHtml = fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, s)
+					if isMarkdown {
+						replaceHtml = fmt.Sprintf("**%s**", s)
+					} else {
+						replaceHtml = fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, s)
+					}
 					key = fmt.Sprintf("{$%d}", numCount)
 				}
 				replaceNum++
