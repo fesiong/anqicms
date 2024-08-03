@@ -143,23 +143,40 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			log.Println("migrate table error ", err)
 			return err
 		}
-		// 部分表强制使用MyISAM引擎
-		err = db.Set("gorm:table_options", "ENGINE=MyISAM DEFAULT CHARSET=utf8mb4").AutoMigrate(
-			&model.Archive{},
-			&model.ArchiveDraft{},
-		)
-		if err != nil {
-			log.Println("migrate table error ", err)
-			return err
+		// 判断是否支持MyISAM引擎
+		var result struct {
+			Exist int `json:"exist"`
 		}
-		// 升级转换部分
-		engine, _ := getTableEngine(db, "archives")
-		if engine != "MyISAM" {
-			db.Exec("ALTER TABLE archives ENGINE=MyISAM")
-		}
-		engine, _ = getTableEngine(db, "archive_drafts")
-		if engine != "MyISAM" {
-			db.Exec("ALTER TABLE archive_drafts ENGINE=MyISAM")
+		db.Raw("SELECT 1 as exist FROM INFORMATION_SCHEMA.ENGINES WHERE ENGINE = 'MyISAM'").Scan(&result)
+		if result.Exist == 1 {
+			// 支持 MyISAM
+			// 部分表强制使用MyISAM引擎
+			err = db.Set("gorm:table_options", "ENGINE=MyISAM DEFAULT CHARSET=utf8mb4").AutoMigrate(
+				&model.Archive{},
+				&model.ArchiveDraft{},
+			)
+			if err != nil {
+				log.Println("migrate table error ", err)
+				return err
+			}
+			// 升级转换部分
+			engine, _ := getTableEngine(db, "archives")
+			if engine != "MyISAM" {
+				db.Exec("ALTER TABLE archives ENGINE=MyISAM")
+			}
+			engine, _ = getTableEngine(db, "archive_drafts")
+			if engine != "MyISAM" {
+				db.Exec("ALTER TABLE archive_drafts ENGINE=MyISAM")
+			}
+		} else {
+			err = db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
+				&model.Archive{},
+				&model.ArchiveDraft{},
+			)
+			if err != nil {
+				log.Println("migrate table error ", err)
+				return err
+			}
 		}
 		// 先删除deleteAt
 		if db.Migrator().HasColumn(&model.Archive{}, "deleted_at") {
