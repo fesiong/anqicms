@@ -134,7 +134,7 @@ func ApiImportArchive(ctx iris.Context) {
 	if id > 0 {
 		_, err := currentSite.GetArchiveById(id)
 		_, err2 := currentSite.GetArchiveDraftById(id)
-		if err != nil && err2 == nil {
+		if err != nil && err2 != nil {
 			// 不存在，创建一个
 			archiveDraft := model.ArchiveDraft{
 				Archive: model.Archive{
@@ -178,10 +178,20 @@ func ApiImportArchive(ctx iris.Context) {
 		}
 	} else {
 		// 标题重复的不允许导入
+		var existId uint
 		exists, err := currentSite.GetArchiveByTitle(title)
 		if err == nil {
+			existId = exists.Id
+		} else {
+			// 也需要判断draft表
+			exists2, err2 := currentSite.GetArchiveDraftByTitle(title)
+			if err2 == nil {
+				existId = exists2.Id
+			}
+		}
+		if existId > 0 {
 			if cover {
-				req.Id = exists.Id
+				req.Id = existId
 			} else {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -194,8 +204,17 @@ func ApiImportArchive(ctx iris.Context) {
 			// 标题重复的不允许导入
 			exists, err = currentSite.GetArchiveByOriginUrl(originUrl)
 			if err == nil {
+				existId = exists.Id
+			} else {
+				// 也需要判断draft表
+				exists2, err2 := currentSite.GetArchiveDraftByOriginUrl(title)
+				if err2 == nil {
+					existId = exists2.Id
+				}
+			}
+			if existId > 0 {
 				if cover {
-					req.Id = exists.Id
+					req.Id = existId
 				} else {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
