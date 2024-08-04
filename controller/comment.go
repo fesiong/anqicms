@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
@@ -27,9 +28,24 @@ func CommentPublish(ctx iris.Context) {
 
 	//登录状态的用户，发布不进审核，否则进审核
 	status := uint(0)
-	userId := ctx.Values().GetIntDefault("adminId", 0)
-	if userId > 0 {
+	userId := ctx.Values().GetIntDefault("userId", 0)
+	adminId := ctx.Values().GetIntDefault("adminId", 0)
+	if adminId > 0 {
 		status = 1
+	} else {
+		// 是否需要审核
+		var contentVerify = true
+		userGroup := ctx.Values().Get("userGroup")
+		if userGroup != nil {
+			group, ok := userGroup.(*model.UserGroup)
+			if ok {
+				contentVerify = !group.Setting.ContentNoVerify
+			}
+		}
+		if contentVerify == false {
+			// 不需要审核
+			status = 1
+		}
 	}
 
 	var req request.PluginComment

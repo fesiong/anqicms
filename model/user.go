@@ -56,6 +56,9 @@ type UserGroupSetting struct {
 	ParentReward int64 `json:"parent_reward"`
 	Discount     int64 `json:"discount"`
 	ExpireDay    int   `json:"expire_day"`
+
+	ContentNoVerify  bool `json:"content_no_verify"`  // 评论/内容发布是否不需要审核
+	ContentNoCaptcha bool `json:"content_no_captcha"` // 评论/内容发布是否不需要验证码
 }
 
 // Value implements the driver.Valuer interface.

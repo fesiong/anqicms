@@ -1286,6 +1286,20 @@ func ApiCommentPublish(ctx iris.Context) {
 			req.ToUid = parent.UserId
 		}
 	}
+	// 是否需要审核
+	var contentVerify = true
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok {
+			contentVerify = !group.Setting.ContentNoVerify
+		}
+	}
+	req.Status = 0
+	if contentVerify == false {
+		// 不需要审核
+		req.Status = 1
+	}
 
 	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
@@ -1451,8 +1465,14 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
-	if currentSite.Safe.APIPublish != 1 {
-		req.Draft = true
+	// 是否需要审核
+	req.Draft = currentSite.Safe.APIPublish != 1
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok {
+			req.Draft = !group.Setting.ContentNoVerify
+		}
 	}
 	userId := ctx.Values().GetIntDefault("userId", 0)
 	req.UserId = uint(userId)

@@ -13,7 +13,7 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 		}
 	} else {
 		comment = &model.Comment{
-			Status:    0,
+			Status:    req.Status,
 			ArchiveId: req.ArchiveId,
 			UserId:    req.UserId,
 			Ip:        req.Ip,
@@ -21,7 +21,7 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 			ToUid:     req.ToUid,
 		}
 	}
-
+	comment.Status = req.Status
 	comment.UserName = req.UserName
 	comment.Content = req.Content
 

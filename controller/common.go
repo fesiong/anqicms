@@ -817,8 +817,18 @@ func GenerateCaptcha(ctx iris.Context) {
 
 func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from string) bool {
 	currentSite := provider.CurrentSite(ctx)
+	// 检查如果用户是否登录
+	// 是否需要验证码
+	var contentCaptcha = currentSite.Safe.Captcha == 1
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok {
+			contentCaptcha = !group.Setting.ContentNoCaptcha
+		}
+	}
 	// 检查验证码
-	if currentSite.Safe.Captcha == 1 {
+	if contentCaptcha {
 		captchaId := ctx.PostValueTrim("captcha_id")
 		captchaValue := ctx.PostValueTrim("captcha")
 		if req != nil {
