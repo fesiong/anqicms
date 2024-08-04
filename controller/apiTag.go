@@ -1274,6 +1274,13 @@ func ApiCommentPublish(ctx iris.Context) {
 	userId := ctx.Values().GetIntDefault("userId", 0)
 	if userId > 0 {
 		req.Status = 1
+		userInfo := ctx.Values().Get("userInfo")
+		if userInfo != nil {
+			user, ok := userInfo.(*model.User)
+			if ok {
+				req.UserName = user.UserName
+			}
+		}
 	}
 
 	req.UserId = uint(userId)

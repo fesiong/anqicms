@@ -56,6 +56,15 @@ func CommentPublish(ctx iris.Context) {
 	req.Content = ctx.PostValueTrim("content")
 	req.ParentId = uint(ctx.PostValueIntDefault("parent_id", 0))
 	req.ToUid = uint(ctx.PostValueIntDefault("to_uid", 0))
+	if userId > 0 {
+		userInfo := ctx.Values().Get("userInfo")
+		if userInfo != nil {
+			user, ok := userInfo.(*model.User)
+			if ok {
+				req.UserName = user.UserName
+			}
+		}
+	}
 
 	req.Status = status
 	req.UserId = uint(userId)
