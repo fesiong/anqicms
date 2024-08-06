@@ -110,14 +110,14 @@ func ApiLogin(ctx iris.Context) {
 			if req.CaptchaId == "" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("GraphicCodeIncorrect"),
+					"msg":  currentSite.TplTr("GraphicCodeIncorrect"),
 				})
 				return
 			}
 			if ok := Store.Verify(req.CaptchaId, req.Captcha, true); !ok {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("GraphicCodeIncorrect"),
+					"msg":  currentSite.TplTr("GraphicCodeIncorrect"),
 				})
 				return
 			}
@@ -128,7 +128,7 @@ func ApiLogin(ctx iris.Context) {
 		if req.UserName == "" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("PleaseEnterAccount"),
+				"msg":  currentSite.TplTr("PleaseEnterAccount"),
 			})
 			return
 		}
@@ -136,7 +136,7 @@ func ApiLogin(ctx iris.Context) {
 		if len(req.Password) < 6 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("PleaseEnterAPasswordOf6CharactersOrMore"),
+				"msg":  currentSite.TplTr("PleaseEnterAPasswordOf6CharactersOrMore"),
 			})
 			return
 		}
@@ -146,7 +146,7 @@ func ApiLogin(ctx iris.Context) {
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("LoginFailed"),
+				"msg":  currentSite.TplTr("LoginFailed"),
 			})
 			return
 		}
@@ -155,7 +155,7 @@ func ApiLogin(ctx iris.Context) {
 	if user == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("LoginFailed"),
+			"msg":  currentSite.TplTr("LoginFailed"),
 		})
 		return
 	}
@@ -222,7 +222,7 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("SaveSuccessfully"),
+		"msg":  currentSite.TplTr("SaveSuccessfully"),
 	})
 }
 
@@ -293,7 +293,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 	if len(req.Password) < 6 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("PleaseFillInAPasswordOfMoreThan6Digits"),
+			"msg":  currentSite.TplTr("PleaseFillInAPasswordOfMoreThan6Digits"),
 		})
 		return
 	}
@@ -302,7 +302,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("PleaseLogIn"),
+			"msg":  currentSite.TplTr("PleaseLogIn"),
 		})
 		return
 	}
@@ -312,7 +312,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 		if !user.CheckPassword(req.OldPassword) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("OldPasswordIsWrong"),
+				"msg":  currentSite.TplTr("OldPasswordIsWrong"),
 			})
 			return
 		}
@@ -329,6 +329,6 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("PasswordChangedSuccessfully"),
+		"msg":  currentSite.TplTr("PasswordChangedSuccessfully"),
 	})
 }

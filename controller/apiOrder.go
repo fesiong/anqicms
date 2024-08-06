@@ -54,7 +54,7 @@ func ApiGetOrderDetail(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("InsufficientPermissions"),
+			"msg":  currentSite.TplTr("InsufficientPermissions"),
 		})
 		return
 	}
@@ -117,7 +117,7 @@ func ApiCancelOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("TheOrderIsNotOperational"),
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
 		})
 		return
 	}
@@ -133,7 +133,7 @@ func ApiCancelOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("OrderCanceled"),
+		"msg":  currentSite.TplTr("OrderCanceled"),
 	})
 }
 
@@ -160,7 +160,7 @@ func ApiApplyRefundOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("TheOrderIsNotOperational"),
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
 		})
 		return
 	}
@@ -176,7 +176,7 @@ func ApiApplyRefundOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("RefundApplicationSubmitted"),
+		"msg":  currentSite.TplTr("RefundApplicationSubmitted"),
 	})
 }
 
@@ -203,7 +203,7 @@ func ApiFinishedOrder(ctx iris.Context) {
 	if order.UserId != userId {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("TheOrderIsNotOperational"),
+			"msg":  currentSite.TplTr("TheOrderIsNotOperational"),
 		})
 		return
 	}
@@ -219,7 +219,7 @@ func ApiFinishedOrder(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("OrderCompleted"),
+		"msg":  currentSite.TplTr("OrderCompleted"),
 	})
 }
 
@@ -316,7 +316,7 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("UnableToCreatePaymentOrder"),
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
 		})
 	}
 }
@@ -531,7 +531,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  ctx.Tr("PaymentSuccessful"),
+			"msg":  currentSite.TplTr("PaymentSuccessful"),
 		})
 		return
 	}
@@ -542,7 +542,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 			//支付成功
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
-				"msg":  ctx.Tr("PaymentSuccessful"),
+				"msg":  currentSite.TplTr("PaymentSuccessful"),
 			})
 			return
 		}
@@ -551,7 +551,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  ctx.Tr("Unpaid"),
+		"msg":  currentSite.TplTr("Unpaid"),
 	})
 }
 

@@ -27,7 +27,7 @@ func (node *tagTrNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Templ
 		return nil
 	}
 
-	writer.WriteString(currentSite.Tr(node.key, args...))
+	writer.WriteString(currentSite.TplTr(node.key, args...))
 
 	return nil
 }

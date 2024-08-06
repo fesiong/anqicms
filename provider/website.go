@@ -80,7 +80,8 @@ type Website struct {
 	FindPasswordInfo *response.FindPasswordInfo
 
 	// 一些缓存内容
-	languages map[string]string
+	languages    map[string]string
+	backLanguage string
 }
 
 var websites = map[uint]*Website{}
@@ -186,7 +187,7 @@ func GetWebsites() map[uint]*Website {
 
 func CurrentSite(ctx iris.Context) *Website {
 	if len(websites) == 0 {
-		return &Website{
+		cur := &Website{
 			Id:         0,
 			Initialed:  false,
 			BaseURI:    "/",
@@ -199,11 +200,16 @@ func CurrentSite(ctx iris.Context) *Website {
 				TemplateName: "default",
 			},
 		}
+		if ctx != nil {
+			cur.backLanguage = ctx.GetLocale().Language()
+		}
+		return cur
 	}
 	if ctx != nil {
 		if siteId, err := ctx.Values().GetUint("siteId"); err == nil {
 			w, ok := websites[siteId]
 			if ok {
+				w.backLanguage = ctx.GetLocale().Language()
 				return w
 			}
 		}
@@ -221,6 +227,7 @@ func CurrentSite(ctx iris.Context) *Website {
 					if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 						w.BaseURI = parsed.RequestURI()
 						ctx.Values().Set("siteId", w.Id)
+						w.backLanguage = ctx.GetLocale().Language()
 						return w
 					}
 				}
@@ -231,6 +238,7 @@ func CurrentSite(ctx iris.Context) *Website {
 							if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 								w.BaseURI = parsed.RequestURI()
 								ctx.Values().Set("siteId", w.Id)
+								w.backLanguage = ctx.GetLocale().Language()
 								return w
 							}
 						}
@@ -242,6 +250,7 @@ func CurrentSite(ctx iris.Context) *Website {
 						if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 							w.BaseURI = parsed.RequestURI()
 							ctx.Values().Set("siteId", w.Id)
+							w.backLanguage = ctx.GetLocale().Language()
 							return w
 						}
 					}
@@ -257,11 +266,13 @@ func CurrentSite(ctx iris.Context) *Website {
 				}
 				if parsed.Hostname() == host {
 					ctx.Values().Set("siteId", w.Id)
+					w.backLanguage = ctx.GetLocale().Language()
 					return w
 				}
 				// 顶级域名
 				if strings.HasSuffix(parsed.Hostname(), "."+host) {
 					ctx.Values().Set("siteId", w.Id)
+					w.backLanguage = ctx.GetLocale().Language()
 					return w
 				}
 			}
@@ -273,6 +284,7 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 					if parsed.Hostname() == host {
 						ctx.Values().Set("siteId", w.Id)
+						w.backLanguage = ctx.GetLocale().Language()
 						return w
 					}
 				}
@@ -285,6 +297,7 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 					if parsed.Hostname() == host {
 						ctx.Values().Set("siteId", w.Id)
+						w.backLanguage = ctx.GetLocale().Language()
 						return w
 					}
 				}
@@ -293,6 +306,9 @@ func CurrentSite(ctx iris.Context) *Website {
 	}
 
 	// return default 1
+	if ctx != nil {
+		websites[1].backLanguage = ctx.GetLocale().Language()
+	}
 	return websites[1]
 }
 

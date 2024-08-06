@@ -80,7 +80,7 @@ func CommentPublish(ctx iris.Context) {
 
 	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
-		msg := ctx.Tr("SaveFailed")
+		msg := currentSite.TplTr("SaveFailed")
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -92,7 +92,7 @@ func CommentPublish(ctx iris.Context) {
 		return
 	}
 
-	msg := ctx.Tr("PublishSuccessfully")
+	msg := currentSite.TplTr("PublishSuccessfully")
 	if returnType == "json" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
@@ -105,8 +105,8 @@ func CommentPublish(ctx iris.Context) {
 		if refer.URL != "" {
 			link = refer.URL
 		}
-		ShowMessage(ctx, ctx.Tr("PublishSuccessfully"), []Button{
-			{Name: ctx.Tr("ClickToContinue"), Link: link},
+		ShowMessage(ctx, currentSite.TplTr("PublishSuccessfully"), []Button{
+			{Name: currentSite.TplTr("ClickToContinue"), Link: link},
 		})
 	}
 }
@@ -146,7 +146,7 @@ func CommentPraise(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("LikeSuccessfully"),
+		"msg":  currentSite.TplTr("LikeSuccessfully"),
 		"data": comment,
 	})
 }
@@ -171,9 +171,9 @@ func CommentList(ctx iris.Context) {
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.URLParamIntDefault("page", 1)
-		webInfo.Title = ctx.Tr("CommentShow", archive.Title)
+		webInfo.Title = currentSite.TplTr("CommentShow", archive.Title)
 		if currentPage > 1 {
-			webInfo.Title += " - " + ctx.Tr("PageNum", currentPage)
+			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
 		}
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description

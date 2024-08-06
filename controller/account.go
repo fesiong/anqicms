@@ -3,17 +3,19 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"strings"
 )
 
 func LoginPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
 		ctx.Redirect("/")
 	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = ctx.Tr("Login")
+		webInfo.Title = currentSite.TplTr("Login")
 		ctx.ViewData("webInfo", webInfo)
 	}
 	err := ctx.View(GetViewPath(ctx, "login.html"))
@@ -23,8 +25,9 @@ func LoginPage(ctx iris.Context) {
 }
 
 func RegisterPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = ctx.Tr("Register")
+		webInfo.Title = currentSite.TplTr("Register")
 		ctx.ViewData("webInfo", webInfo)
 	}
 	err := ctx.View(GetViewPath(ctx, "register.html"))
@@ -34,17 +37,18 @@ func RegisterPage(ctx iris.Context) {
 }
 
 func AccountLogout(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	returnType := ctx.URLParamDefault("return", "html")
 	ctx.RemoveCookie("token")
 	if returnType == "json" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusNoLogin,
-			"msg":  ctx.Tr("LoggedOut"),
+			"msg":  currentSite.TplTr("LoggedOut"),
 		})
 		return
 	}
 
-	ShowMessage(ctx, ctx.Tr("LoggedOut"), []Button{{Name: ctx.Tr("Home"), Link: "/"}})
+	ShowMessage(ctx, currentSite.TplTr("LoggedOut"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
 }
 
 func AccountIndexPage(ctx iris.Context) {

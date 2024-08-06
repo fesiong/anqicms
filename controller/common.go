@@ -61,7 +61,7 @@ func NotFound(ctx iris.Context) {
 	webInfo := &response.WebInfo{}
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite != nil {
-		webInfo.Title = ctx.Tr("404NotFound")
+		webInfo.Title = currentSite.TplTr("404NotFound")
 	} else {
 		webInfo.Title = "404 Not Found"
 	}
@@ -83,7 +83,7 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 	currentSite := provider.CurrentSite(ctx)
 	var tr func(str string, args ...interface{}) string
 	if currentSite != nil {
-		tr = currentSite.Tr
+		tr = currentSite.TplTr
 	} else {
 		tr = func(str string, args ...interface{}) string {
 			return str
@@ -113,8 +113,9 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 }
 
 func InternalServerError(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	webInfo := &response.WebInfo{}
-	webInfo.Title = ctx.Tr("500InternalError")
+	webInfo.Title = currentSite.TplTr("500InternalError")
 	ctx.ViewData("webInfo", webInfo)
 
 	errMessage := ctx.Values().GetString("message")
@@ -154,7 +155,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			}
 
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-				webInfo.Title = ctx.Tr(closeTips)
+				webInfo.Title = currentSite.TplTr(closeTips)
 				ctx.ViewData("webInfo", webInfo)
 			}
 
@@ -170,7 +171,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			ua := strings.ToLower(ctx.GetHeader("User-Agent"))
 			if strings.Contains(ua, "spider") || strings.Contains(ua, "bot") {
 				ctx.StatusCode(403)
-				ShowMessage(ctx, ctx.Tr("YouHaveBeenBanned"), nil)
+				ShowMessage(ctx, currentSite.TplTr("YouHaveBeenBanned"), nil)
 				return true
 			}
 		}
@@ -185,7 +186,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 				}
 				if strings.Contains(ua, v) {
 					ctx.StatusCode(403)
-					ShowMessage(ctx, ctx.Tr("YouHaveBeenBanned"), nil)
+					ShowMessage(ctx, currentSite.TplTr("YouHaveBeenBanned"), nil)
 					return true
 				}
 			}
@@ -209,7 +210,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 					}
 					if strings.HasPrefix(ip, v) {
 						ctx.StatusCode(403)
-						ShowMessage(ctx, ctx.Tr("YouHaveBeenBanned"), nil)
+						ShowMessage(ctx, currentSite.TplTr("YouHaveBeenBanned"), nil)
 						return true
 					}
 				}
@@ -288,11 +289,11 @@ func Inspect(ctx iris.Context) {
 		}
 
 		if website == nil {
-			ShowMessage(ctx, website.Tr("WebsiteConfigurationError"), nil)
+			ShowMessage(ctx, ctx.Tr("WebsiteConfigurationError"), nil)
 			return
 		}
 		if !website.Initialed {
-			ShowMessage(ctx, website.Tr("WebsiteIsClosed"), nil)
+			ShowMessage(ctx, ctx.Tr("WebsiteIsClosed"), nil)
 			return
 		}
 		siteName = website.System.SiteName
@@ -840,10 +841,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("VerificationCodeIsIncorrect"),
+					"msg":  currentSite.TplTr("VerificationCodeIsIncorrect"),
 				})
 			} else {
-				ShowMessage(ctx, ctx.Tr("VerificationCodeIsIncorrect"), nil)
+				ShowMessage(ctx, currentSite.TplTr("VerificationCodeIsIncorrect"), nil)
 			}
 			return false
 		}
@@ -851,10 +852,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("VerificationCodeIsIncorrect"),
+					"msg":  currentSite.TplTr("VerificationCodeIsIncorrect"),
 				})
 			} else {
-				ShowMessage(ctx, ctx.Tr("VerificationCodeIsIncorrect"), nil)
+				ShowMessage(ctx, currentSite.TplTr("VerificationCodeIsIncorrect"), nil)
 			}
 			return false
 		}
@@ -869,10 +870,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  ctx.Tr("TheContentYouSubmittedIsTooShort"),
+					"msg":  currentSite.TplTr("TheContentYouSubmittedIsTooShort"),
 				})
 			} else {
-				ShowMessage(ctx, ctx.Tr("TheContentYouSubmittedIsTooShort"), nil)
+				ShowMessage(ctx, currentSite.TplTr("TheContentYouSubmittedIsTooShort"), nil)
 			}
 			return false
 		}
@@ -889,10 +890,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"),
+						"msg":  currentSite.TplTr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"),
 					})
 				} else {
-					ShowMessage(ctx, ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
+					ShowMessage(ctx, currentSite.TplTr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
 				}
 				return false
 			}
@@ -906,10 +907,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"),
+								"msg":  currentSite.TplTr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"),
 							})
 						} else {
-							ShowMessage(ctx, ctx.Tr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
+							ShowMessage(ctx, currentSite.TplTr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
 						}
 					}
 				}
@@ -931,10 +932,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("TheUpperLimitOfSubmissionsHasBeenReached"),
+						"msg":  currentSite.TplTr("TheUpperLimitOfSubmissionsHasBeenReached"),
 					})
 				} else {
-					ShowMessage(ctx, ctx.Tr("TheUpperLimitOfSubmissionsHasBeenReached"), nil)
+					ShowMessage(ctx, currentSite.TplTr("TheUpperLimitOfSubmissionsHasBeenReached"), nil)
 				}
 				return false
 			}
@@ -949,10 +950,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						if returnType == "json" {
 							ctx.JSON(iris.Map{
 								"code": config.StatusFailed,
-								"msg":  ctx.Tr("IllegalRequest"),
+								"msg":  currentSite.TplTr("IllegalRequest"),
 							})
 						} else {
-							ShowMessage(ctx, ctx.Tr("IllegalRequest"), nil)
+							ShowMessage(ctx, currentSite.TplTr("IllegalRequest"), nil)
 						}
 						return false
 					}
@@ -975,10 +976,10 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 				if returnType == "json" {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
-						"msg":  ctx.Tr("PleaseDoNotSubmitMultipleTimesInAShortPeriodOfTime"),
+						"msg":  currentSite.TplTr("PleaseDoNotSubmitMultipleTimesInAShortPeriodOfTime"),
 					})
 				} else {
-					ShowMessage(ctx, ctx.Tr("PleaseDoNotSubmitMultipleTimesInAShortPeriodOfTime"), nil)
+					ShowMessage(ctx, currentSite.TplTr("PleaseDoNotSubmitMultipleTimesInAShortPeriodOfTime"), nil)
 				}
 				return false
 			}

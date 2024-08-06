@@ -4,7 +4,6 @@ import (
 	stdContext "context"
 	"fmt"
 	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/crond"
@@ -100,15 +99,6 @@ func (bootstrap *Bootstrap) Start() {
 		os.Exit(1)
 	}
 	bootstrap.Application.I18n.SetDefault("zh-CN")
-	bootstrap.Application.I18n.ExtractFunc = func(ctx *context.Context) string {
-		// 获取默认语言
-		currentSite := provider.CurrentSite(ctx)
-		if currentSite.System.Language != "" {
-			return currentSite.System.Language
-		}
-
-		return ctx.GetHeader("Accept-Language")
-	}
 	// 注入I18n 到 provider
 	provider.SetI18n(bootstrap.Application.I18n)
 

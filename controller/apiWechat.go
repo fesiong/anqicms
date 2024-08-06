@@ -25,7 +25,7 @@ func WechatAuthApi(ctx iris.Context) {
 	s := strings.ToLower(ctx.GetHeader("User-Agent"))
 	if !strings.Contains(s, "micromessenger") {
 		// not in weChat browser
-		ShowMessage(ctx, ctx.Tr("PleaseOpenInWechat"), nil)
+		ShowMessage(ctx, currentSite.TplTr("PleaseOpenInWechat"), nil)
 		return
 	}
 	state := ctx.URLParam("state")
@@ -83,7 +83,7 @@ func WechatAuthApi(ctx iris.Context) {
 		if state == "code" {
 			verifyMsg := currentSite.PluginWechat.VerifyMsg
 			if !strings.Contains(verifyMsg, "{code}") {
-				verifyMsg = ctx.Tr("VerificationCodeValidFor30Minutes") + verifyMsg
+				verifyMsg = currentSite.TplTr("VerificationCodeValidFor30Minutes") + verifyMsg
 			}
 			verifyCode := library.CodeCache.Generate(userWechat.Openid)
 			verifyMsg = strings.Replace(verifyMsg, "{code}", verifyCode, 1)

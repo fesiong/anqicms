@@ -582,6 +582,14 @@ func (w *Website) GetTimeFactorSetting() (setting config.PluginTimeFactor) {
 // 这是一个兼容函数，请使用 ctx.Tr
 func (w *Website) Tr(str string, args ...interface{}) string {
 	if I18n != nil {
+		return I18n.Tr(w.backLanguage, str, args...)
+	}
+
+	return fmt.Sprintf(str, args...)
+}
+
+func (w *Website) TplTr(str string, args ...interface{}) string {
+	if I18n != nil {
 		return I18n.Tr(w.System.Language, str, args...)
 	}
 

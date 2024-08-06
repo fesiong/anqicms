@@ -52,7 +52,7 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		if ok {
 			// 从第二页开始，增加分页
 			if paginator.CurrentPage > 1 {
-				pateText = currentSite.Tr("PageNum", paginator.CurrentPage)
+				pateText = currentSite.TplTr("PageNum", paginator.CurrentPage)
 			}
 			return nil
 		}

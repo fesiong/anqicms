@@ -79,7 +79,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
-			Content: ctx.Tr("ThisContentRequiresUserLevelOrAboveToRead", archive.ReadLevel),
+			Content: currentSite.TplTr("ThisContentRequiresUserLevelOrAboveToRead", archive.ReadLevel),
 		}
 	} else {
 		// 读取data
@@ -149,12 +149,12 @@ func ApiArchiveFilters(ctx iris.Context) {
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("ModelDoesNotExist"),
+			"msg":  currentSite.TplTr("ModelDoesNotExist"),
 		})
 		return
 	}
 
-	allText := ctx.Tr("All")
+	allText := currentSite.TplTr("All")
 
 	tmpText := ctx.URLParam("allText")
 	if tmpText != "" {
@@ -791,7 +791,7 @@ func ApiModuleDetail(ctx iris.Context) {
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("ModelDoesNotExist"),
+			"msg":  currentSite.TplTr("ModelDoesNotExist"),
 		})
 		return
 	}
@@ -1315,14 +1315,14 @@ func ApiCommentPublish(ctx iris.Context) {
 
 	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
-		msg := ctx.Tr("SaveFailed")
+		msg := currentSite.TplTr("SaveFailed")
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  msg,
 		})
 	}
 
-	msg := ctx.Tr("PublishSuccessfully")
+	msg := currentSite.TplTr("PublishSuccessfully")
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
@@ -1365,7 +1365,7 @@ func ApiCommentPraise(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("LikeSuccessfully"),
+		"msg":  currentSite.TplTr("LikeSuccessfully"),
 		"data": comment,
 	})
 }
@@ -1424,7 +1424,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 
 	err = currentSite.DB.Save(guestbook).Error
 	if err != nil {
-		msg := ctx.Tr("SaveFailed")
+		msg := currentSite.TplTr("SaveFailed")
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  msg,
@@ -1433,17 +1433,17 @@ func ApiGuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := ctx.Tr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
+	subject := currentSite.TplTr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := ctx.Tr("s:s", item.Name, req[item.FieldName]) + "\n"
+		content := currentSite.TplTr("s:s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
 	// 增加来路和IP返回
-	contents = append(contents, ctx.Tr("SubmitIpLog", guestbook.Ip)+"\n")
-	contents = append(contents, ctx.Tr("SourcePageLog", guestbook.Refer)+"\n")
-	contents = append(contents, ctx.Tr("SubmitTimeLog", time.Now().Format("2006-01-02 15:04:05"))+"\n")
+	contents = append(contents, currentSite.TplTr("SubmitIpLog", guestbook.Ip)+"\n")
+	contents = append(contents, currentSite.TplTr("SourcePageLog", guestbook.Refer)+"\n")
+	contents = append(contents, currentSite.TplTr("SubmitTimeLog", time.Now().Format("2006-01-02 15:04:05"))+"\n")
 
 	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
 		// 后台发信
@@ -1458,7 +1458,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {
-		msg = ctx.Tr("ThankYouForYourMessage!")
+		msg = currentSite.TplTr("ThankYouForYourMessage!")
 	}
 
 	ctx.JSON(iris.Map{
@@ -1513,9 +1513,9 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
-	msg := ctx.Tr("PublishSuccessfully")
+	msg := currentSite.TplTr("PublishSuccessfully")
 	if req.Draft {
-		msg += ctx.Tr("ItHasEnteredTheReview")
+		msg += currentSite.TplTr("ItHasEnteredTheReview")
 	}
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 

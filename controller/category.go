@@ -61,7 +61,7 @@ func CategoryPage(ctx iris.Context) {
 	module := currentSite.GetModuleFromCache(category.ModuleId)
 	if module == nil {
 		ctx.StatusCode(404)
-		ShowMessage(ctx, ctx.Tr("UndefinedModel"), nil)
+		ShowMessage(ctx, currentSite.TplTr("UndefinedModel"), nil)
 		return
 	}
 
@@ -71,7 +71,7 @@ func CategoryPage(ctx iris.Context) {
 			webInfo.Title = category.SeoTitle
 		}
 		if currentPage > 1 {
-			webInfo.Title += " - " + ctx.Tr("PageNum", currentPage)
+			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
 		}
 		webInfo.Keywords = category.Keywords
 		webInfo.Description = category.Description
@@ -128,7 +128,7 @@ func SearchPage(ctx iris.Context) {
 		module = currentSite.GetModuleFromCacheByToken(moduleToken)
 		if module == nil {
 			ctx.StatusCode(404)
-			ShowMessage(ctx, ctx.Tr("UndefinedModel"), nil)
+			ShowMessage(ctx, currentSite.TplTr("UndefinedModel"), nil)
 			return
 		}
 		ctx.ViewData("module", module)
@@ -141,7 +141,7 @@ func SearchPage(ctx iris.Context) {
 				continue
 			}
 			if strings.Contains(q, v) {
-				ShowMessage(ctx, ctx.Tr("TheKeywordYouSearchedContainsCharactersThatAreNotAllowed"), nil)
+				ShowMessage(ctx, currentSite.TplTr("TheKeywordYouSearchedContainsCharactersThatAreNotAllowed"), nil)
 				return
 			}
 		}
@@ -149,12 +149,12 @@ func SearchPage(ctx iris.Context) {
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		currentPage := ctx.Values().GetIntDefault("page", 1)
-		webInfo.Title = ctx.Tr("SearchLog", q)
+		webInfo.Title = currentSite.TplTr("SearchLog", q)
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}
 		if currentPage > 1 {
-			webInfo.Title += " - " + ctx.Tr("PageNum", currentPage)
+			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
 		}
 		webInfo.PageName = "search"
 		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)

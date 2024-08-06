@@ -20,7 +20,7 @@ func ApiGetRetailerInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("QueryFailed"),
+			"msg":  currentSite.TplTr("QueryFailed"),
 		})
 		return
 	}
@@ -40,7 +40,7 @@ func ApiGetRetailerStatistics(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("LoginFailed"),
+			"msg":  currentSite.TplTr("LoginFailed"),
 		})
 		return
 	}
@@ -87,13 +87,13 @@ func ApiUpdateRetailerInfo(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("UpdateInfoFailed"),
+			"msg":  currentSite.TplTr("UpdateInfoFailed"),
 		})
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("SaveSuccessfully"),
+		"msg":  currentSite.TplTr("SaveSuccessfully"),
 	})
 }
 
@@ -147,7 +147,7 @@ func ApiRetailerWithdraw(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  ctx.Tr("WithdrawalApplicationSubmitted"),
+		"msg":  currentSite.TplTr("WithdrawalApplicationSubmitted"),
 	})
 }
 
