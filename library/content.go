@@ -2,6 +2,7 @@ package library
 
 import (
 	"bytes"
+	"fmt"
 	"github.com/gomarkdown/markdown"
 	"github.com/gomarkdown/markdown/html"
 	"github.com/gomarkdown/markdown/parser"
@@ -218,9 +219,10 @@ func MarkdownToHTML(mdStr string) string {
 }
 
 type ContentTitle struct {
-	Title string `json:"title"`
-	Tag   string `json:"tag"`
-	Level int    `json:"level"`
+	Title  string `json:"title"`
+	Tag    string `json:"tag"`
+	Level  int    `json:"level"`
+	Prefix string `json:"prefix"`
 }
 
 func ParseContentTitles(content string) []ContentTitle {
@@ -229,22 +231,33 @@ func ParseContentTitles(content string) []ContentTitle {
 	matches := re.FindAllStringSubmatch(content, -1)
 	var level = 0
 	var parent = -1
+	var prefix []int
 	for _, match := range matches {
 		tag := strings.ToLower(match[1])
 		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
 		if parent == -1 {
 			parent = leaf
 			level = 0
+			prefix = append(prefix, 1)
 		}
 		if parent != leaf {
+			if parent > leaf {
+				prefix = prefix[:len(prefix)-1]
+				prefix[len(prefix)-1]++
+			} else if parent < leaf {
+				prefix = append(prefix, 1)
+			}
 			level -= parent - leaf
 			parent = leaf
+		} else {
+			prefix[len(prefix)-1]++
 		}
 		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[2]), "\n", " "))
 		titles = append(titles, ContentTitle{
-			Title: title,
-			Tag:   tag,
-			Level: level,
+			Title:  title,
+			Tag:    tag,
+			Level:  level,
+			Prefix: strings.ReplaceAll(fmt.Sprintf("%v", prefix), ",", "."),
 		})
 	}
 	return titles

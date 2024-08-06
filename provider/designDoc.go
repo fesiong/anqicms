@@ -275,6 +275,10 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 							Code:  `{% contact with name="QQ" %}`,
 						},
 						{
+							Title: w.Tr("ContactWhatsApp"),
+							Code:  `{% contact with name="WhatsApp" %}`,
+						},
+						{
 							Title: w.Tr("ContactFacebookEbook"),
 							Code:  `{% contact with name="Facebook" %}`,
 						},
