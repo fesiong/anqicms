@@ -9,6 +9,7 @@ import (
 	"net"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 	"unsafe"
@@ -214,4 +215,37 @@ func MarkdownToHTML(mdStr string) string {
 	})
 
 	return string(md)
+}
+
+type ContentTitle struct {
+	Title string `json:"title"`
+	Tag   string `json:"tag"`
+	Level int    `json:"level"`
+}
+
+func ParseContentTitles(content string) []ContentTitle {
+	re, _ := regexp.Compile(`(?is)<(h\d)[^>]*>(.*?)</h\d>`)
+	var titles []ContentTitle
+	matches := re.FindAllStringSubmatch(content, -1)
+	var level = 0
+	var parent = -1
+	for _, match := range matches {
+		tag := strings.ToLower(match[1])
+		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
+		if parent == -1 {
+			parent = leaf
+			level = 0
+		}
+		if parent != leaf {
+			level -= parent - leaf
+			parent = leaf
+		}
+		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[2]), "\n", " "))
+		titles = append(titles, ContentTitle{
+			Title: title,
+			Tag:   tag,
+			Level: level,
+		})
+	}
+	return titles
 }

@@ -149,9 +149,9 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		} else if fieldName == "UpdatedTime" {
 			content = time.Unix(archiveDetail.UpdatedTime, 0).Format(format)
 		}
-		if fieldName == "Content" {
+		if fieldName == "Content" || fieldName == "ContentTitles" {
 			// if read level larger than 0, then need to check permission
-			if archiveDetail.ReadLevel > 0 {
+			if archiveDetail.ReadLevel > 0 && fieldName == "Content" {
 				userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
 				if userGroup == nil || userGroup.Level < archiveDetail.ReadLevel {
 					content = fmt.Sprintf(currentSite.Tr("ThisContentRequiresUserLevelOrAboveToRead"), archiveDetail.ReadLevel)
@@ -166,88 +166,92 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					if render {
 						tmpContent = library.MarkdownToHTML(archiveData.Content)
 					}
-					// lazy load
-					if lazy != "" {
-						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-						tmpContent = re.ReplaceAllStringFunc(tmpContent, func(s string) string {
-							match := re.FindStringSubmatch(s)
-							if len(match) < 2 {
+					if fieldName == "ContentTitles" {
+						content = library.ParseContentTitles(tmpContent)
+					} else {
+						// lazy load
+						if lazy != "" {
+							re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+							tmpContent = re.ReplaceAllStringFunc(tmpContent, func(s string) string {
+								match := re.FindStringSubmatch(s)
+								if len(match) < 2 {
+									return s
+								}
+								res := fmt.Sprintf("%s\" %s=\"%s", currentSite.Content.DefaultThumb, lazy, match[1])
+								s = strings.Replace(s, match[1], res, 1)
 								return s
-							}
-							res := fmt.Sprintf("%s\" %s=\"%s", currentSite.Content.DefaultThumb, lazy, match[1])
-							s = strings.Replace(s, match[1], res, 1)
-							return s
-						})
-					}
-					if currentSite.PluginInterference.Open && currentSite.PluginInterference.Mode == config.InterferenceModeText {
-						webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
-						if ok {
-							var classes = make([]string, 0, 10)
-							for i := 0; i < 10; i++ {
-								tmpClass := library.DecimalToLetter(int64(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(i)))))
-								classes = append(classes, tmpClass)
-							}
-							// 给随机位置添加隐藏标签
-							crcNum := int(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl)))
-							first := 2
-							var tmpData []string
-							var tmpRune = []rune(tmpContent)
-							var start = 0
-							for i := 0; i < len(tmpRune); i++ {
-								if tmpRune[i] == '>' {
-									tmpData = append(tmpData, string(tmpRune[start:i+1]))
-									start = i + 1
-									num := crcNum%10*first/2 + 2
-									first = crcNum % 10
-									crcNum = crcNum / 10
-									j := i + 1
-									for ; j < len(tmpRune)-1; j++ {
-										if tmpRune[j] == '<' {
-											sepLen := j - i - 1
-											if sepLen > num {
-												tmpData = append(tmpData, string(tmpRune[i+1:i+1+num]))
-												if j%2 == 0 {
-													var addText []rune
-													for k := 0; k < sepLen/2; k++ {
-														addText = append(addText, tmpRune[j-k-1])
-														if k > first+1 {
-															break
-														}
-													}
-													tmpData = append(tmpData, "<span class=\""+classes[i%5]+"\">"+string(addText)+"</span>")
-													tmpData = append(tmpData, string(tmpRune[i+1+num:j]))
-												} else {
-													var addText []rune
-													for k := num; k < sepLen; k++ {
-														addText = append(addText, tmpRune[i+1+k])
-														if k > num+first+1 {
-															break
-														}
-													}
-													tmpData = append(tmpData, "<span class=\""+classes[i%5+5]+"\">"+string(addText)+"</span>")
-													tmpData = append(tmpData, string(tmpRune[i+1+num+len(addText):j]))
-												}
-											} else {
-												tmpData = append(tmpData, string(tmpRune[i+1:j]))
-											}
-											start = j
-											break
-										}
-									}
-									i = j
-									continue
-								}
-
-								if crcNum == 0 || i == len(tmpRune)-1 {
-									tmpData = append(tmpData, string(tmpRune[start:]))
-									break
-								}
-							}
-							tmpContent = strings.Join(tmpData, "")
+							})
 						}
+						if currentSite.PluginInterference.Open && currentSite.PluginInterference.Mode == config.InterferenceModeText {
+							webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
+							if ok {
+								var classes = make([]string, 0, 10)
+								for i := 0; i < 10; i++ {
+									tmpClass := library.DecimalToLetter(int64(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(i)))))
+									classes = append(classes, tmpClass)
+								}
+								// 给随机位置添加隐藏标签
+								crcNum := int(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl)))
+								first := 2
+								var tmpData []string
+								var tmpRune = []rune(tmpContent)
+								var start = 0
+								for i := 0; i < len(tmpRune); i++ {
+									if tmpRune[i] == '>' {
+										tmpData = append(tmpData, string(tmpRune[start:i+1]))
+										start = i + 1
+										num := crcNum%10*first/2 + 2
+										first = crcNum % 10
+										crcNum = crcNum / 10
+										j := i + 1
+										for ; j < len(tmpRune)-1; j++ {
+											if tmpRune[j] == '<' {
+												sepLen := j - i - 1
+												if sepLen > num {
+													tmpData = append(tmpData, string(tmpRune[i+1:i+1+num]))
+													if j%2 == 0 {
+														var addText []rune
+														for k := 0; k < sepLen/2; k++ {
+															addText = append(addText, tmpRune[j-k-1])
+															if k > first+1 {
+																break
+															}
+														}
+														tmpData = append(tmpData, "<span class=\""+classes[i%5]+"\">"+string(addText)+"</span>")
+														tmpData = append(tmpData, string(tmpRune[i+1+num:j]))
+													} else {
+														var addText []rune
+														for k := num; k < sepLen; k++ {
+															addText = append(addText, tmpRune[i+1+k])
+															if k > num+first+1 {
+																break
+															}
+														}
+														tmpData = append(tmpData, "<span class=\""+classes[i%5+5]+"\">"+string(addText)+"</span>")
+														tmpData = append(tmpData, string(tmpRune[i+1+num+len(addText):j]))
+													}
+												} else {
+													tmpData = append(tmpData, string(tmpRune[i+1:j]))
+												}
+												start = j
+												break
+											}
+										}
+										i = j
+										continue
+									}
+
+									if crcNum == 0 || i == len(tmpRune)-1 {
+										tmpData = append(tmpData, string(tmpRune[start:]))
+										break
+									}
+								}
+								tmpContent = strings.Join(tmpData, "")
+							}
+						}
+						content = tmpContent
 					}
 				}
-				content = tmpContent
 			}
 		}
 		if fieldName == "Images" || fieldName == "Category" {
