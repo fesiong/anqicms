@@ -240,6 +240,14 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 							Title: w.Tr("CustomParameters"),
 							Code:  `{% system with name="自定义参数名称" %}`,
 						},
+						{
+							Title: w.Tr("CurrentYear"),
+							Code:  `{% now "2006" %}`,
+						},
+						{
+							Title: w.Tr("CurrentDate"),
+							Code:  `{% now "2006-01-02" %}`,
+						},
 					},
 				},
 				{
@@ -1013,6 +1021,15 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 									{% endfor %}
 								</div>
 								{% endarchiveParams %}`,
+						},
+						{
+							Title: w.Tr("ContentTitles"),
+							Code: `{% archiveDetail contentTitles with name="ContentTitles" %}
+								<div>
+								{% for item in contentTitles %}
+									<div class="{{item.Tag}}" level="{{item.Level}}">{{item.Prefix}} {{item.Title}}</div>
+								{% endfor %}
+								</div>`,
 						},
 					},
 				},
