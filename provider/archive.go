@@ -632,6 +632,8 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	_ = w.SaveArchiveFlags(draft.Id, req.Flags)
 	// 保存分类ID
 	_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
+	// 保存 Relations
+	_ = w.SaveArchiveRelations(draft.Id, req.RelationIds)
 	//检查有多少个material
 	var materialIds []uint
 	re, _ := regexp.Compile(`(?i)<div.*?data-material="(\d+)".*?>`)
@@ -1322,6 +1324,41 @@ func (w *Website) SaveArchiveCategories(archiveId uint, categoryIds []uint) erro
 	}
 	// 删除额外的
 	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Delete(&model.ArchiveCategory{})
+
+	return nil
+}
+
+// GetArchiveRelations 仅返回正式的文档
+func (w *Website) GetArchiveRelations(archiveId uint) []*model.Archive {
+	var relations []*model.Archive
+	var relationIds []uint
+	w.DB.Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	if len(relationIds) > 0 {
+		w.DB.Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
+		for i := range relations {
+			relations[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			relations[i].Link = w.GetUrl("archive", relations[i], 0)
+		}
+		return relations
+	}
+
+	return nil
+}
+
+func (w *Website) SaveArchiveRelations(archiveId uint, relationIds []uint) error {
+	if len(relationIds) == 0 {
+		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveRelation{})
+		return nil
+	}
+	for _, rid := range relationIds {
+		arcRelation := model.ArchiveRelation{
+			ArchiveId:  archiveId,
+			RelationId: rid,
+		}
+		w.DB.Model(&model.ArchiveRelation{}).Where("`archive_id` = ? and `relation_id` = ?", archiveId, rid).FirstOrCreate(&arcRelation)
+	}
+	// 删除额外的
+	w.DB.Unscoped().Where("`archive_id` = ? and `relation_id` NOT IN (?)", archiveId, relationIds).Delete(&model.ArchiveRelation{})
 
 	return nil
 }

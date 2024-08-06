@@ -371,56 +371,61 @@ func ApiArchiveList(ctx iris.Context) {
 				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId)
 				return tx
 			}, "archives.id ASC", 0, limit, offset)
+		} else if like == "relation" {
+			archives = currentSite.GetArchiveRelations(archiveId)
 		} else {
-			halfLimit := int(math.Ceil(float64(limit) / 2))
-			archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				if currentSite.Content.MultiCategory == 1 {
-					// 多分类支持
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
-				} else {
-					tx = tx.Where("`category_id` = ?", categoryId)
-				}
-				if len(excludeCategoryIds) > 0 {
+			archives = currentSite.GetArchiveRelations(archiveId)
+			if len(archives) == 0 {
+				halfLimit := int(math.Ceil(float64(limit) / 2))
+				archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						// 多分类支持
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
-						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+					tx = tx.Where("archives.`id` > ?", archiveId)
+					return tx
+				}, "archives.id ASC", 0, limit, offset)
+				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					if currentSite.Content.MultiCategory == 1 {
+						// 多分类支持
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+					tx = tx.Where("archives.`id` < ?", archiveId)
+					return tx
+				}, "archives.id DESC", 0, limit, offset)
+				if len(archives1)+len(archives2) > limit {
+					if len(archives1) > halfLimit && len(archives2) > halfLimit {
+						archives1 = archives1[:halfLimit]
+						archives2 = archives2[:halfLimit]
+					} else if len(archives1) > len(archives2) {
+						archives1 = archives1[:limit-len(archives2)]
+					} else if len(archives2) > len(archives1) {
+						archives2 = archives2[:limit-len(archives1)]
 					}
 				}
-				tx = tx.Where("archives.`id` > ?", archiveId)
-				return tx
-			}, "archives.id ASC", 0, limit, offset)
-			archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				if currentSite.Content.MultiCategory == 1 {
-					// 多分类支持
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
-				} else {
-					tx = tx.Where("`category_id` = ?", categoryId)
+				archives = append(archives2, archives1...)
+				// 如果数量超过，则截取
+				if len(archives) > limit {
+					archives = archives[:limit]
 				}
-				if len(excludeCategoryIds) > 0 {
-					if currentSite.Content.MultiCategory == 1 {
-						tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
-					} else {
-						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
-					}
-				}
-				tx = tx.Where("archives.`id` < ?", archiveId)
-				return tx
-			}, "archives.id DESC", 0, limit, offset)
-			if len(archives1)+len(archives2) > limit {
-				if len(archives1) > halfLimit && len(archives2) > halfLimit {
-					archives1 = archives1[:halfLimit]
-					archives2 = archives2[:halfLimit]
-				} else if len(archives1) > len(archives2) {
-					archives1 = archives1[:limit-len(archives2)]
-				} else if len(archives2) > len(archives1) {
-					archives2 = archives2[:limit-len(archives1)]
-				}
-			}
-			archives = append(archives2, archives1...)
-			// 如果数量超过，则截取
-			if len(archives) > limit {
-				archives = archives[:limit]
 			}
 		}
 	} else {

@@ -55,6 +55,7 @@ type Archive struct {
 	CategoryIds    []uint                  `json:"category_ids" gorm:"-"`
 	Flag           string                  `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
 	Type           string                  `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
+	Relations      []*Archive              `json:"relations" gorm:"-"`
 }
 
 type ArchiveData struct {

@@ -119,6 +119,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.Website{},
 			&model.AiArticlePlan{},
 			&model.ArchiveCategory{},
+			&model.ArchiveRelation{},
 			&model.ArchiveFlag{},
 			&model.HtmlPushLog{},
 

@@ -27,8 +27,9 @@ type Archive struct {
 	Stock        int64                  `json:"stock"`
 	ReadLevel    int                    `json:"read_level"` // 阅读关联 group level
 	Password     string                 `json:"password"`
-	Sort         uint                   `json:"sort"`  // 数值越大，越靠前
-	Draft        bool                   `json:"draft"` // 是否是存草稿
+	Sort         uint                   `json:"sort"`         // 数值越大，越靠前
+	Draft        bool                   `json:"draft"`        // 是否是存草稿
+	RelationIds  []uint                 `json:"relation_ids"` // 相关文档的ID
 
 	// 是否强制保存
 	ForceSave  bool   `json:"force_save"`

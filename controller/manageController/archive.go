@@ -215,6 +215,8 @@ func ArchiveDetail(ctx iris.Context) {
 	archiveDraft.ArchiveData, err = currentSite.GetArchiveDataById(archiveDraft.Id)
 	// 读取 extraDat
 	archiveDraft.Extra = currentSite.GetArchiveExtra(archiveDraft.ModuleId, archiveDraft.Id, false)
+	// 读取relation
+	archiveDraft.Relations = currentSite.GetArchiveRelations(archiveDraft.Id)
 
 	tags := currentSite.GetTagsByItemId(archiveDraft.Id)
 	if len(tags) > 0 {
