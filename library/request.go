@@ -76,7 +76,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	parsedUrl, err := url.Parse(urlPath)
 	if err != nil {
 		//log.Println(err)
-		return nil, nil
+		return nil, err
 	}
 	parsedUrl.Path = ""
 	parsedUrl.RawQuery = ""
