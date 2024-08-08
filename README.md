@@ -2,102 +2,102 @@
 
 <img height="180" src="docs/anqicms.svg" />
 
-[Changelog](./CHANGELOG.md) · English · [中文](./README-zh_CN.md)
+[更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
 
 # AnQiCMS
 
 </div>
 
-## Introduce
+## 介绍
 
-The predecessor of AnQi Content Management System (AnQiCMS) is GoBlog, a simple personal blog system based on the iris framework and developed using golang
+安企内容管理系统(AnqiCMS)的前身是GoBlog，一款基于 iris 框架，使用 golang 开发的简洁版个人博客系统
 
-> GoBlog is an open source personal blog system written in golang, with an elegant interface, compact, fast execution speed, and SEO-friendly, which can meet daily blog needs. It is very simple to use and deploy, and is adaptive to PC and mobile terminals. The page template uses a syntax similar to the blade template engine, which is very easy to use and suitable for personal blogs.
+> GoBlog是一个由 golang 编写的开源个人博客系统，界面优雅，小巧、执行速度飞快，并且对seo友好，可以满足日常博客需求。它的使用很简单，部署非常方便，pc和移动端自适应，页面模板使用类似blade模板引擎语法，上手非常容易，适合个人博客使用。
 
-Anqi Content Management System (AnQiCMS) is an enterprise content management system developed with GoLang based on the iris framework. It is easy to deploy, and the software is more secure than the traditional PHP-developed content management system. It has an elegant, compact interface and fast execution speed. Websites built with AnQiCMS can prevent many common security issues. AnQiCMS is designed to be SEO-friendly, and has a large number of common functions for enterprise sites built in, which is very helpful for website optimization. It improves the efficiency of enterprise management websites to a certain extent and improves the competitiveness of enterprises.
+安企内容管理系统(AnqiCMS)，是一款基于 iris 框架，使用 GoLang 开发的企业内容管理系统。它部署简单，软件相对于传统的PHP开发的内容管理系统更加安全，界面优雅，小巧，执行速度飞快，使用 AnqiCMS 搭建的网站可以防止众多常见的安全问题发生。AnqiCMS 的设计对SEO友好，并且内置了大量企业站常用功能，对网站优化有很好的帮助提升，对企业管理网站一定程度上提提高了办事效率，提高企业的竞争力。
 
-In addition to being suitable for enterprise sites, AnQiCMS is also suitable for marketing websites, corporate official websites, product display sites, government websites, portals, personal blogs and other types of websites.
+AnqiCMS 除了适合做企业站，也适合做营销型网站、企业官网、商品展示站点、政府网站、门户网站、个人博客等等各种类型的网站。
 
-AnQiCMS supports Django template engine syntax, which is similar to blade syntax, and can be very easy to get started with template making. The website mode supports three modes: adaptive, code adaptation, and PC+mobile independent site. According to different needs, you can choose the combination that suits you to build a website.
+AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以非常容易上手模板制作。网站模式支持 自适应、代码适配、PC+mobile 独立站点 三种模式，根据不用需求，可以选择适合自己的搭配方式来建站。
 
-Our pursuit: Make the world a safe website.
+我们的追求：让天下都是安全的网站。
 
-We have been moving towards website security. Let AnQiCMS protect your website security.
+我们一直朝着网站安全的方向前进，让 AnqiCMS 为你的网站安全护航。
 
-Welcome to use AnQiCMS.
+欢迎您使用 AnqiCMS。
 
-## Quick Start
+## 快速开始
 
-[Download AnQiCMS](https://github.com/fesiong/goblog/releases)  
-[Installation Guide](https://www.AnQiCMS.com/help-basic/210.html)  
-[Template Documentation](https://www.AnQiCMS.com/manual)  
-[Usage Guide](https://www.AnQiCMS.com/help)  
-[API Documentation](https://www.AnQiCMS.com/anqiapi)
+[下载最新的 AnqiCMS](https://github.com/fesiong/goblog/releases)  
+[安装一个新的站点](https://www.anqicms.com/help-basic/210.html)  
+[查看模板使用教程](https://www.anqicms.com/manual)  
+[查看后台使用帮助](https://www.anqicms.com/help)  
+[查看接口文档](https://www.anqicms.com/anqiapi)
 
-> Warm reminder: Most documents are written in Chinese. If you are an English user, please use the browser's built-in translation function to translate them yourself.
+> 温馨提示：大多数文档的编写语言为中文，如果您是英文用户，请使用浏览器自带翻译功能自行翻译。
 
-## AnQiCMS Features
+## 网站特色功能
 
-- Customized document model
-- Customized page navigation
-- Rich text, Markdown editor support
-- Webp image support
-- Multiple template customization support
-- Multiple site support
-- Detailed data statistics record
-- Customized pseudo-static rules
-- Active push by multiple search engines
-- Sitemap management
-- Robots.txt management
-- Friendly link management
-- Content comment management
-- Automatic anchor text function
-- Website message management
-- Keyword library management
-- Content material management
-- Email reminder function
-- Article collection function
-- Article combination function
-- Article import function
-- Customized 301 jump function
-- Website content migration function
-- Static page function
-- Customized resource storage
-- User management
-- User group management
-- Mini program support
-- Full-text search support
-- Backup and recovery
-- Article automatic picture support
-- AI automatic writing function
-- Scheduled release/update function
-- Anti-collection interference function
-- Image watermark function
+- 自定义文档模型
+- 自定义页面导航
+- 富文本、Markdown 编辑器支持
+- Webp 图片支持
+- 多模板自定义支持
+- 多站点支持
+- 数据统计详细记录
+- 自定义伪静态规则
+- 多个搜索引擎主动推送
+- Sitemap管理
+- Robots.txt管理
+- 友情链接管理
+- 内容评论管理
+- 自动锚文本功能
+- 网站留言管理
+- 关键词库管理
+- 内容素材管理
+- 邮件提醒功能
+- 文章采集功能
+- 文章组合功能
+- 文章导入功能
+- 自定义301跳转功能
+- 网站内容迁移功能
+- 静态页面功能
+- 自定义资源存储
+- 用户管理
+- 用户组管理
+- 小程序支持
+- 全文搜索支持
+- 备份与恢复
+- 文章自动配图支持
+- AI自动写作功能
+- 定时发布/更新功能
+- 防采集干扰功能
+- 图片水印功能
 
-## AnQiCMS Development History
+## AnQiCMS 发展历程
 
-- Latest
-  > We have been working hard, exploring, iterating and optimizing to provide users with a better user experience.
-- May 1, 2024, v3.3.5 released
-  > Support image watermark function
-- October 24, 2023, v3.2.5 released
-  > Support multi-language translation function, support Markdown editor
-- April 15, 2023, v3.1.1 released
-  > Access AI automatic writing function
-- December 5, 2022, v3.0.0 released
-  > Started to support multi-site mode, simplified and reduced the deployment difficulty of AnQiCMS, and added more common functions for enterprise sites
-- May 30, 2022, v2.1.0 released
-  > Officially renamed AnQiCMS, indicating that AnQiCMS has the necessary functions of common content management systems
-- February 16, 2021, v2.0.0-alpha released
-  > We started to gradually transition from a simple blog function to a more comprehensive content management system, and gradually developed and improved the enterprise site functions.
-- January 21, 2021, GoBlog v1.0.0 released
-  > The perfect blog version, based on the basic version, added background management, SEO functions, etc.
-- December 1, 2020, GoBlog v0.5 released
-  > The refactored version was rewritten using the iris framework, reducing the technology stack and using the template engine that comes with iris. The most basic blog functions were realized.
-- November 19, 2019, GoBlog v0.1 released
-  > The Gin version, with front-end and back-end separation, uses go, gin, gorm for the back-end, and Next.js for the front-end.
+- 最新
+  > 我们一直在努力，不断的探索，持续迭代优化，争取给用户们有更好的使用体验。
+- 2024年 5月 1日，v3.3.5 发布
+  > 支持图片水印功能
+- 2023年10月24日，v3.2.5 发布
+  > 支持多语言翻译功能，支持 Markdown 编辑器
+- 2023年 4月15日，v3.1.1 发布
+  > 接入AI自动写作功能
+- 2022年12月 5日，v3.0.0 发布
+  > 开始支持多站点模式，简化和降低了 AnQiCMS 的部署难度，新增更多丰富的企业站常用功能
+- 2022年 5月30日，v2.1.0 发布
+  > 正式更名为 AnQiCMS，标志着 AnQiCMS 已具备常用的内容管理系统必备功能
+- 2021年 2月16日，v2.0.0-alpha 发布
+  > 开始逐步由单纯的博客功能，过度到更全面的内容管理系统，逐步开发并完善企业站功能
+- 2021年 1月21日，GoBlog v1.0.0 发布  
+  > 博客完善版，在基础版的基础上，增加了后台管理、seo功能等。
+- 2020年12月 1日，GoBlog v0.5 发布  
+  > 重构版本，采用iris框架重写，减少技术栈，改用iris自带的template模板引擎。实现了最基础的博客功能。
+- 2019年11月19日 GoBlog v0.1 发布   
+  > Gin版本，前后端分离，后端使用go、gin、gorm，前端使用Next.js。
 
-## Packages Used
+## 使用的包
 
 - [gorm](https://github.com/go-gorm/gorm)
 - [iris](https://github.com/kataras/iris)
@@ -112,31 +112,31 @@ Welcome to use AnQiCMS.
 - [open-golang](https://github.com/skratchdot/open-golang)
 - [go-qrcode](https://github.com/skip2/go-qrcode)
 
-## Access The Admin Backend
-If you clone the downloaded code from GitHub and compile and run it yourself, you need to compile the backend management code first. The backend management code is at https://github.com/fesiong/AnQiCMS-admin.
-You can also download the latest release from the release of the backend management code and unzip system.zip to the system folder in the project root directory.
+## 访问管理后台
+如果你从 GitHub 上克隆下载的代码，自行编译运行的话，需要先编译后台的管理代码，后台管理代码在 https://github.com/fesiong/anqicms-admin 。
+你也可以从 后台管理代码的release中，下载最新的release，将system.zip 解压到项目根目录下的system文件夹。
 
-The default backend address is http://127.0.0.1:8001/system
+后台地址默认为 http://127.0.0.1:8001/system
 
-If you did not initialize through installation, you may not have set up an administrator account. If you do not set up an administrator account, the default administrator account password is:
+如果你不是通过安装初始化的话，可能没有设置管理员账号，如果没有设置管理员账号，默认的管理员账号密码分别是：
 
-Account: admin
+账号：admin
 
-Password: 123456
+密码：123456
 
-## Sample Website & Development Documentation
-[示例网站 - https://www.AnQiCMS.com/](https://www.AnQiCMS.com/manual)
+## 示例网站 & 开发文档
+[示例网站 - https://www.anqicms.com/](https://www.anqicms.com/manual)
 
 
-## 👥 Issue
-If you encounter any problems, please open an issue on Github.
-You can also add my WeChat: websafety
+## 👥问题反馈    
+遇到问题, 请在Github上开issue。  
+也可以加我的微信：websafety
 
-Scan the QR code to join the golang development learning group
+扫码加入golang开发学习群
 
-![Scan the QR Code](https://www.AnQiCMS.com/uploads/202211/09/1a55bfcde55aa2d6.webp)
+![扫码入群讨论](https://www.anqicms.com/uploads/202211/09/1a55bfcde55aa2d6.webp)
 
 ## License
-AnQiCMS End User License Agreement
+AnqiCMS 最终用户授权协议
 
 Copyright (c) 2019-NOW  Fesion <tpyzlxy@gmail.com>
