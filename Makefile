@@ -29,7 +29,7 @@ build:
 	cp -r ./public/*.xsl ./release/$(GOOS)/public/
 	cp -r ./template ./release/$(GOOS)/
 	cp -r ./system ./release/$(GOOS)/
-	cp -r ./language ./release/$(GOOS)/
+	cp -r ./locales ./release/$(GOOS)/
 	cp -r ./CHANGELOG.md ./release/$(GOOS)/
 	cp -r ./License ./release/$(GOOS)/
 	cp -r ./clientFiles ./release/$(GOOS)/
