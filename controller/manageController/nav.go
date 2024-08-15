@@ -229,7 +229,7 @@ func SettingNavTypeDelete(ctx iris.Context) {
 
 	// 删除更多信息
 	// 删除一类导航
-	currentSite.DB.Where("`type_id` = ?", navType).Delete(model.Nav{})
+	currentSite.DB.Where("`type_id` = ?", navType).Delete(&model.Nav{})
 	err = currentSite.DB.Delete(navType).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
