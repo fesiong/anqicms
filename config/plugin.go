@@ -11,10 +11,11 @@ type CodeItem struct {
 }
 
 type PluginPushConfig struct {
-	BaiduApi string     `json:"baidu_api"`
-	BingApi  string     `json:"bing_api"`
-	JsCode   string     `json:"js_code"`
-	JsCodes  []CodeItem `json:"js_codes"`
+	BaiduApi   string     `json:"baidu_api"`
+	BingApi    string     `json:"bing_api"`
+	GoogleJson string     `json:"google_json"`
+	JsCode     string     `json:"js_code"`
+	JsCodes    []CodeItem `json:"js_codes"`
 }
 
 type PluginSitemapConfig struct {
@@ -22,6 +23,11 @@ type PluginSitemapConfig struct {
 	Type        string `json:"type"`
 	UpdatedTime int64  `json:"updated_time"`
 	SitemapURL  string `json:"sitemap_url"`
+
+	ExcludeTag         bool   `json:"exclude_tag"`
+	ExcludeModuleIds   []uint `json:"exclude_module_ids"`
+	ExcludeCategoryIds []uint `json:"exclude_category_ids"`
+	ExcludePageIds     []uint `json:"exclude_page_ids"`
 }
 
 type PluginAnchorConfig struct {
@@ -61,6 +67,11 @@ type PluginSendmail struct {
 	Account   string `json:"account"`
 	Password  string `json:"password"`
 	Recipient string `json:"recipient"`
+
+	AutoReply    bool   `json:"auto_reply"`
+	ReplySubject string `json:"reply_subject"`
+	ReplyMessage string `json:"reply_message"` // 自动回复内容
+	SendType     []int  `json:"send_type"`
 }
 
 type PluginImportApiConfig struct {
@@ -90,10 +101,87 @@ type PluginStorageConfig struct {
 	UpyunBucket   string `json:"upyun_bucket"`
 	UpyunOperator string `json:"upyun_operator"`
 	UpyunPassword string `json:"upyun_password"`
+
+	FTPHost     string `json:"ftp_host"`
+	FTPPort     int    `json:"ftp_port"`
+	FTPUsername string `json:"ftp_username"`
+	FTPPassword string `json:"ftp_password"`
+	FTPWebroot  string `json:"ftp_webroot"`
+
+	SSHHost       string `json:"ssh_host"`
+	SSHPort       int    `json:"ssh_port"`
+	SSHUsername   string `json:"ssh_username"`
+	SSHPassword   string `json:"ssh_password"`
+	SSHPrivateKey string `json:"ssh_private_key"` // 私钥文件名
+	SSHWebroot    string `json:"ssh_webroot"`
 }
 
 type PluginFulltextConfig struct {
-	Open bool `json:"open"`
+	Open        bool   `json:"open"`
+	UseContent  bool   `json:"use_content"`  // 是否索引内容
+	UseCategory bool   `json:"use_category"` // 是否索引分类
+	UseTag      bool   `json:"use_tag"`      // 是否索引标签
+	Modules     []uint `json:"modules"`
+}
+
+type PluginTitleImageConfig struct {
+	Open      bool   `json:"open"`
+	DrawSub   bool   `json:"draw_sub"`
+	BgImage   string `json:"bg_image"`
+	FontPath  string `json:"font_path"`
+	FontSize  int    `json:"font_size"`
+	FontColor string `json:"font_color"`
+	Width     int    `json:"width"`
+	Height    int    `json:"height"`
+	Noise     bool   `json:"noise"`
+}
+
+type PluginHtmlCache struct {
+	Open          bool   `json:"open"`
+	IndexCache    int64  `json:"index_cache"`     // 首页缓存时间
+	ListCache     int64  `json:"category_cache"`  // 列表页缓存时间
+	DetailCache   int64  `json:"detail_cache"`    // 详情页缓存时间
+	LastBuildTime int64  `json:"last_build_time"` // 上一次手动生成时间
+	LastPushTime  int64  `json:"last_push_time"`  // 上一次手动推送时间
+	ErrorMsg      string `json:"error_msg"`
+	PluginStorageConfig
+}
+
+type PluginTimeFactor struct {
+	Open        bool     `json:"open"`
+	ModuleIds   []int64  `json:"module_ids"`
+	Types       []string `json:"types"`
+	StartDay    int      `json:"start_day"`
+	EndDay      int      `json:"end_day"`
+	CategoryIds []int64  `json:"category_ids"`
+	DoPublish   bool     `json:"do_publish"`
+	ReleaseOpen bool     `json:"release_open"`
+	DailyLimit  int      `json:"daily_limit"`
+	StartTime   int      `json:"start_time"`
+	EndTime     int      `json:"end_time"`
+	TodayCount  int      `json:"today_count"`
+	LastSent    int64    `json:"last_sent"`
+}
+
+type PluginInterference struct {
+	Open              bool `json:"open"`
+	Mode              int  `json:"mode"`
+	DisableSelection  bool `json:"disable_selection"`
+	DisableCopy       bool `json:"disable_copy"`
+	DisableRightClick bool `json:"disable_right_click"`
+}
+
+type PluginWatermark struct {
+	Open      bool   `json:"open"`
+	Type      int    `json:"type"` // 0 image, 1 text
+	ImagePath string `json:"image_path"`
+	Text      string `json:"text,omitempty"`
+	FontPath  string `json:"font_path"`
+	Size      int    `json:"size"`
+	Color     string `json:"color"`
+	Position  int    `json:"position"` // 5 居中，1 左上角，3 右上角 7 左下角 9 右下角
+	Opacity   int    `json:"opacity"`
+	MinSize   int    `json:"min_size"`
 }
 
 func (g *CustomField) SplitContent() []string {
@@ -130,7 +218,7 @@ func (g *CustomField) GetFieldColumn() string {
 
 	if g.Type == CustomFieldTypeNumber {
 		column += " int(10)"
-	} else if g.Type == CustomFieldTypeTextarea {
+	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor {
 		column += " text"
 	} else {
 		// mysql 5.6 下，utf8mb4 索引只能用190
@@ -146,61 +234,4 @@ func (g *CustomField) GetFieldColumn() string {
 	column += " DEFAULT NULL"
 
 	return column
-}
-
-func GetGuestbookFields() []*CustomField {
-	//这里有默认的设置
-	defaultFields := []*CustomField{
-		{
-			Name:      Lang("用户名"),
-			FieldName: "user_name",
-			Type:      "text",
-			Required:  true,
-			IsSystem:  true,
-		},
-		{
-			Name:      Lang("联系电话"),
-			FieldName: "contact",
-			Type:      "text",
-			Required:  false,
-			IsSystem:  true,
-		},
-		{
-			Name:      Lang("Email"),
-			FieldName: "email",
-			Type:      "text",
-			Required:  false,
-			IsSystem:  false,
-		},
-		{
-			Name:      Lang("WhatsApp"),
-			FieldName: "whatsapp",
-			Type:      "text",
-			Required:  false,
-			IsSystem:  false,
-		},
-		{
-			Name:      Lang("留言内容"),
-			FieldName: "content",
-			Type:      "textarea",
-			Required:  false,
-			IsSystem:  true,
-		},
-	}
-
-	exists := false
-	for _, v := range JsonData.PluginGuestbook.Fields {
-		if v.IsSystem || v.FieldName == "user_name" {
-			exists = true
-			break
-		}
-	}
-	var fields []*CustomField
-	if exists {
-		fields = JsonData.PluginGuestbook.Fields
-	} else {
-		fields = append(defaultFields, JsonData.PluginGuestbook.Fields...)
-	}
-
-	return fields
 }

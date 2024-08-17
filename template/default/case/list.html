@@ -1,41 +1,40 @@
 {% extends 'base.html' %}
 
 {% block container %}
-{% include "partial/breadcrumb.html" %}
-<div class="case-list container clearfix">
-	<h1 class="index-case-title">{% categoryDetail with name="Title" %}</h1>
-	<div class="case-list-content clearfix">
-		<div class="page-content">
-			<ul class="case-list-ul">
-				{% archiveList products with type="page" limit="9" %}
-				{% for item in products %}
-				<li class="products-list-li">
-					<div class="item">
-						<div class="item-img">
-							<a href="{{item.Link}}"><img src="{{item.Thumb}}" alt="{{item.Title}}"></a>
-						</div>
-						<div class="item-text">
-							<h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
-						</div>
-					</div>
-				</li>
-				<li class="case-list-li">
-					<div class="item">
-						<div class="item-img">
-							<a href="{{item.Link}}"><img src="{{item.Thumb}}" alt=""></a>
-						</div>
-						<div class="item-text">
-							<h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
-							<p>{{item.Description}}</p>
-						</div>
-					</div>
-				</li>
-				{% endfor %}
-				{% endarchiveList %}
-			</ul>
-			{% include "partial/pagination.html" %}
-		</div>
-		{% include "partial/sidebar.html" %}
-	</div>
+
+{% include "partial/banner.html" %}
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">{% categoryDetail with name="Title" %}</div>
+                <ul class="list-case-ul">
+                    {% archiveList products with type="page" limit="12" %}
+                    {% for item in products %}
+                    <li>
+                        <div class="list-item">
+                            <div class="list-item-img"><a href="{{item.Link}}">
+                                    <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                                </a></div>
+                            <div class="list-item-text">
+                                <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                                <p>{{item.Description}}</p>
+                                <a href="{{item.Link}}" class="more">详情</a>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+                {% include "partial/pagination.html" %}
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
 </div>
 {% endblock %}

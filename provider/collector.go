@@ -7,7 +7,6 @@ import (
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/now"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
@@ -24,9 +23,9 @@ import (
 var emptyLinkPatternStr = `(^data:)|(^tel:)|(^mailto:)|(about:blank)|(javascript:)`
 var emptyLinkPattern = regexp.MustCompile(emptyLinkPatternStr)
 
-func GetUserCollectorSetting() config.CollectorJson {
+func (w *Website) GetUserCollectorSetting() config.CollectorJson {
 	var collector config.CollectorJson
-	value := GetSettingValue(CollectorSettingKey)
+	value := w.GetSettingValue(CollectorSettingKey)
 	if value == "" {
 		return collector
 	}
@@ -38,8 +37,8 @@ func GetUserCollectorSetting() config.CollectorJson {
 	return collector
 }
 
-func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
-	collector := GetUserCollectorSetting()
+func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
+	collector := w.GetUserCollectorSetting()
 	if focus {
 		collector = req
 	} else {
@@ -76,6 +75,12 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 		if req.AutoPseudo {
 			collector.AutoPseudo = req.AutoPseudo
 		}
+		if req.AutoTranslate {
+			collector.AutoTranslate = req.AutoTranslate
+		}
+		if len(req.ToLanguage) > 0 {
+			collector.ToLanguage = req.ToLanguage
+		}
 		if req.CategoryId > 0 {
 			collector.CategoryId = req.CategoryId
 		}
@@ -90,51 +95,23 @@ func SaveUserCollectorSetting(req config.CollectorJson, focus bool) error {
 		}
 	}
 
-	_ = SaveSettingValue(CollectorSettingKey, collector)
+	_ = w.SaveSettingValue(CollectorSettingKey, collector)
 	//重新读取配置
-	LoadCollectorSetting()
+	w.LoadCollectorSetting()
+	if collector.AutoCollect {
+		go w.CollectArticles()
+	}
 
 	return nil
 }
 
-// getBetweenSeconds 根据发布量获取每天发布间隔
-// 根据设置的时间，随机休息秒数
-func getBetweenSeconds() time.Duration {
-	limit := config.CollectorConfig.DailyLimit
-	if limit == 0 {
-		limit = 1000
-	}
-	if config.CollectorConfig.EndHour > 24 {
-		config.CollectorConfig.EndHour = 24
-	}
-	hour := config.CollectorConfig.EndHour - config.CollectorConfig.StartHour
-	if hour > 24 || hour <= 0 {
-		hour = 24
-	}
-	seconds := hour * 3600
-
-	between := seconds/limit*2 - 1
-	if config.CollectorConfig.AutoPseudo {
-		between -= 1
-	}
-
-	//返回随机正负5秒的实际
-	between += rand.Intn(11) - 5
-
-	if between <= 0 {
-		between = 1
-	}
-
-	return time.Duration(between) * time.Second
-}
-
 var runningCollectArticles = false
 
-func CollectArticles() {
-	if dao.DB == nil {
+func (w *Website) CollectArticles() {
+	if w.DB == nil {
 		return
 	}
-	if !config.CollectorConfig.AutoCollect {
+	if !w.CollectorConfig.AutoCollect {
 		return
 	}
 	if runningCollectArticles {
@@ -145,116 +122,135 @@ func CollectArticles() {
 		runningCollectArticles = false
 	}()
 
-	if config.CollectorConfig.StartHour > 0 && time.Now().Hour() < config.CollectorConfig.StartHour {
+	if w.CollectorConfig.StartHour > 0 && time.Now().Hour() < w.CollectorConfig.StartHour {
 		return
 	}
 
-	if config.CollectorConfig.EndHour > 0 && time.Now().Hour() >= config.CollectorConfig.EndHour {
+	if w.CollectorConfig.EndHour > 0 && time.Now().Hour() >= w.CollectorConfig.EndHour {
 		return
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
+	if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
 		return
 	}
 
 	lastId := uint(0)
 	for {
 		var keywords []*model.Keyword
-		dao.DB.Where("id > ? and last_time = 0", lastId).Order("id asc").Limit(100).Find(&keywords)
+		w.DB.Where("id > ? and last_time = 0", lastId).Order("id asc").Limit(10).Find(&keywords)
 		if len(keywords) == 0 {
 			break
 		}
 		lastId = keywords[len(keywords)-1].Id
 		for i := 0; i < len(keywords); i++ {
 			keyword := keywords[i]
-			total, err := CollectArticlesByKeyword(*keyword, false)
-			log.Printf("关键词：%s 采集了 %d 篇文章", keyword.Title, total)
+			// 检查是否采集过
+			if w.checkArticleExists(keyword.Title, "", "") {
+				// 跳过这个关键词
+				if keyword.ArticleCount == 0 {
+					keyword.ArticleCount = 1
+				}
+				keyword.LastTime = time.Now().Unix()
+				w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
+				//log.Println("已存在于数据库", keyword.Title)
+				continue
+			}
+			total, err := w.CollectArticlesByKeyword(*keyword, false)
+			log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
 			// 达到数量了，退出
-			if GetTodayArticleCount() > int64(config.CollectorConfig.DailyLimit) {
+			if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
 				return
 			}
+			// 每个关键词都需要间隔30秒以上
+			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
+				// 延时 10分钟以上
+				// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
 				break
 			}
 		}
 	}
 }
 
-func CollectArticlesByKeyword(keyword model.Keyword, focus bool) (total int, err error) {
-	if config.CollectorConfig.CollectMode == config.CollectModeCombine {
-		total, err = GenerateCombination(&keyword)
-	} else if config.CollectorConfig.CollectMode == config.CollectModeCollect {
-		total, err = CollectArticleFromBaidu(&keyword, focus)
+func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (total int, err error) {
+	if w.CollectorConfig.CollectMode == config.CollectModeCombine {
+		total, err = w.GenerateCombination(&keyword)
+	} else {
+		total, err = w.CollectArticleFromBaidu(&keyword, focus)
 	}
 
 	if err != nil {
 		return total, err
 	}
+	if total == 0 {
+		return total, nil
+	}
 
-	keyword.ArticleCount = GetArticleTotalByKeywordId(keyword.Id)
+	keyword.ArticleCount = w.GetArticleTotalByKeywordId(keyword.Id)
 	keyword.LastTime = time.Now().Unix()
-	dao.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
+	w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
 
 	return total, nil
 }
 
-func SaveCollectArticle(archive *request.Archive, keyword *model.Keyword) error {
-	autoPseudo := false
-	if config.CollectorConfig.AutoPseudo {
-		autoPseudo = true
-	}
-
+func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Keyword) error {
 	//原始标题
 	archive.OriginTitle = archive.Title
 
-	if checkArticleExists(archive.OriginUrl, archive.OriginTitle) {
-		log.Println("已存在于数据库", archive.OriginTitle)
-		return errors.New(config.Lang("已存在于数据库"))
+	if w.checkArticleExists(archive.OriginUrl, archive.OriginTitle, archive.Title) {
+		//log.Println("已存在于数据库", archive.OriginTitle)
+		return errors.New(w.Tr("AlreadyExistsInTheDatabase"))
 	}
 
 	archive.KeywordId = keyword.Id
-	archive.CategoryId = keyword.CategoryId
-	if archive.CategoryId == 0 && config.CollectorConfig.CategoryId > 0 {
-		archive.CategoryId = config.CollectorConfig.CategoryId
+	categoryId := keyword.CategoryId
+	if categoryId == 0 {
+		if len(w.CollectorConfig.CategoryIds) > 0 {
+			categoryId = w.CollectorConfig.CategoryIds[rand.New(rand.NewSource(time.Now().UnixNano())).Intn(len(w.CollectorConfig.CategoryIds))]
+		} else if w.CollectorConfig.CategoryId > 0 {
+			categoryId = w.CollectorConfig.CategoryId
+		}
+		if categoryId == 0 {
+			var category model.Category
+			w.DB.Where("module_id = 1").Take(&category)
+			w.CollectorConfig.CategoryIds = []uint{category.Id}
+			categoryId = category.Id
+		}
 	}
-	// 必须有一个分类，如果都没有，则获取第一个
-	if archive.CategoryId == 0 {
-		var category model.Category
-		dao.DB.Where("module_id = 1").Take(&category)
-		archive.CategoryId = category.Id
-	}
-	log.Println("draft:", config.CollectorConfig.SaveType)
+	archive.CategoryId = categoryId
+	//log.Println("draft:", w.CollectorConfig.SaveType)
 	// 如果不是正常发布，则存到草稿
-	if config.CollectorConfig.SaveType == 0 {
+	if w.CollectorConfig.SaveType == 0 {
 		archive.Draft = true
 	} else {
 		archive.Draft = false
 	}
-	modelArchive, err := SaveArchive(archive)
+	res, err := w.SaveArchive(archive)
 	if err != nil {
 		log.Println("保存文章出错：", archive.Title, err.Error())
 		return err
 	}
-
-	//如果自动伪原创
-	if autoPseudo {
-		archiveData, err := GetArchiveDataById(modelArchive.Id)
-		if err == nil {
-			go PseudoOriginalArticle(archiveData)
-		}
+	if w.CollectorConfig.AutoPseudo {
+		// AI 改写
+		_ = w.AnqiAiPseudoArticle(res)
 	}
+	if w.CollectorConfig.AutoTranslate {
+		// AI 改写
+		_ = w.AnqiTranslateArticle(res, w.CollectorConfig.ToLanguage)
+	}
+
 	//文章计数
-	UpdateTodayArticleCount(1)
+	w.UpdateTodayArticleCount(1)
 
 	return nil
 }
 
-func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
+func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
 	collectUrl := fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=10", keyword.Title)
-	if config.CollectorConfig.FromWebsite != "" {
-		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=10", keyword.Title, config.CollectorConfig.FromWebsite)
+	if w.CollectorConfig.FromWebsite != "" {
+		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=10", keyword.Title, w.CollectorConfig.FromWebsite)
 	}
 
 	resp, err := library.Request(collectUrl, &library.Options{
@@ -271,7 +267,7 @@ func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
 	}
 
 	var total int
-	links := ParseBaiduJson(resp.Body)
+	links := w.ParseBaiduJson(resp.Body)
 	for _, link := range links {
 		//需要过滤可能不是内容的链接，/ 结尾的全部抛弃
 		//if strings.HasSuffix(link.Url, "/") {
@@ -299,15 +295,15 @@ func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
 			continue
 		}
 
-		archive, err := CollectSingleArticle(link, keyword)
+		archive, err := w.CollectSingleArticle(link, keyword)
 		if err == nil {
-			err = SaveCollectArticle(archive, keyword)
+			err = w.SaveCollectArticle(archive, keyword)
 
 			if err == nil {
 				total++
 				if !focus {
-					//根据设置的时间，随机休息秒数
-					time.Sleep(getBetweenSeconds())
+					//根据设置的时间，休息一定秒数
+					time.Sleep(15 * time.Second)
 				}
 			}
 		}
@@ -316,7 +312,7 @@ func CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
 	return total, nil
 }
 
-func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*request.Archive, error) {
+func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*request.Archive, error) {
 	//百度的不使用 chromedp
 	resp, err := library.Request(link.Url, &library.Options{
 		Timeout:  5,
@@ -333,14 +329,14 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 		OriginUrl:   link.Url,
 		ContentText: resp.Body,
 	}
-	_ = ParseArticleDetail(archive)
+	_ = w.ParseArticleDetail(archive)
 	if len(archive.Content) == 0 {
-		log.Println("链接无文章", archive.OriginUrl)
-		return nil, errors.New(config.Lang("链接无文章"))
+		//log.Println("链接无文章", archive.OriginUrl)
+		return nil, errors.New(w.Tr("LinkHasNoArticle"))
 	}
 	if archive.Title == "" {
-		log.Println("链接无文章", archive.OriginUrl)
-		return nil, errors.New(config.Lang("链接无文章"))
+		//log.Println("链接无文章", archive.OriginUrl)
+		return nil, errors.New(w.Tr("LinkHasNoArticle"))
 	}
 	//对乱码的跳过
 	runeTitle := []rune(archive.Title)
@@ -353,15 +349,43 @@ func CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*requ
 	}
 	if isDeny {
 		log.Println("乱码", archive.OriginUrl)
-		return nil, errors.New(config.Lang("乱码"))
+		return nil, errors.New(w.Tr("GarbledCode"))
 	}
 
-	log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
+	// 替换图片
+	if w.CollectorConfig.InsertImage != config.CollectImageRetain {
+		re, _ := regexp.Compile(`(?i)<img\s.*?>`)
+		archive.Content = RemoveTags(re.ReplaceAllString(archive.Content, ""))
+	}
+	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
+		rand.Seed(time.Now().UnixMicro())
+		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		content := strings.SplitAfter(archive.Content, ">")
+
+		index := len(content) / 3
+		content = append(content, "")
+		copy(content[index+1:], content[index:])
+		content[index] = "<img src='" + img + "' alt='" + archive.Title + "'/>"
+		archive.Content = strings.Join(content, "")
+	}
+	if w.CollectorConfig.InsertImage == config.CollectImageCategory {
+		// 根据分类每次只取其中一张
+		img := w.GetRandImageFromCategory(w.CollectorConfig.ImageCategoryId, keyword.Title)
+		if len(img) > 0 {
+			content := strings.SplitAfter(archive.Content, ">")
+			index := len(content) / 3
+			content = append(content, "")
+			copy(content[index+1:], content[index:])
+			content[index] = "<img src='" + img + "' alt='" + archive.Title + "'/>"
+			archive.Content = strings.Join(content, "")
+		}
+	}
+	//log.Println(archive.Title, len(archive.Content), archive.OriginUrl)
 
 	return archive, nil
 }
 
-func ParseBaiduJson(content string) []*response.WebLink {
+func (w *Website) ParseBaiduJson(content string) []*response.WebLink {
 	var baiduJson response.BaiduJson
 	err := json.Unmarshal([]byte(content), &baiduJson)
 	if err != nil {
@@ -387,7 +411,7 @@ func ParseBaiduJson(content string) []*response.WebLink {
 	return links
 }
 
-func ParseArticleDetail(archive *request.Archive) error {
+func (w *Website) ParseArticleDetail(archive *request.Archive) error {
 	//先删除一些不必要的标签
 	re, _ := regexp.Compile("\\<style[\\S\\s]+?\\</style\\>")
 	contentText := re.ReplaceAllString(archive.ContentText, "")
@@ -405,23 +429,23 @@ func ParseArticleDetail(archive *request.Archive) error {
 
 	//如果是百度百科地址，单独处理
 	if strings.Contains(archive.OriginUrl, "baike.baidu.com") {
-		ParseBaikeDetail(archive, doc)
+		w.ParseBaikeDetail(archive, doc)
 	} else if strings.Contains(archive.OriginUrl, "mp.weixin.qq.com") {
-		ParseWeixinDetail(archive, doc)
+		w.ParseWeixinDetail(archive, doc)
 	} else if strings.Contains(archive.OriginUrl, "zhihu.com") {
-		ParseZhihuDetail(archive, doc)
+		w.ParseZhihuDetail(archive, doc)
 	} else if strings.Contains(archive.OriginUrl, "toutiao.com") {
-		ParseToutiaoDetail(archive, doc)
+		w.ParseToutiaoDetail(archive, doc)
 	} else {
-		ParseNormalDetail(archive, doc)
+		w.ParseNormalDetail(archive, doc)
 	}
 
-	archive.Content = ReplaceContentFromConfig(archive.Content, config.CollectorConfig.ContentReplace)
+	archive.Content = w.ReplaceContentFromConfig(archive.Content, w.CollectorConfig.ContentReplace)
 
 	return nil
 }
 
-func ParseBaikeDetail(archive *request.Archive, doc *goquery.Document) {
+func (w *Website) ParseBaikeDetail(archive *request.Archive, doc *goquery.Document) {
 	//获取标题
 	archive.Title = strings.TrimSpace(doc.Find("h1").Text())
 
@@ -435,32 +459,32 @@ func ParseBaikeDetail(archive *request.Archive, doc *goquery.Document) {
 	archive.Content = content
 	//如果获取不到内容，则 fallback 到normal
 	if archive.Content == "" {
-		ParseNormalDetail(archive, doc)
+		w.ParseNormalDetail(archive, doc)
 	}
 }
 
-func ParseWeixinDetail(archive *request.Archive, doc *goquery.Document) {
+func (w *Website) ParseWeixinDetail(archive *request.Archive, doc *goquery.Document) {
 	//获取标题
 	archive.Title = strings.TrimSpace(doc.Find("h1").Eq(0).Text())
 
 	contentList := doc.Find("#js_content")
 
-	content, _ := CleanTags(contentList)
+	content, _ := w.CleanTags(contentList)
 
 	archive.Content = content
 	//如果获取不到内容，则 fallback 到normal
 	if archive.Content == "" {
-		ParseNormalDetail(archive, doc)
+		w.ParseNormalDetail(archive, doc)
 	}
 }
 
-func ParseZhihuDetail(archive *request.Archive, doc *goquery.Document) {
+func (w *Website) ParseZhihuDetail(archive *request.Archive, doc *goquery.Document) {
 	//获取标题
 	archive.Title = strings.TrimSpace(doc.Find("h1").Eq(0).Text())
 
 	var content, planText string
 	doc.Find(".RichContent-inner .RichText,.Post-RichTextContainer .RichText").Each(func(i int, item *goquery.Selection) {
-		tmpContent, tmpText := CleanTags(item)
+		tmpContent, tmpText := w.CleanTags(item)
 		if len(tmpText) > len(planText) {
 			content = tmpContent
 			planText = tmpText
@@ -470,30 +494,30 @@ func ParseZhihuDetail(archive *request.Archive, doc *goquery.Document) {
 	archive.Content = content
 	//如果获取不到内容，则 fallback 到normal
 	if archive.Content == "" {
-		ParseNormalDetail(archive, doc)
+		w.ParseNormalDetail(archive, doc)
 	}
 }
 
-func ParseToutiaoDetail(archive *request.Archive, doc *goquery.Document) {
+func (w *Website) ParseToutiaoDetail(archive *request.Archive, doc *goquery.Document) {
 	//获取标题
 	archive.Title = strings.TrimSpace(doc.Find("h1").Eq(0).Text())
 
 	contentList := doc.Find(".article-content article")
 
-	content, _ := CleanTags(contentList)
+	content, _ := w.CleanTags(contentList)
 
 	archive.Content = content
 	//如果获取不到内容，则 fallback 到normal
 	if archive.Content == "" {
-		ParseNormalDetail(archive, doc)
+		w.ParseNormalDetail(archive, doc)
 	}
 }
 
-func ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
-	ParseLinking(doc, archive.OriginUrl)
-	title := ParseArticleTitle(doc)
+func (w *Website) ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
+	w.ParseLinking(doc, archive.OriginUrl)
+	title := w.ParseArticleTitle(doc)
 
-	otherItems := doc.Find("input,textarea,select,radio,form,button,header,aside,footer,.footer,noscript,meta,nav,hr")
+	otherItems := doc.Find("input,textarea,select,radio,form,button,header,aside,footer,.footer,noscript,meta,nav,hr.modal")
 	if otherItems.Length() > 0 {
 		otherItems.Remove()
 	}
@@ -504,29 +528,29 @@ func ParseNormalDetail(archive *request.Archive, doc *goquery.Document) {
 		archive.Title = title
 	}
 
-	if utf8.RuneCountInString(archive.Title) < config.CollectorConfig.TitleMinLength || HasContain(archive.Title, config.CollectorConfig.TitleExclude) || HasPrefix(archive.Title, config.CollectorConfig.TitleExcludePrefix) || HasSuffix(archive.Title, config.CollectorConfig.TitleExcludeSuffix) {
+	if utf8.RuneCountInString(archive.Title) < w.CollectorConfig.TitleMinLength || HasContain(archive.Title, w.CollectorConfig.TitleExclude) || HasPrefix(archive.Title, w.CollectorConfig.TitleExcludePrefix) || HasSuffix(archive.Title, w.CollectorConfig.TitleExcludeSuffix) {
 		archive.Title = ""
 		//跳过这篇文章
 		return
 	}
 
 	//尝试获取正文内容
-	content, planText, _, _ := ParseArticleContent(doc.Find("body"), 0, isEnglish)
+	content, planText, _, _ := w.ParseArticleContent(doc.Find("body"), 0, isEnglish)
 	if content != nil {
-		archive.Content, planText = CleanTags(content)
+		archive.Content, planText = w.CleanTags(content)
 		planLen := utf8.RuneCountInString(planText)
 		if isEnglish {
 			//英语使用空格来计算词数
 			planLen = len(strings.Split(planText, " "))
 		}
-		if planLen < config.CollectorConfig.ContentMinLength {
+		if planLen < w.CollectorConfig.ContentMinLength {
 			//小于指定次数的，直接抛弃了
 			archive.Content = ""
 		}
 	}
 }
 
-func ParseArticleTitle(doc *goquery.Document) string {
+func (w *Website) ParseArticleTitle(doc *goquery.Document) string {
 	//尝试获取标题
 	//先尝试获取h1标签
 	title := ""
@@ -537,7 +561,7 @@ func ParseArticleTitle(doc *goquery.Document) string {
 			item.Children().Remove()
 			text := strings.TrimSpace(item.Text())
 			textLen := utf8.RuneCountInString(text)
-			if textLen >= config.CollectorConfig.TitleMinLength && textLen > utf8.RuneCountInString(title) && !HasContain(text, config.CollectorConfig.TitleExclude) && !HasPrefix(text, config.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, config.CollectorConfig.TitleExcludeSuffix) {
+			if textLen >= w.CollectorConfig.TitleMinLength && textLen > utf8.RuneCountInString(title) && !HasContain(text, w.CollectorConfig.TitleExclude) && !HasPrefix(text, w.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, w.CollectorConfig.TitleExcludeSuffix) {
 				title = text
 			}
 		}
@@ -547,7 +571,7 @@ func ParseArticleTitle(doc *goquery.Document) string {
 		text, exist := doc.Find("meta[name=ArticleTitle]").Attr("content")
 		if exist {
 			text = strings.TrimSpace(text)
-			if utf8.RuneCountInString(text) >= config.CollectorConfig.TitleMinLength && !HasContain(text, config.CollectorConfig.TitleExclude) && !HasPrefix(text, config.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, config.CollectorConfig.TitleExcludeSuffix) {
+			if utf8.RuneCountInString(text) >= w.CollectorConfig.TitleMinLength && !HasContain(text, w.CollectorConfig.TitleExclude) && !HasPrefix(text, w.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, w.CollectorConfig.TitleExcludeSuffix) {
 				title = text
 			}
 		}
@@ -561,7 +585,7 @@ func ParseArticleTitle(doc *goquery.Document) string {
 			text = text[:sepIndex]
 		}
 		text = strings.TrimSpace(text)
-		if utf8.RuneCountInString(text) >= config.CollectorConfig.TitleMinLength && !HasContain(text, config.CollectorConfig.TitleExclude) && !HasPrefix(text, config.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, config.CollectorConfig.TitleExcludeSuffix) {
+		if utf8.RuneCountInString(text) >= w.CollectorConfig.TitleMinLength && !HasContain(text, w.CollectorConfig.TitleExclude) && !HasPrefix(text, w.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, w.CollectorConfig.TitleExcludeSuffix) {
 			title = text
 		}
 	}
@@ -576,7 +600,7 @@ func ParseArticleTitle(doc *goquery.Document) string {
 				item.Children().Remove()
 				text := strings.TrimSpace(item.Text())
 				textLen := utf8.RuneCountInString(item.Text())
-				if textLen >= config.CollectorConfig.TitleMinLength && textLen > utf8.RuneCountInString(title) && !HasContain(text, config.CollectorConfig.TitleExclude) && !HasPrefix(text, config.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, config.CollectorConfig.TitleExcludeSuffix) {
+				if textLen >= w.CollectorConfig.TitleMinLength && textLen > utf8.RuneCountInString(title) && !HasContain(text, w.CollectorConfig.TitleExclude) && !HasPrefix(text, w.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, w.CollectorConfig.TitleExcludeSuffix) {
 					title = text
 				}
 			}
@@ -591,7 +615,7 @@ func ParseArticleTitle(doc *goquery.Document) string {
 				item.Children().Remove()
 				text := strings.TrimSpace(item.Text())
 				textLen := utf8.RuneCountInString(text)
-				if textLen >= config.CollectorConfig.TitleMinLength && textLen > utf8.RuneCountInString(title) && !HasContain(text, config.CollectorConfig.TitleExclude) && !HasPrefix(text, config.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, config.CollectorConfig.TitleExcludeSuffix) {
+				if textLen >= w.CollectorConfig.TitleMinLength && textLen > utf8.RuneCountInString(title) && !HasContain(text, w.CollectorConfig.TitleExclude) && !HasPrefix(text, w.CollectorConfig.TitleExcludePrefix) && !HasSuffix(text, w.CollectorConfig.TitleExcludeSuffix) {
 					title = text
 				}
 			}
@@ -615,7 +639,7 @@ func ParseArticleTitle(doc *goquery.Document) string {
 	return title
 }
 
-func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) (*goquery.Selection, string, int, int) {
+func (w *Website) ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) (*goquery.Selection, string, int, int) {
 	var content *goquery.Selection
 	contentText := ""
 
@@ -627,7 +651,7 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 		//英语使用空格来计算词数
 		planLen = len(strings.Split(planText, " "))
 	}
-	if planLen < config.CollectorConfig.ContentMinLength {
+	if planLen < w.CollectorConfig.ContentMinLength {
 		//小于指定次数的，直接抛弃了
 		return nil, contentText, maxDeep, maxPCount
 	}
@@ -639,7 +663,7 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 	children := nodeItem.Children()
 	for i := range children.Nodes {
 		item := children.Eq(i)
-		tmpContent, tmpText, tmpDeep, tmpPCount := ParseArticleContent(item, deep+1, isEnglish)
+		tmpContent, tmpText, tmpDeep, tmpPCount := w.ParseArticleContent(item, deep+1, isEnglish)
 		if maxPCount == -1 {
 			maxPCount = tmpPCount
 		}
@@ -679,7 +703,7 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 	}
 
 	//如果内容包含指定关键词，则集体抛弃
-	if HasContain(planText, config.CollectorConfig.ContentExclude) {
+	if HasContain(planText, w.CollectorConfig.ContentExclude) {
 		return nil, contentText, maxDeep, maxPCount
 	}
 
@@ -693,7 +717,7 @@ func ParseArticleContent(nodeItem *goquery.Selection, deep int, isEnglish bool) 
 	return nodeItem.Clone(), planText, maxDeep, maxPCount
 }
 
-func CleanTags(clonedItem *goquery.Selection) (string, string) {
+func (w *Website) CleanTags(clonedItem *goquery.Selection) (string, string) {
 	contentText := strings.TrimSpace(clonedItem.Text())
 	//清理空格
 	re, _ := regexp.Compile(`\s{2,}`)
@@ -810,7 +834,7 @@ func CleanTags(clonedItem *goquery.Selection) (string, string) {
 
 		}
 		//移除不需要的词
-		if HasContain(innerItem.Text(), config.CollectorConfig.ContentExcludeLine) {
+		if HasContain(innerItem.Text(), w.CollectorConfig.ContentExcludeLine) {
 			if innerItem.Children().Length() == 0 || innerItem.Children().Text() == "" {
 				innerItem.Remove()
 				return
@@ -911,65 +935,7 @@ func HasContain(need string, needArray []string) bool {
 	return false
 }
 
-// ReplaceContentFromConfig 替换文章内容
-func ReplaceContentFromConfig(content string, replacer []config.ReplaceKeyword) string {
-	if content == "" || len(replacer) <= 0 {
-		return content
-	}
-
-	var re *regexp.Regexp
-	var err error
-
-	// 替换功能，只替换内容，不替换标签， 因此需要将标签存起来，并在最后还原
-	var replaced = map[string]string{}
-	if strings.Contains(content, "<") {
-		re, _ = regexp.Compile(`<[^>]+>`)
-		results := re.FindAllString(content, -1)
-		for i, v := range results {
-			key := fmt.Sprintf("{$%d}", i)
-			replaced[key] = v
-			content = strings.ReplaceAll(content, v, key)
-		}
-	}
-
-	for _, v := range replacer {
-		// 增加支持正则表达式替换
-		if strings.HasPrefix(v.From, "{") && strings.HasSuffix(v.From, "}") && len(v.From) > 2 {
-			newWord := v.From[1 : len(v.From)-1]
-			// 支持特定规则：邮箱地址，手机号，电话号码，网址、微信号，QQ号，
-			if newWord == "邮箱地址" {
-				re, err = regexp.Compile(`\w+([-+.]\w+)*@\w+([-.]\w+)*\.\w+([-.]\w+)*`)
-			} else if newWord == "日期" {
-				re, err = regexp.Compile(`\d{2,4}[\-/年月日]\d{1,2}[\-/年月日]?(\d{1,2}[\-/年月日]?)?`)
-			} else if newWord == "时间" {
-				re, err = regexp.Compile(`\d{2}[:时分秒]\d{2}[:时分秒]?(\d{2}[:时分秒]?)?`)
-			} else if newWord == "电话号码" {
-				re, err = regexp.Compile(`[+\d]{2}[\d\-+\s]{5,16}`)
-			} else if newWord == "QQ号" {
-				re, err = regexp.Compile(`[1-9]\d{4,10}`)
-			} else if newWord == "微信号" {
-				re, err = regexp.Compile(`[a-zA-Z][a-zA-Z\d_-]{5,19}`)
-			} else if newWord == "网址" {
-				re, err = regexp.Compile(`(?i)((http|ftp|https)://)?[\w\-_]+(\.[\w\-_]+)+([\w\-.,@?^=%&:/~+#]*[\w\-@?^=%&/~+#])?`)
-			} else {
-				re, err = regexp.Compile(newWord)
-			}
-
-			if err == nil {
-				content = re.ReplaceAllString(content, v.To)
-			}
-			continue
-		}
-		content = strings.ReplaceAll(content, v.From, v.To)
-	}
-	for key, val := range replaced {
-		content = strings.ReplaceAll(content, key, val)
-	}
-
-	return content
-}
-
-func ParseLinking(htmlDom *goquery.Document, baseUrl string) {
+func (w *Website) ParseLinking(htmlDom *goquery.Document, baseUrl string) {
 	aList := htmlDom.Find("[href]")
 	aList.Each(func(i int, nodeItem *goquery.Selection) {
 		subURL, exist := nodeItem.Attr("href")
@@ -1021,26 +987,6 @@ func joinURL(baseURL, subURL string) (fullURL, fullURLWithoutFrag string) {
 	return
 }
 
-// PseudoOriginalArticle 伪原创一篇文章
-func PseudoOriginalArticle(archiveData *model.ArchiveData) error {
-	isEnglish := CheckContentIsEnglish(archiveData.Content)
-
-	content := ParsePlanText(archiveData.Content, "")
-
-	content = PseudoArticle(content, isEnglish)
-	if content == "" {
-		return errors.New(fmt.Sprintf("伪原创失败：%d", archiveData.Id))
-	}
-
-	//替换回html
-	content = ParsePlanText(archiveData.Content, content)
-
-	dao.DB.Model(&model.Archive{}).Where("id = ?", archiveData.Id).UpdateColumn("has_pseudo", 1)
-	dao.DB.Model(&model.ArchiveData{}).Where("id = ?", archiveData.Id).UpdateColumn("pseudo_content", content)
-
-	return nil
-}
-
 func TrimContents(content string) string {
 	//移除连续空行
 	re, _ := regexp.Compile(`\n+`)
@@ -1056,23 +1002,24 @@ func CheckContentIsEnglish(content string) bool {
 	}
 
 	enCount := 0
-	for i := 0; i < len(content); i++ {
-		if content[i] < 128 {
+	contents := []rune(content)
+	for i := 0; i < len(contents); i++ {
+		if contents[i] < 2000 {
 			enCount++
 		}
 	}
-	if float64(enCount) > float64(len(content))*0.95 {
+	if float64(enCount) > float64(len(contents))*0.9 {
 		return true
 	}
 
 	return false
 }
 
-func ReplaceArticles() {
+func (w *Website) ReplaceArticles() {
 	startId := uint(0)
 	var archives []*model.Archive
 	for {
-		tx := dao.DB.Model(&model.Archive{})
+		tx := w.DB.Model(&model.Archive{})
 		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&archives)
 		if len(archives) == 0 {
 			break
@@ -1080,20 +1027,52 @@ func ReplaceArticles() {
 		startId = archives[len(archives)-1].Id
 		for _, archive := range archives {
 			var archiveData model.ArchiveData
-			title := ReplaceContentFromConfig(archive.Title, config.CollectorConfig.ContentReplace)
-			dao.DB.Where("id = ?", archive.Id).Take(&archiveData)
-			content := ReplaceContentFromConfig(archiveData.Content, config.CollectorConfig.ContentReplace)
+			title := w.ReplaceContentFromConfig(archive.Title, w.CollectorConfig.ContentReplace)
+			w.DB.Where("id = ?", archive.Id).Take(&archiveData)
+			content := w.ReplaceContentFromConfig(archiveData.Content, w.CollectorConfig.ContentReplace)
 
 			//替换完了
 			hasReplace := false
 			if title != archive.Title {
 				hasReplace = true
-				dao.DB.Model(archive).UpdateColumn("title", title)
+				w.DB.Model(archive).UpdateColumn("title", title)
 			}
 			if content != archiveData.Content {
 				hasReplace = true
 				archiveData.Content = content
-				dao.DB.Model(&archiveData).UpdateColumns(archiveData)
+				w.DB.Model(&archiveData).UpdateColumns(archiveData)
+			}
+			if hasReplace {
+				log.Println("替换文章：" + archive.Title)
+			}
+		}
+	}
+	// 草稿
+	startId = 0
+	var archiveDrafts []*model.ArchiveDraft
+	for {
+		tx := w.DB.Model(&model.ArchiveDraft{})
+		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&archiveDrafts)
+		if len(archiveDrafts) == 0 {
+			break
+		}
+		startId = archiveDrafts[len(archiveDrafts)-1].Id
+		for _, archive := range archiveDrafts {
+			var archiveData model.ArchiveData
+			title := w.ReplaceContentFromConfig(archive.Title, w.CollectorConfig.ContentReplace)
+			w.DB.Where("id = ?", archive.Id).Take(&archiveData)
+			content := w.ReplaceContentFromConfig(archiveData.Content, w.CollectorConfig.ContentReplace)
+
+			//替换完了
+			hasReplace := false
+			if title != archive.Title {
+				hasReplace = true
+				w.DB.Model(archive).UpdateColumn("title", title)
+			}
+			if content != archiveData.Content {
+				hasReplace = true
+				archiveData.Content = content
+				w.DB.Model(&archiveData).UpdateColumns(archiveData)
 			}
 			if hasReplace {
 				log.Println("替换文章：" + archive.Title)
@@ -1109,108 +1088,139 @@ func ParsePlanText(content string, planText string) string {
 		}
 	}()
 
-	htmlR := strings.NewReader(content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
-	if err != nil {
-		return content
+	if !strings.Contains(content, "</") {
+		// 如果不是html，则直接返回
+		if planText == "" {
+			return content
+		}
+		return planText
+	}
+	content = strings.TrimSpace(content)
+	if !strings.HasPrefix(content, "<") {
+		content = "<>" + content + "</>"
 	}
 
 	if planText == "" {
 		var contents []string
-		doc.Find("body").Contents().Each(func(i int, item *goquery.Selection) {
-			text := item.Text()
-			if item.Children().Length() == 0 && text != "" {
-				contents = append(contents, item.Text())
+		reg, _ := regexp.Compile("(?s)>(.*?)<")
+		matches := reg.FindAllStringSubmatch(content, -1)
+		for _, match := range matches {
+			text := strings.TrimSpace(strings.ReplaceAll(match[1], "\n", " "))
+			if strings.HasPrefix(text, "<") {
+				continue
 			}
-		})
+			if len(text) > 0 {
+				contents = append(contents, text)
+			}
+		}
 
 		return strings.Join(contents, "\n")
 	} else {
 		contents := strings.Split(planText, "\n")
 		index := 0
-		doc.Find("body").Contents().Each(func(i int, item *goquery.Selection) {
-			text := item.Text()
-
-			if item.Children().Length() == 0 && text != "" {
+		reg, _ := regexp.Compile("(?s)>(.*?)<")
+		content = reg.ReplaceAllStringFunc(content, func(s string) string {
+			match := reg.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			text := strings.TrimSpace(match[1])
+			if strings.HasPrefix(text, "<") {
+				return s
+			}
+			if len(text) > 0 {
 				if index < len(contents) {
-					item.SetText(contents[index])
+					s = strings.Replace(s, text, contents[index], 1)
 					index++
 				}
 			}
+			return s
 		})
-
-		content, _ = doc.Find("body").Html()
+		// trim content = "<>" + content + "</>"
+		content = strings.TrimPrefix(strings.TrimSuffix(content, "</>"), "<>")
 
 		return content
 	}
 }
 
-// PseudoArticle 伪原创一篇文章，先转成英语，再转成中文
-func PseudoArticle(content string, isEnglish bool) string {
-	langIndex := 1
-	if isEnglish {
-		langIndex = 0
-	}
-	//第一次转换
-	translateFunc := TranslateSources.getSource()
-	to := archiveLang[langIndex]
-	content = translateFunc(content, to)
-	if content == "" {
-		//进行一次尝试
-		translateFunc := TranslateSources.getSource()
-		to := archiveLang[langIndex]
-		content = translateFunc(content, to)
-	}
-	//第二次转换
-	translateFunc = TranslateSources.getSource()
-	to = archiveLang[(langIndex+1)%2]
-	content = translateFunc(content, to)
-	if content == "" {
-		//进行一次尝试
-		translateFunc = TranslateSources.getSource()
-		to = archiveLang[(langIndex+1)%2]
-		content = translateFunc(content, to)
-	}
-	return content
-}
-
-var cachedTodayArticleCount response.CacheArticleCount
-
-func GetTodayArticleCount() int64 {
+func (w *Website) GetTodayArticleCount(from int) int64 {
 	today := now.BeginningOfDay()
-	if cachedTodayArticleCount.Day == today.Day() {
-		return cachedTodayArticleCount.Count
+	if w.cachedTodayArticleCount.Day == today.Day() {
+		if from == config.ArchiveFromAi {
+			return w.cachedTodayArticleCount.AiGenerateCount
+		}
+		return w.cachedTodayArticleCount.CollectCount
 	}
 
-	cachedTodayArticleCount.Day = today.Day()
-	cachedTodayArticleCount.Count = 0
+	w.cachedTodayArticleCount.Day = today.Day()
+	w.cachedTodayArticleCount.CollectCount = 0
+	w.cachedTodayArticleCount.AiGenerateCount = 0
 
 	todayUnix := today.Unix()
-	dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", todayUnix, todayUnix+86400).Count(&cachedTodayArticleCount.Count)
+	var collectCount int64
+	var aiCount int64
+	w.DB.Model(&model.Archive{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromCollect, todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.CollectCount)
+	w.DB.Model(&model.ArchiveDraft{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromCollect, todayUnix, todayUnix+86400).Count(&collectCount)
+	w.cachedTodayArticleCount.CollectCount += collectCount
+	w.DB.Model(&model.Archive{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromAi, todayUnix, todayUnix+86400).Count(&w.cachedTodayArticleCount.AiGenerateCount)
+	w.DB.Model(&model.ArchiveDraft{}).Where("`origin_id` = ? and created_time >= ? and created_time < ?", config.ArchiveFromAi, todayUnix, todayUnix+86400).Count(&aiCount)
+	w.cachedTodayArticleCount.AiGenerateCount += aiCount
 
-	return cachedTodayArticleCount.Count
-}
-
-func UpdateTodayArticleCount(addNum int) {
-	cachedTodayArticleCount.Count += int64(addNum)
-}
-
-func GetArticleTotalByKeywordId(id uint) int64 {
-	var total int64
-	dao.DB.Model(&model.Archive{}).Where("keyword_id = ?", id).Count(&total)
-
-	return total
-}
-
-func checkArticleExists(originUrl, originTitle string) bool {
-	var total int64
-	dao.DB.Model(&model.Archive{}).Where("origin_url = ?", originUrl).Count(&total)
-	if total > 0 {
-		return true
+	if from == config.ArchiveFromAi {
+		return w.cachedTodayArticleCount.AiGenerateCount
 	}
-	dao.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
-	if total > 0 {
-		return true
+	return w.cachedTodayArticleCount.CollectCount
+}
+
+func (w *Website) UpdateTodayArticleCount(addNum int) {
+	w.cachedTodayArticleCount.CollectCount += int64(addNum)
+}
+
+func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {
+	var total int64
+	w.DB.Model(&model.Archive{}).Where("keyword_id = ?", id).Count(&total)
+	var total2 int64
+	w.DB.Model(&model.ArchiveDraft{}).Where("keyword_id = ?", id).Count(&total2)
+	return total + total2
+}
+
+func (w *Website) checkArticleExists(originUrl, originTitle, title string) bool {
+	var total int64
+	if len(originUrl) > 0 {
+		if utf8.RuneCountInString(originUrl) > 190 {
+			originUrl = string([]rune(originUrl)[:190])
+		}
+		w.DB.Model(&model.Archive{}).Where("origin_url = ?", originUrl).Count(&total)
+		if total > 0 {
+			return true
+		}
+		w.DB.Model(&model.ArchiveDraft{}).Where("origin_url = ?", originUrl).Count(&total)
+		if total > 0 {
+			return true
+		}
+	}
+	if len(originTitle) > 0 {
+		if utf8.RuneCountInString(originTitle) > 190 {
+			originTitle = string([]rune(originTitle)[:190])
+		}
+		w.DB.Model(&model.Archive{}).Where("origin_title = ?", originTitle).Count(&total)
+		if total > 0 {
+			return true
+		}
+		w.DB.Model(&model.ArchiveDraft{}).Where("origin_title = ?", originTitle).Count(&total)
+		if total > 0 {
+			return true
+		}
+	}
+	if len(title) > 0 {
+		w.DB.Model(&model.Archive{}).Where("`title` = ?", title).Count(&total)
+		if total > 0 {
+			return true
+		}
+		w.DB.Model(&model.ArchiveDraft{}).Where("`title` = ?", title).Count(&total)
+		if total > 0 {
+			return true
+		}
 	}
 
 	return false

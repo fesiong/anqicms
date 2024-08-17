@@ -6,3 +6,8 @@ type TransferWebsite struct {
 	Token    string `json:"token"`
 	Provider string `json:"provider"`
 }
+
+type TransferTypes struct {
+	ModuleIds []uint   `json:"module_ids"`
+	Types     []string `json:"types"`
+}

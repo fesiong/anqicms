@@ -6,15 +6,19 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 	"unicode/utf8"
 )
 
 type ServerJson struct {
 	Mysql  MysqlConfig  `json:"mysql"`
 	Server ServerConfig `json:"server"`
+
+	Sparks map[string]SparkSetting `json:"sparks"`
 }
 
 type ConfigJson struct {
@@ -45,8 +49,6 @@ type ConfigJson struct {
 
 func initPath() {
 	sep := string(os.PathSeparator)
-	//root := filepath.Dir(os.Args[0])
-	//ExecPath, _ = filepath.Abs(root)
 	ExecPath, _ = os.Executable()
 	baseName := filepath.Base(ExecPath)
 	ExecPath = filepath.Dir(ExecPath)
@@ -69,23 +71,30 @@ func initJSON() {
 	rawConfig, err := os.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
 	if err != nil {
 		//未初始化
-		rawConfig = []byte("{\"db\":{},\"server\":{\"env\": \"production\",\"port\": 8001,\"log_level\":\"error\"}}")
-	}
-
-	if err := json.Unmarshal(rawConfig, &Server); err != nil {
-		fmt.Println("Invalid Config: ", err.Error())
-		os.Exit(-1)
+		Server.Server.Env = "production"
+		Server.Server.Port = 8001
+		Server.Server.LogLevel = "error"
+	} else {
+		if err = json.Unmarshal(rawConfig, &Server); err != nil {
+			fmt.Println("Invalid Config: ", err.Error())
+			logFile, err := os.OpenFile(ExecPath+"error.log", os.O_RDWR|os.O_CREATE|os.O_APPEND, 0766)
+			if nil == err {
+				logFile.WriteString(fmt.Sprintln(time.Now().Format("2006-01-02 15:04:05"), "Invalid Config", err.Error()))
+				defer logFile.Close()
+			}
+			os.Exit(-1)
+		}
 	}
 }
 
 var ExecPath string
 var Server ServerJson
-var JsonData ConfigJson
-var CollectorConfig CollectorJson
-var KeywordConfig KeywordJson
 var AnqiUser AnqiUserConfig
-var RestartChan = make(chan bool, 1)
-var languages = map[string]string{}
+
+var GoogleValid bool // can visit google or not
+
+// RestartChan 1 to restart app, 0 to reload template, 2 to exit app
+var RestartChan = make(chan int)
 
 func init() {
 	initPath()
@@ -117,32 +126,12 @@ func WriteConfig() error {
 	return nil
 }
 
-func LoadLanguage() {
-	// 重置
-	languages = map[string]string{}
-	if JsonData.System.Language == "" {
-		// 默认中文
-		JsonData.System.Language = "zh"
+func GenerateRandString(length int) string {
+	r := rand.New(rand.NewSource(time.Now().UnixNano()))
+	buf := make([]byte, length)
+	for i := 0; i < length; i++ {
+		b := r.Intn(26) + 65
+		buf[i] = byte(b)
 	}
-	languagePath := fmt.Sprintf("%slanguage/%s.yml", ExecPath, JsonData.System.Language)
-
-	yamlFile, err := os.ReadFile(languagePath)
-	if err == nil {
-		strSlice := strings.Split(strings.ReplaceAll(strings.ReplaceAll(string(yamlFile), "\r\n", "\n"), "\r", "\n"), "\n")
-		for _, v := range strSlice {
-			vSplit := strings.SplitN(strings.TrimSpace(v), ":", 2)
-			if len(vSplit) == 2 {
-				languages[strings.Trim(vSplit[0], "\" ")] = strings.Trim(vSplit[1], "\" ")
-			}
-		}
-	}
-	//ended
-}
-
-func Lang(str string) string {
-	if newStr, ok := languages[str]; ok {
-		return newStr
-	}
-
-	return str
+	return strings.ToLower(string(buf))
 }

@@ -3,8 +3,6 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -14,11 +12,10 @@ import (
 )
 
 func ApiRegister(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ApiRegisterRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -34,7 +31,7 @@ func ApiRegister(ctx iris.Context) {
 	req.Phone = strings.TrimSpace(req.Phone)
 	req.Email = strings.TrimSpace(req.Email)
 	req.Password = strings.TrimSpace(req.Password)
-	user, err := provider.RegisterUser(&req)
+	user, err := currentSite.RegisterUser(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -55,11 +52,10 @@ func ApiRegister(ctx iris.Context) {
 }
 
 func ApiLogin(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ApiLoginRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -89,7 +85,7 @@ func ApiLogin(ctx iris.Context) {
 		// todo
 	} else if req.Platform == config.PlatformWeapp {
 		//weapp  login
-		user, err = provider.LoginViaWeapp(&req)
+		user, err = currentSite.LoginViaWeapp(&req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -99,7 +95,7 @@ func ApiLogin(ctx iris.Context) {
 		}
 	} else if req.Platform == config.PlatformWechat {
 		// WeChat official account login
-		user, err = provider.LoginViaWechat(&req)
+		user, err = currentSite.LoginViaWechat(&req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -109,19 +105,19 @@ func ApiLogin(ctx iris.Context) {
 		}
 	} else {
 		// login via user_name/email/cellphone and password
-		if config.JsonData.Safe.Captcha == 1 {
+		if currentSite.Safe.Captcha == 1 {
 			// 验证 captcha
 			if req.CaptchaId == "" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  config.Lang("图形码不正确"),
+					"msg":  currentSite.TplTr("GraphicCodeIncorrect"),
 				})
 				return
 			}
 			if ok := Store.Verify(req.CaptchaId, req.Captcha, true); !ok {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
-					"msg":  config.Lang("图形码不正确"),
+					"msg":  currentSite.TplTr("GraphicCodeIncorrect"),
 				})
 				return
 			}
@@ -132,7 +128,7 @@ func ApiLogin(ctx iris.Context) {
 		if req.UserName == "" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  config.Lang("请输入账号"),
+				"msg":  currentSite.TplTr("PleaseEnterAccount"),
 			})
 			return
 		}
@@ -140,17 +136,17 @@ func ApiLogin(ctx iris.Context) {
 		if len(req.Password) < 6 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  config.Lang("请输入6位及以上长度的密码"),
+				"msg":  currentSite.TplTr("PleaseEnterAPasswordOf6CharactersOrMore"),
 			})
 			return
 		}
 
 		//开始登录用户
-		user, err = provider.LoginViaPassword(&req)
+		user, err = currentSite.LoginViaPassword(&req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  config.Lang("登录失败"),
+				"msg":  currentSite.TplTr("LoginFailed"),
 			})
 			return
 		}
@@ -159,7 +155,7 @@ func ApiLogin(ctx iris.Context) {
 	if user == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("登录失败"),
+			"msg":  currentSite.TplTr("LoginFailed"),
 		})
 		return
 	}
@@ -180,9 +176,10 @@ func ApiLogin(ctx iris.Context) {
 }
 
 func ApiGetUserDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	user, err := provider.GetUserInfoById(userId)
+	user, err := currentSite.GetUserInfoById(userId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -199,6 +196,7 @@ func ApiGetUserDetail(ctx iris.Context) {
 }
 
 func ApiUpdateUserDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -213,7 +211,7 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 	req.Email = strings.TrimSpace(req.Email)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	err := provider.UpdateUserInfo(userId, &req)
+	err := currentSite.UpdateUserInfo(userId, &req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -224,16 +222,17 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("保存成功"),
+		"msg":  currentSite.TplTr("SaveSuccessfully"),
 	})
 }
 
 func ApiGetUserGroups(ctx iris.Context) {
-	groups := provider.GetUserGroups()
+	currentSite := provider.CurrentSite(ctx)
+	groups := currentSite.GetUserGroups()
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
 		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-		discount := provider.GetUserDiscount(userId, userInfo)
+		discount := currentSite.GetUserDiscount(userId, userInfo)
 		for i := range groups {
 			if groups[i].Price > 0 {
 				if discount > 0 {
@@ -251,8 +250,9 @@ func ApiGetUserGroups(ctx iris.Context) {
 }
 
 func ApiGetUserGroupDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
-	group, err := provider.GetUserGroupInfo(id)
+	group, err := currentSite.GetUserGroupInfo(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -263,7 +263,7 @@ func ApiGetUserGroupDetail(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
 		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-		discount := provider.GetUserDiscount(userId, userInfo)
+		discount := currentSite.GetUserDiscount(userId, userInfo)
 		if group.Price > 0 {
 			if discount > 0 {
 				group.FavorablePrice = group.Price * discount / 100
@@ -279,6 +279,7 @@ func ApiGetUserGroupDetail(ctx iris.Context) {
 }
 
 func ApiUpdateUserPassword(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserPasswordRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -292,16 +293,16 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 	if len(req.Password) < 6 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("请填写6位以上的密码"),
+			"msg":  currentSite.TplTr("PleaseFillInAPasswordOfMoreThan6Digits"),
 		})
 		return
 	}
 	userId := ctx.Values().GetUintDefault("userId", 0)
-	user, err := provider.GetUserInfoById(userId)
+	user, err := currentSite.GetUserInfoById(userId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("请登录"),
+			"msg":  currentSite.TplTr("PleaseLogIn"),
 		})
 		return
 	}
@@ -311,7 +312,7 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 		if !user.CheckPassword(req.OldPassword) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  config.Lang("旧密码错误"),
+				"msg":  currentSite.TplTr("OldPasswordIsWrong"),
 			})
 			return
 		}
@@ -324,10 +325,10 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 		})
 		return
 	}
-	dao.DB.Save(user)
+	currentSite.DB.Save(user)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("密码修改成功"),
+		"msg":  currentSite.TplTr("PasswordChangedSuccessfully"),
 	})
 }

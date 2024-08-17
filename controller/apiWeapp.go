@@ -8,6 +8,7 @@ import (
 )
 
 func ApiCreateWeappQrcode(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.WeappQrcodeRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -18,7 +19,7 @@ func ApiCreateWeappQrcode(ctx iris.Context) {
 	}
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
-	qrcode, err := provider.GetWeappQrcode(req.Path, req.Scene, userId)
+	qrcode, err := currentSite.GetWeappQrcode(req.Path, req.Scene, userId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

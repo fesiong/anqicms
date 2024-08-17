@@ -5,12 +5,10 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"github.com/parnurzeal/gorequest"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -19,15 +17,27 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 )
 
 func AdminFileServ(ctx iris.Context) {
+	tmpSiteId := ctx.GetHeader("Site-Id")
+	if len(tmpSiteId) > 0 {
+		siteId, _ := strconv.Atoi(tmpSiteId)
+		if siteId > 0 {
+			// 只有二级目录安装的站点允许这么操作
+			website := provider.GetWebsite(uint(siteId))
+			if len(website.BaseURI) > 1 {
+				ctx.Values().Set("siteId", uint(siteId))
+			}
+		}
+	}
+
 	uri := ctx.RequestPath(false)
 	if uri != "/" {
-		baseDir := config.ExecPath
-		uriFile := baseDir + uri
+		uriFile := config.ExecPath + strings.TrimLeft(uri, "/")
 		_, err := os.Stat(uriFile)
 		if err == nil {
 			ctx.ServeFile(uriFile)
@@ -35,7 +45,7 @@ func AdminFileServ(ctx iris.Context) {
 		}
 
 		if !strings.Contains(filepath.Base(uri), ".") {
-			uriFile = uriFile + "/index.html"
+			uriFile = strings.TrimRight(uriFile, "/") + "/index.html"
 			_, err = os.Stat(uriFile)
 			if err == nil {
 				ctx.ServeFile(uriFile)
@@ -57,79 +67,10 @@ func Version(ctx iris.Context) {
 	})
 }
 
-type moduleCount struct {
-	Name  string `json:"name"`
-	Total int64  `json:"total"`
-}
-type archiveCount struct {
-	Total     int64 `json:"total"`
-	LastWeek  int64 `json:"last_week"`
-	UnRelease int64 `json:"un_release"`
-	Today     int64 `json:"today"`
-}
-type splitCount struct {
-	Total int64 `json:"total"`
-	Today int64 `json:"today"`
-}
-type statistics struct {
-	cacheTime       int64
-	ModuleCounts    []moduleCount       `json:"archive_counts"`
-	ArchiveCount    archiveCount        `json:"archive_count"`
-	CategoryCount   int64               `json:"category_count"`
-	LinkCount       int64               `json:"link_count"`
-	GuestbookCount  int64               `json:"guestbook_count"`
-	TrafficCount    splitCount          `json:"traffic_count"`
-	SpiderCount     splitCount          `json:"spider_count"`
-	IncludeCount    model.SpiderInclude `json:"include_count"`
-	TemplateCount   int64               `json:"template_count"`
-	PageCount       int64               `json:"page_count"`
-	AttachmentCount int64               `json:"attachment_count"`
-}
-
-var cachedStatistics *statistics
-
 func GetStatisticsSummary(ctx iris.Context) {
-	var result = statistics{}
-	if cachedStatistics == nil || cachedStatistics.cacheTime < time.Now().Add(-60*time.Second).Unix() {
-		modules := provider.GetCacheModules()
-		for _, v := range modules {
-			counter := moduleCount{
-				Name: v.Title,
-			}
-			dao.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
-			result.ModuleCounts = append(result.ModuleCounts, counter)
-			result.ArchiveCount.Total += counter.Total
-		}
-		lastWeek := now.BeginningOfWeek()
-		today := now.BeginningOfDay()
-		dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
-		dao.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
-		dao.DB.Model(&model.Archive{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+	currentSite := provider.CurrentSite(ctx)
 
-		dao.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&result.CategoryCount)
-		dao.DB.Model(&model.Link{}).Count(&result.LinkCount)
-		dao.DB.Model(&model.Guestbook{}).Count(&result.GuestbookCount)
-		designList := provider.GetDesignList()
-		result.TemplateCount = int64(len(designList))
-		dao.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
-		dao.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
-
-		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.TrafficCount.Total)
-		dao.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", today.Unix()).Count(&result.TrafficCount.Today)
-
-		dao.DB.Model(&model.Statistic{}).Where("`spider`!= '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.SpiderCount.Total)
-		dao.DB.Model(&model.Statistic{}).Where("`spider` != '' and `created_time` >= ?", today.Unix()).Count(&result.SpiderCount.Today)
-
-		var lastInclude model.SpiderInclude
-		dao.DB.Model(&model.SpiderInclude{}).Order("id desc").Take(&lastInclude)
-		result.IncludeCount = lastInclude
-
-		result.cacheTime = time.Now().Unix()
-
-		cachedStatistics = &result
-	} else {
-		result = *cachedStatistics
-	}
+	result := currentSite.GetStatisticsSummary()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -139,10 +80,11 @@ func GetStatisticsSummary(ctx iris.Context) {
 }
 
 func GetStatisticsDashboard(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var result = iris.Map{}
 	// 登录信息
 	var loginLogs []model.AdminLoginLog
-	dao.DB.Order("id desc").Limit(2).Find(&loginLogs)
+	currentSite.DB.Order("id desc").Limit(2).Find(&loginLogs)
 	if len(loginLogs) == 2 {
 		result["last_login"] = iris.Map{
 			"created_time": loginLogs[1].CreatedTime,
@@ -156,7 +98,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 		}
 	}
 	// 配置信息
-	result["system"] = config.JsonData.System
+	result["system"] = currentSite.System
 
 	result["version"] = config.Version
 	var ms runtime.MemStats
@@ -176,10 +118,10 @@ func CheckVersion(ctx iris.Context) {
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
-		log.Println("获取新版信息失败")
+		log.Println(ctx.Tr("FailedToObtainNewVersion"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "检查版本已是最新版",
+			"msg":  ctx.Tr("CheckThatTheVersionIsTheLatestVersion"),
 		})
 		return
 	}
@@ -191,7 +133,7 @@ func CheckVersion(ctx iris.Context) {
 			// 版本有更新
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
-				"msg":  "发现新版",
+				"msg":  ctx.Tr("FoundANewVersion"),
 				"data": lastVersion,
 			})
 			return
@@ -200,11 +142,12 @@ func CheckVersion(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "检查版本已是最新版",
+		"msg":  ctx.Tr("CheckThatTheVersionIsTheLatestVersion"),
 	})
 }
 
 func VersionUpgrade(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var lastVersion response.LastVersion
 	if err := ctx.ReadJSON(&lastVersion); err != nil {
 		ctx.JSON(iris.Map{
@@ -218,10 +161,10 @@ func VersionUpgrade(ctx iris.Context) {
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
-		log.Println("版本更新失败")
+		log.Println(ctx.Tr("VersionUpdateFailed"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  ctx.Tr("VersionUpdateFailed"),
 		})
 		return
 	}
@@ -231,7 +174,7 @@ func VersionUpgrade(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  ctx.Tr("VersionUpdateFailed"),
 		})
 		return
 	}
@@ -240,7 +183,7 @@ func VersionUpgrade(ctx iris.Context) {
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "版本更新失败",
+			"msg":  ctx.Tr("VersionUpdateFailed"),
 		})
 		return
 	}
@@ -263,7 +206,11 @@ func VersionUpgrade(ctx iris.Context) {
 			continue
 		}
 		// 模板文件不更新
-		if strings.Contains(f.Name, "static/") || strings.Contains(f.Name, "template/") || strings.Contains(f.Name, "favicon.ico") {
+		if strings.Contains(f.Name, "static/") ||
+			strings.Contains(f.Name, "template/") ||
+			strings.Contains(f.Name, ".sh") ||
+			strings.Contains(f.Name, ".bat") ||
+			strings.Contains(f.Name, "favicon.ico") {
 			continue
 		}
 		reader, err := f.Open()
@@ -314,13 +261,13 @@ func VersionUpgrade(ctx iris.Context) {
 		log.Println("Upgrade error files: ", errorFiles)
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  fmt.Sprintf("版本更新部分失败, 以下文件未更新：%v", errorFiles),
+			"msg":  ctx.Tr("VersionUpdatePartiallyFailed", errorFiles),
 		})
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新系统版本：%s => %s", config.Version, lastVersion.Version))
-	msg := "已升级版本，请重启软件以使用新版。"
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemVersion", config.Version, lastVersion.Version))
+	msg := ctx.Tr("TheVersionHasBeenUpgraded")
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,

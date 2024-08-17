@@ -1,14 +1,14 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 )
 
 func PluginPush(ctx iris.Context) {
-	pluginPush := config.JsonData.PluginPush
+	currentSite := provider.CurrentSite(ctx)
+	pluginPush := currentSite.PluginPush
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -18,8 +18,9 @@ func PluginPush(ctx iris.Context) {
 }
 
 func PluginPushLogList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//不需要分页，只显示最后20条
-	list, err := provider.GetLastPushList()
+	list, err := currentSite.GetLastPushList()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -36,6 +37,7 @@ func PluginPushLogList(ctx iris.Context) {
 }
 
 func PluginPushForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginPushConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -45,11 +47,12 @@ func PluginPushForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginPush.BaiduApi = req.BaiduApi
-	config.JsonData.PluginPush.BingApi = req.BingApi
-	config.JsonData.PluginPush.JsCodes = req.JsCodes
+	currentSite.PluginPush.BaiduApi = req.BaiduApi
+	currentSite.PluginPush.BingApi = req.BingApi
+	currentSite.PluginPush.GoogleJson = req.GoogleJson
+	currentSite.PluginPush.JsCodes = req.JsCodes
 
-	err := provider.SaveSettingValue(provider.PushSettingKey, config.JsonData.PluginPush)
+	err := currentSite.SaveSettingValue(provider.PushSettingKey, currentSite.PluginPush)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -57,12 +60,12 @@ func PluginPushForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheIndex()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新搜索引擎推送配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSearchEnginePushConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

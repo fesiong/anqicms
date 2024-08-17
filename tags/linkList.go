@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -14,10 +13,24 @@ type tagLinkListNode struct {
 }
 
 func (node *tagLinkListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
-	linkList, _ := provider.GetLinkList()
+	args, err := parseArgs(node.args, ctx)
+	if err != nil {
+		return err
+	}
+
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
+	linkList, _ := currentSite.GetLinkList()
 
 	ctx.Private[node.name] = linkList
 	//execute

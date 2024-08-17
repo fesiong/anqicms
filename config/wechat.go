@@ -8,4 +8,5 @@ type PluginWeappConfig struct {
 	EncodingAESKey string `json:"encoding_aes_key"`
 	VerifyKey      string `json:"verify_key"`
 	VerifyMsg      string `json:"verify_msg"`
+	ServerUrl      string `json:"server_url"`
 }

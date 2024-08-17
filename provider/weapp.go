@@ -6,18 +6,14 @@ import (
 	"fmt"
 	"github.com/medivhzhan/weapp/v3"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"net/http"
 	"time"
 )
 
-var weappClient *weapp.Client
-
-func GetWeappClient(focus bool) *weapp.Client {
-	if weappClient == nil || focus {
+func (w *Website) GetWeappClient(focus bool) *weapp.Client {
+	if w.weappClient == nil || focus {
 		httpCli := &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
@@ -26,22 +22,22 @@ func GetWeappClient(focus bool) *weapp.Client {
 			},
 		}
 
-		weappClient = weapp.NewClient(
-			config.JsonData.PluginWeapp.AppID,
-			config.JsonData.PluginWeapp.AppSecret,
+		w.weappClient = weapp.NewClient(
+			w.PluginWeapp.AppID,
+			w.PluginWeapp.AppSecret,
 			weapp.WithHttpClient(httpCli),
 		)
 	}
 
-	return weappClient
+	return w.weappClient
 }
 
-func GetWeappQrcode(weappPath, scene string, userId uint) (string, error) {
+func (w *Website) GetWeappQrcode(weappPath, scene string, userId uint) (string, error) {
 	var qrcode model.WeappQrcode
-	err := dao.DB.Where("`user_id` = ? and `path` = ?", userId, weappPath).Take(&qrcode).Error
+	err := w.DB.Where("`user_id` = ? and `path` = ?", userId, weappPath).Take(&qrcode).Error
 	if err != nil {
 		// 没有
-		codeUrl, err := CreateWeappQrcode(weappPath, scene)
+		codeUrl, err := w.CreateWeappQrcode(weappPath, scene)
 		if err != nil {
 			return "", err
 		}
@@ -50,17 +46,17 @@ func GetWeappQrcode(weappPath, scene string, userId uint) (string, error) {
 			Path:    weappPath,
 			CodeUrl: codeUrl,
 		}
-		dao.DB.Save(&qrcode)
+		w.DB.Save(&qrcode)
 	}
 
-	return config.JsonData.PluginStorage.StorageUrl + "/" + qrcode.CodeUrl, nil
+	return w.PluginStorage.StorageUrl + "/" + qrcode.CodeUrl, nil
 }
 
-func CreateWeappQrcode(weappPath, scene string) (string, error) {
+func (w *Website) CreateWeappQrcode(weappPath, scene string) (string, error) {
 	creator := weapp.QRCode{
 		Path: weappPath,
 	}
-	resp, commonErr, err := GetWeappClient(false).GetQRCode(&creator)
+	resp, commonErr, err := w.GetWeappClient(false).GetQRCode(&creator)
 	if err != nil {
 		return "", err
 	}
@@ -77,7 +73,7 @@ func CreateWeappQrcode(weappPath, scene string) (string, error) {
 	tmpName := md5Str + ".png"
 	filePath := fmt.Sprintf("uploads/qrcode/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
 
-	_, err = Storage.UploadFile(filePath, bts)
+	_, err = w.Storage.UploadFile(filePath, bts)
 	if err != nil {
 		return "", err
 	}
@@ -91,8 +87,8 @@ func CreateWeappQrcode(weappPath, scene string) (string, error) {
 		IsImage:      0,
 		Status:       1,
 	}
-	err = attachment.Save(dao.DB)
-	attachment.GetThumb()
+	err = attachment.Save(w.DB)
+	attachment.GetThumb(w.PluginStorage.StorageUrl)
 
 	return attachment.FileLocation, nil
 }

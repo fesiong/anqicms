@@ -3,15 +3,23 @@ package provider
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
+	"errors"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"log"
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/aliyun/aliyun-oss-go-sdk/oss"
+	"github.com/jlaffaye/ftp"
+	"github.com/melbahja/goph"
+	"github.com/pkg/sftp"
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	"github.com/qiniu/go-sdk/v7/storage"
 	"github.com/tencentyun/cos-go-sdk-v5"
@@ -19,22 +27,31 @@ import (
 	"kandaoni.com/anqicms/config"
 )
 
-var Storage *BucketStorage
-
 type BucketStorage struct {
-	storageType         string
+	DataPath            string
+	PublicPath          string
+	w                   *Website
+	config              *config.PluginStorageConfig
 	tencentBucketClient *cos.Client
 	aliyunBucketClient  *oss.Bucket
 	qiniuBucketClient   *qbox.Mac
 	upyunBucketClient   *upyun.UpYun
+	ftpClient           *ftp.ServerConn
+	sshClient           *sftp.Client
+	tryTimes            int
+	connectTime         int64
 }
 
-func GetBucket() (bucket *BucketStorage, err error) {
+func (w *Website) GetBucket() (bucket *BucketStorage, err error) {
 	bucket = &BucketStorage{
-		storageType:         config.JsonData.PluginStorage.StorageType,
+		DataPath:            w.DataPath,
+		PublicPath:          w.PublicPath,
+		w:                   w,
+		config:              &w.PluginStorage,
 		tencentBucketClient: nil,
 		aliyunBucketClient:  nil,
 		qiniuBucketClient:   nil,
+		tryTimes:            0,
 	}
 
 	err = bucket.initBucket()
@@ -43,27 +60,32 @@ func GetBucket() (bucket *BucketStorage, err error) {
 }
 
 func (bs *BucketStorage) initBucket() (err error) {
-	if bs.storageType == config.StorageTypeAliyun {
+	bs.tryTimes = 0
+	if bs.config.StorageType == config.StorageTypeAliyun {
 		err = bs.initAliyunBucket()
-	} else if bs.storageType == config.StorageTypeTencent {
+	} else if bs.config.StorageType == config.StorageTypeTencent {
 		err = bs.initTencentBucket()
-	} else if bs.storageType == config.StorageTypeQiniu {
+	} else if bs.config.StorageType == config.StorageTypeQiniu {
 		err = bs.initQiniuBucket()
-	} else if bs.storageType == config.StorageTypeUpyun {
+	} else if bs.config.StorageType == config.StorageTypeUpyun {
 		err = bs.initUpyunBucket()
+	} else if bs.config.StorageType == config.StorageTypeFTP {
+		err = bs.initFTP()
+	} else if bs.config.StorageType == config.StorageTypeSSH {
+		err = bs.initSSH()
 	} else {
-		bs.storageType = config.StorageTypeLocal
+		bs.config.StorageType = config.StorageTypeLocal
 	}
 
 	return err
 }
 
 func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error) {
-	log.Println("存储到", bs.storageType)
+	//log.Println("存储到", bs.config.StorageType)
 	location = strings.TrimLeft(location, "/")
-	if config.JsonData.PluginStorage.KeepLocal || bs.storageType == config.StorageTypeLocal {
+	if bs.config.KeepLocal || bs.config.StorageType == config.StorageTypeLocal {
 		//将文件写入本地
-		basePath := config.ExecPath + "public/"
+		basePath := bs.PublicPath
 		//先判断文件夹是否存在，不存在就先创建
 		_, err := os.Stat(basePath + location)
 		if err != nil && os.IsNotExist(err) {
@@ -78,8 +100,11 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			//无法创建
 			return "", err
 		}
+		// 如果是本地存储，则
+		// 上传到静态服务器
+		_ = bs.w.SyncHtmlCacheToStorage(basePath+location, location)
 	}
-	if bs.storageType == config.StorageTypeAliyun {
+	if bs.config.StorageType == config.StorageTypeAliyun {
 		if bs.aliyunBucketClient == nil {
 			err := bs.initAliyunBucket()
 			if err != nil {
@@ -91,7 +116,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 		if err != nil {
 			return "", err
 		}
-	} else if bs.storageType == config.StorageTypeTencent {
+	} else if bs.config.StorageType == config.StorageTypeTencent {
 		if bs.tencentBucketClient == nil {
 			err := bs.initTencentBucket()
 			if err != nil {
@@ -102,7 +127,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 		if err != nil {
 			return "", err
 		}
-	} else if bs.storageType == config.StorageTypeQiniu {
+	} else if bs.config.StorageType == config.StorageTypeQiniu {
 		//log.Println("使用七牛云上传")
 		if bs.qiniuBucketClient == nil {
 			err := bs.initQiniuBucket()
@@ -111,7 +136,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			}
 		}
 		putPolicy := storage.PutPolicy{
-			Scope: fmt.Sprintf("%s:%s", config.JsonData.PluginStorage.QiniuBucket, location),
+			Scope: fmt.Sprintf("%s:%s", bs.config.QiniuBucket, location),
 		}
 		upToken := putPolicy.UploadToken(bs.qiniuBucketClient)
 
@@ -120,7 +145,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 		//cfg.UseHTTPS = true
 		// 上传是否使用CDN上传加速
 		cfg.UseCdnDomains = false
-		region, _ := storage.GetRegionByID(storage.RegionID(config.JsonData.PluginStorage.QiniuRegion))
+		region, _ := storage.GetRegionByID(storage.RegionID(bs.config.QiniuRegion))
 		cfg.Zone = &region
 		formUploader := storage.NewFormUploader(&cfg)
 		ret := storage.PutRet{}
@@ -130,7 +155,7 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			fmt.Println(err)
 			return "", err
 		}
-	} else if bs.storageType == config.StorageTypeUpyun {
+	} else if bs.config.StorageType == config.StorageTypeUpyun {
 		if bs.upyunBucketClient == nil {
 			err := bs.initUpyunBucket()
 			if err != nil {
@@ -146,19 +171,92 @@ func (bs *BucketStorage) UploadFile(location string, buff []byte) (string, error
 			fmt.Println(err)
 			return "", err
 		}
+	} else if bs.config.StorageType == config.StorageTypeFTP {
+		if bs.ftpClient == nil {
+			err := bs.initFTP()
+			if err != nil {
+				return "", err
+			}
+		}
+		// 尝试创建目录
+		remoteDir := path.Dir(location)
+		dirs := strings.Split(remoteDir, "/")
+		addonDir := bs.config.FTPWebroot
+		for _, v := range dirs {
+			addonDir += "/" + v
+			//尝试切换到目录，如果切换不成功，则尝试创建
+			err := bs.ftpClient.ChangeDir(addonDir)
+			if err != nil {
+				//无法切换，则尝试创建
+				err = bs.ftpClient.MakeDir(addonDir)
+				if err != nil {
+					err = bs.initSSH()
+					if err != nil {
+						return "", err
+					}
+					err = bs.ftpClient.MakeDir(addonDir)
+					if err != nil {
+						return "", err
+					}
+				}
+			}
+		}
+		remoteFile := bs.config.FTPWebroot + "/" + strings.TrimLeft(location, "/")
+		err := bs.ftpClient.Stor(remoteFile, bytes.NewReader(buff))
+		if err != nil {
+			log.Println("尝试重连：", err)
+			err = bs.initFTP()
+			if err == nil {
+				return bs.UploadFile(location, buff)
+			}
+			return "", errors.New(bs.w.Tr("UploadFileFailedLog", remoteFile, err.Error()))
+		}
+	} else if bs.config.StorageType == config.StorageTypeSSH {
+		if bs.sshClient == nil {
+			err := bs.initSSH()
+			if err != nil {
+				return "", err
+			}
+		}
+		// 尝试创建目录
+		remoteDir := bs.config.SSHWebroot + "/" + path.Dir(location)
+		err := bs.sshClient.MkdirAll(remoteDir)
+		if err != nil {
+			log.Println(err)
+			err = bs.initSSH()
+			if err != nil {
+				return "", err
+			}
+			err = bs.sshClient.MkdirAll(remoteDir)
+			if err != nil {
+				return "", err
+			}
+		}
+		remoteFile := bs.config.SSHWebroot + "/" + strings.TrimLeft(location, "/")
+		file, err := bs.sshClient.Create(remoteFile)
+		if err != nil {
+			log.Println("尝试重连：", err.Error())
+			err = bs.initSSH()
+			if err == nil {
+				return bs.UploadFile(location, buff)
+			}
+			return "", errors.New(bs.w.Tr("UploadFileFailedLog", remoteFile, err.Error()))
+		}
+		file.Write(buff)
+		file.Close()
 	}
 
 	return location, nil
 }
 
 func (bs *BucketStorage) initTencentBucket() error {
-	u, _ := url.Parse(config.JsonData.PluginStorage.TencentBucketUrl)
+	u, _ := url.Parse(bs.config.TencentBucketUrl)
 	b := &cos.BaseURL{BucketURL: u}
 	// Permanent key
 	client := cos.NewClient(b, &http.Client{
 		Transport: &cos.AuthorizationTransport{
-			SecretID:  config.JsonData.PluginStorage.TencentSecretId,
-			SecretKey: config.JsonData.PluginStorage.TencentSecretKey,
+			SecretID:  bs.config.TencentSecretId,
+			SecretKey: bs.config.TencentSecretKey,
 		},
 	})
 
@@ -168,12 +266,12 @@ func (bs *BucketStorage) initTencentBucket() error {
 }
 
 func (bs *BucketStorage) initAliyunBucket() error {
-	client, err := oss.New(config.JsonData.PluginStorage.AliyunEndpoint, config.JsonData.PluginStorage.AliyunAccessKeyId, config.JsonData.PluginStorage.AliyunAccessKeySecret)
+	client, err := oss.New(bs.config.AliyunEndpoint, bs.config.AliyunAccessKeyId, bs.config.AliyunAccessKeySecret)
 	if err != nil {
 		return err
 	}
 
-	bucket, err := client.Bucket(config.JsonData.PluginStorage.AliyunBucketName)
+	bucket, err := client.Bucket(bs.config.AliyunBucketName)
 	if err != nil {
 		return err
 	}
@@ -184,7 +282,7 @@ func (bs *BucketStorage) initAliyunBucket() error {
 }
 
 func (bs *BucketStorage) initQiniuBucket() error {
-	mac := qbox.NewMac(config.JsonData.PluginStorage.QiniuAccessKey, config.JsonData.PluginStorage.QiniuSecretKey)
+	mac := qbox.NewMac(bs.config.QiniuAccessKey, bs.config.QiniuSecretKey)
 
 	bs.qiniuBucketClient = mac
 
@@ -193,9 +291,9 @@ func (bs *BucketStorage) initQiniuBucket() error {
 
 func (bs *BucketStorage) initUpyunBucket() error {
 	up := upyun.NewUpYun(&upyun.UpYunConfig{
-		Bucket:   config.JsonData.PluginStorage.UpyunBucket,
-		Operator: config.JsonData.PluginStorage.UpyunOperator,
-		Password: config.JsonData.PluginStorage.UpyunPassword,
+		Bucket:   bs.config.UpyunBucket,
+		Operator: bs.config.UpyunOperator,
+		Password: bs.config.UpyunPassword,
 	})
 
 	bs.upyunBucketClient = up
@@ -203,13 +301,108 @@ func (bs *BucketStorage) initUpyunBucket() error {
 	return nil
 }
 
-func InitBucket() {
+func (bs *BucketStorage) initFTP() error {
+	if bs.tryTimes >= 3 || time.Now().Unix() < bs.connectTime+120 {
+		return errors.New(bs.w.Tr("RetryMoreThan3Times"))
+	}
+	var c *ftp.ServerConn
 	var err error
-	Storage, err = GetBucket()
+	bs.tryTimes++
+	tlsConfig := &tls.Config{
+		ServerName:         bs.config.FTPHost,
+		InsecureSkipVerify: true,
+	}
+	c, err = ftp.Dial(
+		fmt.Sprintf("%s:%d", bs.config.FTPHost, bs.config.FTPPort),
+		ftp.DialWithTimeout(5*time.Second),
+		//ftp.DialWithDebugOutput(os.Stdout),
+		//ftp.DialWithExplicitTLS(tlsConfig),
+		ftp.DialWithTLS(tlsConfig),
+	)
+	if err != nil {
+		log.Println("尝试TLS 链接失败，重试普通链接：", err.Error())
+		//再尝试使用普通链接
+		c, err = ftp.Dial(
+			fmt.Sprintf("%s:%d", bs.config.FTPHost, bs.config.FTPPort),
+			ftp.DialWithTimeout(5*time.Second),
+			//ftp.DialWithDebugOutput(os.Stdout),
+		)
+		if err != nil {
+			return err
+		}
+	}
 
+	err = c.Login(bs.config.FTPUsername, bs.config.FTPPassword)
+	if err != nil {
+		return err
+	}
+
+	err = c.ChangeDir(bs.config.FTPWebroot)
+	if err != nil {
+		return err
+	}
+	bs.ftpClient = c
+	bs.tryTimes = 0
+	bs.connectTime = time.Now().Unix()
+
+	return nil
+}
+
+func (bs *BucketStorage) initSSH() error {
+	if bs.tryTimes >= 3 || time.Now().Unix() < bs.connectTime+120 {
+		return errors.New(bs.w.Tr("RetryMoreThan3Times"))
+	}
+	var auth goph.Auth
+	var err error
+	bs.tryTimes++
+
+	if bs.config.SSHPrivateKey != "" {
+		//尝试使用私钥连接
+		filePath := fmt.Sprintf(bs.DataPath + "cert/" + bs.config.SSHPrivateKey)
+		auth, err = goph.Key(filePath, bs.config.SSHPassword)
+		if err != nil {
+			return err
+		}
+	} else {
+		auth = goph.Password(bs.config.SSHPassword)
+	}
+	client, err := goph.NewConn(&goph.Config{
+		User:     bs.config.SSHUsername,
+		Addr:     bs.config.SSHHost,
+		Port:     uint(bs.config.SSHPort),
+		Auth:     auth,
+		Timeout:  goph.DefaultTimeout,
+		Callback: ssh.InsecureIgnoreHostKey(),
+	})
+	if err != nil {
+		return err
+	}
+	sshClient, err := client.NewSftp()
+	if err != nil {
+		return err
+	}
+	// 验证权限
+	tmpFile := bs.config.SSHWebroot + "/tmp.tmp"
+	file, err := sshClient.Create(tmpFile)
+	if err != nil {
+		return err
+	}
+	file.Close()
+	sshClient.Remove(tmpFile)
+
+	bs.sshClient = sshClient
+	bs.tryTimes = 0
+	bs.connectTime = time.Now().Unix()
+
+	return nil
+}
+
+func (w *Website) InitBucket() {
+	s, err := w.GetBucket()
 	if err != nil {
 		// 退回到local
 		log.Println(err.Error())
-		Storage.storageType = config.StorageTypeLocal
+		s.config.StorageType = config.StorageTypeLocal
 	}
+	w.Storage = s
 }

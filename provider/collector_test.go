@@ -9,10 +9,10 @@ import (
 	"testing"
 )
 
-func TestCollectSingleArticle(t *testing.T) {
+func (w *Website) TestCollectSingleArticle(t *testing.T) {
 	link := &response.WebLink{Url: "http://blog.niunan.net/blog/show/1295"}
 	keyword := &model.Keyword{Title: "PHP 报错"}
-	result, err := CollectSingleArticle(link, keyword)
+	result, err := w.CollectSingleArticle(link, keyword)
 
 	if err != nil {
 		t.Fatal(err)
@@ -23,11 +23,14 @@ func TestCollectSingleArticle(t *testing.T) {
 
 func TestCollectArticlesByKeyword(t *testing.T) {
 	keyword := model.Keyword{
-		Title:  "负氧离子",
+		Title:  "golang面试题",
 		Status: 1,
 	}
-
-	num, err := CollectArticlesByKeyword(keyword, true)
+	GetDefaultDB()
+	dbSite, _ := GetDBWebsiteInfo(1)
+	InitWebsite(dbSite)
+	w := CurrentSite(nil)
+	num, err := w.CollectArticlesByKeyword(keyword, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +38,7 @@ func TestCollectArticlesByKeyword(t *testing.T) {
 	log.Println(num)
 }
 
-func TestGoquery(t *testing.T) {
+func (w *Website) TestGoquery(t *testing.T) {
 	str := "<p>来张图中吧：</p>\n<p><img data-original=\"https://cdn.jiler.cn/techug/uploads/2017/03/420532-20170305205228282-609193437-1000x519.png\" title=\"图0：2017年的golang、python、php、c++、c、java、Nodejs性能对比\" alt=\"图0：2017年的golang、python、php、c++、c、java、Nodejs性能对比\"/></p>\n<p>总结：</p>"
 
 	htmlR := strings.NewReader(str)

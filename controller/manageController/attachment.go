@@ -1,11 +1,9 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -16,12 +14,13 @@ func AttachmentUpload(ctx iris.Context) {
 }
 
 func AttachmentList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	q := ctx.URLParam("q")
 
-	attachments, total, err := provider.GetAttachmentList(categoryId, q, currentPage, pageSize)
+	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -40,6 +39,7 @@ func AttachmentList(ctx iris.Context) {
 }
 
 func AttachmentDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Attachment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -48,7 +48,7 @@ func AttachmentDelete(ctx iris.Context) {
 		})
 		return
 	}
-	attach, err := provider.GetAttachmentById(req.Id)
+	attach, err := currentSite.GetAttachmentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -57,7 +57,7 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	err = attach.Delete(dao.DB)
+	err = attach.Delete(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -66,15 +66,16 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除图片：%d => %s", attach.Id, attach.FileLocation))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteImageLog", attach.Id, attach.FileLocation))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "图片已删除",
+		"msg":  ctx.Tr("ImageDeleted"),
 	})
 }
 
 func AttachmentEdit(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Attachment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -83,7 +84,7 @@ func AttachmentEdit(ctx iris.Context) {
 		})
 		return
 	}
-	attach, err := provider.GetAttachmentById(req.Id)
+	attach, err := currentSite.GetAttachmentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -93,7 +94,7 @@ func AttachmentEdit(ctx iris.Context) {
 	}
 
 	attach.FileName = req.FileName
-	err = dao.DB.Save(attach).Error
+	err = currentSite.DB.Save(attach).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -102,15 +103,28 @@ func AttachmentEdit(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改图片名称：%d => %s", attach.Id, attach.FileName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyImageNameLog", attach.Id, attach.FileName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "图片名称已修改",
+		"msg":  ctx.Tr("ImageNameModified"),
+	})
+}
+
+func AttachmentScanUploads(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	// 仅扫描uploads目录
+	go currentSite.AttachmentScanUploads(currentSite.PublicPath + "uploads")
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SubmittedForBackgroundProcessing"),
 	})
 }
 
 func AttachmentChangeCategory(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ChangeAttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -120,7 +134,7 @@ func AttachmentChangeCategory(ctx iris.Context) {
 		return
 	}
 
-	err := provider.ChangeAttachmentCategory(req.CategoryId, req.Ids)
+	err := currentSite.ChangeAttachmentCategory(req.CategoryId, req.Ids)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -129,17 +143,18 @@ func AttachmentChangeCategory(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更改图片的分类：%d => %v", req.CategoryId, req.Ids))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ChangeImageCategoryLog", req.CategoryId, req.Ids))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已更新",
+		"msg":  ctx.Tr("CategoryUpdated"),
 	})
 }
 
 func AttachmentCategoryList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 
-	categories, err := provider.GetAttachmentCategories()
+	categories, err := currentSite.GetAttachmentCategories()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -156,6 +171,7 @@ func AttachmentCategoryList(ctx iris.Context) {
 }
 
 func AttachmentCategoryDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -165,7 +181,7 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	category, err := provider.SaveAttachmentCategory(&req)
+	category, err := currentSite.SaveAttachmentCategory(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -174,16 +190,17 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("保存图片分类：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("SaveImageCategoryLog", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已更新",
+		"msg":  ctx.Tr("CategoryUpdated"),
 		"data": category,
 	})
 }
 
 func AttachmentCategoryDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.AttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -193,7 +210,7 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteAttachmentCategory(req.Id)
+	err := currentSite.DeleteAttachmentCategory(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -202,21 +219,22 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除图片分类：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteImageCategoryLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已删除",
+		"msg":  ctx.Tr("CategoryDeleted"),
 	})
 }
 
 func ConvertImageToWebp(ctx iris.Context) {
-	go provider.StartConvertImageToWebp()
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.StartConvertImageToWebp()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("批量转换图片为webp"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchConvertImagesToWebp"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "转换任务已提交到后台运行，具体结束时间与实际图片数量有关。",
+		"msg":  ctx.Tr("TheConversionTaskHasBeenSubmittedToTheBackgroundForRunning"),
 	})
 }

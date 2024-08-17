@@ -3,17 +3,15 @@ package provider
 import (
 	"errors"
 	"github.com/PuerkitoBio/goquery"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"strings"
 	"time"
 )
 
-func GetLinkList() ([]*model.Link, error) {
+func (w *Website) GetLinkList() ([]*model.Link, error) {
 	var links []*model.Link
-	db := dao.DB
+	db := w.DB
 	err := db.Order("sort asc").Find(&links).Error
 	if err != nil {
 		return nil, err
@@ -22,23 +20,23 @@ func GetLinkList() ([]*model.Link, error) {
 	return links, nil
 }
 
-func GetLinkById(id uint) (*model.Link, error) {
+func (w *Website) GetLinkById(id uint) (*model.Link, error) {
 	var link model.Link
-	if err := dao.DB.Where("id = ?", id).First(&link).Error; err != nil {
+	if err := w.DB.Where("id = ?", id).First(&link).Error; err != nil {
 		return nil, err
 	}
 
 	return &link, nil
 }
 
-func GetLinkByLink(link string) (*model.Link, error) {
+func (w *Website) GetLinkByLink(link string) (*model.Link, error) {
 	if link == "" {
-		return nil, errors.New("link必填")
+		return nil, errors.New(w.Tr("LinkRequired"))
 	}
 
 	var friendLink model.Link
 	var err error
-	err = dao.DB.Where("`link` = ?", link).First(&friendLink).Error
+	err = w.DB.Where("`link` = ?", link).First(&friendLink).Error
 	if err != nil {
 		// 增加兼容模式查找
 		if strings.HasPrefix(link, "https") {
@@ -46,9 +44,8 @@ func GetLinkByLink(link string) (*model.Link, error) {
 		} else {
 			link = strings.ReplaceAll(link, "http://", "https://")
 		}
-		err = dao.DB.Where("`link` = ?", link).First(&friendLink).Error
+		err = w.DB.Where("`link` = ?", link).First(&friendLink).Error
 	}
-
 
 	if err != nil {
 		return nil, err
@@ -57,7 +54,7 @@ func GetLinkByLink(link string) (*model.Link, error) {
 	return &friendLink, nil
 }
 
-func PluginLinkCheck(link *model.Link) (*model.Link, error) {
+func (w *Website) PluginLinkCheck(link *model.Link) (*model.Link, error) {
 	remoteLink := link.BackLink
 	if remoteLink == "" {
 		remoteLink = link.Link
@@ -78,7 +75,7 @@ func PluginLinkCheck(link *model.Link) (*model.Link, error) {
 
 	myLink := link.MyLink
 	if myLink == "" {
-		myLink = config.JsonData.System.BaseUrl
+		myLink = w.System.BaseUrl
 	}
 
 	linkStatus := model.LinkStatusNotMatch
@@ -89,7 +86,7 @@ func PluginLinkCheck(link *model.Link) (*model.Link, error) {
 		title := strings.TrimSpace(aLinks.Eq(i).Text())
 		rel, relExists := aLinks.Eq(i).Attr("rel")
 		if exists {
-			if href == myLink || href == myLink + "/" {
+			if href == myLink || href == myLink+"/" {
 				linkStatus = model.LinkStatusOk
 				if link.MyTitle != "" && title != link.MyTitle {
 					linkStatus = model.LinkStatusNotTitle
@@ -105,7 +102,7 @@ func PluginLinkCheck(link *model.Link) (*model.Link, error) {
 
 	link.CheckedTime = time.Now().Unix()
 	link.Status = linkStatus
-	link.Save(dao.DB)
+	link.Save(w.DB)
 
 	return link, nil
 }

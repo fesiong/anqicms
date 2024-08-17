@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -16,7 +15,8 @@ type tagTagDetailNode struct {
 }
 
 func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -24,11 +24,27 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		return err
 	}
 	id := uint(0)
+	token := ""
+	if args["token"] != nil {
+		token = args["token"].String()
+	}
+
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
 
 	tagDetail, _ := ctx.Public["tag"].(*model.Tag)
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		tagDetail, _ = provider.GetTagById(id)
+	}
+	if id > 0 {
+		tagDetail, _ = currentSite.GetTagById(id)
+	} else if token != "" {
+		tagDetail, _ = currentSite.GetTagByUrlToken(token)
 	}
 
 	fieldName := ""
@@ -37,24 +53,25 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	var content string
+	var content interface{}
 
 	if tagDetail != nil {
-		tagDetail.Link = provider.GetUrl("tag", tagDetail, 0)
+		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
 
 		v := reflect.ValueOf(*tagDetail)
 
 		f := v.FieldByName(fieldName)
-
-		content = fmt.Sprintf("%v", f)
-		if content == "" && fieldName == "SeoTitle" {
+		if f.IsValid() {
+			content = f.Interface()
+		}
+		if tagDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = tagDetail.Title
 		}
 	}
 
 	// output
 	if node.name == "" {
-		writer.WriteString(content)
+		writer.WriteString(fmt.Sprintf("%v", content))
 	} else {
 		ctx.Private[node.name] = content
 	}

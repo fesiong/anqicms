@@ -1,5 +1,7 @@
 package request
 
+import "kandaoni.com/anqicms/config"
+
 type PluginRobotsConfig struct {
 	Robots string `json:"robots"`
 }
@@ -29,6 +31,9 @@ type PluginComment struct {
 	ParentId  uint   `json:"parent_id"`
 	ToUid     uint   `json:"to_uid"`
 	Status    uint   `json:"status"`
+
+	// 批量更新
+	Ids []uint `json:"ids"`
 }
 
 type PluginAnchor struct {
@@ -57,6 +62,7 @@ type PluginKeyword struct {
 type PluginKeywordDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
+	All bool   `json:"all"`
 }
 
 type PluginFileUploadDelete struct {
@@ -103,5 +109,23 @@ type PluginRedirectsRequest struct {
 }
 
 type PluginBackupRequest struct {
-	Name string `json:"name"`
+	Name         string `json:"name"`
+	CleanUploads bool   `json:"clean_uploads"`
+}
+
+type PluginReplaceRequest struct {
+	ReplaceTag bool                    `json:"replace_tag"`
+	Places     []string                `json:"places"`
+	Keywords   []config.ReplaceKeyword `json:"keywords"`
+}
+
+type PluginHtmlCachePushRequest struct {
+	All   bool     `json:"all"`
+	Paths []string `json:"paths"`
+}
+
+type PluginTestSendmailRequest struct {
+	Recipient string `json:"recipient"`
+	Subject   string `json:"subject"`
+	Message   string `json:"message"`
 }

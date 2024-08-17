@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"golang.org/x/net/html/charset"
 	"golang.org/x/text/encoding/simplifiedchinese"
@@ -14,12 +13,13 @@ import (
 )
 
 func PluginMaterialList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 
-	materialList, total, err := provider.GetMaterialList(categoryId, keyword, currentPage, pageSize)
+	materialList, total, err := currentSite.GetMaterialList(categoryId, keyword, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -37,8 +37,9 @@ func PluginMaterialList(ctx iris.Context) {
 }
 
 func PluginMaterialCategoryList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 
-	categories, err := provider.GetMaterialCategories()
+	categories, err := currentSite.GetMaterialCategories()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -55,6 +56,7 @@ func PluginMaterialCategoryList(ctx iris.Context) {
 }
 
 func PluginMaterialDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterial
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -64,7 +66,7 @@ func PluginMaterialDetailForm(ctx iris.Context) {
 		return
 	}
 
-	category, err := provider.SaveMaterial(&req)
+	category, err := currentSite.SaveMaterial(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -73,16 +75,17 @@ func PluginMaterialDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新内容素材：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMaterialLog", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "素材已更新",
+		"msg":  ctx.Tr("MaterialUpdated"),
 		"data": category,
 	})
 }
 
 func PluginMaterialDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterial
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -92,7 +95,7 @@ func PluginMaterialDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteMaterial(req.Id)
+	err := currentSite.DeleteMaterial(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -101,15 +104,16 @@ func PluginMaterialDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除内容素材：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteMaterialLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "素材已删除",
+		"msg":  ctx.Tr("MaterialDeleted"),
 	})
 }
 
 func PluginMaterialCategoryDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterialCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -119,7 +123,7 @@ func PluginMaterialCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	category, err := provider.SaveMaterialCategory(&req)
+	category, err := currentSite.SaveMaterialCategory(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -128,16 +132,17 @@ func PluginMaterialCategoryDetailForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新内容素材类别：%d => %s", category.Id, category.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMaterialCategoryLog", category.Id, category.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已更新",
+		"msg":  ctx.Tr("CategoryUpdated"),
 		"data": category,
 	})
 }
 
 func PluginMaterialCategoryDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterialCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -147,7 +152,7 @@ func PluginMaterialCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteMaterialCategory(req.Id)
+	err := currentSite.DeleteMaterialCategory(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -156,15 +161,16 @@ func PluginMaterialCategoryDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除内容素材：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteMaterialLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "分类已删除",
+		"msg":  ctx.Tr("CategoryDeleted"),
 	})
 }
 
 func PluginMaterialImport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterialImportRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
@@ -175,7 +181,7 @@ func PluginMaterialImport(ctx iris.Context) {
 		return
 	}
 
-	err = provider.SaveMaterials(req.Materials)
+	err = currentSite.SaveMaterials(req.Materials)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -184,11 +190,11 @@ func PluginMaterialImport(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导入内容素材"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportMaterial"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "导入成功",
+		"msg":  ctx.Tr("ImportSuccessful"),
 	})
 }
 

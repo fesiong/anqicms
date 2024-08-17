@@ -15,6 +15,7 @@ type Category struct {
 	Template       string   `json:"template"`
 	DetailTemplate string   `json:"detail_template"`
 	UrlToken       string   `json:"url_token"`
+	Force          bool     `json:"force"`
 	Images         []string `json:"images"`
 	Logo           string   `json:"logo"`
 	IsInherit      uint     `json:"is_inherit"`

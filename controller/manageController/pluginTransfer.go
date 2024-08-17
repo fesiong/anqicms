@@ -10,7 +10,8 @@ import (
 )
 
 func GetTransferTask(ctx iris.Context) {
-	task := provider.GetTransferTask()
+	currentSite := provider.CurrentSite(ctx)
+	task := currentSite.GetTransferTask()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -47,6 +48,7 @@ func DownloadClientFile(ctx iris.Context) {
 }
 
 func CreateTransferTask(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.TransferWebsite
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -56,7 +58,7 @@ func CreateTransferTask(ctx iris.Context) {
 		return
 	}
 
-	task, err := provider.CreateTransferTask(&req)
+	task, err := currentSite.CreateTransferTask(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -72,20 +74,76 @@ func CreateTransferTask(ctx iris.Context) {
 	})
 }
 
-func TransferWebData(ctx iris.Context) {
-	task := provider.GetTransferTask()
+func GetTransferModules(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	task := currentSite.GetTransferTask()
 	if task == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "没有可执行的任务",
+			"msg":  ctx.Tr("NoExecutableTasks"),
 		})
 		return
 	}
-	go task.TransferWebData()
+
+	modules, err := task.GetModules()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// * 需要执行的操作type：
+	// -. 同步模型 module
+	// -. 同步分类 category
+	// -. 同步标签 tag
+	// -. 同步锚文本 keyword
+	// -. 同步文档 archive
+	// -. 同步单页 singlepage
+	// -. 同步静态资源 static
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"modules": modules,
+			"types": []string{
+				"module",
+				"category",
+				"tag",
+				"keyword",
+				"archive",
+				"singlepage",
+				"static",
+			},
+		},
+	})
+}
+
+func TransferWebData(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	task := currentSite.GetTransferTask()
+	if task == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("NoExecutableTasks"),
+		})
+		return
+	}
+	var req request.TransferTypes
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	go task.TransferWebData(&req)
 
 	time.Sleep(1 * time.Second)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "任务正在执行中",
+		"msg":  ctx.Tr("TaskInProgress"),
 	})
 }

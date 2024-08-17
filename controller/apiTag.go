@@ -1,9 +1,13 @@
 package controller
 
 import (
+	"errors"
 	"fmt"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
 	"math"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,8 +15,6 @@ import (
 	"github.com/fatih/structs"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -20,12 +22,39 @@ import (
 )
 
 func ApiArchiveDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-	archive, err := provider.GetArchiveById(id)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
+	var archive *model.Archive
+	var err error
+	archive = currentSite.GetArchiveByIdFromCache(id)
+	if archive == nil {
+		archive, err = currentSite.GetArchiveById(id)
+		if archive != nil {
+			currentSite.AddArchiveCache(archive)
+		}
+	}
 	if err != nil {
 		if filename != "" {
-			archive, err = provider.GetArchiveByUrlToken(filename)
+			archive, err = currentSite.GetArchiveByUrlToken(filename)
+		}
+	}
+	// 支持读取草稿，只有登录了才能读取草稿
+	if err != nil && userId > 0 {
+		archiveDraft, err2 := currentSite.GetArchiveDraftById(id)
+		if err2 == nil {
+			if archiveDraft.UserId != userId {
+				err = errors.New("record not found")
+			} else {
+				archive = &archiveDraft.Archive
+				err = nil
+			}
 		}
 	}
 	if err != nil {
@@ -36,43 +65,35 @@ func ApiArchiveDetail(ctx iris.Context) {
 		return
 	}
 
-	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
-	if archive.Price == 0 && archive.ReadLevel == 0 {
-		archive.HasOrdered = true
-	}
-	if userId > 0 {
-		if archive.UserId == userId {
-			archive.HasOrdered = true
-		}
-		if archive.Price > 0 {
-			archive.HasOrdered = provider.CheckArchiveHasOrder(userId, archive.Id)
-			userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-			discount := provider.GetUserDiscount(userId, userInfo)
-			if discount > 0 {
-				archive.FavorablePrice = archive.Price * discount / 100
-			}
-		}
-		if archive.ReadLevel > 0 && !archive.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archive.ReadLevel {
-				archive.HasOrdered = true
-			}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archive = currentSite.CheckArchiveHasOrder(userId, archive, userGroup)
+	if archive.Price > 0 {
+		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
+		discount := currentSite.GetUserDiscount(userId, userInfo)
+		if discount > 0 {
+			archive.FavorablePrice = archive.Price * discount / 100
 		}
 	}
+
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
-			Content: fmt.Sprintf(config.Lang("该内容需要用户等级%d以上才能阅读"), archive.ReadLevel),
+			Content: currentSite.TplTr("ThisContentRequiresUserLevelOrAboveToRead", archive.ReadLevel),
 		}
 	} else {
 		// 读取data
-		archive.ArchiveData, _ = provider.GetArchiveDataById(archive.Id)
+		archive.ArchiveData, _ = currentSite.GetArchiveDataById(archive.Id)
 	}
+	// 读取flag
+	archive.Flag = currentSite.GetArchiveFlags(archive.Id)
 	// 读取分类
-	archive.Category = provider.GetCategoryFromCache(archive.CategoryId)
+	archive.Category = currentSite.GetCategoryFromCache(archive.CategoryId)
+	if archive.Category != nil {
+		archive.Category.Link = currentSite.GetUrl("category", archive.Category, 0)
+	}
 	// 读取 extraDate
-	archive.Extra = provider.GetArchiveExtra(archive.ModuleId, archive.Id)
+	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
 	for i := range archive.Extra {
 		if archive.Extra[i].Value == nil || archive.Extra[i].Value == "" {
 			archive.Extra[i].Value = archive.Extra[i].Default
@@ -81,7 +102,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 			delete(archive.Extra, i)
 		}
 	}
-	tags := provider.GetTagsByItemId(archive.Id)
+	tags := currentSite.GetTagsByItemId(archive.Id)
 	if len(tags) > 0 {
 		var tagNames = make([]string, 0, len(tags))
 		for _, v := range tags {
@@ -89,7 +110,30 @@ func ApiArchiveDetail(ctx iris.Context) {
 		}
 		archive.Tags = tagNames
 	}
-
+	if len(archive.Password) > 0 {
+		// password is not visible for user
+		archive.Password = ""
+		archive.HasPassword = true
+		archive.ArchiveData = nil
+	}
+	if archive.ArchiveData != nil {
+		// convert markdown to html
+		if render {
+			archive.ArchiveData.Content = library.MarkdownToHTML(archive.ArchiveData.Content)
+		}
+		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		archive.ArchiveData.Content = re.ReplaceAllStringFunc(archive.ArchiveData.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			if !strings.HasPrefix(match[1], "http") {
+				res := currentSite.System.BaseUrl + match[1]
+				s = strings.Replace(s, match[1], res, 1)
+			}
+			return s
+		})
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -98,18 +142,19 @@ func ApiArchiveDetail(ctx iris.Context) {
 }
 
 func ApiArchiveFilters(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 
-	module := provider.GetModuleFromCache(moduleId)
+	module := currentSite.GetModuleFromCache(moduleId)
 	if module == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("模型不存在"),
+			"msg":  currentSite.TplTr("ModelDoesNotExist"),
 		})
 		return
 	}
 
-	allText := config.Lang("全部")
+	allText := currentSite.TplTr("All")
 
 	tmpText := ctx.URLParam("allText")
 	if tmpText != "" {
@@ -166,9 +211,24 @@ func ApiArchiveFilters(ctx iris.Context) {
 }
 
 func ApiArchiveList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	draft := ctx.URLParamBoolDefault("draft", false)
+	draftInt := 0
+	if draft {
+		draftInt = 1
+	}
+	tmpUserId := ctx.URLParam("userId")
+	if tmpUserId == "self" {
+		// 获取自己的文章
+		userId = ctx.Values().GetUintDefault("userId", 0)
+	}
+	if userId > 0 {
+		authorId = userId
+	}
 	var categoryIds []uint
 	var categoryDetail *model.Category
 	tmpCatId := ctx.URLParam("categoryId")
@@ -177,7 +237,7 @@ func ApiArchiveList(ctx iris.Context) {
 		for _, v := range tmpIds {
 			tmpId, _ := strconv.Atoi(v)
 			if tmpId > 0 {
-				categoryDetail = provider.GetCategoryFromCache(uint(tmpId))
+				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
 				if categoryDetail != nil {
 					categoryIds = append(categoryIds, categoryDetail.Id)
 					moduleId = categoryDetail.ModuleId
@@ -185,8 +245,19 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	}
-
-	module := provider.GetModuleFromCache(moduleId)
+	// 增加支持 excludeCategoryId
+	var excludeCategoryIds []uint
+	tmpExcludeCatId := ctx.URLParam("excludeCategoryId")
+	if tmpExcludeCatId != "" {
+		tmpIds := strings.Split(tmpExcludeCatId, ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				excludeCategoryIds = append(excludeCategoryIds, uint(tmpId))
+			}
+		}
+	}
+	module := currentSite.GetModuleFromCache(moduleId)
 
 	order := ctx.URLParam("order")
 	limit := 10
@@ -196,6 +267,9 @@ func ApiArchiveList(ctx iris.Context) {
 	flag := ctx.URLParam("flag")
 	q := ctx.URLParam("q")
 	child := true
+	if currentPage < 1 {
+		currentPage = 1
+	}
 
 	childTmp, err := ctx.URLParamBool("child")
 	if err == nil {
@@ -230,158 +304,341 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	}
+	if listType == "page" {
+		if currentPage > 1 {
+			offset = (currentPage - 1) * limit
+		}
+	}
 
+	extraFields := map[uint]map[string]*model.CustomField{}
+	var fields []string
+	fields = append(fields, "id")
+	if module != nil && len(module.Fields) > 0 {
+		for _, v := range module.Fields {
+			fields = append(fields, v.FieldName)
+		}
+	}
+
+	var tmpResult = make([]*model.Archive, 0, limit)
 	var archives []*model.Archive
 	var total int64
 	if listType == "related" {
 		//获取id
 		var categoryId = uint(0)
+		var keywords string
 		if len(categoryIds) > 0 {
 			categoryId = categoryIds[0]
 		}
 		if archiveId > 0 {
-			archive, err := provider.GetArchiveById(archiveId)
+			archive, err := currentSite.GetArchiveById(archiveId)
 			if err == nil {
 				categoryId = archive.CategoryId
-				category := provider.GetCategoryFromCache(categoryId)
+				keywords = strings.Split(strings.ReplaceAll(archive.Keywords, "，", ","), ",")[0]
+				category := currentSite.GetCategoryFromCache(categoryId)
 				if category != nil {
 					moduleId = category.ModuleId
 				}
 			}
 		}
-
-		var archives2 []*model.Archive
-		db := dao.DB
-		newLimit := int(math.Ceil(float64(limit) / 2))
-		if err := db.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).Order("id ASC").Limit(newLimit).Offset(offset).Find(&archives).Error; err != nil {
-			//no
-		}
-		preCount := len(archives)
-		newLimit += newLimit - len(archives)
-		if err := db.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` < ?", moduleId, categoryId, archiveId).Order("id DESC").Limit(newLimit).Offset(offset).Find(&archives2).Error; err != nil {
-			//no
-		}
-		//列表不返回content
-		if len(archives2) > 0 {
-			archives = append(archives, archives2...)
-		}
-		// 如果量不够，则再补充
-		if len(archives) < limit {
-			var archives3 []*model.Archive
-			newLimit = limit - len(archives)
-			db.Model(&model.Archive{}).Where("`status` = 1").Where("`module_id` = ? AND `category_id` = ? AND `status` = 1 AND `id` > ?", moduleId, categoryId, archiveId).Order("id ASC").Limit(newLimit).Offset(offset + preCount).Find(&archives3)
-			if len(archives3) > 0 {
-				archives = append(archives, archives3...)
-			}
-		}
-		// 如果数量超过，则截取
-		if len(archives) > limit {
-			archives = archives[:limit]
-		}
-	} else {
-		builder := dao.DB.Model(&model.Archive{}).Where("`status` = 1")
-
-		if authorId > 0 {
-			builder = builder.Where("user_id = ?", authorId)
+		// 允许通过keywords调用
+		like := ctx.URLParam("like")
+		tmpKeyword := ctx.URLParam("keywords")
+		if len(tmpKeyword) > 0 {
+			keywords = tmpKeyword
 		}
 
-		if moduleId > 0 {
-			builder = builder.Where("module_id = ?", moduleId)
-		}
-
-		if flag != "" {
-			builder = builder.Where("FIND_IN_SET(?,`flag`)", flag)
-		}
-
-		extraFields := map[uint]map[string]*model.CustomField{}
-		var results []map[string]interface{}
-		var fields []string
-		fields = append(fields, "id")
-
-		if module != nil && len(module.Fields) > 0 {
-			for _, v := range module.Fields {
-				fields = append(fields, "`"+v.FieldName+"`")
-				// 如果有筛选条件，从这里开始筛选
-				if param, ok := extraParams[v.FieldName]; ok {
-					builder = builder.Where("`"+v.FieldName+"` = ?", param)
+		if like == "keywords" {
+			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+				if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
 				}
-			}
-		}
-
-		if len(categoryIds) > 0 {
-			if child {
-				var subIds []uint
-				for _, v := range categoryIds {
-					tmpIds := provider.GetSubCategoryIds(v, nil)
-					subIds = append(subIds, tmpIds...)
-					subIds = append(subIds, v)
+				if categoryId > 0 {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Where("archive_categories.category_id = ?", categoryId)
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+				} else if moduleId > 0 {
+					tx = tx.Where("`module_id` = ?", moduleId)
 				}
-				builder = builder.Where("`category_id` IN(?)", subIds)
-			} else if len(categoryIds) == 1 {
-				builder = builder.Where("`category_id` = ?", categoryIds[0])
-			} else {
-				builder = builder.Where("`category_id` IN(?)", categoryIds)
-			}
-		}
-		if order != "" {
-			builder = builder.Order(order)
-		}
-		if listType == "page" {
-			if currentPage > 1 {
-				offset = (currentPage - 1) * limit
-			}
-			if q != "" {
-				builder = builder.Where("`title` like ?", "%"+q+"%")
-			}
-			builder.Count(&total)
-		}
-		builder = builder.Limit(limit).Offset(offset)
-		if err := builder.Find(&archives).Error; err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  err.Error(),
-			})
-			return
-		}
-		var archiveIds = make([]uint, 0, len(archives))
-		for i := range archives {
-			archiveIds = append(archiveIds, archives[i].Id)
-		}
-		if module != nil && len(fields) > 0 && len(archiveIds) > 0 {
-			dao.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select(strings.Join(fields, ",")).Scan(&results)
-			for _, field := range results {
-				item := map[string]*model.CustomField{}
-				for _, v := range module.Fields {
-					item[v.FieldName] = &model.CustomField{
-						Name:  v.Name,
-						Value: field[v.FieldName],
+				if len(excludeCategoryIds) > 0 {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+					} else {
+						tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 					}
 				}
-				if id, ok := field["id"].(uint32); ok {
-					extraFields[uint(id)] = item
+				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId)
+				return tx
+			}, "archives.id ASC", 0, limit, offset)
+		} else if like == "relation" {
+			archives = currentSite.GetArchiveRelations(archiveId)
+		} else {
+			archives = currentSite.GetArchiveRelations(archiveId)
+			if len(archives) == 0 {
+				halfLimit := int(math.Ceil(float64(limit) / 2))
+				archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					if currentSite.Content.MultiCategory == 1 {
+						// 多分类支持
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+					tx = tx.Where("archives.`id` > ?", archiveId)
+					return tx
+				}, "archives.id ASC", 0, limit, offset)
+				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					if currentSite.Content.MultiCategory == 1 {
+						// 多分类支持
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+					tx = tx.Where("archives.`id` < ?", archiveId)
+					return tx
+				}, "archives.id DESC", 0, limit, offset)
+				if len(archives1)+len(archives2) > limit {
+					if len(archives1) > halfLimit && len(archives2) > halfLimit {
+						archives1 = archives1[:halfLimit]
+						archives2 = archives2[:halfLimit]
+					} else if len(archives1) > len(archives2) {
+						archives1 = archives1[:limit-len(archives2)]
+					} else if len(archives2) > len(archives1) {
+						archives2 = archives2[:limit-len(archives1)]
+					}
+				}
+				archives = append(archives2, archives1...)
+				// 如果数量超过，则截取
+				if len(archives) > limit {
+					archives = archives[:limit]
 				}
 			}
-			for i := range archives {
-				if extraFields[archives[i].Id] != nil {
-					archives[i].Extra = extraFields[archives[i].Id]
+		}
+	} else {
+		var fulltextSearch bool
+		var fulltextTotal int64
+		var err2 error
+		var ids []uint64
+		var searchCatIds []uint
+		var searchTagIds []uint
+		if listType == "page" && len(q) > 0 {
+			var tmpIds []uint64
+			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			if err2 == nil {
+				fulltextSearch = true
+				for _, id := range tmpIds {
+					if id < provider.CategoryDivider {
+						ids = append(ids, id)
+					} else if id < provider.TagDivider {
+						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
+					} else if id < provider.TagDividerEnd {
+						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+					} else {
+						// 其他值
+					}
+				}
+				if len(tmpIds) == 0 || len(ids) == 0 {
+					ids = append(ids, 0)
+				}
+				offset = 0
+			}
+		}
+		if len(searchCatIds) > 0 {
+			cats := currentSite.GetCacheCategoriesByIds(searchCatIds)
+			for _, cat := range cats {
+				cat.Link = currentSite.GetUrl("category", cat, 0)
+				tmpResult = append(tmpResult, &model.Archive{
+					Type:        "category",
+					Id:          cat.Id,
+					CreatedTime: cat.CreatedTime,
+					UpdatedTime: cat.UpdatedTime,
+					Title:       cat.Title,
+					SeoTitle:    cat.SeoTitle,
+					UrlToken:    cat.UrlToken,
+					Keywords:    cat.Keywords,
+					Description: cat.Description,
+					ModuleId:    cat.ModuleId,
+					CategoryId:  cat.ParentId,
+					Images:      cat.Images,
+					Logo:        cat.Logo,
+					Link:        cat.Link,
+					Thumb:       cat.Thumb,
+					Sort:        cat.Sort,
+				})
+			}
+		}
+		if len(searchTagIds) > 0 {
+			tags := currentSite.GetTagsByIds(searchTagIds)
+			for _, tag := range tags {
+				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tmpResult = append(tmpResult, &model.Archive{
+					Type:        "tag",
+					Id:          tag.Id,
+					CreatedTime: tag.CreatedTime,
+					UpdatedTime: tag.UpdatedTime,
+					Title:       tag.Title,
+					SeoTitle:    tag.SeoTitle,
+					UrlToken:    tag.UrlToken,
+					Keywords:    tag.Keywords,
+					Description: tag.Description,
+					Link:        tag.Link,
+				})
+			}
+		}
+		ops := func(tx *gorm.DB) *gorm.DB {
+			if authorId > 0 {
+				tx = tx.Where("user_id = ?", authorId)
+			}
+			if flag != "" {
+				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
+			}
+			if len(fields) > 1 {
+				for _, v := range fields {
+					// 如果有筛选条件，从这里开始筛选
+					if param, ok := extraParams[v]; ok {
+						tx = tx.Where("`"+v+"` = ?", param)
+					}
+				}
+			}
+			if currentSite.Content.MultiCategory == 1 && (len(categoryIds) > 0 || len(excludeCategoryIds) > 0) {
+				tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+			}
+			if len(categoryIds) > 0 {
+				if child {
+					var subIds []uint
+					for _, v := range categoryIds {
+						tmpIds := currentSite.GetSubCategoryIds(v, nil)
+						subIds = append(subIds, tmpIds...)
+						subIds = append(subIds, v)
+					}
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Where("archive_categories.category_id IN (?)", subIds)
+					} else {
+						if len(subIds) == 1 {
+							tx = tx.Where("`category_id` = ?", subIds[0])
+						} else {
+							tx = tx.Where("`category_id` IN(?)", subIds)
+						}
+					}
+				} else if len(categoryIds) == 1 {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Where("archive_categories.category_id = ?", categoryIds[0])
+					} else {
+						tx = tx.Where("`category_id` = ?", categoryIds[0])
+					}
+				} else {
+					if currentSite.Content.MultiCategory == 1 {
+						tx = tx.Where("archive_categories.category_id IN (?)", categoryIds)
+					} else {
+						tx = tx.Where("`category_id` IN(?)", categoryIds)
+					}
+				}
+			} else if moduleId > 0 {
+				tx = tx.Where("`module_id` = ?", moduleId)
+			}
+			if len(excludeCategoryIds) > 0 {
+				if currentSite.Content.MultiCategory == 1 {
+					tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+				} else {
+					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
+				}
+			}
+			if len(ids) > 0 {
+				tx = tx.Where("archives.`id` IN(?)", ids)
+			} else if q != "" {
+				tx = tx.Where("`title` like ?", "%"+q+"%")
+			}
+			return tx
+		}
+		if listType != "page" {
+			// 如果不是分页，则不查询count
+			currentPage = 0
+		}
+		if order != "" {
+			if !strings.Contains(order, "rand") {
+				order = "archives." + order
+			}
+		} else {
+			if currentSite.Content.UseSort == 1 {
+				order = "archives.`sort` desc, archives.`id` desc"
+			} else {
+				order = "archives.`id` desc"
+			}
+		}
+		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset, draftInt)
+		if fulltextSearch {
+			total = fulltextTotal
+		}
+	}
+	var archiveIds = make([]uint, 0, len(archives))
+	for i := range archives {
+		archiveIds = append(archiveIds, archives[i].Id)
+		if len(archives[i].Password) > 0 {
+			archives[i].Password = ""
+			archives[i].HasPassword = true
+		}
+	}
+
+	if module != nil && len(fields) > 1 && len(archiveIds) > 0 {
+		var results []map[string]interface{}
+		currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select("`" + strings.Join(fields, "`,`") + "`").Scan(&results)
+		for _, field := range results {
+			item := map[string]*model.CustomField{}
+			for _, v := range module.Fields {
+				item[v.FieldName] = &model.CustomField{
+					Name:  v.Name,
+					Value: field[v.FieldName],
+				}
+			}
+			if id, ok := field["id"].(uint32); ok {
+				extraFields[uint(id)] = item
+			}
+		}
+		for i := range archives {
+			if extraFields[archives[i].Id] != nil {
+				archives[i].Extra = extraFields[archives[i].Id]
+			}
+		}
+	}
+	// 读取flags
+	if len(archiveIds) > 0 {
+		var flags []*model.ArchiveFlags
+		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		for i := range archives {
+			for _, f := range flags {
+				if f.ArchiveId == archives[i].Id {
+					archives[i].Flag = f.Flags
+					break
 				}
 			}
 		}
 	}
 
-	for i := range archives {
-		archives[i].Link = provider.GetUrl("archive", archives[i], 0)
-	}
-
+	tmpResult = append(archives, tmpResult...)
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
 		"total": total,
-		"data":  archives,
+		"data":  tmpResult,
 	})
 }
 
 func ApiArchiveParams(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
 	sorted := true
 	sortedTmp, err := ctx.URLParamBool("sorted")
@@ -389,7 +646,7 @@ func ApiArchiveParams(ctx iris.Context) {
 		sorted = sortedTmp
 	}
 
-	archiveDetail, err := provider.GetArchiveById(archiveId)
+	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -398,26 +655,12 @@ func ApiArchiveParams(ctx iris.Context) {
 		return
 	}
 
-	archiveParams := provider.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
+	archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// if read level larger than 0, then need to check permission
-	if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-		archiveDetail.HasOrdered = true
-	}
-	if userId > 0 {
-		if archiveDetail.UserId == userId {
-			archiveDetail.HasOrdered = true
-		}
-		if archiveDetail.Price > 0 {
-			archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userId, archiveDetail.Id)
-		}
-		if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-			userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
-			if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-				archiveDetail.HasOrdered = true
-			}
-		}
-	}
+	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
+	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+
 	for i := range archiveParams {
 		if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 			archiveParams[i].Value = archiveParams[i].Default
@@ -428,7 +671,7 @@ func ApiArchiveParams(ctx iris.Context) {
 	}
 	if sorted {
 		var extraFields []*model.CustomField
-		module := provider.GetModuleFromCache(archiveDetail.ModuleId)
+		module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 		if module != nil && len(module.Fields) > 0 {
 			for _, v := range module.Fields {
 				extraFields = append(extraFields, archiveParams[v.FieldName])
@@ -451,16 +694,22 @@ func ApiArchiveParams(ctx iris.Context) {
 }
 
 func ApiCategoryDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
 	catname := ctx.URLParam("catname")
 	if catname != "" {
 		filename = catname
 	}
-	category, err := provider.GetCategoryById(id)
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
+	category, err := currentSite.GetCategoryById(id)
 	if err != nil {
 		if filename != "" {
-			category, err = provider.GetCategoryByUrlToken(filename)
+			category, err = currentSite.GetCategoryByUrlToken(filename)
 		}
 	}
 	if err != nil {
@@ -470,7 +719,11 @@ func ApiCategoryDetail(ctx iris.Context) {
 		})
 		return
 	}
-
+	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+	// convert markdown to html
+	if render {
+		category.Content = library.MarkdownToHTML(category.Content)
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -479,8 +732,10 @@ func ApiCategoryDetail(ctx iris.Context) {
 }
 
 func ApiCategoryList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	parentId := uint(ctx.URLParamIntDefault("parentId", 0))
+	all := ctx.URLParamBoolDefault("all", false)
 	limit := 0
 	offset := 0
 	limitTmp := ctx.URLParam("limit")
@@ -500,7 +755,7 @@ func ApiCategoryList(ctx iris.Context) {
 		}
 	}
 
-	categoryList := provider.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive)
+	categoryList := currentSite.GetCategoriesFromCache(moduleId, parentId, config.CategoryTypeArchive, all)
 	var resultList []*model.Category
 	for i := 0; i < len(categoryList); i++ {
 		if offset > i {
@@ -509,7 +764,8 @@ func ApiCategoryList(ctx iris.Context) {
 		if limit > 0 && i >= (limit+offset) {
 			break
 		}
-		categoryList[i].Link = provider.GetUrl("category", categoryList[i], 0)
+		categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		categoryList[i].Link = currentSite.GetUrl("category", categoryList[i], 0)
 		categoryList[i].IsCurrent = false
 		resultList = append(resultList, categoryList[i])
 	}
@@ -521,8 +777,48 @@ func ApiCategoryList(ctx iris.Context) {
 	})
 }
 
+func ApiModuleDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := uint(ctx.URLParamIntDefault("id", 0))
+	filename := ctx.URLParam("filename")
+
+	module := currentSite.GetModuleFromCache(id)
+	if module == nil {
+		if filename != "" {
+			module = currentSite.GetModuleFromCacheByToken(filename)
+		}
+	}
+	if module == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("ModelDoesNotExist"),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": module,
+	})
+}
+
+func ApiModuleList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	moduleList := currentSite.GetCacheModules()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": moduleList,
+	})
+}
+
 func ApiCommentList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	userId := uint(ctx.URLParamIntDefault("user_id", 0))
 	order := ctx.URLParamDefault("order", "id desc")
 	limit := 10
 	offset := 0
@@ -546,7 +842,7 @@ func ApiCommentList(ctx iris.Context) {
 		}
 	}
 
-	commentList, total, _ := provider.GetCommentList(archiveId, order, currentPage, limit, offset)
+	commentList, total, _ := currentSite.GetCommentList(archiveId, userId, order, currentPage, limit, offset)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -557,23 +853,24 @@ func ApiCommentList(ctx iris.Context) {
 }
 
 func ApiContact(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var settings = map[string]interface{}{}
 
-	reflectFields := structs.Fields(config.JsonData.Contact)
+	reflectFields := structs.Fields(currentSite.Contact)
 
 	for _, v := range reflectFields {
 		if v.Name() != "ExtraFields" {
 			value := v.Value()
 			if v.Name() == "Qrcode" {
-				value = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(value.(string), "/")
+				value = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(value.(string), "/")
 			}
 			settings[v.Name()] = value
 		}
 	}
 
-	if config.JsonData.Contact.ExtraFields != nil {
-		for i := range config.JsonData.Contact.ExtraFields {
-			settings[config.JsonData.Contact.ExtraFields[i].Name] = config.JsonData.Contact.ExtraFields[i].Value
+	if currentSite.Contact.ExtraFields != nil {
+		for i := range currentSite.Contact.ExtraFields {
+			settings[currentSite.Contact.ExtraFields[i].Name] = currentSite.Contact.ExtraFields[i].Value
 		}
 	}
 
@@ -585,23 +882,24 @@ func ApiContact(ctx iris.Context) {
 }
 
 func ApiSystem(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var settings = map[string]interface{}{}
 
-	reflectFields := structs.Fields(config.JsonData.System)
+	reflectFields := structs.Fields(currentSite.System)
 
 	for _, v := range reflectFields {
 		if v.Name() != "ExtraFields" {
 			value := v.Value()
 			if v.Name() == "SiteLogo" {
-				value = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(value.(string), "/")
+				value = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(value.(string), "/")
 			}
 			settings[v.Name()] = value
 		}
 	}
 
-	if config.JsonData.System.ExtraFields != nil {
-		for i := range config.JsonData.System.ExtraFields {
-			settings[config.JsonData.System.ExtraFields[i].Name] = config.JsonData.System.ExtraFields[i].Value
+	if currentSite.System.ExtraFields != nil {
+		for i := range currentSite.System.ExtraFields {
+			settings[currentSite.System.ExtraFields[i].Name] = currentSite.System.ExtraFields[i].Value
 		}
 	}
 
@@ -613,7 +911,8 @@ func ApiSystem(ctx iris.Context) {
 }
 
 func ApiGuestbook(ctx iris.Context) {
-	fields := config.GetGuestbookFields()
+	currentSite := provider.CurrentSite(ctx)
+	fields := currentSite.GetGuestbookFields()
 	for i := range fields {
 		//分割items
 		fields[i].SplitContent()
@@ -627,7 +926,8 @@ func ApiGuestbook(ctx iris.Context) {
 }
 
 func ApiLinkList(ctx iris.Context) {
-	linkList, _ := provider.GetLinkList()
+	currentSite := provider.CurrentSite(ctx)
+	linkList, _ := currentSite.GetLinkList()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -637,8 +937,9 @@ func ApiLinkList(ctx iris.Context) {
 }
 
 func ApiNavList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	typeId := ctx.URLParamIntDefault("typeId", 1)
-	navList := provider.GetNavsFromCache(uint(typeId))
+	navList := currentSite.GetNavsFromCache(uint(typeId))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -648,8 +949,9 @@ func ApiNavList(ctx iris.Context) {
 }
 
 func ApiNextArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
-	archiveDetail, err := provider.GetArchiveById(archiveId)
+	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -658,28 +960,25 @@ func ApiNextArchive(ctx iris.Context) {
 		return
 	}
 
-	var nextArchive model.Archive
-	if err2 := dao.DB.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Where("`status` = 1").First(&nextArchive).Error; err2 == nil {
-		nextArchive.GetThumb()
-		nextArchive.Link = provider.GetUrl("archive", &nextArchive, 0)
-
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  "",
-			"data": nextArchive,
-		})
+	nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Order("`id` ASC")
+	})
+	if nextArchive != nil && len(nextArchive.Password) > 0 {
+		// password is not visible for user
+		nextArchive.Password = ""
+		nextArchive.HasPassword = true
 	}
-
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": nil,
+		"data": nextArchive,
 	})
 }
 
 func ApiPrevArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	archiveId := uint(ctx.URLParamIntDefault("id", 0))
-	archiveDetail, err := provider.GetArchiveById(archiveId)
+	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -688,33 +987,34 @@ func ApiPrevArchive(ctx iris.Context) {
 		return
 	}
 
-	var prevArchive model.Archive
-	if err2 := dao.DB.Model(&model.Archive{}).Where("`module_id` = ? AND `category_id` = ?", archiveDetail.ModuleId, archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Where("`status` = 1").Last(&prevArchive).Error; err2 == nil {
-		prevArchive.GetThumb()
-		prevArchive.Link = provider.GetUrl("archive", &prevArchive, 0)
-
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  "",
-			"data": prevArchive,
-		})
+	prevArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Order("`id` DESC")
+	})
+	if prevArchive != nil && len(prevArchive.Password) > 0 {
+		// password is not visible for user
+		prevArchive.Password = ""
+		prevArchive.HasPassword = true
 	}
-
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": nil,
+		"data": prevArchive,
 	})
 }
 
 func ApiPageDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-
-	category, err := provider.GetCategoryById(id)
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
+	category, err := currentSite.GetCategoryById(id)
 	if err != nil {
 		if filename != "" {
-			category, err = provider.GetCategoryByUrlToken(filename)
+			category, err = currentSite.GetCategoryByUrlToken(filename)
 		}
 	}
 	if err != nil {
@@ -724,7 +1024,11 @@ func ApiPageDetail(ctx iris.Context) {
 		})
 		return
 	}
-
+	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+	// convert markdown to html
+	if render {
+		category.Content = library.MarkdownToHTML(category.Content)
+	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -733,9 +1037,11 @@ func ApiPageDetail(ctx iris.Context) {
 }
 
 func ApiPageList(ctx iris.Context) {
-	pageList := provider.GetCategoriesFromCache(0, 0, config.CategoryTypePage)
+	currentSite := provider.CurrentSite(ctx)
+	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage, true)
 	for i := range pageList {
-		pageList[i].Link = provider.GetUrl("page", pageList[i], 0)
+		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
+		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	}
 
 	ctx.JSON(iris.Map{
@@ -746,13 +1052,14 @@ func ApiPageList(ctx iris.Context) {
 }
 
 func ApiTagDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
 
-	tagDetail, err := provider.GetTagById(id)
+	tagDetail, err := currentSite.GetTagById(id)
 	if err != nil {
 		if filename != "" {
-			tagDetail, err = provider.GetTagByUrlToken(filename)
+			tagDetail, err = currentSite.GetTagByUrlToken(filename)
 		}
 	}
 	if err != nil {
@@ -764,7 +1071,7 @@ func ApiTagDetail(ctx iris.Context) {
 	}
 
 	if tagDetail != nil {
-		tagDetail.Link = provider.GetUrl("tag", tagDetail, 0)
+		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
 	}
 
 	ctx.JSON(iris.Map{
@@ -775,13 +1082,14 @@ func ApiTagDetail(ctx iris.Context) {
 }
 
 func ApiTagDataList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
 
-	tagDetail, err := provider.GetTagById(id)
+	tagDetail, err := currentSite.GetTagById(id)
 	if err != nil {
 		if filename != "" {
-			tagDetail, err = provider.GetTagByUrlToken(filename)
+			tagDetail, err = currentSite.GetTagByUrlToken(filename)
 		}
 	}
 	if err != nil {
@@ -795,7 +1103,14 @@ func ApiTagDataList(ctx iris.Context) {
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
-	order := ctx.URLParamDefault("order", "id desc")
+	order := ctx.URLParamDefault("order", "")
+	if order == "" {
+		if currentSite.Content.UseSort == 1 {
+			order = "archives.`sort` desc, archives.`id` desc"
+		} else {
+			order = "archives.`id` desc"
+		}
+	}
 	listType := ctx.URLParamDefault("type", "list")
 
 	limitTmp := ctx.URLParam("limit")
@@ -815,31 +1130,37 @@ func ApiTagDataList(ctx iris.Context) {
 		}
 	}
 
-	var total int64
-	var archives []*model.Archive
-
-	builder := dao.DB.Table("`archives` as a").Joins("INNER JOIN `tag_data` as t ON a.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id).Where("a.`status` = 1").Order(order)
-
 	if listType == "page" {
 		if currentPage > 1 {
 			offset = (currentPage - 1) * limit
 		}
-		builder.Count(&total)
 	}
-
-	builder = builder.Limit(limit).Offset(offset)
-	if err := builder.Find(&archives).Error; err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
+	archives, total, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+		tx = tx.Table("`archives` as archives").
+			Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
+		return tx
+	}, order, currentPage, limit, offset)
+	var archiveIds = make([]uint, 0, len(archives))
 	for i := range archives {
-		archives[i].Link = provider.GetUrl("archive", archives[i], 0)
+		archiveIds = append(archiveIds, archives[i].Id)
+		if len(archives[i].Password) > 0 {
+			archives[i].Password = ""
+			archives[i].HasPassword = true
+		}
 	}
-
+	// 读取flags
+	if len(archiveIds) > 0 {
+		var flags []*model.ArchiveFlags
+		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		for i := range archives {
+			for _, f := range flags {
+				if f.ArchiveId == archives[i].Id {
+					archives[i].Flag = f.Flags
+					break
+				}
+			}
+		}
+	}
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
@@ -849,12 +1170,14 @@ func ApiTagDataList(ctx iris.Context) {
 }
 
 func ApiTagList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	itemId := uint(ctx.URLParamIntDefault("itemId", 0))
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
+	order := ctx.URLParamDefault("order", "id desc")
 
 	limitTmp := ctx.URLParam("limit")
 	if limitTmp != "" {
@@ -879,9 +1202,9 @@ func ApiTagList(ctx iris.Context) {
 		}
 	}
 
-	tagList, total, _ := provider.GetTagList(itemId, "", letter, currentPage, limit, offset)
+	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
 	for i := range tagList {
-		tagList[i].Link = provider.GetUrl("tag", tagList[i], 0)
+		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 	}
 
 	ctx.JSON(iris.Map{
@@ -892,26 +1215,77 @@ func ApiTagList(ctx iris.Context) {
 	})
 }
 
+func ApiBannerList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	bannerType := ctx.URLParamDefault("type", "default")
+	tmpList := currentSite.Banner
+	var bannerList = make([]*config.BannerItem, 0, len(tmpList))
+	for i := range tmpList {
+		if tmpList[i].Type == "" {
+			tmpList[i].Type = "default"
+		}
+		if tmpList[i].Type == bannerType {
+			if !strings.HasPrefix(tmpList[i].Logo, "http") && !strings.HasPrefix(tmpList[i].Logo, "//") {
+				tmpList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(tmpList[i].Logo, "/")
+			}
+			bannerList = append(bannerList, &tmpList[i])
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": bannerList,
+	})
+}
+
+func ApiIndexTdk(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var settings = map[string]interface{}{}
+
+	reflectFields := structs.Fields(currentSite.Index)
+
+	for _, v := range reflectFields {
+		value := v.Value()
+		settings[v.Name()] = value
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": settings,
+	})
+}
+
 func ApiAttachmentUpload(ctx iris.Context) {
 	AttachmentUpload(ctx)
 }
 
 func ApiCommentPublish(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginComment
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
 		return
 	}
+	if ok := SafeVerify(ctx, nil, "json", "comment"); !ok {
+		return
+	}
 
 	userId := ctx.Values().GetIntDefault("userId", 0)
 	if userId > 0 {
 		req.Status = 1
+		userInfo := ctx.Values().Get("userInfo")
+		if userInfo != nil {
+			user, ok := userInfo.(*model.User)
+			if ok {
+				req.UserName = user.UserName
+			}
+		}
 	}
 
 	req.UserId = uint(userId)
@@ -919,22 +1293,36 @@ func ApiCommentPublish(ctx iris.Context) {
 		req.Ip = ctx.RemoteAddr()
 	}
 	if req.ParentId > 0 {
-		parent, err := provider.GetCommentById(req.ParentId)
+		parent, err := currentSite.GetCommentById(req.ParentId)
 		if err == nil {
 			req.ToUid = parent.UserId
 		}
 	}
+	// 是否需要审核
+	var contentVerify = true
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok {
+			contentVerify = !group.Setting.ContentNoVerify
+		}
+	}
+	req.Status = 0
+	if contentVerify == false {
+		// 不需要审核
+		req.Status = 1
+	}
 
-	comment, err := provider.SaveComment(&req)
+	comment, err := currentSite.SaveComment(&req)
 	if err != nil {
-		msg := config.Lang("保存失败")
+		msg := currentSite.TplTr("SaveFailed")
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  msg,
 		})
 	}
 
-	msg := config.Lang("发布成功")
+	msg := currentSite.TplTr("PublishSuccessfully")
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
@@ -943,11 +1331,10 @@ func ApiCommentPublish(ctx iris.Context) {
 }
 
 func ApiCommentPraise(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginComment
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -955,7 +1342,7 @@ func ApiCommentPraise(ctx iris.Context) {
 		return
 	}
 
-	comment, err := provider.GetCommentById(req.Id)
+	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -965,7 +1352,7 @@ func ApiCommentPraise(ctx iris.Context) {
 	}
 
 	comment.VoteCount += 1
-	err = comment.Save(dao.DB)
+	err = comment.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -978,18 +1365,17 @@ func ApiCommentPraise(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("点赞成功"),
+		"msg":  currentSite.TplTr("LikeSuccessfully"),
 		"data": comment,
 	})
 }
 
 func ApiGuestbookForm(ctx iris.Context) {
-	fields := config.GetGuestbookFields()
+	currentSite := provider.CurrentSite(ctx)
+	fields := currentSite.GetGuestbookFields()
 	var req = map[string]interface{}{}
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -1022,6 +1408,9 @@ func ApiGuestbookForm(ctx iris.Context) {
 			extraData[item.Name] = val
 		}
 	}
+	if ok := SafeVerify(ctx, result, "json", "guestbook"); !ok {
+		return
+	}
 
 	//先填充默认字段
 	guestbook := &model.Guestbook{
@@ -1033,9 +1422,9 @@ func ApiGuestbookForm(ctx iris.Context) {
 		ExtraData: extraData,
 	}
 
-	err = dao.DB.Save(guestbook).Error
+	err = currentSite.DB.Save(guestbook).Error
 	if err != nil {
-		msg := config.Lang("保存失败")
+		msg := currentSite.TplTr("SaveFailed")
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  msg,
@@ -1044,24 +1433,32 @@ func ApiGuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := fmt.Sprintf(config.Lang("%s有来自%s的新留言"), config.JsonData.System.SiteName, guestbook.UserName)
+	subject := currentSite.TplTr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := fmt.Sprintf("%s：%s\n", item.Name, req[item.FieldName])
+		content := currentSite.TplTr("s:s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
 	// 增加来路和IP返回
-	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("提交IP"), guestbook.Ip))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("来源页面"), guestbook.Refer))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("提交时间"), time.Now().Format("2006-01-02 15:04:05")))
+	contents = append(contents, currentSite.TplTr("SubmitIpLog", guestbook.Ip)+"\n")
+	contents = append(contents, currentSite.TplTr("SourcePageLog", guestbook.Refer)+"\n")
+	contents = append(contents, currentSite.TplTr("SubmitTimeLog", time.Now().Format("2006-01-02 15:04:05"))+"\n")
 
-	// 后台发信
-	go provider.SendMail(subject, strings.Join(contents, ""))
+	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
+		// 后台发信
+		go currentSite.SendMail(subject, strings.Join(contents, ""))
+		// 回复客户
+		recipient, ok := result["email"]
+		if !ok {
+			recipient = result["contact"]
+		}
+		go currentSite.ReplyMail(recipient)
+	}
 
-	msg := config.JsonData.PluginGuestbook.ReturnMessage
+	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {
-		msg = config.Lang("感谢您的留言！")
+		msg = currentSite.TplTr("ThankYouForYourMessage!")
 	}
 
 	ctx.JSON(iris.Map{
@@ -1071,6 +1468,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 }
 
 func ApiArchivePublish(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -1079,9 +1477,14 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
-	if config.JsonData.Safe.APIPublish != 1 {
-		req.Draft = true
-		return
+	// 是否需要审核
+	req.Draft = currentSite.Safe.APIPublish != 1
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok {
+			req.Draft = !group.Setting.ContentNoVerify
+		}
 	}
 	userId := ctx.Values().GetIntDefault("userId", 0)
 	req.UserId = uint(userId)
@@ -1090,8 +1493,6 @@ func ApiArchivePublish(ctx iris.Context) {
 	var extraReq = map[string]interface{}{}
 	var err error
 	if err = ctx.ReadJSON(&extraReq); err != nil {
-		body, _ := ctx.GetBody()
-		library.DebugLog("error", err.Error(), string(body))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -1104,7 +1505,7 @@ func ApiArchivePublish(ctx iris.Context) {
 		}
 	}
 
-	archive, err := provider.SaveArchive(&req)
+	archive, err := currentSite.SaveArchive(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1112,11 +1513,15 @@ func ApiArchivePublish(ctx iris.Context) {
 		})
 		return
 	}
-	archive.Link = provider.GetUrl("archive", archive, 0)
+	msg := currentSite.TplTr("PublishSuccessfully")
+	if req.Draft {
+		msg += currentSite.TplTr("ItHasEnteredTheReview")
+	}
+	archive.Link = currentSite.GetUrl("archive", archive, 0)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("发布成功，已进入审核"),
+		"msg":  msg,
 		"data": archive,
 	})
 }

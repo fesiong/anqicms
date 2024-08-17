@@ -1,14 +1,14 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 )
 
 func PluginFulltextConfig(ctx iris.Context) {
-	setting := config.JsonData.PluginFulltext
+	currentSite := provider.CurrentSite(ctx)
+	setting := currentSite.PluginFulltext
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -18,6 +18,7 @@ func PluginFulltextConfig(ctx iris.Context) {
 }
 
 func PluginFulltextConfigForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginFulltextConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -27,9 +28,13 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 		return
 	}
 
-	config.JsonData.PluginFulltext.Open = req.Open
+	currentSite.PluginFulltext.Open = req.Open
+	currentSite.PluginFulltext.UseContent = req.UseContent
+	currentSite.PluginFulltext.Modules = req.Modules
+	currentSite.PluginFulltext.UseCategory = req.UseCategory
+	currentSite.PluginFulltext.UseTag = req.UseTag
 
-	err := provider.SaveSettingValue(provider.FulltextSettingKey, config.JsonData.PluginFulltext)
+	err := currentSite.SaveSettingValue(provider.FulltextSettingKey, currentSite.PluginFulltext)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -38,15 +43,16 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新全文索引配置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateFullTextIndexConfiguration"))
 	if req.Open {
-		go provider.InitFulltext()
+		currentSite.CloseFulltext()
+		go currentSite.InitFulltext()
 	} else {
-		provider.CloseFulltext()
+		currentSite.CloseFulltext()
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

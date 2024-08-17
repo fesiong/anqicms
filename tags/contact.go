@@ -2,11 +2,11 @@ package tags
 
 import (
 	"fmt"
+	"kandaoni.com/anqicms/provider"
 	"reflect"
 	"strings"
 
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 )
 
@@ -16,9 +16,21 @@ type tagContactNode struct {
 }
 
 func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
+		return nil
+	}
 	args, err := parseArgs(node.args, ctx)
 	if err != nil {
 		return err
+	}
+
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
 	}
 
 	fieldName := ""
@@ -29,23 +41,23 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 
 	var content string
 
-	if config.JsonData.Contact.ExtraFields != nil {
-		for i := range config.JsonData.Contact.ExtraFields {
-			if config.JsonData.Contact.ExtraFields[i].Name == fieldName {
-				content = config.JsonData.Contact.ExtraFields[i].Value
+	if currentSite.Contact.ExtraFields != nil {
+		for i := range currentSite.Contact.ExtraFields {
+			if currentSite.Contact.ExtraFields[i].Name == fieldName {
+				content = currentSite.Contact.ExtraFields[i].Value
 				break
 			}
 		}
 	}
 	if content == "" {
-		v := reflect.ValueOf(config.JsonData.Contact)
+		v := reflect.ValueOf(currentSite.Contact)
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)
 	}
 	if fieldName == "Qrcode" {
 		if !strings.HasPrefix(content, "http") && !strings.HasPrefix(content, "//") {
-			content = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
+			content = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
 		}
 	}
 

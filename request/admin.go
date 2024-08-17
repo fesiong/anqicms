@@ -22,3 +22,12 @@ type GroupRequest struct {
 	Status      int                `json:"status"`
 	Setting     model.GroupSetting `json:"setting"` //配置
 }
+
+type FindPasswordChooseRequest struct {
+	Way string `json:"way"`
+}
+
+type FindPasswordReset struct {
+	UserName string `json:"user_name"`
+	Password string `json:"password"`
+}

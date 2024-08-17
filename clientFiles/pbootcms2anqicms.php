@@ -4,7 +4,7 @@
  * 仅支持 php 5.3 以上
  * 版权保护，如需使用，请访问 https://www.anqicms.com/。
  * @author anqicms
- * 微信：17620331155
+ * 微信：websafety
  */
 
 use app\api\model\CmsModel;
@@ -265,6 +265,10 @@ class anqicms
                 if (!empty($icon) && strpos($icon, 'http') === false) {
                     $icon = $this->setting['base_url'] + $icon;
                 }
+                $images = array();
+                if (!empty($icon)) {
+                    $images = array($icon);
+                }
                 $archive = array(
                   'id' => intval($val->id),
                   'title' => $val->title,
@@ -275,7 +279,7 @@ class anqicms
                   'status' => intval($val->status),
                   'created_time' => strtotime($val->create_time),
                   'updated_time' => strtotime($val->update_time),
-                  'images' => [$icon],
+                  'images' => $images,
                   'url_token' => $val->filename,
                   'module_id' => intval($val->mcode),
                   'flag' => $flag,

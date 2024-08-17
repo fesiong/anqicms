@@ -2,10 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -20,7 +19,8 @@ type tagArchiveFiltersNode struct {
 }
 
 func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -28,17 +28,25 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		return err
 	}
 
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	if args["moduleId"] == nil {
 		return nil
 	}
 
 	moduleId := uint(args["moduleId"].Integer())
-	module := provider.GetModuleFromCache(moduleId)
+	module := currentSite.GetModuleFromCache(moduleId)
 	if module == nil {
 		return nil
 	}
 
-	allText := config.Lang("全部")
+	allText := currentSite.TplTr("All")
 
 	if args["allText"] != nil {
 		if args["allText"].IsBool() {
@@ -53,7 +61,7 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉，并且不是跟随阅读等级
-	var filterFields []config.CustomField
+	var fields []config.CustomField
 	var filterGroups []response.FilterGroup
 	var newParams = make(url.Values)
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
@@ -76,8 +84,15 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if ok && categoryDetail != nil {
 		matchData = categoryDetail
 		urlMatch = "category"
+	} else {
+		// 在 module 下
+		moduleDetail, ok := ctx.Public["module"].(*model.Module)
+		if ok && moduleDetail != nil {
+			matchData = moduleDetail
+			urlMatch = "archiveIndex"
+		}
 	}
-	urlPatten := provider.GetUrl(urlMatch, matchData, 1)
+	urlPatten := currentSite.GetUrl(urlMatch, matchData, 1)
 	if strings.Contains(urlPatten, "?") {
 		urlPatten += "&"
 	} else {
@@ -87,12 +102,12 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if len(module.Fields) > 0 {
 		for _, v := range module.Fields {
 			if v.IsFilter {
-				filterFields = append(filterFields, v)
+				fields = append(fields, v)
 			}
 		}
 
 		// 所有参数的url都附着到query中
-		for _, v := range filterFields {
+		for _, v := range fields {
 			values := v.SplitContent()
 			if len(values) == 0 {
 				continue

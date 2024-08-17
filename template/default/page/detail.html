@@ -1,40 +1,27 @@
 {% extends 'base.html' %}
 
 {% block container %}
-{% include "partial/breadcrumb.html" %}
-<div class="blog-index clearfix">
-	<!-- single content -->
-	<div class="container clearfix">
-		<!-- single cotnent -->
-		<div class="blog-cotnent clearfix">
-			<div class="page-content">
-				<div class="single-title">
-					<h1>{{page.Title}}</h1>
-				</div>
-				<div class="arc clearfix">
-					{% pageDetail pageContent with name="Content" %}
-					{{pageContent|safe}}
-				</div>
-				<!-- relblog -->
-				<div class="relblog clearfix">
-					<h3 class="rel-title"><i></i>相关页面</h3>
-					<ul class="relblog-ul">
-						{% pageList allPages %}
-						{% for item in allPages %}
-						<li class="relblog-li">
-							<h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
-							<span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
-						</li>
-						{% endfor %}
-						{% endpageList %}
-					</ul>
-				</div>
-				<!-- relblog -->
-			</div>
-			{% include "partial/sidebar.html" %}
-		</div>
-		<!-- single cotnent -->
-	</div>
-	<!-- single content -->
+
+{% include "partial/banner.html" %}
+<!-- crumb -->
+{% include "partial/crumb.html" %}
+<!-- crumb -->
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <h1 class="single-content-title">{% pageDetail with name="Title" %}</h1>
+                <div class="single-arc">
+                    {%- pageDetail articleContent with name="Content" %}
+                    {{articleContent|safe}}
+                </div>
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
 </div>
 {% endblock %}

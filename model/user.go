@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v4"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"hash/crc32"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"strconv"
 	"strings"
@@ -34,15 +32,17 @@ type User struct {
 	LastLogin   int64  `json:"last_login" gorm:"column:last_login;type:int(11);default:0"`
 	ExpireTime  int64  `json:"expire_time" gorm:"column:expire_time;type:int(11);default:0"`
 
-	Token         string     `json:"token" gorm:"-"`
-	Group         *UserGroup `json:"group" gorm:"-"`
-	FullAvatarURL string     `json:"full_avatar_url" gorm:"-"`
+	Extra         map[string]*CustomField `json:"extra" gorm:"-"`
+	Token         string                  `json:"token" gorm:"-"`
+	Group         *UserGroup              `json:"group" gorm:"-"`
+	FullAvatarURL string                  `json:"full_avatar_url" gorm:"-"`
+	Link          string                  `json:"link" gorm:"-"`
 }
 
 type UserGroup struct {
 	Model
 	Title          string           `json:"title" gorm:"column:title;type:varchar(32) not null;default:''"`
-	Description    string           `json:"description" gorm:"column:description;type:varchar(250) not null;default:''"`
+	Description    string           `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Level          int              `json:"level" gorm:"column:level;type:int(10) not null;default:0"` // group level
 	Status         int              `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
 	Price          int64            `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
@@ -56,6 +56,9 @@ type UserGroupSetting struct {
 	ParentReward int64 `json:"parent_reward"`
 	Discount     int64 `json:"discount"`
 	ExpireDay    int   `json:"expire_day"`
+
+	ContentNoVerify  bool `json:"content_no_verify"`  // 评论/内容发布是否不需要审核
+	ContentNoCaptcha bool `json:"content_no_captcha"` // 评论/内容发布是否不需要验证码
 }
 
 // Value implements the driver.Valuer interface.
@@ -78,14 +81,6 @@ func (s *UserGroupSetting) Scan(src interface{}) error {
 	return fmt.Errorf("pq: cannot convert %T", src)
 }
 
-func (u *User) BeforeSave(tx *gorm.DB) (err error) {
-	if u.GroupId == 0 {
-		u.GroupId = config.JsonData.PluginUser.DefaultGroupId
-	}
-
-	return
-}
-
 func (u *User) AfterCreate(tx *gorm.DB) (err error) {
 	if u.InviteCode == "" {
 		id := crc32.ChecksumIEEE([]byte(strconv.Itoa(int(u.Id))))
@@ -97,17 +92,12 @@ func (u *User) AfterCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-func (u *User) AfterFind(tx *gorm.DB) error {
-	u.GetThumb()
-	return nil
-}
-
-func (u *User) GetThumb() string {
+func (u *User) GetThumb(storageUrl string) string {
 	u.FullAvatarURL = u.AvatarURL
 	//取第一张
 	if u.FullAvatarURL != "" {
 		if !strings.HasPrefix(u.FullAvatarURL, "http") && !strings.HasPrefix(u.FullAvatarURL, "//") {
-			u.FullAvatarURL = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(u.FullAvatarURL, "/")
+			u.FullAvatarURL = storageUrl + "/" + strings.TrimPrefix(u.FullAvatarURL, "/")
 		}
 	}
 
@@ -131,7 +121,7 @@ func (u *User) CheckPassword(password string) bool {
 
 func (u *User) EncryptPassword(password string) error {
 	if password == "" {
-		return errors.New(config.Lang("密码为空"))
+		return errors.New("密码为空")
 	}
 	pass := []byte(password)
 	hash, err := bcrypt.GenerateFromPassword(pass, bcrypt.MinCost)
@@ -144,17 +134,7 @@ func (u *User) EncryptPassword(password string) error {
 	return nil
 }
 
-func (u *User) EncodeToken(tx *gorm.DB) error {
-	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": fmt.Sprintf("%d", u.Id),
-		"t":      fmt.Sprintf("%d", time.Now().AddDate(0, 0, 30).Unix()),
-	})
-	// 获取签名字符串
-	tokenString, err := jwtToken.SignedString([]byte(config.Server.Server.TokenSecret))
-	if err != nil {
-		return err
-	}
-	u.Token = tokenString
+func (u *User) LogLogin(tx *gorm.DB) error {
 	u.LastLogin = time.Now().Unix()
 	tx.Model(u).UpdateColumn("last_login", u.LastLogin)
 

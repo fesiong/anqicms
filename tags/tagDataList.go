@@ -2,9 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
+	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
-	"kandaoni.com/anqicms/dao"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"strconv"
@@ -18,7 +18,8 @@ type tagTagDataListNode struct {
 }
 
 func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -26,12 +27,27 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		return err
 	}
 
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "id desc"
+	order := "archives.`id` desc"
+	if currentSite.Content.UseSort == 1 {
+		order = "archives.`sort` desc, archives.`id` desc"
+	}
 	tagId := uint(0)
 	listType := "list"
+	moduleId := uint(0)
+	if args["moduleId"] != nil {
+		moduleId = uint(args["moduleId"].Integer())
+	}
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -40,7 +56,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	tagDetail, _ := ctx.Public["tag"].(*model.Tag)
 	if args["tagId"] != nil {
 		tagId = uint(args["tagId"].Integer())
-		tagDetail, _ = provider.GetTagById(tagId)
+		tagDetail, _ = currentSite.GetTagById(tagId)
 	}
 
 	if tagDetail != nil {
@@ -54,6 +70,9 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if paramPage > 0 {
 				currentPage = paramPage
 			}
+		}
+		if currentPage < 1 {
+			currentPage = 1
 		}
 		if args["limit"] != nil {
 			limitArgs := strings.Split(args["limit"].String(), ",")
@@ -71,32 +90,46 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 
-		var total int64
-		var archives []*model.Archive
-
-		builder := dao.DB.Table("`archives` as a").Joins("INNER JOIN `tag_data` as t ON a.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id).Where("a.`status` = 1").Order(order)
-
 		if listType == "page" {
 			if currentPage > 1 {
 				offset = (currentPage - 1) * limit
 			}
-			builder.Count(&total)
+		} else {
+			currentPage = 1
 		}
-
-		builder = builder.Limit(limit).Offset(offset)
-		if err := builder.Find(&archives).Error; err != nil {
-			return nil
-		}
-
+		archives, total, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+			tx = tx.Table("`archives` as archives").
+				Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
+			if moduleId > 0 {
+				tx = tx.Where("archives.`module_id` = ?", moduleId)
+			}
+			return tx
+		}, order, currentPage, limit, offset)
+		var archiveIds = make([]uint, 0, len(archives))
 		for i := range archives {
-			archives[i].Link = provider.GetUrl("archive", archives[i], 0)
+			archiveIds = append(archiveIds, archives[i].Id)
+			if len(archives[i].Password) > 0 {
+				archives[i].HasPassword = true
+			}
 		}
-
+		// 读取flags
+		if len(archiveIds) > 0 {
+			var flags []*model.ArchiveFlags
+			currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			for i := range archives {
+				for _, f := range flags {
+					if f.ArchiveId == archives[i].Id {
+						archives[i].Flag = f.Flags
+						break
+					}
+				}
+			}
+		}
 		ctx.Private[node.name] = archives
 		if listType == "page" {
 			// 分页
-			urlPatten := provider.GetUrl("tag", tagDetail, -1)
-			ctx.Public["pagination"] = makePagination(total, currentPage, limit, urlPatten, 5)
+			urlPatten := currentSite.GetUrl("tag", tagDetail, -1)
+			ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 		}
 	}
 

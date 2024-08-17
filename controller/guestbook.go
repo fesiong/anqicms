@@ -4,22 +4,32 @@ import (
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 	"strings"
 	"time"
 )
 
 func GuestbookPage(ctx iris.Context) {
-	fields := config.GetGuestbookFields()
+	currentSite := provider.CurrentSite(ctx)
+	base := ctx.Params().Get("base")
+	if base != strings.TrimLeft(currentSite.BaseURI, "/") {
+		ctx.StatusCode(404)
+		ShowMessage(ctx, "Not Found", nil)
+		return
+	}
+
+	fields := currentSite.GetGuestbookFields()
 
 	ctx.ViewData("fields", fields)
 
-	webInfo.Title = config.Lang("在线留言")
-	webInfo.PageName = "guestbook"
-	webInfo.CanonicalUrl = provider.GetUrl("/guestbook.html", nil, 0)
-	ctx.ViewData("webInfo", webInfo)
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = currentSite.TplTr("OnlineMessage")
+		webInfo.PageName = "guestbook"
+		webInfo.CanonicalUrl = currentSite.GetUrl("/guestbook.html", nil, 0)
+		ctx.ViewData("webInfo", webInfo)
+	}
 
 	tplName := "guestbook/index.html"
 	if ViewExists(ctx, "guestbook.html") {
@@ -32,13 +42,18 @@ func GuestbookPage(ctx iris.Context) {
 }
 
 func GuestbookForm(ctx iris.Context) {
-	// 支持返回为 json 或html， 默认 html
-	returnType := ctx.PostValueTrim("return")
-	if ok := SafeVerify(ctx, "guestbook"); !ok {
+	currentSite := provider.CurrentSite(ctx)
+	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Not Found",
+		})
 		return
 	}
+	// 支持返回为 json 或html， 默认 html
+	returnType := ctx.PostValueTrim("return")
 
-	fields := config.GetGuestbookFields()
+	fields := currentSite.GetGuestbookFields()
 	var req = map[string]string{}
 	// 采用post接收
 	extraData := map[string]interface{}{}
@@ -50,7 +65,7 @@ func GuestbookForm(ctx iris.Context) {
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
-				attach, err := provider.AttachmentUpload(file, info, 0, 0)
+				attach, err := currentSite.AttachmentUpload(file, info, 0, 0)
 				if err == nil {
 					val = attach.Logo
 					if attach.Logo == "" {
@@ -63,7 +78,7 @@ func GuestbookForm(ctx iris.Context) {
 		}
 
 		if item.Required && val == "" {
-			msg := fmt.Sprintf("%s必填", item.Name)
+			msg := currentSite.TplTr("ItIsRequired", item.Name)
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -79,6 +94,9 @@ func GuestbookForm(ctx iris.Context) {
 		}
 		req[item.FieldName] = val
 	}
+	if ok := SafeVerify(ctx, req, returnType, "guestbook"); !ok {
+		return
+	}
 
 	//先填充默认字段
 	guestbook := &model.Guestbook{
@@ -90,9 +108,9 @@ func GuestbookForm(ctx iris.Context) {
 		ExtraData: extraData,
 	}
 
-	err := dao.DB.Save(guestbook).Error
+	err := currentSite.DB.Save(guestbook).Error
 	if err != nil {
-		msg := config.Lang("保存失败")
+		msg := currentSite.TplTr("SaveFailed")
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -105,24 +123,32 @@ func GuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := fmt.Sprintf(config.Lang("%s有来自%s的新留言"), config.JsonData.System.SiteName, guestbook.UserName)
+	subject := currentSite.TplTr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := fmt.Sprintf("%s：%s\n", item.Name, req[item.FieldName])
+		content := currentSite.TplTr("s:s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
 	// 增加来路和IP返回
-	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("提交IP"), guestbook.Ip))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("来源页面"), guestbook.Refer))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", config.Lang("提交时间"), time.Now().Format("2006-01-02 15:04:05")))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitIp"), guestbook.Ip))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SourcePage"), guestbook.Refer))
+	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
 
-	// 后台发信
-	go provider.SendMail(subject, strings.Join(contents, ""))
+	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
+		// 后台发信
+		go currentSite.SendMail(subject, strings.Join(contents, ""))
+		// 回复客户
+		recipient, ok := req["email"]
+		if !ok {
+			recipient = req["contact"]
+		}
+		go currentSite.ReplyMail(recipient)
+	}
 
-	msg := config.JsonData.PluginGuestbook.ReturnMessage
+	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {
-		msg = config.Lang("感谢您的留言！")
+		msg = currentSite.TplTr("ThankYouForYourMessage!")
 	}
 
 	if returnType == "json" {
@@ -131,14 +157,14 @@ func GuestbookForm(ctx iris.Context) {
 			"msg":  msg,
 		})
 	} else {
-		link := provider.GetUrl("/guestbook.html", nil, 0)
+		link := currentSite.GetUrl("/guestbook.html", nil, 0)
 		refer := ctx.GetReferrer()
 		if refer.URL != "" {
 			link = refer.URL
 		}
 
 		ShowMessage(ctx, msg, []Button{
-			{Name: config.Lang("点击继续"), Link: link},
+			{Name: currentSite.TplTr("ClickToContinue"), Link: link},
 		})
 	}
 }

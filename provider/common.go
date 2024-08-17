@@ -1,34 +1,30 @@
 package provider
 
-import "kandaoni.com/anqicms/library"
-
-const (
-	IndexCacheKey = "index"
-
-	UserAgentPc     = "pc"
-	UserAgentMobile = "mobile"
+import (
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"log"
 )
 
-func CacheIndex(ua string, body []byte) {
-	library.MemCache.Set(IndexCacheKey+ua, body, 3600)
+func (w *Website) DeleteCacheIndex() {
+	w.RemoveHtmlCache("/")
+	go func() {
+		// 上传到静态服务器
+		cachePath := w.CachePath + "pc"
+		w.BuildIndexCache()
+		_ = w.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
+	}()
 }
 
-func GetIndexCache(ua string) []byte {
-	body := library.MemCache.Get(IndexCacheKey + ua)
-
-	if body == nil {
-		return nil
-	}
-
-	content, ok := body.([]byte)
-	if ok {
-		return content
-	}
-
-	return nil
-}
-
-func DeleteCacheIndex() {
-	library.MemCache.Delete(IndexCacheKey + UserAgentPc)
-	library.MemCache.Delete(IndexCacheKey + UserAgentMobile)
+func init() {
+	// check what if this server can visit google
+	go func() {
+		resp, err := library.GetURLData("https://www.google.com", "", 5)
+		if err != nil {
+			config.GoogleValid = false
+		} else {
+			config.GoogleValid = true
+			log.Println("google-status", resp.StatusCode)
+		}
+	}()
 }

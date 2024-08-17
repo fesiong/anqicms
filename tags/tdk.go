@@ -2,9 +2,9 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"reflect"
 )
@@ -15,6 +15,10 @@ type tagTdkNode struct {
 }
 
 func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
+		return nil
+	}
 	args, err := parseArgs(node.args, ctx)
 	if err != nil {
 		return err
@@ -31,25 +35,43 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		fieldName = library.Case2Camel(fieldName)
 	}
 
-	webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
+	webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
 	if !ok {
 		return nil
 	}
 
-	v := reflect.ValueOf(webInfo)
+	v := reflect.ValueOf(*webInfo)
 
 	f := v.FieldByName(fieldName)
 
 	content := fmt.Sprintf("%v", f)
-	if siteName && fieldName == "Title" {
-		if content != "" {
-			content += " - "
+	if fieldName == "Title" {
+		var pateText string
+		// 增加分页
+		paginator, ok := ctx.Public["pagination"].(*pagination)
+		if ok {
+			// 从第二页开始，增加分页
+			if paginator.CurrentPage > 1 {
+				pateText = currentSite.TplTr("PageNum", paginator.CurrentPage)
+			}
+			return nil
 		}
-		content += config.JsonData.System.SiteName
-	}
-	if fieldName == "Title" && content == "" {
-		// 保持标题至少是网站名称
-		content = config.JsonData.System.SiteName
+		if len(pateText) > 0 {
+			if content != "" {
+				content += " - "
+			}
+			content += pateText
+		}
+		if siteName {
+			if content != "" {
+				content += " - "
+			}
+			content += currentSite.System.SiteName
+		}
+		if content == "" {
+			// 保持标题至少是网站名称
+			content = currentSite.System.SiteName
+		}
 	}
 
 	// output

@@ -1,91 +1,79 @@
 package provider
 
 import (
+	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"net/url"
+	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
 
-func GetCategories(moduleId uint, title string, parentId uint) ([]*model.Category, error) {
+func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
-	db := dao.DB
-	builder := db.Where("`type` = ? and `status` = ?", config.CategoryTypeArchive, 1)
-	if moduleId > 0 {
-		builder = builder.Where("`module_id` = ?", moduleId)
-	}
-
-	err := builder.Order("module_id asc,sort asc").Find(&categories).Error
+	err := ops(w.DB).Omit("content").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
-
+	for i := range categories {
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].Link = w.GetUrl("category", categories[i], 0)
+	}
 	categoryTree := NewCategoryTree(categories)
-	categories = categoryTree.GetTree(parentId, "")
 
-	return categories, nil
-}
-
-func GetPages(title string) ([]*model.Category, error) {
-	var categories []*model.Category
-	db := dao.DB
-	builder := db.Where("`type` = ? and `status` = ?", config.CategoryTypePage, 1)
-	if title != "" {
-		builder = builder.Where("`title` like ?", "%"+title+"%")
-	}
-
-	err := builder.Order("sort asc").Find(&categories).Error
-	if err != nil {
-		return nil, err
+	if showType == config.CategoryShowTypeNode {
+		categories = categoryTree.GetTreeNode(0, "")
+	} else {
+		categories = categoryTree.GetTree(parentId, "")
 	}
 
 	return categories, nil
 }
 
-func GetCategoryByTitle(title string) (*model.Category, error) {
+func (w *Website) GetCategoryByTitle(title string) (*model.Category, error) {
+	return w.GetCategoryByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`title` = ?", title)
+	})
+}
+
+func (w *Website) GetCategoryById(id uint) (*model.Category, error) {
+	return w.GetCategoryByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`id` = ?", id)
+	})
+}
+
+func (w *Website) GetCategoryByUrlToken(urlToken string) (*model.Category, error) {
+	if urlToken == "" {
+		return nil, errors.New("empty token")
+	}
+	return w.GetCategoryByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`url_token` = ?", urlToken)
+	})
+}
+
+func (w *Website) GetCategoryByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Category, error) {
 	var category model.Category
-	db := dao.DB
-	err := db.Where("`title` = ?", title).First(&category).Error
+	err := ops(w.DB).Take(&category).Error
 	if err != nil {
 		return nil, err
 	}
+	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.Link = w.GetUrl("category", &category, 0)
 
 	return &category, nil
 }
 
-func GetCategoryById(id uint) (*model.Category, error) {
-	var category model.Category
-	db := dao.DB
-	err := db.Where("`id` = ?", id).First(&category).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return &category, nil
-}
-
-func GetCategoryByUrlToken(urlToken string) (*model.Category, error) {
-	var category model.Category
-	db := dao.DB
-	err := db.Where("`url_token` = ?", urlToken).First(&category).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return &category, nil
-}
-
-func SaveCategory(req *request.Category) (category *model.Category, err error) {
+func (w *Website) SaveCategory(req *request.Category) (category *model.Category, err error) {
 	newPost := false
 	if req.Id > 0 {
-		category, err = GetCategoryById(req.Id)
+		category, err = w.GetCategoryById(req.Id)
 		if err != nil {
 			return nil, err
 		}
@@ -103,21 +91,21 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	category.ModuleId = req.ModuleId
 	category.ParentId = req.ParentId
 	category.Sort = req.Sort
-	category.Status = 1
+	category.Status = req.Status
 	category.Template = req.Template
 	category.DetailTemplate = req.DetailTemplate
 	category.IsInherit = req.IsInherit
 	category.Images = req.Images
 	category.Logo = req.Logo
 	for i, v := range category.Images {
-		category.Images[i] = strings.TrimPrefix(v, config.JsonData.PluginStorage.StorageUrl)
+		category.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)
 	}
 	if category.Logo != "" {
-		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.PluginStorage.StorageUrl)
+		category.Logo = strings.TrimPrefix(category.Logo, w.PluginStorage.StorageUrl)
 	}
 	//增加判断上级，强制类型与上级同步
 	if category.ParentId > 0 {
-		parent, err := GetCategoryById(category.ParentId)
+		parent, err := w.GetCategoryById(category.ParentId)
 		if err == nil {
 			category.Type = parent.Type
 			category.ModuleId = parent.ModuleId
@@ -125,116 +113,229 @@ func SaveCategory(req *request.Category) (category *model.Category, err error) {
 	}
 	// 判断重复
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title)
+	if !req.Force && len(req.UrlToken) > 0 {
+		// 检查是否重复
+		tmpCat, err := w.GetCategoryByUrlToken(req.UrlToken)
+		if err == nil && tmpCat.Id != category.Id {
+			return nil, errors.New("token duplication")
+		}
 	}
-	category.UrlToken = VerifyCategoryUrlToken(req.UrlToken, category.Id)
-	if category.ModuleId == 0 {
-		modules := GetCacheModules()
+	if req.UrlToken == "" {
+		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+	}
+	if !req.Force {
+		req.UrlToken = w.VerifyCategoryUrlToken(req.UrlToken, category.Id)
+	}
+	category.UrlToken = req.UrlToken
+	if category.ModuleId == 0 && category.Type == config.CategoryTypeArchive {
+		modules := w.GetCacheModules()
 		if len(modules) > 0 {
 			category.ModuleId = modules[0].Id
 		}
 	}
+	if category.Type == config.CategoryTypePage {
+		category.ModuleId = 0
+	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, config.JsonData.System.BaseUrl, "")
-	//goquery
-	htmlR := strings.NewReader(req.Content)
-	doc, err := goquery.NewDocumentFromReader(htmlR)
+	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	baseHost := ""
+	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
-		baseHost := ""
-		urls, err := url.Parse(config.JsonData.System.BaseUrl)
-		if err == nil {
-			baseHost = urls.Host
+		baseHost = urls.Host
+	}
+	autoAddImage := false
+	//提取描述
+	if category.Description == "" {
+		tmpContent := req.Content
+		if w.Content.Editor == "markdown" {
+			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-
-		//提取描述
-		if category.Description == "" {
-			textRune := []rune(strings.ReplaceAll(CleanTagsAndSpaces(doc.Text()), "\n", " "))
-			if len(textRune) > 150 {
-				category.Description = string(textRune[:150])
-			} else {
-				category.Description = string(textRune)
+		category.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
+	}
+	//提取缩略图
+	if len(category.Logo) == 0 {
+		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		match := re.FindStringSubmatch(req.Content)
+		if len(match) > 1 {
+			//提取缩略图
+			category.Logo = match[1]
+			autoAddImage = true
+		} else {
+			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+			match = re.FindStringSubmatch(req.Content)
+			if len(match) > 2 {
+				category.Logo = match[2]
+				autoAddImage = true
 			}
 		}
-		//下载远程图片
-		if config.JsonData.Content.RemoteDownload == 1 {
-			doc.Find("img").Each(func(i int, s *goquery.Selection) {
-				src, exists := s.Attr("src")
-				if exists {
-					alt := s.AttrOr("alt", "")
-					imgUrl, err := url.Parse(src)
-					if err == nil {
-						if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(src, config.JsonData.PluginStorage.StorageUrl) {
-							//外链
-							attachment, err := DownloadRemoteImage(src, alt)
-							if err == nil {
-								s.SetAttr("src", attachment.Logo)
-							}
-						}
-					}
-				}
-			})
-		}
-		//提取缩略图
-		if len(category.Logo) == 0 {
-			imgSections := doc.Find("img")
-			if imgSections.Length() > 0 {
-				//获取第一条
-				category.Logo = imgSections.Eq(0).AttrOr("src", "")
+	}
+	// 过滤外链
+	if w.Content.FilterOutlink == 1 {
+		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
 			}
-		}
-
-		//过滤外链
-		doc.Find("a").Each(func(i int, s *goquery.Selection) {
-			href, exists := s.Attr("href")
-			if exists {
-				aUrl, err := url.Parse(href)
-				if err == nil {
-					if aUrl.Host != "" && aUrl.Host != baseHost {
-						//外链
-						if config.JsonData.Content.FilterOutlink == 1 {
-							//过滤外链
-							s.Contents().Unwrap()
-						} else {
-							//增加nofollow
-							s.SetAttr("rel", "nofollow")
-						}
-					}
+			aUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[2]
 				}
 			}
+			return s
 		})
-
-		//返回最终可用的内容
-		req.Content, _ = doc.Find("body").Html()
+		// 匹配Markdown [link](url)
+		// 由于不支持零宽断言，因此匹配所有
+		re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
+		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+			// 过滤掉 ! 开头的
+			if strings.HasPrefix(s, "!") {
+				return s
+			}
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			aUrl, err2 := url.Parse(match[2])
+			if err2 == nil {
+				if aUrl.Host != "" && aUrl.Host != baseHost {
+					//过滤外链
+					return match[1]
+				}
+			}
+			return s
+		})
 	}
 	category.Content = req.Content
 
-	err = category.Save(dao.DB)
+	err = category.Save(w.DB)
 	if err != nil {
 		return
 	}
-	if newPost && category.Status == config.ContentStatusOK {
-		link := GetUrl("category", category, 0)
-		go PushArchive(link)
-		if config.JsonData.PluginSitemap.AutoBuild == 1 {
-			_ = AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
+	//检查有多少个material
+	var materialIds []uint
+	re, _ := regexp.Compile(`(?i)<div.*?data-material="(\d+)".*?>`)
+	matches := re.FindAllStringSubmatch(req.Content, -1)
+	if len(matches) > 0 {
+		for _, match := range matches {
+			//记录material
+			materialId, _ := strconv.Atoi(match[1])
+			if materialId > 0 {
+				materialIds = append(materialIds, uint(materialId))
+			}
 		}
 	}
+	go w.LogMaterialData(materialIds, "category", category.Id)
+	// 自动提取远程图片改成保存后处理
+	if w.Content.RemoteDownload == 1 {
+		hasChangeImg := false
+		re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+		category.Content = re.ReplaceAllStringFunc(category.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 2 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[1])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					if err2 == nil {
+						// 下载完成
+						hasChangeImg = true
+						s = strings.Replace(s, match[1], attachment.Logo, 1)
+					}
+				}
+			}
+			return s
+		})
+		// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+		re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+		category.Content = re.ReplaceAllStringFunc(category.Content, func(s string) string {
+			match := re.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			imgUrl, err2 := url.Parse(match[2])
+			if err2 == nil {
+				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
+					//外链
+					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					if err2 == nil {
+						// 下载完成
+						hasChangeImg = true
+						s = strings.Replace(s, match[2], attachment.Logo, 1)
+					}
+				}
+			}
+			return s
+		})
+		if hasChangeImg {
+			w.DB.Model(category).UpdateColumn("content", category.Content)
+			// 更新data
+			if autoAddImage {
+				//提取缩略图
+				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+				match := re.FindStringSubmatch(req.Content)
+				if len(match) > 1 {
+					category.Logo = match[1]
+				} else {
+					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+					match = re.FindStringSubmatch(req.Content)
+					if len(match) > 2 {
+						category.Logo = match[2]
+					}
+				}
+				w.DB.Model(category).UpdateColumn("logo", category.Logo)
+			}
+		}
+	}
+	// 如果隐藏的分类有下级，则下级也隐藏
+	if category.Status == config.ContentStatusDraft {
+		w.DB.Model(&model.Category{}).Where("`parent_id` = ?", category.Id).UpdateColumn("status", config.ContentStatusDraft)
+	} else if category.Status == config.ContentStatusOK && category.ParentId > 0 {
+		w.DB.Model(&model.Category{}).Where("`id` = ?", category.ParentId).UpdateColumn("status", config.ContentStatusOK)
+	}
 
-	DeleteCacheCategories()
-	DeleteCacheIndex()
+	if newPost && category.Status == config.ContentStatusOK {
+		link := w.GetUrl("category", category, 0)
+		go func() {
+			w.PushArchive(link)
+			if w.PluginSitemap.AutoBuild == 1 {
+				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
+			}
+		}()
+	}
+	if w.PluginFulltext.UseCategory {
+		w.AddFulltextIndex(&TinyArchive{
+			Id:          CategoryDivider + uint64(category.Id),
+			ModuleId:    category.ModuleId,
+			Title:       category.Title,
+			Keywords:    category.Keywords,
+			Description: category.Description,
+			Content:     category.Content,
+		})
+		w.FlushIndex()
+	}
+	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	w.DeleteCacheCategories()
+	w.DeleteCacheIndex()
 
 	return
 }
 
 // GetCategoryTemplate 获取分类模板，如果检测到不继承，则停止获取
-func GetCategoryTemplate(category *model.Category) *response.CategoryTemplate {
+func (w *Website) GetCategoryTemplate(category *model.Category) *response.CategoryTemplate {
 	if category == nil {
 		return nil
 	}
 
-	if category.Template != "" {
+	if category.Template != "" || category.DetailTemplate != "" {
 		return &response.CategoryTemplate{
 			Template:       category.Template,
 			DetailTemplate: category.DetailTemplate,
@@ -243,124 +344,165 @@ func GetCategoryTemplate(category *model.Category) *response.CategoryTemplate {
 
 	//查找上级
 	if category.ParentId > 0 {
-		parent := GetCategoryFromCache(category.ParentId)
+		parent := w.GetCategoryFromCache(category.ParentId)
 		if parent != nil {
 			// 如果上级存在模板，并且选择不继承，从这里阻止
 			if parent.Template != "" && parent.IsInherit == 0 {
 				return nil
 			}
 		}
-		return GetCategoryTemplate(parent)
+		return w.GetCategoryTemplate(parent)
 	}
 
 	//不存在，则返回空
 	return nil
 }
 
-func DeleteCacheCategories() {
-	library.MemCache.Delete("categories")
+func (w *Website) DeleteCacheCategories() {
+	w.Cache.Delete("categories")
 }
 
-func GetCacheCategories() []model.Category {
-	if dao.DB == nil {
+func (w *Website) GetCacheCategories() []*model.Category {
+	if w.DB == nil {
 		return nil
 	}
-	var categories []model.Category
+	mu.Lock()
+	defer mu.Unlock()
+	var categories []*model.Category
 
-	result := library.MemCache.Get("categories")
-	if result != nil {
-		var ok bool
-		categories, ok = result.([]model.Category)
-		if ok {
-			return categories
-		}
+	err := w.Cache.Get("categories", &categories)
+
+	if err == nil {
+		return categories
 	}
 
-	dao.DB.Where(model.Category{}).Order("sort asc").Find(&categories)
+	w.DB.Model(model.Category{}).Order("sort asc").Find(&categories)
+	for i := range categories {
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	}
+	categoryTree := NewCategoryTree(categories)
+	categories = categoryTree.GetTree(0, "")
 
-	library.MemCache.Set("categories", categories, 0)
+	_ = w.Cache.Set("categories", categories, 0)
 
 	return categories
 }
 
-// GetSubCategoryIds 获取分类的子分类
-func GetSubCategoryIds(categoryId uint, categories []model.Category) []uint {
-	var subIds []uint
-	if categories == nil {
-		categories = GetCacheCategories()
-	}
-
-	for i := range categories {
-		if categories[i].ParentId == categoryId {
-			subIds = append(subIds, categories[i].Id)
-			subIds = append(subIds, GetSubCategoryIds(categories[i].Id, categories)...)
-		}
-	}
-
-	return subIds
-}
-
-func GetCategoryFromCache(categoryId uint) *model.Category {
-	if categoryId == 0 {
-		return nil
-	}
-	categories := GetCacheCategories()
-	for i := range categories {
-		if categories[i].Id == categoryId {
-			return &categories[i]
-		}
-	}
-
-	return nil
-}
-
-func GetCategoryFromCacheByToken(urlToken string) *model.Category {
-	categories := GetCacheCategories()
-	for i := range categories {
-		if categories[i].UrlToken == urlToken {
-			return &categories[i]
-		}
-	}
-
-	return nil
-}
-
-func GetCategoriesFromCache(moduleId, parentId uint, pageType int) []*model.Category {
-	var tmpCategories []*model.Category
-	categories := GetCacheCategories()
-	for i := range categories {
-		if pageType == config.CategoryTypePage {
-			if categories[i].Type != config.CategoryTypePage {
-				continue
+func (w *Website) GetCacheCategoriesByIds(ids []uint) []*model.Category {
+	categories := w.GetCacheCategories()
+	var tmpCategories = make([]*model.Category, 0, len(ids))
+	for _, category := range categories {
+		for _, id := range ids {
+			if category.Id == id {
+				tmpCategories = append(tmpCategories, category)
 			}
-		} else if parentId == 0 {
-			if categories[i].ModuleId != moduleId {
-				continue
-			}
-		}
-		if categories[i].ParentId == parentId {
-			tmpCategories = append(tmpCategories, &categories[i])
 		}
 	}
 
 	return tmpCategories
 }
 
-func VerifyCategoryUrlToken(urlToken string, id uint) string {
+// GetSubCategoryIds 获取分类的子分类
+func (w *Website) GetSubCategoryIds(categoryId uint, categories []*model.Category) []uint {
+	var subIds []uint
+	if categories == nil {
+		categories = w.GetCacheCategories()
+	}
+
+	for i := range categories {
+		if categories[i].Status != config.ContentStatusOK {
+			continue
+		}
+		if categories[i].ParentId == categoryId {
+			subIds = append(subIds, categories[i].Id)
+			subIds = append(subIds, w.GetSubCategoryIds(categories[i].Id, categories)...)
+		}
+	}
+
+	return subIds
+}
+
+func (w *Website) GetCategoryFromCache(categoryId uint) *model.Category {
+	if categoryId == 0 {
+		return nil
+	}
+	categories := w.GetCacheCategories()
+	for i := range categories {
+		if categories[i].Id == categoryId {
+			return categories[i]
+		}
+	}
+
+	return nil
+}
+
+func (w *Website) GetCategoryFromCacheByToken(urlToken string, parents ...*model.Category) *model.Category {
+	categories := w.GetCacheCategories()
+	var parent *model.Category
+	if len(parents) > 0 {
+		parent = parents[0]
+	}
+	if parent != nil {
+		for i := range categories {
+			if categories[i].UrlToken == urlToken && parent.Id == categories[i].ParentId {
+				return categories[i]
+			}
+		}
+	} else {
+		for i := range categories {
+			if categories[i].UrlToken == urlToken {
+				return categories[i]
+			}
+		}
+	}
+
+	return nil
+}
+
+func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int, all bool) []*model.Category {
+	categories := w.GetCacheCategories()
+	var tmpCategories = make([]*model.Category, 0, len(categories))
+	for i := range categories {
+		if categories[i].Status != config.ContentStatusOK {
+			// 跳过隐藏的分类
+			continue
+		}
+		if categories[i].Type != uint(pageType) {
+			continue
+		}
+		if moduleId > 0 && pageType != config.CategoryTypePage {
+			if categories[i].ModuleId != moduleId {
+				continue
+			}
+		}
+		if all || categories[i].ParentId == parentId {
+			tmpCategories = append(tmpCategories, categories[i])
+		}
+	}
+
+	return tmpCategories
+}
+
+func (w *Website) VerifyCategoryUrlToken(urlToken string, id uint) string {
 	index := 0
+	// 防止超出长度
+	if len(urlToken) > 150 {
+		urlToken = urlToken[:150]
+	}
+	urlToken = strings.ToLower(urlToken)
 	for {
 		tmpToken := urlToken
 		if index > 0 {
 			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
 		}
 		// 判断分类
-		tmpCat, err := GetCategoryByUrlToken(tmpToken)
+		tmpCat, err := w.GetCategoryByUrlToken(tmpToken)
 		if err == nil && tmpCat.Id != id {
 			index++
 			continue
 		}
 		// 判断archive
-		_, err = GetArchiveByUrlToken(tmpToken)
+		_, err = w.GetArchiveByUrlToken(tmpToken)
 		if err == nil {
 			index++
 			continue

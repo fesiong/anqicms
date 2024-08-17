@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -10,7 +9,8 @@ import (
 )
 
 func ModuleList(ctx iris.Context) {
-	modules, err := provider.GetModules()
+	currentSite := provider.CurrentSite(ctx)
+	modules, err := currentSite.GetModules()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -27,9 +27,10 @@ func ModuleList(ctx iris.Context) {
 }
 
 func ModuleDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	module, err := provider.GetModuleById(id)
+	module, err := currentSite.GetModuleById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -46,6 +47,7 @@ func ModuleDetail(ctx iris.Context) {
 }
 
 func ModuleDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ModuleRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -59,7 +61,7 @@ func ModuleDetailForm(ctx iris.Context) {
 	if req.TableName == "" || !matched {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请正确填写模型表名",
+			"msg":  ctx.Tr("PleaseFillInTheModelTableNameCorrectly"),
 		})
 		return
 	}
@@ -68,12 +70,12 @@ func ModuleDetailForm(ctx iris.Context) {
 	if req.UrlToken == "" || !matched {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请正确填写URL别名",
+			"msg":  ctx.Tr("PleaseFillInTheUrlAliasCorrectly"),
 		})
 		return
 	}
 
-	module, err := provider.SaveModule(&req)
+	module, err := currentSite.SaveModule(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -81,17 +83,24 @@ func ModuleDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 更新缓存
+	go func() {
+		currentSite.BuildModuleCache(ctx)
+		// 上传到静态服务器
+		_ = currentSite.SyncHtmlCacheToStorage("", "")
+	}()
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改文档模型：%d => %s", module.Id, module.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyDocumentModelLog", module.Id, module.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("SaveSuccessfully"),
 		"data": module,
 	})
 }
 
 func ModuleFieldsDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ModuleFieldRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -101,7 +110,7 @@ func ModuleFieldsDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteModuleField(req.Id, req.FieldName)
+	err := currentSite.DeleteModuleField(req.Id, req.FieldName)
 
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -111,15 +120,16 @@ func ModuleFieldsDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除模型字段：%d => %s", req.Id, req.FieldName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteModelFieldLog", req.Id, req.FieldName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "字段已删除",
+		"msg":  ctx.Tr("FieldDeleted"),
 	})
 }
 
 func ModuleDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ModuleRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -128,7 +138,7 @@ func ModuleDelete(ctx iris.Context) {
 		})
 		return
 	}
-	module, err := provider.GetModuleById(req.Id)
+	module, err := currentSite.GetModuleById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -140,12 +150,12 @@ func ModuleDelete(ctx iris.Context) {
 	if module.IsSystem == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "内置模型不能删除",
+			"msg":  ctx.Tr("BuiltInModelCannotBeDeleted"),
 		})
 		return
 	}
 
-	err = provider.DeleteModule(module)
+	err = currentSite.DeleteModule(module)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -154,12 +164,12 @@ func ModuleDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除文档模型：%d => %s", module.Id, module.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentModelLog", module.Id, module.Title))
 
-	provider.DeleteCacheModules()
+	currentSite.DeleteCacheModules()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "模型已删除",
+		"msg":  ctx.Tr("ModelDeleted"),
 	})
 }

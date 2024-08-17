@@ -4,7 +4,6 @@ import (
 	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -13,10 +12,11 @@ import (
 
 // StatisticSpider 蜘蛛爬行情况
 func StatisticSpider(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//支持按天，按小时区分
 	separate := ctx.URLParam("separate")
 
-	result := provider.StatisticSpider(separate)
+	result := currentSite.StatisticSpider(separate)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -26,10 +26,11 @@ func StatisticSpider(ctx iris.Context) {
 }
 
 func StatisticTraffic(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//支持按天，按小时区分
 	separate := ctx.URLParam("separate")
 
-	result := provider.StatisticTraffic(separate)
+	result := currentSite.StatisticTraffic(separate)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -39,11 +40,12 @@ func StatisticTraffic(ctx iris.Context) {
 }
 
 func StatisticDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	isSpider, _ := ctx.URLParamBool("is_spider")
 
-	list, total, _ := provider.StatisticDetail(isSpider, currentPage, pageSize)
+	list, total, _ := currentSite.StatisticDetail(isSpider, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -54,6 +56,7 @@ func StatisticDetail(ctx iris.Context) {
 }
 
 func GetSpiderIncludeDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	var list []*model.SpiderInclude
@@ -64,7 +67,7 @@ func GetSpiderIncludeDetail(ctx iris.Context) {
 	}
 	offset := (currentPage - 1) * pageSize
 
-	builder := dao.DB.Model(&model.SpiderInclude{})
+	builder := currentSite.DB.Model(&model.SpiderInclude{})
 
 	builder.Count(&total).Limit(pageSize).Offset(offset).Order("`id` desc").Find(&list)
 
@@ -77,12 +80,13 @@ func GetSpiderIncludeDetail(ctx iris.Context) {
 }
 
 func GetSpiderInclude(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var result = make([]response.ChartData, 0, 30*5)
 
 	timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
 
 	var includeLogs []model.SpiderInclude
-	dao.DB.Model(&model.SpiderInclude{}).Where("`created_time` >= ?", timeStamp).
+	currentSite.DB.Model(&model.SpiderInclude{}).Where("`created_time` >= ?", timeStamp).
 		Order("created_time asc").
 		Scan(&includeLogs)
 
@@ -95,23 +99,23 @@ func GetSpiderInclude(ctx iris.Context) {
 		lastDate = date
 		result = append(result, response.ChartData{
 			Date:  date,
-			Label: "百度",
+			Label: ctx.Tr("Baidu"),
 			Value: v.BaiduCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "搜狗",
+			Label: ctx.Tr("Sogou"),
 			Value: v.SogouCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "搜搜",
+			Label: ctx.Tr("Soso"),
 			Value: v.SoCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "必应",
+			Label: ctx.Tr("Bing"),
 			Value: v.BingCount,
 		}, response.ChartData{
 			Date:  date,
-			Label: "谷歌",
+			Label: ctx.Tr("Google"),
 			Value: v.GoogleCount,
 		})
 	}

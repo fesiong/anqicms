@@ -1,6 +1,6 @@
 package config
 
-const Version = "2.5.3"
+const Version = "3.3.9"
 
 const (
 	StatusOK         = 0
@@ -14,6 +14,7 @@ const (
 	CustomFieldTypeText     = "text"
 	CustomFieldTypeNumber   = "number"
 	CustomFieldTypeTextarea = "textarea"
+	CustomFieldTypeEditor   = "editor"
 	CustomFieldTypeRadio    = "radio"
 	CustomFieldTypeCheckbox = "checkbox"
 	CustomFieldTypeSelect   = "select"
@@ -24,12 +25,16 @@ const (
 const (
 	CategoryTypeArchive = 1
 	CategoryTypePage    = 3
+
+	CategoryShowTypeTree = 0
+	CategoryShowTypeNode = 1
 )
 
 const (
-	ContentStatusDraft = 0 // 草稿
-	ContentStatusOK    = 1 // 正式内容
-	ContentStatusPlan  = 2 // 计划内容，等待发布
+	ContentStatusDraft  = 0  // 草稿
+	ContentStatusOK     = 1  // 正式内容
+	ContentStatusPlan   = 2  // 计划内容，等待发布
+	ContentStatusDelete = 99 // 已删除
 )
 
 const (
@@ -43,6 +48,8 @@ const (
 	StorageTypeTencent = "tencent"
 	StorageTypeQiniu   = "qiniu"
 	StorageTypeUpyun   = "upyun"
+	StorageTypeFTP     = "ftp"
+	StorageTypeSSH     = "ssh"
 )
 
 // 支付状态， 0 待支付，1 已支付待发货，2 已发货待收货，3 已收货，8 申请退款中，9 已退款，-1 订单已关闭
@@ -106,6 +113,11 @@ const (
 
 	CollectModeCollect = 0
 	CollectModeCombine = 1
+
+	CollectImageRemove   = 0 // 移除
+	CollectImageRetain   = 1 // 保留
+	CollectImageInsert   = 2 // 自定义插入
+	CollectImageCategory = 3 // 插入指定分类图片
 )
 
 // login platform
@@ -123,4 +135,39 @@ const (
 const (
 	OrderTypeGoods = "goods"
 	OrderTypeVip   = "vip"
+)
+
+const (
+	PasswordFindWayFile = "file"
+	PasswordFindWayDNS  = "dns"
+)
+
+const (
+	ArchiveFromDefault = 0
+	ArchiveFromCollect = 1 // 采集的文章
+	ArchiveFromAi      = 2 // AI生成的文章
+)
+
+const (
+	AiArticleTypeDefault   = 0
+	AiArticleTypeGenerate  = 1
+	AiArticleTypeTranslate = 2
+	AiArticleTypeAiPseudo  = 3
+	AiArticleTypeSelfMedia = 4
+)
+
+// SingleArticleCount AI 改写使用， 1000 字一篇
+const SingleArticleCount = 1000
+
+const (
+	AiArticleStatusCanceled  = -1
+	AiArticleStatusWaiting   = 0
+	AiArticleStatusDoing     = 1
+	AiArticleStatusCompleted = 2
+	AiArticleStatusError     = 4
+)
+
+const (
+	InterferenceModeClass = 0 // 添加随机class
+	InterferenceModeText  = 1 // 添加随机隐藏文字
 )

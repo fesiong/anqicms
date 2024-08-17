@@ -1,18 +1,17 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
 
 func SettingNav(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	typeId := uint(ctx.URLParamIntDefault("type_id", 1))
-	navList, _ := provider.GetNavList(typeId)
+	navList, _ := currentSite.GetNavList(typeId)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -22,6 +21,7 @@ func SettingNav(ctx iris.Context) {
 }
 
 func SettingNavForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.NavConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -33,16 +33,21 @@ func SettingNavForm(ctx iris.Context) {
 
 	if req.Title == "" {
 		if req.NavType == model.NavTypeCategory {
-			category := provider.GetCategoryFromCache(req.PageId)
+			category := currentSite.GetCategoryFromCache(req.PageId)
 			if category != nil {
 				req.Title = category.Title
+			}
+		} else if req.NavType == model.NavTypeArchive {
+			archive, _ := currentSite.GetArchiveById(req.PageId)
+			if archive != nil {
+				req.Title = archive.Title
 			}
 		}
 	}
 	if req.Title == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "请填写导航显示名称",
+			"msg":  ctx.Tr("PleaseFillInTheNavigationDisplayName"),
 		})
 		return
 	}
@@ -50,7 +55,7 @@ func SettingNavForm(ctx iris.Context) {
 	var nav *model.Nav
 	var err error
 	if req.Id > 0 {
-		nav, err = provider.GetNavById(req.Id)
+		nav, err = currentSite.GetNavById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -75,7 +80,7 @@ func SettingNavForm(ctx iris.Context) {
 	nav.Sort = req.Sort
 	nav.Status = 1
 
-	err = nav.Save(dao.DB)
+	err = nav.Save(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -84,18 +89,19 @@ func SettingNavForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新导航信息：%d => %s", nav.Id, nav.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateNavigationLog", nav.Id, nav.Title))
 
-	provider.DeleteCacheNavs()
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheNavs()
+	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
 func SettingNavDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.NavConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -104,7 +110,7 @@ func SettingNavDelete(ctx iris.Context) {
 		})
 		return
 	}
-	nav, err := provider.GetNavById(req.Id)
+	nav, err := currentSite.GetNavById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -113,7 +119,7 @@ func SettingNavDelete(ctx iris.Context) {
 		return
 	}
 
-	err = nav.Delete(dao.DB)
+	err = nav.Delete(currentSite.DB)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -122,19 +128,20 @@ func SettingNavDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除导航信息：%d => %s", nav.Id, nav.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteNavigationLog", nav.Id, nav.Title))
 
-	provider.DeleteCacheNavs()
-	provider.DeleteCacheIndex()
+	currentSite.DeleteCacheNavs()
+	currentSite.DeleteCacheIndex()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "导航已删除",
+		"msg":  ctx.Tr("NavigationDeleted"),
 	})
 }
 
 func SettingNavType(ctx iris.Context) {
-	navTypes, _ := provider.GetNavTypeList()
+	currentSite := provider.CurrentSite(ctx)
+	navTypes, _ := currentSite.GetNavTypeList()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -144,6 +151,7 @@ func SettingNavType(ctx iris.Context) {
 }
 
 func SettingNavTypeForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.NavTypeRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -156,7 +164,7 @@ func SettingNavTypeForm(ctx iris.Context) {
 	var navType *model.NavType
 	var err error
 	if req.Id > 0 {
-		navType, err = provider.GetNavTypeById(req.Id)
+		navType, err = currentSite.GetNavTypeById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -166,7 +174,7 @@ func SettingNavTypeForm(ctx iris.Context) {
 		}
 	} else {
 		// 检查重复标题
-		navType, err = provider.GetNavTypeByTitle(req.Title)
+		navType, err = currentSite.GetNavTypeByTitle(req.Title)
 		if err != nil {
 			navType = &model.NavType{}
 		}
@@ -174,7 +182,7 @@ func SettingNavTypeForm(ctx iris.Context) {
 
 	navType.Title = req.Title
 
-	err = dao.DB.Save(navType).Error
+	err = currentSite.DB.Save(navType).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -183,17 +191,18 @@ func SettingNavTypeForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新导航类别信息：%d => %s", navType.Id, navType.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateNavigationCategoryLog", navType.Id, navType.Title))
 
-	provider.DeleteCacheNavs()
+	currentSite.DeleteCacheNavs()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
 func SettingNavTypeDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.NavTypeRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -202,7 +211,7 @@ func SettingNavTypeDelete(ctx iris.Context) {
 		})
 		return
 	}
-	navType, err := provider.GetNavTypeById(req.Id)
+	navType, err := currentSite.GetNavTypeById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -213,15 +222,15 @@ func SettingNavTypeDelete(ctx iris.Context) {
 	if navType.Id == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "不允许删除默认类别",
+			"msg":  ctx.Tr("DeleteDefaultCategoryIsNotAllowed"),
 		})
 		return
 	}
 
 	// 删除更多信息
 	// 删除一类导航
-	dao.DB.Where("`type_id` = ?", navType).Delete(model.Nav{})
-	err = dao.DB.Delete(navType).Error
+	currentSite.DB.Where("`type_id` = ?", navType).Delete(&model.Nav{})
+	err = currentSite.DB.Delete(navType).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -230,12 +239,12 @@ func SettingNavTypeDelete(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除导航类别信息：%d => %s", navType.Id, navType.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteNavigationCategoryLog", navType.Id, navType.Title))
 
-	provider.DeleteCacheNavs()
+	currentSite.DeleteCacheNavs()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "导航类别已删除",
+		"msg":  ctx.Tr("NavigationCategoryHasBeenDeleted"),
 	})
 }

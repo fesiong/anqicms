@@ -1,11 +1,18 @@
 package library
 
 import (
-	"math/rand"
+	"bytes"
+	"fmt"
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/html"
+	"github.com/gomarkdown/markdown/parser"
+	"github.com/kataras/iris/v12"
+	"net"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
-	"time"
+	"unicode/utf8"
 	"unsafe"
 )
 
@@ -26,16 +33,6 @@ func StripTags(src string) string {
 	re, _ = regexp.Compile("\\s{2,}")
 	src = re.ReplaceAllString(src, "\n")
 	return strings.TrimSpace(src)
-}
-
-func GenerateRandString(length int) string {
-	r := rand.New(rand.NewSource(time.Now().Unix()))
-	bytes := make([]byte, length)
-	for i := 0; i < length; i++ {
-		b := r.Intn(26) + 65
-		bytes[i] = byte(b)
-	}
-	return strings.ToLower(string(bytes))
 }
 
 func Case2Camel(name string) string {
@@ -67,6 +64,9 @@ func ParseUrlToken(name string) string {
 	//去除连续的换行符
 	re, _ := regexp.Compile("-{2,}")
 	name = re.ReplaceAllString(name, "-")
+	if len(name) > 150 {
+		name = name[:150]
+	}
 	return name
 }
 
@@ -150,4 +150,115 @@ func EscapeString(v string) string {
 		}
 	}
 	return string(buf[:pos])
+}
+
+func GetHost(ctx iris.Context) string {
+	// maybe real host in X-Host
+	host := ctx.GetHeader("X-Host")
+	if host == "" {
+		host = ctx.Host()
+	}
+	// remove port from host
+	if tmp, _, err := net.SplitHostPort(host); err == nil {
+		host = tmp
+	}
+
+	switch host {
+	// We could use the netutil.LoopbackRegex but leave it as it's for now, it's faster.
+	case "localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]", "0:0:0:0:0:0:0:0", "0:0:0:0:0:0:0:1":
+		// loopback.
+		return "localhost"
+	default:
+		return host
+	}
+}
+
+// ParseDescription 对于超过250字的描述，截取的时候，以标点符号为准
+func ParseDescription(content string) (description string) {
+	if utf8.RuneCountInString(content) > 200 {
+		content = string([]rune(content)[:200])
+	}
+	lastIndex := strings.LastIndexAny(content, " !,.:;?~。？！，、；：…")
+	if lastIndex >= 150 {
+		description = content[:lastIndex]
+	} else {
+		description = content
+	}
+
+	return
+}
+
+func MarkdownToHTML(mdStr string) string {
+	md := []byte(mdStr)
+	// create markdown parser with extensions
+	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	p := parser.NewWithExtensions(extensions)
+	doc := p.Parse(md)
+
+	// create HTML renderer with extensions
+	htmlFlags := html.CommonFlags | html.HrefTargetBlank
+	opts := html.RendererOptions{Flags: htmlFlags}
+	renderer := html.NewRenderer(opts)
+
+	md = markdown.Render(doc, renderer)
+	// 不转换 mermaid 的 code
+	re, _ := regexp.Compile(`(?is)<pre><code class="language-mermaid">(.*?)</code></pre>`)
+	md = re.ReplaceAllFunc(md, func(bs []byte) []byte {
+		match := re.FindSubmatch(bs)
+		if len(match) < 2 {
+			return bs
+		}
+		buff := bytes.NewBuffer(nil)
+		buff.WriteString("<pre class=\"mermaid\">")
+		buff.Write(match[1])
+		buff.WriteString("</pre>")
+		return buff.Bytes()
+	})
+
+	return string(md)
+}
+
+type ContentTitle struct {
+	Title  string `json:"title"`
+	Tag    string `json:"tag"`
+	Level  int    `json:"level"`
+	Prefix string `json:"prefix"`
+}
+
+func ParseContentTitles(content string) []ContentTitle {
+	re, _ := regexp.Compile(`(?is)<(h\d)[^>]*>(.*?)</h\d>`)
+	var titles []ContentTitle
+	matches := re.FindAllStringSubmatch(content, -1)
+	var level = 0
+	var parent = -1
+	var prefix []int
+	for _, match := range matches {
+		tag := strings.ToLower(match[1])
+		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
+		if parent == -1 {
+			parent = leaf
+			level = 0
+			prefix = append(prefix, 1)
+		}
+		if parent != leaf {
+			if parent > leaf {
+				prefix = prefix[:len(prefix)-1]
+				prefix[len(prefix)-1]++
+			} else if parent < leaf {
+				prefix = append(prefix, 1)
+			}
+			level -= parent - leaf
+			parent = leaf
+		} else {
+			prefix[len(prefix)-1]++
+		}
+		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[2]), "\n", " "))
+		titles = append(titles, ContentTitle{
+			Title:  title,
+			Tag:    tag,
+			Level:  level,
+			Prefix: strings.ReplaceAll(fmt.Sprintf("%v", prefix), ",", "."),
+		})
+	}
+	return titles
 }

@@ -1,27 +1,29 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"regexp"
 	"strings"
 )
 
 func PluginUserFieldsSetting(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"fields": config.GetUserFields(),
+			"fields": currentSite.GetUserFields(),
 		},
 	})
 }
 
 func PluginUserFieldsSettingForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginUserConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -36,18 +38,59 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 	for _, v := range req.Fields {
 		if !v.IsSystem {
 			if v.FieldName == "" {
-				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name), "-", "_")
+				v.FieldName = strings.ReplaceAll(library.GetPinyin(v.Name, currentSite.Content.UrlTokenType == config.UrlTokenTypeSort), "-", "_")
 			}
 		}
+		// 检查fields
+		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, v.FieldName)
+		if err != nil || !match {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  v.FieldName + ctx.Tr("IncorrectNaming"),
+			})
+			return
+		}
+		v.Required = false
 		if _, ok := existsFields[v.FieldName]; !ok {
 			existsFields[v.FieldName] = struct{}{}
 			fields = append(fields, v)
 		}
 	}
 
-	config.JsonData.PluginUser.Fields = fields
+	currentSite.PluginUser.Fields = fields
 
-	err := provider.SaveSettingValue(provider.UserSettingKey, config.JsonData.PluginUser)
+	err := currentSite.SaveSettingValue(provider.UserSettingKey, currentSite.PluginUser)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// sync table
+	currentSite.MigrateUserTable(fields, true)
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyUserExtraField"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
+func PluginUserFieldsDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ModuleFieldRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.DeleteUserField(req.FieldName)
+
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -56,15 +99,16 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改用户额外字段设置信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteUserFieldLog", req.Id, req.FieldName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("FieldDeleted"),
 	})
 }
 
 func PluginUserList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	userId := uint(ctx.URLParamIntDefault("id", 0))
@@ -92,7 +136,7 @@ func PluginUserList(ctx iris.Context) {
 		tx = tx.Order("id desc")
 		return tx
 	}
-	users, total := provider.GetUserList(ops, currentPage, pageSize)
+	users, total := currentSite.GetUserList(ops, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -103,9 +147,10 @@ func PluginUserList(ctx iris.Context) {
 }
 
 func PluginUserDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	user, err := provider.GetUserInfoById(id)
+	user, err := currentSite.GetUserInfoById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -122,6 +167,7 @@ func PluginUserDetail(ctx iris.Context) {
 }
 
 func PluginUserDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -131,7 +177,7 @@ func PluginUserDetailForm(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveUserInfo(&req)
+	err := currentSite.SaveUserInfo(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -139,15 +185,16 @@ func PluginUserDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新用户信息：%d => %s", req.Id, req.UserName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserLog", req.Id, req.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }
 
 func PluginUserDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -157,7 +204,7 @@ func PluginUserDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteUserInfo(req.Id)
+	err := currentSite.DeleteUserInfo(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -165,16 +212,17 @@ func PluginUserDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除用户：%d => %s", req.Id, req.UserName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteUserLog", req.Id, req.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }
 
 func PluginUserGroupList(ctx iris.Context) {
-	groups := provider.GetUserGroups()
+	currentSite := provider.CurrentSite(ctx)
+	groups := currentSite.GetUserGroups()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -184,9 +232,10 @@ func PluginUserGroupList(ctx iris.Context) {
 }
 
 func PluginUserGroupDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	group, err := provider.GetUserGroupInfo(id)
+	group, err := currentSite.GetUserGroupInfo(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -203,6 +252,7 @@ func PluginUserGroupDetail(ctx iris.Context) {
 }
 
 func PluginUserGroupDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserGroupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -212,7 +262,7 @@ func PluginUserGroupDetailForm(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveUserGroupInfo(&req)
+	err := currentSite.SaveUserGroupInfo(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -220,15 +270,16 @@ func PluginUserGroupDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新用户组信息：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserGroupLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }
 
 func PluginUserGroupDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserGroupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -238,7 +289,7 @@ func PluginUserGroupDelete(ctx iris.Context) {
 		return
 	}
 
-	err := provider.DeleteUserGroup(req.Id)
+	err := currentSite.DeleteUserGroup(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -246,10 +297,10 @@ func PluginUserGroupDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除用户组：%d => %s", req.Id, req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteUserGroupLog", req.Id, req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "删除成功",
+		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }

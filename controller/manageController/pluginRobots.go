@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -9,7 +8,8 @@ import (
 )
 
 func PluginRobots(ctx iris.Context) {
-	robots := provider.GetRobots()
+	currentSite := provider.CurrentSite(ctx)
+	robots := currentSite.GetRobots()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -21,6 +21,7 @@ func PluginRobots(ctx iris.Context) {
 }
 
 func PluginRobotsForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginRobotsConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -30,7 +31,7 @@ func PluginRobotsForm(ctx iris.Context) {
 		return
 	}
 
-	err := provider.SaveRobots(req.Robots)
+	err := currentSite.SaveRobots(req.Robots)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -39,10 +40,10 @@ func PluginRobotsForm(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新Robots信息"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateRobots"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

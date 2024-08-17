@@ -1,19 +1,27 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 )
 
 func PluginSitemap(ctx iris.Context) {
-	pluginSitemap := config.JsonData.PluginSitemap
-
+	currentSite := provider.CurrentSite(ctx)
+	pluginSitemap := currentSite.PluginSitemap
+	if pluginSitemap.ExcludeModuleIds == nil {
+		pluginSitemap.ExcludeModuleIds = []uint{}
+	}
+	if pluginSitemap.ExcludeCategoryIds == nil {
+		pluginSitemap.ExcludeCategoryIds = []uint{}
+	}
+	if pluginSitemap.ExcludePageIds == nil {
+		pluginSitemap.ExcludePageIds = []uint{}
+	}
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
-	pluginSitemap.UpdatedTime = provider.GetSitemapTime()
+	pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
 	// 写入Sitemap的url
-	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+	pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -23,6 +31,7 @@ func PluginSitemap(ctx iris.Context) {
 }
 
 func PluginSitemapForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -34,10 +43,15 @@ func PluginSitemapForm(ctx iris.Context) {
 	if req.Type != "xml" {
 		req.Type = "txt"
 	}
-	config.JsonData.PluginSitemap.AutoBuild = req.AutoBuild
-	config.JsonData.PluginSitemap.Type = req.Type
+	oldType := currentSite.PluginSitemap.Type
+	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
+	currentSite.PluginSitemap.Type = req.Type
+	currentSite.PluginSitemap.ExcludeTag = req.ExcludeTag
+	currentSite.PluginSitemap.ExcludeCategoryIds = req.ExcludeCategoryIds
+	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
+	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
-	err := provider.SaveSettingValue(provider.SitemapSettingKey, config.JsonData.PluginSitemap)
+	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -45,16 +59,21 @@ func PluginSitemapForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 当新旧Sitemap不一致的时候，就清理Sitemap
+	if oldType != req.Type {
+		currentSite.DeleteSitemap(oldType)
+	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新SItemap配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "配置已更新",
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
 
 func PluginSitemapBuild(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -67,10 +86,14 @@ func PluginSitemapBuild(ctx iris.Context) {
 		req.Type = "txt"
 	}
 	//先保存一次
-	config.JsonData.PluginSitemap.AutoBuild = req.AutoBuild
-	config.JsonData.PluginSitemap.Type = req.Type
+	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
+	currentSite.PluginSitemap.Type = req.Type
+	currentSite.PluginSitemap.ExcludeTag = req.ExcludeTag
+	currentSite.PluginSitemap.ExcludeCategoryIds = req.ExcludeCategoryIds
+	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
+	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
-	err := provider.SaveSettingValue(provider.SitemapSettingKey, config.JsonData.PluginSitemap)
+	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -80,7 +103,7 @@ func PluginSitemapBuild(ctx iris.Context) {
 	}
 
 	//开始生成sitemap
-	err = provider.BuildSitemap()
+	err = currentSite.BuildSitemap()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -89,18 +112,18 @@ func PluginSitemapBuild(ctx iris.Context) {
 		return
 	}
 
-	pluginSitemap := config.JsonData.PluginSitemap
+	pluginSitemap := currentSite.PluginSitemap
 
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
-	pluginSitemap.UpdatedTime = provider.GetSitemapTime()
+	pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
 	// 写入Sitemap的url
-	pluginSitemap.SitemapURL = config.JsonData.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+	pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("手动更新sitemap"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "Sitemap已更新",
+		"msg":  ctx.Tr("SitemapUpdated"),
 		"data": pluginSitemap,
 	})
 }

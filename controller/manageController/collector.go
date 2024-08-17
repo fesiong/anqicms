@@ -1,16 +1,17 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
 
 // HandleCollectSetting 全局配置
 func HandleCollectSetting(ctx iris.Context) {
-	collector := provider.GetUserCollectorSetting()
+	currentSite := provider.CurrentSite(ctx)
+	collector := currentSite.GetUserCollectorSetting()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -21,6 +22,7 @@ func HandleCollectSetting(ctx iris.Context) {
 
 // HandleSaveCollectSetting 全局配置保存
 func HandleSaveCollectSetting(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.CollectorJson
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -31,7 +33,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 	}
 
 	//将现有配置写回文件
-	err := provider.SaveUserCollectorSetting(req, true)
+	err := currentSite.SaveUserCollectorSetting(req, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -40,15 +42,16 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改采集配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyAcquisitionConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }
 
 func HandleReplaceArticles(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchiveReplaceRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -61,7 +64,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 	if len(req.ContentReplace) == 0 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "替换关键词为空",
+			"msg":  ctx.Tr("ReplaceKeywordIsEmpty"),
 		})
 		return
 	}
@@ -69,7 +72,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 	collectorJson := config.CollectorJson{
 		ContentReplace: req.ContentReplace,
 	}
-	err := provider.SaveUserCollectorSetting(collectorJson, false)
+	err := currentSite.SaveUserCollectorSetting(collectorJson, false)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -80,73 +83,39 @@ func HandleReplaceArticles(ctx iris.Context) {
 
 	if req.Replace {
 
-		provider.AddAdminLog(ctx, fmt.Sprintf("批量替换文档内容"))
+		currentSite.AddAdminLog(ctx, ctx.Tr("BatchReplaceDocumentContent"))
 
-		go provider.ReplaceArticles()
+		go currentSite.ReplaceArticles()
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
-			"msg":  "替换任务已触发",
+			"msg":  ctx.Tr("ReplacementTaskHasBeenTriggered"),
 		})
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新替换关键词配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateReplacementKeywordConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "关键词已保存",
-	})
-}
-
-func HandleArticlePseudo(ctx iris.Context) {
-	var req request.Archive
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	archiveData, err := provider.GetArchiveDataById(req.Id)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	err = provider.PseudoOriginalArticle(archiveData)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	provider.AddAdminLog(ctx, fmt.Sprintf("文档伪原创操作：%d => %s", archiveData.Id, ""))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "伪原创已完成",
+		"msg":  ctx.Tr("KeywordsHaveBeenSaved"),
 	})
 }
 
 func HandleDigKeywords(ctx iris.Context) {
-	go provider.StartDigKeywords(true)
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.StartDigKeywords(true)
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("手动触发关键词拓词任务"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ManuallyTriggerTheKeywordExpansionTask"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "关键词拓词任务已触发",
+		"msg":  ctx.Tr("KeywordExpansionTaskHasBeenTriggered"),
 	})
 }
 
 // HandleArticleCollect 手动采集不受时间限制，并且需要指定关键词
 func HandleArticleCollect(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.KeywordRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -156,7 +125,7 @@ func HandleArticleCollect(ctx iris.Context) {
 		return
 	}
 
-	keyword, err := provider.GetKeywordById(req.Id)
+	keyword, err := currentSite.GetKeywordById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -165,10 +134,49 @@ func HandleArticleCollect(ctx iris.Context) {
 		return
 	}
 
-	go provider.CollectArticlesByKeyword(*keyword, true)
+	go currentSite.CollectArticlesByKeyword(*keyword, true)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "采集任务已触发，预计1分钟后即可查看采集结果",
+		"msg":  ctx.Tr("CollectionTaskHasBeenTriggered"),
+	})
+}
+
+func HandleStartArticleCollect(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	go currentSite.CollectArticles()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("CollectionTaskHasBeenTriggered"),
+	})
+}
+
+// HandleArticleCombinationGet 获取问答组合文章
+func HandleArticleCombinationGet(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.KeywordRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	keyword := model.Keyword{Title: req.Title}
+	archive, err := currentSite.GetCombinationArticle(&keyword)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": archive,
 	})
 }

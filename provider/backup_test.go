@@ -2,18 +2,18 @@ package provider
 
 import "testing"
 
-func TestBackupData(t *testing.T) {
-	err := BackupData()
+func (w *Website) TestBackupData(t *testing.T) {
+	err := w.BackupData()
 
 	if err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestRestoreData(t *testing.T) {
+func (w *Website) TestRestoreData(t *testing.T) {
 	fileName := "20221111180220.sql"
 
-	err := RestoreData(fileName)
+	err := w.RestoreData(fileName)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -3,7 +3,6 @@ package model
 import (
 	"github.com/lib/pq"
 	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
 	"path/filepath"
 	"strings"
 )
@@ -25,37 +24,22 @@ type Category struct {
 	IsInherit      uint           `json:"is_inherit" gorm:"column:is_inherit;type:int(1) unsigned not null;default:0"` // 模板是否被继承
 	Images         pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Logo           string         `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
-	Status         uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Status         uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	Spacer         string         `json:"spacer" gorm:"-"`
 	HasChildren    bool           `json:"has_children" gorm:"-"`
 	Link           string         `json:"link" gorm:"-"`
 	Thumb          string         `json:"thumb" gorm:"-"`
 	IsCurrent      bool           `json:"is_current" gorm:"-"`
+
+	Children []*Category `json:"children,omitempty" gorm:"-"`
 }
 
-func (category *Category) BeforeSave(tx *gorm.DB) error {
-	if len(category.Images) > 0 {
-		for i := range category.Images {
-			category.Images[i] = strings.TrimPrefix(category.Images[i], config.JsonData.PluginStorage.StorageUrl)
-		}
-	}
-	if category.Logo != "" {
-		category.Logo = strings.TrimPrefix(category.Logo, config.JsonData.PluginStorage.StorageUrl)
-	}
-	return nil
-}
-
-func (category *Category) AfterFind(tx *gorm.DB) error {
-	category.GetThumb()
-	return nil
-}
-
-func (category *Category) GetThumb() string {
+func (category *Category) GetThumb(storageUrl, defaultThumb string) string {
 	//取第一张
 	if len(category.Images) > 0 {
 		for i := range category.Images {
 			if !strings.HasPrefix(category.Images[i], "http") && !strings.HasPrefix(category.Images[i], "//") {
-				category.Images[i] = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Images[i], "/")
+				category.Images[i] = storageUrl + "/" + strings.TrimPrefix(category.Images[i], "/")
 			}
 		}
 	}
@@ -64,14 +48,17 @@ func (category *Category) GetThumb() string {
 		if strings.HasPrefix(category.Logo, "http") || strings.HasPrefix(category.Logo, "//") {
 			category.Thumb = category.Logo
 		} else {
-			category.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
+			category.Logo = storageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
 			paths, fileName := filepath.Split(category.Logo)
 			category.Thumb = paths + "thumb_" + fileName
+			if strings.HasSuffix(category.Logo, ".svg") {
+				category.Thumb = category.Logo
+			}
 		}
-	} else if config.JsonData.Content.DefaultThumb != "" {
-		category.Thumb = config.JsonData.Content.DefaultThumb
+	} else if defaultThumb != "" {
+		category.Thumb = defaultThumb
 		if !strings.HasPrefix(category.Thumb, "http") && !strings.HasPrefix(category.Thumb, "//") {
-			category.Thumb = config.JsonData.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
+			category.Thumb = storageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
 		}
 	}
 

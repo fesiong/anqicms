@@ -28,13 +28,18 @@ var DefaultMenuGroups = []*MenuGroup{
 				Path:     "/setting/content",
 				GroupKey: "setting",
 				Name:     "内容设置",
-				Backend:  "/setting/content",
 			},
 			{
 				Path:     "/setting/safe",
 				GroupKey: "setting",
 				Name:     "内容安全设置",
 				Backend:  "/setting/safe",
+			},
+			{
+				Path:     "/setting/sensitive",
+				GroupKey: "setting",
+				Name:     "敏感词设置",
+				Backend:  "/setting/sensitive",
 			},
 			{
 				Path:     "/setting/contact",
@@ -47,6 +52,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				GroupKey: "setting",
 				Name:     "首页TDK设置",
 				Backend:  "/setting/index",
+			},
+			{
+				Path:     "/setting/banner",
+				GroupKey: "setting",
+				Name:     "首页幻灯片",
+				Backend:  "/setting/banner",
 			},
 			{
 				Path:     "/setting/nav",
@@ -90,25 +101,17 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/tag",
 			},
 			{
+				Path:     "/archive/page",
+				GroupKey: "content",
+				Name:     "单页面管理",
+			},
+			{
 				Path:     "/archive/module",
 				GroupKey: "archive",
 				Name:     "内容模型",
-				Backend:  "/module",
-			},
-		},
-	},
-	{
-		Key:  "content",
-		Name: "页面资源",
-		Menus: []*Menu{
-			{
-				Path:     "/content/page",
-				GroupKey: "content",
-				Name:     "单页面管理",
-				Backend:  "/category/list",
 			},
 			{
-				Path:     "/content/attachment",
+				Path:     "/archive/attachment",
 				GroupKey: "content",
 				Name:     "图片资源管理",
 				Backend:  "/attachment",
@@ -162,6 +165,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/comment",
 			},
 			{
+				Path:     "/plugin/anchor",
+				GroupKey: "plugin",
+				Name:     "锚文本管理",
+				Backend:  "/plugin/anchor",
+			},
+			{
 				Path:     "/plugin/guestbook",
 				GroupKey: "plugin",
 				Name:     "网站留言管理",
@@ -180,6 +189,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/material",
 			},
 			{
+				Path:     "/plugin/fileupload",
+				GroupKey: "plugin",
+				Name:     "验证文件上传",
+				Backend:  "/plugin/fileupload",
+			},
+			{
 				Path:     "/plugin/sendmail",
 				GroupKey: "plugin",
 				Name:     "邮件提醒",
@@ -189,7 +204,6 @@ var DefaultMenuGroups = []*MenuGroup{
 				Path:     "/plugin/collector",
 				GroupKey: "plugin",
 				Name:     "内容采集管理",
-				Backend:  "/collector",
 			},
 			{
 				Path:     "/plugin/importapi",
@@ -224,8 +238,14 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/plugin/user/group",
 				GroupKey: "plugin",
-				Name:     "用户组管理",
+				Name:     "用户组VIP",
 				Backend:  "/plugin/user/group",
+			},
+			{
+				Path:     "/plugin/wechat",
+				GroupKey: "plugin",
+				Name:     "微信公众号",
+				Backend:  "/plugin/wechat",
 			},
 			{
 				Path:     "/plugin/weapp",
@@ -234,22 +254,76 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/weapp",
 			},
 			{
-				Path:     "/plugin/pay",
-				GroupKey: "plugin",
-				Name:     "支付配置",
-				Backend:  "/plugin/pay",
-			},
-			{
 				Path:     "/plugin/order",
 				GroupKey: "plugin",
 				Name:     "订单管理",
 				Backend:  "/plugin/order",
 			},
 			{
-				Path:     "/plugin/withdraw",
+				Path:     "/plugin/pay",
 				GroupKey: "plugin",
-				Name:     "提现管理",
-				Backend:  "/plugin/withdraw",
+				Name:     "支付配置",
+				Backend:  "/plugin/pay",
+			},
+			{
+				Path:     "/plugin/finance",
+				GroupKey: "plugin",
+				Name:     "财务管理",
+				Backend:  "/plugin/finance",
+			},
+			{
+				Path:     "/plugin/retailer",
+				GroupKey: "plugin",
+				Name:     "分销管理",
+				Backend:  "/plugin/retailer",
+			},
+			{
+				Path:     "/plugin/fulltext",
+				GroupKey: "plugin",
+				Name:     "全文搜索",
+				Backend:  "/plugin/fulltext",
+			},
+			{
+				Path:     "/plugin/backup",
+				GroupKey: "plugin",
+				Name:     "备份与恢复",
+				Backend:  "/plugin/backup",
+			},
+			{
+				Path:     "/plugin/replace",
+				GroupKey: "plugin",
+				Name:     "全站替换",
+				Backend:  "/plugin/replace",
+			},
+			{
+				Path:     "/plugin/titleimage",
+				GroupKey: "plugin",
+				Name:     "标题自动配图",
+				Backend:  "/plugin/titleimage",
+			},
+			{
+				Path:     "/plugin/htmlcache",
+				GroupKey: "plugin",
+				Name:     "静态页面缓存",
+				Backend:  "/plugin/htmlcache",
+			},
+			{
+				Path:     "/plugin/aigenerate",
+				GroupKey: "plugin",
+				Name:     "静态页面缓存",
+				Backend:  "/plugin/aigenerate",
+			},
+			{
+				Path:     "/plugin/timefactor",
+				GroupKey: "plugin",
+				Name:     "时间因子-定时发布",
+				Backend:  "/plugin/timefactor",
+			},
+			{
+				Path:     "/plugin/interference",
+				GroupKey: "plugin",
+				Name:     "防采集干扰码",
+				Backend:  "/plugin/interference",
 			},
 		},
 	},
@@ -331,11 +405,6 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/admin/list",
 			},
 			{
-				Path:     "/account/index",
-				GroupKey: "account",
-				Name:     "管理员信息",
-			},
-			{
 				Path:     "/account/group/list",
 				GroupKey: "account",
 				Name:     "管理员分组列表",
@@ -368,7 +437,7 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/tool/upgrade",
 				GroupKey: "tool",
-				Name:     "操作记录",
+				Name:     "系统升级",
 				Backend:  "/version/upgrade",
 			},
 			{

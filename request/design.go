@@ -37,6 +37,7 @@ type CopyDesignFileRequest struct {
 }
 
 type DesignDataRequest struct {
-	Package    string `json:"package"`
-	AutoBackup bool   `json:"auto_backup"`
+	Package     string `json:"package"`
+	AutoBackup  bool   `json:"auto_backup"`
+	AutoCleanup bool   `json:"auto_cleanup"`
 }

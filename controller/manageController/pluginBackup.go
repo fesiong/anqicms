@@ -1,17 +1,18 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 func PluginBackupList(ctx iris.Context) {
-	list := provider.GetBackupList()
+	currentSite := provider.CurrentSite(ctx)
+	list := currentSite.GetBackupList()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -21,7 +22,8 @@ func PluginBackupList(ctx iris.Context) {
 }
 
 func PluginBackupDump(ctx iris.Context) {
-	err := provider.BackupData()
+	currentSite := provider.CurrentSite(ctx)
+	err := currentSite.BackupData()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -30,15 +32,16 @@ func PluginBackupDump(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("备份数据"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "备份已完成",
+		"msg":  ctx.Tr("BackupCompleted"),
 	})
 }
 
 func PluginBackupRestore(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -48,7 +51,7 @@ func PluginBackupRestore(ctx iris.Context) {
 		return
 	}
 
-	err := provider.RestoreData(req.Name)
+	err := currentSite.RestoreData(req.Name)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -58,27 +61,28 @@ func PluginBackupRestore(ctx iris.Context) {
 	}
 
 	// 重新读取配置
-	provider.InitSetting()
-	provider.AddAdminLog(ctx, fmt.Sprintf("从备份中恢复数据"))
+	currentSite.InitSetting()
+	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
 	go func() {
-		time.Sleep(50 * time.Millisecond)
-		// 如果切换了模板，则重载模板
-		config.RestartChan <- true
+		// 如果切换了模板，需要重启
+		config.RestartChan <- 0
 
-		time.Sleep(2 * time.Second)
+		time.Sleep(1 * time.Second)
 		// 删除索引
-		provider.DeleteCache()
-		provider.CloseFulltext()
-		provider.InitFulltext()
+		currentSite.DeleteCache()
+		currentSite.RemoveHtmlCache()
+		currentSite.CloseFulltext()
+		currentSite.InitFulltext()
 	}()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "数据已恢复",
+		"msg":  ctx.Tr("DataRestored"),
 	})
 }
 
 func PluginBackupDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -87,7 +91,7 @@ func PluginBackupDelete(ctx iris.Context) {
 		})
 		return
 	}
-	err := provider.DeleteBackupData(req.Name)
+	err := currentSite.DeleteBackupData(req.Name)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -95,15 +99,16 @@ func PluginBackupDelete(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除备份数据"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteBackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已处理",
+		"msg":  ctx.Tr("Processed"),
 	})
 }
 
 func PluginBackupImport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -117,29 +122,30 @@ func PluginBackupImport(ctx iris.Context) {
 	if !strings.HasSuffix(info.Filename, ".sql") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "导入的文件格式不正确",
+			"msg":  ctx.Tr("IncorrectImportedFileFormat"),
 		})
 		return
 	}
 
-	err = provider.ImportBackupFile(file, info.Filename)
+	err = currentSite.ImportBackupFile(file, info.Filename)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "文件保存失败",
+			"msg":  ctx.Tr("FileSaveFailed"),
 		})
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导入备份文件：%s", info.Filename))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportBackupFileLog", info.Filename))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "备份文件导入完成",
+		"msg":  ctx.Tr("BackupFileImportCompleted"),
 	})
 }
 
 func PluginBackupExport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -148,7 +154,7 @@ func PluginBackupExport(ctx iris.Context) {
 		})
 		return
 	}
-	filePath, err := provider.GetBackupFilePath(req.Name)
+	filePath, err := currentSite.GetBackupFilePath(req.Name)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -157,5 +163,25 @@ func PluginBackupExport(ctx iris.Context) {
 		return
 	}
 
-	ctx.SendFile(filePath, "")
+	ctx.SendFile(filePath, currentSite.Host+"-"+filepath.Base(filePath))
+}
+
+func PluginBackupCleanup(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PluginBackupRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.CleanupWebsiteData(req.CleanUploads)
+	currentSite.AddAdminLog(ctx, ctx.Tr("OneClickClearingOfWebsiteData"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("CleanUpCompleted"),
+	})
 }

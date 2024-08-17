@@ -5,25 +5,32 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"os"
 	"strings"
 	"time"
 )
 
-const MailLogFile = "mail"
+const MailLogFile = "mail.log"
+
+const (
+	SendTypeGuestbook = 1 // 新留言
+	SendTypeDaily     = 2 // 网站日报
+	SendTypeNewOrder  = 3 // 新订单
+	SendTypePayOrder  = 4 // 新订单
+)
 
 type MailLog struct {
 	CreatedTime int64  `json:"created_time"`
 	Subject     string `json:"subject"`
 	Status      string `json:"status"`
+	Address     string `json:"address"`
 }
 
-func GetLastSendmailList() ([]*MailLog, error) {
+func (w *Website) GetLastSendmailList() ([]*MailLog, error) {
 	var mailLogs []*MailLog
 	//获取20条数据
-	filePath := fmt.Sprintf("%scache/%s.log", config.ExecPath, MailLogFile)
+	filePath := w.CachePath + MailLogFile
 	logFile, err := os.Open(filePath)
 	if nil != err {
 		//打开失败
@@ -79,8 +86,20 @@ func GetLastSendmailList() ([]*MailLog, error) {
 	return mailLogs, nil
 }
 
-func SendMail(subject, content string) error {
-	setting := config.JsonData.PluginSendmail
+func (w *Website) SendMail(subject, content string, recipients ...string) error {
+	setting := w.PluginSendmail
+	if setting.Account == "" {
+		//成功配置，则跳过
+		return errors.New(w.Tr("PleaseConfigureSender"))
+	}
+
+	err := w.sendMail(subject, content, recipients, false, true)
+
+	return err
+}
+
+func (w *Website) sendMail(subject, content string, recipients []string, useHtml bool, setLog bool) error {
+	setting := w.PluginSendmail
 	port := setting.Port
 	if port == 0 {
 		//默认使用25端口
@@ -93,7 +112,7 @@ func SendMail(subject, content string) error {
 
 	if setting.Account == "" {
 		//成功配置，则跳过
-		return errors.New(config.Lang("请配置发件人信息"))
+		return errors.New(w.Tr("PleaseConfigureSender"))
 	}
 
 	//开始发送
@@ -107,42 +126,82 @@ func SendMail(subject, content string) error {
 	}
 	email.Password = setting.Password
 
-	var recipients []string
-	if setting.Recipient != "" {
-		tmp := strings.Split(setting.Recipient, ",")
-		for _, v := range tmp {
-			v = strings.TrimSpace(v)
-			if v != "" {
-				recipients = append(recipients, v)
+	if len(recipients) == 0 {
+		if setting.Recipient != "" {
+			tmp := strings.Split(setting.Recipient, ",")
+			for _, v := range tmp {
+				v = strings.TrimSpace(v)
+				if v != "" {
+					recipients = append(recipients, v)
+				}
 			}
 		}
+		if len(recipients) == 0 {
+			recipients = append(recipients, setting.Account)
+		}
 	}
-	if len(recipients) == 0 {
-		recipients = append(recipients, setting.Account)
+	// 多个收件地址的时候，分开发送
+	var err error
+	for _, to := range recipients {
+		email.To = []string{to}
+		email.Subject = subject
+		if useHtml {
+			email.HTML = content
+		} else {
+			email.Text = content
+		}
+
+		if err = email.Send(); err != nil {
+			if setLog {
+				w.logMailError(to, subject, err.Error())
+			}
+			continue
+		}
+		if setLog {
+			w.logMailError(to, subject, w.Tr("SentSuccessfully"))
+		}
+	}
+	return err
+}
+
+// SendTypeValid 检查发送类型是否可发送
+func (w *Website) SendTypeValid(sendType int) bool {
+	// 默认支持新留言发送
+	if len(w.PluginSendmail.SendType) == 0 && sendType == SendTypeGuestbook {
+		return true
+	}
+	for _, v := range w.PluginSendmail.SendType {
+		if v == sendType {
+			return true
+		}
 	}
 
-	email.To = recipients
-	email.Subject = subject
-	email.Text = content
+	return false
+}
 
-	if err := email.Send(); err != nil {
-		logMailError(subject, err.Error())
-		return err
+// ReplyMail 如果设置了回复邮件，则尝试回复给用户
+func (w *Website) ReplyMail(recipient string) error {
+	if !strings.Contains(recipient, "@") {
+		return errors.New(w.Tr("IncorrectRecipientAddress"))
 	}
-	logMailError(subject, config.Lang("发送成功"))
+	if w.PluginSendmail.AutoReply && w.PluginSendmail.ReplySubject != "" && w.PluginSendmail.ReplyMessage != "" {
+		return w.SendMail(w.PluginSendmail.ReplySubject, w.PluginSendmail.ReplyMessage, recipient)
+	}
+
 	return nil
 }
 
-func logMailError(subject, status string) {
+func (w *Website) logMailError(address, subject, status string) {
 	mailLog := MailLog{
 		CreatedTime: time.Now().Unix(),
 		Subject:     subject,
 		Status:      status,
+		Address:     address,
 	}
 
 	content, err := json.Marshal(mailLog)
 
 	if err == nil {
-		library.DebugLog(MailLogFile, string(content))
+		library.DebugLog(w.CachePath, MailLogFile, string(content))
 	}
 }

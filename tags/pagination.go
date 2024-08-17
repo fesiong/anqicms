@@ -2,8 +2,8 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/config"
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"math"
 	"net/url"
@@ -20,6 +20,7 @@ type pageItem struct {
 }
 
 type pagination struct {
+	w            *provider.Website
 	TotalItems   int64
 	TotalPages   int
 	pageSize     int
@@ -41,6 +42,10 @@ type tagPaginationNode struct {
 }
 
 func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
+		return nil
+	}
 	args, err := parseArgs(node.args, ctx)
 	if err != nil {
 		return err
@@ -61,7 +66,7 @@ func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 
 	if paginator.urlPatten == "" {
-		webInfo, ok := ctx.Public["webInfo"].(response.WebInfo)
+		webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
 		if ok {
 			paginator.urlPatten = webInfo.CanonicalUrl
 		}
@@ -162,11 +167,12 @@ func TagPaginationParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pon
 	return tagNode, nil
 }
 
-func makePagination(TotalItems int64, currentPage, pageSize int, urlPatten string, maxPagesShow int) *pagination {
+func makePagination(currentSite *provider.Website, TotalItems int64, currentPage, pageSize int, urlPatten string, maxPagesShow int) *pagination {
 	if currentPage < 1 {
 		currentPage = 1
 	}
 	pager := &pagination{
+		w:            currentSite,
 		TotalItems:   TotalItems,
 		TotalPages:   0,
 		pageSize:     pageSize,
@@ -183,7 +189,7 @@ func makePagination(TotalItems int64, currentPage, pageSize int, urlPatten strin
 
 func (p *pagination) getFirstPage() *pageItem {
 	item := &pageItem{
-		Name: config.Lang("第一页"),
+		Name: p.w.TplTr("FirstPage"),
 		Link: p.getPageUrl(1),
 	}
 
@@ -196,7 +202,7 @@ func (p *pagination) getFirstPage() *pageItem {
 
 func (p *pagination) getLastPage() *pageItem {
 	item := &pageItem{
-		Name: config.Lang("尾页"),
+		Name: p.w.TplTr("LastPage"),
 		Link: p.getPageUrl(p.TotalPages),
 	}
 
@@ -213,7 +219,7 @@ func (p *pagination) getPrevPage() *pageItem {
 	}
 
 	item := &pageItem{
-		Name: config.Lang("上一页"),
+		Name: p.w.TplTr("PreviousPage"),
 		Link: p.getPageUrl(p.CurrentPage - 1),
 	}
 
@@ -225,7 +231,7 @@ func (p *pagination) getNextPage() *pageItem {
 		return nil
 	}
 	item := &pageItem{
-		Name: config.Lang("下一页"),
+		Name: p.w.TplTr("NextPage"),
 		Link: p.getPageUrl(p.CurrentPage + 1),
 	}
 

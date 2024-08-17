@@ -3,20 +3,23 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"net/url"
+	"regexp"
 	"strings"
+	"time"
 )
 
 func Install(ctx iris.Context) {
-	if dao.DB != nil {
+	if provider.GetDefaultDB() != nil {
 		ctx.Redirect("/")
 		return
 	}
+	defaultSite := provider.CurrentSite(ctx)
 
-	ctx.WriteString(`<!DOCTYPE html>
+	viewTpl := `<!DOCTYPE html>
 <html lang="zh-cn">
 
 <head>
@@ -58,10 +61,10 @@ func Install(ctx iris.Context) {
       flex: 1;
     }
 
-	.layui-form-text {
-		padding: 6px 0;
-		flex: 1;
-	}
+    .layui-form-text {
+      padding: 6px 0;
+      flex: 1;
+    }
 
     .layui-input {
       box-sizing: border-box;
@@ -88,6 +91,7 @@ func Install(ctx iris.Context) {
     }
 
     .layui-btn {
+      display: inline-block;
       cursor: pointer;
       border-radius: 2px;
       color: #555;
@@ -105,95 +109,212 @@ func Install(ctx iris.Context) {
     .submit-buttons {
       text-align: center;
     }
+
+    a {
+      text-decoration: none;
+      line-height: 1;
+    }
+
+    #loading {
+      display: none;
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      margin-left: -120px;
+      margin-top: -40px;
+      padding: 30px;
+      width: 180px;
+      background: #ffffff;
+      box-shadow: 0 1px 5px rgb(0 0 0 / 30%);
+      border-radius: 5px;
+    }
+
+    .loading-icon {
+      margin-left: 5px;
+      -webkit-animation-name: typing;
+      animation-name: typing;
+      -webkit-animation-duration: 3s;
+      animation-duration: 3s;
+      -webkit-animation-timing-function: steps(14, end);
+      animation-timing-function: steps(14, end);
+      -webkit-animation-iteration-count: infinite;
+      animation-iteration-count: infinite;
+      display: inline-block;
+      width: 24px;
+      overflow: hidden;
+      vertical-align: middle;
+    }
+
+    @keyframes typing {
+      from {
+        width: 0
+      }
+    }
+
+    #alert {
+      display: none;
+      position: fixed;
+      width: 560px;
+      top: 50%;
+      left: 50%;
+      margin-top: -66px;
+      margin-left: -300px;
+      padding: 20px;
+      box-shadow: 0 1px 5px rgb(0 0 0 / 30%);
+      border-radius: 5px;
+      background: #fff;
+    }
+
+    .alert-buttons {
+      margin-top: 30px;
+      text-align: right;
+    }
   </style>
 </head>
 
 <body>
   <div class="container">
-    <h1 class="title">安企CMS(AnqiCMS)初始化安装</h1>
-    <form class="layui-form" action="/install" method="post">
+    <h1 class="title">{% tr "AnqiCMS(AnqiCMS)InitializationInstallation" %}</h1>
+    <form class="layui-form" id="install-form" action="/install" method="post" onsubmit="return checkSubmit(this);">
       <div>
         <div class="layui-form-item">
-          <label class="layui-form-label">数据库地址</label>
+          <label class="layui-form-label">{% tr "DatabaseAddress" %}</label>
           <div class="layui-input-block">
-            <input type="text" name="host" value="localhost" required placeholder="一般是localhost" autocomplete="off" class="layui-input">
+            <input type="text" name="host" value="localhost" required placeholder="{% tr "UsuallyLocalhost" %}" autocomplete="off" class="layui-input">
           </div>
         </div>
         <div class="layui-form-item">
-          <label class="layui-form-label">数据库端口</label>
+          <label class="layui-form-label">{% tr "DatabasePort" %}</label>
           <div class="layui-input-block">
-            <input type="text" name="port" value="3306" required placeholder="一般是3306" autocomplete="off" class="layui-input">
+            <input type="text" name="port" value="3306" required placeholder="{% tr "Usually3306" %}" autocomplete="off" class="layui-input">
           </div>
         </div>
         <div class="layui-form-item">
-          <label class="layui-form-label">数据库名称</label>
+          <label class="layui-form-label">{% tr "DatabaseName" %}</label>
           <div class="layui-input-block">
-            <input type="text" name="database" value="anqicms" required placeholder="安装到哪个数据库" autocomplete="off" class="layui-input">
-            <div class="layui-form-mid layui-aux-word">如果数据库不存在，程序则会尝试创建它</div>
+            <input type="text" name="database" value="anqicms" required placeholder="{% tr "WhichDatabaseToInstall" %}" autocomplete="off" class="layui-input">
+            <div class="layui-form-mid layui-aux-word">{% tr "IfTheDatabaseDoesNotExistTheProgramWillTryToCreateIt" %}</div>
           </div>
         </div>
         <div class="layui-form-item">
-          <label class="layui-form-label">数据库用户</label>
+          <label class="layui-form-label">{% tr "DatabaseUser" %}</label>
           <div class="layui-input-block">
-            <input type="text" name="user" required placeholder="填写数据库用户名" autocomplete="off" class="layui-input">
+            <input type="text" name="user" required placeholder="{% tr "FillInTheDatabaseUserName" %}" autocomplete="off" class="layui-input">
           </div>
         </div>
         <div class="layui-form-item">
-          <label class="layui-form-label">数据库密码</label>
+          <label class="layui-form-label">{% tr "DatabasePassword" %}</label>
           <div class="layui-input-block">
-            <input type="password" name="password" required placeholder="填写数据库密码" autocomplete="off" class="layui-input">
+            <input type="password" name="password" placeholder="{% tr "FillInTheDatabasePassword" %}" autocomplete="off" class="layui-input">
           </div>
         </div>
       </div>
       <div class="layui-form-item">
-        <label class="layui-form-label">后台用户名</label>
+        <label class="layui-form-label">{% tr "BackstageUserName" %}</label>
         <div class="layui-input-block">
-          <input type="text" name="admin_user" value="admin" required placeholder="用于登录管理后台" autocomplete="off" class="layui-input">
+          <input type="text" name="admin_user" value="admin" required placeholder="{% tr "UsedToLogInToTheManagementBackstage" %}" autocomplete="off" class="layui-input">
         </div>
       </div>
       <div class="layui-form-item">
-        <label class="layui-form-label">后台密码</label>
+        <label class="layui-form-label">{% tr "BackstagePassword" %}</label>
         <div class="layui-input-block">
-          <input type="password" name="admin_password" minlength="6" maxlength="20" required placeholder="请填写6位以上的密码" autocomplete="off" class="layui-input">
+          <input type="password" name="admin_password" minlength="6" maxlength="20" required placeholder="{% tr "PleaseFillInAPasswordOfMoreThan6Digits" %}" autocomplete="off" class="layui-input">
         </div>
       </div>
       <div class="layui-form-item">
-        <label class="layui-form-label">网站地址</label>
+        <label class="layui-form-label">{% tr "WebsiteAddress" %}</label>
         <div class="layui-input-block">
           <input type="text" name="base_url" value="" autocomplete="off" class="layui-input">
-          <div class="layui-form-mid layui-aux-word">指该网站的网址，如：http://www.anqicms.com，如本地测试请勿填写。</div>
+          <div class="layui-form-mid layui-aux-word">{% tr "RefersToTheWebsitesUrl" %}</div>
         </div>
       </div>
       <div class="layui-form-item">
-        <label class="layui-form-label">演示数据</label>
+        <label class="layui-form-label">{% tr "DemoData" %}</label>
         <div class="layui-form-text">
-          <label><input type="checkbox" name="preview_data" value="1" checked>安装</label>
-          <span class="layui-form-mid layui-aux-word">勾选后，将安装默认演示数据</span>
+          <label><input type="checkbox" name="preview_data" value="1">{% tr "Install" %}</label>
+          <span class="layui-form-mid layui-aux-word">{% tr "AfterCheckingTheDefaultDemoDataWillBeInstalled" %}</span>
         </div>
       </div>
       <div class="layui-form-item">
         <div class="layui-input-block submit-buttons">
-          <button type="reset" class="layui-btn">重置</button>
-          <button class="layui-btn btn-primary" type="submit">确认初始化</button>
+          <button type="reset" class="layui-btn">{% tr "Reset" %}</button>
+          <button class="layui-btn btn-primary" type="submit">{% tr "ConfirmInitialization" %}</button>
         </div>
       </div>
     </form>
   </div>
+  <div id="loading">{% tr "InstallingInProgress" %}<span class="loading-icon">···</span></div>
+  <div id="alert"></div>
 </body>
-</html>`)
+<script>
+  let installing = false;
+  function checkSubmit(form) {
+    if (installing) {
+      return false;
+    }
+    let el = document.getElementById("loading");
+    el.style.display = "block";
+    installing = true;
+    let formData = new FormData(form);
+    var xhr = new XMLHttpRequest();
+    xhr.open("POST", "/install");
+    xhr.send(formData);
+    xhr.onload = function () {
+      let res = JSON.parse(xhr.responseText);
+      if (res.code !== 0) {
+        showAlert(res.msg, []);
+      } else {
+        showAlert(res.msg, [{ name: '{% tr "AccessTheManagementBackstage" %}', link: '/system/' }, { name: '{% tr "AccessTheHomepage" %}', link: '/' }]);
+      }
+      el.style.display = "none";
+      installing = false;
+    }
+    return false;
+  }
+  function closeAlert() {
+    let el = document.getElementById("alert");
+    el.style.display = "none";
+  }
+  function showAlert(message, buttons) {
+    let el = document.getElementById("alert");
+    el.style.display = "block";
+    let text = "<div>" + message + "</div><div class=\"alert-buttons\"><a class=\"layui-btn\" href=\"javascript:closeAlert();\">{% tr "Confirm" %}</a>";
+    if (buttons.length > 0) {
+      for (let i in buttons) {
+        text += "<a class=\"layui-btn btn-primary\" href=\"" + buttons[i].link + "\">" + buttons[i].name + "</a>";
+      }
+    }
+    el.innerHTML = text;
+  }
+</script>
+
+</html>`
+	// translate
+	re, _ := regexp.Compile(`{%\s*tr "(.+?)"\s*%}`)
+	viewTpl = re.ReplaceAllStringFunc(viewTpl, func(s string) string {
+		match := re.FindStringSubmatch(s)
+		return defaultSite.Tr(match[1])
+	})
+
+	ctx.WriteString(viewTpl)
 }
 
 var installRunning bool
 
 func InstallForm(ctx iris.Context) {
-	if dao.DB != nil {
-		ShowMessage(ctx, "已初始化完成，无需再处理", []Button{
-			{Name: "点击继续", Link: "/"},
+	defaultSite := provider.CurrentSite(ctx)
+	if provider.GetDefaultDB() != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  defaultSite.Tr("InitializationCompleted"),
 		})
 		return
 	}
 	if installRunning {
-		ShowMessage(ctx, "已初始化任务正在进行中", nil)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  defaultSite.Tr("InitializedTaskInProgress"),
+		})
 		return
 	}
 	installRunning = true
@@ -213,7 +334,10 @@ func InstallForm(ctx iris.Context) {
 	req.PreviewData, _ = ctx.PostValueBool("preview_data")
 
 	if len(req.AdminPassword) < 6 {
-		ShowMessage(ctx, "请填写6位以上的管理员密码", nil)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  defaultSite.Tr("PleaseFillInTheAdministratorPasswordOfMoreThan6Digits"),
+		})
 		return
 	}
 
@@ -223,16 +347,16 @@ func InstallForm(ctx iris.Context) {
 			req.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
 		}
 	}
-	config.JsonData.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
-	config.JsonData.PluginStorage.StorageUrl = config.JsonData.System.BaseUrl
 
-	config.Server.Mysql.Database = req.Database
-	config.Server.Mysql.User = req.User
-	config.Server.Mysql.Password = req.Password
-	config.Server.Mysql.Host = req.Host
-	config.Server.Mysql.Port = req.Port
+	var mysqlConfig = config.MysqlConfig{
+		Database: req.Database,
+		User:     req.User,
+		Password: req.Password,
+		Host:     req.Host,
+		Port:     req.Port,
+	}
 
-	err := dao.InitDB()
+	db, err := provider.InitDB(&mysqlConfig)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -240,8 +364,11 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	config.Server.Mysql = mysqlConfig
+	provider.SetDefaultDB(db)
+
 	//自动迁移数据库
-	err = dao.AutoMigrateDB(dao.DB)
+	err = provider.AutoMigrateDB(db, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -258,18 +385,37 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
-	_ = provider.SaveSettingValue(provider.SystemSettingKey, config.JsonData.System)
-	_ = provider.SaveSettingValue(provider.StorageSettingKey, config.JsonData.PluginStorage)
+
+	dbWebsite := model.Website{
+		// 首个站点ID为1
+		Model: model.Model{Id: 1},
+		// 首个站点为安装目录
+		RootPath: config.ExecPath,
+		Name:     defaultSite.Tr("AnqiCMS(AnqiCMS)"),
+		Mysql:    config.Server.Mysql,
+		Status:   1,
+	}
+	db.Save(&dbWebsite)
+
+	provider.InitWebsite(&dbWebsite)
+	website := provider.GetWebsite(dbWebsite.Id)
+
+	website.System.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
+	website.PluginStorage.StorageUrl = website.System.BaseUrl
+	_ = website.SaveSettingValue(provider.SystemSettingKey, website.System)
+	_ = website.SaveSettingValue(provider.StorageSettingKey, website.PluginStorage)
 
 	if req.PreviewData {
-		_ = provider.RestoreDesignData(config.JsonData.System.TemplateName)
+		_ = website.RestoreDesignData(website.System.TemplateName)
 	}
+	// 安装时间
+	_ = website.SaveSettingValue(provider.InstallTimeKey, time.Now().Unix())
 	// 读入配置
-	provider.InitSetting()
+	website.InitSetting()
 	// 初始化数据
-	dao.InitModelData(dao.DB)
+	website.InitModelData()
 	//创建管理员
-	err = provider.InitAdmin(req.AdminUser, req.AdminPassword, true)
+	err = website.InitAdmin(req.AdminUser, req.AdminPassword, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -277,9 +423,10 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+	config.RestartChan <- 0
 
-	ShowMessage(ctx, "AnqiCMS安装成功", []Button{
-		{Name: "访问管理后台", Link: "/system/"},
-		{Name: "访问首页", Link: "/"},
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  defaultSite.Tr("AnqiCMSInstalledSuccessfully"),
 	})
 }

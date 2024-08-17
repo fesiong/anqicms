@@ -2,7 +2,6 @@ package model
 
 import (
 	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -19,6 +18,7 @@ type Attachment struct {
 	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
 	IsImage      int    `json:"is_image" gorm:"column:is_image;type:tinyint(1) not null;default:0"`
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
+	Watermark    uint   `json:"watermark" gorm:"column:watermark;type:tinyint(1) not null;default:0"`
 	Logo         string `json:"logo" gorm:"-"`
 	Thumb        string `json:"thumb" gorm:"-"`
 }
@@ -46,20 +46,17 @@ func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
 	return nil
 }
 
-func (attachment *Attachment) GetThumb() {
+func (attachment *Attachment) GetThumb(storageUrl string) {
 	// 如果不是图片
-	ext := filepath.Ext(attachment.FileLocation)
-	if ext != ".jpg" &&
-		ext != ".jpeg" &&
-		ext != ".gif" &&
-		ext != ".png" &&
-		ext != ".bmp" &&
-		ext != ".webp" {
-		attachment.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + attachment.FileLocation
+	if attachment.IsImage == 0 {
+		attachment.Logo = storageUrl + "/" + attachment.FileLocation
+		if strings.HasSuffix(attachment.FileLocation, ".svg") {
+			attachment.Thumb = attachment.Logo
+		}
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
-	if strings.HasPrefix(attachment.FileLocation, "http") && !strings.HasPrefix(attachment.FileLocation, "//") {
+	if strings.HasPrefix(attachment.FileLocation, "http") || strings.HasPrefix(attachment.FileLocation, "//") {
 		attachment.Logo = attachment.FileLocation
 		attachment.Thumb = attachment.FileLocation
 	} else {
@@ -67,9 +64,12 @@ func (attachment *Attachment) GetThumb() {
 		if strings.HasPrefix(attachment.FileLocation, "20") {
 			attachment.FileLocation = "uploads/" + attachment.FileLocation
 		}
-		attachment.Logo = config.JsonData.PluginStorage.StorageUrl + "/" + attachment.FileLocation
+		attachment.Logo = storageUrl + "/" + attachment.FileLocation
 		paths, fileName := filepath.Split(attachment.Logo)
 		attachment.Thumb = paths + "thumb_" + fileName
+		if strings.HasSuffix(attachment.FileLocation, ".svg") {
+			attachment.Thumb = attachment.Logo
+		}
 	}
 }
 
@@ -91,7 +91,6 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 		db.Model(&Attachment{}).Where("`category_id` = ?", attachment.CategoryId).Count(&attachCount)
 		db.Model(&AttachmentCategory{}).Where("`id` = ?", attachment.CategoryId).UpdateColumn("attach_count", attachCount)
 	}
-	attachment.GetThumb()
 
 	return nil
 }

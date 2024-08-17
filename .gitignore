@@ -5,10 +5,10 @@ vendor
 /config.json
 goblog
 /doc
-/docs
 /test
 /data
 /system
 /release
 collector.json
 keyword.json
+*.log

@@ -1,8 +1,6 @@
 package model
 
-import (
-	"gorm.io/gorm"
-)
+import "gorm.io/gorm"
 
 const (
 	StatusWait = uint(0)
@@ -26,4 +24,6 @@ type CustomField struct {
 	Value       interface{} `json:"value"`
 	Default     interface{} `json:"default"`
 	FollowLevel bool        `json:"follow_level"`
+	Type        string      `json:"-"`
+	FieldName   string      `json:"-"`
 }

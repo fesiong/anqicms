@@ -6,7 +6,7 @@ import (
 )
 
 func TestGetPinyin(t *testing.T) {
-	result := GetPinyin("Electronic Water Bath")
+	result := GetPinyin("Electronic Water Bath", true)
 
 	log.Println(result)
 }

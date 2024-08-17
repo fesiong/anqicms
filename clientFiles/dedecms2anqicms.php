@@ -4,7 +4,7 @@
  * 仅支持 php 5.3 以上
  * 版权保护，如需使用，请访问 https://www.anqicms.com/。
  * @author anqicms
- * 微信：17620331155
+ * 微信：websafety
  */
 
 //报错设置
@@ -209,6 +209,10 @@ class anqicms
             $moduleTables = $this->getModuleTables();
             // 增加附加表
             foreach ($archives as $key => $val) {
+                $images = array();
+                if (!empty($val['litpic'])) {
+                    $images = array($val['litpic']);
+                }
                 $archive = array(
                   'id' => $val['id'],
                   'title' => $val['title'],
@@ -219,7 +223,7 @@ class anqicms
                   'status' => 1,
                   'created_time' => $val['pubdate'],
                   'updated_time' => $val['senddate'],
-                  'images' => [$val['litpic']],
+                  'images' => $images,
                   'url_token' => $val['filename'],
                   'module_id' => $val['channel'],
                   'flag' => $val['flag'],
@@ -449,7 +453,7 @@ class anqicms
                             if ($file2 === 'common.inc.php') {
                                 $filePath = APP_PATH . $file . '/' . $file2;
                                 $content = file_get_contents($filePath);
-                                if (strpos($content, '//数据库连接信息') !== false) {
+                                if (strpos($content, '$cfg_db_language') !== false) {
                                     $configFile = $filePath;
                                     break 2;
                                 }

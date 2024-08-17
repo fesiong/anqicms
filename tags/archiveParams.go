@@ -2,8 +2,7 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v4"
-	"kandaoni.com/anqicms/dao"
+	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
@@ -15,7 +14,8 @@ type tagArchiveParamsNode struct {
 }
 
 func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.TemplateWriter) *pongo2.Error {
-	if dao.DB == nil {
+	currentSite, _ := ctx.Public["website"].(*provider.Website)
+	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
 	args, err := parseArgs(node.args, ctx)
@@ -24,40 +24,53 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	}
 	id := uint(0)
 
+	if args["site_id"] != nil {
+		args["siteId"] = args["site_id"]
+	}
+	if args["siteId"] != nil {
+		siteId := args["siteId"].Integer()
+		currentSite = provider.GetWebsite(uint(siteId))
+	}
+
 	sorted := true
 	if args["sorted"] != nil {
 		sorted = args["sorted"].Bool()
+	}
+	name := ""
+	if args["name"] != nil {
+		name = args["name"].String()
+		if len(name) > 0 {
+			sorted = false
+		}
 	}
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
-		archiveDetail, _ = provider.GetArchiveById(id)
+		if archiveDetail == nil || archiveDetail.Id != id {
+			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
+			if archiveDetail == nil {
+				archiveDetail, _ = currentSite.GetArchiveById(id)
+				if archiveDetail != nil {
+					// if read level larger than 0, then need to check permission
+					userId := uint(0)
+					userInfo, ok := ctx.Public["userInfo"].(*model.User)
+					if ok && userInfo.Id > 0 {
+						userId = userInfo.Id
+					}
+					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+					archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+
+					currentSite.AddArchiveCache(archiveDetail)
+				}
+			}
+		}
 	}
 
 	if archiveDetail != nil {
-		archiveParams := provider.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id)
+		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
-			// if read level larger than 0, then need to check permission
-			if archiveDetail.Price == 0 && archiveDetail.ReadLevel == 0 {
-				archiveDetail.HasOrdered = true
-			}
-			userInfo, ok := ctx.Public["userInfo"].(*model.User)
-			if ok && userInfo.Id > 0 {
-				if archiveDetail.UserId == userInfo.Id {
-					archiveDetail.HasOrdered = true
-				}
-				if archiveDetail.Price > 0 {
-					archiveDetail.HasOrdered = provider.CheckArchiveHasOrder(userInfo.Id, archiveDetail.Id)
-				}
-				if archiveDetail.ReadLevel > 0 && !archiveDetail.HasOrdered {
-					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-					if userGroup != nil && userGroup.Level >= archiveDetail.ReadLevel {
-						archiveDetail.HasOrdered = true
-					}
-				}
-			}
 			for i := range archiveParams {
 				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
 					archiveParams[i].Value = archiveParams[i].Default
@@ -68,7 +81,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			}
 			if sorted {
 				var extraFields []*model.CustomField
-				module := provider.GetModuleFromCache(archiveDetail.ModuleId)
+				module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 				if module != nil && len(module.Fields) > 0 {
 					for _, v := range module.Fields {
 						extraFields = append(extraFields, archiveParams[v.FieldName])
@@ -77,7 +90,15 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 				ctx.Private[node.name] = extraFields
 			} else {
-				ctx.Private[node.name] = archiveParams
+				if len(name) > 0 {
+					var content interface{}
+					if item, ok := archiveParams[name]; ok {
+						content = item.Value
+					}
+					ctx.Private[node.name] = content
+				} else {
+					ctx.Private[node.name] = archiveParams
+				}
 			}
 		}
 	}

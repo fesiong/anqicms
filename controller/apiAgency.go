@@ -3,7 +3,6 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -11,20 +10,21 @@ import (
 )
 
 func ApiGetRetailerInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	retailerId := uint(ctx.URLParamIntDefault("retailer_id", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if retailerId == 0 {
 		retailerId = userId
 	}
-	user, err := provider.GetUserInfoById(retailerId)
+	user, err := currentSite.GetUserInfoById(retailerId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("查询失败"),
+			"msg":  currentSite.TplTr("QueryFailed"),
 		})
 		return
 	}
-	user.Group, _ = provider.GetUserGroupInfo(user.GroupId)
+	user.Group, _ = currentSite.GetUserGroupInfo(user.GroupId)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -34,29 +34,30 @@ func ApiGetRetailerInfo(ctx iris.Context) {
 }
 
 func ApiGetRetailerStatistics(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
-	user, err := provider.GetUserInfoById(userId)
+	user, err := currentSite.GetUserInfoById(userId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("登录失败"),
+			"msg":  currentSite.TplTr("LoginFailed"),
 		})
 		return
 	}
 
 	// 可提现佣金
 	var canWithdrawAmount response.SumAmount
-	dao.DB.Model(&model.Commission{}).Where("`user_id` = ? and `status` = ?", user.Id, config.CommissionStatusWait).Select("SUM(`amount`) as total").Take(&canWithdrawAmount)
+	currentSite.DB.Model(&model.Commission{}).Where("`user_id` = ? and `status` = ?", user.Id, config.CommissionStatusWait).Select("SUM(`amount`) as total").Take(&canWithdrawAmount)
 	// 已提现佣金
 	var paidWithdrawAmount response.SumAmount
-	dao.DB.Model(&model.Commission{}).Where("`user_id` = ? and `status` = ?", user.Id, config.CommissionStatusPaid).Select("SUM(`amount`) as total").Take(&paidWithdrawAmount)
+	currentSite.DB.Model(&model.Commission{}).Where("`user_id` = ? and `status` = ?", user.Id, config.CommissionStatusPaid).Select("SUM(`amount`) as total").Take(&paidWithdrawAmount)
 	// 未结算佣金
 	// 未结算佣金从订单中计算
 	var unfinishedWithdrawAmount response.SumAmount
-	dao.DB.Model(&model.Order{}).Where("(`share_user_id` = ? or `share_parent_user_id` = ?) and `status` IN(?)", user.Id, user.Id, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select("SUM(`amount`) as total").Take(&unfinishedWithdrawAmount)
+	currentSite.DB.Model(&model.Order{}).Where("(`share_user_id` = ? or `share_parent_user_id` = ?) and `status` IN(?)", user.Id, user.Id, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select("SUM(`amount`) as total").Take(&unfinishedWithdrawAmount)
 	// 我的团队人数
 	var memberCount int64
-	dao.DB.Model(&model.User{}).Where("`parent_id` = ?", user.Id).Count(&memberCount)
+	currentSite.DB.Model(&model.User{}).Where("`parent_id` = ?", user.Id).Count(&memberCount)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -71,6 +72,7 @@ func ApiGetRetailerStatistics(ctx iris.Context) {
 }
 
 func ApiUpdateRetailerInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -81,27 +83,28 @@ func ApiUpdateRetailerInfo(ctx iris.Context) {
 	}
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	err := dao.DB.Model(model.User{}).Where("`id` = ?", userId).UpdateColumn("real_name", req.RealName).Error
+	err := currentSite.DB.Model(model.User{}).Where("`id` = ?", userId).UpdateColumn("real_name", req.RealName).Error
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  config.Lang("更新信息失败"),
+			"msg":  currentSite.TplTr("UpdateInfoFailed"),
 		})
 	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  config.Lang("保存成功"),
+		"msg":  currentSite.TplTr("SaveSuccessfully"),
 	})
 }
 
 func ApiGetRetailerOrders(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	orders, total := provider.GetRetailerOrders(userId, currentPage, pageSize)
+	orders, total := currentSite.GetRetailerOrders(userId, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -112,12 +115,13 @@ func ApiGetRetailerOrders(ctx iris.Context) {
 }
 
 func ApiGetRetailerWithdraws(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	withdraws, total := provider.GetRetailerWithdraws(userId, currentPage, pageSize)
+	withdraws, total := currentSite.GetRetailerWithdraws(userId, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -128,10 +132,11 @@ func ApiGetRetailerWithdraws(ctx iris.Context) {
 }
 
 func ApiRetailerWithdraw(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	// 执行提现操作
-	err := provider.RetailerApplyWithdraw(userId)
+	err := currentSite.RetailerApplyWithdraw(userId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -142,17 +147,18 @@ func ApiRetailerWithdraw(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusFailed,
-		"msg":  config.Lang("提现申请已提交"),
+		"msg":  currentSite.TplTr("WithdrawalApplicationSubmitted"),
 	})
 }
 
 func ApiGetRetailerMembers(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	members, total := provider.GetRetailerMembers(userId, currentPage, pageSize)
+	members, total := currentSite.GetRetailerMembers(userId, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -163,12 +169,13 @@ func ApiGetRetailerMembers(ctx iris.Context) {
 }
 
 func ApiGetRetailerCommissions(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 
-	commissions, total := provider.GetRetailerCommissions(userId, currentPage, pageSize)
+	commissions, total := currentSite.GetRetailerCommissions(userId, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

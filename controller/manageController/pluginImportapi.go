@@ -1,14 +1,14 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 )
 
 func PluginImportApi(ctx iris.Context) {
-	importApi := config.JsonData.PluginImportApi
+	currentSite := provider.CurrentSite(ctx)
+	importApi := currentSite.PluginImportApi
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -16,12 +16,13 @@ func PluginImportApi(ctx iris.Context) {
 		"data": iris.Map{
 			"token":      importApi.Token,
 			"link_token": importApi.LinkToken,
-			"base_url":   config.JsonData.System.BaseUrl,
+			"base_url":   currentSite.System.BaseUrl,
 		},
 	})
 }
 
 func PluginUpdateApiToken(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginImportApiConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -31,13 +32,13 @@ func PluginUpdateApiToken(ctx iris.Context) {
 		return
 	}
 	if req.Token != "" {
-		config.JsonData.PluginImportApi.Token = req.Token
+		currentSite.PluginImportApi.Token = req.Token
 	}
 	if req.LinkToken != "" {
-		config.JsonData.PluginImportApi.LinkToken = req.LinkToken
+		currentSite.PluginImportApi.LinkToken = req.LinkToken
 	}
 	// 回写
-	err := provider.SaveSettingValue(provider.ImportApiSettingKey, config.JsonData.PluginImportApi)
+	err := currentSite.SaveSettingValue(provider.ImportApiSettingKey, currentSite.PluginImportApi)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -45,10 +46,10 @@ func PluginUpdateApiToken(ctx iris.Context) {
 		})
 		return
 	}
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新API导入Token"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateApiImportToken"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "Token已更新",
+		"msg":  ctx.Tr("TokenUpdated"),
 	})
 }

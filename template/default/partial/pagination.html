@@ -1,19 +1,21 @@
 {% pagination pages with show="5" %}
-<div class="wp-pagenavi">
-    <a class="previouspostslink {% if pages.FirstPage.IsCurrent %}active{% endif %}" href="{{pages.FirstPage.Link}}">{{pages.FirstPage.Name}}</a>
+<!-- pageination -->
+<div class="pagnavi">
+    <a href="{{pages.FirstPage.Link}}" class="{% if pages.FirstPage.IsCurrent %}current{% endif %}">首页</a>
     {% if pages.PrevPage %}
-    <a class="previouspostslink" href="{{pages.PrevPage.Link}}">{{pages.PrevPage.Name}}</a>
+    <a href="{{pages.PrevPage.Link}}"><i class="fa fa-angle-left"></i></a>
     {% endif %}
     {% for item in pages.Pages %}
     {% if item.IsCurrent %}
-    <span class="current">{{item.Name}}</span>
+    <a href="javascript:;" class="current">{{item.Name}}</a>
     {% else %}
-    <a class="page larger" href="{{item.Link}}">{{item.Name}}</a>
+    <a href="{{item.Link}}">{{item.Name}}</a>
     {% endif %}
     {% endfor %}
     {% if pages.NextPage %}
-    <a class="nextpostslink" href="{{pages.NextPage.Link}}">{{pages.NextPage.Name}}</a>
+    <a href="{{pages.NextPage.Link}}"><i class="fa fa-angle-right"></i></a>
     {% endif %}
-    <a class="nextpostslink {% if pages.LastPage.IsCurrent %}active{% endif %}" href="{{pages.LastPage.Link}}">{{pages.LastPage.Name}}</a>
+    <a href="{{pages.LastPage.Link}}" class="{% if pages.LastPage.IsCurrent %}current{% endif %}">尾页</a>
 </div>
+<!-- pagination -->
 {% endpagination %}

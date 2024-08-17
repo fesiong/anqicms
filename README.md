@@ -1,15 +1,24 @@
-# AnqiCMS 基于irisweb的golang编写的安企内容管理系统
+<div align="center"><a name="readme-top"></a>
 
-安企内容管理系统(AnqiCMS)的前身是GoBlog，一款基于irisweb的golang编写的简洁版个人博客系统
+<img height="180" src="docs/anqicms.svg" />
 
-> GoBlog是一个开源的个人博客系统，界面优雅，小巧、执行速度飞快，并且对seo友好，可以满足日常博客需求。你完全可以用它来搭建自己的博客。它的使用很简单，部署非常方便。
-> GoBlog是一款由golang编写的博客，它使用了golang非常流行的网页框架irisweb+gorm，pc和移动端自适应，页面模板使用类似blade模板引擎语法，上手非常容易。
+[更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
 
-安企内容管理系统(AnqiCMS)，是一款使用 GoLang 开发的企业站内容管理系统，它部署简单，软件安全，界面优雅，小巧，执行速度飞快，使用 AnqiCMS 搭建的网站可以防止众多安全问题发生。AnqiCMS 的设计对SEO友好，并且内置了大量企业站常用功能，对网站优化有很好的帮助提升，对企业管理网站一定程度上提提高了办事效率，提高企业的竞争力。
+# AnQiCMS
 
-AnqiCMS 除了适合做企业站，也适合做营销型网站、企业官网、商品展示站点、政府网站、门户网站、个人博客等等各种类型的网站。AnqiCMS 是什么，AnqiCMS 是一个可以自由使用并开放源码的内容管理系统，你可以拿 AnqiCMS 来搭建各种不违法的网站。
+</div>
 
-AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以非常容易上手模板制作。网站模式支持 自适应、代码适配、PC+mobile独立站点 模式，根据不用需求，可以选择适合自己的搭配方式来建站。
+## 介绍
+
+安企内容管理系统(AnqiCMS)的前身是GoBlog，一款基于 iris 框架，使用 golang 开发的简洁版个人博客系统
+
+> GoBlog是一个由 golang 编写的开源个人博客系统，界面优雅，小巧、执行速度飞快，并且对seo友好，可以满足日常博客需求。它的使用很简单，部署非常方便，pc和移动端自适应，页面模板使用类似blade模板引擎语法，上手非常容易，适合个人博客使用。
+
+安企内容管理系统(AnqiCMS)，是一款基于 iris 框架，使用 GoLang 开发的企业内容管理系统。它部署简单，软件相对于传统的PHP开发的内容管理系统更加安全，界面优雅，小巧，执行速度飞快，使用 AnqiCMS 搭建的网站可以防止众多常见的安全问题发生。AnqiCMS 的设计对SEO友好，并且内置了大量企业站常用功能，对网站优化有很好的帮助提升，对企业管理网站一定程度上提提高了办事效率，提高企业的竞争力。
+
+AnqiCMS 除了适合做企业站，也适合做营销型网站、企业官网、商品展示站点、政府网站、门户网站、个人博客等等各种类型的网站。
+
+AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以非常容易上手模板制作。网站模式支持 自适应、代码适配、PC+mobile 独立站点 三种模式，根据不用需求，可以选择适合自己的搭配方式来建站。
 
 我们的追求：让天下都是安全的网站。
 
@@ -17,188 +26,99 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 
 欢迎您使用 AnqiCMS。
 
-## AnqiCMS 分支版本说明
+## 快速开始
 
-- master为最新开发版代码
-- simple 为仅包含基础功能的博客代码
-- blog 为具有完整后台的博客代码
-- enterprise 为安企内容管理系统(AnqiCMS)的代码
+[下载最新的 AnqiCMS](https://github.com/fesiong/goblog/releases)  
+[安装一个新的站点](https://www.anqicms.com/help-basic/210.html)  
+[查看模板使用教程](https://www.anqicms.com/manual)  
+[查看后台使用帮助](https://www.anqicms.com/help)  
+[查看接口文档](https://www.anqicms.com/anqiapi)
 
-## AnqiCMS 开发计划表
+> 温馨提示：大多数文档的编写语言为中文，如果您是英文用户，请使用浏览器自带翻译功能自行翻译。
 
-### simple 基础功能 (已发布)
+## 网站特色功能
 
-- [x] 博客底层功能
-- [x] 发布/修改文章
-- [x] 创建分类
-- [x] 文章展示
-- [x] 图片上传
-- [x] 初始化博客
-- [x] 页面tdk设置
-- [x] 管理员登录/权限控制
-- [x] pc端和移动端自适应适配
+- 自定义文档模型
+- 自定义页面导航
+- 富文本、Markdown 编辑器支持
+- Webp 图片支持
+- 多模板自定义支持
+- 多站点支持
+- 数据统计详细记录
+- 自定义伪静态规则
+- 多个搜索引擎主动推送
+- Sitemap管理
+- Robots.txt管理
+- 友情链接管理
+- 内容评论管理
+- 自动锚文本功能
+- 网站留言管理
+- 关键词库管理
+- 内容素材管理
+- 邮件提醒功能
+- 文章采集功能
+- 文章组合功能
+- 文章导入功能
+- 自定义301跳转功能
+- 网站内容迁移功能
+- 静态页面功能
+- 自定义资源存储
+- 用户管理
+- 用户组管理
+- 小程序支持
+- 全文搜索支持
+- 备份与恢复
+- 文章自动配图支持
+- AI自动写作功能
+- 定时发布/更新功能
+- 防采集干扰功能
+- 图片水印功能
 
-### blog 博客完善 (已发布)
+## AnQiCMS 发展历程
 
-- [x] 增加管理后台
-- [x] 自动提取和设置缩略图
-- [x] sitemap自动生成
-- [x] robots后台配置
-- [x] 搜索引擎主动推送
-- [x] 友情链接后台管理
-- [x] 增加文章评论和评论管理
-- [x] 增加闭站功能
-- [x] 自动过滤外链
-- [x] 自定义导航配置功能
-- [x] 优雅的启动和重启博客
+- 最新
+  > 我们一直在努力，不断的探索，持续迭代优化，争取给用户们有更好的使用体验。
+- 2024年 5月 1日，v3.3.5 发布
+  > 支持图片水印功能
+- 2023年10月24日，v3.2.5 发布
+  > 支持多语言翻译功能，支持 Markdown 编辑器
+- 2023年 4月15日，v3.1.1 发布
+  > 接入AI自动写作功能
+- 2022年12月 5日，v3.0.0 发布
+  > 开始支持多站点模式，简化和降低了 AnQiCMS 的部署难度，新增更多丰富的企业站常用功能
+- 2022年 5月30日，v2.1.0 发布
+  > 正式更名为 AnQiCMS，标志着 AnQiCMS 已具备常用的内容管理系统必备功能
+- 2021年 2月16日，v2.0.0-alpha 发布
+  > 开始逐步由单纯的博客功能，过度到更全面的内容管理系统，逐步开发并完善企业站功能
+- 2021年 1月21日，GoBlog v1.0.0 发布  
+  > 博客完善版，在基础版的基础上，增加了后台管理、seo功能等。
+- 2020年12月 1日，GoBlog v0.5 发布  
+  > 重构版本，采用iris框架重写，减少技术栈，改用iris自带的template模板引擎。实现了最基础的博客功能。
+- 2019年11月19日 GoBlog v0.1 发布   
+  > Gin版本，前后端分离，后端使用go、gin、gorm，前端使用Next.js。
 
-### enterprise 安企内容管理系统(AnqiCMS) (已发布)
+## 使用的包
 
-- [x] 增加多模板支持功能
-- [x] 增加产品模块和管理
-- [x] 后台动态设置前端基础信息
-- [x] 自定义url伪静态规则
-- [x] 增加自动添加锚文本功能
-- [x] 增加留言功能
-- [x] 增加关键词管理
-- [x] 增加内容素材片段管理
-- [x] 增加留言邮件提醒功能
-- [x] 增加后台上传各种验证文件功能
-- [x] 增加蜘蛛、流量统计和配置功能
-- [x] 增加自定义文章、产品字段功能
-- [x] 增加移动端模板功能
-- [x] 增加计划任务功能
-- [x] 增加模板标签功能[查看标签使用手册](https://www.anqicms.com/manual)
-- [x] 增加自定义分类模板、文章模板、产品模板、页面模板功能
-- [x] 增加内容采集功能
-- [x] 增加内容伪原创功能 ？该功能还需要调试
-- [x] 增加后台直接修改模板功能
-- [x] 增加标签功能
+- [gorm](https://github.com/go-gorm/gorm)
+- [iris](https://github.com/kataras/iris)
+- [jwt](https://github.com/golang-jwt/jwt)
+- [sego](https://github.com/huichen/sego)
+- [gorequest](https://github.com/parnurzeal/gorequest)
+- [goquery](https://github.com/PuerkitoBio/goquery)
+- [chromedp](https://github.com/chromedp/chromedp)
+- [markdown](https://github.com/gomarkdown/markdown)
+- [webp](https://github.com/chai2010/webp)
+- [cron](https://github.com/robfig/cron)
+- [open-golang](https://github.com/skratchdot/open-golang)
+- [go-qrcode](https://github.com/skip2/go-qrcode)
 
-### 其他计划
+## 访问管理后台
+如果你从 GitHub 上克隆下载的代码，自行编译运行的话，需要先编译后台的管理代码，后台管理代码在 https://github.com/fesiong/anqicms-admin 。
+你也可以从 后台管理代码的release中，下载最新的release，将system.zip 解压到项目根目录下的system文件夹。
 
-- [ ] 适配微信小程序
-- [ ] 适配百度小程序
-- [ ] 适配头条小程序
-- [ ] 适配支付宝小程序
-- [ ] 适配QQ小程序
+后台地址默认为 http://127.0.0.1:8001/system
 
-### 模板标签
-[查看模板标签说明](https://www.anqicms.com/manual)
-
-## AnqiCMS 的安装
-### AnqiCMS依赖的软件
-| 软件 | 版本|  
-|:---------|:-------:|
-| golang  |  1.13 (及以上) |
-| mysql  |  5.6.35 (及以上) |
-
-### 克隆代码
-将`AnqiCMS`的代码克隆到本地任意目录，并进入该目录操作  
-### 安装依赖环境
-由于众所周知的原因，我们需要设置代理，在终端执行这个代码：
-```bash
-go env -w GOPROXY=https://goproxy.cn,direct
-```
-接着执行下面的代码，编译代码是编译成可执行文件，测试运行可以一边测试一边修改。
-```bash
-go mod tidy
-go mod vendor
-# 这是编译代码
-go build -o anqicms main/main.go
-# 这是测试运行代码
-go run main/main.go
-```
-至此便可以运行网站了
-### 运行AnqiCMS
-启动AnqiCMS
-```bash
-# 这是执行编译后的可执行文件
-./anqicms
-# 这是测试运行代码
-go run main/main.go
-```
-在浏览器访问： http://127.0.0.1:8001 。初次访问，需要初始化AnqiCMS，在初始化界面，输入mysql信息，设置管理员账号、密码。完成后，就可以开始编写博客了。
-### 服务端部署
-
-下载最新的发行版：[下载发行版](https://github.com/fesiong/goblog/releases)
-
-根据你的服务器选择，linux用户，请下载anqicms-linux.zip，windows用户，请下载anqicms-windows.zip。
-
-将压缩包上传的网站根目录。
-
-#### nginx 配置
-
-一般上，还需要配置nginx代理，来使用80端口或https端口。  
-nginx代理代码如下：
-```bash
-    location @AnqiCMS {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_set_header   Host             $host;
-        proxy_set_header   X-Real-IP        $remote_addr;
-        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
-    }
-    error_page 404 =200  @AnqiCMS;
-    location / {
-       try_files $uri $uri/index.html @AnqiCMS;
-    }
-```
-
-完整的nginx配置：
-```conf
-server
-{
-    listen       80;
-    server_name dev.anqicms.com m.anqicms.com;
-    root /data/wwwroot/irisweb/public;
-
-    location @AnqiCMS {
-        proxy_pass http://127.0.0.1:8001;
-        proxy_set_header   Host             $host;
-        proxy_set_header   X-Real-IP        $remote_addr;
-        proxy_set_header   X-Forwarded-For  $proxy_add_x_forwarded_for;
-    }
-    error_page 404 =200  @AnqiCMS;
-    location / {
-       try_files $uri $uri/index.html @AnqiCMS;
-    }
-    access_log off;
-}
-```
-
-#### 宝塔下Apache环境部署
-
-- 调整运行目录，运行目录设置为：/public
-- 设置反向代理，目标URL：http://127.0.0.1:8001
-- 添加计划任务脚本，执行周期，每分钟执行一次，内容为：
-```shell script
-#!/bin/bash
-### check 502
-# author fesion
-# the bin name is anqicms
-BINNAME=anqicms
-# 设置anqicms目标目录
-BINPATH=/你存放anqicms的目录
-
-# check the pid if exists
-exists=`ps -ef | grep '\<anqicms\>' |grep -v grep |wc -l`
-echo "$(date +'%Y%m%d %H:%M:%S') $BINNAME PID check: $exists" >> $BINPATH/check.log
-echo "PID $BINNAME check: $exists"
-if [ $exists -eq 0 ]; then
-    echo "$BINNAME NOT running"
-    cd $BINPATH && nohup $BINPATH/$BINNAME >> $BINPATH/running.log 2>&1 &
-fi
-```
-添加计划任务后，点执行。
-
-### 访问管理后台
-管理后台在blog分支和master分支上提供，simple分支没有管理后台。
-
-后台地址默认为 http://127.0.0.1:8001/manage
-
-你可以在登录后台后修改后台地址。如果修改后台地址后，需要重启才能生效。
-
-如果你不是通过安装初始化博客的话，可能没有设置管理员账号，如果没有设置管理员账号，默认的管理员账号密码分别是：
+如果你不是通过安装初始化的话，可能没有设置管理员账号，如果没有设置管理员账号，默认的管理员账号密码分别是：
 
 账号：admin
 

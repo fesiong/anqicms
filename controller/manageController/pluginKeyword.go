@@ -1,10 +1,8 @@
 package manageController
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/dao"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -13,7 +11,8 @@ import (
 
 // PluginKeywordSetting 全局配置
 func PluginKeywordSetting(ctx iris.Context) {
-	setting := provider.GetUserKeywordSetting()
+	currentSite := provider.CurrentSite(ctx)
+	setting := currentSite.GetUserKeywordSetting()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -24,6 +23,7 @@ func PluginKeywordSetting(ctx iris.Context) {
 
 // PluginSaveKeywordSetting 全局配置保存
 func PluginSaveKeywordSetting(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req config.KeywordJson
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -34,7 +34,7 @@ func PluginSaveKeywordSetting(ctx iris.Context) {
 	}
 
 	//将现有配置写回文件
-	err := provider.SaveUserKeywordSetting(req, true)
+	err := currentSite.SaveUserKeywordSetting(req, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -43,21 +43,22 @@ func PluginSaveKeywordSetting(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("修改关键词配置"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyKeywordConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "保存成功",
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }
 
 func PluginKeywordList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("title")
 
-	keywordList, total, err := provider.GetKeywordList(keyword, currentPage, pageSize)
+	keywordList, total, err := currentSite.GetKeywordList(keyword, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -75,6 +76,7 @@ func PluginKeywordList(ctx iris.Context) {
 }
 
 func PluginKeywordDetailForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginKeyword
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -88,7 +90,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 	var err error
 
 	if req.Id > 0 {
-		keyword, err = provider.GetKeywordById(req.Id)
+		keyword, err = currentSite.GetKeywordById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -97,18 +99,18 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 			return
 		}
 		//去重
-		exists, err := provider.GetKeywordByTitle(req.Title)
+		exists, err := currentSite.GetKeywordByTitle(req.Title)
 		if err == nil && exists.Id != keyword.Id {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  fmt.Errorf("已存在关键词%s，修改失败", req.Title),
+				"msg":  ctx.Tr("KeywordAlreadyExists", req.Title),
 			})
 			return
 		}
 		keyword.Title = req.Title
 		keyword.CategoryId = req.CategoryId
 
-		err = keyword.Save(dao.DB)
+		err = keyword.Save(currentSite.DB)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -122,7 +124,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 		for _, v := range keywords {
 			v = strings.TrimSpace(v)
 			if v != "" {
-				_, err := provider.GetKeywordByTitle(v)
+				_, err := currentSite.GetKeywordByTitle(v)
 				if err == nil {
 					//已存在，跳过
 					continue
@@ -132,20 +134,21 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 					CategoryId: req.CategoryId,
 					Status:     1,
 				}
-				keyword.Save(dao.DB)
+				keyword.Save(currentSite.DB)
 			}
 		}
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("更新关键词：%s", req.Title))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateKeywordLog", req.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "关键词已更新",
+		"msg":  ctx.Tr("KeywordUpdated"),
 	})
 }
 
 func PluginKeywordDelete(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginKeywordDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -157,7 +160,7 @@ func PluginKeywordDelete(ctx iris.Context) {
 
 	if req.Id > 0 {
 		//删一条
-		keyword, err := provider.GetKeywordById(req.Id)
+		keyword, err := currentSite.GetKeywordById(req.Id)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -166,7 +169,7 @@ func PluginKeywordDelete(ctx iris.Context) {
 			return
 		}
 
-		err = provider.DeleteKeyword(keyword)
+		err = currentSite.DeleteKeyword(keyword)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -177,25 +180,29 @@ func PluginKeywordDelete(ctx iris.Context) {
 	} else if len(req.Ids) > 0 {
 		//删除多条
 		for _, id := range req.Ids {
-			keyword, err := provider.GetKeywordById(id)
+			keyword, err := currentSite.GetKeywordById(id)
 			if err != nil {
 				continue
 			}
 
-			_ = provider.DeleteKeyword(keyword)
+			_ = currentSite.DeleteKeyword(keyword)
 		}
+	} else if req.All {
+		// 删除所有
+		currentSite.DB.Where("`id` > 0").Delete(model.Keyword{})
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("删除关键词：%d, %v", req.Id, req.Ids))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteKeywordLog", req.Id, req.Ids, req.All))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "已执行删除操作",
+		"msg":  ctx.Tr("DeleteOperationHasBeenPerformed"),
 	})
 }
 
 func PluginKeywordExport(ctx iris.Context) {
-	keywords, err := provider.GetAllKeywords()
+	currentSite := provider.CurrentSite(ctx)
+	keywords, err := currentSite.GetAllKeywords()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -212,7 +219,7 @@ func PluginKeywordExport(ctx iris.Context) {
 		content = append(content, []interface{}{v.Title, v.CategoryId})
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导出关键词"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ExportKeywords"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -225,6 +232,7 @@ func PluginKeywordExport(ctx iris.Context) {
 }
 
 func PluginKeywordImport(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -235,7 +243,7 @@ func PluginKeywordImport(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	result, err := provider.ImportKeywords(file, info)
+	result, err := currentSite.ImportKeywords(file, info)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -244,11 +252,11 @@ func PluginKeywordImport(ctx iris.Context) {
 		return
 	}
 
-	provider.AddAdminLog(ctx, fmt.Sprintf("导入关键词"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportKeywords"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  "上传完毕",
+		"msg":  ctx.Tr("UploadCompleted"),
 		"data": result,
 	})
 }
