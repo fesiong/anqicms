@@ -117,10 +117,12 @@ func InternalServerError(ctx iris.Context) {
 	webInfo := &response.WebInfo{}
 	webInfo.Title = currentSite.TplTr("500InternalError")
 	ctx.ViewData("webInfo", webInfo)
-
-	errMessage := ctx.Values().GetString("message")
-	if errMessage == "" {
+	var errMessage string
+	err := ctx.GetErr()
+	if err == nil {
 		errMessage = "(Unexpected) internal server error"
+	} else {
+		errMessage = err.Error()
 	}
 	ctx.ViewData("errMessage", errMessage)
 	tplName := "errors/500.html"
@@ -128,7 +130,7 @@ func InternalServerError(ctx iris.Context) {
 		tplName = "errors_500.html"
 	}
 	ctx.StatusCode(500)
-	err := ctx.View(GetViewPath(ctx, tplName))
+	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
 		ShowMessage(ctx, errMessage, nil)
 	}
