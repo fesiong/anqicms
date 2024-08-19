@@ -697,6 +697,17 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 		}
 		if bytes.Contains(content, []byte(word)) {
 			content = bytes.ReplaceAll(content, []byte(word), bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
+		} else {
+			// 增加支持正则表达式替换，定义正则表达式以{开头}结束，如：{[1-9]\d{4,10}}
+			if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
+				// 移除首尾花括号
+				newWord := word[1 : len(word)-1]
+				re, err := regexp.Compile(newWord)
+				if err == nil {
+					content = re.ReplaceAll(content, bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
+				}
+				continue
+			}
 		}
 	}
 	// 替换回来
