@@ -257,7 +257,7 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 			if len(match) < 4 {
 				return s
 			}
-			if match[2] == anchor.Title && match[1] != "?" {
+			if match[2] == anchor.Title && match[1] != "!" {
 				//更换链接
 				s = strings.Replace(s, match[3], anchor.Link, 1)
 			}
@@ -392,7 +392,7 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	reg, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
 	content = reg.ReplaceAllStringFunc(content, func(s string) string {
 		match := reg.FindStringSubmatch(s)
-		if len(match) > 2 && match[1] != "?" {
+		if len(match) > 2 && match[1] != "!" {
 			existsKeywords[strings.ToLower(match[2])] = true
 			existsLinks[strings.ToLower(match[3])] = true
 		}
