@@ -18,6 +18,11 @@ func CategoryPage(ctx iris.Context) {
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > 1000 {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	categoryId := ctx.Params().GetUintDefault("id", 0)
 	catId := ctx.Params().GetUintDefault("catid", 0)
 	if catId > 0 {
@@ -41,12 +46,12 @@ func CategoryPage(ctx iris.Context) {
 	} else {
 		if urlToken != "" {
 			//优先使用urlToken
-			category, err = currentSite.GetCategoryByUrlToken(urlToken)
+			category = currentSite.GetCategoryFromCacheByToken(urlToken)
 		} else {
-			category, err = currentSite.GetCategoryById(categoryId)
+			category = currentSite.GetCategoryFromCache(categoryId)
 		}
 	}
-	if err != nil || category.Status != config.ContentStatusOK {
+	if category == nil || category.Status != config.ContentStatusOK {
 		NotFound(ctx)
 		return
 	}
@@ -121,6 +126,12 @@ func SearchPage(ctx iris.Context) {
 		ctx.ServeFile(cacheFile)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > 1000 {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	q := strings.TrimSpace(ctx.URLParam("q"))
 	moduleToken := ctx.Params().GetString("module")
 	var module *model.Module
@@ -148,7 +159,6 @@ func SearchPage(ctx iris.Context) {
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = currentSite.TplTr("SearchLog", q)
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title

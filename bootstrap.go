@@ -165,6 +165,9 @@ func TimestampToDate(in int64, layout string) string {
 
 func (bootstrap *Bootstrap) Shutdown() error {
 	bootstrap.Application.Shutdown(stdContext.Background())
+	provider.Shutdown()
+	// 关闭一些应用
+	crond.Stop()
 
 	return nil
 }

@@ -26,7 +26,7 @@ type Archive struct {
 	Images       pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Template     string         `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
 	CanonicalUrl string         `json:"canonical_url" gorm:"column:canonical_url;type:varchar(250) not null;default:''"` // 规范链接
-	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null"`              // 固化的链接
+	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null;index"`        // 固化的链接
 	UserId       uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Price        int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	Stock        int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`

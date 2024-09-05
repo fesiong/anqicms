@@ -27,6 +27,7 @@ type pagination struct {
 	CurrentPage  int
 	urlPatten    string
 	maxPagesShow int
+	maxPages     int
 
 	FirstPage *pageItem
 	LastPage  *pageItem
@@ -179,6 +180,7 @@ func makePagination(currentSite *provider.Website, TotalItems int64, currentPage
 		CurrentPage:  currentPage,
 		urlPatten:    urlPatten,
 		maxPagesShow: maxPagesShow,
+		maxPages:     1000, // 最大显示1000页
 	}
 
 	//计算TotalPages
@@ -201,12 +203,16 @@ func (p *pagination) getFirstPage() *pageItem {
 }
 
 func (p *pagination) getLastPage() *pageItem {
+	lastPage := p.TotalPages
+	if lastPage > p.maxPages {
+		lastPage = p.maxPages
+	}
 	item := &pageItem{
 		Name: p.w.TplTr("LastPage"),
-		Link: p.getPageUrl(p.TotalPages),
+		Link: p.getPageUrl(lastPage),
 	}
 
-	if p.CurrentPage == p.TotalPages {
+	if p.CurrentPage == lastPage {
 		item.IsCurrent = true
 	}
 
@@ -263,16 +269,19 @@ func (p *pagination) getPages() []*pageItem {
 	if p.TotalPages <= 1 {
 		return pages
 	}
-
-	if p.TotalPages <= p.maxPagesShow {
-		for i := 1; i <= p.TotalPages; i++ {
+	lastPage := p.TotalPages
+	if lastPage > p.maxPages {
+		lastPage = p.maxPages
+	}
+	if lastPage <= p.maxPagesShow {
+		for i := 1; i <= lastPage; i++ {
 			pages = append(pages, p.createPage(i))
 		}
 	} else {
 		slidingStart := 1
 		numAdjacent := (p.maxPagesShow - 3) / 2
-		if p.CurrentPage+numAdjacent > p.TotalPages {
-			slidingStart = p.TotalPages - p.maxPagesShow + 2
+		if p.CurrentPage+numAdjacent > lastPage {
+			slidingStart = lastPage - p.maxPagesShow + 2
 		} else {
 			slidingStart = p.CurrentPage - numAdjacent
 		}
@@ -280,8 +289,8 @@ func (p *pagination) getPages() []*pageItem {
 			slidingStart = 2
 		}
 		slidingEnd := slidingStart + p.maxPagesShow - 3
-		if slidingEnd >= p.TotalPages {
-			slidingEnd = p.TotalPages - 1
+		if slidingEnd >= lastPage {
+			slidingEnd = lastPage - 1
 		}
 		pages = append(pages, p.createPage(1))
 		if slidingStart > 2 {
@@ -290,11 +299,11 @@ func (p *pagination) getPages() []*pageItem {
 		for i := slidingStart; i <= slidingEnd; i++ {
 			pages = append(pages, p.createPage(i))
 		}
-		if slidingEnd < p.TotalPages-1 {
+		if slidingEnd < lastPage-1 {
 			pages = append(pages, p.createPageEllipsis())
 		}
 
-		pages = append(pages, p.createPage(p.TotalPages))
+		pages = append(pages, p.createPage(lastPage))
 	}
 
 	return pages

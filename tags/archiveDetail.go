@@ -113,6 +113,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		}
 		// 读取flag
 		if fieldName == "Flags" || fieldName == "Flag" {
+			fieldName = "Flag"
 			archiveDetail.Flag = currentSite.GetArchiveFlags(archiveDetail.Id)
 		}
 		if fieldName == "Link" {

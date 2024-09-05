@@ -26,8 +26,8 @@ func (w *Website) GetTagList(itemId uint, title string, firstLetter string, curr
 		var ids []uint
 		w.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &ids)
 		if len(ids) == 0 {
-			// 否则只有0
-			ids = append(ids, 0)
+			// 不用再查询了，直接返回结果
+			return tags, 0, nil
 		}
 		builder = builder.Where("`id` IN(?)", ids)
 	}

@@ -8,8 +8,11 @@ import (
 	"time"
 )
 
+var crontab *cron.Cron
+
 func Crond() {
-	crontab := cron.New(cron.WithSeconds())
+	return
+	crontab = cron.New(cron.WithSeconds())
 	//每天执行
 	crontab.AddFunc("@daily", dailyTask)
 	// 每天8点执行
@@ -21,6 +24,12 @@ func Crond() {
 	// 每分钟执行
 	crontab.AddFunc("1 * * * * *", minutelyTask)
 	crontab.Start()
+}
+
+func Stop() {
+	if crontab != nil {
+		crontab.Stop()
+	}
 }
 
 func dailyTask() {
@@ -46,6 +55,8 @@ func hourlyTask() {
 	startDigKeywords()
 	// 每小时检查一次账号状态
 	CheckAuthValid()
+	// 每小时统计一次统计数据
+	calcStatistics()
 }
 
 func hourly10MinuteTask() {
@@ -101,6 +112,16 @@ func cleanStatistics() {
 			continue
 		}
 		w.CleanStatistics()
+	}
+}
+
+func calcStatistics() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed || w.StatisticLog == nil {
+			continue
+		}
+		w.StatisticLog.Calc(w.DB)
 	}
 }
 

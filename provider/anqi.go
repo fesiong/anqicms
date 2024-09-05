@@ -973,3 +973,20 @@ func Restart() error {
 	}
 	return syscall.Exec(self, args, env)
 }
+
+func Shutdown() {
+	sites := GetWebsites()
+	for _, w := range sites {
+		// 关闭数据库
+		if w.DB != nil {
+			db, err := w.DB.DB()
+			if err == nil {
+				_ = db.Close()
+			}
+		}
+		// 关闭日志文件
+		if w.StatisticLog != nil {
+			w.StatisticLog.Close()
+		}
+	}
+}

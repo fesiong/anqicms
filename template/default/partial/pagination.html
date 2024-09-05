@@ -16,6 +16,7 @@
     <a href="{{pages.NextPage.Link}}"><i class="fa fa-angle-right"></i></a>
     {% endif %}
     <a href="{{pages.LastPage.Link}}" class="{% if pages.LastPage.IsCurrent %}current{% endif %}">尾页</a>
+    <a href="javascript:;">共 {{pages.TotalItems}} 条</a>
 </div>
 <!-- pagination -->
 {% endpagination %}

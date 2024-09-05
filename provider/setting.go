@@ -578,7 +578,7 @@ func (w *Website) GetTimeFactorSetting() (setting config.PluginTimeFactor) {
 	return
 }
 
-// Tr as Translate, formats according to a format specifier and returns the resulting string after translate.
+// Tr as Translate
 // 这是一个兼容函数，请使用 ctx.Tr
 func (w *Website) Tr(str string, args ...interface{}) string {
 	if I18n != nil {
@@ -588,7 +588,11 @@ func (w *Website) Tr(str string, args ...interface{}) string {
 		}
 	}
 
-	return fmt.Sprintf(str, args...)
+	//return fmt.Sprintf(str, args...)
+	if len(args) > 0 {
+		return str + fmt.Sprintf("%v", args)
+	}
+	return str
 }
 
 func (w *Website) TplTr(str string, args ...interface{}) string {

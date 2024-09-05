@@ -18,7 +18,7 @@ func (w *Website) TestCreateTransferTask(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	task.TransferWebData()
+	task.TransferWebData(&request.TransferTypes{})
 	log.Println(task.Current, task.ErrorMsg)
 }
 

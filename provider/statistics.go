@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"errors"
 	"github.com/jinzhu/now"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -17,40 +18,29 @@ type SpiderData struct {
 	Spider        string
 }
 
-func (w *Website) StatisticSpider(separate string) []response.ChartData {
-	//支持按天，按小时区分
+func (w *Website) StatisticSpider() []response.ChartData {
 	var result []response.ChartData
 
-	if separate == "hour" {
-		//按小时展示，展示24小时
-		todayStamp := now.BeginningOfDay().Unix()
-		var tmpResult []*SpiderData
-		w.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` != ''").
-			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%H:00') AS statistic_date,spider").
-			Group("statistic_date,spider").Order("statistic_date asc").Find(&tmpResult)
-
-		for _, v := range tmpResult {
-			result = append(result,
-				response.ChartData{
-					Date:  v.StatisticDate,
-					Value: int(v.Total),
-					Label: v.Spider,
-				})
+	timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("visit_count").Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("visit_count").Order("created_time ASC").Find(&tmpResult)
 		}
-	} else {
-		//其他情况，按天展示，展示30天
-		timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
-		var tmpResult []*SpiderData
-		w.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamp).Where("`spider` != ''").
-			Select("count(1) AS total, FROM_UNIXTIME(created_time, '%m-%d') AS statistic_date,spider").
-			Group("statistic_date,spider").Order("statistic_date asc").Find(&tmpResult)
+	}
 
-		for _, v := range tmpResult {
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		for key, num := range v.SpiderCount {
 			result = append(result,
 				response.ChartData{
-					Date:  v.StatisticDate,
-					Value: int(v.Total),
-					Label: v.Spider,
+					Date:  vDate,
+					Value: num,
+					Label: key,
 				})
 		}
 	}
@@ -59,57 +49,52 @@ func (w *Website) StatisticSpider(separate string) []response.ChartData {
 }
 
 // StatisticTraffic 增加IP
-func (w *Website) StatisticTraffic(separate string) []response.ChartData {
+func (w *Website) StatisticTraffic() []response.ChartData {
 	//支持按天，按小时区分
 	var result []response.ChartData
 
-	if separate == "hour" {
-		//按小时展示，展示24小时
-		todayStamp := now.BeginningOfDay().Unix()
-		var tmpResult []*SpiderData
-		w.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", todayStamp).Where("`spider` = ''").
-			Select("count(1) AS total, count(distinct ip) as ips FROM_UNIXTIME(created_time, '%H:00') AS statistic_date").
-			Group("statistic_date").Order("statistic_date asc").Find(&tmpResult)
-
-		for _, v := range tmpResult {
-			result = append(result,
-				response.ChartData{
-					Date:  v.StatisticDate,
-					Value: int(v.Total),
-					Label: "PV",
-				}, response.ChartData{
-					Date:  v.StatisticDate,
-					Value: int(v.Ips),
-					Label: "IP",
-				})
+	timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count").Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count").Order("created_time ASC").Find(&tmpResult)
 		}
-	} else {
-		//其他情况，按天展示，展示30天
-		timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
-		var tmpResult []*SpiderData
-		w.DB.Model(&model.Statistic{}).Where("`created_time` >= ?", timeStamp).Where("`spider` = ''").
-			Select("count(1) AS total, count(distinct ip) as ips, FROM_UNIXTIME(created_time, '%m-%d') AS statistic_date").
-			Group("statistic_date").Order("statistic_date asc").Find(&tmpResult)
-
-		for _, v := range tmpResult {
-			result = append(result,
-				response.ChartData{
-					Date:  v.StatisticDate,
-					Value: int(v.Total),
-					Label: "PV",
-				}, response.ChartData{
-					Date:  v.StatisticDate,
-					Value: int(v.Ips),
-					Label: "IP",
-				})
-		}
+	}
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		result = append(result,
+			response.ChartData{
+				Date:  vDate,
+				Value: v.VisitCount.PVCount,
+				Label: "PV",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.VisitCount.IPCount,
+				Label: "IP",
+			})
 	}
 
 	return result
 }
 
-func (w *Website) StatisticDetail(isSpider bool, currentPage, limit int) ([]*model.Statistic, int64, error) {
-	var statistics []*model.Statistic
+func (w *Website) GetStatisticDates() []string {
+	if w.StatisticLog == nil {
+		return nil
+	}
+
+	return w.StatisticLog.GetLogDates()
+}
+
+func (w *Website) StatisticDetail(filename string, currentPage, limit int) ([]*Statistic, int64, error) {
+	if w.StatisticLog == nil {
+		return nil, 0, errors.New("statistic log is not ready")
+	}
+
+	var statistics []*Statistic
 	var total int64
 
 	if limit < 1 {
@@ -121,20 +106,17 @@ func (w *Website) StatisticDetail(isSpider bool, currentPage, limit int) ([]*mod
 	}
 	offset := (currentPage - 1) * limit
 
-	builder := w.DB.Model(&model.Statistic{})
-	if isSpider {
-		builder = builder.Where("`spider` != ''")
-	}
-
-	builder.Count(&total).Limit(limit).Offset(offset).Order("`id` desc").Find(&statistics)
+	statistics, total = w.StatisticLog.Read(filename, offset, limit)
 
 	return statistics, total, nil
 }
 
 func (w *Website) CleanStatistics() {
 	//清理一个月前的记录
-	agoStamp := time.Now().AddDate(0, 0, -30).Unix()
-	w.DB.Unscoped().Where("`created_time` < ?", agoStamp).Delete(model.Statistic{})
+	if w.StatisticLog == nil {
+		return
+	}
+	w.StatisticLog.Clear(false)
 }
 
 func (w *Website) GetStatisticsSummary() *response.Statistics {
@@ -165,11 +147,18 @@ func (w *Website) GetStatisticsSummary() *response.Statistics {
 		w.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
 		w.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
 
-		w.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.TrafficCount.Total)
-		w.DB.Model(&model.Statistic{}).Where("`spider` = '' and `created_time` >= ?", today.Unix()).Count(&result.TrafficCount.Today)
+		timeStamp := now.BeginningOfDay().AddDate(0, 0, -7).Unix()
+		var tmpResult []*model.StatisticLog
+		w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Order("created_time ASC").Find(&tmpResult)
 
-		w.DB.Model(&model.Statistic{}).Where("`spider`!= '' and `created_time` >= ?", time.Now().AddDate(0, 0, -7).Unix()).Count(&result.SpiderCount.Total)
-		w.DB.Model(&model.Statistic{}).Where("`spider` != '' and `created_time` >= ?", today.Unix()).Count(&result.SpiderCount.Today)
+		for i, v := range tmpResult {
+			result.TrafficCount.Total += int64(v.VisitCount.PVCount)
+			result.SpiderCount.Total += calcSpider(v.SpiderCount)
+			if i == len(tmpResult)-1 && v.CreatedTime == today.Unix() {
+				result.TrafficCount.Today = int64(v.VisitCount.PVCount)
+				result.SpiderCount.Total = calcSpider(v.SpiderCount)
+			}
+		}
 
 		var lastInclude model.SpiderInclude
 		w.DB.Model(&model.SpiderInclude{}).Order("id desc").Take(&lastInclude)
@@ -210,23 +199,22 @@ func (w *Website) SendStatisticsMail() {
 		w.DB.Where("`created_time` >= ?", todayStamp-86400).Order("id desc").Take(&engineIndex)
 	}
 	// 蜘蛛
-	var spiderResult []*SpiderData
+	var statisticResult model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Take(&statisticResult)
 	var totalSpider int64
-	w.DB.Model(&model.Statistic{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Where("`spider` != ''").
-		Select("count(1) AS total, spider").
-		Group("spider").Find(&spiderResult)
-	for _, v := range spiderResult {
-		totalSpider += v.Total
+	var spiderResult []*SpiderData
+	if statisticResult.SpiderCount != nil {
+		totalSpider = calcSpider(statisticResult.SpiderCount)
+		for key, num := range statisticResult.SpiderCount {
+			spiderResult = append(spiderResult, &SpiderData{
+				Spider: key,
+				Total:  int64(num),
+			})
+		}
 	}
+
 	// 访问量
-	var visitResult []*SpiderData
-	var totalVisit int64
-	w.DB.Model(&model.Statistic{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Where("`spider` = ''").
-		Select("count(1) AS total, FROM_UNIXTIME(created_time, '%H:00') AS statistic_date").
-		Group("statistic_date").Order("statistic_date asc").Find(&visitResult)
-	for _, v := range visitResult {
-		totalVisit += v.Total
-	}
+	var totalVisit = statisticResult.VisitCount.PVCount
 	// 文档等数据
 	var archiveCount int64
 	var allArchiveCount int64
@@ -360,9 +348,6 @@ func (w *Website) SendStatisticsMail() {
       </tr>
     </tfoot>
     <tbody>`
-		for i := 0; i < len(visitResult); i++ {
-			content += "<tr>\n        <td>" + visitResult[i].StatisticDate + "</td>\n        <td>" + strconv.Itoa(int(visitResult[i].Total)) + "</td>\n</tr>"
-		}
 		content += `
     </tbody>
   </table>`
@@ -395,4 +380,13 @@ func (w *Website) SendStatisticsMail() {
 		// 不记录错误
 		_ = w.sendMail(subject, content, nil, true, false)
 	}
+}
+
+func calcSpider(data map[string]int) int64 {
+	var count int
+	for _, v := range data {
+		count += v
+	}
+
+	return int64(count)
 }

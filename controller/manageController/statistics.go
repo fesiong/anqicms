@@ -13,10 +13,7 @@ import (
 // StatisticSpider 蜘蛛爬行情况
 func StatisticSpider(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	//支持按天，按小时区分
-	separate := ctx.URLParam("separate")
-
-	result := currentSite.StatisticSpider(separate)
+	result := currentSite.StatisticSpider()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -27,10 +24,20 @@ func StatisticSpider(ctx iris.Context) {
 
 func StatisticTraffic(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	//支持按天，按小时区分
-	separate := ctx.URLParam("separate")
 
-	result := currentSite.StatisticTraffic(separate)
+	result := currentSite.StatisticTraffic()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func StatisticDates(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	result := currentSite.GetStatisticDates()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -43,9 +50,9 @@ func StatisticDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	isSpider, _ := ctx.URLParamBool("is_spider")
+	date := ctx.URLParam("date")
 
-	list, total, _ := currentSite.StatisticDetail(isSpider, currentPage, pageSize)
+	list, total, _ := currentSite.StatisticDetail(date, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

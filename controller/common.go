@@ -38,7 +38,8 @@ var SpiderNames = []NameVal{
 	{Name: "yahoo!", Val: "yahoo"},
 	{Name: "sogou", Val: "sogou"},
 	{Name: "bytespider", Val: "byte"},
-	{Name: "yisouspider", Val: "Yisou"},
+	{Name: "yisouspider", Val: "yisou"},
+	{Name: "yandexbot", Val: "yandex"},
 	{Name: "spider", Val: "other"},
 	{Name: "bot", Val: "other"},
 }
@@ -119,10 +120,13 @@ func InternalServerError(ctx iris.Context) {
 	ctx.ViewData("webInfo", webInfo)
 	var errMessage string
 	err := ctx.GetErr()
-	if err == nil {
-		errMessage = "(Unexpected) internal server error"
-	} else {
+	message := ctx.Values().GetString("message")
+	if err != nil {
 		errMessage = err.Error()
+	} else if message != "" {
+		errMessage = message
+	} else {
+		errMessage = "(Unexpected) internal server error"
 	}
 	ctx.ViewData("errMessage", errMessage)
 	tplName := "errors/500.html"
@@ -329,6 +333,11 @@ func FileServe(ctx iris.Context) bool {
 			ctx.ServeFile(uriFile)
 			return true
 		}
+	}
+	// 避开 favicon.ico
+	if strings.HasSuffix(uri, "favicon.ico") {
+		ctx.StatusCode(400)
+		return true
 	}
 	// 自动生成Sitemap
 	if ((strings.HasSuffix(uri, "sitemap.xml") && currentSite.PluginSitemap.Type == "xml") ||
@@ -733,7 +742,7 @@ func LogAccess(ctx iris.Context) {
 		userAgent = userAgent[:250]
 	}
 
-	statistic := &model.Statistic{
+	statistic := &provider.Statistic{
 		Spider:    spider,
 		Host:      ctx.Request().Host,
 		Url:       currentPath,
@@ -743,7 +752,7 @@ func LogAccess(ctx iris.Context) {
 		UserAgent: userAgent,
 	}
 	// 这里不需要等待
-	go currentSite.DB.Save(statistic)
+	go currentSite.StatisticLog.Write(statistic)
 
 	ctx.Next()
 }

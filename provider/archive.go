@@ -121,7 +121,6 @@ func (w *Website) GetArchiveDraftByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.
 	archive.Link = w.GetUrl("archive", &archive, 0)
 	return &archive, nil
 }
-
 func (w *Website) GetArchiveDataById(id uint) (*model.ArchiveData, error) {
 	var data model.ArchiveData
 	err := w.DB.Where("`id` = ?", id).First(&data).Error
@@ -184,7 +183,13 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		cacheKeyCount := "archive-list-count" + library.Md5(sqlCount)[8:24]
 		err := w.Cache.Get(cacheKeyCount, &total)
 		if err != nil {
-			builder.Count(&total)
+			// 如果使用explain分析行数大于10万，则不再使用count统计行数
+			explainCount := w.GetExplainCount(sqlCount)
+			if explainCount > 100000 {
+				total = explainCount
+			} else {
+				builder.Count(&total)
+			}
 			_ = w.Cache.Set(cacheKeyCount, total, 300)
 		}
 		// 分页提速，先查出ID，再查询结果
@@ -216,6 +221,17 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 
 	return archives, total, nil
+}
+
+type ExplainCount struct {
+	Rows int64
+}
+
+func (w *Website) GetExplainCount(sql string) int64 {
+	var result ExplainCount
+	w.DB.Raw("EXPLAIN " + sql).Scan(&result)
+
+	return result.Rows
 }
 
 func (w *Website) GetArchiveExtraFromCache(archiveId uint) (extra map[string]*model.CustomField) {

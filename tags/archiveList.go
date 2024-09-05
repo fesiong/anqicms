@@ -139,6 +139,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	q := ""
 	argQ := ""
 	child := true
+	showFlag := false
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -155,6 +156,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["q"] != nil {
 		q = strings.TrimSpace(args["q"].String())
 		argQ = q
+	}
+	if args["showFlag"] != nil {
+		showFlag = args["showFlag"].Bool()
 	}
 
 	// 支持更多的参数搜索，
@@ -489,7 +493,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 	// 读取flags
-	if len(archiveIds) > 0 {
+	if showFlag && len(archiveIds) > 0 {
 		var flags []*model.ArchiveFlags
 		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
 		for i := range archives {

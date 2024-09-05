@@ -3,6 +3,7 @@ package library
 import (
 	"encoding/json"
 	"errors"
+	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -70,7 +71,14 @@ func (m *FileCache) Set(key string, val any, expire int64) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(cacheFile, saveData, 0644)
+	err = os.WriteFile(cacheFile, saveData, 0644)
+	if err != nil {
+		if os.IsNotExist(err) {
+			_ = os.MkdirAll(filepath.Dir(cacheFile), os.ModePerm)
+			err = os.WriteFile(cacheFile, saveData, 0644)
+		}
+	}
+	return err
 }
 
 func (m *FileCache) Delete(key string) {
@@ -101,13 +109,18 @@ func (m *FileCache) CleanAll(prefix ...string) {
 func InitFileCache(cachePath string) Cache {
 	cachePath = cachePath + "data/"
 	_, err := os.Stat(cachePath)
-	if err != nil && errors.Is(err, os.ErrNotExist) {
-		_ = os.Mkdir(cachePath, os.ModePerm)
+	if err != nil && os.IsNotExist(err) {
+		err = os.MkdirAll(cachePath, os.ModePerm)
+		if err != nil {
+			log.Println("cache path create err", cachePath, err)
+		}
 	}
 	cache := &FileCache{
 		suffix:    ".cache.json",
 		cachePath: cachePath,
 	}
+	// 每次初始化前，先清理旧的缓存
+	cache.CleanAll()
 
 	return cache
 }

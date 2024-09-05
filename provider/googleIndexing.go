@@ -37,7 +37,7 @@ func (w *Website) PushGoogleIndexing(client *indexing.Service, domain string) (i
 		return -1, err
 	}
 
-	w.logPushResult("google", fmt.Sprintf("%v, %s", domain, res.HTTPStatusCode))
+	w.logPushResult("google", fmt.Sprintf("%v, %d", domain, res.HTTPStatusCode))
 
 	return res.HTTPStatusCode, nil
 }

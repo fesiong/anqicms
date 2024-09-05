@@ -174,6 +174,7 @@ func manageRoute(app *iris.Application) {
 		{
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
+			statistic.Get("/dates", manageController.StatisticDates)
 			statistic.Get("/detail", manageController.StatisticDetail)
 			statistic.Get("/include", manageController.GetSpiderInclude)
 			statistic.Get("/include/detail", manageController.GetSpiderIncludeDetail)

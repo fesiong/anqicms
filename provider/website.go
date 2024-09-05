@@ -29,6 +29,7 @@ type Website struct {
 	CachePath               string
 	PublicPath              string
 	DB                      *gorm.DB
+	StatisticLog            *StatisticLog
 	Storage                 *BucketStorage
 	CacheStorage            *BucketStorage
 	parsedPatten            *RewritePatten
@@ -173,6 +174,7 @@ func InitWebsite(mw *model.Website) {
 		}
 	}
 	if w.Initialed {
+		w.InitStatistic()
 		w.InitBucket()
 		w.InitCacheBucket()
 		w.InitCache()
