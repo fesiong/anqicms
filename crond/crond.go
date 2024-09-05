@@ -11,7 +11,6 @@ import (
 var crontab *cron.Cron
 
 func Crond() {
-	return
 	crontab = cron.New(cron.WithSeconds())
 	//每天执行
 	crontab.AddFunc("@daily", dailyTask)
