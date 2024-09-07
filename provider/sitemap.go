@@ -202,6 +202,10 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 		}
 		re, _ := regexp.Compile(`archive-(\d+)`)
 		match := re.FindStringSubmatch(latestSitemap)
+		if len(match) < 2 {
+			// Sitemap不存在。生成一份
+			return w.BuildSitemap()
+		}
 		latestSitemapId, _ := strconv.Atoi(match[1])
 		archivePath := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 		archiveFile := NewSitemapGenerator(w, archivePath, w.System.BaseUrl, true)
