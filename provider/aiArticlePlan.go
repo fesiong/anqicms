@@ -58,6 +58,9 @@ func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult, useSelf bool) (*model.Ai
 
 // SyncAiArticlePlan 从服务器中拉取进行中的任务
 func (w *Website) SyncAiArticlePlan() {
+	if !w.AiGenerateConfig.Open {
+		return
+	}
 	var plans []*model.AiArticlePlan
 	w.DB.Model(&model.AiArticlePlan{}).Where("`status` = ? and `use_self` = 0", config.AiArticleStatusDoing).Find(&plans)
 
@@ -66,6 +69,6 @@ func (w *Website) SyncAiArticlePlan() {
 	}
 
 	for _, plan := range plans {
-		w.AnqiSyncAiPlanResult(plan)
+		_ = w.AnqiSyncAiPlanResult(plan)
 	}
 }

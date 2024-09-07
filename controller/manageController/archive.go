@@ -20,6 +20,7 @@ func ArchiveList(ctx iris.Context) {
 	status := ctx.URLParamDefault("status", "ok") // 支持 '':all，draft:0, ok:1, plan:2
 	sort := ctx.URLParamDefault("sort", "id")
 	flag := ctx.URLParam("flag")
+	exact := ctx.URLParamBoolDefault("exact", false)
 	order := strings.ToLower(ctx.URLParamDefault("order", "desc"))
 	if order != "asc" {
 		order = "desc"
@@ -95,16 +96,25 @@ func ArchiveList(ctx iris.Context) {
 			return tx
 		}
 	}
-	offset := 0
-	if currentPage > 0 {
-		offset = (currentPage - 1) * pageSize
-	}
+	offset := (currentPage - 1) * pageSize
 	builder := dbTable(ops(currentSite.DB))
 
 	builder = dbTable(builder)
 
 	var total int64
-	builder.Count(&total)
+	if exact == false {
+		sqlCount := currentSite.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			tx = dbTable(ops(tx))
+			return tx.Find(&[]*model.Archive{})
+		})
+		total = currentSite.GetExplainCount(sqlCount)
+		if total < 100000 {
+			builder.Count(&total)
+			exact = true
+		}
+	} else {
+		builder.Count(&total)
+	}
 	// 先查询ID
 	var archiveIds []uint
 	builder.Limit(pageSize).Offset(offset).Select("archives.id").Pluck("id", &archiveIds)
@@ -176,6 +186,7 @@ func ArchiveList(ctx iris.Context) {
 		"code":  config.StatusOK,
 		"msg":   "",
 		"total": total,
+		"exact": exact,
 		"data":  archives,
 	})
 }

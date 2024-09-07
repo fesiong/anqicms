@@ -121,6 +121,9 @@ func (w *Website) CheckWithdrawToWechat() {
 	defer func() {
 		withdrawRunning = false
 	}()
+	if w.PluginPay.WechatKeyPath == "" || (w.PluginPay.WechatAppId == "" && w.PluginPay.WeappAppId == "") {
+		return
+	}
 	var withdraws []model.UserWithdraw
 
 	w.DB.Where("status = ?", config.CommissionStatusWait).Find(&withdraws)

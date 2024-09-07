@@ -146,14 +146,14 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			return err
 		}
 		// 取消使用 MyISAM 引擎
-		engine, _ := getTableEngine(db, "archives")
-		if engine == "MyISAM" {
-			db.Exec("ALTER TABLE archives ENGINE=InnoDB")
-		}
-		engine, _ = getTableEngine(db, "archive_drafts")
-		if engine == "MyISAM" {
-			db.Exec("ALTER TABLE archive_drafts ENGINE=InnoDB")
-		}
+		//engine, _ := getTableEngine(db, "archives")
+		//if engine == "MyISAM" {
+		//	db.Exec("ALTER TABLE archives ENGINE=InnoDB")
+		//}
+		//engine, _ = getTableEngine(db, "archive_drafts")
+		//if engine == "MyISAM" {
+		//	db.Exec("ALTER TABLE archive_drafts ENGINE=InnoDB")
+		//}
 		// 先删除deleteAt
 		if db.Migrator().HasColumn(&model.Archive{}, "deleted_at") {
 			db.Unscoped().Where("`deleted_at` is not null").Delete(model.Archive{})

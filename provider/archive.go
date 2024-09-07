@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -184,10 +185,8 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		err := w.Cache.Get(cacheKeyCount, &total)
 		if err != nil {
 			// 如果使用explain分析行数大于10万，则不再使用count统计行数
-			explainCount := w.GetExplainCount(sqlCount)
-			if explainCount > 100000 {
-				total = explainCount
-			} else {
+			total = w.GetExplainCount(sqlCount)
+			if total < 100000 {
 				builder.Count(&total)
 			}
 			_ = w.Cache.Set(cacheKeyCount, total, 300)
@@ -829,55 +828,57 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 		}()
 	}
 	// 更新缓存
-	go func() {
-		// 生成文章页，生成栏目页，生成首页，生成tag
-		// 上传到静态服务器
-		cachePath := w.CachePath + "pc"
-		// 生成文章页
-		link := w.GetUrl("archive", archive, 0)
-		link = strings.TrimPrefix(link, w.System.BaseUrl)
-		_ = w.GetAndCacheHtmlData(link, false)
-		if w.System.TemplateType != config.TemplateTypeAuto {
-			_ = w.GetAndCacheHtmlData(link, true)
-		}
-		archivePath := cachePath + transToLocalPath(link, "")
-		_ = w.SyncHtmlCacheToStorage(archivePath, link)
-		// 生成栏目页，只生成第一页
-		category := w.GetCategoryFromCache(archive.CategoryId)
-		if category != nil {
-			link = w.GetUrl("category", category, 0)
+	if w.PluginHtmlCache.Open && w.PluginHtmlCache.StorageType != "" && w.CacheStorage != nil {
+		go func() {
+			// 生成文章页，生成栏目页，生成首页，生成tag
+			// 上传到静态服务器
+			cachePath := w.CachePath + "pc"
+			// 生成文章页
+			link := w.GetUrl("archive", archive, 0)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			_ = w.GetAndCacheHtmlData(link, false)
 			if w.System.TemplateType != config.TemplateTypeAuto {
 				_ = w.GetAndCacheHtmlData(link, true)
 			}
-			categoryPath := cachePath + transToLocalPath(link, "")
-			_ = w.SyncHtmlCacheToStorage(categoryPath, link)
-		}
-		// 生成Tag，只生成第一页
-		tags := w.GetTagsByItemId(archive.Id)
-		if len(tags) > 0 {
-			link = w.GetUrl("tagIndex", nil, 0)
-			link = strings.TrimPrefix(link, w.System.BaseUrl)
-			// 先生成首页
-			_ = w.GetAndCacheHtmlData(link, false)
-			if w.System.TemplateType != config.TemplateTypeAuto {
-				_ = w.GetAndCacheHtmlData(link, true)
-			}
-			tagPath := cachePath + transToLocalPath(link, "")
-			_ = w.SyncHtmlCacheToStorage(tagPath, link)
-			for _, tag := range tags {
-				link = w.GetUrl("tag", tag, 0)
+			archivePath := cachePath + transToLocalPath(link, "")
+			_ = w.SyncHtmlCacheToStorage(archivePath, link)
+			// 生成栏目页，只生成第一页
+			category := w.GetCategoryFromCache(archive.CategoryId)
+			if category != nil {
+				link = w.GetUrl("category", category, 0)
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				_ = w.GetAndCacheHtmlData(link, false)
 				if w.System.TemplateType != config.TemplateTypeAuto {
 					_ = w.GetAndCacheHtmlData(link, true)
 				}
-				tagPath = cachePath + transToLocalPath(link, "")
-				_ = w.SyncHtmlCacheToStorage(tagPath, link)
+				categoryPath := cachePath + transToLocalPath(link, "")
+				_ = w.SyncHtmlCacheToStorage(categoryPath, link)
 			}
-		}
-	}()
+			// 生成Tag，只生成第一页
+			tags := w.GetTagsByItemId(archive.Id)
+			if len(tags) > 0 {
+				link = w.GetUrl("tagIndex", nil, 0)
+				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				// 先生成首页
+				_ = w.GetAndCacheHtmlData(link, false)
+				if w.System.TemplateType != config.TemplateTypeAuto {
+					_ = w.GetAndCacheHtmlData(link, true)
+				}
+				tagPath := cachePath + transToLocalPath(link, "")
+				_ = w.SyncHtmlCacheToStorage(tagPath, link)
+				for _, tag := range tags {
+					link = w.GetUrl("tag", tag, 0)
+					link = strings.TrimPrefix(link, w.System.BaseUrl)
+					_ = w.GetAndCacheHtmlData(link, false)
+					if w.System.TemplateType != config.TemplateTypeAuto {
+						_ = w.GetAndCacheHtmlData(link, true)
+					}
+					tagPath = cachePath + transToLocalPath(link, "")
+					_ = w.SyncHtmlCacheToStorage(tagPath, link)
+				}
+			}
+		}()
+	}
 
 	return nil
 }
@@ -1182,8 +1183,11 @@ func (w *Website) PublishPlanArchives() {
 
 func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
 	// 发布的步骤：将草稿转移到正式表，删除草稿
-	w.DB.Save(&archiveDraft.Archive)
-
+	err := w.DB.Save(&archiveDraft.Archive).Error
+	if err != nil {
+		log.Println("写入文档正式表失败，可能表损坏或磁盘满了")
+		return
+	}
 	w.DB.Delete(archiveDraft)
 
 	_ = w.SuccessReleaseArchive(&archiveDraft.Archive, true)

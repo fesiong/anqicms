@@ -2,7 +2,6 @@ package crond
 
 import (
 	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
 	"kandaoni.com/anqicms/provider"
 	"math/rand"
 	"time"
@@ -38,8 +37,6 @@ func dailyTask() {
 	CleanArchives()
 	// 每天检查VIP
 	CleanUserVip()
-	// 每天定期优化表
-	optimizeTable()
 }
 
 func daily8HourTask() {
@@ -74,24 +71,6 @@ func minutelyTask() {
 	UpdateTimeFactor()
 	// 每分钟检查一次 AI文章计划
 	AiArticlePlan()
-}
-
-func optimizeTable() {
-	// 需要优化的表
-	tables := []string{
-		"archives",
-		"archive_drafts",
-	}
-
-	websites := provider.GetWebsites()
-	for _, w := range websites {
-		if !w.Initialed {
-			continue
-		}
-		for _, t := range tables {
-			w.DB.Exec("OPTIMIZE TABLE `?`", gorm.Expr(t))
-		}
-	}
 }
 
 func startDigKeywords() {
