@@ -9,7 +9,6 @@ import (
 	"gorm.io/gorm/clause"
 	"io"
 	"kandaoni.com/anqicms/model"
-	"log"
 	"os"
 	"sort"
 	"strings"
@@ -270,10 +269,12 @@ func (s *StatisticLog) Calc(db *gorm.DB) {
 			break
 		}
 		logData, err := s.CalcLog(startTime)
-		log.Printf("%#v, %#v", logData, err)
 		if err == nil {
 			// 记录存在，写入数据库
-			db.Model(&model.StatisticLog{}).Where("created_time = ?", startTime.Unix()).FirstOrCreate(&logData)
+			db.Model(&model.StatisticLog{}).Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "created_time"}},
+				UpdateAll: true,
+			}).Where("`created_time` = ?", startTime.Unix()).Create(&logData)
 		}
 		startTime = startTime.AddDate(0, 0, 1)
 	}
