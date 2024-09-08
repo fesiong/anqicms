@@ -814,18 +814,19 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 		go w.AutoInsertAnchor(archive.Id, archive.Keywords, archive.Link)
 	}
 
-	w.DeleteCacheIndex()
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
+	// 删除首页缓存
+	w.DeleteCacheIndex()
 
 	//新发布的文章，执行推送
 	if newPost {
 		go func() {
 			w.PushArchive(archive.Link)
-			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
-			}
 		}()
+		if w.PluginSitemap.AutoBuild == 1 {
+			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
+		}
 	}
 	// 更新缓存
 	if w.PluginHtmlCache.Open && w.PluginHtmlCache.StorageType != "" && w.CacheStorage != nil {
@@ -833,6 +834,9 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			// 生成文章页，生成栏目页，生成首页，生成tag
 			// 上传到静态服务器
 			cachePath := w.CachePath + "pc"
+			// 生成首页
+			w.BuildIndexCache()
+			_ = w.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
 			// 生成文章页
 			link := w.GetUrl("archive", archive, 0)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
