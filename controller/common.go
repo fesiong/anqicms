@@ -281,6 +281,8 @@ func Common(ctx iris.Context) {
 	}
 	ctx.ViewData("inviteCode", inviteCode)
 
+	ctx.ViewData("today", library.GetToday())
+
 	ctx.Next()
 }
 

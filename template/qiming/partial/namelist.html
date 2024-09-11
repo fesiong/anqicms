@@ -1,0 +1,128 @@
+{% for item in nameList %}
+<a class="single-name layui-card" href="{{item.GetUrl()}}">
+    <div class="name-score">
+        <span class="label">综合<br/>得分</span>
+        <span class="score">{{item.TotalScore()}}</span>
+        <span class="cent">分</span>
+    </div>
+    <div class="name-items layui-clear">
+        {% for name in item.LastName %}
+        <div class="name-item">
+            <div class="name">{{name.Ch}}</div>
+            <div class="detail">
+                <div class="item">
+                    <span class="label">笔画：</span>
+                    <span class="info">{{name.ScienceStroke}}画</span>
+                </div>
+                <div class="item">
+                    <span class="label">五行：</span>
+                    <span class="info">{{name.WuXing}}</span>
+                </div>
+                <div class="item">
+                    <span class="label">拼音：</span>
+                    <span class="info">{{name.GetPinYin()}}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+        {% for name in item.FirstName %}
+        <div class="name-item">
+            <div class="name">{{name.Ch}}</div>
+            <div class="detail">
+                <div class="item">
+                    <span class="label">笔画：</span>
+                    <span class="info">{{name.ScienceStroke}}画</span>
+                </div>
+                <div class="item">
+                    <span class="label">五行：</span>
+                    <span class="info">{{name.WuXing}}</span>
+                </div>
+                <div class="item">
+                    <span class="label">拼音：</span>
+                    <span class="info">{{name.GetPinYin()}}</span>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="name-scores layui-clear">
+        <div class="score-item">
+            <div class="label">好听内涵</div>
+            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                <div class="layui-progress-bar bg-gold" lay-percent="{{item.GetScore(0)}}%"></div>
+            </div>
+        </div>
+        <div class="score-item">
+            <div class="label">五行八字</div>
+            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                <div class="layui-progress-bar bg-wood" lay-percent="{{item.GetScore(1)}}%"></div>
+            </div>
+        </div>
+        <div class="score-item">
+            <div class="label">生肖打分</div>
+            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                <div class="layui-progress-bar bg-water" lay-percent="{{item.GetScore(2)}}%"></div>
+            </div>
+        </div>
+        <div class="score-item">
+            <div class="label">星座打分</div>
+            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                <div class="layui-progress-bar bg-fire" lay-percent="{{item.GetScore(3)}}%"></div>
+            </div>
+        </div>
+        <div class="score-item">
+            <div class="label">五格理数</div>
+            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                <div class="layui-progress-bar bg-soil" lay-percent="{{item.GetScore(4)}}%"></div>
+            </div>
+        </div>
+        <div class="score-item">
+            <div class="label">周易卦像</div>
+            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                <div class="layui-progress-bar bg-gold" lay-percent="{{item.GetScore(5)}}%"></div>
+            </div>
+        </div>
+    </div>
+    <div class="layui-card layui-card-inner">
+        <div class="layui-card-header">用字分析</div>
+        <div class="layui-card-body">
+            <p>
+                {% for ch in item.LastName %}
+                <span class="strong color-primary">{{ch.Ch}}</span> 字系您指定的姓氏用字，五行属性是<span class="color-red">{{ch.WuXing}}</span>，偏旁部首为{{ch.Radical}}，{% if ch.Stroke %}笔画为{{item.Stroke}}画，{% endif %}取名科学计算笔画为{{ch.ScienceStroke}}画{% if ch.KangXi %}，康熙字典对应的字为<span class="strong color-primary">{{ch.KangXi}}</span>{% endif %}
+                {% endfor %}
+            </p>
+            {% for ch in item.FirstName %}
+            <p>
+                <span class="strong color-primary">{{ch.Ch}}</span> 字的五行属性是<span class="color-red">{{ch.WuXing}}</span>，偏旁部首为{{ch.Radical}}，{% if ch.Stroke %}笔画为{{item.Stroke}}画，{% endif %}取名科学计算笔画为{{ch.ScienceStroke}}画{% if ch.KangXi %}，康熙字典对应的字为<span class="strong color-primary">{{ch.KangXi}}</span>{% endif %}
+            </p>
+            {% endfor %}
+            可以弥补性格缺陷，增强主动性，变的热情好礼、善交朋友、口才佳、人缘好。其人富有仁慈心，外表乐观，待人诚恳，交友甚广，做事有计划。其人意志坚定，注重实际与工作，耐性佳，能克苦耐劳，创立属于自己的事业。
+        </div>
+    </div>
+    {% set ciyu = item.CiYu() %}
+    {% if ciyu %}
+    <div class="layui-card layui-card-inner">
+        <div class="layui-card-header">美好寓意</div>
+        <div class="layui-card-body">
+            {% for inner in ciyu %}
+            <div><span class="strong color-primary">{{inner.Title}}</span>，
+                {{inner.Content|safe}}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="layui-card layui-card-inner">
+        <div class="layui-card-header">字义分析</div>
+        <div class="layui-card-body">
+            {% for ch in item.FirstName %}
+            <div class="character-item">
+                <span class="strong color-primary">{{ch.Ch}}</span>，
+                {{ch.GetComment(false)}}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</a>
+{% endfor %}

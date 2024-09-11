@@ -1,0 +1,64 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>起名常用汉字</strong></li>
+        </ul>
+        <article>
+            <div class="article-title">
+                <h1>起名用字字典 - 男宝宝起名常用字 - 女宝宝起名常用字 - 汉字五行解析</h1>
+            </div>
+            <div class="article-content">
+                <p>我国汉语中有几万个汉字，日常生活中常用的汉字有几千个。而这几千个常用汉字中，适合用来起名的则相对更少一点。</p>
+                <p>{% system with name='SiteName' %}基于大量的真实人名库进行统计，把最常用的宝宝起名汉字统计出来，供您起名参考。包含男孩起名常用字和女孩起名常用字。宝宝起名的时候，汉字之间的搭配很重要，既要兼顾传统的五行和五格，还要考虑读音和意蕴。宝宝起名工具助您一臂之力：</p>
+            </div>
+        </article>
+        <div class="layui-card">
+            <div class="layui-card-header">男宝宝起名常用汉字大全</div>
+            <div class="layui-card-body">
+                <ul class="main-surname">
+                    {% for item in maleCharacters %}
+                    <li><a href="/character/{{item.Hash}}">{{item.Ch}}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="layui-card">
+            <div class="layui-card-header">女宝宝起名常用汉字大全</div>
+            <div class="layui-card-body">
+                <ul class="main-surname">
+                    {% for item in femaleCharacters %}
+                    <li><a href="/character/{{item.Hash}}">{{item.Ch}}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        <div class="layui-card">
+            <div class="layui-card-header">起名常用汉字大全</div>
+            <div class="layui-card-body">
+                <ul class="main-surname">
+                    {% for item in totalCharacters %}
+                    <li><a href="/character/{{item.Hash}}">{{item.Ch}}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        {% include "partial/newarticle.html" %}
+        <div class="category aside-item zodiac">
+            <h2>姓名测试解读</h2>
+            <ul>
+                {% for item in lastDetails %}
+                <li><a href="/detail/{{item.Hash}}">{{item.GetFullName()}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

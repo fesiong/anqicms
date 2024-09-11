@@ -139,6 +139,18 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatMenu{},
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
+
+			&model.Calendar{},
+			&model.Character{},
+			&model.Horoscope{},
+			&model.WuXing{},
+			&model.WuGeLucky{},
+			&model.NameData{},
+			&model.NameHistory{},
+			&model.NameSource{},
+			&model.NameSourceData{},
+			&model.NameDetail{},
+			&model.Surname{},
 		)
 
 		if err != nil {

@@ -1,0 +1,63 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name='Title' %}</a></li>
+            <li><strong>{% archiveDetail with name="Title" %}</strong></li>
+        </ul>
+        <article>
+            <div class="article-title">
+                <h1>{% archiveDetail with name="Title" %}</h1>
+                <p class="article-views">
+                    <span>{% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
+                    <span>浏览次数 {% archiveDetail with name="Views" %}</span>
+                </p>
+            </div>
+            <div class="article-content">
+              {% archiveDetail articleContent with name="Content" %}
+              {{articleContent|safe}}
+            </div>
+        </article>
+        <ul class="prevnext-article">
+          {% prevArchive prev %}
+          <li class="prev">上一篇
+            {% if prev %}
+            <a href="{{prev.Link}}">{{prev.Title}}</a>
+            {% else %}
+            没有了
+            {% endif %}
+          </li>
+          {% endprevArchive %}
+          {% nextArchive next %}
+          <li class="next">下一篇
+            {% if next %}
+            <a href="{{next.Link}}">{{next.Title}}</a>
+            {% else %}
+            没有了
+            {% endif %}
+          </li>
+          {% endnextArchive %}
+        </ul>
+    </main>
+    <aside>
+      {% archiveList relationList with type="related" limit="6" %}
+      <div class="article-related">
+        <h2>相关起名知识</h2>
+        <ul class="article-list">
+            {% for item in relationList %}
+            <li>
+                <a href="{{item.Link}}">{{item.Title}}</a>
+            </li>
+            {% endfor %}
+        </ul>
+    </div>
+    {% endarchiveList %}
+        {% include "partial/newarticle.html" %}
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+    </aside>
+</div>
+{% endblock %}

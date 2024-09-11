@@ -1,0 +1,461 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>{{name.FullName()}}姓名测试结果</strong></li>
+        </ul>
+        <div>
+            <div class="name-info layui-card">
+                <div class="avatar"><img src="{% system with name='TemplateUrl' %}images/name-avatar.png"/></div>
+                <div class="name-detail">
+                    <div>
+                        <div class="detail-item">
+                            <span class="item-label">姓名：</span>
+                            <span class="item-value">{{name.FullName()}}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="item-label">性别：</span>
+                            <span class="item-value">{{name.Gender()}}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="item-label">综合得分：</span>
+                            <span class="item-value"><span class="score">{{name.TotalScore()}}</span>
+                            <span class="cent">分</span></span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="detail-item">
+                            <span class="item-label">出生时间：</span>
+                            <span class="item-value">农历 {{born.LunarDate()}}{{bazi.ShiChen}}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="item-label"></span>
+                            <span class="item-value">公历 {{born.Solar().Time().Format("2006年01月02日 15时04分")}}</span>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="detail-item">
+                            <span class="item-label">生肖：</span>
+                            <span class="item-value">{{zodiac.Name}}</span>
+                        </div>
+                        <div class="detail-item">
+                            <span class="item-label">出生时辰：</span>
+                            <span class="item-value">{{bazi.ShiChen}}</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="single-name layui-card">
+                <div class="name-items layui-clear">
+                    {% for item in name.LastName %}
+                    <div class="name-item">
+                        <div class="name">{{item.Ch}}</div>
+                        <div class="detail">
+                            <div class="item">
+                                <span class="label">笔画：</span>
+                                <span class="info">{{item.ScienceStroke}}画</span>
+                            </div>
+                            <div class="item">
+                                <span class="label">五行：</span>
+                                <span class="info">{{item.WuXing}}</span>
+                            </div>
+                            <div class="item">
+                                <span class="label">拼音：</span>
+                                <span class="info">{{item.GetPinYin()}}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                    {% for item in name.FirstName %}
+                    <div class="name-item">
+                        <div class="name">{{item.Ch}}</div>
+                        <div class="detail">
+                            <div class="item">
+                                <span class="label">笔画：</span>
+                                <span class="info">{{item.ScienceStroke}}画</span>
+                            </div>
+                            <div class="item">
+                                <span class="label">五行：</span>
+                                <span class="info">{{item.WuXing}}{{name.Male}}</span>
+                            </div>
+                            <div class="item">
+                                <span class="label">拼音：</span>
+                                <span class="info">{{item.GetPinYin()}}</span>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            <div class="name-explain">
+                <div class="layui-card">
+                    <div class="layui-card-header">姓氏解释</div>
+                    <div class="layui-card-body">
+                        <span class="strong color-primary">{{detail.LastName}}</span>系您指定的姓氏用字。从生肖上看，生肖为{{zodiac.Name}}。
+                        {% for item in name.LastName %}
+                        <span class="strong color-primary">{{item.Ch}}</span>的五行属<span class="color-red">{{item.WuXing}}</span>，偏旁部首为{{item.Radical}}，{% if item.Stroke %}笔画为{{item.Stroke}}画，{% endif %}取名科学计算笔画为{{item.ScienceStroke}}画，康熙字典对应的字为<span class="strong color-primary">{{item.KangXi}}</span>。
+                        {% endfor %}
+                        <p class="mt-normal">{{surname.Description}}</p>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">八字用字分析</div>
+                    <div class="layui-card-body">
+                        {{bazi.String()|safe}}
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">生肖用字分析</div>
+                    <div class="layui-card-body">
+                        宝宝生肖属相为{{zodiac.Name}}，起名宜有{{zodiac.GetXiRadical()}}等部首为吉，增加宝宝运势，以保万事顺利。
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">五格理数用字分析</div>
+                    <div class="layui-card-body">
+                        姓氏
+                        {% for item in name.LastName %}
+                        <span class="strong color-primary">{{item.Ch}}</span>的五行属性是<span class="color-red">{{item.WuXing}}</span>，偏旁部首为{{item.Radical}}，{% if item.Stroke %}笔画为{{item.Stroke}}画，{% endif %}取名科学计算笔画为{{item.ScienceStroke}}画{% if item.KangXi %}，康熙字典对应的字为<span class="strong color-primary">{{item.KangXi}}</span>{% endif %}，
+                        {% endfor %}
+                        起名宜用三才配置佳，五格笔划组合85分以上的字来起名。
+                        <br/>
+                        <table class="layui-table text-center gua-table">
+                            <colgroup>
+                                <col width="60">
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                                <col>
+                            </colgroup>
+                            <thead>
+                                <tr>
+                                    <td>理数</td>
+                                    <td>天格</td>
+                                    <td>地格</td>
+                                    <td>人格</td>
+                                    <td>总格</td>
+                                    <td>外格</td>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr>
+                                    <td>
+                                        <dl>
+                                            <dd>理数</dd>
+                                            <dd>吉凶</dd>
+                                            <dd>卦</dd>
+                                            <dd>天九</dd>
+                                            <dd class="dd-line3">义象</dd>
+                                        </dl>
+                                    </td>
+                                    <td>
+                                        <dl>
+                                            <dd>{{daYan.TianGe.Number}}</dd>
+                                            <dd>天注定</dd>
+                                            <dd>{{daYan.TianGe.Gua}}</dd>
+                                            <dd>{{daYan.ZongGe.SkyNine}}</dd>
+                                            <dd class="dd-line3">天格先天注定的，原则上只能接受，不能变更。</dd>
+                                        </dl>
+                                    </td>
+                                    <td>
+                                        <dl>
+                                            <dd>{{daYan.DiGe.Number}}</dd>
+                                            <dd>{{daYan.DiGe.Lucky}}</dd>
+                                            <dd>{{daYan.DiGe.Gua}}</dd>
+                                            <dd>{{daYan.ZongGe.SkyNine}}</dd>
+                                            <dd class="dd-line3">{{daYan.DiGe.YiXiang}}</dd>
+                                        </dl>
+                                    </td>
+                                    <td>
+                                        <dl>
+                                            <dd>{{daYan.RenGe.Number}}</dd>
+                                            <dd>{{daYan.RenGe.Lucky}}</dd>
+                                            <dd>{{daYan.RenGe.Gua}}</dd>
+                                            <dd>{{daYan.ZongGe.SkyNine}}</dd>
+                                            <dd class="dd-line3">{{daYan.RenGe.YiXiang}}</dd>
+                                        </dl>
+                                    </td>
+                                    <td>
+                                        <dl>
+                                            <dd>{{daYan.ZongGe.Number}}</dd>
+                                            <dd>{{daYan.ZongGe.Lucky}}</dd>
+                                            <dd>{{daYan.ZongGe.Gua}}</dd>
+                                            <dd>{{daYan.ZongGe.SkyNine}}</dd>
+                                            <dd class="dd-line3">{{daYan.ZongGe.YiXiang}}</dd>
+                                        </dl>
+                                    </td>
+                                    <td>
+                                        <dl>
+                                            <dd>{{daYan.WaiGe.Number}}</dd>
+                                            <dd>{{daYan.WaiGe.Lucky}}</dd>
+                                            <dd>{{daYan.WaiGe.Gua}}</dd>
+                                            <dd>{{daYan.WaiGe.SkyNine}}</dd>
+                                            <dd class="dd-line3">{{daYan.WaiGe.YiXiang}}</dd>
+                                        </dl>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">星座分析</div>
+                    <div class="layui-card-body">
+                        宝宝的星座为{{star.Title}}，起名宜{{star.Advantage}}等名字性格起名为吉，弥补宝宝性格缺点。
+                    </div>
+                </div>
+                
+            <div class="layui-card">
+                <div class="layui-card-header">周易用字分析</div>
+                <div class="layui-card-body">
+                    根据周易卦象，起名宜用{{guaMing}}等周易卦象起名为吉。<br/>
+                    <table class="layui-table text-center gua-table">
+                        <colgroup>
+                            <col width="60">
+                            <col>
+                            <col>
+                            <col>
+                            <col>
+                            <col>
+                        </colgroup>
+                        <thead>
+                            <tr>
+                                <td>卦象</td>
+                                <td>本卦</td>
+                                <td>变卦</td>
+                                <td>互卦</td>
+                                <td>错卦</td>
+                                <td>综卦</td>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>
+                                    <dl class="first-dl">
+                                        <dd>符号</dd>
+                                        <dd>卦序</dd>
+                                        <dd>卦象</dd>
+                                        <dd>卦名</dd>
+                                        <dd>上卦</dd>
+                                        <dd>下卦</dd>
+                                        <dd class="dd-line3">卦意</dd>
+                                    </dl>
+                                </td>
+                                {% for i in "01234"|make_list %}
+                                {% set gua = baGua.Get(forloop.Counter-1) %}
+                                <td>
+                                    <dl>
+                                        <dd class="gua-fuhao">{{gua.FuHao}}</dd>
+                                        <dd>{{gua.GuaXu}}</dd>
+                                        <dd>{{gua.GuaXiang}}</dd>
+                                        <dd>{{gua.GuaMing}}</dd>
+                                        <dd>{{gua.ShangGua}}</dd>
+                                        <dd>{{gua.XiaGua}}</dd>
+                                        <dd class="dd-line3">{{gua.GuaYi}}</dd>
+                                    </dl>
+                                </td>
+                                {% endfor %}
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">生辰八字起名分析详解</div>
+                    <div class="layui-card-body">
+                        <table class="layui-table text-center">
+                            <tbody>
+                                <tr>
+                                    <td>出生公历</td>
+                                    <td>{{born.Solar().Time().Format("2006年")}}</td>
+                                    <td>{{born.Solar().Time().Format("01月")}}</td>
+                                    <td>{{born.Solar().Time().Format("02日")}}</td>
+                                    <td>{{born.Solar().Time().Format("15时")}}</td>
+                                </tr>
+                                <tr>
+                                    <td>出生农历</td>
+                                    <td>{{lunarDate.Year}}</td>
+                                    <td>{{lunarDate.Month}}</td>
+                                    <td>{{lunarDate.Day}}</td>
+                                    <td>{{bazi.ShiChen}}</td>
+                                </tr>
+                                <tr>
+                                    <td>八字</td>
+                                    <td>{{bazi.GetBaZi(0)}}</td>
+                                    <td>{{bazi.GetBaZi(1)}}</td>
+                                    <td>{{bazi.GetBaZi(2)}}</td>
+                                    <td>{{bazi.GetBaZi(3)}}</td>
+                                </tr>
+                                <tr>
+                                    <td>五行</td>
+                                    <td>{{bazi.GetWuXing(0)}}</td>
+                                    <td>{{bazi.GetWuXing(1)}}</td>
+                                    <td>{{bazi.GetWuXing(2)}}</td>
+                                    <td>{{bazi.GetWuXing(3)}}</td>
+                                </tr>
+                                <tr>
+                                    <td>纳音</td>
+                                    <td>{{bazi.GetNaYin(0)}}</td>
+                                    <td>{{bazi.GetNaYin(1)}}</td>
+                                    <td>{{bazi.GetNaYin(2)}}</td>
+                                    <td>{{bazi.GetNaYin(3)}}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">八字五行强弱分析</div>
+                    <div class="layui-card-body">
+                        <div class="wuxing-items">
+                            <div class="wuxing-item">
+                                <div class="label color-gold">金</div>
+                                <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                    <div class="layui-progress-bar bg-gold" lay-percent="{{bazi.XiYong().GetWuXing("金")}}%"></div>
+                                </div>
+                            </div>
+                            <div class="wuxing-item">
+                                <div class="label color-wood">木</div>
+                                <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                    <div class="layui-progress-bar bg-wood" lay-percent="{{bazi.XiYong().GetWuXing("木")}}%"></div>
+                                </div>
+                            </div>
+                            <div class="wuxing-item">
+                                <div class="label color-water">水</div>
+                                <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                    <div class="layui-progress-bar bg-water" lay-percent="{{bazi.XiYong().GetWuXing("水")}}%"></div>
+                                </div>
+                            </div>
+                            <div class="wuxing-item">
+                                <div class="label color-fire">火</div>
+                                <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                    <div class="layui-progress-bar bg-fire" lay-percent="{{bazi.XiYong().GetWuXing("火")}}%"></div>
+                                </div>
+                            </div>
+                            <div class="wuxing-item">
+                                <div class="label color-soil">土</div>
+                                <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                    <div class="layui-progress-bar bg-soil" lay-percent="{{bazi.XiYong().GetWuXing("土")}}%"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="">
+                            <p>五行：<span>{{bazi.XiYong().GetWuXingNum("金")}}金</span>，
+                                <span>{{bazi.XiYong().GetWuXingNum("木")}}木</span>，
+                                <span>{{bazi.XiYong().GetWuXingNum("水")}}水</span>，
+                                <span>{{bazi.XiYong().GetWuXingNum("火")}}火</span>，
+                                <span>{{bazi.XiYong().GetWuXingNum("土")}}土</span></p>
+                            <p>此命五行{{bazi.XiYong().GetWang()}}旺{% if bazi.XiYong().GetQue() %}缺{{bazi.XiYong().GetQue()}}{% endif %}；</p>
+                            <p>日主天干为{{bazi.RiZhuWuXing()}}，同类为 {{bazi.XiYong().GetSimilar()}} ；异类为 {{bazi.XiYong().GetHeterogeneous()}} 。</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">八字喜用神分析</div>
+                    <div class="layui-card-body">
+                        <div class="">〖同类得分〗同类{{bazi.XiYong().GetSimilar()}} 　同类共计{{bazi.XiYong().GetSimilarPoint()}}分；</div>
+                        <div class="">〖异类得分〗异类{{bazi.XiYong().GetHeterogeneous()}} 　异类共计{{bazi.XiYong().GetHeterogeneousPoint()}}分；</div>
+                        <div class="">〖综合旺衰得分〗{{bazi.XiYong().GetZongPoint()}}分，【八字 偏{{bazi.XiYong().GetQiangRuo()}}】</div>
+                        <div class="">〖八字喜用神〗八字喜【{{bazi.XiYongShen()}}】，【{{bazi.XiYongShen()}}】就是此命的【喜神】。</div>
+                        <p>用五行属 <span class="strong color-primary">{{bazi.XiYongShen()}}</span> 的字起名，对今后健康，事业，婚姻，财运都更加有利。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="single-name layui-card">
+                <div class="name-scores layui-clear">
+                    <div class="score-item">
+                        <div class="label">好听内涵</div>
+                        <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                            <div class="layui-progress-bar bg-gold" lay-percent="{{name.GetScore(0)}}%"></div>
+                        </div>
+                    </div>
+                    <div class="score-item">
+                        <div class="label">五行八字</div>
+                        <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                            <div class="layui-progress-bar bg-wood" lay-percent="{{name.GetScore(1)}}%"></div>
+                        </div>
+                    </div>
+                    <div class="score-item">
+                        <div class="label">生肖打分</div>
+                        <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                            <div class="layui-progress-bar bg-water" lay-percent="{{name.GetScore(2)}}%"></div>
+                        </div>
+                    </div>
+                    <div class="score-item">
+                        <div class="label">星座打分</div>
+                        <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                            <div class="layui-progress-bar bg-fire" lay-percent="{{name.GetScore(3)}}%"></div>
+                        </div>
+                    </div>
+                    <div class="score-item">
+                        <div class="label">五格理数</div>
+                        <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                            <div class="layui-progress-bar bg-soil" lay-percent="{{name.GetScore(4)}}%"></div>
+                        </div>
+                    </div>
+                    <div class="score-item">
+                        <div class="label">周易卦像</div>
+                        <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                            <div class="layui-progress-bar bg-gold" lay-percent="{{name.GetScore(5)}}%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="layui-card layui-card-inner">
+                    <div class="layui-card-header">用字分析</div>
+                    <div class="layui-card-body">
+                        <p>
+                            {% for ch in name.LastName %}
+                            <span class="strong color-primary">{{ch.Ch}}</span> 字系您指定的姓氏用字，五行属性是<span class="color-red">{{ch.WuXing}}</span>，偏旁部首为{{ch.Radical}}，{% if ch.Stroke %}笔画为{{ch.Stroke}}画，{% endif %}取名科学计算笔画为{{ch.ScienceStroke}}画{% if ch.KangXi %}，康熙字典对应的字为<span class="strong color-primary">{{ch.KangXi}}</span>{% endif %}
+                            {% endfor %}
+                        </p>
+                        {% for ch in name.FirstName %}
+
+                        <p>
+                            <span class="strong color-primary">{{ch.Ch}}</span> 字的五行属性是<span class="color-red">{{ch.WuXing}}</span>，偏旁部首为{{ch.Radical}}，{% if ch.Stroke %}笔画为{{ch.Stroke}}画，{% endif %}取名科学计算笔画为{{ch.ScienceStroke}}画{% if ch.KangXi %}，康熙字典对应的字为<span class="strong color-primary">{{ch.KangXi}}</span>{% endif %}
+                        </p>
+                        {% endfor %}
+                        可以弥补性格缺陷，增强主动性，变的热情好礼、善交朋友、口才佳、人缘好。其人富有仁慈心，外表乐观，待人诚恳，交友甚广，做事有计划。其人意志坚定，注重实际与工作，耐性佳，能克苦耐劳，创立属于自己的事业。
+                    </div>
+                </div>
+                <div class="layui-card layui-card-inner">
+                    <div class="layui-card-header">字义分析</div>
+                    <div class="layui-card-body">
+                        {% for ch in name.FirstName %}
+                        <div><span class="strong color-primary">{{ch.Ch}}</span>，
+                            {{ch.GetComment(false)}}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="layui-card layui-card-inner">
+                    <div class="layui-card-header">美好寓意</div>
+                    <div class="layui-card-body">
+                        {% for item in name.CiYu() %}
+                        <div><span class="strong color-primary">{{item.Title}}</span>，
+                            {{item.Description|safe}}，
+                            {{item.Content|safe}}
+                        </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        <div class="category aside-item character">
+            <h2>相关姓名测试</h2>
+            <ul>
+                {% for item in detailRelated %}
+                <li><a href="/detail/{{item.Hash}}">{{item.GetFullName()}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

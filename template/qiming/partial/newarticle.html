@@ -1,0 +1,12 @@
+{% archiveList popularArticles with type="list" order="views desc" limit="6" %}
+<div class="article-related">
+    <h2>最新起名知识</h2>
+    <ul class="article-list">
+        {% for item in popularArticles %}
+        <li>
+            <a href="{{item.Link}}">{{item.Title}}</a>
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+{% endarchiveList %}

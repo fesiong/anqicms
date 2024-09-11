@@ -115,3 +115,25 @@ func min(a, b int) int {
 	}
 	return b
 }
+
+type Today struct {
+	Year   string
+	Month  string
+	Day    string
+	Hour   string
+	Minute string
+}
+
+func GetToday() *Today {
+	today := time.Now().Format("2006-01-02-15-04")
+	format := strings.Split(today, "-")
+	todayFormat := &Today{
+		Year:   format[0],
+		Month:  format[1],
+		Day:    format[2],
+		Hour:   format[3],
+		Minute: format[4],
+	}
+
+	return todayFormat
+}

@@ -41,6 +41,23 @@ func Register(app *iris.Application) {
 	// account party
 	app.Get("/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
 
+	app.Get("/checkout", controller.NameCheckout)
+	app.Post("/name/create", controller.CreateName)
+	app.Post("/name/checkout", controller.CreateNameDetail)
+	app.Post("/name/horoscope", controller.CreateHoroscope)
+	app.Get("/naming", controller.NameChoose) // 起名结果
+	app.Get("/detail/{id:string}", controller.NameDetail)
+
+	app.Get("/zodiac", controller.ZodiacIndex)
+	app.Get("/surname", controller.SurnameIndex)
+	app.Get("/character", controller.CharacterIndex)
+	app.Get("/zodiac/{id:string}", controller.ZodiacDetail)
+	app.Get("/surname/{id:string}", controller.SuanameDetail)
+	app.Get("/character/{id:string}", controller.CharacterDetail)
+
+	app.Get("/horoscope", controller.HoroscopeIndex)
+	app.Get("/horoscope/{id:string}", controller.HoroscopeDetail)
+
 	api := app.Party("/api", middleware.ParseUserToken)
 	{
 		api.Get("/captcha", controller.GenerateCaptcha)
@@ -48,6 +65,13 @@ func Register(app *iris.Application) {
 		api.Get("/wechat/auth", controller.WechatAuthApi)
 		api.Get("/wechat", controller.WechatApi)
 		api.Post("/wechat", controller.WechatApi)
+
+		// 开始暴露更多API
+		api.Post("/name/choose", controller.ApiNameChoose)
+		api.Post("/name/detail", controller.ApiNameDetail)
+		api.Post("/name/fortune", controller.ApiNameFortune) // 八字
+		api.Get("/name/surname", controller.ApiNameSurname)
+		api.Get("/name/character", controller.ApiNameCharacter) // 查字
 
 		// 友链API
 		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)

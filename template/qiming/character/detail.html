@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>{{character.Ch}}字属性解释</strong></li>
+        </ul>
+        <div>
+            <div class="name-explain">
+                <div class="layui-card">
+                    <div class="layui-card-header">{{character.Ch}}字简介</div>
+                    <div class="layui-card-body">
+                        <p class="mt-normal">{{character.Ch}}字，五行属性是{{character.WuXing}}，偏旁部首为{{chatacter.Radical}}。{{character.Ch}}字读音是{{chatacter.GetPinYin()}}，{% if item.Stroke %}笔画为{{item.Stroke}}画，{% endif %}取名科学计算笔画为{{item.ScienceStroke}}画{% if ch.KangXi %}；{{character.Ch}}字康熙字典对应的字为<span class="strong color-primary">{{ch.KangXi}}</span>{% endif %}{% if ch.TraditionalCharacterRaw %}；{{character.Ch}}字的繁体字写法为{{ch.GetTraditionalCharacter()}}{% endif %}；名字库中有{{character.Total}}人使用了{{character.Ch}}字。</p>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">{{character.Ch}}字解释</div>
+                    <div class="layui-card-body">
+                        {{character.GetComment(true)|safe}}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        <div class="category aside-item character">
+            <h2>相关取名用字</h2>
+            <ul>
+                {% for item in relatedCharacters %}
+                <li><a href="/character/{{item.Hash}}">{{item.Ch}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

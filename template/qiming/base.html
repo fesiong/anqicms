@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charSet="utf-8" />
+    <meta name="renderer" content="webkit">
+    <meta name="viewport"
+        content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1" />
+    <meta name="applicable-device" content="mobile">
+    {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
+    <meta name="keywords" content="{% tdk with name='Keywords' %}">
+    <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
+    <link href="{% system with name='TemplateUrl' %}layui/css/layui.css" rel="stylesheet">
+    <link href="{% system with name='TemplateUrl' %}css/style.css?v=1.3" rel="stylesheet">
+</head>
+
+<body>
+	<div class="layui-header">
+		<div class="layui-container">
+				<a href="/">
+						<div class="layui-logo">
+								<img style="height: 48px;" src="{% system with name='SiteLogo' %}" alt="{% system with name='SiteName' %}" />
+						</div>
+				</a>
+				<a class="mobile-nav-switch"><span class="layui-icon layui-icon-shrink-right"></span></a>
+				<ul class="layui-nav layui-layout-left nav-list">
+				{% navList navList %}
+						{%- for item in navList %}
+						<li class="layui-nav-item{% if item.IsCurrent %} layui-this{% endif %}">
+								<a href="{{ item.Link }}">{{item.Title}}</a>
+								{%- if item.NavList %}
+								<dl class="layui-nav-child">
+										{%- for inner in item.NavList %}
+										<dd class="{% if inner.IsCurrent %} layui-this{% endif %}">
+												<a href="{{ inner.Link }}">{{inner.Title}}</a>
+										</dd>
+										{% endfor %}
+								</dl>
+								{% endif %}
+						</li>
+						{% endfor %}
+				{% endnavList %}
+				</ul>
+		</div>
+</div>
+
+    {% block header %}
+    <div class="fixed-header"></div>
+    {% endblock %}
+    {% block container %}
+    <div class="layui-container">
+        container
+    </div>
+    {% endblock %}
+    
+    
+		<footer>
+			<div class="layui-container">
+				<div>
+					<div class="layout"></div>
+					{% system siteCopyright with name="SiteCopyright" %}
+					{% if siteCopyright %}<p>{{siteCopyright|safe}}</p>{% endif %}
+					<p>&copy;2008-{% now "2006" %} {% system with name='SiteName' %}. All Rights Reserved {% system with name='SiteName' %}由 <a href="https://www.anqicms.com/" target="_blank">安企内容管理系统(AnqiCMS)</a> 驱动</p>
+					<p>
+						{% system siteIcp with name="SiteIcp" %}
+						{% if siteIcp %}
+						<a href="https://beian.miit.gov.cn/" rel="nofollow" target="_blank">{{siteIcp}}</a>
+						{% endif %}
+						<span class="footer-divide">|</span>
+						<a href="javascript:;">客服微信： {% contact with name="Wechat" %}</a>
+						<span class="footer-divide">|</span>
+						<a href="javascript:;">客服电话： {% contact with name="Cellphone" %}</a>
+					</p>
+				</div>
+			</div>
+	</footer>
+	</body>
+	<script>
+			var today = {
+					born_year: '{{today.Year}}',
+					born_month: '{{today.Month}}',
+					born_day: '{{today.Day}}',
+					born_hour: '{{today.Hour}}',
+					born_minute: '{{today.Minute}}',
+			};
+	</script>
+</body>
+<script src="{% system with name='TemplateUrl' %}layui/layui.js"></script>
+<script src="{% system with name='TemplateUrl' %}js/app.js?v=1.3"></script>
+{% block footer %}
+{% endblock %}
+<div class="layui-hide">
+    {{- pluginJsCode|safe }}
+</div>
+</html>

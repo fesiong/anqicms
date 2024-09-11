@@ -1,0 +1,74 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/breadcrumb.html" %}
+<div class="blog-list container clearfix">
+  <h1 class="index-news-title">搜索：{{urlParams.q}}</h1>
+  <div class="blog-list-content clearfix">
+    <div class="page-content">
+      <ul class="blog-list-ul clearfix">
+        {% archiveList articles with type="page" limit="10" %}
+        {% for item in articles %}
+        <li class="blog-list-li">
+          <div class="blog-list-li-item">
+            <div class="blog-list-img">
+              <a href="{{item.Link}}"><img src="{{item.Thumb}}" alt="{{item.Title}}"></a>
+            </div>
+            <div class="blog-list-text">
+              <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+              <div class="time">
+                <span>发布时间：{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                <span>作者：<a>{% system with name="SiteName" %}</a></span>
+              </div>
+              <p>{{item.Description}}</p>
+              <a href="{{item.Link}}" class="btn" rel="nofollow">了解详情</a>
+            </div>
+          </div>
+        </li>
+        {% endfor %}
+        {% endarchiveList %}
+      </ul>
+      {% include "partial/pagination.html" %}
+    </div>
+    {% include "partial/sidebar.html" %}
+  </div>
+</div>
+{% endblock %}
+{% extends 'base.html' %}
+
+{% block container %}
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>搜索：{{urlParams.q}}</strong></li>
+        </ul>
+        <div class="sub-articles">
+            <ul class="article-list">
+              {% archiveList articles with type="page" limit="10" %}
+              {% for item in articles %}
+                <li>
+                    <a href="{{item.Link}}">{{item.Title}}</a>
+                    <span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                </li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+        {% include "partial/pagination.html" %}
+    </main>
+    <aside>
+        {% include "partial/newarticle.html" %}
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        <div class="category aside-item zodiac">
+            <h2>姓名测试解读</h2>
+            <ul>
+                {% for item in lastDetails %}
+                <li><a href="/detail/{{item.Hash}}">{{item.GetFullName()}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% pagination pages with show="5" %}
+<div class="category">
+    <ul>
+        {% if pages.PrevPage %}
+        <li class="prev"><a href="{{pages.PrevPage.Link}}">上一页</a></li>
+        {% endif %}
+        {% if pages.NextPage %}
+        <li><a href="{{pages.NextPage.Link}}">下一页</a></li>
+        {% endif %}
+    </ul>
+</div>
+{% endpagination %}

@@ -1,0 +1,102 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>十二生肖解读</strong></li>
+        </ul>
+        <article>
+            <div class="article-title">
+                <h1>十二生肖有什么？十二生肖的由来和计算方法</h1>
+            </div>
+            <div class="article-content">
+                <p>
+                    十二生肖，即鼠、牛、虎、兔、龙、蛇、马、羊、猴、鸡、狗、猪，用于记年。是中国传统文化的重要部分，顺序排列为子鼠、丑牛、寅虎、卯兔、辰龙、巳蛇、午马、未羊、申猴、酉鸡、戌狗、亥猪。每个人都知道自己的生肖是什么，但未必是准确的。中国黄历以立春确定生肖。“农历”是汉代开始使用的“太阴历”，新年是以立春为界的，立春是二十四节气之首，生肖以立春为准。传统的命理学、占卜学等民俗学，均以“立春”作为生肖计算的依据。包括现在的民间占星卜卦先生也一直沿用传统的生肖定法。因为生肖本与地支同源，不能以当前的春节来定。</p>
+                <p>立春是二十四节气之首。二十四节气是根据太阳在黄道（即地球绕太阳公转的轨道）上的位置来划分的。天文台每年会有准确的时刻公布，
+                    比如2011年是12时33分。立春开始同时阴历也变成了“辛卯年”。有人说不是大年初一就应该是“辛卯年”了吗？很遗憾很多人都有这个误解。</p>
+                <p>让我们先来看看天干地支纪年法。</p>
+                <p>天干有十：甲、乙、丙、丁、戊（wù）、己、庚、辛、壬（rén）、癸（guǐ）；</p>
+                <p>地支十二：子、丑、寅、卯（mǎo）、辰（chén）、巳（sì）、午、未（wèi）、申、酉（yǒu）、戌（xū）、亥。</p>
+                <p>
+                    天干地支组合成如下六十个计时序号，作为纪年、月、日、时的名称，叫“干支纪年法”。天干地支纪年法同时可纪年、月、日、时，分别称为“年柱、月柱、日柱、时柱”。此八个字就是俗称的“八字”。一个人的八字就是他出生时间的四柱记录。</p>
+                <p>十二地支与十二生肖对应，即子鼠、丑牛、寅虎、卯兔、辰龙、巳蛇、午马、未羊、申猴、酉鸡、戌狗、亥猪。</p>
+                <p>干支用六十甲子依次纪年，六十年一个轮回。干支纪年法的新一年由立春开始。所以与地支相应的生肖自然也应该从立春算起。</p>
+                <p>
+                    中国的农历是一种“阴阳合历”，既根据太阳也根据月亮的运行制定的，二十四节气反映太阳的运行周期。初一、十五等反映月亮的周期。辛亥革命之前，农历大年初一叫做“元旦”，立春叫做“春节”；辛亥革命后，民国政府宣布废除农历改用新历（即公历），用民国纪年，从1912年开始，称公历1月1日为“元旦”；1914年1月，民国政府又颁布法令改称农历大年初一为“春节”，并一直沿用至今。民间混淆了阴历年和干支纪年法的黄历年，所以引起误解。</p>
+                <p>按照老黄历仍然是以二十四节气之首“立春”做为岁首，“立春”代表春天的开始，也代表一年的开始，传统命理学的八字也是以“立春”开始计算，立春才是生肖属相年的开始。</p>
+                <p>起名取名时遵循的五行喜用也是以正确的八字计算为依据的。参见<strong><a href="/">免费智能起名</a></strong>。</p>
+            </div>
+        </article>
+        <div class="layui-card">
+            <div class="layui-card-header">十二生肖</div>
+            <div class="layui-card-body">
+                <ul class="main-zodiac">
+                    <li><a class="zodiac-mice" href="/zodiac/mice">
+                            <div class="title">生肖鼠</div>
+                            <div>生肖属鼠的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-cattle" href="/zodiac/cattle">
+                            <div class="title">生肖牛</div>
+                            <div>生肖属牛的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-tiger" href="/zodiac/tiger">
+                            <div class="title">生肖虎</div>
+                            <div>生肖属虎的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-rabbit" href="/zodiac/rabbit">
+                            <div class="title">生肖兔</div>
+                            <div>生肖属兔的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-dragon" href="/zodiac/dragon">
+                            <div class="title">生肖龙</div>
+                            <div>生肖属龙的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-snake" href="/zodiac/snake">
+                            <div class="title">生肖蛇</div>
+                            <div>生肖属蛇的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-horse" href="/zodiac/horse">
+                            <div class="title">生肖马</div>
+                            <div>生肖属马的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-sheep" href="/zodiac/sheep">
+                            <div class="title">生肖羊</div>
+                            <div>生肖属羊的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-monkey" href="/zodiac/monkey">
+                            <div class="title">生肖猴</div>
+                            <div>生肖属猴的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-chick" href="/zodiac/chick">
+                            <div class="title">生肖鸡</div>
+                            <div>生肖属鸡的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-dog" href="/zodiac/dog">
+                            <div class="title">生肖狗</div>
+                            <div>生肖属狗的取名技巧，用字分析</div>
+                        </a></li>
+                    <li><a class="zodiac-pig" href="/zodiac/pig">
+                            <div class="title">生肖猪</div>
+                            <div>生肖属猪的取名技巧，用字分析</div>
+                        </a></li>
+                </ul>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        {% include "partial/newarticle.html" %}
+        <div class="category aside-item zodiac">
+            <h2>姓名测试解读</h2>
+            <ul>
+                {% for item in lastDetails %}
+                <li><a href="/detail/{{item.Hash}}">{{item.GetFullName()}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

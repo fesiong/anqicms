@@ -1,0 +1,395 @@
+{% extends 'base.html' %}
+{% block container %}
+<div class="layui-container">
+	<main>
+			<ul class="crumb">
+					<li>起名网，宝宝取名，姓名测试打分，公司起名，专家起名，周易起名软件，起名字大全</li>
+			</ul>
+			<div class="layui-card">
+					<div class="layui-card-header">宝宝智能起名 <span class="layui-word-aux text-small">
+							综合五行、生肖、五格的取名法，完美满足传统取名的要求；更有时尚的诗词文化典籍起名；以及多方位的美名解析。 </span></div>
+					<div class="layui-card-body">
+							<div class="name-form">
+									<form class="layui-form" method="post" lay-filter="named-form" onsubmit="return false;">
+											<div class="layui-form-item">
+													<label class="layui-form-label">姓氏</label>
+													<div class="layui-input-inline" style="width: 70px;">
+															<input type="text" name="last_name" required lay-verify="required" placeholder=""
+																		 autocomplete="off" class="layui-input" maxlength="2">
+													</div>
+													<div class="layui-form-mid" style="margin-left: 30px;">性别</div>
+													<div class="layui-input-inline" style="width: 150px;">
+															<input type="radio" name="gender" value="male" title="男" checked>
+															<input type="radio" name="gender" value="female" title="女">
+													</div>
+													<div class="layui-form-mid">姓名形式</div>
+													<div class="layui-input-inline" style="width: 170px;">
+															<select name="name_type">
+																	<option value="single">单字名，如：张飞</option>
+																	<option value="double" selected>双字名，如：王重阳</option>
+																	<option value="overlap">叠字名，如：李冰冰</option>
+															</select>
+													</div>
+											</div>
+											<div class="layui-form-item">
+													<label class="layui-form-label">出生日期</label>
+													<div class="layui-input-block">
+															<div>
+																	<input type="radio" name="know_born" value="time" title="知道详细出生时间" checked>
+																	<input type="radio" name="know_born" value="date" title="只知道出生日期">
+																	<input type="radio" name="know_born" value="none" title="具体出生日期未知">
+															</div>
+													</div>
+											</div>
+											<div class="layui-form-item">
+													<label class="layui-form-label">日历</label>
+													<div class="layui-input-block">
+															<div>
+																	<input type="radio" name="calendar" value="solar" title="公历" lay-filter="calendar" checked>
+																	<input type="radio" name="calendar" value="lunar" title="农历" lay-filter="calendar">
+																	<span id="lunar-leap" class="layui-hide">
+																			<input type="checkbox" name="leap" value="1" lay-skin="primary" title="闰月">
+																	</span>
+															</div>
+													</div>
+											</div>
+											<div class="layui-form-item">
+													<div class="layui-form-label">出生日期</div>
+													<div class="layui-input-inline mobile-inline" style="width: 90px !important;">
+															<select name="born_year">
+																	<option value="">出生年份</option>
+																	<option value="1960">1960年</option>
+																	<option value="1961">1961年</option>
+																	<option value="1962">1962年</option>
+																	<option value="1963">1963年</option>
+																	<option value="1964">1964年</option>
+																	<option value="1965">1965年</option>
+																	<option value="1966">1966年</option>
+																	<option value="1967">1967年</option>
+																	<option value="1968">1968年</option>
+																	<option value="1969">1969年</option>
+																	<option value="1970">1970年</option>
+																	<option value="1971">1971年</option>
+																	<option value="1972">1972年</option>
+																	<option value="1973">1973年</option>
+																	<option value="1974">1974年</option>
+																	<option value="1975">1975年</option>
+																	<option value="1976">1976年</option>
+																	<option value="1977">1977年</option>
+																	<option value="1978">1978年</option>
+																	<option value="1979">1979年</option>
+																	<option value="1980">1980年</option>
+																	<option value="1981">1981年</option>
+																	<option value="1982">1982年</option>
+																	<option value="1983">1983年</option>
+																	<option value="1984">1984年</option>
+																	<option value="1985">1985年</option>
+																	<option value="1986">1986年</option>
+																	<option value="1987">1987年</option>
+																	<option value="1988">1988年</option>
+																	<option value="1989">1989年</option>
+																	<option value="1990">1990年</option>
+																	<option value="1991">1991年</option>
+																	<option value="1992">1992年</option>
+																	<option value="1993">1993年</option>
+																	<option value="1994">1994年</option>
+																	<option value="1995">1995年</option>
+																	<option value="1996">1996年</option>
+																	<option value="1997">1997年</option>
+																	<option value="1998">1998年</option>
+																	<option value="1999">1999年</option>
+																	<option value="2000">2000年</option>
+																	<option value="2001">2001年</option>
+																	<option value="2002">2002年</option>
+																	<option value="2003">2003年</option>
+																	<option value="2004">2004年</option>
+																	<option value="2005">2005年</option>
+																	<option value="2006">2006年</option>
+																	<option value="2007">2007年</option>
+																	<option value="2008">2008年</option>
+																	<option value="2009">2009年</option>
+																	<option value="2010">2010年</option>
+																	<option value="2011">2011年</option>
+																	<option value="2012">2012年</option>
+																	<option value="2013">2013年</option>
+																	<option value="2014">2014年</option>
+																	<option value="2015">2015年</option>
+																	<option value="2016">2016年</option>
+																	<option value="2017">2017年</option>
+																	<option value="2018">2018年</option>
+																	<option value="2019">2019年</option>
+																	<option selected="selected" value="2020">2020年</option>
+																	<option value="2021">2021年</option>
+																	<option value="2022">2022年</option>
+																	<option value="2023">2023年</option>
+															</select>
+													</div>
+													<div class="layui-input-inline mobile-inline" style="width: 70px !important;">
+															<select name="born_month">
+																	<option value="">月份</option>
+																	<option selected="selected" value="01">1月</option>
+																	<option value="02">2月</option>
+																	<option value="03">3月</option>
+																	<option value="04">4月</option>
+																	<option value="05">5月</option>
+																	<option value="06">6月</option>
+																	<option value="07">7月</option>
+																	<option value="08">8月</option>
+																	<option value="09">9月</option>
+																	<option value="10" selected="selected">10月</option>
+																	<option value="11">11月</option>
+																	<option value="12">12月</option>
+															</select>
+													</div>
+													<div class="layui-input-inline mobile-inline" style="width: 70px !important;">
+															<select name="born_day">
+																	<option value="">日期</option>
+																	<option selected="selected" value="01">1日</option>
+																	<option value="02">2日</option>
+																	<option value="03">3日</option>
+																	<option value="04">4日</option>
+																	<option value="05">5日</option>
+																	<option value="06">6日</option>
+																	<option value="07">7日</option>
+																	<option value="08">8日</option>
+																	<option value="09">9日</option>
+																	<option value="10">10日</option>
+																	<option value="11">11日</option>
+																	<option value="12">12日</option>
+																	<option value="13">13日</option>
+																	<option value="14">14日</option>
+																	<option value="15">15日</option>
+																	<option value="16">16日</option>
+																	<option value="17">17日</option>
+																	<option value="18">18日</option>
+																	<option value="19">19日</option>
+																	<option value="20">20日</option>
+																	<option value="21">21日</option>
+																	<option value="22">22日</option>
+																	<option value="23">23日</option>
+																	<option value="24">24日</option>
+																	<option value="25">25日</option>
+																	<option value="26">26日</option>
+																	<option value="27">27日</option>
+																	<option value="28">28日</option>
+																	<option value="29">29日</option>
+																	<option value="30">30日</option>
+																	<option value="31">31日</option>
+															</select>
+													</div>
+													<div class="layui-form-mid">时间</div>
+													<div class="layui-input-inline mobile-inline" style="width: 110px !important;">
+															<select name="born_hour">
+																	<option value="">时辰　时间</option>
+																	<option selected="selected" value="00">子时　0点</option>
+																	<option value="01">丑时　1点</option>
+																	<option value="02">丑时　2点</option>
+																	<option value="03">寅时　3点</option>
+																	<option value="04">寅时　4点</option>
+																	<option value="05">卯时　5点</option>
+																	<option value="06">卯时　6点</option>
+																	<option value="07">辰时　7点</option>
+																	<option value="08">辰时　8点</option>
+																	<option value="09">巳时　9点</option>
+																	<option value="10">巳时　10点</option>
+																	<option value="11">午时　11点</option>
+																	<option value="12">午时　12点</option>
+																	<option value="13">未时　13点</option>
+																	<option value="14">未时　14点</option>
+																	<option value="15">申时　15点</option>
+																	<option value="16">申时　16点</option>
+																	<option value="17">酉时　17点</option>
+																	<option value="18">酉时　18点</option>
+																	<option value="19">戌时　19点</option>
+																	<option value="20">戌时　20点</option>
+																	<option value="21">亥时　21点</option>
+																	<option value="22">亥时　22点</option>
+																	<option value="23">子时　23点</option>
+															</select>
+													</div>
+													<div class="layui-input-inline mobile-inline" style="width: 80px !important;">
+															<select name="born_minute">
+																	<option selected="selected" value="00">00分</option>
+																	<option value="01">01分</option>
+																	<option value="02">02分</option>
+																	<option value="03">03分</option>
+																	<option value="04">04分</option>
+																	<option value="05">05分</option>
+																	<option value="06">06分</option>
+																	<option value="07">07分</option>
+																	<option value="08">08分</option>
+																	<option value="09">09分</option>
+																	<option value="10">10分</option>
+																	<option value="11">11分</option>
+																	<option value="12">12分</option>
+																	<option value="13">13分</option>
+																	<option value="14">14分</option>
+																	<option value="15">15分</option>
+																	<option value="16">16分</option>
+																	<option value="17">17分</option>
+																	<option value="18">18分</option>
+																	<option value="19">19分</option>
+																	<option value="20">20分</option>
+																	<option value="21">21分</option>
+																	<option value="22">22分</option>
+																	<option value="23">23分</option>
+																	<option value="24">24分</option>
+																	<option value="25">25分</option>
+																	<option value="26">26分</option>
+																	<option value="27">27分</option>
+																	<option value="28">28分</option>
+																	<option value="29">29分</option>
+																	<option value="30">30分</option>
+																	<option value="31">31分</option>
+																	<option value="32">32分</option>
+																	<option value="33">33分</option>
+																	<option value="34">34分</option>
+																	<option value="35">35分</option>
+																	<option value="36">36分</option>
+																	<option value="37">37分</option>
+																	<option value="38">38分</option>
+																	<option value="39">39分</option>
+																	<option value="40">40分</option>
+																	<option value="41">41分</option>
+																	<option value="42">42分</option>
+																	<option value="43">43分</option>
+																	<option value="44">44分</option>
+																	<option value="45">45分</option>
+																	<option value="46">46分</option>
+																	<option value="47">47分</option>
+																	<option value="48">48分</option>
+																	<option value="49">49分</option>
+																	<option value="50">50分</option>
+																	<option value="51">51分</option>
+																	<option value="52">52分</option>
+																	<option value="53">53分</option>
+																	<option value="54">54分</option>
+																	<option value="55">55分</option>
+																	<option value="56">56分</option>
+																	<option value="57">57分</option>
+																	<option value="58">58分</option>
+																	<option value="59">59分</option>
+															</select>
+													</div>
+											</div>
+											<fieldset class="layui-elem-field layui-field-title choose-collapse text-center">
+													<legend><a id="show-more-item">更多起名意愿（选项）</a></legend>
+											</fieldset>
+											<div id="more-item" class="layui-hide">
+													<div class="layui-form-item">
+															<label class="layui-form-label">出生方位</label>
+															<div class="layui-input-block">
+																	<input type="radio" name="position" value="east" title="东方" checked>
+																	<input type="radio" name="position" value="northeast" title="东北方">
+																	<input type="radio" name="position" value="southeast" title="东南方">
+																	<input type="radio" name="position" value="south" title="南方">
+																	<input type="radio" name="position" value="southwest" title="西南方">
+																	<input type="radio" name="position" value="west" title="西方">
+																	<input type="radio" name="position" value="northwest" title="西北方">
+																	<input type="radio" name="position" value="north" title="北方">
+																	<input type="radio" name="position" value="" title="不知道">
+															</div>
+													</div>
+													<div class="layui-form-item">
+															<label class="layui-form-label">名字来源</label>
+															<div class="layui-input-inline">
+																	<select name="source_from">
+																			<option value="">不限</option>
+																			<option value="1">论语</option>
+																			<option value="2">大学</option>
+																			<option value="3">中庸</option>
+																			<option value="4">诗经</option>
+																			<option value="5">周易</option>
+																			<option value="6">楚辞</option>
+																			<option value="7">尚书</option>
+																			<option value="8">道德经</option>
+																			<option value="9">唐诗</option>
+																			<option value="10">宋词</option>
+																			<option value="11">三字经</option>
+																			<option value="12">千字文</option>
+																			<option value="13">美好成语</option>
+																	</select>
+															</div>
+															<div class="layui-input-inline">
+																	<input type="checkbox" name="only_kangxi" value="on" lay-skin="primary" title="只使用康熙字典">
+															</div>
+													</div>
+													<div class="layui-form-item">
+															<label class="layui-form-label">忌讳字</label>
+															<div class="layui-input-inline">
+																	<input type="text" name="taboo_character" autocomplete="off" class="layui-input">
+															</div>
+															<div class="layui-form-mid layui-word-aux">例如：难，可同时指定多个，如：艰难困苦</div>
+													</div>
+													<div class="layui-form-item">
+															<label class="layui-form-label">忌讳偏旁</label>
+															<div class="layui-input-inline">
+																	<input type="text" name="taboo_side" autocomplete="off" class="layui-input">
+															</div>
+															<div class="layui-form-mid layui-word-aux">例如：纟，可同时指定多个，如：纟木氵虫</div>
+													</div>
+													<div class="layui-form-item">
+															<label class="layui-form-label">指定用字</label>
+															<div class="layui-input-inline">
+																	<select name="appoint_type">
+																			<option value="" selected>不指定</option>
+																			<option value="first">中间字</option>
+																			<option value="second">尾字</option>
+																	</select>
+															</div>
+															<div class="layui-input-inline" style="width: 80px;">
+																	<input type="text" name="appoint_name" autocomplete="off" class="layui-input">
+															</div>
+															<div class="layui-form-mid layui-word-aux">比如指定辈分字</div>
+													</div>
+											</div>
+											<div class="submit-buttons">
+													<button class="layui-btn" lay-submit lay-filter="named-form">开始智能起名</button>
+													<a class="layui-btn layui-btn-primary" href="javascript:;" onclick="alert('添加微信，一对一起名服务。微信号：{% contact with name="Wechat" %}')">专家专业起名</a>
+											</div>
+									</form>
+							</div>
+					</div>
+			</div>
+			<div class="layui-card">
+					<div class="layui-card-header">姓名测试解读</div>
+					<div class="layui-card-body">
+							<ul class="main-surname">
+									{% for item in lastDetails %}
+									<li><a href="/detail/{{item.Hash}}">{{item.GetFullName()}}</a></li>
+									{% endfor %}
+							</ul>
+					</div>
+			</div>
+			<div class="layui-card">
+					<div class="layui-card-header">生辰八字解读</div>
+					<div class="layui-card-body">
+							<ul class="main-surname">
+									{% for item in lastHoroscopes %}
+									<li><a href="/horoscope/{{item.Hash}}">{{item}}</a></li>
+									{% endfor %}
+							</ul>
+					</div>
+			</div>
+	</main>
+	<aside>
+			{% include "partial/zodiac.html" %}
+			{% include "partial/surname.html" %}
+			{% include "partial/newarticle.html" %}
+	</aside>
+</div>
+
+{% linkList friendLinks %}
+{% if friendLinks %}
+<div class="layui-container">
+    <div class="friend-links">
+        <span class="title">友情链接：</span>
+        {% for item in friendLinks %}
+        <a class="item" href="{{item.Link}}" {% if item.Nofollow == 1 %} rel="nofollow"{% endif %} target="_blank">{{item.Title}}</a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+{% endlinkList %}
+
+{% endblock %}

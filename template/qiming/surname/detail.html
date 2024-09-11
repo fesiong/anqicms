@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>{{surname.Title}}姓男孩女孩取名用字解析</strong></li>
+        </ul>
+        <div>
+            <div class="name-explain">
+                <div class="layui-card">
+                    <div class="layui-card-header">姓名介绍</div>
+                    <div class="layui-card-body">
+                        <p class="mt-normal">{{surname.Content|safe}}</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        <div class="category aside-item character">
+            <h2>{{surname.Title}}姓相关姓氏</h2>
+            <ul>
+                {% for item in relatedSurnames %}
+                <li><a href="/surname/{{item.Hash}}">{{item.Title}}姓</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% if surnameArticles %}
+        <div class="article-related">
+            <h2>{{surname.Title}}姓相关知识</h2>
+            <ul class="article-list">
+                {% for item in surnameArticles %}
+                <li>
+                    <a href="/article/{{item.Hash}}">{{item.Title}}</a>
+                    <span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </aside>
+</div>
+{% endblock %}

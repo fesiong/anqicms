@@ -29,6 +29,13 @@ func IndexPage(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 
+	//八字查询
+	lastHoroscopes, _, _ := currentSite.GetHoroscopeList(1, 12, "")
+	ctx.ViewData("lastHoroscopes", lastHoroscopes)
+
+	lastDetails, _, _ := currentSite.GetNameDetailList(1, 22, "")
+	ctx.ViewData("lastDetails", lastDetails)
+
 	// 支持2种文件结构，一种是目录式的，一种是扁平式的
 	tplName := "index/index.html"
 	if ViewExists(ctx, "index.html") {

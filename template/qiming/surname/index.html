@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>百家姓解读</strong></li>
+        </ul>
+        <article>
+            <div class="article-title">
+                <h1>百家姓起源 - 百家姓都有哪些</h1>
+            </div>
+            <div class="article-content">
+                <p>《百家姓》是一部关于中文姓氏的作品。按文献记载，成文于北宋初。原收集姓氏411个，后增补到504个，其中单姓444个，复姓60个。</p>
+                <p>《百家姓》采用四言体例，对姓氏进行了排列，而且句句押韵，虽然它的内容没有文理，但对于中国姓氏文化的传承、中国文字的认识等方面都起了巨大作用，这也是能够流传千百年的一个重要因素。</p>
+                <p>《百家姓》与《三字经》、《千字文》并称“三百千”，是中国古代幼儿的启蒙读物。“赵钱孙李”成为《百家姓》前四姓是因为百家姓形成于宋朝，故而宋朝皇帝的赵氏、吴越国国王钱俶、正妃孙氏以及南唐国主李氏成为百家姓前四位。</p>
+                <p>为了方便用户快速查询各个姓氏的信息、姓氏起名例子，开拓起名思路，我们特地从百家姓中，将常用的姓氏列举出来，供大家起名的时候参考使用。<a href="/">免费智能取名</a></p>
+                <p>需要说明的是，里面的名字可能并不是个个都是您喜欢的风格，因为毕竟每个人喜欢的风格并不是一致的。请从下面的姓氏列表中选择您关注的姓氏以查看名字列表如果您的姓氏暂时不在列表中或者想得到更多姓名大全，可以通过<a href="/">免费智能取名</a>来查看更多可参考姓名</p>
+            </div>
+        </article>
+        <div class="layui-card">
+            <div class="layui-card-header">百家姓</div>
+            <div class="layui-card-body">
+                <ul class="main-surname">
+                    {% for item in surnames %}
+                    <li><a href="/surname/{{item.Hash}}">{{item.Title}}</a></li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        {% include "partial/newarticle.html" %}
+    </aside>
+</div>
+{% endblock %}

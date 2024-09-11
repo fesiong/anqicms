@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/breadcrumb.html" %}
+<!-- contact -->
+<div class="contact container clearfix">
+  <h1 class="index-contact-title">联系我们</h1>
+  <div class="contact-content clearfix">
+    <div class="page-content">
+      <div class="contact-item">
+        <div class="contact-info">
+          <h2><i class="layui-icon layui-icon-vercode"></i>{% system with name="SiteName" %}</h2>
+          <p><i class="layui-icon layui-icon-username"></i>{% contact with name="UserName" %}</p>
+          <p><i class="layui-icon layui-icon-cellphone"></i>{% contact with name="Cellphone" %}</p>
+          <p><i class="layui-icon layui-icon-email"></i>{% contact with name="Email" %}</p>
+          <p><i class="layui-icon layui-icon-home"></i>{% contact with name="Address" %}</p>
+        </div>
+        <div class="contact-img">
+          <h3>扫码加微信</h3>
+          <img src="{% contact with name='Qrcode' %}" alt="{% system with name='SiteName' %}">
+        </div>
+      </div>
+      <div class="contact-form">
+        <h3>给我们留言</h3>
+        <form action="/guestbook.html" method="post" enctype="multipart/form-data">
+          {% guestbook fields %}
+          {% for item in fields %}
+          {% if item.Type == "text" || item.Type == "number" %}
+          <input type="{{item.Type}}" name="{{item.FieldName}}" {% if item.Required %}required{% endif %}
+            placeholder="{{item.Name}}, {{item.Content}}" autocomplete="off" class="layui-input">
+          {% elif item.Type == "textarea" %}
+          <textarea cols="30" rows="10" name="{{item.FieldName}}" {% if item.Required %}required{% endif %}
+            placeholder="{{item.Name}}, {{item.Content}}" rows="5"></textarea>
+          {% elif item.Type == "radio" %}
+          {%- for val in item.Items %}
+          <input type="{{item.Type}}" name="{{item.FieldName}}" value="{{val}}" title="{{val}}">
+          {%- endfor %}
+          {% elif item.Type == "checkbox" %}
+          {%- for val in item.Items %}
+          <input type="{{item.Type}}" name="{{item.FieldName}}[]" value="{{val}}" title="{{val}}">
+          {%- endfor %}
+          {% elif item.Type == "select" %}
+          <select name="{{item.FieldName}}">
+            {%- for val in item.Items %}
+            <option value="{{val}}">{{val}}</option>
+            {%- endfor %}
+          </select>
+          {% elif item.Type == "image" %}
+          <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %}
+            placeholder="{{item.Name}}, {{item.Content}}">
+          {% elif item.Type == "file" %}
+          <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %}
+                 placeholder="{{item.Name}}, {{item.Content}}">
+          {% endif %}
+          {% endfor %}
+          {% endguestbook %}
+          <div style="display: flex; clear: both">
+            <input type="hidden" name="captcha_id" id="captcha_id">
+            <input type="text" name="captcha" required placeholder="请填写验证码" class="layui-input" style="flex: 1">
+            <img src="" id="get-captcha" style="width: 150px;height: 56px;cursor: pointer;" />
+            <script>
+              document.getElementById('get-captcha').addEventListener("click", function (e) {
+                fetch('/api/captcha')
+                        .then(response => {
+                          return response.json()
+                        })
+                        .then(res => {
+                          document.getElementById('captcha_id').setAttribute("value", res.data.captcha_id)
+                          document.getElementById('get-captcha').setAttribute("src", res.data.captcha)
+                        }).catch(err =>{console.log(err)})
+              });
+              document.getElementById('get-captcha').click();
+              // jquery 调用方式
+              $('#get-captcha').onclick(function (e) {
+                $.get('/api/captcha', function(res) {
+                  $('#captcha_id').attr("value", res.data.captcha_id)
+                  $('#get-captcha').attr("src", res.data.captcha)
+                }, 'json')
+              })
+            </script>
+          </div>
+          <button class="form-btn">提交</button>
+        </form>
+      </div>
+    </div>
+    {% include "partial/sidebar.html" %}
+  </div>
+</div>
+<!-- contact -->
+{% endblock %}

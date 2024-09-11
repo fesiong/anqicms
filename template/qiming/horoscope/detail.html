@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>{{born.Solar().Time().Format("2006年01月02日15点")}}出生宝宝生辰八字</strong></li>
+        </ul>
+        <div>
+            <div class="layui-card">
+                <div class="layui-card-header">生辰八字起名分析详解</div>
+                <div class="layui-card-body">
+                    <table class="layui-table text-center">
+                        <tbody>
+                        <tr>
+                            <td>出生公历</td>
+                            <td>{{born.Solar().Time().Format("2006年")}}</td>
+                            <td>{{born.Solar().Time().Format("01月")}}</td>
+                            <td>{{born.Solar().Time().Format("02日")}}</td>
+                            <td>{{born.Solar().Time().Format("15时")}}</td>
+                        </tr>
+                        <tr>
+                            <td>出生农历</td>
+                            <td>{{lunarDate.Year}}</td>
+                            <td>{{lunarDate.Month}}</td>
+                            <td>{{lunarDate.Day}}</td>
+                            <td>{{bazi.ShiChen}}</td>
+                        </tr>
+                        <tr>
+                            <td>八字</td>
+                            <td>{{bazi.GetBaZi(0)}}</td>
+                            <td>{{bazi.GetBaZi(1)}}</td>
+                            <td>{{bazi.GetBaZi(2)}}</td>
+                            <td>{{bazi.GetBaZi(3)}}</td>
+                        </tr>
+                        <tr>
+                            <td>五行</td>
+                            <td>{{bazi.GetWuXing(0)}}</td>
+                            <td>{{bazi.GetWuXing(1)}}</td>
+                            <td>{{bazi.GetWuXing(2)}}</td>
+                            <td>{{bazi.GetWuXing(3)}}</td>
+                        </tr>
+                        <tr>
+                            <td>纳音</td>
+                            <td>{{bazi.GetNaYin(0)}}</td>
+                            <td>{{bazi.GetNaYin(1)}}</td>
+                            <td>{{bazi.GetNaYin(2)}}</td>
+                            <td>{{bazi.GetNaYin(3)}}</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">八字五行强弱分析</div>
+                <div class="layui-card-body">
+                    <div class="wuxing-items">
+                        <div class="wuxing-item">
+                            <div class="label color-gold">金</div>
+                            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                <div class="layui-progress-bar bg-gold" lay-percent="{{bazi.XiYong().GetWuXing("金")}}%"></div>
+                            </div>
+                        </div>
+                        <div class="wuxing-item">
+                            <div class="label color-wood">木</div>
+                            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                <div class="layui-progress-bar bg-wood" lay-percent="{{bazi.XiYong().GetWuXing("木")}}%"></div>
+                            </div>
+                        </div>
+                        <div class="wuxing-item">
+                            <div class="label color-water">水</div>
+                            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                <div class="layui-progress-bar bg-water" lay-percent="{{bazi.XiYong().GetWuXing("水")}}%"></div>
+                            </div>
+                        </div>
+                        <div class="wuxing-item">
+                            <div class="label color-fire">火</div>
+                            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                <div class="layui-progress-bar bg-fire" lay-percent="{{bazi.XiYong().GetWuXing("火")}}%"></div>
+                            </div>
+                        </div>
+                        <div class="wuxing-item">
+                            <div class="label color-soil">土</div>
+                            <div class="layui-progress layui-progress-big" lay-showPercent="true">
+                                <div class="layui-progress-bar bg-soil" lay-percent="{{bazi.XiYong().GetWuXing("土")}}%"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="">
+                        <p>五行：<span>{{bazi.XiYong().GetWuXingNum("金")}}金</span>，
+                            <span>{{bazi.XiYong().GetWuXingNum("木")}}木</span>，
+                            <span>{{bazi.XiYong().GetWuXingNum("水")}}水</span>，
+                            <span>{{bazi.XiYong().GetWuXingNum("火")}}火</span>，
+                            <span>{{bazi.XiYong().GetWuXingNum("土")}}土</span></p>
+                        <p>此命五行{{bazi.XiYong().GetWang()}}旺{% if bazi.XiYong().GetQue() %}缺{{bazi.XiYong().GetQue()}}{% endif %}；</p>
+                        <p>日主天干为{{bazi.RiZhuWuXing()}}，同类为 {{bazi.XiYong().GetSimilar()}} ；异类为 {{bazi.XiYong().GetHeterogeneous()}} 。</p>
+                    </div>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">八字喜用神分析</div>
+                <div class="layui-card-body">
+                    <div class="">〖同类得分〗同类{{bazi.XiYong().GetSimilar()}} 　同类共计{{bazi.XiYong().GetSimilarPoint()}}分；</div>
+                    <div class="">〖异类得分〗异类{{bazi.XiYong().GetHeterogeneous()}} 　异类共计{{bazi.XiYong().GetHeterogeneousPoint()}}分；</div>
+                    <div class="">〖综合旺衰得分〗{{bazi.XiYong().GetZongPoint()}}分，【八字 偏{{bazi.XiYong().GetQiangRuo()}}】</div>
+                    <div class="">〖八字喜用神〗八字喜【{{bazi.XiYongShen()}}】，【{{bazi.XiYongShen()}}】就是此命的【喜神】。</div>
+                    <p>用五行属 <span class="strong color-primary">{{bazi.XiYongShen()}}</span> 的字起名，对今后健康，事业，婚姻，财运都更加有利。</p>
+                </div>
+            </div>
+            <div class="layui-card">
+                <div class="layui-card-header">五行相生相克</div>
+                <div class="layui-card-body">
+                    <div class="wuxing-shengke">{{bazi.GetWuXingString()|safe}}</div>
+                    <div class="wuxing-word-aux">五行相生的关系为“木生火，火生土，土生金，金生水，水生木”。</div>
+                    <div class="wuxing-word-aux">五行相克的关系为“木克土，土克水，水克火，火克金，金克木”。</div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        <div class="category aside-item choose-name">
+            <h2>相关生辰八字</h2>
+            <ul>
+                {% for item in horoscopeRelated %}
+                <li><a href="/horoscope/{{item.Hash}}">{{item}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

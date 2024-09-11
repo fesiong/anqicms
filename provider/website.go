@@ -8,6 +8,7 @@ import (
 	"github.com/medivhzhan/weapp/v3"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/fate"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
@@ -109,6 +110,7 @@ func InitWebsites() {
 	for _, v := range sites {
 		InitWebsite(v)
 	}
+	fate.InitFate(db)
 }
 
 func InitWebsite(mw *model.Website) {

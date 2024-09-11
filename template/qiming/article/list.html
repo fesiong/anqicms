@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>{% categoryDetail with name='Title' %}</strong></li>
+        </ul>
+        <div class="sub-articles">
+            <ul class="article-list">
+              {% archiveList articles with type="page" limit="10" %}
+              {% for item in articles %}
+                <li>
+                    <a href="{{item.Link}}">{{item.Title}}</a>
+                    <span>{{stampToDate(item.CreatedTime, "2006-01-02")}}</span>
+                </li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+        {% include "partial/pagination.html" %}
+    </main>
+    <aside>
+        {% include "partial/newarticle.html" %}
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+        <div class="category aside-item zodiac">
+            <h2>姓名测试解读</h2>
+            <ul>
+                {% for item in lastDetails %}
+                <li><a href="/detail/{{item.Hash}}">{{item.GetFullName()}}</a></li>
+                {% endfor %}
+            </ul>
+        </div>
+    </aside>
+</div>
+{% endblock %}

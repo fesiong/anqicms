@@ -6,6 +6,8 @@
 
 # AnQiCMS
 
+# 基于安企CMS + Fate 二次开发的起名网站 [安装教程](usage.md)
+
 </div>
 
 ## 介绍

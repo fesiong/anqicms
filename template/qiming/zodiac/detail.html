@@ -1,0 +1,54 @@
+{% extends 'base.html' %}
+{% block container %}
+
+<div class="layui-container">
+    <main>
+        <ul class="crumb">
+            <li><a href="/">{% system with name='SiteName' %}</a></li>
+            <li><strong>属{{zodiac.Name}}的取名用字解析</strong></li>
+        </ul>
+        <div>
+            <div class="name-explain">
+                <div class="layui-card">
+                    <div class="layui-card-header">生肖解释</div>
+                    <div class="layui-card-body">
+                        <p class="mt-normal">属{{zodiac.Name}}的人起名宜用三才配置佳，五格笔划组合85分以上的字来起名，弥补宝宝性格缺点。</p>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">属{{zodiac.Name}}的人起名宜用的字</div>
+                    <div class="layui-card-body">
+                        <ul class="main-surname">
+                            {% for item in zodiac.GetXiArray() %}
+                            <li><a href="/character/{{item.Hash}}">{{item.Ch}}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">属{{zodiac.Name}}的人起名忌用的字</div>
+                    <div class="layui-card-body">
+                        <ul class="main-surname">
+                            {% for item in zodiac.GetJiArray() %}
+                            <li><a href="/character/{{item.Hash}}">{{item.Ch}}</a></li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                </div>
+                <div class="layui-card">
+                    <div class="layui-card-header">属{{zodiac.Name}}的人起名宜用的偏旁部首</div>
+                    <div class="layui-card-body">
+                        <ul class="main-surname">
+                            {{ zodiac.GetXiRadical() }}
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <aside>
+        {% include "partial/zodiac.html" %}
+        {% include "partial/surname.html" %}
+    </aside>
+</div>
+{% endblock %}
