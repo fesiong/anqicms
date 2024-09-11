@@ -26,6 +26,8 @@ var sparkApiUrls = map[string]string{
 	"2.0": "wss://spark-api.xf-yun.com/v2.1/chat",
 	"3.0": "wss://spark-api.xf-yun.com/v3.1/chat",
 	"3.5": "wss://spark-api.xf-yun.com/v3.5/chat",
+	"4.0": "wss://spark-api.xf-yun.com/v4.0/chat",
+	"pro": "wss://spark-api.xf-yun.com/chat/pro-128k",
 }
 
 var ErrSensitive = errors.New("sensitive")
@@ -193,6 +195,10 @@ func genParams1(appid, question string, ver string) map[string]interface{} { // 
 		domain = "generalv3"
 	} else if ver == "3.5" {
 		domain = "generalv3.5"
+	} else if ver == "pro" {
+		domain = "pro-128k"
+	} else if ver == "4.0" {
+		domain = "4.0Ultra"
 	}
 
 	data := map[string]interface{}{ // 根据实际情况修改返回的数据结构和字段名
