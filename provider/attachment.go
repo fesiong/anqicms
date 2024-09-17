@@ -414,7 +414,7 @@ func (w *Website) BuildThumb(fileLocation string) error {
 func (w *Website) GetAttachmentCategories() ([]*model.AttachmentCategory, error) {
 	var categories []*model.AttachmentCategory
 
-	err := w.DB.Where("`status` = 1").Find(&categories).Error
+	err := w.DB.Where("`status` = 1").Order("id desc").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
