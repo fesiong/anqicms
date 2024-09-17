@@ -11,6 +11,7 @@ import (
 	"mime/multipart"
 	"os"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -25,6 +26,19 @@ func (w *Website) dumpTableSchema(tableName string, file *os.File) error {
 	if err != nil {
 		return err
 	}
+
+	// 移除 CHARACTER SET utf8mb4 COLLATE utf8mb4_latvian_ci NOT NULL DEFAULT '',
+	// 移除 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+	re, _ := regexp.Compile(` COLLATE utf8\S+\s?`)
+	data = re.ReplaceAllString(data, " ")
+	re, _ = regexp.Compile(` COLLATE=utf8\S+\s?`)
+	data = re.ReplaceAllStringFunc(data, func(s string) string {
+		if strings.HasSuffix(s, " ") {
+			return " "
+		}
+		return ""
+	})
 
 	_, err = file.WriteString(fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", tableName))
 	data = data + ";\n\n"
