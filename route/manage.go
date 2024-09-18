@@ -436,6 +436,7 @@ func manageRoute(app *iris.Application) {
 			{
 				backup.Get("/list", manageController.PluginBackupList)
 				backup.Post("/dump", manageController.PluginBackupDump)
+				backup.Get("/status", manageController.PluginBackupStatus)
 				backup.Post("/restore", manageController.PluginBackupRestore)
 				backup.Post("/delete", manageController.PluginBackupDelete)
 				backup.Post("/export", manageController.PluginBackupExport)

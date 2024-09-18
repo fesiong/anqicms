@@ -256,7 +256,15 @@ func RestoreDesignData(ctx iris.Context) {
 	}
 	if req.AutoBackup {
 		// 如果用户勾选了自动备份
-		err := currentSite.BackupData()
+		status, err := currentSite.NewBackup()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		err = status.BackupData()
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,

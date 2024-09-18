@@ -20,9 +20,43 @@ import (
 const ChunkSizeInMB = 16
 const MaxStmtSize = 1000000
 
-func (w *Website) dumpTableSchema(tableName string, file *os.File) error {
+const (
+	BackupTypeBackup  = "backup"
+	BackupTypeRestore = "restore"
+)
+
+type BackupStatus struct {
+	w        *Website
+	Finished bool   `json:"finished"` // true | false
+	Type     string `json:"type"`     // type = backup|restore
+	Percent  int    `json:"percent"`  // 0-100
+	Message  string `json:"message"`  // current message
+}
+
+var backupStatus *BackupStatus
+
+func (w *Website) GetBackupStatus() *BackupStatus {
+	return backupStatus
+}
+
+func (w *Website) NewBackup() (*BackupStatus, error) {
+	if backupStatus != nil && backupStatus.Finished == false {
+		return nil, errors.New(w.Tr("TaskIsRunningPleaseWait"))
+	}
+
+	backupStatus = &BackupStatus{
+		w:        w,
+		Finished: false,
+		Percent:  0,
+		Message:  "",
+	}
+
+	return backupStatus, nil
+}
+
+func (bs *BackupStatus) dumpTableSchema(tableName string, file *os.File) error {
 	var data string
-	err := w.DB.Raw(fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", w.Mysql.Database, tableName)).Row().Scan(&tableName, &data)
+	err := bs.w.DB.Raw(fmt.Sprintf("SHOW CREATE TABLE `%s`.`%s`", bs.w.Mysql.Database, tableName)).Row().Scan(&tableName, &data)
 	if err != nil {
 		return err
 	}
@@ -46,11 +80,11 @@ func (w *Website) dumpTableSchema(tableName string, file *os.File) error {
 	return err
 }
 
-func (w *Website) dumpTable(table string, file *os.File) (err error) {
+func (bs *BackupStatus) dumpTable(table string, file *os.File) (err error) {
 	var allBytes uint64
 	var allRows uint64
 
-	cursor, err := w.DB.Raw(fmt.Sprintf("SELECT * FROM `%s`.`%s`", w.Mysql.Database, table)).Rows()
+	cursor, err := bs.w.DB.Raw(fmt.Sprintf("SELECT * FROM `%s`.`%s`", bs.w.Mysql.Database, table)).Rows()
 	if err != nil {
 		return err
 	}
@@ -65,14 +99,14 @@ func (w *Website) dumpTable(table string, file *os.File) (err error) {
 	if err != nil {
 		return err
 	}
-	destColNames := w.DB.Statement.Quote(cols)
+	destColNames := bs.w.DB.Statement.Quote(cols)
 	stmtSize := 0
 	chunkBytes := 0
 	rows := make([]string, 0, 256)
 	inserts := make([]string, 0, 256)
 	for cursor.Next() {
 		var dest map[string]interface{}
-		err = w.DB.ScanRows(cursor, &dest)
+		err = bs.w.DB.ScanRows(cursor, &dest)
 		if err != nil {
 			return err
 		}
@@ -133,10 +167,20 @@ func (w *Website) dumpTable(table string, file *os.File) (err error) {
 	return nil
 }
 
-func (w *Website) BackupData() error {
-	backupFile := w.DataPath + "backup/" + time.Now().Format("20060102150405.sql")
+func (bs *BackupStatus) BackupData() error {
+	bs.Type = BackupTypeBackup
+	bs.Percent = 0
+	defer func() {
+		bs.Finished = true
+		time.AfterFunc(3*time.Second, func() {
+			if bs.Finished {
+				backupStatus = nil
+			}
+		})
+	}()
+	backupFile := bs.w.DataPath + "backup/" + time.Now().Format("20060102150405.sql")
 	// create dir
-	_ = os.MkdirAll(w.DataPath+"backup/", os.ModePerm)
+	_ = os.MkdirAll(bs.w.DataPath+"backup/", os.ModePerm)
 	outFile, err := os.Create(backupFile)
 	if err != nil {
 		return err
@@ -144,19 +188,23 @@ func (w *Website) BackupData() error {
 
 	t := time.Now()
 
-	tables, err := w.DB.Migrator().GetTables()
+	tables, err := bs.w.DB.Migrator().GetTables()
 	if err != nil {
 		return err
 	}
 
 	for _, table := range tables {
-		err = w.dumpTableSchema(table, outFile)
+		if bs.Percent < 99 {
+			bs.Percent++
+		}
+		bs.Message = bs.w.Tr("BackingUp%s", table)
+		err = bs.dumpTableSchema(table, outFile)
 		if err != nil {
 			log.Println(err)
 			continue
 		}
 
-		err = w.dumpTable(table, outFile)
+		err = bs.dumpTable(table, outFile)
 		if err != nil {
 			log.Println(err)
 			continue
@@ -168,28 +216,60 @@ func (w *Website) BackupData() error {
 	return nil
 }
 
-func (w *Website) RestoreData(fileName string) error {
+func (bs *BackupStatus) RestoreData(fileName string) error {
+	bs.Type = BackupTypeRestore
+	bs.Percent = 0
+	defer func() {
+		bs.Finished = true
+		time.AfterFunc(3*time.Second, func() {
+			if bs.Finished {
+				backupStatus = nil
+			}
+		})
+	}()
 	if fileName == "" {
-		return errors.New(w.Tr("BackupFileDoesNotExist"))
+		bs.Message = bs.w.Tr("BackupFileDoesNotExist")
+		return errors.New(bs.w.Tr("BackupFileDoesNotExist"))
 	}
-	backupFile := w.DataPath + "backup/" + fileName
+	backupFile := bs.w.DataPath + "backup/" + fileName
 	outFile, err := os.Open(backupFile)
 	if err != nil {
+		bs.Message = err.Error()
 		return err
 	}
 	defer outFile.Close()
 
 	var tmpStr string
 	lineReader := bufio.NewReader(outFile)
+	var size int64 = 0
+	var curSize int64 = 0
+	stat, err := outFile.Stat()
+	if err == nil {
+		size = stat.Size()
+	}
+
+	isEOF := false
 	for {
 		line, err := lineReader.ReadString('\n')
 		if err == io.EOF {
-			break
+			isEOF = true
 		}
 		tmpStr += line
-		if strings.HasSuffix(line, ";\n") {
-			w.DB.Exec(tmpStr)
+		if strings.HasSuffix(line, ";\n") || isEOF {
+			curSize += int64(len(tmpStr))
+			bs.Percent = int(curSize * 100 / size)
+			if strings.HasPrefix(tmpStr, "DROP TABLE") {
+				re, _ := regexp.Compile("`(.+?)`")
+				match := re.FindStringSubmatch(tmpStr)
+				if len(match) == 2 {
+					bs.Message = bs.w.Tr("RestoringData%s", match[1])
+				}
+			}
+			bs.w.DB.Exec(tmpStr)
 			tmpStr = ""
+		}
+		if isEOF {
+			break
 		}
 	}
 

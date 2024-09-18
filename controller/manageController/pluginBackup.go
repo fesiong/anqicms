@@ -23,7 +23,7 @@ func PluginBackupList(ctx iris.Context) {
 
 func PluginBackupDump(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	err := currentSite.BackupData()
+	status, err := currentSite.NewBackup()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -31,12 +31,32 @@ func PluginBackupDump(ctx iris.Context) {
 		})
 		return
 	}
+	go status.BackupData()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("BackupCompleted"),
+		"msg":  ctx.Tr("BackupIsStarted"),
+	})
+}
+
+func PluginBackupStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	status := currentSite.GetBackupStatus()
+	if status == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("ThereAreNoActiveTask"),
+			"data": nil,
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
 	})
 }
 
@@ -51,7 +71,7 @@ func PluginBackupRestore(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.RestoreData(req.Name)
+	status, err := currentSite.NewBackup()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -59,25 +79,36 @@ func PluginBackupRestore(ctx iris.Context) {
 		})
 		return
 	}
-
-	// 重新读取配置
-	currentSite.InitSetting()
-	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
 	go func() {
-		// 如果切换了模板，需要重启
-		config.RestartChan <- 0
+		err = status.RestoreData(req.Name)
+		if err == nil {
+			// 重新读取配置
+			currentSite.InitSetting()
+			currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
+			go func() {
+				// 如果切换了模板，需要重启
+				config.RestartChan <- 0
 
-		time.Sleep(1 * time.Second)
-		// 删除索引
-		currentSite.DeleteCache()
-		currentSite.RemoveHtmlCache()
-		currentSite.CloseFulltext()
-		currentSite.InitFulltext()
+				time.Sleep(1 * time.Second)
+				// 删除索引
+				currentSite.DeleteCache()
+				currentSite.RemoveHtmlCache()
+				currentSite.CloseFulltext()
+				currentSite.InitFulltext()
+			}()
+
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  ctx.Tr("DataRestored"),
+			})
+		}
 	}()
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("DataRestored"),
+		"msg":  ctx.Tr("RestoreIsStarted"),
 	})
 }
 
