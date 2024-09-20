@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">{% moduleDetail with name="Title" %}</div>
+                <ul class="list-blog-ul">
+                    {% archiveList articles with type="page" limit="10" %}
+                    {% for item in articles %}
+                    <li>
+                        <div class="info">
+                            <span>来源：<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name="Title" %}</a></span> /
+                            <span>时间: {{ stampToDate(item.CreatedTime, "2006-01-02") }}</span>
+                        </div>
+                        <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        <p>{{item.Description}}</p>
+                        <a href="{{item.Link}}" class="more">详情</a>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+                {% include "partial/pagination.html" %}
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+</div>
+{% endblock %}

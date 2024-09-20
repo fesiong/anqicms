@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+
+{% block container %}
+
+{% include "partial/banner.html" %}
+<!-- crumb -->
+{% include "partial/crumb.html" %}
+<!-- crumb -->
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <h1 class="single-content-title">{% pageDetail with name="Title" %}</h1>
+                <div class="single-arc">
+                    {%- pageDetail articleContent with name="Content" %}
+                    {{articleContent|safe}}
+                </div>
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+</div>
+{% endblock %}

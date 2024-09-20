@@ -1,0 +1,73 @@
+{% extends 'base.html' %}
+
+{% block container %}
+
+{% include "partial/banner.html" %}
+<!-- crumb -->
+{% include "partial/crumb.html" %}
+<!-- crumb -->
+<div class="page">
+    <div class="container">
+        <!-- toppro -->
+        <div class="toppro">
+            <div class="toppro-img">
+                <div class="imgitem"><img src="{% archiveDetail with name='Logo' %}" alt="{% archiveDetail with name='Title' %}"></div>
+            </div>
+            <div class="toppro-text">
+                <h1>{% archiveDetail with name="Title" %}</h1>
+                <p>{% archiveDetail with name="Description" %}</p>
+                <a href="tel:{% contact with name='Cellphone' %}" rel="nofollow" class="more">联系电话:{% contact with name="Cellphone" %}</a>
+            </div>
+        </div>
+        <!-- toppro -->
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">产品详情</div>
+                <div class="single-arc">
+                    {% archiveDetail productContent with name="Content" %}
+                    {{productContent|safe}}
+                </div>
+                <div class="tags">
+                    {% tagList tags with limit="5" %}
+                    {% if tags %}
+                    <span>标签：
+                        {% for item in tags %}
+                        <a href="{{item.Link}}">{{item.Title}}</a>
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                    {% endtagList %}
+                </div>
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+    <!-- rel-pro -->
+    <div class="rel">
+        <div class="container">
+            <h2>相关产品</h2>
+            <ul class="rel-pro-ul">
+                {% archiveList products with type="list" limit="4" %}
+                {% for item in products %}
+                <li>
+                    <div class="list-item">
+                        <div class="list-item-img"><a href="{{item.Link}}">
+                                <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                            </a></div>
+                        <div class="list-item-text">
+                            <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+    </div>
+    <!-- rel-pro -->
+</div>
+{% endblock %}

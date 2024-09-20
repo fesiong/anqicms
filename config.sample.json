@@ -1,0 +1,8 @@
+{
+	"server": {
+		"site_name": "安企内容管理系统(AnqiCMS)",
+		"env": "production",
+		"port": 8001,
+		"log_level": "release"
+	}
+}

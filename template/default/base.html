@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
+    <meta name="keywords" content="{% tdk with name='Keywords' %}">
+    <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
+    <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/style.css" />
+    {%- tdk canonical with name="CanonicalUrl" %}
+    {%- if canonical %}
+    <link rel="canonical" href="{{canonical}}" />
+    {%- endif %}
+    {% block head %}
+    {% endblock %}
+</head>
+
+
+<body>
+    <!-- top -->
+    <div class="top">
+        <div class="container">
+            <div class="top-item">
+                <div class="top-left">欢迎来到{% system with name="SiteName" %}官方网站!</div>
+                <div class="top-right">
+                    {% navList navList with typeId=2 %}
+                    {%- for item in navList %}
+                    <a href="{{ item.Link }}" rel="nofollow" target="_blank">{{item.Title}}</a>
+                    {% endfor %}
+                    {% endnavList %}
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- top -->
+    <!-- header -->
+    <header id="header">
+        <div class="container">
+            <div class="header">
+                <div class="logo">
+                    <a href="/" title="{% system with name='SiteName' %}"><img src="{% system with name='SiteLogo' %}" alt="{% system with name='SiteName' %}"></a>
+                </div>
+                <div class="navbar">
+                    <ul class="nav-menu">
+                        {% navList navList with typeId=1 %}
+                        {%- for item in navList %}
+                        <li>
+                            <a href="{{ item.Link }}">{{item.Title}}</a>
+                            {%- if item.NavList %}
+                            <ul class="nav-menu-child">
+                                {%- for inner in item.NavList %}
+                                <li>
+                                    <a href="{{ inner.Link }}">{{inner.Title}}</a>
+                                    {% if inner.NavType == 1 %}
+                                        {% categoryList innerCategories with parentId=inner.PageId %}
+                                        {% if innerCategories %}
+                                        <ul class="nav-menu-child-child">
+                                            {% for item in innerCategories %}
+                                            <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                                            {% endfor %}
+                                        </ul>
+                                        {% else %}
+                                            {% archiveList products with type="list" categoryId=inner.PageId limit="8" %}
+                                            {% if products %}
+                                            <ul class="nav-menu-child-child">
+                                                {% for item in products %}
+                                                <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                                                {% endfor %}
+                                            </ul>
+                                            {% endif %}
+                                            {% endarchiveList %}
+                                        {% endif %}
+                                        {% endcategoryList %}
+                                    {% endif %}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% endif %}
+                        </li>
+                        {% endfor %}
+                        {% endnavList %}
+                    </ul>
+                    <div class="logo-tel">
+                        <p><i class="fa fa-phone"></i> 全国服务热线：</p>
+                        <a href="tel:{% contact with name='Cellphone' %}" title="电话">{% contact with name="Cellphone" %}</a>
+                    </div>
+                </div>
+                <i class="fa fa-bars m-menu-open"></i>
+                <i class="fa fa-close m-menu-close"></i>
+            </div>
+        </div>
+    </header>
+    <!-- header -->
+    <!-- layout -->
+    {% block container %}
+    <div>
+        请不要编辑这里
+    </div>
+    {% endblock %}
+    <!-- layout -->
+    {% block footer %}
+    {% endblock %}
+    <!-- footer -->
+    <div class="footer">
+        <div class="container">
+            <div class="section footer-item">
+                <div class="foot">
+                    <h2>产品分类</h2>
+                    <ul class="footer-ul">
+                        {% categoryList productCategories with moduleId="2" parentId="0" limit="5" %}
+                        {% for item in productCategories %}
+                        <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                        {% endfor %}
+                        {% endcategoryList %}
+                    </ul>
+                </div>
+                <div class="foot">
+                    <h2>热门产品</h2>
+                    <ul class="footer-ul">
+                        {% archiveList products with type="list" moduleId="2" categoryId=0 limit="5" %}
+                        {% for item in products %}
+                        <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                        {% endfor %}
+                        {% endarchiveList %}
+                    </ul>
+                </div>
+                <div class="foot">
+                    <h2>联系方式</h2>
+                    <p><i class="fa fa-phone"></i> 电话:{% contact with name="Cellphone" %}</p>
+                    <p><i class="fa fa-envelope-o"></i> 邮箱:{% contact with name="Email" %}</p>
+                    <p><i class="fa fa-qq"></i> 微信:{% contact with name="Wechat" %}</p>
+                    <p><i class="fa fa-home"></i> 地址:{% contact with name="Address" %}</p>
+                </div>
+                <div class="foot">
+                    <h3>扫码联系</h3>
+                    <img src="{% contact with name='Qrcode' %}" alt="">
+                </div>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            Copyright &copy; {% now "2006" %} {% system with name="SiteName" %}.版权所有 All Rights Reserved, Created By <a href="https://www.anqicms.com/" target="_blank">安企内容管理系统(AnqiCMS)</a>
+            {% system siteIcp with name="SiteIcp" %}
+            {% if siteIcp %}
+            <a href="https://beian.miit.gov.cn/" rel="nofollow" target="_blank">{{siteIcp}}</a>
+            {% endif %}
+        </div>
+    </div>
+    <!-- footer -->
+    <!-- tool bar -->
+    <div class="tool-bar">
+        <div class="tool-item">
+            <a href="#" class="tool-item-cap active" rel="nofollow">
+                <i class="fa fa-headphones"></i>
+                <div class="tool-item-name">在线客服</div>
+            </a>
+        </div>
+        <div class="tool-item">
+            <div class="tool-item-cap">
+                <i class="fa fa-wechat"></i>
+                <div class="tool-item-name">微信联系</div>
+            </div>
+            <div class="tool-item-sub tool-qrcode">
+                <div class="wechat-qrcode">
+                    <div class="qrcode">
+                        <img src="{% contact with name='Qrcode' %}" alt="客服">
+                    </div>
+                    <div class="qrcode-name">扫码加微信(手机同号)</div>
+                </div>
+            </div>
+        </div>
+        <div class="tool-item">
+            <div class="tool-item-cap">
+                <i class="fa fa-phone"></i>
+                <div class="tool-item-name">电话咨询</div>
+            </div>
+            <div class="tool-item-sub tool-tel">
+                <a href="tel:{% contact with name='Cellphone' %}" rel="nofollow"><i class="fa fa-phone"></i>
+                    <span>{% contact with name="Cellphone" %}</span></a>
+            </div>
+        </div>
+        <div class="tool-item">
+            <div class="tool-item-cap back-top js-to-top">
+                <i class="fa fa-hand-o-up"></i>
+                <div class="tool-item-name">返回顶部</div>
+            </div>
+        </div>
+    </div>
+    <!-- tool bar -->
+    <!-- js -->
+    <script src="{% system with name='TemplateUrl' %}js/jquery-3.3.1.min.js" type="text/javascript"></script>
+    <script src="{% system with name='TemplateUrl' %}js/js.js" type="text/javascript"></script>
+    <!-- js -->
+    <div class="hide">
+        {{- pluginJsCode|safe }}
+    </div>
+</body>
+
+</html>

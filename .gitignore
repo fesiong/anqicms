@@ -1,0 +1,14 @@
+.idea
+.DS_Store
+.vscode
+vendor
+/config.json
+goblog
+/doc
+/test
+/data
+/system
+/release
+collector.json
+keyword.json
+*.log

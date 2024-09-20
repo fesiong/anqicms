@@ -1,0 +1,166 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<!-- slider -->
+<div class="slider">
+    {% bannerList banners %}
+    {% for item in banners %}
+    {% if forloop.First %}
+    <a class="banner-item" href="{{item.Link}}" target="_blank">
+        <img src="{{item.Logo}}" alt="{{item.Alt}}" />
+    </a>
+    {% endif %}
+    {% endfor %}
+    {% endbannerList %}
+</div>
+<!-- slider -->
+<!-- ind-tag -->
+<div class="ind-tag">
+    <div class="container">
+        <span>热门搜索：</span>
+        {% archiveList products with type="list" flag="c" moduleId="2" limit="5" %}
+        {% for item in products %}
+        <a href="{{item.Link}}">{{item.Title}}</a>
+        {% endfor %}
+        {% endarchiveList %}
+    </div>
+</div>
+<!-- ind-tag -->
+<!-- layout -->
+<!-- ind-pro -->
+<div class="section ind-pro">
+    <div class="container">
+        <div class="ind-pro-item">
+            <div class="ind-pro-list">
+                <div class="ind-pro-title">
+                    <h2><a href="{% moduleDetail with name='Link' id='2' %}" title="">热门产品</a></h2>
+                    <a href="{% moduleDetail with name='Link' id='2' %}" class="more">更多...</a>
+                </div>
+                <ul class="ind-pro-ul">
+                    {% archiveList products with type="list" moduleId="2" limit="8" %}
+                    {% for item in products %}
+                    <li>
+                        <div class="list-item">
+                            <div class="list-item-img"><a href="{{item.Link}}">
+                                    <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                                </a></div>
+                            <div class="list-item-text">
+                                <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+            </div>
+            <div class="ind-pro-nav">
+                <h2>产品中心</h2>
+                <div class="accordion">
+                    {% categoryList productCategories with moduleId="2" parentId="0" %}
+                    {% for item in productCategories %}
+                    <button class="accordion-item">{{item.Title}}</button>
+                    <div class="accordion-item-content">
+                        <ul class="ind-pro-nav-ul">
+                            {% if item.HasChildren %}
+                            {% categoryList subCategories with moduleId="1" parentId=item.Id %}
+                            {% for inner in subCategories %}
+                            <li><a href="{{inner.Link}}" title="">{{inner.Title}}</a></li>
+                            {% endfor %}
+                            {% endcategoryList %}
+                            {% else %}
+                            {% archiveList products with type="list" categoryId=item.Id limit="8" %}
+                            {% for inner in products %}
+                            <li><a href="{{inner.Link}}" title="">{{inner.Title}}</a></li>
+                            {% endfor %}
+                            {% endarchiveList %}
+                            {% endif %}
+                        </ul>
+                    </div>
+                    {% endfor %}
+                    {% endcategoryList %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- ind-pro -->
+<!-- ind-about -->
+<div class="section ind-about">
+    <div class="container">
+        <div class="ind-about-item">
+            <div class="ind-about-img"><a href="{% pageDetail with name='Link' token='about' %}" title="{% pageDetail with name='Title' token='about' %}">
+                    <div class="imgitem"><img src="{% pageDetail with name='Logo' token='about' %}" alt=""></div>
+                </a></div>
+            <div class="ind-about-text">
+                <h2>{% pageDetail with name='Title' token='about' %}</h2>
+
+                <p>{% pageDetail with name="Description" token='about' %}</p>
+                <a href="{% pageDetail with name='Link' token='about' %}" class="more">更多详情+</a>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- ind-about -->
+<!-- ind-case -->
+<div class="section ind-case">
+    <div class="container">
+        <div class="ind-case-title">客户案例</div>
+        <ul class="ind-case-ul">
+            {% archiveList cases with type="list" moduleId="3" limit="4" %}
+            {% for item in cases %}
+            <li>
+                <div class="list-item">
+                    <div class="list-item-img"><a href="{{item.Link}}">
+                            <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                        </a></div>
+                    <div class="list-item-text">
+                        <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        <p>{{item.Description}}</p>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+            {% endarchiveList %}
+        </ul>
+    </div>
+</div>
+<!-- ind-case -->
+<!-- ind-blog -->
+<div class="section ind-blog">
+    <div class="container">
+        <div class="ind-case-title">新闻资讯</div>
+        <ul class="ind-blog-ul">
+            {% archiveList articles with type="list" moduleId="1" limit="6" %}
+            {% for item in articles %}
+            <li>
+                <div class="list-item">
+                    <div class="ind-blog-time">
+                        <span>{{ stampToDate(item.CreatedTime, "02")}}</span>
+                        <p>{{ stampToDate(item.CreatedTime, "2006/01") }}</p>
+                    </div>
+                    <div class="ind-blog-text">
+                        <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        <p>{{item.Description}}</p>
+                        <a href="{{item.Link}}" class="more">详情...</a>
+                    </div>
+                </div>
+            </li>
+            {% endfor %}
+            {% endarchiveList %}
+        </ul>
+    </div>
+</div>
+<!-- ind-blog -->
+<!-- flink -->
+<div class="flink">
+    <div class="container">
+        <span>友情链接：</span>
+        {% linkList friendLinks %}
+        {% for item in friendLinks %}
+        <a href="{{item.Link}}" {% if item.Nofollow==1 %} rel="nofollow" {% endif %} target="_blank">{{item.Title}}</a>
+        {% endfor %}
+        {% endlinkList %}
+    </div>
+</div>
+<!-- flink -->
+{% endblock %}

@@ -1,0 +1,22 @@
+{% pagination pages with show="5" %}
+<!-- pageination -->
+<div class="pagnavi">
+    <a href="{{pages.FirstPage.Link}}" class="{% if pages.FirstPage.IsCurrent %}current{% endif %}">首页</a>
+    {% if pages.PrevPage %}
+    <a href="{{pages.PrevPage.Link}}"><i class="fa fa-angle-left"></i></a>
+    {% endif %}
+    {% for item in pages.Pages %}
+    {% if item.IsCurrent %}
+    <a href="javascript:;" class="current">{{item.Name}}</a>
+    {% else %}
+    <a href="{{item.Link}}">{{item.Name}}</a>
+    {% endif %}
+    {% endfor %}
+    {% if pages.NextPage %}
+    <a href="{{pages.NextPage.Link}}"><i class="fa fa-angle-right"></i></a>
+    {% endif %}
+    <a href="{{pages.LastPage.Link}}" class="{% if pages.LastPage.IsCurrent %}current{% endif %}">尾页</a>
+    <a href="javascript:;">共 {{pages.TotalItems}} 条</a>
+</div>
+<!-- pagination -->
+{% endpagination %}

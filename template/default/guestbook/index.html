@@ -1,0 +1,88 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">给我留言</div>
+                <div class="single-arc">
+                    <form class="guestbook-form" action="/guestbook.html" method="post" enctype="multipart/form-data">
+                        {% guestbook fields %}
+                        {% for item in fields %}
+                        {% if item.Type == "text" || item.Type == "number" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                <input type="{{item.Type}}" name="{{item.FieldName}}" {% if item.Required %}required{% endif %} placeholder="{{item.Content}}" autocomplete="off">
+                            </div>
+                        </div>
+                        {% elif item.Type == "textarea" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                <textarea cols="30" rows="10" name="{{item.FieldName}}" {% if item.Required %}required{% endif %} placeholder="{{item.Content}}" rows="5"></textarea>
+                            </div>
+                        </div>
+                        {% elif item.Type == "radio" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                {%- for val in item.Items %}
+                                <label><input type="{{item.Type}}" name="{{item.FieldName}}" value="{{val}}"><span>{{val}}</span></label>
+                                {%- endfor %}
+                            </div>
+                        </div>
+                        {% elif item.Type == "checkbox" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                {%- for val in item.Items %}
+                                <label><input type="{{item.Type}}" name="{{item.FieldName}}[]" value="{{val}}"><span>{{val}}</span></label>
+                                {%- endfor %}
+                            </div>
+                        </div>
+                        {% elif item.Type == "select" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                <select name="{{item.FieldName}}">
+                                    {%- for val in item.Items %}
+                                    <option value="{{val}}">{{val}}</option>
+                                    {%- endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        {% elif item.Type == "image" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %} placeholder="{{item.Content}}">
+                            </div>
+                        </div>
+                        {% elif item.Type == "file" %}
+                        <div class="form-item">
+                            <div class="form-label">{{item.Name}}</div>
+                            <div class="form-value">
+                                <input type="file" name="{{item.FieldName}}" {% if item.Required %}required lay-verify="required" {% endif %} placeholder="{{item.Content}}">
+                            </div>
+                        </div>
+                        {% endif %}
+                        {% endfor %}
+                        {% endguestbook %}
+                        <div class="form-control">
+                            <button class="form-btn">提交</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+</div>
+{% endblock %}

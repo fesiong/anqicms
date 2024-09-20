@@ -1,0 +1,30 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">标签中心</div>
+                <ul class="list-blog-ul">
+                    {% tagList tags with type="page" limit="10" %}
+                    {% for item in tags %}
+                    <li>
+                        <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        <p>{{item.Description}}</p>
+                    </li>
+                    {% endfor %}
+                    {% endtagList %}
+                </ul>
+                {% include "partial/pagination.html" %}
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+</div>
+{% endblock %}

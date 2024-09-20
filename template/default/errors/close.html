@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-cn">
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
+    <style>
+        .page404 {
+            text-align: center;
+            padding: 100px 0;
+            border-top: 1px solid #f6f6f6;
+        }
+
+        .page404 h1 {
+            font-weight: bold;
+            font-size: 100px;
+            color: #0068AB;
+            margin-bottom: 30px;
+        }
+    </style>
+</head>
+
+<body>
+<div class="page">
+    <div class="container">
+        <div class="page404">
+            <h1>Close</h1>
+            <p>{{closeTips}}</p>
+        </div>
+    </div>
+</div>
+</body>
+
+</html>

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block container %}
+{% include "partial/crumb.html" %}
+<!-- layout -->
+<div class="page">
+    <div class="container">
+        <div class="section index-pro">
+            {% categoryList productCategories with moduleId="2" parentId="0" %}
+            {% for item in productCategories %}
+            <div class="index-pro-item">
+                <h2><a href="{{item.Link}}">{{item.Title}}</a></h2>
+                <ul class="index-pro-ul">
+                    {% archiveList products with type="list" categoryId=item.Id limit="8" %}
+                    {% for item in products %}
+                    <li>
+                        <div class="list-item">
+                            <div class="list-item-img"><a href="{{item.Link}}">
+                                    <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                                </a></div>
+                            <div class="list-item-text">
+                                <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+            </div>
+            {% endfor %}
+            {% endcategoryList %}
+        </div>
+    </div>
+</div>
+{% endblock %}
