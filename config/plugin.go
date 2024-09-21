@@ -156,11 +156,16 @@ type PluginTimeFactor struct {
 	CategoryIds []int64  `json:"category_ids"`
 	DoPublish   bool     `json:"do_publish"`
 	ReleaseOpen bool     `json:"release_open"`
-	DailyLimit  int      `json:"daily_limit"`
+	DailyLimit  int      `json:"daily_limit"` // 自动发布用
 	StartTime   int      `json:"start_time"`
 	EndTime     int      `json:"end_time"`
-	TodayCount  int      `json:"today_count"`
+	TodayCount  int      `json:"today_count"` // 当天发布了多少
 	LastSent    int64    `json:"last_sent"`
+	DailyUpdate int      `json:"daily_update"` // 自动更新用
+	TodayUpdate int      `json:"today_update"` // 当天更新了多少
+	LastUpdate  int64    `json:"last_update"`  // 最后更新时间
+
+	UpdateRunning bool `json:"-"`
 }
 
 type PluginInterference struct {

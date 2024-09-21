@@ -99,6 +99,7 @@ func (w *Website) InitSetting() {
 	w.LoadKeywordSetting()
 	w.LoadInterferenceSetting()
 	w.LoadWatermarkSetting()
+	w.LoadTimeFactorSetting()
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -566,13 +567,13 @@ func (w *Website) LoadKeywordSetting() {
 	}
 }
 
-func (w *Website) GetTimeFactorSetting() (setting config.PluginTimeFactor) {
+func (w *Website) LoadTimeFactorSetting() {
 	value := w.GetSettingValue(TimeFactorKey)
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &setting); err != nil {
+	if err := json.Unmarshal([]byte(value), &w.PluginTimeFactor); err != nil {
 		return
 	}
 
