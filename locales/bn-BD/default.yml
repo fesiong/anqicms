@@ -256,6 +256,7 @@
 "NoExecutableTasks": "সঞ্চালনের জন্য কোন কাজ নেই"
 "TaskInProgress": "কার্য সম্পাদন করা হচ্ছে"
 "UpdateFullTextIndexConfiguration": "পূর্ণ-পাঠ্য সূচক কনফিগারেশন তথ্য আপডেট করুন"
+"UpdateLimiterConfiguration": "ওয়েবসাইট নিরাপত্তা কনফিগারেশন তথ্য আপডেট করুন"
 "(Default)": "(ডিফল্ট)"
 "(Inherited)": "(উত্তরাধিকারী)"
 "SaveDocumentCategoryLog": "নথি বিভাগ সংরক্ষণ করুন: %d => %s"

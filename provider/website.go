@@ -79,7 +79,7 @@ type Website struct {
 	KeywordConfig   config.KeywordJson
 
 	FindPasswordInfo *response.FindPasswordInfo
-
+	Limiter          *Limiter
 	// 一些缓存内容
 	languages    map[string]string
 	backLanguage string
@@ -174,6 +174,8 @@ func InitWebsite(mw *model.Website) {
 		}
 	}
 	if w.Initialed {
+		// 启动限流器
+		w.InitLimiter()
 		w.InitStatistic()
 		w.InitBucket()
 		w.InitCacheBucket()

@@ -256,6 +256,7 @@
 "NoExecutableTasks": "Nenhuma tarefa para executar"
 "TaskInProgress": "A tarefa está sendo executada"
 "UpdateFullTextIndexConfiguration": "Atualizar informações de configuração de índice de texto completo"
+"UpdateLimiterConfiguration": "Atualizar informações de configuração de segurança do site"
 "(Default)": "(padrão)"
 "(Inherited)": "(herdar)"
 "SaveDocumentCategoryLog": "Salvar categoria do documento: %d => %s"

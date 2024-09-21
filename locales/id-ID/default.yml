@@ -256,6 +256,7 @@
 "NoExecutableTasks": "Tidak ada tugas yang harus dilakukan"
 "TaskInProgress": "Tugas sedang dijalankan"
 "UpdateFullTextIndexConfiguration": "Perbarui informasi konfigurasi indeks teks lengkap"
+"UpdateLimiterConfiguration": "Perbarui informasi konfigurasi keamanan situs web"
 "(Default)": "(bawaan)"
 "(Inherited)": "(mewarisi)"
 "SaveDocumentCategoryLog": "Simpan kategori dokumen: %d => %s"

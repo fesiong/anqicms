@@ -256,6 +256,7 @@
 "NoExecutableTasks": "没有可执行的任务"
 "TaskInProgress": "任务正在执行中"
 "UpdateFullTextIndexConfiguration": "更新全文索引配置信息"
+"UpdateLimiterConfiguration": "更新网站安全防范配置信息"
 "(Default)": "(默认)"
 "(Inherited)": "(继承)"
 "SaveDocumentCategoryLog": "保存文档分类：%d => %s"
