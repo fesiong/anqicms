@@ -8,19 +8,18 @@ import (
 )
 
 func (w *Website) TryToRunTimeFactor() {
-	setting := w.GetTimeFactorSetting()
-	if !setting.Open && !setting.ReleaseOpen {
+	if !w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen {
 		return
 	}
 
 	// 开始尝试执行更新任务
-	if len(setting.ModuleIds) == 0 {
+	if len(w.PluginTimeFactor.ModuleIds) == 0 {
 		return
 	}
 
-	go w.TimeRenewArchives(&setting)
+	go w.TimeRenewArchives(&w.PluginTimeFactor)
 
-	go w.TimeReleaseArchives(&setting)
+	go w.TimeReleaseArchives(&w.PluginTimeFactor)
 }
 
 func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
@@ -31,6 +30,34 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 		return
 	}
 	if setting.StartDay == 0 {
+		return
+	}
+	if setting.UpdateRunning {
+		return
+	}
+	setting.UpdateRunning = true
+	defer func() {
+		setting.UpdateRunning = false
+	}()
+	if setting.TodayUpdate > 0 && time.Unix(setting.LastUpdate, 0).Day() != time.Now().Day() {
+		setting.TodayUpdate = 0
+		// 更新数量
+		_ = w.SaveSettingValue(TimeFactorKey, setting)
+	}
+	// 计算每篇间隔
+	if setting.DailyUpdate > 0 && setting.TodayUpdate >= setting.DailyUpdate {
+		return
+	}
+	if setting.EndTime == 0 {
+		setting.EndTime = 23
+	}
+	diffSecond := (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyUpdate
+	if diffSecond < 1 {
+		diffSecond = 1
+	}
+	nowStamp := time.Now().Unix()
+	if setting.DailyUpdate > 0 && setting.LastUpdate > nowStamp+int64(diffSecond) {
+		// 间隔未到
 		return
 	}
 
@@ -63,19 +90,22 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 		}
 	}
 	var archives []*model.Archive
-	if setting.DoPublish {
-		// 重新推送
-		db.Find(&archives)
-	}
-	db.UpdateColumns(updateFields)
-
-	if setting.DoPublish && len(archives) > 0 {
-		// 重新推送
+	db.Find(&archives)
+	if len(archives) > 0 {
 		for _, archive := range archives {
-			go w.PushArchive(archive.Link)
-			// 清除缓存
-			w.DeleteArchiveCache(archive.Id)
-			w.DeleteArchiveExtraCache(archive.Id)
+			// 更新时间
+			w.DB.Model(archive).Where("`id` = ?", archive.Id).UpdateColumns(updateFields)
+			if setting.DoPublish {
+				// 重新推送
+				go w.PushArchive(archive.Link)
+				// 清除缓存
+				w.DeleteArchiveCache(archive.Id)
+				w.DeleteArchiveExtraCache(archive.Id)
+			}
+			// 如果有限制时间，则在这里进行等待
+			if setting.DailyUpdate > 0 {
+				time.Sleep(time.Second * time.Duration(diffSecond))
+			}
 		}
 	}
 }

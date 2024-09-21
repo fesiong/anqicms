@@ -74,6 +74,7 @@ type Website struct {
 	SensitiveWords     []string                      `json:"sensitive_words"`
 	AiGenerateConfig   config.AiGenerateConfig       `json:"ai_generate_config"`
 	PluginInterference config.PluginInterference     `json:"plugin_interference"`
+	PluginTimeFactor   config.PluginTimeFactor       `json:"plugin_time_factor"`
 
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson
