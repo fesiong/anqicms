@@ -256,6 +256,7 @@
 "NoExecutableTasks": "実行するタスクはありません"
 "TaskInProgress": "タスクが実行中です"
 "UpdateFullTextIndexConfiguration": "全文インデックス構成情報を更新する"
+"UpdateLimiterConfiguration": "Web サイトのセキュリティ構成情報を更新します"
 "(Default)": "（デフォルト）"
 "(Inherited)": "(継承)"
 "SaveDocumentCategoryLog": "ドキュメント カテゴリを保存: %d => %s"

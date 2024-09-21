@@ -184,6 +184,17 @@ type PluginWatermark struct {
 	MinSize   int    `json:"min_size"`
 }
 
+type PluginLimiter struct {
+	Open          bool     `json:"open"`
+	WhiteIPs      []string `json:"white_ips"`
+	BlackIPs      []string `json:"black_ips"`
+	MaxRequests   int      `json:"max_requests"`
+	BlockHours    int      `json:"block_hours"`
+	BlockAgents   []string `json:"block_agents"`
+	AllowPrefixes []string `json:"allow_prefixes"`
+	IsAllowSpider bool     `json:"is_allow_spider"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

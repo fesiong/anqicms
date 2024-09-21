@@ -50,6 +50,7 @@ const (
 	AnqiSettingKey        = "anqi"
 	AiGenerateSettingKey  = "ai_generate"
 	TimeFactorKey         = "time_factor"
+	LimiterSettingKey     = "limiter"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -727,4 +728,14 @@ func (w *Website) LoadInterferenceSetting() {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginInterference)
 	}
+}
+
+func (w *Website) GetLimiterSetting() *config.PluginLimiter {
+	var limiter config.PluginLimiter
+	value := w.GetSettingValue(LimiterSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &limiter)
+	}
+
+	return &limiter
 }

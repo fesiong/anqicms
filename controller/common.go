@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -23,39 +24,6 @@ var Store = captcha.DefaultMemStore
 type Button struct {
 	Name string
 	Link string
-}
-
-type NameVal struct {
-	Name string
-	Val  string
-}
-
-var SpiderNames = []NameVal{
-	{Name: "googlebot", Val: "google"},
-	{Name: "bingbot", Val: "bing"},
-	{Name: "baiduspider", Val: "baidu"},
-	{Name: "360spider", Val: "360"},
-	{Name: "yahoo!", Val: "yahoo"},
-	{Name: "sogou", Val: "sogou"},
-	{Name: "bytespider", Val: "byte"},
-	{Name: "yisouspider", Val: "yisou"},
-	{Name: "yandexbot", Val: "yandex"},
-	{Name: "spider", Val: "other"},
-	{Name: "bot", Val: "other"},
-}
-
-var DeviceNames = []NameVal{
-	{Name: "android", Val: "android"},
-	{Name: "iphone", Val: "iphone"},
-	{Name: "windows", Val: "windows"},
-	{Name: "macintosh", Val: "mac"},
-	{Name: "linux", Val: "linux"},
-	{Name: "mobile", Val: "mobile"},
-	{Name: "curl", Val: "curl"},
-	{Name: "python", Val: "python"},
-	{Name: "client", Val: "client"},
-	{Name: "spider", Val: "spider"},
-	{Name: "bot", Val: "spider"},
 }
 
 func NotFound(ctx iris.Context) {
@@ -314,6 +282,11 @@ func Inspect(ctx iris.Context) {
 					return
 				}
 			}
+		}
+		// 限流器
+		blocked := UseLimiter(ctx)
+		if blocked {
+			return
 		}
 	}
 
@@ -730,9 +703,9 @@ func LogAccess(ctx iris.Context) {
 
 	userAgent := ctx.GetHeader("User-Agent")
 	//获取蜘蛛
-	spider := GetSpider(userAgent)
+	spider := library.GetSpider(userAgent)
 	//获取设备
-	device := GetDevice(userAgent)
+	device := library.GetDevice(userAgent)
 	// 最多只存储250字符
 	if len(currentPath) > 250 {
 		currentPath = currentPath[:250]
@@ -755,30 +728,6 @@ func LogAccess(ctx iris.Context) {
 	go currentSite.StatisticLog.Write(statistic)
 
 	ctx.Next()
-}
-
-func GetSpider(ua string) string {
-	ua = strings.ToLower(ua)
-	//获取蜘蛛
-	for _, v := range SpiderNames {
-		if strings.Contains(ua, v.Name) {
-			return v.Val
-		}
-	}
-
-	return ""
-}
-
-func GetDevice(ua string) string {
-	ua = strings.ToLower(ua)
-
-	for _, v := range DeviceNames {
-		if strings.Contains(ua, v.Name) {
-			return v.Val
-		}
-	}
-
-	return "proxy"
 }
 
 func NewDriver() *captcha.DriverString {
@@ -998,4 +947,52 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	}
 
 	return true
+}
+
+func UseLimiter(ctx iris.Context) bool {
+	// 后台地址跳过，静态文件跳过
+	uri := ctx.RequestPath(false)
+	if strings.HasPrefix(uri, "/static") || strings.HasPrefix(uri, "/system") || strings.HasPrefix(uri, "/uploads") {
+		return false
+	}
+	currentSite := provider.CurrentSite(ctx)
+	// 没启用拦截器
+	if currentSite.Limiter == nil {
+		return false
+	}
+	// 如果放行蜘蛛，就进行判断
+	if currentSite.Limiter.IsAllowSpider() {
+		// spider 跳过
+		userAgent := ctx.GetHeader("User-Agent")
+		//获取蜘蛛
+		spider := library.GetSpider(userAgent)
+		if spider != "" {
+			return false
+		}
+	}
+
+	ip := ctx.RemoteAddr()
+
+	// 白名单跳过
+	if currentSite.Limiter.IsWhiteIp(ip) {
+		return false
+	}
+
+	// 检查IP是否已被封禁
+	if currentSite.Limiter.IsIPBlocked(ip) {
+		ctx.StatusCode(http.StatusForbidden)
+		_, _ = ctx.WriteString("Your IP is blocked.")
+		return true
+	}
+
+	// 记录IP访问，并检查是否超出阈值
+	if !currentSite.Limiter.RecordIPVisit(ip) {
+		currentSite.Limiter.BlockIP(ip)
+		ctx.StatusCode(http.StatusTooManyRequests)
+		_, _ = ctx.WriteString("Too many requests from this IP.")
+		return true
+	}
+
+	// 正常处理请求
+	return false
 }

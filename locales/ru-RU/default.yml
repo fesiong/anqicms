@@ -256,6 +256,7 @@
 "NoExecutableTasks": "Нет задач для выполнения"
 "TaskInProgress": "Задача выполняется"
 "UpdateFullTextIndexConfiguration": "Обновить информацию о конфигурации полнотекстового индекса."
+"UpdateLimiterConfiguration": "Обновить информацию о конфигурации безопасности веб-сайта"
 "(Default)": "(по умолчанию)"
 "(Inherited)": "(наследовать)"
 "SaveDocumentCategoryLog": "Сохранить категорию документа: %d => %s"

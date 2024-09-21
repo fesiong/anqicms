@@ -508,6 +508,13 @@ func manageRoute(app *iris.Application) {
 				interference.Get("/config", manageController.PluginInterferenceConfig)
 				interference.Post("/config", manageController.PluginInterferenceConfigForm)
 			}
+			limiter := plugin.Party("/limiter")
+			{
+				limiter.Get("/setting", manageController.PluginGetLimiterSetting)
+				limiter.Post("/setting", manageController.PluginSaveLimiterSetting)
+				limiter.Get("/blockedips", manageController.PluginGetBlockedIPs)
+				limiter.Post("/blockedip/remove", manageController.PluginRemoveBlockedIP)
+			}
 		}
 	}
 }

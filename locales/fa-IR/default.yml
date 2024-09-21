@@ -256,6 +256,7 @@
 "NoExecutableTasks": "هیچ کار برای انجام"
 "TaskInProgress": "وظیفه در حال اجراست"
 "UpdateFullTextIndexConfiguration": "اطلاعات پیکربندی فهرست کامل متن را به روز کنید"
+"UpdateLimiterConfiguration": "اطلاعات پیکربندی امنیتی وب سایت را به روز کنید"
 "(Default)": "(پیش فرض)"
 "(Inherited)": "(به ارث می برند)"
 "SaveDocumentCategoryLog": "ذخیره دسته سند: %d => %s"
