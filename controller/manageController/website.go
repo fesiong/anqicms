@@ -135,6 +135,9 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		//修改站点，可以修改全部信息，但是不再同步内容
 		dbSite.Name = req.Name
 		dbSite.Status = req.Status
+		if dbSite.TokenSecret == "" {
+			dbSite.TokenSecret = config.GenerateRandString(32)
+		}
 		err = provider.GetDefaultDB().Save(dbSite).Error
 		if err != nil {
 			ctx.JSON(iris.Map{
@@ -246,9 +249,10 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		}
 		// 先检查数据库
 		dbSite = &model.Website{
-			RootPath: req.RootPath,
-			Name:     req.Name,
-			Status:   req.Status,
+			RootPath:    req.RootPath,
+			Name:        req.Name,
+			Status:      req.Status,
+			TokenSecret: config.GenerateRandString(32),
 		}
 		if req.Mysql.UseDefault {
 			req.Mysql.User = config.Server.Mysql.User

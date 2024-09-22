@@ -93,7 +93,7 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Where("`title` like ?", "%"+title+"%")
 			}
 			tx = tx.Order(orderBy)
-			return tx
+			return tx.Debug()
 		}
 	}
 	offset := (currentPage - 1) * pageSize

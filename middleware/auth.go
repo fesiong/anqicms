@@ -50,6 +50,13 @@ func ParseAdminToken(ctx iris.Context) {
 				})
 				return
 			}
+			// 如果登录过期时间在1小时内，则进行续签，续签只能延长24小时
+			if sec < time.Now().Add(1*time.Hour).Unix() {
+				adminId, _ := strconv.Atoi(userID)
+				newToken := currentSite.GetAdminAuthToken(uint(adminId), false)
+				// 下发新token
+				ctx.Header("update-token", newToken)
+			}
 			ctx.Values().Set("adminId", userID)
 		} else {
 			ctx.JSON(iris.Map{
