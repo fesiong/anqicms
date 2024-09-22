@@ -55,6 +55,12 @@ func ParseUserToken(ctx iris.Context) {
 						ctx.ViewData("userGroup", userGroup)
 						ctx.ViewData("userInfo", userInfo)
 					}
+					// 如果登录过期时间在1小时内，则进行续签，续签只能延长24小时
+					if sec < time.Now().Add(1*time.Hour).Unix() {
+						newToken := currentSite.GetUserAuthToken(uint(id), false)
+						// 下发新token
+						ctx.Header("update-token", newToken)
+					}
 				}
 			}
 		}

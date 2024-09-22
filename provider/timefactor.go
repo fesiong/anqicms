@@ -1,7 +1,6 @@
 package provider
 
 import (
-	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"time"
@@ -79,22 +78,26 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 			db = db.Where("`updated_time` < ?", startStamp)
 		}
 	}
-	addStamp := (setting.StartDay - setting.EndDay) * 86400
+	addStamp := time.Now()
+	if setting.EndDay > 0 {
+		addStamp = addStamp.AddDate(0, 0, -setting.EndDay)
+	}
 	updateFields := map[string]interface{}{}
 	for _, field := range setting.Types {
 		if field == "created_time" {
-			updateFields["created_time"] = gorm.Expr("`created_time` + ?", addStamp)
+			updateFields["created_time"] = addStamp.Unix()
 		}
 		if field == "updated_time" {
-			updateFields["updated_time"] = gorm.Expr("`updated_time` + ?", addStamp)
+			updateFields["updated_time"] = addStamp.Unix()
 		}
 	}
 	var archives []*model.Archive
 	db.Find(&archives)
+	spend := 0
 	if len(archives) > 0 {
 		for _, archive := range archives {
 			// 更新时间
-			w.DB.Model(archive).Where("`id` = ?", archive.Id).UpdateColumns(updateFields)
+			w.DB.Model(archive).UpdateColumns(updateFields)
 			if setting.DoPublish {
 				// 重新推送
 				go w.PushArchive(archive.Link)
@@ -102,9 +105,24 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 				w.DeleteArchiveCache(archive.Id)
 				w.DeleteArchiveExtraCache(archive.Id)
 			}
-			// 如果有限制时间，则在这里进行等待
+			// 如果有限制时间，则在这里进行等待，并且小于1分钟，才进行等待
 			if setting.DailyUpdate > 0 {
-				time.Sleep(time.Second * time.Duration(diffSecond))
+				spend += diffSecond
+				if spend > 60 {
+					// 超过1分钟，就退出
+					return
+				}
+				if diffSecond < 60 {
+					time.Sleep(time.Second * time.Duration(diffSecond))
+				}
+			}
+			// 对下一次更新的文章增加 diffSecond
+			addStamp = addStamp.Add(time.Second * time.Duration(diffSecond))
+			if _, ok := updateFields["created_time"]; ok {
+				updateFields["created_time"] = addStamp.Unix()
+			}
+			if _, ok := updateFields["updated_time"]; ok {
+				updateFields["updated_time"] = addStamp.Unix()
 			}
 		}
 	}

@@ -131,9 +131,13 @@ func InitWebsite(mw *model.Website) {
 	if !strings.HasSuffix(mw.RootPath, "/") {
 		mw.RootPath = mw.RootPath + "/"
 	}
+	if mw.Id > 0 && mw.TokenSecret == "" {
+		mw.TokenSecret = config.GenerateRandString(32)
+		GetDefaultDB().Save(mw)
+	}
 	w := Website{
 		Id:          mw.Id,
-		TokenSecret: config.GenerateRandString(32),
+		TokenSecret: mw.TokenSecret,
 		Mysql:       &mw.Mysql,
 		DB:          db,
 		BaseURI:     "/",
@@ -143,6 +147,8 @@ func InitWebsite(mw *model.Website) {
 		PublicPath:  mw.RootPath + "public/",
 	}
 	if db != nil && mw.Status == 1 {
+		// 读取真正的 TokenSecret
+
 		w.Initialed = true
 	}
 	if db == nil {
