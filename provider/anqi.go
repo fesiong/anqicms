@@ -94,6 +94,7 @@ type AnqiAiResult struct {
 	CreatedTime int64  `json:"created_time"`
 	Type        int    `json:"type"`
 	Language    string `json:"language"`
+	ToLanguage  string `json:"to_language"`
 	Keyword     string `json:"keyword"`
 	Demand      string `json:"demand"`
 	PayCount    int64  `json:"pay_count"`
@@ -364,14 +365,15 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive, toLanguage string
 		w.DB.Save(archiveData)
 		// 添加到plan，并标记完成
 		result := AnqiAiResult{
-			Type:      config.AiArticleTypeTranslate,
-			Language:  req.Language,
-			Keyword:   req.Keyword,
-			Demand:    req.Demand,
-			Status:    config.AiArticleStatusCompleted,
-			Title:     req.Title,
-			Content:   req.Content,
-			ArticleId: archive.Id,
+			Type:       config.AiArticleTypeTranslate,
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Keyword:    req.Keyword,
+			Demand:     req.Demand,
+			Status:     config.AiArticleStatusCompleted,
+			Title:      req.Title,
+			Content:    req.Content,
+			ArticleId:  archive.Id,
 		}
 		_, err = w.SaveAiArticlePlan(&result, true)
 	} else {
