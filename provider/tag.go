@@ -105,7 +105,12 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	if req.Id > 0 {
 		tag, err = w.GetTagById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			tag = &model.Tag{
+				Status: 1,
+			}
+			tag.Id = req.Id
+			newPost = true
 		}
 	} else {
 		tag, err = w.GetTagByTitle(req.Title)

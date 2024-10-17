@@ -83,8 +83,8 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1

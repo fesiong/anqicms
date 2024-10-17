@@ -18,7 +18,7 @@ func CategoryPage(ctx iris.Context) {
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
-	if currentPage > 1000 {
+	if currentPage > currentSite.Content.MaxPage {
 		// 最大1000页
 		NotFound(ctx)
 		return
@@ -127,7 +127,7 @@ func SearchPage(ctx iris.Context) {
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
-	if currentPage > 1000 {
+	if currentPage > currentSite.Content.MaxPage {
 		// 最大1000页
 		NotFound(ctx)
 		return

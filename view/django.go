@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
+	"github.com/kataras/iris/v12/i18n"
 	view2 "github.com/kataras/iris/v12/view"
 	"hash/crc32"
 	"io"
@@ -227,6 +228,8 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 		if !site.Initialed {
 			continue
 		}
+		// 检查模板是否有多语言
+		var mapLocales = map[string]struct{}{}
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
@@ -239,6 +242,13 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 
 			if info == nil || info.IsDir() {
 				return nil
+			}
+			// 判断是否有多语言
+			if strings.HasPrefix(path, "locales") {
+				pathSplit := strings.Split(path, "/")
+				if len(pathSplit) > 2 {
+					mapLocales[pathSplit[1]] = struct{}{}
+				}
 			}
 
 			if s.extension != "" {
@@ -266,6 +276,17 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 			}
 			return nil
 		})
+		if len(mapLocales) > 0 {
+			var locales = make([]string, 0, len(mapLocales))
+			for k := range mapLocales {
+				locales = append(locales, k)
+			}
+			tplI18n := i18n.New()
+			err = tplI18n.LoadFS(sfs, "./locales/*/*.yml", locales...)
+			if err == nil {
+				site.TplI18n = tplI18n
+			}
+		}
 	}
 
 	return err

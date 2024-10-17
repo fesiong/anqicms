@@ -17,6 +17,7 @@ type AiGenerateConfig struct {
 	EndHour         int              `json:"end_hour"`     //每天结束时间
 	DailyLimit      int              `json:"daily_limit"`  //每日限额
 	AiEngine        string           `json:"ai_engine"`    // ai 引擎，default 官方接口，openai 自定义openai，spark 星火大模型
+	AiTranslate     bool             `json:"ai_translate"` // 是否使用AI翻译
 	OpenAIKeys      []OpenAIKey      `json:"open_ai_keys"` // self openai key
 	ApiValid        bool             `json:"api_valid"`    // api地址是否可用
 	KeyIndex        int              `json:"-"`            // 上一次调用的key id
@@ -39,4 +40,12 @@ const (
 	AiEngineDefault = ""
 	AiEngineOpenAI  = "openai"
 	AiEngineSpark   = "spark"
+)
+
+const (
+	TranslateEngineDefault = ""
+	TranslateEngineBaidu   = "baidu"
+	TranslateEngineYoudao  = "youdao"
+	TranslateEngineGoogle  = "google"
+	TranslateEngineAi      = "ai"
 )

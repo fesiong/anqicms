@@ -200,6 +200,22 @@ type PluginLimiter struct {
 	IsAllowSpider bool     `json:"is_allow_spider"`
 }
 
+type PluginMultiLangConfig struct {
+	Open            bool            `json:"open"`
+	Type            string          `json:"type"`
+	DefaultLanguage string          `json:"default_language"` // 该语言只是调用系统的设置
+	AutoTranslate   bool            `json:"auto_translate"`
+	SubSites        map[string]uint `json:"-"`
+}
+
+type PluginTranslateConfig struct {
+	Engine          string `json:"engine"`            // 使用的翻译引擎，默认为官方接口，可选有：baidu,youdao,ai
+	BaiduAppId      string `json:"baidu_app_id"`      // 百度翻译
+	BaiduAppSecret  string `json:"baidu_app_secret"`  // 百度翻译
+	YoudaoAppKey    string `json:"youdao_app_key"`    // 有道翻译
+	YoudaoAppSecret string `json:"youdao_app_secret"` // 有道翻译
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

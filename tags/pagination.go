@@ -180,7 +180,7 @@ func makePagination(currentSite *provider.Website, TotalItems int64, currentPage
 		CurrentPage:  currentPage,
 		urlPatten:    urlPatten,
 		maxPagesShow: maxPagesShow,
-		maxPages:     1000, // 最大显示1000页
+		maxPages:     currentSite.Content.MaxPage, // 最大显示1000页
 	}
 
 	//计算TotalPages

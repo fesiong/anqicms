@@ -4,8 +4,10 @@ import (
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"strings"
 	"time"
 )
 
@@ -199,8 +201,8 @@ func AnqiTranslateArticle(ctx iris.Context) {
 		})
 		return
 	}
-
-	err = currentSite.AnqiTranslateArticle(archive, req.ToLanguage)
+	// 读取 data
+	archiveData, err := currentSite.GetArchiveDataById(archive.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -208,6 +210,33 @@ func AnqiTranslateArticle(ctx iris.Context) {
 		})
 		return
 	}
+	aiReq := &provider.AnqiAiRequest{
+		Title:      archive.Title,
+		Content:    archiveData.Content,
+		ArticleId:  archive.Id,
+		Language:   "",
+		ToLanguage: req.ToLanguage,
+		Async:      false, // 同步返回结果
+	}
+	result, err := currentSite.AnqiTranslateString(aiReq)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 更新文档
+	if result.Status == config.AiArticleStatusCompleted {
+		archive.Title = result.Title
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
+		currentSite.DB.Save(archive)
+		// 再保存内容
+		archiveData.Content = result.Content
+		currentSite.DB.Save(archiveData)
+	}
+	// 写入 plan
+	_, _ = currentSite.SaveAiArticlePlan(result, result.UseSelf)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

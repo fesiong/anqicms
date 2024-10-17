@@ -14,8 +14,13 @@ func TagIndexPage(ctx iris.Context) {
 		ctx.ServeFile(cacheFile)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = currentSite.TplTr("TagList")
 		if currentPage > 1 {
 			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
@@ -62,9 +67,14 @@ func TagPage(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = tag.Title
 		if tag.SeoTitle != "" {
 			webInfo.Title = tag.SeoTitle

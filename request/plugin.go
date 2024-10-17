@@ -129,3 +129,10 @@ type PluginTestSendmailRequest struct {
 	Subject   string `json:"subject"`
 	Message   string `json:"message"`
 }
+
+type PluginMultiLangSiteRequest struct {
+	Id       uint   `json:"id"`
+	ParentId uint   `json:"parent_id"`
+	Language string `json:"language"`
+	Focus    bool   `json:"focus"`
+}

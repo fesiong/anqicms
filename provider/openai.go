@@ -22,134 +22,42 @@ type OpenAIResult struct {
 	Code    int    `json:"code"`
 }
 
-func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
-	var result *OpenAIResult
-	var err error
-	// 翻译标题
-	prompt := "请将下列文字翻译成英文：\n" + req.Title
-	if req.Language == config.LanguageEn {
-		prompt = "Please translate the following text into Chinese:\n" + req.Title
-	}
-
+func (w *Website) SelfAiTranslate(content string, toLanguage string) (string, error) {
+	prompt := "请将下列文字翻译成" + toLanguage + "：\n" + content
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New(w.Tr("InterfaceUnavailable"))
+			return "", errors.New(w.Tr("InterfaceUnavailable"))
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
-			return nil, errors.New(w.Tr("NoAvailableKey"))
+			return "", errors.New(w.Tr("NoAvailableKey"))
 		}
 
-		result, err = GetOpenAIResponse(key, prompt)
+		result, err := GetOpenAIResponse(key, prompt)
 		if err != nil {
-			if result.Code == 401 || result.Code == 429 {
+			if result != nil && (result.Code == 401 || result.Code == 429) {
 				w.SetOpenAIKeyInvalid(key)
 			}
-			return nil, err
+			return "", err
 		}
-	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
-		if err != nil {
-			return nil, err
-		}
-		result = &OpenAIResult{
-			Content: content,
-			Usage:   0,
-			Code:    200,
-		}
-	} else {
-		// 错误
-		return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
-	}
-
-	if len(result.Content) == 0 {
-		return nil, errors.New(w.Tr("InsufficientTextContent"))
-	}
-	req.Title = result.Content
-
-	// 先获取文章img，如果有的话
-	re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-	images := re.FindAllString(req.Content, -1)
-
-	contentText := ParsePlanText(req.Content, "")
-	texts := strings.Split(contentText, "\n")
-	start := 0
-	var contentTexts []string
-	if utf8.RuneCountInString(contentText) > 1000 {
-		for i := 1; i <= len(texts); i++ {
-			if utf8.RuneCountInString(strings.Join(texts[start:i], "\n")) > 1000 {
-				tmpText := strings.Join(texts[start:i-1], "\n")
-				contentTexts = append(contentTexts, tmpText)
-				start = i - 1
-			}
-		}
-		tmpText := strings.Join(texts[start:], "\n")
-		contentTexts = append(contentTexts, tmpText)
-	} else {
-		contentTexts = append(contentTexts, contentText)
-	}
-	for i := range contentTexts {
-		// before replace
-		prompt = "请将下列文字翻译成英文：\n" + contentTexts[i]
-		if req.Language == config.LanguageEn {
-			prompt = "Please translate the following text into Chinese:\n" + contentTexts[i]
-		}
-		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
-			key := w.GetOpenAIKey()
-			if key == "" {
-				return nil, errors.New(w.Tr("NoAvailableKey"))
-			}
-			result, err = GetOpenAIResponse(key, prompt)
-			if err != nil {
-				if result.Code == 401 || result.Code == 429 {
-					w.SetOpenAIKeyInvalid(key)
-				}
-				return nil, err
-			}
-		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
-			if err != nil {
-				return nil, err
-			}
-			result = &OpenAIResult{
-				Content: content,
-				Usage:   0,
-				Code:    200,
-			}
-		}
-
 		if len(result.Content) == 0 {
-			return nil, errors.New(w.Tr("InsufficientTextContent"))
+			return "", errors.New(w.Tr("InsufficientTextContent"))
 		}
 
-		contentTexts[i] = result.Content
-	}
-	translated := strings.Join(contentTexts, "\n")
-
-	results := strings.Split(translated, "\n")
-	for i := 0; i < len(results); i++ {
-		results[i] = strings.TrimSpace(results[i])
-		if len(results[i]) == 0 {
-			results = append(results[:i], results[i+1:]...)
-			i--
-		} else {
-			results[i] = "<p>" + results[i] + "</p>"
+		return result.Content, nil
+	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+		tmpContent, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
+		if err != nil {
+			return "", err
 		}
-	}
-	// 如果有图片，则需要重新插入图片
-	if len(images) > 0 {
-		for i := range images {
-			insertIndex := i*2 + 1
-			if len(results) >= insertIndex {
-				results = append(results[:insertIndex], results[insertIndex-1:]...)
-				results[insertIndex] = images[i]
-			}
+		if len(tmpContent) == 0 {
+			return "", errors.New(w.Tr("InsufficientTextContent"))
 		}
+
+		return tmpContent, nil
 	}
 
-	req.Content = strings.Join(results, "\n")
-
-	return req, nil
+	return "", errors.New(w.Tr("NoAiGenerationSourceSelected"))
 }
 
 func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {

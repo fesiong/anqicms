@@ -284,8 +284,8 @@ func ApiArchiveList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -747,8 +747,8 @@ func ApiCategoryList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -834,8 +834,8 @@ func ApiCommentList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1122,8 +1122,8 @@ func ApiTagDataList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1188,8 +1188,8 @@ func ApiTagList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1

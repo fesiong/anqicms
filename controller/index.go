@@ -8,12 +8,17 @@ import (
 
 func IndexPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
-	if ok {
-		ctx.ServeFile(cacheFile)
+	//cacheFile, ok := currentSite.LoadCachedHtml(ctx)
+	//if ok {
+	//	ctx.ServeFile(cacheFile)
+	//	return
+	//}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
 		return
 	}
-	currentPage := ctx.Values().GetIntDefault("page", 1)
 	webTitle := currentSite.Index.SeoTitle
 	if currentPage > 1 {
 		webTitle += " - " + currentSite.TplTr("PageNum", currentPage)

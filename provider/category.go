@@ -75,7 +75,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if req.Id > 0 {
 		category, err = w.GetCategoryById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			category = &model.Category{
+				Status: 1,
+			}
+			category.Id = req.Id
+			newPost = true
 		}
 	} else {
 		category = &model.Category{

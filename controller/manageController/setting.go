@@ -13,7 +13,7 @@ import (
 )
 
 func SettingSystem(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.System
 	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") && !strings.HasPrefix(system.SiteLogo, "//") {
 		system.SiteLogo = currentSite.PluginStorage.StorageUrl + system.SiteLogo
@@ -48,7 +48,7 @@ func SettingSystem(ctx iris.Context) {
 }
 
 func SettingSystemForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SystemConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -122,7 +122,7 @@ func SettingSystemForm(ctx iris.Context) {
 }
 
 func SettingContent(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Content
 	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") && !strings.HasPrefix(system.DefaultThumb, "//") {
 		system.DefaultThumb = currentSite.PluginStorage.StorageUrl + system.DefaultThumb
@@ -136,7 +136,7 @@ func SettingContent(ctx iris.Context) {
 }
 
 func SettingContentForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContentConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -167,6 +167,8 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.ThumbHeight = req.ThumbHeight
 	currentSite.Content.DefaultThumb = req.DefaultThumb
 	currentSite.Content.Editor = req.Editor
+	currentSite.Content.MaxPage = req.MaxPage
+	currentSite.Content.MaxLimit = req.MaxLimit
 
 	err := currentSite.SaveSettingValue(provider.ContentSettingKey, currentSite.Content)
 	if err != nil {
@@ -191,7 +193,7 @@ func SettingContentForm(ctx iris.Context) {
 
 // 重建所有的thumb
 func SettingThumbRebuild(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go currentSite.ThumbRebuild()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("RegenerateAllThumbnails"))
@@ -203,7 +205,7 @@ func SettingThumbRebuild(ctx iris.Context) {
 }
 
 func SettingIndex(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Index
 
 	ctx.JSON(iris.Map{
@@ -214,7 +216,7 @@ func SettingIndex(ctx iris.Context) {
 }
 
 func SettingIndexForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.IndexConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -247,7 +249,7 @@ func SettingIndexForm(ctx iris.Context) {
 }
 
 func SettingContact(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Contact
 	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") && !strings.HasPrefix(system.Qrcode, "//") {
 		system.Qrcode = currentSite.PluginStorage.StorageUrl + system.Qrcode
@@ -261,7 +263,7 @@ func SettingContact(ctx iris.Context) {
 }
 
 func SettingContactForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContactConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -315,7 +317,7 @@ func SettingContactForm(ctx iris.Context) {
 }
 
 func SettingCache(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	filePath := currentSite.CachePath + "cache_clear.log"
 	info, err := os.Stat(filePath)
 	var lastUpdate int64
@@ -334,7 +336,7 @@ func SettingCache(ctx iris.Context) {
 }
 
 func SettingCacheForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.CacheConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -370,7 +372,7 @@ func SettingCacheForm(ctx iris.Context) {
 }
 
 func SettingSafe(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Safe
 
 	ctx.JSON(iris.Map{
@@ -381,7 +383,7 @@ func SettingSafe(ctx iris.Context) {
 }
 
 func SettingSafeForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SafeConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -421,7 +423,7 @@ func SettingSafeForm(ctx iris.Context) {
 }
 
 func SaveSystemFavicon(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	file, _, err := ctx.FormFile("file")
 	if err != nil {
@@ -450,7 +452,7 @@ func SaveSystemFavicon(ctx iris.Context) {
 }
 
 func DeleteSystemFavicon(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	_, err := os.Stat(currentSite.PublicPath + "favicon.ico")
 	if err == nil {
@@ -473,7 +475,7 @@ func DeleteSystemFavicon(ctx iris.Context) {
 }
 
 func SettingBanner(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	type Banner struct {
 		Type string              `json:"type"`
 		List []config.BannerItem `json:"list"`
@@ -519,7 +521,7 @@ func SettingBanner(ctx iris.Context) {
 }
 
 func DeleteSettingBanner(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.BannerItem
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -562,7 +564,7 @@ func DeleteSettingBanner(ctx iris.Context) {
 }
 
 func SettingBannerForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.BannerItem
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -615,7 +617,7 @@ func SettingBannerForm(ctx iris.Context) {
 }
 
 func SettingMigrateDB(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	err := provider.AutoMigrateDB(currentSite.DB, true)
 
