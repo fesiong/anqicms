@@ -98,9 +98,13 @@ func (bootstrap *Bootstrap) Start() {
 		log.Println("languages err", err)
 		os.Exit(1)
 	}
+	bootstrap.Application.I18n.Cookie = "lang"
+	bootstrap.Application.I18n.Subdomain = false
+	bootstrap.Application.I18n.PathRedirect = false
 	bootstrap.Application.I18n.SetDefault("zh-CN")
 	// 注入I18n 到 provider
 	provider.SetI18n(bootstrap.Application.I18n)
+	bootstrap.Application.I18n.Tags()
 
 	pugEngine := view.Django(".html")
 	// 开发模式下动态加载
@@ -137,6 +141,7 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("userGroupDetail", tags.TagUserGroupDetailParser)
 	_ = pugEngine.RegisterTag("bannerList", tags.TagBannerListParser)
 	_ = pugEngine.RegisterTag("moduleDetail", tags.TagModuleDetailParser)
+	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
 
 	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行

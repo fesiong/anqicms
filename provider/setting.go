@@ -51,6 +51,8 @@ const (
 	AiGenerateSettingKey  = "ai_generate"
 	TimeFactorKey         = "time_factor"
 	LimiterSettingKey     = "limiter"
+	MultiLangSettingKey   = "multi_lang"
+	TranslateSettingKey   = "translate"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -100,6 +102,8 @@ func (w *Website) InitSetting() {
 	w.LoadInterferenceSetting()
 	w.LoadWatermarkSetting()
 	w.LoadTimeFactorSetting()
+	w.LoadMultiLangSetting()
+	w.LoadTranslateSetting()
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -126,6 +130,12 @@ func (w *Website) LoadContentSetting() {
 	value := w.GetSettingValue(ContentSettingKey)
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Content)
+	}
+	if w.Content.MaxPage < 1 {
+		w.Content.MaxPage = 1000
+	}
+	if w.Content.MaxLimit < 1 {
+		w.Content.MaxLimit = 100
 	}
 }
 
@@ -580,6 +590,32 @@ func (w *Website) LoadTimeFactorSetting() {
 	return
 }
 
+func (w *Website) LoadMultiLangSetting() {
+	value := w.GetSettingValue(MultiLangSettingKey)
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), &w.MultiLanguage); err != nil {
+		return
+	}
+
+	return
+}
+
+func (w *Website) LoadTranslateSetting() {
+	value := w.GetSettingValue(TranslateSettingKey)
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), &w.PluginTranslate); err != nil {
+		return
+	}
+
+	return
+}
+
 // Tr as Translate
 // 这是一个兼容函数，请使用 ctx.Tr
 func (w *Website) Tr(str string, args ...interface{}) string {
@@ -598,6 +634,12 @@ func (w *Website) Tr(str string, args ...interface{}) string {
 }
 
 func (w *Website) TplTr(str string, args ...interface{}) string {
+	if w.TplI18n != nil {
+		tmpStr := w.TplI18n.Tr(w.System.Language, str, args...)
+		if tmpStr != "" {
+			return tmpStr
+		}
+	}
 	if I18n != nil {
 		tmpStr := I18n.Tr(w.System.Language, str, args...)
 		if tmpStr != "" {

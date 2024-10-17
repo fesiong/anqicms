@@ -123,6 +123,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.HtmlPushLog{},
 			&model.Archive{},
 			&model.ArchiveDraft{},
+			&model.TranslateLog{},
 
 			&model.User{},
 			&model.UserGroup{},

@@ -196,6 +196,16 @@ func CheckCloseSite(ctx iris.Context) bool {
 }
 
 func Common(ctx iris.Context) {
+	lang := ctx.URLParam("lang")
+	if lang != "" {
+		// 将lang设置到cookie,并维持1周
+		ctx.SetCookieKV("lang", lang, iris.CookieExpires(7*24*time.Hour))
+		// 然后301跳回原页面
+		query := ctx.Request().URL.Query()
+		query.Del("lang")
+		ctx.Request().URL.RawQuery = query.Encode()
+		ctx.Redirect(ctx.Request().URL.String(), iris.StatusMovedPermanently)
+	}
 	currentSite := provider.CurrentSite(ctx)
 	//inject ctx
 	ctx.ViewData("requestParams", ctx.Params())
@@ -231,6 +241,7 @@ func Common(ctx iris.Context) {
 		currentPage = paramPage
 	}
 	ctx.Values().Set("page", currentPage)
+	ctx.ViewData("currentPage", currentPage)
 
 	// invite code
 	inviteCode := ctx.URLParam("invite")
@@ -350,6 +361,20 @@ func ReRouteContext(ctx iris.Context) {
 		ctx.Params().Set(i, v)
 		if i == "page" && v > "0" {
 			ctx.Values().Set("page", v)
+			ctx.ViewData("currentPage", v)
+		}
+	}
+
+	currentSite := provider.CurrentSite(ctx)
+	mainSite := currentSite.GetMainWebsite()
+	if mainSite.MultiLanguage.Open {
+		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+			// 采用目录形式，检查是否需要跳转
+			if ctx.RequestPath(false) == "/" {
+				// 跳转到 主域名 + lang
+				//ctx.Redirect(currentSite.System.BaseUrl+"/"+mainSite.System.Language+"/", 301)
+				//return
+			}
 		}
 	}
 
@@ -394,9 +419,23 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	currentSite := provider.CurrentSite(ctx)
 	//这里总共有6条正则规则，需要逐一匹配
 	// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
+	var useSite = currentSite
+	baseURI := strings.Trim(currentSite.BaseURI, "/")
+	mainSite := currentSite.GetMainWebsite()
+	if mainSite.MultiLanguage.Open {
+		// 使用主站点的URL形式
+		useSite = mainSite
+		if mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+				// 采用目录形式
+				baseURI = currentSite.System.Language
+			}
+		}
+	}
+
 	matchMap := map[string]string{}
 	paramValue := ctx.Params().Get("path")
-	paramValue = strings.TrimLeft(strings.TrimPrefix(paramValue, strings.Trim(currentSite.BaseURI, "/")), "/")
+	paramValue = strings.TrimLeft(strings.TrimPrefix(paramValue, baseURI), "/")
 	// index
 	if paramValue == "" {
 		matchMap["match"] = "index"
@@ -425,7 +464,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 		}
 		return matchMap, true
 	}
-	rewritePattern := currentSite.ParsePatten(false)
+	rewritePattern := useSite.ParsePatten(false)
 	//archivePage
 	reg = regexp.MustCompile(rewritePattern.ArchiveIndexRule)
 	match = reg.FindStringSubmatch(paramValue)

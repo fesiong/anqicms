@@ -344,13 +344,17 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		if err != nil {
 			archive, err := w.GetArchiveById(req.Id)
 			if err != nil {
-				return nil, err
+				// 表示不存在，则新建一个
+				newPost = true
+				draft = &model.ArchiveDraft{}
+				draft.Id = req.Id
+			} else {
+				draft = &model.ArchiveDraft{
+					Archive: *archive,
+					Status:  config.ContentStatusOK,
+				}
+				isReleased = true
 			}
-			draft = &model.ArchiveDraft{
-				Archive: *archive,
-				Status:  config.ContentStatusOK,
-			}
-			isReleased = true
 		}
 	} else {
 		newPost = true
@@ -604,7 +608,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 如果是 已经发布了的，则保存到正式表
 	if isReleased {
-		err = w.DB.Debug().Save(&draft.Archive).Error
+		err = w.DB.Save(&draft.Archive).Error
 		if err != nil {
 			return nil, err
 		}
@@ -620,7 +624,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 	} else {
 		// 保存到草稿
-		err = w.DB.Debug().Save(draft).Error
+		err = w.DB.Save(draft).Error
 		if err != nil {
 			return nil, err
 		}

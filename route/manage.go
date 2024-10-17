@@ -515,6 +515,23 @@ func manageRoute(app *iris.Application) {
 				limiter.Get("/blockedips", manageController.PluginGetBlockedIPs)
 				limiter.Post("/blockedip/remove", manageController.PluginRemoveBlockedIP)
 			}
+			multiLang := plugin.Party("/multilang")
+			{
+				multiLang.Get("/config", manageController.PluginGetMultiLangConfig)
+				multiLang.Post("/config", manageController.PluginSaveMultiLangConfig)
+				multiLang.Get("/sites", manageController.PluginGetMultiLangSites)
+				multiLang.Get("/validsites", manageController.GetValidWebsiteList)
+				multiLang.Post("/site/remove", manageController.PluginRemoveMultiLangSite)
+				multiLang.Post("/site/save", manageController.PluginSaveMultiLangSite)
+				multiLang.Post("/site/sync", manageController.PluginSyncMultiLangSiteContent)
+				multiLang.Get("/site/sync/status", manageController.PluginMultiSiteSyncStatus)
+			}
+			translate := plugin.Party("/translate")
+			{
+				translate.Get("/config", manageController.PluginGetTranslateConfig)
+				translate.Post("/config", manageController.PluginSaveTranslateConfig)
+				translate.Get("/logs", manageController.PluginTranslateLogList)
+			}
 		}
 	}
 }

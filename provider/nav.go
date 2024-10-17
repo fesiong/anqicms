@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"errors"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetNavList(typeId uint) ([]*model.Nav, error) {
@@ -74,6 +76,88 @@ func (w *Website) GetNavTypeByTitle(title string) (*model.NavType, error) {
 	}
 
 	return &navType, nil
+}
+
+func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
+	if req.Title == "" {
+		if req.NavType == model.NavTypeCategory {
+			category := w.GetCategoryFromCache(req.PageId)
+			if category != nil {
+				req.Title = category.Title
+			}
+		} else if req.NavType == model.NavTypeArchive {
+			archive, _ := w.GetArchiveById(req.PageId)
+			if archive != nil {
+				req.Title = archive.Title
+			}
+		}
+	}
+	if req.Title == "" {
+		return nil, errors.New(w.Tr("PleaseFillInTheNavigationDisplayName"))
+	}
+
+	var nav *model.Nav
+	var err error
+	if req.Id > 0 {
+		nav, err = w.GetNavById(req.Id)
+		if err != nil {
+			// 表示不存在，则新建一个
+			nav = &model.Nav{
+				Status: 1,
+			}
+			nav.Id = req.Id
+		}
+	} else {
+		nav = &model.Nav{
+			Status: 1,
+		}
+	}
+
+	nav.Title = req.Title
+	nav.SubTitle = req.SubTitle
+	nav.Description = req.Description
+	nav.ParentId = req.ParentId
+	nav.NavType = req.NavType
+	nav.PageId = req.PageId
+	nav.TypeId = req.TypeId
+	nav.Link = req.Link
+	nav.Sort = req.Sort
+	nav.Status = 1
+
+	err = nav.Save(w.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	return nav, nil
+}
+
+func (w *Website) SaveNavType(req *request.NavTypeRequest) (*model.NavType, error) {
+	var navType *model.NavType
+	var err error
+	if req.Id > 0 {
+		navType, err = w.GetNavTypeById(req.Id)
+		if err != nil {
+			// 表示不存在，则新建一个
+			navType = &model.NavType{}
+			navType.Id = req.Id
+		}
+	} else {
+		// 检查重复标题
+		navType, err = w.GetNavTypeByTitle(req.Title)
+		if err != nil {
+			navType = &model.NavType{}
+		}
+	}
+
+	navType.Title = req.Title
+
+	err = w.DB.Save(navType).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return navType, nil
 }
 
 func (w *Website) DeleteCacheNavs() {

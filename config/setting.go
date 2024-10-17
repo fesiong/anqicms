@@ -44,6 +44,8 @@ type ContentConfig struct {
 	MultiCategory  int    `json:"multi_category"` // 是否启用多分类支持
 	Editor         string `json:"editor"`         // 使用的editor，默认为空，支持 空值|default|markdown
 	UseSort        int    `json:"use_sort"`       // 启用文档排序
+	MaxPage        int    `json:"max_page"`       // 最大显示页码
+	MaxLimit       int    `json:"max_limit"`      // 最大显示条数
 }
 
 type IndexConfig struct {

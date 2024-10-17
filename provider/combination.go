@@ -136,7 +136,34 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	}
 	if w.CollectorConfig.AutoTranslate {
 		// AI 改写
-		_ = w.AnqiTranslateArticle(res, w.CollectorConfig.ToLanguage)
+		// 读取 data
+		archiveData, err := w.GetArchiveDataById(res.Id)
+		if err != nil {
+			return 1, nil
+		}
+		aiReq := &AnqiAiRequest{
+			Title:      res.Title,
+			Content:    archiveData.Content,
+			ArticleId:  res.Id,
+			Language:   w.CollectorConfig.Language,
+			ToLanguage: w.CollectorConfig.ToLanguage,
+			Async:      false, // 同步返回结果
+		}
+		result, err := w.AnqiTranslateString(aiReq)
+		if err != nil {
+			return 1, nil
+		}
+		// 更新文档
+		if result.Status == config.AiArticleStatusCompleted {
+			res.Title = result.Title
+			res.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
+			w.DB.Save(res)
+			// 再保存内容
+			archiveData.Content = result.Content
+			w.DB.Save(archiveData)
+		}
+		// 写入 plan
+		_, _ = w.SaveAiArticlePlan(result, result.UseSelf)
 	}
 
 	return 1, nil
