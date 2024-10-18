@@ -574,9 +574,9 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		} else {
 			if currentSite.Content.UseSort == 1 {
-				order = "archives.`sort` desc, archives.`id` desc"
+				order = "archives.`sort` desc, archives.`created_time` desc"
 			} else {
-				order = "archives.`id` desc"
+				order = "archives.`created_time` desc"
 			}
 		}
 		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset, draftInt)
@@ -1106,9 +1106,9 @@ func ApiTagDataList(ctx iris.Context) {
 	order := ctx.URLParamDefault("order", "")
 	if order == "" {
 		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 	listType := ctx.URLParamDefault("type", "list")

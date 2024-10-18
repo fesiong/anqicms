@@ -38,9 +38,9 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "archives.`id` desc"
+	order := "archives.`created_time` desc"
 	if currentSite.Content.UseSort == 1 {
-		order = "archives.`sort` desc, archives.`id` desc"
+		order = "archives.`sort` desc, archives.`created_time` desc"
 	}
 	tagId := uint(0)
 	listType := "list"
