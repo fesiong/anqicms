@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"reflect"
+	"strings"
 )
 
 type tagTdkNode struct {
@@ -46,28 +48,51 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 
 	content := fmt.Sprintf("%v", f)
 	if fieldName == "Title" {
-		var pateText string
-		// 增加分页
-		paginator, ok := ctx.Public["pagination"].(*pagination)
-		if ok {
-			// 从第二页开始，增加分页
-			if paginator.CurrentPage > 1 {
-				pateText = currentSite.TplTr("PageNum", paginator.CurrentPage)
-			}
-			return nil
+		sep := " - "
+		if args["sep"] != nil {
+			sep = args["sep"].String()
 		}
-		if len(pateText) > 0 {
-			if content != "" {
-				content += " - "
+		var titleText = make([]string, 0, 10)
+		titleText = append(titleText, content)
+		showParent := false
+		if args["showParent"] != nil {
+			showParent = args["showParent"].Bool()
+		}
+		// 增加分页
+		if webInfo.CurrentPage > 1 {
+			// 从第二页开始，增加分页
+			titleText = append(titleText, currentSite.TplTr("PageNum", webInfo.CurrentPage))
+		}
+		// 增加上级标题
+		if showParent {
+			parentId := uint(0)
+			if webInfo.PageName == "archiveDetail" {
+				archive, ok := ctx.Public["archive"].(*model.Archive)
+				if ok {
+					parentId = archive.CategoryId
+
+				}
+			} else if webInfo.PageName == "archiveList" {
+				categoryInfo, ok := ctx.Public["category"].(*model.Category)
+				if ok {
+					parentId = categoryInfo.ParentId
+
+				}
 			}
-			content += pateText
+			categories := currentSite.GetParentCategories(parentId)
+			// 先翻转categories
+			for i := len(categories)/2 - 1; i >= 0; i-- {
+				opp := len(categories) - 1 - i
+				categories[i], categories[opp] = categories[opp], categories[i]
+			}
+			for _, category := range categories {
+				titleText = append(titleText, category.Title)
+			}
 		}
 		if siteName {
-			if content != "" {
-				content += " - "
-			}
-			content += currentSite.System.SiteName
+			titleText = append(titleText, currentSite.System.SiteName)
 		}
+		content = strings.Join(titleText, sep)
 		if content == "" {
 			// 保持标题至少是网站名称
 			content = currentSite.System.SiteName

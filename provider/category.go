@@ -363,6 +363,27 @@ func (w *Website) GetCategoryTemplate(category *model.Category) *response.Catego
 	return nil
 }
 
+func (w *Website) GetParentCategories(parentId uint) []*model.Category {
+	var categories []*model.Category
+	if parentId == 0 {
+		return nil
+	}
+	for {
+		category := w.GetCategoryFromCache(parentId)
+		if category == nil {
+			break
+		}
+		categories = append(categories, category)
+		parentId = category.ParentId
+	}
+	// 将 categories 翻转
+	for i, j := 0, len(categories)-1; i < j; i, j = i+1, j-1 {
+		categories[i], categories[j] = categories[j], categories[i]
+	}
+
+	return categories
+}
+
 func (w *Website) DeleteCacheCategories() {
 	w.Cache.Delete("categories")
 }

@@ -177,9 +177,7 @@ func CommentList(ctx iris.Context) {
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = currentSite.TplTr("CommentShow", archive.Title)
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
 		webInfo.PageName = "comments"
