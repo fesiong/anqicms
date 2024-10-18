@@ -7,6 +7,7 @@ type ModuleRequest struct {
 	TableName string               `json:"table_name"`
 	UrlToken  string               `json:"url_token"`
 	Title     string               `json:"title"`
+	Name      string               `json:"name"`
 	Fields    []config.CustomField `json:"fields"`
 	IsSystem  int                  `json:"is_system"`
 	TitleName string               `json:"title_name"`

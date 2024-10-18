@@ -154,16 +154,17 @@ func InitWebsite(mw *model.Website) {
 		GetDefaultDB().Save(mw)
 	}
 	w := Website{
-		Id:          mw.Id,
-		ParentId:    mw.ParentId,
-		TokenSecret: mw.TokenSecret,
-		Mysql:       &mw.Mysql,
-		DB:          db,
-		BaseURI:     "/",
-		RootPath:    mw.RootPath,
-		CachePath:   mw.RootPath + "cache/",
-		DataPath:    mw.RootPath + "data/",
-		PublicPath:  mw.RootPath + "public/",
+		Id:           mw.Id,
+		ParentId:     mw.ParentId,
+		TokenSecret:  mw.TokenSecret,
+		Mysql:        &mw.Mysql,
+		DB:           db,
+		BaseURI:      "/",
+		RootPath:     mw.RootPath,
+		CachePath:    mw.RootPath + "cache/",
+		DataPath:     mw.RootPath + "data/",
+		PublicPath:   mw.RootPath + "public/",
+		backLanguage: "zh-cn",
 	}
 	if db != nil && mw.Status == 1 {
 		// 读取真正的 TokenSecret

@@ -13,6 +13,7 @@ import (
 type Module struct {
 	Model
 	TableName string       `json:"table_name" gorm:"column:table_name;type:varchar(50) not null;default:''"`
+	Name      string       `json:"name" gorm:"column:name;type:varchar(50) not null;default:''"`
 	UrlToken  string       `json:"url_token" gorm:"column:url_token;type:varchar(50) not null;default:''"` // 定义
 	Title     string       `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	Fields    moduleFields `json:"fields" gorm:"column:fields;type:longtext default null"`

@@ -97,7 +97,6 @@ func ModuleDetailForm(ctx iris.Context) {
 						if currentSite.MultiLanguage.AutoTranslate {
 							transReq := provider.AnqiAiRequest{
 								Title:      subModule.Title,
-								Content:    "",
 								Language:   currentSite.System.Language,
 								ToLanguage: subSite.System.Language,
 								Async:      false, // 同步返回结果

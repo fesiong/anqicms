@@ -735,6 +735,8 @@
 "OtherErrors": "অন্যান্য ত্রুটি"
 "DatabaseConnectionFailed": "ডাটাবেস সংযোগ ব্যর্থ হয়েছে৷"
 "SitePathError:": "সাইট পাথ ত্রুটি:"
+"articleModule": "নিবন্ধ মডিউল"
+"productModule": "পণ্য মডিউল"
 "ArticleCenter": "প্রবন্ধ কেন্দ্র"
 "Title": "শিরোনাম"
 "ProductCenter": "পণ্য কেন্দ্র"

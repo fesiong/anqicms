@@ -735,6 +735,8 @@
 "OtherErrors": "その他のエラー"
 "DatabaseConnectionFailed": "データベース接続に失敗しました"
 "SitePathError:": "サイトパスエラー:"
+"articleModule": "記事モジュール"
+"productModule": "製品モジュール"
 "ArticleCenter": "記事センター"
 "Title": "タイトル"
 "ProductCenter": "プロダクトセンター"

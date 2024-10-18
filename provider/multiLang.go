@@ -276,7 +276,10 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				res, err := mainSite.AnqiTranslateString(&transReq)
 				if err == nil {
 					// 只处理成功的结果
-					targetSite.DB.Model(&module).UpdateColumn("title", res.Title)
+					targetSite.DB.Model(&module).UpdateColumns(map[string]interface{}{
+						"title":     res.Title,
+						"seo_title": res.Content,
+					})
 				}
 			}
 		}
@@ -597,7 +600,10 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				res, err := mainSite.AnqiTranslateString(&transReq)
 				if err == nil {
 					// 只处理成功的结果
-					targetSite.DB.Model(&module).UpdateColumn("title", res.Title)
+					targetSite.DB.Model(&module).UpdateColumns(map[string]interface{}{
+						"title":     res.Title,
+						"seo_title": res.Content,
+					})
 				}
 			}
 		}
