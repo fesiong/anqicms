@@ -735,6 +735,8 @@
 "OtherErrors": "其他錯誤"
 "DatabaseConnectionFailed": "資料庫連線失敗"
 "SitePathError:": "網站路徑錯誤："
+"articleModule": "文章模組"
+"productModule": "產品模組"
 "ArticleCenter": "文章中心"
 "Title": "標題"
 "ProductCenter": "產品中心"

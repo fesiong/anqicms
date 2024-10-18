@@ -735,6 +735,8 @@
 "OtherErrors": "其他错误"
 "DatabaseConnectionFailed": "数据库连接失败"
 "SitePathError:": "站点路径错误："
+"articleModule": "文章模块"
+"productModule": "产品模块"
 "ArticleCenter": "文章中心"
 "Title": "标题"
 "ProductCenter": "产品中心"

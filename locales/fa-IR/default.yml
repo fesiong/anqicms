@@ -735,6 +735,8 @@
 "OtherErrors": "سایر خطاها"
 "DatabaseConnectionFailed": "اتصال پایگاه داده انجام نشد"
 "SitePathError:": "خطای مسیر سایت:"
+"articleModule": "Article Module"
+"productModule": "ماژول محصول"
 "ArticleCenter": "مرکز مقاله"
 "Title": "عنوان"
 "ProductCenter": "مرکز محصولات"

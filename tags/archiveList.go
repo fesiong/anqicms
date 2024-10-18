@@ -125,9 +125,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	} else {
 		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 

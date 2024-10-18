@@ -735,6 +735,8 @@
 "OtherErrors": "Other errors"
 "DatabaseConnectionFailed": "Database connection failed"
 "SitePathError:": "Site path error:"
+"articleModule": "Article Module"
+"productModule": "Product Module"
 "ArticleCenter": "Article Center"
 "Title": "Title"
 "ProductCenter": "Product Center"
