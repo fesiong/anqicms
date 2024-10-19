@@ -165,7 +165,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	if attachId == 0 {
 		// gif 不转成 webp，因为使用的webp库还不支持
-		if w.Content.UseWebp == 1 && imgType != "gif" {
+		if w.Content.UseWebp == 1 && (imgType != "gif" || w.Content.ConvertGif == 1) {
 			imgType = "webp"
 		}
 		tmpName = md5Str[8:24] + "." + imgType
