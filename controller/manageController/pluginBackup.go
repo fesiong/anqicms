@@ -5,6 +5,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -149,22 +150,78 @@ func PluginBackupImport(ctx iris.Context) {
 		return
 	}
 	defer file.Close()
+	// 增加支持分片上传
+	chunks := ctx.PostValueIntDefault("chunks", 0)
+	if chunks > 0 {
+		chunk := ctx.PostValueIntDefault("chunk", 0)
+		fileName := ctx.PostValue("file_name")
+		fileMd5 := ctx.PostValue("md5")
+		// 使用了分片上传
+		tmpFile, err := currentSite.UploadByChunks(file, fileMd5, chunk, chunks)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if tmpFile == nil {
+			// 表示分片上传，不需要返回结果
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  "",
+			})
+			return
+		}
+		defer func() {
+			tmpName := tmpFile.Name()
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpName)
+		}()
+		stat, err := tmpFile.Stat()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 
-	if !strings.HasSuffix(info.Filename, ".sql") {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("IncorrectImportedFileFormat"),
-		})
-		return
-	}
+		info.Filename = fileName
+		info.Size = stat.Size()
+		tmpFile.Seek(0, 0)
 
-	err = currentSite.ImportBackupFile(file, info.Filename)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("FileSaveFailed"),
-		})
-		return
+		if !strings.HasSuffix(info.Filename, ".sql") {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectImportedFileFormat"),
+			})
+			return
+		}
+		err = currentSite.ImportBackupFile(tmpFile, info.Filename)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("FileSaveFailed"),
+			})
+			return
+		}
+	} else {
+		if !strings.HasSuffix(info.Filename, ".sql") {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectImportedFileFormat"),
+			})
+			return
+		}
+		err = currentSite.ImportBackupFile(file, info.Filename)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("FileSaveFailed"),
+			})
+			return
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ImportBackupFileLog", info.Filename))
@@ -172,6 +229,10 @@ func PluginBackupImport(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("BackupFileImportCompleted"),
+		"data": iris.Map{
+			"status": "success",
+			"file":   info.Filename,
+		},
 	})
 }
 

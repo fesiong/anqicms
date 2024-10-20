@@ -69,3 +69,17 @@ type ArchivePasswordRequest struct {
 	Id       uint   `json:"id"`
 	Password string `json:"password"`
 }
+
+type QuickImportArchiveRequest struct {
+	FileName       string `form:"file_name"`
+	Md5            string `form:"md5"`
+	Chunk          int    `form:"chunk"`
+	Chunks         int    `form:"chunks"`
+	CategoryId     uint   `form:"category_id"`
+	TitleType      int    `form:"title_type"` // 1来自内容，0来自文件标题
+	Size           int64  `form:"size"`
+	PlanType       int    `form:"plan_type"`
+	PlanStart      int    `form:"plan_start"`      // 计划开始时间 0 立即 1 跟随最后一篇 2 半小时 3 1小时 4 2小时 5 4小时 6 8小时 7 12小时 8 24小时
+	Days           int    `form:"days"`            // 分成多少天发布
+	CheckDuplicate bool   `form:"check_duplicate"` // 是否检查重复标题
+}

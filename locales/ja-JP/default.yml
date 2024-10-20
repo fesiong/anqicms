@@ -781,3 +781,7 @@
 "LastPage": "最後のページ"
 "PreviousPage": "前のページ"
 "NextPage": "次のページ"
+"prevTaskIsRunning": "前のタスクはまだ終了していません"
+"ImportArchiveFileLog": "ドキュメントをバッチでインポートします"
+"ArchiveFileImportCompleted": "ドキュメントのバッチインポートが成功しました"
+"currentInsertId%d": "ID を挿入中: %d"

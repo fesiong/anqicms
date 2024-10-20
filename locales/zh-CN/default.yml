@@ -781,3 +781,7 @@
 "LastPage": "尾页"
 "PreviousPage": "上一页"
 "NextPage": "下一页"
+"prevTaskIsRunning": "上一个任务尚未结束"
+"ImportArchiveFileLog": "批量导入文档"
+"ArchiveFileImportCompleted": "批量导入文档成功"
+"currentInsertId%d": "正在插入ID: %d"
