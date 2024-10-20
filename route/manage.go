@@ -168,6 +168,8 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/sort", manageController.UpdateArchiveSort)
 			archive.Post("/plan", manageController.UpdateArchiveReleasePlan)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
+			archive.Post("/import", manageController.QuickImportArchive)
+			archive.Get("/import/status", manageController.GetQuickImportArchiveStatus)
 		}
 
 		statistic := manage.Party("/statistic", middleware.ParseAdminToken, middleware.AdminPermission)

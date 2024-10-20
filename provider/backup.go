@@ -8,7 +8,6 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/response"
 	"log"
-	"mime/multipart"
 	"os"
 	"reflect"
 	"regexp"
@@ -320,7 +319,7 @@ func (w *Website) DeleteBackupData(fileName string) error {
 	return err
 }
 
-func (w *Website) ImportBackupFile(file multipart.File, fileName string) error {
+func (w *Website) ImportBackupFile(file io.Reader, fileName string) error {
 	fileName = strings.ReplaceAll(fileName, "..", "")
 	fileName = strings.ReplaceAll(fileName, "\\", "")
 	backupFile := w.DataPath + "backup/" + fileName
@@ -333,7 +332,8 @@ func (w *Website) ImportBackupFile(file multipart.File, fileName string) error {
 	}
 	defer outFile.Close()
 
-	_, err = io.Copy(outFile, file)
+	l, err := io.Copy(outFile, file)
+	log.Println("copydata", l, err)
 
 	return err
 }

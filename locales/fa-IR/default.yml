@@ -781,3 +781,7 @@
 "LastPage": "آخرین صفحه"
 "PreviousPage": "صفحه قبلی"
 "NextPage": "صفحه بعد"
+"prevTaskIsRunning": "وظیفه قبلی هنوز به پایان نرسیده است"
+"ImportArchiveFileLog": "وارد کردن اسناد به صورت دسته ای"
+"ArchiveFileImportCompleted": "واردات دسته ای اسناد با موفقیت انجام شد"
+"currentInsertId%d": "در حال درج شناسه: %d"

@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"strings"
 	"time"
 )
@@ -192,6 +193,123 @@ func ArchiveList(ctx iris.Context) {
 	})
 }
 
+func QuickImportArchive(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	file, info, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+
+	var req request.QuickImportArchiveRequest
+	if err = ctx.ReadForm(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 增加支持分片上传
+	if req.Chunks > 0 {
+		// 使用了分片上传
+		tmpFile, err := currentSite.UploadByChunks(file, req.Md5, req.Chunk, req.Chunks)
+
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if tmpFile == nil {
+			// 表示分片上传，不需要返回结果
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  "",
+			})
+			return
+		}
+		stat, err := tmpFile.Stat()
+		if err != nil {
+			func() {
+				tmpName := tmpFile.Name()
+				_ = tmpFile.Close()
+				_ = os.Remove(tmpName)
+			}()
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+
+		tmpFile.Seek(0, 0)
+		req.Size = stat.Size()
+
+		quickImport, err := currentSite.NewQuickImportArchive(&req)
+		if err != nil {
+			func() {
+				tmpName := tmpFile.Name()
+				_ = tmpFile.Close()
+				_ = os.Remove(tmpName)
+			}()
+
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		go func() {
+			tmpName := tmpFile.Name()
+			_ = quickImport.Start(tmpFile)
+
+			time.Sleep(2 * time.Second)
+			_ = os.Remove(tmpName)
+		}()
+
+	} else {
+		req.FileName = info.Filename
+		req.Size = info.Size
+
+		quickImport, err := currentSite.NewQuickImportArchive(&req)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		go quickImport.Start(file)
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportArchiveFileLog", req.FileName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ArchiveFileImportCompleted"),
+		"data": iris.Map{
+			"status": "success",
+			"file":   req.FileName,
+		},
+	})
+}
+
+func GetQuickImportArchiveStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	status := currentSite.GetQuickImportStatus()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
+	})
+}
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))

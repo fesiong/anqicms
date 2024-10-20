@@ -781,3 +781,7 @@
 "LastPage": "halaman terakhir"
 "PreviousPage": "Halaman sebelumnya"
 "NextPage": "Halaman selanjutnya"
+"prevTaskIsRunning": "Tugas sebelumnya belum berakhir"
+"ImportArchiveFileLog": "Impor dokumen dalam batch"
+"ArchiveFileImportCompleted": "Impor dokumen secara batch berhasil"
+"currentInsertId%d": "Memasukkan ID: %d"

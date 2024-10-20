@@ -47,6 +47,7 @@ type Website struct {
 	Cache                   library.Cache
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus
+	quickImportStatus       *QuickImportArchive
 
 	System  config.SystemConfig  `json:"system"`
 	Content config.ContentConfig `json:"content"`

@@ -781,3 +781,7 @@
 "LastPage": "Last page"
 "PreviousPage": "Previous page"
 "NextPage": "Next page"
+"prevTaskIsRunning": "The previous task has not yet ended"
+"ImportArchiveFileLog": "Batch import documents"
+"ArchiveFileImportCompleted": "Batch import documents successfully"
+"currentInsertId%d": "Inserting ID: %d"

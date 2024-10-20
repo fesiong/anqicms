@@ -781,3 +781,7 @@
 "LastPage": "শেষ পৃষ্ঠা"
 "PreviousPage": "আগের পৃষ্ঠা"
 "NextPage": "পরবর্তী পৃষ্ঠা"
+"prevTaskIsRunning": "আগের টাস্ক এখনো শেষ হয়নি"
+"ImportArchiveFileLog": "ব্যাচে নথি আমদানি করুন"
+"ArchiveFileImportCompleted": "দস্তাবেজগুলির ব্যাচ আমদানি সফল হয়েছে"
+"currentInsertId%d": "আইডি সন্নিবেশ করা হচ্ছে: %d"

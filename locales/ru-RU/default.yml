@@ -781,3 +781,7 @@
 "LastPage": "Последняя страница"
 "PreviousPage": "Предыдущая страница"
 "NextPage": "Следущая страница"
+"prevTaskIsRunning": "Предыдущая задача еще не завершилась"
+"ImportArchiveFileLog": "Импортировать документы пакетами"
+"ArchiveFileImportCompleted": "Пакетный импорт документов успешен"
+"currentInsertId%d": "Вставка идентификатора: %d"

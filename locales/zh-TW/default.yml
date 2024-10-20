@@ -781,3 +781,7 @@
 "LastPage": "尾頁"
 "PreviousPage": "上一頁"
 "NextPage": "下一頁"
+"prevTaskIsRunning": "上一個任務尚未結束"
+"ImportArchiveFileLog": "批次導入文件"
+"ArchiveFileImportCompleted": "批次導入文件成功"
+"currentInsertId%d": "正在插入ID: %d"

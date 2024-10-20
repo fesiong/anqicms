@@ -781,3 +781,7 @@
 "LastPage": "última página"
 "PreviousPage": "Página anterior"
 "NextPage": "Próxima página"
+"prevTaskIsRunning": "A tarefa anterior ainda não terminou"
+"ImportArchiveFileLog": "Importar documentos em lotes"
+"ArchiveFileImportCompleted": "Importação em lote de documentos bem-sucedida"
+"currentInsertId%d": "Inserindo ID: %d"
