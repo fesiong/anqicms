@@ -257,6 +257,7 @@ func manageRoute(app *iris.Application) {
 				anchor.Post("/import", manageController.PluginAnchorImport)
 				anchor.Get("/setting", manageController.PluginAnchorSetting)
 				anchor.Post("/setting", manageController.PluginAnchorSettingForm)
+				anchor.Post("/addfromtitle", manageController.PluginAnchorAddFromTitle)
 			}
 
 			guestbook := plugin.Party("/guestbook")

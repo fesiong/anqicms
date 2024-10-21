@@ -5,6 +5,7 @@ import (
 	"io"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 	"math"
 	"mime/multipart"
 	"regexp"
@@ -546,4 +547,25 @@ func (w *Website) AutoInsertAnchor(archiveId uint, keywords, link string) {
 			w.DB.Save(anchor)
 		}
 	}
+}
+
+func (w *Website) InsertTitleToAnchor(req *request.PluginAnchorAddFromTitle) error {
+	if req.Type == "category" {
+		// from category
+		var categories []*model.Category
+		w.DB.Where("`id` IN (?)", req.Ids).Find(&categories)
+		for _, category := range categories {
+			category.Link = w.GetUrl("category", category, 0)
+			w.AutoInsertAnchor(0, category.Title, category.Link)
+		}
+	} else if req.Type == "archive" {
+		var archives []*model.Archive
+		w.DB.Where("`id` IN (?)", req.Ids).Find(&archives)
+		for _, archive := range archives {
+			archive.Link = w.GetUrl("archive", archive, 0)
+			w.AutoInsertAnchor(archive.Id, archive.Title, archive.Link)
+		}
+	}
+
+	return nil
 }

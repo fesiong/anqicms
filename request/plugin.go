@@ -48,6 +48,11 @@ type PluginAnchorDelete struct {
 	Ids []uint `json:"ids"`
 }
 
+type PluginAnchorAddFromTitle struct {
+	Type string `json:"type"`
+	Ids  []uint `json:"ids"`
+}
+
 type PluginGuestbookDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
