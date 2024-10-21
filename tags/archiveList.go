@@ -104,6 +104,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
+	var excludeFlags []string
+	if args["excludeFlag"] != nil {
+		excludeFlags = strings.Split(args["excludeFlag"].String(), ",")
+	}
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
@@ -400,6 +404,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
+			} else if len(excludeFlags) > 0 {
+				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag NOT IN (?)", excludeFlags)
 			}
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)
