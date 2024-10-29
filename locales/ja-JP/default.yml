@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "ドキュメントをバッチでインポートします"
 "ArchiveFileImportCompleted": "ドキュメントのバッチインポートが成功しました"
 "currentInsertId%d": "ID を挿入中: %d"
+"paymentSuccessful": "注文の支払いが成功しました"
+"paymentCanceled": "注文はキャンセルされました"
+"paymentResultError": "支払い結果エラー"
+"paymentParameterError": "支払いパラメータエラー"

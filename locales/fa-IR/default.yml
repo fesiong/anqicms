@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "وارد کردن اسناد به صورت دسته ای"
 "ArchiveFileImportCompleted": "واردات دسته ای اسناد با موفقیت انجام شد"
 "currentInsertId%d": "در حال درج شناسه: %d"
+"paymentSuccessful": "سفارش پرداخت موفق شد"
+"paymentCanceled": "سفارش لغو شد"
+"paymentResultError": "خطای نتیجه پرداخت"
+"paymentParameterError": "خطای پارامتر پرداخت"

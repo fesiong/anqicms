@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "Импортировать документы пакетами"
 "ArchiveFileImportCompleted": "Пакетный импорт документов успешен"
 "currentInsertId%d": "Вставка идентификатора: %d"
+"paymentSuccessful": "Оплата заказа прошла успешно"
+"paymentCanceled": "Заказ отменен"
+"paymentResultError": "Ошибка результата платежа"
+"paymentParameterError": "Ошибка параметра платежа"

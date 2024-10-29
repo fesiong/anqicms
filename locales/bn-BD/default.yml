@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "ব্যাচে নথি আমদানি করুন"
 "ArchiveFileImportCompleted": "দস্তাবেজগুলির ব্যাচ আমদানি সফল হয়েছে"
 "currentInsertId%d": "আইডি সন্নিবেশ করা হচ্ছে: %d"
+"paymentSuccessful": "অর্ডার পেমেন্ট সফল হয়েছে"
+"paymentCanceled": "অর্ডার বাতিল করা হয়েছে"
+"paymentResultError": "পেমেন্ট ফলাফল ত্রুটি"
+"paymentParameterError": "পেমেন্ট প্যারামিটার ত্রুটি"

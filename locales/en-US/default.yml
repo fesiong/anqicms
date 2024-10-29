@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "Batch import documents"
 "ArchiveFileImportCompleted": "Batch import documents successfully"
 "currentInsertId%d": "Inserting ID: %d"
+"paymentSuccessful": "Order payment successful"
+"paymentCanceled": "Order canceled"
+"paymentResultError": "Payment result error"
+"paymentParameterError": "Payment parameter error"

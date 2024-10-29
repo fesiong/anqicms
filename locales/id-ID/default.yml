@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "Impor dokumen dalam batch"
 "ArchiveFileImportCompleted": "Impor dokumen secara batch berhasil"
 "currentInsertId%d": "Memasukkan ID: %d"
+"paymentSuccessful": "Pembayaran pesanan berhasil"
+"paymentCanceled": "Pesanan telah dibatalkan"
+"paymentResultError": "Kesalahan hasil pembayaran"
+"paymentParameterError": "Kesalahan parameter pembayaran"

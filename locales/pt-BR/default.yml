@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "Importar documentos em lotes"
 "ArchiveFileImportCompleted": "Importação em lote de documentos bem-sucedida"
 "currentInsertId%d": "Inserindo ID: %d"
+"paymentSuccessful": "Pagamento do pedido realizado com sucesso"
+"paymentCanceled": "O pedido foi cancelado"
+"paymentResultError": "Erro no resultado do pagamento"
+"paymentParameterError": "Erro no parâmetro de pagamento"
