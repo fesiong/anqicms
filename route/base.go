@@ -123,6 +123,12 @@ func Register(app *iris.Application) {
 		notify.Post("/alipay/pay", controller.NotifyAlipay)
 	}
 
+	returnParty := app.Party("/return")
+	{
+		returnParty.Get("/paypal/pay", controller.PaypalReturnResult)
+		returnParty.Get("/paypal/cancel", controller.PaypalCancelResult)
+	}
+
 	//后台管理路由相关
 	manageRoute(app)
 }

@@ -785,3 +785,7 @@
 "ImportArchiveFileLog": "批量导入文档"
 "ArchiveFileImportCompleted": "批量导入文档成功"
 "currentInsertId%d": "正在插入ID: %d"
+"paymentSuccessful": "订单支付成功"
+"paymentCanceled": "订单已取消"
+"paymentResultError": "支付结果错误"
+"paymentParameterError": "支付参数错误"
