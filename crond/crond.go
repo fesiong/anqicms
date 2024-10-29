@@ -56,7 +56,7 @@ func hourlyTask() {
 }
 
 func hourly10MinuteTask() {
-	// 每十分钟检查一次提现
+	// 每十分钟检查一次采集
 	CollectArticles()
 }
 

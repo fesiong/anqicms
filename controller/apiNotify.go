@@ -112,6 +112,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		payment.PayWay = "wechat"
 		payment.TerraceId = notifyReq.GetString("transaction_id")
 		payment.PaidTime = time.Now().Unix()
+		payment.BuyerId = notifyReq.GetString("openid")
 		currentSite.DB.Save(payment)
 		order.PaymentId = payment.PaymentId
 		currentSite.DB.Save(order)
@@ -228,6 +229,11 @@ func NotifyAlipay(ctx iris.Context) {
 		payment.PayWay = "alipay"
 		payment.PaidTime = time.Now().Unix()
 		payment.TerraceId = bm.GetString("trade_no")
+		payment.BuyerId = bm.GetString("buyer_id")
+		if bm.GetString("buyer_open_id") != "" {
+			payment.BuyerId = bm.GetString("buyer_open_id")
+		}
+		payment.BuyerInfo = bm.GetString("buyer_logon_id")
 		currentSite.DB.Save(payment)
 		order.PaymentId = payment.PaymentId
 		currentSite.DB.Save(order)

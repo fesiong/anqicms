@@ -75,6 +75,7 @@ const (
 	PayWayWeapp   = "weapp"   // 微信小程序支付
 	PayWayAlipay  = "alipay"  // 支付宝支付
 	PayWayOffline = "offline" // 线下支付
+	PayWayPaypal  = "paypal"  // paypal
 )
 
 const (

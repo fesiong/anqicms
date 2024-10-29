@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
+	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/pkg/util"
+	"github.com/go-pay/gopay/pkg/xlog"
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
@@ -313,6 +315,8 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createWeappPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayAlipay {
 		createAlipayPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayPaypal {
+		createPaypalPayment(ctx, payment, order)
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -514,6 +518,76 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		},
 	})
 	return
+}
+
+func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, true)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	var purchases = []*paypal.PurchaseUnit{
+		{
+			ReferenceId: payment.PaymentId,
+			Amount: &paypal.Amount{
+				CurrencyCode: "USD",
+				Value:        fmt.Sprintf("%.2f", float32(payment.Amount)/100),
+			},
+		},
+	}
+
+	bm := make(gopay.BodyMap)
+	bm.Set("intent", "CAPTURE").
+		Set("purchase_units", purchases).
+		SetBodyMap("payment_source", func(b gopay.BodyMap) {
+			b.SetBodyMap("paypal", func(bb gopay.BodyMap) {
+				bb.SetBodyMap("experience_context", func(bbb gopay.BodyMap) {
+					bbb.Set("brand_name", currentSite.System.SiteName).
+						Set("locale", "en-US").
+						Set("shipping_preference", "NO_SHIPPING").
+						Set("user_action", "PAY_NOW").
+						Set("return_url", currentSite.System.BaseUrl+"/return/paypal/pay").
+						Set("cancel_url", currentSite.System.BaseUrl+"/return/paypal/cancel")
+				})
+			})
+		})
+
+	ppRsp, err := client.CreateOrder(ctx, bm)
+	if err != nil {
+		xlog.Error(err)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if ppRsp.Code != 200 {
+		// do something
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ppRsp.Error,
+		})
+		return
+	}
+	// 更新id
+	payment.TerraceId = ppRsp.Response.Id
+	currentSite.DB.Save(payment)
+
+	// payer link
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":  "paypal",
+			"jump_url": ppRsp.Response.Links[1].Href,
+		},
+	})
 }
 
 func ApiPaymentCheck(ctx iris.Context) {
