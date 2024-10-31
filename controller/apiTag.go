@@ -1072,6 +1072,10 @@ func ApiTagDetail(ctx iris.Context) {
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
+		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
+		if err == nil {
+			tagDetail.Content = tagContent.Content
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -1201,8 +1205,22 @@ func ApiTagList(ctx iris.Context) {
 			offset = (currentPage - 1) * limit
 		}
 	}
-
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
+	var categoryIds []uint
+	var categoryDetail *model.Category
+	tmpCatId := ctx.URLParam("categoryId")
+	if tmpCatId != "" {
+		tmpIds := strings.Split(tmpCatId, ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
+				if categoryDetail != nil {
+					categoryIds = append(categoryIds, categoryDetail.Id)
+				}
+			}
+		}
+	}
+	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 	}

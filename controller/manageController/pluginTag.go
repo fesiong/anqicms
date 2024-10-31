@@ -12,7 +12,12 @@ func PluginTagList(ctx iris.Context) {
 	title := ctx.URLParam("title")
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	tags, total, err := currentSite.GetTagList(0, title, "", currentPage, pageSize, 0, "id desc")
+	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
+	var categoryIds []uint
+	if categoryId > 0 {
+		categoryIds = append(categoryIds, categoryId)
+	}
+	tags, total, err := currentSite.GetTagList(0, title, categoryIds, "", currentPage, pageSize, 0, "id desc")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -24,6 +29,13 @@ func PluginTagList(ctx iris.Context) {
 	// 生成链接
 	for i := range tags {
 		tags[i].Link = currentSite.GetUrl("tag", tags[i], 0)
+		// categoryTitle
+		if tags[i].CategoryId > 0 {
+			category := currentSite.GetCategoryFromCache(tags[i].CategoryId)
+			if category != nil {
+				tags[i].CategoryTitle = category.Title
+			}
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -36,15 +48,19 @@ func PluginTagList(ctx iris.Context) {
 
 func PluginTagDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	id := ctx.Params().GetUintDefault("id", 0)
+	id := ctx.URLParamIntDefault("id", 0)
 
-	tag, err := currentSite.GetTagById(id)
+	tag, err := currentSite.GetTagById(uint(id))
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
 		return
+	}
+	tagContent, err := currentSite.GetTagContentById(tag.Id)
+	if err == nil {
+		tag.Content = tagContent.Content
 	}
 
 	ctx.JSON(iris.Map{
@@ -111,6 +127,7 @@ func PluginTagDetailForm(ctx iris.Context) {
 						req.SeoTitle = tmpTag.SeoTitle
 						req.Description = tmpTag.Description
 						req.Keywords = tmpTag.Keywords
+						req.Content = tmpTag.Content
 					}
 					_, _ = subSite.SaveTag(&req)
 				}

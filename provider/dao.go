@@ -140,6 +140,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatMenu{},
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
+			&model.TagContent{},
 		)
 
 		if err != nil {
