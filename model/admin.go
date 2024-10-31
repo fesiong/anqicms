@@ -18,6 +18,7 @@ type Admin struct {
 	Token     string      `json:"token" gorm:"-"`
 	Group     *AdminGroup `json:"group" gorm:"-"`
 	SiteId    uint        `json:"site_id" gorm:"-"`
+	IsSuper   bool        `json:"is_super" gorm:"-"` // 是否是主站点的管理员
 }
 
 type AdminGroup struct {

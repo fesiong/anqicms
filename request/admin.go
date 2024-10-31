@@ -13,6 +13,14 @@ type AdminInfoRequest struct {
 	GroupId     uint   `json:"group_id"`
 	OldPassword string `json:"old_password"`
 	RePassword  string `json:"re_password"`
+	// 登录支持后台快速登录参数
+	Sign   string `json:"sign"`
+	SiteId uint   `json:"site_id"`
+	Nonce  string `json:"nonce"`
+}
+
+type WebsiteLoginRequest struct {
+	SiteId uint `json:"site_id"`
 }
 
 type GroupRequest struct {

@@ -56,6 +56,7 @@ func manageRoute(app *iris.Application) {
 			website.Get("/info", manageController.GetWebsiteInfo)
 			website.Post("/save", manageController.SaveWebsiteInfo)
 			website.Post("/delete", manageController.DeleteWebsite)
+			website.Post("/login", manageController.LoginSubWebsite)
 		}
 
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
