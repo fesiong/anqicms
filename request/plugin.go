@@ -102,6 +102,7 @@ type PluginTag struct {
 	Description string `json:"description"`
 	FirstLetter string `json:"first_letter"`
 	Content     string `json:"content"`
+	Logo        string `json:"logo"`
 	Status      uint   `json:"status"`
 }
 

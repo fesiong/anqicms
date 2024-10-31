@@ -485,6 +485,7 @@ func ApiArchiveList(ctx iris.Context) {
 			tags := currentSite.GetTagsByIds(searchTagIds)
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
 					Id:          tag.Id,
@@ -496,6 +497,8 @@ func ApiArchiveList(ctx iris.Context) {
 					Keywords:    tag.Keywords,
 					Description: tag.Description,
 					Link:        tag.Link,
+					Logo:        tag.Logo,
+					Thumb:       tag.Thumb,
 				})
 			}
 		}
@@ -1072,6 +1075,7 @@ func ApiTagDetail(ctx iris.Context) {
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
 		if err == nil {
 			tagDetail.Content = tagContent.Content
@@ -1223,6 +1227,7 @@ func ApiTagList(ctx iris.Context) {
 	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	}
 
 	ctx.JSON(iris.Map{
