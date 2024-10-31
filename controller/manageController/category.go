@@ -281,3 +281,14 @@ func CategoryDelete(ctx iris.Context) {
 		"msg":  ctx.Tr("CategoryDeleted"),
 	})
 }
+
+func CategoryUpdateArchiveCount(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	currentSite.UpdateCategoryArchiveCounts()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
+	})
+}

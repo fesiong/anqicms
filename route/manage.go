@@ -152,6 +152,7 @@ func manageRoute(app *iris.Application) {
 			category.Get("/detail", manageController.CategoryDetail)
 			category.Post("/detail", manageController.CategoryDetailForm)
 			category.Post("/delete", manageController.CategoryDelete)
+			category.Post("/count", manageController.CategoryUpdateArchiveCount)
 		}
 
 		archive := manage.Party("/archive", middleware.ParseAdminToken, middleware.AdminPermission)

@@ -29,6 +29,7 @@ func PluginTagList(ctx iris.Context) {
 	// 生成链接
 	for i := range tags {
 		tags[i].Link = currentSite.GetUrl("tag", tags[i], 0)
+		tags[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 		// categoryTitle
 		if tags[i].CategoryId > 0 {
 			category := currentSite.GetCategoryFromCache(tags[i].CategoryId)
@@ -58,6 +59,7 @@ func PluginTagDetail(ctx iris.Context) {
 		})
 		return
 	}
+	tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	tagContent, err := currentSite.GetTagContentById(tag.Id)
 	if err == nil {
 		tag.Content = tagContent.Content

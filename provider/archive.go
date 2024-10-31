@@ -657,6 +657,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	_ = w.SaveArchiveFlags(draft.Id, req.Flags)
 	// 保存分类ID
 	_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
+	if isReleased {
+		// 更新分类的文档计数
+		for _, catId := range req.CategoryIds {
+			w.UpdateCategoryArchiveCount(catId)
+		}
+	}
 	// 保存 Relations
 	_ = w.SaveArchiveRelations(draft.Id, req.RelationIds)
 	//检查有多少个material
@@ -910,7 +916,6 @@ func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 
 func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
-
 	go func() {
 		var doc TinyArchive
 		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
@@ -935,7 +940,8 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	if err = w.DB.Unscoped().Delete(archive).Error; err != nil {
 		return err
 	}
-
+	// 更新文档计数
+	w.UpdateCategoryArchiveCount(archive.CategoryId)
 	if archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
 	}
@@ -1203,6 +1209,8 @@ func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
 		return
 	}
 	w.DB.Delete(archiveDraft)
+	// 更新文档计数
+	w.UpdateCategoryArchiveCount(archiveDraft.CategoryId)
 
 	_ = w.SuccessReleaseArchive(&archiveDraft.Archive, true)
 }

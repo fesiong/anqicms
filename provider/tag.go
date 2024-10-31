@@ -82,7 +82,7 @@ func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	if err := w.DB.Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
-
+	tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 	return &tag, nil
 }
 
@@ -91,7 +91,6 @@ func (w *Website) GetTagByTitle(title string) (*model.Tag, error) {
 	if err := w.DB.Where("`title` = ?", title).First(&tag).Error; err != nil {
 		return nil, err
 	}
-
 	return &tag, nil
 }
 
@@ -148,6 +147,10 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	tag.Description = req.Description
 	tag.FirstLetter = req.FirstLetter
 	tag.CategoryId = req.CategoryId
+	tag.Logo = req.Logo
+	if tag.Logo != "" {
+		tag.Logo = strings.TrimPrefix(tag.Logo, w.PluginStorage.StorageUrl)
+	}
 	// 判断重复
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
 	if req.UrlToken == "" {
