@@ -101,6 +101,7 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	module.Title = req.Title
 	module.Name = req.Name
 	module.Fields = req.Fields
+	module.CategoryFields = req.CategoryFields
 	module.TitleName = req.TitleName
 	module.UrlToken = req.UrlToken
 	module.Status = req.Status

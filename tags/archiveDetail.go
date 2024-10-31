@@ -137,7 +137,17 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					}
 				}
 				if item, ok := archiveParams[inputName]; ok {
-					content = item.Value
+					if item.Value == nil || item.Value == "" {
+						item.Value = item.Default
+					}
+					if item.FollowLevel && !archiveDetail.HasOrdered {
+						content = ""
+					} else {
+						if item.Type == config.CustomFieldTypeEditor && render {
+							item.Value = library.MarkdownToHTML(fmt.Sprintf("%v", item.Value))
+						}
+						content = item.Value
+					}
 				}
 			}
 		}
