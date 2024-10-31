@@ -1,6 +1,9 @@
 package manageController
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -9,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -421,5 +425,77 @@ func GetCurrentSiteInfo(ctx iris.Context) {
 			"base_url": currentSite.System.BaseUrl,
 			"name":     website.Name,
 		},
+	})
+}
+
+func LoginSubWebsite(ctx iris.Context) {
+	var req request.WebsiteLoginRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.SiteId == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("SiteDoesNotExist"),
+		})
+		return
+	}
+	// 只有默认站点才可以进行站点的创建
+	currentSite := provider.CurrentSite(ctx)
+	// 只有默认站点和多语言站点的主站点才可以进行站点的创建
+	if currentSite.Id != 1 {
+		isSub := false
+		if currentSite.MultiLanguage.Open {
+			// 需要判断是不是子站
+			for _, subId := range currentSite.MultiLanguage.SubSites {
+				if subId == req.SiteId {
+					// 存在这样的子站点
+					isSub = true
+					break
+				}
+			}
+		}
+		if !isSub {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("InsufficientPermissions"),
+			})
+			return
+		}
+	}
+	subSite := provider.GetWebsite(req.SiteId)
+	if subSite == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("SiteDoesNotExist"),
+		})
+		return
+	}
+	// 登录第一个账号
+	var admin model.Admin
+	err := subSite.DB.First(&admin).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("UserDoesNotExist"),
+		})
+		return
+	}
+	// 构造登录链接
+	nonce := strconv.FormatInt(time.Now().UnixMicro(), 10)
+	signHash := sha256.New()
+	signHash.Write([]byte(admin.Password + nonce))
+	sign := signHash.Sum(nil)
+
+	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", subSite.System.BaseUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": link,
 	})
 }
