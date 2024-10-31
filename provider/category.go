@@ -18,7 +18,7 @@ import (
 
 func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
-	err := ops(w.DB).Omit("content").Find(&categories).Error
+	err := ops(w.DB).Omit("content", "extra_data").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
@@ -102,6 +102,9 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	category.IsInherit = req.IsInherit
 	category.Images = req.Images
 	category.Logo = req.Logo
+	if req.Extra != nil {
+		category.Extra = req.Extra
+	}
 	for i, v := range category.Images {
 		category.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)
 	}
