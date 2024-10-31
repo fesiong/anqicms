@@ -53,7 +53,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		if args["parentId"].String() == "parent" {
 			if categoryDetail != nil {
 				parentId = categoryDetail.ParentId
-				excludeId = categoryDetail.Id
+				//	excludeId = categoryDetail.Id
 			}
 		} else {
 			parentId = uint(args["parentId"].Integer())
