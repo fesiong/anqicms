@@ -92,7 +92,7 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application = iris.New()
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
-	route.Register(bootstrap.Application)
+	route.Register(bootstrap.Application, SystemFiles)
 	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
 	if err != nil {
 		log.Println("languages err", err)
