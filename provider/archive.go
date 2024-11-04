@@ -1609,9 +1609,10 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 				}
 			}
 
-			articleContent = string(content)
-
-			articleContent = library.MarkdownToHTML(string(content))
+			articleContent = strings.TrimSpace(string(content))
+			if fileExt == ".md" || content[0] != '<' {
+				articleContent = library.MarkdownToHTML(articleContent)
+			}
 		}
 		// 检查标题重复问题
 		if qia.CheckDuplicate {

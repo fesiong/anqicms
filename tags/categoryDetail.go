@@ -85,7 +85,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
 			if module != nil && module.CategoryFields != nil {
 				for _, field := range module.CategoryFields {
-					if field.Name == inputName && field.Type == config.CustomFieldTypeEditor {
+					if field.Name == inputName && field.Type == config.CustomFieldTypeEditor && render {
 						item = library.MarkdownToHTML(fmt.Sprintf("%v", item))
 					}
 				}
