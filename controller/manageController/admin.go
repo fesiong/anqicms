@@ -177,6 +177,8 @@ func AdminLogin(ctx iris.Context) {
 	currentSite.AdminLoginError.Times = 0
 	admin.Token = currentSite.GetAdminAuthToken(admin.Id, req.Remember)
 	admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
+	// 记录用户登录时间
+	currentSite.DB.Model(admin).UpdateColumn("login_time", time.Now().Unix())
 
 	// 记录日志
 	adminLog := model.AdminLoginLog{
