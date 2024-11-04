@@ -85,6 +85,10 @@ func (w *Website) GetAdminGroupInfo(groupId uint) (*model.AdminGroup, error) {
 	if err != nil {
 		return nil, err
 	}
+	if group.Id == 1 {
+		// 1 为超级管理员，不能被修改
+		group.Setting.Permissions = nil
+	}
 
 	return &group, nil
 }
@@ -116,6 +120,10 @@ func (w *Website) DeleteAdminGroup(groupId uint) error {
 	if err != nil {
 		return err
 	}
+	// 不能删除超级管理员
+	if group.Id == 1 {
+		return errors.New("permission denied")
+	}
 
 	err = w.DB.Delete(&group).Error
 
@@ -128,6 +136,10 @@ func (w *Website) DeleteAdminInfo(adminId uint) error {
 
 	if err != nil {
 		return err
+	}
+	// 不能删除超级管理员
+	if admin.Id == 1 {
+		return errors.New("permission denied")
 	}
 
 	err = w.DB.Delete(&admin).Error
