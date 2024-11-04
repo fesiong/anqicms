@@ -151,6 +151,7 @@ func (bootstrap *Bootstrap) Start() {
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
 		iris.WithRemoteAddrHeader("X-Real-IP"),
 		iris.WithRemoteAddrHeader("X-Forwarded-For"),
+		iris.WithHostProxyHeader("X-Host"),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithoutBodyConsumptionOnUnmarshal,
 		iris.WithoutPathCorrection,
