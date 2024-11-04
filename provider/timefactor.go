@@ -50,7 +50,10 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 	if setting.EndTime == 0 {
 		setting.EndTime = 23
 	}
-	diffSecond := (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyUpdate
+	var diffSecond = 1
+	if setting.DailyUpdate > 0 {
+		diffSecond = (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyUpdate
+	}
 	if diffSecond < 1 {
 		diffSecond = 1
 	}
