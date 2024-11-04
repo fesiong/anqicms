@@ -62,6 +62,10 @@ func (w *Website) GetMultiLangSites(mainId uint) []*model.Website {
 	if err != nil {
 		return nil
 	}
+	mainSite := GetWebsite(mainId)
+	if mainSite == nil || mainSite.MultiLanguage.Open == false {
+		return nil
+	}
 	defaultSite.IsMain = true
 	var sites []*model.Website
 	db.Model(&model.Website{}).Where("parent_id = ?", mainId).Omit("token_secret", "mysql", "root_path").Order("id asc").Find(&sites)
