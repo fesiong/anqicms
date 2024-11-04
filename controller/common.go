@@ -756,7 +756,7 @@ func LogAccess(ctx iris.Context) {
 
 	statistic := &provider.Statistic{
 		Spider:    spider,
-		Host:      ctx.Request().Host,
+		Host:      ctx.Host(),
 		Url:       currentPath,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
