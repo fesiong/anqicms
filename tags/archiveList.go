@@ -408,7 +408,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
 			} else if len(excludeFlags) > 0 {
-				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag NOT IN (?)", excludeFlags)
+				tx = tx.Joins("LEFT JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag IN (?)", excludeFlags).Where("archive_flags.archive_id IS NULL")
 			}
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)

@@ -166,7 +166,7 @@ func ArchiveList(ctx iris.Context) {
 		}
 		for _, c := range modules {
 			if c.Id == v.ModuleId {
-				archives[i].ModuleName = c.Title
+				archives[i].ModuleName = c.Name
 			}
 		}
 	}
