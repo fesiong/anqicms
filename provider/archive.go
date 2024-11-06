@@ -659,8 +659,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
 	if isReleased {
 		// 更新分类的文档计数
-		for _, catId := range req.CategoryIds {
-			w.UpdateCategoryArchiveCount(catId)
+		// 如果文档数量大于100万，则不自动计数
+		totalArchive := w.GetExplainCount("SELECT id FROM archives")
+		if totalArchive < 1000000 {
+			for _, catId := range req.CategoryIds {
+				w.UpdateCategoryArchiveCount(catId)
+			}
 		}
 	}
 	// 保存 Relations
@@ -940,8 +944,12 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	if err = w.DB.Unscoped().Delete(archive).Error; err != nil {
 		return err
 	}
-	// 更新文档计数
-	w.UpdateCategoryArchiveCount(archive.CategoryId)
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
+	if totalArchive < 1000000 {
+		// 更新文档计数
+		w.UpdateCategoryArchiveCount(archive.CategoryId)
+	}
 	if archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
 	}
@@ -1210,7 +1218,11 @@ func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
 	}
 	w.DB.Delete(archiveDraft)
 	// 更新文档计数
-	w.UpdateCategoryArchiveCount(archiveDraft.CategoryId)
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
+	if totalArchive < 1000000 {
+		w.UpdateCategoryArchiveCount(archiveDraft.CategoryId)
+	}
 
 	_ = w.SuccessReleaseArchive(&archiveDraft.Archive, true)
 }
@@ -1357,15 +1369,30 @@ func (w *Website) SaveArchiveCategories(archiveId uint, categoryIds []uint) erro
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveCategory{})
 		return nil
 	}
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
 	for _, catId := range categoryIds {
 		arcCategory := model.ArchiveCategory{
 			CategoryId: catId,
 			ArchiveId:  archiveId,
 		}
 		w.DB.Model(&model.ArchiveCategory{}).Where("`archive_id` = ? and `category_id` = ?", archiveId, catId).FirstOrCreate(&arcCategory)
+		// 更新文档计数
+		if totalArchive < 1000000 {
+			w.UpdateCategoryArchiveCount(catId)
+		}
 	}
 	// 删除额外的
-	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Delete(&model.ArchiveCategory{})
+	var archiveCategories []*model.ArchiveCategory
+	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Find(&archiveCategories)
+	if len(archiveCategories) > 0 {
+		for _, v := range archiveCategories {
+			w.DB.Unscoped().Model(v).Delete(&model.ArchiveCategory{})
+			if totalArchive < 1000000 {
+				w.UpdateCategoryArchiveCount(v.CategoryId)
+			}
+		}
+	}
 
 	return nil
 }
@@ -1609,9 +1636,10 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 				}
 			}
 
-			articleContent = string(content)
-
-			articleContent = library.MarkdownToHTML(string(content))
+			articleContent = strings.TrimSpace(string(content))
+			if fileExt == ".md" || content[0] != '<' {
+				articleContent = library.MarkdownToHTML(articleContent)
+			}
 		}
 		// 检查标题重复问题
 		if qia.CheckDuplicate {

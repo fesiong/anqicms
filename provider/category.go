@@ -553,6 +553,10 @@ func (w *Website) UpdateCategoryArchiveCounts() {
 
 func (w *Website) UpdateCategoryArchiveCount(categoryId uint) {
 	var archiveCount int64
-	w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id = ?", categoryId).Count(&archiveCount)
+	if w.Content.MultiCategory == 1 {
+		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id = ?", categoryId).Count(&archiveCount)
+	} else {
+		w.DB.Model(&model.Archive{}).Where("category_id = ?", categoryId).Count(&archiveCount)
+	}
 	w.DB.Model(&model.Category{}).Where("id = ?", categoryId).UpdateColumn("archive_count", archiveCount)
 }

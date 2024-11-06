@@ -10,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -754,9 +755,13 @@ func LogAccess(ctx iris.Context) {
 		userAgent = userAgent[:250]
 	}
 
+	host := ctx.Host()
+	if tmp, _, err := net.SplitHostPort(host); err == nil {
+		host = tmp
+	}
 	statistic := &provider.Statistic{
 		Spider:    spider,
-		Host:      ctx.Host(),
+		Host:      host,
 		Url:       currentPath,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
