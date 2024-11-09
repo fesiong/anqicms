@@ -390,10 +390,11 @@ func InstallForm(ctx iris.Context) {
 		// 首个站点ID为1
 		Model: model.Model{Id: 1},
 		// 首个站点为安装目录
-		RootPath: config.ExecPath,
-		Name:     defaultSite.Tr("AnqiCMS(AnqiCMS)"),
-		Mysql:    config.Server.Mysql,
-		Status:   1,
+		RootPath:    config.ExecPath,
+		Name:        defaultSite.Tr("AnqiCMS(AnqiCMS)"),
+		Mysql:       config.Server.Mysql,
+		TokenSecret: config.GenerateRandString(32),
+		Status:      1,
 	}
 	db.Save(&dbWebsite)
 

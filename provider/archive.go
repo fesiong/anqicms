@@ -1,16 +1,22 @@
 package provider
 
 import (
+	"archive/zip"
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/jinzhu/now"
 	"gorm.io/gorm"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"log"
+	"math"
+	"mime/multipart"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -344,13 +350,17 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		if err != nil {
 			archive, err := w.GetArchiveById(req.Id)
 			if err != nil {
-				return nil, err
+				// 表示不存在，则新建一个
+				newPost = true
+				draft = &model.ArchiveDraft{}
+				draft.Id = req.Id
+			} else {
+				draft = &model.ArchiveDraft{
+					Archive: *archive,
+					Status:  config.ContentStatusOK,
+				}
+				isReleased = true
 			}
-			draft = &model.ArchiveDraft{
-				Archive: *archive,
-				Status:  config.ContentStatusOK,
-			}
-			isReleased = true
 		}
 	} else {
 		newPost = true
@@ -604,7 +614,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 如果是 已经发布了的，则保存到正式表
 	if isReleased {
-		err = w.DB.Debug().Save(&draft.Archive).Error
+		err = w.DB.Save(&draft.Archive).Error
 		if err != nil {
 			return nil, err
 		}
@@ -620,7 +630,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 	} else {
 		// 保存到草稿
-		err = w.DB.Debug().Save(draft).Error
+		err = w.DB.Save(draft).Error
 		if err != nil {
 			return nil, err
 		}
@@ -647,6 +657,16 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	_ = w.SaveArchiveFlags(draft.Id, req.Flags)
 	// 保存分类ID
 	_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
+	if isReleased {
+		// 更新分类的文档计数
+		// 如果文档数量大于100万，则不自动计数
+		totalArchive := w.GetExplainCount("SELECT id FROM archives")
+		if totalArchive < 1000000 {
+			for _, catId := range req.CategoryIds {
+				w.UpdateCategoryArchiveCount(catId)
+			}
+		}
+	}
 	// 保存 Relations
 	_ = w.SaveArchiveRelations(draft.Id, req.RelationIds)
 	//检查有多少个material
@@ -900,7 +920,6 @@ func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 
 func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
-
 	go func() {
 		var doc TinyArchive
 		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
@@ -925,7 +944,12 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	if err = w.DB.Unscoped().Delete(archive).Error; err != nil {
 		return err
 	}
-
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
+	if totalArchive < 1000000 {
+		// 更新文档计数
+		w.UpdateCategoryArchiveCount(archive.CategoryId)
+	}
 	if archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
 	}
@@ -1193,6 +1217,12 @@ func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
 		return
 	}
 	w.DB.Delete(archiveDraft)
+	// 更新文档计数
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
+	if totalArchive < 1000000 {
+		w.UpdateCategoryArchiveCount(archiveDraft.CategoryId)
+	}
 
 	_ = w.SuccessReleaseArchive(&archiveDraft.Archive, true)
 }
@@ -1339,15 +1369,30 @@ func (w *Website) SaveArchiveCategories(archiveId uint, categoryIds []uint) erro
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveCategory{})
 		return nil
 	}
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
 	for _, catId := range categoryIds {
 		arcCategory := model.ArchiveCategory{
 			CategoryId: catId,
 			ArchiveId:  archiveId,
 		}
 		w.DB.Model(&model.ArchiveCategory{}).Where("`archive_id` = ? and `category_id` = ?", archiveId, catId).FirstOrCreate(&arcCategory)
+		// 更新文档计数
+		if totalArchive < 1000000 {
+			w.UpdateCategoryArchiveCount(catId)
+		}
 	}
 	// 删除额外的
-	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Delete(&model.ArchiveCategory{})
+	var archiveCategories []*model.ArchiveCategory
+	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Find(&archiveCategories)
+	if len(archiveCategories) > 0 {
+		for _, v := range archiveCategories {
+			w.DB.Unscoped().Model(v).Delete(&model.ArchiveCategory{})
+			if totalArchive < 1000000 {
+				w.UpdateCategoryArchiveCount(v.CategoryId)
+			}
+		}
+	}
 
 	return nil
 }
@@ -1383,6 +1428,292 @@ func (w *Website) SaveArchiveRelations(archiveId uint, relationIds []uint) error
 	}
 	// 删除额外的
 	w.DB.Unscoped().Where("`archive_id` = ? and `relation_id` NOT IN (?)", archiveId, relationIds).Delete(&model.ArchiveRelation{})
+
+	return nil
+}
+
+type QuickImportArchive struct {
+	Total      int  `json:"total"`
+	Finished   int  `json:"finished"`
+	IsFinished bool `json:"is_finished"`
+	Succeed    int  `json:"succeed"`
+	DailyCount int  `json:"daily_count"` // 每天发布数量
+	w          *Website
+	PlanType   int `json:"plan_type"`  // 发布类型，0 = 发布到正式文章，1 = 发布到草稿箱，2 = 发布到草稿箱并定时发布
+	PlanStart  int `json:"plan_start"` // 计划开始时间 0 立即 1 跟随最后一篇 2 半小时 3 1小时 4 2小时 5 4小时 6 8小时 7 12小时 8 24小时
+	Days       int `json:"days"`       // 分成多少天发布
+
+	FileName       string `json:"file_name"`
+	Size           int64  `json:"size"` // 文件大小
+	Md5            string `json:"md5"`
+	Chunk          int    `json:"chunk"`
+	Chunks         int    `json:"chunks"`
+	CategoryId     uint   `json:"category_id"`
+	TitleType      int    `json:"title_type"`
+	CheckDuplicate bool   `json:"check_duplicate"` // 是否检查重复标题
+	Message        string `json:"message"`
+
+	current   time.Time
+	between   time.Duration
+	curDayNum int
+}
+
+func (w *Website) NewQuickImportArchive(req *request.QuickImportArchiveRequest) (*QuickImportArchive, error) {
+	if w.quickImportStatus != nil && w.quickImportStatus.IsFinished == false {
+		return nil, errors.New(w.Tr("prevTaskIsRunning"))
+	}
+	w.quickImportStatus = &QuickImportArchive{
+		w:              w,
+		FileName:       req.FileName,
+		Md5:            req.Md5,
+		Chunks:         req.Chunks,
+		Chunk:          req.Chunk,
+		CategoryId:     req.CategoryId,
+		TitleType:      req.TitleType,
+		Size:           req.Size,
+		PlanType:       req.PlanType,
+		PlanStart:      req.PlanStart,
+		Days:           req.Days,
+		CheckDuplicate: req.CheckDuplicate,
+	}
+
+	return w.quickImportStatus, nil
+}
+
+func (w *Website) GetQuickImportStatus() *QuickImportArchive {
+	if w.quickImportStatus != nil && w.quickImportStatus.IsFinished {
+		time.AfterFunc(500*time.Millisecond, func() {
+			w.quickImportStatus = nil
+		})
+	}
+	return w.quickImportStatus
+}
+
+func (qia *QuickImportArchive) setCurrentTime() {
+	// // 计划开始时间 0 立即 1 跟随最后一篇 2 半小时 3 1小时 4 2小时 5 4小时 6 8小时 7 12小时 8 24小时，9 3天 10 7天 11 1个月 12 6个月 13 1年
+	if qia.PlanStart == 2 {
+		qia.current = qia.current.Add(30 * time.Minute)
+	} else if qia.PlanStart == 3 {
+		qia.current = qia.current.Add(60 * time.Minute)
+	} else if qia.PlanStart == 4 {
+		qia.current = qia.current.Add(2 * time.Hour)
+	} else if qia.PlanStart == 5 {
+		qia.current = qia.current.Add(4 * time.Hour)
+	} else if qia.PlanStart == 6 {
+		qia.current = qia.current.Add(8 * time.Hour)
+	} else if qia.PlanStart == 7 {
+		qia.current = qia.current.Add(12 * time.Hour)
+	} else if qia.PlanStart == 8 {
+		qia.current = qia.current.Add(24 * time.Hour)
+	} else if qia.PlanStart == 9 {
+		qia.current = qia.current.AddDate(0, 0, 3)
+	} else if qia.PlanStart == 10 {
+		qia.current = qia.current.AddDate(0, 0, 7)
+	} else if qia.PlanStart == 11 {
+		qia.current = qia.current.AddDate(0, 1, 0)
+	} else if qia.PlanStart == 12 {
+		qia.current = qia.current.AddDate(0, 6, 0)
+	} else if qia.PlanStart == 13 {
+		qia.current = qia.current.AddDate(1, 0, 0)
+	} else if qia.PlanStart == 1 {
+		// start follow last
+		var lastArchive model.ArchiveDraft
+		qia.w.DB.Model(&model.ArchiveDraft{}).Last(&lastArchive)
+		if lastArchive.CreatedTime > qia.current.Unix() {
+			qia.current = time.Unix(lastArchive.CreatedTime, 0).Add(qia.between)
+		}
+	}
+}
+
+func (qia *QuickImportArchive) Start(file multipart.File) error {
+	defer func() {
+		qia.IsFinished = true
+		_ = file.Close()
+	}()
+
+	category, err := qia.w.GetCategoryById(qia.CategoryId)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+	// 解压zip
+	zipReader, err := zip.NewReader(file, qia.Size)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+
+	qia.Total = len(zipReader.File)
+	qia.between = 0
+	qia.current = time.Now()
+	if qia.PlanType == 2 {
+		qia.DailyCount = int(math.Ceil(float64(qia.Total) / float64(qia.Days)))
+		qia.between = time.Hour * 24 / time.Duration(qia.DailyCount)
+		if qia.PlanStart > 0 {
+			qia.setCurrentTime()
+		}
+	}
+
+	tx := qia.w.DB.Begin()
+	defer tx.Commit()
+
+	nextArchiveId := model.GetNextArchiveId(tx)
+	var archives = make([]model.ArchiveDraft, 0, 2000)
+	var archiveData = make([]model.ArchiveData, 0, 2000)
+	var archiveCategories = make([]model.ArchiveCategory, 0, 2000)
+	for _, f := range zipReader.File {
+		qia.Finished++
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		reader, err := f.Open()
+		if err != nil {
+			qia.Message = err.Error()
+			continue
+		}
+		content, err := io.ReadAll(reader)
+		_ = reader.Close()
+		if err != nil {
+			qia.Message = err.Error()
+			continue
+		}
+		fileExt := filepath.Ext(f.Name)
+		// 支持 txt/html/md
+		status := config.ContentStatusOK
+		if qia.PlanType == 2 {
+			status = config.ContentStatusPlan
+		} else if qia.PlanType == 1 {
+			status = config.ContentStatusDraft
+		}
+		archive := model.ArchiveDraft{
+			Archive: model.Archive{
+				Title:       strings.TrimSuffix(filepath.Base(f.Name), fileExt),
+				CreatedTime: qia.current.Unix(),
+				UpdatedTime: time.Now().Unix(),
+				CategoryId:  category.Id,
+				ModuleId:    category.ModuleId,
+			},
+			Status: uint(status),
+		}
+		archive.Id = nextArchiveId
+		var articleContent string
+		if fileExt == ".html" {
+			re, _ := regexp.Compile(`<title.*?>(.+?)</title>`)
+			match := re.Match(content)
+			if match {
+				// 普通html文档，需要解析
+				arc := &request.Archive{
+					OriginUrl:   "",
+					ContentText: string(content),
+				}
+				err = qia.w.ParseArticleDetail(arc)
+				if err != nil {
+					qia.Message = err.Error()
+					// html文档解析失败
+					continue
+				}
+				if qia.TitleType == 1 && arc.Title != "" {
+					archive.Title = arc.Title
+				}
+				articleContent = arc.Content
+			} else {
+				if qia.TitleType == 1 {
+					contents := bytes.Split(content, []byte{'\n'})
+					if len(contents) > 1 {
+						archive.Title = string(contents[0])
+						content = bytes.Join(contents[1:], []byte{'\n'})
+					}
+				}
+				articleContent = string(content)
+			}
+		} else if fileExt == ".md" || fileExt == ".txt" {
+			if bytes.HasPrefix(content, []byte("# ")) || qia.TitleType == 1 {
+				// 第一行是标题
+				contents := bytes.Split(content, []byte{'\n'})
+				if len(contents) > 1 {
+					archive.Title = strings.TrimLeft(string(contents[0]), "# ")
+					content = bytes.Join(contents[1:], []byte{'\n'})
+				}
+			}
+
+			articleContent = strings.TrimSpace(string(content))
+			if fileExt == ".md" || content[0] != '<' {
+				articleContent = library.MarkdownToHTML(articleContent)
+			}
+		}
+		// 检查标题重复问题
+		if qia.CheckDuplicate {
+			var count int64
+			tx.Model(&model.Archive{}).Where("title = ?", archive.Title).Count(&count)
+			if count > 0 {
+				continue
+			}
+			tx.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Count(&count)
+			if count > 0 {
+				continue
+			}
+		}
+		// 步进
+		// 增加id值
+		nextArchiveId++
+		if qia.between > 0 {
+			qia.current = qia.current.Add(qia.between)
+		}
+		// e
+		// 解析description
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		// 解析urlToken
+		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
+		archives = append(archives, archive)
+		// archiveData
+		archiveData = append(archiveData, model.ArchiveData{
+			Id:      archive.Id,
+			Content: articleContent,
+		})
+		archiveCategories = append(archiveCategories, model.ArchiveCategory{
+			CategoryId: category.Id,
+			ArchiveId:  archive.Id,
+		})
+		// 分批入库
+		if len(archives) >= 1000 {
+			if qia.PlanType != 0 {
+				// 入库到 draft
+				tx.CreateInBatches(archives, 1000)
+			} else {
+				// release mode
+				var release = make([]model.Archive, 0, len(archives))
+				for _, v := range archives {
+					release = append(release, v.Archive)
+				}
+				tx.CreateInBatches(archives, 1000)
+			}
+			tx.CreateInBatches(archiveData, 1000)
+			tx.CreateInBatches(archiveCategories, 1000)
+			log.Println("in id ", nextArchiveId)
+			qia.Message = qia.w.Tr("currentInsertId%d", nextArchiveId)
+			archives = make([]model.ArchiveDraft, 0, 1000)
+			archiveData = make([]model.ArchiveData, 0, 1000)
+			archiveCategories = make([]model.ArchiveCategory, 0, 1000)
+			qia.Succeed += len(archives)
+		}
+	}
+	if len(archives) > 0 {
+		if qia.PlanType != 0 {
+			// 入库到 draft
+			tx.CreateInBatches(archives, 1000)
+		} else {
+			// release mode
+			var release = make([]model.Archive, 0, len(archives))
+			for _, v := range archives {
+				release = append(release, v.Archive)
+			}
+			tx.CreateInBatches(archives, 1000)
+		}
+		tx.CreateInBatches(archiveData, 1000)
+		tx.CreateInBatches(archiveCategories, 1000)
+		qia.Succeed += len(archives)
+	}
+	qia.IsFinished = true
 
 	return nil
 }

@@ -7,11 +7,13 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
 
-func (w *Website) GetTagList(itemId uint, title string, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
+func (w *Website) GetTagList(itemId uint, title string, categoryIds []uint, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
 	var tags []*model.Tag
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
@@ -33,6 +35,13 @@ func (w *Website) GetTagList(itemId uint, title string, firstLetter string, curr
 	}
 	if title != "" {
 		builder = builder.Where("`title` like ?", "%"+title+"%")
+	}
+	if len(categoryIds) > 0 {
+		if len(categoryIds) == 1 {
+			builder = builder.Where("`category_id` = ?", categoryIds[0])
+		} else {
+			builder = builder.Where("`category_id` IN(?)", categoryIds)
+		}
 	}
 
 	err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&tags).Error
@@ -59,12 +68,21 @@ func (w *Website) GetTagById(id uint) (*model.Tag, error) {
 	return &tag, nil
 }
 
+func (w *Website) GetTagContentById(id uint) (*model.TagContent, error) {
+	var tagContent model.TagContent
+	if err := w.DB.Where("id = ?", id).First(&tagContent).Error; err != nil {
+		return nil, err
+	}
+
+	return &tagContent, nil
+}
+
 func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	var tag model.Tag
 	if err := w.DB.Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
-
+	tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 	return &tag, nil
 }
 
@@ -73,7 +91,6 @@ func (w *Website) GetTagByTitle(title string) (*model.Tag, error) {
 	if err := w.DB.Where("`title` = ?", title).First(&tag).Error; err != nil {
 		return nil, err
 	}
-
 	return &tag, nil
 }
 
@@ -85,6 +102,7 @@ func (w *Website) DeleteTag(id uint) error {
 
 	//删除记录
 	w.DB.Unscoped().Where("`tag_id` = ?", tag.Id).Delete(model.TagData{})
+	w.DB.Unscoped().Where("`id` = ?", tag.Id).Delete(model.TagContent{})
 
 	//执行删除操作
 	err = w.DB.Delete(tag).Error
@@ -105,7 +123,12 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	if req.Id > 0 {
 		tag, err = w.GetTagById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			tag = &model.Tag{
+				Status: 1,
+			}
+			tag.Id = req.Id
+			newPost = true
 		}
 	} else {
 		tag, err = w.GetTagByTitle(req.Title)
@@ -123,6 +146,12 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	tag.UrlToken = req.UrlToken
 	tag.Description = req.Description
 	tag.FirstLetter = req.FirstLetter
+	tag.CategoryId = req.CategoryId
+	tag.Template = req.Template
+	tag.Logo = req.Logo
+	if tag.Logo != "" {
+		tag.Logo = strings.TrimPrefix(tag.Logo, w.PluginStorage.StorageUrl)
+	}
 	// 判断重复
 	req.UrlToken = library.ParseUrlToken(req.UrlToken)
 	if req.UrlToken == "" {
@@ -142,6 +171,66 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 
 	if err != nil {
 		return
+	}
+	// 保存 content
+	if len(req.Content) > 0 {
+		// 将单个&nbsp;替换为空格
+		req.Content = library.ReplaceSingleSpace(req.Content)
+		// todo 应该只替换 src,href 中的 baseUrl
+		req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+		// 过滤外链
+		if w.Content.FilterOutlink == 1 {
+			baseHost := ""
+			urls, err := url.Parse(w.System.BaseUrl)
+			if err == nil {
+				baseHost = urls.Host
+			}
+
+			re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+			req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+				match := re.FindStringSubmatch(s)
+				if len(match) < 3 {
+					return s
+				}
+				aUrl, err2 := url.Parse(match[1])
+				if err2 == nil {
+					if aUrl.Host != "" && aUrl.Host != baseHost {
+						//过滤外链
+						return match[2]
+					}
+				}
+				return s
+			})
+			// 匹配Markdown [link](url)
+			// 由于不支持零宽断言，因此匹配所有
+			re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
+			req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+				// 过滤掉 ! 开头的
+				if strings.HasPrefix(s, "!") {
+					return s
+				}
+				match := re.FindStringSubmatch(s)
+				if len(match) < 3 {
+					return s
+				}
+				aUrl, err2 := url.Parse(match[2])
+				if err2 == nil {
+					if aUrl.Host != "" && aUrl.Host != baseHost {
+						//过滤外链
+						return match[1]
+					}
+				}
+				return s
+			})
+		}
+		tagContent := &model.TagContent{
+			Id:      tag.Id,
+			Content: req.Content,
+		}
+		err = w.DB.Save(&tagContent).Error
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	if newPost && tag.Status == config.ContentStatusOK {

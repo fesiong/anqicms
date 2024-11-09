@@ -112,9 +112,16 @@ func ApiArchiveDetail(ctx iris.Context) {
 	}
 	if len(archive.Password) > 0 {
 		// password is not visible for user
+		password := ctx.URLParam("password")
+		if password == archive.Password {
+			archive.PasswordValid = true
+		}
 		archive.Password = ""
 		archive.HasPassword = true
-		archive.ArchiveData = nil
+		// 带密码的文档，如果密码不正确，则不显示内容
+		if archive.PasswordValid == false {
+			archive.ArchiveData = nil
+		}
 	}
 	if archive.ArchiveData != nil {
 		// convert markdown to html
@@ -284,8 +291,8 @@ func ApiArchiveList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -485,6 +492,7 @@ func ApiArchiveList(ctx iris.Context) {
 			tags := currentSite.GetTagsByIds(searchTagIds)
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
 					Id:          tag.Id,
@@ -496,6 +504,8 @@ func ApiArchiveList(ctx iris.Context) {
 					Keywords:    tag.Keywords,
 					Description: tag.Description,
 					Link:        tag.Link,
+					Logo:        tag.Logo,
+					Thumb:       tag.Thumb,
 				})
 			}
 		}
@@ -574,9 +584,9 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		} else {
 			if currentSite.Content.UseSort == 1 {
-				order = "archives.`sort` desc, archives.`id` desc"
+				order = "archives.`sort` desc, archives.`created_time` desc"
 			} else {
-				order = "archives.`id` desc"
+				order = "archives.`created_time` desc"
 			}
 		}
 		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset, draftInt)
@@ -747,8 +757,8 @@ func ApiCategoryList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -834,8 +844,8 @@ func ApiCommentList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1072,6 +1082,11 @@ func ApiTagDetail(ctx iris.Context) {
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
+		if err == nil {
+			tagDetail.Content = tagContent.Content
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -1106,9 +1121,9 @@ func ApiTagDataList(ctx iris.Context) {
 	order := ctx.URLParamDefault("order", "")
 	if order == "" {
 		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 	listType := ctx.URLParamDefault("type", "list")
@@ -1122,8 +1137,8 @@ func ApiTagDataList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1188,8 +1203,8 @@ func ApiTagList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1201,10 +1216,25 @@ func ApiTagList(ctx iris.Context) {
 			offset = (currentPage - 1) * limit
 		}
 	}
-
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
+	var categoryIds []uint
+	var categoryDetail *model.Category
+	tmpCatId := ctx.URLParam("categoryId")
+	if tmpCatId != "" {
+		tmpIds := strings.Split(tmpCatId, ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
+				if categoryDetail != nil {
+					categoryIds = append(categoryIds, categoryDetail.Id)
+				}
+			}
+		}
+	}
+	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	}
 
 	ctx.JSON(iris.Map{

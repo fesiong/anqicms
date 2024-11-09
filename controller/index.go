@@ -14,16 +14,18 @@ func IndexPage(ctx iris.Context) {
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
-	webTitle := currentSite.Index.SeoTitle
-	if currentPage > 1 {
-		webTitle += " - " + currentSite.TplTr("PageNum", currentPage)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
 	}
-
+	webTitle := currentSite.Index.SeoTitle
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = webTitle
 		webInfo.Keywords = currentSite.Index.SeoKeywords
 		webInfo.Description = currentSite.Index.SeoDescription
 		//设置页面名称，方便tags识别
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "index"
 		webInfo.CanonicalUrl = currentSite.GetUrl("", nil, 0)
 		ctx.ViewData("webInfo", webInfo)

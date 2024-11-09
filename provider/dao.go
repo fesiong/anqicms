@@ -123,6 +123,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.HtmlPushLog{},
 			&model.Archive{},
 			&model.ArchiveDraft{},
+			&model.TranslateLog{},
 
 			&model.User{},
 			&model.UserGroup{},
@@ -139,6 +140,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatMenu{},
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
+			&model.TagContent{},
 
 			&model.Calendar{},
 			&model.Character{},
@@ -238,6 +240,7 @@ func (w *Website) InitModelData() {
 			Model:     model.Model{Id: 1},
 			TableName: "article",
 			UrlToken:  "news",
+			Name:      w.Tr("articleModule"),
 			Title:     w.Tr("ArticleCenter"),
 			Fields:    nil,
 			IsSystem:  1,
@@ -248,6 +251,7 @@ func (w *Website) InitModelData() {
 			Model:     model.Model{Id: 2},
 			TableName: "product",
 			UrlToken:  "product",
+			Name:      w.Tr("productModule"),
 			Title:     w.Tr("ProductCenter"),
 			Fields:    nil,
 			IsSystem:  1,
@@ -257,13 +261,16 @@ func (w *Website) InitModelData() {
 	}
 	for _, m := range modules {
 		m.Database = w.Mysql.Database
-		var exists int64
-		w.DB.Model(&model.Module{}).Where("`id` = ?", m.Id).Count(&exists)
-		if exists == 0 {
+		var dbModule model.Module
+		w.DB.Model(&model.Module{}).Where("`id` = ?", m.Id).Take(&dbModule)
+		if dbModule.Id == 0 {
 			w.DB.Create(&m)
 			// 并生成表
 			tplPath := fmt.Sprintf("%s/%s", w.GetTemplateDir(), m.TableName)
 			m.Migrate(w.DB, tplPath, false)
+		} else if dbModule.Name == "" {
+			// 修复name
+			w.DB.Model(&dbModule).UpdateColumn("name", m.Name)
 		}
 	}
 	// 表字段重新检查

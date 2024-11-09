@@ -15,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/view"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -92,15 +93,19 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application = iris.New()
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
-	route.Register(bootstrap.Application)
+	route.Register(bootstrap.Application, SystemFiles)
 	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
 	if err != nil {
 		log.Println("languages err", err)
 		os.Exit(1)
 	}
+	bootstrap.Application.I18n.Cookie = "lang"
+	bootstrap.Application.I18n.Subdomain = false
+	bootstrap.Application.I18n.PathRedirect = false
 	bootstrap.Application.I18n.SetDefault("zh-CN")
 	// 注入I18n 到 provider
 	provider.SetI18n(bootstrap.Application.I18n)
+	bootstrap.Application.I18n.Tags()
 
 	pugEngine := view.Django(".html")
 	// 开发模式下动态加载
@@ -137,6 +142,7 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("userGroupDetail", tags.TagUserGroupDetailParser)
 	_ = pugEngine.RegisterTag("bannerList", tags.TagBannerListParser)
 	_ = pugEngine.RegisterTag("moduleDetail", tags.TagModuleDetailParser)
+	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
 
 	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行
@@ -146,6 +152,7 @@ func (bootstrap *Bootstrap) Start() {
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
 		iris.WithRemoteAddrHeader("X-Real-IP"),
 		iris.WithRemoteAddrHeader("X-Forwarded-For"),
+		iris.WithHostProxyHeader("X-Host"),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithoutBodyConsumptionOnUnmarshal,
 		iris.WithoutPathCorrection,
@@ -158,8 +165,12 @@ func (bootstrap *Bootstrap) Start() {
 	}
 }
 
-func TimestampToDate(in int64, layout string) string {
-	t := time.Unix(in, 0)
+func TimestampToDate(in interface{}, layout string) string {
+	in2, _ := strconv.ParseInt(fmt.Sprint(in), 10, 64)
+	if in2 == 0 {
+		return ""
+	}
+	t := time.Unix(in2, 0)
 	return t.Format(layout)
 }
 

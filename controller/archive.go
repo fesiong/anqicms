@@ -200,11 +200,18 @@ func ArchiveIndex(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = module.Title
 
 		//设置页面名称，方便tags识别
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "archiveIndex"
 		webInfo.NavBar = module.Id
 		webInfo.CanonicalUrl = currentSite.GetUrl("archiveIndex", module, 0)

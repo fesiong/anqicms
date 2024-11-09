@@ -8,7 +8,7 @@ import (
 )
 
 func SettingSensitiveWords(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	sensitiveWords := currentSite.SensitiveWords
 
 	ctx.JSON(iris.Map{
@@ -19,7 +19,7 @@ func SettingSensitiveWords(ctx iris.Context) {
 }
 
 func SettingSensitiveWordsForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req []string
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -49,7 +49,7 @@ func SettingSensitiveWordsForm(ctx iris.Context) {
 }
 
 func SettingSensitiveWordsCheck(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -72,7 +72,7 @@ func SettingSensitiveWordsCheck(ctx iris.Context) {
 }
 
 func SettingSensitiveWordsSync(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	err := currentSite.AnqiSyncSensitiveWords()
 	if err != nil {

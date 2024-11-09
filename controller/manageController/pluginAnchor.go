@@ -329,3 +329,31 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }
+
+func PluginAnchorAddFromTitle(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PluginAnchorAddFromTitle
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.InsertTitleToAnchor(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportAnchorTextLog", req))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("UploadCompleted"),
+	})
+}

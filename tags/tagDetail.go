@@ -36,6 +36,11 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 
 	tagDetail, _ := ctx.Public["tag"].(*model.Tag)
 	if args["id"] != nil {
@@ -57,7 +62,7 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
-
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 		v := reflect.ValueOf(*tagDetail)
 
 		f := v.FieldByName(fieldName)
@@ -66,6 +71,16 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		}
 		if tagDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = tagDetail.Title
+		}
+		if fieldName == "Content" {
+			tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
+			if err == nil {
+				content = tagContent.Content
+				// convert markdown to html
+				if render {
+					content = library.MarkdownToHTML(tagContent.Content)
+				}
+			}
 		}
 	}
 

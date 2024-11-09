@@ -110,6 +110,14 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if archiveDetail != nil {
 		if len(archiveDetail.Password) > 0 {
 			archiveDetail.HasPassword = true
+			urlParams, ok := ctx.Public["urlParams"].(map[string]string)
+			if ok {
+				password := urlParams["password"]
+				if password == archiveDetail.Password {
+					// 密码验证正确
+					archiveDetail.PasswordValid = true
+				}
+			}
 		}
 		// 读取flag
 		if fieldName == "Flags" || fieldName == "Flag" {
@@ -137,7 +145,17 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					}
 				}
 				if item, ok := archiveParams[inputName]; ok {
-					content = item.Value
+					if item.Value == nil || item.Value == "" {
+						item.Value = item.Default
+					}
+					if item.FollowLevel && !archiveDetail.HasOrdered {
+						content = ""
+					} else {
+						if item.Type == config.CustomFieldTypeEditor && render {
+							item.Value = library.MarkdownToHTML(fmt.Sprintf("%v", item.Value))
+						}
+						content = item.Value
+					}
 				}
 			}
 		}

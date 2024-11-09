@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jinzhu/now"
 	"github.com/medivhzhan/weapp/v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -201,6 +200,18 @@ func (w *Website) GetUserGroupInfo(groupId uint) (*model.UserGroup, error) {
 	var group model.UserGroup
 
 	err := w.DB.Where("`id` = ?", groupId).Take(&group).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &group, nil
+}
+
+func (w *Website) GetUserGroupInfoByLevel(level int) (*model.UserGroup, error) {
+	var group model.UserGroup
+
+	err := w.DB.Where("`level` = ?", level).Take(&group).Error
 
 	if err != nil {
 		return nil, err
@@ -692,7 +703,8 @@ func (w *Website) GetUserExtra(id uint) map[string]*model.CustomField {
 }
 
 func (w *Website) GetUserAuthToken(userId uint, remember bool) string {
-	t := now.BeginningOfDay().AddDate(0, 0, 1)
+	// 默认24小时
+	t := time.Now().Add(24 * time.Hour)
 	// 记住会记住30天
 	if remember {
 		t = t.AddDate(0, 0, 29)

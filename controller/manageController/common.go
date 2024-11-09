@@ -126,6 +126,9 @@ func CheckVersion(ctx iris.Context) {
 		return
 	}
 
+	// 删除 system
+	_ = os.RemoveAll(config.ExecPath + "system")
+
 	err := json.Unmarshal(body, &lastVersion)
 	if err == nil {
 		result := library.VersionCompare(lastVersion.Version, config.Version)
@@ -156,6 +159,12 @@ func VersionUpgrade(ctx iris.Context) {
 		})
 		return
 	}
+	// 不支持自动升级
+	ctx.JSON(iris.Map{
+		"code": config.StatusFailed,
+		"msg":  "起名特别版不支持后台升级哦",
+	})
+	return
 	// 下载压缩包
 	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-v%s.zip", runtime.GOOS, lastVersion.Version)
 	// 最长等待10分钟
@@ -193,6 +202,9 @@ func VersionUpgrade(ctx iris.Context) {
 		// 删除压缩包
 		os.Remove(tmpFile)
 	}()
+
+	// 删除 system
+	_ = os.RemoveAll(config.ExecPath + "system")
 
 	var errorFiles []string
 	path, _ := os.Executable()

@@ -262,3 +262,60 @@ func ParseContentTitles(content string) []ContentTitle {
 	}
 	return titles
 }
+
+type NameVal struct {
+	Name string
+	Val  string
+}
+
+var SpiderNames = []NameVal{
+	{Name: "googlebot", Val: "google"},
+	{Name: "bingbot", Val: "bing"},
+	{Name: "baiduspider", Val: "baidu"},
+	{Name: "360spider", Val: "360"},
+	{Name: "yahoo!", Val: "yahoo"},
+	{Name: "sogou", Val: "sogou"},
+	{Name: "bytespider", Val: "byte"},
+	{Name: "yisouspider", Val: "yisou"},
+	{Name: "yandexbot", Val: "yandex"},
+	{Name: "spider", Val: "other"},
+	{Name: "bot", Val: "other"},
+}
+
+var DeviceNames = []NameVal{
+	{Name: "android", Val: "android"},
+	{Name: "iphone", Val: "iphone"},
+	{Name: "windows", Val: "windows"},
+	{Name: "macintosh", Val: "mac"},
+	{Name: "linux", Val: "linux"},
+	{Name: "mobile", Val: "mobile"},
+	{Name: "curl", Val: "curl"},
+	{Name: "python", Val: "python"},
+	{Name: "client", Val: "client"},
+	{Name: "spider", Val: "spider"},
+	{Name: "bot", Val: "spider"},
+}
+
+func GetSpider(ua string) string {
+	ua = strings.ToLower(ua)
+	//获取蜘蛛
+	for _, v := range SpiderNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
+		}
+	}
+
+	return ""
+}
+
+func GetDevice(ua string) string {
+	ua = strings.ToLower(ua)
+
+	for _, v := range DeviceNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
+		}
+	}
+
+	return "proxy"
+}

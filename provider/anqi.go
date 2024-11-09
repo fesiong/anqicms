@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/parnurzeal/gorequest"
+	"gorm.io/gorm/clause"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -77,8 +78,9 @@ type AnqiAiRequest struct {
 	Content    string `json:"content"`
 	TextLength int64  `json:"text_length"`
 	AiRemain   int64  `json:"ai_remain"`
-	Async      bool   `json:"async"` // 是否异步处理
-	Cost       bool   `json:"cost"`  // 支付需要支付
+	Async      bool   `json:"async"`      // 是否异步处理
+	Cost       bool   `json:"cost"`       // 支付需要支付
+	ArticleId  uint   `json:"article_id"` // 本地的文档ID
 
 	Type  int  `json:"type"`
 	ReqId uint `json:"req_id"`
@@ -94,15 +96,19 @@ type AnqiAiResult struct {
 	CreatedTime int64  `json:"created_time"`
 	Type        int    `json:"type"`
 	Language    string `json:"language"`
+	ToLanguage  string `json:"to_language"`
 	Keyword     string `json:"keyword"`
 	Demand      string `json:"demand"`
 	PayCount    int64  `json:"pay_count"`
 	Status      int    `json:"status"`
 
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	ReqId     uint   `json:"req_id"`
-	ArticleId uint   `json:"-"`
+	Title         string `json:"title"`
+	Content       string `json:"content"`
+	ReqId         uint   `json:"req_id"`
+	ArticleId     uint   `json:"-"`
+	UseSelf       bool   `json:"-"`
+	OriginTitle   string `json:"origin_title"`
+	OriginContent string `json:"origin_content"`
 }
 
 type AnqiAiResponse struct {
@@ -331,17 +337,8 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	return nil
 }
 
-func (w *Website) AnqiTranslateArticle(archive *model.Archive, toLanguage string) error {
-	archiveData, err := w.GetArchiveDataById(archive.Id)
-	if err != nil {
-		return err
-	}
-	req := &AnqiAiRequest{
-		Title:      archive.Title,
-		Content:    archiveData.Content,
-		ToLanguage: toLanguage,
-		Async:      true, // 异步返回结果
-	}
+// AnqiTranslateString 翻译任意文本内容
+func (w *Website) AnqiTranslateString(req *AnqiAiRequest) (result *AnqiAiResult, err error) {
 	if req.Language == "" {
 		isEnglish := CheckContentIsEnglish(req.Title)
 		if isEnglish {
@@ -350,49 +347,79 @@ func (w *Website) AnqiTranslateArticle(archive *model.Archive, toLanguage string
 			req.Language = config.LanguageZh
 		}
 	}
-
-	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
-		req, err = w.SelfAiTranslateResult(req)
-		if err != nil {
-			return err
+	if req.ToLanguage == "" {
+		return nil, errors.New(w.Tr("PleaseSelectTargetLanguage"))
+	}
+	// 检查是否在记录中存在结果。如果是有记录，则标记 useSelf = true
+	logData := QueryTranslateLog(&AnqiAiResult{Title: req.Title, OriginContent: req.Content, ToLanguage: req.ToLanguage})
+	if logData != nil {
+		result = &AnqiAiResult{
+			Type:          config.AiArticleTypeTranslate,
+			Language:      req.Language,
+			ToLanguage:    req.ToLanguage,
+			Keyword:       req.Keyword,
+			Demand:        req.Demand,
+			Status:        config.AiArticleStatusCompleted,
+			Title:         logData.Title,
+			Content:       logData.Content,
+			OriginTitle:   logData.OriginTitle,
+			OriginContent: logData.OriginContent,
+			ArticleId:     req.ArticleId,
+			UseSelf:       true,
 		}
-		archive.Title = req.Title
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
-		err = w.DB.Save(archive).Error
-		// 再保存内容
-		archiveData.Content = req.Content
-		w.DB.Save(archiveData)
-		// 添加到plan，并标记完成
-		result := AnqiAiResult{
-			Type:      config.AiArticleTypeTranslate,
-			Language:  req.Language,
-			Keyword:   req.Keyword,
-			Demand:    req.Demand,
-			Status:    config.AiArticleStatusCompleted,
-			Title:     req.Title,
-			Content:   req.Content,
-			ArticleId: archive.Id,
-		}
-		_, err = w.SaveAiArticlePlan(&result, true)
-	} else {
-		var result AnqiAiResponse
-		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
-		if len(errs) > 0 {
-			return errs[0]
-		}
-		if result.Code != 0 {
-			return errors.New(result.Msg)
-		}
-		// 添加到plan中
-		result.Data.Status = config.AiArticleStatusDoing
-		result.Data.ArticleId = archive.Id
-		_, err = w.SaveAiArticlePlan(&result.Data, false)
-		if err != nil {
-			return err
-		}
+		return result, nil
 	}
 
-	return nil
+	originTitle := req.Title
+	originContent := req.Content
+	// 如果设置了使用AI翻译，则使用自己翻译
+	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault && w.AiGenerateConfig.AiTranslate {
+		req, err = w.SelfAiTranslateResult(req)
+		if err != nil {
+			return nil, err
+		}
+		result = &AnqiAiResult{
+			Type:          config.AiArticleTypeTranslate,
+			Language:      req.Language,
+			ToLanguage:    req.ToLanguage,
+			Keyword:       req.Keyword,
+			Demand:        req.Demand,
+			Status:        config.AiArticleStatusCompleted,
+			Title:         req.Title,
+			Content:       req.Content,
+			OriginTitle:   originTitle,
+			OriginContent: originContent,
+			ArticleId:     req.ArticleId,
+			UseSelf:       true,
+		}
+
+		// 记录翻译记录
+		AddTranslateLog(result)
+
+		return result, nil
+	} else {
+		var res AnqiAiResponse
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&res)
+		if len(errs) > 0 {
+			return nil, errs[0]
+		}
+		if res.Code != 0 {
+			return nil, errors.New(res.Msg)
+		}
+		if res.Data.Status != config.AiArticleStatusCompleted {
+			res.Data.Status = config.AiArticleStatusDoing
+		}
+		res.Data.UseSelf = false
+		res.Data.ArticleId = req.ArticleId
+		if res.Data.Status == config.AiArticleStatusCompleted {
+			// 记录翻译记录
+			res.Data.OriginTitle = originTitle
+			res.Data.OriginContent = originContent
+			AddTranslateLog(&res.Data)
+		}
+
+		return &res.Data, nil
+	}
 }
 
 func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
@@ -608,6 +635,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 		return ErrDoing
 	}
 	if result.Data.Status == config.AiArticleStatusCompleted {
+		// 异步返回的不记录log
 		// 成功
 		if plan.ArticleId > 0 {
 			// 更新文章
@@ -929,6 +957,43 @@ func (w *Website) AnqiSyncSensitiveWords() error {
 	}
 
 	return nil
+}
+
+func AddTranslateLog(result *AnqiAiResult) {
+	// translate log 只记录到主站点的库里
+	db := GetDefaultDB()
+
+	// md5 的值 = 原始字符串+翻译的语言
+	md5Str := library.Md5(result.OriginTitle + "-" + result.OriginContent + "-" + result.ToLanguage)
+	logData := model.TranslateLog{
+		Language:      result.Language,
+		ToLanguage:    result.ToLanguage,
+		OriginTitle:   result.OriginTitle,
+		OriginContent: result.OriginContent,
+		Md5:           md5Str,
+		Title:         result.Title,
+		Content:       result.Content,
+	}
+
+	db.Model(&model.TranslateLog{}).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "md5"}},
+		UpdateAll: true,
+	}).Where("`md5` = ?", md5Str).Create(&logData)
+}
+
+func QueryTranslateLog(result *AnqiAiResult) *model.TranslateLog {
+	// translate log 只记录到主站点的库里
+	db := GetDefaultDB()
+	// md5 的值 = 原始字符串+翻译的语言
+	md5Str := library.Md5(result.OriginTitle + "-" + result.OriginContent + "-" + result.ToLanguage)
+
+	var logData model.TranslateLog
+	err := db.Model(&model.TranslateLog{}).Where("`md5` = ?", md5Str).Take(&logData).Error
+	if err != nil {
+		return nil
+	}
+
+	return &logData
 }
 
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {

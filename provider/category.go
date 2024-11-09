@@ -18,7 +18,7 @@ import (
 
 func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
-	err := ops(w.DB).Omit("content").Find(&categories).Error
+	err := ops(w.DB).Omit("content", "extra_data").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +75,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if req.Id > 0 {
 		category, err = w.GetCategoryById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			category = &model.Category{
+				Status: 1,
+			}
+			category.Id = req.Id
+			newPost = true
 		}
 	} else {
 		category = &model.Category{
@@ -97,6 +102,9 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	category.IsInherit = req.IsInherit
 	category.Images = req.Images
 	category.Logo = req.Logo
+	if req.Extra != nil {
+		category.Extra = req.Extra
+	}
 	for i, v := range category.Images {
 		category.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)
 	}
@@ -358,6 +366,27 @@ func (w *Website) GetCategoryTemplate(category *model.Category) *response.Catego
 	return nil
 }
 
+func (w *Website) GetParentCategories(parentId uint) []*model.Category {
+	var categories []*model.Category
+	if parentId == 0 {
+		return nil
+	}
+	for {
+		category := w.GetCategoryFromCache(parentId)
+		if category == nil {
+			break
+		}
+		categories = append(categories, category)
+		parentId = category.ParentId
+	}
+	// 将 categories 翻转
+	for i, j := 0, len(categories)-1; i < j; i, j = i+1, j-1 {
+		categories[i], categories[j] = categories[j], categories[i]
+	}
+
+	return categories
+}
+
 func (w *Website) DeleteCacheCategories() {
 	w.Cache.Delete("categories")
 }
@@ -512,4 +541,22 @@ func (w *Website) VerifyCategoryUrlToken(urlToken string, id uint) string {
 	}
 
 	return urlToken
+}
+
+func (w *Website) UpdateCategoryArchiveCounts() {
+	var categories []*model.Category
+	w.DB.Model(model.Category{}).Find(&categories)
+	for _, category := range categories {
+		w.UpdateCategoryArchiveCount(category.Id)
+	}
+}
+
+func (w *Website) UpdateCategoryArchiveCount(categoryId uint) {
+	var archiveCount int64
+	if w.Content.MultiCategory == 1 {
+		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id = ?", categoryId).Count(&archiveCount)
+	} else {
+		w.DB.Model(&model.Archive{}).Where("category_id = ?", categoryId).Count(&archiveCount)
+	}
+	w.DB.Model(&model.Category{}).Where("id = ?", categoryId).UpdateColumn("archive_count", archiveCount)
 }

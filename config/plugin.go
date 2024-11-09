@@ -156,11 +156,16 @@ type PluginTimeFactor struct {
 	CategoryIds []int64  `json:"category_ids"`
 	DoPublish   bool     `json:"do_publish"`
 	ReleaseOpen bool     `json:"release_open"`
-	DailyLimit  int      `json:"daily_limit"`
+	DailyLimit  int      `json:"daily_limit"` // 自动发布用
 	StartTime   int      `json:"start_time"`
 	EndTime     int      `json:"end_time"`
-	TodayCount  int      `json:"today_count"`
+	TodayCount  int      `json:"today_count"` // 当天发布了多少
 	LastSent    int64    `json:"last_sent"`
+	DailyUpdate int      `json:"daily_update"` // 自动更新用
+	TodayUpdate int      `json:"today_update"` // 当天更新了多少
+	LastUpdate  int64    `json:"last_update"`  // 最后更新时间
+
+	UpdateRunning bool `json:"-"`
 }
 
 type PluginInterference struct {
@@ -182,6 +187,33 @@ type PluginWatermark struct {
 	Position  int    `json:"position"` // 5 居中，1 左上角，3 右上角 7 左下角 9 右下角
 	Opacity   int    `json:"opacity"`
 	MinSize   int    `json:"min_size"`
+}
+
+type PluginLimiter struct {
+	Open          bool     `json:"open"`
+	WhiteIPs      []string `json:"white_ips"`
+	BlackIPs      []string `json:"black_ips"`
+	MaxRequests   int      `json:"max_requests"`
+	BlockHours    int      `json:"block_hours"`
+	BlockAgents   []string `json:"block_agents"`
+	AllowPrefixes []string `json:"allow_prefixes"`
+	IsAllowSpider bool     `json:"is_allow_spider"`
+}
+
+type PluginMultiLangConfig struct {
+	Open            bool            `json:"open"`
+	Type            string          `json:"type"`
+	DefaultLanguage string          `json:"default_language"` // 该语言只是调用系统的设置
+	AutoTranslate   bool            `json:"auto_translate"`
+	SubSites        map[string]uint `json:"-"`
+}
+
+type PluginTranslateConfig struct {
+	Engine          string `json:"engine"`            // 使用的翻译引擎，默认为官方接口，可选有：baidu,youdao,ai
+	BaiduAppId      string `json:"baidu_app_id"`      // 百度翻译
+	BaiduAppSecret  string `json:"baidu_app_secret"`  // 百度翻译
+	YoudaoAppKey    string `json:"youdao_app_key"`    // 有道翻译
+	YoudaoAppSecret string `json:"youdao_app_secret"` // 有道翻译
 }
 
 func (g *CustomField) SplitContent() []string {

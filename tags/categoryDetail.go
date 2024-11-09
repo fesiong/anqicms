@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -43,9 +44,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	fieldName := ""
+	inputName := ""
 	if args["name"] != nil {
-		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		inputName = args["name"].String()
+		fieldName = library.Case2Camel(inputName)
 	}
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
@@ -76,6 +78,19 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		var content interface{}
 		if f.IsValid() {
 			content = f.Interface()
+		}
+		// 支持 extra
+		if item, ok := categoryDetail.Extra[inputName]; ok {
+			// 如果是editor，需要render
+			module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
+			if module != nil && module.CategoryFields != nil {
+				for _, field := range module.CategoryFields {
+					if field.Name == inputName && field.Type == config.CustomFieldTypeEditor && render {
+						item = library.MarkdownToHTML(fmt.Sprintf("%v", item))
+					}
+				}
+			}
+			content = item
 		}
 
 		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {

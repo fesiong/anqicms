@@ -1,18 +1,17 @@
 package route
 
 import (
-	"fmt"
+	"embed"
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
 
-func manageRoute(app *iris.Application) {
+func manageRoute(app *iris.Application, systemFiles embed.FS) {
 	system := app.Party("/system", manageController.AdminFileServ)
 	{
-		system.HandleDir("/", fmt.Sprintf("%ssystem", config.ExecPath))
+		system.HandleDir("/", systemFiles)
 	}
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{
@@ -56,6 +55,7 @@ func manageRoute(app *iris.Application) {
 			website.Get("/info", manageController.GetWebsiteInfo)
 			website.Post("/save", manageController.SaveWebsiteInfo)
 			website.Post("/delete", manageController.DeleteWebsite)
+			website.Post("/login", manageController.LoginSubWebsite)
 		}
 
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -151,6 +151,7 @@ func manageRoute(app *iris.Application) {
 			category.Get("/detail", manageController.CategoryDetail)
 			category.Post("/detail", manageController.CategoryDetailForm)
 			category.Post("/delete", manageController.CategoryDelete)
+			category.Post("/count", manageController.CategoryUpdateArchiveCount)
 		}
 
 		archive := manage.Party("/archive", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -168,6 +169,8 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/sort", manageController.UpdateArchiveSort)
 			archive.Post("/plan", manageController.UpdateArchiveReleasePlan)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
+			archive.Post("/import", manageController.QuickImportArchive)
+			archive.Get("/import/status", manageController.GetQuickImportArchiveStatus)
 		}
 
 		statistic := manage.Party("/statistic", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -255,6 +258,7 @@ func manageRoute(app *iris.Application) {
 				anchor.Post("/import", manageController.PluginAnchorImport)
 				anchor.Get("/setting", manageController.PluginAnchorSetting)
 				anchor.Post("/setting", manageController.PluginAnchorSettingForm)
+				anchor.Post("/addfromtitle", manageController.PluginAnchorAddFromTitle)
 			}
 
 			guestbook := plugin.Party("/guestbook")
@@ -436,6 +440,7 @@ func manageRoute(app *iris.Application) {
 			{
 				backup.Get("/list", manageController.PluginBackupList)
 				backup.Post("/dump", manageController.PluginBackupDump)
+				backup.Get("/status", manageController.PluginBackupStatus)
 				backup.Post("/restore", manageController.PluginBackupRestore)
 				backup.Post("/delete", manageController.PluginBackupDelete)
 				backup.Post("/export", manageController.PluginBackupExport)
@@ -506,6 +511,30 @@ func manageRoute(app *iris.Application) {
 			{
 				interference.Get("/config", manageController.PluginInterferenceConfig)
 				interference.Post("/config", manageController.PluginInterferenceConfigForm)
+			}
+			limiter := plugin.Party("/limiter")
+			{
+				limiter.Get("/setting", manageController.PluginGetLimiterSetting)
+				limiter.Post("/setting", manageController.PluginSaveLimiterSetting)
+				limiter.Get("/blockedips", manageController.PluginGetBlockedIPs)
+				limiter.Post("/blockedip/remove", manageController.PluginRemoveBlockedIP)
+			}
+			multiLang := plugin.Party("/multilang")
+			{
+				multiLang.Get("/config", manageController.PluginGetMultiLangConfig)
+				multiLang.Post("/config", manageController.PluginSaveMultiLangConfig)
+				multiLang.Get("/sites", manageController.PluginGetMultiLangSites)
+				multiLang.Get("/validsites", manageController.GetValidWebsiteList)
+				multiLang.Post("/site/remove", manageController.PluginRemoveMultiLangSite)
+				multiLang.Post("/site/save", manageController.PluginSaveMultiLangSite)
+				multiLang.Post("/site/sync", manageController.PluginSyncMultiLangSiteContent)
+				multiLang.Get("/site/sync/status", manageController.PluginMultiSiteSyncStatus)
+			}
+			translate := plugin.Party("/translate")
+			{
+				translate.Get("/config", manageController.PluginGetTranslateConfig)
+				translate.Post("/config", manageController.PluginSaveTranslateConfig)
+				translate.Get("/logs", manageController.PluginTranslateLogList)
 			}
 		}
 	}

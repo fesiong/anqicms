@@ -57,7 +57,11 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if req.Id > 0 {
 		module, err = w.GetModuleById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			module = &model.Module{
+				Status: 1,
+			}
+			module.Id = req.Id
 		}
 	} else {
 		module = &model.Module{
@@ -95,7 +99,9 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 
 	module.Fields = req.Fields
 	module.Title = req.Title
+	module.Name = req.Name
 	module.Fields = req.Fields
+	module.CategoryFields = req.CategoryFields
 	module.TitleName = req.TitleName
 	module.UrlToken = req.UrlToken
 	module.Status = req.Status

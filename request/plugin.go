@@ -48,6 +48,11 @@ type PluginAnchorDelete struct {
 	Ids []uint `json:"ids"`
 }
 
+type PluginAnchorAddFromTitle struct {
+	Type string `json:"type"`
+	Ids  []uint `json:"ids"`
+}
+
 type PluginGuestbookDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
@@ -90,11 +95,15 @@ type PluginMaterialImportRequest struct {
 type PluginTag struct {
 	Id          uint   `json:"id"`
 	Title       string `json:"title"`
+	CategoryId  uint   `json:"category_id"`
 	UrlToken    string `json:"url_token"`
 	SeoTitle    string `json:"seo_title"`
 	Keywords    string `json:"keywords"`
 	Description string `json:"description"`
 	FirstLetter string `json:"first_letter"`
+	Content     string `json:"content"`
+	Logo        string `json:"logo"`
+	Template    string `json:"template"`
 	Status      uint   `json:"status"`
 }
 
@@ -128,4 +137,11 @@ type PluginTestSendmailRequest struct {
 	Recipient string `json:"recipient"`
 	Subject   string `json:"subject"`
 	Message   string `json:"message"`
+}
+
+type PluginMultiLangSiteRequest struct {
+	Id       uint   `json:"id"`
+	ParentId uint   `json:"parent_id"`
+	Language string `json:"language"`
+	Focus    bool   `json:"focus"`
 }

@@ -1,26 +1,24 @@
 package provider
 
 import (
-	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"time"
 )
 
 func (w *Website) TryToRunTimeFactor() {
-	setting := w.GetTimeFactorSetting()
-	if !setting.Open && !setting.ReleaseOpen {
+	if !w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen {
 		return
 	}
 
 	// 开始尝试执行更新任务
-	if len(setting.ModuleIds) == 0 {
+	if len(w.PluginTimeFactor.ModuleIds) == 0 {
 		return
 	}
 
-	go w.TimeRenewArchives(&setting)
+	go w.TimeRenewArchives(&w.PluginTimeFactor)
 
-	go w.TimeReleaseArchives(&setting)
+	go w.TimeReleaseArchives(&w.PluginTimeFactor)
 }
 
 func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
@@ -31,6 +29,37 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 		return
 	}
 	if setting.StartDay == 0 {
+		return
+	}
+	if setting.UpdateRunning {
+		return
+	}
+	setting.UpdateRunning = true
+	defer func() {
+		setting.UpdateRunning = false
+	}()
+	if setting.TodayUpdate > 0 && time.Unix(setting.LastUpdate, 0).Day() != time.Now().Day() {
+		setting.TodayUpdate = 0
+		// 更新数量
+		_ = w.SaveSettingValue(TimeFactorKey, setting)
+	}
+	// 计算每篇间隔
+	if setting.DailyUpdate > 0 && setting.TodayUpdate >= setting.DailyUpdate {
+		return
+	}
+	if setting.EndTime == 0 {
+		setting.EndTime = 23
+	}
+	var diffSecond = 1
+	if setting.DailyUpdate > 0 {
+		diffSecond = (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyUpdate
+	}
+	if diffSecond < 1 {
+		diffSecond = 1
+	}
+	nowStamp := time.Now().Unix()
+	if setting.DailyUpdate > 0 && setting.LastUpdate > nowStamp+int64(diffSecond) {
+		// 间隔未到
 		return
 	}
 
@@ -52,30 +81,52 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 			db = db.Where("`updated_time` < ?", startStamp)
 		}
 	}
-	addStamp := (setting.StartDay - setting.EndDay) * 86400
+	addStamp := time.Now()
+	if setting.EndDay > 0 {
+		addStamp = addStamp.AddDate(0, 0, -setting.EndDay)
+	}
 	updateFields := map[string]interface{}{}
 	for _, field := range setting.Types {
 		if field == "created_time" {
-			updateFields["created_time"] = gorm.Expr("`created_time` + ?", addStamp)
+			updateFields["created_time"] = addStamp.Unix()
 		}
 		if field == "updated_time" {
-			updateFields["updated_time"] = gorm.Expr("`updated_time` + ?", addStamp)
+			updateFields["updated_time"] = addStamp.Unix()
 		}
 	}
 	var archives []*model.Archive
-	if setting.DoPublish {
-		// 重新推送
-		db.Find(&archives)
-	}
-	db.UpdateColumns(updateFields)
-
-	if setting.DoPublish && len(archives) > 0 {
-		// 重新推送
+	db.Find(&archives)
+	spend := 0
+	if len(archives) > 0 {
 		for _, archive := range archives {
-			go w.PushArchive(archive.Link)
-			// 清除缓存
-			w.DeleteArchiveCache(archive.Id)
-			w.DeleteArchiveExtraCache(archive.Id)
+			// 更新时间
+			w.DB.Model(archive).UpdateColumns(updateFields)
+			if setting.DoPublish {
+				// 重新推送
+				go w.PushArchive(archive.Link)
+				// 清除缓存
+				w.DeleteArchiveCache(archive.Id)
+				w.DeleteArchiveExtraCache(archive.Id)
+			}
+			// 如果有限制时间，则在这里进行等待，并且小于1分钟，才进行等待
+			if setting.DailyUpdate > 0 {
+				spend += diffSecond
+				if spend > 60 {
+					// 超过1分钟，就退出
+					return
+				}
+				if diffSecond < 60 {
+					time.Sleep(time.Second * time.Duration(diffSecond))
+				}
+			}
+			// 对下一次更新的文章增加 diffSecond
+			addStamp = addStamp.Add(time.Second * time.Duration(diffSecond))
+			if _, ok := updateFields["created_time"]; ok {
+				updateFields["created_time"] = addStamp.Unix()
+			}
+			if _, ok := updateFields["updated_time"]; ok {
+				updateFields["updated_time"] = addStamp.Unix()
+			}
 		}
 	}
 }

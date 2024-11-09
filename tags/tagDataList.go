@@ -38,9 +38,9 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "archives.`id` desc"
+	order := "archives.`created_time` desc"
 	if currentSite.Content.UseSort == 1 {
-		order = "archives.`sort` desc, archives.`id` desc"
+		order = "archives.`sort` desc, archives.`created_time` desc"
 	}
 	tagId := uint(0)
 	listType := "list"
@@ -82,8 +82,8 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			} else if len(limitArgs) == 1 {
 				limit, _ = strconv.Atoi(limitArgs[0])
 			}
-			if limit > 100 {
-				limit = 100
+			if limit > currentSite.Content.MaxLimit {
+				limit = currentSite.Content.MaxLimit
 			}
 			if limit < 1 {
 				limit = 1

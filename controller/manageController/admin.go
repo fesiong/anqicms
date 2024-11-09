@@ -1,6 +1,8 @@
 package manageController
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
@@ -25,6 +27,54 @@ func AdminLogin(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 如果使用了后台登录，则在这里进行判断
+	if req.Sign != "" && req.Nonce != "" {
+		if req.SiteId > 0 {
+			ctx.Values().Set("siteId", req.SiteId)
+			currentSite = provider.CurrentSite(ctx)
+		}
+		admin, err := currentSite.GetAdminByUserName(req.UserName)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("UserDoesNotExist"),
+			})
+			return
+		}
+		// 验证是否正确
+		signHash := sha256.New()
+		signHash.Write([]byte(admin.Password + req.Nonce))
+		sign := signHash.Sum(nil)
+
+		if hex.EncodeToString(sign) != req.Sign {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("VerificationCodeIsIncorrect"),
+			})
+			return
+		}
+		// 验证通过，直接完成登录
+		admin.Token = currentSite.GetAdminAuthToken(admin.Id, req.Remember)
+		admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
+
+		// 记录日志
+		adminLog := model.AdminLoginLog{
+			AdminId:  admin.Id,
+			Ip:       ctx.RemoteAddr(),
+			Status:   1,
+			UserName: req.UserName,
+			Password: "",
+		}
+		currentSite.DB.Create(&adminLog)
+
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("LoginSuccessful"),
+			"data": admin,
 		})
 		return
 	}
@@ -126,6 +176,9 @@ func AdminLogin(ctx iris.Context) {
 	// 重置管理员登录失败次数
 	currentSite.AdminLoginError.Times = 0
 	admin.Token = currentSite.GetAdminAuthToken(admin.Id, req.Remember)
+	admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
+	// 记录用户登录时间
+	currentSite.DB.Model(admin).UpdateColumn("login_time", time.Now().Unix())
 
 	// 记录日志
 	adminLog := model.AdminLoginLog{
@@ -200,6 +253,7 @@ func AdminDetail(ctx iris.Context) {
 		return
 	}
 	admin.SiteId = currentSite.Id
+	admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

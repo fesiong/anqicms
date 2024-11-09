@@ -50,7 +50,8 @@ type Archive struct {
 	Tags           []string                `json:"tags,omitempty" gorm:"-"`
 	HasOrdered     bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
 	FavorablePrice int64                   `json:"favorable_price" gorm:"-"`
-	HasPassword    bool                    `json:"has_password" gorm:"-"` // 需要密码的时候，这个字段为true
+	HasPassword    bool                    `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
+	PasswordValid  bool                    `json:"password_valid,omitempty" gorm:"-"` // 验证密码正确
 	CategoryTitles []string                `json:"category_titles" gorm:"-"`
 	CategoryIds    []uint                  `json:"category_ids" gorm:"-"`
 	Flag           string                  `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的

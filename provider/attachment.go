@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/chai2010/webp"
+	"github.com/h2non/filetype"
 	"github.com/parnurzeal/gorequest"
 	"image"
 	"image/color"
@@ -24,6 +25,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -31,8 +33,14 @@ import (
 func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId uint) (*model.Attachment, error) {
 	db := w.DB
 
-	fileExt := strings.ToLower(filepath.Ext(info.Filename))
-	if fileExt == ".php" {
+	file.Seek(0, 0)
+	kind, _ := filetype.MatchReader(file)
+	file.Seek(0, 0)
+	fileExt := "." + kind.Extension
+	if kind == filetype.Unknown {
+		fileExt = strings.ToLower(filepath.Ext(info.Filename))
+	}
+	if fileExt == ".php" || fileExt == ".jsp" {
 		return nil, errors.New(w.Tr("NotAllowedToUploadPhpFiles"))
 	}
 	if fileExt == ".jpeg" {
@@ -108,6 +116,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	// 不是图片的时候的处理方法
 	if isImage != 1 {
 		bts, _ := io.ReadAll(file)
+		fileSize = int64(len(bts))
 		_, err = w.Storage.UploadFile(filePath+tmpName, bts)
 		if err != nil {
 			return nil, err
@@ -165,7 +174,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	if attachId == 0 {
 		// gif 不转成 webp，因为使用的webp库还不支持
-		if w.Content.UseWebp == 1 && imgType != "gif" {
+		if w.Content.UseWebp == 1 && (imgType != "gif" || w.Content.ConvertGif == 1) {
 			imgType = "webp"
 		}
 		tmpName = md5Str[8:24] + "." + imgType
@@ -414,7 +423,7 @@ func (w *Website) BuildThumb(fileLocation string) error {
 func (w *Website) GetAttachmentCategories() ([]*model.AttachmentCategory, error) {
 	var categories []*model.AttachmentCategory
 
-	err := w.DB.Where("`status` = 1").Find(&categories).Error
+	err := w.DB.Where("`status` = 1").Order("id desc").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
@@ -885,4 +894,75 @@ func Opaque(im image.Image) bool {
 	}
 
 	return true // All pixels are opaque, so is the image
+}
+
+// UploadByChunks 分片上传处理函数
+func (w *Website) UploadByChunks(file multipart.File, fileMd5 string, chunk, chunks int) (*os.File, error) {
+	// 临时文件保存6小时
+	maxAge := 6 * time.Hour
+	// 打开临时文件夹
+	tmpDir := w.CachePath + "tmp"
+	// 检查并创建文件夹
+	_, err := os.Stat(tmpDir)
+	if err != nil && os.IsNotExist(err) {
+		_ = os.MkdirAll(tmpDir, os.ModePerm)
+	}
+	// 清理过期的分片文件
+	_ = filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if info.ModTime().Add(maxAge).Before(time.Now()) {
+			_ = os.Remove(path)
+		}
+		return nil
+	})
+	// 开始写入临时文件
+	buf, err := io.ReadAll(file)
+	if err != nil {
+		return nil, err
+	}
+	tmpName := library.Md5(fileMd5) + "_" + strconv.Itoa(chunk) + ".part"
+	err = os.WriteFile(tmpDir+"/"+tmpName, buf, os.ModePerm)
+	if err != nil {
+		return nil, err
+	}
+	// 验证分片是否全部上传完毕
+	done := true
+	for i := 0; i < chunks; i++ {
+		tmpPart := tmpDir + "/" + library.Md5(fileMd5) + "_" + strconv.Itoa(i) + ".part"
+		if _, err = os.Stat(tmpPart); err != nil && os.IsNotExist(err) {
+			done = false
+			break
+		}
+	}
+
+	if done {
+		// 将文件写入到临时文件
+		tmpFile, err := os.CreateTemp(tmpDir, "upload_")
+		if err != nil {
+			return nil, err
+		}
+		for i := 0; i < chunks; i++ {
+			tmpPart := tmpDir + "/" + library.Md5(fileMd5) + "_" + strconv.Itoa(i) + ".part"
+			buf2, err2 := os.ReadFile(tmpPart)
+			if err2 != nil {
+				_ = tmpFile.Close()
+				return nil, err2
+			}
+			_, err = tmpFile.Write(buf2)
+			if err != nil {
+				_ = tmpFile.Close()
+				return nil, err
+			}
+			_ = os.Remove(tmpPart)
+		}
+
+		return tmpFile, nil
+	}
+
+	return nil, nil
 }

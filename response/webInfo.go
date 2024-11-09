@@ -9,4 +9,5 @@ type WebInfo struct {
 	PageName     string `json:"page_name"`
 	CanonicalUrl string `json:"canonical_url"` // 当前页面的规范URL
 	TotalPages   int    `json:"total_pages"`
+	CurrentPage  int    `json:"current_page"`
 }

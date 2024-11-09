@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.3.12"
+const Version = "3.4.0"
 
 const (
 	StatusOK         = 0
@@ -75,6 +75,7 @@ const (
 	PayWayWeapp   = "weapp"   // 微信小程序支付
 	PayWayAlipay  = "alipay"  // 支付宝支付
 	PayWayOffline = "offline" // 线下支付
+	PayWayPaypal  = "paypal"  // paypal
 )
 
 const (
@@ -170,4 +171,10 @@ const (
 const (
 	InterferenceModeClass = 0 // 添加随机class
 	InterferenceModeText  = 1 // 添加随机隐藏文字
+)
+
+const (
+	MultiLangTypeDomain    = "domain"
+	MultiLangTypeDirectory = "directory"
+	MultiLangTypeSame      = "same"
 )

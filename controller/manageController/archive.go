@@ -4,15 +4,17 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"strings"
 	"time"
 )
 
 func ArchiveList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
@@ -93,7 +95,7 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Where("`title` like ?", "%"+title+"%")
 			}
 			tx = tx.Order(orderBy)
-			return tx
+			return tx.Debug()
 		}
 	}
 	offset := (currentPage - 1) * pageSize
@@ -164,7 +166,7 @@ func ArchiveList(ctx iris.Context) {
 		}
 		for _, c := range modules {
 			if c.Id == v.ModuleId {
-				archives[i].ModuleName = c.Title
+				archives[i].ModuleName = c.Name
 			}
 		}
 	}
@@ -191,8 +193,125 @@ func ArchiveList(ctx iris.Context) {
 	})
 }
 
-func ArchiveDetail(ctx iris.Context) {
+func QuickImportArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	file, info, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+
+	var req request.QuickImportArchiveRequest
+	if err = ctx.ReadForm(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 增加支持分片上传
+	if req.Chunks > 0 {
+		// 使用了分片上传
+		tmpFile, err := currentSite.UploadByChunks(file, req.Md5, req.Chunk, req.Chunks)
+
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if tmpFile == nil {
+			// 表示分片上传，不需要返回结果
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  "",
+			})
+			return
+		}
+		stat, err := tmpFile.Stat()
+		if err != nil {
+			func() {
+				tmpName := tmpFile.Name()
+				_ = tmpFile.Close()
+				_ = os.Remove(tmpName)
+			}()
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+
+		tmpFile.Seek(0, 0)
+		req.Size = stat.Size()
+
+		quickImport, err := currentSite.NewQuickImportArchive(&req)
+		if err != nil {
+			func() {
+				tmpName := tmpFile.Name()
+				_ = tmpFile.Close()
+				_ = os.Remove(tmpName)
+			}()
+
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		go func() {
+			tmpName := tmpFile.Name()
+			_ = quickImport.Start(tmpFile)
+
+			time.Sleep(2 * time.Second)
+			_ = os.Remove(tmpName)
+		}()
+
+	} else {
+		req.FileName = info.Filename
+		req.Size = info.Size
+
+		quickImport, err := currentSite.NewQuickImportArchive(&req)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		go quickImport.Start(file)
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportArchiveFileLog", req.FileName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ArchiveFileImportCompleted"),
+		"data": iris.Map{
+			"status": "success",
+			"file":   req.FileName,
+		},
+	})
+}
+
+func GetQuickImportArchiveStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	status := currentSite.GetQuickImportStatus()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
+	})
+}
+func ArchiveDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
 	archiveDraft, err := currentSite.GetArchiveDraftById(id)
@@ -246,7 +365,7 @@ func ArchiveDetail(ctx iris.Context) {
 }
 
 func ArchiveDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -311,6 +430,68 @@ func ArchiveDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 插入记录
+				if req.Id == 0 {
+					req.Id = archive.Id
+					subArchive, err := subSite.SaveArchive(&req)
+					if err == nil {
+						// 同步成功，进行翻译
+						if currentSite.MultiLanguage.AutoTranslate {
+							// 文章的翻译，使用另一个接口
+							// 读取 data
+							archiveData, err := subSite.GetArchiveDataById(subArchive.Id)
+							if err != nil {
+								continue
+							}
+							aiReq := &provider.AnqiAiRequest{
+								Title:      subArchive.Title,
+								Content:    archiveData.Content,
+								ArticleId:  subArchive.Id,
+								Language:   currentSite.System.Language,
+								ToLanguage: subSite.System.Language,
+								Async:      false, // 同步返回结果
+							}
+							result, err := currentSite.AnqiTranslateString(aiReq)
+							if err != nil {
+								continue
+							}
+							// 更新文档
+							if result.Status == config.AiArticleStatusCompleted {
+								subArchive.Title = result.Title
+								subArchive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
+								subSite.DB.Save(subArchive)
+								// 再保存内容
+								archiveData.Content = result.Content
+								subSite.DB.Save(archiveData)
+							}
+							// 写入 plan
+							_, _ = currentSite.SaveAiArticlePlan(result, result.UseSelf)
+						}
+					}
+				} else {
+					// 修改的话，就排除 title, content，description，keywords 字段
+					tmpArchive, err := subSite.GetArchiveById(req.Id)
+					if err == nil {
+						tmpContent, err := subSite.GetArchiveDataById(req.Id)
+						if err == nil {
+							req.Content = tmpContent.Content
+						}
+						req.Title = tmpArchive.Title
+						req.Description = tmpArchive.Description
+						req.Keywords = tmpArchive.Keywords
+						req.SeoTitle = tmpArchive.SeoTitle
+					}
+					_, _ = subSite.SaveArchive(&req)
+				}
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateDocumentLog", archive.Id, archive.Title))
 
@@ -324,7 +505,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 // ArchiveRecover
 // 从回收站恢复
 func ArchiveRecover(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -350,6 +531,20 @@ func ArchiveRecover(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				subArchive, err := subSite.GetArchiveDraftById(req.Id)
+				if err == nil {
+					_ = subSite.RecoverArchive(subArchive)
+				}
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDocumentLog", archive.Id, archive.Title))
 
@@ -360,7 +555,7 @@ func ArchiveRecover(ctx iris.Context) {
 }
 
 func ArchiveRelease(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -380,6 +575,20 @@ func ArchiveRelease(ctx iris.Context) {
 
 	archive.CreatedTime = time.Now().Unix()
 	currentSite.PublishPlanArchive(archive)
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				subArchive, err := subSite.GetArchiveDraftById(req.Id)
+				if err == nil {
+					subSite.PublishPlanArchive(subArchive)
+				}
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("PublishDocumentLog", archive.Id, archive.Title))
 
@@ -392,7 +601,7 @@ func ArchiveRelease(ctx iris.Context) {
 // ArchiveDelete
 // 删除文档，从正式表删除，或从草稿箱删除
 func ArchiveDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -412,6 +621,17 @@ func ArchiveDelete(ctx iris.Context) {
 			})
 			return
 		}
+		// 如果开启了多语言，则自动同步文章,分类
+		if currentSite.MultiLanguage.Open {
+			for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+				// 同步分类，先同步，再添加翻译计划
+				subSite := provider.GetWebsite(subSiteID)
+				if subSite != nil && subSite.Initialed {
+					// 同步更新
+					_ = subSite.DeleteArchive(archive)
+				}
+			}
+		}
 
 		currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentLog", archive.Id, archive.Title))
 	} else {
@@ -426,6 +646,18 @@ func ArchiveDelete(ctx iris.Context) {
 				})
 				return
 			}
+			// 如果开启了多语言，则自动同步文章,分类
+			if currentSite.MultiLanguage.Open {
+				for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+					// 同步分类，先同步，再添加翻译计划
+					subSite := provider.GetWebsite(subSiteID)
+					if subSite != nil && subSite.Initialed {
+						// 同步更新
+						_ = subSite.DeleteArchiveDraft(archiveDraft)
+					}
+				}
+			}
+
 			currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentLog", archiveDraft.Id, archiveDraft.Title))
 		}
 	}
@@ -437,7 +669,7 @@ func ArchiveDelete(ctx iris.Context) {
 }
 
 func ArchiveDeleteImage(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchiveImageDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -479,6 +711,21 @@ func ArchiveDeleteImage(ctx iris.Context) {
 	} else {
 		currentSite.DB.Save(archiveDraft)
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				if isReleased {
+					subSite.DB.Model(&archiveDraft.Archive).UpdateColumn("images", archiveDraft.Images)
+				} else {
+					currentSite.DB.Model(archiveDraft).UpdateColumn("images", archiveDraft.Images)
+				}
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentImageLog", archiveDraft.Id, archiveDraft.Title))
 
@@ -489,7 +736,7 @@ func ArchiveDeleteImage(ctx iris.Context) {
 }
 
 func UpdateArchiveRecommend(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -507,6 +754,17 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveRecommend(&req)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentFlagLog", req.Ids, req.Flag))
 
@@ -517,7 +775,7 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 }
 
 func UpdateArchiveStatus(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -535,6 +793,17 @@ func UpdateArchiveStatus(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveStatus(&req)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentStatusLog", req.Ids, req.Status))
 
@@ -545,7 +814,7 @@ func UpdateArchiveStatus(ctx iris.Context) {
 }
 
 func UpdateArchiveTime(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -563,6 +832,17 @@ func UpdateArchiveTime(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveTime(&req)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentTimeLog", req.Ids, req.Time))
 
@@ -573,7 +853,7 @@ func UpdateArchiveTime(ctx iris.Context) {
 }
 
 func UpdateArchiveReleasePlan(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -591,6 +871,17 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveReleasePlan(&req)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentScheduledReleaseLog", req.Ids, req.DailyLimit))
 
@@ -601,7 +892,7 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 }
 
 func UpdateArchiveSort(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -620,6 +911,18 @@ func UpdateArchiveSort(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				subSite.DB.Model(&model.Archive{}).Where("id = ?", req.Id).UpdateColumn("sort", req.Sort)
+				subSite.DB.Model(&model.ArchiveDraft{}).Where("id = ?", req.Id).UpdateColumn("sort", req.Sort)
+			}
+		}
+	}
 	// 删除列表缓存
 	currentSite.Cache.CleanAll("archive-list")
 
@@ -632,7 +935,7 @@ func UpdateArchiveSort(ctx iris.Context) {
 }
 
 func UpdateArchiveCategory(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchivesUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -649,6 +952,17 @@ func UpdateArchiveCategory(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveCategory(&req)
+			}
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentCategoryLog", req.Ids, req.CategoryIds))

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -14,12 +15,15 @@ func TagIndexPage(ctx iris.Context) {
 		ctx.ServeFile(cacheFile)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = currentSite.TplTr("TagList")
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "tagIndex"
 		webInfo.CanonicalUrl = currentSite.GetUrl("tagIndex", nil, currentPage)
 		ctx.ViewData("webInfo", webInfo)
@@ -62,16 +66,19 @@ func TagPage(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.Values().GetIntDefault("page", 1)
 		webInfo.Title = tag.Title
 		if tag.SeoTitle != "" {
 			webInfo.Title = tag.SeoTitle
 		}
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = tag.Keywords
 		webInfo.Description = tag.Description
 		webInfo.NavBar = tag.Id
@@ -87,6 +94,11 @@ func TagPage(ctx iris.Context) {
 	tplName = "tag/list.html"
 	if ViewExists(ctx, "tag_list.html") {
 		tplName = "tag_list.html"
+	}
+	if tag.Template != "" {
+		tplName = tag.Template
+	} else if ViewExists(ctx, fmt.Sprintf("tag/list-%d.html", tag.Id)) {
+		tplName = fmt.Sprintf("tag/list-%d.html", tag.Id)
 	}
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))

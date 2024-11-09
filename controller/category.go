@@ -18,7 +18,7 @@ func CategoryPage(ctx iris.Context) {
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
-	if currentPage > 1000 {
+	if currentPage > currentSite.Content.MaxPage {
 		// 最大1000页
 		NotFound(ctx)
 		return
@@ -75,9 +75,7 @@ func CategoryPage(ctx iris.Context) {
 		if category.SeoTitle != "" {
 			webInfo.Title = category.SeoTitle
 		}
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = category.Keywords
 		webInfo.Description = category.Description
 		webInfo.NavBar = category.Id
@@ -127,7 +125,7 @@ func SearchPage(ctx iris.Context) {
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
-	if currentPage > 1000 {
+	if currentPage > currentSite.Content.MaxPage {
 		// 最大1000页
 		NotFound(ctx)
 		return
@@ -163,9 +161,7 @@ func SearchPage(ctx iris.Context) {
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "search"
 		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)
 		ctx.ViewData("webInfo", webInfo)

@@ -167,14 +167,17 @@ func CommentList(ctx iris.Context) {
 		ShowMessage(ctx, "Not Found", nil)
 		return
 	}
+	currentPage := ctx.URLParamIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.URLParamIntDefault("page", 1)
 		webInfo.Title = currentSite.TplTr("CommentShow", archive.Title)
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
 		webInfo.PageName = "comments"

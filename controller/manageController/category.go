@@ -12,7 +12,7 @@ import (
 )
 
 func CategoryList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	categoryType := uint(ctx.URLParamIntDefault("type", 0))
 	showType := ctx.URLParamIntDefault("show_type", 0)
@@ -116,7 +116,7 @@ func CategoryList(ctx iris.Context) {
 }
 
 func CategoryDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
 	category, err := currentSite.GetCategoryById(id)
@@ -136,7 +136,7 @@ func CategoryDetail(ctx iris.Context) {
 }
 
 func CategoryDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -154,6 +154,67 @@ func CategoryDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 插入记录
+				if req.Id == 0 {
+					req.Id = category.Id
+					subCategory, err := subSite.SaveCategory(&req)
+					if err == nil {
+						// 同步成功，进行翻译
+						if currentSite.MultiLanguage.AutoTranslate {
+							transReq := provider.AnqiAiRequest{
+								Title:      subCategory.Title,
+								Content:    subCategory.Content,
+								Language:   currentSite.System.Language,
+								ToLanguage: subSite.System.Language,
+								Async:      false, // 同步返回结果
+							}
+							res, err := currentSite.AnqiTranslateString(&transReq)
+							if err == nil {
+								// 只处理成功的结果
+								subSite.DB.Model(subCategory).UpdateColumns(map[string]interface{}{
+									"title":   res.Title,
+									"content": res.Content,
+								})
+							}
+							if len(category.Description) > 0 {
+								transReq = provider.AnqiAiRequest{
+									Title:      "",
+									Content:    category.Description,
+									Language:   currentSite.System.Language,
+									ToLanguage: subSite.System.Language,
+									Async:      false, // 同步返回结果
+								}
+								res, err = currentSite.AnqiTranslateString(&transReq)
+								if err == nil {
+									// 只处理成功的结果
+									subSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
+										"description": res.Content,
+									})
+								}
+							}
+						}
+					}
+				} else {
+					// 修改的话，就排除 title, content，description，keywords 字段
+					tmpCategory, err := subSite.GetCategoryById(req.Id)
+					if err == nil {
+						req.Title = tmpCategory.Title
+						req.Content = tmpCategory.Content
+						req.Description = tmpCategory.Description
+						req.Keywords = tmpCategory.Keywords
+					}
+					_, _ = subSite.SaveCategory(&req)
+				}
+			}
+		}
+	}
+
 	// 更新缓存
 	go func() {
 		currentSite.BuildModuleCache(ctx)
@@ -172,7 +233,7 @@ func CategoryDetailForm(ctx iris.Context) {
 }
 
 func CategoryDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -198,6 +259,17 @@ func CategoryDelete(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步删除
+				_ = category.Delete(subSite.DB)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentCategoryLog", category.Id, category.Title))
 
@@ -207,5 +279,16 @@ func CategoryDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("CategoryDeleted"),
+	})
+}
+
+func CategoryUpdateArchiveCount(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	currentSite.UpdateCategoryArchiveCounts()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }

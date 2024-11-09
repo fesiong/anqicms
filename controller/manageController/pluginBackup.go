@@ -5,6 +5,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -23,7 +24,7 @@ func PluginBackupList(ctx iris.Context) {
 
 func PluginBackupDump(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	err := currentSite.BackupData()
+	status, err := currentSite.NewBackup()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -31,12 +32,32 @@ func PluginBackupDump(ctx iris.Context) {
 		})
 		return
 	}
+	go status.BackupData()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("BackupCompleted"),
+		"msg":  ctx.Tr("BackupIsStarted"),
+	})
+}
+
+func PluginBackupStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	status := currentSite.GetBackupStatus()
+	if status == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("ThereAreNoActiveTask"),
+			"data": nil,
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
 	})
 }
 
@@ -51,7 +72,7 @@ func PluginBackupRestore(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.RestoreData(req.Name)
+	status, err := currentSite.NewBackup()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -59,25 +80,36 @@ func PluginBackupRestore(ctx iris.Context) {
 		})
 		return
 	}
-
-	// 重新读取配置
-	currentSite.InitSetting()
-	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
 	go func() {
-		// 如果切换了模板，需要重启
-		config.RestartChan <- 0
+		err = status.RestoreData(req.Name)
+		if err == nil {
+			// 重新读取配置
+			currentSite.InitSetting()
+			currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
+			go func() {
+				// 如果切换了模板，需要重启
+				config.RestartChan <- 0
 
-		time.Sleep(1 * time.Second)
-		// 删除索引
-		currentSite.DeleteCache()
-		currentSite.RemoveHtmlCache()
-		currentSite.CloseFulltext()
-		currentSite.InitFulltext()
+				time.Sleep(1 * time.Second)
+				// 删除索引
+				currentSite.DeleteCache()
+				currentSite.RemoveHtmlCache()
+				currentSite.CloseFulltext()
+				currentSite.InitFulltext()
+			}()
+
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  ctx.Tr("DataRestored"),
+			})
+		}
 	}()
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("BackupData"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("DataRestored"),
+		"msg":  ctx.Tr("RestoreIsStarted"),
 	})
 }
 
@@ -118,22 +150,78 @@ func PluginBackupImport(ctx iris.Context) {
 		return
 	}
 	defer file.Close()
+	// 增加支持分片上传
+	chunks := ctx.PostValueIntDefault("chunks", 0)
+	if chunks > 0 {
+		chunk := ctx.PostValueIntDefault("chunk", 0)
+		fileName := ctx.PostValue("file_name")
+		fileMd5 := ctx.PostValue("md5")
+		// 使用了分片上传
+		tmpFile, err := currentSite.UploadByChunks(file, fileMd5, chunk, chunks)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if tmpFile == nil {
+			// 表示分片上传，不需要返回结果
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  "",
+			})
+			return
+		}
+		defer func() {
+			tmpName := tmpFile.Name()
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpName)
+		}()
+		stat, err := tmpFile.Stat()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 
-	if !strings.HasSuffix(info.Filename, ".sql") {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("IncorrectImportedFileFormat"),
-		})
-		return
-	}
+		info.Filename = fileName
+		info.Size = stat.Size()
+		tmpFile.Seek(0, 0)
 
-	err = currentSite.ImportBackupFile(file, info.Filename)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("FileSaveFailed"),
-		})
-		return
+		if !strings.HasSuffix(info.Filename, ".sql") {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectImportedFileFormat"),
+			})
+			return
+		}
+		err = currentSite.ImportBackupFile(tmpFile, info.Filename)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("FileSaveFailed"),
+			})
+			return
+		}
+	} else {
+		if !strings.HasSuffix(info.Filename, ".sql") {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectImportedFileFormat"),
+			})
+			return
+		}
+		err = currentSite.ImportBackupFile(file, info.Filename)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("FileSaveFailed"),
+			})
+			return
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ImportBackupFileLog", info.Filename))
@@ -141,6 +229,10 @@ func PluginBackupImport(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("BackupFileImportCompleted"),
+		"data": iris.Map{
+			"status": "success",
+			"file":   info.Filename,
+		},
 	})
 }
 

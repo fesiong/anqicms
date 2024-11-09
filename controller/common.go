@@ -10,6 +10,8 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"net"
+	"net/http"
 	"net/url"
 	"os"
 	"regexp"
@@ -23,39 +25,6 @@ var Store = captcha.DefaultMemStore
 type Button struct {
 	Name string
 	Link string
-}
-
-type NameVal struct {
-	Name string
-	Val  string
-}
-
-var SpiderNames = []NameVal{
-	{Name: "googlebot", Val: "google"},
-	{Name: "bingbot", Val: "bing"},
-	{Name: "baiduspider", Val: "baidu"},
-	{Name: "360spider", Val: "360"},
-	{Name: "yahoo!", Val: "yahoo"},
-	{Name: "sogou", Val: "sogou"},
-	{Name: "bytespider", Val: "byte"},
-	{Name: "yisouspider", Val: "yisou"},
-	{Name: "yandexbot", Val: "yandex"},
-	{Name: "spider", Val: "other"},
-	{Name: "bot", Val: "other"},
-}
-
-var DeviceNames = []NameVal{
-	{Name: "android", Val: "android"},
-	{Name: "iphone", Val: "iphone"},
-	{Name: "windows", Val: "windows"},
-	{Name: "macintosh", Val: "mac"},
-	{Name: "linux", Val: "linux"},
-	{Name: "mobile", Val: "mobile"},
-	{Name: "curl", Val: "curl"},
-	{Name: "python", Val: "python"},
-	{Name: "client", Val: "client"},
-	{Name: "spider", Val: "spider"},
-	{Name: "bot", Val: "spider"},
 }
 
 func NotFound(ctx iris.Context) {
@@ -228,6 +197,16 @@ func CheckCloseSite(ctx iris.Context) bool {
 }
 
 func Common(ctx iris.Context) {
+	lang := ctx.URLParam("lang")
+	if lang != "" {
+		// 将lang设置到cookie,并维持1周
+		ctx.SetCookieKV("lang", lang, iris.CookieExpires(7*24*time.Hour))
+		// 然后301跳回原页面
+		query := ctx.Request().URL.Query()
+		query.Del("lang")
+		ctx.Request().URL.RawQuery = query.Encode()
+		ctx.Redirect(ctx.Request().URL.String(), iris.StatusMovedPermanently)
+	}
 	currentSite := provider.CurrentSite(ctx)
 	//inject ctx
 	ctx.ViewData("requestParams", ctx.Params())
@@ -263,6 +242,7 @@ func Common(ctx iris.Context) {
 		currentPage = paramPage
 	}
 	ctx.Values().Set("page", currentPage)
+	ctx.ViewData("currentPage", currentPage)
 
 	// invite code
 	inviteCode := ctx.URLParam("invite")
@@ -316,6 +296,11 @@ func Inspect(ctx iris.Context) {
 					return
 				}
 			}
+		}
+		// 限流器
+		blocked := UseLimiter(ctx)
+		if blocked {
+			return
 		}
 	}
 
@@ -379,6 +364,20 @@ func ReRouteContext(ctx iris.Context) {
 		ctx.Params().Set(i, v)
 		if i == "page" && v > "0" {
 			ctx.Values().Set("page", v)
+			ctx.ViewData("currentPage", v)
+		}
+	}
+
+	currentSite := provider.CurrentSite(ctx)
+	mainSite := currentSite.GetMainWebsite()
+	if mainSite.MultiLanguage.Open {
+		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+			// 采用目录形式，检查是否需要跳转
+			if ctx.RequestPath(false) == "/" {
+				// 跳转到 主域名 + lang
+				//ctx.Redirect(currentSite.System.BaseUrl+"/"+mainSite.System.Language+"/", 301)
+				//return
+			}
 		}
 	}
 
@@ -423,9 +422,23 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	currentSite := provider.CurrentSite(ctx)
 	//这里总共有6条正则规则，需要逐一匹配
 	// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
+	var useSite = currentSite
+	baseURI := strings.Trim(currentSite.BaseURI, "/")
+	mainSite := currentSite.GetMainWebsite()
+	if mainSite.MultiLanguage.Open {
+		// 使用主站点的URL形式
+		useSite = mainSite
+		if mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+				// 采用目录形式
+				baseURI = currentSite.System.Language
+			}
+		}
+	}
+
 	matchMap := map[string]string{}
 	paramValue := ctx.Params().Get("path")
-	paramValue = strings.TrimLeft(strings.TrimPrefix(paramValue, strings.Trim(currentSite.BaseURI, "/")), "/")
+	paramValue = strings.TrimLeft(strings.TrimPrefix(paramValue, baseURI), "/")
 	// index
 	if paramValue == "" {
 		matchMap["match"] = "index"
@@ -454,7 +467,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 		}
 		return matchMap, true
 	}
-	rewritePattern := currentSite.ParsePatten(false)
+	rewritePattern := useSite.ParsePatten(false)
 	//archivePage
 	reg = regexp.MustCompile(rewritePattern.ArchiveIndexRule)
 	match = reg.FindStringSubmatch(paramValue)
@@ -732,9 +745,9 @@ func LogAccess(ctx iris.Context) {
 
 	userAgent := ctx.GetHeader("User-Agent")
 	//获取蜘蛛
-	spider := GetSpider(userAgent)
+	spider := library.GetSpider(userAgent)
 	//获取设备
-	device := GetDevice(userAgent)
+	device := library.GetDevice(userAgent)
 	// 最多只存储250字符
 	if len(currentPath) > 250 {
 		currentPath = currentPath[:250]
@@ -744,9 +757,13 @@ func LogAccess(ctx iris.Context) {
 		userAgent = userAgent[:250]
 	}
 
+	host := ctx.Host()
+	if tmp, _, err := net.SplitHostPort(host); err == nil {
+		host = tmp
+	}
 	statistic := &provider.Statistic{
 		Spider:    spider,
-		Host:      ctx.Request().Host,
+		Host:      host,
 		Url:       currentPath,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
@@ -757,30 +774,6 @@ func LogAccess(ctx iris.Context) {
 	go currentSite.StatisticLog.Write(statistic)
 
 	ctx.Next()
-}
-
-func GetSpider(ua string) string {
-	ua = strings.ToLower(ua)
-	//获取蜘蛛
-	for _, v := range SpiderNames {
-		if strings.Contains(ua, v.Name) {
-			return v.Val
-		}
-	}
-
-	return ""
-}
-
-func GetDevice(ua string) string {
-	ua = strings.ToLower(ua)
-
-	for _, v := range DeviceNames {
-		if strings.Contains(ua, v.Name) {
-			return v.Val
-		}
-	}
-
-	return "proxy"
 }
 
 func NewDriver() *captcha.DriverString {
@@ -1000,4 +993,52 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	}
 
 	return true
+}
+
+func UseLimiter(ctx iris.Context) bool {
+	// 后台地址跳过，静态文件跳过
+	uri := ctx.RequestPath(false)
+	if strings.HasPrefix(uri, "/static") || strings.HasPrefix(uri, "/system") || strings.HasPrefix(uri, "/uploads") {
+		return false
+	}
+	currentSite := provider.CurrentSite(ctx)
+	// 没启用拦截器
+	if currentSite.Limiter == nil {
+		return false
+	}
+	// 如果放行蜘蛛，就进行判断
+	if currentSite.Limiter.IsAllowSpider() {
+		// spider 跳过
+		userAgent := ctx.GetHeader("User-Agent")
+		//获取蜘蛛
+		spider := library.GetSpider(userAgent)
+		if spider != "" {
+			return false
+		}
+	}
+
+	ip := ctx.RemoteAddr()
+
+	// 白名单跳过
+	if currentSite.Limiter.IsWhiteIp(ip) {
+		return false
+	}
+
+	// 检查IP是否已被封禁
+	if currentSite.Limiter.IsIPBlocked(ip) {
+		ctx.StatusCode(http.StatusForbidden)
+		_, _ = ctx.WriteString("Your IP is blocked.")
+		return true
+	}
+
+	// 记录IP访问，并检查是否超出阈值
+	if !currentSite.Limiter.RecordIPVisit(ip) {
+		currentSite.Limiter.BlockIP(ip)
+		ctx.StatusCode(http.StatusTooManyRequests)
+		_, _ = ctx.WriteString("Too many requests from this IP.")
+		return true
+	}
+
+	// 正常处理请求
+	return false
 }

@@ -104,6 +104,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
+	var excludeFlags []string
+	if args["excludeFlag"] != nil {
+		excludeFlags = strings.Split(args["excludeFlag"].String(), ",")
+	}
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
@@ -125,9 +129,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	} else {
 		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 
@@ -197,8 +201,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -210,6 +214,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	} else {
 		currentPage = 1
+		// list模式则始终使用 argQ
+		q = argQ
 	}
 
 	var tmpResult = make([]*model.Archive, 0, limit)
@@ -380,6 +386,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			tags := currentSite.GetTagsByIds(searchTagIds)
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
 					Id:          tag.Id,
@@ -391,6 +398,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					Keywords:    tag.Keywords,
 					Description: tag.Description,
 					Link:        tag.Link,
+					Logo:        tag.Logo,
+					Thumb:       tag.Thumb,
 				})
 			}
 		}
@@ -400,6 +409,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
+			} else if len(excludeFlags) > 0 {
+				tx = tx.Joins("LEFT JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag IN (?)", excludeFlags).Where("archive_flags.archive_id IS NULL")
 			}
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)

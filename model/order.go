@@ -120,6 +120,8 @@ type Payment struct {
 	PayWay    string `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`       // 支付方式
 	PaidTime  int64  `json:"paid_time" gorm:"column:paid_time;type:int(10) not null;default:0;comment:支付时间"` //该订单支付时间
 	Remark    string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`                     //备注
+	BuyerId   string `json:"buyer_id" gorm:"column:buyer_id;type:varchar(64) not null;default:''"`           //用户标识
+	BuyerInfo string `json:"buyer_info" gorm:"column:buyer_info;type:varchar(255) not null;default:''"`      //买家信息，PayPal有返回
 }
 
 func (p *Payment) AfterCreate(tx *gorm.DB) (err error) {

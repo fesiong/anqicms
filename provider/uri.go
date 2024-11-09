@@ -12,8 +12,22 @@ import (
 // GetUrl 生成url
 // 支持的规则：getUrl("archive"|"category"|"page"|"nav"|"archiveIndex", item, int)
 // 如果page == -1，则不对page进行转换。
+// 支持多语言站点功能
 func (w *Website) GetUrl(match string, data interface{}, page int, args ...interface{}) string {
-	rewritePattern := w.ParsePatten(false)
+	var useSite = w
+	mainSite := w.GetMainWebsite()
+	baseUrl := useSite.System.BaseUrl
+	if mainSite.MultiLanguage.Open {
+		useSite = mainSite
+		if mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+				baseUrl = useSite.System.BaseUrl + "/" + w.System.Language
+			} else {
+				baseUrl = useSite.System.BaseUrl
+			}
+		}
+	}
+	rewritePattern := useSite.ParsePatten(false)
 	uri := ""
 	switch match {
 	case "archive":
@@ -286,7 +300,7 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 	}
 
 	if strings.HasPrefix(uri, "/") {
-		uri = w.System.BaseUrl + uri
+		uri = baseUrl + uri
 	}
 	return uri
 }
