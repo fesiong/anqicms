@@ -14,6 +14,7 @@ type Tag struct {
 	UrlToken    string `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
 	Description string `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	FirstLetter string `json:"first_letter" gorm:"column:first_letter;type:char(1) not null;default:'';index"`
+	Template    string `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
 	Logo        string `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 

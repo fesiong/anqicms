@@ -12,5 +12,5 @@
 	"status": 1,
 	"tpl_files": null,
 	"static_files": null,
-	"preview_data": true
+	"preview_data": false
 }
