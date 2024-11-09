@@ -214,6 +214,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	} else {
 		currentPage = 1
+		// list模式则始终使用 argQ
+		q = argQ
 	}
 
 	var tmpResult = make([]*model.Archive, 0, limit)

@@ -15,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/view"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -164,8 +165,12 @@ func (bootstrap *Bootstrap) Start() {
 	}
 }
 
-func TimestampToDate(in int64, layout string) string {
-	t := time.Unix(in, 0)
+func TimestampToDate(in interface{}, layout string) string {
+	in2, _ := strconv.ParseInt(fmt.Sprint(in), 10, 64)
+	if in2 == 0 {
+		return ""
+	}
+	t := time.Unix(in2, 0)
 	return t.Format(layout)
 }
 

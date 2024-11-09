@@ -112,9 +112,16 @@ func ApiArchiveDetail(ctx iris.Context) {
 	}
 	if len(archive.Password) > 0 {
 		// password is not visible for user
+		password := ctx.URLParam("password")
+		if password == archive.Password {
+			archive.PasswordValid = true
+		}
 		archive.Password = ""
 		archive.HasPassword = true
-		archive.ArchiveData = nil
+		// 带密码的文档，如果密码不正确，则不显示内容
+		if archive.PasswordValid == false {
+			archive.ArchiveData = nil
+		}
 	}
 	if archive.ArchiveData != nil {
 		// convert markdown to html

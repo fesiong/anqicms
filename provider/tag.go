@@ -147,6 +147,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	tag.Description = req.Description
 	tag.FirstLetter = req.FirstLetter
 	tag.CategoryId = req.CategoryId
+	tag.Template = req.Template
 	tag.Logo = req.Logo
 	if tag.Logo != "" {
 		tag.Logo = strings.TrimPrefix(tag.Logo, w.PluginStorage.StorageUrl)

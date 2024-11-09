@@ -208,6 +208,18 @@ func (w *Website) GetUserGroupInfo(groupId uint) (*model.UserGroup, error) {
 	return &group, nil
 }
 
+func (w *Website) GetUserGroupInfoByLevel(level int) (*model.UserGroup, error) {
+	var group model.UserGroup
+
+	err := w.DB.Where("`level` = ?", level).Take(&group).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &group, nil
+}
+
 func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) error {
 	var group = model.UserGroup{
 		Title:       req.Title,

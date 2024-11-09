@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -93,6 +94,11 @@ func TagPage(ctx iris.Context) {
 	tplName = "tag/list.html"
 	if ViewExists(ctx, "tag_list.html") {
 		tplName = "tag_list.html"
+	}
+	if tag.Template != "" {
+		tplName = tag.Template
+	} else if ViewExists(ctx, fmt.Sprintf("tag/list-%d.html", tag.Id)) {
+		tplName = fmt.Sprintf("tag/list-%d.html", tag.Id)
 	}
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
