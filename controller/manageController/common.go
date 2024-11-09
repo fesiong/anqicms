@@ -194,6 +194,9 @@ func VersionUpgrade(ctx iris.Context) {
 		os.Remove(tmpFile)
 	}()
 
+	// 删除 system
+	_ = os.RemoveAll(config.ExecPath + "system")
+
 	var errorFiles []string
 	path, _ := os.Executable()
 	exec := filepath.Base(path)

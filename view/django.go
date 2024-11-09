@@ -308,7 +308,7 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 	if err == nil {
 		s.templateCache[site.Id][name] = tmpl
 	} else {
-		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
+		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error() + "<br/> on file " + name))
 	}
 
 	return nil
