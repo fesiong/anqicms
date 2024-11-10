@@ -27,7 +27,7 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 	var orders []*model.Order
 	var total int64
 	offset := (page - 1) * pageSize
-	tx := w.DB.Model(&model.Order{}).Debug()
+	tx := w.DB.Model(&model.Order{})
 	if userId > 0 {
 		tx = tx.Where("`user_id` = ?", userId)
 	}

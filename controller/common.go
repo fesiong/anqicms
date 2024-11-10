@@ -996,7 +996,7 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 func UseLimiter(ctx iris.Context) bool {
 	// 后台地址跳过，静态文件跳过
 	uri := ctx.RequestPath(false)
-	if strings.HasPrefix(uri, "/static") || strings.HasPrefix(uri, "/system") || strings.HasPrefix(uri, "/uploads") {
+	if strings.HasPrefix(uri, "/static") || strings.HasPrefix(uri, "/system") || strings.HasPrefix(uri, "/uploads") || strings.HasPrefix(uri, "/favicon.ico") || strings.HasSuffix(uri, "/api/import") {
 		return false
 	}
 	currentSite := provider.CurrentSite(ctx)

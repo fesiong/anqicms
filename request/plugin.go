@@ -145,3 +145,7 @@ type PluginMultiLangSiteRequest struct {
 	Language string `json:"language"`
 	Focus    bool   `json:"focus"`
 }
+
+type PluginLimiterRemoveIPRequest struct {
+	Ip string `json:"ip"`
+}

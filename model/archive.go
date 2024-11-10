@@ -73,23 +73,34 @@ type ArchiveDraft struct {
 }
 
 func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
-	a.Id = GetNextArchiveId(tx)
+	a.Id = GetNextArchiveId(tx, false)
 	return
 }
 
-var nextArchiveId uint = 0
-var nextArchiveIdTime int64 = 0
-var nextArchiveIdMutex sync.Mutex
+type NextArchiveId struct {
+	Id        uint  `json:"-"`
+	QueryTime int64 `json:"-"`
+}
+
+var nextArchiveIdStore = sync.Mutex{}
 
 // GetNextArchiveId
 // ArchiveId 同时检查 archives表和archive_drafts表
 // 每次获取，自动加 1
-func GetNextArchiveId(tx *gorm.DB) uint {
-	nextArchiveIdMutex.Lock()
-	defer nextArchiveIdMutex.Unlock()
+func GetNextArchiveId(tx *gorm.DB, forceUpdate bool) uint {
+	plugin := tx.Config.Plugins["nextArchiveId"]
+	pluginNext, _ := plugin.(*NextArchiveIdPlugin)
+	nextArchiveIdStore.Lock()
+	defer nextArchiveIdStore.Unlock()
 	// 仅缓存60秒
-	if nextArchiveIdTime+60 > time.Now().Unix() {
+	nextArchiveId, nextTime := pluginNext.GetId()
+	if nextTime+60 > time.Now().Unix() {
 		nextArchiveId += 1
+		if forceUpdate {
+			nextTime = time.Now().Unix()
+		}
+		_ = pluginNext.SetId(nextArchiveId, nextTime)
+
 		return nextArchiveId
 	}
 	// 从数据库读取
@@ -102,7 +113,7 @@ func GetNextArchiveId(tx *gorm.DB) uint {
 	}
 	// 下一个ID
 	nextArchiveId = uint(lastId) + 1
-	nextArchiveIdTime = time.Now().Unix()
+	_ = pluginNext.SetId(nextArchiveId, time.Now().Unix()+60)
 
 	return nextArchiveId
 }
@@ -135,4 +146,28 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 	}
 
 	return a.Thumb
+}
+
+type NextArchiveIdPlugin struct {
+	Id        uint  `json:"-"`
+	QueryTime int64 `json:"-"`
+}
+
+func (n *NextArchiveIdPlugin) Name() string {
+	return "nextArchiveId"
+}
+
+func (n *NextArchiveIdPlugin) Initialize(*gorm.DB) error {
+	return nil
+}
+
+func (n *NextArchiveIdPlugin) SetId(id uint, nextTime int64) (err error) {
+	n.Id = id
+	n.QueryTime = nextTime
+
+	return nil
+}
+
+func (n *NextArchiveIdPlugin) GetId() (uint, int64) {
+	return n.Id, n.QueryTime
 }

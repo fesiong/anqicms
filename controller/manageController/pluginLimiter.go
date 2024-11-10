@@ -4,6 +4,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginGetLimiterSetting(ctx iris.Context) {
@@ -61,9 +62,16 @@ func PluginGetBlockedIPs(ctx iris.Context) {
 
 func PluginRemoveBlockedIP(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	ip := ctx.URLParam("ip")
+	var req request.PluginLimiterRemoveIPRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
-	currentSite.Limiter.RemoveBlockedIP(ip)
+	currentSite.Limiter.RemoveBlockedIP(req.Ip)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

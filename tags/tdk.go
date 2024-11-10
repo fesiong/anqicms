@@ -53,7 +53,9 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 			sep = args["sep"].String()
 		}
 		var titleText = make([]string, 0, 10)
-		titleText = append(titleText, content)
+		if len(content) > 0 {
+			titleText = append(titleText, content)
+		}
 		showParent := false
 		if args["showParent"] != nil {
 			showParent = args["showParent"].Bool()
@@ -89,7 +91,7 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 				titleText = append(titleText, category.Title)
 			}
 		}
-		if siteName {
+		if siteName && len(currentSite.System.SiteName) > 0 {
 			titleText = append(titleText, currentSite.System.SiteName)
 		}
 		content = strings.Join(titleText, sep)
