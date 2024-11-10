@@ -5,7 +5,7 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {% block title %}<title>{% tdk with name="Title" siteName=true sep=" - " showParent=true %}</title>{% endblock %}
+    {% block title %}<title>{% tdk with name="Title" siteName=true %}</title>{% endblock %}
     <meta name="keywords" content="{% tdk with name='Keywords' %}">
     <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/font-awesome.min.css" />
