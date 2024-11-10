@@ -29,7 +29,6 @@ func GetDefaultDB() *gorm.DB {
 				library.DebugLog(config.ExecPath, "error.log", time.Now().Format("2006-01-02 15:04:05"), "连接数据库失败", err.Error())
 				os.Exit(-1)
 			}
-
 			defaultDB = db
 		}
 	}
@@ -76,7 +75,10 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	}
 	sqlDB.SetMaxIdleConns(100)
 	sqlDB.SetConnMaxLifetime(-1)
-
+	err = db.Use(&model.NextArchiveIdPlugin{})
+	if err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 
