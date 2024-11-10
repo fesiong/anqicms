@@ -1296,7 +1296,7 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 			archive.HasOrdered = true
 		} else if archive.Price > 0 {
 			var exist int64
-			w.DB.Debug().Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+			w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
 				config.OrderStatusPaid,
 				config.OrderStatusDelivering,
 				config.OrderStatusCompleted}).Count(&exist)
@@ -1554,13 +1554,7 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 		}
 	}
 
-	tx := qia.w.DB.Begin()
-	defer tx.Commit()
-
-	nextArchiveId := model.GetNextArchiveId(tx)
 	var archives = make([]model.ArchiveDraft, 0, 2000)
-	var archiveData = make([]model.ArchiveData, 0, 2000)
-	var archiveCategories = make([]model.ArchiveCategory, 0, 2000)
 	for _, f := range zipReader.File {
 		qia.Finished++
 		if f.FileInfo().IsDir() {
@@ -1595,7 +1589,6 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 			},
 			Status: uint(status),
 		}
-		archive.Id = nextArchiveId
 		var articleContent string
 		if fileExt == ".html" {
 			re, _ := regexp.Compile(`<title.*?>(.+?)</title>`)
@@ -1644,18 +1637,16 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 		// 检查标题重复问题
 		if qia.CheckDuplicate {
 			var count int64
-			tx.Model(&model.Archive{}).Where("title = ?", archive.Title).Count(&count)
+			qia.w.DB.Model(&model.Archive{}).Where("title = ?", archive.Title).Count(&count)
 			if count > 0 {
 				continue
 			}
-			tx.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Count(&count)
+			qia.w.DB.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Count(&count)
 			if count > 0 {
 				continue
 			}
 		}
 		// 步进
-		// 增加id值
-		nextArchiveId++
 		if qia.between > 0 {
 			qia.current = qia.current.Add(qia.between)
 		}
@@ -1664,56 +1655,57 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
 		// 解析urlToken
 		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
-		archives = append(archives, archive)
-		// archiveData
-		archiveData = append(archiveData, model.ArchiveData{
-			Id:      archive.Id,
+		archive.ArchiveData = &model.ArchiveData{
 			Content: articleContent,
-		})
-		archiveCategories = append(archiveCategories, model.ArchiveCategory{
-			CategoryId: category.Id,
-			ArchiveId:  archive.Id,
-		})
+		}
+		archives = append(archives, archive)
 		// 分批入库
 		if len(archives) >= 1000 {
-			if qia.PlanType != 0 {
-				// 入库到 draft
-				tx.CreateInBatches(archives, 1000)
-			} else {
-				// release mode
-				var release = make([]model.Archive, 0, len(archives))
-				for _, v := range archives {
-					release = append(release, v.Archive)
-				}
-				tx.CreateInBatches(archives, 1000)
-			}
-			tx.CreateInBatches(archiveData, 1000)
-			tx.CreateInBatches(archiveCategories, 1000)
-			log.Println("in id ", nextArchiveId)
-			qia.Message = qia.w.Tr("currentInsertId%d", nextArchiveId)
+			qia.SaveBatches(archives)
 			archives = make([]model.ArchiveDraft, 0, 1000)
-			archiveData = make([]model.ArchiveData, 0, 1000)
-			archiveCategories = make([]model.ArchiveCategory, 0, 1000)
 			qia.Succeed += len(archives)
 		}
 	}
 	if len(archives) > 0 {
-		if qia.PlanType != 0 {
-			// 入库到 draft
-			tx.CreateInBatches(archives, 1000)
-		} else {
-			// release mode
-			var release = make([]model.Archive, 0, len(archives))
-			for _, v := range archives {
-				release = append(release, v.Archive)
-			}
-			tx.CreateInBatches(archives, 1000)
-		}
-		tx.CreateInBatches(archiveData, 1000)
-		tx.CreateInBatches(archiveCategories, 1000)
-		qia.Succeed += len(archives)
+		qia.SaveBatches(archives)
 	}
 	qia.IsFinished = true
 
 	return nil
+}
+
+func (qia *QuickImportArchive) SaveBatches(archives []model.ArchiveDraft) {
+	tx := qia.w.DB.Begin()
+	defer tx.Commit()
+
+	var archiveCategories = make([]model.ArchiveCategory, 0, len(archives))
+	var archiveData = make([]model.ArchiveData, 0, len(archives))
+	var lastId uint
+	for i := range archives {
+		lastId = model.GetNextArchiveId(tx, true)
+		archives[i].Id = lastId
+		archiveCategories = append(archiveCategories, model.ArchiveCategory{
+			CategoryId: archives[i].CategoryId,
+			ArchiveId:  archives[i].Id,
+		})
+		archives[i].ArchiveData.Id = archives[i].Id
+		archiveData = append(archiveData, *archives[i].ArchiveData)
+	}
+
+	if qia.PlanType != 0 {
+		// 入库到 draft
+		tx.CreateInBatches(archives, 1000)
+	} else {
+		// release mode
+		var release = make([]model.Archive, 0, len(archives))
+		for _, v := range archives {
+			release = append(release, v.Archive)
+		}
+		tx.CreateInBatches(release, 1000)
+	}
+	tx.CreateInBatches(archiveData, 1000)
+	tx.CreateInBatches(archiveCategories, 1000)
+	log.Println("in id ", lastId)
+	qia.Message = qia.w.Tr("currentInsertId%d", lastId)
+	qia.Succeed += len(archives)
 }

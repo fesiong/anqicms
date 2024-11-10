@@ -84,7 +84,7 @@ func (l *Limiter) UpdateLimiter(setting *config.PluginLimiter) {
 }
 
 func (l *Limiter) isPrivateIP(ip string) bool {
-	// 判断师傅说内网IP，或本地IP
+	// 判断是否是内网IP，或本地IP
 	if strings.HasPrefix(ip, "10.") || strings.HasPrefix(ip, "172.") || strings.HasPrefix(ip, "192.168.") || strings.HasPrefix(ip, "127.") || strings.HasPrefix(ip, "localhost") {
 		return true
 	}
@@ -161,6 +161,28 @@ func (l *Limiter) IsIPBlocked(ip string) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	if len(l.blackIPs) > 0 {
+		parsedIP := net.ParseIP(ip)
+		// 检查是否在黑名单中，黑名单支持IP段
+		for _, blackIP := range l.blackIPs {
+			if strings.Contains(blackIP, "/") {
+				// 检查IP段
+				_, ipNet, err := net.ParseCIDR(blackIP)
+				if err != nil {
+					// 解析错误，忽略这条记录
+					continue
+				}
+				// 判断IP是否在IP段中
+				if ipNet.Contains(parsedIP) {
+					// 在IP段内
+					return true
+				}
+			} else if blackIP == ip {
+				return true
+			}
+		}
+	}
+
 	unblockTime, blocked := l.blockedIPs[ip]
 	if !blocked {
 		return false
@@ -185,9 +207,9 @@ func (l *Limiter) IsWhiteIp(ip string) bool {
 	parsedIP := net.ParseIP(ip)
 	// 检查是否在白名单中，白名单支持IP段
 	for _, whiteIP := range l.whiteIPs {
-		if strings.HasPrefix(whiteIP, "/") {
+		if strings.Contains(whiteIP, "/") {
 			// 检查IP段
-			_, ipNet, err := net.ParseCIDR("192.168.0.0/16")
+			_, ipNet, err := net.ParseCIDR(whiteIP)
 			if err != nil {
 				// 解析错误，忽略这条记录
 				continue
