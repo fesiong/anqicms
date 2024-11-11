@@ -241,7 +241,9 @@ func CurrentSite(ctx iris.Context) *Website {
 		if siteId, err := ctx.Values().GetUint("siteId"); err == nil {
 			w, ok := websites[siteId]
 			if ok {
-				w.backLanguage = ctx.GetLocale().Language()
+				if w.backLanguage == "" {
+					w.backLanguage = ctx.GetLocale().Language()
+				}
 				return w
 			}
 		}
@@ -285,7 +287,9 @@ func CurrentSite(ctx iris.Context) *Website {
 						}
 					}
 					ctx.Values().Set("siteId", w.Id)
-					w.backLanguage = ctx.GetLocale().Language()
+					if w.backLanguage == "" {
+						w.backLanguage = ctx.GetLocale().Language()
+					}
 					return w
 				}
 				// end
@@ -293,7 +297,9 @@ func CurrentSite(ctx iris.Context) *Website {
 					if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 						w.BaseURI = parsed.RequestURI()
 						ctx.Values().Set("siteId", w.Id)
-						w.backLanguage = ctx.GetLocale().Language()
+						if w.backLanguage == "" {
+							w.backLanguage = ctx.GetLocale().Language()
+						}
 						return w
 					}
 				}
@@ -304,7 +310,9 @@ func CurrentSite(ctx iris.Context) *Website {
 							if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 								w.BaseURI = parsed.RequestURI()
 								ctx.Values().Set("siteId", w.Id)
-								w.backLanguage = ctx.GetLocale().Language()
+								if w.backLanguage == "" {
+									w.backLanguage = ctx.GetLocale().Language()
+								}
 								return w
 							}
 						}
@@ -316,7 +324,9 @@ func CurrentSite(ctx iris.Context) *Website {
 						if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 							w.BaseURI = parsed.RequestURI()
 							ctx.Values().Set("siteId", w.Id)
-							w.backLanguage = ctx.GetLocale().Language()
+							if w.backLanguage == "" {
+								w.backLanguage = ctx.GetLocale().Language()
+							}
 							return w
 						}
 					}
@@ -352,13 +362,17 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 
 					ctx.Values().Set("siteId", w.Id)
-					w.backLanguage = ctx.GetLocale().Language()
+					if w.backLanguage == "" {
+						w.backLanguage = ctx.GetLocale().Language()
+					}
 					return w
 				}
 				// 顶级域名
 				if strings.HasSuffix(parsed.Hostname(), "."+host) {
 					ctx.Values().Set("siteId", w.Id)
-					w.backLanguage = ctx.GetLocale().Language()
+					if w.backLanguage == "" {
+						w.backLanguage = ctx.GetLocale().Language()
+					}
 					return w
 				}
 			}
@@ -370,7 +384,9 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 					if parsed.Hostname() == host {
 						ctx.Values().Set("siteId", w.Id)
-						w.backLanguage = ctx.GetLocale().Language()
+						if w.backLanguage == "" {
+							w.backLanguage = ctx.GetLocale().Language()
+						}
 						return w
 					}
 				}
@@ -383,7 +399,9 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 					if parsed.Hostname() == host {
 						ctx.Values().Set("siteId", w.Id)
-						w.backLanguage = ctx.GetLocale().Language()
+						if w.backLanguage == "" {
+							w.backLanguage = ctx.GetLocale().Language()
+						}
 						return w
 					}
 				}
