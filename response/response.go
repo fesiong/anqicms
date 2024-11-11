@@ -56,3 +56,8 @@ type FindPasswordInfo struct {
 	End      time.Time   `json:"-"`
 	Timer    *time.Timer `json:"-"`
 }
+
+type TinyAttachment struct {
+	FileName     string `json:"file_name"`
+	FileLocation string `json:"file_location"`
+}

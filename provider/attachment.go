@@ -19,8 +19,10 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
+	"math/rand"
 	"mime/multipart"
 	"os"
 	"path"
@@ -804,7 +806,7 @@ func (w *Website) GetRandImageFromCategory(categoryId int, title string) string 
 	// 根据分类每次只取其中一张
 	var attach model.Attachment
 	if categoryId >= 0 {
-		w.DB.Model(&model.Attachment{}).Where("category_id = ? and is_image = ?", w.CollectorConfig.ImageCategoryId, 1).Order("rand()").Limit(1).Take(&attach)
+		w.DB.Model(&model.Attachment{}).Where("category_id = ? and is_image = ?", categoryId, 1).Order("rand()").Limit(1).Take(&attach)
 	} else if categoryId == -1 {
 		// 全部图片，所以每次只取其中一张
 		w.DB.Model(&model.Attachment{}).Where("is_image = ?", 1).Order("rand()").Limit(1).Take(&attach)
@@ -830,6 +832,26 @@ func (w *Website) GetRandImageFromCategory(categoryId int, title string) string 
 	}
 
 	return img
+}
+
+func (w *Website) GetCategoryImages(categoryId int) []*response.TinyAttachment {
+	// 根据分类读取
+	var attaches []*response.TinyAttachment
+	if categoryId >= 0 {
+		w.DB.Model(&model.Attachment{}).Where("category_id = ? and is_image = ?", categoryId, 1).Order("rand()").Scan(&attaches)
+	} else {
+		// 全部图片
+		w.DB.Model(&model.Attachment{}).Where("is_image = ?", 1).Scan(&attaches)
+	}
+	for i := range attaches {
+		attaches[i].FileLocation = w.PluginStorage.StorageUrl + "/" + attaches[i].FileLocation
+	}
+	// 对attaches 进行随机打乱
+	rand.Shuffle(len(attaches), func(i, j int) {
+		attaches[i], attaches[j] = attaches[j], attaches[i]
+	})
+
+	return attaches
 }
 
 func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
