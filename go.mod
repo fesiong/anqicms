@@ -15,7 +15,7 @@ require (
 	github.com/go-pay/gopay v1.5.98
 	github.com/golang-jwt/jwt/v5 v5.2.1
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
-	github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47
+	github.com/gomarkdown/markdown v0.0.0-20241105142532-d03b89096d81
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.0
 	github.com/h2non/filetype v1.1.3

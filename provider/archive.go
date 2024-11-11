@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jinzhu/now"
+	"golang.org/x/text/encoding/simplifiedchinese"
 	"gorm.io/gorm"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
 	"mime/multipart"
@@ -1443,15 +1445,20 @@ type QuickImportArchive struct {
 	PlanStart  int `json:"plan_start"` // 计划开始时间 0 立即 1 跟随最后一篇 2 半小时 3 1小时 4 2小时 5 4小时 6 8小时 7 12小时 8 24小时
 	Days       int `json:"days"`       // 分成多少天发布
 
-	FileName       string `json:"file_name"`
-	Size           int64  `json:"size"` // 文件大小
-	Md5            string `json:"md5"`
-	Chunk          int    `json:"chunk"`
-	Chunks         int    `json:"chunks"`
-	CategoryId     uint   `json:"category_id"`
-	TitleType      int    `json:"title_type"`
-	CheckDuplicate bool   `json:"check_duplicate"` // 是否检查重复标题
-	Message        string `json:"message"`
+	FileName        string `json:"file_name"`
+	Size            int64  `json:"size"` // 文件大小
+	Md5             string `json:"md5"`
+	Chunk           int    `json:"chunk"`
+	Chunks          int    `json:"chunks"`
+	CategoryId      uint   `json:"category_id"`
+	TitleType       int    `json:"title_type"`
+	CheckDuplicate  bool   `json:"check_duplicate"` // 是否检查重复标题
+	Message         string `json:"message"`
+	InsertImage     int    `json:"insert_image"` // 0 不插入，1不插入，2 自定义插入图片 3 从图片分类里插入
+	ImageCategoryId int    `json:"image_category_id"`
+
+	images    []*response.TinyAttachment
+	nextImage int
 
 	current   time.Time
 	between   time.Duration
@@ -1462,19 +1469,32 @@ func (w *Website) NewQuickImportArchive(req *request.QuickImportArchiveRequest) 
 	if w.quickImportStatus != nil && w.quickImportStatus.IsFinished == false {
 		return nil, errors.New(w.Tr("prevTaskIsRunning"))
 	}
+	var images = make([]*response.TinyAttachment, 0, len(req.Images))
+	if req.InsertImage == config.CollectImageInsert {
+		for _, image := range req.Images {
+			images = append(images, &response.TinyAttachment{
+				FileName:     filepath.Base(image),
+				FileLocation: image,
+			})
+		}
+	}
 	w.quickImportStatus = &QuickImportArchive{
-		w:              w,
-		FileName:       req.FileName,
-		Md5:            req.Md5,
-		Chunks:         req.Chunks,
-		Chunk:          req.Chunk,
-		CategoryId:     req.CategoryId,
-		TitleType:      req.TitleType,
-		Size:           req.Size,
-		PlanType:       req.PlanType,
-		PlanStart:      req.PlanStart,
-		Days:           req.Days,
-		CheckDuplicate: req.CheckDuplicate,
+		w:               w,
+		FileName:        req.FileName,
+		Md5:             req.Md5,
+		Chunks:          req.Chunks,
+		Chunk:           req.Chunk,
+		CategoryId:      req.CategoryId,
+		TitleType:       req.TitleType,
+		Size:            req.Size,
+		PlanType:        req.PlanType,
+		PlanStart:       req.PlanStart,
+		Days:            req.Days,
+		CheckDuplicate:  req.CheckDuplicate,
+		InsertImage:     req.InsertImage,
+		ImageCategoryId: req.ImageCategoryId,
+		images:          images,
+		nextImage:       0,
 	}
 
 	return w.quickImportStatus, nil
@@ -1543,6 +1563,11 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 		return err
 	}
 
+	// 读取图片
+	if qia.InsertImage == config.CollectImageCategory {
+		qia.images = qia.w.GetCategoryImages(qia.ImageCategoryId)
+	}
+
 	qia.Total = len(zipReader.File)
 	qia.between = 0
 	qia.current = time.Now()
@@ -1570,6 +1595,12 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 		if err != nil {
 			qia.Message = err.Error()
 			continue
+		}
+		if f.Flags == 0 {
+			name, err := library.DecodeToUTF8([]byte(f.Name), simplifiedchinese.GBK)
+			if err == nil {
+				f.Name = string(name)
+			}
 		}
 		fileExt := filepath.Ext(f.Name)
 		// 支持 txt/html/md
@@ -1630,9 +1661,12 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 			}
 
 			articleContent = strings.TrimSpace(string(content))
-			if fileExt == ".md" || content[0] != '<' {
+			if (fileExt == ".md" || content[0] != '<') && qia.w.Content.Editor != "markdown" {
 				articleContent = library.MarkdownToHTML(articleContent)
 			}
+		} else {
+			// 不支持的文件类型，也跳过
+			continue
 		}
 		// 检查标题重复问题
 		if qia.CheckDuplicate {
@@ -1651,6 +1685,47 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 			qia.current = qia.current.Add(qia.between)
 		}
 		// e
+		// 插入图片
+		if len(qia.images) > 0 {
+			var img string
+			if qia.ImageCategoryId == -2 {
+				// 按关键词匹配
+				keywordSplit := library.WordSplit(archive.Title, false)
+				for _, word := range keywordSplit {
+					if img != "" {
+						break
+					}
+					for _, v := range qia.images {
+						if strings.Contains(v.FileName, word) {
+							img = v.FileLocation
+							break
+						}
+					}
+				}
+			} else {
+				// 随机一张，已经随机过了，因此这里就是顺序
+				img = qia.images[qia.nextImage].FileLocation
+				qia.nextImage = (qia.nextImage + 1) % len(qia.images)
+			}
+			if img != "" {
+				imgTag := "<img src='" + img + "' alt='" + archive.Title + "' />"
+
+				var contents = strings.Split(articleContent, "\n")
+				if len(contents) < 2 && strings.Contains(articleContent, ">") {
+					contents = strings.SplitAfter(articleContent, ">")
+				}
+				index := len(contents) / 3
+				contents = append(contents, "")
+				copy(contents[index+1:], contents[index:])
+				// ![新的图片](http://xxx/xxx.webp)
+				if qia.w.Content.Editor == "markdown" {
+					imgTag = fmt.Sprintf("![%s](%s)", archive.Title, img)
+				}
+				contents[index] = imgTag
+				articleContent = strings.Join(contents, "")
+				archive.Images = []string{img}
+			}
+		}
 		// 解析description
 		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
 		// 解析urlToken
