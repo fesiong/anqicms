@@ -45,6 +45,25 @@ func main() {
 			}
 		}
 	}()
+	// env
+	envDb := os.Getenv("MYSQL_DATABASE")
+	envHost := os.Getenv("MYSQL_HOST")
+	envPwd := os.Getenv("MYSQL_ROOT_PASSWORD")
+	envPort := os.Getenv("MYSQL_PORT")
+	if len(envDb) > 0 && len(envHost) > 0 && len(envPwd) > 0 {
+		envPort2, _ := strconv.Atoi(envPort)
+		if envPort2 == 0 {
+			envPort2 = 3306
+		}
+		config.Server.Mysql = config.MysqlConfig{
+			Database: envDb,
+			User:     "root",
+			Password: envPwd,
+			Host:     envHost,
+			Port:     envPort2,
+		}
+		_ = config.WriteConfig()
+	}
 
 	b := anqicms.New(config.Server.Server.Port, config.Server.Server.LogLevel)
 	b.Serve()

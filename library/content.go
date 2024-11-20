@@ -189,6 +189,11 @@ func ParseDescription(content string) (description string) {
 }
 
 func MarkdownToHTML(mdStr string) string {
+	if len(mdStr) == 0 {
+		return ""
+	}
+	// 换行转换成p
+	mdStr = strings.ReplaceAll(mdStr, "\n", "  \n")
 	md := []byte(mdStr)
 	// create markdown parser with extensions
 	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
