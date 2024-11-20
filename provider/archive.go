@@ -1177,7 +1177,10 @@ func (w *Website) GetCacheFixedLinks() map[string]uint {
 	}
 
 	var archives []model.Archive
-	w.DB.Model(model.Archive{}).Where("`fixed_link` != ''").Select("fixed_link", "id").Scan(&archives)
+	err = w.DB.Model(model.Archive{}).Where("`fixed_link` != ''").Select("fixed_link", "id").Scan(&archives).Error
+	if err != nil {
+		return nil
+	}
 	for i := range archives {
 		fixedLinks[archives[i].FixedLink] = archives[i].Id
 	}
@@ -1651,11 +1654,14 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 				articleContent = string(content)
 			}
 		} else if fileExt == ".md" || fileExt == ".txt" {
-			if bytes.HasPrefix(content, []byte("# ")) || qia.TitleType == 1 {
+			if len(content) == 0 {
+				continue
+			}
+			if bytes.HasPrefix(content, []byte("#")) || qia.TitleType == 1 {
 				// 第一行是标题
 				contents := bytes.Split(content, []byte{'\n'})
 				if len(contents) > 1 {
-					archive.Title = strings.TrimLeft(string(contents[0]), "# ")
+					archive.Title = strings.Trim(string(contents[0]), "# *")
 					content = bytes.Join(contents[1:], []byte{'\n'})
 				}
 			}

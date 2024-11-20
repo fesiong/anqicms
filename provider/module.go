@@ -183,13 +183,17 @@ func (w *Website) GetCacheModules() []model.Module {
 	var modules []model.Module
 
 	err := w.Cache.Get("modules", &modules)
-	if err == nil {
+	if err == nil && len(modules) > 0 {
 		return modules
 	}
 
-	w.DB.Model(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules)
-
-	_ = w.Cache.Set("modules", modules, 0)
+	err = w.DB.Model(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules).Error
+	if err != nil {
+		return nil
+	}
+	if len(modules) > 0 {
+		_ = w.Cache.Set("modules", modules, 0)
+	}
 
 	return modules
 }
