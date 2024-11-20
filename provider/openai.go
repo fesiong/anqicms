@@ -307,7 +307,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	}
 	// 获取标题
 	results := strings.Split(result.Content, "\n")
-	title := strings.TrimLeft(results[0], "# ")
+	title := strings.Trim(results[0], "# *")
 	if w.AiGenerateConfig.DoubleTitle {
 		if strings.Contains(title, "主标题：") {
 			title = strings.TrimPrefix(title, "主标题：")
