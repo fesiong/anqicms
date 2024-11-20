@@ -175,9 +175,14 @@ func (w *Website) GetCacheNavs() []model.Nav {
 		return navs
 	}
 
-	w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs)
+	err = w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs).Error
+	if err != nil {
+		return nil
+	}
 
-	_ = w.Cache.Set("navs", navs, 0)
+	if len(navs) > 0 {
+		_ = w.Cache.Set("navs", navs, 0)
+	}
 
 	return navs
 }
