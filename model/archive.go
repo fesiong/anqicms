@@ -11,16 +11,16 @@ import (
 
 type Archive struct {
 	//默认字段
-	Id           uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey;index:idx_category_archive_id,priority:2;index:idx_module_archive_id,priority:2"`
-	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	Id           uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time;index:idx_category_created_time,priority:2;index:idx_module_created_time,priority:2"`
 	UpdatedTime  int64          `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title        string         `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';index"`
 	SeoTitle     string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	UrlToken     string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
 	Keywords     string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
 	Description  string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
-	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_archive_id,priority:1"`
-	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_archive_id,priority:1"`
+	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_created_time,priority:1"`
+	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_created_time,priority:1"`
 	Views        uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	CommentCount uint           `json:"comment_count" gorm:"column:comment_count;type:int(10) unsigned not null;default:0"`
 	Images       pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
