@@ -44,8 +44,13 @@ func GetWebsiteInfo(ctx iris.Context) {
 	}
 
 	website := provider.GetWebsite(dbSite.Id)
-	adminInfo, err := website.GetAdminInfoById(1)
-	if err != nil {
+	var adminInfo *model.Admin
+	if website != nil {
+		adminInfo, err = website.GetAdminInfoById(1)
+		if err != nil {
+			adminInfo = &model.Admin{}
+		}
+	} else {
 		adminInfo = &model.Admin{}
 	}
 	result := request.WebsiteRequest{
@@ -55,8 +60,10 @@ func GetWebsiteInfo(ctx iris.Context) {
 		Status:    dbSite.Status,
 		Mysql:     dbSite.Mysql,
 		AdminUser: adminInfo.UserName,
-		BaseUrl:   website.System.BaseUrl,
-		Initialed: website.Initialed,
+	}
+	if website != nil {
+		result.BaseUrl = website.System.BaseUrl
+		result.Initialed = website.Initialed
 	}
 	if dbSite.Id == 1 {
 		result.Mysql = config.Server.Mysql
