@@ -2,9 +2,16 @@
 
 <img height="180" src="docs/anqicms.svg" />
 
-[更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
+# AnQiCMS 一款高性能的内容管理系统
 
-# AnQiCMS
+
+<div align="center">
+<a href="https://github.com/fesiong/anqicms/releases"><img alt="GitHub release" src="https://img.shields.io/github/release/fesiong/anqicms.svg?style=flat-square&include_prereleases" /></a>
+<a href="https://hub.docker.com/r/anqicms/anqicms"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/anqicms/anqicms?style=flat-square" /></a>
+<a href="https://github.com/fesiong/anqicms/commits"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/fesiong/anqicms.svg?style=flat-square" /></a>
+</div>
+
+[官网](https://www.anqicms.com) · [文档](https://www.anqicms.com/help) · [演示](https://demo.anqicms.com) · [GitCode](https://gitcode.com/anqicms/anqicms) · [更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
 
 </div>
 
@@ -24,8 +31,30 @@ AnQiCMS旨在为中小型企业提供一个高效、稳定、灵活的内容管�
 
 ## 快速开始
 
-[下载最新的 AnQiCMS](https://github.com/fesiong/goblog/releases)  
-[安装一个新的站点](https://www.anqicms.com/help-basic/210.html)  
+### 快速(宝塔)部署
+
+- [宝塔面板(9.2+)一键部署](https://www.anqicms.com/help/3628.html)
+- [aaPanel一键部署](https://www.anqicms.com/help/3633.html)
+- [1Panel部署](https://www.anqicms.com/help/3634.html)
+- [宝塔面板(9.0以前版本)部署](https://www.anqicms.com/help-basic/210.html)
+- [LNMP命令部署](https://www.anqicms.com/courses/3486.html)
+
+Docker 快速体验
+
+```bash
+docker pull anqicms/anqicms:latest
+docker run -d --name anqicms -p 8001:8001 anqicms/anqicms:latest
+```
+
+### 在线体验
+
+环境地址：https://demo.anqicms.com
+后台地址：https://demo.anqicms.com/system
+用户名：`admin`
+密码：`123456`
+
+### 使用帮助
+
 [查看模板使用教程](https://www.anqicms.com/manual)  
 [查看后台使用帮助](https://www.anqicms.com/help)  
 [查看接口文档](https://www.anqicms.com/anqiapi)
