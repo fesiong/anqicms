@@ -13,24 +13,27 @@ function getRem(pwidth, prem) {
   }
 }
 $win = $(window);
-$(".m-menu-open").on("click", function () {
+$(document).on("click", ".m-menu-open", function () {
   $(".header").addClass("m-nav-show");
 });
-$(".m-menu-close").on("click", function () {
+$(document).on("click", ".m-menu-close", function () {
   $(".header").removeClass("m-nav-show");
 });
 
-$(".js-to-top").on("click", function () {
+$(document).on("click", ".js-to-top", function () {
   $win.scrollTop(0);
 });
 
-var $singleTable = $(".single-arc table");
-if ($singleTable.length > 0) {
-  $singleTable.each(function () {
-    $(this).wrap('<div class="single-table">');
-  });
+function renderTable() {
+  var $singleTable = $(".single-arc table");
+  if ($singleTable.length > 0) {
+    $singleTable.each(function () {
+      $(this).wrap('<div class="single-table">');
+    });
+  }
 }
-$("button.accordion-item").click(function () {
+
+$(document).on("click", "button.accordion-item", function () {
   var contentEl = $(this).next(".accordion-item-content");
   if ($(this).hasClass("active")) {
     $(this).removeClass("active");
@@ -43,7 +46,23 @@ $("button.accordion-item").click(function () {
       .css("max-height", 0);
   }
 });
-$("button.accordion-item").first().click();
-$('.tool-item').click(function() {
+
+function initial() {
+  renderTable();
+  $("button.accordion-item").first().click();
+}
+
+initial();
+
+$(document).on('click', '.tool-item', function() {
   $(this).addClass('active').siblings().removeClass('active');
+})
+// pjax
+$(document).pjax('a', '#pjax-container');
+$(document).on('pjax:send', function() {
+  NProgress.start();
+})
+$(document).on('pjax:complete', function() {
+  NProgress.done();
+  initial();
 })
