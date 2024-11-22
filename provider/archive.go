@@ -1605,6 +1605,13 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 				f.Name = string(name)
 			}
 		}
+		// 检查content是否是utf8
+		if !utf8.Valid(content) {
+			tmpContent, err := simplifiedchinese.GBK.NewDecoder().Bytes(content)
+			if err == nil {
+				content = tmpContent
+			}
+		}
 		fileExt := filepath.Ext(f.Name)
 		// 支持 txt/html/md
 		status := config.ContentStatusOK

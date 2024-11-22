@@ -73,7 +73,9 @@ type ArchiveDraft struct {
 }
 
 func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
-	a.Id = GetNextArchiveId(tx, false)
+	if a.Id == 0 {
+		a.Id = GetNextArchiveId(tx, false)
+	}
 	return
 }
 
