@@ -33,9 +33,8 @@ AnQiCMS旨在为中小型企业提供一个高效、稳定、灵活的内容管�
 
 ### 快速(宝塔)部署
 
-- [宝塔面板(9.2+)一键部署](https://www.anqicms.com/help/3628.html)
-- [aaPanel一键部署](https://www.anqicms.com/help/3633.html)
-- [1Panel部署](https://www.anqicms.com/help/3634.html)
+- [宝塔面板(9.2+)一键部署**推荐**](https://www.anqicms.com/help/3628.html)
+- [aaPanel(宝塔国际版)一键部署](https://www.anqicms.com/help/3633.html)
 - [宝塔面板(9.0以前版本)部署](https://www.anqicms.com/help-basic/210.html)
 - [LNMP命令部署](https://www.anqicms.com/courses/3486.html)
 
@@ -48,10 +47,10 @@ docker run -d --name anqicms -p 8001:8001 anqicms/anqicms:latest
 
 ### 在线体验
 
-环境地址：https://demo.anqicms.com
-后台地址：https://demo.anqicms.com/system
-用户名：`admin`
-密码：`123456`
+环境地址：[https://demo.anqicms.com](https://demo.anqicms.com)  
+后台地址：[https://demo.anqicms.com/system](https://demo.anqicms.com/system)  
+用户名：`admin`  
+密码：`123456`  
 
 ### 使用帮助
 
