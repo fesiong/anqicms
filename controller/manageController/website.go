@@ -20,7 +20,9 @@ import (
 func GetWebsiteList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	dbSites, total := provider.GetDBWebsites(currentPage, pageSize)
+	name := ctx.URLParam("name")
+	baseUrl := ctx.URLParam("base_url")
+	dbSites, total := provider.GetDBWebsites(name, baseUrl, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

@@ -471,7 +471,7 @@ func (w *Website) GetTemplateDir() string {
 	return w.RootPath + "template/" + w.System.TemplateName
 }
 
-func GetDBWebsites(page, pageSize int) ([]*model.Website, int64) {
+func GetDBWebsites(name, baseUrl string, page, pageSize int) ([]*model.Website, int64) {
 	var sites []*model.Website
 	db := GetDefaultDB()
 	if db == nil {
@@ -480,6 +480,18 @@ func GetDBWebsites(page, pageSize int) ([]*model.Website, int64) {
 	var total int64
 	offset := (page - 1) * pageSize
 	tx := db.Model(&model.Website{}).Order("id asc")
+	if name != "" {
+		tx = tx.Where("`name` LIKE ?", "%"+name+"%")
+	}
+	if baseUrl != "" {
+		var ids []uint
+		for _, w := range websites {
+			if strings.Contains(w.System.BaseUrl, baseUrl) {
+				ids = append(ids, w.Id)
+			}
+		}
+		tx = tx.Where("id in (?)", ids)
+	}
 	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&sites)
 	if len(sites) > 0 {
 		sites[0].Mysql = config.Server.Mysql
