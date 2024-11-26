@@ -500,7 +500,11 @@ func LoginSubWebsite(ctx iris.Context) {
 	signHash.Write([]byte(admin.Password + nonce))
 	sign := signHash.Sum(nil)
 
-	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", subSite.System.BaseUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
+	loginUrl := subSite.System.BaseUrl
+	if subSite.System.AdminUrl != "" {
+		loginUrl = subSite.System.AdminUrl
+	}
+	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", loginUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
