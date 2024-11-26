@@ -48,4 +48,5 @@ const (
 	TranslateEngineYoudao  = "youdao"
 	TranslateEngineGoogle  = "google"
 	TranslateEngineAi      = "ai"
+	TranslateEngineDeepl   = "deepl"
 )

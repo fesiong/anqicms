@@ -373,7 +373,7 @@ func (w *Website) AnqiTranslateString(req *AnqiAiRequest) (result *AnqiAiResult,
 	originTitle := req.Title
 	originContent := req.Content
 	// 如果设置了使用AI翻译，则使用自己翻译
-	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault && w.AiGenerateConfig.AiTranslate {
+	if w.PluginTranslate.Engine != config.TranslateEngineDefault {
 		req, err = w.SelfAiTranslateResult(req)
 		if err != nil {
 			return nil, err
@@ -610,9 +610,13 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 	var err error
 	// 重新检查状态
-	plan, err = w.GetAiArticlePlanByReqId(plan.ReqId)
+	plan, err = w.GetAiArticlePlanByReqId(plan.Id)
 	if err != nil {
 		return err
+	}
+	if plan.ReqId == 0 {
+		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
+		return errors.New("req-id is empty")
 	}
 	if plan.Status != config.AiArticleStatusDoing {
 		return errors.New(w.Tr("ThePlanHasBeenProcessed"))

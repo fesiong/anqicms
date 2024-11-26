@@ -240,7 +240,7 @@ func AnqiTranslateArticle(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("TranslationHasBeenAddedToThePlan"),
+		"msg":  ctx.Tr("TranslationHasFinished"),
 	})
 }
 

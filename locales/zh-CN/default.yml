@@ -287,7 +287,7 @@
 "UpdateTimeFactorTimedReleaseConfiguration": "更新时间因子-定时发布配置"
 "SubmitSuccessfully": "提交成功"
 "DownloadSuccessfully": "下载成功"
-"TranslationHasBeenAddedToThePlan": "翻译已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度"
+"TranslationHasFinished": "翻译已完成"
 "AiPseudoOriginalHasBeenAddedToThePlan": "AI伪原创已添加到计划中，预计2分钟后完成，可在AI自动写作功能中查看进度"
 "RestartSuccessfully": "重启成功"
 "UpdateSearchEnginePushConfiguration": "更新搜索引擎推送配置"

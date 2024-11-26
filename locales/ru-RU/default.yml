@@ -287,7 +287,7 @@
 "UpdateTimeFactorTimedReleaseConfiguration": "Обновление конфигурации запланированного выпуска с учетом временного фактора"
 "SubmitSuccessfully": "Отправлено успешно"
 "DownloadSuccessfully": "загрузка прошла успешно"
-"TranslationHasBeenAddedToThePlan": "Перевод добавлен в план и ожидается, что он будет завершен через 2 минуты. Вы можете проверить ход выполнения с помощью функции автоматического написания AI."
+"TranslationHasFinished": "Перевод завершен"
 "AiPseudoOriginalHasBeenAddedToThePlan": "Создание псевдооригинала ИИ добавлено в план и, как ожидается, будет завершено через 2 минуты. Вы можете проверить ход выполнения функции автоматического написания ИИ."
 "RestartSuccessfully": "Перезагрузка прошла успешно"
 "UpdateSearchEnginePushConfiguration": "Обновить конфигурацию push-рассылки поисковой системы"
