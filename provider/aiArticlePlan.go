@@ -72,6 +72,8 @@ func (w *Website) SyncAiArticlePlan() {
 
 	for _, plan := range plans {
 		err := w.AnqiSyncAiPlanResult(plan)
-		log.Println("plan text", plan.Id, err)
+		if err != nil {
+			log.Println("plan text", plan.Id, err)
+		}
 	}
 }
