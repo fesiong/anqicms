@@ -287,7 +287,7 @@
 "UpdateTimeFactorTimedReleaseConfiguration": "時間要素に応じたスケジュールされたリリース構成の更新"
 "SubmitSuccessfully": "正常に送信されました"
 "DownloadSuccessfully": "ダウンロードに成功しました"
-"TranslationHasBeenAddedToThePlan": "翻訳はプランに追加されており、2分で完了する予定です。AI自動筆記機能で進捗状況を確認できます。"
+"TranslationHasFinished": "翻訳が完了しました"
 "AiPseudoOriginalHasBeenAddedToThePlan": "AI疑似オリジナル作成がプランに追加されており、2分で完了する見込みです。AI自動筆記機能で進捗状況を確認できます。"
 "RestartSuccessfully": "再起動に成功しました"
 "UpdateSearchEnginePushConfiguration": "検索エンジンのプッシュ構成を更新する"

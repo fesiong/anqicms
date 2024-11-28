@@ -214,6 +214,7 @@ type PluginTranslateConfig struct {
 	BaiduAppSecret  string `json:"baidu_app_secret"`  // 百度翻译
 	YoudaoAppKey    string `json:"youdao_app_key"`    // 有道翻译
 	YoudaoAppSecret string `json:"youdao_app_secret"` // 有道翻译
+	DeeplAuthKey    string `json:"deepl_auth_key"`    // Deepl
 }
 
 func (g *CustomField) SplitContent() []string {

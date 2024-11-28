@@ -287,7 +287,7 @@
 "UpdateTimeFactorTimedReleaseConfiguration": "Update time factor-timed release configuration"
 "SubmitSuccessfully": "Submit successfully"
 "DownloadSuccessfully": "Download successfully"
-"TranslationHasBeenAddedToThePlan": "Translation has been added to the plan, and is expected to be completed in 2 minutes. The progress can be viewed in the AI ​​automatic writing function"
+"TranslationHasFinished": "Translation completed"
 "AiPseudoOriginalHasBeenAddedToThePlan": "AI pseudo-original has been added to the plan, and is expected to be completed in 2 minutes. The progress can be viewed in the AI ​​automatic writing function"
 "RestartSuccessfully": "Restart successfully"
 "UpdateSearchEnginePushConfiguration": "Update search engine push configuration"

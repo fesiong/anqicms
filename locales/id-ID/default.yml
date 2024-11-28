@@ -287,7 +287,7 @@
 "UpdateTimeFactorTimedReleaseConfiguration": "Perbarui konfigurasi rilis terjadwal dengan faktor waktu"
 "SubmitSuccessfully": "Berhasil dikirimkan"
 "DownloadSuccessfully": "pengunduhan berhasil"
-"TranslationHasBeenAddedToThePlan": "Terjemahan telah ditambahkan ke rencana dan diharapkan selesai dalam 2 menit. Anda dapat memeriksa kemajuannya dalam fungsi penulisan otomatis AI"
+"TranslationHasFinished": "Terjemahan selesai"
 "AiPseudoOriginalHasBeenAddedToThePlan": "Pembuatan AI pseudo-asli telah ditambahkan ke rencana dan diharapkan selesai dalam 2 menit. Anda dapat memeriksa kemajuannya dalam fungsi penulisan otomatis AI"
 "RestartSuccessfully": "Mulai ulang berhasil"
 "UpdateSearchEnginePushConfiguration": "Perbarui konfigurasi push mesin pencari"

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -10,6 +11,7 @@ import (
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -46,6 +48,24 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 				return nil, err
 			}
 			req.Title = content
+		} else if w.PluginTranslate.Engine == config.TranslateEngineDeepl {
+			// Deepl翻译
+			client := NewDeepl(w.PluginTranslate.DeeplAuthKey)
+			glossariesId, err := client.GetGlossaries()
+			if err != nil {
+				return nil, err
+			}
+			translation, _, err := client.Translate(
+				req.Title,
+				req.Language,
+				req.ToLanguage,
+				glossariesId,
+			)
+			if err != nil {
+				return nil, err
+			}
+
+			req.Title = translation
 		} else {
 			return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
 		}
@@ -83,6 +103,8 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 				}
 				contentTexts[i] = tmpContent
 			} else if w.PluginTranslate.Engine == config.TranslateEngineBaidu {
+				// 百度的默认qps=1
+				time.Sleep(time.Second)
 				// 使用百度翻译
 				baiduTranslate := NewBaiduTranslate(w.PluginTranslate.BaiduAppId, w.PluginTranslate.BaiduAppSecret)
 				content, err := baiduTranslate.Translate(contentTexts[i], req.Language, req.ToLanguage)
@@ -98,6 +120,24 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 					return nil, err
 				}
 				contentTexts[i] = content
+			} else if w.PluginTranslate.Engine == config.TranslateEngineDeepl {
+				// Deepl翻译
+				client := NewDeepl(w.PluginTranslate.DeeplAuthKey)
+				glossariesId, err := client.GetGlossaries()
+				if err != nil {
+					return nil, err
+				}
+				translation, _, err := client.Translate(
+					contentTexts[i],
+					req.Language,
+					req.ToLanguage,
+					glossariesId,
+				)
+				if err != nil {
+					return nil, err
+				}
+
+				contentTexts[i] = translation
 			}
 		}
 		translated := strings.Join(contentTexts, "\n")
@@ -287,4 +327,190 @@ func (yt *YoudaoTranslate) getUuid() string {
 	b[6] = (b[6] & 0x0f) | 0x40
 	b[8] = (b[8] & 0x3f) | 0x80
 	return fmt.Sprintf("%x-%x-%x-%x-%x", b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
+
+type Deepl struct {
+	baseURL string
+	apiKey  string
+}
+
+type TranslationPayload struct {
+	Text       []string `json:"text"`
+	TargetLang string   `json:"target_lang"`
+	SourceLang string   `json:"source_lang"`
+	GlossaryID string   `json:"glossary_id"`
+}
+
+type TranslationResponse struct {
+	Translations []Translation `json:"translations"`
+}
+
+type Translation struct {
+	DetectedSourceLanguage string `json:"detected_source_language"`
+	Text                   string `json:"text"`
+}
+
+func NewDeepl(apiKey string) *Deepl {
+	baseURL := "https://api.deepl.com/v2"
+	if strings.HasSuffix(apiKey, ":fx") {
+		baseURL = "https://api-free.deepl.com/v2"
+	}
+
+	return &Deepl{apiKey: apiKey, baseURL: baseURL}
+}
+
+func (d *Deepl) Translate(text string, sourceLang, targetLang string, glossaryID string) (string, string, error) {
+	sourceLang = strings.ToUpper(sourceLang)
+	targetLang = strings.ToUpper(targetLang)
+
+	payload := TranslationPayload{
+		Text:       []string{text},
+		TargetLang: targetLang,
+		SourceLang: sourceLang,
+		GlossaryID: glossaryID,
+	}
+
+	j, err := json.Marshal(payload)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	apiUrl := fmt.Sprintf("%s/translate", d.baseURL)
+
+	req, err := http.NewRequest("POST", apiUrl, bytes.NewBuffer(j))
+
+	if err != nil {
+		return "", "", err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("DeepL-Auth-Key %s", d.apiKey))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return "", "", err
+	}
+	defer resp.Body.Close()
+
+	responseData := TranslationResponse{}
+
+	body, _ := io.ReadAll(resp.Body)
+	err = json.Unmarshal(body, &responseData)
+
+	if err != nil {
+		return "", "", err
+	}
+
+	var result []string
+	for _, item := range responseData.Translations {
+		sourceLang = item.DetectedSourceLanguage
+		result = append(result, item.Text)
+	}
+
+	return strings.Join(result, "\n"), sourceLang, nil
+}
+
+func (d *Deepl) GetGlossaries() (string, error) {
+
+	url := fmt.Sprintf("%s/glossaries", d.baseURL)
+
+	req, err := http.NewRequest("GET", url, nil)
+
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("DeepL-Auth-Key %s", d.apiKey))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	if err != nil {
+		return "", err
+	}
+
+	defer resp.Body.Close()
+
+	buf := new(bytes.Buffer)
+	return buf.String(), nil
+}
+
+type CreateGlossaryPayload struct {
+	Name          string `json:"name"`
+	SourceLang    string `json:"source_lang"`
+	TargetLang    string `json:"target_lang"`
+	EntriesFormat string `json:"entries_format"`
+	Entries       string `json:"entries"`
+}
+
+type Glossary struct {
+	ID           string `json:"glossary_id"`
+	Name         string `json:"name"`
+	Ready        bool   `json:"ready"`
+	SourceLang   string `json:"source_lang"`
+	TargetLang   string `json:"target_lang"`
+	CreationTime string `json:"creation_time"`
+	EntryCount   int    `json:"entry_count"`
+}
+
+func (d *Deepl) CreateGlossary(name, sourceLang, targetLang string, entriesTSV io.Reader) (*Glossary, error) {
+
+	buf := new(strings.Builder)
+	_, err := io.Copy(buf, entriesTSV)
+
+	if err != nil {
+		return nil, err
+	}
+
+	entries := strings.ReplaceAll(buf.String(), "\r\n", "\n")
+
+	payload := CreateGlossaryPayload{
+		Name:          name,
+		SourceLang:    sourceLang,
+		TargetLang:    targetLang,
+		EntriesFormat: "tsv",
+		Entries:       entries,
+	}
+
+	j, err := json.Marshal(payload)
+
+	fmt.Println(string(j))
+
+	if err != nil {
+		return nil, err
+	}
+
+	url := fmt.Sprintf("%s/glossaries", d.baseURL)
+
+	req, err := http.NewRequest("POST", url, bytes.NewBuffer(j))
+
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header.Set("Authorization", fmt.Sprintf("DeepL-Auth-Key %s", d.apiKey))
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+
+	log.Printf("Response: %s", resp.Status)
+
+	if err != nil {
+		return nil, err
+	}
+
+	createdGlossary := Glossary{}
+
+	err = json.NewDecoder(resp.Body).Decode(&createdGlossary)
+	defer resp.Body.Close()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &createdGlossary, nil
 }

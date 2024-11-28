@@ -273,6 +273,17 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}, "archives.id ASC", 0, limit, offset)
 		} else if like == "relation" {
 			archives = currentSite.GetArchiveRelations(archiveId)
+		} else if like == "tag" {
+			// 根据tag来调用相关
+			var tagIds []uint
+			currentSite.DB.Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tagIds)
+			if len(tagIds) > 0 {
+				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					tx = tx.Table("`archives` as archives").
+						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tagIds, archiveId)
+					return tx
+				}, order, 0, limit, offset)
+			}
 		} else {
 			// 检查是否有相关文档
 			archives = currentSite.GetArchiveRelations(archiveId)

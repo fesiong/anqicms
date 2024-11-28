@@ -135,3 +135,17 @@ func GenerateRandString(length int) string {
 	}
 	return strings.ToLower(string(buf))
 }
+
+func LoadLocales() (languages []string) {
+	// 读取language列表
+	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", ExecPath))
+	if err == nil {
+		for _, info := range readerInfos {
+			if info.IsDir() {
+				languages = append(languages, info.Name())
+			}
+		}
+	}
+
+	return nil
+}
