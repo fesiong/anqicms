@@ -85,6 +85,7 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/contact", manageController.SettingContact)
 			setting.Get("/cache", manageController.SettingCache)
 			setting.Get("/safe", manageController.SettingSafe)
+			setting.Get("/diyfield", manageController.SettingDiyField)
 
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
@@ -98,6 +99,7 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/cache", manageController.SettingCacheForm)
 			setting.Post("/convert/webp", manageController.ConvertImageToWebp)
 			setting.Post("/safe", manageController.SettingSafeForm)
+			setting.Post("/diyfield", manageController.SettingDiyFieldForm)
 			setting.Post("/favicon", manageController.SaveSystemFavicon)
 			setting.Post("/favicon/delete", manageController.DeleteSystemFavicon)
 			setting.Get("/banner", manageController.SettingBanner)

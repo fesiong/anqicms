@@ -27,6 +27,7 @@ const (
 	SensitiveWordsKey = "sensitive_words"
 	InstallTimeKey    = "install_time"
 	CacheTypeKey      = "cache_type"
+	DiyFieldsKey      = "diy_fields"
 
 	PushSettingKey        = "push"
 	SitemapSettingKey     = "sitemap"
@@ -614,6 +615,22 @@ func (w *Website) LoadTranslateSetting() {
 	}
 
 	return
+}
+
+func (w *Website) GetDiyFieldSetting() []config.ExtraField {
+	var fields []config.ExtraField
+	err := w.Cache.Get(DiyFieldsKey, &fields)
+	if err != nil {
+		value := w.GetSettingValue(DiyFieldsKey)
+		if value != "" {
+			err = json.Unmarshal([]byte(value), &fields)
+			if err == nil {
+				_ = w.Cache.Set(DiyFieldsKey, fields, 86400)
+			}
+		}
+	}
+	
+	return fields
 }
 
 // Tr as Translate
