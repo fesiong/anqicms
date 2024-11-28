@@ -619,6 +619,18 @@ func (w *Website) LoadTranslateSetting() {
 // Tr as Translate
 // 这是一个兼容函数，请使用 ctx.Tr
 func (w *Website) Tr(str string, args ...interface{}) string {
+	if I18n == nil {
+		I18n = i18n.New()
+		_ = I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
+		// default to chinese
+		lang, exists := os.LookupEnv("LANG")
+		if !exists {
+			lang = "zh-CN"
+		} else {
+			lang = strings.ReplaceAll(strings.Split(lang, ".")[0], "_", "-")
+		}
+		I18n.SetDefault(lang)
+	}
 	if I18n != nil {
 		tmpStr := I18n.Tr(w.backLanguage, str, args...)
 		if tmpStr != "" {

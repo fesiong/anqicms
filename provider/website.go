@@ -154,6 +154,12 @@ func InitWebsite(mw *model.Website) {
 		mw.TokenSecret = config.GenerateRandString(32)
 		GetDefaultDB().Save(mw)
 	}
+	lang, exists := os.LookupEnv("LANG")
+	if !exists {
+		lang = "zh-CN"
+	} else {
+		lang = strings.ReplaceAll(strings.Split(lang, ".")[0], "_", "-")
+	}
 	w := Website{
 		Id:           mw.Id,
 		ParentId:     mw.ParentId,
@@ -165,7 +171,7 @@ func InitWebsite(mw *model.Website) {
 		CachePath:    mw.RootPath + "cache/",
 		DataPath:     mw.RootPath + "data/",
 		PublicPath:   mw.RootPath + "public/",
-		backLanguage: "zh-cn",
+		backLanguage: lang,
 	}
 	if db != nil && mw.Status == 1 {
 		// 读取真正的 TokenSecret
