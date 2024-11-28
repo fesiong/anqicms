@@ -423,6 +423,47 @@ func SettingSafeForm(ctx iris.Context) {
 	})
 }
 
+func SettingDiyField(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	fields := currentSite.GetDiyFieldSetting()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": fields,
+	})
+}
+
+func SettingDiyFieldForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req []config.ExtraField
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.SaveSettingValue(provider.DiyFieldsKey, req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.Cache.Delete(provider.DiyFieldsKey)
+	currentSite.DeleteCacheIndex()
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSecuritySettings"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
 func SaveSystemFavicon(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

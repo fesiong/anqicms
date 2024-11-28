@@ -612,6 +612,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 	// 重新检查状态
 	plan, err = w.GetAiArticlePlanByReqId(plan.Id)
 	if err != nil {
+		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
 		return err
 	}
 	if plan.ReqId == 0 {
