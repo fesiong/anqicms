@@ -8,6 +8,8 @@ import (
 	"kandaoni.com/anqicms"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"log"
 	"os"
 	"os/exec"
@@ -63,6 +65,16 @@ func main() {
 			Port:     envPort2,
 		}
 		_ = config.WriteConfig()
+		db, err := provider.InitDB(&config.Server.Mysql)
+		if err == nil && db.Migrator().HasTable(&model.Website{}) == false {
+			provider.SetDefaultDB(db)
+			provider.InitWebsites()
+			website := provider.GetWebsite(1)
+			// 安装默认数据
+			if website != nil {
+				err = website.RestoreDesignData(website.System.TemplateName)
+			}
+		}
 	}
 
 	b := anqicms.New(config.Server.Server.Port, config.Server.Server.LogLevel)

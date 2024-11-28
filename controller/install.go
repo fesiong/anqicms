@@ -344,7 +344,11 @@ func InstallForm(ctx iris.Context) {
 	if req.BaseUrl == "" {
 		urlPath, err := url.Parse(ctx.FullRequestURI())
 		if err == nil {
-			req.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+			host := urlPath.Host
+			if strings.HasSuffix(host, ":80") || strings.HasSuffix(host, ":443") {
+				host = strings.Split(host, ":")[0]
+			}
+			req.BaseUrl = urlPath.Scheme + "://" + host
 		}
 	}
 
