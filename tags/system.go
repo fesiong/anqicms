@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"reflect"
@@ -43,6 +44,14 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 	// TemplateUrl 实时算出来, 它的计算方式是 /static/{TemplateName}
 	if fieldName == "TemplateUrl" {
 		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(currentSite.System.BaseUrl, "/"), currentSite.System.TemplateName)
+		// 如果是多站点，除了独立域名外，另外两种方式的静态资源，都采用目录形式，否则会导致加载异常
+		// 只有子站需要
+		if currentSite.ParentId > 0 {
+			mainSite := provider.GetWebsite(currentSite.ParentId)
+			if mainSite.MultiLanguage.Open == true && currentSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+				content = fmt.Sprintf("%s/%s/static/%s/", strings.TrimRight(mainSite.System.BaseUrl, "/"), currentSite.System.Language, currentSite.System.TemplateName)
+			}
+		}
 	} else if currentSite.System.ExtraFields != nil {
 		for i := range currentSite.System.ExtraFields {
 			if currentSite.System.ExtraFields[i].Name == fieldName {

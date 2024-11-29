@@ -181,6 +181,62 @@ func AnqiSendFeedback(ctx iris.Context) {
 	})
 }
 
+func AuthExtractKeywords(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.AnqiExtractRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	result, err := currentSite.AnqiExtractKeywords(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SubmitSuccessfully"),
+		"data": result,
+	})
+}
+
+func AuthExtractDescription(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.AnqiExtractRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	result, err := currentSite.AnqiExtractDescription(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SubmitSuccessfully"),
+		"data": strings.Join(result, ""),
+	})
+}
+
 func AnqiTranslateArticle(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.Archive

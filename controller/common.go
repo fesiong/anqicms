@@ -318,6 +318,18 @@ func FileServe(ctx iris.Context) bool {
 			ctx.ServeFile(uriFile)
 			return true
 		}
+		// 多语言站点目录支持
+		if currentSite.ParentId > 0 {
+			index := strings.Index(uri, "/static")
+			if index > 0 {
+				uriFile = baseDir + uri[index:]
+				_, err = os.Stat(uriFile)
+				if err == nil {
+					_ = ctx.ServeFile(uriFile)
+					return true
+				}
+			}
+		}
 	}
 	// 避开 favicon.ico
 	if strings.HasSuffix(uri, "favicon.ico") {

@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -503,6 +504,14 @@ func LoginSubWebsite(ctx iris.Context) {
 	loginUrl := subSite.System.BaseUrl
 	if subSite.System.AdminUrl != "" {
 		loginUrl = subSite.System.AdminUrl
+	}
+	// 如果loginUrl包含了目录，则需要将目录清除
+	parsed, err := url.Parse(loginUrl)
+	if err == nil {
+		if len(parsed.Path) > 1 {
+			parsed.Path = ""
+			loginUrl = parsed.String()
+		}
 	}
 	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", loginUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
 
