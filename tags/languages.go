@@ -87,6 +87,7 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		}
 
 		languageSites[i].Link = link
+		languageSites[i].LanguageIcon = library.GetLanguageIcon(tmpSite.System.Language)
 		languageSites[i].LanguageName = library.GetLanguageName(tmpSite.System.Language)
 		if languageSites[i].LanguageName == "" {
 			languageSites[i].LanguageName = languageSites[i].Name
