@@ -26,6 +26,8 @@ func ApiImportArchive(ctx iris.Context) {
 	seoTitle := ctx.PostValueTrim("seo_title")
 	content := ctx.PostValueTrim("content")
 	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
+	// 支持分类名称
+	categoryTitle := ctx.PostValueTrim("category_title")
 	keywords := ctx.PostValueTrim("keywords")
 	description := ctx.PostValueTrim("description")
 	logo := ctx.PostValueTrim("logo")
@@ -58,11 +60,33 @@ func ApiImportArchive(ctx iris.Context) {
 		categoryIds = append(categoryIds, categoryId)
 	}
 	if len(categoryIds) == 0 {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("PleaseSelectAColumn"),
-		})
-		return
+		// 支持分类名称
+		if len(categoryTitle) > 0 {
+			category, err := currentSite.GetCategoryByTitle(categoryTitle)
+			if err != nil {
+				// 分类不存在，创建
+				moduleId := uint(ctx.PostValueIntDefault("module_id", 0))
+				if moduleId == 0 {
+					moduleId = 1
+				}
+				category, err = currentSite.SaveCategory(&request.Category{
+					Title:    categoryTitle,
+					ModuleId: moduleId,
+					Status:   1,
+					Type:     config.CategoryTypeArchive,
+				})
+			}
+			if category != nil {
+				categoryIds = append(categoryIds, category.Id)
+			}
+		}
+		if len(categoryIds) == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("PleaseSelectAColumn"),
+			})
+			return
+		}
 	}
 	for _, catId := range categoryIds {
 		category := currentSite.GetCategoryFromCache(catId)
