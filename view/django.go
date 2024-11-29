@@ -6,6 +6,7 @@ import (
 	"github.com/kataras/iris/v12/context"
 	"github.com/kataras/iris/v12/i18n"
 	view2 "github.com/kataras/iris/v12/view"
+	"golang.org/x/net/html"
 	"hash/crc32"
 	"io"
 	"io/fs"
@@ -445,10 +446,58 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		}
 		// 对data进行敏感词替换
 		data = currentSite.ReplaceSensitiveWords(data)
+		pjax := ctx.GetHeader("X-Pjax")
+		var pjaxContainer string
+		if pjax == "true" {
+			pjaxContainer = ctx.GetHeader("X-Pjax-Container")
+			if pjaxContainer == "" {
+				pjaxContainer = ctx.URLParam("_pjax")
+			}
+			if pjaxContainer == "" {
+				pjaxContainer = "pjax-container"
+			} else {
+				pjaxContainer = strings.TrimLeft(pjaxContainer, "#")
+			}
+			doc, err := html.Parse(bytes.NewBuffer(data))
+			if err == nil {
+				// 查找 #pjax-container 节点
+				node := findNodeByID(doc, pjaxContainer)
+				if node != nil {
+					data = getInnerHTML(node)
+				}
+			}
+		}
+
 		buf := bytes.NewBuffer(data)
 		_, err = buf.WriteTo(w)
 		return err
 	}
 
 	return view2.ErrNotExist{Name: filename, IsLayout: false, Data: bindingData}
+}
+func findNodeByID(n *html.Node, id string) *html.Node {
+	if n.Type == html.ElementNode {
+		for _, attr := range n.Attr {
+			if attr.Key == "id" && attr.Val == id {
+				return n
+			}
+		}
+	}
+
+	// 递归查找子节点
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if result := findNodeByID(child, id); result != nil {
+			return result
+		}
+	}
+
+	return nil
+}
+
+func getInnerHTML(n *html.Node) []byte {
+	var buf bytes.Buffer
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		html.Render(&buf, child)
+	}
+	return buf.Bytes()
 }

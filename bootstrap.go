@@ -94,7 +94,7 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
 	route.Register(bootstrap.Application, SystemFiles)
-	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
+	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
 	if err != nil {
 		log.Println("languages err", err)
 		os.Exit(1)
@@ -117,6 +117,7 @@ func (bootstrap *Bootstrap) Start() {
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
 	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)
+	_ = pugEngine.RegisterTag("diy", tags.TagDiyParser)
 	_ = pugEngine.RegisterTag("system", tags.TagSystemParser)
 	_ = pugEngine.RegisterTag("contact", tags.TagContactParser)
 	_ = pugEngine.RegisterTag("navList", tags.TagNavListParser)
@@ -179,20 +180,6 @@ func (bootstrap *Bootstrap) Shutdown() error {
 	provider.Shutdown()
 	// 关闭一些应用
 	crond.Stop()
-
-	return nil
-}
-
-func loadLocales() (languages []string) {
-	// 读取language列表
-	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", config.ExecPath))
-	if err == nil {
-		for _, info := range readerInfos {
-			if info.IsDir() {
-				languages = append(languages, info.Name())
-			}
-		}
-	}
 
 	return nil
 }

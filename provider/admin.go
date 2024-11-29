@@ -159,6 +159,9 @@ func (w *Website) GetAdminByUserName(userName string) (*model.Admin, error) {
 
 func (w *Website) GetAdminInfoById(id uint) (*model.Admin, error) {
 	var admin model.Admin
+	if w.DB == nil {
+		return nil, errors.New("database not ready")
+	}
 	db := w.DB
 	err := db.Where("`id` = ?", id).First(&admin).Error
 	if err != nil {

@@ -46,6 +46,8 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
+			anqi.Post("/extract/keywords", manageController.AuthExtractKeywords)
+			anqi.Post("/extract/description", manageController.AuthExtractDescription)
 			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
@@ -84,6 +86,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			setting.Get("/contact", manageController.SettingContact)
 			setting.Get("/cache", manageController.SettingCache)
 			setting.Get("/safe", manageController.SettingSafe)
+			setting.Get("/diyfield", manageController.SettingDiyField)
 
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
@@ -97,6 +100,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			setting.Post("/cache", manageController.SettingCacheForm)
 			setting.Post("/convert/webp", manageController.ConvertImageToWebp)
 			setting.Post("/safe", manageController.SettingSafeForm)
+			setting.Post("/diyfield", manageController.SettingDiyFieldForm)
 			setting.Post("/favicon", manageController.SaveSystemFavicon)
 			setting.Post("/favicon/delete", manageController.DeleteSystemFavicon)
 			setting.Get("/banner", manageController.SettingBanner)

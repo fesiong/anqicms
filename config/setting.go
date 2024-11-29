@@ -88,9 +88,11 @@ type SafeConfig struct {
 }
 
 type ExtraField struct {
-	Name   string `json:"name"`
-	Value  string `json:"value"`
-	Remark string `json:"remark"`
+	Name    string `json:"name"`
+	Type    string `json:"type"`
+	Value   string `json:"value"`
+	Remark  string `json:"remark"`
+	Content string `json:"content"`
 }
 
 type BannerItem struct {

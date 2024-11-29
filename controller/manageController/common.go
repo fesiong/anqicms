@@ -29,7 +29,7 @@ func AdminFileServ(ctx iris.Context) {
 		if siteId > 0 {
 			// 只有二级目录安装的站点允许这么操作
 			website := provider.GetWebsite(uint(siteId))
-			if len(website.BaseURI) > 1 {
+			if website != nil && len(website.BaseURI) > 1 {
 				ctx.Values().Set("siteId", uint(siteId))
 			}
 		}

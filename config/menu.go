@@ -65,6 +65,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "导航设置",
 				Backend:  "/setting/nav",
 			},
+			{
+				Path:     "/setting/diyfield",
+				GroupKey: "setting",
+				Name:     "自定义字段",
+				Backend:  "/setting/diyfield",
+			},
 		},
 	},
 	{

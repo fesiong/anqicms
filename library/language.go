@@ -205,3 +205,142 @@ func GetLanguageName(lang string) string {
 
 	return name
 }
+
+func GetLanguageIcon(lang string) string {
+	switch lang {
+	case "en":
+		return "🇺🇸" // 美国（英语主要地区）
+	case "zh-cn":
+		return "🇨🇳" // 中国（简体中文）
+	case "zh-tw":
+		return "🇹🇼" // 台湾（繁体中文）
+	case "vi":
+		return "🇻🇳" // 越南
+	case "id":
+		return "🇮🇩" // 印度尼西亚
+	case "hi":
+		return "🇮🇳" // 印度（印地语）
+	case "it":
+		return "🇮🇹" // 意大利
+	case "el":
+		return "🇬🇷" // 希腊
+	case "es":
+		return "🇪🇸" // 西班牙
+	case "pt":
+		return "🇵🇹" // 葡萄牙
+	case "sr":
+		return "🇷🇸" // 塞尔维亚
+	case "my":
+		return "🇲🇲" // 缅甸
+	case "bn":
+		return "🇧🇩" // 孟加拉国
+	case "th":
+		return "🇹🇭" // 泰国
+	case "tr":
+		return "🇹🇷" // 土耳其
+	case "ja":
+		return "🇯🇵" // 日本
+	case "lo":
+		return "🇱🇦" // 老挝
+	case "ko":
+		return "🇰🇷" // 韩国
+	case "ru":
+		return "🇷🇺" // 俄罗斯
+	case "fr":
+		return "🇫🇷" // 法国
+	case "de":
+		return "🇩🇪" // 德国
+	case "fa":
+		return "🇮🇷" // 伊朗（波斯语）
+	case "ar":
+		return "🇸🇦" // 沙特阿拉伯（阿拉伯语）
+	case "ms":
+		return "🇲🇾" // 马来西亚
+	case "jw":
+		return "🇮🇩" // 印尼（爪哇语）
+	case "te":
+		return "🇮🇳" // 印度（泰卢固语）
+	case "ta":
+		return "🇮🇳" // 印度（泰米尔语）
+	case "mr":
+		return "🇮🇳" // 印度（马拉地语）
+	case "ur":
+		return "🇵🇰" // 巴基斯坦（乌尔都语）
+	case "pl":
+		return "🇵🇱" // 波兰
+	case "uk":
+		return "🇺🇦" // 乌克兰
+	case "pa":
+		return "🇮🇳" // 印度（旁遮普语）
+	case "ro":
+		return "🇷🇴" // 罗马尼亚
+	case "et":
+		return "🇪🇪" // 爱沙尼亚
+	case "os":
+		return "🇷🇺" // 俄罗斯（奥塞梯语）
+	case "be":
+		return "🇧🇾" // 白俄罗斯
+	case "bg":
+		return "🇧🇬" // 保加利亚
+	case "is":
+		return "🇮🇸" // 冰岛
+	case "bs":
+		return "🇧🇦" // 波斯尼亚和黑塞哥维那
+	case "bo":
+		return "🇨🇳" // 中国（藏语）
+	case "da":
+		return "🇩🇰" // 丹麦
+	case "tl":
+		return "🇵🇭" // 菲律宾
+	case "fi":
+		return "🇫🇮" // 芬兰
+	case "sv":
+		return "🇸🇪" // 瑞典
+	case "kg":
+		return "🇨🇬" // 刚果
+	case "ka":
+		return "🇬🇪" // 格鲁吉亚
+	case "kk":
+		return "🇰🇿" // 哈萨克斯坦
+	case "gl":
+		return "🇪🇸" // 西班牙（加利西亚语）
+	case "ky":
+		return "🇰🇬" // 吉尔吉斯斯坦
+	case "nl":
+		return "🇳🇱" // 荷兰
+	case "ca":
+		return "🇪🇸" // 西班牙（加泰罗尼亚语）
+	case "cs":
+		return "🇨🇿" // 捷克
+	case "kn":
+		return "🇮🇳" // 印度（卡纳达语）
+	case "mn":
+		return "🇲🇳" // 蒙古
+	case "hr":
+		return "🇭🇷" // 克罗地亚
+	case "lv":
+		return "🇱🇻" // 拉脱维亚
+	case "lt":
+		return "🇱🇹" // 立陶宛
+	case "no":
+		return "🇳🇴" // 挪威
+	case "ne":
+		return "🇳🇵" // 尼泊尔
+	case "ps":
+		return "🇦🇫" // 阿富汗（普什图语）
+	case "ks":
+		return "🇸🇰" // 斯洛伐克
+	case "tk":
+		return "🇹🇲" // 土库曼斯坦
+	case "uz":
+		return "🇺🇿" // 乌兹别克斯坦
+	case "iw":
+		return "🇮🇱" // 以色列（希伯来语）
+	case "hu":
+		return "🇭🇺" // 匈牙利
+	case "hy":
+		return "🇦🇲" // 亚美尼亚
+	default:
+		return "🏳️" // 默认返回未知旗帜
+	}
+}

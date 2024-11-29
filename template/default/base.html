@@ -9,6 +9,7 @@
     <meta name="keywords" content="{% tdk with name='Keywords' %}">
     <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/nprogress.css" />
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/style.css" />
     {%- tdk canonical with name="CanonicalUrl" %}
     {%- if canonical %}
@@ -95,11 +96,13 @@
     </header>
     <!-- header -->
     <!-- layout -->
+    <div id="pjax-container">
     {% block container %}
     <div>
         请不要编辑这里
     </div>
     {% endblock %}
+    </div>
     <!-- layout -->
     {% block footer %}
     {% endblock %}
@@ -191,6 +194,8 @@
     <!-- tool bar -->
     <!-- js -->
     <script src="{% system with name='TemplateUrl' %}js/jquery-3.3.1.min.js" type="text/javascript"></script>
+    <script src="{% system with name='TemplateUrl' %}js/jquery.pjax.js" type="text/javascript"></script>
+    <script src="{% system with name='TemplateUrl' %}js/nprogress.js" type="text/javascript"></script>
     <script src="{% system with name='TemplateUrl' %}js/js.js" type="text/javascript"></script>
     <!-- js -->
     <div class="hide">

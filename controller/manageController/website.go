@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -20,7 +21,9 @@ import (
 func GetWebsiteList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	dbSites, total := provider.GetDBWebsites(currentPage, pageSize)
+	name := ctx.URLParam("name")
+	baseUrl := ctx.URLParam("base_url")
+	dbSites, total := provider.GetDBWebsites(name, baseUrl, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -44,8 +47,13 @@ func GetWebsiteInfo(ctx iris.Context) {
 	}
 
 	website := provider.GetWebsite(dbSite.Id)
-	adminInfo, err := website.GetAdminInfoById(1)
-	if err != nil {
+	var adminInfo *model.Admin
+	if website != nil {
+		adminInfo, err = website.GetAdminInfoById(1)
+		if err != nil {
+			adminInfo = &model.Admin{}
+		}
+	} else {
 		adminInfo = &model.Admin{}
 	}
 	result := request.WebsiteRequest{
@@ -55,8 +63,10 @@ func GetWebsiteInfo(ctx iris.Context) {
 		Status:    dbSite.Status,
 		Mysql:     dbSite.Mysql,
 		AdminUser: adminInfo.UserName,
-		BaseUrl:   website.System.BaseUrl,
-		Initialed: website.Initialed,
+	}
+	if website != nil {
+		result.BaseUrl = website.System.BaseUrl
+		result.Initialed = website.Initialed
 	}
 	if dbSite.Id == 1 {
 		result.Mysql = config.Server.Mysql
@@ -491,7 +501,19 @@ func LoginSubWebsite(ctx iris.Context) {
 	signHash.Write([]byte(admin.Password + nonce))
 	sign := signHash.Sum(nil)
 
-	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", subSite.System.BaseUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
+	loginUrl := subSite.System.BaseUrl
+	if subSite.System.AdminUrl != "" {
+		loginUrl = subSite.System.AdminUrl
+	}
+	// 如果loginUrl包含了目录，则需要将目录清除
+	parsed, err := url.Parse(loginUrl)
+	if err == nil {
+		if len(parsed.Path) > 1 {
+			parsed.Path = ""
+			loginUrl = parsed.String()
+		}
+	}
+	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", loginUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

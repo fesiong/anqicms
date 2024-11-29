@@ -287,7 +287,7 @@
 "UpdateTimeFactorTimedReleaseConfiguration": "Atualizar configuração de versão agendada por fator de tempo"
 "SubmitSuccessfully": "submetido com sucesso"
 "DownloadSuccessfully": "download bem sucedido"
-"TranslationHasBeenAddedToThePlan": "A tradução foi adicionada ao plano e deverá ser concluída em 2 minutos. Você pode verificar o progresso na função de escrita automática da IA."
+"TranslationHasFinished": "Tradução concluída"
 "AiPseudoOriginalHasBeenAddedToThePlan": "A criação pseudo-original de IA foi adicionada ao plano e deve ser concluída em 2 minutos. Você pode verificar o progresso na função de escrita automática de IA."
 "RestartSuccessfully": "Reinicialização bem-sucedida"
 "UpdateSearchEnginePushConfiguration": "Atualizar configuração push do mecanismo de pesquisa"

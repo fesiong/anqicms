@@ -102,6 +102,7 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 			// 更新时间
 			w.DB.Model(archive).UpdateColumns(updateFields)
 			if setting.DoPublish {
+				archive.Link = w.GetUrl("archive", archive, 0)
 				// 重新推送
 				go w.PushArchive(archive.Link)
 				// 清除缓存

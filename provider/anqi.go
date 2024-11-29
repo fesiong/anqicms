@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"github.com/parnurzeal/gorequest"
 	"gorm.io/gorm/clause"
+	"image"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -124,6 +125,12 @@ type AnqiAiStreamResult struct {
 }
 
 type AnqiSensitiveResult struct {
+	Code int      `json:"code"`
+	Msg  string   `json:"msg"`
+	Data []string `json:"data"`
+}
+
+type AnqiExtractResult struct {
 	Code int      `json:"code"`
 	Msg  string   `json:"msg"`
 	Data []string `json:"data"`
@@ -286,6 +293,16 @@ func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachmen
 		return nil, errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
 	}
 
+	// 上传之前，先进行图片处理，减少数据的传输
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err == nil {
+		// 处理成 webp
+		buf, err := encodeImage(img, "webp", 85)
+		if err == nil {
+			data = buf
+		}
+	}
+
 	var result AnqiAttachmentResult
 	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).Post(AnqiApi+"/template/upload").SendFile(data, name, "attach").EndStruct(&result)
 	if len(errs) > 0 {
@@ -373,7 +390,7 @@ func (w *Website) AnqiTranslateString(req *AnqiAiRequest) (result *AnqiAiResult,
 	originTitle := req.Title
 	originContent := req.Content
 	// 如果设置了使用AI翻译，则使用自己翻译
-	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault && w.AiGenerateConfig.AiTranslate {
+	if w.PluginTranslate.Engine != config.TranslateEngineDefault {
 		req, err = w.SelfAiTranslateResult(req)
 		if err != nil {
 			return nil, err
@@ -610,9 +627,14 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 	var err error
 	// 重新检查状态
-	plan, err = w.GetAiArticlePlanByReqId(plan.ReqId)
+	plan, err = w.GetAiArticlePlanById(plan.Id)
 	if err != nil {
+		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
 		return err
+	}
+	if plan.ReqId == 0 {
+		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
+		return errors.New("req-id is empty")
 	}
 	if plan.Status != config.AiArticleStatusDoing {
 		return errors.New(w.Tr("ThePlanHasBeenProcessed"))
@@ -957,6 +979,42 @@ func (w *Website) AnqiSyncSensitiveWords() error {
 	}
 
 	return nil
+}
+
+func (w *Website) AnqiExtractKeywords(req *request.AnqiExtractRequest) ([]string, error) {
+	var result AnqiExtractResult
+
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/extract/keywords").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	if len(result.Data) > 0 {
+		return result.Data, nil
+	}
+
+	return nil, nil
+}
+
+func (w *Website) AnqiExtractDescription(req *request.AnqiExtractRequest) ([]string, error) {
+	var result AnqiExtractResult
+
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/extract/summarize").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	if len(result.Data) > 0 {
+		return result.Data, nil
+	}
+
+	return nil, nil
 }
 
 func AddTranslateLog(result *AnqiAiResult) {

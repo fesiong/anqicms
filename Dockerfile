@@ -23,7 +23,7 @@ COPY --from=builder /build/locales /app/locales
 COPY --from=builder /build/License /app/License
 COPY --from=builder /build/clientFiles /app/clientFiles
 COPY --from=builder /build/dictionary.txt /app/dictionary.txt
-VOLUME /app/public
+VOLUME /app
 
 EXPOSE 8001
 CMD ["/app/anqicms","-port", "8001"]
