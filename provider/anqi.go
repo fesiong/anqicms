@@ -627,7 +627,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 	var err error
 	// 重新检查状态
-	plan, err = w.GetAiArticlePlanByReqId(plan.Id)
+	plan, err = w.GetAiArticlePlanById(plan.Id)
 	if err != nil {
 		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
 		return err

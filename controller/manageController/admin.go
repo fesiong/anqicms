@@ -70,6 +70,7 @@ func AdminLogin(ctx iris.Context) {
 			Password: "",
 		}
 		currentSite.DB.Create(&adminLog)
+		admin.SiteId = currentSite.Id
 
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
