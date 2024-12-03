@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"net/url"
 	"strings"
 )
 
@@ -157,13 +158,13 @@ func SearchPage(ctx iris.Context) {
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = currentSite.TplTr("SearchLog", q)
+		webInfo.Title = currentSite.TplTr("SearchLog", "")
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}
 		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "search"
-		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)
+		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", url.QueryEscape(q)), nil, currentPage)
 		ctx.ViewData("webInfo", webInfo)
 	}
 
