@@ -72,11 +72,23 @@ func PluginOrderSetPay(ctx iris.Context) {
 
 	payment, err := currentSite.GetPaymentInfoByOrderId(req.OrderId)
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+		// 生成一个payment
+		order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		payment, err = currentSite.GeneratePayment(order, req.PayWay)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 	}
 
 	if payment.PaidTime > 0 {
