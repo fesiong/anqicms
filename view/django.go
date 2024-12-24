@@ -467,6 +467,13 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 				}
 			}
 		}
+		// 对于模板是pc+mobile的域名，需要做替换
+		if len(currentSite.System.MobileUrl) > 0 {
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			if mobileTemplate {
+				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
+			}
+		}
 
 		buf := bytes.NewBuffer(data)
 		_, err = buf.WriteTo(w)
