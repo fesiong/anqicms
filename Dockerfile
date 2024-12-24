@@ -1,4 +1,4 @@
-FROM golang:alpine as builder
+FROM golang:alpine AS builder
 
 RUN apk add build-base
 
@@ -23,7 +23,9 @@ COPY --from=builder /build/locales /app/locales
 COPY --from=builder /build/License /app/License
 COPY --from=builder /build/clientFiles /app/clientFiles
 COPY --from=builder /build/dictionary.txt /app/dictionary.txt
-VOLUME /app
+VOLUME /app/template
+VOLUME /app/public
+VOLUME /app/data
 
 EXPOSE 8001
 CMD ["/app/anqicms","-port", "8001"]
