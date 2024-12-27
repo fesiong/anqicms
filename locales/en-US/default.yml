@@ -268,6 +268,7 @@
 "Syncing%s:%s": "Synchronizing %s: %s"
 "Translating%s:%s": "Translating %s: %s"
 "UpdateTranslateConfiguration": "Update translation configuration information"
+"UpdateJsonLdConfiguration": "Update JSON-LD configuration information"
 "(Default)": "(Default)"
 "(Inherited)": "(Inherited)"
 "SaveDocumentCategoryLog": "Save document category: %d => %s"

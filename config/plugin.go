@@ -217,6 +217,12 @@ type PluginTranslateConfig struct {
 	DeeplAuthKey    string `json:"deepl_auth_key"`    // Deepl
 }
 
+type PluginJsonLdConfig struct {
+	Open          bool   `json:"open"`
+	DefaultAuthor string `json:"author"`
+	DefaultBrand  string `json:"brand"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")

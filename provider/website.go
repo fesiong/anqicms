@@ -81,6 +81,7 @@ type Website struct {
 	PluginTimeFactor   config.PluginTimeFactor       `json:"plugin_time_factor"`
 	MultiLanguage      config.PluginMultiLangConfig  `json:"plugin_multi_language"`
 	PluginTranslate    config.PluginTranslateConfig  `json:"plugin_translate"`
+	PluginJsonLd       config.PluginJsonLdConfig     `json:"plugin_jsonld"`
 
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson

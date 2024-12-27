@@ -54,6 +54,7 @@ const (
 	LimiterSettingKey     = "limiter"
 	MultiLangSettingKey   = "multi_lang"
 	TranslateSettingKey   = "translate"
+	JsonLdSettingKey      = "json_ld"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -105,6 +106,7 @@ func (w *Website) InitSetting() {
 	w.LoadTimeFactorSetting()
 	w.LoadMultiLangSetting()
 	w.LoadTranslateSetting()
+	w.LoadJsonLdSetting()
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -617,6 +619,19 @@ func (w *Website) LoadTranslateSetting() {
 	return
 }
 
+func (w *Website) LoadJsonLdSetting() {
+	value := w.GetSettingValue(JsonLdSettingKey)
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), &w.PluginJsonLd); err != nil {
+		return
+	}
+
+	return
+}
+
 func (w *Website) GetDiyFieldSetting() []config.ExtraField {
 	var fields []config.ExtraField
 	err := w.Cache.Get(DiyFieldsKey, &fields)
@@ -629,7 +644,7 @@ func (w *Website) GetDiyFieldSetting() []config.ExtraField {
 			}
 		}
 	}
-	
+
 	return fields
 }
 

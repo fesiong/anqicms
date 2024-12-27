@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
@@ -528,6 +529,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 
+	tmpResult = append(archives, tmpResult...)
 	if listType == "page" {
 		var urlPatten string
 		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
@@ -546,8 +548,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		pager := makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 		webInfo.TotalPages = pager.TotalPages
 		ctx.Public["pagination"] = pager
+
+		// 公开列表数据
+		if currentSite.PluginJsonLd.Open {
+			ctxOri := ctx.Public["ctx"].(iris.Context)
+			ctxOri.ViewData("listData", tmpResult)
+		}
 	}
-	tmpResult = append(archives, tmpResult...)
 	ctx.Private[node.name] = tmpResult
 	ctx.Private["combine"] = combineArchive
 

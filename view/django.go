@@ -474,6 +474,23 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
 			}
 		}
+		// 添加json-ld
+		if currentSite.PluginJsonLd.Open {
+			jsonLd := currentSite.GetJsonLd(ctx)
+			if len(jsonLd) > 0 {
+				jsonLdBuf := []byte("\n<script type=\"application/ld+json\">\n" + jsonLd + "\n</script>\n")
+				if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+					index = index + 7
+					tmpData := make([]byte, len(data)+len(jsonLdBuf))
+					copy(tmpData, data[:index])
+					copy(tmpData[index:], jsonLdBuf)
+					copy(tmpData[index+len(jsonLdBuf):], data[index:])
+					data = tmpData
+				} else {
+					data = append(data, jsonLdBuf...)
+				}
+			}
+		}
 
 		buf := bytes.NewBuffer(data)
 		_, err = buf.WriteTo(w)

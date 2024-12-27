@@ -268,6 +268,7 @@
 "Syncing%s:%s": "Sincronizando %s: %s"
 "Translating%s:%s": "Traduzindo %s: %s"
 "UpdateTranslateConfiguration": "Atualizar informações de configuração de tradução"
+"UpdateJsonLdConfiguration": "JSON-LD কনফিগারেশন তথ্য আপডেট করুন"
 "(Default)": "(ডিফল্ট)"
 "(Inherited)": "(উত্তরাধিকারী)"
 "SaveDocumentCategoryLog": "নথি বিভাগ সংরক্ষণ করুন: %d => %s"

@@ -391,6 +391,8 @@ func ReRouteContext(ctx iris.Context) {
 		}
 	}
 
+	ctx.ViewData("ctx", ctx)
+
 	switch params["match"] {
 	case "notfound":
 		// 走到 not Found

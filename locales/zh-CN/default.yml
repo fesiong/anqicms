@@ -268,6 +268,7 @@
 "Syncing%s:%s": "正在同步 %s: %s"
 "Translating%s:%s": "正在翻译 %s: %s"
 "UpdateTranslateConfiguration": "更新翻译配置信息"
+"UpdateJsonLdConfiguration": "更新JSON-LD配置信息"
 "(Default)": "(默认)"
 "(Inherited)": "(继承)"
 "SaveDocumentCategoryLog": "保存文档分类：%d => %s"

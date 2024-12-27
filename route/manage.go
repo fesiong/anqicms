@@ -541,6 +541,11 @@ func manageRoute(app *iris.Application) {
 				translate.Post("/config", manageController.PluginSaveTranslateConfig)
 				translate.Get("/logs", manageController.PluginTranslateLogList)
 			}
+			jsonLd := plugin.Party("/jsonld")
+			{
+				jsonLd.Get("/config", manageController.PluginGetJsonLdConfig)
+				jsonLd.Post("/config", manageController.PluginSaveJsonLdConfig)
+			}
 		}
 	}
 }
