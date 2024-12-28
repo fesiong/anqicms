@@ -194,6 +194,7 @@
 "LoginSuccessful": "ログイン成功"
 "LoggedOut": "ログアウトしました"
 "UserDoesNotExist": "ユーザーは存在しません"
+"accountHasBeenDisabled": "アカウントが無効になっています"
 "AdministratorDoesNotExist": "管理者が存在しません"
 "TheAccountAlreadyExists": "このアカウントはすでに存在します"
 "TheAccountCannotBeEmpty": "アカウントを空にすることはできません"

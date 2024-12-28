@@ -194,6 +194,7 @@
 "LoginSuccessful": "সফল লগইন"
 "LoggedOut": "প্রস্থান"
 "UserDoesNotExist": "ব্যবহারকারী কোন অস্তিত্ব নেই"
+"accountHasBeenDisabled": "অ্যাকাউন্ট নিষ্ক্রিয়"
 "AdministratorDoesNotExist": "প্রশাসকের অস্তিত্ব নেই"
 "TheAccountAlreadyExists": "এই অ্যাকাউন্টটি ইতিমধ্যেই বিদ্যমান"
 "TheAccountCannotBeEmpty": "অ্যাকাউন্ট খালি করা যাবে না"

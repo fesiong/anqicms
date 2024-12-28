@@ -194,6 +194,7 @@
 "LoginSuccessful": "ورود با موفقیت"
 "LoggedOut": "از سیستم خارج شد"
 "UserDoesNotExist": "کاربر وجود ندارد"
+"accountHasBeenDisabled": "حساب غیرفعال شده"
 "AdministratorDoesNotExist": "مدیر وجود ندارد"
 "TheAccountAlreadyExists": "این حساب در حال حاضر وجود دارد"
 "TheAccountCannotBeEmpty": "حساب نمی تواند خالی باشد"

@@ -194,6 +194,7 @@
 "LoginSuccessful": "Авторизация успешна"
 "LoggedOut": "Вышли из"
 "UserDoesNotExist": "Пользователь не существует"
+"accountHasBeenDisabled": "Счет был запрещен."
 "AdministratorDoesNotExist": "Администратор не существует"
 "TheAccountAlreadyExists": "этот аккаунт уже существует"
 "TheAccountCannotBeEmpty": "Аккаунт не может быть пустым"

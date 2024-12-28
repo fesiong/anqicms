@@ -194,6 +194,7 @@
 "LoginSuccessful": "login berhasil"
 "LoggedOut": "Keluar"
 "UserDoesNotExist": "pengguna tidak ada"
+"accountHasBeenDisabled": "Akun sudah dinonaktifkan"
 "AdministratorDoesNotExist": "Administrator tidak ada"
 "TheAccountAlreadyExists": "Akun ini sudah ada"
 "TheAccountCannotBeEmpty": "Akun tidak boleh kosong"

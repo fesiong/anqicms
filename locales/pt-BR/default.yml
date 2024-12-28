@@ -194,6 +194,7 @@
 "LoginSuccessful": "login bem-sucedido"
 "LoggedOut": "Desconectado"
 "UserDoesNotExist": "Usuário não existe"
+"accountHasBeenDisabled": "A conta foi desativada"
 "AdministratorDoesNotExist": "Administrador não existe"
 "TheAccountAlreadyExists": "Esta conta já existe"
 "TheAccountCannotBeEmpty": "A conta não pode ficar vazia"

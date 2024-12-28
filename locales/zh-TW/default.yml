@@ -194,6 +194,7 @@
 "LoginSuccessful": "登入成功"
 "LoggedOut": "已登出登入"
 "UserDoesNotExist": "使用者不存在"
+"accountHasBeenDisabled": "帳號已被禁用"
 "AdministratorDoesNotExist": "管理者不存在"
 "TheAccountAlreadyExists": "該帳號已存在"
 "TheAccountCannotBeEmpty": "帳號不能為空"

@@ -43,7 +43,6 @@ type Website struct {
 	weappClient             *weapp.Client
 	wechatServer            *wechat.Server
 	CachedStatistics        *response.Statistics
-	AdminLoginError         response.LoginError
 	Cache                   library.Cache
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus

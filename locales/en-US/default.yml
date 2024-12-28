@@ -194,6 +194,7 @@
 "LoginSuccessful": "Login successful"
 "LoggedOut": "Logged out"
 "UserDoesNotExist": "User does not exist"
+"accountHasBeenDisabled": "Account has been disabled"
 "AdministratorDoesNotExist": "Administrator does not exist"
 "TheAccountAlreadyExists": "The account already exists"
 "TheAccountCannotBeEmpty": "Account cannot be empty"
