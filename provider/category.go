@@ -558,10 +558,13 @@ func (w *Website) UpdateCategoryArchiveCounts() {
 
 func (w *Website) UpdateCategoryArchiveCount(categoryId uint) {
 	var archiveCount int64
+	// 同时计算子分类文章数量
+	var subIds = w.GetSubCategoryIds(categoryId, nil)
+	subIds = append(subIds, categoryId)
 	if w.Content.MultiCategory == 1 {
-		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id = ?", categoryId).Count(&archiveCount)
+		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id in (?)", subIds).Count(&archiveCount)
 	} else {
-		w.DB.Model(&model.Archive{}).Where("category_id = ?", categoryId).Count(&archiveCount)
+		w.DB.Model(&model.Archive{}).Where("category_id in (?)", subIds).Count(&archiveCount)
 	}
 	w.DB.Model(&model.Category{}).Where("id = ?", categoryId).UpdateColumn("archive_count", archiveCount)
 }
