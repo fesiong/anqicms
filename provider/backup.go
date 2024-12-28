@@ -184,6 +184,7 @@ func (bs *BackupStatus) BackupData() error {
 	if err != nil {
 		return err
 	}
+	defer outFile.Close()
 
 	t := time.Now()
 
@@ -197,6 +198,10 @@ func (bs *BackupStatus) BackupData() error {
 			bs.Percent++
 		}
 		bs.Message = bs.w.Tr("BackingUp%s", table)
+		// 跳过logs表
+		if strings.Contains(table, "_logs") {
+			continue
+		}
 		err = bs.dumpTableSchema(table, outFile)
 		if err != nil {
 			log.Println(err)
@@ -263,6 +268,17 @@ func (bs *BackupStatus) RestoreData(fileName string) error {
 				if len(match) == 2 {
 					bs.Message = bs.w.Tr("RestoringData%s", match[1])
 				}
+			}
+			// 跳过logs表
+			var checkStr string
+			lnIndex := strings.Index(tmpStr, "\n")
+			if lnIndex > 0 {
+				checkStr = tmpStr[0:lnIndex]
+			} else {
+				checkStr = tmpStr
+			}
+			if strings.Contains(checkStr, "_logs`") {
+				continue
 			}
 			bs.w.DB.Exec(tmpStr)
 			tmpStr = ""
