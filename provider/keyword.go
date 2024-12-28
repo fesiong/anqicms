@@ -54,7 +54,7 @@ func (w *Website) SaveUserKeywordSetting(req config.KeywordJson, focus bool) err
 
 	_ = w.SaveSettingValue(KeywordSettingKey, keywordJson)
 	//重新读取配置
-	w.LoadKeywordSetting()
+	w.LoadKeywordSetting(w.GetSettingValue(KeywordSettingKey))
 
 	return nil
 }

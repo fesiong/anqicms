@@ -55,7 +55,7 @@ func (w *Website) SaveAiGenerateSetting(req config.AiGenerateConfig, focus bool)
 
 	_ = w.SaveSettingValue(AiGenerateSettingKey, setting)
 	//重新读取配置
-	w.LoadAiGenerateSetting()
+	w.LoadAiGenerateSetting(w.GetSettingValue(AiGenerateSettingKey))
 	go func() {
 		w.CheckOpenAIAPIValid()
 		if setting.Open {
