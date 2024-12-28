@@ -553,21 +553,18 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if err == nil {
 		baseHost = urls.Host
 	}
-	autoAddImage := false
 	//提取缩略图
 	if len(draft.Images) == 0 {
 		re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
 		match := re.FindStringSubmatch(req.Content)
 		if len(match) > 1 {
 			draft.Images = append(draft.Images, match[1])
-			autoAddImage = true
 		} else {
 			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
 			match = re.FindStringSubmatch(req.Content)
 			if len(match) > 2 {
 				draft.Images = append(draft.Images, match[2])
-				autoAddImage = true
 			}
 		}
 	}
@@ -687,7 +684,33 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	go w.LogMaterialData(materialIds, "archive", draft.Id)
 	// 自动提取远程图片改成保存后处理
 	if w.Content.RemoteDownload == 1 {
+		// 处理 images
 		hasChangeImg := false
+		for i, v := range draft.Images {
+			if strings.HasPrefix(v, w.PluginStorage.StorageUrl) {
+				continue
+			}
+			if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "http") {
+				imgUrl, err2 := url.Parse(v)
+				if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
+					// 自动下载
+					attachment, err2 := w.DownloadRemoteImage(v, "")
+					if err2 == nil {
+						// 下载完成
+						draft.Images[i] = strings.TrimPrefix(attachment.Logo, w.PluginStorage.StorageUrl)
+						hasChangeImg = true
+					}
+				}
+			}
+		}
+		if hasChangeImg {
+			if isReleased {
+				w.DB.Model(&draft.Archive).UpdateColumn("images", draft.Images)
+			} else {
+				w.DB.Model(draft).UpdateColumn("images", draft.Images)
+			}
+		}
+		hasChangeImg = false
 		re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -731,28 +754,6 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		})
 		if hasChangeImg {
 			w.DB.Model(&archiveData).UpdateColumn("content", archiveData.Content)
-			// 更新data
-			if autoAddImage {
-				//提取缩略图
-				draft.Images = draft.Images[:0]
-				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-				match := re.FindStringSubmatch(archiveData.Content)
-				if len(match) > 1 {
-					draft.Images = append(draft.Images, match[1])
-				} else {
-					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
-					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-					match = re.FindStringSubmatch(archiveData.Content)
-					if len(match) > 2 {
-						draft.Images = append(draft.Images, match[2])
-					}
-				}
-				if isReleased {
-					w.DB.Model(&draft.Archive).UpdateColumn("images", draft.Images)
-				} else {
-					w.DB.Model(draft).UpdateColumn("images", draft.Images)
-				}
-			}
 		}
 	}
 	//extra
