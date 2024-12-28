@@ -52,7 +52,7 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 				content = field.Content
 			}
 			if field.Type == config.CustomFieldTypeEditor && render {
-				content = library.MarkdownToHTML(fmt.Sprintf("%v", content))
+				content = library.MarkdownToHTML(fmt.Sprintf("%v", content), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 			}
 			break
 		}

@@ -179,7 +179,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		// todo 应该只替换 src,href 中的 baseUrl
 		req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
 		// 过滤外链
-		if w.Content.FilterOutlink == 1 {
+		if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 			baseHost := ""
 			urls, err := url.Parse(w.System.BaseUrl)
 			if err == nil {
@@ -196,7 +196,12 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 				if err2 == nil {
 					if aUrl.Host != "" && aUrl.Host != baseHost {
 						//过滤外链
-						return match[2]
+						if w.Content.FilterOutlink == 1 {
+							return match[2]
+						} else if !strings.Contains(match[0], "nofollow") {
+							newUrl := match[1] + `" rel="nofollow`
+							s = strings.Replace(s, match[1], newUrl, 1)
+						}
 					}
 				}
 				return s
@@ -217,7 +222,10 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 				if err2 == nil {
 					if aUrl.Host != "" && aUrl.Host != baseHost {
 						//过滤外链
-						return match[1]
+						if w.Content.FilterOutlink == 1 {
+							return match[1]
+						}
+						// 添加 nofollow 不在这里处理，因为md不支持
 					}
 				}
 				return s

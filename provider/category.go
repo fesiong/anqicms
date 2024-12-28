@@ -180,7 +180,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}
 	}
 	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -191,7 +191,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(s, match[1], newUrl, 1)
+					}
 				}
 			}
 			return s
@@ -212,7 +217,10 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[1]
+					if w.Content.FilterOutlink == 1 {
+						return match[1]
+					}
+					// 添加 nofollow 不在这里处理，因为md不支持
 				}
 			}
 			return s

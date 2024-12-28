@@ -86,7 +86,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					continue
 				}
 				if archiveParams[i].Type == config.CustomFieldTypeEditor && render {
-					archiveParams[i].Value = library.MarkdownToHTML(fmt.Sprintf("%v", archiveParams[i].Value))
+					archiveParams[i].Value = library.MarkdownToHTML(fmt.Sprintf("%v", archiveParams[i].Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 				}
 			}
 			if sorted {

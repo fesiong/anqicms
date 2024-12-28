@@ -78,7 +78,7 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 				content = tagContent.Content
 				// convert markdown to html
 				if render {
-					content = library.MarkdownToHTML(tagContent.Content)
+					content = library.MarkdownToHTML(tagContent.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 				}
 			}
 		}

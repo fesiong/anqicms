@@ -684,7 +684,7 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 			content = archiveData.Content
 			// render
 			if currentSite.Content.Editor == "markdown" {
-				content = library.MarkdownToHTML(archiveData.Content)
+				content = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 			}
 		}
 		ctx.JSON(iris.Map{

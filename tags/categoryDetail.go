@@ -86,7 +86,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			if module != nil && module.CategoryFields != nil {
 				for _, field := range module.CategoryFields {
 					if field.Name == inputName && field.Type == config.CustomFieldTypeEditor && render {
-						item = library.MarkdownToHTML(fmt.Sprintf("%v", item))
+						item = library.MarkdownToHTML(fmt.Sprintf("%v", item), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 					}
 				}
 			}
@@ -98,7 +98,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		}
 		// convert markdown to html
 		if fieldName == "Content" && render {
-			content = library.MarkdownToHTML(categoryDetail.Content)
+			content = library.MarkdownToHTML(categoryDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 		}
 		// output
 		if node.name == "" {

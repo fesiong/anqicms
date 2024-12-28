@@ -76,7 +76,7 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 		baseHost = urls.Host
 	}
 	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -87,7 +87,12 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(match[0], match[1], newUrl, 1)
+					}
 				}
 			}
 			return s

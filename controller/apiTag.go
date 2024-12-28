@@ -126,7 +126,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	if archive.ArchiveData != nil {
 		// convert markdown to html
 		if render {
-			archive.ArchiveData.Content = library.MarkdownToHTML(archive.ArchiveData.Content)
+			archive.ArchiveData.Content = library.MarkdownToHTML(archive.ArchiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 		}
 		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 		archive.ArchiveData.Content = re.ReplaceAllStringFunc(archive.ArchiveData.Content, func(s string) string {
@@ -732,7 +732,7 @@ func ApiCategoryDetail(ctx iris.Context) {
 	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	// convert markdown to html
 	if render {
-		category.Content = library.MarkdownToHTML(category.Content)
+		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -1037,7 +1037,7 @@ func ApiPageDetail(ctx iris.Context) {
 	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	// convert markdown to html
 	if render {
-		category.Content = library.MarkdownToHTML(category.Content)
+		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
