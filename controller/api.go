@@ -36,7 +36,14 @@ func ApiImportArchive(ctx iris.Context) {
 	images, _ := ctx.PostValues("images[]")
 	urlToken := ctx.PostValueTrim("url_token")
 	draft, _ := ctx.PostValueBool("draft")
-	cover, _ := ctx.PostValueBool("cover")
+	cover, _ := ctx.PostValueInt("cover") // 0=不覆盖，提示错误，1=覆盖，2=继续插入
+	if cover == 0 {
+		// 兼容旧的bool
+		boolCover, _ := ctx.PostValueBool("cover")
+		if boolCover {
+			cover = 1
+		}
+	}
 	template := ctx.PostValueTrim("template")
 	canonicalUrl := ctx.PostValueTrim("canonical_url")
 	fixedLink := ctx.PostValueTrim("fixed_link")
@@ -190,9 +197,9 @@ func ApiImportArchive(ctx iris.Context) {
 			req.Id = id
 		} else {
 			// 已存在
-			if cover {
+			if cover == 1 {
 				req.Id = id
-			} else {
+			} else if cover == 0 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
 					"msg":  ctx.Tr("DocumentIdIsRepeated"),
@@ -214,9 +221,9 @@ func ApiImportArchive(ctx iris.Context) {
 			}
 		}
 		if existId > 0 {
-			if cover {
+			if cover == 1 {
 				req.Id = existId
-			} else {
+			} else if cover == 0 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
 					"msg":  ctx.Tr("DocumentTitleIsRepeated"),
@@ -237,9 +244,9 @@ func ApiImportArchive(ctx iris.Context) {
 				}
 			}
 			if existId > 0 {
-				if cover {
+				if cover == 1 {
 					req.Id = existId
-				} else {
+				} else if cover == 0 {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
 						"msg":  ctx.Tr("DocumentIsRepeated"),
