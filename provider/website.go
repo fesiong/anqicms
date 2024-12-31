@@ -195,7 +195,13 @@ func InitWebsite(mw *model.Website) {
 	}
 	websites[mw.Id] = &w
 	if db != nil {
-		_ = AutoMigrateDB(db, false)
+		var lastVersion string
+		db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
+		if lastVersion != "" {
+			go AutoMigrateDB(db, false)
+		} else {
+			_ = AutoMigrateDB(db, false)
+		}
 		w.InitSetting()
 		w.InitModelData()
 		// fix BaseUri

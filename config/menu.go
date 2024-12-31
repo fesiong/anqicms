@@ -365,6 +365,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "多语言站点",
 				Backend:  "/plugin/multilang",
 			},
+			{
+				Path:     "/plugin/jsonld",
+				GroupKey: "plugin",
+				Name:     "结构化数据标记",
+				Backend:  "/plugin/jsonld",
+			},
 		},
 	},
 	{

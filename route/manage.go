@@ -197,6 +197,7 @@ func manageRoute(app *iris.Application) {
 			design.Post("/save", manageController.SaveDesignInfo)
 			design.Post("/delete", manageController.DeleteDesignInfo)
 			design.Post("/download", manageController.DownloadDesignInfo)
+			design.Get("/upload/check", manageController.CheckUploadDesignInfo)
 			design.Post("/upload", manageController.UploadDesignInfo)
 			design.Post("/use", manageController.UseDesignInfo)
 			design.Post("/data/restore", manageController.RestoreDesignData)

@@ -274,7 +274,7 @@ func (w *Website) GetDesignTemplateFiles(packageName string) ([]response.DesignF
 	return templates, nil
 }
 
-func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
+func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader, cover string) error {
 	// 解压
 	zipReader, err := zip.NewReader(file, info.Size)
 	if err != nil {
@@ -299,15 +299,20 @@ func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) 
 	_, err = os.Stat(packagePath)
 	if err == nil {
 		// 已存在
-		i := 1
-		for {
-			packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
-			_, err = os.Stat(packagePath)
-			if err != nil {
-				packageName = fmt.Sprintf("%s%d", packageName, i)
-				break
+		if cover == "cover" {
+			// 覆盖
+		} else {
+			// 新名称
+			i := 1
+			for {
+				packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
+				_, err = os.Stat(packagePath)
+				if err != nil {
+					packageName = fmt.Sprintf("%s%d", packageName, i)
+					break
+				}
+				i++
 			}
-			i++
 		}
 	}
 
