@@ -16,6 +16,8 @@ type Module struct {
 	Name           string       `json:"name" gorm:"column:name;type:varchar(50) not null;default:''"`
 	UrlToken       string       `json:"url_token" gorm:"column:url_token;type:varchar(50) not null;default:''"` // 定义
 	Title          string       `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	Keywords       string       `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
+	Description    string       `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Fields         moduleFields `json:"fields" gorm:"column:fields;type:longtext default null"`
 	CategoryFields moduleFields `json:"category_fields" gorm:"column:category_fields;type:longtext default null"`
 	IsSystem       int          `json:"is_system" gorm:"column:is_system;type:tinyint(1) unsigned not null;default:0"`
