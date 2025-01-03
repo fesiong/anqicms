@@ -180,7 +180,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	archive := &draft.Archive
 	archive.CreatedTime = nowStamp
 	archive.UpdatedTime = nowStamp
-	err = w.DB.Model(model.Archive{}).Save(archive).Error
+	err = w.DB.Save(archive).Error
 	if err != nil {
 		// err
 		return
