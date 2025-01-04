@@ -224,7 +224,11 @@ func Common(ctx iris.Context) {
 			} else if ctx.GetHeader("X-Scheme") == "https" {
 				urlPath.Scheme = "https"
 			}
-			currentSite.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+			host := urlPath.Host
+			if strings.HasSuffix(host, ":80") || strings.HasSuffix(host, ":443") {
+				host = strings.Split(host, ":")[0]
+			}
+			currentSite.System.BaseUrl = urlPath.Scheme + "://" + host
 			currentSite.PluginStorage.StorageUrl = currentSite.System.BaseUrl
 		}
 	}
