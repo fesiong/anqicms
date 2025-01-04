@@ -3,6 +3,7 @@ package provider
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/jinzhu/now"
@@ -16,6 +17,7 @@ import (
 	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
+	"math/rand"
 	"mime/multipart"
 	"net/url"
 	"path/filepath"
@@ -172,9 +174,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 	var builder *gorm.DB
 	if draft {
-		builder = w.DB.Table("`archive_drafts` as archives").Order(order)
+		builder = w.DB.Table("`archive_drafts` as archives")
 	} else {
-		builder = w.DB.Model(&model.Archive{}).Order(order)
+		builder = w.DB.Model(&model.Archive{})
 	}
 
 	if ops != nil {
@@ -215,7 +217,36 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 	} else {
-		builder = builder.Limit(pageSize).Offset(offset)
+		if strings.Contains(order, "rand") {
+			// 如果文章总量大于10万，则使用下面的方法处理
+			totalArchive := w.GetExplainCount("SELECT id FROM archives")
+			if totalArchive > 100000 {
+				var minMax struct {
+					MinId int `json:"min_id"`
+					MaxId int `json:"max_id"`
+				}
+				builder.WithContext(context.Background()).Debug().Select("MIN(id) as min_id, MAX(id) as max_id").Scan(&minMax)
+				if minMax.MinId == 0 || minMax.MaxId == 0 {
+					return nil, 0, errors.New("empty archive")
+				}
+				var existIds []uint
+				randId := rand.New(rand.NewSource(time.Now().UnixNano()))
+				for i := 0; i < pageSize; i++ {
+					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					var findId uint
+					builder.WithContext(context.Background()).Where("id >= ?", tmpId).Select("id").Limit(1).Pluck("id", &findId)
+					if findId > 0 {
+						existIds = append(existIds, findId)
+					}
+				}
+				if len(existIds) > 0 {
+					builder = builder.Where("id IN (?)", existIds)
+				} else {
+					builder = builder.Where("id = 0")
+				}
+			}
+		}
+		builder = builder.Limit(pageSize).Offset(offset).Order(order)
 		if err := builder.Find(&archives).Error; err != nil {
 			return nil, 0, err
 		}

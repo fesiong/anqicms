@@ -123,10 +123,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	var order string
 	if args["order"] != nil {
+		order = args["order"].String()
 		if !strings.Contains(order, "rand") {
-			order = "archives." + args["order"].String()
-		} else {
-			order = args["order"].String()
+			order = "archives." + order
 		}
 	} else {
 		if currentSite.Content.UseSort == 1 {
