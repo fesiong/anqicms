@@ -1778,6 +1778,20 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 				articleContent = strings.Join(contents, "")
 				archive.Images = []string{img}
 			}
+		} else {
+			// 提取缩略图
+			re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
+			match := re.FindStringSubmatch(articleContent)
+			if len(match) > 1 {
+				archive.Images = append(archive.Images, match[1])
+			} else {
+				// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+				re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+				match = re.FindStringSubmatch(articleContent)
+				if len(match) > 2 {
+					archive.Images = append(archive.Images, match[2])
+				}
+			}
 		}
 		// 解析description
 		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
