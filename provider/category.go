@@ -146,7 +146,21 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
+	if category.Extra != nil {
+		module := w.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			for _, field := range module.CategoryFields {
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					category.Extra[field.FieldName] != nil {
+					value, ok := category.Extra[field.FieldName].(string)
+					if ok {
+						category.Extra[field.FieldName] = w.ReplaceContentUrl(value, false)
+					}
+				}
+			}
+		}
+	}
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
@@ -323,7 +337,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		go func() {
 			w.PushArchive(link)
 			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
+				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"), category)
 			}
 		}()
 	}

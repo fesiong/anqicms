@@ -213,7 +213,7 @@ func GetLanguageIcon(lang string) string {
 	case "zh-cn":
 		return "🇨🇳" // 中国（简体中文）
 	case "zh-tw":
-		return "🇹🇼" // 台湾（繁体中文）
+		return "🇨🇳" // 台湾（繁体中文）
 	case "vi":
 		return "🇻🇳" // 越南
 	case "id":

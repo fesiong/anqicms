@@ -8,7 +8,7 @@ import (
 )
 
 func PluginGetLimiterSetting(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetLimiterSetting()
 
 	ctx.JSON(iris.Map{
@@ -19,7 +19,7 @@ func PluginGetLimiterSetting(ctx iris.Context) {
 }
 
 func PluginSaveLimiterSetting(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginLimiter
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -49,7 +49,7 @@ func PluginSaveLimiterSetting(ctx iris.Context) {
 }
 
 func PluginGetBlockedIPs(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	blockIPs := currentSite.Limiter.GetBlockIPs()
 
@@ -61,7 +61,7 @@ func PluginGetBlockedIPs(ctx iris.Context) {
 }
 
 func PluginRemoveBlockedIP(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLimiterRemoveIPRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

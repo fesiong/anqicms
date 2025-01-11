@@ -59,6 +59,12 @@ $(document).on('click', '.tool-item', function() {
 })
 // pjax
 $(document).pjax('a', '#pjax-container');
+$(document).on('pjax:beforeSend', function(xhr) {
+  if ($(xhr.relatedTarget).data("pjax") === false) {
+    window.location.href = $(xhr.relatedTarget).prop('href');
+    return false
+  }
+})
 $(document).on('pjax:send', function() {
   NProgress.start();
 })

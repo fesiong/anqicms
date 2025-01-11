@@ -7,7 +7,10 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"log"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -51,69 +54,125 @@ func (w *Website) GetMainWebsite() *Website {
 	return w
 }
 
-func (w *Website) GetMultiLangSites(mainId uint) []*model.Website {
-	db := GetDefaultDB()
+func (w *Website) GetMultiLangSites(mainId uint, all bool) []response.MultiLangSite {
 	// 用于读取真实的主站点ID
 	if mainId == 0 {
 		mainId = w.Id
 	}
-	var defaultSite *model.Website
-	err := db.Model(&model.Website{}).Where("id = ?", mainId).Omit("token_secret", "mysql", "root_path").Take(&defaultSite).Error
-	if err != nil {
-		return nil
-	}
+
 	mainSite := GetWebsite(mainId)
-	if mainSite == nil || mainSite.MultiLanguage.Open == false {
+	if mainSite == nil || !mainSite.Initialed || mainSite.MultiLanguage.Open == false {
 		return nil
 	}
-	defaultSite.IsMain = true
-	var sites []*model.Website
-	db.Model(&model.Website{}).Where("parent_id = ?", mainId).Omit("token_secret", "mysql", "root_path").Order("id asc").Find(&sites)
-	sites = append(sites)
-	newSites := make([]*model.Website, len(sites)+1)
-	newSites[0] = defaultSite
-	copy(newSites[1:], sites)
-	for i := range newSites {
-		newSites[i].IsCurrent = w.Id == newSites[i].Id
-		currentSite := GetWebsite(newSites[i].Id)
-		if currentSite != nil {
-			newSites[i].Language = currentSite.System.Language
-			newSites[i].BaseUrl = currentSite.System.BaseUrl
-			newSites[i].ErrorMsg = currentSite.ErrorMsg
-			if !currentSite.Initialed {
-				newSites[i].Status = 0
-			} else {
-				// 根据选择的模式来生成链接
-			}
+
+	var multiLangSites = make([]response.MultiLangSite, 0, 10)
+	// 先添加主站点
+	var link string
+	tmpSite := response.MultiLangSite{
+		Id:           mainSite.Id,
+		RootPath:     mainSite.RootPath,
+		Name:         mainSite.Name,
+		Status:       mainSite.Initialed,
+		ParentId:     0,
+		LanguageIcon: mainSite.LanguageIcon,
+		IsCurrent:    w.Id == mainSite.Id,
+	}
+
+	// more
+	link = mainSite.GetUrl("", nil, 0)
+	// 如果是同链接，则是一个跳转链接
+	if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+		if strings.Contains(link, "?") {
+			link = link + "&lang=" + mainSite.System.Language
 		} else {
-			newSites[i].Status = 0
+			link += "?lang=" + mainSite.System.Language
 		}
 	}
-	return newSites
+	tmpSite.Link = link
+	tmpSite.LanguageEmoji = library.GetLanguageIcon(mainSite.System.Language)
+	tmpSite.LanguageName = library.GetLanguageName(mainSite.System.Language)
+	tmpSite.Language = mainSite.System.Language
+	tmpSite.BaseUrl = mainSite.System.BaseUrl
+	// end
+
+	multiLangSites = append(multiLangSites, tmpSite)
+	// 继续添加子站点
+	allSites := GetWebsites()
+	for i := range allSites {
+		if allSites[i].ParentId == mainId {
+			if allSites[i].Initialed != true && !all {
+				// 如果不是获取全部，则跳过那些不正确的站点
+				continue
+			}
+			subSite := response.MultiLangSite{
+				Id:           allSites[i].Id,
+				RootPath:     allSites[i].RootPath,
+				Name:         allSites[i].Name,
+				Status:       allSites[i].Initialed,
+				ParentId:     allSites[i].ParentId,
+				LanguageIcon: allSites[i].LanguageIcon,
+				IsCurrent:    w.Id == allSites[i].Id,
+				ErrorMsg:     allSites[i].ErrorMsg,
+			}
+			if allSites[i].Initialed {
+				link = allSites[i].GetUrl("", nil, 0)
+				// 如果是同链接，则是一个跳转链接
+				if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+					if strings.Contains(link, "?") {
+						link = link + "&lang=" + allSites[i].System.Language
+					} else {
+						link += "?lang=" + allSites[i].System.Language
+					}
+				}
+				subSite.Link = link
+				subSite.LanguageEmoji = library.GetLanguageIcon(allSites[i].System.Language)
+				subSite.LanguageName = library.GetLanguageName(allSites[i].System.Language)
+				subSite.Language = allSites[i].System.Language
+				subSite.BaseUrl = allSites[i].System.BaseUrl
+			}
+			multiLangSites = append(multiLangSites, subSite)
+		}
+	}
+
+	return multiLangSites
 }
 
-func (w *Website) GetMultiLangValidSites(mainId uint) []*model.Website {
-	db := GetDefaultDB()
-	var sites []*model.Website
+func (w *Website) GetMultiLangValidSites(mainId uint) []response.MultiLangSite {
+	var sites []response.MultiLangSite
+	values := websites.Values()
 	// 排除所有的主站点
-	var parentIds []uint
-	db.Model(&model.Website{}).Where("parent_id != 0").Pluck("parent_id", &parentIds)
-	parentIds = append(parentIds, mainId)
 	// 排除所有的主站点以及其他主站点的子站点
-	db.Model(&model.Website{}).Where("(parent_id = ? or parent_id = 0) and id NOT IN (?)", mainId, parentIds).Order("id asc").Find(&sites)
-	for i := range sites {
-		currentSite := GetWebsite(sites[i].Id)
-		if currentSite != nil {
-			sites[i].Language = currentSite.System.Language
-			sites[i].BaseUrl = currentSite.System.BaseUrl
-			sites[i].ErrorMsg = currentSite.ErrorMsg
-			if !currentSite.Initialed {
-				sites[i].Status = 0
-			}
-		} else {
-			sites[i].Status = 0
+	var parentMap = map[uint]struct{}{}
+	for i := range values {
+		if values[i].ParentId > 0 {
+			parentMap[values[i].ParentId] = struct{}{}
 		}
 	}
+	for i := range values {
+		// 排除其他主站点的子站点
+		if values[i].ParentId > 0 && values[i].ParentId != mainId {
+			continue
+		}
+		// 排除主站点
+		if _, ok := parentMap[values[i].Id]; ok {
+			continue
+		}
+		// 排除不可用的站点
+		if !values[i].Initialed {
+			continue
+		}
+		// 剩下是可用的
+		sites = append(sites, response.MultiLangSite{
+			Id:       values[i].Id,
+			ParentId: values[i].ParentId,
+			RootPath: values[i].RootPath,
+			Name:     values[i].Name,
+			Status:   values[i].Initialed,
+			Language: values[i].System.Language,
+			BaseUrl:  values[i].System.BaseUrl,
+		})
+	}
+
 	return sites
 }
 
@@ -148,14 +207,22 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 
 	// 不允许和主站点相同
 	if req.Id == req.ParentId {
-		return errors.New(w.Tr("ErrorSameSite"))
+		// 只能修改language_icon
+		err = db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumns(map[string]interface{}{
+			"language_icon": req.LanguageIcon,
+		}).Error
+		if err == nil {
+			w.LanguageIcon = req.LanguageIcon
+		}
+		return err
+		//return errors.New(w.Tr("ErrorSameSite"))
 	}
 	if req.Language != "other" {
 		if req.Language == mainDBSite.Language {
 			return errors.New(w.Tr("ErrorLanguageDuplicate"))
 		}
 		// 先获取所有的子站点
-		sites := w.GetMultiLangSites(w.ParentId)
+		sites := w.GetMultiLangSites(w.ParentId, true)
 		for _, site := range sites {
 			if site.Language == req.Language && site.Id != req.Id {
 				return errors.New(w.Tr("ErrorLanguageDuplicate"))
@@ -171,7 +238,10 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 	if err != nil {
 		return err
 	}
-	err = db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumn("parent_id", req.ParentId).Error
+	err = db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumns(map[string]interface{}{
+		"parent_id":     req.ParentId,
+		"language_icon": req.LanguageIcon,
+	}).Error
 	if err != nil {
 		return err
 	}
@@ -181,6 +251,8 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 		db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumn("sync_time", 0)
 	}
 
+	targetSite.ParentId = req.ParentId
+	targetSite.LanguageIcon = req.LanguageIcon
 	targetSite.System.Language = req.Language
 	err = targetSite.SaveSettingValue(SystemSettingKey, targetSite.System)
 	if err != nil {
@@ -237,6 +309,8 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 		mainSite.DB.Model(&model.NavType{}).Count(&total)
 		ms.TotalCount += total
 		mainSite.DB.Model(&model.Nav{}).Count(&total)
+		ms.TotalCount += total
+		mainSite.DB.Model(&model.Attachment{}).Count(&total)
 		ms.TotalCount += total
 		mainSite.DB.Model(&model.Category{}).Count(&total)
 		ms.TotalCount += total
@@ -328,6 +402,49 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				}
 			}
 		}
+		// 同步图片资源
+		var attachCategories []model.AttachmentCategory
+		mainSite.DB.Model(&model.AttachmentCategory{}).Order("id ASC").Find(&attachCategories)
+		for _, attachCat := range attachCategories {
+			log.Println("sync navtype", attachCat.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment Category", attachCat.Title)
+			targetSite.DB.Save(&attachCat)
+		}
+		startId = lastId
+		for {
+			var attachments []model.Attachment
+			mainSite.DB.Model(&model.Attachment{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&attachments)
+			if len(attachments) == 0 {
+				break
+			}
+			startId = attachments[len(attachments)-1].Id
+			for _, attachment := range attachments {
+				log.Println("sync attachment", attachment.Id)
+				ms.FinishCount++
+				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+				ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment", attachment.FileName)
+				targetSite.DB.Save(&attachment)
+				// 还需要复制图片
+				if attachment.FileLocation != "" {
+					// 复制图片，只支持本地图片复制
+					logoPath := ms.w.PublicPath + strings.TrimPrefix(attachment.FileLocation, "/")
+					logoBuf, err := os.ReadFile(logoPath)
+					if err == nil {
+						_, err = ms.w.Storage.UploadFile(attachment.FileLocation, logoBuf)
+					}
+					// 复制 thumb
+					paths, fileName := filepath.Split(attachment.FileLocation)
+					thumbLocation := paths + "thumb_" + fileName
+					thumbPath := ms.w.PublicPath + strings.TrimPrefix(thumbLocation, "/")
+					thumbBuf, err := os.ReadFile(thumbPath)
+					if err == nil {
+						_, err = ms.w.Storage.UploadFile(thumbLocation, thumbBuf)
+					}
+				}
+			}
+		}
 		// 同步分类
 		var categories []model.Category
 		mainSite.DB.Model(&model.Category{}).Order("id ASC").Find(&categories)
@@ -377,6 +494,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 			}
 		}
 		// 同步标签
+		startId = lastId
 		for {
 			var tags []model.Tag
 			mainSite.DB.Model(&model.Tag{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&tags)

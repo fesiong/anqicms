@@ -444,6 +444,7 @@ func compress(file *os.File, prefix string, zw *zip.Writer) error {
 	} else {
 		header, err := zip.FileInfoHeader(info)
 		header.Name = prefix + header.Name
+		header.Method = zip.Deflate
 		if err != nil {
 			return err
 		}
@@ -1659,6 +1660,7 @@ func (w *Website) writeFileToZip(name string, filePath string, zw *zip.Writer) e
 	info, _ := file.Stat()
 	header, err := zip.FileInfoHeader(info)
 	header.Name = name
+	header.Method = zip.Deflate
 	if err != nil {
 		return err
 	}
@@ -1686,6 +1688,7 @@ func (w *Website) writeDataToZip(name string, data interface{}, zw *zip.Writer) 
 	header := &zip.FileHeader{
 		Name:               name,
 		UncompressedSize64: uint64(size),
+		Method:             zip.Deflate,
 	}
 	header.Modified = time.Now()
 	header.SetMode(os.ModePerm)

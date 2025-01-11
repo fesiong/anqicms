@@ -7,7 +7,7 @@ import (
 )
 
 func PluginFulltextConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginFulltext
 
 	ctx.JSON(iris.Map{
@@ -18,7 +18,7 @@ func PluginFulltextConfig(ctx iris.Context) {
 }
 
 func PluginFulltextConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginFulltextConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

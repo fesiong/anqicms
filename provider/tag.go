@@ -73,6 +73,7 @@ func (w *Website) GetTagContentById(id uint) (*model.TagContent, error) {
 	if err := w.DB.Where("id = ?", id).First(&tagContent).Error; err != nil {
 		return nil, err
 	}
+	tagContent.Content = w.ReplaceContentUrl(tagContent.Content, true)
 
 	return &tagContent, nil
 }
@@ -177,7 +178,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		// 将单个&nbsp;替换为空格
 		req.Content = library.ReplaceSingleSpace(req.Content)
 		// todo 应该只替换 src,href 中的 baseUrl
-		req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+		req.Content = w.ReplaceContentUrl(req.Content, false)
 		// 过滤外链
 		if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 			baseHost := ""
@@ -245,7 +246,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		link := w.GetUrl("tag", tag, 0)
 		go w.PushArchive(link)
 		if w.PluginSitemap.AutoBuild == 1 {
-			_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
+			_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
 		}
 	}
 	if w.PluginFulltext.UseTag {
@@ -290,7 +291,7 @@ func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 			link := w.GetUrl("tag", tag, 0)
 			go w.PushArchive(link)
 			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"))
+				_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
 			}
 		}
 		tagIds = append(tagIds, tag.Id)

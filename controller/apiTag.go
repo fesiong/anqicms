@@ -100,6 +100,10 @@ func ApiArchiveDetail(ctx iris.Context) {
 		}
 		if archive.Extra[i].FollowLevel && !archive.HasOrdered {
 			delete(archive.Extra, i)
+		} else if archive.Extra[i].Type == config.CustomFieldTypeEditor && render {
+			if value, ok := archive.Extra[i].Value.(string); ok {
+				archive.Extra[i].Value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			}
 		}
 	}
 	tags := currentSite.GetTagsByItemId(archive.Id)
@@ -734,6 +738,30 @@ func ApiCategoryDetail(ctx iris.Context) {
 	if render {
 		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 	}
+	category.Content = currentSite.ReplaceContentUrl(category.Content, true)
+	// extra replace
+	if category.Extra != nil {
+		module := currentSite.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			for _, field := range module.CategoryFields {
+				if category.Extra[field.FieldName] == nil || category.Extra[field.FieldName] == "" {
+					// default
+					category.Extra[field.FieldName] = field.Content
+				}
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					category.Extra[field.FieldName] != nil {
+					value, ok2 := category.Extra[field.FieldName].(string)
+					if ok2 {
+						if field.Type == config.CustomFieldTypeEditor && render {
+							value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
+						category.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+					}
+				}
+			}
+		}
+	}
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -1284,6 +1312,32 @@ func ApiIndexTdk(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": settings,
+	})
+}
+
+func ApiLanguages(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	// 获取当前的链接
+	mainId := currentSite.ParentId
+	if mainId == 0 {
+		mainId = currentSite.Id
+	}
+
+	mainSite := provider.GetWebsite(mainId)
+	if mainSite.MultiLanguage.Open == false {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": nil,
+		})
+	}
+
+	languageSites := currentSite.GetMultiLangSites(mainId, false)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": languageSites,
 	})
 }
 

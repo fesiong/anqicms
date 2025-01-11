@@ -12,7 +12,7 @@ import (
 
 // StatisticSpider 蜘蛛爬行情况
 func StatisticSpider(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	result := currentSite.StatisticSpider()
 
 	ctx.JSON(iris.Map{
@@ -23,7 +23,7 @@ func StatisticSpider(ctx iris.Context) {
 }
 
 func StatisticTraffic(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	result := currentSite.StatisticTraffic()
 
@@ -35,7 +35,7 @@ func StatisticTraffic(ctx iris.Context) {
 }
 
 func StatisticDates(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	result := currentSite.GetStatisticDates()
 
@@ -47,7 +47,7 @@ func StatisticDates(ctx iris.Context) {
 }
 
 func StatisticDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	date := ctx.URLParam("date")
@@ -63,7 +63,7 @@ func StatisticDetail(ctx iris.Context) {
 }
 
 func GetSpiderIncludeDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	var list []*model.SpiderInclude
@@ -87,7 +87,7 @@ func GetSpiderIncludeDetail(ctx iris.Context) {
 }
 
 func GetSpiderInclude(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var result = make([]response.ChartData, 0, 30*5)
 
 	timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()

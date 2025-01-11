@@ -138,6 +138,8 @@ func (w *Website) GetArchiveDataById(id uint) (*model.ArchiveData, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 对内容进行处理
+	data.Content = w.ReplaceContentUrl(data.Content, true)
 
 	return &data, nil
 }
@@ -225,7 +227,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 					MinId int `json:"min_id"`
 					MaxId int `json:"max_id"`
 				}
-				builder.WithContext(context.Background()).Debug().Select("MIN(id) as min_id, MAX(id) as max_id").Scan(&minMax)
+				builder.WithContext(context.Background()).Select("MIN(id) as min_id, MAX(id) as max_id").Scan(&minMax)
 				if minMax.MinId == 0 || minMax.MaxId == 0 {
 					return nil, 0, errors.New("empty archive")
 				}
@@ -310,17 +312,10 @@ func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]
 			w.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
-				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
-					value, ok := result[v.FieldName].(string)
-					if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
-						result[v.FieldName] = w.PluginStorage.StorageUrl + value
-					}
-				}
-				// render
-				if v.Type == config.CustomFieldTypeEditor && w.Content.Editor == "markdown" {
-					value, ok := result[v.FieldName].(string)
-					if ok {
-						result[v.FieldName] = library.MarkdownToHTML(value, w.System.BaseUrl, w.Content.FilterOutlink)
+				value, ok := result[v.FieldName].(string)
+				if ok {
+					if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+						result[v.FieldName] = w.ReplaceContentUrl(value, true)
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
@@ -546,7 +541,11 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
-							extraFields[v.FieldName] = strings.TrimPrefix(value, w.PluginStorage.StorageUrl)
+							if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+								extraFields[v.FieldName] = w.ReplaceContentUrl(value, false)
+							} else {
+								extraFields[v.FieldName] = extraValue["value"]
+							}
 						} else {
 							extraFields[v.FieldName] = extraValue["value"]
 						}
@@ -578,7 +577,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	// todo 应该只替换 src,href 中的 baseUrl
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
@@ -887,7 +886,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			w.PushArchive(archive.Link)
 		}()
 		if w.PluginSitemap.AutoBuild == 1 {
-			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
+			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
 		}
 	}
 	// 更新缓存

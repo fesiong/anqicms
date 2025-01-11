@@ -15,12 +15,12 @@
                     {% for item in articles %}
                     <li>
                         <div class="info">
-                            <span>来源：<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name="Title" %}</a></span> /
-                            <span>时间: {{ stampToDate(item.CreatedTime, "2006-01-02") }}</span>
+                            <span>{% tr 'source:' %}<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name="Title" %}</a></span> /
+                            <span><span>{% tr 'time:' %}</span>{{ stampToDate(item.CreatedTime, "2006-01-02") }}</span>
                         </div>
                         <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
                         <p>{{item.Description}}</p>
-                        <a href="{{item.Link}}" class="more">详情</a>
+                        <a href="{{item.Link}}" class="more">{% tr 'detail' %}</a>
                     </li>
                     {% endfor %}
                     {% endarchiveList %}

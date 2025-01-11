@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -34,13 +33,7 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		return nil
 	}
 
-	languageSites := currentSite.GetMultiLangSites(mainId)
-	// 需要过滤掉不能用的站点
-	for i := 0; i < len(languageSites); i++ {
-		if languageSites[i].Status != 1 {
-			languageSites = append(languageSites[:i], languageSites[i+1:]...)
-		}
-	}
+	languageSites := currentSite.GetMultiLangSites(mainId, false)
 	// 检查当前是在哪个页面下
 	webInfo, ok := ctx.Public["webInfo"].(*response.WebInfo)
 	if !ok {
@@ -87,11 +80,6 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		}
 
 		languageSites[i].Link = link
-		languageSites[i].LanguageIcon = library.GetLanguageIcon(tmpSite.System.Language)
-		languageSites[i].LanguageName = library.GetLanguageName(tmpSite.System.Language)
-		if languageSites[i].LanguageName == "" {
-			languageSites[i].LanguageName = languageSites[i].Name
-		}
 	}
 
 	ctx.Private[node.name] = languageSites

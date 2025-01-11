@@ -17,15 +17,8 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 	var useSite = w
 	mainSite := w.GetMainWebsite()
 	baseUrl := useSite.System.BaseUrl
-	if mainSite.MultiLanguage.Open {
+	if mainSite.MultiLanguage.Open && mainSite.Id != useSite.Id {
 		useSite = mainSite
-		if mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
-			if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
-				baseUrl = useSite.System.BaseUrl + "/" + w.System.Language
-			} else {
-				baseUrl = useSite.System.BaseUrl
-			}
-		}
 	}
 	rewritePattern := useSite.ParsePatten(false)
 	uri := ""

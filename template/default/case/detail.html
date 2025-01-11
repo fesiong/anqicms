@@ -14,8 +14,8 @@
                 <div class="single-title">
                     <h1>{% archiveDetail with name="Title" %}</h1>
                     <div class="info">
-                        <span>来源：<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name='Title' %}</a></span> /
-                        <span>时间: {% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
+                        <span>{% tr 'source:' %}<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name='Title' %}</a></span> /
+                        <span><span>{% tr 'time:' %}</span>{% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
                     </div>
                 </div>
                 <div class="single-arc">
@@ -25,7 +25,8 @@
                 <div class="tags">
                     {% tagList tags with limit="5" %}
                     {% if tags %}
-                    <span>标签：
+                    <span>
+                        <span>{% tr 'tags:' %}</span>
                         {% for item in tags %}
                         <a href="{{item.Link}}">{{item.Title}}</a>
                         {% endfor %}
@@ -36,12 +37,12 @@
                 <div class="prenext">
                     {% prevArchive prev %}
                     {% if prev %}
-                    <p><span>上一篇: </span> <a href="{{prev.Link}}">{{prev.Title}}</a></p>
+                    <p><span>{% tr 'prev-article:' %}</span> <a href="{{prev.Link}}">{{prev.Title}}</a></p>
                     {% endif %}
                     {% endprevArchive %}
                     {% nextArchive next %}
                     {% if next %}
-                    <p><span>下一篇: </span> <a href="{{next.Link}}">{{next.Title}}</a></p>
+                    <p><span>{% tr 'next-article:' %</span> <a href="{{next.Link}}">{{next.Title}}</a></p>
                     {% endif %}
                     {% endnextArchive %}
                 </div>
@@ -55,7 +56,7 @@
     <!-- rel-pro -->
     <div class="rel">
         <div class="container">
-            <h2>相关产品</h2>
+            <h2>{% tr 'related-products' %}</h2>
             <ul class="rel-pro-ul">
                 {% archiveList products with type="list" moduleId="2" categoryId=0 limit="4" %}
                 {% for item in products %}

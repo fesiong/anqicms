@@ -16,7 +16,7 @@ import (
 )
 
 func PluginFileUploadList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	uploadFiles := currentSite.PluginUploadFiles
 
 	for i := range uploadFiles {
@@ -31,7 +31,7 @@ func PluginFileUploadList(ctx iris.Context) {
 }
 
 func PluginFileUploadDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginFileUploadDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -92,7 +92,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 // PluginFileUploadUpload
 // 上传，只允许上传txt,htm,html
 func PluginFileUploadUpload(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{

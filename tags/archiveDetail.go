@@ -268,6 +268,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 								tmpContent = strings.Join(tmpData, "")
 							}
 						}
+						tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
 						content = tmpContent
 					}
 				}

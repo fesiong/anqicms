@@ -7,14 +7,14 @@
         <div class="section page-item">
             <!-- content -->
             <div class="page-content">
-                <div class="single-content-title">搜索：{{urlParams.q}}</div>
+                <div class="single-content-title"><span>{% tr 'search:' %}</span>{{urlParams.q}}</div>
                 <ul class="list-blog-ul">
                     {% archiveList articles with type="page" limit="10" %}
                     {% for item in articles %}
                     <li>
                         <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
                         <p>{{item.Description}}</p>
-                        <a href="{{item.Link}}" class="more">详情</a>
+                        <a href="{{item.Link}}" class="more">{% tr 'detail' %}</a>
                     </li>
                     {% endfor %}
                     {% endarchiveList %}

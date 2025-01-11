@@ -140,10 +140,11 @@ type PluginTestSendmailRequest struct {
 }
 
 type PluginMultiLangSiteRequest struct {
-	Id       uint   `json:"id"`
-	ParentId uint   `json:"parent_id"`
-	Language string `json:"language"`
-	Focus    bool   `json:"focus"`
+	Id           uint   `json:"id"`
+	ParentId     uint   `json:"parent_id"`
+	Language     string `json:"language"`
+	LanguageIcon string `json:"language_icon"`
+	Focus        bool   `json:"focus"`
 }
 
 type PluginLimiterRemoveIPRequest struct {

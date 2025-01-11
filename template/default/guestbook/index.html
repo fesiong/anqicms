@@ -7,7 +7,7 @@
         <div class="section page-item">
             <!-- content -->
             <div class="page-content">
-                <div class="single-content-title">给我留言</div>
+                <div class="single-content-title">{% tr 'guestbook' %}</div>
                 <div class="single-arc">
                     <form class="guestbook-form" action="/guestbook.html" method="post" enctype="multipart/form-data">
                         {% guestbook fields %}
@@ -73,7 +73,7 @@
                         {% endfor %}
                         {% endguestbook %}
                         <div class="form-control">
-                            <button class="form-btn">提交</button>
+                            <button class="form-btn">{% tr 'submit' %}</button>
                         </div>
                     </form>
                 </div>

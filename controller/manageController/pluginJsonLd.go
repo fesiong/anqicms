@@ -7,7 +7,7 @@ import (
 )
 
 func PluginGetJsonLdConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginJsonLd
 
 	ctx.JSON(iris.Map{
@@ -18,7 +18,7 @@ func PluginGetJsonLdConfig(ctx iris.Context) {
 }
 
 func PluginSaveJsonLdConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginJsonLdConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

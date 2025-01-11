@@ -16,11 +16,16 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 type Website struct {
-	Id                      uint
-	ParentId                uint
+	// 前端需要的字段
+	Id           uint   `json:"id"`
+	ParentId     uint   `json:"parent_id"`
+	Name         string `json:"name"`          // 来自数据库的
+	LanguageIcon string `json:"language_icon"` // 图标
+	// e
 	TokenSecret             string
 	Mysql                   *config.MysqlConfig
 	Initialed               bool
@@ -48,39 +53,39 @@ type Website struct {
 	HtmlCachePushStatus     *HtmlCacheStatus
 	quickImportStatus       *QuickImportArchive
 
-	System  config.SystemConfig  `json:"system"`
-	Content config.ContentConfig `json:"content"`
-	Index   config.IndexConfig   `json:"index"`
-	Contact config.ContactConfig `json:"contact"`
-	Safe    config.SafeConfig    `json:"safe"`
-	Banner  config.BannerConfig  `json:"banner"`
+	System  config.SystemConfig
+	Content config.ContentConfig
+	Index   config.IndexConfig
+	Contact config.ContactConfig
+	Safe    config.SafeConfig
+	Banner  config.BannerConfig
 	//plugin
-	PluginPush         config.PluginPushConfig       `json:"plugin_push"`
-	PluginSitemap      config.PluginSitemapConfig    `json:"plugin_sitemap"`
-	PluginRewrite      config.PluginRewriteConfig    `json:"plugin_rewrite"`
-	PluginAnchor       config.PluginAnchorConfig     `json:"plugin_anchor"`
-	PluginGuestbook    config.PluginGuestbookConfig  `json:"plugin_guestbook"`
-	PluginUploadFiles  []config.PluginUploadFile     `json:"plugin_upload_file"`
-	PluginSendmail     config.PluginSendmail         `json:"plugin_sendmail"`
-	PluginImportApi    config.PluginImportApiConfig  `json:"plugin_import_api"`
-	PluginStorage      config.PluginStorageConfig    `json:"plugin_storage"`
-	PluginPay          config.PluginPayConfig        `json:"plugin_pay"`
-	PluginWeapp        config.PluginWeappConfig      `json:"plugin_weapp"`
-	PluginWechat       config.PluginWeappConfig      `json:"plugin_wechat"`
-	PluginRetailer     config.PluginRetailerConfig   `json:"plugin_retailer"`
-	PluginUser         config.PluginUserConfig       `json:"plugin_user"`
-	PluginOrder        config.PluginOrderConfig      `json:"plugin_order"`
-	PluginFulltext     config.PluginFulltextConfig   `json:"plugin_fulltext"`
-	PluginTitleImage   config.PluginTitleImageConfig `json:"plugin_title_image"`
-	PluginWatermark    config.PluginWatermark        `json:"plugin_watermark"`
-	PluginHtmlCache    config.PluginHtmlCache        `json:"plugin_html_cache"`
-	SensitiveWords     []string                      `json:"sensitive_words"`
-	AiGenerateConfig   config.AiGenerateConfig       `json:"ai_generate_config"`
-	PluginInterference config.PluginInterference     `json:"plugin_interference"`
-	PluginTimeFactor   config.PluginTimeFactor       `json:"plugin_time_factor"`
-	MultiLanguage      config.PluginMultiLangConfig  `json:"plugin_multi_language"`
-	PluginTranslate    config.PluginTranslateConfig  `json:"plugin_translate"`
-	PluginJsonLd       config.PluginJsonLdConfig     `json:"plugin_jsonld"`
+	PluginPush         config.PluginPushConfig
+	PluginSitemap      config.PluginSitemapConfig
+	PluginRewrite      config.PluginRewriteConfig
+	PluginAnchor       config.PluginAnchorConfig
+	PluginGuestbook    config.PluginGuestbookConfig
+	PluginUploadFiles  []config.PluginUploadFile
+	PluginSendmail     config.PluginSendmail
+	PluginImportApi    config.PluginImportApiConfig
+	PluginStorage      config.PluginStorageConfig
+	PluginPay          config.PluginPayConfig
+	PluginWeapp        config.PluginWeappConfig
+	PluginWechat       config.PluginWeappConfig
+	PluginRetailer     config.PluginRetailerConfig
+	PluginUser         config.PluginUserConfig
+	PluginOrder        config.PluginOrderConfig
+	PluginFulltext     config.PluginFulltextConfig
+	PluginTitleImage   config.PluginTitleImageConfig
+	PluginWatermark    config.PluginWatermark
+	PluginHtmlCache    config.PluginHtmlCache
+	SensitiveWords     []string
+	AiGenerateConfig   config.AiGenerateConfig
+	PluginInterference config.PluginInterference
+	PluginTimeFactor   config.PluginTimeFactor
+	MultiLanguage      config.PluginMultiLangConfig
+	PluginTranslate    config.PluginTranslateConfig
+	PluginJsonLd       config.PluginJsonLdConfig
 
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson
@@ -93,7 +98,94 @@ type Website struct {
 	backLanguage string
 }
 
-var websites = map[uint]*Website{}
+type OrderedWebsites struct {
+	mu   sync.RWMutex
+	data map[uint]*Website
+	keys []uint
+}
+
+func NewWebsites() *OrderedWebsites {
+	return &OrderedWebsites{
+		mu:   sync.RWMutex{},
+		data: make(map[uint]*Website),
+		keys: make([]uint, 0),
+	}
+}
+
+func (ow *OrderedWebsites) Set(website *Website) {
+	ow.mu.Lock()
+	defer ow.mu.Unlock()
+
+	if _, exists := ow.data[website.Id]; !exists {
+		// New id
+		ow.keys = append(ow.keys, website.Id)
+	}
+	ow.data[website.Id] = website
+}
+
+func (ow *OrderedWebsites) Get(id uint) (*Website, bool) {
+	ow.mu.RLock()
+	defer ow.mu.RUnlock()
+
+	website, exists := ow.data[id]
+	return website, exists
+}
+
+func (ow *OrderedWebsites) Delete(id uint) {
+	ow.mu.Lock()
+	defer ow.mu.Unlock()
+
+	if _, exists := ow.data[id]; !exists {
+		return
+	}
+	// Remove from map
+	delete(ow.data, id)
+
+	// Remove from keys slice
+	for i, key := range ow.keys {
+		if key == id {
+			ow.keys = append(ow.keys[:i], ow.keys[i+1:]...)
+			break
+		}
+	}
+}
+
+func (ow *OrderedWebsites) Len() int {
+	ow.mu.RLock()
+	defer ow.mu.RUnlock()
+
+	return len(ow.keys)
+}
+
+func (ow *OrderedWebsites) Keys(baseUrl string) []uint {
+	ow.mu.RLock()
+	defer ow.mu.RUnlock()
+	var ids []uint
+
+	if baseUrl == "" {
+		return append(ids, ow.keys...)
+	}
+
+	for _, w := range ow.data {
+		if strings.Contains(w.System.BaseUrl, baseUrl) {
+			ids = append(ids, w.Id)
+		}
+	}
+	return ids
+}
+
+func (ow *OrderedWebsites) Values() []*Website {
+	ow.mu.RLock()
+	defer ow.mu.RUnlock()
+
+	values := make([]*Website, len(ow.keys))
+	for i, id := range ow.keys {
+		values[i] = ow.data[id]
+	}
+	return values
+}
+
+var websites = NewWebsites()
 
 func InitWebsites() {
 	// 先需要获得 default db
@@ -118,13 +210,31 @@ func InitWebsites() {
 		InitWebsite(v)
 	}
 	// 检查多语言站点
-	for _, w := range websites {
+	values := websites.Values()
+	for _, w := range values {
 		if w.MultiLanguage.Open {
 			w.MultiLanguage.SubSites = map[string]uint{}
 			// 读取子站点
-			multiLangSites := w.GetMultiLangSites(w.Id)
+			multiLangSites := w.GetMultiLangSites(w.Id, false)
+			mainBaseUrl := w.System.BaseUrl
 			for _, v := range multiLangSites {
 				w.MultiLanguage.SubSites[v.Language] = v.Id
+				// 根据多语言站点的规则，改变baseUrl 和 storageUrl
+				if w.MultiLanguage.Type != config.MultiLangTypeDomain {
+					curSite, ok := websites.Get(v.Id)
+					if ok {
+						var baseUrl string
+						if w.MultiLanguage.Type == config.MultiLangTypeDirectory {
+							baseUrl = mainBaseUrl + "/" + v.Language
+						} else {
+							baseUrl = mainBaseUrl
+						}
+						if curSite.PluginStorage.StorageType == config.StorageTypeLocal {
+							curSite.PluginStorage.StorageUrl = baseUrl
+						}
+						curSite.System.BaseUrl = baseUrl
+					}
+				}
 			}
 		}
 
@@ -163,6 +273,8 @@ func InitWebsite(mw *model.Website) {
 	w := Website{
 		Id:           mw.Id,
 		ParentId:     mw.ParentId,
+		Name:         mw.Name,
+		LanguageIcon: mw.LanguageIcon,
 		TokenSecret:  mw.TokenSecret,
 		Mysql:        &mw.Mysql,
 		DB:           db,
@@ -193,7 +305,7 @@ func InitWebsite(mw *model.Website) {
 	if mw.Id == 1 {
 		w.Mysql = &config.Server.Mysql
 	}
-	websites[mw.Id] = &w
+	websites.Set(&w)
 	if db != nil {
 		var lastVersion string
 		db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
@@ -225,12 +337,12 @@ func InitWebsite(mw *model.Website) {
 	}
 }
 
-func GetWebsites() map[uint]*Website {
-	return websites
+func GetWebsites() []*Website {
+	return websites.Values()
 }
 
 func CurrentSite(ctx iris.Context) *Website {
-	if len(websites) == 0 {
+	if websites.Len() == 0 {
 		cur := &Website{
 			Id:         0,
 			Initialed:  false,
@@ -251,7 +363,7 @@ func CurrentSite(ctx iris.Context) *Website {
 	}
 	if ctx != nil {
 		if siteId, err := ctx.Values().GetUint("siteId"); err == nil {
-			w, ok := websites[siteId]
+			w, ok := websites.Get(siteId)
 			if ok {
 				if w.backLanguage == "" {
 					w.backLanguage = ctx.GetLocale().Language()
@@ -263,8 +375,9 @@ func CurrentSite(ctx iris.Context) *Website {
 		uri := ctx.RequestPath(false)
 		host := library.GetHost(ctx)
 		// check exist uri first
+		values := websites.Values()
 		if uri != "/" {
-			for _, w := range websites {
+			for _, w := range values {
 				parsed, err := url.Parse(w.System.BaseUrl)
 				if err != nil {
 					continue
@@ -293,7 +406,7 @@ func CurrentSite(ctx iris.Context) *Website {
 						if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
 							ctx.SetLanguage(lang)
 							ctx.Values().Set("siteId", tmpId)
-							tmpSite := websites[tmpId]
+							tmpSite, _ := websites.Get(tmpId)
 							tmpSite.backLanguage = ctx.GetLocale().Language()
 							return tmpSite
 						}
@@ -345,7 +458,7 @@ func CurrentSite(ctx iris.Context) *Website {
 				}
 			}
 		}
-		for _, w := range websites {
+		for _, w := range values {
 			// 判断内容，base_url,mobile_url,admin_url
 			parsed, err := url.Parse(w.System.BaseUrl)
 			if err == nil {
@@ -367,7 +480,7 @@ func CurrentSite(ctx iris.Context) *Website {
 						if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
 							ctx.SetLanguage(lang)
 							ctx.Values().Set("siteId", tmpId)
-							tmpSite := websites[tmpId]
+							tmpSite, _ := websites.Get(tmpId)
 							tmpSite.backLanguage = ctx.GetLocale().Language()
 							return tmpSite
 						}
@@ -422,10 +535,11 @@ func CurrentSite(ctx iris.Context) *Website {
 	}
 
 	// return default 1
+	defaultWebsite, _ := websites.Get(1)
 	if ctx != nil {
-		websites[1].backLanguage = ctx.GetLocale().Language()
+		defaultWebsite.backLanguage = ctx.GetLocale().Language()
 	}
-	return websites[1]
+	return defaultWebsite
 }
 
 func CurrentSubSite(ctx iris.Context) *Website {
@@ -452,13 +566,13 @@ func CurrentSubSite(ctx iris.Context) *Website {
 
 // GetWebsite default 1
 func GetWebsite(siteId uint) *Website {
-	website, _ := websites[siteId]
+	website, _ := websites.Get(siteId)
 
 	return website
 }
 
 func RemoveWebsite(siteId uint, removeFile bool) {
-	defer delete(websites, siteId)
+	websites.Delete(siteId)
 	site := GetWebsite(siteId)
 	if site != nil {
 		if removeFile {
@@ -496,12 +610,7 @@ func GetDBWebsites(name, baseUrl string, page, pageSize int) ([]*model.Website, 
 		tx = tx.Where("`name` LIKE ?", "%"+name+"%")
 	}
 	if baseUrl != "" {
-		var ids []uint
-		for _, w := range websites {
-			if strings.Contains(w.System.BaseUrl, baseUrl) {
-				ids = append(ids, w.Id)
-			}
-		}
+		ids := websites.Keys(baseUrl)
 		tx = tx.Where("id in (?)", ids)
 	}
 	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&sites)
@@ -512,7 +621,6 @@ func GetDBWebsites(name, baseUrl string, page, pageSize int) ([]*model.Website, 
 			if currentSite != nil {
 				sites[i].Language = currentSite.System.Language
 				sites[i].BaseUrl = currentSite.System.BaseUrl
-				sites[i].ErrorMsg = currentSite.ErrorMsg
 				if !currentSite.Initialed {
 					sites[i].Status = 0
 				}
@@ -539,7 +647,6 @@ func GetDBWebsiteInfo(id uint) (*model.Website, error) {
 	if currentSite != nil {
 		website.Language = currentSite.System.Language
 		website.BaseUrl = currentSite.System.BaseUrl
-		website.ErrorMsg = currentSite.ErrorMsg
 		if !currentSite.Initialed {
 			website.Status = 0
 		}

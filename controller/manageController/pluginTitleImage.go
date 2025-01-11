@@ -13,7 +13,7 @@ import (
 )
 
 func PluginTitleImageConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginTitleImage
 
 	ctx.JSON(iris.Map{
@@ -24,7 +24,7 @@ func PluginTitleImageConfig(ctx iris.Context) {
 }
 
 func PluginTitleImageConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginTitleImageConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -72,7 +72,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 }
 
 func PluginTitleImagePreview(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	text := ctx.URLParamDefault("text", ctx.Tr("WelcomeToAnqiCMS"))
 	str := currentSite.NewTitleImage().DrawPreview(text)
 
@@ -83,7 +83,7 @@ func PluginTitleImagePreview(ctx iris.Context) {
 }
 
 func PluginTitleImageUploadFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	name := ctx.PostValue("name")
 	// allow upload font and image
 	if name != "font_path" && name != "bg_image" {
@@ -183,7 +183,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 }
 
 func PluginTitleImageGenerate(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	currentSite.GenerateAllTitleImages()
 

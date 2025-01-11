@@ -67,7 +67,7 @@ func PluginGetMultiLangSites(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 
 	// 读取当前站点的多语言站点
-	sites := currentSite.GetMultiLangSites(currentSite.Id)
+	sites := currentSite.GetMultiLangSites(currentSite.Id, true)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

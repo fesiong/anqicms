@@ -12,7 +12,7 @@ import (
 )
 
 func PluginStorageConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginStorage
 
 	ctx.JSON(iris.Map{
@@ -23,7 +23,7 @@ func PluginStorageConfig(ctx iris.Context) {
 }
 
 func PluginStorageConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginStorageConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -88,7 +88,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 }
 
 func PluginStorageUploadFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	file, _, err := ctx.FormFile("file")
 	if err != nil {

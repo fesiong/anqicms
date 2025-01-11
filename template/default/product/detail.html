@@ -16,14 +16,14 @@
             <div class="toppro-text">
                 <h1>{% archiveDetail with name="Title" %}</h1>
                 <p>{% archiveDetail with name="Description" %}</p>
-                <a href="tel:{% contact with name='Cellphone' %}" rel="nofollow" class="more">联系电话:{% contact with name="Cellphone" %}</a>
+                <a href="tel:{% contact with name='Cellphone' %}" rel="nofollow" class="more"><span>{% tr 'contact-number' %}</span>: {% contact with name="Cellphone" %}</a>
             </div>
         </div>
         <!-- toppro -->
         <div class="section page-item">
             <!-- content -->
             <div class="page-content">
-                <div class="single-content-title">产品详情</div>
+                <div class="single-content-title">{% tr 'product-detail' %}</div>
                 <div class="single-arc">
                     {% archiveDetail productContent with name="Content" %}
                     {{productContent|safe}}
@@ -31,7 +31,8 @@
                 <div class="tags">
                     {% tagList tags with limit="5" %}
                     {% if tags %}
-                    <span>标签：
+                    <span>
+                        <span>{% tr 'tags:' %}</span>
                         {% for item in tags %}
                         <a href="{{item.Link}}">{{item.Title}}</a>
                         {% endfor %}
@@ -49,7 +50,7 @@
     <!-- rel-pro -->
     <div class="rel">
         <div class="container">
-            <h2>相关产品</h2>
+            <h2>{% tr 'related-products' %}</h2>
             <ul class="rel-pro-ul">
                 {% archiveList products with type="list" limit="4" %}
                 {% for item in products %}

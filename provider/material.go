@@ -32,6 +32,9 @@ func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, 
 	if err != nil {
 		return nil, 0, err
 	}
+	for i, v := range materials {
+		materials[i].Content = w.ReplaceContentUrl(v.Content, true)
+	}
 
 	//增加分类名称
 	categories, err := w.GetMaterialCategories()
@@ -69,7 +72,7 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {

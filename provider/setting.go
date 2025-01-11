@@ -262,12 +262,12 @@ func (w *Website) LoadStorageSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginStorage)
 	}
-	// 配置默认的storageUrl
-	if w.PluginStorage.StorageUrl == "" {
-		w.PluginStorage.StorageUrl = w.System.BaseUrl
-	}
 	if w.PluginStorage.StorageType == "" {
 		w.PluginStorage.StorageType = config.StorageTypeLocal
+	}
+	// 配置默认的storageUrl
+	if w.PluginStorage.StorageUrl == "" || w.PluginStorage.StorageType == config.StorageTypeLocal {
+		w.PluginStorage.StorageUrl = w.System.BaseUrl
 	}
 }
 
@@ -798,4 +798,56 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 	}
 
 	return &limiter
+}
+
+func (w *Website) ReplaceContentUrl(content string, reverse bool) string {
+	if len(content) == 0 {
+		return content
+	}
+	// todo，替换的时候，还需要考虑 Markdown
+	// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+	mdRe, _ := regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+	if mdRe.MatchString(content) {
+		content = mdRe.ReplaceAllStringFunc(content, func(s string) string {
+			match := mdRe.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			if reverse {
+				// 恢复
+				if strings.HasPrefix(match[2], "/uploads") {
+					s = strings.Replace(s, match[2], w.PluginStorage.StorageUrl+match[2], 1)
+				}
+			} else {
+				s = strings.Replace(s, match[2], strings.TrimPrefix(match[2], w.PluginStorage.StorageUrl), 1)
+			}
+
+			return s
+		})
+	}
+
+	if reverse {
+		// 支持替换url
+		if strings.HasPrefix(content, "/uploads") {
+			content = w.PluginStorage.StorageUrl + content
+		} else {
+			// 恢复
+			content = strings.ReplaceAll(content, "\"/uploads", "\""+w.PluginStorage.StorageUrl+"/uploads")
+		}
+		return content
+	} else {
+		// todo 应该只替换 src,href 中的 baseUrl
+		// 图片都上传到 uploads
+		if strings.HasPrefix(content, w.PluginStorage.StorageUrl) {
+			content = strings.TrimPrefix(content, w.PluginStorage.StorageUrl)
+		} else {
+			content = strings.ReplaceAll(content, "\""+w.PluginStorage.StorageUrl+"/uploads", "\"/uploads")
+			// 如果baseUrl 是 127.0.0.1 或者localhost，则把它们全部替换
+			if strings.Contains(w.System.BaseUrl, "127.0.0.1") || strings.Contains(w.System.BaseUrl, "localhost") {
+				content = strings.ReplaceAll(content, w.System.BaseUrl, "")
+			}
+		}
+	}
+
+	return content
 }
