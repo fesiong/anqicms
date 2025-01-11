@@ -3,6 +3,7 @@ package provider
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"github.com/jinzhu/now"
@@ -16,6 +17,7 @@ import (
 	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
+	"math/rand"
 	"mime/multipart"
 	"net/url"
 	"path/filepath"
@@ -136,6 +138,8 @@ func (w *Website) GetArchiveDataById(id uint) (*model.ArchiveData, error) {
 	if err != nil {
 		return nil, err
 	}
+	// 对内容进行处理
+	data.Content = w.ReplaceContentUrl(data.Content, true)
 
 	return &data, nil
 }
@@ -172,9 +176,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 	var builder *gorm.DB
 	if draft {
-		builder = w.DB.Table("`archive_drafts` as archives").Order(order)
+		builder = w.DB.Table("`archive_drafts` as archives")
 	} else {
-		builder = w.DB.Model(&model.Archive{}).Order(order)
+		builder = w.DB.Model(&model.Archive{})
 	}
 
 	if ops != nil {
@@ -215,7 +219,36 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 	} else {
-		builder = builder.Limit(pageSize).Offset(offset)
+		if strings.Contains(order, "rand") {
+			// 如果文章总量大于10万，则使用下面的方法处理
+			totalArchive := w.GetExplainCount("SELECT id FROM archives")
+			if totalArchive > 100000 {
+				var minMax struct {
+					MinId int `json:"min_id"`
+					MaxId int `json:"max_id"`
+				}
+				builder.WithContext(context.Background()).Select("MIN(id) as min_id, MAX(id) as max_id").Scan(&minMax)
+				if minMax.MinId == 0 || minMax.MaxId == 0 {
+					return nil, 0, errors.New("empty archive")
+				}
+				var existIds []uint
+				randId := rand.New(rand.NewSource(time.Now().UnixNano()))
+				for i := 0; i < pageSize; i++ {
+					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					var findId uint
+					builder.WithContext(context.Background()).Where("id >= ?", tmpId).Select("id").Limit(1).Pluck("id", &findId)
+					if findId > 0 {
+						existIds = append(existIds, findId)
+					}
+				}
+				if len(existIds) > 0 {
+					builder = builder.Where("id IN (?)", existIds)
+				} else {
+					builder = builder.Where("id = 0")
+				}
+			}
+		}
+		builder = builder.Limit(pageSize).Offset(offset).Order(order)
 		if err := builder.Find(&archives).Error; err != nil {
 			return nil, 0, err
 		}
@@ -279,17 +312,10 @@ func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]
 			w.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
-				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
-					value, ok := result[v.FieldName].(string)
-					if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
-						result[v.FieldName] = w.PluginStorage.StorageUrl + value
-					}
-				}
-				// render
-				if v.Type == config.CustomFieldTypeEditor && w.Content.Editor == "markdown" {
-					value, ok := result[v.FieldName].(string)
-					if ok {
-						result[v.FieldName] = library.MarkdownToHTML(value)
+				value, ok := result[v.FieldName].(string)
+				if ok {
+					if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+						result[v.FieldName] = w.ReplaceContentUrl(value, true)
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
@@ -515,7 +541,11 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
-							extraFields[v.FieldName] = strings.TrimPrefix(value, w.PluginStorage.StorageUrl)
+							if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+								extraFields[v.FieldName] = w.ReplaceContentUrl(value, false)
+							} else {
+								extraFields[v.FieldName] = extraValue["value"]
+							}
 						} else {
 							extraFields[v.FieldName] = extraValue["value"]
 						}
@@ -547,32 +577,29 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	// todo 应该只替换 src,href 中的 baseUrl
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
 		baseHost = urls.Host
 	}
-	autoAddImage := false
 	//提取缩略图
 	if len(draft.Images) == 0 {
 		re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
 		match := re.FindStringSubmatch(req.Content)
 		if len(match) > 1 {
 			draft.Images = append(draft.Images, match[1])
-			autoAddImage = true
 		} else {
 			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
 			match = re.FindStringSubmatch(req.Content)
 			if len(match) > 2 {
 				draft.Images = append(draft.Images, match[2])
-				autoAddImage = true
 			}
 		}
 	}
-	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	// 过滤外链，1=移除，2=nofollow
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -583,7 +610,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(s, match[1], newUrl, 1)
+					}
 				}
 			}
 			return s
@@ -604,7 +636,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[1]
+					if w.Content.FilterOutlink == 1 {
+						return match[1]
+					}
+					// 添加 nofollow 不在这里处理，因为md不支持
 				}
 			}
 			return s
@@ -687,7 +722,33 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	go w.LogMaterialData(materialIds, "archive", draft.Id)
 	// 自动提取远程图片改成保存后处理
 	if w.Content.RemoteDownload == 1 {
+		// 处理 images
 		hasChangeImg := false
+		for i, v := range draft.Images {
+			if strings.HasPrefix(v, w.PluginStorage.StorageUrl) {
+				continue
+			}
+			if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "http") {
+				imgUrl, err2 := url.Parse(v)
+				if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
+					// 自动下载
+					attachment, err2 := w.DownloadRemoteImage(v, "")
+					if err2 == nil {
+						// 下载完成
+						draft.Images[i] = strings.TrimPrefix(attachment.Logo, w.PluginStorage.StorageUrl)
+						hasChangeImg = true
+					}
+				}
+			}
+		}
+		if hasChangeImg {
+			if isReleased {
+				w.DB.Model(&draft.Archive).UpdateColumn("images", draft.Images)
+			} else {
+				w.DB.Model(draft).UpdateColumn("images", draft.Images)
+			}
+		}
+		hasChangeImg = false
 		re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -731,28 +792,6 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		})
 		if hasChangeImg {
 			w.DB.Model(&archiveData).UpdateColumn("content", archiveData.Content)
-			// 更新data
-			if autoAddImage {
-				//提取缩略图
-				draft.Images = draft.Images[:0]
-				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-				match := re.FindStringSubmatch(archiveData.Content)
-				if len(match) > 1 {
-					draft.Images = append(draft.Images, match[1])
-				} else {
-					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
-					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-					match = re.FindStringSubmatch(archiveData.Content)
-					if len(match) > 2 {
-						draft.Images = append(draft.Images, match[2])
-					}
-				}
-				if isReleased {
-					w.DB.Model(&draft.Archive).UpdateColumn("images", draft.Images)
-				} else {
-					w.DB.Model(draft).UpdateColumn("images", draft.Images)
-				}
-			}
 		}
 	}
 	//extra
@@ -847,7 +886,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			w.PushArchive(archive.Link)
 		}()
 		if w.PluginSitemap.AutoBuild == 1 {
-			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
+			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
 		}
 	}
 	// 更新缓存
@@ -1675,7 +1714,7 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 
 			articleContent = strings.TrimSpace(string(content))
 			if (fileExt == ".md" || content[0] != '<') && qia.w.Content.Editor != "markdown" {
-				articleContent = library.MarkdownToHTML(articleContent)
+				articleContent = library.MarkdownToHTML(articleContent, qia.w.System.BaseUrl, qia.w.Content.FilterOutlink)
 			}
 		} else {
 			// 不支持的文件类型，也跳过
@@ -1737,6 +1776,20 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 				contents[index] = imgTag
 				articleContent = strings.Join(contents, "")
 				archive.Images = []string{img}
+			}
+		} else {
+			// 提取缩略图
+			re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
+			match := re.FindStringSubmatch(articleContent)
+			if len(match) > 1 {
+				archive.Images = append(archive.Images, match[1])
+			} else {
+				// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+				re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+				match = re.FindStringSubmatch(articleContent)
+				if len(match) > 2 {
+					archive.Images = append(archive.Images, match[2])
+				}
 			}
 		}
 		// 解析description

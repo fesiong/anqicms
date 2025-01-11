@@ -8,6 +8,8 @@ type ModuleRequest struct {
 	UrlToken       string               `json:"url_token"`
 	Title          string               `json:"title"`
 	Name           string               `json:"name"`
+	Keywords       string               `json:"keywords"`
+	Description    string               `json:"description"`
 	Fields         []config.CustomField `json:"fields"`
 	CategoryFields []config.CustomField `json:"category_fields"`
 	IsSystem       int                  `json:"is_system"`

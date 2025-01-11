@@ -4,25 +4,22 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 )
 
-func PluginRobots(ctx iris.Context) {
+func PluginGetJsonLdConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	robots := currentSite.GetRobots()
+	setting := currentSite.PluginJsonLd
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": iris.Map{
-			"robots": robots,
-		},
+		"data": setting,
 	})
 }
 
-func PluginRobotsForm(ctx iris.Context) {
+func PluginSaveJsonLdConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginRobotsConfig
+	var req config.PluginJsonLdConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -31,7 +28,8 @@ func PluginRobotsForm(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.SaveRobots(req.Robots)
+	currentSite.PluginJsonLd = req
+	err := currentSite.SaveSettingValue(provider.JsonLdSettingKey, currentSite.PluginJsonLd)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -40,7 +38,7 @@ func PluginRobotsForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateRobots"))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateJsonLdConfiguration"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

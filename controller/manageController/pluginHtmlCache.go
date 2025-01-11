@@ -15,7 +15,7 @@ import (
 )
 
 func PluginHtmlCacheConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	pluginHtmlCache := currentSite.PluginHtmlCache
 
 	ctx.JSON(iris.Map{
@@ -26,7 +26,7 @@ func PluginHtmlCacheConfig(ctx iris.Context) {
 }
 
 func PluginHtmlCacheConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -95,7 +95,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuild(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -117,7 +117,7 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildIndex(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		currentSite.BuildIndexCache()
 		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
@@ -133,7 +133,7 @@ func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildCategory(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		currentSite.BuildModuleCache(ctx)
 		currentSite.BuildCategoryCache(ctx)
@@ -151,7 +151,7 @@ func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildArchive(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		currentSite.BuildArchiveCache()
 		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
@@ -168,7 +168,7 @@ func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildTag(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		currentSite.BuildTagIndexCache(ctx)
 		currentSite.BuildTagCache(ctx)
@@ -186,7 +186,7 @@ func PluginHtmlCacheBuildTag(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildStatus(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetHtmlCacheStatus()
 
 	if status != nil && status.FinishedTime > 0 && !status.Removing {
@@ -204,7 +204,7 @@ func PluginHtmlCacheBuildStatus(ctx iris.Context) {
 }
 
 func PluginCleanHtmlCache(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentSite.RemoveHtmlCache()
 
 	ctx.JSON(iris.Map{
@@ -214,7 +214,7 @@ func PluginCleanHtmlCache(ctx iris.Context) {
 }
 
 func PluginHtmlCacheUploadFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	file, _, err := ctx.FormFile("file")
 	if err != nil {
@@ -273,7 +273,7 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 }
 
 func PluginHtmlCachePush(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginHtmlCachePushRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -317,7 +317,7 @@ func PluginHtmlCachePush(ctx iris.Context) {
 }
 
 func PluginHtmlCachePushStatus(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetHtmlCachePushStatus()
 
 	if status != nil && status.FinishedTime > 0 && !status.Removing {
@@ -335,7 +335,7 @@ func PluginHtmlCachePushStatus(ctx iris.Context) {
 }
 
 func PluginHtmlCachePushLogs(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)

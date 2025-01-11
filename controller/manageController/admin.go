@@ -30,6 +30,8 @@ func AdminLogin(ctx iris.Context) {
 		})
 		return
 	}
+	req.UserName = strings.TrimSpace(req.UserName)
+	req.Password = strings.TrimSpace(req.Password)
 
 	// 如果使用了后台登录，则在这里进行判断
 	if req.Sign != "" && req.Nonce != "" {
@@ -99,43 +101,45 @@ func AdminLogin(ctx iris.Context) {
 		}
 	}
 
-	// 如果连续错了5次，则只能10分钟后再试
-	if currentSite.AdminLoginError.Times >= 5 {
-		if currentSite.AdminLoginError.LastTime > time.Now().Add(-10*time.Minute).Unix() {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  ctx.Tr("AdministratorHasBeenTemporarilyLocked"),
-			})
-			return
-		} else {
-			currentSite.AdminLoginError.Times = 0
-		}
-	}
-
-	req.UserName = strings.TrimSpace(req.UserName)
-	req.Password = strings.TrimSpace(req.Password)
-
-	if req.UserName == "" {
+	if req.UserName == "" || req.Password == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("PleaseEnterUsername"),
 		})
 		return
 	}
-	//验证密码
-	if len(req.Password) < 6 {
+
+	// 如果连续错了5次，则只能10分钟后再试
+	// 如果IP被封了，则不再检查
+	keyPrefix := "forbidden-admin-"
+	storeKey := keyPrefix + ctx.RemoteAddr()
+	var loginError response.LoginError
+	err := currentSite.Cache.Get(storeKey, &loginError)
+	if err == nil && loginError.Times >= 5 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("PleaseEnterAPasswordOf6CharactersOrMore"),
+			"msg":  ctx.Tr("AdministratorHasBeenTemporarilyLocked"),
 		})
 		return
 	}
-
+	// 先验证账号对不对，如果账号对，那就封账号
 	admin, err := currentSite.GetAdminByUserName(req.UserName)
-	if err != nil {
-		currentSite.AdminLoginError.Times++
-		currentSite.AdminLoginError.LastTime = time.Now().Unix()
-
+	if err == nil {
+		// 如果密码错误,封账号
+		storeKey = keyPrefix + admin.UserName
+		err = currentSite.Cache.Get(storeKey, &loginError)
+		if err == nil && loginError.Times >= 5 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("AdministratorHasBeenTemporarilyLocked"),
+			})
+			return
+		}
+	} else {
+		loginError.Times++
+		loginError.LastTime = time.Now().Unix()
+		// 保存 store, 封禁10分钟
+		_ = currentSite.Cache.Set(storeKey, loginError, 600)
 		// 记录日志
 		adminLog := model.AdminLoginLog{
 			AdminId:  0,
@@ -152,10 +156,20 @@ func AdminLogin(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 账号被禁用
+	if admin.Status != 1 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("AdministratorHasBeenTemporarilyLocked"),
+		})
+		return
+	}
+	// 到这里的时候，账号对了，还需要验证密码
 	if !admin.CheckPassword(req.Password) {
-		currentSite.AdminLoginError.Times++
-		currentSite.AdminLoginError.LastTime = time.Now().Unix()
+		loginError.Times++
+		loginError.LastTime = time.Now().Unix()
+		// 保存 store, 封禁10分钟
+		_ = currentSite.Cache.Set(storeKey, loginError, 600)
 
 		// 记录日志
 		adminLog := model.AdminLoginLog{
@@ -174,8 +188,10 @@ func AdminLogin(ctx iris.Context) {
 		return
 	}
 
-	// 重置管理员登录失败次数
-	currentSite.AdminLoginError.Times = 0
+	// 登录成功，重置管理员登录失败次数
+	currentSite.Cache.Delete(keyPrefix + ctx.RemoteAddr())
+	currentSite.Cache.Delete(keyPrefix + admin.UserName)
+	// 更新token
 	admin.Token = currentSite.GetAdminAuthToken(admin.Id, req.Remember)
 	admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
 	// 记录用户登录时间

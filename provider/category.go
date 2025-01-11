@@ -146,7 +146,21 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
+	if category.Extra != nil {
+		module := w.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			for _, field := range module.CategoryFields {
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					category.Extra[field.FieldName] != nil {
+					value, ok := category.Extra[field.FieldName].(string)
+					if ok {
+						category.Extra[field.FieldName] = w.ReplaceContentUrl(value, false)
+					}
+				}
+			}
+		}
+	}
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
@@ -180,7 +194,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}
 	}
 	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -191,7 +205,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(s, match[1], newUrl, 1)
+					}
 				}
 			}
 			return s
@@ -212,7 +231,10 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[1]
+					if w.Content.FilterOutlink == 1 {
+						return match[1]
+					}
+					// 添加 nofollow 不在这里处理，因为md不支持
 				}
 			}
 			return s
@@ -315,7 +337,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		go func() {
 			w.PushArchive(link)
 			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
+				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"), category)
 			}
 		}()
 	}
@@ -558,10 +580,13 @@ func (w *Website) UpdateCategoryArchiveCounts() {
 
 func (w *Website) UpdateCategoryArchiveCount(categoryId uint) {
 	var archiveCount int64
+	// 同时计算子分类文章数量
+	var subIds = w.GetSubCategoryIds(categoryId, nil)
+	subIds = append(subIds, categoryId)
 	if w.Content.MultiCategory == 1 {
-		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id = ?", categoryId).Count(&archiveCount)
+		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id in (?)", subIds).Count(&archiveCount)
 	} else {
-		w.DB.Model(&model.Archive{}).Where("category_id = ?", categoryId).Count(&archiveCount)
+		w.DB.Model(&model.Archive{}).Where("category_id in (?)", subIds).Count(&archiveCount)
 	}
 	w.DB.Model(&model.Category{}).Where("id = ?", categoryId).UpdateColumn("archive_count", archiveCount)
 }

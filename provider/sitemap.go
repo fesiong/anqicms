@@ -69,6 +69,25 @@ func (w *Website) BuildSitemap() error {
 	//如果所有数量多于50000，则按种类生成。
 	//sitemap将包含首页、分类首页、文章页、产品页
 	baseUrl := w.System.BaseUrl
+	multiLang := false
+	var multiLangSites []*Website
+	if w.PluginSitemap.Type == "xml" {
+		mainId := w.ParentId
+		if mainId == 0 {
+			mainId = w.Id
+		}
+		mainSite := GetWebsite(mainId)
+		if mainSite.MultiLanguage.Open == true {
+			multiLang = true
+		}
+		tmpSites := w.GetMultiLangSites(mainId, false)
+		for i := 0; i < len(tmpSites); i++ {
+			tmpSite := GetWebsite(tmpSites[i].Id)
+			if tmpSite != nil {
+				multiLangSites = append(multiLangSites, tmpSite)
+			}
+		}
+	}
 
 	categoryBuilder := w.DB.Model(&model.Category{}).Where("`status` = 1").Order("id asc").Select("id", "updated_time", "type", "module_id", "url_token")
 	archiveBuilder := w.DB.Model(&model.Archive{}).Order("id asc").Select("id", "created_time", "updated_time", "url_token", "module_id", "category_id", "fixed_link")
@@ -94,12 +113,38 @@ func (w *Website) BuildSitemap() error {
 	categoryFile := NewSitemapGenerator(w, fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type), w.System.BaseUrl, false)
 	defer categoryFile.Save()
 	//写入首页
-	categoryFile.AddLoc(baseUrl, time.Now().Format("2006-01-02"))
+	var alternates []AlternateLink
+	if multiLang {
+		for _, site := range multiLangSites {
+			if site.Id == w.Id {
+				continue
+			}
+			alternate := AlternateLink{
+				Href:     site.System.BaseUrl,
+				Hreflang: site.System.Language,
+			}
+			alternates = append(alternates, alternate)
+		}
+	}
+	categoryFile.AddLoc(baseUrl, time.Now().Format("2006-01-02"), alternates)
 	//写入分类页
 	var categories []*model.Category
 	categoryBuilder.Find(&categories)
 	for _, v := range categories {
-		categoryFile.AddLoc(w.GetUrl("category", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+		alternates = alternates[:0]
+		if multiLang {
+			for _, site := range multiLangSites {
+				if site.Id == w.Id {
+					continue
+				}
+				alternate := AlternateLink{
+					Href:     site.GetUrl("category", v, 0),
+					Hreflang: site.System.Language,
+				}
+				alternates = append(alternates, alternate)
+			}
+		}
+		categoryFile.AddLoc(w.GetUrl("category", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 	}
 	//写入文章
 	var archives []*model.Archive
@@ -123,7 +168,20 @@ func (w *Website) BuildSitemap() error {
 				break
 			}
 			for _, v := range archives {
-				archiveFile.AddLoc(w.GetUrl("archive", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+				alternates = alternates[:0]
+				if multiLang {
+					for _, site := range multiLangSites {
+						if site.Id == w.Id {
+							continue
+						}
+						alternate := AlternateLink{
+							Href:     site.GetUrl("archive", v, 0),
+							Hreflang: site.System.Language,
+						}
+						alternates = append(alternates, alternate)
+					}
+				}
+				archiveFile.AddLoc(w.GetUrl("archive", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 			}
 			remainNum -= len(archives)
 			lastId = archives[len(archives)-1].Id
@@ -155,7 +213,20 @@ func (w *Website) BuildSitemap() error {
 					break
 				}
 				for _, v := range tags {
-					tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"))
+					alternates = alternates[:0]
+					if multiLang {
+						for _, site := range multiLangSites {
+							if site.Id == w.Id {
+								continue
+							}
+							alternate := AlternateLink{
+								Href:     site.GetUrl("tag", v, 0),
+								Hreflang: site.System.Language,
+							}
+							alternates = append(alternates, alternate)
+						}
+					}
+					tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 				}
 				remainNum -= len(tags)
 				lastId = tags[len(tags)-1].Id
@@ -173,7 +244,26 @@ func (w *Website) BuildSitemap() error {
 }
 
 // AddonSitemap 追加sitemap
-func (w *Website) AddonSitemap(itemType string, link string, lastmod string) error {
+func (w *Website) AddonSitemap(itemType string, link string, lastmod string, data interface{}) error {
+	multiLang := false
+	var multiLangSites []*Website
+	if w.PluginSitemap.Type == "xml" {
+		mainId := w.ParentId
+		if mainId == 0 {
+			mainId = w.Id
+		}
+		mainSite := GetWebsite(mainId)
+		if mainSite.MultiLanguage.Open == true {
+			multiLang = true
+		}
+		tmpSites := w.GetMultiLangSites(mainId, false)
+		for i := 0; i < len(tmpSites); i++ {
+			tmpSite := GetWebsite(tmpSites[i].Id)
+			if tmpSite != nil {
+				multiLangSites = append(multiLangSites, tmpSite)
+			}
+		}
+	}
 	//index 和 category 存放在同一个文件，文章单独一个文件
 	if itemType == "category" {
 		categoryPath := fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type)
@@ -189,7 +279,23 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 		categoryFile := NewSitemapGenerator(w, categoryPath, w.System.BaseUrl, true)
 		defer categoryFile.Save()
 		//写入分类页
-		categoryFile.AddLoc(link, lastmod)
+		var alternates []AlternateLink
+		if multiLang {
+			item, ok := data.(*model.Category)
+			if ok {
+				for _, site := range multiLangSites {
+					if site.Id == w.Id {
+						continue
+					}
+					alternate := AlternateLink{
+						Href:     site.GetUrl("category", item, 0),
+						Hreflang: site.System.Language,
+					}
+					alternates = append(alternates, alternate)
+				}
+			}
+		}
+		categoryFile.AddLoc(link, lastmod, alternates)
 		_ = w.UpdateSitemapTime()
 	} else if itemType == "archive" {
 		// 读取SitemapIndex，并找到最后一个
@@ -209,6 +315,22 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 		latestSitemapId, _ := strconv.Atoi(match[1])
 		archivePath := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 		archiveFile := NewSitemapGenerator(w, archivePath, w.System.BaseUrl, true)
+		var alternates []AlternateLink
+		if multiLang {
+			item, ok := data.(*model.Archive)
+			if ok {
+				for _, site := range multiLangSites {
+					if site.Id == w.Id {
+						continue
+					}
+					alternate := AlternateLink{
+						Href:     site.GetUrl("archive", item, 0),
+						Hreflang: site.System.Language,
+					}
+					alternates = append(alternates, alternate)
+				}
+			}
+		}
 		if len(archiveFile.Urls) >= SitemapLimit {
 			// 生成新文件
 			latestSitemapId++
@@ -217,10 +339,10 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 			_ = indexFile.Save()
 			archivePathNew := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, latestSitemapId+1, w.PluginSitemap.Type)
 			archiveFile2 := NewSitemapGenerator(w, archivePathNew, w.System.BaseUrl, false)
-			archiveFile2.AddLoc(link, lastmod)
+			archiveFile2.AddLoc(link, lastmod, alternates)
 			_ = archiveFile2.Save()
 		} else {
-			archiveFile.AddLoc(link, lastmod)
+			archiveFile.AddLoc(link, lastmod, alternates)
 			_ = archiveFile.Save()
 		}
 		_ = w.UpdateSitemapTime()
@@ -238,15 +360,31 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 		latestSitemapId, _ := strconv.Atoi(match[1])
 		tagPath := fmt.Sprintf("%stag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 		tagFile := NewSitemapGenerator(w, tagPath, w.System.BaseUrl, true)
+		var alternates []AlternateLink
+		if multiLang {
+			item, ok := data.(*model.Tag)
+			if ok {
+				for _, site := range multiLangSites {
+					if site.Id == w.Id {
+						continue
+					}
+					alternate := AlternateLink{
+						Href:     site.GetUrl("tag", item, 0),
+						Hreflang: site.System.Language,
+					}
+					alternates = append(alternates, alternate)
+				}
+			}
+		}
 		if len(tagFile.Urls) >= SitemapLimit {
 			latestSitemapId++
 			indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", w.System.BaseUrl, latestSitemapId, w.PluginSitemap.Type))
 			tagPathNew := fmt.Sprintf("%stag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 			tagFile2 := NewSitemapGenerator(w, tagPathNew, w.System.BaseUrl, false)
-			tagFile2.AddLoc(link, lastmod)
+			tagFile2.AddLoc(link, lastmod, alternates)
 			_ = tagFile2.Save()
 		} else {
-			tagFile.AddLoc(link, lastmod)
+			tagFile.AddLoc(link, lastmod, alternates)
 			_ = tagFile.Save()
 		}
 
@@ -256,16 +394,24 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string) err
 	return nil
 }
 
+// AlternateLink 用于存储 hreflang 信息
+type AlternateLink struct {
+	Hreflang string `xml:"hreflang,attr"`
+	Href     string `xml:"href,attr"`
+}
+
 type SitemapUrl struct {
-	Loc        string `xml:"loc"`
-	Lastmod    string `xml:"lastmod,omitempty"`
-	ChangeFreq string `xml:"changefreq,omitempty"`
-	Priority   string `xml:"priority,omitempty"`
+	Loc        string          `xml:"loc"`
+	Lastmod    string          `xml:"lastmod,omitempty"`
+	ChangeFreq string          `xml:"changefreq,omitempty"`
+	Priority   string          `xml:"priority,omitempty"`
+	Alternates []AlternateLink `xml:"xhtml:link,omitempty"`
 }
 
 type SitemapGenerator struct {
 	XMLName  xml.Name     `xml:"urlset"`
 	Xmlns    string       `xml:"xmlns,attr"`
+	XmlnsX   string       `xml:"xmlns:xhtml,attr"`
 	Urls     []SitemapUrl `xml:"url"`
 	Type     string       `xml:"-"`
 	FilePath string       `xml:"-"`
@@ -290,6 +436,7 @@ func NewSitemapGenerator(w *Website, filePath, baseUrl string, load bool) *Sitem
 		FilePath: filePath,
 		BaseUrl:  baseUrl,
 		Xmlns:    "http://www.sitemaps.org/schemas/sitemap/0.9",
+		XmlnsX:   "http://www.w3.org/1999/xhtml",
 	}
 	if load {
 		generator.Load()
@@ -319,12 +466,13 @@ func (g *SitemapGenerator) Load() {
 	}
 }
 
-func (g *SitemapGenerator) AddLoc(loc string, lastMod string) {
+func (g *SitemapGenerator) AddLoc(loc string, lastMod string, alternates []AlternateLink) {
 	g.Urls = append(g.Urls, SitemapUrl{
 		Loc:     loc,
 		Lastmod: lastMod,
 		//ChangeFreq: "daily",
 		//Priority:   "0.8",
+		Alternates: alternates,
 	})
 }
 

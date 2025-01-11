@@ -32,6 +32,9 @@ func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, 
 	if err != nil {
 		return nil, 0, err
 	}
+	for i, v := range materials {
+		materials[i].Content = w.ReplaceContentUrl(v.Content, true)
+	}
 
 	//增加分类名称
 	categories, err := w.GetMaterialCategories()
@@ -69,14 +72,14 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
 		baseHost = urls.Host
 	}
 	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -87,7 +90,12 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(match[0], match[1], newUrl, 1)
+					}
 				}
 			}
 			return s

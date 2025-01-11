@@ -1086,6 +1086,20 @@ textarea:focus {
 	margin-bottom: 0.3rem;
 }
 
+.languages {
+	margin-left: 10px;
+}
+.language-item {
+	display: flex;
+	align-items: center;
+}
+.language-icon {
+	width: 20px;
+	height: 16px;
+	object-fit: contain;
+	margin-right: 5px;
+}
+
 /* 404 */
 /* pc style */
 @media screen and (min-width: 768px) {

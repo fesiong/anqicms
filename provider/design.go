@@ -274,7 +274,7 @@ func (w *Website) GetDesignTemplateFiles(packageName string) ([]response.DesignF
 	return templates, nil
 }
 
-func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
+func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader, cover string) error {
 	// 解压
 	zipReader, err := zip.NewReader(file, info.Size)
 	if err != nil {
@@ -299,15 +299,20 @@ func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) 
 	_, err = os.Stat(packagePath)
 	if err == nil {
 		// 已存在
-		i := 1
-		for {
-			packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
-			_, err = os.Stat(packagePath)
-			if err != nil {
-				packageName = fmt.Sprintf("%s%d", packageName, i)
-				break
+		if cover == "cover" {
+			// 覆盖
+		} else {
+			// 新名称
+			i := 1
+			for {
+				packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
+				_, err = os.Stat(packagePath)
+				if err != nil {
+					packageName = fmt.Sprintf("%s%d", packageName, i)
+					break
+				}
+				i++
 			}
-			i++
 		}
 	}
 
@@ -439,6 +444,7 @@ func compress(file *os.File, prefix string, zw *zip.Writer) error {
 	} else {
 		header, err := zip.FileInfoHeader(info)
 		header.Name = prefix + header.Name
+		header.Method = zip.Deflate
 		if err != nil {
 			return err
 		}
@@ -1654,6 +1660,7 @@ func (w *Website) writeFileToZip(name string, filePath string, zw *zip.Writer) e
 	info, _ := file.Stat()
 	header, err := zip.FileInfoHeader(info)
 	header.Name = name
+	header.Method = zip.Deflate
 	if err != nil {
 		return err
 	}
@@ -1681,6 +1688,7 @@ func (w *Website) writeDataToZip(name string, data interface{}, zw *zip.Writer) 
 	header := &zip.FileHeader{
 		Name:               name,
 		UncompressedSize64: uint64(size),
+		Method:             zip.Deflate,
 	}
 	header.Modified = time.Now()
 	header.SetMode(os.ModePerm)

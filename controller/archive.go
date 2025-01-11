@@ -209,6 +209,8 @@ func ArchiveIndex(ctx iris.Context) {
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = module.Title
+		webInfo.Keywords = module.Keywords
+		webInfo.Description = module.Description
 
 		//设置页面名称，方便tags识别
 		webInfo.CurrentPage = currentPage

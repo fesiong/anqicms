@@ -10,7 +10,7 @@ import (
 )
 
 func PluginGuestbookList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
@@ -34,7 +34,7 @@ func PluginGuestbookList(ctx iris.Context) {
 }
 
 func PluginGuestbookDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginGuestbookDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -84,7 +84,7 @@ func PluginGuestbookDelete(ctx iris.Context) {
 }
 
 func PluginGuestbookExport(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	guestbooks, err := currentSite.GetAllGuestbooks()
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -137,7 +137,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 }
 
 func PluginGuestbookSetting(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -149,7 +149,7 @@ func PluginGuestbookSetting(ctx iris.Context) {
 }
 
 func PluginGuestbookSettingForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginGuestbookConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

@@ -1,6 +1,6 @@
 <div class="sidebar">
     <div class="side">
-        <h2>产品中心</h2>
+        <h2>{% tr 'product-center' %}</h2>
         <div class="side-item">
             <div class="accordion">
                 {% categoryList productCategories with moduleId="2" parentId="0" %}
@@ -29,7 +29,7 @@
         </div>
     </div>
     <div class="side">
-        <h2>推荐产品</h2>
+        <h2>{% tr 'recommend-products' %}</h2>
         <div class="side-item">
             <ul class="side-pro-ul">
                 {% archiveList products with type="list" moduleId="2" categoryId=0 limit="4" %}
@@ -50,7 +50,7 @@
         </div>
     </div>
     <div class="side">
-        <h2>热门文章</h2>
+        <h2>{% tr 'hot-articles' %}</h2>
         <div class="side-item">
             <ul class="side-blog-ul">
                 {% archiveList articles with type="list" moduleId="1" categoryId=0 limit="8" %}
@@ -62,14 +62,14 @@
         </div>
     </div>
     <div class="side">
-        <h2>联系我们</h2>
+        <h2>{% tr 'contact-us' %}</h2>
         <div class="side-item">
-            <p>公司：{% system with name="SiteName" %}</p>
-            <p>联系人：{% contact with name="UserName" %}</p>
-            <p>电话：{% contact with name="Cellphone" %}</p>
-            <p>微信：{% contact with name="Wechat" %}</p>
-            <p>邮箱：{% contact with name="Email" %}</p>
-            <p>地址：{% contact with name="Address" %}</p>
+            <p>{% tr 'company' %}: {% system with name="SiteName" %}</p>
+            <p>{% tr 'contacts' %}: {% contact with name="UserName" %}</p>
+            <p>{% tr 'cellphone' %}: {% contact with name="Cellphone" %}</p>
+            <p>{% tr 'wechat' %}: {% contact with name="Wechat" %}</p>
+            <p>{% tr 'e-mail' %}: {% contact with name="Email" %}</p>
+            <p>{% tr 'address' %}: {% contact with name="Address" %}</p>
         </div>
     </div>
 </div>

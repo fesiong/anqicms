@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"time"
 )
 
@@ -185,6 +186,7 @@ func DownloadDesignInfo(ctx iris.Context) {
 
 func UploadDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
+	cover := ctx.FormValue("cover")
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -195,7 +197,7 @@ func UploadDesignInfo(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	err = currentSite.UploadDesignZip(file, info)
+	err = currentSite.UploadDesignZip(file, info, cover)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -209,6 +211,27 @@ func UploadDesignInfo(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("UploadSuccessfully"),
+	})
+}
+
+// CheckUploadDesignInfo 如果文件名重复，则需要确认是否覆盖
+func CheckUploadDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	packageName := ctx.URLParam("package")
+	packagePath := currentSite.RootPath + "template/" + packageName
+	_, err := os.Stat(packagePath)
+	if err == nil {
+		// 已存在
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
 	})
 }
 

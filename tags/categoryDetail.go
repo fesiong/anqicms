@@ -80,25 +80,43 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			content = f.Interface()
 		}
 		// 支持 extra
-		if item, ok := categoryDetail.Extra[inputName]; ok {
-			// 如果是editor，需要render
+		if categoryDetail.Extra != nil {
 			module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
-			if module != nil && module.CategoryFields != nil {
+			if module != nil && len(module.CategoryFields) > 0 {
 				for _, field := range module.CategoryFields {
-					if field.Name == inputName && field.Type == config.CustomFieldTypeEditor && render {
-						item = library.MarkdownToHTML(fmt.Sprintf("%v", item))
+					if categoryDetail.Extra[field.FieldName] == nil || categoryDetail.Extra[field.FieldName] == "" {
+						// default
+						categoryDetail.Extra[field.FieldName] = field.Content
 					}
+					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+						categoryDetail.Extra[field.FieldName] != nil {
+						value, ok2 := categoryDetail.Extra[field.FieldName].(string)
+						if ok2 {
+							if field.Type == config.CustomFieldTypeEditor && render {
+								value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+							}
+							categoryDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+						}
+					}
+
 				}
 			}
+		}
+		if item, ok := categoryDetail.Extra[inputName]; ok {
 			content = item
 		}
 
 		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = categoryDetail.Title
 		}
+
 		// convert markdown to html
-		if fieldName == "Content" && render {
-			content = library.MarkdownToHTML(categoryDetail.Content)
+		if fieldName == "Content" {
+			var value string
+			if render {
+				value = library.MarkdownToHTML(categoryDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			}
+			content = currentSite.ReplaceContentUrl(value, true)
 		}
 		// output
 		if node.name == "" {
@@ -106,6 +124,8 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		} else {
 			if fieldName == "Images" {
 				ctx.Private[node.name] = categoryDetail.Images
+			} else if fieldName == "Extra" {
+				ctx.Private[node.name] = categoryDetail.Extra
 			} else {
 				ctx.Private[node.name] = content
 			}

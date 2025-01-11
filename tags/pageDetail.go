@@ -81,7 +81,7 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 	// convert markdown to html
 	if fieldName == "Content" && render {
-		content = library.MarkdownToHTML(pageDetail.Content)
+		content = library.MarkdownToHTML(pageDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 	}
 	if node.name == "" {
 		writer.WriteString(fmt.Sprintf("%v", content))

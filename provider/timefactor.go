@@ -166,11 +166,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 
 	// 从草稿箱发布
 	db := w.DB.Model(&model.ArchiveDraft{}).Where("`status` = 0")
-	if len(setting.ModuleIds) == 1 {
-		db = db.Where("module_id = ?", setting.ModuleIds[0])
-	} else {
-		db = db.Where("module_id IN (?)", setting.ModuleIds)
-	}
+	db = db.Where("module_id IN (?)", setting.ModuleIds)
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
@@ -184,7 +180,13 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	archive := &draft.Archive
 	archive.CreatedTime = nowStamp
 	archive.UpdatedTime = nowStamp
-	w.DB.Save(archive)
+	err = w.DB.Save(archive).Error
+	if err != nil {
+		// err
+		return
+	}
+	// 删除草稿
+	w.DB.Delete(draft)
 	_ = w.SuccessReleaseArchive(archive, true)
 	// 清除缓存
 	w.DeleteArchiveCache(archive.Id)

@@ -50,6 +50,7 @@ func (m *MemoryCache) Set(key string, val any, expire int64) error {
 		}
 	} else {
 		//存在，替换
+		m.list[key].Expire = expire
 		m.list[key].val = val
 		m.moveToHead(m.list[key])
 	}

@@ -97,7 +97,7 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 
 	_ = w.SaveSettingValue(CollectorSettingKey, collector)
 	//重新读取配置
-	w.LoadCollectorSetting()
+	w.LoadCollectorSetting(w.GetSettingValue(CollectorSettingKey))
 	if collector.AutoCollect {
 		go w.CollectArticles()
 	}

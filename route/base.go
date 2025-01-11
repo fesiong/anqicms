@@ -99,6 +99,7 @@ func Register(app *iris.Application) {
 		api.Get("/setting/contact", controller.CheckApiOpen, controller.ApiContact)
 		api.Get("/setting/system", controller.CheckApiOpen, controller.ApiSystem)
 		api.Get("/setting/index", controller.CheckApiOpen, controller.ApiIndexTdk)
+		api.Get("/languages", controller.CheckApiOpen, controller.ApiLanguages)
 		api.Get("/guestbook/fields", controller.CheckApiOpen, controller.CheckApiOpen, controller.ApiGuestbook)
 		api.Get("/friendlink/list", controller.CheckApiOpen, controller.ApiLinkList)
 		api.Get("/nav/list", controller.CheckApiOpen, controller.ApiNavList)

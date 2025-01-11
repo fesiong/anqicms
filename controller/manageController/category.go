@@ -127,6 +127,19 @@ func CategoryDetail(ctx iris.Context) {
 		})
 		return
 	}
+	category.Content = currentSite.ReplaceContentUrl(category.Content, true)
+	// extra replace
+	if category.Extra != nil {
+		module := currentSite.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			for _, field := range module.CategoryFields {
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					category.Extra[field.FieldName] != nil {
+					category.Extra[field.FieldName] = currentSite.ReplaceContentUrl(category.Extra[field.FieldName].(string), true)
+				}
+			}
+		}
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -105,6 +105,8 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	module.TitleName = req.TitleName
 	module.UrlToken = req.UrlToken
 	module.Status = req.Status
+	module.Keywords = req.Keywords
+	module.Description = req.Description
 
 	err = w.DB.Save(module).Error
 	if err != nil {

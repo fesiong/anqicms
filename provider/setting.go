@@ -54,6 +54,7 @@ const (
 	LimiterSettingKey     = "limiter"
 	MultiLangSettingKey   = "multi_lang"
 	TranslateSettingKey   = "translate"
+	JsonLdSettingKey      = "json_ld"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -69,48 +70,57 @@ func SetI18n(i *i18n.I18n) {
 }
 
 func (w *Website) InitSetting() {
+	if w.DB == nil {
+		return
+	}
 	// load setting from db
-	w.LoadSystemSetting()
-	w.LoadContentSetting()
-	w.LoadIndexSetting()
-	w.LoadContactSetting()
-	w.LoadSafeSetting()
-	w.LoadBannerSetting()
-	w.LoadSensitiveWords()
+	var settings []*model.Setting
+	w.DB.Find(&settings)
+	var settingMap = map[string]string{}
+	for _, item := range settings {
+		settingMap[item.Key] = item.Value
+	}
+	w.LoadSystemSetting(settingMap[SystemSettingKey])
+	w.LoadContentSetting(settingMap[ContentSettingKey])
+	w.LoadIndexSetting(settingMap[IndexSettingKey])
+	w.LoadContactSetting(settingMap[ContactSettingKey])
+	w.LoadSafeSetting(settingMap[SafeSettingKey])
+	w.LoadBannerSetting(settingMap[BannerSettingKey])
+	w.LoadSensitiveWords(settingMap[SensitiveWordsKey])
 
-	w.LoadPushSetting()
-	w.LoadSitemapSetting()
-	w.LoadRewriteSetting()
-	w.LoadAnchorSetting()
-	w.LoadGuestbookSetting()
-	w.LoadUploadFilesSetting()
-	w.LoadSendmailSetting()
-	w.LoadImportApiSetting()
-	w.LoadStorageSetting()
-	w.LoadPaySetting()
-	w.LoadWeappSetting()
-	w.LoadWechatSetting()
-	w.LoadRetailerSetting()
-	w.LoadUserSetting()
-	w.LoadOrderSetting()
-	w.LoadFulltextSetting()
-	w.LoadTitleImageSetting()
-	w.LoadHtmlCacheSetting()
-	w.LoadAnqiUser()
-	w.LoadAiGenerateSetting()
-	w.LoadCollectorSetting()
-	w.LoadKeywordSetting()
-	w.LoadInterferenceSetting()
-	w.LoadWatermarkSetting()
-	w.LoadTimeFactorSetting()
-	w.LoadMultiLangSetting()
-	w.LoadTranslateSetting()
+	w.LoadPushSetting(settingMap[PushSettingKey])
+	w.LoadSitemapSetting(settingMap[SitemapSettingKey])
+	w.LoadRewriteSetting(settingMap[RewriteSettingKey])
+	w.LoadAnchorSetting(settingMap[AnchorSettingKey])
+	w.LoadGuestbookSetting(settingMap[GuestbookSettingKey])
+	w.LoadUploadFilesSetting(settingMap[UploadFilesSettingKey])
+	w.LoadSendmailSetting(settingMap[SendmailSettingKey])
+	w.LoadImportApiSetting(settingMap[ImportApiSettingKey])
+	w.LoadStorageSetting(settingMap[StorageSettingKey])
+	w.LoadPaySetting(settingMap[PaySettingKey])
+	w.LoadWeappSetting(settingMap[WeappSettingKey])
+	w.LoadWechatSetting(settingMap[WechatSettingKey])
+	w.LoadRetailerSetting(settingMap[RetailerSettingKey])
+	w.LoadUserSetting(settingMap[UserSettingKey])
+	w.LoadOrderSetting(settingMap[OrderSettingKey])
+	w.LoadFulltextSetting(settingMap[FulltextSettingKey])
+	w.LoadTitleImageSetting(settingMap[TitleImageSettingKey])
+	w.LoadHtmlCacheSetting(settingMap[HtmlCacheSettingKey])
+	w.LoadAnqiUser(settingMap[AnqiSettingKey])
+	w.LoadAiGenerateSetting(settingMap[AiGenerateSettingKey])
+	w.LoadCollectorSetting(settingMap[CollectorSettingKey])
+	w.LoadKeywordSetting(settingMap[KeywordSettingKey])
+	w.LoadInterferenceSetting(settingMap[InterferenceKey])
+	w.LoadWatermarkSetting(settingMap[WatermarkSettingKey])
+	w.LoadTimeFactorSetting(settingMap[TimeFactorKey])
+	w.LoadMultiLangSetting(settingMap[MultiLangSettingKey])
+	w.LoadTranslateSetting(settingMap[TranslateSettingKey])
+	w.LoadJsonLdSetting(settingMap[JsonLdSettingKey])
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
 
-func (w *Website) LoadSystemSetting() {
-	value := w.GetSettingValue(SystemSettingKey)
+func (w *Website) LoadSystemSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.System)
 	}
@@ -127,8 +137,7 @@ func (w *Website) LoadSystemSetting() {
 	}
 }
 
-func (w *Website) LoadContentSetting() {
-	value := w.GetSettingValue(ContentSettingKey)
+func (w *Website) LoadContentSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Content)
 	}
@@ -140,43 +149,37 @@ func (w *Website) LoadContentSetting() {
 	}
 }
 
-func (w *Website) LoadIndexSetting() {
-	value := w.GetSettingValue(IndexSettingKey)
+func (w *Website) LoadIndexSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Index)
 	}
 }
 
-func (w *Website) LoadBannerSetting() {
-	value := w.GetSettingValue(BannerSettingKey)
+func (w *Website) LoadBannerSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Banner)
 	}
 }
 
-func (w *Website) LoadSensitiveWords() {
-	value := w.GetSettingValue(SensitiveWordsKey)
+func (w *Website) LoadSensitiveWords(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.SensitiveWords)
 	}
 }
 
-func (w *Website) LoadContactSetting() {
-	value := w.GetSettingValue(ContactSettingKey)
+func (w *Website) LoadContactSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Contact)
 	}
 }
 
-func (w *Website) LoadSafeSetting() {
-	value := w.GetSettingValue(SafeSettingKey)
+func (w *Website) LoadSafeSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.Safe)
 	}
 }
 
-func (w *Website) LoadPushSetting() {
-	value := w.GetSettingValue(PushSettingKey)
+func (w *Website) LoadPushSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginPush)
 	}
@@ -192,8 +195,7 @@ func (w *Website) LoadPushSetting() {
 	}
 }
 
-func (w *Website) LoadSitemapSetting() {
-	value := w.GetSettingValue(SitemapSettingKey)
+func (w *Website) LoadSitemapSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginSitemap)
 	}
@@ -203,36 +205,31 @@ func (w *Website) LoadSitemapSetting() {
 	}
 }
 
-func (w *Website) LoadRewriteSetting() {
-	value := w.GetSettingValue(RewriteSettingKey)
+func (w *Website) LoadRewriteSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginRewrite)
 	}
 }
 
-func (w *Website) LoadAnchorSetting() {
-	value := w.GetSettingValue(AnchorSettingKey)
+func (w *Website) LoadAnchorSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginAnchor)
 	}
 }
 
-func (w *Website) LoadGuestbookSetting() {
-	value := w.GetSettingValue(GuestbookSettingKey)
+func (w *Website) LoadGuestbookSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginGuestbook)
 	}
 }
 
-func (w *Website) LoadUploadFilesSetting() {
-	value := w.GetSettingValue(UploadFilesSettingKey)
+func (w *Website) LoadUploadFilesSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginUploadFiles)
 	}
 }
 
-func (w *Website) LoadSendmailSetting() {
-	value := w.GetSettingValue(SendmailSettingKey)
+func (w *Website) LoadSendmailSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginSendmail)
 	}
@@ -241,8 +238,7 @@ func (w *Website) LoadSendmailSetting() {
 	}
 }
 
-func (w *Website) LoadImportApiSetting() {
-	value := w.GetSettingValue(ImportApiSettingKey)
+func (w *Website) LoadImportApiSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginImportApi)
 	}
@@ -262,50 +258,44 @@ func (w *Website) LoadImportApiSetting() {
 
 }
 
-func (w *Website) LoadStorageSetting() {
-	value := w.GetSettingValue(StorageSettingKey)
+func (w *Website) LoadStorageSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginStorage)
-	}
-	// 配置默认的storageUrl
-	if w.PluginStorage.StorageUrl == "" {
-		w.PluginStorage.StorageUrl = w.System.BaseUrl
 	}
 	if w.PluginStorage.StorageType == "" {
 		w.PluginStorage.StorageType = config.StorageTypeLocal
 	}
+	// 配置默认的storageUrl
+	if w.PluginStorage.StorageUrl == "" || w.PluginStorage.StorageType == config.StorageTypeLocal {
+		w.PluginStorage.StorageUrl = w.System.BaseUrl
+	}
 }
 
-func (w *Website) LoadPaySetting() {
-	value := w.GetSettingValue(PaySettingKey)
+func (w *Website) LoadPaySetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginPay)
 	}
 }
 
-func (w *Website) LoadWeappSetting() {
-	value := w.GetSettingValue(WeappSettingKey)
+func (w *Website) LoadWeappSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginWeapp)
 	}
 }
 
-func (w *Website) LoadWechatSetting() {
-	value := w.GetSettingValue(WechatSettingKey)
+func (w *Website) LoadWechatSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginWechat)
 	}
 }
 
-func (w *Website) LoadRetailerSetting() {
-	value := w.GetSettingValue(RetailerSettingKey)
+func (w *Website) LoadRetailerSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginRetailer)
 	}
 }
 
-func (w *Website) LoadUserSetting() {
-	value := w.GetSettingValue(UserSettingKey)
+func (w *Website) LoadUserSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginUser)
 	}
@@ -314,8 +304,7 @@ func (w *Website) LoadUserSetting() {
 	}
 }
 
-func (w *Website) LoadOrderSetting() {
-	value := w.GetSettingValue(OrderSettingKey)
+func (w *Website) LoadOrderSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginOrder)
 	}
@@ -325,15 +314,13 @@ func (w *Website) LoadOrderSetting() {
 	}
 }
 
-func (w *Website) LoadFulltextSetting() {
-	value := w.GetSettingValue(FulltextSettingKey)
+func (w *Website) LoadFulltextSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginFulltext)
 	}
 }
 
-func (w *Website) LoadTitleImageSetting() {
-	value := w.GetSettingValue(TitleImageSettingKey)
+func (w *Website) LoadTitleImageSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginTitleImage)
 	}
@@ -351,8 +338,7 @@ func (w *Website) LoadTitleImageSetting() {
 	}
 }
 
-func (w *Website) LoadWatermarkSetting() {
-	value := w.GetSettingValue(WatermarkSettingKey)
+func (w *Website) LoadWatermarkSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginWatermark)
 	}
@@ -373,8 +359,7 @@ func (w *Website) LoadWatermarkSetting() {
 	}
 }
 
-func (w *Website) LoadHtmlCacheSetting() {
-	value := w.GetSettingValue(HtmlCacheSettingKey)
+func (w *Website) LoadHtmlCacheSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginHtmlCache)
 	}
@@ -389,8 +374,7 @@ func (w *Website) LoadHtmlCacheSetting() {
 	}
 }
 
-func (w *Website) LoadAnqiUser() {
-	value := w.GetSettingValue(AnqiSettingKey)
+func (w *Website) LoadAnqiUser(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &config.AnqiUser)
 	}
@@ -398,8 +382,7 @@ func (w *Website) LoadAnqiUser() {
 	go w.AnqiCheckLogin(false)
 }
 
-func (w *Website) LoadAiGenerateSetting() {
-	value := w.GetSettingValue(AiGenerateSettingKey)
+func (w *Website) LoadAiGenerateSetting(value string) {
 	if value == "" {
 		return
 	}
@@ -409,11 +392,10 @@ func (w *Website) LoadAiGenerateSetting() {
 	}
 }
 
-func (w *Website) LoadCollectorSetting() {
+func (w *Website) LoadCollectorSetting(value string) {
 	//先读取默认配置
 	w.CollectorConfig = config.DefaultCollectorConfig
 	//再根据用户配置来覆盖
-	value := w.GetSettingValue(CollectorSettingKey)
 	if value == "" {
 		return
 	}
@@ -533,17 +515,15 @@ func (w *Website) LoadCollectorSetting() {
 	}
 }
 
-func (w *Website) LoadKeywordSetting() {
+func (w *Website) LoadKeywordSetting(value string) {
 	//先读取默认配置
 	w.KeywordConfig = config.DefaultKeywordConfig
-	value := w.GetSettingValue(KeywordSettingKey)
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.KeywordConfig)
-	}
 	//再根据用户配置来覆盖
 	if value == "" {
 		return
 	}
+
+	_ = json.Unmarshal([]byte(value), &w.KeywordConfig)
 
 	var keyword config.KeywordJson
 	if err := json.Unmarshal([]byte(value), &keyword); err != nil {
@@ -578,8 +558,7 @@ func (w *Website) LoadKeywordSetting() {
 	}
 }
 
-func (w *Website) LoadTimeFactorSetting() {
-	value := w.GetSettingValue(TimeFactorKey)
+func (w *Website) LoadTimeFactorSetting(value string) {
 	if value == "" {
 		return
 	}
@@ -591,8 +570,7 @@ func (w *Website) LoadTimeFactorSetting() {
 	return
 }
 
-func (w *Website) LoadMultiLangSetting() {
-	value := w.GetSettingValue(MultiLangSettingKey)
+func (w *Website) LoadMultiLangSetting(value string) {
 	if value == "" {
 		return
 	}
@@ -604,13 +582,24 @@ func (w *Website) LoadMultiLangSetting() {
 	return
 }
 
-func (w *Website) LoadTranslateSetting() {
-	value := w.GetSettingValue(TranslateSettingKey)
+func (w *Website) LoadTranslateSetting(value string) {
 	if value == "" {
 		return
 	}
 
 	if err := json.Unmarshal([]byte(value), &w.PluginTranslate); err != nil {
+		return
+	}
+
+	return
+}
+
+func (w *Website) LoadJsonLdSetting(value string) {
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), &w.PluginJsonLd); err != nil {
 		return
 	}
 
@@ -629,7 +618,7 @@ func (w *Website) GetDiyFieldSetting() []config.ExtraField {
 			}
 		}
 	}
-	
+
 	return fields
 }
 
@@ -795,8 +784,7 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 	return content
 }
 
-func (w *Website) LoadInterferenceSetting() {
-	value := w.GetSettingValue(InterferenceKey)
+func (w *Website) LoadInterferenceSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginInterference)
 	}
@@ -810,4 +798,56 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 	}
 
 	return &limiter
+}
+
+func (w *Website) ReplaceContentUrl(content string, reverse bool) string {
+	if len(content) == 0 {
+		return content
+	}
+	// todo，替换的时候，还需要考虑 Markdown
+	// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+	mdRe, _ := regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+	if mdRe.MatchString(content) {
+		content = mdRe.ReplaceAllStringFunc(content, func(s string) string {
+			match := mdRe.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			if reverse {
+				// 恢复
+				if strings.HasPrefix(match[2], "/uploads") {
+					s = strings.Replace(s, match[2], w.PluginStorage.StorageUrl+match[2], 1)
+				}
+			} else {
+				s = strings.Replace(s, match[2], strings.TrimPrefix(match[2], w.PluginStorage.StorageUrl), 1)
+			}
+
+			return s
+		})
+	}
+
+	if reverse {
+		// 支持替换url
+		if strings.HasPrefix(content, "/uploads") {
+			content = w.PluginStorage.StorageUrl + content
+		} else {
+			// 恢复
+			content = strings.ReplaceAll(content, "\"/uploads", "\""+w.PluginStorage.StorageUrl+"/uploads")
+		}
+		return content
+	} else {
+		// todo 应该只替换 src,href 中的 baseUrl
+		// 图片都上传到 uploads
+		if strings.HasPrefix(content, w.PluginStorage.StorageUrl) {
+			content = strings.TrimPrefix(content, w.PluginStorage.StorageUrl)
+		} else {
+			content = strings.ReplaceAll(content, "\""+w.PluginStorage.StorageUrl+"/uploads", "\"/uploads")
+			// 如果baseUrl 是 127.0.0.1 或者localhost，则把它们全部替换
+			if strings.Contains(w.System.BaseUrl, "127.0.0.1") || strings.Contains(w.System.BaseUrl, "localhost") {
+				content = strings.ReplaceAll(content, w.System.BaseUrl, "")
+			}
+		}
+	}
+
+	return content
 }

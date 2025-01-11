@@ -152,7 +152,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						content = ""
 					} else {
 						if item.Type == config.CustomFieldTypeEditor && render {
-							item.Value = library.MarkdownToHTML(fmt.Sprintf("%v", item.Value))
+							item.Value = library.MarkdownToHTML(fmt.Sprintf("%v", item.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 						}
 						content = item.Value
 					}
@@ -183,7 +183,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					tmpContent = archiveData.Content
 					// convert markdown to html
 					if render {
-						tmpContent = library.MarkdownToHTML(archiveData.Content)
+						tmpContent = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 					}
 					if fieldName == "ContentTitles" {
 						content = library.ParseContentTitles(tmpContent)
@@ -268,6 +268,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 								tmpContent = strings.Join(tmpData, "")
 							}
 						}
+						tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
 						content = tmpContent
 					}
 				}

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"strconv"
@@ -132,4 +133,37 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func LevenshteinDistance(s1, s2 string) float64 {
+	r1 := []rune(s1)
+	r2 := []rune(s2)
+	len1 := len(r1)
+	len2 := len(r2)
+
+	prev := make([]float64, len2+1)
+	curr := make([]float64, len2+1)
+
+	for j := 0; j <= len2; j++ {
+		prev[j] = float64(j)
+	}
+
+	for i := 1; i <= len1; i++ {
+		curr[0] = float64(i)
+		for j := 1; j <= len2; j++ {
+			var cost float64
+			if r1[i-1] != r2[j-1] {
+				cost = 1
+			}
+			// 计算当前值
+			curr[j] = math.Min(math.Min(prev[j-1]+cost, curr[j-1]+1), prev[j]+1)
+		}
+		// 滚动数组更新
+		prev, curr = curr, prev
+	}
+
+	// 计算相似度
+	distance := prev[len2]
+	maxLen := math.Max(float64(len1), float64(len2))
+	return 1 - distance/maxLen
 }

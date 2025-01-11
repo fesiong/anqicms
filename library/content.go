@@ -8,6 +8,7 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 	"github.com/kataras/iris/v12"
 	"net"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -188,14 +189,17 @@ func ParseDescription(content string) (description string) {
 	return
 }
 
-func MarkdownToHTML(mdStr string) string {
+// MarkdownToHTML 将markdown转换为html
+// args[0] = baseUrl
+// args[1] = filterOutLink
+func MarkdownToHTML(mdStr string, args ...interface{}) string {
 	if len(mdStr) == 0 {
 		return ""
 	}
 	// 换行转换成p
 	mdStr = strings.ReplaceAll(mdStr, "\n", "  \n")
 	md := []byte(mdStr)
-	// create markdown parser with extensions
+	// create Markdown parser with extensions
 	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
 	p := parser.NewWithExtensions(extensions)
 	doc := p.Parse(md)
@@ -219,6 +223,37 @@ func MarkdownToHTML(mdStr string) string {
 		buff.WriteString("</pre>")
 		return buff.Bytes()
 	})
+	if len(args) == 2 {
+		baseUrl, _ := args[0].(string)
+		filterOutLink, _ := args[1].(int)
+		if filterOutLink == 2 {
+			baseHost := ""
+			urls, err := url.Parse(baseUrl)
+			if err == nil {
+				baseHost = urls.Host
+			}
+			// 添加 nofollow
+			re, _ = regexp.Compile(`(?is)<a.*?href="(.+?)".*?>`)
+			md = re.ReplaceAllFunc(md, func(bs []byte) []byte {
+				match := re.FindSubmatch(bs)
+				if len(match) < 2 {
+					return bs
+				}
+				if bytes.HasPrefix(match[1], []byte("http")) || bytes.HasPrefix(match[1], []byte("//")) {
+					aUrl, err2 := url.Parse(string(match[1]))
+					if err2 == nil {
+						if aUrl.Host != "" && aUrl.Host != baseHost {
+							//过滤外链
+							newUrl := append(match[1], []byte(`" rel="nofollow`)...)
+							bs = bytes.Replace(bs, match[1], newUrl, 1)
+						}
+					}
+				}
+
+				return bs
+			})
+		}
+	}
 
 	return string(md)
 }

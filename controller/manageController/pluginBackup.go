@@ -12,7 +12,7 @@ import (
 )
 
 func PluginBackupList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	list := currentSite.GetBackupList()
 
 	ctx.JSON(iris.Map{
@@ -23,7 +23,7 @@ func PluginBackupList(ctx iris.Context) {
 }
 
 func PluginBackupDump(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	status, err := currentSite.NewBackup()
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -43,7 +43,7 @@ func PluginBackupDump(ctx iris.Context) {
 }
 
 func PluginBackupStatus(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetBackupStatus()
 	if status == nil {
 		ctx.JSON(iris.Map{
@@ -62,7 +62,7 @@ func PluginBackupStatus(ctx iris.Context) {
 }
 
 func PluginBackupRestore(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -114,7 +114,7 @@ func PluginBackupRestore(ctx iris.Context) {
 }
 
 func PluginBackupDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -140,7 +140,7 @@ func PluginBackupDelete(ctx iris.Context) {
 }
 
 func PluginBackupImport(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -237,7 +237,7 @@ func PluginBackupImport(ctx iris.Context) {
 }
 
 func PluginBackupExport(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -259,7 +259,7 @@ func PluginBackupExport(ctx iris.Context) {
 }
 
 func PluginBackupCleanup(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginBackupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

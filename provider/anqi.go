@@ -346,7 +346,7 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	file := bytes.NewReader(body)
 
 	// 将模板写入到本地
-	err := w.UploadDesignZip(file, info)
+	err := w.UploadDesignZip(file, info, "")
 	if err != nil {
 		return err
 	}

@@ -224,7 +224,11 @@ func Common(ctx iris.Context) {
 			} else if ctx.GetHeader("X-Scheme") == "https" {
 				urlPath.Scheme = "https"
 			}
-			currentSite.System.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+			host := urlPath.Host
+			if strings.HasSuffix(host, ":80") || strings.HasSuffix(host, ":443") {
+				host = strings.Split(host, ":")[0]
+			}
+			currentSite.System.BaseUrl = urlPath.Scheme + "://" + host
 			currentSite.PluginStorage.StorageUrl = currentSite.System.BaseUrl
 		}
 	}
@@ -319,14 +323,17 @@ func FileServe(ctx iris.Context) bool {
 			return true
 		}
 		// 多语言站点目录支持
-		if currentSite.ParentId > 0 {
-			index := strings.Index(uri, "/static")
-			if index > 0 {
-				uriFile = baseDir + uri[index:]
-				_, err = os.Stat(uriFile)
-				if err == nil {
-					_ = ctx.ServeFile(uriFile)
-					return true
+		mainSite := currentSite.GetMainWebsite()
+		if mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+			for lang := range mainSite.MultiLanguage.SubSites {
+				if strings.HasPrefix(uri, "/"+lang+"/") {
+					uriFile = baseDir + uri[len(lang)+1:]
+					_, err = os.Stat(uriFile)
+					if err == nil {
+						_ = ctx.ServeFile(uriFile)
+						return true
+					}
+					break
 				}
 			}
 		}
@@ -390,6 +397,8 @@ func ReRouteContext(ctx iris.Context) {
 			}
 		}
 	}
+
+	ctx.ViewData("ctx", ctx)
 
 	switch params["match"] {
 	case "notfound":
