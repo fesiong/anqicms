@@ -13,7 +13,8 @@ import (
 
 type Archive struct {
 	//默认字段
-	Id           uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	Id           int64          `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey"`
+	ParentId     int64          `json:"parent_id" gorm:"column:parent_id;type:bigint(20) not null;default:0;index"`
 	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time;index:idx_category_created_time,priority:2;index:idx_module_created_time,priority:2"`
 	UpdatedTime  int64          `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title        string         `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';index"`
@@ -62,7 +63,7 @@ type Archive struct {
 }
 
 type ArchiveData struct {
-	Id      uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	Id      int64  `json:"id" gorm:"column:id;type:bigint(20) unsigned not null AUTO_INCREMENT;primaryKey"`
 	Content string `json:"content" gorm:"column:content;type:longtext default null"`
 }
 
@@ -85,7 +86,7 @@ func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
 }
 
 type NextArchiveId struct {
-	Id        uint  `json:"-"`
+	Id        int64 `json:"-"`
 	QueryTime int64 `json:"-"`
 }
 
@@ -94,7 +95,7 @@ var nextArchiveIdStore = sync.Mutex{}
 // GetNextArchiveId
 // ArchiveId 同时检查 archives表和archive_drafts表
 // 每次获取，自动加 1
-func GetNextArchiveId(tx *gorm.DB, forceUpdate bool) uint {
+func GetNextArchiveId(tx *gorm.DB, forceUpdate bool) int64 {
 	plugin := tx.Config.Plugins["nextArchiveId"]
 	pluginNext, _ := plugin.(*NextArchiveIdPlugin)
 	nextArchiveIdStore.Lock()
@@ -119,7 +120,7 @@ func GetNextArchiveId(tx *gorm.DB, forceUpdate bool) uint {
 		lastId = lastIdTmp
 	}
 	// 下一个ID
-	nextArchiveId = uint(lastId) + 1
+	nextArchiveId = lastId + 1
 	_ = pluginNext.SetId(nextArchiveId, time.Now().Unix()+60)
 
 	return nextArchiveId
@@ -156,7 +157,7 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 }
 
 type NextArchiveIdPlugin struct {
-	Id        uint  `json:"-"`
+	Id        int64 `json:"-"`
 	QueryTime int64 `json:"-"`
 }
 
@@ -168,13 +169,13 @@ func (n *NextArchiveIdPlugin) Initialize(*gorm.DB) error {
 	return nil
 }
 
-func (n *NextArchiveIdPlugin) SetId(id uint, nextTime int64) (err error) {
+func (n *NextArchiveIdPlugin) SetId(id int64, nextTime int64) (err error) {
 	n.Id = id
 	n.QueryTime = nextTime
 
 	return nil
 }
 
-func (n *NextArchiveIdPlugin) GetId() (uint, int64) {
+func (n *NextArchiveIdPlugin) GetId() (int64, int64) {
 	return n.Id, n.QueryTime
 }

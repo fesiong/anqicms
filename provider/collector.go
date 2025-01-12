@@ -1043,7 +1043,7 @@ func CheckContentIsEnglish(content string) bool {
 }
 
 func (w *Website) ReplaceArticles() {
-	startId := uint(0)
+	startId := int64(0)
 	var archives []*model.Archive
 	for {
 		tx := w.DB.Model(&model.Archive{})

@@ -81,7 +81,7 @@ func TagPage(ctx iris.Context) {
 		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = tag.Keywords
 		webInfo.Description = tag.Description
-		webInfo.NavBar = tag.Id
+		webInfo.NavBar = int64(tag.Id)
 		webInfo.PageName = "tag"
 		webInfo.CanonicalUrl = currentSite.GetUrl("tag", tag, currentPage)
 		ctx.ViewData("webInfo", webInfo)

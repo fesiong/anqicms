@@ -3,7 +3,7 @@ package request
 import "kandaoni.com/anqicms/config"
 
 type Archive struct {
-	Id           uint                   `json:"id"`
+	Id           int64                  `json:"id"`
 	Title        string                 `json:"title"`
 	SeoTitle     string                 `json:"seo_title"`
 	ModuleId     uint                   `json:"module_id"`
@@ -29,7 +29,7 @@ type Archive struct {
 	Password     string                 `json:"password"`
 	Sort         uint                   `json:"sort"`         // 数值越大，越靠前
 	Draft        bool                   `json:"draft"`        // 是否是存草稿
-	RelationIds  []uint                 `json:"relation_ids"` // 相关文档的ID
+	RelationIds  []int64                `json:"relation_ids"` // 相关文档的ID
 
 	// 是否强制保存
 	ForceSave  bool   `json:"force_save"`
@@ -43,8 +43,8 @@ type Archive struct {
 }
 
 type ArchiveImageDeleteRequest struct {
-	Id         uint `json:"id"`
-	ImageIndex int  `json:"image_index"`
+	Id         int64 `json:"id"`
+	ImageIndex int   `json:"image_index"`
 }
 
 type ArchiveReplaceRequest struct {
@@ -53,7 +53,7 @@ type ArchiveReplaceRequest struct {
 }
 
 type ArchivesUpdateRequest struct {
-	Ids []uint `json:"ids"`
+	Ids []int64 `json:"ids"`
 
 	CategoryId  uint   `json:"category_id"`
 	CategoryIds []uint `json:"category_ids"`
@@ -66,7 +66,7 @@ type ArchivesUpdateRequest struct {
 }
 
 type ArchivePasswordRequest struct {
-	Id       uint   `json:"id"`
+	Id       int64  `json:"id"`
 	Password string `json:"password"`
 }
 

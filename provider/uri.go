@@ -210,11 +210,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 					uri = "/"
 				} else if item.PageId > 0 {
 					//文档首页
-					module := w.GetModuleFromCache(item.PageId)
+					module := w.GetModuleFromCache(uint(item.PageId))
 					uri = w.GetUrl("archiveIndex", module, 0)
 				}
 			} else if item.NavType == model.NavTypeCategory {
-				category := w.GetCategoryFromCache(item.PageId)
+				category := w.GetCategoryFromCache(uint(item.PageId))
 				if category != nil {
 					uri = w.GetUrl("category", category, 0)
 				}

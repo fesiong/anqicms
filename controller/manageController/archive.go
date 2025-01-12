@@ -312,7 +312,7 @@ func GetQuickImportArchiveStatus(ctx iris.Context) {
 }
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	id := uint(ctx.URLParamIntDefault("id", 0))
+	id := ctx.URLParamInt64Default("id", 0)
 
 	archiveDraft, err := currentSite.GetArchiveDraftById(id)
 	if err != nil {

@@ -50,7 +50,7 @@ func CommentPublish(ctx iris.Context) {
 
 	var req request.PluginComment
 	// 采用post接收
-	req.ArchiveId = uint(ctx.PostValueIntDefault("archive_id", 0))
+	req.ArchiveId = ctx.PostValueInt64Default("archive_id", 0)
 	req.UserName = ctx.PostValueTrim("user_name")
 	req.Ip = ctx.PostValueTrim("ip")
 	req.Content = ctx.PostValueTrim("content")
@@ -161,7 +161,7 @@ func CommentList(ctx iris.Context) {
 		return
 	}
 
-	archiveId := uint(ctx.Params().GetIntDefault("id", 0))
+	archiveId := ctx.Params().GetInt64Default("id", 0)
 	archive, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ShowMessage(ctx, "Not Found", nil)

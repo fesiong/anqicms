@@ -24,7 +24,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if err != nil {
 		return err
 	}
-	id := uint(0)
+	id := int64(0)
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -53,7 +53,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		id = int64(args["id"].Integer())
 		if archiveDetail == nil || archiveDetail.Id != id {
 			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
 			if archiveDetail == nil {

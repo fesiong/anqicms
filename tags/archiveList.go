@@ -112,12 +112,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
-		combineId := uint(args["combineId"].Integer())
+		combineId := int64(args["combineId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 	if args["combineFromId"] != nil {
 		combineMode = "from"
-		combineId := uint(args["combineFromId"].Integer())
+		combineId := int64(args["combineFromId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 
@@ -223,7 +223,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var total int64
 	if listType == "related" {
 		//获取id
-		archiveId := uint(0)
+		archiveId := int64(0)
 		var keywords string
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 		var categoryId = uint(0)
@@ -375,7 +375,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "category",
-					Id:          cat.Id,
+					Id:          int64(cat.Id),
 					CreatedTime: cat.CreatedTime,
 					UpdatedTime: cat.UpdatedTime,
 					Title:       cat.Title,
@@ -400,7 +400,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
-					Id:          tag.Id,
+					Id:          int64(tag.Id),
 					CreatedTime: tag.CreatedTime,
 					UpdatedTime: tag.UpdatedTime,
 					Title:       tag.Title,
@@ -500,7 +500,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			total = fulltextTotal
 		}
 	}
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {

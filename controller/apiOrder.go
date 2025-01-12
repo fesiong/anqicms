@@ -631,7 +631,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 func ApiArchiveOrderCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
@@ -658,7 +658,7 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 	var req request.ArchivePasswordRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		req.Id, _ = ctx.PostValueUint("id")
+		req.Id = ctx.PostValueInt64Default("id", 0)
 		req.Password = ctx.PostValueTrim("password")
 		if req.Id == 0 || len(req.Password) == 0 {
 			ctx.JSON(iris.Map{

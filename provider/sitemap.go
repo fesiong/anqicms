@@ -148,7 +148,7 @@ func (w *Website) BuildSitemap() error {
 	}
 	//写入文章
 	var archives []*model.Archive
-	lastId := uint(0)
+	lastId := int64(0)
 	page := 0
 	for {
 		// 每次加1，累计将生成的页码
@@ -195,7 +195,7 @@ func (w *Website) BuildSitemap() error {
 	if w.PluginSitemap.ExcludeTag == false {
 		page = 0
 		var tags []*model.Tag
-		lastId = uint(0)
+		lastId = int64(0)
 		for {
 			page++
 			//写入index
@@ -229,7 +229,7 @@ func (w *Website) BuildSitemap() error {
 					tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 				}
 				remainNum -= len(tags)
-				lastId = tags[len(tags)-1].Id
+				lastId = int64(tags[len(tags)-1].Id)
 			}
 			_ = tagFile.Save()
 			if finished {

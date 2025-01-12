@@ -22,7 +22,7 @@ type PluginLink struct {
 
 type PluginComment struct {
 	Id        uint   `json:"id"`
-	ArchiveId uint   `json:"archive_id"`
+	ArchiveId int64  `json:"archive_id"`
 	UserId    uint   `json:"user_id"`
 	UserName  string `json:"user_name"`
 	Ip        string `json:"ip"`

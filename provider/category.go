@@ -259,7 +259,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			}
 		}
 	}
-	go w.LogMaterialData(materialIds, "category", category.Id)
+	go w.LogMaterialData(materialIds, "category", int64(category.Id))
 	// 自动提取远程图片改成保存后处理
 	if w.Content.RemoteDownload == 1 {
 		hasChangeImg := false

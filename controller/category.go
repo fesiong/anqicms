@@ -79,7 +79,7 @@ func CategoryPage(ctx iris.Context) {
 		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = category.Keywords
 		webInfo.Description = category.Description
-		webInfo.NavBar = category.Id
+		webInfo.NavBar = int64(category.Id)
 		webInfo.PageName = "archiveList"
 		webInfo.CanonicalUrl = currentSite.GetUrl("category", category, currentPage)
 		ctx.ViewData("webInfo", webInfo)

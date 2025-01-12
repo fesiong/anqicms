@@ -556,7 +556,7 @@ func (w *Website) StartConvertImageToWebp() {
 			}
 		}
 		// 替换 archive logo,images
-		innerLastId := uint(0)
+		innerLastId := int64(0)
 		for {
 			var archives []model.Archive
 			w.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&archives)
@@ -586,7 +586,7 @@ func (w *Website) StartConvertImageToWebp() {
 			}
 		}
 		// 替换 archive_data content
-		innerLastId = uint(0)
+		innerLastId = 0
 		for {
 			var archiveData []model.ArchiveData
 			w.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&archiveData)
@@ -608,14 +608,14 @@ func (w *Website) StartConvertImageToWebp() {
 			}
 		}
 		// 替换 comment content
-		innerLastId = uint(0)
+		innerLastId = 0
 		for {
 			var comments []model.Comment
 			w.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&comments)
 			if len(comments) == 0 {
 				break
 			}
-			innerLastId = comments[len(comments)-1].Id
+			innerLastId = int64(comments[len(comments)-1].Id)
 			for _, v := range comments {
 				update := false
 				for x := range results {
@@ -630,14 +630,14 @@ func (w *Website) StartConvertImageToWebp() {
 			}
 		}
 		// 替换 material content
-		innerLastId = uint(0)
+		innerLastId = 0
 		for {
 			var materials []model.Material
 			w.DB.Where("`id` > ?", innerLastId).Order("id asc").Limit(1000).Find(&materials)
 			if len(materials) == 0 {
 				break
 			}
-			innerLastId = materials[len(materials)-1].Id
+			innerLastId = int64(materials[len(materials)-1].Id)
 			for _, v := range materials {
 				update := false
 				for x := range results {

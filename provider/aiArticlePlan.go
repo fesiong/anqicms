@@ -6,7 +6,7 @@ import (
 	"log"
 )
 
-func (w *Website) GetAiArticlePlanByReqId(reqId uint) (*model.AiArticlePlan, error) {
+func (w *Website) GetAiArticlePlanByReqId(reqId int64) (*model.AiArticlePlan, error) {
 	var plan model.AiArticlePlan
 	err := w.DB.Where("`req_id` = ?", reqId).Take(&plan).Error
 

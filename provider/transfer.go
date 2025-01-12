@@ -96,7 +96,7 @@ type AnchorData struct {
 }
 
 type ArchiveData struct {
-	Id           uint                   `json:"id"`
+	Id           int64                  `json:"id"`
 	Title        string                 `json:"title"`
 	SeoTitle     string                 `json:"seo_title"`
 	ModuleId     uint                   `json:"module_id"`

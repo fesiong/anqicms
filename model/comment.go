@@ -6,7 +6,7 @@ import (
 
 type Comment struct {
 	Model
-	ArchiveId uint     `json:"archive_id" gorm:"column:archive_id;type:int(10) unsigned not null;default:0;index:idx_archive_id"`
+	ArchiveId int64    `json:"archive_id" gorm:"column:archive_id;type:bigint(20) not null;default:0;index:idx_archive_id"`
 	UserId    uint     `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index:idx_user_id"`
 	UserName  string   `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:''"`
 	Ip        string   `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`

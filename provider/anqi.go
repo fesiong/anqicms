@@ -81,19 +81,19 @@ type AnqiAiRequest struct {
 	AiRemain   int64  `json:"ai_remain"`
 	Async      bool   `json:"async"`      // 是否异步处理
 	Cost       bool   `json:"cost"`       // 支付需要支付
-	ArticleId  uint   `json:"article_id"` // 本地的文档ID
+	ArticleId  int64  `json:"article_id"` // 本地的文档ID
 
-	Type  int  `json:"type"`
-	ReqId uint `json:"req_id"`
+	Type  int   `json:"type"`
+	ReqId int64 `json:"req_id"`
 }
 
 type AnqiAiPlanRequest struct {
-	ReqId uint `json:"req_id"`
+	ReqId int64 `json:"req_id"`
 }
 
 // AnqiAiResult 是结合了2中结构体的内容，一种是plan，一种是article
 type AnqiAiResult struct {
-	Id          uint   `json:"id"`
+	Id          int64  `json:"id"`
 	CreatedTime int64  `json:"created_time"`
 	Type        int    `json:"type"`
 	Language    string `json:"language"`
@@ -105,8 +105,8 @@ type AnqiAiResult struct {
 
 	Title         string `json:"title"`
 	Content       string `json:"content"`
-	ReqId         uint   `json:"req_id"`
-	ArticleId     uint   `json:"-"`
+	ReqId         int64  `json:"req_id"`
+	ArticleId     int64  `json:"-"`
 	UseSelf       bool   `json:"-"`
 	OriginTitle   string `json:"origin_title"`
 	OriginContent string `json:"origin_content"`

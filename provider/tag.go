@@ -14,7 +14,7 @@ import (
 	"time"
 )
 
-func (w *Website) GetTagList(itemId uint, title string, categoryIds []uint, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
+func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
 	var tags []*model.Tag
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
@@ -258,7 +258,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	return
 }
 
-func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
+func (w *Website) SaveTagData(itemId int64, tagNames []string) error {
 	if len(tagNames) == 0 {
 		w.DB.Where("`item_id` = ?", itemId).Delete(&model.TagData{})
 		return nil
@@ -301,7 +301,7 @@ func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 	return nil
 }
 
-func (w *Website) GetTagsByItemId(itemId uint) []*model.Tag {
+func (w *Website) GetTagsByItemId(itemId int64) []*model.Tag {
 	var tags []*model.Tag
 	var tagIds []uint
 	err := w.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &tagIds).Error

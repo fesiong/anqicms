@@ -29,7 +29,7 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 	return
 }
 
-func (w *Website) GetCommentList(archiveId, userId uint, order string, currentPage int, pageSize int, offset int) ([]*model.Comment, int64, error) {
+func (w *Website) GetCommentList(archiveId int64, userId uint, order string, currentPage int, pageSize int, offset int) ([]*model.Comment, int64, error) {
 	var comments []*model.Comment
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
