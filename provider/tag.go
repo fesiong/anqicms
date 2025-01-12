@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/request"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -321,31 +322,36 @@ func (w *Website) GetTagsByItemId(itemId uint) []*model.Tag {
 }
 
 func (w *Website) VerifyTagUrlToken(urlToken string, id uint) string {
-	index := 0
 	// 防止超出长度
 	if len(urlToken) > 150 {
 		urlToken = urlToken[:150]
 	}
 	urlToken = strings.ToLower(urlToken)
-	for {
-		tmpToken := urlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+	if id == 0 {
+		lastId := model.GetNextTagId(w.DB)
+		urlToken += "-t" + strconv.Itoa(int(lastId))
+	} else if !library.IsNumericEnding(urlToken) {
+		index := 0
+		for {
+			tmpToken := urlToken
+			if index > 0 {
+				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+			}
+			// 判断分类
+			_, err := w.GetCategoryByUrlToken(tmpToken)
+			if err == nil {
+				index++
+				continue
+			}
+			// 判断archive
+			tmpTag, err := w.GetTagByUrlToken(tmpToken)
+			if err == nil && tmpTag.Id != id {
+				index++
+				continue
+			}
+			urlToken = tmpToken
+			break
 		}
-		// 判断分类
-		_, err := w.GetCategoryByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
-		}
-		// 判断archive
-		tmpTag, err := w.GetTagByUrlToken(tmpToken)
-		if err == nil && tmpTag.Id != id {
-			index++
-			continue
-		}
-		urlToken = tmpToken
-		break
 	}
 
 	return urlToken

@@ -445,7 +445,7 @@ func (t *TransferWebsite) transferTags() error {
 		}
 		tag.Id = result.Data[i].Id
 		if tag.UrlToken == "" {
-			tag.UrlToken = library.GetPinyin(tag.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
+			tag.UrlToken = library.GetPinyin(tag.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort) + "-t" + strconv.Itoa(int(tag.Id))
 		}
 		tag.UrlToken = t.w.VerifyTagUrlToken(tag.UrlToken, tag.Id)
 		letter := "A"

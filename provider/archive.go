@@ -1294,6 +1294,7 @@ func (w *Website) CleanArchives() {
 	}
 }
 
+// VerifyArchiveUrlToken token增加a标记：token-a-id
 func (w *Website) VerifyArchiveUrlToken(urlToken string, id uint) string {
 	index := 0
 	// 防止超出长度
