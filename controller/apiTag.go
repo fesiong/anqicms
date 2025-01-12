@@ -224,6 +224,7 @@ func ApiArchiveFilters(ctx iris.Context) {
 func ApiArchiveList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	archiveId := ctx.URLParamInt64Default("id", 0)
+	parentId := ctx.URLParamInt64Default("parentId", 0)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -516,6 +517,9 @@ func ApiArchiveList(ctx iris.Context) {
 		ops := func(tx *gorm.DB) *gorm.DB {
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
+			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)

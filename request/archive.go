@@ -4,6 +4,7 @@ import "kandaoni.com/anqicms/config"
 
 type Archive struct {
 	Id           int64                  `json:"id"`
+	ParentId     int64                  `json:"parent_id"`
 	Title        string                 `json:"title"`
 	SeoTitle     string                 `json:"seo_title"`
 	ModuleId     uint                   `json:"module_id"`

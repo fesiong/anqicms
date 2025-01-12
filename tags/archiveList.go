@@ -44,6 +44,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var categoryIds []uint
 	var defaultCategoryId uint
 	var authorId = uint(0)
+	var parentId = int64(0)
 	var categoryDetail *model.Category
 
 	if args["moduleId"] != nil {
@@ -54,6 +55,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["userId"] != nil {
 		authorId = uint(args["userId"].Integer())
+	}
+	if args["parentId"] != nil {
+		parentId = int64(args["parentId"].Integer())
 	}
 	module, _ := ctx.Public["module"].(*model.Module)
 	if module != nil {
@@ -417,6 +421,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		ops := func(tx *gorm.DB) *gorm.DB {
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
+			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)

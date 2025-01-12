@@ -22,6 +22,7 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.PostValueInt64Default("id", 0)
+	parentId := ctx.PostValueInt64Default("parent_id", 0)
 	title := ctx.PostValueTrim("title")
 	seoTitle := ctx.PostValueTrim("seo_title")
 	content := ctx.PostValueTrim("content")
@@ -139,6 +140,7 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 
 	var req = request.Archive{
+		ParentId:     parentId,
 		Title:        title,
 		SeoTitle:     seoTitle,
 		CategoryId:   categoryId,
@@ -169,6 +171,7 @@ func ApiImportArchive(ctx iris.Context) {
 			// 不存在，创建一个
 			archiveDraft := model.ArchiveDraft{
 				Archive: model.Archive{
+					ParentId:    parentId,
 					Title:       title,
 					SeoTitle:    seoTitle,
 					UrlToken:    urlToken,

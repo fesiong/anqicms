@@ -470,6 +470,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 正常的保存行为
 	draft.ModuleId = category.ModuleId
+	draft.ParentId = req.ParentId
 	draft.Title = req.Title
 	draft.SeoTitle = req.SeoTitle
 	draft.Keywords = req.Keywords
