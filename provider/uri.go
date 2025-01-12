@@ -44,10 +44,8 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				uri = item.FixedLink
 				break
 			}
-			// 修正
-			if item.UrlToken == "" {
-				_ = w.UpdateArchiveUrlToken(item)
-			}
+			// 修正空白的urlToken
+			_ = w.UpdateArchiveUrlToken(item)
 
 			for _, v := range rewritePattern.ArchiveTags {
 				if v == "id" {

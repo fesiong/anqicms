@@ -145,7 +145,6 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	tag.SeoTitle = req.SeoTitle
 	tag.Keywords = req.Keywords
 	tag.Status = 1
-	tag.UrlToken = req.UrlToken
 	tag.Description = req.Description
 	tag.FirstLetter = req.FirstLetter
 	tag.CategoryId = req.CategoryId
@@ -155,11 +154,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		tag.Logo = strings.TrimPrefix(tag.Logo, w.PluginStorage.StorageUrl)
 	}
 	// 判断重复
-	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-	}
-	tag.UrlToken = w.VerifyTagUrlToken(req.UrlToken, tag.Id)
+	tag.UrlToken = w.VerifyTagUrlToken(req.UrlToken, tag.Title, tag.Id)
 
 	if tag.FirstLetter == "" {
 		letter := "A"
@@ -275,8 +270,7 @@ func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 		}
 		tag, err := w.GetTagByTitle(tagName)
 		if err != nil {
-			newToken := library.GetPinyin(tagName, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-			newToken = w.VerifyTagUrlToken(newToken, 0)
+			newToken := w.VerifyTagUrlToken("", tagName, 0)
 			letter := "A"
 			if len(newToken) > 0 && newToken != "-" {
 				letter = string(newToken[0])
@@ -292,7 +286,7 @@ func (w *Website) SaveTagData(itemId uint, tagNames []string) error {
 			link := w.GetUrl("tag", tag, 0)
 			go w.PushArchive(link)
 			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
+				go w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
 			}
 		}
 		tagIds = append(tagIds, tag.Id)
@@ -321,16 +315,26 @@ func (w *Website) GetTagsByItemId(itemId uint) []*model.Tag {
 	return tags
 }
 
-func (w *Website) VerifyTagUrlToken(urlToken string, id uint) string {
-	// 防止超出长度
-	if len(urlToken) > 150 {
-		urlToken = urlToken[:150]
-	}
-	urlToken = strings.ToLower(urlToken)
-	if id == 0 {
-		lastId := model.GetNextTagId(w.DB)
+func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) string {
+	newToken := false
+	if urlToken == "" {
+		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+		}
+		lastId := id
+		if id == 0 {
+			lastId = model.GetNextTagId(w.DB)
+		}
 		urlToken += "-t" + strconv.Itoa(int(lastId))
-	} else if !library.IsNumericEnding(urlToken) {
+		newToken = true
+	}
+	if newToken == false {
+		urlToken = strings.ToLower(library.ParseUrlToken(urlToken))
+		// 防止超出长度
+		if len(urlToken) > 150 {
+			urlToken = urlToken[:150]
+		}
 		index := 0
 		for {
 			tmpToken := urlToken

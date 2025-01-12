@@ -409,14 +409,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		draft.Status = config.ContentStatusDraft
 	}
 	// 判断重复
-	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-	}
-	if req.UrlToken == "" {
-		req.UrlToken = time.Now().Format("a-20060102150405")
-	}
-	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, draft.Id)
+	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, draft.Title, draft.Id)
 	if utf8.RuneCountInString(req.Title) > 190 {
 		req.Title = string([]rune(req.Title)[:190])
 		if strings.Count(req.Title, " ") > 1 {
@@ -886,7 +879,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			w.PushArchive(archive.Link)
 		}()
 		if w.PluginSitemap.AutoBuild == 1 {
-			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
+			go w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
 		}
 	}
 	// 更新缓存
@@ -950,8 +943,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 
 func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 	if archive.UrlToken == "" {
-		newToken := library.GetPinyin(archive.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-		archive.UrlToken = w.VerifyArchiveUrlToken(newToken, archive.Id)
+		archive.UrlToken = w.VerifyArchiveUrlToken(archive.UrlToken, archive.Title, archive.Id)
 
 		w.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
 	}
@@ -1295,38 +1287,52 @@ func (w *Website) CleanArchives() {
 }
 
 // VerifyArchiveUrlToken token增加a标记：token-a-id
-func (w *Website) VerifyArchiveUrlToken(urlToken string, id uint) string {
-	index := 0
-	// 防止超出长度
-	if len(urlToken) > 150 {
-		urlToken = urlToken[:150]
+func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id uint) string {
+	newToken := false
+	if urlToken == "" {
+		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+		}
+		if id > 0 {
+			urlToken += "-a" + strconv.Itoa(int(id))
+		}
+		// 如果id=0，则在beforeCreate 中添加后缀
+		newToken = true
 	}
-	urlToken = strings.ToLower(urlToken)
-	for {
-		tmpToken := urlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+	if newToken == false {
+		urlToken = strings.ToLower(library.ParseUrlToken(urlToken))
+		// 防止超出长度
+		if len(urlToken) > 150 {
+			urlToken = urlToken[:150]
 		}
-		// 判断分类
-		_, err := w.GetCategoryByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
+		index := 0
+		for {
+			tmpToken := urlToken
+			if index > 0 {
+				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+			}
+			// 判断分类
+			_, err := w.GetCategoryByUrlToken(tmpToken)
+			if err == nil {
+				index++
+				continue
+			}
+			// 判断archive
+			tmpArc, err := w.GetArchiveByUrlToken(tmpToken)
+			if err == nil && tmpArc.Id != id {
+				index++
+				continue
+			}
+			// 判断archiveDraft
+			tmpDraft, err := w.GetArchiveDraftByUrlToken(tmpToken)
+			if err == nil && tmpDraft.Id != id {
+				index++
+				continue
+			}
+			urlToken = tmpToken
+			break
 		}
-		// 判断archive
-		tmpArc, err := w.GetArchiveByUrlToken(tmpToken)
-		if err == nil && tmpArc.Id != id {
-			index++
-			continue
-		}
-		// 判断archiveDraft
-		tmpDraft, err := w.GetArchiveDraftByUrlToken(tmpToken)
-		if err == nil && tmpDraft.Id != id {
-			index++
-			continue
-		}
-		urlToken = tmpToken
-		break
 	}
 
 	return urlToken
