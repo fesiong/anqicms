@@ -132,7 +132,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			order = "archives." + order
 		}
 	} else {
-		if currentSite.Content.UseSort == 1 {
+		if currentSite.Content.UseSort == 1 || parentId > 0 {
 			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
 			order = "archives.`created_time` desc"

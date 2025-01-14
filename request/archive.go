@@ -54,16 +54,16 @@ type ArchiveReplaceRequest struct {
 }
 
 type ArchivesUpdateRequest struct {
-	Ids []int64 `json:"ids"`
-
-	CategoryId  uint   `json:"category_id"`
-	CategoryIds []uint `json:"category_ids"`
-	Status      uint   `json:"status"`
-	Flag        string `json:"flag"`
-	Time        uint   `json:"time"`
-	DailyLimit  int    `json:"daily_limit"` //每日限额
-	StartHour   int    `json:"start_hour"`  //每天开始时间
-	EndHour     int    `json:"end_hour"`    //每天结束时间
+	Ids         []int64 `json:"ids"`
+	ParentId    int64   `json:"parent_id"`
+	CategoryId  uint    `json:"category_id"`
+	CategoryIds []uint  `json:"category_ids"`
+	Status      uint    `json:"status"`
+	Flag        string  `json:"flag"`
+	Time        uint    `json:"time"`
+	DailyLimit  int     `json:"daily_limit"` //每日限额
+	StartHour   int     `json:"start_hour"`  //每天开始时间
+	EndHour     int     `json:"end_hour"`    //每天结束时间
 }
 
 type ArchivePasswordRequest struct {

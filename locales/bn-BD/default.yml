@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "নথি কাস্টম বাছাই আপডেট করুন: %v => %d"
 "SortingUpdated": "বাছাই আপডেট করা হয়েছে"
 "BatchUpdateDocumentCategoryLog": "ব্যাচ আপডেট নথি শ্রেণীবিভাগ: %v => %d"
+"BatchUpdateDocumentParentLog": "Update Document's Parent ID: %v => %d"
 "ReplaceTheEntireSiteLog": "পুরো সাইট জুড়ে %v, %v প্রতিস্থাপন করুন"
 "ReplacementCompleted": "প্রতিস্থাপন সম্পন্ন হয়েছে"
 "PleaseFillInTheNavigationDisplayName": "অনুগ্রহ করে নেভিগেশন প্রদর্শনের নামটি পূরণ করুন"

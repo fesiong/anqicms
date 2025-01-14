@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "ドキュメントのカスタム並べ替えを更新: %v => %d"
 "SortingUpdated": "並べ替えを更新しました"
 "BatchUpdateDocumentCategoryLog": "ドキュメント分類のバッチ更新: %v => %d"
+"BatchUpdateDocumentParentLog": "Update Document's Parent ID: %v => %d"
 "ReplaceTheEntireSiteLog": "サイト全体の %v、%v を置き換えます"
 "ReplacementCompleted": "交換完了"
 "PleaseFillInTheNavigationDisplayName": "ナビゲーションの表示名を入力してください"

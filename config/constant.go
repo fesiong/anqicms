@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.4.3"
+const Version = "3.4.2"
 
 const (
 	StatusOK         = 0
@@ -109,7 +109,7 @@ const (
 	EnginBing   = "bing"
 	EnginOther  = "other"
 
-	LanguageZh = "zh"
+	LanguageZh = "zh-cn"
 	LanguageEn = "en"
 
 	CollectModeCollect = 0

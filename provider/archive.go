@@ -1151,6 +1151,21 @@ func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) e
 	return nil
 }
 
+func (w *Website) UpdateArchiveParent(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Tr("NoDocumentToOperate"))
+	}
+
+	// 同步更新
+	w.DB.Model(&model.Archive{}).Where("id IN(?)", req.Ids).UpdateColumn("parent_id", req.ParentId)
+	w.DB.Model(&model.ArchiveDraft{}).Where("id IN(?)", req.Ids).UpdateColumn("parent_id", req.ParentId)
+	// 删除列表缓存
+	w.Cache.CleanAll("archive-list")
+	// end
+
+	return nil
+}
+
 func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))

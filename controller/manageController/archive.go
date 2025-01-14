@@ -19,6 +19,7 @@ func ArchiveList(ctx iris.Context) {
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
+	parentId := ctx.URLParamInt64Default("parent_id", 0)
 	status := ctx.URLParamDefault("status", "ok") // 支持 '':all，draft:0, ok:1, plan:2
 	sort := ctx.URLParamDefault("sort", "id")
 	flag := ctx.URLParam("flag")
@@ -79,6 +80,9 @@ func ArchiveList(ctx iris.Context) {
 			} else if moduleId > 0 {
 				tx = tx.Where("`module_id` = ?", moduleId)
 			}
+			if parentId > 0 {
+				tx = tx.Where("`parent_id` = ?", parentId)
+			}
 			if status == "delete" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDelete)
 			} else if status == "draft" {
@@ -92,7 +96,18 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
 			}
 			if title != "" {
-				tx = tx.Where("`title` like ?", "%"+title+"%")
+				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+				var allArchives int64
+				if status == "ok" {
+					allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
+				} else {
+					allArchives = currentSite.GetExplainCount("SELECT id FROM archive_drafts")
+				}
+				if allArchives > 100000 {
+					tx = tx.Where("`title` like ?", title+"%")
+				} else {
+					tx = tx.Where("`title` like ?", "%"+title+"%")
+				}
 			}
 			tx = tx.Order(orderBy)
 			return tx
@@ -931,6 +946,45 @@ func UpdateArchiveSort(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("SortingUpdated"),
+	})
+}
+
+func UpdateArchiveParent(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.UpdateArchiveParent(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(subSiteID)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveParent(&req)
+			}
+		}
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentParentLog", req.Ids, req.CategoryIds))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
 
