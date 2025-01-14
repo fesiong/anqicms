@@ -28,7 +28,7 @@ import (
 	"unicode/utf8"
 )
 
-func (w *Website) GetArchiveByIdFromCache(id uint) (archive *model.Archive) {
+func (w *Website) GetArchiveByIdFromCache(id int64) (archive *model.Archive) {
 	err := w.Cache.Get(fmt.Sprintf("archive-%d", id), archive)
 	if err != nil {
 		return nil
@@ -41,11 +41,11 @@ func (w *Website) AddArchiveCache(archive *model.Archive) {
 	_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
 }
 
-func (w *Website) DeleteArchiveCache(id uint) {
+func (w *Website) DeleteArchiveCache(id int64) {
 	w.Cache.Delete(fmt.Sprintf("archive-%d", id))
 }
 
-func (w *Website) GetArchiveById(id uint) (*model.Archive, error) {
+func (w *Website) GetArchiveById(id int64) (*model.Archive, error) {
 	return w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", id)
 	})
@@ -89,7 +89,7 @@ func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archi
 	return &archive, nil
 }
 
-func (w *Website) GetArchiveDraftById(id uint) (*model.ArchiveDraft, error) {
+func (w *Website) GetArchiveDraftById(id int64) (*model.ArchiveDraft, error) {
 	return w.GetArchiveDraftByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", id)
 	})
@@ -132,7 +132,7 @@ func (w *Website) GetArchiveDraftByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.
 	archive.Link = w.GetUrl("archive", &archive, 0)
 	return &archive, nil
 }
-func (w *Website) GetArchiveDataById(id uint) (*model.ArchiveData, error) {
+func (w *Website) GetArchiveDataById(id int64) (*model.ArchiveData, error) {
 	var data model.ArchiveData
 	err := w.DB.Where("`id` = ?", id).First(&data).Error
 	if err != nil {
@@ -205,7 +205,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		}
 		// 分页提速，先查出ID，再查询结果
 		// 先查询ID
-		var archiveIds []uint
+		var archiveIds []int64
 		builder.Limit(pageSize).Offset(offset).Select("archives.id").Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
@@ -231,11 +231,11 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 				if minMax.MinId == 0 || minMax.MaxId == 0 {
 					return nil, 0, errors.New("empty archive")
 				}
-				var existIds []uint
+				var existIds []int64
 				randId := rand.New(rand.NewSource(time.Now().UnixNano()))
 				for i := 0; i < pageSize; i++ {
 					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
-					var findId uint
+					var findId int64
 					builder.WithContext(context.Background()).Where("id >= ?", tmpId).Select("id").Limit(1).Pluck("id", &findId)
 					if findId > 0 {
 						existIds = append(existIds, findId)
@@ -274,7 +274,7 @@ func (w *Website) GetExplainCount(sql string) int64 {
 	return result.Rows
 }
 
-func (w *Website) GetArchiveExtraFromCache(archiveId uint) (extra map[string]*model.CustomField) {
+func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*model.CustomField) {
 	err := w.Cache.Get(fmt.Sprintf("archive-extra-%d", archiveId), &extra)
 	if err != nil {
 		return nil
@@ -283,15 +283,15 @@ func (w *Website) GetArchiveExtraFromCache(archiveId uint) (extra map[string]*mo
 	return extra
 }
 
-func (w *Website) AddArchiveExtraCache(archiveId uint, extra map[string]*model.CustomField) {
+func (w *Website) AddArchiveExtraCache(archiveId int64, extra map[string]*model.CustomField) {
 	_ = w.Cache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 60)
 }
 
-func (w *Website) DeleteArchiveExtraCache(archiveId uint) {
+func (w *Website) DeleteArchiveExtraCache(archiveId int64) {
 	w.Cache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
 }
 
-func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]*model.CustomField {
+func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[string]*model.CustomField {
 	if loadCache {
 		cached := w.GetArchiveExtraFromCache(id)
 		if cached != nil {
@@ -409,14 +409,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		draft.Status = config.ContentStatusDraft
 	}
 	// 判断重复
-	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-	}
-	if req.UrlToken == "" {
-		req.UrlToken = time.Now().Format("a-20060102150405")
-	}
-	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, draft.Id)
+	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, draft.Title, draft.Id)
 	if utf8.RuneCountInString(req.Title) > 190 {
 		req.Title = string([]rune(req.Title)[:190])
 		if strings.Count(req.Title, " ") > 1 {
@@ -477,6 +470,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 正常的保存行为
 	draft.ModuleId = category.ModuleId
+	draft.ParentId = req.ParentId
 	draft.Title = req.Title
 	draft.SeoTitle = req.SeoTitle
 	draft.Keywords = req.Keywords
@@ -798,7 +792,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if len(extraFields) > 0 {
 		//入库
 		// 先检查是否存在
-		var existsId uint
+		var existsId int64
 		w.DB.Table(module.TableName).Where("`id` = ?", draft.Id).Pluck("id", &existsId)
 		if existsId > 0 {
 			// 已存在
@@ -886,7 +880,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			w.PushArchive(archive.Link)
 		}()
 		if w.PluginSitemap.AutoBuild == 1 {
-			_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
+			go w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
 		}
 	}
 	// 更新缓存
@@ -950,8 +944,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 
 func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 	if archive.UrlToken == "" {
-		newToken := library.GetPinyin(archive.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-		archive.UrlToken = w.VerifyArchiveUrlToken(newToken, archive.Id)
+		archive.UrlToken = w.VerifyArchiveUrlToken(archive.UrlToken, archive.Title, archive.Id)
 
 		w.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
 	}
@@ -1158,6 +1151,21 @@ func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) e
 	return nil
 }
 
+func (w *Website) UpdateArchiveParent(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Tr("NoDocumentToOperate"))
+	}
+
+	// 同步更新
+	w.DB.Model(&model.Archive{}).Where("id IN(?)", req.Ids).UpdateColumn("parent_id", req.ParentId)
+	w.DB.Model(&model.ArchiveDraft{}).Where("id IN(?)", req.Ids).UpdateColumn("parent_id", req.ParentId)
+	// 删除列表缓存
+	w.Cache.CleanAll("archive-list")
+	// end
+
+	return nil
+}
+
 func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
@@ -1204,11 +1212,11 @@ func (w *Website) DeleteCacheFixedLinks() {
 	w.Cache.Delete("fixedLinks")
 }
 
-func (w *Website) GetCacheFixedLinks() map[string]uint {
+func (w *Website) GetCacheFixedLinks() map[string]int64 {
 	if w.DB == nil {
 		return nil
 	}
-	var fixedLinks = map[string]uint{}
+	var fixedLinks = map[string]int64{}
 
 	err := w.Cache.Get("fixedLinks", &fixedLinks)
 	if err == nil {
@@ -1229,7 +1237,7 @@ func (w *Website) GetCacheFixedLinks() map[string]uint {
 	return fixedLinks
 }
 
-func (w *Website) GetFixedLinkFromCache(fixedLink string) uint {
+func (w *Website) GetFixedLinkFromCache(fixedLink string) int64 {
 	links := w.GetCacheFixedLinks()
 
 	archiveId, ok := links[fixedLink]
@@ -1294,38 +1302,53 @@ func (w *Website) CleanArchives() {
 	}
 }
 
-func (w *Website) VerifyArchiveUrlToken(urlToken string, id uint) string {
-	index := 0
-	// 防止超出长度
-	if len(urlToken) > 150 {
-		urlToken = urlToken[:150]
+// VerifyArchiveUrlToken token增加a标记：token-a-id
+func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string {
+	newToken := false
+	if urlToken == "" {
+		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+		}
+		if id > 0 {
+			urlToken += "-a" + strconv.Itoa(int(id))
+		}
+		// 如果id=0，则在beforeCreate 中添加后缀
+		newToken = true
 	}
-	urlToken = strings.ToLower(urlToken)
-	for {
-		tmpToken := urlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+	if newToken == false {
+		urlToken = strings.ToLower(library.ParseUrlToken(urlToken))
+		// 防止超出长度
+		if len(urlToken) > 150 {
+			urlToken = urlToken[:150]
 		}
-		// 判断分类
-		_, err := w.GetCategoryByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
+		index := 0
+		for {
+			tmpToken := urlToken
+			if index > 0 {
+				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+			}
+			// 判断分类
+			_, err := w.GetCategoryByUrlToken(tmpToken)
+			if err == nil {
+				index++
+				continue
+			}
+			// 判断archive
+			tmpArc, err := w.GetArchiveByUrlToken(tmpToken)
+			if err == nil && tmpArc.Id != id {
+				index++
+				continue
+			}
+			// 判断archiveDraft
+			tmpDraft, err := w.GetArchiveDraftByUrlToken(tmpToken)
+			if err == nil && tmpDraft.Id != id {
+				index++
+				continue
+			}
+			urlToken = tmpToken
+			break
 		}
-		// 判断archive
-		tmpArc, err := w.GetArchiveByUrlToken(tmpToken)
-		if err == nil && tmpArc.Id != id {
-			index++
-			continue
-		}
-		// 判断archiveDraft
-		tmpDraft, err := w.GetArchiveDraftByUrlToken(tmpToken)
-		if err == nil && tmpDraft.Id != id {
-			index++
-			continue
-		}
-		urlToken = tmpToken
-		break
 	}
 
 	return urlToken
@@ -1362,10 +1385,10 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 
 func (w *Website) UpgradeMultiCategory() {
 	type tinyArchive struct {
-		Id         uint `json:"id"`
-		CategoryId uint `json:"category_id"`
+		Id         int64 `json:"id"`
+		CategoryId uint  `json:"category_id"`
 	}
-	var lastId uint = 0
+	var lastId int64 = 0
 	for {
 		var archives []*tinyArchive
 		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Order("id asc").Limit(1000).Scan(&archives)
@@ -1383,14 +1406,14 @@ func (w *Website) UpgradeMultiCategory() {
 	}
 }
 
-func (w *Website) GetArchiveFlags(archiveId uint) string {
+func (w *Website) GetArchiveFlags(archiveId int64) string {
 	var flags []string
 	w.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` = ?", archiveId).Pluck("flag", &flags)
 
 	return strings.Join(flags, ",")
 }
 
-func (w *Website) SaveArchiveFlags(archiveId uint, flags []string) error {
+func (w *Website) SaveArchiveFlags(archiveId int64, flags []string) error {
 	if len(flags) == 0 {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveFlag{})
 		return nil
@@ -1408,7 +1431,7 @@ func (w *Website) SaveArchiveFlags(archiveId uint, flags []string) error {
 	return nil
 }
 
-func (w *Website) SaveArchiveCategories(archiveId uint, categoryIds []uint) error {
+func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) error {
 	if len(categoryIds) == 0 {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveCategory{})
 		return nil
@@ -1442,9 +1465,9 @@ func (w *Website) SaveArchiveCategories(archiveId uint, categoryIds []uint) erro
 }
 
 // GetArchiveRelations 仅返回正式的文档
-func (w *Website) GetArchiveRelations(archiveId uint) []*model.Archive {
+func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
-	var relationIds []uint
+	var relationIds []int64
 	w.DB.Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
 		w.DB.Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
@@ -1458,7 +1481,7 @@ func (w *Website) GetArchiveRelations(archiveId uint) []*model.Archive {
 	return nil
 }
 
-func (w *Website) SaveArchiveRelations(archiveId uint, relationIds []uint) error {
+func (w *Website) SaveArchiveRelations(archiveId int64, relationIds []int64) error {
 	if len(relationIds) == 0 {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveRelation{})
 		return nil
@@ -1821,7 +1844,7 @@ func (qia *QuickImportArchive) SaveBatches(archives []model.ArchiveDraft) {
 
 	var archiveCategories = make([]model.ArchiveCategory, 0, len(archives))
 	var archiveData = make([]model.ArchiveData, 0, len(archives))
-	var lastId uint
+	var lastId int64
 	for i := range archives {
 		lastId = model.GetNextArchiveId(tx, true)
 		archives[i].Id = lastId

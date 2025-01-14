@@ -150,7 +150,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		webInfo := &response.WebInfo{
 			Title:    module.Title,
 			PageName: "archiveIndex",
-			NavBar:   module.Id,
+			NavBar:   int64(module.Id),
 		}
 		newCtx.ViewData("webInfo", webInfo)
 		tplName := module.TableName + "/index.html"
@@ -253,7 +253,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	webInfo := &response.WebInfo{
 		Title:    category.Title,
 		PageName: "archiveList",
-		NavBar:   category.Id,
+		NavBar:   int64(category.Id),
 	}
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := module.TableName + "/list.html"
@@ -345,7 +345,7 @@ func (w *Website) BuildArchiveCache() {
 	w.HtmlCacheStatus.FinishedTime = 0
 	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingDocuments")
 	// 生成详情
-	lastId := uint(0)
+	lastId := int64(0)
 	for {
 		var archives []*model.Archive
 		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Limit(1000).Order("id asc").Find(&archives)
@@ -513,7 +513,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	webInfo := &response.WebInfo{
 		Title:    tag.Title,
 		PageName: "tag",
-		NavBar:   tag.Id,
+		NavBar:   int64(tag.Id),
 	}
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := "tag/list.html"

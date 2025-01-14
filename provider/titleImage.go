@@ -62,7 +62,7 @@ func (w *Website) NewTitleImage() *TitleImage {
 
 func (w *Website) GenerateAllTitleImages() {
 	// 根据attachment表读取每一张图片
-	lastId := uint(0)
+	lastId := int64(0)
 	limit := 500
 	ti := w.NewTitleImage()
 	// archive

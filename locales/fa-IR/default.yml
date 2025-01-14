@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "مرتب سازی سفارشی سند را به روز کنید: %v => %d"
 "SortingUpdated": "مرتب سازی به روز شد"
 "BatchUpdateDocumentCategoryLog": "دسته بندی اسناد به روز رسانی دسته ای: %v => %d"
+"BatchUpdateDocumentParentLog": "Update Document's Parent ID: %v => %d"
 "ReplaceTheEntireSiteLog": "%v، %v را در سراسر سایت جایگزین کنید"
 "ReplacementCompleted": "تعویض کامل شد"
 "PleaseFillInTheNavigationDisplayName": "لطفاً نام نمایش ناوبری را پر کنید"

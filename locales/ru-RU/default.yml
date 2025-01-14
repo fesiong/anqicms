@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "Обновить пользовательскую сортировку документа: %v => %d"
 "SortingUpdated": "Сортировка обновлена"
 "BatchUpdateDocumentCategoryLog": "Классификация документов пакетного обновления: %v => %d"
+"BatchUpdateDocumentParentLog": "Update Document's Parent ID: %v => %d"
 "ReplaceTheEntireSiteLog": "Замените %v, %v по всему сайту."
 "ReplacementCompleted": "Замена завершена"
 "PleaseFillInTheNavigationDisplayName": "Пожалуйста, заполните отображаемое имя навигации"

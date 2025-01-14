@@ -105,7 +105,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			return tx
 		}, order, currentPage, limit, offset)
-		var archiveIds = make([]uint, 0, len(archives))
+		var archiveIds = make([]int64, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
 			if len(archives[i].Password) > 0 {

@@ -1522,7 +1522,7 @@ func (w *Website) BackupDesignData(packageName string) error {
 	var archives []model.Archive
 	w.DB.Order("`id` desc").Limit(maxLimit).Find(&archives)
 	if len(archives) > 0 {
-		var archiveIds = make([]uint, 0, len(archives))
+		var archiveIds = make([]int64, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
 			archives[i].Extra = w.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, false)

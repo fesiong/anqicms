@@ -52,7 +52,7 @@ func PagePage(ctx iris.Context) {
 		}
 		webInfo.Keywords = category.Keywords
 		webInfo.Description = category.Description
-		webInfo.NavBar = category.Id
+		webInfo.NavBar = int64(category.Id)
 		webInfo.PageName = "pageDetail"
 		webInfo.CanonicalUrl = currentSite.GetUrl("page", category, 0)
 		ctx.ViewData("webInfo", webInfo)

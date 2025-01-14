@@ -22,7 +22,7 @@ func UserPage(ctx iris.Context) {
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = user.UserName
-		webInfo.NavBar = user.Id
+		webInfo.NavBar = int64(user.Id)
 		webInfo.PageName = "userDetail"
 		webInfo.CanonicalUrl = currentSite.GetUrl("user", user, 0)
 		ctx.ViewData("webInfo", webInfo)

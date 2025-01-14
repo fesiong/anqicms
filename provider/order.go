@@ -70,7 +70,7 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 		var details []*model.OrderDetail
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -88,7 +88,7 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
 						if orders[i].Type == config.OrderTypeVip {
-							group, err := w.GetUserGroupInfo(details[j].GoodsId)
+							group, err := w.GetUserGroupInfo(uint(details[j].GoodsId))
 							if err == nil {
 								details[i].Group = group
 							}
@@ -122,12 +122,12 @@ func (w *Website) GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 	w.DB.Where("`order_id` = ?", order.OrderId).Find(&details)
 	if len(details) > 0 {
 		if order.Type == config.OrderTypeVip {
-			group, err := w.GetUserGroupInfo(details[0].GoodsId)
+			group, err := w.GetUserGroupInfo(uint(details[0].GoodsId))
 			if err == nil {
 				details[0].Group = group
 			}
 		} else {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -743,7 +743,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	var sellerId uint = 0
 	if remark == "" {
 		if req.Type == config.OrderTypeVip {
-			group, err := w.GetUserGroupInfo(req.Details[0].GoodsId)
+			group, err := w.GetUserGroupInfo(uint(req.Details[0].GoodsId))
 			if err != nil {
 				tx.Rollback()
 				return nil, err
@@ -789,7 +789,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	// 计算商品总价
 	if req.Type == config.OrderTypeVip {
-		group, err := w.GetUserGroupInfo(req.Details[0].GoodsId)
+		group, err := w.GetUserGroupInfo(uint(req.Details[0].GoodsId))
 		if err != nil {
 			tx.Rollback()
 			return nil, err
@@ -984,7 +984,7 @@ func (w *Website) GetRetailerOrders(retailerId uint, page, pageSize int) ([]*mod
 		var details []*model.OrderDetail
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -1002,7 +1002,7 @@ func (w *Website) GetRetailerOrders(retailerId uint, page, pageSize int) ([]*mod
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
 						if orders[i].Type == config.OrderTypeVip {
-							group, err := w.GetUserGroupInfo(details[j].GoodsId)
+							group, err := w.GetUserGroupInfo(uint(details[j].GoodsId))
 							if err == nil {
 								details[i].Group = group
 							}
@@ -1154,7 +1154,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 		var details []*model.OrderDetail
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -1172,7 +1172,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
 						if orders[i].Type == config.OrderTypeVip {
-							group, err := w.GetUserGroupInfo(details[j].GoodsId)
+							group, err := w.GetUserGroupInfo(uint(details[j].GoodsId))
 							if err == nil {
 								details[i].Group = group
 							}

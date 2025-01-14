@@ -21,7 +21,8 @@ func ApiImportArchive(ctx iris.Context) {
 		return
 	}
 	currentSite := provider.CurrentSite(ctx)
-	id := uint(ctx.PostValueIntDefault("id", 0))
+	id := ctx.PostValueInt64Default("id", 0)
+	parentId := ctx.PostValueInt64Default("parent_id", 0)
 	title := ctx.PostValueTrim("title")
 	seoTitle := ctx.PostValueTrim("seo_title")
 	content := ctx.PostValueTrim("content")
@@ -139,6 +140,7 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 
 	var req = request.Archive{
+		ParentId:     parentId,
 		Title:        title,
 		SeoTitle:     seoTitle,
 		CategoryId:   categoryId,
@@ -169,6 +171,7 @@ func ApiImportArchive(ctx iris.Context) {
 			// 不存在，创建一个
 			archiveDraft := model.ArchiveDraft{
 				Archive: model.Archive{
+					ParentId:    parentId,
 					Title:       title,
 					SeoTitle:    seoTitle,
 					UrlToken:    urlToken,
@@ -209,7 +212,7 @@ func ApiImportArchive(ctx iris.Context) {
 		}
 	} else {
 		// 标题重复的不允许导入
-		var existId uint
+		var existId int64
 		exists, err := currentSite.GetArchiveByTitle(title)
 		if err == nil {
 			existId = exists.Id
@@ -321,7 +324,7 @@ func ApiImportArchive(ctx iris.Context) {
 
 func ApiImportGetArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	id := uint(ctx.URLParamIntDefault("id", 0))
+	id := ctx.URLParamInt64Default("id", 0)
 	title := ctx.URLParam("title")
 	urlToken := ctx.URLParam("url_token")
 	originUrl := ctx.URLParam("origin_url")

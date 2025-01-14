@@ -172,6 +172,7 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/status", manageController.UpdateArchiveStatus)
 			archive.Post("/time", manageController.UpdateArchiveTime)
 			archive.Post("/sort", manageController.UpdateArchiveSort)
+			archive.Post("/parent", manageController.UpdateArchiveParent)
 			archive.Post("/plan", manageController.UpdateArchiveReleasePlan)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 			archive.Post("/import", manageController.QuickImportArchive)

@@ -34,7 +34,7 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
 
-	archiveId := uint(0)
+	archiveId := int64(0)
 	order := "id desc"
 	limit := 10
 	offset := 0
@@ -42,7 +42,7 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	listType := "list"
 
 	if args["archiveId"] != nil {
-		archiveId = uint(args["archiveId"].Integer())
+		archiveId = int64(args["archiveId"].Integer())
 	}
 
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)

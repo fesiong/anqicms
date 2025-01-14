@@ -87,6 +87,7 @@ func (m *FileCache) Delete(key string) {
 }
 
 func (m *FileCache) CleanAll(prefix ...string) {
+	// cache 目录下还存在了其他文件，因此，不能时间移除目录，需要匹配后缀
 	if len(m.cachePath) == 0 {
 		return
 	}
@@ -96,13 +97,21 @@ func (m *FileCache) CleanAll(prefix ...string) {
 			if info == nil || info.IsDir() {
 				return nil
 			}
-			if strings.HasPrefix(path, prefix[0]) {
+			if strings.HasPrefix(path, prefix[0]) && strings.HasSuffix(path, m.suffix) {
 				_ = os.Remove(path)
 			}
 			return nil
 		})
 	} else {
-		_ = os.RemoveAll(m.cachePath)
+		_ = filepath.Walk(m.cachePath, func(path string, info os.FileInfo, err error) error {
+			if info == nil || info.IsDir() {
+				return nil
+			}
+			if strings.HasSuffix(path, m.suffix) {
+				_ = os.Remove(path)
+			}
+			return nil
+		})
 	}
 }
 

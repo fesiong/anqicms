@@ -37,7 +37,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	limit := 10
 	offset := 0
 	currentPage := 1
-	itemId := uint(0)
+	itemId := int64(0)
 	listType := "list"
 	order := "id desc"
 	var categoryIds []uint
@@ -63,7 +63,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	}
 
 	if args["itemId"] != nil {
-		itemId = uint(args["itemId"].Integer())
+		itemId = int64(args["itemId"].Integer())
 	} else {
 		// 自动获取
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)

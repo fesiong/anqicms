@@ -187,7 +187,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 		}
 		if db.Migrator().HasColumn(&model.Archive{}, "flag") {
 			var tinyArcs []struct {
-				Id   uint   `json:"id"`
+				Id   int64  `json:"id"`
 				Flag string `json:"flag"`
 			}
 			db.Model(&model.Archive{}).Where("flag IS NOT NULL AND flag != ''").Scan(&tinyArcs)

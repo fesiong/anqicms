@@ -295,7 +295,7 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	//先遍历文章、产品，添加锚文本
 	//每次取100个
 	limit := 100
-	lastId := uint(0)
+	lastId := int64(0)
 	var archives []*model.Archive
 
 	for {
@@ -313,7 +313,7 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	}
 }
 
-func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link string) string {
+func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemId int64, link string) string {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
@@ -524,7 +524,7 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	return content
 }
 
-func (w *Website) AutoInsertAnchor(archiveId uint, keywords, link string) {
+func (w *Website) AutoInsertAnchor(archiveId int64, keywords, link string) {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	keywords = strings.ReplaceAll(keywords, "，", ",")
 	keywords = strings.ReplaceAll(keywords, "_", ",")

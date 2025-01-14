@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "Perbarui penyortiran khusus dokumen: %v => %d"
 "SortingUpdated": "Penyortiran diperbarui"
 "BatchUpdateDocumentCategoryLog": "Klasifikasi dokumen pembaruan batch: %v => %d"
+"BatchUpdateDocumentParentLog": "Update Document's Parent ID: %v => %d"
 "ReplaceTheEntireSiteLog": "Ganti %v, %v di seluruh situs"
 "ReplacementCompleted": "Penggantian selesai"
 "PleaseFillInTheNavigationDisplayName": "Silakan isi nama tampilan navigasi"

@@ -40,7 +40,7 @@ func (a *moduleFields) Scan(data interface{}) error {
 
 func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 	if !tx.Migrator().HasTable(m.TableName) {
-		tx.Exec("CREATE TABLE `?` (`id` int(10) unsigned NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) DEFAULT CHARSET=utf8mb4;", gorm.Expr(m.TableName))
+		tx.Exec("CREATE TABLE `?` (`id` bigint(20) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) DEFAULT CHARSET=utf8mb4;", gorm.Expr(m.TableName))
 	}
 	// 根据表单字段，生成数据
 	for _, field := range m.Fields {

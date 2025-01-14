@@ -81,7 +81,7 @@ func (w *Website) GetNavTypeByTitle(title string) (*model.NavType, error) {
 func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
 	if req.Title == "" {
 		if req.NavType == model.NavTypeCategory {
-			category := w.GetCategoryFromCache(req.PageId)
+			category := w.GetCategoryFromCache(uint(req.PageId))
 			if category != nil {
 				req.Title = category.Title
 			}

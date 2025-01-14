@@ -96,7 +96,7 @@ type AnchorData struct {
 }
 
 type ArchiveData struct {
-	Id           uint                   `json:"id"`
+	Id           int64                  `json:"id"`
 	Title        string                 `json:"title"`
 	SeoTitle     string                 `json:"seo_title"`
 	ModuleId     uint                   `json:"module_id"`
@@ -444,10 +444,7 @@ func (t *TransferWebsite) transferTags() error {
 			tag.Description = string([]rune(tag.Description)[:1000])
 		}
 		tag.Id = result.Data[i].Id
-		if tag.UrlToken == "" {
-			tag.UrlToken = library.GetPinyin(tag.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
-		}
-		tag.UrlToken = t.w.VerifyTagUrlToken(tag.UrlToken, tag.Id)
+		tag.UrlToken = t.w.VerifyTagUrlToken(tag.UrlToken, tag.Title, tag.Id)
 		letter := "A"
 		if tag.UrlToken != "-" {
 			letter = string(tag.UrlToken[0])
@@ -574,10 +571,7 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 			archive.UpdatedTime = result.Data[i].UpdatedTime
 			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
 			archive.Id = result.Data[i].Id
-			if archive.UrlToken == "" {
-				archive.UrlToken = library.GetPinyin(archive.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
-			}
-			archive.UrlToken = t.w.VerifyArchiveUrlToken(archive.UrlToken, archive.Id)
+			archive.UrlToken = t.w.VerifyArchiveUrlToken(archive.UrlToken, archive.Title, archive.Id)
 			// 先保存为草稿
 			t.w.DB.Save(&archive)
 			// 如果status == 1，则保存为正式表

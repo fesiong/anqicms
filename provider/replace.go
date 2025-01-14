@@ -105,7 +105,7 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 }
 
 func (w *Website) replaceArchiveValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
-	startId := uint(0)
+	startId := int64(0)
 	var archives []*model.Archive
 	for {
 		tx := w.DB.Model(&model.Archive{})

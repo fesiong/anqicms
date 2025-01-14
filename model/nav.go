@@ -18,7 +18,7 @@ type Nav struct {
 	Description string `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	ParentId    uint   `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
 	NavType     uint   `json:"nav_type" gorm:"column:nav_type;type:int(10) unsigned not null;default:0;index:idx_nav_type"`
-	PageId      uint   `json:"page_id" gorm:"column:page_id;type:int(10) unsigned not null;default:0;index:idx_page_id"`
+	PageId      int64  `json:"page_id" gorm:"column:page_id;type:bigint(20) not null;default:0;index:idx_page_id"`
 	TypeId      uint   `json:"type_id" gorm:"column:type_id;type:int(10) unsigned not null;default:1;index:idx_type_id"`
 	Link        string `json:"link" gorm:"column:link;type:varchar(250) not null;default:''"`
 	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`

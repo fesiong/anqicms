@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "Update documents and customize the sorting: %v => %d"
 "SortingUpdated": "The sorting has been updated"
 "BatchUpdateDocumentCategoryLog": "Update document categories in batches: %v => %d"
+"BatchUpdateDocumentParentLog": "Update Document's Parent ID: %v => %d"
 "ReplaceTheEntireSiteLog": "Replace the entire site with %v, %v"
 "ReplacementCompleted": "Replacement completed"
 "PleaseFillInTheNavigationDisplayName": "Please fill in the navigation display name"

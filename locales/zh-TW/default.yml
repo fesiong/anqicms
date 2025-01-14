@@ -161,6 +161,7 @@
 "UpdateDocumentCustomSortLog": "更新文檔自訂排序：%v => %d"
 "SortingUpdated": "排序已更新"
 "BatchUpdateDocumentCategoryLog": "批次更新文件分類：%v => %d"
+"BatchUpdateDocumentParentLog": "批次更新文件上级: %v => %d"
 "ReplaceTheEntireSiteLog": "全站替換 %v, %v"
 "ReplacementCompleted": "替換已完成"
 "PleaseFillInTheNavigationDisplayName": "請填寫導航顯示名稱"

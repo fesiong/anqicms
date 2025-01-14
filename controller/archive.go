@@ -18,7 +18,7 @@ func ArchiveDetail(ctx iris.Context) {
 		ctx.ServeFile(cacheFile)
 		return
 	}
-	id := ctx.Params().GetUintDefault("id", 0)
+	id := ctx.Params().GetInt64Default("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
 	var err error
@@ -83,9 +83,9 @@ func ArchiveDetail(ctx iris.Context) {
 	var combineArchive *model.Archive
 	if combineName != "" {
 		// 需要先验证是否是archive
-		tmpId, err := strconv.Atoi(combineName)
+		tmpId, err := strconv.ParseInt(combineName, 10, 64)
 		if err == nil {
-			combineArchive, err = currentSite.GetArchiveById(uint(tmpId))
+			combineArchive, err = currentSite.GetArchiveById(tmpId)
 		} else {
 			combineArchive, err = currentSite.GetArchiveByUrlToken(combineName)
 		}
@@ -119,7 +119,7 @@ func ArchiveDetail(ctx iris.Context) {
 		}
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
-		webInfo.NavBar = archive.CategoryId
+		webInfo.NavBar = int64(archive.CategoryId)
 		webInfo.PageId = archive.Id
 		//设置页面名称，方便tags识别
 		webInfo.PageName = "archiveDetail"
@@ -215,7 +215,7 @@ func ArchiveIndex(ctx iris.Context) {
 		//设置页面名称，方便tags识别
 		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "archiveIndex"
-		webInfo.NavBar = module.Id
+		webInfo.NavBar = int64(module.Id)
 		webInfo.CanonicalUrl = currentSite.GetUrl("archiveIndex", module, 0)
 		ctx.ViewData("webInfo", webInfo)
 	}

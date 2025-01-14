@@ -236,7 +236,7 @@ func (w *Website) SaveMaterialCategory(req *request.PluginMaterialCategory) (cat
 	return
 }
 
-func (w *Website) LogMaterialData(materialIds []uint, itemType string, itemId uint) {
+func (w *Website) LogMaterialData(materialIds []uint, itemType string, itemId int64) {
 	//清理不存在的
 	w.DB.Unscoped().Model(&model.MaterialData{}).Where("`material_id` not in(?) and `item_type` = ? and `item_id` = ?", materialIds, itemType, itemId).Delete(model.MaterialData{})
 	//先检查是否存在

@@ -297,8 +297,8 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 
 	log.Println("start to sync content")
 
-	var lastId uint = 0
-	var startId uint = 0
+	var lastId int64 = 0
+	var startId int64 = 0
 	var limitSize = 5000
 	// 如果没同步过，或使用强制同步，则同步所有，否则只同步新增的
 	if targetDbSite.SyncTime == 0 || req.Focus {
@@ -419,7 +419,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 			if len(attachments) == 0 {
 				break
 			}
-			startId = attachments[len(attachments)-1].Id
+			startId = int64(attachments[len(attachments)-1].Id)
 			for _, attachment := range attachments {
 				log.Println("sync attachment", attachment.Id)
 				ms.FinishCount++
@@ -501,7 +501,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 			if len(tags) == 0 {
 				break
 			}
-			startId = tags[len(tags)-1].Id
+			startId = int64(tags[len(tags)-1].Id)
 			for _, tag := range tags {
 				log.Println("sync tag", tag.Id)
 				ms.FinishCount++
@@ -566,7 +566,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 						break
 					}
 					ms.TotalCount += int64(len(extraData))
-					startId = uint(tmpId)
+					startId = int64(tmpId)
 					for _, data := range extraData {
 						log.Println("sync extra", data)
 						ms.FinishCount++
@@ -635,7 +635,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 			if len(tagData) == 0 {
 				break
 			}
-			startId = tagData[len(tagData)-1].Id
+			startId = int64(tagData[len(tagData)-1].Id)
 			for _, tag := range tagData {
 				log.Println("sync tagdata", tag.Id)
 				ms.FinishCount++
@@ -814,7 +814,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 						break
 					}
 					ms.TotalCount += int64(len(extraData))
-					startId = uint(tmpId)
+					startId = int64(tmpId)
 					for _, data := range extraData {
 						ms.FinishCount++
 						ms.Percent = ms.FinishCount * 100 / ms.TotalCount
@@ -884,7 +884,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				break
 			}
 			ms.TotalCount += int64(len(tagData))
-			startId = tagData[len(tagData)-1].Id
+			startId = int64(tagData[len(tagData)-1].Id)
 			var tagIds = make([]uint, 0, len(tagData))
 			for _, tag := range tagData {
 				ms.FinishCount++

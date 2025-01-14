@@ -44,6 +44,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var categoryIds []uint
 	var defaultCategoryId uint
 	var authorId = uint(0)
+	var parentId = int64(0)
 	var categoryDetail *model.Category
 
 	if args["moduleId"] != nil {
@@ -54,6 +55,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["userId"] != nil {
 		authorId = uint(args["userId"].Integer())
+	}
+	if args["parentId"] != nil {
+		parentId = int64(args["parentId"].Integer())
 	}
 	module, _ := ctx.Public["module"].(*model.Module)
 	if module != nil {
@@ -112,12 +116,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
-		combineId := uint(args["combineId"].Integer())
+		combineId := int64(args["combineId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 	if args["combineFromId"] != nil {
 		combineMode = "from"
-		combineId := uint(args["combineFromId"].Integer())
+		combineId := int64(args["combineFromId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 
@@ -128,7 +132,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			order = "archives." + order
 		}
 	} else {
-		if currentSite.Content.UseSort == 1 {
+		if currentSite.Content.UseSort == 1 || parentId > 0 {
 			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
 			order = "archives.`created_time` desc"
@@ -223,7 +227,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var total int64
 	if listType == "related" {
 		//获取id
-		archiveId := uint(0)
+		archiveId := int64(0)
 		var keywords string
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 		var categoryId = uint(0)
@@ -375,7 +379,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "category",
-					Id:          cat.Id,
+					Id:          int64(cat.Id),
 					CreatedTime: cat.CreatedTime,
 					UpdatedTime: cat.UpdatedTime,
 					Title:       cat.Title,
@@ -400,7 +404,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
-					Id:          tag.Id,
+					Id:          int64(tag.Id),
 					CreatedTime: tag.CreatedTime,
 					UpdatedTime: tag.UpdatedTime,
 					Title:       tag.Title,
@@ -417,6 +421,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		ops := func(tx *gorm.DB) *gorm.DB {
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
+			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
@@ -500,7 +507,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			total = fulltextTotal
 		}
 	}
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {

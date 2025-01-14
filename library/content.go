@@ -71,6 +71,12 @@ func ParseUrlToken(name string) string {
 	return name
 }
 
+func IsNumericEnding(s string) bool {
+	// 使用正则表达式判断是否以数字结尾
+	re := regexp.MustCompile(`\d+$`)
+	return re.MatchString(s)
+}
+
 func ReplaceSingleSpace(content string) string {
 	// 将单个&nbsp;替换为空格
 	re, _ := regexp.Compile(`(&nbsp;|\xA0)+`)

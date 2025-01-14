@@ -23,7 +23,7 @@ import (
 
 func ApiArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	id := uint(ctx.URLParamIntDefault("id", 0))
+	id := ctx.URLParamInt64Default("id", 0)
 	filename := ctx.URLParam("filename")
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// 只有content字段有效
@@ -223,7 +223,8 @@ func ApiArchiveFilters(ctx iris.Context) {
 
 func ApiArchiveList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
+	parentId := ctx.URLParamInt64Default("parentId", 0)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -321,7 +322,7 @@ func ApiArchiveList(ctx iris.Context) {
 		}
 	}
 
-	extraFields := map[uint]map[string]*model.CustomField{}
+	extraFields := map[int64]map[string]*model.CustomField{}
 	var fields []string
 	fields = append(fields, "id")
 	if module != nil && len(module.Fields) > 0 {
@@ -474,7 +475,7 @@ func ApiArchiveList(ctx iris.Context) {
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "category",
-					Id:          cat.Id,
+					Id:          int64(cat.Id),
 					CreatedTime: cat.CreatedTime,
 					UpdatedTime: cat.UpdatedTime,
 					Title:       cat.Title,
@@ -499,7 +500,7 @@ func ApiArchiveList(ctx iris.Context) {
 				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
-					Id:          tag.Id,
+					Id:          int64(tag.Id),
 					CreatedTime: tag.CreatedTime,
 					UpdatedTime: tag.UpdatedTime,
 					Title:       tag.Title,
@@ -516,6 +517,9 @@ func ApiArchiveList(ctx iris.Context) {
 		ops := func(tx *gorm.DB) *gorm.DB {
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
+			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
@@ -598,7 +602,7 @@ func ApiArchiveList(ctx iris.Context) {
 			total = fulltextTotal
 		}
 	}
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
@@ -618,8 +622,11 @@ func ApiArchiveList(ctx iris.Context) {
 					Value: field[v.FieldName],
 				}
 			}
-			if id, ok := field["id"].(uint32); ok {
-				extraFields[uint(id)] = item
+			if id, ok := field["id"].(int64); ok {
+				extraFields[id] = item
+			} else if id2, ok2 := field["id"]; ok2 {
+				tmpId, _ := strconv.ParseInt(fmt.Sprintf("%d", id2), 10, 64)
+				extraFields[tmpId] = item
 			}
 		}
 		for i := range archives {
@@ -653,7 +660,7 @@ func ApiArchiveList(ctx iris.Context) {
 
 func ApiArchiveParams(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	sorted := true
 	sortedTmp, err := ctx.URLParamBool("sorted")
 	if err == nil {
@@ -855,7 +862,7 @@ func ApiModuleList(ctx iris.Context) {
 
 func ApiCommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	userId := uint(ctx.URLParamIntDefault("user_id", 0))
 	order := ctx.URLParamDefault("order", "id desc")
 	limit := 10
@@ -988,7 +995,7 @@ func ApiNavList(ctx iris.Context) {
 
 func ApiNextArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -1015,7 +1022,7 @@ func ApiNextArchive(ctx iris.Context) {
 
 func ApiPrevArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -1183,7 +1190,7 @@ func ApiTagDataList(ctx iris.Context) {
 			Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
 		return tx
 	}, order, currentPage, limit, offset)
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
@@ -1217,7 +1224,7 @@ func ApiTagList(ctx iris.Context) {
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
-	itemId := uint(ctx.URLParamIntDefault("itemId", 0))
+	itemId := ctx.URLParamInt64Default("itemId", 0)
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
 	order := ctx.URLParamDefault("order", "id desc")

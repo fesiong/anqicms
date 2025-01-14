@@ -1,6 +1,7 @@
 package model
 
 import (
+	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
 )
@@ -25,9 +26,9 @@ type Tag struct {
 }
 
 type TagData struct {
-	Id     uint `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	TagId  uint `json:"tag_id" gorm:"column:tag_id;type:int(10) not null;default:0;index"`
-	ItemId uint `json:"item_id" gorm:"column:item_id;type:int(10) unsigned not null;default:0;index:idx_item_id"`
+	Id     uint  `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	TagId  uint  `json:"tag_id" gorm:"column:tag_id;type:int(10) not null;default:0;index"`
+	ItemId int64 `json:"item_id" gorm:"column:item_id;type:bigint(20) not null;default:0;index:idx_item_id"`
 }
 
 type TagContent struct {
@@ -56,4 +57,11 @@ func (tag *Tag) GetThumb(storageUrl, defaultThumb string) string {
 	}
 
 	return tag.Thumb
+}
+
+func GetNextTagId(tx *gorm.DB) uint {
+	var lastId int64
+	tx.Model(Tag{}).Order("id desc").Limit(1).Pluck("id", &lastId)
+
+	return uint(lastId) + 1
 }
