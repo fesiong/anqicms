@@ -33,6 +33,7 @@ func Register(app *iris.Application) {
 	// 内容导入API
 	app.HandleMany("GET POST", "/api/import/archive /{base:string}/api/import/archive", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportArchive)
 	app.HandleMany("GET POST", "/api/import/categories /{base:string}/api/import/categories", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportGetCategories)
+	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
 
 	// login and register
 	app.Get("/login", controller.LoginPage)
