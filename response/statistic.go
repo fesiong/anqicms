@@ -32,4 +32,5 @@ type Statistics struct {
 	TemplateCount   int64               `json:"template_count"`
 	PageCount       int64               `json:"page_count"`
 	AttachmentCount int64               `json:"attachment_count"`
+	Exact           bool                `json:"exact"` // 是否取的是真实值
 }

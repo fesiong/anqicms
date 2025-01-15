@@ -69,8 +69,8 @@ func Version(ctx iris.Context) {
 
 func GetStatisticsSummary(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-
-	result := currentSite.GetStatisticsSummary()
+	exact := ctx.URLParamBoolDefault("exact", false)
+	result := currentSite.GetStatisticsSummary(exact)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

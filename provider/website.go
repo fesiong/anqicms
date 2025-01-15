@@ -47,7 +47,6 @@ type Website struct {
 	transferWebsite         *TransferWebsite
 	weappClient             *weapp.Client
 	wechatServer            *wechat.Server
-	CachedStatistics        *response.Statistics
 	Cache                   library.Cache
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus
