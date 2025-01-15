@@ -121,10 +121,11 @@ func (w *Website) CleanStatistics() {
 }
 
 func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
-	var result = &response.Statistics{}
+	var result = response.Statistics{}
 	cacheKey := "cachedStatistics"
-	err := w.Cache.Get(cacheKey, result)
+	err := w.Cache.Get(cacheKey, &result)
 	if err != nil || exact {
+		result = response.Statistics{}
 		// 重新获取
 		// 先检查文章总量是否超过10万
 		explainCount := w.GetExplainCount("SELECT id FROM archives")
@@ -239,7 +240,7 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 		w.Cache.Set(cacheKey, result, 60)
 	}
 
-	return result
+	return &result
 }
 
 func (w *Website) SendStatisticsMail() {
