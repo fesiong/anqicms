@@ -6,7 +6,10 @@ import (
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/library"
 	"math"
+	"mime/multipart"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1368,14 +1371,11 @@ func ApiCommentPublish(ctx iris.Context) {
 	}
 
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	if userId > 0 {
-		req.Status = 1
-		userInfo := ctx.Values().Get("userInfo")
-		if userInfo != nil {
-			user, ok := userInfo.(*model.User)
-			if ok {
-				req.UserName = user.UserName
-			}
+	userInfo := ctx.Values().Get("userInfo")
+	if userInfo != nil {
+		user, ok := userInfo.(*model.User)
+		if ok {
+			req.UserName = user.UserName
 		}
 	}
 
@@ -1433,7 +1433,17 @@ func ApiCommentPraise(ctx iris.Context) {
 		return
 	}
 
+	userId := ctx.Values().GetIntDefault("userId", 0)
 	comment, err := currentSite.GetCommentById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 检查是否点赞过
+	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1443,15 +1453,6 @@ func ApiCommentPraise(ctx iris.Context) {
 	}
 
 	comment.VoteCount += 1
-	err = comment.Save(currentSite.DB)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
 	comment.Active = true
 
 	ctx.JSON(iris.Map{
@@ -1463,6 +1464,7 @@ func ApiCommentPraise(ctx iris.Context) {
 
 func ApiGuestbookForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
 	fields := currentSite.GetGuestbookFields()
 	var req = map[string]interface{}{}
 	var err error
@@ -1481,6 +1483,52 @@ func ApiGuestbookForm(ctx iris.Context) {
 			tmpVal, ok := req[item.FieldName].([]string)
 			if ok {
 				val = strings.Trim(strings.Join(tmpVal, ","), ",")
+			}
+		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
+			tmpVal, ok := req[item.FieldName].(string)
+			if ok {
+				// 如果有上传文件，则需要用户登录
+				if userId == 0 {
+					msg := currentSite.TplTr("ThisOperationRequiresLogin")
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  msg,
+					})
+					return
+				}
+				tmpfile, err := os.CreateTemp("", "upload")
+				if err != nil {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  "File Not Found",
+					})
+					return
+				}
+				if _, err := tmpfile.Write([]byte(tmpVal)); err != nil {
+					_ = tmpfile.Close()
+					_ = os.Remove(tmpfile.Name())
+
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  "File Not Found",
+					})
+				}
+				tmpfile.Seek(0, 0)
+				fileHeader := &multipart.FileHeader{
+					Filename: filepath.Base(item.FieldName),
+					Header:   nil,
+					Size:     int64(len(tmpVal)),
+				}
+				attach, err := currentSite.AttachmentUpload(tmpfile, fileHeader, 0, 0, userId)
+				if err == nil {
+					val = attach.Logo
+					if attach.Logo == "" {
+						val = attach.FileLocation
+					}
+				}
+
+				_ = tmpfile.Close()
+				_ = os.Remove(tmpfile.Name())
 			}
 		} else {
 			val, _ = req[item.FieldName].(string)

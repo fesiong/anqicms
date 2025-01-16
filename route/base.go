@@ -21,10 +21,10 @@ func Register(app *iris.Application) {
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
 
-	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, controller.AttachmentUpload)
+	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, middleware.UserAuth, controller.AttachmentUpload)
 
-	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, controller.CommentPublish)
-	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, controller.CommentPraise)
+	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPublish)
+	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
 	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, controller.CommentList)
 
 	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
@@ -112,9 +112,9 @@ func Register(app *iris.Application) {
 		api.Get("/tag/data/list", controller.CheckApiOpen, controller.ApiTagDataList)
 		api.Get("/tag/list", controller.CheckApiOpen, controller.ApiTagList)
 		api.Get("/banner/list", controller.CheckApiOpen, controller.ApiBannerList)
-		api.Post("/attachment/upload", controller.CheckApiOpen, controller.ApiAttachmentUpload)
-		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
-		api.Post("/comment/praise", controller.CheckApiOpen, controller.ApiCommentPraise)
+		api.Post("/attachment/upload", controller.CheckApiOpen, middleware.UserAuth, controller.ApiAttachmentUpload)
+		api.Post("/comment/publish", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPublish)
+		api.Post("/comment/praise", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
 	}
 

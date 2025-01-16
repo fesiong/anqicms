@@ -256,7 +256,7 @@ func (t *TitleImage) Save(img image.Image, title string) (string, error) {
 	defer os.Remove(tmpfile.Name()) // clean up
 	tmpfile.Write(buf)
 
-	attachment, err := t.w.AttachmentUpload(tmpfile, fileHeader, 0, 0)
+	attachment, err := t.w.AttachmentUpload(tmpfile, fileHeader, 0, 0, 0)
 	if err != nil {
 		return "", err
 	}

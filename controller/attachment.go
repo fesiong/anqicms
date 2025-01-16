@@ -10,6 +10,7 @@ import (
 
 func AttachmentUpload(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
 	// 增加分类
 	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
 	attachId := uint(ctx.PostValueIntDefault("id", 0))
@@ -27,22 +28,12 @@ func AttachmentUpload(ctx iris.Context) {
 	defer file.Close()
 
 	if attachId > 0 {
-		adminId := ctx.Values().GetUintDefault("adminId", 0)
-		if adminId == 0 {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  ctx.Tr("UnableToModifyTheImage"),
-			})
-			return
-		}
-		_, err := currentSite.GetAttachmentById(attachId)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  ctx.Tr("TheImageResourceToBeReplacedDoesNotExist"),
-			})
-			return
-		}
+		// 前端用户不允许编辑
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("UnableToModifyTheImage"),
+		})
+		return
 	}
 
 	var attachment *model.Attachment
@@ -87,7 +78,7 @@ func AttachmentUpload(ctx iris.Context) {
 		info.Size = stat.Size()
 		tmpFile.Seek(0, 0)
 
-		attachment, err = currentSite.AttachmentUpload(tmpFile, info, categoryId, attachId)
+		attachment, err = currentSite.AttachmentUpload(tmpFile, info, categoryId, attachId, userId)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -97,7 +88,7 @@ func AttachmentUpload(ctx iris.Context) {
 		}
 	} else {
 		// 普通上传
-		attachment, err = currentSite.AttachmentUpload(file, info, categoryId, attachId)
+		attachment, err = currentSite.AttachmentUpload(file, info, categoryId, attachId, userId)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,

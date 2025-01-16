@@ -29,23 +29,18 @@ func CommentPublish(ctx iris.Context) {
 	//登录状态的用户，发布不进审核，否则进审核
 	status := uint(0)
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	adminId := ctx.Values().GetIntDefault("adminId", 0)
-	if adminId > 0 {
+	// 是否需要审核
+	var contentVerify = true
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok {
+			contentVerify = !group.Setting.ContentNoVerify
+		}
+	}
+	if contentVerify == false {
+		// 不需要审核
 		status = 1
-	} else {
-		// 是否需要审核
-		var contentVerify = true
-		userGroup := ctx.Values().Get("userGroup")
-		if userGroup != nil {
-			group, ok := userGroup.(*model.UserGroup)
-			if ok {
-				contentVerify = !group.Setting.ContentNoVerify
-			}
-		}
-		if contentVerify == false {
-			// 不需要审核
-			status = 1
-		}
 	}
 
 	var req request.PluginComment
@@ -56,13 +51,11 @@ func CommentPublish(ctx iris.Context) {
 	req.Content = ctx.PostValueTrim("content")
 	req.ParentId = uint(ctx.PostValueIntDefault("parent_id", 0))
 	req.ToUid = uint(ctx.PostValueIntDefault("to_uid", 0))
-	if userId > 0 {
-		userInfo := ctx.Values().Get("userInfo")
-		if userInfo != nil {
-			user, ok := userInfo.(*model.User)
-			if ok {
-				req.UserName = user.UserName
-			}
+	userInfo := ctx.Values().Get("userInfo")
+	if userInfo != nil {
+		user, ok := userInfo.(*model.User)
+		if ok {
+			req.UserName = user.UserName
 		}
 	}
 
@@ -122,6 +115,7 @@ func CommentPraise(ctx iris.Context) {
 	}
 	var req request.PluginComment
 	req.Id = uint(ctx.PostValueIntDefault("id", 0))
+	userId := ctx.Values().GetIntDefault("userId", 0)
 
 	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
@@ -131,9 +125,8 @@ func CommentPraise(ctx iris.Context) {
 		})
 		return
 	}
-
-	comment.VoteCount += 1
-	err = comment.Save(currentSite.DB)
+	// 检查是否点赞过
+	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -142,6 +135,7 @@ func CommentPraise(ctx iris.Context) {
 		return
 	}
 
+	comment.VoteCount += 1
 	comment.Active = true
 
 	ctx.JSON(iris.Map{

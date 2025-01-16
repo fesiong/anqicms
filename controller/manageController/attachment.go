@@ -88,7 +88,7 @@ func AttachmentUpload(ctx iris.Context) {
 		info.Size = stat.Size()
 		tmpFile.Seek(0, 0)
 
-		attachment, err = currentSite.AttachmentUpload(tmpFile, info, categoryId, attachId)
+		attachment, err = currentSite.AttachmentUpload(tmpFile, info, categoryId, attachId, 0)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -98,7 +98,7 @@ func AttachmentUpload(ctx iris.Context) {
 		}
 	} else {
 		// 普通上传
-		attachment, err = currentSite.AttachmentUpload(file, info, categoryId, attachId)
+		attachment, err = currentSite.AttachmentUpload(file, info, categoryId, attachId, 0)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,

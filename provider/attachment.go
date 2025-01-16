@@ -32,7 +32,7 @@ import (
 	"time"
 )
 
-func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId uint) (*model.Attachment, error) {
+func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId, userId uint) (*model.Attachment, error) {
 	db := w.DB
 
 	file.Seek(0, 0)
@@ -125,6 +125,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		}
 		//文件上传完成
 		attachment = &model.Attachment{
+			UserId:       userId,
 			FileName:     fileName,
 			FileLocation: filePath + tmpName,
 			FileSize:     fileSize,
@@ -250,6 +251,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	//文件上传完成
 	attachment = &model.Attachment{
+		UserId:       userId,
 		FileName:     fileName,
 		FileLocation: filePath + tmpName,
 		FileSize:     fileSize,
@@ -299,7 +301,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 				Size:     int64(len(body)),
 			}
 
-			return w.AttachmentUpload(tmpfile, fileHeader, 0, 0)
+			return w.AttachmentUpload(tmpfile, fileHeader, 0, 0, 0)
 		} else {
 			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}
