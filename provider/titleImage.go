@@ -193,17 +193,19 @@ func sumTitle(title string) string {
 
 func (t *TitleImage) makeBackground(title string) (newImg image.Image) {
 	titleSum := sumTitle(title)
-	if len(t.config.BgImage) > 0 {
-		file, err := os.Open(t.PublicPath + t.config.BgImage)
-		defer file.Close()
+	if len(t.config.BgImages) > 0 {
+		rad := rand.New(rand.NewSource(time.Now().UnixNano()))
+		bgImage := t.config.BgImages[rad.Intn(len(t.config.BgImages))]
+		file, err := os.Open(t.PublicPath + bgImage)
 		if err == nil {
+			defer file.Close()
 			img, _, err := image.Decode(file)
 			if err == nil {
 				newImg = library.ThumbnailCrop(t.config.Width, t.config.Height, img, 2)
 				return
 			} else {
 				file.Seek(0, 0)
-				if strings.HasSuffix(t.config.BgImage, "webp") {
+				if strings.HasSuffix(bgImage, "webp") {
 					img, err = webp.Decode(file)
 					if err == nil {
 						newImg = library.ThumbnailCrop(t.config.Width, t.config.Height, img, 2)
@@ -265,7 +267,7 @@ func (t *TitleImage) Save(img image.Image, title string) (string, error) {
 }
 
 func (t *TitleImage) EncodeB64string(img image.Image) string {
-	buf, _ := encodeImage(img, "webp", 85)
+	buf, _ := encodeImage(img, "webp", webp.DefaulQuality)
 
 	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
 }
@@ -275,9 +277,6 @@ func (t *TitleImage) drawTitle(img image.Image, title string) image.Image {
 	c := freetype.NewContext()
 	c.SetDPI(72)
 	c.SetClip(img.Bounds())
-	m := image.NewNRGBA(img.Bounds())
-	draw.Draw(m, img.Bounds(), img, image.Point{}, draw.Src)
-	c.SetDst(m)
 	c.SetHinting(font.HintingFull)
 	c.SetFont(t.font)
 	// 文字最小，最大
@@ -322,6 +321,36 @@ func (t *TitleImage) drawTitle(img image.Image, title string) image.Image {
 	lineLen := len(lineWords)
 	// 行高 size * 1.6
 	startY := t.config.Height/2 - (int(float64(realSize)/1.5) + int(float64((lineLen-1)*realSize)*1.6)/2) + realSize
+
+	m := image.NewNRGBA(img.Bounds())
+	draw.Draw(m, img.Bounds(), img, image.Point{}, draw.Src)
+	// 如果有文字背景色，则绘制背景色
+	if len(t.config.FontBgColor) > 0 {
+		bgColor := image.NewUniform(library.HEXToRGB(t.config.FontBgColor))
+		// x=0,y=startY,w=t.config.Width,h=realSize*lineLen
+		bgY := startY - realSize - realSize/2
+		bgY1 := startY + int(float64(realSize)*1.6)*(lineLen-1) + int(float64(realSize)*1.6/2)
+		r, g, b, a := bgColor.RGBA()
+		if a != 255 {
+			newRgba := image.NewNRGBA(image.Rect(0, 0, t.config.Width, bgY1-bgY))
+			dx := newRgba.Bounds().Dx()
+			dy := newRgba.Bounds().Dy()
+			for i := 0; i < dx; i++ {
+				for j := 0; j < dy; j++ {
+					//颜色模型转换，至关重要！
+					v := newRgba.ColorModel().Convert(color.NRGBA64{R: uint16(r), G: uint16(g), B: uint16(b), A: uint16(a)})
+					//Alpha = 0: Full transparent
+					rr, gg, bb, aa := v.RGBA()
+					newRgba.SetRGBA64(i, j, color.RGBA64{R: uint16(rr), G: uint16(gg), B: uint16(bb), A: uint16(aa)})
+				}
+			}
+			draw.Draw(m, image.Rect(0, bgY, t.config.Width, bgY1), newRgba, image.Point{}, draw.Over)
+		} else {
+			draw.Draw(m, image.Rect(0, bgY, t.config.Width, bgY1), bgColor, image.Point{}, draw.Over)
+		}
+	}
+	c.SetDst(m)
+
 	for i, tmpText := range lineWords {
 		tmpWidth = t.getLettersLen([]rune(tmpText), realSize)
 		startX := (t.config.Width - tmpWidth) / 2
