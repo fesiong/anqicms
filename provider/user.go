@@ -102,20 +102,31 @@ func (w *Website) GetUsersInfoByIds(userIds []uint) []*model.User {
 }
 
 func (w *Website) SaveUserInfo(req *request.UserRequest) error {
-	var user = model.User{
-		UserName:   req.UserName,
-		RealName:   req.RealName,
-		AvatarURL:  req.AvatarURL,
-		Introduce:  req.Introduce,
-		Phone:      req.Phone,
-		Email:      req.Email,
-		IsRetailer: req.IsRetailer,
-		ParentId:   req.ParentId,
-		InviteCode: req.InviteCode,
-		GroupId:    req.GroupId,
-		ExpireTime: req.ExpireTime,
-		Status:     req.Status,
+	var user *model.User
+	var err error
+	if req.Id > 0 {
+		user, err = w.GetUserInfoById(req.Id)
+		if err != nil {
+			// 用户不存在
+			return err
+		}
+	} else {
+		user = &model.User{}
 	}
+
+	user.UserName = req.UserName
+	user.RealName = req.RealName
+	user.AvatarURL = req.AvatarURL
+	user.Introduce = req.Introduce
+	user.Phone = req.Phone
+	user.Email = req.Email
+	user.IsRetailer = req.IsRetailer
+	user.ParentId = req.ParentId
+	user.InviteCode = req.InviteCode
+	user.GroupId = req.GroupId
+	user.ExpireTime = req.ExpireTime
+	user.Status = req.Status
+
 	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Password != "" {
@@ -124,15 +135,8 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 	if user.GroupId == 0 {
 		user.GroupId = w.PluginUser.DefaultGroupId
 	}
-	if req.Id > 0 {
-		_, err := w.GetUserInfoById(req.Id)
-		if err != nil {
-			// 用户不存在
-			return err
-		}
-		user.Id = req.Id
-	}
-	err := w.DB.Save(&user).Error
+
+	err = w.DB.Save(user).Error
 	//extra
 	extraFields := map[string]interface{}{}
 	if len(w.PluginUser.Fields) > 0 {
