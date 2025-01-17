@@ -59,6 +59,7 @@ func Register(app *iris.Application) {
 		api.Post("/register", controller.ApiRegister)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
+		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)
 		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
 		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
 		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)

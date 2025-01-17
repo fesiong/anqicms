@@ -858,7 +858,9 @@ func (w *Website) GetCategoryImages(categoryId int) []*response.TinyAttachment {
 
 func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
 	buff := &bytes.Buffer{}
-
+	if quality == 0 {
+		quality = webp.DefaulQuality
+	}
 	if imgType == "webp" {
 		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
 		// 先返回，不用再compress
