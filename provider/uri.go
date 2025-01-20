@@ -5,6 +5,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -51,8 +52,12 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 					if len(args) > 0 {
-						if combine, ok := args[0].(*model.Archive); ok && combine != nil {
-							uri = strings.ReplaceAll(uri, "(/c-{combine})", fmt.Sprintf("/c-%d", combine.Id))
+						if combines, ok := args[0].([]*model.Archive); ok && combines != nil {
+							var combineIds []string
+							for _, combine := range combines {
+								combineIds = append(combineIds, strconv.FormatInt(combine.Id, 10))
+							}
+							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+strings.Join(combineIds, "-"))
 						}
 					}
 				} else if v == "catid" {
@@ -60,8 +65,13 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				} else if v == "filename" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
 					if len(args) > 0 {
-						if combine, ok := args[0].(*model.Archive); ok && combine != nil {
-							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+combine.UrlToken)
+						// combine 只支持ID
+						if combines, ok := args[0].([]*model.Archive); ok && combines != nil {
+							var combineIds []string
+							for _, combine := range combines {
+								combineIds = append(combineIds, strconv.FormatInt(combine.Id, 10))
+							}
+							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+strings.Join(combineIds, "-"))
 						}
 					}
 				} else if v == "catname" {

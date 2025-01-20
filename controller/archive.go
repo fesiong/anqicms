@@ -78,25 +78,32 @@ func ArchiveDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
-	// 支持 combine
+	// 支持 combine，最多支持5个
 	combineName := ctx.Params().GetString("combine")
-	var combineArchive *model.Archive
+	var combineArchives []*model.Archive
+	var combineIds []int64
 	if combineName != "" {
 		// 需要先验证是否是archive
-		tmpId, err := strconv.ParseInt(combineName, 10, 64)
-		if err == nil {
-			combineArchive, err = currentSite.GetArchiveById(tmpId)
-		} else {
-			combineArchive, err = currentSite.GetArchiveByUrlToken(combineName)
+		// 支持多个ID，用 - 隔开
+		combines := strings.Split(combineName, "-")
+		for i, v := range combines {
+			var combineArchive *model.Archive
+			tmpId, err := strconv.ParseInt(v, 10, 64)
+			if err == nil {
+				combineArchive, err = currentSite.GetArchiveById(tmpId)
+			}
+			if err != nil || i > 5 {
+				// 只要有一个不存在，都报错
+				// 超过5个也不行
+				NotFound(ctx)
+				return
+			}
+			combineIds = append(combineIds, combineArchive.Id)
+			combineArchives = append(combineArchives, combineArchive)
 		}
-		if err != nil {
-			// 不存在
-			NotFound(ctx)
-			return
-		}
-		ctx.ViewData("combineId", combineArchive.Id)
+		ctx.ViewData("combineIds", combineIds)
+		ctx.ViewData("combineArchives", combineArchives)
 	}
-	ctx.ViewData("combineArchive", combineArchive)
 
 	// check the archive had paid if the archive need to pay.
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -117,6 +124,11 @@ func ArchiveDetail(ctx iris.Context) {
 		if archive.SeoTitle != "" {
 			webInfo.Title = archive.SeoTitle
 		}
+		if len(combineArchives) > 0 {
+			for _, combineArchive := range combineArchives {
+				webInfo.Title += "_" + combineArchive.Title
+			}
+		}
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
 		webInfo.NavBar = int64(archive.CategoryId)
@@ -125,8 +137,8 @@ func ArchiveDetail(ctx iris.Context) {
 		webInfo.PageName = "archiveDetail"
 		webInfo.CanonicalUrl = archive.CanonicalUrl
 		if webInfo.CanonicalUrl == "" {
-			if combineArchive != nil {
-				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0, combineArchive)
+			if len(combineArchives) > 0 {
+				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0, combineArchives)
 			} else {
 				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0)
 			}
