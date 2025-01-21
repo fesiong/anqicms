@@ -492,9 +492,17 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 			}
 			if len(ids) > 0 {
+				// 使用了全文索引，拿到了ID
 				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if q != "" {
-				tx = tx.Where("`title` like ?", "%"+q+"%")
+				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+				var allArchives int64
+				allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
+				if allArchives > 100000 {
+					tx = tx.Where("`title` like ?", q+"%")
+				} else {
+					tx = tx.Where("`title` like ?", "%"+q+"%")
+				}
 			}
 			return tx
 		}

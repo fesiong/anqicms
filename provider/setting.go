@@ -405,6 +405,15 @@ func (w *Website) LoadCollectorSetting(value string) {
 		return
 	}
 
+	// 配置代理
+	if collector.ProxyConfig.Open && collector.ProxyConfig.ApiUrl != "" {
+		w.CollectorConfig.ProxyConfig = collector.ProxyConfig
+		// 启用代理
+		w.Proxy = NewProxyIPs(&w.CollectorConfig.ProxyConfig)
+	} else {
+		// 释放代理
+		w.Proxy = nil
+	}
 	//开始处理
 	if collector.ErrorTimes != 0 {
 		w.CollectorConfig.ErrorTimes = collector.ErrorTimes

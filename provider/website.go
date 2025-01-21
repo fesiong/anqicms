@@ -88,6 +88,7 @@ type Website struct {
 
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson
+	Proxy           *ProxyIPs // 代理
 
 	FindPasswordInfo *response.FindPasswordInfo
 	Limiter          *Limiter

@@ -16,6 +16,7 @@ import (
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
@@ -162,13 +163,17 @@ func (w *Website) CollectArticles() {
 			if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
 				return
 			}
-			// 每个关键词都需要间隔30秒以上
-			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
+			// 如果没有使用代理，则每个关键词都需要间隔30秒以上
+			if w.Proxy == nil {
+				time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
+			}
 			if err != nil {
 				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
 				// 延时 10分钟以上
 				// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
-				break
+				if w.Proxy == nil {
+					break
+				}
 			}
 		}
 	}
@@ -178,7 +183,7 @@ func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (t
 	if w.CollectorConfig.CollectMode == config.CollectModeCombine {
 		total, err = w.GenerateCombination(&keyword)
 	} else {
-		total, err = w.CollectArticleFromBaidu(&keyword, focus)
+		total, err = w.CollectArticleFromBaidu(&keyword, focus, 0)
 	}
 
 	if err != nil {
@@ -274,12 +279,15 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	return nil
 }
 
-func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
+func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool, retry int) (int, error) {
 	collectUrl := fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=10", keyword.Title)
 	if w.CollectorConfig.FromWebsite != "" {
 		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=10", keyword.Title, w.CollectorConfig.FromWebsite)
 	}
-
+	var proxyIp string
+	if w.Proxy != nil {
+		proxyIp = w.Proxy.GetIP()
+	}
 	resp, err := library.Request(collectUrl, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
@@ -288,13 +296,32 @@ func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (i
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
 			"Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
 		},
+		Proxy: proxyIp,
 	})
 	if err != nil {
+		if proxyIp != "" {
+			w.Proxy.RemoveIP(proxyIp)
+			// 重试2次
+			if retry < 2 {
+				return w.CollectArticleFromBaidu(keyword, focus, retry+1)
+			}
+		}
 		return 0, err
 	}
 
 	var total int
 	links := w.ParseBaiduJson(resp.Body)
+	// 如果是使用了代理，则使用并发处理，最大10并发
+	chNum := 1
+	if w.Proxy != nil {
+		chNum = w.Proxy.cfg.Concurrent * 2
+		if chNum > 10 {
+			chNum = 10
+		}
+	}
+	wg := sync.WaitGroup{}
+	ch := make(chan int, chNum)
+	defer close(ch)
 	for _, link := range links {
 		//需要过滤可能不是内容的链接，/ 结尾的全部抛弃
 		//if strings.HasSuffix(link.Url, "/") {
@@ -322,33 +349,55 @@ func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (i
 			continue
 		}
 
-		archive, err := w.CollectSingleArticle(link, keyword)
-		if err == nil {
-			err = w.SaveCollectArticle(archive, keyword)
-
+		ch <- 1
+		wg.Add(1)
+		go func(wl *response.WebLink) {
+			defer func() {
+				<-ch
+				wg.Done()
+			}()
+			archive, err := w.CollectSingleArticle(wl, keyword, 0)
 			if err == nil {
-				total++
-				if !focus {
-					//根据设置的时间，休息一定秒数
-					time.Sleep(15 * time.Second)
+				err = w.SaveCollectArticle(archive, keyword)
+
+				if err == nil {
+					total++
+					if !focus && proxyIp == "" {
+						//如果没有使用代理，根据设置的时间，休息一定秒数
+						time.Sleep(15 * time.Second)
+					}
 				}
 			}
-		}
+		}(link)
 	}
+	wg.Wait()
 
 	return total, nil
 }
 
-func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*request.Archive, error) {
+func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Keyword, retry int) (*request.Archive, error) {
 	//百度的不使用 chromedp
+	var proxyIp string
+	if w.Proxy != nil {
+		proxyIp = w.Proxy.GetIP()
+	}
 	resp, err := library.Request(link.Url, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
 		Header: map[string]string{
 			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s", url.QueryEscape(keyword.Title)),
 		},
+		Proxy: proxyIp,
 	})
 	if err != nil {
+		//log.Println("请求出错：", link.Url, err.Error())
+		if proxyIp != "" {
+			w.Proxy.RemoveIP(proxyIp)
+			// 重试2次
+			if retry < 2 {
+				return w.CollectSingleArticle(link, keyword, retry+1)
+			}
+		}
 		return nil, err
 	}
 
