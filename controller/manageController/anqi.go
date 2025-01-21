@@ -5,6 +5,7 @@ import (
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"strings"
@@ -249,13 +250,20 @@ func AnqiTranslateArticle(ctx iris.Context) {
 		return
 	}
 
+	isDraft := false
 	archive, err := currentSite.GetArchiveById(req.Id)
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+		// 可能是 草稿
+		archiveDraft, err := currentSite.GetArchiveDraftById(req.Id)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		isDraft = true
+		archive = &archiveDraft.Archive
 	}
 	// 读取 data
 	archiveData, err := currentSite.GetArchiveDataById(archive.Id)
@@ -286,7 +294,16 @@ func AnqiTranslateArticle(ctx iris.Context) {
 	if result.Status == config.AiArticleStatusCompleted {
 		archive.Title = result.Title
 		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-		currentSite.DB.Save(archive)
+		tx := currentSite.DB
+		if isDraft {
+			tx = tx.Model(&model.Archive{})
+		} else {
+			tx = tx.Model(&model.ArchiveDraft{})
+		}
+		tx.Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
+			"title":       archive.Title,
+			"description": archive.Description,
+		})
 		// 再保存内容
 		archiveData.Content = result.Content
 		currentSite.DB.Save(archiveData)
@@ -312,16 +329,23 @@ func AnqiAiPseudoArticle(ctx iris.Context) {
 		return
 	}
 
+	isDraft := false
 	archive, err := currentSite.GetArchiveById(req.Id)
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+		// 可能是 草稿
+		archiveDraft, err := currentSite.GetArchiveDraftById(req.Id)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		isDraft = true
+		archive = &archiveDraft.Archive
 	}
 
-	err = currentSite.AnqiAiPseudoArticle(archive)
+	err = currentSite.AnqiAiPseudoArticle(archive, isDraft)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

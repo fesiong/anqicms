@@ -116,11 +116,11 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		KeywordId:  keyword.Id,
 		OriginUrl:  keyword.Title,
 	}
+	isDraft := false
 	if w.CollectorConfig.SaveType == 0 {
-		archive.Draft = true
-	} else {
-		archive.Draft = false
+		isDraft = true
 	}
+	archive.Draft = isDraft
 	// 保存前再检查一次
 	if w.checkArticleExists(keyword.Title, "", archive.Title) {
 		return 1, nil
@@ -133,7 +133,7 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 	log.Println(res.Id, res.Title)
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
-		_ = w.AnqiAiPseudoArticle(res)
+		_ = w.AnqiAiPseudoArticle(res, isDraft)
 	}
 	if w.CollectorConfig.AutoTranslate {
 		// AI 改写
@@ -158,7 +158,16 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		if result.Status == config.AiArticleStatusCompleted {
 			res.Title = result.Title
 			res.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-			w.DB.Save(res)
+			tx := w.DB
+			if isDraft {
+				tx = tx.Model(&model.ArchiveDraft{})
+			} else {
+				tx = tx.Model(&model.Archive{})
+			}
+			tx.Where("id = ?", res.Id).UpdateColumns(map[string]interface{}{
+				"title":       res.Title,
+				"description": res.Description,
+			})
 			// 再保存内容
 			archiveData.Content = result.Content
 			w.DB.Save(archiveData)

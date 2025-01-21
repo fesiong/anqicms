@@ -227,11 +227,11 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	archive.CategoryId = categoryId
 	//log.Println("draft:", w.CollectorConfig.SaveType)
 	// 如果不是正常发布，则存到草稿
+	isDraft := false
 	if w.CollectorConfig.SaveType == 0 {
-		archive.Draft = true
-	} else {
-		archive.Draft = false
+		isDraft = true
 	}
+	archive.Draft = isDraft
 	res, err := w.SaveArchive(archive)
 	if err != nil {
 		log.Println("保存文章出错：", archive.Title, err.Error())
@@ -242,7 +242,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
-		_ = w.AnqiAiPseudoArticle(res)
+		_ = w.AnqiAiPseudoArticle(res, isDraft)
 	}
 	if w.CollectorConfig.AutoTranslate {
 		// AI 翻译
@@ -267,7 +267,16 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 		if result.Status == config.AiArticleStatusCompleted {
 			res.Title = result.Title
 			res.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-			w.DB.Save(res)
+			tx := w.DB
+			if isDraft {
+				tx = tx.Model(&model.ArchiveDraft{})
+			} else {
+				tx = tx.Model(&model.Archive{})
+			}
+			tx.Where("id = ?", res.Id).UpdateColumns(map[string]interface{}{
+				"title":       res.Title,
+				"description": res.Description,
+			})
 			// 再保存内容
 			archiveData.Content = result.Content
 			w.DB.Save(archiveData)
