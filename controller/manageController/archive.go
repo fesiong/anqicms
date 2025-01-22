@@ -2,6 +2,8 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -325,6 +327,87 @@ func GetQuickImportArchiveStatus(ctx iris.Context) {
 		"data": status,
 	})
 }
+
+func GetQuickImportExcelTemplate(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var excelTemplateRequest struct {
+		CategoryId uint `json:"category_id"`
+	}
+	err := ctx.ReadJSON(&excelTemplateRequest)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "category_id is required",
+		})
+		return
+	}
+	category := currentSite.GetCategoryFromCache(excelTemplateRequest.CategoryId)
+	if category == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "category is empty",
+		})
+		return
+	}
+	module := currentSite.GetModuleFromCache(category.ModuleId)
+	if module == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "module is empty",
+		})
+		return
+	}
+	// 开始生成 Excel 模板
+	// 主表字段 id, parent_id, seo_title, url_token,logo,images, keywords, description, user_id, price, stock, read_level, password, sort, origin_url, origin_title
+	type Item struct {
+		Field string
+		Value string
+	}
+	var fields = []Item{
+		{Field: "title", Value: "示例标题"},
+		{Field: "content", Value: "示例内容"},
+		{Field: "seo_title", Value: "示例SEO标题"},
+		{Field: "logo", Value: "https://www.anqicms.com/anqicms.png"},
+		{Field: "keywords", Value: "示例关键词"},
+		{Field: "description", Value: "示例介绍"},
+		{Field: "price", Value: "9980"},
+		{Field: "stock", Value: "9999"},
+	}
+	if module.Fields != nil {
+		for _, field := range module.Fields {
+			fields = append(fields, Item{
+				Field: field.FieldName,
+				Value: field.Name,
+			})
+		}
+	}
+	// 生成Excel
+	f := excelize.NewFile()
+	defer func() {
+		_ = f.Close()
+	}()
+	// 26个字母
+	colLetters := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"}
+	for i, field := range fields {
+		_ = f.SetCellValue("Sheet1", colLetters[i]+"1", field.Field)
+		_ = f.SetCellValue("Sheet1", colLetters[i]+"2", field.Value)
+	}
+	// 输出文件
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	destName := "import-template.xlsx"
+	ctx.ResponseWriter().Header().Set(context.ContentDispositionHeaderKey, context.MakeDisposition(destName))
+
+	_, _ = ctx.Write(buf.Bytes())
+}
+
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)

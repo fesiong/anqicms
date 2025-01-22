@@ -177,6 +177,7 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 			archive.Post("/import", manageController.QuickImportArchive)
 			archive.Get("/import/status", manageController.GetQuickImportArchiveStatus)
+			archive.Post("/import/exceltemplate", manageController.GetQuickImportExcelTemplate)
 		}
 
 		statistic := manage.Party("/statistic", middleware.ParseAdminToken, middleware.AdminPermission)
