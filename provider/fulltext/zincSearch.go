@@ -3,12 +3,10 @@ package fulltext
 import (
 	"context"
 	"errors"
-	"fmt"
 	client "github.com/zinclabs/sdk-go-zincsearch"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"log"
-	"os"
 	"strconv"
 )
 

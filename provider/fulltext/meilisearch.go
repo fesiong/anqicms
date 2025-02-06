@@ -1,13 +1,11 @@
 package fulltext
 
 import (
-	"errors"
 	"fmt"
 	"github.com/meilisearch/meilisearch-go"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"log"
-	"os"
 	"strconv"
 )
 
