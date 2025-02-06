@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"math"
 	"mime/multipart"
 	"net/url"
@@ -447,26 +448,26 @@ func ApiArchiveList(ctx iris.Context) {
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
-		var ids []uint64
+		var ids []int64
 		var searchCatIds []uint
 		var searchTagIds []uint
 		if listType == "page" && len(q) > 0 {
-			var tmpIds []uint64
-			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			var tmpDocs []fulltext.TinyArchive
+			tmpDocs, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
 			if err2 == nil {
 				fulltextSearch = true
-				for _, id := range tmpIds {
-					if id < provider.CategoryDivider {
-						ids = append(ids, id)
-					} else if id < provider.TagDivider {
-						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
-					} else if id < provider.TagDividerEnd {
-						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+				for _, doc := range tmpDocs {
+					if doc.Type == fulltext.ArchiveType {
+						ids = append(ids, doc.Id)
+					} else if doc.Type == fulltext.CategoryType {
+						searchCatIds = append(searchCatIds, uint(doc.Id))
+					} else if doc.Type == fulltext.TagType {
+						searchTagIds = append(searchTagIds, uint(doc.Id))
 					} else {
 						// 其他值
 					}
 				}
-				if len(tmpIds) == 0 || len(ids) == 0 {
+				if len(tmpDocs) == 0 || len(ids) == 0 {
 					ids = append(ids, 0)
 				}
 				offset = 0

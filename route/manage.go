@@ -442,6 +442,8 @@ func manageRoute(app *iris.Application) {
 			{
 				fulltext.Get("/config", manageController.PluginFulltextConfig)
 				fulltext.Post("/config", manageController.PluginFulltextConfigForm)
+				fulltext.Post("/rebuild", manageController.PluginFulltextRebuild)
+				fulltext.Get("/status", manageController.PluginFulltextStatus)
 			}
 
 			backup := plugin.Party("/backup")

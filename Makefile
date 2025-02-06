@@ -14,6 +14,7 @@ all: clean tidy build archive
 clean:
 	@echo "🧹 Cleaning..."
 	@rm -rf ./release
+	@rm -rf ./anqicms.syso
 
 tiny:
 	@echo "🧼 Tidying up dependencies..."

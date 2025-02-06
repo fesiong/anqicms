@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"net/url"
@@ -342,8 +343,9 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}()
 	}
 	if w.PluginFulltext.UseCategory {
-		w.AddFulltextIndex(&TinyArchive{
-			Id:          CategoryDivider + uint64(category.Id),
+		w.AddFulltextIndex(fulltext.TinyArchive{
+			Id:          int64(category.Id),
+			Type:        fulltext.CategoryType,
 			ModuleId:    category.ModuleId,
 			Title:       category.Title,
 			Keywords:    category.Keywords,

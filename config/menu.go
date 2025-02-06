@@ -326,7 +326,7 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/plugin/aigenerate",
 				GroupKey: "plugin",
-				Name:     "静态页面缓存",
+				Name:     "AI自动写作",
 				Backend:  "/plugin/aigenerate",
 			},
 			{

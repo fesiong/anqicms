@@ -14,6 +14,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"log"
@@ -839,8 +840,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 
 	if isReleased {
 		// 尝试添加全文索引
-		w.AddFulltextIndex(&TinyArchive{
-			Id:          uint64(draft.Id),
+		w.AddFulltextIndex(fulltext.TinyArchive{
+			Id:          draft.Id,
+			Type:        fulltext.ArchiveType,
 			ModuleId:    draft.ModuleId,
 			Title:       draft.Title,
 			Keywords:    draft.Keywords,
@@ -956,10 +958,10 @@ func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
 	go func() {
-		var doc TinyArchive
-		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
+		var doc fulltext.TinyArchive
+		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
 		// 尝试添加全文索引
-		w.AddFulltextIndex(&doc)
+		w.AddFulltextIndex(doc)
 	}()
 
 	return nil
@@ -992,7 +994,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-	w.RemoveFulltextIndex(uint64(archive.Id))
+	w.RemoveFulltextIndex(fulltext.TinyArchive{Id: archive.Id, Type: fulltext.ArchiveType})
 	// 每次删除文档，都清理一次Sitemap
 	if w.PluginSitemap.AutoBuild == 1 {
 		w.DeleteSitemap(w.PluginSitemap.Type)
@@ -1065,7 +1067,7 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 				hasFixedLink = true
 			}
 			w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-			w.RemoveFulltextIndex(uint64(archive.Id))
+			w.RemoveFulltextIndex(fulltext.TinyArchive{Id: archive.Id, Type: fulltext.ArchiveType})
 		}
 		if hasFixedLink {
 			w.DeleteCacheFixedLinks()

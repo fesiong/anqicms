@@ -27,12 +27,17 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 		})
 		return
 	}
+	oldEngine := currentSite.PluginFulltext.Engine
 
 	currentSite.PluginFulltext.Open = req.Open
 	currentSite.PluginFulltext.UseContent = req.UseContent
 	currentSite.PluginFulltext.Modules = req.Modules
 	currentSite.PluginFulltext.UseCategory = req.UseCategory
 	currentSite.PluginFulltext.UseTag = req.UseTag
+	currentSite.PluginFulltext.Engine = req.Engine
+	currentSite.PluginFulltext.EngineUrl = req.EngineUrl
+	currentSite.PluginFulltext.EngineUser = req.EngineUser
+	currentSite.PluginFulltext.EnginePass = req.EnginePass
 
 	err := currentSite.SaveSettingValue(provider.FulltextSettingKey, currentSite.PluginFulltext)
 	if err != nil {
@@ -46,7 +51,7 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateFullTextIndexConfiguration"))
 	if req.Open {
 		currentSite.CloseFulltext()
-		go currentSite.InitFulltext()
+		go currentSite.InitFulltext(oldEngine != req.Engine)
 	} else {
 		currentSite.CloseFulltext()
 	}
@@ -54,5 +59,35 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
+func PluginFulltextRebuild(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	if !currentSite.PluginFulltext.Open {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Fulltext is not open",
+		})
+		return
+	}
+
+	currentSite.CloseFulltext()
+	go currentSite.InitFulltext(true)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SubmittedForBackgroundProcessing"),
+	})
+}
+
+func PluginFulltextStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	status := currentSite.GetFullTextStatus()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
 	})
 }

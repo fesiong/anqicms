@@ -122,6 +122,12 @@ type PluginFulltextConfig struct {
 	UseCategory bool   `json:"use_category"` // 是否索引分类
 	UseTag      bool   `json:"use_tag"`      // 是否索引标签
 	Modules     []uint `json:"modules"`
+	Initialed   bool   `json:"initialed"` //是否已经生成过索引
+
+	Engine     string `json:"engine"` // 支持的搜索引擎：default(wukong)|Elasticsearch|ZincSearch|Meilisearch
+	EngineUrl  string `json:"engine_url"`
+	EngineUser string `json:"engine_user"`
+	EnginePass string `json:"engine_pass"`
 }
 
 type PluginTitleImageConfig struct {

@@ -1,12 +1,15 @@
 module kandaoni.com/anqicms
 
-go 1.20
+go 1.22
+
+toolchain go1.22.11
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.1
 	github.com/aliyun/aliyun-oss-go-sdk v3.0.2+incompatible
 	github.com/chai2010/webp v1.1.2-0.20240612091223-aa1b379218b7
 	github.com/disintegration/imaging v1.6.2
+	github.com/elastic/go-elasticsearch/v8 v8.17.0
 	github.com/esap/wechat v1.1.2
 	github.com/fatih/structs v1.1.0
 	github.com/flopp/go-findfont v0.1.0
@@ -26,6 +29,7 @@ require (
 	github.com/kataras/iris/v12 v12.2.7
 	github.com/lib/pq v1.10.9
 	github.com/medivhzhan/weapp/v3 v3.8.1
+	github.com/meilisearch/meilisearch-go v0.30.0
 	github.com/melbahja/goph v1.4.0
 	github.com/mojocn/base64Captcha v1.3.6
 	github.com/mozillazg/go-pinyin v0.20.0
@@ -40,6 +44,7 @@ require (
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.45
 	github.com/upyun/go-sdk/v3 v3.0.4
 	github.com/xuri/excelize/v2 v2.9.0
+	github.com/zinclabs/sdk-go-zincsearch v0.3.3
 	golang.org/x/crypto v0.28.0
 	golang.org/x/image v0.18.0
 	golang.org/x/net v0.30.0
@@ -58,7 +63,7 @@ require (
 	github.com/Joker/jade v1.1.3 // indirect
 	github.com/Shopify/goreferrer v0.0.0-20220729165902-8cddb4f5de06 // indirect
 	github.com/adamzy/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
-	github.com/andybalholm/brotli v1.1.0 // indirect
+	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/andybalholm/cascadia v1.3.2 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/boltdb/bolt v1.3.1 // indirect
@@ -71,6 +76,7 @@ require (
 	github.com/cznic/sortutil v0.0.0-20181122101858-f5f958428db8 // indirect
 	github.com/cznic/zappy v0.0.0-20181122101859-ca47d358d4b1 // indirect
 	github.com/edsrzf/mmap-go v1.0.0 // indirect
+	github.com/elastic/elastic-transport-go/v8 v8.6.0 // indirect
 	github.com/elazarl/goproxy v0.0.0-20231117061959-7cc037d33fb5 // indirect
 	github.com/fatih/color v1.16.0 // indirect
 	github.com/felixge/httpsnoop v1.0.4 // indirect
@@ -81,11 +87,12 @@ require (
 	github.com/getlantern/hex v0.0.0-20190417191902-c6586a6fe0b7 // indirect
 	github.com/getlantern/hidden v0.0.0-20190325191715-f02dbb02be55 // indirect
 	github.com/getlantern/ops v0.0.0-20190325191751-d70cb0d6f85f // indirect
-	github.com/go-logr/logr v1.4.1 // indirect
+	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
+	github.com/golang-jwt/jwt/v4 v4.5.1 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
@@ -139,9 +146,9 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	go.opencensus.io v0.24.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.49.0 // indirect
-	go.opentelemetry.io/otel v1.24.0 // indirect
-	go.opentelemetry.io/otel/metric v1.24.0 // indirect
-	go.opentelemetry.io/otel/trace v1.24.0 // indirect
+	go.opentelemetry.io/otel v1.28.0 // indirect
+	go.opentelemetry.io/otel/metric v1.28.0 // indirect
+	go.opentelemetry.io/otel/trace v1.28.0 // indirect
 	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
 	golang.org/x/sync v0.8.0 // indirect
