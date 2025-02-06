@@ -443,8 +443,8 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		archive.Content = RemoveTags(re.ReplaceAllString(archive.Content, ""))
 	}
 	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
-		rand.Seed(time.Now().UnixMicro())
-		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		img := w.CollectorConfig.Images[rd.Intn(len(w.CollectorConfig.Images))]
 		content := strings.SplitAfter(archive.Content, ">")
 
 		index := len(content) / 3

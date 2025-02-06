@@ -10,17 +10,19 @@ type AiGenerateConfig struct {
 	Images          []string         `json:"images"`
 	ImageCategoryId int              `json:"image_category_id"` // 选定的图片分类
 	ContentReplace  []ReplaceKeyword `json:"content_replace"`
-	CategoryId      uint             `json:"category_id"`  //默认分类
-	CategoryIds     []uint           `json:"category_ids"` // 默认分类，支持多个
-	SaveType        uint             `json:"save_type"`    // 文档处理方式
-	StartHour       int              `json:"start_hour"`   //每天开始时间
-	EndHour         int              `json:"end_hour"`     //每天结束时间
-	DailyLimit      int              `json:"daily_limit"`  //每日限额
-	AiEngine        string           `json:"ai_engine"`    // ai 引擎，default 官方接口，openai 自定义openai，spark 星火大模型
-	AiTranslate     bool             `json:"ai_translate"` // 是否使用AI翻译
-	OpenAIKeys      []OpenAIKey      `json:"open_ai_keys"` // self openai key
-	ApiValid        bool             `json:"api_valid"`    // api地址是否可用
-	KeyIndex        int              `json:"-"`            // 上一次调用的key id
+	CategoryId      uint             `json:"category_id"`   //默认分类
+	CategoryIds     []uint           `json:"category_ids"`  // 默认分类，支持多个
+	SaveType        uint             `json:"save_type"`     // 文档处理方式
+	StartHour       int              `json:"start_hour"`    //每天开始时间
+	EndHour         int              `json:"end_hour"`      //每天结束时间
+	DailyLimit      int              `json:"daily_limit"`   //每日限额
+	AiEngine        string           `json:"ai_engine"`     // ai 引擎，default 官方接口，openai 自定义openai，spark 星火大模型，DeepSeek
+	AiTranslate     bool             `json:"ai_translate"`  // 是否使用AI翻译
+	OpenAIKeys      []OpenAIKey      `json:"open_ai_keys"`  // self openai key
+	ApiValid        bool             `json:"api_valid"`     // api地址是否可用
+	KeyIndex        int              `json:"-"`             // 上一次调用的key id
+	OpenAiApi       string           `json:"open_ai_api"`   // openai api地址
+	OpenAIModel     string           `json:"open_ai_model"` // 选用的模型
 	Spark           SparkSetting     `json:"spark"`
 }
 
@@ -37,9 +39,10 @@ type SparkSetting struct {
 }
 
 const (
-	AiEngineDefault = ""
-	AiEngineOpenAI  = "openai"
-	AiEngineSpark   = "spark"
+	AiEngineDefault  = ""
+	AiEngineOpenAI   = "openai"
+	AiEngineSpark    = "spark"
+	AiEngineDeepSeek = "deepseek"
 )
 
 const (

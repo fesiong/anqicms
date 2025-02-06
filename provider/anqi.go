@@ -527,8 +527,8 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		}
 		var content = strings.Split(req.Content, "\n")
 		if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
-			rand.Seed(time.Now().UnixMicro())
-			img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			img := w.AiGenerateConfig.Images[rd.Intn(len(w.AiGenerateConfig.Images))]
 			index := len(content) / 3
 			content = append(content, "")
 			copy(content[index+1:], content[index:])
@@ -700,8 +700,8 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			}
 			var content = strings.Split(req.Content, "\n")
 			if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
-				rand.Seed(time.Now().UnixMicro())
-				img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
+				rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+				img := w.AiGenerateConfig.Images[rd.Intn(len(w.AiGenerateConfig.Images))]
 				index := len(content) / 3
 				content = append(content, "")
 				copy(content[index+1:], content[index:])
@@ -846,14 +846,8 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
-		if w.Content.Editor == "markdown" {
-			prompt += "\n请使用 Markdown 格式输出"
-		}
 		if req.Language == config.LanguageEn {
 			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
-			if w.Content.Editor == "markdown" {
-				prompt += "\nPlease output in Markdown format."
-			}
 		}
 		if len(req.Demand) > 0 {
 			prompt += "\n" + req.Demand
@@ -866,7 +860,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			if key == "" {
 				return "", errors.New(w.Tr("NoAvailableKey"))
 			}
-			stream, err := GetOpenAIStreamResponse(key, prompt)
+			stream, err := w.GetOpenAIStreamResponse(key, prompt)
 			if err != nil {
 				msg := err.Error()
 				re, _ := regexp.Compile(`code: (\d+),`)

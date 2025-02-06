@@ -37,7 +37,7 @@ require (
 	github.com/pkg/sftp v1.13.6
 	github.com/qiniu/go-sdk/v7 v7.19.0
 	github.com/robfig/cron/v3 v3.0.1
-	github.com/sashabaranov/go-openai v1.18.3
+	github.com/sashabaranov/go-openai v1.36.1
 	github.com/shirou/gopsutil/v3 v3.23.12
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
@@ -45,10 +45,10 @@ require (
 	github.com/upyun/go-sdk/v3 v3.0.4
 	github.com/xuri/excelize/v2 v2.9.0
 	github.com/zinclabs/sdk-go-zincsearch v0.3.3
-	golang.org/x/crypto v0.28.0
+	golang.org/x/crypto v0.32.0
 	golang.org/x/image v0.18.0
-	golang.org/x/net v0.30.0
-	golang.org/x/text v0.19.0
+	golang.org/x/net v0.34.0
+	golang.org/x/text v0.21.0
 	google.golang.org/api v0.169.0
 	gorm.io/driver/mysql v1.5.2
 	gorm.io/gorm v1.25.5
@@ -151,8 +151,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.28.0 // indirect
 	golang.org/x/exp v0.0.0-20240112132812-db7319d0e0e3 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
-	golang.org/x/sync v0.8.0 // indirect
-	golang.org/x/sys v0.26.0 // indirect
+	golang.org/x/sync v0.10.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240304161311-37d4d3c04a78 // indirect

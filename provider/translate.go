@@ -148,8 +148,6 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 			if len(results[i]) == 0 {
 				results = append(results[:i], results[i+1:]...)
 				i--
-			} else {
-				results[i] = "<p>" + results[i] + "</p>"
 			}
 		}
 		// 如果有图片，则需要重新插入图片
@@ -164,6 +162,9 @@ func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, err
 		}
 
 		req.Content = strings.Join(results, "\n")
+		if w.Content.Editor != "markdown" {
+			req.Content = library.MarkdownToHTML(req.Content, w.System.BaseUrl, w.Content.FilterOutlink)
+		}
 	}
 
 	return req, nil
