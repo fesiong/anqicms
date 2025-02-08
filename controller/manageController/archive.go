@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"os"
 	"strings"
@@ -59,6 +60,10 @@ func ArchiveList(ctx iris.Context) {
 		return tx
 	}
 
+	offset := (currentPage - 1) * pageSize
+	var fulltextSearch bool
+	var fulltextTotal int64
+	var ids []int64
 	if collect {
 		ops = func(tx *gorm.DB) *gorm.DB {
 			return tx.Where("`origin_url` != ''").Order(orderBy)
@@ -98,24 +103,47 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
 			}
 			if title != "" {
-				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
-				var allArchives int64
+				// 如果开启了全文索引，则尝试使用全文索引搜索，status = "ok" 时有效
 				if status == "ok" {
-					allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
-				} else {
-					allArchives = currentSite.GetExplainCount("SELECT id FROM archive_drafts")
+					var tmpDocs []fulltext.TinyArchive
+					var err2 error
+					tmpDocs, fulltextTotal, err2 = currentSite.Search(title, moduleId, currentPage, pageSize)
+					if err2 == nil {
+						fulltextSearch = true
+						// 只保留文档
+						for _, doc := range tmpDocs {
+							if doc.Type == fulltext.ArchiveType {
+								ids = append(ids, doc.Id)
+							}
+						}
+						if len(tmpDocs) == 0 || len(ids) == 0 {
+							ids = append(ids, 0)
+						}
+						offset = 0
+					}
 				}
-				if allArchives > 100000 {
-					tx = tx.Where("`title` like ?", title+"%")
+				if fulltextSearch == true {
+					// 使用了全文索引，拿到了ID
+					tx = tx.Where("archives.`id` IN(?)", ids)
 				} else {
-					tx = tx.Where("`title` like ?", "%"+title+"%")
+					// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+					var allArchives int64
+					if status == "ok" {
+						allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
+					} else {
+						allArchives = currentSite.GetExplainCount("SELECT id FROM archive_drafts")
+					}
+					if allArchives > 100000 {
+						tx = tx.Where("`title` like ?", title+"%")
+					} else {
+						tx = tx.Where("`title` like ?", "%"+title+"%")
+					}
 				}
 			}
 			tx = tx.Order(orderBy)
 			return tx
 		}
 	}
-	offset := (currentPage - 1) * pageSize
 	builder := dbTable(ops(currentSite.DB))
 
 	builder = dbTable(builder)
@@ -133,6 +161,9 @@ func ArchiveList(ctx iris.Context) {
 		}
 	} else {
 		builder.Count(&total)
+	}
+	if fulltextSearch {
+		total = fulltextTotal
 	}
 	// 先查询ID
 	var archiveIds []uint
