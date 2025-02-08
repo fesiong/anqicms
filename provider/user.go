@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/medivhzhan/weapp/v3"
+	"golang.org/x/image/webp"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"image"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
@@ -99,19 +102,32 @@ func (w *Website) GetUsersInfoByIds(userIds []uint) []*model.User {
 }
 
 func (w *Website) SaveUserInfo(req *request.UserRequest) error {
-	var user = model.User{
-		UserName:   req.UserName,
-		RealName:   req.RealName,
-		AvatarURL:  req.AvatarURL,
-		Phone:      req.Phone,
-		Email:      req.Email,
-		IsRetailer: req.IsRetailer,
-		ParentId:   req.ParentId,
-		InviteCode: req.InviteCode,
-		GroupId:    req.GroupId,
-		ExpireTime: req.ExpireTime,
-		Status:     req.Status,
+	var user *model.User
+	var err error
+	if req.Id > 0 {
+		user, err = w.GetUserInfoById(req.Id)
+		if err != nil {
+			// 用户不存在
+			return err
+		}
+	} else {
+		user = &model.User{}
 	}
+
+	user.UserName = req.UserName
+	user.RealName = req.RealName
+	user.AvatarURL = req.AvatarURL
+	user.Introduce = req.Introduce
+	user.Phone = req.Phone
+	user.Email = req.Email
+	user.IsRetailer = req.IsRetailer
+	user.ParentId = req.ParentId
+	user.InviteCode = req.InviteCode
+	user.GroupId = req.GroupId
+	user.ExpireTime = req.ExpireTime
+	user.Status = req.Status
+
+	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Password != "" {
 		user.EncryptPassword(req.Password)
@@ -119,15 +135,8 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 	if user.GroupId == 0 {
 		user.GroupId = w.PluginUser.DefaultGroupId
 	}
-	if req.Id > 0 {
-		_, err := w.GetUserInfoById(req.Id)
-		if err != nil {
-			// 用户不存在
-			return err
-		}
-		user.Id = req.Id
-	}
-	err := w.DB.Save(&user).Error
+
+	err = w.DB.Save(user).Error
 	//extra
 	extraFields := map[string]interface{}{}
 	if len(w.PluginUser.Fields) > 0 {
@@ -590,6 +599,7 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	}
 	user.UserName = req.UserName
 	user.RealName = req.RealName
+	user.Introduce = req.Introduce
 	if user.GroupId == 0 {
 		user.GroupId = w.PluginUser.DefaultGroupId
 	}
@@ -684,10 +694,10 @@ func (w *Website) GetUserExtra(id uint) map[string]*model.CustomField {
 		w.DB.Model(model.User{}).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 		//extra的CheckBox的值
 		for _, v := range w.PluginUser.Fields {
-			if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
-				value, ok := result[v.FieldName].(string)
-				if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
-					result[v.FieldName] = w.PluginStorage.StorageUrl + value
+			value, ok := result[v.FieldName].(string)
+			if ok {
+				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+					result[v.FieldName] = w.ReplaceContentUrl(value, true)
 				}
 			}
 			extraFields[v.FieldName] = &model.CustomField{
@@ -720,4 +730,39 @@ func (w *Website) GetUserAuthToken(userId uint, remember bool) string {
 	}
 
 	return tokenString
+}
+
+func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl string, err error) {
+	var fileName string
+	img, imgType, err := image.Decode(file)
+	if err != nil {
+		file.Seek(0, 0)
+		img, err = webp.Decode(file)
+		imgType = "webp"
+		if err != nil {
+			return "", errors.New(w.Tr("UnsupportedImageFormat"))
+		}
+	}
+	if imgType == "jpeg" {
+		imgType = "jpg"
+	}
+	if imgType != "jpg" && imgType != "gif" && imgType != "webp" {
+		imgType = "png"
+	}
+	file.Seek(0, 0)
+	fileName = "uploads/user/" + strconv.Itoa(int(userId)) + "." + imgType
+	// 头像统一处理裁剪成正方形，256*256，并且不加水印
+	newImg := library.ThumbnailCrop(256, 256, img, 2)
+	buf, _, _ := encodeImage(newImg, imgType, w.Content.Quality)
+	// 上传图片
+	_, err = w.Storage.UploadFile(fileName, buf)
+	if err != nil {
+		return "", err
+	}
+
+	// 更新用户头像地址
+	w.DB.Model(&model.User{}).Where("`id` = ?", userId).UpdateColumn("avatar_url", fileName)
+
+	// 返回头像地址
+	return w.PluginStorage.StorageUrl + "/" + fileName, nil
 }

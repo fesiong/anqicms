@@ -98,7 +98,19 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 							categoryDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 						}
 					}
-
+				}
+				if fieldName == "Extra" {
+					var extras = make([]model.CustomField, 0, len(module.CategoryFields))
+					for _, field := range module.CategoryFields {
+						extras = append(extras, model.CustomField{
+							Name:      field.Name,
+							Value:     categoryDetail.Extra[field.FieldName],
+							Default:   field.Content,
+							Type:      field.Type,
+							FieldName: field.FieldName,
+						})
+					}
+					content = extras
 				}
 			}
 		}
@@ -124,8 +136,6 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		} else {
 			if fieldName == "Images" {
 				ctx.Private[node.name] = categoryDetail.Images
-			} else if fieldName == "Extra" {
-				ctx.Private[node.name] = categoryDetail.Extra
 			} else {
 				ctx.Private[node.name] = content
 			}

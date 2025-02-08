@@ -7,12 +7,14 @@ import (
 	"errors"
 	"fmt"
 	"github.com/jinzhu/now"
+	"github.com/xuri/excelize/v2"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"gorm.io/gorm"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 	"log"
@@ -838,8 +840,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 
 	if isReleased {
 		// 尝试添加全文索引
-		w.AddFulltextIndex(&TinyArchive{
-			Id:          uint64(draft.Id),
+		w.AddFulltextIndex(fulltext.TinyArchive{
+			Id:          draft.Id,
+			Type:        fulltext.ArchiveType,
 			ModuleId:    draft.ModuleId,
 			Title:       draft.Title,
 			Keywords:    draft.Keywords,
@@ -955,10 +958,10 @@ func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
 	go func() {
-		var doc TinyArchive
-		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
+		var doc fulltext.TinyArchive
+		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
 		// 尝试添加全文索引
-		w.AddFulltextIndex(&doc)
+		w.AddFulltextIndex(doc)
 	}()
 
 	return nil
@@ -991,7 +994,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-	w.RemoveFulltextIndex(uint64(archive.Id))
+	w.RemoveFulltextIndex(fulltext.TinyArchive{Id: archive.Id, Type: fulltext.ArchiveType})
 	// 每次删除文档，都清理一次Sitemap
 	if w.PluginSitemap.AutoBuild == 1 {
 		w.DeleteSitemap(w.PluginSitemap.Type)
@@ -1064,7 +1067,7 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 				hasFixedLink = true
 			}
 			w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-			w.RemoveFulltextIndex(uint64(archive.Id))
+			w.RemoveFulltextIndex(fulltext.TinyArchive{Id: archive.Id, Type: fulltext.ArchiveType})
 		}
 		if hasFixedLink {
 			w.DeleteCacheFixedLinks()
@@ -1616,6 +1619,16 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 		_ = file.Close()
 	}()
 
+	if strings.HasSuffix(qia.FileName, ".xlsx") {
+		// xlsx
+		return qia.startExcel(file)
+	} else {
+		// zip
+		return qia.startZip(file)
+	}
+}
+
+func (qia *QuickImportArchive) startZip(file multipart.File) error {
 	category, err := qia.w.GetCategoryById(qia.CategoryId)
 	if err != nil {
 		qia.Message = err.Error()
@@ -1833,6 +1846,415 @@ func (qia *QuickImportArchive) Start(file multipart.File) error {
 	if len(archives) > 0 {
 		qia.SaveBatches(archives)
 	}
+	qia.IsFinished = true
+
+	return nil
+}
+
+func (qia *QuickImportArchive) startExcel(file multipart.File) error {
+	category, err := qia.w.GetCategoryById(qia.CategoryId)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+	excelReader, err := excelize.OpenReader(file)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+
+	// 读取图片
+	if qia.InsertImage == config.CollectImageCategory {
+		qia.images = qia.w.GetCategoryImages(qia.ImageCategoryId)
+	}
+	// 实际上，我们只处理第一个表
+	sheets := excelReader.GetSheetList()
+	sheetName := sheets[0]
+	rows, err := excelReader.GetRows(sheetName)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+	if len(rows) < 2 {
+		qia.Message = "Excel is empty"
+		return errors.New(qia.Message)
+	}
+	// 确认字段，第一行为字段
+	// 根据分类，先读取出对应的模型以及字段
+	module := qia.w.GetModuleFromCache(category.ModuleId)
+	if module == nil {
+		qia.Message = "Module is empty"
+		return errors.New(qia.Message)
+	}
+	var extraFields = make(map[string]int)
+	var existFields = make(map[string]int)
+	for i, col := range rows[0] {
+		// 匹配自定义字段
+		existExtra := false
+		if len(module.Fields) > 0 {
+			for _, field := range module.Fields {
+				if field.FieldName == col {
+					extraFields[field.FieldName] = i
+					existExtra = true
+					break
+				}
+			}
+		}
+		if !existExtra {
+			// 主表字段
+			existFields[col] = i
+		}
+	}
+	// 如果没有标题，则不允许插入
+	if _, ok := existFields["title"]; !ok {
+		qia.Message = "Title is empty"
+		return errors.New(qia.Message)
+	}
+
+	qia.Total = len(rows) - 1
+	qia.between = 0
+	qia.current = time.Now()
+	if qia.PlanType == 2 {
+		qia.DailyCount = int(math.Ceil(float64(qia.Total) / float64(qia.Days)))
+		qia.between = time.Hour * 24 / time.Duration(qia.DailyCount)
+		if qia.PlanStart > 0 {
+			qia.setCurrentTime()
+		}
+	}
+	baseHost := ""
+	urls, err := url.Parse(qia.w.System.BaseUrl)
+	if err == nil {
+		baseHost = urls.Host
+	}
+	// excel 导入不使用 批量导入方式，而是逐个入库
+	for i, row := range rows {
+		if i == 0 {
+			// 跳过标题行
+			continue
+		}
+		qia.Finished++
+		// 支持 txt/html/md
+		status := config.ContentStatusOK
+		if qia.PlanType == 2 {
+			status = config.ContentStatusPlan
+		} else if qia.PlanType == 1 {
+			status = config.ContentStatusDraft
+		}
+		title := strings.TrimSpace(row[existFields["title"]])
+		if title == "" {
+			// 标题为空，跳过
+			continue
+		}
+		categoryId := category.Id
+		moduleId := category.ModuleId
+		extraTableName := module.TableName
+		extra := extraFields
+		if colId, ok := existFields["category_id"]; ok {
+			tmpId, _ := strconv.Atoi(row[colId])
+			if tmpId > 0 {
+				tmpCategory := qia.w.GetCategoryFromCache(uint(tmpId))
+				if tmpCategory != nil {
+					categoryId = tmpCategory.Id
+					moduleId = tmpCategory.ModuleId
+					if moduleId != module.Id {
+						// 模型不一致，重新获取 extraFields
+						tmpModule := qia.w.GetModuleFromCache(tmpCategory.ModuleId)
+						extra = make(map[string]int)
+						if tmpModule != nil {
+							extraTableName = tmpModule.TableName
+							if len(tmpModule.Fields) > 0 {
+								for ri, col := range rows[0] {
+									// 匹配自定义字段
+									for _, field := range tmpModule.Fields {
+										if field.FieldName == col {
+											extra[field.FieldName] = ri
+											break
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		// 如果分类字段填写的是分类名称
+		if colId, ok := existFields["category_title"]; ok {
+			categoryTitle := strings.TrimSpace(row[colId])
+			if len(categoryTitle) > 0 {
+				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
+				if err != nil {
+					// 分类不存在，创建
+					if moduleId == 0 {
+						moduleId = 1
+					}
+					tmpCategory, err = qia.w.SaveCategory(&request.Category{
+						Title:    categoryTitle,
+						ModuleId: moduleId,
+						Status:   1,
+						Type:     config.CategoryTypeArchive,
+					})
+				}
+				if tmpCategory != nil {
+					categoryId = tmpCategory.Id
+				}
+			}
+		}
+
+		archive := model.ArchiveDraft{
+			Archive: model.Archive{
+				Title:       title,
+				CreatedTime: qia.current.Unix(),
+				UpdatedTime: time.Now().Unix(),
+				CategoryId:  categoryId,
+				ModuleId:    moduleId,
+			},
+			Status: uint(status),
+		}
+		articleContent := strings.TrimSpace(row[existFields["content"]])
+		if len(articleContent) > 0 {
+			if (articleContent[0] != '<') && qia.w.Content.Editor != "markdown" {
+				articleContent = library.MarkdownToHTML(articleContent, qia.w.System.BaseUrl, qia.w.Content.FilterOutlink)
+			}
+		}
+
+		// 检查标题重复问题
+		if qia.CheckDuplicate {
+			var count int64
+			qia.w.DB.Model(&model.Archive{}).Where("title = ?", archive.Title).Count(&count)
+			if count > 0 {
+				continue
+			}
+			qia.w.DB.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Count(&count)
+			if count > 0 {
+				continue
+			}
+		}
+		// 步进
+		if qia.between > 0 {
+			qia.current = qia.current.Add(qia.between)
+		}
+		// e
+		// 插入图片
+		if len(qia.images) > 0 {
+			var img string
+			if qia.ImageCategoryId == -2 {
+				// 按关键词匹配
+				keywordSplit := library.WordSplit(archive.Title, false)
+				for _, word := range keywordSplit {
+					if img != "" {
+						break
+					}
+					for _, v := range qia.images {
+						if strings.Contains(v.FileName, word) {
+							img = v.FileLocation
+							break
+						}
+					}
+				}
+			} else {
+				// 随机一张，已经随机过了，因此这里就是顺序
+				img = qia.images[qia.nextImage].FileLocation
+				qia.nextImage = (qia.nextImage + 1) % len(qia.images)
+			}
+			if img != "" {
+				imgTag := "<img src='" + img + "' alt='" + archive.Title + "' />"
+
+				var contents = strings.Split(articleContent, "\n")
+				if len(contents) < 2 && strings.Contains(articleContent, ">") {
+					contents = strings.SplitAfter(articleContent, ">")
+				}
+				index := len(contents) / 3
+				contents = append(contents, "")
+				copy(contents[index+1:], contents[index:])
+				// ![新的图片](http://xxx/xxx.webp)
+				if qia.w.Content.Editor == "markdown" {
+					imgTag = fmt.Sprintf("![%s](%s)", archive.Title, img)
+				}
+				contents[index] = imgTag
+				articleContent = strings.Join(contents, "")
+				archive.Images = []string{img}
+			}
+		} else {
+			// 提取缩略图
+			re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
+			match := re.FindStringSubmatch(articleContent)
+			if len(match) > 1 {
+				archive.Images = append(archive.Images, match[1])
+			} else {
+				// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+				re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+				match = re.FindStringSubmatch(articleContent)
+				if len(match) > 2 {
+					archive.Images = append(archive.Images, match[2])
+				}
+			}
+		}
+		// 解析description
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		// 解析urlToken
+		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
+		// 处理更多主表字段
+		// id, parent_id, seo_title, url_token,logo,images, keywords, description, user_id, price, stock, read_level, password, sort, origin_url, origin_title
+		if colId, ok := existFields["id"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Id = tmpId
+			}
+		}
+		if colId, ok := existFields["parent_id"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.ParentId = tmpId
+			}
+		}
+		if colId, ok := existFields["logo"]; ok {
+			logo := strings.TrimSpace(row[colId])
+			if len(logo) > 0 {
+				archive.Images = append(archive.Images, logo)
+			}
+		}
+		if colId, ok := existFields["images"]; ok {
+			archive.Images = strings.Split(strings.TrimSpace(row[colId]), ",")
+		}
+		if qia.w.Content.RemoteDownload == 1 {
+			// 处理 images
+			for ii, v := range archive.Images {
+				if strings.HasPrefix(v, qia.w.PluginStorage.StorageUrl) {
+					continue
+				}
+				if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "http") {
+					imgUrl, err2 := url.Parse(v)
+					if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
+						// 自动下载
+						attachment, err2 := qia.w.DownloadRemoteImage(v, "")
+						if err2 == nil {
+							// 下载完成
+							archive.Images[ii] = strings.TrimPrefix(attachment.Logo, qia.w.PluginStorage.StorageUrl)
+						}
+					}
+				}
+			}
+		}
+		if colId, ok := existFields["seo_title"]; ok {
+			archive.SeoTitle = row[colId]
+		}
+		if colId, ok := existFields["url_token"]; ok {
+			archive.UrlToken = row[colId]
+		}
+		if colId, ok := existFields["keywords"]; ok {
+			archive.Keywords = row[colId]
+		}
+		if colId, ok := existFields["description"]; ok {
+			archive.Description = row[colId]
+		}
+		if colId, ok := existFields["user_id"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.UserId = uint(tmpId)
+			}
+		}
+		if colId, ok := existFields["price"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Price = tmpId
+			}
+		}
+		if colId, ok := existFields["stock"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Stock = tmpId
+			}
+		}
+		if colId, ok := existFields["read_level"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.ReadLevel = int(tmpId)
+			}
+		}
+		if colId, ok := existFields["password"]; ok {
+			archive.Password = row[colId]
+		}
+		if colId, ok := existFields["sort"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Sort = uint(tmpId)
+			}
+		}
+		if colId, ok := existFields["origin_url"]; ok {
+			archive.OriginUrl = row[colId]
+		}
+		if colId, ok := existFields["origin_title"]; ok {
+			archive.OriginTitle = row[colId]
+		}
+		// 先对主表进行入库
+		tx := qia.w.DB.Begin()
+		// 需要写入表 archive_category, archive_data，archives, archive_drafts, tag_data, tag
+		if qia.PlanType != 0 {
+			// 入库到 draft
+			err = tx.Save(&archive).Error
+			if err != nil {
+				tx.Rollback()
+				continue
+			}
+		} else {
+			// release mode
+			err = tx.Save(&archive.Archive).Error
+			if err != nil {
+				tx.Rollback()
+				continue
+			}
+		}
+		// 保存 content
+		archiveData := model.ArchiveData{
+			Id:      archive.Id,
+			Content: articleContent,
+		}
+		err = tx.Save(&archiveData).Error
+		if err != nil {
+			tx.Rollback()
+			continue
+		}
+		tx.Commit()
+		// 保存Flags
+		var flags []string
+		if colId, ok := existFields["flag"]; ok {
+			flags = strings.Split(row[colId], ",")
+			if len(flags) > 0 {
+				_ = qia.w.SaveArchiveFlags(archive.Id, flags)
+			}
+		}
+		// 保存分类ID
+		_ = qia.w.SaveArchiveCategories(archive.Id, []uint{archive.CategoryId})
+		// 处理 tag
+		if colId, ok := existFields["tag"]; ok {
+			tags := strings.Split(strings.ReplaceAll(row[colId], "，", ","), ",")
+			if len(tags) > 0 {
+				_ = qia.w.SaveTagData(archive.Id, tags)
+			}
+		}
+		// 处理附表
+		if len(extra) > 0 {
+			var extraData = make(map[string]interface{})
+			for k, colId := range extra {
+				extraData[k] = row[colId]
+			}
+			// 先检查是否存在
+			var existsId int64
+			qia.w.DB.Table(extraTableName).Where("`id` = ?", archive.Id).Pluck("id", &existsId)
+			if existsId > 0 {
+				// 已存在
+				qia.w.DB.Table(extraTableName).Where("`id` = ?", archive.Id).Updates(extraData)
+			} else {
+				// 新建
+				extraData["id"] = archive.Id
+				qia.w.DB.Table(extraTableName).Where("`id` = ?", archive.Id).Create(extraData)
+			}
+		}
+
+		qia.Succeed++
+	}
+
 	qia.IsFinished = true
 
 	return nil

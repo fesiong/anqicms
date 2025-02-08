@@ -1,11 +1,12 @@
 package manageController
 
 import (
-	"github.com/chai2010/webp"
 	"github.com/kataras/iris/v12"
+	"golang.org/x/image/webp"
 	"image"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
@@ -45,9 +46,10 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 
 	currentSite.PluginTitleImage.Open = req.Open
 	currentSite.PluginTitleImage.DrawSub = req.DrawSub
-	currentSite.PluginTitleImage.BgImage = req.BgImage
+	currentSite.PluginTitleImage.BgImages = req.BgImages
 	currentSite.PluginTitleImage.FontPath = req.FontPath
 	currentSite.PluginTitleImage.FontSize = req.FontSize
+	currentSite.PluginTitleImage.FontBgColor = req.FontBgColor
 	currentSite.PluginTitleImage.Width = req.Width
 	currentSite.PluginTitleImage.Height = req.Height
 	currentSite.PluginTitleImage.Noise = req.Noise
@@ -116,7 +118,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 		fileName = "uploads/titleimage/title_font.ttf"
 	} else {
 		// image
-		_, _, err := image.Decode(file)
+		_, _, err = image.Decode(file)
 		if err != nil {
 			file.Seek(0, 0)
 			if strings.HasSuffix(info.Filename, "webp") {
@@ -131,7 +133,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 			}
 		}
 		file.Seek(0, 0)
-		fileName = "uploads/titleimage/bg_image" + filepath.Ext(info.Filename)
+		fileName = "uploads/titleimage/" + library.Md5(info.Filename) + filepath.Ext(info.Filename)
 	}
 	buff, err := io.ReadAll(file)
 	if err != nil {
@@ -161,16 +163,14 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 
 	if name == "font_path" {
 		currentSite.PluginTitleImage.FontPath = fileName
-	} else {
-		currentSite.PluginTitleImage.BgImage = fileName
-	}
-	err = currentSite.SaveSettingValue(provider.TitleImageSettingKey, currentSite.PluginTitleImage)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+		err = currentSite.SaveSettingValue(provider.TitleImageSettingKey, currentSite.PluginTitleImage)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTitleImageResourcesLog", name))

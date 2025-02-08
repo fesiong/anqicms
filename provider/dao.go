@@ -102,6 +102,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.NavType{},
 			&model.Link{},
 			&model.Comment{},
+			&model.CommentPraise{},
 			&model.Anchor{},
 			&model.AnchorData{},
 			&model.Guestbook{},

@@ -42,6 +42,8 @@ const (
 	UrlTokenTypeSort = 1
 )
 
+const DefaultQuality = 90
+
 const (
 	StorageTypeLocal   = "local" // or empty
 	StorageTypeAliyun  = "aliyun"

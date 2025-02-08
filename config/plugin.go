@@ -122,18 +122,25 @@ type PluginFulltextConfig struct {
 	UseCategory bool   `json:"use_category"` // 是否索引分类
 	UseTag      bool   `json:"use_tag"`      // 是否索引标签
 	Modules     []uint `json:"modules"`
+	Initialed   bool   `json:"initialed"` //是否已经生成过索引
+
+	Engine     string `json:"engine"` // 支持的搜索引擎：default(wukong)|Elasticsearch|ZincSearch|Meilisearch
+	EngineUrl  string `json:"engine_url"`
+	EngineUser string `json:"engine_user"`
+	EnginePass string `json:"engine_pass"`
 }
 
 type PluginTitleImageConfig struct {
-	Open      bool   `json:"open"`
-	DrawSub   bool   `json:"draw_sub"`
-	BgImage   string `json:"bg_image"`
-	FontPath  string `json:"font_path"`
-	FontSize  int    `json:"font_size"`
-	FontColor string `json:"font_color"`
-	Width     int    `json:"width"`
-	Height    int    `json:"height"`
-	Noise     bool   `json:"noise"`
+	Open        bool     `json:"open"`
+	DrawSub     bool     `json:"draw_sub"`
+	BgImages    []string `json:"bg_images"`
+	FontPath    string   `json:"font_path"`
+	FontSize    int      `json:"font_size"`
+	FontColor   string   `json:"font_color"`
+	FontBgColor string   `json:"font_bg_color"` // 文字背景色
+	Width       int      `json:"width"`
+	Height      int      `json:"height"`
+	Noise       bool     `json:"noise"`
 }
 
 type PluginHtmlCache struct {

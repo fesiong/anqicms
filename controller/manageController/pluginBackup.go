@@ -95,7 +95,7 @@ func PluginBackupRestore(ctx iris.Context) {
 				currentSite.DeleteCache()
 				currentSite.RemoveHtmlCache()
 				currentSite.CloseFulltext()
-				currentSite.InitFulltext()
+				currentSite.InitFulltext(true)
 			}()
 
 			ctx.JSON(iris.Map{

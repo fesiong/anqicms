@@ -419,6 +419,57 @@ func ApiImportGetCategories(ctx iris.Context) {
 	})
 }
 
+// ApiImportMakeSitemap 通过API接口生成Sitemap
+func ApiImportMakeSitemap(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	async := ctx.FormValue("async")
+
+	if async == "true" || async == "1" {
+		go func() {
+			err := currentSite.BuildSitemap()
+			if err == nil {
+				pluginSitemap := currentSite.PluginSitemap
+
+				//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
+				pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
+				// 写入Sitemap的url
+				pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+
+				currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
+			}
+		}()
+
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("SubmittedForBackgroundProcessing"),
+		})
+		return
+	}
+	//开始生成sitemap
+	err := currentSite.BuildSitemap()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	pluginSitemap := currentSite.PluginSitemap
+
+	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
+	pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
+	// 写入Sitemap的url
+	pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SitemapUpdated"),
+		"data": pluginSitemap,
+	})
+}
 func ApiImportCreateFriendLink(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	// 增加支持 didi 友链的批量导入

@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"net/url"
 	"regexp"
@@ -112,6 +113,7 @@ func (w *Website) DeleteTag(id uint) error {
 	if err != nil {
 		return err
 	}
+	w.RemoveFulltextIndex(fulltext.TinyArchive{Id: int64(tag.Id), Type: fulltext.TagType})
 
 	return nil
 }
@@ -246,8 +248,9 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		}
 	}
 	if w.PluginFulltext.UseTag {
-		w.AddFulltextIndex(&TinyArchive{
-			Id:          TagDivider + uint64(tag.Id),
+		w.AddFulltextIndex(fulltext.TinyArchive{
+			Id:          int64(tag.Id),
+			Type:        fulltext.TagType,
 			Title:       tag.Title,
 			Keywords:    tag.Keywords,
 			Description: tag.Description,

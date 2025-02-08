@@ -865,7 +865,7 @@ func (w *Website) insertAttachment(realName string, isImage int) {
 		Size:     info.Size(),
 	}
 	// 再走一遍上传流程
-	_, err = w.AttachmentUpload(file, fileHeader, 0, attachment.Id)
+	_, err = w.AttachmentUpload(file, fileHeader, 0, attachment.Id, 0)
 	if err != nil {
 		log.Println(err)
 		return

@@ -5,8 +5,12 @@ import (
 	"fmt"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"math"
+	"mime/multipart"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -444,26 +448,26 @@ func ApiArchiveList(ctx iris.Context) {
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
-		var ids []uint64
+		var ids []int64
 		var searchCatIds []uint
 		var searchTagIds []uint
 		if listType == "page" && len(q) > 0 {
-			var tmpIds []uint64
-			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			var tmpDocs []fulltext.TinyArchive
+			tmpDocs, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
 			if err2 == nil {
 				fulltextSearch = true
-				for _, id := range tmpIds {
-					if id < provider.CategoryDivider {
-						ids = append(ids, id)
-					} else if id < provider.TagDivider {
-						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
-					} else if id < provider.TagDividerEnd {
-						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+				for _, doc := range tmpDocs {
+					if doc.Type == fulltext.ArchiveType {
+						ids = append(ids, doc.Id)
+					} else if doc.Type == fulltext.CategoryType {
+						searchCatIds = append(searchCatIds, uint(doc.Id))
+					} else if doc.Type == fulltext.TagType {
+						searchTagIds = append(searchTagIds, uint(doc.Id))
 					} else {
 						// 其他值
 					}
 				}
-				if len(tmpIds) == 0 || len(ids) == 0 {
+				if len(tmpDocs) == 0 || len(ids) == 0 {
 					ids = append(ids, 0)
 				}
 				offset = 0
@@ -1368,14 +1372,11 @@ func ApiCommentPublish(ctx iris.Context) {
 	}
 
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	if userId > 0 {
-		req.Status = 1
-		userInfo := ctx.Values().Get("userInfo")
-		if userInfo != nil {
-			user, ok := userInfo.(*model.User)
-			if ok {
-				req.UserName = user.UserName
-			}
+	userInfo := ctx.Values().Get("userInfo")
+	if userInfo != nil {
+		user, ok := userInfo.(*model.User)
+		if ok {
+			req.UserName = user.UserName
 		}
 	}
 
@@ -1433,7 +1434,17 @@ func ApiCommentPraise(ctx iris.Context) {
 		return
 	}
 
+	userId := ctx.Values().GetIntDefault("userId", 0)
 	comment, err := currentSite.GetCommentById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 检查是否点赞过
+	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1443,15 +1454,6 @@ func ApiCommentPraise(ctx iris.Context) {
 	}
 
 	comment.VoteCount += 1
-	err = comment.Save(currentSite.DB)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
 	comment.Active = true
 
 	ctx.JSON(iris.Map{
@@ -1463,6 +1465,7 @@ func ApiCommentPraise(ctx iris.Context) {
 
 func ApiGuestbookForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
 	fields := currentSite.GetGuestbookFields()
 	var req = map[string]interface{}{}
 	var err error
@@ -1481,6 +1484,52 @@ func ApiGuestbookForm(ctx iris.Context) {
 			tmpVal, ok := req[item.FieldName].([]string)
 			if ok {
 				val = strings.Trim(strings.Join(tmpVal, ","), ",")
+			}
+		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
+			tmpVal, ok := req[item.FieldName].(string)
+			if ok {
+				// 如果有上传文件，则需要用户登录
+				if userId == 0 {
+					msg := currentSite.TplTr("ThisOperationRequiresLogin")
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  msg,
+					})
+					return
+				}
+				tmpfile, err := os.CreateTemp("", "upload")
+				if err != nil {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  "File Not Found",
+					})
+					return
+				}
+				if _, err := tmpfile.Write([]byte(tmpVal)); err != nil {
+					_ = tmpfile.Close()
+					_ = os.Remove(tmpfile.Name())
+
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  "File Not Found",
+					})
+				}
+				tmpfile.Seek(0, 0)
+				fileHeader := &multipart.FileHeader{
+					Filename: filepath.Base(item.FieldName),
+					Header:   nil,
+					Size:     int64(len(tmpVal)),
+				}
+				attach, err := currentSite.AttachmentUpload(tmpfile, fileHeader, 0, 0, userId)
+				if err == nil {
+					val = attach.Logo
+					if attach.Logo == "" {
+						val = attach.FileLocation
+					}
+				}
+
+				_ = tmpfile.Close()
+				_ = os.Remove(tmpfile.Name())
 			}
 		} else {
 			val, _ = req[item.FieldName].(string)

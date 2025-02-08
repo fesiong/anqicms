@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/sashabaranov/go-openai"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -33,7 +34,7 @@ func (w *Website) SelfAiTranslate(content string, toLanguage string) (string, er
 			return "", errors.New(w.Tr("NoAvailableKey"))
 		}
 
-		result, err := GetOpenAIResponse(key, prompt)
+		result, err := w.GetOpenAIResponse(key, prompt)
 		if err != nil {
 			if result != nil && (result.Code == 401 || result.Code == 429) {
 				w.SetOpenAIKeyInvalid(key)
@@ -77,7 +78,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
 
-		result, err = GetOpenAIResponse(key, prompt)
+		result, err = w.GetOpenAIResponse(key, prompt)
 		if err != nil {
 			if result.Code == 401 || result.Code == 429 {
 				w.SetOpenAIKeyInvalid(key)
@@ -140,7 +141,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 				return nil, errors.New(w.Tr("NoAvailableKey"))
 			}
 
-			result, err = GetOpenAIResponse(key, prompt)
+			result, err = w.GetOpenAIResponse(key, prompt)
 			if err != nil {
 				if result.Code == 401 || result.Code == 429 {
 					w.SetOpenAIKeyInvalid(key)
@@ -173,8 +174,6 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 		if len(results[i]) == 0 {
 			results = append(results[:i], results[i+1:]...)
 			i--
-		} else {
-			results[i] = "<p>" + results[i] + "</p>"
 		}
 	}
 	// 如果有图片，则需要重新插入图片
@@ -189,6 +188,9 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 	}
 
 	req.Content = strings.Join(results, "\n")
+	if w.Content.Editor != "markdown" {
+		req.Content = library.MarkdownToHTML(req.Content, w.System.BaseUrl, w.Content.FilterOutlink)
+	}
 
 	return req, nil
 }
@@ -200,28 +202,24 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	if w.AiGenerateConfig.DoubleTitle {
 		prompt = "请您基于关键词'" + req.Keyword + "'生成一篇双标题文章，输出格式'主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）正文：（在此处输入正文内容）'，要求表意清晰，主题鲜明，分段表述"
 	}
-	if w.Content.Editor == "markdown" {
-		prompt += "\n请使用 Markdown 格式输出"
-	}
 	if req.Language == config.LanguageEn {
 		prompt = "Please generate an English article based on the keywords, and put the article title on the first line. Keywords: " + req.Keyword
-		if w.Content.Editor == "markdown" {
-			prompt += "\nPlease output in Markdown format."
-		}
 	}
 	if len(req.Demand) > 0 {
 		prompt += "\n" + req.Demand
 	}
-	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
-		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New(w.Tr("InterfaceUnavailable"))
+	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI || w.AiGenerateConfig.AiEngine == config.AiEngineDeepSeek {
+		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+			if !w.AiGenerateConfig.ApiValid {
+				return nil, errors.New(w.Tr("InterfaceUnavailable"))
+			}
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
 			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
-
-		result, err = GetOpenAIResponse(key, prompt)
+		// DeepSeek和openai共用一个处理方法
+		result, err = w.GetOpenAIResponse(key, prompt)
 		if err != nil {
 			if result.Code == 401 || result.Code == 429 {
 				w.SetOpenAIKeyInvalid(key)
@@ -354,6 +352,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	title = strings.TrimPrefix(title, "副标题：")
 	title = strings.Replace(title, "副标题", "", 1)
 	title = strings.Replace(title, "：", "，", 1)
+	title = strings.Trim(title, "# *")
 	if utf8.RuneCountInString(title) > 150 {
 		title = string([]rune(title)[:150])
 	}
@@ -381,18 +380,21 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 				results[i] = seps[1]
 			}
 		}
-		if w.Content.Editor != "markdown" {
-			results[i] = "<p>" + results[i] + "</p>"
-		}
 	}
 	req.Title = title
 	req.Content = strings.Join(results, "\n")
+	if w.Content.Editor != "markdown" {
+		req.Content = library.MarkdownToHTML(req.Content, w.System.BaseUrl, w.Content.FilterOutlink)
+	}
 
 	return req, nil
 }
 
-func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
+func (w *Website) GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 	cfg := openai.DefaultConfig(apiKey)
+	if w.AiGenerateConfig.OpenAiApi != "" {
+		cfg.BaseURL = w.AiGenerateConfig.OpenAiApi
+	}
 	transport := &http.Transport{}
 	proxy := os.Getenv("HTTP_PROXY")
 	if len(proxy) > 0 {
@@ -405,10 +407,14 @@ func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 		Transport: transport,
 	}
 	client := openai.NewClientWithConfig(cfg)
+	model := openai.GPT3Dot5Turbo
+	if w.AiGenerateConfig.OpenAIModel != "" {
+		model = w.AiGenerateConfig.OpenAIModel
+	}
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo,
+			Model: model,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
@@ -435,8 +441,11 @@ func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 	return result, nil
 }
 
-func GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStream, error) {
+func (w *Website) GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStream, error) {
 	cfg := openai.DefaultConfig(apiKey)
+	if w.AiGenerateConfig.OpenAiApi != "" {
+		cfg.BaseURL = w.AiGenerateConfig.OpenAiApi
+	}
 	transport := &http.Transport{}
 	proxy := os.Getenv("HTTP_PROXY")
 	if len(proxy) > 0 {
@@ -450,9 +459,12 @@ func GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStrea
 	}
 	client := openai.NewClientWithConfig(cfg)
 	ctx := context.Background()
-
+	model := openai.GPT3Dot5Turbo
+	if w.AiGenerateConfig.OpenAIModel != "" {
+		model = w.AiGenerateConfig.OpenAIModel
+	}
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
+		Model: model,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleUser,

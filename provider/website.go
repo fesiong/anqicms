@@ -3,7 +3,6 @@ package provider
 import (
 	"errors"
 	"github.com/esap/wechat"
-	"github.com/huichen/wukong/engine"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/i18n"
 	"github.com/medivhzhan/weapp/v3"
@@ -11,6 +10,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/response"
 	"net/url"
 	"os"
@@ -41,13 +41,12 @@ type Website struct {
 	Storage                 *BucketStorage
 	CacheStorage            *BucketStorage
 	parsedPatten            *RewritePatten
-	searcher                *engine.Engine
-	fulltextStatus          int // 0 未启用，1初始化中，2 初始化完成
+	searcher                fulltext.Service
+	fulltextStatus          FulltextStatus
 	cachedTodayArticleCount response.CacheArticleCount
 	transferWebsite         *TransferWebsite
 	weappClient             *weapp.Client
 	wechatServer            *wechat.Server
-	CachedStatistics        *response.Statistics
 	Cache                   library.Cache
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus
@@ -89,6 +88,7 @@ type Website struct {
 
 	CollectorConfig config.CollectorJson
 	KeywordConfig   config.KeywordJson
+	Proxy           *ProxyIPs // 代理
 
 	FindPasswordInfo *response.FindPasswordInfo
 	Limiter          *Limiter
@@ -333,7 +333,7 @@ func InitWebsite(mw *model.Website) {
 		w.InitCacheBucket()
 		w.InitCache()
 		// 初始化索引,异步处理
-		go w.InitFulltext()
+		go w.InitFulltext(false)
 	}
 }
 

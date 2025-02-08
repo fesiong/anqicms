@@ -82,3 +82,29 @@ func (w *Website) GetCommentById(id uint) (*model.Comment, error) {
 
 	return &comment, nil
 }
+
+func (w *Website) GetCommentPraise(userId uint, commentId int64) (*model.CommentPraise, error) {
+	var praise model.CommentPraise
+	if err := w.DB.Where("user_id = ? and comment_id = ?", userId, commentId).Take(&praise).Error; err != nil {
+		return nil, err
+	}
+
+	return &praise, nil
+}
+
+func (w *Website) AddCommentPraise(userId uint, commentId int64, archiveId int64) (praise *model.CommentPraise, err error) {
+	praise, err = w.GetCommentPraise(userId, commentId)
+	if err != nil {
+		praise = &model.CommentPraise{
+			UserId:    userId,
+			CommentId: commentId,
+			ArchiveId: archiveId,
+			Rate:      1,
+		}
+		if err = w.DB.Create(praise).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return praise, nil
+}

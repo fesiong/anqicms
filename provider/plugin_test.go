@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/paypal"
-	"github.com/go-pay/gopay/pkg/xlog"
 	"github.com/google/uuid"
 	"kandaoni.com/anqicms/model"
 	"log"
@@ -67,7 +66,6 @@ func TestPaypalPayment(t *testing.T) {
 		})
 	ppRsp, err := client.CreateOrder(context.Background(), bm)
 	if err != nil {
-		xlog.Error(err)
 		t.Log(err)
 		return
 	}
@@ -103,7 +101,6 @@ func TestPaypalReturn(t *testing.T) {
 
 	ppRsp, err := client.OrderDetail(context.Background(), "0Y5371446W544664V", bm)
 	if err != nil {
-		xlog.Error(err)
 		t.Log(err)
 		return
 	}
@@ -137,7 +134,6 @@ func TestPaypaCapture(t *testing.T) {
 	// 3VV29137SN736974V
 	ppRsp, err := client.OrderCapture(context.Background(), "0Y5371446W544664V", bm)
 	if err != nil {
-		xlog.Error(err)
 		t.Log(err)
 		return
 	}

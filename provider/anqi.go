@@ -297,7 +297,7 @@ func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachmen
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err == nil {
 		// 处理成 webp
-		buf, err := encodeImage(img, "webp", 85)
+		buf, _, err := encodeImage(img, "webp", 85)
 		if err == nil {
 			data = buf
 		}
@@ -439,7 +439,7 @@ func (w *Website) AnqiTranslateString(req *AnqiAiRequest) (result *AnqiAiResult,
 	}
 }
 
-func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
+func (w *Website) AnqiAiPseudoArticle(archive *model.Archive, isDraft bool) error {
 	archiveData, err := w.GetArchiveDataById(archive.Id)
 	if err != nil {
 		return err
@@ -459,7 +459,17 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		archive.Title = req.Title
 		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
 		archive.HasPseudo = 1
-		err = w.DB.Save(archive).Error
+		tx := w.DB
+		if isDraft {
+			tx = tx.Model(&model.ArchiveDraft{})
+		} else {
+			tx = tx.Model(&model.Archive{})
+		}
+		err = tx.Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
+			"title":       archive.Title,
+			"description": archive.Description,
+			"has_pseudo":  archive.HasPseudo,
+		}).Error
 		// 再保存内容
 		archiveData.Content = req.Content
 		w.DB.Save(archiveData)
@@ -517,8 +527,8 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		}
 		var content = strings.Split(req.Content, "\n")
 		if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
-			rand.Seed(time.Now().UnixMicro())
-			img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			img := w.AiGenerateConfig.Images[rd.Intn(len(w.AiGenerateConfig.Images))]
 			index := len(content) / 3
 			content = append(content, "")
 			copy(content[index+1:], content[index:])
@@ -661,7 +671,16 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 		// 成功
 		if plan.ArticleId > 0 {
 			// 更新文章
-			w.DB.Model(&model.Archive{}).Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
+			// 如果是草稿，则更新草稿箱，查询正式表不存在的话，就认为是草稿
+			_, err = w.GetArchiveById(plan.ArticleId)
+			tx := w.DB
+			if err != nil {
+				// 不存在，视为草稿
+				tx = tx.Model(&model.ArchiveDraft{})
+			} else {
+				tx = tx.Model(&model.Archive{})
+			}
+			tx.Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
 				"title":       result.Data.Title,
 				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " ")),
 			})
@@ -681,8 +700,8 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			}
 			var content = strings.Split(req.Content, "\n")
 			if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
-				rand.Seed(time.Now().UnixMicro())
-				img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
+				rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+				img := w.AiGenerateConfig.Images[rd.Intn(len(w.AiGenerateConfig.Images))]
 				index := len(content) / 3
 				content = append(content, "")
 				copy(content[index+1:], content[index:])
@@ -827,14 +846,8 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
-		if w.Content.Editor == "markdown" {
-			prompt += "\n请使用 Markdown 格式输出"
-		}
 		if req.Language == config.LanguageEn {
 			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
-			if w.Content.Editor == "markdown" {
-				prompt += "\nPlease output in Markdown format."
-			}
 		}
 		if len(req.Demand) > 0 {
 			prompt += "\n" + req.Demand
@@ -847,7 +860,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			if key == "" {
 				return "", errors.New(w.Tr("NoAvailableKey"))
 			}
-			stream, err := GetOpenAIStreamResponse(key, prompt)
+			stream, err := w.GetOpenAIStreamResponse(key, prompt)
 			if err != nil {
 				msg := err.Error()
 				re, _ := regexp.Compile(`code: (\d+),`)

@@ -4,12 +4,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/image/webp"
 	"image"
 	"image/color"
 	"image/draw"
@@ -125,7 +125,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	quality := w.Content.Quality
 	if quality == 0 {
 		// 默认质量是90
-		quality = webp.DefaulQuality
+		quality = config.DefaultQuality
 	}
 
 	// gif 不处理
@@ -136,7 +136,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	if err != nil {
 		return err
 	}
-	buf, _ := encodeImage(img, imgType, quality)
+	buf, _, _ := encodeImage(img, imgType, quality)
 
 	err = os.WriteFile(originPath, buf, os.ModePerm)
 	if err != nil {
@@ -155,7 +155,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	thumbPath := w.PublicPath + paths + "thumb_" + fileName
 
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
-	buf, _ = encodeImage(newImg, imgType, quality)
+	buf, _, _ = encodeImage(newImg, imgType, quality)
 
 	err = os.WriteFile(thumbPath, buf, os.ModePerm)
 	if err != nil {
@@ -263,7 +263,7 @@ func (t *Watermark) DrawWatermarkPreview() string {
 }
 
 func (t *Watermark) EncodeB64string(img image.Image) string {
-	buf, _ := encodeImage(img, "webp", 85)
+	buf, _, _ := encodeImage(img, "webp", config.DefaultQuality)
 	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
 }
 

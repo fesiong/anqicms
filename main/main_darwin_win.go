@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"log"
 	"os"
+	"strconv"
 )
 
 func main() {
@@ -19,7 +20,7 @@ func main() {
 	flag.Parse()
 	config.Server.Server.Port = *port
 
-	inuse := library.ScanPort("tcp", "", config.Server.Server.Port)
+	inuse := library.ScanPort("tcp", "", strconv.Itoa(config.Server.Server.Port))
 	if inuse {
 		//端口被占用，说明已经打开了
 		log.Println("端口已经被占用，可能软件已经启动")

@@ -20,19 +20,19 @@ func Register(app *iris.Application) {
 
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
-
-	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, controller.AttachmentUpload)
-
-	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, controller.CommentPublish)
-	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, controller.CommentPraise)
+	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPublish)
+	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
 	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, controller.CommentList)
 
 	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
 	app.HandleMany(iris.MethodPost, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
 
 	// 内容导入API
+
+	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, controller.VerifyApiToken, controller.AttachmentUpload)
 	app.HandleMany("GET POST", "/api/import/archive /{base:string}/api/import/archive", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportArchive)
 	app.HandleMany("GET POST", "/api/import/categories /{base:string}/api/import/categories", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportGetCategories)
+	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
 
 	// login and register
 	app.Get("/login", controller.LoginPage)
@@ -59,6 +59,7 @@ func Register(app *iris.Application) {
 		api.Post("/register", controller.ApiRegister)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
+		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)
 		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
 		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
 		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
@@ -111,9 +112,9 @@ func Register(app *iris.Application) {
 		api.Get("/tag/data/list", controller.CheckApiOpen, controller.ApiTagDataList)
 		api.Get("/tag/list", controller.CheckApiOpen, controller.ApiTagList)
 		api.Get("/banner/list", controller.CheckApiOpen, controller.ApiBannerList)
-		api.Post("/attachment/upload", controller.CheckApiOpen, controller.ApiAttachmentUpload)
-		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
-		api.Post("/comment/praise", controller.CheckApiOpen, controller.ApiCommentPraise)
+		api.Post("/attachment/upload", controller.CheckApiOpen, middleware.UserAuth, controller.ApiAttachmentUpload)
+		api.Post("/comment/publish", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPublish)
+		api.Post("/comment/praise", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
 	}
 

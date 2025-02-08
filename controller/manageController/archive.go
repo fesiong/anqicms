@@ -2,11 +2,14 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
+	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"os"
 	"strings"
@@ -57,6 +60,10 @@ func ArchiveList(ctx iris.Context) {
 		return tx
 	}
 
+	offset := (currentPage - 1) * pageSize
+	var fulltextSearch bool
+	var fulltextTotal int64
+	var ids []int64
 	if collect {
 		ops = func(tx *gorm.DB) *gorm.DB {
 			return tx.Where("`origin_url` != ''").Order(orderBy)
@@ -96,24 +103,47 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
 			}
 			if title != "" {
-				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
-				var allArchives int64
+				// 如果开启了全文索引，则尝试使用全文索引搜索，status = "ok" 时有效
 				if status == "ok" {
-					allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
-				} else {
-					allArchives = currentSite.GetExplainCount("SELECT id FROM archive_drafts")
+					var tmpDocs []fulltext.TinyArchive
+					var err2 error
+					tmpDocs, fulltextTotal, err2 = currentSite.Search(title, moduleId, currentPage, pageSize)
+					if err2 == nil {
+						fulltextSearch = true
+						// 只保留文档
+						for _, doc := range tmpDocs {
+							if doc.Type == fulltext.ArchiveType {
+								ids = append(ids, doc.Id)
+							}
+						}
+						if len(tmpDocs) == 0 || len(ids) == 0 {
+							ids = append(ids, 0)
+						}
+						offset = 0
+					}
 				}
-				if allArchives > 100000 {
-					tx = tx.Where("`title` like ?", title+"%")
+				if fulltextSearch == true {
+					// 使用了全文索引，拿到了ID
+					tx = tx.Where("archives.`id` IN(?)", ids)
 				} else {
-					tx = tx.Where("`title` like ?", "%"+title+"%")
+					// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+					var allArchives int64
+					if status == "ok" {
+						allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
+					} else {
+						allArchives = currentSite.GetExplainCount("SELECT id FROM archive_drafts")
+					}
+					if allArchives > 100000 {
+						tx = tx.Where("`title` like ?", title+"%")
+					} else {
+						tx = tx.Where("`title` like ?", "%"+title+"%")
+					}
 				}
 			}
 			tx = tx.Order(orderBy)
 			return tx
 		}
 	}
-	offset := (currentPage - 1) * pageSize
 	builder := dbTable(ops(currentSite.DB))
 
 	builder = dbTable(builder)
@@ -131,6 +161,9 @@ func ArchiveList(ctx iris.Context) {
 		}
 	} else {
 		builder.Count(&total)
+	}
+	if fulltextSearch {
+		total = fulltextTotal
 	}
 	// 先查询ID
 	var archiveIds []uint
@@ -325,6 +358,87 @@ func GetQuickImportArchiveStatus(ctx iris.Context) {
 		"data": status,
 	})
 }
+
+func GetQuickImportExcelTemplate(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var excelTemplateRequest struct {
+		CategoryId uint `json:"category_id"`
+	}
+	err := ctx.ReadJSON(&excelTemplateRequest)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "category_id is required",
+		})
+		return
+	}
+	category := currentSite.GetCategoryFromCache(excelTemplateRequest.CategoryId)
+	if category == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "category is empty",
+		})
+		return
+	}
+	module := currentSite.GetModuleFromCache(category.ModuleId)
+	if module == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "module is empty",
+		})
+		return
+	}
+	// 开始生成 Excel 模板
+	// 主表字段 id, parent_id, seo_title, url_token,logo,images, keywords, description, user_id, price, stock, read_level, password, sort, origin_url, origin_title
+	type Item struct {
+		Field string
+		Value string
+	}
+	var fields = []Item{
+		{Field: "title", Value: "示例标题"},
+		{Field: "content", Value: "示例内容"},
+		{Field: "seo_title", Value: "示例SEO标题"},
+		{Field: "logo", Value: "https://www.anqicms.com/anqicms.png"},
+		{Field: "keywords", Value: "示例关键词"},
+		{Field: "description", Value: "示例介绍"},
+		{Field: "price", Value: "9980"},
+		{Field: "stock", Value: "9999"},
+	}
+	if module.Fields != nil {
+		for _, field := range module.Fields {
+			fields = append(fields, Item{
+				Field: field.FieldName,
+				Value: field.Name,
+			})
+		}
+	}
+	// 生成Excel
+	f := excelize.NewFile()
+	defer func() {
+		_ = f.Close()
+	}()
+	// 26个字母
+	colLetters := []string{"A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"}
+	for i, field := range fields {
+		_ = f.SetCellValue("Sheet1", colLetters[i]+"1", field.Field)
+		_ = f.SetCellValue("Sheet1", colLetters[i]+"2", field.Value)
+	}
+	// 输出文件
+	buf, err := f.WriteToBuffer()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	destName := "import-template.xlsx"
+	ctx.ResponseWriter().Header().Set(context.ContentDispositionHeaderKey, context.MakeDisposition(destName))
+
+	_, _ = ctx.Write(buf.Bytes())
+}
+
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)

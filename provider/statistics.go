@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"github.com/jinzhu/now"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
@@ -119,26 +120,89 @@ func (w *Website) CleanStatistics() {
 	w.StatisticLog.Clear(false)
 }
 
-func (w *Website) GetStatisticsSummary() *response.Statistics {
-	var result = &response.Statistics{}
-	if w.CachedStatistics == nil || w.CachedStatistics.CacheTime < time.Now().Add(-60*time.Second).Unix() {
+func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
+	var result = response.Statistics{}
+	cacheKey := "cachedStatistics"
+	err := w.Cache.Get(cacheKey, &result)
+	if err != nil || exact {
+		result = response.Statistics{}
+		// 重新获取
+		// 先检查文章总量是否超过10万
+		explainCount := w.GetExplainCount("SELECT id FROM archives")
+		if explainCount <= 100000 {
+			exact = true
+		}
 		modules := w.GetCacheModules()
 		for _, v := range modules {
 			counter := response.ModuleCount{
 				Id:   v.Id,
 				Name: v.Title,
 			}
-			w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
+			if exact {
+				w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
+			} else {
+				toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+					return tx.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).First(&model.Archive{})
+				})
+				counter.Total = w.GetExplainCount(toSql)
+				if counter.Total <= 100000 {
+					// 再次求取准确值
+					w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
+				}
+			}
 			result.ModuleCounts = append(result.ModuleCounts, counter)
 			result.ArchiveCount.Total += counter.Total
 		}
 		lastWeek := now.BeginningOfWeek()
 		today := now.BeginningOfDay()
-		w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
-		w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
-		w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
-		w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
-
+		if exact {
+			w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
+		} else {
+			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).First(&model.Archive{})
+			})
+			result.ArchiveCount.LastWeek = w.GetExplainCount(toSql)
+			if result.ArchiveCount.LastWeek <= 100000 {
+				// 再次求取准确值
+				w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
+			}
+		}
+		if exact {
+			w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
+		} else {
+			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).First(&model.Archive{})
+			})
+			result.ArchiveCount.Today = w.GetExplainCount(toSql)
+			if result.ArchiveCount.Today <= 100000 {
+				// 再次求取准确值
+				w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
+			}
+		}
+		if exact {
+			w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+		} else {
+			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).First(&model.ArchiveDraft{})
+			})
+			result.ArchiveCount.UnRelease = w.GetExplainCount(toSql)
+			if result.ArchiveCount.UnRelease <= 100000 {
+				// 再次求取准确值
+				w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+			}
+		}
+		if exact {
+			w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
+		} else {
+			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&model.ArchiveDraft{}).Where("status = 0").First(&model.ArchiveDraft{})
+			})
+			result.ArchiveCount.Draft = w.GetExplainCount(toSql)
+			if result.ArchiveCount.Draft <= 100000 {
+				// 再次求取准确值
+				w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
+			}
+		}
 		w.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&result.CategoryCount)
 		w.DB.Model(&model.Link{}).Count(&result.LinkCount)
 		w.DB.Model(&model.Guestbook{}).Count(&result.GuestbookCount)
@@ -171,11 +235,12 @@ func (w *Website) GetStatisticsSummary() *response.Statistics {
 		_ = json.Unmarshal([]byte(w.GetSettingValue(InstallTimeKey)), &installTime)
 		// show guide 安装的第一天，还没设置站点名称，还没创建分类，没有发布文章，则show guide
 		result.ShowGuide = (installTime+86400) > time.Now().Unix() || result.CategoryCount == 0 || result.ArchiveCount.Total == 0 || len(w.System.SiteName) == 0
-
-		w.CachedStatistics = result
+		result.Exact = exact
+		// 写入缓存，并缓存60秒
+		w.Cache.Set(cacheKey, result, 60)
 	}
 
-	return w.CachedStatistics
+	return &result
 }
 
 func (w *Website) SendStatisticsMail() {

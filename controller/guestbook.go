@@ -43,6 +43,7 @@ func GuestbookPage(ctx iris.Context) {
 
 func GuestbookForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
 	if !strings.HasPrefix(ctx.RequestPath(false), currentSite.BaseURI) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -63,9 +64,22 @@ func GuestbookForm(ctx iris.Context) {
 			tmpVal, _ := ctx.PostValues(item.FieldName + "[]")
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
+			// 如果有上传文件，则需要用户登录
+			if userId == 0 {
+				msg := currentSite.TplTr("ThisOperationRequiresLogin")
+				if returnType == "json" {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  msg,
+					})
+				} else {
+					ShowMessage(ctx, msg, nil)
+				}
+				return
+			}
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
-				attach, err := currentSite.AttachmentUpload(file, info, 0, 0)
+				attach, err := currentSite.AttachmentUpload(file, info, 0, 0, userId)
 				if err == nil {
 					val = attach.Logo
 					if attach.Logo == "" {
