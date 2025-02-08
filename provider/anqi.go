@@ -297,7 +297,7 @@ func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachmen
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err == nil {
 		// 处理成 webp
-		buf, err := encodeImage(img, "webp", 85)
+		buf, _, err := encodeImage(img, "webp", 85)
 		if err == nil {
 			data = buf
 		}

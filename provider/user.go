@@ -3,9 +3,9 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/chai2010/webp"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/medivhzhan/weapp/v3"
+	"golang.org/x/image/webp"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"image"
@@ -753,7 +753,7 @@ func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl 
 	fileName = "uploads/user/" + strconv.Itoa(int(userId)) + "." + imgType
 	// 头像统一处理裁剪成正方形，256*256，并且不加水印
 	newImg := library.ThumbnailCrop(256, 256, img, 2)
-	buf, _ := encodeImage(newImg, imgType, w.Content.Quality)
+	buf, _, _ := encodeImage(newImg, imgType, w.Content.Quality)
 	// 上传图片
 	_, err = w.Storage.UploadFile(fileName, buf)
 	if err != nil {

@@ -1,8 +1,8 @@
 package manageController
 
 import (
-	"github.com/chai2010/webp"
 	"github.com/kataras/iris/v12"
+	"golang.org/x/image/webp"
 	"image"
 	"io"
 	"kandaoni.com/anqicms/config"

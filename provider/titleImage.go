@@ -4,10 +4,10 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
+	"golang.org/x/image/webp"
 	"image"
 	"image/color"
 	"image/draw"
@@ -246,7 +246,7 @@ func (t *TitleImage) Save(img image.Image, title string) (string, error) {
 		imgType = "webp"
 	}
 
-	buf, _ := encodeImage(img, imgType, 100)
+	buf, imgType, _ := encodeImage(img, imgType, 100)
 
 	fileHeader := &multipart.FileHeader{
 		Filename: library.Md5(title) + "." + imgType,
@@ -267,7 +267,7 @@ func (t *TitleImage) Save(img image.Image, title string) (string, error) {
 }
 
 func (t *TitleImage) EncodeB64string(img image.Image) string {
-	buf, _ := encodeImage(img, "webp", webp.DefaulQuality)
+	buf, _, _ := encodeImage(img, "webp", config.DefaultQuality)
 
 	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
 }

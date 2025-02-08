@@ -118,7 +118,7 @@ func CheckVersion(ctx iris.Context) {
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
-		log.Println(ctx.Tr("FailedToObtainNewVersion"))
+		log.Println(ctx.Tr("FailedToObtainNewVersion"), errs)
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  ctx.Tr("CheckThatTheVersionIsTheLatestVersion"),

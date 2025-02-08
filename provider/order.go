@@ -8,11 +8,10 @@ import (
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
-	"github.com/go-pay/gopay/pkg/util"
-	"github.com/go-pay/gopay/pkg/xlog"
 	"github.com/go-pay/gopay/wechat"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
@@ -406,7 +405,7 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 
 			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", util.RandomString(32)).
+			bm.Set("nonce_str", library.GenerateRandString(32)).
 				Set("out_trade_no", order.PaymentId).
 				Set("out_refund_no", refund.RefundId).
 				Set("total_fee", order.Amount).
@@ -441,7 +440,7 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 
 			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", util.RandomString(32)).
+			bm.Set("nonce_str", library.GenerateRandString(32)).
 				Set("out_trade_no", order.PaymentId).
 				Set("out_refund_no", refund.RefundId).
 				Set("total_fee", order.Amount).
@@ -540,7 +539,6 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 			ppRsp, err := client.PaymentCaptureRefund(context.Background(), payment.TerraceId, bm)
 			if err != nil {
-				xlog.Error(err)
 				return err
 			}
 			if ppRsp.Code != http.StatusOK && ppRsp.Code != http.StatusCreated {
@@ -1302,7 +1300,7 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		aliRsp, err := client.TradeQuery(context.Background(), bm)
 		if err != nil {
 			if bizErr, ok := alipay.IsBizError(err); ok {
-				xlog.Errorf("%+v", bizErr)
+				log.Printf("%+v", bizErr)
 				// do something
 				return err
 			}

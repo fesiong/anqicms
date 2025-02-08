@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"github.com/go-pay/gopay"
-	"github.com/go-pay/gopay/pkg/util"
 	"github.com/go-pay/gopay/wechat"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"log"
@@ -197,7 +197,7 @@ func (w *Website) CheckWithdrawToWechat() {
 		}
 
 		bm := make(gopay.BodyMap)
-		bm.Set("nonce_str", util.RandomString(32)).
+		bm.Set("nonce_str", library.GenerateRandString(32)).
 			Set("partner_trade_no", fmt.Sprintf("%d", withdraw.Id)).
 			Set("openid", userWechat.Openid).
 			Set("check_name", "FORCE_CHECK").

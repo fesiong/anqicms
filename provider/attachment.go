@@ -6,9 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/chai2010/webp"
 	"github.com/h2non/filetype"
 	"github.com/parnurzeal/gorequest"
+	"golang.org/x/image/webp"
 	"image"
 	"image/color"
 	"image/draw"
@@ -16,6 +16,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
@@ -25,12 +26,19 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"os"
+	"os/exec"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
 )
+
+// imageMagickPath 检测Imagemagick是否可用
+var imageMagickPath string
+var webpPath string
+var pngquantPath string
 
 func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId, userId uint) (*model.Attachment, error) {
 	db := w.DB
@@ -73,12 +81,12 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	fileName := strings.TrimSuffix(info.Filename, path.Ext(info.Filename))
 	// 获取md5
 	md5hash := md5.New()
-	file.Seek(0, 0)
+	_, _ = file.Seek(0, 0)
 	_, err = io.Copy(md5hash, file)
 	if err != nil {
 		return nil, err
 	}
-	file.Seek(0, 0)
+	_, _ = file.Seek(0, 0)
 	md5Str := hex.EncodeToString(md5hash.Sum(nil))
 	exists, _ := w.GetAttachmentByMd5(md5Str)
 	if attachment != nil {
@@ -192,7 +200,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	quality := w.Content.Quality
 	if quality == 0 {
 		// 默认质量是90
-		quality = webp.DefaulQuality
+		quality = config.DefaultQuality
 	}
 	if oriImgType == "jpg" {
 		j, err2 := library.NewQuality(file)
@@ -210,12 +218,21 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		height = img.Bounds().Dy()
 	}
 	// 保存裁剪的图片
+	// 如果服务器安装了ImageMagick，则尝试使用ImageMagick裁剪gif
+	iMPath, _ := getImageMagickPath()
 	addWatermark := uint(0)
 	var buf []byte
 	if imgType == "gif" {
 		// gif 直接使用原始数据
-		file.Seek(0, 0)
+		_, _ = file.Seek(0, 0)
 		buf, _ = io.ReadAll(file)
+		if iMPath != "" {
+			args := []string{"-coalesce", "-layers", "Optimize"}
+			buf2, err := processTempFileWithCmd(bytes.NewBuffer(buf), imgType, iMPath, args, nil)
+			if err == nil {
+				buf = buf2
+			}
+		}
 	} else {
 		// 如果开启图片水印功能，则加水印,gif 不处理
 		if w.PluginWatermark.Open {
@@ -227,7 +244,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 				}
 			}
 		}
-		buf, _ = encodeImage(img, imgType, quality)
+		buf, imgType, _ = encodeImage(img, imgType, quality)
 	}
 	fileSize = int64(len(buf))
 
@@ -240,8 +257,30 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	//生成宽度为250的缩略图
 	thumbName := "thumb_" + tmpName
 
-	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
-	buf, _ = encodeImage(newImg, imgType, quality)
+	if imgType == "gif" && iMPath != "" {
+		args := []string{"-coalesce", "-resize"}
+		if w.Content.ThumbCrop == 0 {
+			// 等比缩放
+			args = append(args, fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+		} else if w.Content.ThumbCrop == 1 {
+			// 补白
+			args = append(args, fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight), "-background", "white", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+		} else {
+			// 裁剪
+			args = append(args, fmt.Sprintf("%dx%d^", w.Content.ThumbWidth, w.Content.ThumbHeight), "-gravity", "center", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+		}
+		args = append(args, "-layers", "Optimize")
+		buf2, err := processTempFileWithCmd(bytes.NewBuffer(buf), imgType, iMPath, args, nil)
+		if err == nil {
+			buf = buf2
+		} else {
+			newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
+			buf, _, _ = encodeImage(newImg, imgType, quality)
+		}
+	} else {
+		newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
+		buf, _, _ = encodeImage(newImg, imgType, quality)
+	}
 
 	// 上传缩略图
 	_, err = w.Storage.UploadFile(filePath+thumbName, buf)
@@ -409,11 +448,11 @@ func (w *Website) BuildThumb(fileLocation string) error {
 	quality := w.Content.Quality
 	if quality == 0 {
 		// 默认质量是90
-		quality = webp.DefaulQuality
+		quality = config.DefaultQuality
 	}
 
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
-	buf, _ := encodeImage(newImg, imgType, quality)
+	buf, _, _ := encodeImage(newImg, imgType, quality)
 
 	_, err = w.Storage.UploadFile(thumbPath, buf)
 	if err != nil {
@@ -682,55 +721,55 @@ func (w *Website) StartConvertImageToWebp() {
 
 func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	originPath := w.PublicPath + attachment.FileLocation
-
-	// 对原图处理
-	f, err := os.Open(originPath)
+	binPath, err := getWebpPath()
 	if err != nil {
 		return err
 	}
-	defer f.Close()
-
+	if strings.HasSuffix(originPath, ".webp") {
+		// 已经是webp，不需要处理
+		return nil
+	}
 	newFile := strings.TrimSuffix(attachment.FileLocation, filepath.Ext(attachment.FileLocation)) + ".webp"
-
-	img, _, err := image.Decode(f)
-	if err != nil {
-		fmt.Println(w.Tr("UnableToObtainImageSize"))
-		return err
-	}
+	newPath := w.PublicPath + newFile
 	quality := w.Content.Quality
 	if quality == 0 {
 		// 默认质量是90
-		quality = webp.DefaulQuality
+		quality = config.DefaultQuality
 	}
-	buff := &bytes.Buffer{}
-	_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
-	err = os.WriteFile(w.PublicPath+newFile, buff.Bytes(), os.ModePerm)
+	// 调用命令进行处理
+	err = library.RunCmd(binPath, originPath, "−quiet", "-q", strconv.Itoa(quality), "-o", newPath)
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(newFile, buff.Bytes())
+	// 检查新生成的文件，并读取它
+	buf, err := os.ReadFile(newPath)
+	if err != nil {
+		return err
+	}
+	_, err = w.Storage.UploadFile(newFile, buf)
 	if err != nil {
 		return err
 	}
 
 	// 回写
 	attachment.FileLocation = newFile
-	attachment.FileMd5 = library.Md5Bytes(buff.Bytes())
+	attachment.FileMd5 = library.Md5Bytes(buf)
 	w.DB.Save(attachment)
 
+	// 对缩略图进行处理
 	paths, fileName := filepath.Split(attachment.FileLocation)
 	thumbPath := w.PublicPath + paths + "thumb_" + fileName
-
-	buff.Reset()
-	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
-
-	_ = webp.Encode(buff, newImg, &webp.Options{Lossless: false, Quality: float32(quality)})
-
-	err = os.WriteFile(thumbPath, buff.Bytes(), os.ModePerm)
+	newThumbPath := strings.TrimSuffix(thumbPath, filepath.Ext(thumbPath)) + ".webp"
+	err = library.RunCmd(binPath, thumbPath, "-q", strconv.Itoa(quality), "-o", newThumbPath)
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(paths+"thumb_"+fileName, buff.Bytes())
+	// 检查新生成的文件，并读取它
+	buf, err = os.ReadFile(newPath)
+	if err != nil {
+		return err
+	}
+	_, err = w.Storage.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), buf)
 	if err != nil {
 		return err
 	}
@@ -856,70 +895,136 @@ func (w *Website) GetCategoryImages(categoryId int) []*response.TinyAttachment {
 	return attaches
 }
 
-func encodeImage(img image.Image, imgType string, quality int) ([]byte, error) {
-	buff := &bytes.Buffer{}
+func encodeImage(img image.Image, imgType string, quality int) ([]byte, string, error) {
+	// 如果 quality 为 0，则使用默认值
 	if quality == 0 {
-		quality = webp.DefaulQuality
+		quality = config.DefaultQuality
 	}
-	if imgType == "webp" {
-		_ = webp.Encode(buff, img, &webp.Options{Lossless: false, Quality: float32(quality)})
-		// 先返回，不用再compress
-		return buff.Bytes(), nil
-	} else if imgType == "gif" {
-		if err := gif.Encode(buff, img, nil); err != nil {
-			return nil, err
-		}
-	} else {
-		return compressImage(img, quality)
-	}
-	return buff.Bytes(), nil
-}
 
-// compressImage 只能压缩png/jpg
-// 由于取消引用pngquant，因此有透明度的png图片不再进行压缩。
-func compressImage(img image.Image, quality int) ([]byte, error) {
-	isOpaque := Opaque(img)
-	buff := &bytes.Buffer{}
-	if isOpaque {
-		// 无透明度，按jpeg处理
-		if err := jpeg.Encode(buff, img, &jpeg.Options{Quality: quality}); err != nil {
-			return nil, err
+	var buf bytes.Buffer
+	realType := imgType
+
+	// 先将图片编码到 buf，根据图片类型进行不同处理
+	switch imgType {
+	case "jpg":
+		if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: quality}); err != nil {
+			return nil, imgType, err
 		}
-	} else {
-		err := png.Encode(buff, img)
-		if err != nil {
+		// jpg 图片无需后续压缩，直接返回
+		return buf.Bytes(), imgType, nil
+
+	case "gif":
+		if err := gif.Encode(&buf, img, nil); err != nil {
+			return nil, imgType, err
+		}
+
+	default:
+		// 其它图片类型先尝试转换为 png
+		if err := png.Encode(&buf, img); err != nil {
+			// 如果 png 编码失败，尝试转换成 jpg（先填充白色背景）
 			newImg := image.NewRGBA(img.Bounds())
 			draw.Draw(newImg, newImg.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
 			draw.Draw(newImg, newImg.Bounds(), img, img.Bounds().Min, draw.Over)
-			if err = jpeg.Encode(buff, newImg, &jpeg.Options{Quality: quality}); err != nil {
-				return nil, err
+			if err = jpeg.Encode(&buf, newImg, &jpeg.Options{Quality: quality}); err != nil {
+				return nil, imgType, err
 			}
+			realType = "jpg"
+		} else {
+			realType = "png"
 		}
 	}
 
-	return buff.Bytes(), nil
+	// 如果目标类型是 webp，使用 libwebp 处理
+	if imgType == "webp" {
+		binPath, err := getWebpPath()
+		if err == nil {
+			// 调用 helper，指定输出后缀为 webp，传入 webp 的相关参数
+			if data, err := processTempFileWithCmd(&buf, realType, binPath, []string{"-q", strconv.Itoa(quality), "-o"}, []string{"-quiet"}); err == nil {
+				return data, imgType, nil
+			}
+		}
+		// 出错则退化返回原先的结果
+		return buf.Bytes(), realType, nil
+	}
+
+	// 对于 gif 和 png，尝试用 ImageMagick 优化（如果可用）
+	if imPath, err := getImageMagickPath(); err == nil {
+		// 如果是 png，先尝试用 pngquant 进一步压缩
+		if imgType == "png" {
+			if pngquant, err := getPngquantPath(); err == nil {
+				minQuality := quality - 30
+				if minQuality < 10 {
+					minQuality = 10
+				}
+				args := []string{"--force", "--skip-if-larger", "--strip", "--quality", fmt.Sprintf("%d-%d", minQuality, quality), "-o"}
+				if data, err := processTempFileWithCmd(&buf, imgType, pngquant, args, nil); err == nil {
+					return data, imgType, nil
+				}
+			}
+		}
+		// ImageMagick 处理：对于 gif 使用 "-layers Optimize"，其它类型额外加上 "-strip", "-quality", "-depth"
+		var args []string
+		if imgType == "gif" {
+			args = []string{"-coalesce", "-layers", "Optimize"}
+		} else {
+			args = []string{"-strip", "-quality", strconv.Itoa(quality), "-depth", "8"}
+		}
+		if data, err := processTempFileWithCmd(&buf, imgType, imPath, args, nil); err == nil {
+			return data, imgType, nil
+		}
+	}
+
+	// 所有处理都失败，则返回初步编码的结果
+	return buf.Bytes(), imgType, nil
 }
 
-func Opaque(im image.Image) bool {
-	// Check if image has Opaque() method:
-	if oim, ok := im.(interface {
-		Opaque() bool
-	}); ok {
-		return oim.Opaque() // It does, call it and return its result!
+// processTempFileWithCmd 封装了将 buf 写入临时文件、调用外部命令处理、读取处理结果的逻辑。
+// 参数说明：
+// - buf：图片数据缓冲区。
+// - tempExt：临时文件的扩展名（即原始编码格式）。
+// - cmdPath：外部命令路径（如 libwebp、pngquant、ImageMagick）。
+// - args：传递给外部命令的参数（注意不含输入文件路径和输出参数）。
+func processTempFileWithCmd(buf *bytes.Buffer, tempExt, cmdPath string, args []string, prefixArgs []string) ([]byte, error) {
+	// 创建临时文件，文件名后缀为 tempExt
+	tmpFile, err := os.CreateTemp("", "*."+tempExt)
+	if err != nil {
+		return nil, err
+	}
+	// 确保临时文件关闭并删除
+	defer func() {
+		_ = tmpFile.Close()
+		_ = os.Remove(tmpFile.Name())
+	}()
+	// 将缓冲区数据写入临时文件
+	if _, err = tmpFile.Write(buf.Bytes()); err != nil {
+		return nil, err
+	}
+	_ = tmpFile.Close()
+
+	// 构造输出文件名
+	outName := tmpFile.Name() + ".new"
+
+	// 拼接命令参数：第一个参数为输入文件路径，后续参数、最后输出文件路径
+	fullArgs := append([]string{tmpFile.Name()}, args...)
+	if len(prefixArgs) > 0 {
+		fullArgs = append(prefixArgs, fullArgs...)
+	}
+	fullArgs = append(fullArgs, outName)
+
+	// 调用外部命令进行处理
+	if err = library.RunCmd(cmdPath, fullArgs...); err != nil {
+		log.Println("processTempFileWithCmd error:", err)
+		return nil, err
 	}
 
-	// No Opaque() method, we need to loop through all pixels and check manually:
-	rect := im.Bounds()
-	for y := rect.Min.Y; y < rect.Max.Y; y++ {
-		for x := rect.Min.X; x < rect.Max.X; x++ {
-			if _, _, _, a := im.At(x, y).RGBA(); a != 0xffff {
-				return false // Found a non-opaque pixel: image is non-opaque
-			}
-		}
-
+	// 检查输出文件是否生成，并读取之
+	data, err := os.ReadFile(outName)
+	if err != nil {
+		log.Println("processTempFileWithCmd error:", err)
+		return nil, err
 	}
-
-	return true // All pixels are opaque, so is the image
+	_ = os.Remove(outName)
+	return data, err
 }
 
 // UploadByChunks 分片上传处理函数
@@ -991,4 +1096,58 @@ func (w *Website) UploadByChunks(file multipart.File, fileMd5 string, chunk, chu
 	}
 
 	return nil, nil
+}
+
+func getImageMagickPath() (string, error) {
+	if imageMagickPath != "" {
+		return imageMagickPath, nil
+	}
+	// 同时检查 Imagemagick 7 和 Imagemagick 6
+	filePath, err := exec.LookPath("magick")
+	if err != nil {
+		filePath, err = exec.LookPath("convert")
+		if err != nil {
+			return "", err
+		}
+	}
+	imageMagickPath = filePath
+	return imageMagickPath, nil
+}
+
+// 检查系统安装的pngquant，如果存在，则返回路径
+// pngquant 不内置，需要自行安装
+func getPngquantPath() (string, error) {
+	if pngquantPath != "" {
+		return pngquantPath, nil
+	}
+	filePath, err := exec.LookPath("pngquant")
+	if err != nil {
+		return "", err
+	}
+	pngquantPath = filePath
+	return pngquantPath, nil
+}
+
+func getWebpPath() (string, error) {
+	if webpPath != "" {
+		return webpPath, nil
+	}
+	goos := runtime.GOOS
+	arch := runtime.GOARCH
+	binName := "cwebp_" + goos + "_" + arch
+	if goos == "windows" {
+		binName += ".exe"
+	}
+	binPath := config.ExecPath + "source/" + binName
+	if _, err := os.Stat(binPath); err != nil {
+		if os.IsNotExist(err) {
+			// 尝试坚持系统安装的 cwebp
+			binPath, err = exec.LookPath("cwebp")
+			if err != nil {
+				return "", err
+			}
+		}
+	}
+	webpPath = binPath
+	return webpPath, nil
 }
