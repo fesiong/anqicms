@@ -40,7 +40,6 @@ build:
 	cp -r ./public/static ./release/$(GOOS)/public/
 	cp -r ./public/*.xsl ./release/$(GOOS)/public/ 2>/dev/null || true
 	cp -r ./template ./release/$(GOOS)/
-	cp -r ./system ./release/$(GOOS)/
 	cp -r ./locales ./release/$(GOOS)/
 	cp -r ./CHANGELOG.md ./release/$(GOOS)/
 	cp -r ./License ./release/$(GOOS)/
