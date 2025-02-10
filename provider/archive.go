@@ -411,7 +411,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		draft.Status = config.ContentStatusDraft
 	}
 	// 判断重复
-	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, draft.Title, draft.Id)
+	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, req.Title, draft.Id)
 	if utf8.RuneCountInString(req.Title) > 190 {
 		req.Title = string([]rune(req.Title)[:190])
 		if strings.Count(req.Title, " ") > 1 {
