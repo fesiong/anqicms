@@ -242,6 +242,10 @@ func VersionUpgrade(ctx iris.Context) {
 
 		reader.Close()
 		_ = newFile.Close()
+		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqicms,cwebp
+		if f.Name == "anqicms" || f.Name == "anqicms.exe" || strings.HasPrefix(f.Name, "cwebp_") {
+			_ = os.Chmod(realName, os.ModePerm)
+		}
 	}
 	// 尝试更换主程序
 	oldPath := execPath + ".old"
