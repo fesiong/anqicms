@@ -23,7 +23,7 @@ COPY --from=builder /build/locales /app/locales
 COPY --from=builder /build/License /app/License
 COPY --from=builder /build/clientFiles /app/clientFiles
 COPY --from=builder /build/dictionary.txt /app/dictionary.txt
-COPY --from=builder /build/cwebp_linux_amd64 /app/source/
+COPY --from=builder /build/source/cwebp_linux_amd64 /app/source/
 VOLUME /app/template
 VOLUME /app/public
 VOLUME /app/data
