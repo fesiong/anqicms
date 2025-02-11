@@ -55,6 +55,7 @@ func NewLimiter(setting *config.PluginLimiter) *Limiter {
 		ipVisits:   make(map[string]*VisitInfo),
 		blockedIPs: make(map[string]time.Time),
 		MaxTime:    5 * time.Minute,
+		mu:         sync.Mutex{},
 	}
 
 	limiter.UpdateLimiter(setting)
