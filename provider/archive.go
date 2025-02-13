@@ -178,9 +178,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 	var builder *gorm.DB
 	if draft {
-		builder = w.DB.Table("`archive_drafts` as archives")
+		builder = w.DB.Table("`archive_drafts` as archives").Debug()
 	} else {
-		builder = w.DB.Model(&model.Archive{})
+		builder = w.DB.Model(&model.Archive{}).Debug()
 	}
 
 	if ops != nil {
@@ -208,7 +208,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		// 分页提速，先查出ID，再查询结果
 		// 先查询ID
 		var archiveIds []int64
-		builder.Limit(pageSize).Offset(offset).Select("archives.id").Pluck("id", &archiveIds)
+		builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order).Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
 				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
