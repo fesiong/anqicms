@@ -1314,7 +1314,18 @@ func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string
 			urlToken = urlToken[:100]
 		}
 		if id > 0 {
-			urlToken += "-a" + strconv.Itoa(int(id))
+			// 判断archive
+			tmpArc, err := w.GetArchiveByUrlToken(urlToken)
+			if err == nil && tmpArc.Id != id {
+				urlToken += "-a" + strconv.FormatInt(id, 10)
+				return urlToken
+			}
+			// 判断archiveDraft
+			tmpDraft, err := w.GetArchiveDraftByUrlToken(urlToken)
+			if err == nil && tmpDraft.Id != id {
+				urlToken += "-a" + strconv.FormatInt(id, 10)
+				return urlToken
+			}
 		}
 		// 如果id=0，则在beforeCreate 中添加后缀
 		newToken = true
