@@ -82,7 +82,7 @@ func PluginWatermarkPreview(ctx iris.Context) {
 
 	cfg := currentSite.PluginWatermark
 	cfg.Open = true
-	wm := currentSite.NewWatermark(&cfg)
+	wm := currentSite.NewWatermark(cfg)
 	if wm == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

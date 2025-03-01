@@ -82,7 +82,7 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 
 func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
 	var archive model.Archive
-	err := ops(w.DB).Take(&archive).Error
+	err := ops(w.DB.WithContext(w.Ctx())).Take(&archive).Error
 	if err != nil {
 		return nil, err
 	}
@@ -136,7 +136,7 @@ func (w *Website) GetArchiveDraftByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.
 }
 func (w *Website) GetArchiveDataById(id int64) (*model.ArchiveData, error) {
 	var data model.ArchiveData
-	err := w.DB.Where("`id` = ?", id).First(&data).Error
+	err := w.DB.WithContext(w.Ctx()).Where("`id` = ?", id).First(&data).Error
 	if err != nil {
 		return nil, err
 	}
@@ -164,7 +164,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	// 对于没有分页的list，则缓存
 	var cacheKey = ""
 	if currentPage == 0 && !draft {
-		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql := w.DB.WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
 				tx = ops(tx)
 			}
@@ -178,9 +178,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 	var builder *gorm.DB
 	if draft {
-		builder = w.DB.Table("`archive_drafts` as archives").Debug()
+		builder = w.DB.Table("`archive_drafts` as archives").WithContext(w.Ctx())
 	} else {
-		builder = w.DB.Model(&model.Archive{}).Debug()
+		builder = w.DB.Model(&model.Archive{}).WithContext(w.Ctx())
 	}
 
 	if ops != nil {
@@ -311,7 +311,7 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 		}
 		//从数据库中取出来
 		if len(fields) > 0 {
-			w.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
+			w.DB.WithContext(w.Ctx()).Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
 				value, ok := result[v.FieldName].(string)
@@ -1377,7 +1377,7 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 			archive.HasOrdered = true
 		} else if archive.Price > 0 {
 			var exist int64
-			w.DB.Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+			w.DB.WithContext(w.Ctx()).Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
 				config.OrderStatusPaid,
 				config.OrderStatusDelivering,
 				config.OrderStatusCompleted}).Count(&exist)
@@ -1422,7 +1422,7 @@ func (w *Website) UpgradeMultiCategory() {
 
 func (w *Website) GetArchiveFlags(archiveId int64) string {
 	var flags []string
-	w.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` = ?", archiveId).Pluck("flag", &flags)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` = ?", archiveId).Pluck("flag", &flags)
 
 	return strings.Join(flags, ",")
 }
@@ -1482,9 +1482,9 @@ func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) err
 func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
 	var relationIds []int64
-	w.DB.Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
-		w.DB.Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
+		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {
 			relations[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 			relations[i].Link = w.GetUrl("archive", relations[i], 0)

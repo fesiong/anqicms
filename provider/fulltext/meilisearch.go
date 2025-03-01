@@ -10,12 +10,12 @@ import (
 )
 
 type MeiliSearchService struct {
-	config    config.PluginFulltextConfig
+	config    *config.PluginFulltextConfig
 	apiClient meilisearch.ServiceManager
 	indexName string
 }
 
-func NewMeiliSearchService(cfg config.PluginFulltextConfig, indexName string) (Service, error) {
+func NewMeiliSearchService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
 	meili := &MeiliSearchService{
 		config:    cfg,
 		indexName: indexName,

@@ -51,7 +51,7 @@ func (w *Website) NewTitleImage() *TitleImage {
 	t := TitleImage{
 		w:          w,
 		PublicPath: w.PublicPath,
-		config:     &w.PluginTitleImage,
+		config:     w.PluginTitleImage,
 		useWebp:    w.Content.UseWebp,
 		font:       f,
 		fontSize:   fontSize,

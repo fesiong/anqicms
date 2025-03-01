@@ -34,7 +34,7 @@ func CommentPublish(ctx iris.Context) {
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok {
+		if ok && group.Setting.ContentNoVerify {
 			contentVerify = !group.Setting.ContentNoVerify
 		}
 	}
@@ -180,9 +180,10 @@ func CommentList(ctx iris.Context) {
 	}
 
 	ctx.ViewData("archiveId", archiveId)
-	tplName := "comment/list.html"
-	if ViewExists(ctx, "comment_list.html") {
-		tplName = "comment_list.html"
+	tplName, ok := currentSite.TemplateExist("comment/list.html", "comment_list.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {

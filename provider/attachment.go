@@ -236,7 +236,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	} else {
 		// 如果开启图片水印功能，则加水印,gif 不处理
 		if w.PluginWatermark.Open {
-			wm := w.NewWatermark(&w.PluginWatermark)
+			wm := w.NewWatermark(w.PluginWatermark)
 			if wm != nil {
 				img, err = wm.DrawWatermark(img)
 				if err == nil {

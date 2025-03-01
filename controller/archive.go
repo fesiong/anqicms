@@ -46,6 +46,20 @@ func ArchiveDetail(ctx iris.Context) {
 			category = tmpCat
 		}
 	}
+	// catname 也要验证
+	catName := ctx.Params().GetString("catname")
+	if catName != "" {
+		category = currentSite.GetCategoryFromCacheByToken(catName)
+		if category == nil {
+			NotFound(ctx)
+			return
+		}
+		// 不是上级也不行
+		if category.Id != archive.CategoryId {
+			NotFound(ctx)
+			return
+		}
+	}
 
 	createTime := time.Unix(archive.CreatedTime, 0)
 	year := ctx.Params().GetString("year")
@@ -171,22 +185,19 @@ func ArchiveDetail(ctx iris.Context) {
 			}
 		}
 	}
-	if tplName == "" {
-		tplName = module.TableName + "/detail.html"
-		tplName2 := module.TableName + "_detail.html"
-		if ViewExists(ctx, tplName2) {
-			tplName = tplName2
+	if tplName != "" {
+		if !strings.HasSuffix(tplName, ".html") {
+			tplName += ".html"
 		}
 	}
-
-	if !strings.HasSuffix(tplName, ".html") {
-		tplName += ".html"
-	}
-
 	tmpTpl := fmt.Sprintf("%s/detail-%d.html", module.TableName, archive.Id)
-	if ViewExists(ctx, tmpTpl) {
-		tplName = tmpTpl
+
+	tplName, ok = currentSite.TemplateExist(tplName, tmpTpl, module.TableName+"/detail.html", module.TableName+"_detail.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
+
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
@@ -237,10 +248,10 @@ func ArchiveIndex(ctx iris.Context) {
 
 	// 默认模板规则：表名 / index,list, detail .html
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
-	tplName := module.TableName + "/index.html"
-	tplName2 := module.TableName + "_index.html"
-	if ViewExists(ctx, tplName2) {
-		tplName = tplName2
+	tplName, ok := currentSite.TemplateExist(module.TableName+"/index.html", module.TableName+"_index.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))

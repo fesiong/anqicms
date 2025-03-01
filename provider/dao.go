@@ -73,8 +73,10 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxIdleConns(100)
-	sqlDB.SetConnMaxLifetime(-1)
+	// 连接池设置
+	sqlDB.SetMaxIdleConns(500)
+	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 	err = db.Use(&model.NextArchiveIdPlugin{})
 	if err != nil {
 		return nil, err

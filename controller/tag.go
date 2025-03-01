@@ -29,9 +29,10 @@ func TagIndexPage(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 
-	tplName := "tag/index.html"
-	if ViewExists(ctx, "tag_index.html") {
-		tplName = "tag_index.html"
+	tplName, ok := currentSite.TemplateExist("tag/index.html", "tag_index.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
@@ -89,16 +90,10 @@ func TagPage(ctx iris.Context) {
 
 	ctx.ViewData("tag", tag)
 
-	var tplName string
-
-	tplName = "tag/list.html"
-	if ViewExists(ctx, "tag_list.html") {
-		tplName = "tag_list.html"
-	}
-	if tag.Template != "" {
-		tplName = tag.Template
-	} else if ViewExists(ctx, fmt.Sprintf("tag/list-%d.html", tag.Id)) {
-		tplName = fmt.Sprintf("tag/list-%d.html", tag.Id)
+	tplName, ok := currentSite.TemplateExist(fmt.Sprintf("tag/list-%d.html", tag.Id), "tag/list.html", "tag_list.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))

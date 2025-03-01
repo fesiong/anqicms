@@ -617,7 +617,7 @@ func ApiArchiveList(ctx iris.Context) {
 
 	if module != nil && len(fields) > 1 && len(archiveIds) > 0 {
 		var results []map[string]interface{}
-		currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select("`" + strings.Join(fields, "`,`") + "`").Scan(&results)
+		currentSite.DB.WithContext(currentSite.Ctx()).Table(module.TableName).Where("`id` IN(?)", archiveIds).Select("`" + strings.Join(fields, "`,`") + "`").Scan(&results)
 		for _, field := range results {
 			item := map[string]*model.CustomField{}
 			for _, v := range module.Fields {
@@ -642,7 +642,7 @@ func ApiArchiveList(ctx iris.Context) {
 	// 读取flags
 	if len(archiveIds) > 0 {
 		var flags []*model.ArchiveFlags
-		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
 		for i := range archives {
 			for _, f := range flags {
 				if f.ArchiveId == archives[i].Id {
@@ -731,16 +731,16 @@ func ApiCategoryDetail(ctx iris.Context) {
 	if ctx.URLParamExists("render") {
 		render = ctx.URLParamBoolDefault("render", render)
 	}
-	category, err := currentSite.GetCategoryById(id)
-	if err != nil {
+	category := currentSite.GetCategoryFromCache(id)
+	if category == nil {
 		if filename != "" {
-			category, err = currentSite.GetCategoryByUrlToken(filename)
+			category = currentSite.GetCategoryFromCacheByToken(filename)
 		}
 	}
-	if err != nil {
+	if category == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  "not found",
 		})
 		return
 	}
@@ -1060,16 +1060,16 @@ func ApiPageDetail(ctx iris.Context) {
 	if ctx.URLParamExists("render") {
 		render = ctx.URLParamBoolDefault("render", render)
 	}
-	category, err := currentSite.GetCategoryById(id)
-	if err != nil {
+	category := currentSite.GetCategoryFromCache(id)
+	if category == nil {
 		if filename != "" {
-			category, err = currentSite.GetCategoryByUrlToken(filename)
+			category = currentSite.GetCategoryFromCacheByToken(filename)
 		}
 	}
-	if err != nil {
+	if category == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  "not found",
 		})
 		return
 	}
@@ -1395,7 +1395,7 @@ func ApiCommentPublish(ctx iris.Context) {
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok {
+		if ok && group.Setting.ContentNoVerify {
 			contentVerify = !group.Setting.ContentNoVerify
 		}
 	}
@@ -1622,7 +1622,7 @@ func ApiArchivePublish(ctx iris.Context) {
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok {
+		if ok && group.Setting.ContentNoVerify {
 			req.Draft = !group.Setting.ContentNoVerify
 		}
 	}

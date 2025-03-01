@@ -121,8 +121,9 @@ func (w *Website) InitSetting() {
 }
 
 func (w *Website) LoadSystemSetting(value string) {
+	w.System = &config.SystemConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.System)
+		_ = json.Unmarshal([]byte(value), w.System)
 	}
 	//如果没有设置模板，则默认是default
 	if w.System.TemplateName == "" {
@@ -138,8 +139,9 @@ func (w *Website) LoadSystemSetting(value string) {
 }
 
 func (w *Website) LoadContentSetting(value string) {
+	w.Content = &config.ContentConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Content)
+		_ = json.Unmarshal([]byte(value), w.Content)
 	}
 	if w.Content.MaxPage < 1 {
 		w.Content.MaxPage = 1000
@@ -150,8 +152,9 @@ func (w *Website) LoadContentSetting(value string) {
 }
 
 func (w *Website) LoadIndexSetting(value string) {
+	w.Index = &config.IndexConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Index)
+		_ = json.Unmarshal([]byte(value), w.Index)
 	}
 }
 
@@ -168,20 +171,23 @@ func (w *Website) LoadSensitiveWords(value string) {
 }
 
 func (w *Website) LoadContactSetting(value string) {
+	w.Contact = &config.ContactConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Contact)
+		_ = json.Unmarshal([]byte(value), w.Contact)
 	}
 }
 
 func (w *Website) LoadSafeSetting(value string) {
+	w.Safe = &config.SafeConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Safe)
+		_ = json.Unmarshal([]byte(value), w.Safe)
 	}
 }
 
 func (w *Website) LoadPushSetting(value string) {
+	w.PluginPush = &config.PluginPushConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginPush)
+		_ = json.Unmarshal([]byte(value), w.PluginPush)
 	}
 	// 兼容旧版 jscode
 	if w.PluginPush.JsCode != "" {
@@ -196,8 +202,9 @@ func (w *Website) LoadPushSetting(value string) {
 }
 
 func (w *Website) LoadSitemapSetting(value string) {
+	w.PluginSitemap = &config.PluginSitemapConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginSitemap)
+		_ = json.Unmarshal([]byte(value), w.PluginSitemap)
 	}
 	// sitemap
 	if w.PluginSitemap.Type != "xml" {
@@ -206,20 +213,23 @@ func (w *Website) LoadSitemapSetting(value string) {
 }
 
 func (w *Website) LoadRewriteSetting(value string) {
+	w.PluginRewrite = &config.PluginRewriteConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginRewrite)
+		_ = json.Unmarshal([]byte(value), w.PluginRewrite)
 	}
 }
 
 func (w *Website) LoadAnchorSetting(value string) {
+	w.PluginAnchor = &config.PluginAnchorConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginAnchor)
+		_ = json.Unmarshal([]byte(value), w.PluginAnchor)
 	}
 }
 
 func (w *Website) LoadGuestbookSetting(value string) {
+	w.PluginGuestbook = &config.PluginGuestbookConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginGuestbook)
+		_ = json.Unmarshal([]byte(value), w.PluginGuestbook)
 	}
 }
 
@@ -230,8 +240,9 @@ func (w *Website) LoadUploadFilesSetting(value string) {
 }
 
 func (w *Website) LoadSendmailSetting(value string) {
+	w.PluginSendmail = &config.PluginSendmail{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginSendmail)
+		_ = json.Unmarshal([]byte(value), w.PluginSendmail)
 	}
 	if len(w.PluginSendmail.SendType) == 0 {
 		w.PluginSendmail.SendType = []int{SendTypeGuestbook}
@@ -239,8 +250,9 @@ func (w *Website) LoadSendmailSetting(value string) {
 }
 
 func (w *Website) LoadImportApiSetting(value string) {
+	w.PluginImportApi = &config.PluginImportApiConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginImportApi)
+		_ = json.Unmarshal([]byte(value), w.PluginImportApi)
 	}
 	// 导入API生成
 	if w.PluginImportApi.Token == "" || w.PluginImportApi.LinkToken == "" {
@@ -259,8 +271,9 @@ func (w *Website) LoadImportApiSetting(value string) {
 }
 
 func (w *Website) LoadStorageSetting(value string) {
+	w.PluginStorage = &config.PluginStorageConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginStorage)
+		_ = json.Unmarshal([]byte(value), w.PluginStorage)
 	}
 	if w.PluginStorage.StorageType == "" {
 		w.PluginStorage.StorageType = config.StorageTypeLocal
@@ -272,32 +285,37 @@ func (w *Website) LoadStorageSetting(value string) {
 }
 
 func (w *Website) LoadPaySetting(value string) {
+	w.PluginPay = &config.PluginPayConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginPay)
+		_ = json.Unmarshal([]byte(value), w.PluginPay)
 	}
 }
 
 func (w *Website) LoadWeappSetting(value string) {
+	w.PluginWeapp = &config.PluginWeappConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginWeapp)
+		_ = json.Unmarshal([]byte(value), w.PluginWeapp)
 	}
 }
 
 func (w *Website) LoadWechatSetting(value string) {
+	w.PluginWechat = &config.PluginWeappConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginWechat)
+		_ = json.Unmarshal([]byte(value), w.PluginWechat)
 	}
 }
 
 func (w *Website) LoadRetailerSetting(value string) {
+	w.PluginRetailer = &config.PluginRetailerConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginRetailer)
+		_ = json.Unmarshal([]byte(value), w.PluginRetailer)
 	}
 }
 
 func (w *Website) LoadUserSetting(value string) {
+	w.PluginUser = &config.PluginUserConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginUser)
+		_ = json.Unmarshal([]byte(value), w.PluginUser)
 	}
 	if w.PluginUser.DefaultGroupId == 0 {
 		w.PluginUser.DefaultGroupId = 1
@@ -305,8 +323,9 @@ func (w *Website) LoadUserSetting(value string) {
 }
 
 func (w *Website) LoadOrderSetting(value string) {
+	w.PluginOrder = &config.PluginOrderConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginOrder)
+		_ = json.Unmarshal([]byte(value), w.PluginOrder)
 	}
 	if w.PluginOrder.AutoFinishDay <= 0 {
 		// default auto finish day
@@ -315,14 +334,16 @@ func (w *Website) LoadOrderSetting(value string) {
 }
 
 func (w *Website) LoadFulltextSetting(value string) {
+	w.PluginFulltext = &config.PluginFulltextConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginFulltext)
+		_ = json.Unmarshal([]byte(value), w.PluginFulltext)
 	}
 }
 
 func (w *Website) LoadTitleImageSetting(value string) {
+	w.PluginTitleImage = &config.PluginTitleImageConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginTitleImage)
+		_ = json.Unmarshal([]byte(value), w.PluginTitleImage)
 	}
 	if w.PluginTitleImage.Width == 0 {
 		w.PluginTitleImage.Width = 800
@@ -339,8 +360,9 @@ func (w *Website) LoadTitleImageSetting(value string) {
 }
 
 func (w *Website) LoadWatermarkSetting(value string) {
+	w.PluginWatermark = &config.PluginWatermark{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginWatermark)
+		_ = json.Unmarshal([]byte(value), w.PluginWatermark)
 	}
 	if w.PluginWatermark.Size == 0 {
 		w.PluginWatermark.Size = 20
@@ -360,8 +382,9 @@ func (w *Website) LoadWatermarkSetting(value string) {
 }
 
 func (w *Website) LoadHtmlCacheSetting(value string) {
+	w.PluginHtmlCache = &config.PluginHtmlCache{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginHtmlCache)
+		_ = json.Unmarshal([]byte(value), w.PluginHtmlCache)
 	}
 	// if no item, set to default
 	// index default cache 5 minutes
@@ -383,18 +406,19 @@ func (w *Website) LoadAnqiUser(value string) {
 }
 
 func (w *Website) LoadAiGenerateSetting(value string) {
+	w.AiGenerateConfig = &config.AiGenerateConfig{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &w.AiGenerateConfig); err != nil {
+	if err := json.Unmarshal([]byte(value), w.AiGenerateConfig); err != nil {
 		return
 	}
 }
 
 func (w *Website) LoadCollectorSetting(value string) {
 	//先读取默认配置
-	w.CollectorConfig = config.DefaultCollectorConfig
+	w.CollectorConfig = &config.DefaultCollectorConfig
 	//再根据用户配置来覆盖
 	if value == "" {
 		return
@@ -526,13 +550,13 @@ func (w *Website) LoadCollectorSetting(value string) {
 
 func (w *Website) LoadKeywordSetting(value string) {
 	//先读取默认配置
-	w.KeywordConfig = config.DefaultKeywordConfig
+	w.KeywordConfig = &config.DefaultKeywordConfig
 	//再根据用户配置来覆盖
 	if value == "" {
 		return
 	}
 
-	_ = json.Unmarshal([]byte(value), &w.KeywordConfig)
+	_ = json.Unmarshal([]byte(value), w.KeywordConfig)
 
 	var keyword config.KeywordJson
 	if err := json.Unmarshal([]byte(value), &keyword); err != nil {
@@ -568,11 +592,12 @@ func (w *Website) LoadKeywordSetting(value string) {
 }
 
 func (w *Website) LoadTimeFactorSetting(value string) {
+	w.PluginTimeFactor = &config.PluginTimeFactor{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &w.PluginTimeFactor); err != nil {
+	if err := json.Unmarshal([]byte(value), w.PluginTimeFactor); err != nil {
 		return
 	}
 
@@ -580,11 +605,12 @@ func (w *Website) LoadTimeFactorSetting(value string) {
 }
 
 func (w *Website) LoadMultiLangSetting(value string) {
+	w.MultiLanguage = &config.PluginMultiLangConfig{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &w.MultiLanguage); err != nil {
+	if err := json.Unmarshal([]byte(value), w.MultiLanguage); err != nil {
 		return
 	}
 
@@ -592,11 +618,12 @@ func (w *Website) LoadMultiLangSetting(value string) {
 }
 
 func (w *Website) LoadTranslateSetting(value string) {
+	w.PluginTranslate = &config.PluginTranslateConfig{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &w.PluginTranslate); err != nil {
+	if err := json.Unmarshal([]byte(value), w.PluginTranslate); err != nil {
 		return
 	}
 
@@ -604,11 +631,12 @@ func (w *Website) LoadTranslateSetting(value string) {
 }
 
 func (w *Website) LoadJsonLdSetting(value string) {
+	w.PluginJsonLd = &config.PluginJsonLdConfig{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &w.PluginJsonLd); err != nil {
+	if err := json.Unmarshal([]byte(value), w.PluginJsonLd); err != nil {
 		return
 	}
 
@@ -794,8 +822,9 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 }
 
 func (w *Website) LoadInterferenceSetting(value string) {
+	w.PluginInterference = &config.PluginInterference{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginInterference)
+		_ = json.Unmarshal([]byte(value), w.PluginInterference)
 	}
 }
 

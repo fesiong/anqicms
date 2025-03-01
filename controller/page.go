@@ -27,11 +27,11 @@ func PagePage(ctx iris.Context) {
 	var err error
 	if urlToken != "" {
 		//优先使用urlToken
-		category, err = currentSite.GetCategoryByUrlToken(urlToken)
+		category = currentSite.GetCategoryFromCacheByToken(urlToken)
 	} else {
-		category, err = currentSite.GetCategoryById(categoryId)
+		category = currentSite.GetCategoryFromCache(categoryId)
 	}
-	if err != nil || category.Status != config.ContentStatusOK {
+	if category == nil || category.Status != config.ContentStatusOK {
 		NotFound(ctx)
 		return
 	}
@@ -58,23 +58,21 @@ func PagePage(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
-	tplName := "page/detail.html"
-	if ViewExists(ctx, "page_detail.html") {
-		tplName = "page_detail.html"
-	}
 	tmpTpl := fmt.Sprintf("page/detail-%d.html", category.Id)
-	if ViewExists(ctx, tmpTpl) {
-		tplName = tmpTpl
-	} else if ViewExists(ctx, fmt.Sprintf("page-%d.html", category.Id)) {
-		tplName = fmt.Sprintf("page-%d.html", category.Id)
-	} else {
-		categoryTemplate := currentSite.GetCategoryTemplate(category)
-		if categoryTemplate != nil {
-			tplName = categoryTemplate.Template
+	categoryTemplate := currentSite.GetCategoryTemplate(category)
+	var catTpl string
+	if categoryTemplate != nil {
+		catTpl = categoryTemplate.Template
+		if !strings.HasSuffix(catTpl, ".html") {
+			catTpl += ".html"
 		}
 	}
-	if !strings.HasSuffix(tplName, ".html") {
-		tplName += ".html"
+	tokenTpl := fmt.Sprintf("page/%s.html", category.UrlToken)
+
+	tplName, ok := currentSite.TemplateExist(catTpl, tokenTpl, tmpTpl, fmt.Sprintf("page-%d.html", category.Id), "page/detail.html", "page_detail.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))

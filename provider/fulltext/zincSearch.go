@@ -11,7 +11,7 @@ import (
 )
 
 type ZincSearchService struct {
-	config    config.PluginFulltextConfig
+	config    *config.PluginFulltextConfig
 	apiClient *client.APIClient
 	ctx       context.Context
 	indexName string
@@ -26,7 +26,7 @@ type ZincIndexProperty struct {
 	Aggregatable  bool   `json:"aggregatable,omitempty"`
 }
 
-func NewZincSearchService(cfg config.PluginFulltextConfig, indexName string) (Service, error) {
+func NewZincSearchService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
 	configuration := client.NewConfiguration()
 	configuration.Servers = client.ServerConfigurations{
 		client.ServerConfiguration{

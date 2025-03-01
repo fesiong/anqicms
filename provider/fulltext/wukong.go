@@ -14,11 +14,11 @@ import (
 // ID 长度为18 位，
 // 区分规则是：900000000000000000 = category，800000000000000000 = tag，其他 = archive
 type WukongService struct {
-	config   config.PluginFulltextConfig
+	config   *config.PluginFulltextConfig
 	searcher *engine.Engine
 }
 
-func NewWukongService(cfg config.PluginFulltextConfig, indexName string) (Service, error) {
+func NewWukongService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
 	s := &WukongService{
 		config:   cfg,
 		searcher: new(engine.Engine),

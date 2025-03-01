@@ -38,9 +38,6 @@ func NotFound(ctx iris.Context) {
 	ctx.ViewData("webInfo", webInfo)
 
 	tplName := "errors/404.html"
-	if ViewExists(ctx, "errors_404.html") {
-		tplName = "errors_404.html"
-	}
 	ctx.StatusCode(404)
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
@@ -99,9 +96,6 @@ func InternalServerError(ctx iris.Context) {
 	}
 	ctx.ViewData("errMessage", errMessage)
 	tplName := "errors/500.html"
-	if ViewExists(ctx, "errors_500.html") {
-		tplName = "errors_500.html"
-	}
 	ctx.StatusCode(500)
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
@@ -125,10 +119,6 @@ func CheckCloseSite(ctx iris.Context) bool {
 			closeTips := currentSite.System.SiteCloseTips
 			ctx.ViewData("closeTips", closeTips)
 			tplName := "errors/close.html"
-			if ViewExists(ctx, "errors_close.html") {
-				tplName = "errors_close.html"
-			}
-
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 				webInfo.Title = currentSite.TplTr(closeTips)
 				ctx.ViewData("webInfo", webInfo)
@@ -397,8 +387,6 @@ func ReRouteContext(ctx iris.Context) {
 			}
 		}
 	}
-
-	ctx.ViewData("ctx", ctx)
 
 	switch params["match"] {
 	case "notfound":
@@ -849,7 +837,7 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok {
+		if ok && group.Setting.ContentNoCaptcha {
 			contentCaptcha = !group.Setting.ContentNoCaptcha
 		}
 	}

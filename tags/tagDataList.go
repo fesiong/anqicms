@@ -115,7 +115,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		// 读取flags
 		if len(archiveIds) > 0 {
 			var flags []*model.ArchiveFlags
-			currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
 			for i := range archives {
 				for _, f := range flags {
 					if f.ArchiveId == archives[i].Id {

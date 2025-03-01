@@ -12,7 +12,7 @@ import (
 )
 
 type ElasticSearchService struct {
-	config    config.PluginFulltextConfig
+	config    *config.PluginFulltextConfig
 	apiClient *es8.TypedClient
 	indexName string
 }
@@ -26,7 +26,7 @@ type ElasticIndexProperty struct {
 	Aggregatable  bool   `json:"aggregatable,omitempty"`
 }
 
-func NewElasticSearchService(cfg config.PluginFulltextConfig, indexName string) (Service, error) {
+func NewElasticSearchService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
 	es8cfg := es8.Config{
 		Addresses: []string{
 			cfg.EngineUrl,

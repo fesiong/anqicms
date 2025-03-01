@@ -29,7 +29,7 @@ func PluginSaveTranslateConfig(ctx iris.Context) {
 		return
 	}
 
-	currentSite.PluginTranslate = req
+	currentSite.PluginTranslate = &req
 	err := currentSite.SaveSettingValue(provider.TranslateSettingKey, currentSite.PluginTranslate)
 	if err != nil {
 		ctx.JSON(iris.Map{
