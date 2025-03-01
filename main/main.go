@@ -11,7 +11,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"log"
-	"net/http"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -20,12 +19,8 @@ import (
 	"strings"
 	"syscall"
 )
-import _ "net/http/pprof"
 
 func main() {
-	go func() {
-		http.ListenAndServe(":6060", nil)
-	}()
 	port := flag.Int("port", config.Server.Server.Port, "运行端口号")
 	flag.Parse()
 	config.Server.Server.Port = *port
