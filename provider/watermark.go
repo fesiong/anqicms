@@ -77,7 +77,7 @@ func (w *Website) GenerateAllWatermark() {
 	// 根据attachment表读取每一张图片
 	lastId := uint(0)
 	limit := 500
-	wm := w.NewWatermark(&w.PluginWatermark)
+	wm := w.NewWatermark(w.PluginWatermark)
 	if wm == nil {
 		return
 	}

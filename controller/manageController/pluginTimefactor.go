@@ -43,7 +43,7 @@ func PluginTimeFactorSettingSave(ctx iris.Context) {
 	}
 	// 回写
 	req.UpdateRunning = setting.UpdateRunning
-	currentSite.PluginTimeFactor = req
+	currentSite.PluginTimeFactor = &req
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateTimeFactorTimedReleaseConfiguration"))
 

@@ -233,6 +233,7 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 		var mapLocales = map[string]struct{}{}
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
+		var tplFiles = make(map[string]int64, 100)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				if throw {
@@ -270,13 +271,14 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 				}
 				return nil
 			}
-
+			tplFiles[path] = info.Size()
 			err = s.ParseTemplate(site, path, contents)
 			if err != nil && throw {
 				return err
 			}
 			return nil
 		})
+		site.SetTemplates(tplFiles)
 		if len(mapLocales) > 0 {
 			var locales = make([]string, 0, len(mapLocales))
 			for k := range mapLocales {

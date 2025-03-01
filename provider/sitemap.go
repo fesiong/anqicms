@@ -357,7 +357,10 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		}
 		re, _ := regexp.Compile(`tag-(\d+)`)
 		match := re.FindStringSubmatch(latestSitemap)
-		latestSitemapId, _ := strconv.Atoi(match[1])
+		var latestSitemapId int
+		if len(match) == 2 {
+			latestSitemapId, _ = strconv.Atoi(match[1])
+		}
 		tagPath := fmt.Sprintf("%stag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 		tagFile := NewSitemapGenerator(w, tagPath, w.System.BaseUrl, true)
 		var alternates []AlternateLink

@@ -58,7 +58,7 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		}
 	}
 	if content == "" {
-		v := reflect.ValueOf(currentSite.System)
+		v := reflect.ValueOf(*currentSite.System)
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)

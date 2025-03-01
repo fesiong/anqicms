@@ -42,8 +42,8 @@ type Website struct {
 	CacheStorage            *BucketStorage
 	parsedPatten            *RewritePatten
 	searcher                fulltext.Service
-	fulltextStatus          FulltextStatus
-	cachedTodayArticleCount response.CacheArticleCount
+	fulltextStatus          *FulltextStatus
+	cachedTodayArticleCount *response.CacheArticleCount
 	transferWebsite         *TransferWebsite
 	weappClient             *weapp.Client
 	wechatServer            *wechat.Server
@@ -52,42 +52,42 @@ type Website struct {
 	HtmlCachePushStatus     *HtmlCacheStatus
 	quickImportStatus       *QuickImportArchive
 
-	System  config.SystemConfig
-	Content config.ContentConfig
-	Index   config.IndexConfig
-	Contact config.ContactConfig
-	Safe    config.SafeConfig
+	System  *config.SystemConfig
+	Content *config.ContentConfig
+	Index   *config.IndexConfig
+	Contact *config.ContactConfig
+	Safe    *config.SafeConfig
 	Banner  config.BannerConfig
 	//plugin
-	PluginPush         config.PluginPushConfig
-	PluginSitemap      config.PluginSitemapConfig
-	PluginRewrite      config.PluginRewriteConfig
-	PluginAnchor       config.PluginAnchorConfig
-	PluginGuestbook    config.PluginGuestbookConfig
+	PluginPush         *config.PluginPushConfig
+	PluginSitemap      *config.PluginSitemapConfig
+	PluginRewrite      *config.PluginRewriteConfig
+	PluginAnchor       *config.PluginAnchorConfig
+	PluginGuestbook    *config.PluginGuestbookConfig
 	PluginUploadFiles  []config.PluginUploadFile
-	PluginSendmail     config.PluginSendmail
-	PluginImportApi    config.PluginImportApiConfig
-	PluginStorage      config.PluginStorageConfig
-	PluginPay          config.PluginPayConfig
-	PluginWeapp        config.PluginWeappConfig
-	PluginWechat       config.PluginWeappConfig
-	PluginRetailer     config.PluginRetailerConfig
-	PluginUser         config.PluginUserConfig
-	PluginOrder        config.PluginOrderConfig
-	PluginFulltext     config.PluginFulltextConfig
-	PluginTitleImage   config.PluginTitleImageConfig
-	PluginWatermark    config.PluginWatermark
-	PluginHtmlCache    config.PluginHtmlCache
+	PluginSendmail     *config.PluginSendmail
+	PluginImportApi    *config.PluginImportApiConfig
+	PluginStorage      *config.PluginStorageConfig
+	PluginPay          *config.PluginPayConfig
+	PluginWeapp        *config.PluginWeappConfig
+	PluginWechat       *config.PluginWeappConfig
+	PluginRetailer     *config.PluginRetailerConfig
+	PluginUser         *config.PluginUserConfig
+	PluginOrder        *config.PluginOrderConfig
+	PluginFulltext     *config.PluginFulltextConfig
+	PluginTitleImage   *config.PluginTitleImageConfig
+	PluginWatermark    *config.PluginWatermark
+	PluginHtmlCache    *config.PluginHtmlCache
 	SensitiveWords     []string
-	AiGenerateConfig   config.AiGenerateConfig
-	PluginInterference config.PluginInterference
-	PluginTimeFactor   config.PluginTimeFactor
-	MultiLanguage      config.PluginMultiLangConfig
-	PluginTranslate    config.PluginTranslateConfig
-	PluginJsonLd       config.PluginJsonLdConfig
+	AiGenerateConfig   *config.AiGenerateConfig
+	PluginInterference *config.PluginInterference
+	PluginTimeFactor   *config.PluginTimeFactor
+	MultiLanguage      *config.PluginMultiLangConfig
+	PluginTranslate    *config.PluginTranslateConfig
+	PluginJsonLd       *config.PluginJsonLdConfig
 
-	CollectorConfig config.CollectorJson
-	KeywordConfig   config.KeywordJson
+	CollectorConfig *config.CollectorJson
+	KeywordConfig   *config.KeywordJson
 	Proxy           *ProxyIPs // 代理
 
 	FindPasswordInfo *response.FindPasswordInfo
@@ -96,6 +96,47 @@ type Website struct {
 	// 一些缓存内容
 	languages    map[string]string
 	backLanguage string
+	ctx          iris.Context // 这个类型是指针，因此只能在拷贝后赋值
+	Template     *StoreTemplates
+}
+
+type StoreTemplates struct {
+	Templates map[string]int64
+	mu        sync.Mutex
+}
+
+func (w *Website) SetTemplates(templates map[string]int64) {
+	if w.Template == nil {
+		return
+	}
+	w.Template.mu.Lock()
+	defer w.Template.mu.Unlock()
+	w.Template.Templates = templates
+}
+
+func (w *Website) TemplateExist(tplPaths ...string) (string, bool) {
+	if len(tplPaths) == 0 {
+		return "", false
+	}
+	if w.Template == nil {
+		return tplPaths[0], false
+	}
+	w.Template.mu.Lock()
+	defer w.Template.mu.Unlock()
+	for _, tplPath := range tplPaths {
+		if tplPath == "" {
+			continue
+		}
+		if _, ok := w.Template.Templates[tplPath]; ok {
+			return tplPath, true
+		}
+	}
+
+	return tplPaths[0], false
+}
+
+func (w *Website) Ctx() iris.Context {
+	return w.ctx
 }
 
 type OrderedWebsites struct {
@@ -129,6 +170,11 @@ func (ow *OrderedWebsites) Get(id uint) (*Website, bool) {
 
 	website, exists := ow.data[id]
 	return website, exists
+}
+
+func (ow *OrderedWebsites) MustGet(id uint) *Website {
+	website, _ := ow.Get(id)
+	return website
 }
 
 func (ow *OrderedWebsites) Delete(id uint) {
@@ -284,6 +330,10 @@ func InitWebsite(mw *model.Website) {
 		DataPath:     mw.RootPath + "data/",
 		PublicPath:   mw.RootPath + "public/",
 		backLanguage: lang,
+		Template: &StoreTemplates{
+			Templates: make(map[string]int64),
+			mu:        sync.Mutex{},
+		},
 	}
 	if db != nil && mw.Status == 1 {
 		// 读取真正的 TokenSecret
@@ -343,6 +393,207 @@ func GetWebsites() []*Website {
 
 func CurrentSite(ctx iris.Context) *Website {
 	if websites.Len() == 0 {
+		return createDefaultWebsite(ctx)
+	}
+
+	if ctx == nil {
+		defaultWebsite, _ := websites.Get(1)
+		return defaultWebsite
+	}
+
+	// Try to get from siteId in context first
+	if site, ok := getWebsiteFromContext(ctx); ok {
+		return site
+	}
+
+	// Match by URI and host
+	if site := matchWebsiteByRequest(ctx); site != nil {
+		return site
+	}
+
+	// Fallback to default website
+	return cloneWithContext(websites.MustGet(1), ctx)
+}
+
+// 创建默认网站配置
+func createDefaultWebsite(ctx iris.Context) *Website {
+	site := &Website{
+		Id:         0,
+		Initialed:  false,
+		BaseURI:    "/",
+		RootPath:   config.ExecPath,
+		CachePath:  config.ExecPath + "cache/",
+		DataPath:   config.ExecPath + "data/",
+		PublicPath: config.ExecPath + "public/",
+		System: &config.SystemConfig{
+			SiteName:     "AnQiCMS",
+			TemplateName: "default",
+		},
+		ctx: ctx,
+		Template: &StoreTemplates{
+			Templates: make(map[string]int64),
+			mu:        sync.Mutex{},
+		},
+	}
+	if ctx != nil {
+		site.backLanguage = ctx.GetLocale().Language()
+	}
+	return site
+}
+
+// 从上下文中获取并验证站点
+func getWebsiteFromContext(ctx iris.Context) (*Website, bool) {
+	siteId, err := ctx.Values().GetUint("siteId")
+	if err != nil {
+		return nil, false
+	}
+
+	w, ok := websites.Get(siteId)
+	if !ok {
+		return nil, false
+	}
+
+	return cloneWithContext(w, ctx), true
+}
+
+// 通过请求信息匹配网站
+func matchWebsiteByRequest(ctx iris.Context) *Website {
+	uri := ctx.RequestPath(false)
+	host := library.GetHost(ctx)
+	values := websites.Values()
+
+	// 优先处理非根路径的情况
+	if uri != "/" {
+		if site := matchByURIAndHost(values, uri, host, ctx); site != nil {
+			return site
+		}
+	}
+
+	// 处理根路径和后备匹配
+	return matchRootAndFallback(values, host, ctx)
+}
+
+// 克隆网站配置并添加上下文
+func cloneWithContext(w *Website, ctx iris.Context) *Website {
+	cloned := *w
+	cloned.ctx = ctx
+	if ctx != nil {
+		cloned.backLanguage = ctx.GetLocale().Language()
+	}
+	return &cloned
+}
+
+// URI和主机匹配逻辑
+func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *Website {
+	for _, w := range sites {
+		// 检查所有相关URL配置
+		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.MobileUrl, w.System.AdminUrl} {
+			if urlToCheck == "" {
+				continue
+			}
+
+			parsed, err := url.Parse(urlToCheck)
+			if err != nil || parsed.RequestURI() == "/" {
+				continue
+			}
+
+			if isHostMatch(parsed, host) && strings.HasPrefix(uri, parsed.RequestURI()) {
+				return handleMatchedWebsite(w, parsed.RequestURI(), ctx)
+			}
+		}
+
+		// 处理多语言逻辑
+		if mainSite := handleMultiLanguage(w, host, uri, ctx); mainSite != nil {
+			return mainSite
+		}
+	}
+	return nil
+}
+
+// 根路径和后备匹配逻辑
+func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Website {
+	for _, w := range sites {
+		parsed, err := url.Parse(w.System.BaseUrl)
+		if err != nil || parsed.RequestURI() != "/" {
+			continue
+		}
+
+		if isHostMatch(parsed, host) {
+			return handleHostMatch(w, ctx)
+		}
+
+		if isSubdomainMatch(parsed.Hostname(), host) {
+			return cloneWithContext(w, ctx)
+		}
+	}
+	return nil
+}
+
+// 处理多语言配置
+func handleMultiLanguage(w *Website, host, uri string, ctx iris.Context) *Website {
+	parsed, err := url.Parse(w.System.BaseUrl)
+	if err != nil || parsed.Hostname() != host {
+		return nil
+	}
+
+	mainSite := w.GetMainWebsite()
+	if !mainSite.MultiLanguage.Open {
+		return nil
+	}
+
+	lang := detectLanguage(mainSite, ctx, uri)
+	if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
+		ctx.SetLanguage(lang)
+		ctx.Values().Set("siteId", tmpId)
+		if subSite, ok := websites.Get(tmpId); ok {
+			return cloneWithContext(subSite, ctx)
+		}
+	}
+	return nil
+}
+
+// 检测语言设置
+func detectLanguage(mainSite *Website, ctx iris.Context, uri string) string {
+	switch mainSite.MultiLanguage.Type {
+	case config.MultiLangTypeDirectory:
+		lang := strings.SplitN(strings.TrimPrefix(uri, "/"), "/", 2)[0]
+		if !strings.Contains(lang, ".") {
+			return lang
+		}
+	case config.MultiLangTypeSame:
+		if lang := ctx.GetCookie("lang"); lang != "" {
+			return lang
+		}
+		return ctx.URLParam("lang")
+	}
+	return ""
+}
+
+// 主机匹配检查
+func isHostMatch(parsed *url.URL, host string) bool {
+	return parsed.Hostname() == host
+}
+
+// 子域名匹配检查
+func isSubdomainMatch(parsedHost, currentHost string) bool {
+	return strings.HasSuffix(parsedHost, "."+currentHost)
+}
+
+// 处理匹配到的网站
+func handleMatchedWebsite(w *Website, baseURI string, ctx iris.Context) *Website {
+	w.BaseURI = baseURI
+	ctx.Values().Set("siteId", w.Id)
+	return cloneWithContext(w, ctx)
+}
+
+// 处理主机匹配的情况
+func handleHostMatch(w *Website, ctx iris.Context) *Website {
+	ctx.Values().Set("siteId", w.Id)
+	return cloneWithContext(w, ctx)
+}
+
+func CurrentSite2(ctx iris.Context) *Website {
+	if websites.Len() == 0 {
 		cur := &Website{
 			Id:         0,
 			Initialed:  false,
@@ -351,24 +602,30 @@ func CurrentSite(ctx iris.Context) *Website {
 			CachePath:  config.ExecPath + "cache/",
 			DataPath:   config.ExecPath + "data/",
 			PublicPath: config.ExecPath + "public/",
-			System: config.SystemConfig{
+			System: &config.SystemConfig{
 				SiteName:     "AnQiCMS",
 				TemplateName: "default",
+			},
+			Template: &StoreTemplates{
+				Templates: make(map[string]int64),
+				mu:        sync.Mutex{},
 			},
 		}
 		if ctx != nil {
 			cur.backLanguage = ctx.GetLocale().Language()
 		}
+		cur.ctx = ctx
 		return cur
 	}
 	if ctx != nil {
+		var tmpSite Website
 		if siteId, err := ctx.Values().GetUint("siteId"); err == nil {
 			w, ok := websites.Get(siteId)
 			if ok {
-				if w.backLanguage == "" {
-					w.backLanguage = ctx.GetLocale().Language()
-				}
-				return w
+				tmpSite = *w
+				tmpSite.backLanguage = ctx.GetLocale().Language()
+				tmpSite.ctx = ctx
+				return &tmpSite
 			}
 		}
 		// 获取到当前website
@@ -406,26 +663,28 @@ func CurrentSite(ctx iris.Context) *Website {
 						if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
 							ctx.SetLanguage(lang)
 							ctx.Values().Set("siteId", tmpId)
-							tmpSite, _ := websites.Get(tmpId)
+							tmpSite1, _ := websites.Get(tmpId)
+							tmpSite = *tmpSite1
 							tmpSite.backLanguage = ctx.GetLocale().Language()
-							return tmpSite
+							tmpSite.ctx = ctx
+							return &tmpSite
 						}
 					}
 					ctx.Values().Set("siteId", w.Id)
-					if w.backLanguage == "" {
-						w.backLanguage = ctx.GetLocale().Language()
-					}
-					return w
+					tmpSite = *w
+					tmpSite.backLanguage = ctx.GetLocale().Language()
+					tmpSite.ctx = ctx
+					return &tmpSite
 				}
 				// end
 				if parsed.RequestURI() != "/" {
 					if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 						w.BaseURI = parsed.RequestURI()
 						ctx.Values().Set("siteId", w.Id)
-						if w.backLanguage == "" {
-							w.backLanguage = ctx.GetLocale().Language()
-						}
-						return w
+						tmpSite = *w
+						tmpSite.backLanguage = ctx.GetLocale().Language()
+						tmpSite.ctx = ctx
+						return &tmpSite
 					}
 				}
 				if w.System.MobileUrl != "" {
@@ -435,10 +694,10 @@ func CurrentSite(ctx iris.Context) *Website {
 							if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 								w.BaseURI = parsed.RequestURI()
 								ctx.Values().Set("siteId", w.Id)
-								if w.backLanguage == "" {
-									w.backLanguage = ctx.GetLocale().Language()
-								}
-								return w
+								tmpSite = *w
+								tmpSite.backLanguage = ctx.GetLocale().Language()
+								tmpSite.ctx = ctx
+								return &tmpSite
 							}
 						}
 					}
@@ -449,10 +708,10 @@ func CurrentSite(ctx iris.Context) *Website {
 						if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
 							w.BaseURI = parsed.RequestURI()
 							ctx.Values().Set("siteId", w.Id)
-							if w.backLanguage == "" {
-								w.backLanguage = ctx.GetLocale().Language()
-							}
-							return w
+							tmpSite = *w
+							tmpSite.backLanguage = ctx.GetLocale().Language()
+							tmpSite.ctx = ctx
+							return &tmpSite
 						}
 					}
 				}
@@ -480,25 +739,27 @@ func CurrentSite(ctx iris.Context) *Website {
 						if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
 							ctx.SetLanguage(lang)
 							ctx.Values().Set("siteId", tmpId)
-							tmpSite, _ := websites.Get(tmpId)
+							tmpSite1, _ := websites.Get(tmpId)
+							tmpSite = *tmpSite1
 							tmpSite.backLanguage = ctx.GetLocale().Language()
-							return tmpSite
+							tmpSite.ctx = ctx
+							return &tmpSite
 						}
 					}
 
 					ctx.Values().Set("siteId", w.Id)
-					if w.backLanguage == "" {
-						w.backLanguage = ctx.GetLocale().Language()
-					}
-					return w
+					tmpSite = *w
+					tmpSite.backLanguage = ctx.GetLocale().Language()
+					tmpSite.ctx = ctx
+					return &tmpSite
 				}
 				// 顶级域名
 				if strings.HasSuffix(parsed.Hostname(), "."+host) {
 					ctx.Values().Set("siteId", w.Id)
-					if w.backLanguage == "" {
-						w.backLanguage = ctx.GetLocale().Language()
-					}
-					return w
+					tmpSite = *w
+					tmpSite.backLanguage = ctx.GetLocale().Language()
+					tmpSite.ctx = ctx
+					return &tmpSite
 				}
 			}
 			if w.System.MobileUrl != "" {
@@ -509,10 +770,10 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 					if parsed.Hostname() == host {
 						ctx.Values().Set("siteId", w.Id)
-						if w.backLanguage == "" {
-							w.backLanguage = ctx.GetLocale().Language()
-						}
-						return w
+						tmpSite = *w
+						tmpSite.backLanguage = ctx.GetLocale().Language()
+						tmpSite.ctx = ctx
+						return &tmpSite
 					}
 				}
 			}
@@ -524,10 +785,10 @@ func CurrentSite(ctx iris.Context) *Website {
 					}
 					if parsed.Hostname() == host {
 						ctx.Values().Set("siteId", w.Id)
-						if w.backLanguage == "" {
-							w.backLanguage = ctx.GetLocale().Language()
-						}
-						return w
+						tmpSite = *w
+						tmpSite.backLanguage = ctx.GetLocale().Language()
+						tmpSite.ctx = ctx
+						return &tmpSite
 					}
 				}
 			}
@@ -537,7 +798,10 @@ func CurrentSite(ctx iris.Context) *Website {
 	// return default 1
 	defaultWebsite, _ := websites.Get(1)
 	if ctx != nil {
-		defaultWebsite.backLanguage = ctx.GetLocale().Language()
+		tmpSite := *defaultWebsite
+		tmpSite.backLanguage = ctx.GetLocale().Language()
+		tmpSite.ctx = ctx
+		return &tmpSite
 	}
 	return defaultWebsite
 }

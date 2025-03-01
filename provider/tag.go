@@ -22,13 +22,13 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 	}
 	var total int64
 
-	builder := w.DB.Model(&model.Tag{}).Order(order)
+	builder := w.DB.WithContext(w.Ctx()).Model(&model.Tag{}).Order(order)
 	if firstLetter != "" {
 		builder = builder.Where("`first_letter` = ?", firstLetter)
 	}
 	if itemId != 0 {
 		var ids []uint
-		w.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &ids)
+		w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &ids)
 		if len(ids) == 0 {
 			// 不用再查询了，直接返回结果
 			return tags, 0, nil
@@ -56,14 +56,14 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 
 func (w *Website) GetTagsByIds(ids []uint) []*model.Tag {
 	var tags []*model.Tag
-	w.DB.Model(&model.Tag{}).Where("`id` IN(?)", ids).Find(&tags)
+	w.DB.WithContext(w.Ctx()).Model(&model.Tag{}).Where("`id` IN(?)", ids).Find(&tags)
 
 	return tags
 }
 
 func (w *Website) GetTagById(id uint) (*model.Tag, error) {
 	var tag model.Tag
-	if err := w.DB.Where("id = ?", id).First(&tag).Error; err != nil {
+	if err := w.DB.WithContext(w.Ctx()).Where("id = ?", id).First(&tag).Error; err != nil {
 		return nil, err
 	}
 
@@ -72,7 +72,7 @@ func (w *Website) GetTagById(id uint) (*model.Tag, error) {
 
 func (w *Website) GetTagContentById(id uint) (*model.TagContent, error) {
 	var tagContent model.TagContent
-	if err := w.DB.Where("id = ?", id).First(&tagContent).Error; err != nil {
+	if err := w.DB.WithContext(w.Ctx()).Where("id = ?", id).First(&tagContent).Error; err != nil {
 		return nil, err
 	}
 	tagContent.Content = w.ReplaceContentUrl(tagContent.Content, true)
@@ -82,7 +82,7 @@ func (w *Website) GetTagContentById(id uint) (*model.TagContent, error) {
 
 func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	var tag model.Tag
-	if err := w.DB.Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
+	if err := w.DB.WithContext(w.Ctx()).Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
 	tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
@@ -307,7 +307,7 @@ func (w *Website) SaveTagData(itemId int64, tagNames []string) error {
 func (w *Website) GetTagsByItemId(itemId int64) []*model.Tag {
 	var tags []*model.Tag
 	var tagIds []uint
-	err := w.DB.Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &tagIds).Error
+	err := w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &tagIds).Error
 	if err != nil {
 		return nil
 	}

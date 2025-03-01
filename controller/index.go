@@ -32,9 +32,10 @@ func IndexPage(ctx iris.Context) {
 	}
 
 	// 支持2种文件结构，一种是目录式的，一种是扁平式的
-	tplName := "index/index.html"
-	if ViewExists(ctx, "index.html") {
-		tplName = "index.html"
+	tplName, ok := currentSite.TemplateExist("index/index.html", "index.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))

@@ -255,9 +255,13 @@ func (bs *BackupStatus) RestoreData(fileName string) error {
 	isEOF := false
 	for {
 		line, err := lineReader.ReadString('\n')
+		if err != nil {
+			log.Println("is restore finished", err)
+		}
 		if err == io.EOF {
 			isEOF = true
 		}
+		log.Println("is eof", isEOF)
 		tmpStr += line
 		if strings.HasSuffix(line, ";\n") || isEOF {
 			curSize += int64(len(tmpStr))
@@ -277,10 +281,9 @@ func (bs *BackupStatus) RestoreData(fileName string) error {
 			} else {
 				checkStr = tmpStr
 			}
-			if strings.Contains(checkStr, "_logs`") {
-				continue
+			if !strings.Contains(checkStr, "_logs`") {
+				bs.w.DB.Exec(tmpStr)
 			}
-			bs.w.DB.Exec(tmpStr)
 			tmpStr = ""
 		}
 		if isEOF {

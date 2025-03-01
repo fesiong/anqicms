@@ -5,7 +5,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -63,28 +62,33 @@ func CategoryList(ctx iris.Context) {
 			// 默认的
 			if categories[i].Type == config.CategoryTypePage {
 				categories[i].Template = ctx.Tr("(Default)") + " page/detail.html"
-				if controller.ViewExists(ctx, "page_detail.html") {
-					categories[i].Template = ctx.Tr("(Default)") + " page_detail.html"
+				tmpTpl, ok := currentSite.TemplateExist("page_detail.html")
+				if ok {
+					categories[i].Template = ctx.Tr("(Default)") + " " + tmpTpl
 				}
-				tmpTpl := fmt.Sprintf("page/detail-%d.html", categories[i].Id)
-				if controller.ViewExists(ctx, tmpTpl) {
+				tmpTpl0 := fmt.Sprintf("page/%s.html", categories[i].UrlToken)
+				tmpTpl1 := fmt.Sprintf("page/detail-%d.html", categories[i].Id)
+				tmpTpl2 := fmt.Sprintf("page-%d.html", categories[i].Id)
+				tmpTpl, ok = currentSite.TemplateExist(tmpTpl0, tmpTpl1, tmpTpl2)
+				if ok {
 					categories[i].Template = "(ID) " + tmpTpl
-				} else if controller.ViewExists(ctx, fmt.Sprintf("page-%d.html", categories[i].Id)) {
-					categories[i].Template = "(ID) " + fmt.Sprintf("page-%d.html", categories[i].Id)
-				} else {
-					categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
-					if categoryTemplate != nil {
-						categories[i].Template = categoryTemplate.Template
-					}
+				}
+				categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
+				if categoryTemplate != nil {
+					categories[i].Template = categoryTemplate.Template
 				}
 			} else {
 				categories[i].Template = ctx.Tr("(Default)") + mapModules[categories[i].ModuleId].TableName + "/list.html"
 				tplName2 := mapModules[categories[i].ModuleId].TableName + "_list.html"
-				if controller.ViewExists(ctx, tplName2) {
-					categories[i].Template = ctx.Tr("(Default)") + tplName2
+				tmpTpl, ok := currentSite.TemplateExist(tplName2)
+				if ok {
+					categories[i].Template = ctx.Tr("(Default)") + tmpTpl
 				}
-				if controller.ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)) {
-					categories[i].Template = "(ID) " + fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)
+				tmpTpl0 := fmt.Sprintf("%s/%s.html", mapModules[categories[i].ModuleId].TableName, categories[i].UrlToken)
+				tmpTpl1 := fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)
+				tmpTpl, ok = currentSite.TemplateExist(tmpTpl0, tmpTpl1)
+				if ok {
+					categories[i].Template = "(ID) " + tmpTpl
 				}
 				// 跟随上级
 				if categories[i].ParentId > 0 {
@@ -102,8 +106,9 @@ func CategoryList(ctx iris.Context) {
 		if categories[i].DetailTemplate == "" && categories[i].Type != config.CategoryTypePage {
 			categories[i].DetailTemplate = ctx.Tr("(Default)") + mapModules[categories[i].ModuleId].TableName + "/detail.html"
 			tplName2 := mapModules[categories[i].ModuleId].TableName + "_detail.html"
-			if controller.ViewExists(ctx, tplName2) {
-				categories[i].DetailTemplate = ctx.Tr("(Default)") + tplName2
+			tmpTpl, ok := currentSite.TemplateExist(tplName2)
+			if ok {
+				categories[i].DetailTemplate = ctx.Tr("(Default)") + tmpTpl
 			}
 		}
 	}

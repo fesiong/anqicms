@@ -203,10 +203,10 @@ func MarkdownToHTML(mdStr string, args ...interface{}) string {
 		return ""
 	}
 	// 换行转换成p
-	mdStr = strings.ReplaceAll(mdStr, "\n", "  \n")
+	//mdStr = strings.ReplaceAll(mdStr, "\n", "  \n")
 	md := []byte(mdStr)
 	// create Markdown parser with extensions
-	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	extensions := parser.CommonExtensions | parser.NoEmptyLineBeforeBlock
 	p := parser.NewWithExtensions(extensions)
 	doc := p.Parse(md)
 

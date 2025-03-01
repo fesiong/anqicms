@@ -87,24 +87,21 @@ func CategoryPage(ctx iris.Context) {
 
 	ctx.ViewData("category", category)
 
-	tplName := module.TableName + "/list.html"
-	tplName2 := module.TableName + "_list.html"
-	if ViewExists(ctx, tplName2) {
-		tplName = tplName2
-	}
+	tmpTpl := fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
-	if category.Template != "" {
-		tplName = category.Template
-	} else if ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
-		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
-	} else {
-		categoryTemplate := currentSite.GetCategoryTemplate(category)
-		if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
-			tplName = categoryTemplate.Template
+	var catTpl string
+	categoryTemplate := currentSite.GetCategoryTemplate(category)
+	if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
+		catTpl = categoryTemplate.Template
+		if !strings.HasSuffix(catTpl, ".html") {
+			catTpl += ".html"
 		}
 	}
-	if !strings.HasSuffix(tplName, ".html") {
-		tplName += ".html"
+	tokenTpl := fmt.Sprintf("%s/%s.html", module.TableName, category.UrlToken)
+	tplName, ok := currentSite.TemplateExist(catTpl, tokenTpl, tmpTpl, module.TableName+"/list.html", module.TableName+"_list.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
@@ -170,16 +167,14 @@ func SearchPage(ctx iris.Context) {
 
 	ctx.ViewData("q", q)
 
-	tplName := "search/index.html"
-	if ViewExists(ctx, "search.html") {
-		tplName = "search.html"
-	}
+	var tmpTpl string
 	if module != nil {
-		if ViewExists(ctx, "search/"+module.UrlToken+".html") {
-			tplName = "search/" + module.UrlToken + ".html"
-		} else if ViewExists(ctx, "search_"+module.UrlToken+".html") {
-			tplName = "search_" + module.UrlToken + ".html"
-		}
+		tmpTpl = "search/" + module.UrlToken + ".html"
+	}
+	tplName, ok := currentSite.TemplateExist(tmpTpl, "search/index.html", "search.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))

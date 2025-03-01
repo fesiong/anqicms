@@ -50,7 +50,7 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		}
 	}
 	if content == "" {
-		v := reflect.ValueOf(currentSite.Contact)
+		v := reflect.ValueOf(*currentSite.Contact)
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)

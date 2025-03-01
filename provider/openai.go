@@ -202,7 +202,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	if w.AiGenerateConfig.DoubleTitle {
 		prompt = "请您基于关键词'" + req.Keyword + "'生成一篇双标题文章，输出格式'主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）正文：（在此处输入正文内容）'，要求表意清晰，主题鲜明，分段表述"
 	}
-	if req.Language == config.LanguageEn {
+	if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
 		prompt = "Please generate an English article based on the keywords, and put the article title on the first line. Keywords: " + req.Keyword
 	}
 	if len(req.Demand) > 0 {

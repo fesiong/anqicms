@@ -47,7 +47,7 @@ func (w *Website) GetBucket() (bucket *BucketStorage, err error) {
 		DataPath:            w.DataPath,
 		PublicPath:          w.PublicPath,
 		w:                   w,
-		config:              &w.PluginStorage,
+		config:              w.PluginStorage,
 		tencentBucketClient: nil,
 		aliyunBucketClient:  nil,
 		qiniuBucketClient:   nil,

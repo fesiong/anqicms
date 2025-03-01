@@ -28,7 +28,7 @@ func PluginSaveJsonLdConfig(ctx iris.Context) {
 		return
 	}
 
-	currentSite.PluginJsonLd = req
+	currentSite.PluginJsonLd = &req
 	err := currentSite.SaveSettingValue(provider.JsonLdSettingKey, currentSite.PluginJsonLd)
 	if err != nil {
 		ctx.JSON(iris.Map{

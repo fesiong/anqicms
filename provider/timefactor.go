@@ -16,9 +16,9 @@ func (w *Website) TryToRunTimeFactor() {
 		return
 	}
 
-	go w.TimeRenewArchives(&w.PluginTimeFactor)
+	go w.TimeRenewArchives(w.PluginTimeFactor)
 
-	go w.TimeReleaseArchives(&w.PluginTimeFactor)
+	go w.TimeReleaseArchives(w.PluginTimeFactor)
 }
 
 func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {

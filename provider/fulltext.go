@@ -22,15 +22,17 @@ type FulltextStatus struct {
 }
 
 func (w *Website) GetFullTextStatus() *FulltextStatus {
-	return &w.fulltextStatus
+	return w.fulltextStatus
 }
 
 func (w *Website) InitFulltext(focus bool) {
-	if !w.PluginFulltext.Open || len(w.PluginFulltext.Modules) == 0 || w.searcher != nil {
+	if w.PluginFulltext == nil || !w.PluginFulltext.Open || len(w.PluginFulltext.Modules) == 0 || w.searcher != nil {
 		return
 	}
-	w.fulltextStatus.Status = 1
-	w.fulltextStatus.Msg = "Initializing"
+	w.fulltextStatus = &FulltextStatus{
+		Status: 1,
+		Msg:    "Initializing",
+	}
 	var err error
 
 	log.Println("fulltext init")
@@ -137,7 +139,8 @@ func (w *Website) InitFulltext(focus bool) {
 }
 
 func (w *Website) CloseFulltext() {
-	w.fulltextStatus = FulltextStatus{}
+	// 防止出错
+	w.fulltextStatus = &FulltextStatus{}
 	if w.searcher == nil {
 		return
 	}

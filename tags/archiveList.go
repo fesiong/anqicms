@@ -3,7 +3,6 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
-	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
@@ -281,7 +280,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		} else if like == "tag" {
 			// 根据tag来调用相关
 			var tagIds []uint
-			currentSite.DB.Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tagIds)
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tagIds)
 			if len(tagIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					tx = tx.Table("`archives` as archives").
@@ -533,7 +532,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	// 读取flags
 	if showFlag && len(archiveIds) > 0 {
 		var flags []*model.ArchiveFlags
-		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
 		for i := range archives {
 			for _, f := range flags {
 				if f.ArchiveId == archives[i].Id {
@@ -566,8 +565,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 		// 公开列表数据
 		if currentSite.PluginJsonLd.Open {
-			ctxOri := ctx.Public["ctx"].(iris.Context)
-			ctxOri.ViewData("listData", tmpResult)
+			ctxOri := currentSite.Ctx()
+			if ctxOri != nil {
+				ctxOri.ViewData("listData", tmpResult)
+			}
 		}
 	}
 	ctx.Private[node.name] = tmpResult

@@ -31,9 +31,10 @@ func GuestbookPage(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 
-	tplName := "guestbook/index.html"
-	if ViewExists(ctx, "guestbook.html") {
-		tplName = "guestbook.html"
+	tplName, ok := currentSite.TemplateExist("guestbook/index.html", "guestbook.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {

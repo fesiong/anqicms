@@ -36,7 +36,7 @@ func (w *Website) GetCommentList(archiveId int64, userId uint, order string, cur
 	}
 	var total int64
 
-	builder := w.DB.Model(&model.Comment{})
+	builder := w.DB.Model(&model.Comment{}).WithContext(w.Ctx())
 	if archiveId > 0 {
 		builder = builder.Where("archive_id = ?", archiveId)
 	}
@@ -63,7 +63,7 @@ func (w *Website) GetCommentList(archiveId int64, userId uint, order string, cur
 
 func (w *Website) GetCommentById(id uint) (*model.Comment, error) {
 	var comment model.Comment
-	if err := w.DB.Where("id = ?", id).First(&comment).Error; err != nil {
+	if err := w.DB.WithContext(w.Ctx()).Where("id = ?", id).First(&comment).Error; err != nil {
 		return nil, err
 	}
 	//获取itemItile
@@ -75,7 +75,7 @@ func (w *Website) GetCommentById(id uint) (*model.Comment, error) {
 	//获取parent
 	if comment.ParentId > 0 {
 		var parent model.Comment
-		if err := w.DB.Where("id = ?", comment.ParentId).First(&parent).Error; err == nil {
+		if err := w.DB.WithContext(w.Ctx()).Where("id = ?", comment.ParentId).First(&parent).Error; err == nil {
 			comment.Parent = &parent
 		}
 	}
@@ -85,7 +85,7 @@ func (w *Website) GetCommentById(id uint) (*model.Comment, error) {
 
 func (w *Website) GetCommentPraise(userId uint, commentId int64) (*model.CommentPraise, error) {
 	var praise model.CommentPraise
-	if err := w.DB.Where("user_id = ? and comment_id = ?", userId, commentId).Take(&praise).Error; err != nil {
+	if err := w.DB.WithContext(w.Ctx()).Where("user_id = ? and comment_id = ?", userId, commentId).Take(&praise).Error; err != nil {
 		return nil, err
 	}
 
