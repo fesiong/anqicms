@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"errors"
 	"github.com/esap/wechat"
 	"github.com/kataras/iris/v12"
@@ -135,7 +136,14 @@ func (w *Website) TemplateExist(tplPaths ...string) (string, bool) {
 	return tplPaths[0], false
 }
 
-func (w *Website) Ctx() iris.Context {
+func (w *Website) Ctx() context.Context {
+	if w.ctx == nil {
+		return context.TODO()
+	}
+	return w.ctx.Request().Context()
+}
+
+func (w *Website) CtxOri() iris.Context {
 	return w.ctx
 }
 
@@ -334,6 +342,7 @@ func InitWebsite(mw *model.Website) {
 			Templates: make(map[string]int64),
 			mu:        sync.Mutex{},
 		},
+		cachedTodayArticleCount: &response.CacheArticleCount{},
 	}
 	if db != nil && mw.Status == 1 {
 		// 读取真正的 TokenSecret
@@ -376,6 +385,7 @@ func InitWebsite(mw *model.Website) {
 		}
 	}
 	if w.Initialed {
+		w.GetRewritePatten(true)
 		// 启动限流器
 		w.InitLimiter()
 		w.InitStatistic()

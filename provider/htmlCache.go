@@ -669,7 +669,10 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 	if w.PluginHtmlCache.Open == false {
 		return "", false
 	}
-	if ctx.GetHeader("Cache-Control") == "no-cache" {
+	// 获得路由
+	match := ctx.Params().Get("match")
+	// 首页不允许通过 no-cache 跳过缓存
+	if ctx.GetHeader("Cache-Control") == "no-cache" && match != "index" {
 		return "", false
 	}
 	// 用户登录后，也不缓存
@@ -677,8 +680,6 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 	if userId > 0 {
 		return "", false
 	}
-	// 获得路由
-	match := ctx.Params().Get("match")
 	if match == "index" {
 		if w.PluginHtmlCache.IndexCache == 0 {
 			return "", false

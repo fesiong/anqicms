@@ -10,12 +10,14 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
+	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
 	"strings"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
@@ -1002,12 +1004,48 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	return true
 }
 
+var isLimiting int32 = 0 // 原子操作标识
+
 func UseLimiter(ctx iris.Context) bool {
 	// 后台地址跳过，静态文件跳过
 	uri := ctx.RequestPath(false)
 	if strings.HasPrefix(uri, "/static") || strings.HasPrefix(uri, "/system") || strings.HasPrefix(uri, "/uploads") || strings.HasPrefix(uri, "/favicon.ico") || strings.HasSuffix(uri, "/api/import") {
+		// 这两个特殊处理
+		if strings.HasPrefix(uri, "/static") || strings.HasPrefix(uri, "/uploads") {
+			currentSite := provider.CurrentSite(ctx)
+			// 没启用拦截器
+			if currentSite.Limiter == nil {
+				return false
+			}
+			// 是否禁止空refer，只对 uploads,static 目录生效
+			if currentSite.Limiter.IsBanEmptyRefer() {
+				refer := ctx.GetReferrer()
+				if refer.Raw == "" {
+					return true
+				}
+			}
+		}
 		return false
 	}
+	// 如果内存使用超过了阈值，则不给访问，在这个时间开始5秒内的所有链接不能访问
+	if isLimiting == 1 {
+		log.Println("isLimiting", isLimiting, "429")
+		ctx.StatusCode(429) // Too Many Requests
+		return true
+	}
+	_, sysUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
+
+	// 触发限流条件（示例阈值，需根据服务器配置调整）
+	if sysUsedPercent > 60 || sysFreePercent < 15 {
+		atomic.StoreInt32(&isLimiting, 1)
+		time.AfterFunc(5*time.Second, func() {
+			atomic.StoreInt32(&isLimiting, 0)
+		})
+		ctx.StatusCode(429) // Too Many Requests
+		return true
+	}
+	atomic.StoreInt32(&isLimiting, 0)
+	//end
 	currentSite := provider.CurrentSite(ctx)
 	// 没启用拦截器
 	if currentSite.Limiter == nil {
@@ -1029,6 +1067,14 @@ func UseLimiter(ctx iris.Context) bool {
 	// 白名单跳过
 	if currentSite.Limiter.IsWhiteIp(ip) {
 		return false
+	}
+
+	// 是否禁止空ua
+	if currentSite.Limiter.IsBanEmptyAgent() {
+		userAgent := ctx.GetHeader("User-Agent")
+		if userAgent == "" {
+			return true
+		}
 	}
 
 	// 检查IP是否已被封禁

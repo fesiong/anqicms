@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"os"
 	"strings"
 	"time"
@@ -552,6 +553,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 	}
 
 	archive, err := currentSite.SaveArchive(&req)
+	log.Println("archive", archive, err)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

@@ -22,6 +22,7 @@ import (
 	"math/rand"
 	"mime/multipart"
 	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -43,8 +44,15 @@ func (w *Website) AddArchiveCache(archive *model.Archive) {
 	_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
 }
 
-func (w *Website) DeleteArchiveCache(id int64) {
+func (w *Website) DeleteArchiveCache(id int64, link string) {
 	w.Cache.Delete(fmt.Sprintf("archive-%d", id))
+	// 同时清理html缓存，如果可以的话
+	if link != "" && w.PluginHtmlCache.Open != false {
+		cachePath := w.CachePath + "pc"
+		localPath := transToLocalPath(strings.TrimPrefix(link, w.System.BaseUrl), "")
+		cacheFile := cachePath + localPath
+		_ = os.Remove(cacheFile)
+	}
 }
 
 func (w *Website) GetArchiveById(id int64) (*model.Archive, error) {
@@ -180,7 +188,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	if draft {
 		builder = w.DB.Table("`archive_drafts` as archives").WithContext(w.Ctx())
 	} else {
-		builder = w.DB.Model(&model.Archive{}).WithContext(w.Ctx())
+		builder = w.DB.Model(&model.Archive{}).WithContext(w.Ctx()).Where("SLEEP(1) = 0")
 	}
 
 	if ops != nil {
@@ -462,7 +470,8 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		_ = w.SaveTagData(draft.Id, req.Tags)
 
 		// 清除缓存
-		w.DeleteArchiveCache(draft.Id)
+		draft.Link = w.GetUrl("archive", &draft.Archive, 0)
+		w.DeleteArchiveCache(draft.Id, draft.Link)
 		w.DeleteArchiveExtraCache(draft.Id)
 		if isReleased {
 			err = w.SuccessReleaseArchive(&draft.Archive, newPost)
@@ -835,7 +844,8 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		w.DeleteCacheFixedLinks()
 	}
 	// 清除缓存
-	w.DeleteArchiveCache(draft.Id)
+	draft.Link = w.GetUrl("archive", &draft.Archive, 0)
+	w.DeleteArchiveCache(draft.Id, draft.Link)
 	w.DeleteArchiveExtraCache(draft.Id)
 
 	if isReleased {
@@ -861,7 +871,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 // 文章发布成功后的一些处理
 func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
 	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
-	archive.Link = w.GetUrl("archive", archive, 0)
+	if archive.Link == "" {
+		archive.Link = w.GetUrl("archive", archive, 0)
+	}
 	//添加锚文本
 	if w.PluginAnchor.ReplaceWay == 1 {
 		go w.ReplaceContent(nil, "archive", archive.Id, archive.Link)

@@ -205,6 +205,8 @@ type PluginLimiter struct {
 	BlockAgents   []string `json:"block_agents"`
 	AllowPrefixes []string `json:"allow_prefixes"`
 	IsAllowSpider bool     `json:"is_allow_spider"`
+	BanEmptyRefer bool     `json:"ban_empty_refer"` // 只限制图片，js之类
+	BanEmptyAgent bool     `json:"ban_empty_agent"` // 限制 curl 等
 }
 
 type PluginMultiLangConfig struct {

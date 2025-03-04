@@ -32,6 +32,8 @@ type Limiter struct {
 	blockAgents   []string
 	allowPrefixes []string
 	isAllowSpider bool
+	banEmptyAgent bool
+	banEmptyRefer bool
 	MaxTime       time.Duration
 	MaxRequests   int
 	BlockDuration time.Duration
@@ -74,6 +76,8 @@ func (l *Limiter) UpdateLimiter(setting *config.PluginLimiter) {
 	l.isAllowSpider = setting.IsAllowSpider
 	l.allowPrefixes = setting.AllowPrefixes
 	l.blockAgents = setting.BlockAgents
+	l.banEmptyRefer = setting.BanEmptyRefer
+	l.banEmptyAgent = setting.BanEmptyAgent
 	if setting.MaxRequests < 1 {
 		setting.MaxRequests = 100
 	}
@@ -230,6 +234,14 @@ func (l *Limiter) IsWhiteIp(ip string) bool {
 
 func (l *Limiter) IsAllowSpider() bool {
 	return l.isAllowSpider
+}
+
+func (l *Limiter) IsBanEmptyAgent() bool {
+	return l.banEmptyAgent
+}
+
+func (l *Limiter) IsBanEmptyRefer() bool {
+	return l.banEmptyRefer
 }
 
 func (l *Limiter) GetBlockIPs() []BlockIP {
