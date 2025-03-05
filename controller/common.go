@@ -839,7 +839,7 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok && group.Setting.ContentNoCaptcha {
+		if ok && group != nil && group.Setting.ContentNoCaptcha {
 			contentCaptcha = !group.Setting.ContentNoCaptcha
 		}
 	}

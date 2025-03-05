@@ -111,7 +111,7 @@ const (
 	EnginBing   = "bing"
 	EnginOther  = "other"
 
-	LanguageZh = "zh-cn"
+	LanguageZh = "zh-CN"
 	LanguageEn = "en"
 
 	CollectModeCollect = 0

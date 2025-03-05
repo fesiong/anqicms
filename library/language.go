@@ -6,10 +6,10 @@ func GetLanguageName(lang string) string {
 	case "en":
 		// 英语
 		name = "English"
-	case "zh-cn":
+	case "zh-CN":
 		// 简体中文
 		name = "简体中文"
-	case "zh-tw":
+	case "zh-TW":
 		// 繁体中文
 		name = "繁体中文"
 	case "vi":
@@ -201,6 +201,93 @@ func GetLanguageName(lang string) string {
 	case "hy":
 		// 亚美尼亚语
 		name = "Armenian"
+	case "ht":
+		// 海地克里奥尔语
+		name = "Kreyòl Ayisyen"
+	case "mg":
+		// 马尔加什语
+		name = "Malagasy"
+	case "mk":
+		// 马其顿语
+		name = "Македонски"
+	case "ml":
+		// 马拉雅拉姆语
+		name = "മലയാളം"
+	case "af":
+		// 南非荷兰语
+		name = "Afrikaans"
+	case "mt":
+		// 马耳他语
+		name = "Malti"
+	case "eu":
+		// 巴斯克语
+		name = "Euskara"
+	case "pt-PT":
+		// 葡萄牙语
+		name = "Português-PT"
+	case "az":
+		// 阿塞拜疆语
+		name = "Azərbaycan"
+	case "en-GB":
+		// 英语
+		name = "英国English"
+	case "sd":
+		// 信德语
+		name = "سنڌي"
+	case "se":
+		// 北萨米语
+		name = "Davvisámegiella"
+	case "si":
+		// 僧伽罗语
+		name = "සිංහල"
+	case "sk":
+		// 斯洛伐克语
+		name = "Slovenčina"
+	case "sl":
+		// 斯洛文尼亚语
+		name = "Slovenščina"
+	case "ga":
+		// 爱尔兰语
+		name = "Gaeilge"
+	case "sn":
+		// 修纳语
+		name = "Shona"
+	case "so":
+		// 索马里语
+		name = "Soomaali"
+	case "gd":
+		// 苏格兰盖尔语
+		name = "Gàidhlig"
+	case "sq":
+		// 阿尔巴尼亚语
+		name = "Shqip"
+	case "st":
+		// 塞索托语
+		name = "Sesotho"
+	case "km":
+		// 高棉语
+		name = "ភាសាខ្មែរ"
+	case "sw":
+		// 斯瓦希里语
+		name = "Kiswahili"
+	case "pt-BR":
+		// 葡萄牙语
+		name = "Português-BR"
+	case "co":
+		// 科西嘉语
+		name = "Corsu"
+	case "gu":
+		// 古吉拉特语
+		name = "ગુજરાતી"
+	case "tg":
+		// 塔吉克语
+		name = "Тоҷикӣ"
+	case "la":
+		// 拉丁语
+		name = "Latina"
+	case "cy":
+		// 威尔士语
+		name = "Cymraeg"
 	}
 
 	return name
@@ -210,9 +297,9 @@ func GetLanguageIcon(lang string) string {
 	switch lang {
 	case "en":
 		return "🇺🇸" // 美国（英语主要地区）
-	case "zh-cn":
+	case "zh-CN":
 		return "🇨🇳" // 中国（简体中文）
-	case "zh-tw":
+	case "zh-TW":
 		return "🇨🇳" // 台湾（繁体中文）
 	case "vi":
 		return "🇻🇳" // 越南
@@ -340,6 +427,64 @@ func GetLanguageIcon(lang string) string {
 		return "🇭🇺" // 匈牙利
 	case "hy":
 		return "🇦🇲" // 亚美尼亚
+	case "ht":
+		return "🇭🇹"
+	case "mg":
+		return "🇲🇬"
+	case "mk":
+		return "🇲🇰"
+	case "ml":
+		return "🇮🇳"
+	case "af":
+		return "🇿🇦"
+	case "mt":
+		return "🇲🇹"
+	case "eu":
+		return "🇪🇸"
+	case "pt-PT":
+		return "🇵🇹"
+	case "az":
+		return "🇦🇿"
+	case "en-GB":
+		return "🇬🇧"
+	case "sd":
+		return "🇵🇰"
+	case "se":
+		return "🇳🇴"
+	case "si":
+		return "🇱🇰"
+	case "sk":
+		return "🇸🇰"
+	case "sl":
+		return "🇸🇮"
+	case "ga":
+		return "🇮🇪"
+	case "sn":
+		return "🇿🇼"
+	case "so":
+		return "🇸🇴"
+	case "gd":
+		return "🇬🇧"
+	case "sq":
+		return "🇦🇱"
+	case "st":
+		return "🇱🇸"
+	case "km":
+		return "🇰🇭"
+	case "sw":
+		return "🇹🇿"
+	case "pt-BR":
+		return "🇧🇷"
+	case "co":
+		return "🇫🇷"
+	case "gu":
+		return "🇮🇳"
+	case "tg":
+		return "🇹🇯"
+	case "la":
+		return "🇻🇦"
+	case "cy":
+		return "🇬🇧"
 	default:
 		return "🏳️" // 默认返回未知旗帜
 	}
