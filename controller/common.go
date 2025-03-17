@@ -962,8 +962,8 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	}
 	// 禁止的内容
 	if currentSite.Safe.ContentForbidden != "" {
-		forbiddens := strings.Split(currentSite.Safe.ContentForbidden, "\n")
-		for _, v := range forbiddens {
+		forbidden := strings.Split(currentSite.Safe.ContentForbidden, "\n")
+		for _, v := range forbidden {
 			v = strings.TrimSpace(v)
 			if v == "" {
 				continue
@@ -994,6 +994,7 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 						} else {
 							ShowMessage(ctx, currentSite.TplTr("TheContentYouSubmittedContainsCharactersThatAreNotAllowed"), nil)
 						}
+						return false
 					}
 				}
 			}
