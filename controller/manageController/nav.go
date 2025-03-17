@@ -41,9 +41,9 @@ func SettingNavForm(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				// 插入记录
 				if req.Id == 0 {
@@ -123,9 +123,9 @@ func SettingNavDelete(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				// 同步删除
 				_ = nav.Delete(subSite.DB)
@@ -176,9 +176,9 @@ func SettingNavTypeForm(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				// 插入记录
 				if req.Id == 0 {
@@ -245,9 +245,9 @@ func SettingNavTypeDelete(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				// 同步删除
 				// 删除一类导航

@@ -6,17 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/jinzhu/now"
-	"github.com/xuri/excelize/v2"
-	"golang.org/x/text/encoding/simplifiedchinese"
-	"gorm.io/gorm"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider/fulltext"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
 	"math/rand"
@@ -29,6 +19,17 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/jinzhu/now"
+	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/encoding/simplifiedchinese"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func (w *Website) GetArchiveByIdFromCache(id int64) (archive *model.Archive) {
@@ -188,7 +189,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	if draft {
 		builder = w.DB.Table("`archive_drafts` as archives").WithContext(w.Ctx())
 	} else {
-		builder = w.DB.Model(&model.Archive{}).WithContext(w.Ctx()).Where("SLEEP(1) = 0")
+		builder = w.DB.Model(&model.Archive{}).WithContext(w.Ctx())
 	}
 
 	if ops != nil {
@@ -1801,7 +1802,7 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			var img string
 			if qia.ImageCategoryId == -2 {
 				// 按关键词匹配
-				keywordSplit := library.WordSplit(archive.Title, false)
+				keywordSplit := WordSplit(archive.Title, false)
 				for _, word := range keywordSplit {
 					if img != "" {
 						break
@@ -2063,7 +2064,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 			var img string
 			if qia.ImageCategoryId == -2 {
 				// 按关键词匹配
-				keywordSplit := library.WordSplit(archive.Title, false)
+				keywordSplit := WordSplit(archive.Title, false)
 				for _, word := range keywordSplit {
 					if img != "" {
 						break

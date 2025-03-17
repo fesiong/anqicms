@@ -51,7 +51,10 @@ func PluginSaveLimiterSetting(ctx iris.Context) {
 func PluginGetBlockedIPs(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
-	blockIPs := currentSite.Limiter.GetBlockIPs()
+	var blockIPs []provider.BlockIP
+	if currentSite.Limiter != nil {
+		blockIPs = currentSite.Limiter.GetBlockIPs()
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -71,7 +74,9 @@ func PluginRemoveBlockedIP(ctx iris.Context) {
 		return
 	}
 
-	currentSite.Limiter.RemoveBlockedIP(req.Ip)
+	if currentSite.Limiter != nil {
+		currentSite.Limiter.RemoveBlockedIP(req.Ip)
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

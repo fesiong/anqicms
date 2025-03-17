@@ -144,9 +144,15 @@ type PluginMultiLangSiteRequest struct {
 	ParentId     uint   `json:"parent_id"`
 	Language     string `json:"language"`
 	LanguageIcon string `json:"language_icon"`
+	BaseUrl      string `json:"base_url"`
 	Focus        bool   `json:"focus"`
 }
 
 type PluginLimiterRemoveIPRequest struct {
 	Ip string `json:"ip"`
+}
+
+type PluginMultiLangCacheRemoveRequest struct {
+	Uris []string `json:"uris"`
+	All  bool     `json:"all"`
 }

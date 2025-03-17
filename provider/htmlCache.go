@@ -4,13 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,6 +14,12 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 )
 
 // SpecialCharsMap 查询参数中的特殊字符
@@ -582,6 +583,13 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if w.PluginHtmlCache.Open == false {
 		return errors.New(w.Tr("StaticCacheFunctionIsNotEnabled"))
 	}
+
+	_, err := w.GetHtmlDataByLocal(urlPath, isMobile)
+
+	return err
+}
+
+func (w *Website) GetHtmlDataByLocal(urlPath string, isMobile bool) ([]byte, error) {
 	if strings.HasPrefix(urlPath, "http") {
 		parsed, err := url.Parse(urlPath)
 		if err == nil {
@@ -595,19 +603,20 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if isMobile && w.System.TemplateType == config.TemplateTypeSeparate {
 		mobileUrl, err := url.Parse(w.System.MobileUrl)
 		if err != nil {
-			return errors.New(w.Tr("MobileDomainNameResolutionFailed"))
+			return nil, errors.New(w.Tr("MobileDomainNameResolutionFailed"))
 		}
 		host = mobileUrl.Hostname()
 	}
 	ua := library.GetUserAgent(isMobile)
 	baseUrl := fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port)
 
+	// 10秒超时
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	req, err := http.NewRequest("GET", baseUrl+urlPath, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", ua)
 	req.Header.Set("X-Host", host)
@@ -615,11 +624,12 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	req.Header.Set("Cache", "true")
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = resp.Body.Close()
+	defer resp.Body.Close()
+	content, _ := io.ReadAll(resp.Body)
 
-	return err
+	return content, nil
 }
 
 func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []byte) error {

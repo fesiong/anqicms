@@ -113,7 +113,7 @@ func (k *KeywordCollect) InitRootWords() {
 
 	var result = make([][]string, 0, len(rootKeywords))
 	for i := range rootKeywords {
-		result = append(result, library.WordSplit(strings.ToLower(rootKeywords[i]), false))
+		result = append(result, WordSplit(strings.ToLower(rootKeywords[i]), false))
 		k.ExistsWords.Store(rootKeywords[i], 0)
 	}
 

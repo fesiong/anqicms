@@ -5,19 +5,19 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"os/signal"
+	"strconv"
+	"strings"
+	"syscall"
+
 	"kandaoni.com/anqicms"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"log"
-	"os"
-	"os/exec"
-	"os/signal"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"syscall"
 )
 
 func main() {
@@ -85,8 +85,7 @@ func checkProcesses() {
 	// 端口没被占用，但是程序启动了
 	selfPid := os.Getpid()
 	executable, _ := os.Executable()
-	binName := filepath.Base(executable)
-	cmd := exec.Command("pidof", binName)
+	cmd := exec.Command("pgrep", "-f", executable)
 	output, err := cmd.Output()
 	if err == nil {
 		// 有启动

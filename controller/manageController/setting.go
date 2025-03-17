@@ -105,6 +105,9 @@ func SettingSystemForm(ctx iris.Context) {
 		})
 		return
 	}
+	if currentSite.MultiLanguage != nil {
+		currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 

@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"strings"
+	"sync"
 )
 
 type CodeItem struct {
@@ -209,12 +210,117 @@ type PluginLimiter struct {
 	BanEmptyAgent bool     `json:"ban_empty_agent"` // 限制 curl 等
 }
 
+type MultiLangSite struct {
+	Id            uint   `json:"id"`
+	RootPath      string `json:"root_path,omitempty"`
+	Name          string `json:"name,omitempty"`
+	Status        bool   `json:"status,omitempty"`
+	ParentId      uint   `json:"parent_id,omitempty"`
+	SyncTime      int64  `json:"sync_time,omitempty"`
+	LanguageIcon  string `json:"language_icon"` // 图标
+	LanguageEmoji string `json:"language_emoji,omitempty"`
+	LanguageName  string `json:"language_name,omitempty"`
+	Language      string `json:"language"`
+	IsCurrent     bool   `json:"is_current,omitempty"`
+	Link          string `json:"link,omitempty"`
+	BaseUrl       string `json:"base_url,omitempty"`
+	ErrorMsg      string `json:"error_msg,omitempty"`
+}
+
 type PluginMultiLangConfig struct {
+	mu              *sync.Mutex     `json:"-"`
 	Open            bool            `json:"open"`
 	Type            string          `json:"type"`
 	DefaultLanguage string          `json:"default_language"` // 该语言只是调用系统的设置
 	AutoTranslate   bool            `json:"auto_translate"`
-	SubSites        map[string]uint `json:"-"`
+	SiteType        string          `json:"site_type"` // multi|single
+	SubSites        []MultiLangSite `json:"sub_sites"`
+}
+
+func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite *MultiLangSite) string {
+	if pm.SiteType == MultiLangSiteTypeSingle {
+		if pm.Type == MultiLangTypeDomain {
+			oriUrl = strings.Replace(oriUrl, baseUrl, langSite.BaseUrl, 1)
+		} else if pm.Type == MultiLangTypeDirectory {
+			// 替换目录
+			if strings.HasPrefix(oriUrl, baseUrl+"/"+pm.DefaultLanguage) {
+				oriUrl = strings.Replace(oriUrl, baseUrl+"/"+pm.DefaultLanguage, baseUrl, 1)
+			}
+			oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+		} else if pm.Type == MultiLangTypeSame {
+			// 相同
+			if strings.Contains(oriUrl, "?") {
+				oriUrl = oriUrl + "&lang=" + langSite.Language
+			} else {
+				oriUrl += "?lang=" + langSite.Language
+			}
+		}
+	}
+
+	// 返回默认值
+	return oriUrl
+}
+
+func (pm *PluginMultiLangConfig) GetSite(lang string) *MultiLangSite {
+	if lang == "" {
+		return nil
+	}
+	for i := range pm.SubSites {
+		if pm.SubSites[i].Language == lang {
+			return &pm.SubSites[i]
+		}
+	}
+	// 如果没匹配的话，则尝试匹配前缀
+	if strings.Contains(lang, "-") {
+		lang = strings.Split(lang, "-")[0]
+		for i := range pm.SubSites {
+			if pm.SubSites[i].Language == lang {
+				return &pm.SubSites[i]
+			}
+		}
+	}
+	return nil
+}
+
+func (pm *PluginMultiLangConfig) GetSiteByBaseUrl(baseUrl string) *MultiLangSite {
+	for i := range pm.SubSites {
+		if strings.Contains(pm.SubSites[i].BaseUrl, baseUrl) {
+			return &pm.SubSites[i]
+		}
+	}
+	return nil
+}
+
+func (pm *PluginMultiLangConfig) RemoveSite(id uint, lang string) {
+	for i := range pm.SubSites {
+		if id > 0 && pm.SubSites[i].Id == id {
+			pm.SubSites = append(pm.SubSites[:i], pm.SubSites[i+1:]...)
+			break
+		} else if lang != "" && pm.SubSites[i].Language == lang {
+			pm.SubSites = append(pm.SubSites[:i], pm.SubSites[i+1:]...)
+			break
+		}
+	}
+}
+
+func (pm *PluginMultiLangConfig) SaveSite(site MultiLangSite) {
+	var exist = false
+	for i := range pm.SubSites {
+		if site.Id > 0 && pm.SubSites[i].Id == site.Id {
+			exist = true
+			// 已存在，更新
+			pm.SubSites[i] = site
+			break
+		} else if pm.SubSites[i].Language == site.Language {
+			exist = true
+			// 已存在，更新
+			pm.SubSites[i] = site
+			break
+		}
+	}
+	if !exist {
+		pm.SubSites = append(pm.SubSites, site)
+	}
 }
 
 type PluginTranslateConfig struct {

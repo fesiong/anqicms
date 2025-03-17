@@ -855,7 +855,7 @@ func (w *Website) GetRandImageFromCategory(categoryId int, title string) string 
 		// 尝试关键词匹配图片名称
 		// 每次只取其中一张
 		// 先分词
-		keywordSplit := library.WordSplit(title, false)
+		keywordSplit := WordSplit(title, false)
 		// 查询attachment表，尝试匹配keywordSplit里的关键词
 		tx := w.DB.Model(&model.Attachment{}).Where("is_image = ?", 1)
 		var queries []string

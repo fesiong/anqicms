@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"mime/multipart"
 	"strconv"
@@ -190,7 +189,7 @@ func ContainKeywords(title, keyword string) bool {
 		return false
 	}
 	title = strings.ToLower(title)
-	words := library.WordSplit(strings.ToLower(keyword), false)
+	words := WordSplit(strings.ToLower(keyword), false)
 	maxLen := 0
 	matchLen := 0
 	for _, wd := range words {

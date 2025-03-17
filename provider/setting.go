@@ -6,15 +6,16 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/kataras/iris/v12/i18n"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kataras/iris/v12/i18n"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 const (
@@ -130,7 +131,7 @@ func (w *Website) LoadSystemSetting(value string) {
 		w.System.TemplateName = "default"
 	}
 	if w.System.Language == "" {
-		w.System.Language = "zh"
+		w.System.Language = "zh-CN"
 	}
 	// 默认站点
 	if w.Id == 1 {
@@ -613,7 +614,10 @@ func (w *Website) LoadMultiLangSetting(value string) {
 	if err := json.Unmarshal([]byte(value), w.MultiLanguage); err != nil {
 		return
 	}
-
+	if w.MultiLanguage.SiteType == "" {
+		w.MultiLanguage.SiteType = config.MultiLangSiteTypeMulti
+	}
+	w.MultiLanguage.DefaultLanguage = w.System.Language
 	return
 }
 
@@ -674,7 +678,7 @@ func (w *Website) Tr(str string, args ...interface{}) string {
 		}
 		I18n.SetDefault(lang)
 	}
-	if I18n != nil {
+	if I18n != nil && w != nil {
 		tmpStr := I18n.Tr(w.backLanguage, str, args...)
 		if tmpStr != "" {
 			return tmpStr
@@ -746,7 +750,7 @@ func (w *Website) DeleteCache() {
 	// todo, 清理缓存
 	w.Cache.CleanAll()
 	// 释放词典
-	library.DictClose()
+	DictClose()
 	// 记录
 	filePath := w.CachePath + "cache_clear.log"
 	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)

@@ -4,6 +4,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -11,11 +17,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"net/url"
-	"os"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func GetWebsiteList(ctx iris.Context) {
@@ -461,8 +462,8 @@ func LoginSubWebsite(ctx iris.Context) {
 		isSub := false
 		if currentSite.MultiLanguage.Open {
 			// 需要判断是不是子站
-			for _, subId := range currentSite.MultiLanguage.SubSites {
-				if subId == req.SiteId {
+			for _, sub := range currentSite.MultiLanguage.SubSites {
+				if sub.Id == req.SiteId {
 					// 存在这样的子站点
 					isSub = true
 					break

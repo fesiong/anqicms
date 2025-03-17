@@ -2,6 +2,7 @@ package route
 
 import (
 	"fmt"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
@@ -539,6 +540,9 @@ func manageRoute(app *iris.Application) {
 				multiLang.Post("/site/save", manageController.PluginSaveMultiLangSite)
 				multiLang.Post("/site/sync", manageController.PluginSyncMultiLangSiteContent)
 				multiLang.Get("/site/sync/status", manageController.PluginMultiSiteSyncStatus)
+				multiLang.Get("/site/html/logs", manageController.GetTranslateHtmlLogs)
+				multiLang.Get("/site/html/caches", manageController.GetTranslateHtmlCaches)
+				multiLang.Post("/site/html/cache/remove", manageController.PluginRemoveTranslateHtmlCache)
 			}
 			translate := plugin.Party("/translate")
 			{

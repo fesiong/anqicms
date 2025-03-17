@@ -179,4 +179,7 @@ const (
 	MultiLangTypeDomain    = "domain"
 	MultiLangTypeDirectory = "directory"
 	MultiLangTypeSame      = "same"
+
+	MultiLangSiteTypeMulti  = "multi"
+	MultiLangSiteTypeSingle = "single"
 )

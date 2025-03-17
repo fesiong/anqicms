@@ -293,7 +293,7 @@ func (t *TitleImage) drawTitle(img image.Image, title string) image.Image {
 	c.SetFontSize(float64(realSize))
 	c.SetSrc(image.NewUniform(library.HEXToRGB(t.config.FontColor)))
 
-	words := library.WordSplit(title, true)
+	words := WordSplit(title, true)
 	var lineWords []string
 	var tmpWords string
 	var tmpWidth int

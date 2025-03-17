@@ -11,7 +11,6 @@ import (
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -253,14 +252,14 @@ func NewYoudaoTranslate(appKey, appSecret string) *YoudaoTranslate {
 func (yt *YoudaoTranslate) Translate(content string, fromLanguage string, toLanguage string) (string, error) {
 	// 将请求参数中的 APPID(appid)， 翻译 query(q，注意为UTF-8编码)，随机数(salt)，以及平台分配的密钥(可在管理控制台查看) 按照 appid+q+salt+密钥的顺序拼接得到字符串 1。
 	salt := library.GenerateRandString(5)
-	if fromLanguage == "zh-cn" {
+	if strings.ToLower(fromLanguage) == "zh-cn" {
 		fromLanguage = "zh-CHS"
-	} else if fromLanguage == "zh-tw" {
+	} else if strings.ToLower(fromLanguage) == "zh-tw" {
 		fromLanguage = "zh-CHT"
 	}
-	if toLanguage == "zh-cn" {
+	if strings.ToLower(toLanguage) == "zh-cn" {
 		toLanguage = "zh-CHS"
-	} else if toLanguage == "zh-tw" {
+	} else if strings.ToLower(toLanguage) == "zh-tw" {
 		toLanguage = "zh-CHT"
 	}
 	curtime := strconv.FormatInt(time.Now().Unix(), 10)
@@ -478,8 +477,6 @@ func (d *Deepl) CreateGlossary(name, sourceLang, targetLang string, entriesTSV i
 
 	j, err := json.Marshal(payload)
 
-	fmt.Println(string(j))
-
 	if err != nil {
 		return nil, err
 	}
@@ -498,16 +495,14 @@ func (d *Deepl) CreateGlossary(name, sourceLang, targetLang string, entriesTSV i
 	client := &http.Client{}
 	resp, err := client.Do(req)
 
-	log.Printf("Response: %s", resp.Status)
-
 	if err != nil {
 		return nil, err
 	}
+	defer resp.Body.Close()
 
 	createdGlossary := Glossary{}
 
 	err = json.NewDecoder(resp.Body).Decode(&createdGlossary)
-	defer resp.Body.Close()
 
 	if err != nil {
 		return nil, err

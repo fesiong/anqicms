@@ -2,14 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"github.com/jinzhu/now"
-	"github.com/kataras/iris/v12"
-	captcha "github.com/mojocn/base64Captcha"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"net"
 	"net/http"
@@ -20,6 +12,15 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"github.com/jinzhu/now"
+	"github.com/kataras/iris/v12"
+	captcha "github.com/mojocn/base64Captcha"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 var Store = captcha.DefaultMemStore
@@ -197,7 +198,11 @@ func Common(ctx iris.Context) {
 		query := ctx.Request().URL.Query()
 		query.Del("lang")
 		ctx.Request().URL.RawQuery = query.Encode()
-		ctx.Redirect(ctx.Request().URL.String(), iris.StatusMovedPermanently)
+		ctx.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+		ctx.Header("Cache-Control", "post-check=0, pre-check=0") // 部分旧版浏览器需要
+		ctx.Header("Pragma", "no-cache")                         // HTTP 1.0 兼容
+		ctx.Header("Expires", "Thu, 01 Jan 1970 00:00:00 GMT")   // 过期时间设为过去
+		ctx.Redirect(ctx.Request().URL.String(), iris.StatusTemporaryRedirect)
 	}
 	currentSite := provider.CurrentSite(ctx)
 	//inject ctx
@@ -317,7 +322,17 @@ func FileServe(ctx iris.Context) bool {
 		// 多语言站点目录支持
 		mainSite := currentSite.GetMainWebsite()
 		if mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
-			for lang := range mainSite.MultiLanguage.SubSites {
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+				baseDir2 := fmt.Sprintf("%spublic", mainSite.RootPath)
+				uriFile2 := baseDir2 + strings.TrimPrefix(uri, strings.TrimRight(mainSite.BaseURI, "/"))
+				_, err = os.Stat(uriFile2)
+				if err == nil {
+					ctx.ServeFile(uriFile2)
+					return true
+				}
+			}
+			for i := range mainSite.MultiLanguage.SubSites {
+				lang := mainSite.MultiLanguage.SubSites[i].Language
 				if strings.HasPrefix(uri, "/"+lang+"/") {
 					uriFile = baseDir + uri[len(lang)+1:]
 					_, err = os.Stat(uriFile)
@@ -380,6 +395,57 @@ func ReRouteContext(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	mainSite := currentSite.GetMainWebsite()
 	if mainSite.MultiLanguage.Open {
+		if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+			// 解析当前站点的语言
+			var langSite *config.MultiLangSite
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeDomain {
+				langSite = mainSite.MultiLanguage.GetSiteByBaseUrl(library.GetHost(ctx))
+			} else {
+				var lang string
+				if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+					uri := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+					uris := strings.SplitN(uri, "/", 2)
+					if len(uris) > 1 {
+						lang = uris[0]
+					}
+				} else {
+					lang = ctx.GetLocale().Language()
+				}
+				langSite = mainSite.MultiLanguage.GetSite(lang)
+			}
+
+			// 如果不是主域名的语言，则翻译
+			if langSite != nil && langSite.Language != mainSite.System.Language {
+				uri := ctx.Request().RequestURI
+				// 先检查前缀
+				if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+					// 去掉前缀
+					uri = strings.TrimPrefix(uri, "/"+langSite.Language)
+				} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+					// 去掉 ?lang=xxxx 或 &lang=xxx
+					// ?_pjax=%23pjax-container
+					parsed, err := url.Parse(uri)
+					if err == nil {
+						if parsed.Query().Has("lang") {
+							// 去掉 lang 参数
+							parsed.Query().Del("lang")
+						}
+						if parsed.Query().Has("_pjax") {
+							// 去掉 _pjax 参数
+							parsed.Query().Del("_pjax")
+						}
+						parsed.RawQuery = parsed.Query().Encode()
+						uri = parsed.String()
+					}
+				}
+				content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
+				if err != nil {
+					log.Println("translate err", err)
+				}
+				ctx.HTML(content)
+				return
+			}
+		}
 		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
 			// 采用目录形式，检查是否需要跳转
 			if ctx.RequestPath(false) == "/" {
@@ -477,6 +543,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 		return matchMap, true
 	}
 	rewritePattern := useSite.ParsePatten(false)
+
 	//archivePage
 	reg = regexp.MustCompile(rewritePattern.ArchiveIndexRule)
 	match = reg.FindStringSubmatch(paramValue)
@@ -1036,12 +1103,13 @@ func UseLimiter(ctx iris.Context) bool {
 	_, sysUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
 
 	// 触发限流条件（示例阈值，需根据服务器配置调整）
-	if sysUsedPercent > 60 || sysFreePercent < 15 {
+	if sysUsedPercent > 70 || sysFreePercent < 10 {
 		atomic.StoreInt32(&isLimiting, 1)
 		time.AfterFunc(5*time.Second, func() {
 			atomic.StoreInt32(&isLimiting, 0)
 		})
-		ctx.StatusCode(429) // Too Many Requests
+		ctx.StatusCode(http.StatusTooManyRequests)
+		_, _ = ctx.WriteString("Too many requests from this IP.")
 		return true
 	}
 	atomic.StoreInt32(&isLimiting, 0)

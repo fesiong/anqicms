@@ -1,12 +1,13 @@
 package provider
 
 import (
-	"kandaoni.com/anqicms/config"
 	"net"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"kandaoni.com/anqicms/config"
 )
 
 // traffic limiter
@@ -245,6 +246,9 @@ func (l *Limiter) IsBanEmptyRefer() bool {
 }
 
 func (l *Limiter) GetBlockIPs() []BlockIP {
+	if l == nil {
+		return nil
+	}
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
@@ -263,32 +267,40 @@ func (l *Limiter) GetBlockIPs() []BlockIP {
 
 // RemoveBlockedIP 解禁某一个IP，用于管理员手动解禁
 func (l *Limiter) RemoveBlockedIP(ip string) {
-	mu.Lock()
-	defer mu.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
 	delete(l.blockedIPs, ip)
 	delete(l.ipVisits, ip)
 }
 
 func (l *Limiter) cleanupExpiredRecords() {
-	mu.Lock()
-	defer mu.Unlock()
+	l.mu.Lock()
+	defer l.mu.Unlock()
 
-	now := time.Now()
+	now := time.Now().Unix()
+	// 创建临时map记录需要保留的条目
+	keepIPs := make(map[string]struct{})
+	for ip, info := range l.ipVisits {
+		if now-info.LastVisit <= int64(l.MaxTime.Seconds()) {
+			keepIPs[ip] = struct{}{}
+		}
+	}
+	// 重建ipVisits
+	newIPVisits := make(map[string]*VisitInfo)
+	for ip := range keepIPs {
+		newIPVisits[ip] = l.ipVisits[ip]
+	}
+	l.ipVisits = newIPVisits
 
-	// 清理过期的封禁记录
+	// 重建blockedIPs
+	newBlockedIPs := make(map[string]time.Time)
 	for ip, unblockTime := range l.blockedIPs {
-		if now.After(unblockTime) {
-			delete(l.blockedIPs, ip)
+		if time.Now().Before(unblockTime) {
+			newBlockedIPs[ip] = unblockTime
 		}
 	}
-
-	// 清理过期的IP访问记录，这里只回收最后一次访问超过5分钟的记录
-	for ip, visitInfo := range l.ipVisits {
-		if now.After(time.Unix(visitInfo.LastVisit, 0).Add(l.MaxTime)) {
-			delete(l.ipVisits, ip)
-		}
-	}
+	l.blockedIPs = newBlockedIPs
 }
 
 func (l *Limiter) startCleanupTask() {
