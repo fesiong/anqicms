@@ -2,6 +2,7 @@ package controller
 
 import (
 	"fmt"
+	"github.com/kataras/iris/v12/context"
 	"log"
 	"net"
 	"net/http"
@@ -442,7 +443,8 @@ func ReRouteContext(ctx iris.Context) {
 				if err != nil {
 					log.Println("translate err", err)
 				}
-				ctx.HTML(content)
+				ctx.ContentType(context.ContentHTMLHeaderValue)
+				ctx.WriteString(content)
 				return
 			}
 		}
