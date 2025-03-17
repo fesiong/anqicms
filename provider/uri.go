@@ -15,13 +15,17 @@ import (
 // 如果page == -1，则不对page进行转换。
 // 支持多语言站点功能
 func (w *Website) GetUrl(match string, data interface{}, page int, args ...interface{}) string {
-	var useSite = w
 	mainSite := w.GetMainWebsite()
-	baseUrl := useSite.System.BaseUrl
-	if mainSite.MultiLanguage.Open && mainSite.Id != useSite.Id {
-		useSite = mainSite
+	baseUrl := w.System.BaseUrl
+	if mainSite.MultiLanguage.Open {
+		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+			// 替换目录
+			baseUrl = mainSite.System.BaseUrl + "/" + w.System.Language
+		} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+			baseUrl = mainSite.System.BaseUrl
+		}
 	}
-	rewritePattern := useSite.ParsePatten(false)
+	rewritePattern := mainSite.ParsePatten(false)
 	uri := ""
 	switch match {
 	case "archive":

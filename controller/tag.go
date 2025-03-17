@@ -2,7 +2,9 @@ package controller
 
 import (
 	"fmt"
+
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -12,6 +14,7 @@ func TagIndexPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
+		ctx.ContentType(context.ContentHTMLHeaderValue)
 		ctx.ServeFile(cacheFile)
 		return
 	}
@@ -50,6 +53,7 @@ func TagPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
+		ctx.ContentType(context.ContentHTMLHeaderValue)
 		ctx.ServeFile(cacheFile)
 		return
 	}

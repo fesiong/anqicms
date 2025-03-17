@@ -1,346 +1,512 @@
 package library
 
+type Language struct {
+	Code string `json:"code"`
+	Name string `json:"name"`
+	Icon string `json:"icon"`
+}
+
+var (
+	// 语言列表
+	Languages = []Language{
+		{
+			Code: "en",
+			Name: "English",
+			Icon: "🇺🇸",
+		},
+		{
+			Code: "zh-CN",
+			Name: "简体中文",
+			Icon: "🇨🇳",
+		},
+		{
+			Code: "zh-TW",
+			Name: "繁体中文",
+			Icon: "🇨🇳",
+		},
+		{
+			Code: "vi",
+			Name: "Tiếng Việt",
+			Icon: "🇻🇳",
+		},
+		{
+			Code: "id",
+			Name: "Bahasa Indonesia",
+			Icon: "🇮🇩",
+		},
+		{
+			Code: "hi",
+			Name: "Hindi",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "it",
+			Name: "Italiano",
+			Icon: "🇮🇹",
+		},
+		{
+			Code: "el",
+			Name: "Greek",
+			Icon: "🇬🇷",
+		},
+		{
+			Code: "es",
+			Name: "Español",
+			Icon: "🇪🇸",
+		},
+		{
+			Code: "pt",
+			Name: "Português",
+			Icon: "🇵🇹",
+		},
+		{
+			Code: "sr",
+			Name: "Srpski",
+			Icon: "🇷🇸",
+		},
+		{
+			Code: "my",
+			Name: "Burmese",
+			Icon: "🇲🇲",
+		},
+		{
+			Code: "bn",
+			Name: "Bengali",
+			Icon: "🇧🇩",
+		},
+		{
+			Code: "th",
+			Name: "Thai",
+			Icon: "🇹🇭",
+		},
+		{
+			Code: "tr",
+			Name: "Türkçe",
+			Icon: "🇹🇷",
+		},
+		{
+			Code: "ja",
+			Name: "Japanese",
+			Icon: "🇯🇵",
+		},
+		{
+			Code: "lo",
+			Name: "Lao",
+			Icon: "🇱🇦",
+		},
+		{
+			Code: "ko",
+			Name: "한국어",
+			Icon: "🇰🇷",
+		},
+		{
+			Code: "ru",
+			Name: "Русский",
+			Icon: "🇷🇺",
+		},
+		{
+			Code: "fr",
+			Name: "Français",
+			Icon: "🇫🇷",
+		},
+		{
+			Code: "de",
+			Name: "Deutsch",
+			Icon: "🇩🇪",
+		},
+		{
+			Code: "fa",
+			Name: "فارسی",
+			Icon: "🇮🇷",
+		},
+		{
+			Code: "ar",
+			Name: "العربية",
+			Icon: "🇸🇦",
+		},
+		{
+			Code: "ms",
+			Name: "Bahasa Melayu",
+			Icon: "🇲🇾",
+		},
+		{
+			Code: "jw",
+			Name: "Jawa",
+			Icon: "🇮🇩",
+		},
+		{
+			Code: "te",
+			Name: "Telugu",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "ta",
+			Name: "Tamil",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "mr",
+			Name: "Marathi",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "ur",
+			Name: "Urdu",
+			Icon: "🇵🇰",
+		},
+		{
+			Code: "pl",
+			Name: "Polski",
+			Icon: "🇵🇱",
+		},
+		{
+			Code: "uk",
+			Name: "Українська",
+			Icon: "🇺🇦",
+		},
+		{
+			Code: "pa",
+			Name: "Panjabi",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "ro",
+			Name: "Română",
+			Icon: "🇷🇴",
+		},
+		{
+			Code: "et",
+			Name: "Eesti",
+			Icon: "🇪🇪",
+		},
+		{
+			Code: "os",
+			Name: "Ossetic",
+			Icon: "🇷🇺",
+		},
+		{
+			Code: "be",
+			Name: "Беларуская",
+			Icon: "🇧🇾",
+		},
+		{
+			Code: "bg",
+			Name: "Български",
+			Icon: "🇧🇬",
+		},
+		{
+			Code: "is",
+			Name: "Icelandic",
+			Icon: "🇮🇸",
+		},
+		{
+			Code: "bs",
+			Name: "Bosnian",
+			Icon: "🇧🇦",
+		},
+		{
+			Code: "bo",
+			Name: "Tibetan",
+			Icon: "🇨🇳",
+		},
+		{
+			Code: "da",
+			Name: "Dansk",
+			Icon: "🇩🇰",
+		},
+		{
+			Code: "tl",
+			Name: "Filipino",
+			Icon: "🇵🇭",
+		},
+		{
+			Code: "fi",
+			Name: "Suomi",
+			Icon: "🇫🇮",
+		},
+		{
+			Code: "sv",
+			Name: "Swedish",
+			Icon: "🇸🇪",
+		},
+		{
+			Code: "kg",
+			Name: "Kongo",
+			Icon: "🇨🇬",
+		},
+		{
+			Code: "ka",
+			Name: "Georgian",
+			Icon: "🇬🇪",
+		},
+		{
+			Code: "kk",
+			Name: "Kazakh",
+			Icon: "🇰🇿",
+		},
+		{
+			Code: "gl",
+			Name: "Galician",
+			Icon: "🇪🇸",
+		},
+		{
+			Code: "ky",
+			Name: "Kyrgyz",
+			Icon: "🇰🇬",
+		},
+		{
+			Code: "nl",
+			Name: "Nederlands",
+			Icon: "🇳🇱",
+		},
+		{
+			Code: "ca",
+			Name: "Catalan",
+			Icon: "🇪🇸",
+		},
+		{
+			Code: "cs",
+			Name: "Čeština",
+			Icon: "🇨🇿",
+		},
+		{
+			Code: "kn",
+			Name: "Kannada",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "mn",
+			Name: "Mongolian",
+			Icon: "🇲🇳",
+		},
+		{
+			Code: "hr",
+			Name: "Hrvatski",
+			Icon: "🇭🇷",
+		},
+		{
+			Code: "lv",
+			Name: "Latvian",
+			Icon: "🇱🇻",
+		},
+		{
+			Code: "lt",
+			Name: "Lettish",
+			Icon: "🇱🇹",
+		},
+		{
+			Code: "no",
+			Name: "Norwegian",
+			Icon: "🇳🇴",
+		},
+		{
+			Code: "ne",
+			Name: "Nepali",
+			Icon: "🇳🇵",
+		},
+		{
+			Code: "ps",
+			Name: "Pashto",
+			Icon: "🇦🇫",
+		},
+		{
+			Code: "ks",
+			Name: "Slovak",
+			Icon: "🇸🇰",
+		},
+		{
+			Code: "tk",
+			Name: "Turkmen",
+			Icon: "🇹🇲",
+		},
+		{
+			Code: "uz",
+			Name: "Uzbek",
+			Icon: "🇺🇿",
+		},
+		{
+			Code: "iw",
+			Name: "Hebrew",
+			Icon: "🇮🇱",
+		},
+		{
+			Code: "hu",
+			Name: "Hungarian",
+			Icon: "🇭🇺",
+		},
+		{
+			Code: "hy",
+			Name: "Armenian",
+			Icon: "🇦🇲",
+		},
+		{
+			Code: "ht",
+			Name: "Kreyòl Ayisyen",
+			Icon: "🇭🇹",
+		},
+		{
+			Code: "mg",
+			Name: "Malagasy",
+			Icon: "🇲🇬",
+		},
+		{
+			Code: "mk",
+			Name: "Македонски",
+			Icon: "🇲🇰",
+		},
+		{
+			Code: "ml",
+			Name: "മലയാളം",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "af",
+			Name: "Afrikaans",
+			Icon: "🇿🇦",
+		},
+		{
+			Code: "mt",
+			Name: "Malti",
+			Icon: "🇲🇹",
+		},
+		{
+			Code: "eu",
+			Name: "Euskara",
+			Icon: "🇪🇸",
+		},
+		{
+			Code: "pt-PT",
+			Name: "Português-PT",
+			Icon: "🇵🇹",
+		},
+		{
+			Code: "az",
+			Name: "Azərbaycan",
+			Icon: "🇦🇿",
+		},
+		{
+			Code: "en-GB",
+			Name: "英国English",
+			Icon: "🇬🇧",
+		},
+		{
+			Code: "sd",
+			Name: "سنڌي",
+			Icon: "🇵🇰",
+		},
+		{
+			Code: "se",
+			Name: "Davvisámegiella",
+			Icon: "🇳🇴",
+		},
+		{
+			Code: "si",
+			Name: "සිංහල",
+			Icon: "🇱🇰",
+		},
+		{
+			Code: "sk",
+			Name: "Slovenčina",
+			Icon: "🇸🇰",
+		},
+		{
+			Code: "sl",
+			Name: "Slovenščina",
+			Icon: "🇸🇮",
+		},
+		{
+			Code: "ga",
+			Name: "Gaeilge",
+			Icon: "🇮🇪",
+		},
+		{
+			Code: "sn",
+			Name: "Shona",
+			Icon: "🇿🇼",
+		},
+		{
+			Code: "so",
+			Name: "Soomaali",
+			Icon: "🇸🇴",
+		},
+		{
+			Code: "gd",
+			Name: "Gàidhlig",
+			Icon: "🇬🇧",
+		},
+		{
+			Code: "sq",
+			Name: "Shqip",
+			Icon: "🇦🇱",
+		},
+		{
+			Code: "st",
+			Name: "Sesotho",
+			Icon: "🇱🇸",
+		},
+		{
+			Code: "km",
+			Name: "ភាសាខ្មែរ",
+			Icon: "🇰🇭",
+		},
+		{
+			Code: "sw",
+			Name: "Kiswahili",
+			Icon: "🇹🇿",
+		},
+		{
+			Code: "pt-BR",
+			Name: "Português-BR",
+			Icon: "🇧🇷",
+		},
+		{
+			Code: "co",
+			Name: "Corsu",
+			Icon: "🇫🇷",
+		},
+		{
+			Code: "gu",
+			Name: "ગુજરાતી",
+			Icon: "🇮🇳",
+		},
+		{
+			Code: "tg",
+			Name: "Тоҷикӣ",
+			Icon: "🇹🇯",
+		},
+		{
+			Code: "la",
+			Name: "Latina",
+			Icon: "🇻🇦",
+		},
+		{
+			Code: "cy",
+			Name: "Cymraeg",
+			Icon: "🇬🇧",
+		},
+	}
+)
+
 func GetLanguageName(lang string) string {
 	name := lang
-	switch lang {
-	case "en":
-		// 英语
-		name = "English"
-	case "zh-cn":
-		// 简体中文
-		name = "简体中文"
-	case "zh-tw":
-		// 繁体中文
-		name = "繁体中文"
-	case "vi":
-		// 越南语
-		name = "Tiếng Việt"
-	case "id":
-		// 印尼语
-		name = "Bahasa Indonesia"
-	case "hi":
-		// 印地语
-		name = "Hindi"
-	case "it":
-		// 意大利语
-		name = "Italiano"
-	case "el":
-		// 希腊语
-		name = "Greek"
-	case "es":
-		// 西班牙语
-		name = "Español"
-	case "pt":
-		// 葡萄牙语
-		name = "Português"
-	case "sr":
-		// 塞尔维亚语
-		name = "Srpski"
-	case "my":
-		// 缅甸语
-		name = "Burmese"
-	case "bn":
-		// 孟加拉语
-		name = "Bengali"
-	case "th":
-		// 泰语
-		name = "Thai"
-	case "tr":
-		// 土耳其语
-		name = "Türkçe"
-	case "ja":
-		// 日语
-		name = "Japanese"
-	case "lo":
-		// 老挝语
-		name = "Lao"
-	case "ko":
-		// 韩语
-		name = "한국어"
-	case "ru":
-		// 俄语
-		name = "Русский"
-	case "fr":
-		// 法语
-		name = "Français"
-	case "de":
-		// 德语
-		name = "Deutsch"
-	case "fa":
-		// 波斯语
-		name = "فارسی"
-	case "ar":
-		// 阿拉伯语
-		name = "العربية"
-	case "ms":
-		// 马来语
-		name = "Bahasa Melayu"
-	case "jw":
-		// 爪哇语
-		name = "Jawa"
-	case "te":
-		// 泰卢固语
-		name = "Telugu"
-	case "ta":
-		// 泰米尔语
-		name = "Tamil"
-	case "mr":
-		// 马拉地语
-		name = "Marathi"
-	case "ur":
-		// 乌尔都语
-		name = "Urdu"
-	case "pl":
-		// 波兰语
-		name = "Polski"
-	case "uk":
-		// 乌克兰语
-		name = "Українська"
-	case "pa":
-		// 旁遮普语
-		name = "Panjabi"
-	case "ro":
-		// 罗马尼亚语
-		name = "Română"
-	case "et":
-		// 爱沙尼亚语
-		name = "Eesti"
-	case "os":
-		// 奥塞梯语
-		name = "Ossetic"
-	case "be":
-		// 白俄罗斯语
-		name = "Беларуская"
-	case "bg":
-		// 保加利亚语
-		name = "Български"
-	case "is":
-		// 冰岛语
-		name = "Icelandic"
-	case "bs":
-		// 波斯尼亚语
-		name = "Bosnian"
-	case "bo":
-		// 藏语
-		name = "Tibetan"
-	case "da":
-		// 丹麦语
-		name = "Dansk"
-	case "tl":
-		// 菲律宾语
-		name = "Filipino"
-	case "fi":
-		// 芬兰语
-		name = "Suomi"
-	case "sv":
-		// 瑞典语
-		name = "Swedish"
-	case "kg":
-		// 刚果语
-		name = "Kongo"
-	case "ka":
-		// 格鲁吉亚语
-		name = "Georgian"
-	case "kk":
-		// 哈萨克语
-		name = "Kazakh"
-	case "gl":
-		// 加利西亚语
-		name = "Galician"
-	case "ky":
-		// 吉尔吉斯语
-		name = "Kyrgyz"
-	case "nl":
-		// 荷兰语
-		name = "Nederlands"
-	case "ca":
-		// 加泰罗尼亚语
-		name = "Catalan"
-	case "cs":
-		// 捷克语
-		name = "Čeština"
-	case "kn":
-		// 卡纳达语
-		name = "Kannada"
-	case "mn":
-		// 蒙古语
-		name = "Mongolian"
-	case "hr":
-		// 克罗地亚语
-		name = "Hrvatski"
-	case "lv":
-		// 拉脱维亚语
-		name = "Latvian"
-	case "lt":
-		// 立陶宛语
-		name = "Lettish"
-	case "no":
-		// 挪威语
-		name = "Norwegian"
-	case "ne":
-		// 尼泊尔语
-		name = "Nepali"
-	case "ps":
-		// 普什图语
-		name = "Pashto"
-	case "ks":
-		// 斯洛伐克语
-		name = "Slovak"
-	case "tk":
-		// 土库曼语
-		name = "Turkmen"
-	case "uz":
-		// 乌兹别克语
-		name = "Uzbek"
-	case "iw":
-		// 希伯来语
-		name = "Hebrew"
-	case "hu":
-		// 匈牙利语
-		name = "Hungarian"
-	case "hy":
-		// 亚美尼亚语
-		name = "Armenian"
+	for i := range Languages {
+		if Languages[i].Code == lang {
+			name = Languages[i].Name
+			break
+		}
 	}
 
 	return name
 }
 
 func GetLanguageIcon(lang string) string {
-	switch lang {
-	case "en":
-		return "🇺🇸" // 美国（英语主要地区）
-	case "zh-cn":
-		return "🇨🇳" // 中国（简体中文）
-	case "zh-tw":
-		return "🇨🇳" // 台湾（繁体中文）
-	case "vi":
-		return "🇻🇳" // 越南
-	case "id":
-		return "🇮🇩" // 印度尼西亚
-	case "hi":
-		return "🇮🇳" // 印度（印地语）
-	case "it":
-		return "🇮🇹" // 意大利
-	case "el":
-		return "🇬🇷" // 希腊
-	case "es":
-		return "🇪🇸" // 西班牙
-	case "pt":
-		return "🇵🇹" // 葡萄牙
-	case "sr":
-		return "🇷🇸" // 塞尔维亚
-	case "my":
-		return "🇲🇲" // 缅甸
-	case "bn":
-		return "🇧🇩" // 孟加拉国
-	case "th":
-		return "🇹🇭" // 泰国
-	case "tr":
-		return "🇹🇷" // 土耳其
-	case "ja":
-		return "🇯🇵" // 日本
-	case "lo":
-		return "🇱🇦" // 老挝
-	case "ko":
-		return "🇰🇷" // 韩国
-	case "ru":
-		return "🇷🇺" // 俄罗斯
-	case "fr":
-		return "🇫🇷" // 法国
-	case "de":
-		return "🇩🇪" // 德国
-	case "fa":
-		return "🇮🇷" // 伊朗（波斯语）
-	case "ar":
-		return "🇸🇦" // 沙特阿拉伯（阿拉伯语）
-	case "ms":
-		return "🇲🇾" // 马来西亚
-	case "jw":
-		return "🇮🇩" // 印尼（爪哇语）
-	case "te":
-		return "🇮🇳" // 印度（泰卢固语）
-	case "ta":
-		return "🇮🇳" // 印度（泰米尔语）
-	case "mr":
-		return "🇮🇳" // 印度（马拉地语）
-	case "ur":
-		return "🇵🇰" // 巴基斯坦（乌尔都语）
-	case "pl":
-		return "🇵🇱" // 波兰
-	case "uk":
-		return "🇺🇦" // 乌克兰
-	case "pa":
-		return "🇮🇳" // 印度（旁遮普语）
-	case "ro":
-		return "🇷🇴" // 罗马尼亚
-	case "et":
-		return "🇪🇪" // 爱沙尼亚
-	case "os":
-		return "🇷🇺" // 俄罗斯（奥塞梯语）
-	case "be":
-		return "🇧🇾" // 白俄罗斯
-	case "bg":
-		return "🇧🇬" // 保加利亚
-	case "is":
-		return "🇮🇸" // 冰岛
-	case "bs":
-		return "🇧🇦" // 波斯尼亚和黑塞哥维那
-	case "bo":
-		return "🇨🇳" // 中国（藏语）
-	case "da":
-		return "🇩🇰" // 丹麦
-	case "tl":
-		return "🇵🇭" // 菲律宾
-	case "fi":
-		return "🇫🇮" // 芬兰
-	case "sv":
-		return "🇸🇪" // 瑞典
-	case "kg":
-		return "🇨🇬" // 刚果
-	case "ka":
-		return "🇬🇪" // 格鲁吉亚
-	case "kk":
-		return "🇰🇿" // 哈萨克斯坦
-	case "gl":
-		return "🇪🇸" // 西班牙（加利西亚语）
-	case "ky":
-		return "🇰🇬" // 吉尔吉斯斯坦
-	case "nl":
-		return "🇳🇱" // 荷兰
-	case "ca":
-		return "🇪🇸" // 西班牙（加泰罗尼亚语）
-	case "cs":
-		return "🇨🇿" // 捷克
-	case "kn":
-		return "🇮🇳" // 印度（卡纳达语）
-	case "mn":
-		return "🇲🇳" // 蒙古
-	case "hr":
-		return "🇭🇷" // 克罗地亚
-	case "lv":
-		return "🇱🇻" // 拉脱维亚
-	case "lt":
-		return "🇱🇹" // 立陶宛
-	case "no":
-		return "🇳🇴" // 挪威
-	case "ne":
-		return "🇳🇵" // 尼泊尔
-	case "ps":
-		return "🇦🇫" // 阿富汗（普什图语）
-	case "ks":
-		return "🇸🇰" // 斯洛伐克
-	case "tk":
-		return "🇹🇲" // 土库曼斯坦
-	case "uz":
-		return "🇺🇿" // 乌兹别克斯坦
-	case "iw":
-		return "🇮🇱" // 以色列（希伯来语）
-	case "hu":
-		return "🇭🇺" // 匈牙利
-	case "hy":
-		return "🇦🇲" // 亚美尼亚
-	default:
-		return "🏳️" // 默认返回未知旗帜
+	var icon string
+	for i := range Languages {
+		if Languages[i].Code == lang {
+			icon = Languages[i].Icon
+			break
+		}
 	}
+
+	return icon
 }

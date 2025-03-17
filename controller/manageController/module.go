@@ -1,11 +1,12 @@
 package manageController
 
 import (
+	"regexp"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"regexp"
 )
 
 func ModuleList(ctx iris.Context) {
@@ -85,9 +86,9 @@ func ModuleDetailForm(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				if req.Id == 0 {
 					req.Id = module.Id
@@ -161,9 +162,9 @@ func ModuleFieldsDelete(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				// 同步删除
 				_ = subSite.DeleteModuleField(req.Id, req.FieldName)
@@ -216,9 +217,9 @@ func ModuleDelete(ctx iris.Context) {
 	}
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
-		for _, subSiteID := range currentSite.MultiLanguage.SubSites {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
 			// 同步分类，先同步，再添加翻译计划
-			subSite := provider.GetWebsite(subSiteID)
+			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
 				// 同步删除
 				_ = subSite.DeleteModule(module)

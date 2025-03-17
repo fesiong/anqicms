@@ -2,12 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 type tagLanguagesNode struct {
@@ -41,7 +42,14 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	}
 
 	for i := range languageSites {
-		tmpSite := provider.GetWebsite(languageSites[i].Id)
+		languageSites[i].IsCurrent = languageSites[i].Language == currentSite.GetLang()
+		var tmpSite *provider.Website
+		if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
+			tmpSite = provider.GetWebsite(languageSites[i].Id)
+		} else {
+			// single type
+			tmpSite = currentSite
+		}
 		var link string
 		currentPage, _ := ctx.Public["currentPage"].(int)
 		// archive
@@ -70,12 +78,15 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		if link == "" && mainSite.MultiLanguage.Type != config.MultiLangTypeSame {
 			link = tmpSite.GetUrl("", nil, 0)
 		}
-		// 如果是同链接，则是一个跳转链接
-		if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+		if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+			// 需要处理URL
+			link = mainSite.MultiLanguage.GetUrl(link, mainSite.System.BaseUrl, &languageSites[i])
+		} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+			// 如果是同链接，则是一个跳转链接
 			if strings.Contains(link, "?") {
-				link = link + "&lang=" + tmpSite.System.Language
+				link = link + "&lang=" + languageSites[i].Language
 			} else {
-				link += "?lang=" + tmpSite.System.Language
+				link += "?lang=" + languageSites[i].Language
 			}
 		}
 

@@ -23,9 +23,9 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 	app.Post("/install", controller.InstallForm)
 	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPublish)
 	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
-	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, controller.CommentList)
+	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, middleware.HandlerTimeout, controller.CommentList)
 
-	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
+	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, middleware.HandlerTimeout, controller.GuestbookPage)
 	app.HandleMany(iris.MethodPost, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
 
 	// 内容导入API

@@ -118,7 +118,6 @@ func CheckVersion(ctx iris.Context) {
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
-		log.Println(ctx.Tr("FailedToObtainNewVersion"), errs)
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  ctx.Tr("CheckThatTheVersionIsTheLatestVersion"),
@@ -161,7 +160,6 @@ func VersionUpgrade(ctx iris.Context) {
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(15 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
-		log.Println(ctx.Tr("VersionUpdateFailed"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("VersionUpdateFailed"),
@@ -262,7 +260,7 @@ func VersionUpgrade(ctx iris.Context) {
 			err = os.Rename(oldPath, execPath)
 		}
 	} else {
-		log.Println("fail to rename old executable.")
+		log.Println("fail to rename old executable.", err)
 	}
 	if len(errorFiles) > 1 {
 		log.Println("Upgrade error files: ", errorFiles)

@@ -1,7 +1,9 @@
 package library
 
 import (
+	"github.com/shirou/gopsutil/v4/mem"
 	"reflect"
+	"runtime"
 	"strings"
 )
 
@@ -47,4 +49,15 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 	reflect.ValueOf(s).Elem().Set(structValue)
 
 	return nil
+}
+
+func GetSystemMemoryUsage() (used uint64, usedPercent float64, freePercent float64) {
+	v, _ := mem.VirtualMemory()
+	return v.Total / 1024 / 1024, v.UsedPercent, (float64(v.Available) / float64(v.Total)) * 100
+}
+
+func GetProcessMemory() uint64 {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return m.Alloc / 1024 / 1024 // 返回MB单位
 }

@@ -1,7 +1,14 @@
 package provider
 
 import (
+	"context"
 	"errors"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+
 	"github.com/esap/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/i18n"
@@ -12,11 +19,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/response"
-	"net/url"
-	"os"
-	"strconv"
-	"strings"
-	"sync"
 )
 
 type Website struct {
@@ -135,8 +137,19 @@ func (w *Website) TemplateExist(tplPaths ...string) (string, bool) {
 	return tplPaths[0], false
 }
 
-func (w *Website) Ctx() iris.Context {
+func (w *Website) Ctx() context.Context {
+	if w.ctx == nil {
+		return context.TODO()
+	}
+	return w.ctx.Request().Context()
+}
+
+func (w *Website) CtxOri() iris.Context {
 	return w.ctx
+}
+
+func (w *Website) GetLang() string {
+	return w.backLanguage
 }
 
 type OrderedWebsites struct {
@@ -259,26 +272,31 @@ func InitWebsites() {
 	values := websites.Values()
 	for _, w := range values {
 		if w.MultiLanguage.Open {
-			w.MultiLanguage.SubSites = map[string]uint{}
-			// 读取子站点
-			multiLangSites := w.GetMultiLangSites(w.Id, false)
-			mainBaseUrl := w.System.BaseUrl
-			for _, v := range multiLangSites {
-				w.MultiLanguage.SubSites[v.Language] = v.Id
-				// 根据多语言站点的规则，改变baseUrl 和 storageUrl
-				if w.MultiLanguage.Type != config.MultiLangTypeDomain {
-					curSite, ok := websites.Get(v.Id)
-					if ok {
-						var baseUrl string
-						if w.MultiLanguage.Type == config.MultiLangTypeDirectory {
-							baseUrl = mainBaseUrl + "/" + v.Language
-						} else {
-							baseUrl = mainBaseUrl
-						}
-						if curSite.PluginStorage.StorageType == config.StorageTypeLocal {
+			if w.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
+				// 读取子站点
+				multiLangSites := w.GetMultiLangSites(w.Id, false)
+				w.MultiLanguage.SubSites = make([]config.MultiLangSite, 0, len(multiLangSites)*2)
+				mainBaseUrl := w.System.BaseUrl
+				for _, v := range multiLangSites {
+					tmpSite := config.MultiLangSite{
+						Id:           v.Id,
+						Language:     v.Language,
+						LanguageIcon: v.LanguageIcon,
+					}
+					w.MultiLanguage.SubSites = append(w.MultiLanguage.SubSites, tmpSite)
+					// 根据多语言站点的规则，改变baseUrl 和 storageUrl
+					if w.MultiLanguage.Type != config.MultiLangTypeDomain {
+						curSite, ok := websites.Get(v.Id)
+						if ok {
+							var baseUrl string
+							if w.MultiLanguage.Type == config.MultiLangTypeDirectory {
+								baseUrl = mainBaseUrl + "/" + v.Language
+							} else {
+								baseUrl = mainBaseUrl
+							}
 							curSite.PluginStorage.StorageUrl = baseUrl
+							//curSite.System.BaseUrl = baseUrl
 						}
-						curSite.System.BaseUrl = baseUrl
 					}
 				}
 			}
@@ -334,6 +352,7 @@ func InitWebsite(mw *model.Website) {
 			Templates: make(map[string]int64),
 			mu:        sync.Mutex{},
 		},
+		cachedTodayArticleCount: &response.CacheArticleCount{},
 	}
 	if db != nil && mw.Status == 1 {
 		// 读取真正的 TokenSecret
@@ -376,6 +395,7 @@ func InitWebsite(mw *model.Website) {
 		}
 	}
 	if w.Initialed {
+		w.GetRewritePatten(true)
 		// 启动限流器
 		w.InitLimiter()
 		w.InitStatistic()
@@ -491,7 +511,7 @@ func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *We
 			if urlToCheck == "" {
 				continue
 			}
-
+			// 这里不处理根路径的 domain
 			parsed, err := url.Parse(urlToCheck)
 			if err != nil || parsed.RequestURI() == "/" {
 				continue
@@ -531,6 +551,7 @@ func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Webs
 
 // 处理多语言配置
 func handleMultiLanguage(w *Website, host, uri string, ctx iris.Context) *Website {
+	// 多语言只根据 baseUrl 来处理
 	parsed, err := url.Parse(w.System.BaseUrl)
 	if err != nil || parsed.Hostname() != host {
 		return nil
@@ -541,20 +562,35 @@ func handleMultiLanguage(w *Website, host, uri string, ctx iris.Context) *Websit
 		return nil
 	}
 
-	lang := detectLanguage(mainSite, ctx, uri)
-	if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
-		ctx.SetLanguage(lang)
-		ctx.Values().Set("siteId", tmpId)
-		if subSite, ok := websites.Get(tmpId); ok {
-			return cloneWithContext(subSite, ctx)
+	lang := detectLanguage(mainSite, ctx, host, uri)
+	langSite := mainSite.MultiLanguage.GetSite(lang)
+	if langSite != nil {
+		ctx.SetLanguage(langSite.Language)
+		// 如果是 single 形式的，就返回主站点
+		if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+			ctx.Values().Set("siteId", mainSite.Id)
+			return cloneWithContext(mainSite, ctx)
+		} else {
+			ctx.Values().Set("siteId", langSite.Id)
+			if subSite, ok := websites.Get(langSite.Id); ok {
+				return cloneWithContext(subSite, ctx)
+			}
 		}
 	}
 	return nil
 }
 
 // 检测语言设置
-func detectLanguage(mainSite *Website, ctx iris.Context, uri string) string {
+func detectLanguage(mainSite *Website, ctx iris.Context, host string, uri string) string {
 	switch mainSite.MultiLanguage.Type {
+	case config.MultiLangTypeDomain:
+		// 匹配 domain
+		for _, langSite := range mainSite.MultiLanguage.SubSites {
+			parsed, err := url.Parse(langSite.BaseUrl)
+			if err == nil && isHostMatch(parsed, host) {
+				return langSite.Language
+			}
+		}
 	case config.MultiLangTypeDirectory:
 		lang := strings.SplitN(strings.TrimPrefix(uri, "/"), "/", 2)[0]
 		if !strings.Contains(lang, ".") {
@@ -588,6 +624,33 @@ func handleMatchedWebsite(w *Website, baseURI string, ctx iris.Context) *Website
 
 // 处理主机匹配的情况
 func handleHostMatch(w *Website, ctx iris.Context) *Website {
+	// 处理多语言逻辑
+	mainSite := w.GetMainWebsite()
+	if mainSite.MultiLanguage.Open {
+		// 采用目录形式
+		var lang string
+		if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+			// url不变
+			lang = ctx.GetCookie("lang")
+			if lang == "" {
+				lang = ctx.URLParam("lang")
+			}
+		}
+		langSite := mainSite.MultiLanguage.GetSite(lang)
+		if langSite != nil {
+			ctx.SetLanguage(langSite.Language)
+			// 如果是 single 形式的，就返回主站点
+			if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+				ctx.Values().Set("siteId", mainSite.Id)
+				return cloneWithContext(mainSite, ctx)
+			} else {
+				ctx.Values().Set("siteId", langSite.Id)
+				if subSite, ok := websites.Get(langSite.Id); ok {
+					return cloneWithContext(subSite, ctx)
+				}
+			}
+		}
+	}
 	ctx.Values().Set("siteId", w.Id)
 	return cloneWithContext(w, ctx)
 }
@@ -660,10 +723,11 @@ func CurrentSite2(ctx iris.Context) *Website {
 								lang = ctx.URLParam("lang")
 							}
 						}
-						if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
+						langSite := mainSite.MultiLanguage.GetSite(lang)
+						if langSite != nil {
 							ctx.SetLanguage(lang)
-							ctx.Values().Set("siteId", tmpId)
-							tmpSite1, _ := websites.Get(tmpId)
+							ctx.Values().Set("siteId", langSite.Id)
+							tmpSite1, _ := websites.Get(langSite.Id)
 							tmpSite = *tmpSite1
 							tmpSite.backLanguage = ctx.GetLocale().Language()
 							tmpSite.ctx = ctx
@@ -736,10 +800,11 @@ func CurrentSite2(ctx iris.Context) *Website {
 								lang = ctx.URLParam("lang")
 							}
 						}
-						if tmpId, ok := mainSite.MultiLanguage.SubSites[lang]; ok {
+						langSite := mainSite.MultiLanguage.GetSite(lang)
+						if langSite != nil {
 							ctx.SetLanguage(lang)
-							ctx.Values().Set("siteId", tmpId)
-							tmpSite1, _ := websites.Get(tmpId)
+							ctx.Values().Set("siteId", langSite.Id)
+							tmpSite1, _ := websites.Get(langSite.Id)
 							tmpSite = *tmpSite1
 							tmpSite.backLanguage = ctx.GetLocale().Language()
 							tmpSite.ctx = ctx
@@ -814,10 +879,10 @@ func CurrentSubSite(ctx iris.Context) *Website {
 		if tmpSiteId != "" {
 			siteId, _ := strconv.Atoi(tmpSiteId)
 			if siteId > 0 {
-				for _, subId := range currentSite.MultiLanguage.SubSites {
-					if subId == uint(siteId) {
+				for i := range currentSite.MultiLanguage.SubSites {
+					if currentSite.MultiLanguage.SubSites[i].Id == uint(siteId) {
 						// 存在这样的子站点
-						currentSite = GetWebsite(subId)
+						currentSite = GetWebsite(uint(siteId))
 						break
 					}
 				}

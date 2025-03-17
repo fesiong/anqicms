@@ -1,4 +1,4 @@
-package library
+package provider
 
 import (
 	"log"

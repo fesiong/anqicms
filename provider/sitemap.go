@@ -5,13 +5,15 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
-	"kandaoni.com/anqicms/model"
 	"net/url"
 	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) UpdateSitemapTime() error {
@@ -70,7 +72,8 @@ func (w *Website) BuildSitemap() error {
 	//sitemap将包含首页、分类首页、文章页、产品页
 	baseUrl := w.System.BaseUrl
 	multiLang := false
-	var multiLangSites []*Website
+	var multiLangSiteType string
+	var multiLangSites []config.MultiLangSite
 	if w.PluginSitemap.Type == "xml" {
 		mainId := w.ParentId
 		if mainId == 0 {
@@ -79,13 +82,8 @@ func (w *Website) BuildSitemap() error {
 		mainSite := GetWebsite(mainId)
 		if mainSite.MultiLanguage.Open == true {
 			multiLang = true
-		}
-		tmpSites := w.GetMultiLangSites(mainId, false)
-		for i := 0; i < len(tmpSites); i++ {
-			tmpSite := GetWebsite(tmpSites[i].Id)
-			if tmpSite != nil {
-				multiLangSites = append(multiLangSites, tmpSite)
-			}
+			multiLangSiteType = mainSite.MultiLanguage.SiteType
+			multiLangSites = w.GetMultiLangSites(mainId, false)
 		}
 	}
 
@@ -115,13 +113,28 @@ func (w *Website) BuildSitemap() error {
 	//写入首页
 	var alternates []AlternateLink
 	if multiLang {
-		for _, site := range multiLangSites {
-			if site.Id == w.Id {
-				continue
-			}
-			alternate := AlternateLink{
-				Href:     site.System.BaseUrl,
-				Hreflang: site.System.Language,
+		for idx := range multiLangSites {
+			var alternate AlternateLink
+			if multiLangSiteType == config.MultiLangSiteTypeMulti {
+				site := GetWebsite(multiLangSites[idx].Id)
+				if site == nil {
+					continue
+				}
+				if site.Id == w.Id {
+					continue
+				}
+				alternate = AlternateLink{
+					Href:     site.System.BaseUrl,
+					Hreflang: site.System.Language,
+				}
+			} else {
+				// single
+				link := w.System.BaseUrl + "/"
+				link = w.MultiLanguage.GetUrl(link, w.System.BaseUrl, &multiLangSites[idx])
+				alternate = AlternateLink{
+					Href:     link,
+					Hreflang: multiLangSites[idx].Language,
+				}
 			}
 			alternates = append(alternates, alternate)
 		}
@@ -131,20 +144,34 @@ func (w *Website) BuildSitemap() error {
 	var categories []*model.Category
 	categoryBuilder.Find(&categories)
 	for _, v := range categories {
+		defaultLink := w.GetUrl("category", v, 0)
 		alternates = alternates[:0]
 		if multiLang {
-			for _, site := range multiLangSites {
-				if site.Id == w.Id {
-					continue
-				}
-				alternate := AlternateLink{
-					Href:     site.GetUrl("category", v, 0),
-					Hreflang: site.System.Language,
+			for idx := range multiLangSites {
+				var alternate AlternateLink
+				if multiLangSiteType == config.MultiLangSiteTypeMulti {
+					site := GetWebsite(multiLangSites[idx].Id)
+					if site == nil {
+						continue
+					}
+					if site.Id == w.Id {
+						continue
+					}
+					alternate = AlternateLink{
+						Href:     site.GetUrl("category", v, 0),
+						Hreflang: site.System.Language,
+					}
+				} else {
+					// single
+					alternate = AlternateLink{
+						Href:     w.MultiLanguage.GetUrl(defaultLink, w.System.BaseUrl, &multiLangSites[idx]),
+						Hreflang: multiLangSites[idx].Language,
+					}
 				}
 				alternates = append(alternates, alternate)
 			}
 		}
-		categoryFile.AddLoc(w.GetUrl("category", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
+		categoryFile.AddLoc(defaultLink, time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 	}
 	//写入文章
 	var archives []*model.Archive
@@ -168,20 +195,34 @@ func (w *Website) BuildSitemap() error {
 				break
 			}
 			for _, v := range archives {
+				defaultLink := w.GetUrl("archive", v, 0)
 				alternates = alternates[:0]
 				if multiLang {
-					for _, site := range multiLangSites {
-						if site.Id == w.Id {
-							continue
-						}
-						alternate := AlternateLink{
-							Href:     site.GetUrl("archive", v, 0),
-							Hreflang: site.System.Language,
+					for idx := range multiLangSites {
+						var alternate AlternateLink
+						if multiLangSiteType == config.MultiLangSiteTypeMulti {
+							site := GetWebsite(multiLangSites[idx].Id)
+							if site == nil {
+								continue
+							}
+							if site.Id == w.Id {
+								continue
+							}
+							alternate = AlternateLink{
+								Href:     site.GetUrl("archive", v, 0),
+								Hreflang: site.System.Language,
+							}
+						} else {
+							// single
+							alternate = AlternateLink{
+								Href:     w.MultiLanguage.GetUrl(defaultLink, w.System.BaseUrl, &multiLangSites[idx]),
+								Hreflang: multiLangSites[idx].Language,
+							}
 						}
 						alternates = append(alternates, alternate)
 					}
 				}
-				archiveFile.AddLoc(w.GetUrl("archive", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
+				archiveFile.AddLoc(defaultLink, time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 			}
 			remainNum -= len(archives)
 			lastId = archives[len(archives)-1].Id
@@ -213,20 +254,34 @@ func (w *Website) BuildSitemap() error {
 					break
 				}
 				for _, v := range tags {
+					defaultLink := w.GetUrl("tag", v, 0)
 					alternates = alternates[:0]
 					if multiLang {
-						for _, site := range multiLangSites {
-							if site.Id == w.Id {
-								continue
-							}
-							alternate := AlternateLink{
-								Href:     site.GetUrl("tag", v, 0),
-								Hreflang: site.System.Language,
+						for idx := range multiLangSites {
+							var alternate AlternateLink
+							if multiLangSiteType == config.MultiLangSiteTypeMulti {
+								site := GetWebsite(multiLangSites[idx].Id)
+								if site == nil {
+									continue
+								}
+								if site.Id == w.Id {
+									continue
+								}
+								alternate = AlternateLink{
+									Href:     site.GetUrl("tag", v, 0),
+									Hreflang: site.System.Language,
+								}
+							} else {
+								// single
+								alternate = AlternateLink{
+									Href:     w.MultiLanguage.GetUrl(defaultLink, w.System.BaseUrl, &multiLangSites[idx]),
+									Hreflang: multiLangSites[idx].Language,
+								}
 							}
 							alternates = append(alternates, alternate)
 						}
 					}
-					tagFile.AddLoc(w.GetUrl("tag", v, 0), time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
+					tagFile.AddLoc(defaultLink, time.Unix(v.UpdatedTime, 0).Format("2006-01-02"), alternates)
 				}
 				remainNum -= len(tags)
 				lastId = int64(tags[len(tags)-1].Id)
@@ -246,7 +301,8 @@ func (w *Website) BuildSitemap() error {
 // AddonSitemap 追加sitemap
 func (w *Website) AddonSitemap(itemType string, link string, lastmod string, data interface{}) error {
 	multiLang := false
-	var multiLangSites []*Website
+	var multiLangSiteType string
+	var multiLangSites []config.MultiLangSite
 	if w.PluginSitemap.Type == "xml" {
 		mainId := w.ParentId
 		if mainId == 0 {
@@ -255,15 +311,11 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		mainSite := GetWebsite(mainId)
 		if mainSite.MultiLanguage.Open == true {
 			multiLang = true
-		}
-		tmpSites := w.GetMultiLangSites(mainId, false)
-		for i := 0; i < len(tmpSites); i++ {
-			tmpSite := GetWebsite(tmpSites[i].Id)
-			if tmpSite != nil {
-				multiLangSites = append(multiLangSites, tmpSite)
-			}
+			multiLangSiteType = mainSite.MultiLanguage.SiteType
+			multiLangSites = w.GetMultiLangSites(mainId, false)
 		}
 	}
+
 	//index 和 category 存放在同一个文件，文章单独一个文件
 	if itemType == "category" {
 		categoryPath := fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type)
@@ -283,13 +335,26 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		if multiLang {
 			item, ok := data.(*model.Category)
 			if ok {
-				for _, site := range multiLangSites {
-					if site.Id == w.Id {
-						continue
-					}
-					alternate := AlternateLink{
-						Href:     site.GetUrl("category", item, 0),
-						Hreflang: site.System.Language,
+				for idx := range multiLangSites {
+					var alternate AlternateLink
+					if multiLangSiteType == config.MultiLangSiteTypeMulti {
+						site := GetWebsite(multiLangSites[idx].Id)
+						if site == nil {
+							continue
+						}
+						if site.Id == w.Id {
+							continue
+						}
+						alternate = AlternateLink{
+							Href:     site.GetUrl("category", item, 0),
+							Hreflang: site.System.Language,
+						}
+					} else {
+						// single
+						alternate = AlternateLink{
+							Href:     w.MultiLanguage.GetUrl(link, w.System.BaseUrl, &multiLangSites[idx]),
+							Hreflang: multiLangSites[idx].Language,
+						}
 					}
 					alternates = append(alternates, alternate)
 				}
@@ -319,13 +384,26 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		if multiLang {
 			item, ok := data.(*model.Archive)
 			if ok {
-				for _, site := range multiLangSites {
-					if site.Id == w.Id {
-						continue
-					}
-					alternate := AlternateLink{
-						Href:     site.GetUrl("archive", item, 0),
-						Hreflang: site.System.Language,
+				for idx := range multiLangSites {
+					var alternate AlternateLink
+					if multiLangSiteType == config.MultiLangSiteTypeMulti {
+						site := GetWebsite(multiLangSites[idx].Id)
+						if site == nil {
+							continue
+						}
+						if site.Id == w.Id {
+							continue
+						}
+						alternate = AlternateLink{
+							Href:     site.GetUrl("archive", item, 0),
+							Hreflang: site.System.Language,
+						}
+					} else {
+						// single
+						alternate = AlternateLink{
+							Href:     w.MultiLanguage.GetUrl(link, w.System.BaseUrl, &multiLangSites[idx]),
+							Hreflang: multiLangSites[idx].Language,
+						}
 					}
 					alternates = append(alternates, alternate)
 				}
@@ -367,13 +445,26 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		if multiLang {
 			item, ok := data.(*model.Tag)
 			if ok {
-				for _, site := range multiLangSites {
-					if site.Id == w.Id {
-						continue
-					}
-					alternate := AlternateLink{
-						Href:     site.GetUrl("tag", item, 0),
-						Hreflang: site.System.Language,
+				for idx := range multiLangSites {
+					var alternate AlternateLink
+					if multiLangSiteType == config.MultiLangSiteTypeMulti {
+						site := GetWebsite(multiLangSites[idx].Id)
+						if site == nil {
+							continue
+						}
+						if site.Id == w.Id {
+							continue
+						}
+						alternate = AlternateLink{
+							Href:     site.GetUrl("tag", item, 0),
+							Hreflang: site.System.Language,
+						}
+					} else {
+						// single
+						alternate = AlternateLink{
+							Href:     w.MultiLanguage.GetUrl(link, w.System.BaseUrl, &multiLangSites[idx]),
+							Hreflang: multiLangSites[idx].Language,
+						}
 					}
 					alternates = append(alternates, alternate)
 				}

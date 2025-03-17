@@ -565,7 +565,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 		// 公开列表数据
 		if currentSite.PluginJsonLd.Open {
-			ctxOri := currentSite.Ctx()
+			ctxOri := currentSite.CtxOri()
 			if ctxOri != nil {
 				ctxOri.ViewData("listData", tmpResult)
 			}

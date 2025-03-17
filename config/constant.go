@@ -111,7 +111,7 @@ const (
 	EnginBing   = "bing"
 	EnginOther  = "other"
 
-	LanguageZh = "zh-cn"
+	LanguageZh = "zh-CN"
 	LanguageEn = "en"
 
 	CollectModeCollect = 0
@@ -179,4 +179,7 @@ const (
 	MultiLangTypeDomain    = "domain"
 	MultiLangTypeDirectory = "directory"
 	MultiLangTypeSame      = "same"
+
+	MultiLangSiteTypeMulti  = "multi"
+	MultiLangSiteTypeSingle = "single"
 )

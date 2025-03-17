@@ -34,7 +34,7 @@ func CommentPublish(ctx iris.Context) {
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok && group.Setting.ContentNoVerify {
+		if ok && group != nil && group.Setting.ContentNoVerify {
 			contentVerify = !group.Setting.ContentNoVerify
 		}
 	}

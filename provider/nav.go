@@ -196,13 +196,13 @@ func (w *Website) GetNavsFromCache(typeId uint) []*model.Nav {
 			//先获取顶层的
 			//再获取是否有下一层的
 			//嵌套，前台使用
-			navs[i].NavList = nil
+			navs[i].NavList = make([]*model.Nav, 0)
 			for j := range navs {
 				if navs[j].ParentId == navs[i].Id {
 					navs[j].Spacer = "└  "
 					navs[j].Link = w.GetUrl("nav", &navs[j], 0)
 					// 增加三级
-					navs[j].NavList = nil
+					navs[j].NavList = make([]*model.Nav, 0)
 					for k := range navs {
 						if navs[k].ParentId == navs[j].Id {
 							navs[k].Spacer = "└  └  "

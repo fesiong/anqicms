@@ -30,12 +30,17 @@ func PluginSaveMultiLangConfig(ctx iris.Context) {
 		})
 		return
 	}
+	if req.SiteType == "" {
+		req.SiteType = config.MultiLangSiteTypeMulti
+	}
 
 	currentSite.MultiLanguage.Open = req.Open
 	currentSite.MultiLanguage.Type = req.Type
 	currentSite.MultiLanguage.AutoTranslate = req.AutoTranslate
+	currentSite.MultiLanguage.SiteType = req.SiteType
 	// language
 	currentSite.System.Language = req.DefaultLanguage
+	currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
 
 	err := currentSite.SaveSettingValue(provider.SystemSettingKey, currentSite.System)
 	if err != nil {
@@ -55,6 +60,23 @@ func PluginSaveMultiLangConfig(ctx iris.Context) {
 		return
 	}
 
+	// 切换站点类型的时候，需要更新 storageUrl
+	mainBaseUrl := currentSite.System.BaseUrl
+	if req.SiteType == config.MultiLangSiteTypeMulti && currentSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+		for _, v := range currentSite.MultiLanguage.SubSites {
+			curSite := provider.GetWebsite(v.Id)
+			if curSite != nil {
+				var baseUrl string
+				if currentSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+					baseUrl = mainBaseUrl + "/" + v.Language
+				} else {
+					baseUrl = mainBaseUrl
+				}
+				curSite.PluginStorage.StorageUrl = baseUrl
+			}
+		}
+	}
+	currentSite.DeleteCache()
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMultiLangConfiguration"))
 
 	ctx.JSON(iris.Map{
@@ -65,7 +87,17 @@ func PluginSaveMultiLangConfig(ctx iris.Context) {
 
 func PluginGetMultiLangSites(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-
+	siteType := ctx.URLParam("type")
+	if siteType == config.MultiLangSiteTypeMulti {
+		// 如果站点是 single，则不返回
+		if currentSite.MultiLanguage == nil || currentSite.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  "",
+			})
+			return
+		}
+	}
 	// 读取当前站点的多语言站点
 	sites := currentSite.GetMultiLangSites(currentSite.Id, true)
 
@@ -98,7 +130,7 @@ func PluginRemoveMultiLangSite(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.RemoveMultiLangSite(req.Id)
+	err := currentSite.RemoveMultiLangSite(req.Id, req.Language)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -187,5 +219,59 @@ func PluginMultiSiteSyncStatus(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": status,
+	})
+}
+
+func GetTranslateHtmlLogs(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+
+	result, total := currentSite.GetTranslateHtmlLogs(currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  result,
+	})
+}
+
+func GetTranslateHtmlCaches(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	lang := ctx.URLParam("lang")
+
+	result, total := currentSite.GetTranslateHtmlCaches(lang, currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  result,
+	})
+}
+
+func PluginRemoveTranslateHtmlCache(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PluginMultiLangCacheRemoveRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.All {
+		currentSite.DeleteMultiLangCacheAll()
+	} else {
+		currentSite.DeleteMultiLangCache(req.Uris)
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }

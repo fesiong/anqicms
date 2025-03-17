@@ -1,19 +1,23 @@
 package provider
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
-	"log"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
 )
 
 type MultiLangSyncStatus struct {
@@ -54,7 +58,7 @@ func (w *Website) GetMainWebsite() *Website {
 	return w
 }
 
-func (w *Website) GetMultiLangSites(mainId uint, all bool) []response.MultiLangSite {
+func (w *Website) GetMultiLangSites(mainId uint, all bool) []config.MultiLangSite {
 	// 用于读取真实的主站点ID
 	if mainId == 0 {
 		mainId = w.Id
@@ -65,10 +69,10 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []response.MultiLangS
 		return nil
 	}
 
-	var multiLangSites = make([]response.MultiLangSite, 0, 10)
+	var multiLangSites = make([]config.MultiLangSite, 0, 100)
 	// 先添加主站点
 	var link string
-	tmpSite := response.MultiLangSite{
+	tmpSite := config.MultiLangSite{
 		Id:           mainSite.Id,
 		RootPath:     mainSite.RootPath,
 		Name:         mainSite.Name,
@@ -97,39 +101,70 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []response.MultiLangS
 
 	multiLangSites = append(multiLangSites, tmpSite)
 	// 继续添加子站点
-	allSites := GetWebsites()
-	for i := range allSites {
-		if allSites[i].ParentId == mainId {
-			if allSites[i].Initialed != true && !all {
-				// 如果不是获取全部，则跳过那些不正确的站点
-				continue
-			}
-			subSite := response.MultiLangSite{
-				Id:           allSites[i].Id,
-				RootPath:     allSites[i].RootPath,
-				Name:         allSites[i].Name,
-				Status:       allSites[i].Initialed,
-				ParentId:     allSites[i].ParentId,
-				LanguageIcon: allSites[i].LanguageIcon,
-				IsCurrent:    w.Id == allSites[i].Id,
-				ErrorMsg:     allSites[i].ErrorMsg,
-			}
-			if allSites[i].Initialed {
-				link = allSites[i].GetUrl("", nil, 0)
-				// 如果是同链接，则是一个跳转链接
-				if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
-					if strings.Contains(link, "?") {
-						link = link + "&lang=" + allSites[i].System.Language
-					} else {
-						link += "?lang=" + allSites[i].System.Language
-					}
+	if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
+		allSites := GetWebsites()
+		for i := range allSites {
+			if allSites[i].ParentId == mainId {
+				if allSites[i].Initialed != true && !all {
+					// 如果不是获取全部，则跳过那些不正确的站点
+					continue
 				}
-				subSite.Link = link
-				subSite.LanguageEmoji = library.GetLanguageIcon(allSites[i].System.Language)
-				subSite.LanguageName = library.GetLanguageName(allSites[i].System.Language)
-				subSite.Language = allSites[i].System.Language
-				subSite.BaseUrl = allSites[i].System.BaseUrl
+				subSite := config.MultiLangSite{
+					Id:           allSites[i].Id,
+					RootPath:     allSites[i].RootPath,
+					Name:         allSites[i].Name,
+					Status:       allSites[i].Initialed,
+					ParentId:     allSites[i].ParentId,
+					LanguageIcon: allSites[i].LanguageIcon,
+					IsCurrent:    w.Id == allSites[i].Id,
+					ErrorMsg:     allSites[i].ErrorMsg,
+				}
+				if allSites[i].Initialed {
+					link = allSites[i].GetUrl("", nil, 0)
+					// 如果是同链接，则是一个跳转链接
+					if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+						if strings.Contains(link, "?") {
+							link = link + "&lang=" + allSites[i].System.Language
+						} else {
+							link += "?lang=" + allSites[i].System.Language
+						}
+					}
+					subSite.Link = link
+					subSite.LanguageEmoji = library.GetLanguageIcon(allSites[i].System.Language)
+					subSite.LanguageName = library.GetLanguageName(allSites[i].System.Language)
+					subSite.Language = allSites[i].System.Language
+					subSite.BaseUrl = allSites[i].System.BaseUrl
+				}
+				multiLangSites = append(multiLangSites, subSite)
 			}
+		}
+	} else {
+		// single 模式
+		for i := range mainSite.MultiLanguage.SubSites {
+			subSite := config.MultiLangSite{
+				Id:           mainSite.MultiLanguage.SubSites[i].Id,
+				RootPath:     mainSite.RootPath,
+				Name:         mainSite.MultiLanguage.SubSites[i].LanguageName,
+				Status:       true,
+				ParentId:     mainId,
+				LanguageIcon: mainSite.MultiLanguage.SubSites[i].LanguageIcon,
+				IsCurrent:    w.Id == mainSite.MultiLanguage.SubSites[i].Id,
+				Language:     mainSite.MultiLanguage.SubSites[i].Language,
+				BaseUrl:      mainSite.MultiLanguage.SubSites[i].BaseUrl,
+			}
+			var link string
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeDomain {
+				link = subSite.BaseUrl + "/"
+			} else if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+				link = mainSite.System.BaseUrl + "/" + subSite.Language + "/"
+			} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+				link += mainSite.GetUrl("", nil, 0) + "?lang=" + subSite.Language
+			}
+			subSite.Link = link
+			subSite.LanguageEmoji = library.GetLanguageIcon(subSite.Language)
+			subSite.LanguageName = library.GetLanguageName(subSite.Language)
+			subSite.Name = subSite.LanguageName
+
 			multiLangSites = append(multiLangSites, subSite)
 		}
 	}
@@ -137,8 +172,8 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []response.MultiLangS
 	return multiLangSites
 }
 
-func (w *Website) GetMultiLangValidSites(mainId uint) []response.MultiLangSite {
-	var sites []response.MultiLangSite
+func (w *Website) GetMultiLangValidSites(mainId uint) []config.MultiLangSite {
+	var sites []config.MultiLangSite
 	values := websites.Values()
 	// 排除所有的主站点
 	// 排除所有的主站点以及其他主站点的子站点
@@ -162,7 +197,7 @@ func (w *Website) GetMultiLangValidSites(mainId uint) []response.MultiLangSite {
 			continue
 		}
 		// 剩下是可用的
-		sites = append(sites, response.MultiLangSite{
+		sites = append(sites, config.MultiLangSite{
 			Id:       values[i].Id,
 			ParentId: values[i].ParentId,
 			RootPath: values[i].RootPath,
@@ -176,21 +211,28 @@ func (w *Website) GetMultiLangValidSites(mainId uint) []response.MultiLangSite {
 	return sites
 }
 
-func (w *Website) RemoveMultiLangSite(siteId uint) error {
-	// 先移除parentId
-	db := GetDefaultDB()
-	err := db.Model(&model.Website{}).Where("id = ?", siteId).Update("parent_id", 0).Error
-	if err != nil {
-		return err
-	}
-	// 修改运行中的状态
-	targetSite := GetWebsite(siteId)
-	if targetSite != nil {
-		// 移除当前语言
-		mainSite := GetWebsite(siteId)
-		delete(mainSite.MultiLanguage.SubSites, targetSite.System.Language)
+func (w *Website) RemoveMultiLangSite(siteId uint, lang string) error {
+	if siteId > 0 {
+		// 先移除parentId
+		db := GetDefaultDB()
+		err := db.Model(&model.Website{}).Where("id = ?", siteId).Update("parent_id", 0).Error
+		if err != nil {
+			return err
+		}
+		// 修改运行中的状态
+		targetSite := GetWebsite(siteId)
+		if targetSite != nil {
+			// 移除当前语言
+			mainSite := GetWebsite(siteId)
+			mainSite.MultiLanguage.RemoveSite(siteId, lang)
 
-		targetSite.ParentId = 0
+			targetSite.ParentId = 0
+		}
+	} else {
+		// 移除语言
+		w.MultiLanguage.RemoveSite(siteId, lang)
+		// 更新setting
+		_ = w.SaveSettingValue(MultiLangSettingKey, w.MultiLanguage)
 	}
 	// todo
 
@@ -229,38 +271,66 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 			}
 		}
 	}
-	// 设置语言
-	targetSite := GetWebsite(req.Id)
-	if targetSite == nil || targetSite.DB == nil {
-		return errors.New(w.Tr("SiteDoesNotExist"))
-	}
-	targetDbSite, err := GetDBWebsiteInfo(req.Id)
-	if err != nil {
-		return err
-	}
-	err = db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumns(map[string]interface{}{
-		"parent_id":     req.ParentId,
-		"language_icon": req.LanguageIcon,
-	}).Error
-	if err != nil {
-		return err
-	}
-	// 如果原来的parentId和当前不一致，则修改sync_time
-	if targetDbSite.ParentId != req.ParentId {
-		// 修改sync_time
-		db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumn("sync_time", 0)
-	}
+	var targetSite *Website
+	if w.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
+		// 设置语言
+		targetSite = GetWebsite(req.Id)
+		if targetSite == nil || targetSite.DB == nil {
+			return errors.New(w.Tr("SiteDoesNotExist"))
+		}
+		targetDbSite, err := GetDBWebsiteInfo(req.Id)
+		if err != nil {
+			return err
+		}
+		err = db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumns(map[string]interface{}{
+			"parent_id":     req.ParentId,
+			"language_icon": req.LanguageIcon,
+		}).Error
+		if err != nil {
+			return err
+		}
+		// 如果原来的parentId和当前不一致，则修改sync_time
+		if targetDbSite.ParentId != req.ParentId {
+			// 修改sync_time
+			db.Model(&model.Website{}).Where("id = ?", req.Id).UpdateColumn("sync_time", 0)
+		}
+		var baseUrl string
+		if w.MultiLanguage.Type == config.MultiLangTypeDirectory {
+			baseUrl = w.System.BaseUrl + "/" + req.Language
+		} else if w.MultiLanguage.Type == config.MultiLangTypeSame {
+			baseUrl = w.System.BaseUrl
+		}
+		targetSite.PluginStorage.StorageUrl = baseUrl
 
-	targetSite.ParentId = req.ParentId
-	targetSite.LanguageIcon = req.LanguageIcon
-	targetSite.System.Language = req.Language
-	err = targetSite.SaveSettingValue(SystemSettingKey, targetSite.System)
-	if err != nil {
-		return err
+		targetSite.ParentId = req.ParentId
+		targetSite.LanguageIcon = req.LanguageIcon
+		targetSite.System.Language = req.Language
+		err = targetSite.SaveSettingValue(SystemSettingKey, targetSite.System)
+		if err != nil {
+			return err
+		}
+	} else {
+		targetSite = &Website{
+			Id:           req.Id,
+			ParentId:     req.ParentId,
+			LanguageIcon: req.LanguageIcon,
+			System: &config.SystemConfig{
+				Language: req.Language,
+				BaseUrl:  req.BaseUrl,
+			},
+		}
 	}
 	// 加入到语言列表
 	mainSite := GetWebsite(req.ParentId)
-	mainSite.MultiLanguage.SubSites[targetSite.System.Language] = targetSite.Id
+	langSite := config.MultiLangSite{
+		Id:           targetSite.Id,
+		Language:     targetSite.System.Language,
+		BaseUrl:      targetSite.System.BaseUrl,
+		LanguageIcon: targetSite.LanguageIcon,
+	}
+	mainSite.MultiLanguage.SaveSite(langSite)
+	// 更新setting
+	_ = w.SaveSettingValue(MultiLangSettingKey, mainSite.MultiLanguage)
 
 	return nil
 }
@@ -997,4 +1067,275 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 	log.Println("finished synced content")
 
 	return nil
+}
+
+var uriLangLocks = sync.Map{}
+
+// GetOrSetMultiLangCache siteType = single 模式下，翻译缓存的页面内容
+// 缓存路径规则： /cache/multiLang/{lang}/{uri_hash}
+// 每个翻译页面都是原子操作，单次只允许一个线程进行翻译
+// 如果获取缓存时没有缓存，则进行翻译，并写入缓存，再返回
+// 如果翻译失败，则回退到原始内容
+// 存储的第一行，为文件的uri。第二行开始为内容，因为文件名不是真实的uri
+func (w *Website) GetOrSetMultiLangCache(uri string, lang string) (string, error) {
+	uriHash := library.Md5(uri)
+	cachePath := w.CachePath + "multiLang/" + lang + "/" + uriHash
+	lock, _ := uriLangLocks.LoadOrStore(uriHash, &sync.Mutex{})
+	mutex := lock.(*sync.Mutex)
+	// 加锁
+	mutex.Lock()
+	defer mutex.Unlock()
+	defer uriLangLocks.Delete(uriHash)
+
+	// 先检查缓存文件是否存在，如果存在，直接返回
+	if _, err := os.Stat(cachePath); err == nil {
+		// 读取缓存文件
+		buf, err := os.ReadFile(cachePath)
+		if err == nil {
+			// 删除第一行的内容
+			// 找到第一个\n的位置
+			pos := bytes.Index(buf, []byte("\n"))
+			return string(buf[pos+1:]), nil
+		}
+	}
+	// 如果不存在，则先获取原始内容，并进行翻译
+	buf, err := w.GetHtmlDataByLocal(uri, false)
+	if err != nil {
+		return "", err
+	}
+	req := &AnqiTranslateHtmlRequest{
+		Uri:         uri,
+		Html:        string(buf),
+		Language:    w.System.Language,
+		ToLanguage:  lang,
+		IgnoreClass: []string{"languages"},
+		IgnoreId:    []string{"languages"},
+	}
+	result, err := w.AnqiTranslateHtml(req)
+	if err != nil {
+		// 如果翻译失败，则回退到原始内容
+		log.Println("translate html failed:", err)
+		return string(buf), err
+	}
+	// 翻译完毕，修改lang
+	re, _ := regexp.Compile(`(?i)<html.*?>`)
+	result = re.ReplaceAllString(result, fmt.Sprintf(`<html lang="%s">`, req.ToLanguage))
+	// 替换URL
+	langSite := w.MultiLanguage.GetSite(lang)
+	if langSite != nil {
+		// rel="alternate" 和 class="languages" 部分不替换,为了防止被替换，先把他们替换成其它
+		var replacedMap = map[string]string{}
+		idxNum := 0
+		re0, _ := regexp.Compile(`(?i)<link\s+[^>]*?\bhref="[^"]+"[^>]*>`)
+		result = re0.ReplaceAllStringFunc(result, func(s string) string {
+			// 如果是 rel="alternate" 和 class="languages" 部分，则跳过
+			if strings.Contains(s, "rel=\"alternate\"") {
+				idxNum++
+				numText := fmt.Sprintf("$(num%d)", idxNum)
+				replacedMap[numText] = s
+				return numText
+			}
+			return s
+		})
+		// 替换 class="languages"
+		locator := library.NewDivLocator("div", "languages")
+		langCode := locator.FindDiv(result)
+		if langCode != "" {
+			idxNum++
+			numText := fmt.Sprintf("$(num%d)", idxNum)
+			replacedMap[numText] = langCode
+			result = strings.Replace(result, langCode, numText, 1)
+		}
+		if w.MultiLanguage.Type == config.MultiLangTypeDomain {
+			// 替换域名
+			// rel="alternate" 和 class="languages" 部分不替换
+			result = strings.ReplaceAll(result, w.System.BaseUrl, langSite.BaseUrl)
+		} else if w.MultiLanguage.Type == config.MultiLangTypeDirectory {
+			// 替换目录
+			// rel="alternate" 和 class="languages" 部分不替换
+			// 查找所有的链接
+			re2, _ := regexp.Compile(w.System.BaseUrl + "[^\"]{1,10}")
+			result = re2.ReplaceAllStringFunc(result, func(s string) string {
+				if strings.HasPrefix(s, w.System.BaseUrl+"/"+w.System.Language) {
+					s = strings.Replace(s, w.System.BaseUrl+"/"+w.System.Language, w.System.BaseUrl+"/"+langSite.Language, 1)
+				} else {
+					s = strings.ReplaceAll(s, w.System.BaseUrl, w.System.BaseUrl+"/"+langSite.Language)
+				}
+				return s
+			})
+		}
+		// 最后替换回来
+		for k, v := range replacedMap {
+			result = strings.Replace(result, k, v, 1)
+		}
+	}
+
+	// 对内容进行缓存
+	// 文件夹可能不存在，需要先判断创建
+	err = os.MkdirAll(filepath.Dir(cachePath), 0755)
+	if err != nil {
+		log.Println("create html cache dir failed:", err)
+		return result, err
+	}
+	// 写入缓存文件
+	// 第一行是uri，第二行开始是内容
+	err = os.WriteFile(cachePath, []byte(uri+"\n"+result), 0644)
+	if err != nil {
+		log.Println("write html cache file failed:", err)
+	}
+
+	return result, nil
+}
+
+func (w *Website) DeleteMultiLangCache(uris []string) {
+	// 获取所有的语言
+	if w.MultiLanguage.Open && w.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+		// 这种情况下才需要处理
+		for i := range w.MultiLanguage.SubSites {
+			lang := w.MultiLanguage.SubSites[i].Language
+			for _, uri := range uris {
+				uriHash := library.Md5(uri)
+				cachePath := w.CachePath + "multiLang/" + lang + "/" + uriHash
+				// 删除缓存文件
+				_ = os.Remove(cachePath)
+			}
+		}
+	}
+}
+
+func (w *Website) DeleteMultiLangCacheAll() {
+	// 获取所有的语言
+	if w.MultiLanguage.Open && w.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
+		// 这种情况下才需要处理
+		for i := range w.MultiLanguage.SubSites {
+			lang := w.MultiLanguage.SubSites[i].Language
+			cachePath := w.CachePath + "multiLang/" + lang
+			// 删除缓存文件
+			_ = os.RemoveAll(cachePath)
+		}
+	}
+}
+
+func (w *Website) GetTranslateHtmlLogs(page, pageSize int) ([]*model.TranslateHtmlLog, int64) {
+	var total int64
+	var logs []*model.TranslateHtmlLog
+
+	tx := w.DB.Model(&model.TranslateHtmlLog{})
+	offset := 0
+	if page > 0 {
+		offset = (page - 1) * pageSize
+	}
+	tx.Count(&total).Order("id desc").Limit(pageSize).Offset(offset).Find(&logs)
+
+	return logs, total
+}
+
+type TranslateHtmlCacheFile struct {
+	Uri     string `json:"uri"`
+	Lang    string `json:"lang"`
+	LastMod int64  `json:"last_mod"`
+	Html    string `json:"html"`
+}
+
+// GetTranslateHtmlCaches 获取所有已缓存的翻译文件
+func (w *Website) GetTranslateHtmlCaches(lang string, page, pageSize int) ([]*TranslateHtmlCacheFile, int64) {
+	cachePath := w.CachePath + "multiLang/"
+	// 读取已缓存的语言
+	var caches []*TranslateHtmlCacheFile
+	var total int64
+
+	// 获取所有语言目录
+	langDirs, err := os.ReadDir(cachePath)
+	if err != nil {
+		return caches, total
+	}
+	// 计算总文件数
+	for _, langDir := range langDirs {
+		if !langDir.IsDir() {
+			continue
+		}
+		if lang != "" && langDir.Name() != lang {
+			// 过滤特定语言
+			continue
+		}
+		langPath := filepath.Join(cachePath, langDir.Name())
+		files, err := os.ReadDir(langPath)
+		if err != nil {
+			continue
+		}
+		total += int64(len(files))
+	}
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start >= int(total) {
+		return caches, total
+	}
+	if end > int(total) {
+		end = int(total)
+	}
+
+	// 遍历文件直到找到需要的范围
+	var current int
+outer:
+	for _, langDir := range langDirs {
+		if !langDir.IsDir() {
+			continue
+		}
+		langName := langDir.Name()
+		if lang != "" && langName != lang {
+			// 过滤特定语言
+			continue
+		}
+		langPath := filepath.Join(cachePath, langName)
+
+		files, err := os.ReadDir(langPath)
+		if err != nil {
+			continue
+		}
+
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+			// 如果当前文件不在需要的范围内，跳过
+			if current < start {
+				current++
+				continue
+			}
+			if current >= end {
+				break outer
+			}
+
+			filePath := filepath.Join(langPath, file.Name())
+			fileInfo, err := os.Stat(filePath)
+			if err != nil {
+				current++
+				continue
+			}
+
+			// 读取文件第一行
+			file, err := os.Open(filePath)
+			if err != nil {
+				current++
+				continue
+			}
+			scanner := bufio.NewScanner(file)
+			var firstLine string
+			if scanner.Scan() {
+				firstLine = scanner.Text()
+			}
+			file.Close()
+
+			cache := &TranslateHtmlCacheFile{
+				Uri:     firstLine,
+				Lang:    langName,
+				LastMod: fileInfo.ModTime().Unix(),
+				Html:    "",
+			}
+			caches = append(caches, cache)
+			current++
+		}
+	}
+
+	return caches, total
 }

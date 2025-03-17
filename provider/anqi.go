@@ -7,15 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/parnurzeal/gorequest"
-	"gorm.io/gorm/clause"
 	"image"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"math/rand"
 	"mime/multipart"
@@ -29,6 +22,15 @@ import (
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
+
+	"github.com/parnurzeal/gorequest"
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 const AnqiApi = "https://auth.anqicms.com/auth"
@@ -134,6 +136,32 @@ type AnqiExtractResult struct {
 	Code int      `json:"code"`
 	Msg  string   `json:"msg"`
 	Data []string `json:"data"`
+}
+
+type AnqiTranslateHtmlRequest struct {
+	Uri         string   `json:"uri"`
+	Html        string   `json:"html"`
+	Language    string   `json:"language"`    // 源语言，如果不传，则会自动推断
+	ToLanguage  string   `json:"to_language"` // 目标语言，必传
+	IgnoreClass []string `json:"ignore_class"`
+	IgnoreId    []string `json:"ignore_id"`
+}
+
+type AnqiTranslateHtmlResult struct {
+	Uri        string `json:"uri"` // 这个一般不用传
+	Html       string `json:"html"`
+	Language   string `json:"language"`
+	ToLanguage string `json:"to_language"`
+	Status     int    `json:"status"`
+	Count      int64  `json:"count"`     // 总量
+	UseCount   int64  `json:"use_count"` // 用量
+	Remark     string `json:"remark"`
+}
+
+type AnqiTranslateHtmlResponse struct {
+	Code int                     `json:"code"`
+	Msg  string                  `json:"msg"`
+	Data AnqiTranslateHtmlResult `json:"data"`
 }
 
 // AnqiLogin
@@ -1065,6 +1093,70 @@ func QueryTranslateLog(result *AnqiAiResult) *model.TranslateLog {
 	}
 
 	return &logData
+}
+
+func AddTranslateHtmlLog(result *AnqiTranslateHtmlResult) {
+	// translate log 只记录到主站点的库里
+	db := GetDefaultDB()
+
+	logData := model.TranslateHtmlLog{
+		Uri:        result.Uri,
+		Language:   result.Language,
+		ToLanguage: result.ToLanguage,
+		Count:      result.Count,
+		UseCount:   result.UseCount,
+		Status:     result.Status,
+		Remark:     result.Remark,
+	}
+
+	db.Model(&model.TranslateHtmlLog{}).Create(&logData)
+}
+
+// AnqiTranslateHtml 多语言html翻译，只能使用官方接口，从原站语言翻译成目标语言
+func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content string, err error) {
+	if req.Language == "" {
+		req.Language = w.System.Language
+	}
+	if req.ToLanguage == "" {
+		return "", errors.New(w.Tr("PleaseSelectTargetLanguage"))
+	}
+
+	var res AnqiTranslateHtmlResponse
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate/html").Send(req).EndStruct(&res)
+	if len(errs) > 0 {
+		msg := errs[0].Error()
+		if utf8.RuneCountInString(msg) > 190 {
+			msg = string([]rune(msg)[:190])
+		}
+		AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+			Uri:        req.Uri,
+			Html:       "",
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Remark:     msg,
+		})
+		return "", errs[0]
+	}
+	if res.Code != 0 {
+		msg := res.Msg
+		if utf8.RuneCountInString(msg) > 190 {
+			msg = string([]rune(msg)[:190])
+		}
+		AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+			Uri:        req.Uri,
+			Html:       "",
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Remark:     msg,
+		})
+		return "", errors.New(res.Msg)
+	}
+	// 是否需要记录翻译日志？要的
+	res.Data.Uri = req.Uri // 因为返回的没有这个，因此这里要补上
+	res.Data.Status = 1
+	AddTranslateHtmlLog(&res.Data)
+
+	return res.Data.Html, nil
 }
 
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {

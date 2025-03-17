@@ -20,7 +20,7 @@ func Install(ctx iris.Context) {
 	defaultSite := provider.CurrentSite(ctx)
 
 	viewTpl := `<!DOCTYPE html>
-<html lang="zh-cn">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">

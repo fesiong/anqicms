@@ -3,8 +3,9 @@ package middleware
 import (
 	"context"
 	"errors"
-	"github.com/kataras/iris/v12"
 	"time"
+
+	"github.com/kataras/iris/v12"
 )
 
 func HandlerTimeout(ctx iris.Context) {

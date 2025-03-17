@@ -2,24 +2,25 @@ package view
 
 import (
 	"bytes"
-	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
-	"github.com/kataras/iris/v12/i18n"
-	view2 "github.com/kataras/iris/v12/view"
-	"golang.org/x/net/html"
 	"hash/crc32"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"os"
 	stdPath "path"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
+	"github.com/kataras/iris/v12/i18n"
+	view2 "github.com/kataras/iris/v12/view"
+	"golang.org/x/net/html"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 
 	"github.com/fatih/structs"
 	"github.com/flosch/pongo2/v6"
@@ -367,10 +368,22 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		}
 	}
 	ctx := w.(iris.Context)
+	// 检查是否已经超时
+	if err := ctx.Request().Context().Err(); err != nil {
+		return err
+	}
 	currentSite := provider.CurrentSite(ctx)
 	if tmpl := s.fromCache(currentSite.Id, filename); tmpl != nil {
+		// 在执行模板渲染前再次检查超时状态
+		if err := ctx.Request().Context().Err(); err != nil {
+			return err
+		}
 		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
 		if err != nil {
+			return err
+		}
+		// 再次检查是否超时
+		if err := ctx.Request().Context().Err(); err != nil {
 			return err
 		}
 		// 如果启用了防采集
