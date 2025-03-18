@@ -31,6 +31,8 @@ type PluginComment struct {
 	ParentId  uint   `json:"parent_id"`
 	ToUid     uint   `json:"to_uid"`
 	Status    uint   `json:"status"`
+	CaptchaId string `json:"captcha_id"`
+	Captcha   string `json:"captcha"`
 
 	// 批量更新
 	Ids []uint `json:"ids"`

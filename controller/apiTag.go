@@ -1367,7 +1367,12 @@ func ApiCommentPublish(ctx iris.Context) {
 		})
 		return
 	}
-	if ok := SafeVerify(ctx, nil, "json", "comment"); !ok {
+	var req2 = map[string]string{
+		"content":    req.Content,
+		"captcha_id": req.CaptchaId,
+		"captcha":    req.Captcha,
+	}
+	if ok := SafeVerify(ctx, req2, "json", "comment"); !ok {
 		return
 	}
 
