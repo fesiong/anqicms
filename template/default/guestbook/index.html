@@ -72,6 +72,24 @@
                         {% endif %}
                         {% endfor %}
                         {% endguestbook %}
+                        <div style="display: flex; clear: both">
+            <input type="hidden" name="captcha_id" id="captcha_id">
+            <input type="text" name="captcha" required placeholder="请填写验证码" class="layui-input" style="flex: 1">
+            <img src="" id="get-captcha" style="width: 150px;height: 56px;cursor: pointer;" />
+            <script>
+              document.getElementById('get-captcha').addEventListener("click", function (e) {
+                fetch('/api/captcha')
+                        .then(response => {
+                          return response.json()
+                        })
+                        .then(res => {
+                          document.getElementById('captcha_id').setAttribute("value", res.data.captcha_id)
+                          document.getElementById('get-captcha').setAttribute("src", res.data.captcha)
+                        }).catch(err =>{console.log(err)})
+              });
+              document.getElementById('get-captcha').click();
+            </script>
+          </div>
                         <div class="form-control">
                             <button class="form-btn">{% tr 'submit' %}</button>
                         </div>

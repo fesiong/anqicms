@@ -916,7 +916,7 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	if contentCaptcha {
 		captchaId := ctx.PostValueTrim("captcha_id")
 		captchaValue := ctx.PostValueTrim("captcha")
-		if req != nil {
+		if req != nil && (req["captcha_id"] != "" || req["captcha"] != "") {
 			captchaId = req["captcha_id"]
 			captchaValue = req["captcha"]
 		}
@@ -946,7 +946,7 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 	}
 	// 内容长度现在 ContentLimit
 	content := ctx.PostValueTrim("content")
-	if req != nil {
+	if req != nil && req["content"] != "" {
 		content = req["content"]
 	}
 	if currentSite.Safe.ContentLimit > 0 {
@@ -983,8 +983,8 @@ func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from
 			}
 			if req != nil {
 				// 对于req的所有内容都进行判断
-				for _, rv := range req {
-					if len(rv) == 0 {
+				for k, rv := range req {
+					if k == "captcha_id" || k == "captcha" || len(rv) == 0 {
 						continue
 					}
 					if strings.Contains(rv, v) {
