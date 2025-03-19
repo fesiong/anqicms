@@ -78,8 +78,8 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateStorageConfiguration"))
-
-	currentSite.InitBucket()
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.InitBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

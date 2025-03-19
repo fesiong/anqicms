@@ -160,8 +160,39 @@ func (w *Website) LoadIndexSetting(value string) {
 }
 
 func (w *Website) LoadBannerSetting(value string) {
+	w.Banner = &config.BannerConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Banner)
+		err := json.Unmarshal([]byte(value), &w.Banner)
+		if err != nil {
+			// 旧版的，做一下兼容
+			var banners []config.BannerItem
+			if err = json.Unmarshal([]byte(value), &banners); err == nil {
+				for i := range banners {
+					if banners[i].Type == "" {
+						banners[i].Type = "default"
+					}
+				}
+				var mapBanners = map[string][]config.BannerItem{}
+				for _, v := range banners {
+					mapBanners[v.Type] = append(mapBanners[v.Type], v)
+				}
+				for i := range banners {
+					if item, ok := mapBanners[banners[i].Type]; ok {
+						banner := config.Banner{
+							Type: banners[i].Type,
+							List: item,
+						}
+						w.Banner.Banners = append(w.Banner.Banners, banner)
+						delete(mapBanners, banners[i].Type)
+					}
+				}
+			}
+		}
+	}
+	if len(w.Banner.Banners) == 0 {
+		w.Banner.Banners = append(w.Banner.Banners, config.Banner{
+			Type: "default",
+		})
 	}
 }
 

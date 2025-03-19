@@ -28,8 +28,9 @@ func PluginSaveJsonLdConfig(ctx iris.Context) {
 		return
 	}
 
-	currentSite.PluginJsonLd = &req
-	err := currentSite.SaveSettingValue(provider.JsonLdSettingKey, currentSite.PluginJsonLd)
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.PluginJsonLd = &req
+	err := currentSite.SaveSettingValue(provider.JsonLdSettingKey, w2.PluginJsonLd)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

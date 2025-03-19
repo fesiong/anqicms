@@ -569,9 +569,11 @@ func FindPasswordChooseWay(ctx iris.Context) {
 	}
 
 	if currentSite.FindPasswordInfo == nil {
-		currentSite.FindPasswordInfo = &response.FindPasswordInfo{
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.FindPasswordInfo = &response.FindPasswordInfo{
 			Token: library.Md5(currentSite.TokenSecret + fmt.Sprintf("%d", time.Now().UnixNano())),
 		}
+		currentSite.FindPasswordInfo = w2.FindPasswordInfo
 	} else {
 		currentSite.FindPasswordInfo.Timer.Stop()
 	}

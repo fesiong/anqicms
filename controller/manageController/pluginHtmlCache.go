@@ -85,8 +85,8 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateCacheConfiguration"))
-
-	currentSite.InitCacheBucket()
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.InitCacheBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -104,9 +104,9 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 		})
 		return
 	}
-
+	w2 := provider.GetWebsite(currentSite.Id)
 	//开始生成
-	go currentSite.BuildHtmlCache(ctx)
+	go w2.BuildHtmlCache(ctx)
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateCacheManually"))
 
@@ -119,10 +119,11 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildIndexCache()
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
-		_ = currentSite.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildIndexCache()
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
+		_ = w2.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateHomepageCacheManually"))
 
@@ -135,12 +136,13 @@ func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildModuleCache(ctx)
-		currentSite.BuildCategoryCache(ctx)
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildModuleCache(ctx)
+		w2.BuildCategoryCache(ctx)
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
 		// 更新的html
-		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+		_ = w2.ReadAndSendLocalFiles(cachePath)
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateColumnCacheManually"))
 
@@ -153,11 +155,12 @@ func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildArchiveCache()
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildArchiveCache()
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
 		// 更新的html
-		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+		_ = w2.ReadAndSendLocalFiles(cachePath)
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateDocumentCacheManually"))
 
@@ -170,12 +173,13 @@ func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 func PluginHtmlCacheBuildTag(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildTagIndexCache(ctx)
-		currentSite.BuildTagCache(ctx)
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildTagIndexCache(ctx)
+		w2.BuildTagCache(ctx)
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
 		// 更新的html
-		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+		_ = w2.ReadAndSendLocalFiles(cachePath)
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateTagCacheManually"))
 
@@ -192,7 +196,8 @@ func PluginHtmlCacheBuildStatus(ctx iris.Context) {
 	if status != nil && status.FinishedTime > 0 && !status.Removing {
 		status.Removing = true
 		time.AfterFunc(30*time.Second, func() {
-			currentSite.HtmlCacheStatus = nil
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.HtmlCacheStatus = nil
 		})
 	}
 
@@ -282,6 +287,7 @@ func PluginHtmlCachePush(ctx iris.Context) {
 		})
 		return
 	}
+	w2 := provider.GetWebsite(currentSite.Id)
 	// 开始执行推送
 	if len(req.Paths) > 0 {
 		// 逐个进行
@@ -296,15 +302,15 @@ func PluginHtmlCachePush(ctx iris.Context) {
 				cachePath := currentSite.CachePath + "pc"
 				remotePath = strings.TrimPrefix(fullName, cachePath)
 			}
-			_ = currentSite.SyncHtmlCacheToStorage(fullName, remotePath)
+			_ = w2.SyncHtmlCacheToStorage(fullName, remotePath)
 		}
 	} else {
 		go func() {
 			if req.All {
 				// 全量推送，重置所有推送数据
-				currentSite.CleanHtmlPushLog()
+				w2.CleanHtmlPushLog()
 			}
-			_ = currentSite.SyncHtmlCacheToStorage("", "")
+			_ = w2.SyncHtmlCacheToStorage("", "")
 		}()
 	}
 
@@ -323,7 +329,8 @@ func PluginHtmlCachePushStatus(ctx iris.Context) {
 	if status != nil && status.FinishedTime > 0 && !status.Removing {
 		status.Removing = true
 		time.AfterFunc(30*time.Second, func() {
-			currentSite.HtmlCachePushStatus = nil
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.HtmlCachePushStatus = nil
 		})
 	}
 

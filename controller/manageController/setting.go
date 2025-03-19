@@ -360,7 +360,8 @@ func SettingCacheForm(ctx iris.Context) {
 		currentSite.DB.Save(&setting)
 		if oldCacheType != req.CacheType {
 			// 重新初始化缓存
-			currentSite.InitCache()
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.InitCache()
 		}
 		currentSite.AddAdminLog(ctx, ctx.Tr("ChangeCacheType"))
 	} else {
@@ -521,47 +522,11 @@ func DeleteSystemFavicon(ctx iris.Context) {
 
 func SettingBanner(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	type Banner struct {
-		Type string              `json:"type"`
-		List []config.BannerItem `json:"list"`
-	}
-	var banners []*Banner
-	var mapBanners = map[string][]config.BannerItem{}
-
-	for i := range currentSite.Banner {
-		if currentSite.Banner[i].Type == "" {
-			currentSite.Banner[i].Type = "default"
-		}
-	}
-	for _, v := range currentSite.Banner {
-		if !strings.HasPrefix(v.Logo, "http") && !strings.HasPrefix(v.Logo, "//") {
-			v.Logo = currentSite.PluginStorage.StorageUrl + v.Logo
-		}
-		if _, ok := mapBanners[v.Type]; !ok {
-			mapBanners[v.Type] = []config.BannerItem{}
-		}
-		mapBanners[v.Type] = append(mapBanners[v.Type], v)
-	}
-	for i := range currentSite.Banner {
-		if item, ok := mapBanners[currentSite.Banner[i].Type]; ok {
-			banner := &Banner{
-				Type: currentSite.Banner[i].Type,
-				List: item,
-			}
-			banners = append(banners, banner)
-			delete(mapBanners, currentSite.Banner[i].Type)
-		}
-	}
-	if len(banners) == 0 {
-		banners = append(banners, &Banner{
-			Type: "default",
-		})
-	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": banners,
+		"data": currentSite.Banner.Banners,
 	})
 }
 
@@ -583,9 +548,17 @@ func DeleteSettingBanner(ctx iris.Context) {
 		})
 		return
 	}
-	for i := range currentSite.Banner {
-		if currentSite.Banner[i].Id == req.Id {
-			currentSite.Banner = append(currentSite.Banner[:i], currentSite.Banner[i+1:]...)
+	for i := range currentSite.Banner.Banners {
+		if req.Type == currentSite.Banner.Banners[i].Type {
+			for j := range currentSite.Banner.Banners[i].List {
+				if currentSite.Banner.Banners[i].List[j].Id == req.Id {
+					currentSite.Banner.Banners[i].List = append(currentSite.Banner.Banners[i].List[:j], currentSite.Banner.Banners[i].List[j+1:]...)
+					if len(currentSite.Banner.Banners[i].List) == 0 && req.Type != "default" {
+						currentSite.Banner.Banners = append(currentSite.Banner.Banners[:i], currentSite.Banner.Banners[i+1:]...)
+					}
+					break
+				}
+			}
 			break
 		}
 	}
@@ -628,16 +601,38 @@ func SettingBannerForm(ctx iris.Context) {
 	}
 	req.Logo = strings.TrimPrefix(req.Logo, currentSite.PluginStorage.StorageUrl)
 	if req.Id == 0 {
-		if len(currentSite.Banner) > 0 {
-			req.Id = currentSite.Banner[len(currentSite.Banner)-1].Id + 1
-		} else {
-			req.Id = 1
+		var exist bool
+		for i := range currentSite.Banner.Banners {
+			if req.Type == currentSite.Banner.Banners[i].Type {
+				exist = true
+				if len(currentSite.Banner.Banners[i].List) > 0 {
+					req.Id = currentSite.Banner.Banners[i].List[len(currentSite.Banner.Banners[i].List)-1].Id + 1
+				} else {
+					req.Id = 1
+				}
+				currentSite.Banner.Banners[i].List = append(currentSite.Banner.Banners[i].List, req)
+				break
+			}
+
 		}
-		currentSite.Banner = append(currentSite.Banner, req)
+		if !exist {
+			req.Id = 1
+			currentSite.Banner.Banners = append(currentSite.Banner.Banners, config.Banner{
+				Type: req.Type,
+				List: []config.BannerItem{
+					req,
+				},
+			})
+		}
 	} else {
-		for i := range currentSite.Banner {
-			if currentSite.Banner[i].Id == req.Id {
-				currentSite.Banner[i] = req
+		for i := range currentSite.Banner.Banners {
+			if req.Type == currentSite.Banner.Banners[i].Type {
+				for j := range currentSite.Banner.Banners[i].List {
+					if currentSite.Banner.Banners[i].List[j].Id == req.Id {
+						currentSite.Banner.Banners[i].List[j] = req
+						break
+					}
+				}
 				break
 			}
 		}

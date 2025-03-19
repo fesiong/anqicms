@@ -49,11 +49,12 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateFullTextIndexConfiguration"))
+	w2 := provider.GetWebsite(currentSite.Id)
 	if req.Open {
-		currentSite.CloseFulltext()
-		go currentSite.InitFulltext(oldEngine != req.Engine)
+		w2.CloseFulltext()
+		go w2.InitFulltext(oldEngine != req.Engine)
 	} else {
-		currentSite.CloseFulltext()
+		w2.CloseFulltext()
 	}
 
 	ctx.JSON(iris.Map{
@@ -71,9 +72,9 @@ func PluginFulltextRebuild(ctx iris.Context) {
 		})
 		return
 	}
-
-	currentSite.CloseFulltext()
-	go currentSite.InitFulltext(true)
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.CloseFulltext()
+	go w2.InitFulltext(true)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

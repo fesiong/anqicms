@@ -40,7 +40,8 @@ func PluginSaveLimiterSetting(ctx iris.Context) {
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateLimiterConfiguration"))
 	// 更新limiter
-	currentSite.InitLimiter()
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.InitLimiter()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

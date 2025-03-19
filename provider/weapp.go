@@ -27,6 +27,8 @@ func (w *Website) GetWeappClient(focus bool) *weapp.Client {
 			w.PluginWeapp.AppSecret,
 			weapp.WithHttpClient(httpCli),
 		)
+		w2 := GetWebsite(w.Id)
+		w2.weappClient = w.weappClient
 	}
 
 	return w.weappClient
