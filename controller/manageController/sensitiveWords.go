@@ -30,8 +30,10 @@ func SettingSensitiveWordsForm(ctx iris.Context) {
 	}
 
 	currentSite.SensitiveWords = req
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.SensitiveWords = req
 
-	err := currentSite.SaveSettingValue(provider.SensitiveWordsKey, currentSite.SensitiveWords)
+	err := currentSite.SaveSettingValue(provider.SensitiveWordsKey, w2.SensitiveWords)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

@@ -1287,17 +1287,15 @@ func ApiTagList(ctx iris.Context) {
 func ApiBannerList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	bannerType := ctx.URLParamDefault("type", "default")
-	tmpList := currentSite.Banner
-	var bannerList = make([]*config.BannerItem, 0, len(tmpList))
-	for i := range tmpList {
-		if tmpList[i].Type == "" {
-			tmpList[i].Type = "default"
-		}
-		if tmpList[i].Type == bannerType {
-			if !strings.HasPrefix(tmpList[i].Logo, "http") && !strings.HasPrefix(tmpList[i].Logo, "//") {
-				tmpList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(tmpList[i].Logo, "/")
+	var bannerList = make([]*config.BannerItem, 0, 10)
+	for _, tmpList := range currentSite.Banner.Banners {
+		if tmpList.Type == bannerType {
+			for _, banner := range tmpList.List {
+				if !strings.HasPrefix(banner.Logo, "http") && !strings.HasPrefix(banner.Logo, "//") {
+					banner.Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(banner.Logo, "/")
+				}
+				bannerList = append(bannerList, &banner)
 			}
-			bannerList = append(bannerList, &tmpList[i])
 		}
 	}
 

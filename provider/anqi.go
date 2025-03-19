@@ -1016,6 +1016,8 @@ func (w *Website) AnqiSyncSensitiveWords() error {
 
 	if len(result.Data) > 0 {
 		w.SensitiveWords = result.Data
+		w2 := websites.MustGet(w.Id)
+		w2.SensitiveWords = result.Data
 		w.SaveSettingValue(SensitiveWordsKey, w.SensitiveWords)
 	}
 

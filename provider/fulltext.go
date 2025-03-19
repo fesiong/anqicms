@@ -51,6 +51,10 @@ func (w *Website) InitFulltext(focus bool) {
 		w.searcher, err = fulltext.NewWukongService(w.PluginFulltext, indexName)
 		w.PluginFulltext.Initialed = false
 	}
+	//由于指针的原因，因此需要将它赋值给原始对象
+	w2 := websites.MustGet(w.Id)
+	w2.PluginFulltext = w.PluginFulltext
+	w2.searcher = w.searcher
 	log.Println("fulltext init", err)
 	if err != nil {
 		w.fulltextStatus.Status = -1
@@ -140,12 +144,13 @@ func (w *Website) InitFulltext(focus bool) {
 
 func (w *Website) CloseFulltext() {
 	// 防止出错
-	w.fulltextStatus = &FulltextStatus{}
-	if w.searcher == nil {
+	w2 := GetWebsite(w.Id)
+	w2.fulltextStatus = &FulltextStatus{}
+	if w2.searcher == nil {
 		return
 	}
-	w.searcher.Close()
-	w.searcher = nil
+	w2.searcher.Close()
+	w2.searcher = nil
 }
 
 func (w *Website) FlushIndex() {

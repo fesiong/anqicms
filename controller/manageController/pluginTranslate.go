@@ -29,8 +29,9 @@ func PluginSaveTranslateConfig(ctx iris.Context) {
 		return
 	}
 
-	currentSite.PluginTranslate = &req
-	err := currentSite.SaveSettingValue(provider.TranslateSettingKey, currentSite.PluginTranslate)
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.PluginTranslate = &req
+	err := currentSite.SaveSettingValue(provider.TranslateSettingKey, w2.PluginTranslate)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

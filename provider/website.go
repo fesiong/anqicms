@@ -59,7 +59,7 @@ type Website struct {
 	Index   *config.IndexConfig
 	Contact *config.ContactConfig
 	Safe    *config.SafeConfig
-	Banner  config.BannerConfig
+	Banner  *config.BannerConfig
 	//plugin
 	PluginPush         *config.PluginPushConfig
 	PluginSitemap      *config.PluginSitemapConfig

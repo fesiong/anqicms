@@ -104,7 +104,14 @@ type BannerItem struct {
 	Type        string `json:"type"` // 增加类型
 }
 
-type BannerConfig []BannerItem
+type Banner struct {
+	Type string       `json:"type"`
+	List []BannerItem `json:"list"`
+}
+
+type BannerConfig struct {
+	Banners []Banner `json:"banner"`
+}
 
 type CacheConfig struct {
 	CacheType string `json:"cache_type"`

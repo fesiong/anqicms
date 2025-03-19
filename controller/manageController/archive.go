@@ -263,10 +263,11 @@ func QuickImportArchive(ctx iris.Context) {
 		return
 	}
 
+	w2 := provider.GetWebsite(currentSite.Id)
 	// 增加支持分片上传
 	if req.Chunks > 0 {
 		// 使用了分片上传
-		tmpFile, err := currentSite.UploadByChunks(file, req.Md5, req.Chunk, req.Chunks)
+		tmpFile, err := w2.UploadByChunks(file, req.Md5, req.Chunk, req.Chunks)
 
 		if err != nil {
 			ctx.JSON(iris.Map{
@@ -300,7 +301,7 @@ func QuickImportArchive(ctx iris.Context) {
 		tmpFile.Seek(0, 0)
 		req.Size = stat.Size()
 
-		quickImport, err := currentSite.NewQuickImportArchive(&req)
+		quickImport, err := w2.NewQuickImportArchive(&req)
 		if err != nil {
 			func() {
 				tmpName := tmpFile.Name()
@@ -326,7 +327,7 @@ func QuickImportArchive(ctx iris.Context) {
 		req.FileName = info.Filename
 		req.Size = info.Size
 
-		quickImport, err := currentSite.NewQuickImportArchive(&req)
+		quickImport, err := w2.NewQuickImportArchive(&req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
