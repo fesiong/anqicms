@@ -1325,6 +1325,10 @@ func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string
 		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		if len(urlToken) > 100 {
 			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
 		if id > 0 {
 			// 判断archive
@@ -1346,8 +1350,12 @@ func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string
 	if newToken == false {
 		urlToken = strings.ToLower(library.ParseUrlToken(urlToken))
 		// 防止超出长度
-		if len(urlToken) > 150 {
-			urlToken = urlToken[:150]
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
 		index := 0
 		for {

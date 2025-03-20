@@ -3,9 +3,7 @@ package model
 import (
 	"github.com/lib/pq"
 	"gorm.io/gorm"
-	"kandaoni.com/anqicms/library"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -78,9 +76,6 @@ type ArchiveDraft struct {
 func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
 	if a.Id == 0 {
 		a.Id = GetNextArchiveId(tx, false)
-		if !library.IsNumericEnding(a.UrlToken) {
-			a.UrlToken += "-a" + strconv.Itoa(int(a.Id))
-		}
 	}
 	return
 }
