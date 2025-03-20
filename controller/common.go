@@ -451,6 +451,7 @@ func ReRouteContext(ctx iris.Context) {
 					log.Println("translate err", err)
 				}
 				ctx.ContentType(context.ContentHTMLHeaderValue)
+				ctx.Header("Content-Language", langSite.Language)
 				ctx.WriteString(content)
 				return
 			}
@@ -463,6 +464,7 @@ func ReRouteContext(ctx iris.Context) {
 				//return
 			}
 		}
+		ctx.Header("Content-Language", currentSite.System.Language)
 	}
 
 	switch params["match"] {
