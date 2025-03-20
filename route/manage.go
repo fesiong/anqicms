@@ -11,7 +11,7 @@ import (
 )
 
 func manageRoute(app *iris.Application) {
-	system := app.Party("/system", manageController.AdminFileServ)
+	system := app.Party("/system", middleware.ParseAdminUrlFile, manageController.AdminFileServ)
 	{
 		system.HandleDir("/", fmt.Sprintf("%ssystem", config.ExecPath))
 	}

@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -81,6 +82,22 @@ func ParseAdminUrl(ctx iris.Context) {
 					"code": config.StatusNoLogin,
 					"msg":  ctx.Tr("PleaseUseTheCorrectEntranceToAccess"),
 				})
+				return
+			}
+		}
+	}
+
+	ctx.Next()
+}
+
+func ParseAdminUrlFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	if strings.HasPrefix(currentSite.System.AdminUrl, "http") {
+		parsedUrl, err := url.Parse(currentSite.System.AdminUrl)
+		// 如果解析失败，则跳过
+		if err == nil {
+			if parsedUrl.Hostname() != library.GetHost(ctx) {
+				ctx.StatusCode(http.StatusForbidden)
 				return
 			}
 		}

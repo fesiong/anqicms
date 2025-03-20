@@ -482,6 +482,7 @@ func matchWebsiteByRequest(ctx iris.Context) *Website {
 	host := library.GetHost(ctx)
 	values := websites.Values()
 
+	// 第一遍先处理二级目录的 baseUrl
 	// 优先处理非根路径的情况
 	if uri != "/" {
 		if site := matchByURIAndHost(values, uri, host, ctx); site != nil {
@@ -517,6 +518,7 @@ func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *We
 				continue
 			}
 
+			// 这里匹配二级目录站点，包括多语言使用二级域名的部分
 			if isHostMatch(parsed, host) && strings.HasPrefix(uri, parsed.RequestURI()) {
 				return handleMatchedWebsite(w, parsed.RequestURI(), ctx)
 			}
@@ -533,17 +535,24 @@ func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *We
 // 根路径和后备匹配逻辑
 func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Website {
 	for _, w := range sites {
-		parsed, err := url.Parse(w.System.BaseUrl)
-		if err != nil || parsed.RequestURI() != "/" {
-			continue
-		}
+		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.MobileUrl, w.System.AdminUrl} {
+			if urlToCheck == "" {
+				continue
+			}
+			// 这里不处理根路径的 domain
+			parsed, err := url.Parse(urlToCheck)
+			if err != nil {
+				continue
+			}
 
-		if isHostMatch(parsed, host) {
-			return handleHostMatch(w, ctx)
-		}
+			// 这里匹配host
+			if isHostMatch(parsed, host) {
+				return handleHostMatch(w, ctx)
+			}
 
-		if isSubdomainMatch(parsed.Hostname(), host) {
-			return cloneWithContext(w, ctx)
+			if isSubdomainMatch(parsed.Hostname(), host) {
+				return cloneWithContext(w, ctx)
+			}
 		}
 	}
 	return nil
