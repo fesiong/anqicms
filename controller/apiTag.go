@@ -959,6 +959,29 @@ func ApiSystem(ctx iris.Context) {
 	})
 }
 
+func ApiDiyField(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
+	var settings = map[string]interface{}{}
+
+	fields := currentSite.GetDiyFieldSetting()
+	for i := range fields {
+		settings[fields[i].Name] = fields[i].Value
+		if fields[i].Type == config.CustomFieldTypeEditor && render {
+			settings[fields[i].Name] = library.MarkdownToHTML(fmt.Sprintf("%v", fields[i].Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": settings,
+	})
+}
+
 func ApiGuestbook(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	fields := currentSite.GetGuestbookFields()
