@@ -68,7 +68,7 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 		}
 		str += "<script type=\"text/javascript\">setTimeout(function(){window.location.href=\"" + buttons[0].Link + "\"}, 3000);</script>"
 	}
-	if currentSite != nil {
+	if currentSite != nil && currentSite.PluginPush != nil {
 		var jsCodes string
 		for _, v := range currentSite.PluginPush.JsCodes {
 			jsCodes += v.Value + "\n"
@@ -109,6 +109,9 @@ func InternalServerError(ctx iris.Context) {
 
 func CheckCloseSite(ctx iris.Context) bool {
 	currentSite := provider.CurrentSite(ctx)
+	if currentSite.Id == 0 {
+		return false
+	}
 	if !strings.HasPrefix(ctx.GetCurrentRoute().Path(), "/system") {
 		// 闭站
 		siteClose := currentSite.System.SiteClose == 1
@@ -227,15 +230,19 @@ func Common(ctx iris.Context) {
 				host = strings.Split(host, ":")[0]
 			}
 			currentSite.System.BaseUrl = urlPath.Scheme + "://" + host
-			currentSite.PluginStorage.StorageUrl = currentSite.System.BaseUrl
+			if currentSite.PluginStorage != nil {
+				currentSite.PluginStorage.StorageUrl = currentSite.System.BaseUrl
+			}
 		}
 	}
-	//js code
-	var jsCodes string
-	for _, v := range currentSite.PluginPush.JsCodes {
-		jsCodes += v.Value + "\n"
+	if currentSite.PluginPush != nil {
+		//js code
+		var jsCodes string
+		for _, v := range currentSite.PluginPush.JsCodes {
+			jsCodes += v.Value + "\n"
+		}
+		ctx.ViewData("pluginJsCode", jsCodes)
 	}
-	ctx.ViewData("pluginJsCode", jsCodes)
 
 	// 设置分页
 	currentPage := ctx.URLParamIntDefault("page", 1)
@@ -322,7 +329,7 @@ func FileServe(ctx iris.Context) bool {
 		}
 		// 多语言站点目录支持
 		mainSite := currentSite.GetMainWebsite()
-		if mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+		if mainSite.MultiLanguage != nil && mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
 			if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
 				baseDir2 := fmt.Sprintf("%spublic", mainSite.RootPath)
 				uriFile2 := baseDir2 + strings.TrimPrefix(uri, strings.TrimRight(mainSite.BaseURI, "/"))
@@ -352,7 +359,7 @@ func FileServe(ctx iris.Context) bool {
 		return true
 	}
 	// 自动生成Sitemap
-	if ((strings.HasSuffix(uri, "sitemap.xml") && currentSite.PluginSitemap.Type == "xml") ||
+	if currentSite.PluginSitemap != nil && ((strings.HasSuffix(uri, "sitemap.xml") && currentSite.PluginSitemap.Type == "xml") ||
 		(strings.HasSuffix(uri, "sitemap.txt") && currentSite.PluginSitemap.Type == "txt")) &&
 		!ctx.Values().GetBoolDefault("sitemap", false) {
 		_ = currentSite.BuildSitemap()
@@ -395,7 +402,7 @@ func ReRouteContext(ctx iris.Context) {
 
 	currentSite := provider.CurrentSite(ctx)
 	mainSite := currentSite.GetMainWebsite()
-	if mainSite.MultiLanguage.Open {
+	if mainSite.MultiLanguage != nil && mainSite.MultiLanguage.Open {
 		if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeSingle {
 			// 解析当前站点的语言
 			var langSite *config.MultiLangSite
@@ -783,7 +790,7 @@ func CheckTemplateType(ctx iris.Context) {
 
 func LogAccess(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	if currentSite == nil {
+	if currentSite == nil || currentSite.StatisticLog == nil {
 		ctx.Next()
 		return
 	}
@@ -870,7 +877,7 @@ func NewDriver() *captcha.DriverString {
 func GenerateCaptcha(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	safeSetting := currentSite.Safe
-	if safeSetting.AdminCaptchaOff == 1 {
+	if safeSetting == nil || safeSetting.AdminCaptchaOff == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "",
@@ -902,6 +909,9 @@ func GenerateCaptcha(ctx iris.Context) {
 
 func SafeVerify(ctx iris.Context, req map[string]string, returnType string, from string) bool {
 	currentSite := provider.CurrentSite(ctx)
+	if currentSite.Safe == nil {
+		return true
+	}
 	// 检查如果用户是否登录
 	// 是否需要验证码
 	var contentCaptcha = currentSite.Safe.Captcha == 1
