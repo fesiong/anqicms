@@ -1597,6 +1597,7 @@ func (w *Website) GetQuickImportStatus() *QuickImportArchive {
 		time.AfterFunc(500*time.Millisecond, func() {
 			w.quickImportStatus = nil
 		})
+		return nil
 	}
 	return w.quickImportStatus
 }
@@ -1779,6 +1780,34 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 		} else {
 			// 不支持的文件类型，也跳过
 			continue
+		}
+		// 支持在标题中添加#分类名称#来快速创建分类
+		if strings.Contains(archive.Title, "#") {
+			idx := strings.Index(archive.Title, "#")
+			edx := strings.LastIndex(archive.Title, "#")
+			if strings.HasPrefix(archive.Title, "[") {
+				edx = strings.Index(archive.Title, "]")
+			}
+			if edx < idx {
+				edx = idx
+			}
+			categoryTitle := strings.Trim(archive.Title[idx+1:edx], "#] ")
+			archive.Title = archive.Title[edx+1:]
+			if categoryTitle != "" {
+				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
+				if err != nil {
+					// 分类不存在，创建
+					tmpCategory, _ = qia.w.SaveCategory(&request.Category{
+						Title:    categoryTitle,
+						ModuleId: category.ModuleId,
+						Status:   1,
+						Type:     config.CategoryTypeArchive,
+					})
+				}
+				if tmpCategory != nil {
+					archive.CategoryId = tmpCategory.Id
+				}
+			}
 		}
 		// 检查标题重复问题
 		if qia.CheckDuplicate {
