@@ -1112,19 +1112,17 @@ func UseLimiter(ctx iris.Context) bool {
 	// 如果内存使用超过了阈值，则不给访问，在这个时间开始5秒内的所有链接不能访问
 	if isLimiting == 1 {
 		log.Println("isLimiting", isLimiting, "429")
-		ctx.StatusCode(429) // Too Many Requests
+		ctx.StatusCode(http.StatusTooManyRequests) // Too Many Requests
 		return true
 	}
-	_, sysUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
-
+	_, appUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
 	// 触发限流条件（示例阈值，需根据服务器配置调整）
-	if sysUsedPercent > 70 || sysFreePercent < 10 {
+	if appUsedPercent > 70 || sysFreePercent < 10 {
 		atomic.StoreInt32(&isLimiting, 1)
 		time.AfterFunc(5*time.Second, func() {
 			atomic.StoreInt32(&isLimiting, 0)
 		})
 		ctx.StatusCode(http.StatusTooManyRequests)
-		_, _ = ctx.WriteString("Too many requests from this IP.")
 		return true
 	}
 	atomic.StoreInt32(&isLimiting, 0)

@@ -53,7 +53,9 @@ func MapToStruct(m map[string]interface{}, s interface{}) error {
 
 func GetSystemMemoryUsage() (used uint64, usedPercent float64, freePercent float64) {
 	v, _ := mem.VirtualMemory()
-	return v.Total / 1024 / 1024, v.UsedPercent, (float64(v.Available) / float64(v.Total)) * 100
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	return v.Total / 1024 / 1024, (float64(m.Alloc) / float64(v.Total)) * 100, (float64(v.Available) / float64(v.Total)) * 100
 }
 
 func GetProcessMemory() uint64 {
