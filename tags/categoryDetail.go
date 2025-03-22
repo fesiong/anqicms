@@ -127,6 +127,8 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			var value string
 			if render {
 				value = library.MarkdownToHTML(categoryDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			} else {
+				value = categoryDetail.Content
 			}
 			content = currentSite.ReplaceContentUrl(value, true)
 		}
