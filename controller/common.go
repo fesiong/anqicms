@@ -449,6 +449,9 @@ func ReRouteContext(ctx iris.Context) {
 				content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
 				if err != nil {
 					log.Println("translate err", err)
+					// 翻译错误的时候，就设置 no-index
+					// x-robots-tag: noindex, follow
+					ctx.Header("X-Robots-Tag", "noindex, follow")
 				}
 				ctx.ContentType(context.ContentHTMLHeaderValue)
 				ctx.Header("Content-Language", langSite.Language)
