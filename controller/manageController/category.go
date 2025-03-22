@@ -143,6 +143,15 @@ func CategoryDetail(ctx iris.Context) {
 					category.Extra[field.FieldName] != nil {
 					category.Extra[field.FieldName] = currentSite.ReplaceContentUrl(category.Extra[field.FieldName].(string), true)
 				}
+				if field.Type == config.CustomFieldTypeImages && category.Extra[field.FieldName] != nil {
+					if val, ok := category.Extra[field.FieldName].([]interface{}); ok {
+						for j, v2 := range val {
+							v2s, _ := v2.(string)
+							val[j] = currentSite.ReplaceContentUrl(v2s, true)
+						}
+						category.Extra[field.FieldName] = val
+					}
+				}
 			}
 		}
 	}

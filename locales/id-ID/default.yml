@@ -778,6 +778,7 @@
 "MessageContent": "Isi pesan"
 "ModelTableNameAlreadyExists": "Nama tabel model sudah ada, silahkan diubah."
 "ModelUrlAliasAlreadyExists": "Alias ​​URL model sudah ada, silakan diubah."
+"FieldAlreadyExists": "The field with the same name already exists"
 "Comment": "Komentar"
 "MessageBoard": "papan pesan"
 "FirstPage": "Halaman pertama"

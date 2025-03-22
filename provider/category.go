@@ -159,6 +159,15 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 						category.Extra[field.FieldName] = w.ReplaceContentUrl(value, false)
 					}
 				}
+				if field.Type == config.CustomFieldTypeImages {
+					if val, ok := category.Extra[field.FieldName].([]interface{}); ok {
+						for j, v2 := range val {
+							v2s, _ := v2.(string)
+							val[j] = w.ReplaceContentUrl(v2s, false)
+						}
+						category.Extra[field.FieldName] = val
+					}
+				}
 			}
 		}
 	}

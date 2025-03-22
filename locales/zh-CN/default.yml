@@ -778,6 +778,7 @@
 "MessageContent": "留言内容"
 "ModelTableNameAlreadyExists": "模型表名已存在，请更换一个"
 "ModelUrlAliasAlreadyExists": "模型URL别名已存在，请更换一个"
+"FieldAlreadyExists": "同名字段已存在"
 "Comment": "评论"
 "MessageBoard": "留言板"
 "FirstPage": "第一页"

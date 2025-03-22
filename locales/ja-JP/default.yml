@@ -778,6 +778,7 @@
 "MessageContent": "メッセージ内容"
 "ModelTableNameAlreadyExists": "モデルテーブル名はすでに存在します。変更してください。"
 "ModelUrlAliasAlreadyExists": "モデル URL エイリアスは既に存在します。変更してください。"
+"FieldAlreadyExists": "The field with the same name already exists"
 "Comment": "コメント"
 "MessageBoard": "伝言板"
 "FirstPage": "一ページ目"
