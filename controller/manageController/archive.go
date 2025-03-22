@@ -352,7 +352,8 @@ func QuickImportArchive(ctx iris.Context) {
 
 func GetQuickImportArchiveStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	status := currentSite.GetQuickImportStatus()
+	w2 := provider.GetWebsite(currentSite.Id)
+	status := w2.GetQuickImportStatus()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -769,6 +769,15 @@ func ApiCategoryDetail(ctx iris.Context) {
 						category.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 					}
 				}
+				if field.Type == config.CustomFieldTypeImages && category.Extra[field.FieldName] != nil {
+					if val, ok := category.Extra[field.FieldName].([]interface{}); ok {
+						for j, v2 := range val {
+							v2s, _ := v2.(string)
+							val[j] = currentSite.ReplaceContentUrl(v2s, true)
+						}
+						category.Extra[field.FieldName] = val
+					}
+				}
 			}
 		}
 	}
@@ -949,6 +958,29 @@ func ApiSystem(ctx iris.Context) {
 	if currentSite.System.ExtraFields != nil {
 		for i := range currentSite.System.ExtraFields {
 			settings[currentSite.System.ExtraFields[i].Name] = currentSite.System.ExtraFields[i].Value
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": settings,
+	})
+}
+
+func ApiDiyField(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
+	var settings = map[string]interface{}{}
+
+	fields := currentSite.GetDiyFieldSetting()
+	for i := range fields {
+		settings[fields[i].Name] = fields[i].Value
+		if fields[i].Type == config.CustomFieldTypeEditor && render {
+			settings[fields[i].Name] = library.MarkdownToHTML(fmt.Sprintf("%v", fields[i].Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 		}
 	}
 

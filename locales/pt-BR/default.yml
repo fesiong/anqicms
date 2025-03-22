@@ -778,6 +778,7 @@
 "MessageContent": "Conteúdo da mensagem"
 "ModelTableNameAlreadyExists": "O nome da tabela modelo já existe, altere-o."
 "ModelUrlAliasAlreadyExists": "O alias do URL do modelo já existe. Altere-o."
+"FieldAlreadyExists": "The field with the same name already exists"
 "Comment": "Comente"
 "MessageBoard": "quadro de mensagens"
 "FirstPage": "Primeira página"

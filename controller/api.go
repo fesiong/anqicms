@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -43,6 +44,20 @@ func ApiImportArchive(ctx iris.Context) {
 		boolCover, _ := ctx.PostValueBool("cover")
 		if boolCover {
 			cover = 1
+		}
+	}
+	if len(images) == 1 && strings.HasPrefix(images[0], "[") {
+		err := json.Unmarshal([]byte(images[0]), &images)
+		if err != nil {
+			images = nil
+		}
+	}
+	// 验证 images
+	for i := 0; i < len(images); i++ {
+		if len(images[i]) < 10 && !(strings.HasPrefix(images[i], "http") || strings.HasPrefix(images[i], "/")) {
+			// 删除它
+			images = append(images[:i], images[i+1:]...)
+			i--
 		}
 	}
 	template := ctx.PostValueTrim("template")

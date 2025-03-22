@@ -91,9 +91,35 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	}
 	// 检查fields
 	for i := range req.Fields {
+		// 不允许使用已存在的字段
+		archiveFields, err := getColumns(w.DB, &model.Archive{})
+		if err == nil {
+			for _, val := range archiveFields {
+				if val == req.Fields[i].FieldName {
+					return nil, errors.New(req.Fields[i].FieldName + w.Tr("FieldAlreadyExists"))
+				}
+			}
+		}
 		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.Fields[i].FieldName)
 		if err != nil || !match {
 			return nil, errors.New(req.Fields[i].FieldName + w.Tr("IncorrectNaming"))
+		}
+	}
+	// 检查 categoryFields
+	// 检查fields
+	for i := range req.CategoryFields {
+		// 不允许使用已存在的字段
+		categoryFields, err := getColumns(w.DB, &model.Category{})
+		if err == nil {
+			for _, val := range categoryFields {
+				if val == req.CategoryFields[i].FieldName {
+					return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("FieldAlreadyExists"))
+				}
+			}
+		}
+		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.CategoryFields[i].FieldName)
+		if err != nil || !match {
+			return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("IncorrectNaming"))
 		}
 	}
 

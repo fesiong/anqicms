@@ -778,6 +778,7 @@
 "MessageContent": "বার্তা বিষয়বস্তু"
 "ModelTableNameAlreadyExists": "মডেল টেবিলের নাম ইতিমধ্যেই বিদ্যমান, দয়া করে এটি পরিবর্তন করুন।"
 "ModelUrlAliasAlreadyExists": "মডেল URL উপনাম ইতিমধ্যেই বিদ্যমান, দয়া করে এটি পরিবর্তন করুন."
+"FieldAlreadyExists": "The field with the same name already exists"
 "Comment": "মন্তব্য করুন"
 "MessageBoard": "বার্তা বোর্ড"
 "FirstPage": "প্রথম পৃষ্ঠা"

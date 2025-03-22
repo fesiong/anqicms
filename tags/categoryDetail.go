@@ -98,6 +98,15 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 							categoryDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 						}
 					}
+					if field.Type == config.CustomFieldTypeImages && categoryDetail.Extra[field.FieldName] != nil {
+						if val, ok := categoryDetail.Extra[field.FieldName].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = currentSite.ReplaceContentUrl(v2s, true)
+							}
+							categoryDetail.Extra[field.FieldName] = val
+						}
+					}
 				}
 				if fieldName == "Extra" {
 					var extras = make([]model.CustomField, 0, len(module.CategoryFields))
@@ -127,6 +136,8 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			var value string
 			if render {
 				value = library.MarkdownToHTML(categoryDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			} else {
+				value = categoryDetail.Content
 			}
 			content = currentSite.ReplaceContentUrl(value, true)
 		}

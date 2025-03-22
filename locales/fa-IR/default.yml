@@ -778,6 +778,7 @@
 "MessageContent": "محتوای پیام"
 "ModelTableNameAlreadyExists": "نام جدول مدل از قبل وجود دارد، لطفاً آن را تغییر دهید."
 "ModelUrlAliasAlreadyExists": "نام مستعار URL مدل از قبل وجود دارد، لطفاً آن را تغییر دهید."
+"FieldAlreadyExists": "The field with the same name already exists"
 "Comment": "اظهار نظر"
 "MessageBoard": "تابلوی پیام"
 "FirstPage": "صفحه اول"

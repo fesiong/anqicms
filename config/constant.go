@@ -20,6 +20,7 @@ const (
 	CustomFieldTypeSelect   = "select"
 	CustomFieldTypeImage    = "image"
 	CustomFieldTypeFile     = "file"
+	CustomFieldTypeImages   = "images"
 )
 
 const (

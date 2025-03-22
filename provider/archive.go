@@ -4,6 +4,7 @@ import (
 	"archive/zip"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -327,6 +328,16 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 				if ok {
 					if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
 						result[v.FieldName] = w.ReplaceContentUrl(value, true)
+					} else if v.Type == config.CustomFieldTypeImages {
+						// json 还原
+						var images []string
+						err := json.Unmarshal([]byte(value), &images)
+						if err == nil {
+							for i := range images {
+								images[i] = w.ReplaceContentUrl(images[i], true)
+							}
+							result[v.FieldName] = images
+						}
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
@@ -537,13 +548,24 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							var val2 []string
 							for _, v2 := range val {
-								val2 = append(val2, v2.(string))
+								v2s, _ := v2.(string)
+								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
 						}
 					} else if v.Type == config.CustomFieldTypeNumber {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.Atoi(fmt.Sprintf("%v", extraValue["value"]))
+					} else if v.Type == config.CustomFieldTypeImages {
+						// 存 json
+						if val, ok := extraValue["value"].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = w.ReplaceContentUrl(v2s, false)
+							}
+							buf, _ := json.Marshal(val)
+							extraFields[v.FieldName] = string(buf)
+						}
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
@@ -1325,6 +1347,10 @@ func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string
 		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		if len(urlToken) > 100 {
 			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
 		if id > 0 {
 			// 判断archive
@@ -1346,8 +1372,12 @@ func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string
 	if newToken == false {
 		urlToken = strings.ToLower(library.ParseUrlToken(urlToken))
 		// 防止超出长度
-		if len(urlToken) > 150 {
-			urlToken = urlToken[:150]
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
 		index := 0
 		for {
@@ -1597,6 +1627,7 @@ func (w *Website) GetQuickImportStatus() *QuickImportArchive {
 		time.AfterFunc(500*time.Millisecond, func() {
 			w.quickImportStatus = nil
 		})
+		return nil
 	}
 	return w.quickImportStatus
 }
@@ -1779,6 +1810,34 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 		} else {
 			// 不支持的文件类型，也跳过
 			continue
+		}
+		// 支持在标题中添加#分类名称#来快速创建分类
+		if strings.Contains(archive.Title, "#") {
+			idx := strings.Index(archive.Title, "#")
+			edx := strings.LastIndex(archive.Title, "#")
+			if strings.HasPrefix(archive.Title, "[") {
+				edx = strings.Index(archive.Title, "]")
+			}
+			if edx < idx {
+				edx = idx
+			}
+			categoryTitle := strings.Trim(archive.Title[idx+1:edx], "#] ")
+			archive.Title = archive.Title[edx+1:]
+			if categoryTitle != "" {
+				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
+				if err != nil {
+					// 分类不存在，创建
+					tmpCategory, _ = qia.w.SaveCategory(&request.Category{
+						Title:    categoryTitle,
+						ModuleId: category.ModuleId,
+						Status:   1,
+						Type:     config.CategoryTypeArchive,
+					})
+				}
+				if tmpCategory != nil {
+					archive.CategoryId = tmpCategory.Id
+				}
+			}
 		}
 		// 检查标题重复问题
 		if qia.CheckDuplicate {

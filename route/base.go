@@ -100,6 +100,7 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 		api.Get("/comment/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiCommentList)
 		api.Get("/setting/contact", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiContact)
 		api.Get("/setting/system", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiSystem)
+		api.Get("/setting/diy", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiDiyField)
 		api.Get("/setting/index", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiIndexTdk)
 		api.Get("/languages", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiLanguages)
 		api.Get("/guestbook/fields", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiGuestbook)

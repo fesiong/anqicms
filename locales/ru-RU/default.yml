@@ -778,6 +778,7 @@
 "MessageContent": "Содержание сообщения"
 "ModelTableNameAlreadyExists": "Имя таблицы модели уже существует, измените его."
 "ModelUrlAliasAlreadyExists": "Псевдоним URL-адреса модели уже существует, измените его."
+"FieldAlreadyExists": "The field with the same name already exists"
 "Comment": "Комментарий"
 "MessageBoard": "доска объявлений"
 "FirstPage": "Первая страница"
