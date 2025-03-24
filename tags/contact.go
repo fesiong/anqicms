@@ -44,7 +44,7 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	if currentSite.Contact.ExtraFields != nil {
 		for i := range currentSite.Contact.ExtraFields {
 			if currentSite.Contact.ExtraFields[i].Name == fieldName {
-				content = currentSite.Contact.ExtraFields[i].Value
+				content = fmt.Sprintf("%v", currentSite.Contact.ExtraFields[i].Value)
 				break
 			}
 		}

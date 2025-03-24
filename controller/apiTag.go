@@ -1136,7 +1136,11 @@ func ApiTagDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render = ctx.URLParamBoolDefault("render", render)
+	}
 	tagDetail, err := currentSite.GetTagById(id)
 	if err != nil {
 		if filename != "" {
@@ -1157,6 +1161,41 @@ func ApiTagDetail(ctx iris.Context) {
 		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
 		if err == nil {
 			tagDetail.Content = tagContent.Content
+			// convert markdown to html
+			if render {
+				tagDetail.Content = library.MarkdownToHTML(tagDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			}
+			tagDetail.Extra = tagContent.Extra
+			if tagDetail.Extra != nil {
+				fields := currentSite.GetTagFields()
+				if len(fields) > 0 {
+					for _, field := range fields {
+						if tagDetail.Extra[field.FieldName] == nil || tagDetail.Extra[field.FieldName] == "" {
+							// default
+							tagDetail.Extra[field.FieldName] = field.Content
+						}
+						if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+							tagDetail.Extra[field.FieldName] != nil {
+							value, ok2 := tagDetail.Extra[field.FieldName].(string)
+							if ok2 {
+								if field.Type == config.CustomFieldTypeEditor && render {
+									value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+								}
+								tagDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+							}
+						}
+						if field.Type == config.CustomFieldTypeImages && tagDetail.Extra[field.FieldName] != nil {
+							if val, ok := tagDetail.Extra[field.FieldName].([]interface{}); ok {
+								for j, v2 := range val {
+									v2s, _ := v2.(string)
+									val[j] = currentSite.ReplaceContentUrl(v2s, true)
+								}
+								tagDetail.Extra[field.FieldName] = val
+							}
+						}
+					}
+				}
+			}
 		}
 	}
 

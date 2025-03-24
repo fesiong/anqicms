@@ -73,7 +73,10 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 					if ok {
 						innerUpdate := false
 						for i := range val {
-							val2 := w.replaceContentText(val[i].Value, replacer)
+							val2, ok := val[i].Value.(string)
+							if ok {
+								val2 = w.replaceContentText(val2, replacer)
+							}
 							if val2 != val[i].Value {
 								updateCount++
 								innerUpdate = true

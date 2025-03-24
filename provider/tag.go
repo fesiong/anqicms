@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"kandaoni.com/anqicms/config"
@@ -172,7 +173,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		return
 	}
 	// 保存 content
-	if len(req.Content) > 0 {
+	if len(req.Content) > 0 || len(req.Extra) > 0 {
 		// 将单个&nbsp;替换为空格
 		req.Content = library.ReplaceSingleSpace(req.Content)
 		// todo 应该只替换 src,href 中的 baseUrl
@@ -230,9 +231,33 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 				return s
 			})
 		}
+		if req.Extra != nil {
+			fields := w.GetTagFields()
+			if len(fields) > 0 {
+				for _, field := range fields {
+					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+						req.Extra[field.FieldName] != nil {
+						value, ok := req.Extra[field.FieldName].(string)
+						if ok {
+							req.Extra[field.FieldName] = w.ReplaceContentUrl(value, false)
+						}
+					}
+					if field.Type == config.CustomFieldTypeImages {
+						if val, ok := req.Extra[field.FieldName].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = w.ReplaceContentUrl(v2s, false)
+							}
+							req.Extra[field.FieldName] = val
+						}
+					}
+				}
+			}
+		}
 		tagContent := &model.TagContent{
 			Id:      tag.Id,
 			Content: req.Content,
+			Extra:   req.Extra,
 		}
 		err = w.DB.Save(&tagContent).Error
 		if err != nil {
@@ -324,12 +349,19 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		if len(urlToken) > 100 {
 			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
-		lastId := id
-		if id == 0 {
-			lastId = model.GetNextTagId(w.DB)
+		if id > 0 {
+			// 判断archive
+			tmpTag, err := w.GetTagByUrlToken(urlToken)
+			if err == nil && tmpTag.Id != id {
+				urlToken += "-t" + strconv.FormatInt(int64(id), 10)
+				return urlToken
+			}
 		}
-		urlToken += "-t" + strconv.Itoa(int(lastId))
 		newToken = true
 	}
 	if newToken == false {
@@ -337,6 +369,10 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 		// 防止超出长度
 		if len(urlToken) > 150 {
 			urlToken = urlToken[:150]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
 		index := 0
 		for {
@@ -362,4 +398,32 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 	}
 
 	return urlToken
+}
+
+func (w *Website) GetTagFields() []config.CustomField {
+	fieldsValue := w.GetSettingValue(TagFieldsSettingKey)
+	var fields []config.CustomField
+	_ = json.Unmarshal([]byte(fieldsValue), &fields)
+
+	return fields
+}
+
+func (w *Website) SaveTagFields(fields []config.CustomField) error {
+	for _, field := range fields {
+		// 不允许使用已存在的字段
+		tagFields, err := getColumns(w.DB, &model.Tag{})
+		if err == nil {
+			for _, val := range tagFields {
+				if val == field.FieldName {
+					return errors.New(field.FieldName + w.Tr("FieldAlreadyExists"))
+				}
+			}
+		}
+		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, field.FieldName)
+		if err != nil || !match {
+			return errors.New(field.FieldName + w.Tr("IncorrectNaming"))
+		}
+	}
+
+	return w.SaveSettingValue(TagFieldsSettingKey, fields)
 }
