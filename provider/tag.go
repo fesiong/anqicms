@@ -349,12 +349,19 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
 		if len(urlToken) > 100 {
 			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
-		lastId := id
-		if id == 0 {
-			lastId = model.GetNextTagId(w.DB)
+		if id > 0 {
+			// 判断archive
+			tmpTag, err := w.GetTagByUrlToken(urlToken)
+			if err == nil && tmpTag.Id != id {
+				urlToken += "-t" + strconv.FormatInt(int64(id), 10)
+				return urlToken
+			}
 		}
-		urlToken += "-t" + strconv.Itoa(int(lastId))
 		newToken = true
 	}
 	if newToken == false {
@@ -362,6 +369,10 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 		// 防止超出长度
 		if len(urlToken) > 150 {
 			urlToken = urlToken[:150]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
 		index := 0
 		for {
