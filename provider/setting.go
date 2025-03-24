@@ -56,6 +56,7 @@ const (
 	MultiLangSettingKey   = "multi_lang"
 	TranslateSettingKey   = "translate"
 	JsonLdSettingKey      = "json_ld"
+	TagFieldsSettingKey   = "tag_fields"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"

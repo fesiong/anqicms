@@ -63,6 +63,27 @@ func PluginTagDetail(ctx iris.Context) {
 	tagContent, err := currentSite.GetTagContentById(tag.Id)
 	if err == nil {
 		tag.Content = tagContent.Content
+		tag.Extra = tagContent.Extra
+		if tag.Extra != nil {
+			fields := currentSite.GetTagFields()
+			if len(fields) > 0 {
+				for _, field := range fields {
+					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+						tag.Extra[field.FieldName] != nil {
+						tag.Extra[field.FieldName] = currentSite.ReplaceContentUrl(tag.Extra[field.FieldName].(string), true)
+					}
+					if field.Type == config.CustomFieldTypeImages && tag.Extra[field.FieldName] != nil {
+						if val, ok := tag.Extra[field.FieldName].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = currentSite.ReplaceContentUrl(v2s, true)
+							}
+							tag.Extra[field.FieldName] = val
+						}
+					}
+				}
+			}
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -197,5 +218,42 @@ func PluginTagDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("TagDeleted"),
+	})
+}
+
+func PluginTagFields(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	fields := currentSite.GetTagFields()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": fields,
+	})
+}
+
+func PluginTagFieldsForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req []config.CustomField
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if err := currentSite.SaveTagFields(req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }

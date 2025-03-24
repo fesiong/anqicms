@@ -872,18 +872,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	w.DeleteArchiveExtraCache(draft.Id)
 
 	if isReleased {
-		// 尝试添加全文索引
-		w.AddFulltextIndex(fulltext.TinyArchive{
-			Id:          draft.Id,
-			Type:        fulltext.ArchiveType,
-			ModuleId:    draft.ModuleId,
-			Title:       draft.Title,
-			Keywords:    draft.Keywords,
-			Description: draft.Description,
-			Content:     archiveData.Content,
-		})
-		w.FlushIndex()
-
+		draft.ArchiveData = &archiveData
 		err = w.SuccessReleaseArchive(&draft.Archive, newPost)
 	}
 
@@ -903,10 +892,25 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 	}
 	//提取锚文本
 	if w.PluginAnchor.KeywordWay == 1 {
-
 		go w.AutoInsertAnchor(archive.Id, archive.Keywords, archive.Link)
 	}
-
+	// 添加索引
+	go func() {
+		// 尝试添加全文索引
+		tinyData := fulltext.TinyArchive{
+			Id:          archive.Id,
+			Type:        fulltext.ArchiveType,
+			ModuleId:    archive.ModuleId,
+			Title:       archive.Title,
+			Keywords:    archive.Keywords,
+			Description: archive.Description,
+		}
+		if archive.ArchiveData != nil {
+			tinyData.Content = archive.ArchiveData.Content
+		}
+		w.AddFulltextIndex(tinyData)
+		w.FlushIndex()
+	}()
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	// 删除首页缓存

@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -53,9 +54,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	}
 
 	fieldName := ""
+	inputName := ""
 	if args["name"] != nil {
-		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		inputName = args["name"].String()
+		fieldName = library.Case2Camel(inputName)
 	}
 
 	var content interface{}
@@ -72,16 +74,68 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		if tagDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = tagDetail.Title
 		}
-		if fieldName == "Content" {
-			tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
-			if err == nil {
-				content = tagContent.Content
-				// convert markdown to html
-				if render {
-					content = library.MarkdownToHTML(tagContent.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+		tmpKey := "tagContent" + fmt.Sprintf("%d", tagDetail.Id)
+		var tagContent *model.TagContent
+		if ctx.Public[tmpKey] != nil {
+			tagContent, _ = ctx.Public[tmpKey].(*model.TagContent)
+		}
+		if tagContent == nil {
+			tagContent, _ = currentSite.GetTagContentById(tagDetail.Id)
+		}
+		if fieldName == "Content" && tagContent != nil {
+			content = tagContent.Content
+			// convert markdown to html
+			if render {
+				content = library.MarkdownToHTML(tagContent.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			}
+		}
+		if tagContent != nil && tagContent.Extra != nil {
+			fields := currentSite.GetTagFields()
+			if len(fields) > 0 {
+				for _, field := range fields {
+					if tagContent.Extra[field.FieldName] == nil || tagContent.Extra[field.FieldName] == "" {
+						// default
+						tagContent.Extra[field.FieldName] = field.Content
+					}
+					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+						tagContent.Extra[field.FieldName] != nil {
+						value, ok2 := tagContent.Extra[field.FieldName].(string)
+						if ok2 {
+							if field.Type == config.CustomFieldTypeEditor && render {
+								value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+							}
+							tagContent.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+						}
+					}
+					if field.Type == config.CustomFieldTypeImages && tagContent.Extra[field.FieldName] != nil {
+						if val, ok := tagContent.Extra[field.FieldName].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = currentSite.ReplaceContentUrl(v2s, true)
+							}
+							tagContent.Extra[field.FieldName] = val
+						}
+					}
+				}
+				if fieldName == "Extra" {
+					var extras = make([]model.CustomField, 0, len(fields))
+					for _, field := range fields {
+						extras = append(extras, model.CustomField{
+							Name:      field.Name,
+							Value:     tagContent.Extra[field.FieldName],
+							Default:   field.Content,
+							Type:      field.Type,
+							FieldName: field.FieldName,
+						})
+					}
+					content = extras
 				}
 			}
 		}
+		if item, ok := tagContent.Extra[inputName]; ok {
+			content = item
+		}
+
 	}
 
 	// output

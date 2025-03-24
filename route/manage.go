@@ -330,6 +330,8 @@ func manageRoute(app *iris.Application) {
 				tag.Get("/detail", manageController.PluginTagDetail)
 				tag.Post("/detail", manageController.PluginTagDetailForm)
 				tag.Post("/delete", manageController.PluginTagDelete)
+				tag.Get("/fields", manageController.PluginTagFields)
+				tag.Post("/fields", manageController.PluginTagFieldsForm)
 			}
 
 			redirect := plugin.Party("/redirect")
