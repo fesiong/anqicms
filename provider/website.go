@@ -550,9 +550,9 @@ func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Webs
 				return handleHostMatch(w, ctx)
 			}
 
-			if isSubdomainMatch(parsed.Hostname(), host) {
-				return cloneWithContext(w, ctx)
-			}
+			//if isSubdomainMatch(parsed.Hostname(), host) {
+			//	return cloneWithContext(w, ctx)
+			//}
 		}
 	}
 	return nil
