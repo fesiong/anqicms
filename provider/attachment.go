@@ -799,6 +799,10 @@ func (w *Website) AttachmentScanUploads(baseDir string) {
 				// 跳过
 				continue
 			}
+			// 跳过 .开头的文件
+			if strings.HasPrefix(fi.Name(), ".") {
+				continue
+			}
 			fileInfo, err := fi.Info()
 			if err != nil {
 				continue
@@ -818,9 +822,14 @@ func (w *Website) AttachmentScanUploads(baseDir string) {
 			}
 
 			// 检查是否存在数据库
-			var existNum int64
-			w.DB.Model(&model.Attachment{}).Where("`file_location` = ?", fileLocation).Count(&existNum)
-			if existNum > 0 {
+			var exist model.Attachment
+			err = w.DB.Unscoped().Model(&model.Attachment{}).Where("`file_location` = ?", fileLocation).Take(&exist).Error
+			if err == nil {
+				// 如果文件呗删了，则需要更新状态
+				if exist.DeletedAt.Valid {
+					//更新
+					w.DB.Unscoped().Model(&exist).Update("deleted_at", nil)
+				}
 				continue
 			}
 			md5Str, err := library.Md5File(name)

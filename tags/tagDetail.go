@@ -131,9 +131,9 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 					content = extras
 				}
 			}
-		}
-		if item, ok := tagContent.Extra[inputName]; ok {
-			content = item
+			if item, ok := tagContent.Extra[inputName]; ok {
+				content = item
+			}
 		}
 
 	}
