@@ -367,696 +367,527 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 
 	log.Println("start to sync content")
 
-	var lastId int64 = 0
 	var startId int64 = 0
 	var limitSize = 5000
+	if targetDbSite.SyncTime == 0 {
+		req.Focus = true
+	}
 	// 如果没同步过，或使用强制同步，则同步所有，否则只同步新增的
-	if targetDbSite.SyncTime == 0 || req.Focus {
-		// 同步所有
-		var total int64
-		mainSite.DB.Model(&model.Module{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.NavType{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.Nav{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.Attachment{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.Category{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.Tag{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.ArchiveData{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.Archive{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.TagData{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.ArchiveCategory{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.ArchiveFlag{}).Count(&total)
-		ms.TotalCount += total
-		mainSite.DB.Model(&model.ArchiveRelation{}).Count(&total)
-		ms.TotalCount += total
+	var total int64
+	mainSite.DB.Model(&model.Module{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.NavType{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.Nav{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.Attachment{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.Category{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.Tag{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.ArchiveData{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.Archive{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.TagData{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.ArchiveCategory{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.ArchiveFlag{}).Count(&total)
+	ms.TotalCount += total
+	mainSite.DB.Model(&model.ArchiveRelation{}).Count(&total)
+	ms.TotalCount += total
 
-		// 先同步模型
-		var modules []model.Module
-		mainSite.DB.Model(&model.Module{}).Order("id ASC").Find(&modules)
-		for _, module := range modules {
-			log.Println("sync module", module.Id)
+	// 先同步模型
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.Module{}).Order("id DESC").Pluck("id", &startId)
+	}
+	var modules []model.Module
+	mainSite.DB.Model(&model.Module{}).Where("id > ?", startId).Order("id ASC").Find(&modules)
+	for _, module := range modules {
+		log.Println("sync module", module.Id)
+		ms.FinishCount++
+		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+		ms.Message = ms.w.Tr("Syncing%s:%s", "module", module.Title)
+		// 保存到目标站点
+		targetSite.DB.Save(&module)
+		// 自动翻译
+		if mainSite.MultiLanguage.AutoTranslate {
 			ms.FinishCount++
+			ms.TotalCount++
 			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "module", module.Title)
-			// 保存到目标站点
-			targetSite.DB.Save(&module)
-			// 自动翻译
-			if mainSite.MultiLanguage.AutoTranslate {
-				ms.FinishCount++
-				ms.TotalCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Translating%s:%s", "Module", module.Title)
-				transReq := AnqiAiRequest{
-					Title:      module.Title,
-					Language:   mainSite.System.Language,
-					ToLanguage: targetSite.System.Language,
-					Async:      false, // 同步返回结果
-				}
-				res, err := mainSite.AnqiTranslateString(&transReq)
-				if err == nil {
-					// 只处理成功的结果
-					targetSite.DB.Model(&module).UpdateColumns(map[string]interface{}{
-						"title":     res.Title,
-						"seo_title": res.Content,
-					})
-				}
+			ms.Message = ms.w.Tr("Translating%s:%s", "Module", module.Title)
+			transReq := &AnqiTranslateTextRequest{
+				Text: []string{
+					module.Title,       // 0
+					module.Description, // 1
+					module.Keywords,    // 2
+				},
+				Language:   mainSite.System.Language,
+				ToLanguage: targetSite.System.Language,
+			}
+			res, err := mainSite.AnqiTranslateString(transReq)
+			if err == nil {
+				// 只处理成功的结果
+				err = targetSite.DB.Model(&module).UpdateColumns(map[string]interface{}{
+					"title":       res.Text[0],
+					"description": res.Text[1],
+					"keywords":    res.Text[2],
+				}).Error
+				log.Println("translate err", err)
 			}
 		}
-		// 同步导航
-		var navTypes []model.NavType
-		mainSite.DB.Model(&model.NavType{}).Order("id ASC").Find(&navTypes)
-		for _, navType := range navTypes {
-			log.Println("sync navtype", navType.Id)
+	}
+	// 同步导航
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.NavType{}).Order("id DESC").Pluck("id", &startId)
+	}
+	var navTypes []model.NavType
+	mainSite.DB.Model(&model.NavType{}).Where("id > ?", startId).Order("id ASC").Find(&navTypes)
+	for _, navType := range navTypes {
+		log.Println("sync navtype", navType.Id)
+		ms.FinishCount++
+		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+		ms.Message = ms.w.Tr("Syncing%s:%s", "Nav Type", navType.Title)
+		targetSite.DB.Save(&navType)
+	}
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.Nav{}).Order("id DESC").Pluck("id", &startId)
+	}
+	var navs []model.Nav
+	mainSite.DB.Model(&model.Nav{}).Where("id > ?", startId).Order("id ASC").Find(&navs)
+	for _, nav := range navs {
+		log.Println("sync navs", nav.Id)
+		ms.FinishCount++
+		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+		ms.Message = ms.w.Tr("Syncing%s:%s", "Nav", nav.Title)
+		targetSite.DB.Save(&nav)
+		// 自动翻译
+		if mainSite.MultiLanguage.AutoTranslate {
 			ms.FinishCount++
+			ms.TotalCount++
 			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "Nav Type", navType.Title)
-			targetSite.DB.Save(&navType)
-		}
-		var navs []model.Nav
-		mainSite.DB.Model(&model.Nav{}).Order("id ASC").Find(&navs)
-		for _, nav := range navs {
-			log.Println("sync navs", nav.Id)
-			ms.FinishCount++
-			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "Nav", nav.Title)
-			targetSite.DB.Save(&nav)
-			// 自动翻译
-			if mainSite.MultiLanguage.AutoTranslate {
-				ms.FinishCount++
-				ms.TotalCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Translating%s:%s", "Nav", nav.Title)
-				transReq := AnqiAiRequest{
-					Title:      nav.Title,
-					Content:    nav.Description,
-					Language:   mainSite.System.Language,
-					ToLanguage: targetSite.System.Language,
-					Async:      false, // 同步返回结果
-				}
-				res, err := mainSite.AnqiTranslateString(&transReq)
-				if err == nil {
-					// 只处理成功的结果
-					targetSite.DB.Model(&nav).UpdateColumns(map[string]interface{}{
-						"title":       res.Title,
-						"description": res.Content,
-					})
-				}
+			ms.Message = ms.w.Tr("Translating%s:%s", "Nav", nav.Title)
+			transReq := &AnqiTranslateTextRequest{
+				Text: []string{
+					nav.Title,       // 0
+					nav.Description, // 1
+					nav.SubTitle,    // 2
+				},
+				Language:   mainSite.System.Language,
+				ToLanguage: targetSite.System.Language,
+			}
+			res, err := mainSite.AnqiTranslateString(transReq)
+			if err == nil {
+				// 只处理成功的结果
+				targetSite.DB.Model(&nav).UpdateColumns(map[string]interface{}{
+					"title":       res.Text[0],
+					"description": res.Text[1],
+					"sub_title":   res.Text[2],
+				})
 			}
 		}
-		// 同步图片资源
-		var attachCategories []model.AttachmentCategory
-		mainSite.DB.Model(&model.AttachmentCategory{}).Order("id ASC").Find(&attachCategories)
-		for _, attachCat := range attachCategories {
-			log.Println("sync navtype", attachCat.Id)
+	}
+	// 同步图片资源
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.AttachmentCategory{}).Order("id DESC").Pluck("id", &startId)
+	}
+	var attachCategories []model.AttachmentCategory
+	mainSite.DB.Model(&model.AttachmentCategory{}).Where("id > ?", startId).Order("id ASC").Find(&attachCategories)
+	for _, attachCat := range attachCategories {
+		log.Println("sync navtype", attachCat.Id)
+		ms.FinishCount++
+		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+		ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment Category", attachCat.Title)
+		targetSite.DB.Save(&attachCat)
+	}
+	// attachment 的复制处理
+	isCopied := false
+	if targetSite.PluginStorage.StorageType == config.StorageTypeLocal && req.Focus {
+		isCopied = true
+		// 采用复制的形式,全量复制
+		_ = library.CopyDir(targetSite.PublicPath+"uploads", mainSite.PublicPath+"uploads")
+	}
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.Attachment{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var attachments []model.Attachment
+		mainSite.DB.Model(&model.Attachment{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&attachments)
+		if len(attachments) == 0 {
+			break
+		}
+		startId = int64(attachments[len(attachments)-1].Id)
+		for _, attachment := range attachments {
+			log.Println("sync attachment", attachment.Id)
 			ms.FinishCount++
 			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment Category", attachCat.Title)
-			targetSite.DB.Save(&attachCat)
-		}
-		startId = lastId
-		for {
-			var attachments []model.Attachment
-			mainSite.DB.Model(&model.Attachment{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&attachments)
-			if len(attachments) == 0 {
-				break
-			}
-			startId = int64(attachments[len(attachments)-1].Id)
-			for _, attachment := range attachments {
-				log.Println("sync attachment", attachment.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment", attachment.FileName)
-				targetSite.DB.Save(&attachment)
-				// 还需要复制图片
-				if attachment.FileLocation != "" {
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment", attachment.FileName)
+			// 如果是本地图片，则采用复制，如果是远程图片，则采用上传
+			if targetSite.PluginStorage.StorageType == config.StorageTypeLocal {
+				// 采用复制的形式
+				if !isCopied && attachment.FileLocation != "" {
+					// 增量的在这里复制
+					// 还需要复制图片
 					// 复制图片，只支持本地图片复制
-					logoPath := ms.w.PublicPath + strings.TrimPrefix(attachment.FileLocation, "/")
-					logoBuf, err := os.ReadFile(logoPath)
-					if err == nil {
-						_, err = ms.w.Storage.UploadFile(attachment.FileLocation, logoBuf)
-					}
+					logoPath := mainSite.PublicPath + strings.TrimPrefix(attachment.FileLocation, "/")
+					destPath := targetSite.PublicPath + strings.TrimPrefix(attachment.FileLocation, "/")
+					_, _ = library.CopyFile(destPath, logoPath)
 					// 复制 thumb
 					paths, fileName := filepath.Split(attachment.FileLocation)
 					thumbLocation := paths + "thumb_" + fileName
-					thumbPath := ms.w.PublicPath + strings.TrimPrefix(thumbLocation, "/")
-					thumbBuf, err := os.ReadFile(thumbPath)
-					if err == nil {
-						_, err = ms.w.Storage.UploadFile(thumbLocation, thumbBuf)
-					}
+					thumbPath := mainSite.PublicPath + strings.TrimPrefix(thumbLocation, "/")
+					destThumbPath := targetSite.PublicPath + strings.TrimPrefix(thumbLocation, "/")
+					_, _ = library.CopyFile(destThumbPath, thumbPath)
 				}
-			}
-		}
-		// 同步分类
-		var categories []model.Category
-		mainSite.DB.Model(&model.Category{}).Order("id ASC").Find(&categories)
-		for _, category := range categories {
-			log.Println("sync category", category.Id)
-			ms.FinishCount++
-			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "Category", category.Title)
-			targetSite.DB.Save(&category)
-			// 自动翻译
-			if mainSite.MultiLanguage.AutoTranslate {
-				ms.FinishCount++
-				ms.TotalCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Translating%s:%s", "Category", category.Title)
-				transReq := AnqiAiRequest{
-					Title:      category.Title,
-					Content:    category.Content,
-					Language:   mainSite.System.Language,
-					ToLanguage: targetSite.System.Language,
-					Async:      false, // 同步返回结果
-				}
-				res, err := mainSite.AnqiTranslateString(&transReq)
+				targetSite.DB.Save(&attachment)
+			} else if attachment.FileLocation != "" {
+				// 复制图片，只支持本地图片复制
+				logoPath := mainSite.PublicPath + strings.TrimPrefix(attachment.FileLocation, "/")
+				logoBuf, err := os.ReadFile(logoPath)
 				if err == nil {
-					// 只处理成功的结果
-					targetSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
-						"title":   res.Title,
-						"content": res.Content,
-					})
+					_, err = targetSite.Storage.UploadFile(attachment.FileLocation, logoBuf)
 				}
-				if len(category.Description) > 0 {
-					transReq = AnqiAiRequest{
-						Title:      "",
-						Content:    category.Description,
-						Language:   mainSite.System.Language,
-						ToLanguage: targetSite.System.Language,
-						Async:      false, // 同步返回结果
-					}
-					res, err = mainSite.AnqiTranslateString(&transReq)
-					if err == nil {
-						// 只处理成功的结果
-						targetSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
-							"description": res.Content,
-						})
-					}
-				}
-			}
-		}
-		// 同步标签
-		startId = lastId
-		for {
-			var tags []model.Tag
-			mainSite.DB.Model(&model.Tag{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&tags)
-			if len(tags) == 0 {
-				break
-			}
-			startId = int64(tags[len(tags)-1].Id)
-			for _, tag := range tags {
-				log.Println("sync tag", tag.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Tag", tag.Title)
-				targetSite.DB.Save(&tag)
-				// 自动翻译
-				if mainSite.MultiLanguage.AutoTranslate {
-					ms.FinishCount++
-					ms.TotalCount++
-					ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-					ms.Message = ms.w.Tr("Translating%s:%s", "Tag", tag.Title)
-					transReq := AnqiAiRequest{
-						Title:      tag.Title,
-						Content:    tag.Description,
-						Language:   mainSite.System.Language,
-						ToLanguage: targetSite.System.Language,
-						Async:      false, // 同步返回结果
-					}
-					res, err := mainSite.AnqiTranslateString(&transReq)
-					if err == nil {
-						// 只处理成功的结果
-						targetSite.DB.Model(&tag).UpdateColumns(map[string]interface{}{
-							"title":       res.Title,
-							"description": res.Content,
-						})
-					}
-				}
-			}
-		}
-
-		// 同步文章，以及文章的附表
-		startId = lastId
-		for {
-			var archiveData []model.ArchiveData
-			mainSite.DB.Model(&model.ArchiveData{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveData)
-			if len(archiveData) == 0 {
-				break
-			}
-			startId = archiveData[len(archiveData)-1].Id
-			for _, archive := range archiveData {
-				log.Println("sync arcdata", archive.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Data", strconv.Itoa(int(archive.Id)))
-				targetSite.DB.Save(&archive)
-			}
-		}
-
-		for _, module := range modules {
-			if len(module.Fields) > 0 {
-				module.Migrate(targetSite.DB, module.TableName, false)
-				startId = lastId
-				for {
-					var extraData []map[string]interface{}
-					mainSite.DB.Table(module.TableName).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Scan(&extraData)
-					if len(extraData) == 0 {
-						break
-					}
-					tmpId, _ := strconv.Atoi(fmt.Sprintf("%v", extraData[len(extraData)-1]["id"]))
-					if tmpId == 0 {
-						break
-					}
-					ms.TotalCount += int64(len(extraData))
-					startId = int64(tmpId)
-					for _, data := range extraData {
-						log.Println("sync extra", data)
-						ms.FinishCount++
-						ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-						ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Extra", tmpId)
-						targetSite.DB.Table(module.TableName).Create(&data)
-						// 不做翻译
-					}
-				}
-			}
-		}
-
-		startId = lastId
-		for {
-			var archives []model.Archive
-			mainSite.DB.Model(&model.Archive{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archives)
-			if len(archives) == 0 {
-				break
-			}
-			startId = archives[len(archives)-1].Id
-			for _, archive := range archives {
-				log.Println("sync archive", archive.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive", archive.Title)
-				targetSite.DB.Save(&archive)
-				// 自动翻译
-				if mainSite.MultiLanguage.AutoTranslate {
-					// 文章的翻译，使用另一个接口
-					// 读取 data
-					archiveData, err := targetSite.GetArchiveDataById(archive.Id)
-					if err != nil {
-						continue
-					}
-					aiReq := &AnqiAiRequest{
-						Title:      archive.Title,
-						Content:    archiveData.Content,
-						ArticleId:  archive.Id,
-						Language:   mainSite.System.Language,
-						ToLanguage: targetSite.System.Language,
-						Async:      false, // 同步返回结果
-					}
-					result, err := mainSite.AnqiTranslateString(aiReq)
-					if err != nil {
-						continue
-					}
-					// 更新文档
-					if result.Status == config.AiArticleStatusCompleted {
-						archive.Title = result.Title
-						archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-						targetSite.DB.Save(archive)
-						// 再保存内容
-						archiveData.Content = result.Content
-						targetSite.DB.Save(archiveData)
-					}
-					// 写入 plan
-					_, _ = mainSite.SaveAiArticlePlan(result, result.UseSelf)
-				}
-			}
-		}
-
-		startId = lastId
-		for {
-			var tagData []model.TagData
-			mainSite.DB.Model(&model.TagData{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&tagData)
-			if len(tagData) == 0 {
-				break
-			}
-			startId = int64(tagData[len(tagData)-1].Id)
-			for _, tag := range tagData {
-				log.Println("sync tagdata", tag.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Tag Data", strconv.Itoa(int(tag.Id)))
-				targetSite.DB.Save(&tag)
-			}
-		}
-
-		startId = lastId
-		for {
-			var archiveCategories []model.ArchiveCategory
-			mainSite.DB.Model(&model.ArchiveCategory{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveCategories)
-			if len(archiveCategories) == 0 {
-				break
-			}
-			startId = archiveCategories[len(archiveCategories)-1].Id
-			for _, archiveCategory := range archiveCategories {
-				log.Println("sync arccate", archiveCategory.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Category", strconv.Itoa(int(archiveCategory.Id)))
-				targetSite.DB.Save(&archiveCategory)
-			}
-		}
-
-		startId = lastId
-		for {
-			var archiveFlags []model.ArchiveFlag
-			mainSite.DB.Model(&model.ArchiveFlag{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveFlags)
-			if len(archiveFlags) == 0 {
-				break
-			}
-			startId = archiveFlags[len(archiveFlags)-1].Id
-			for _, archiveFlag := range archiveFlags {
-				log.Println("sync arcflag", archiveFlag.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Flag", strconv.Itoa(int(archiveFlag.Id)))
-				targetSite.DB.Save(&archiveFlag)
-			}
-		}
-		startId = lastId
-		for {
-			var archiveRelations []model.ArchiveRelation
-			mainSite.DB.Model(&model.ArchiveRelation{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveRelations)
-			if len(archiveRelations) == 0 {
-				break
-			}
-			startId = archiveRelations[len(archiveRelations)-1].Id
-			for _, archiveRelation := range archiveRelations {
-				log.Println("sync arcrelation", archiveRelation.Id)
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Relation", strconv.Itoa(int(archiveRelation.Id)))
-				targetSite.DB.Save(&archiveRelation)
-			}
-		}
-	} else {
-		// 只同步新增的，如果是同步新增的，则只查找缺少的ID。
-		// 新增的只处理 modules,categories,archives
-		// modules
-		var modules []model.Module
-		mainSite.DB.Model(&model.Module{}).Order("id ASC").Find(&modules)
-		ms.TotalCount += int64(len(modules))
-		for _, module := range modules {
-			ms.FinishCount++
-			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "Module", module.Title)
-			// 检查目标站点是否已经存在相同的ID
-			targetSite.DB.Where("id = ?", module.Id).FirstOrCreate(&module)
-			// 自动翻译
-			if mainSite.MultiLanguage.AutoTranslate {
-				ms.FinishCount++
-				ms.TotalCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Translating%s:%s", "Module", module.Title)
-				transReq := AnqiAiRequest{
-					Title:      module.Title,
-					Language:   mainSite.System.Language,
-					ToLanguage: targetSite.System.Language,
-					Async:      false, // 同步返回结果
-				}
-				res, err := mainSite.AnqiTranslateString(&transReq)
+				// 复制 thumb
+				paths, fileName := filepath.Split(attachment.FileLocation)
+				thumbLocation := paths + "thumb_" + fileName
+				thumbPath := mainSite.PublicPath + strings.TrimPrefix(thumbLocation, "/")
+				thumbBuf, err := os.ReadFile(thumbPath)
 				if err == nil {
-					// 只处理成功的结果
-					targetSite.DB.Model(&module).UpdateColumns(map[string]interface{}{
-						"title":     res.Title,
-						"seo_title": res.Content,
-					})
+					_, err = targetSite.Storage.UploadFile(thumbLocation, thumbBuf)
 				}
 			}
 		}
-		// categories
+	}
+	// 同步分类
+	startId = 0
+	if !req.Focus {
 		targetSite.DB.Model(&model.Category{}).Order("id DESC").Pluck("id", &startId)
-		var categories []model.Category
-		mainSite.DB.Model(&model.Category{}).Where("id > ?", startId).Order("id ASC").Find(&categories)
-		ms.TotalCount += int64(len(categories))
-		for _, category := range categories {
+	}
+	var categories []model.Category
+	mainSite.DB.Model(&model.Category{}).Where("id > ?", startId).Order("id ASC").Find(&categories)
+	for _, category := range categories {
+		log.Println("sync category", category.Id)
+		ms.FinishCount++
+		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+		ms.Message = ms.w.Tr("Syncing%s:%s", "Category", category.Title)
+		targetSite.DB.Save(&category)
+		// 自动翻译
+		if mainSite.MultiLanguage.AutoTranslate {
+			ms.FinishCount++
+			ms.TotalCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Translating%s:%s", "Category", category.Title)
+			transReq := &AnqiTranslateTextRequest{
+				Text: []string{
+					category.Title,       // 0
+					category.Description, // 1
+					category.Keywords,    // 2
+					category.Content,     // 3
+				},
+				Language:   mainSite.System.Language,
+				ToLanguage: targetSite.System.Language,
+			}
+			res, err := mainSite.AnqiTranslateString(transReq)
+			if err == nil {
+				// 只处理成功的结果
+				targetSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
+					"title":       res.Text[0],
+					"description": res.Text[1],
+					"keywords":    res.Text[2],
+					"content":     res.Text[3],
+				})
+			}
+		}
+	}
+	// 同步标签
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.Tag{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var tags []model.Tag
+		mainSite.DB.Model(&model.Tag{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&tags)
+		if len(tags) == 0 {
+			break
+		}
+		startId = int64(tags[len(tags)-1].Id)
+		for _, tag := range tags {
+			log.Println("sync tag", tag.Id)
 			ms.FinishCount++
 			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-			ms.Message = ms.w.Tr("Syncing%s:%s", "Category", category.Title)
-			targetSite.DB.Where("id = ?", category.Id).Save(&category)
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Tag", tag.Title)
+			targetSite.DB.Save(&tag)
+			// tag Content
+			tagContent, err := mainSite.GetTagContentById(tag.Id)
+			if err == nil {
+				targetSite.DB.Save(&tagContent)
+			}
 			// 自动翻译
 			if mainSite.MultiLanguage.AutoTranslate {
 				ms.FinishCount++
 				ms.TotalCount++
 				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Translating%s:%s", "Category", category.Title)
-				transReq := AnqiAiRequest{
-					Title:      category.Title,
-					Content:    category.Content,
+				ms.Message = ms.w.Tr("Translating%s:%s", "Tag", tag.Title)
+				var content string
+				if tagContent != nil {
+					content = tagContent.Content
+				}
+				transReq := &AnqiTranslateTextRequest{
+					Text: []string{
+						tag.Title,       // 0
+						tag.Description, // 1
+						tag.Keywords,    // 2
+						content,         // 3
+					},
 					Language:   mainSite.System.Language,
 					ToLanguage: targetSite.System.Language,
-					Async:      false, // 同步返回结果
 				}
-				res, err := mainSite.AnqiTranslateString(&transReq)
+				res, err := mainSite.AnqiTranslateString(transReq)
 				if err == nil {
 					// 只处理成功的结果
-					targetSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
-						"title":   res.Title,
-						"content": res.Content,
+					targetSite.DB.Model(&tag).UpdateColumns(map[string]interface{}{
+						"title":       res.Text[0],
+						"description": res.Text[1],
+						"keywords":    res.Text[2],
 					})
-				}
-				if len(category.Description) > 0 {
-					transReq = AnqiAiRequest{
-						Title:      "",
-						Content:    category.Description,
-						Language:   mainSite.System.Language,
-						ToLanguage: targetSite.System.Language,
-						Async:      false, // 同步返回结果
-					}
-					res, err = mainSite.AnqiTranslateString(&transReq)
-					if err == nil {
-						// 只处理成功的结果
-						targetSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
-							"description": res.Content,
-						})
+					if res.Text[3] != "" {
+						targetSite.DB.Model(&model.TagContent{}).Where("id = ?", tag.Id).UpdateColumn("content", res.Text[3])
 					}
 				}
 			}
 		}
+	}
 
-		targetSite.DB.Model(&model.Archive{}).Order("id DESC").Pluck("id", &lastId)
-		// archiveData
-		startId = lastId
-		for {
-			var archiveData []model.ArchiveData
-			mainSite.DB.Model(&model.ArchiveData{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveData)
-			if len(archiveData) == 0 {
-				break
-			}
-			ms.TotalCount += int64(len(archiveData))
-			startId = archiveData[len(archiveData)-1].Id
-			for _, archive := range archiveData {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Data", strconv.Itoa(int(archive.Id)))
-				targetSite.DB.Save(&archive)
-			}
+	// 同步文章，以及文章的附表
+	startId = 0
+	if !req.Focus {
+		// 以 archives 为准
+		targetSite.DB.Model(&model.Archive{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var archiveData []model.ArchiveData
+		mainSite.DB.Model(&model.ArchiveData{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveData)
+		if len(archiveData) == 0 {
+			break
 		}
-
-		// extraData
-		for _, module := range modules {
-			if len(module.Fields) > 0 {
-				module.Migrate(targetSite.DB, module.TableName, false)
-				startId = lastId
-				for {
-					var extraData []map[string]interface{}
-					mainSite.DB.Table(module.TableName).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Scan(&extraData)
-					if len(extraData) == 0 {
-						break
-					}
-					tmpId, _ := strconv.Atoi(fmt.Sprintf("%v", extraData[len(extraData)-1]["id"]))
-					if tmpId == 0 {
-						break
-					}
-					ms.TotalCount += int64(len(extraData))
-					startId = int64(tmpId)
-					for _, data := range extraData {
-						ms.FinishCount++
-						ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-						ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Extra", tmpId)
-						targetSite.DB.Table(module.TableName).Create(&data)
-					}
-				}
-			}
+		startId = archiveData[len(archiveData)-1].Id
+		for _, archive := range archiveData {
+			log.Println("sync arcdata", archive.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Data", strconv.Itoa(int(archive.Id)))
+			targetSite.DB.Save(&archive)
 		}
+	}
 
-		// archives
-		startId = lastId
-		for {
-			var archives []model.Archive
-			mainSite.DB.Model(&model.Archive{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archives)
-			if len(archives) == 0 {
-				break
+	for _, module := range modules {
+		if len(module.Fields) > 0 {
+			module.Migrate(targetSite.DB, module.TableName, false)
+			startId = 0
+			if !req.Focus {
+				// 以 archives 为准
+				targetSite.DB.Model(&model.Archive{}).Order("id DESC").Pluck("id", &startId)
 			}
-			ms.TotalCount += int64(len(archives))
-			startId = archives[len(archives)-1].Id
-			for _, archive := range archives {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive", archive.Title)
-				targetSite.DB.Where("id = ?", archive.Id).Save(&archive)
-				// 自动翻译
-				if mainSite.MultiLanguage.AutoTranslate {
-					// 文章的翻译，使用另一个接口
-					// 读取 data
-					archiveData, err := targetSite.GetArchiveDataById(archive.Id)
-					if err != nil {
-						continue
-					}
-					aiReq := &AnqiAiRequest{
-						Title:      archive.Title,
-						Content:    archiveData.Content,
-						ArticleId:  archive.Id,
-						Language:   mainSite.System.Language,
-						ToLanguage: targetSite.System.Language,
-						Async:      false, // 同步返回结果
-					}
-					result, err := mainSite.AnqiTranslateString(aiReq)
-					if err != nil {
-						continue
-					}
-					// 更新文档
-					if result.Status == config.AiArticleStatusCompleted {
-						archive.Title = result.Title
-						archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-						targetSite.DB.Save(archive)
-						// 再保存内容
-						archiveData.Content = result.Content
-						targetSite.DB.Save(archiveData)
-					}
-					// 写入 plan
-					_, _ = mainSite.SaveAiArticlePlan(result, result.UseSelf)
+			for {
+				var extraData []map[string]interface{}
+				mainSite.DB.Table(module.TableName).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Scan(&extraData)
+				if len(extraData) == 0 {
+					break
 				}
-			}
-		}
-
-		targetSite.DB.Model(&model.TagData{}).Order("id DESC").Pluck("id", &lastId)
-		startId = lastId
-		for {
-			var tagData []model.TagData
-			mainSite.DB.Model(&model.TagData{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&tagData)
-			if len(tagData) == 0 {
-				break
-			}
-			ms.TotalCount += int64(len(tagData))
-			startId = int64(tagData[len(tagData)-1].Id)
-			var tagIds = make([]uint, 0, len(tagData))
-			for _, tag := range tagData {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Tag Data", strconv.Itoa(int(tag.Id)))
-				targetSite.DB.Save(&tag)
-				existId := false
-				for _, id := range tagIds {
-					if id == tag.TagId {
-						existId = true
-						break
-					}
+				tmpId, _ := strconv.Atoi(fmt.Sprintf("%v", extraData[len(extraData)-1]["id"]))
+				if tmpId == 0 {
+					break
 				}
-				if !existId {
-					tagIds = append(tagIds, tag.Id)
-				}
-			}
-			var tags []model.Tag
-			mainSite.DB.Model(&model.Tag{}).Where("id IN(?)", tagIds).Order("id asc").Find(&tags)
-			ms.TotalCount += int64(len(tags))
-			for _, tag := range tags {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Tag", tag.Title)
-				targetSite.DB.Save(&tag)
-				// 自动翻译
-				if mainSite.MultiLanguage.AutoTranslate {
+				ms.TotalCount += int64(len(extraData))
+				startId = int64(tmpId)
+				for _, data := range extraData {
+					log.Println("sync extra", data)
 					ms.FinishCount++
-					ms.TotalCount++
 					ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-					ms.Message = ms.w.Tr("Translating%s:%s", "Category", tag.Title)
-					transReq := AnqiAiRequest{
-						Title:      tag.Title,
-						Content:    tag.Description,
-						Language:   mainSite.System.Language,
-						ToLanguage: targetSite.System.Language,
-						Async:      false, // 同步返回结果
-					}
-					res, err := mainSite.AnqiTranslateString(&transReq)
-					if err == nil {
-						// 只处理成功的结果
-						targetSite.DB.Model(&tag).UpdateColumns(map[string]interface{}{
-							"title":       res.Title,
-							"description": res.Content,
-						})
+					ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Extra", tmpId)
+					targetSite.DB.Table(module.TableName).Create(&data)
+					// 自动翻译
+					dataId, _ := strconv.Atoi(fmt.Sprintf("%v", data["id"]))
+					if mainSite.MultiLanguage.AutoTranslate {
+						ms.FinishCount++
+						ms.TotalCount++
+						ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+						ms.Message = ms.w.Tr("Translating%s:%s", "Archive Extra", dataId)
+						var texts []string
+						var textKeys []string
+						for fk, field := range data {
+							if fk == "id" {
+								continue
+							}
+							val, ok := field.(string)
+							if ok && val != "" {
+								texts = append(texts, val)
+								textKeys = append(textKeys, fk)
+							}
+						}
+						if len(texts) > 0 {
+							transReq := &AnqiTranslateTextRequest{
+								Text:       texts,
+								Language:   mainSite.System.Language,
+								ToLanguage: targetSite.System.Language,
+							}
+							res, err := mainSite.AnqiTranslateString(transReq)
+							if err == nil {
+								// 只处理成功的结果
+								// 还原
+								var updated = map[string]interface{}{}
+								for i, textKey := range textKeys {
+									updated[textKey] = res.Text[i]
+								}
+								targetSite.DB.Table(module.TableName).Where("id = ?", dataId).UpdateColumns(updated)
+							}
+						}
 					}
 				}
 			}
 		}
+	}
 
-		targetSite.DB.Model(&model.ArchiveCategory{}).Order("id DESC").Pluck("id", &lastId)
-		startId = lastId
-		for {
-			var archiveCategories []model.ArchiveCategory
-			mainSite.DB.Model(&model.ArchiveCategory{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveCategories)
-			if len(archiveCategories) == 0 {
-				break
-			}
-			ms.TotalCount += int64(len(archiveCategories))
-			startId = archiveCategories[len(archiveCategories)-1].Id
-			for _, archiveCategory := range archiveCategories {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Tag Data", strconv.Itoa(int(archiveCategory.Id)))
-				targetSite.DB.Save(&archiveCategory)
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.Archive{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var archives []model.Archive
+		mainSite.DB.Model(&model.Archive{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archives)
+		if len(archives) == 0 {
+			break
+		}
+		startId = archives[len(archives)-1].Id
+		for _, archive := range archives {
+			log.Println("sync archive", archive.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Archive", archive.Title)
+			targetSite.DB.Save(&archive)
+			// 自动翻译
+			if mainSite.MultiLanguage.AutoTranslate {
+				// 文章的翻译，使用另一个接口
+				// 读取 data
+				archiveData, err := targetSite.GetArchiveDataById(archive.Id)
+				if err != nil {
+					continue
+				}
+				transReq := &AnqiTranslateTextRequest{
+					Text: []string{
+						archive.Title,       // 0
+						archive.Description, // 1
+						archive.Keywords,    // 2
+						archiveData.Content, // 3
+					},
+					Language:   mainSite.System.Language,
+					ToLanguage: targetSite.System.Language,
+				}
+				result, err := mainSite.AnqiTranslateString(transReq)
+				if err != nil {
+					continue
+				}
+				// 更新文档
+				archive.Title = result.Text[0]
+				archive.Description = result.Text[1]
+				archive.Keywords = result.Text[2]
+				targetSite.DB.Model(&archive).UpdateColumns(map[string]interface{}{
+					"title":       archive.Title,
+					"description": archive.Description,
+					"keywords":    archive.Keywords,
+				})
+				// 再保存内容
+				archiveData.Content = result.Text[3]
+				targetSite.DB.Model(archiveData).UpdateColumns(map[string]interface{}{
+					"content": archiveData.Content,
+				})
 			}
 		}
+	}
 
-		targetSite.DB.Model(&model.ArchiveFlag{}).Order("id DESC").Pluck("id", &lastId)
-		startId = lastId
-		for {
-			var archiveFlags []model.ArchiveFlag
-			mainSite.DB.Model(&model.ArchiveFlag{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveFlags)
-			if len(archiveFlags) == 0 {
-				break
-			}
-			ms.TotalCount += int64(len(archiveFlags))
-			startId = archiveFlags[len(archiveFlags)-1].Id
-			for _, archiveFlag := range archiveFlags {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Flag", strconv.Itoa(int(archiveFlag.Id)))
-				targetSite.DB.Save(&archiveFlag)
-			}
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.TagData{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var tagData []model.TagData
+		mainSite.DB.Model(&model.TagData{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&tagData)
+		if len(tagData) == 0 {
+			break
 		}
+		startId = int64(tagData[len(tagData)-1].Id)
+		for _, tag := range tagData {
+			log.Println("sync tagdata", tag.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Tag Data", strconv.Itoa(int(tag.Id)))
+			targetSite.DB.Save(&tag)
+		}
+	}
 
-		targetSite.DB.Model(&model.ArchiveRelation{}).Order("id DESC").Pluck("id", &lastId)
-		startId = lastId
-		for {
-			var archiveRelations []model.ArchiveRelation
-			mainSite.DB.Model(&model.ArchiveRelation{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveRelations)
-			if len(archiveRelations) == 0 {
-				break
-			}
-			ms.TotalCount += int64(len(archiveRelations))
-			startId = archiveRelations[len(archiveRelations)-1].Id
-			for _, archiveRelation := range archiveRelations {
-				ms.FinishCount++
-				ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-				ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Relation", strconv.Itoa(int(archiveRelation.Id)))
-				targetSite.DB.Save(&archiveRelation)
-			}
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.ArchiveCategory{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var archiveCategories []model.ArchiveCategory
+		mainSite.DB.Model(&model.ArchiveCategory{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveCategories)
+		if len(archiveCategories) == 0 {
+			break
+		}
+		startId = archiveCategories[len(archiveCategories)-1].Id
+		for _, archiveCategory := range archiveCategories {
+			log.Println("sync arccate", archiveCategory.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Category", strconv.Itoa(int(archiveCategory.Id)))
+			targetSite.DB.Save(&archiveCategory)
+		}
+	}
+
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.ArchiveFlag{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var archiveFlags []model.ArchiveFlag
+		mainSite.DB.Model(&model.ArchiveFlag{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveFlags)
+		if len(archiveFlags) == 0 {
+			break
+		}
+		startId = archiveFlags[len(archiveFlags)-1].Id
+		for _, archiveFlag := range archiveFlags {
+			log.Println("sync arcflag", archiveFlag.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Flag", strconv.Itoa(int(archiveFlag.Id)))
+			targetSite.DB.Save(&archiveFlag)
+		}
+	}
+	startId = 0
+	if !req.Focus {
+		targetSite.DB.Model(&model.ArchiveRelation{}).Order("id DESC").Pluck("id", &startId)
+	}
+	for {
+		var archiveRelations []model.ArchiveRelation
+		mainSite.DB.Model(&model.ArchiveRelation{}).Where("id > ?", startId).Limit(limitSize).Order("id ASC").Find(&archiveRelations)
+		if len(archiveRelations) == 0 {
+			break
+		}
+		startId = archiveRelations[len(archiveRelations)-1].Id
+		for _, archiveRelation := range archiveRelations {
+			log.Println("sync arcrelation", archiveRelation.Id)
+			ms.FinishCount++
+			ms.Percent = ms.FinishCount * 100 / ms.TotalCount
+			ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Relation", strconv.Itoa(int(archiveRelation.Id)))
+			targetSite.DB.Save(&archiveRelation)
 		}
 	}
 

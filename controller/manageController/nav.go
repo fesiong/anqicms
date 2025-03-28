@@ -52,19 +52,22 @@ func SettingNavForm(ctx iris.Context) {
 					if err == nil {
 						// 同步成功，进行翻译
 						if currentSite.MultiLanguage.AutoTranslate {
-							transReq := provider.AnqiAiRequest{
-								Title:      subNav.Title,
-								Content:    subNav.Description,
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subNav.Title,       // 0
+									subNav.Description, // 1
+									subNav.SubTitle,    // 2
+								},
 								Language:   currentSite.System.Language,
 								ToLanguage: subSite.System.Language,
-								Async:      false, // 同步返回结果
 							}
-							res, err := currentSite.AnqiTranslateString(&transReq)
+							res, err := currentSite.AnqiTranslateString(transReq)
 							if err == nil {
 								// 只处理成功的结果
 								subSite.DB.Model(subNav).UpdateColumns(map[string]interface{}{
-									"title":       res.Title,
-									"description": res.Content,
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"sub_title":   res.Text[2],
 								})
 							}
 						}

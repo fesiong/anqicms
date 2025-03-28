@@ -10,7 +10,6 @@ import (
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/fulltext"
@@ -581,29 +580,28 @@ func ArchiveDetailForm(ctx iris.Context) {
 							if err != nil {
 								continue
 							}
-							aiReq := &provider.AnqiAiRequest{
-								Title:      subArchive.Title,
-								Content:    archiveData.Content,
-								ArticleId:  subArchive.Id,
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subArchive.Title,       // 0
+									subArchive.Description, // 1
+									subArchive.Keywords,    // 2
+									archiveData.Content,    // 3
+								},
 								Language:   currentSite.System.Language,
 								ToLanguage: subSite.System.Language,
-								Async:      false, // 同步返回结果
 							}
-							result, err := currentSite.AnqiTranslateString(aiReq)
+							result, err := currentSite.AnqiTranslateString(transReq)
 							if err != nil {
 								continue
 							}
 							// 更新文档
-							if result.Status == config.AiArticleStatusCompleted {
-								subArchive.Title = result.Title
-								subArchive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-								subSite.DB.Save(subArchive)
-								// 再保存内容
-								archiveData.Content = result.Content
-								subSite.DB.Save(archiveData)
-							}
-							// 写入 plan
-							_, _ = currentSite.SaveAiArticlePlan(result, result.UseSelf)
+							subArchive.Title = result.Text[0]
+							subArchive.Description = result.Text[1]
+							subArchive.Keywords = result.Text[2]
+							subSite.DB.Save(subArchive)
+							// 再保存内容
+							archiveData.Content = result.Text[3]
+							subSite.DB.Save(archiveData)
 						}
 					}
 				} else {

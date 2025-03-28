@@ -195,36 +195,25 @@ func CategoryDetailForm(ctx iris.Context) {
 					if err == nil {
 						// 同步成功，进行翻译
 						if currentSite.MultiLanguage.AutoTranslate {
-							transReq := provider.AnqiAiRequest{
-								Title:      subCategory.Title,
-								Content:    subCategory.Content,
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subCategory.Title,       // 0
+									subCategory.Description, // 1
+									subCategory.Keywords,    // 2
+									subCategory.Content,     // 3
+								},
 								Language:   currentSite.System.Language,
 								ToLanguage: subSite.System.Language,
-								Async:      false, // 同步返回结果
 							}
-							res, err := currentSite.AnqiTranslateString(&transReq)
+							res, err := currentSite.AnqiTranslateString(transReq)
 							if err == nil {
 								// 只处理成功的结果
 								subSite.DB.Model(subCategory).UpdateColumns(map[string]interface{}{
-									"title":   res.Title,
-									"content": res.Content,
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"keywords":    res.Text[2],
+									"content":     res.Text[3],
 								})
-							}
-							if len(category.Description) > 0 {
-								transReq = provider.AnqiAiRequest{
-									Title:      "",
-									Content:    category.Description,
-									Language:   currentSite.System.Language,
-									ToLanguage: subSite.System.Language,
-									Async:      false, // 同步返回结果
-								}
-								res, err = currentSite.AnqiTranslateString(&transReq)
-								if err == nil {
-									// 只处理成功的结果
-									subSite.DB.Model(&category).UpdateColumns(map[string]interface{}{
-										"description": res.Content,
-									})
-								}
 							}
 						}
 					}

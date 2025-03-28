@@ -4,7 +4,6 @@ import (
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -274,15 +273,17 @@ func AnqiTranslateArticle(ctx iris.Context) {
 		})
 		return
 	}
-	aiReq := &provider.AnqiAiRequest{
-		Title:      archive.Title,
-		Content:    archiveData.Content,
-		ArticleId:  archive.Id,
-		Language:   "",
+	transReq := &provider.AnqiTranslateTextRequest{
+		Text: []string{
+			archive.Title,       // 0
+			archive.Description, // 1
+			archive.Keywords,    // 2
+			archiveData.Content, // 3
+		},
+		Language:   currentSite.System.Language,
 		ToLanguage: req.ToLanguage,
-		Async:      false, // 同步返回结果
 	}
-	result, err := currentSite.AnqiTranslateString(aiReq)
+	result, err := currentSite.AnqiTranslateString(transReq)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -291,25 +292,23 @@ func AnqiTranslateArticle(ctx iris.Context) {
 		return
 	}
 	// 更新文档
-	if result.Status == config.AiArticleStatusCompleted {
-		archive.Title = result.Title
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-		tx := currentSite.DB
-		if isDraft {
-			tx = tx.Model(&model.Archive{})
-		} else {
-			tx = tx.Model(&model.ArchiveDraft{})
-		}
-		tx.Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
-			"title":       archive.Title,
-			"description": archive.Description,
-		})
-		// 再保存内容
-		archiveData.Content = result.Content
-		currentSite.DB.Save(archiveData)
+	archive.Title = result.Text[0]
+	archive.Description = result.Text[1]
+	archive.Keywords = result.Text[2]
+	tx := currentSite.DB
+	if isDraft {
+		tx = tx.Model(&model.Archive{})
+	} else {
+		tx = tx.Model(&model.ArchiveDraft{})
 	}
-	// 写入 plan
-	_, _ = currentSite.SaveAiArticlePlan(result, result.UseSelf)
+	tx.Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
+		"title":       archive.Title,
+		"description": archive.Description,
+		"keywords":    archive.Keywords,
+	})
+	// 再保存内容
+	archiveData.Content = result.Text[3]
+	currentSite.DB.Save(archiveData)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
