@@ -96,17 +96,22 @@ func ModuleDetailForm(ctx iris.Context) {
 					if err == nil {
 						// 同步成功，进行翻译
 						if currentSite.MultiLanguage.AutoTranslate {
-							transReq := provider.AnqiAiRequest{
-								Title:      subModule.Title,
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subModule.Title,       // 0
+									subModule.Description, // 1
+									subModule.Keywords,    // 2
+								},
 								Language:   currentSite.System.Language,
 								ToLanguage: subSite.System.Language,
-								Async:      false, // 同步返回结果
 							}
-							res, err := currentSite.AnqiTranslateString(&transReq)
+							res, err := currentSite.AnqiTranslateString(transReq)
 							if err == nil {
 								// 只处理成功的结果
 								subSite.DB.Model(subModule).UpdateColumns(map[string]interface{}{
-									"title": res.Title,
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"keywords":    res.Text[2],
 								})
 							}
 						}

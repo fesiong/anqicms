@@ -692,6 +692,13 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	//最后archive
 	reg = regexp.MustCompile(rewritePattern.ArchiveRule)
 	match = reg.FindStringSubmatch(paramValue)
+	if len(match) == 0 && strings.Contains(rewritePattern.ArchiveRule, "\\?") {
+		// 详情支持带问号的规则
+		paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+		// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
+		reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.ArchiveRule, "$") + "([&#].*)?$")
+		match = reg.FindStringSubmatch(paramValueWithArgs)
+	}
 	if len(match) > 1 {
 		matchMap["match"] = "archive"
 		for i, v := range match {

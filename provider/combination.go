@@ -142,38 +142,37 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		if err != nil {
 			return 1, nil
 		}
-		aiReq := &AnqiAiRequest{
-			Title:      res.Title,
-			Content:    archiveData.Content,
-			ArticleId:  res.Id,
+		transReq := &AnqiTranslateTextRequest{
+			Text: []string{
+				res.Title,           // 0
+				res.Description,     // 1
+				res.Keywords,        // 2
+				archiveData.Content, // 3
+			},
 			Language:   w.CollectorConfig.Language,
 			ToLanguage: w.CollectorConfig.ToLanguage,
-			Async:      false, // 同步返回结果
 		}
-		result, err := w.AnqiTranslateString(aiReq)
+		result, err := w.AnqiTranslateString(transReq)
 		if err != nil {
 			return 1, nil
 		}
-		// 更新文档
-		if result.Status == config.AiArticleStatusCompleted {
-			res.Title = result.Title
-			res.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Content), "\n", " "))
-			tx := w.DB
-			if isDraft {
-				tx = tx.Model(&model.ArchiveDraft{})
-			} else {
-				tx = tx.Model(&model.Archive{})
-			}
-			tx.Where("id = ?", res.Id).UpdateColumns(map[string]interface{}{
-				"title":       res.Title,
-				"description": res.Description,
-			})
-			// 再保存内容
-			archiveData.Content = result.Content
-			w.DB.Save(archiveData)
+		// 翻译成功，更新文档
+		res.Title = result.Text[0]
+		res.Description = result.Text[1]
+		res.Keywords = result.Text[2]
+		tx := w.DB
+		if isDraft {
+			tx = tx.Model(&model.ArchiveDraft{})
+		} else {
+			tx = tx.Model(&model.Archive{})
 		}
-		// 写入 plan
-		_, _ = w.SaveAiArticlePlan(result, result.UseSelf)
+		tx.Where("id = ?", res.Id).UpdateColumns(map[string]interface{}{
+			"title":       res.Title,
+			"description": res.Description,
+			"keywords":    res.Keywords,
+		})
+		// 再保存内容
+		w.DB.Model(&model.ArchiveData{}).Where("id = ?", archiveData.Id).UpdateColumn("content", result.Text[3])
 	}
 
 	return 1, nil

@@ -491,18 +491,22 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		}
 		// 添加json-ld
 		if currentSite.PluginJsonLd.Open {
-			jsonLd := currentSite.GetJsonLd(ctx)
-			if len(jsonLd) > 0 {
-				jsonLdBuf := []byte("\n<script type=\"application/ld+json\">\n" + jsonLd + "\n</script>\n")
-				if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
-					index = index + 7
-					tmpData := make([]byte, len(data)+len(jsonLdBuf))
-					copy(tmpData, data[:index])
-					copy(tmpData[index:], jsonLdBuf)
-					copy(tmpData[index+len(jsonLdBuf):], data[index:])
-					data = tmpData
-				} else {
-					data = append(data, jsonLdBuf...)
+			// 需要先检查页面是否存在ls+json,如果已存在，则不再添加
+			re, _ := regexp.Compile(`<script.+?type="application/ld\+json".*?>`)
+			if !re.Match(data) {
+				jsonLd := currentSite.GetJsonLd(ctx)
+				if len(jsonLd) > 0 {
+					jsonLdBuf := []byte("\n<script type=\"application/ld+json\">\n" + jsonLd + "\n</script>\n")
+					if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+						index = index + 7
+						tmpData := make([]byte, len(data)+len(jsonLdBuf))
+						copy(tmpData, data[:index])
+						copy(tmpData[index:], jsonLdBuf)
+						copy(tmpData[index+len(jsonLdBuf):], data[index:])
+						data = tmpData
+					} else {
+						data = append(data, jsonLdBuf...)
+					}
 				}
 			}
 		}

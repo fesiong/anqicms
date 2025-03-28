@@ -29,6 +29,7 @@ const (
 
 	CategoryShowTypeTree = 0
 	CategoryShowTypeNode = 1
+	CategoryShowTypeList = 2
 )
 
 const (

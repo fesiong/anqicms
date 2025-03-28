@@ -8,161 +8,63 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"log"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 )
 
-func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
-	// 翻译标题
-	if len(req.Title) > 0 {
-		// 翻译标题
-		// 使用AI翻译
-		if w.PluginTranslate.Engine == config.TranslateEngineAi {
-			tmpContent, err := w.SelfAiTranslate(req.Title, req.ToLanguage)
+func (w *Website) SelfAiTranslateResult(req *AnqiTranslateTextRequest) (*AnqiTranslateTextRequest, error) {
+	// 内容逐个翻译
+	// 对于纯txt的打包处理，对于html的单独处理
+	var newText []string
+	var newIndex []int
+	for i := range req.Text {
+		content := strings.TrimSpace(req.Text[i])
+		if content == "" {
+			// 空的跳过
+			continue
+		}
+		if strings.HasPrefix(content, "<") {
+			resp, err := w.TranslateHtml(content, req.Language, req.ToLanguage)
 			if err != nil {
 				return nil, err
+			} else {
+				// 需要只取 body部分
+				htmlR := strings.NewReader(resp)
+				doc, err2 := goquery.NewDocumentFromReader(htmlR)
+				if err2 == nil {
+					htmlCode, err2 := doc.Find("body").Html()
+					if err2 == nil {
+						resp = htmlCode
+					}
+				}
+				req.Text[i] = resp
 			}
-			req.Title = tmpContent
-		} else if w.PluginTranslate.Engine == config.TranslateEngineBaidu {
-			// 使用百度翻译
-			baiduTranslate := NewBaiduTranslate(w.PluginTranslate.BaiduAppId, w.PluginTranslate.BaiduAppSecret)
-			content, err := baiduTranslate.Translate(req.Title, req.Language, req.ToLanguage)
-			if err != nil {
-				return nil, err
-			}
-			req.Title = content
-		} else if w.PluginTranslate.Engine == config.TranslateEngineYoudao {
-			// 有道翻译
-			youdaoTranslate := NewYoudaoTranslate(w.PluginTranslate.YoudaoAppKey, w.PluginTranslate.YoudaoAppSecret)
-			content, err := youdaoTranslate.Translate(req.Title, req.Language, req.ToLanguage)
-			if err != nil {
-				return nil, err
-			}
-			req.Title = content
-		} else if w.PluginTranslate.Engine == config.TranslateEngineDeepl {
-			// Deepl翻译
-			client := NewDeepl(w.PluginTranslate.DeeplAuthKey)
-			glossariesId, err := client.GetGlossaries()
-			if err != nil {
-				return nil, err
-			}
-			translation, _, err := client.Translate(
-				req.Title,
-				req.Language,
-				req.ToLanguage,
-				glossariesId,
-			)
-			if err != nil {
-				return nil, err
-			}
-
-			req.Title = translation
 		} else {
-			return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
+			newText = append(newText, req.Text[i])
+			newIndex = append(newIndex, i)
 		}
 	}
-	// 翻译内容
-	if len(req.Content) > 0 {
-		// 先获取文章img，如果有的话
-		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-		images := re.FindAllString(req.Content, -1)
-
-		contentText := ParsePlanText(req.Content, "")
-		texts := strings.Split(contentText, "\n")
-		start := 0
-		var contentTexts []string
-		if utf8.RuneCountInString(contentText) > 1000 {
-			for i := 1; i <= len(texts); i++ {
-				if utf8.RuneCountInString(strings.Join(texts[start:i], "\n")) > 1000 {
-					tmpText := strings.Join(texts[start:i-1], "\n")
-					contentTexts = append(contentTexts, tmpText)
-					start = i - 1
-				}
-			}
-			tmpText := strings.Join(texts[start:], "\n")
-			contentTexts = append(contentTexts, tmpText)
+	if len(newText) > 0 {
+		result, err := w.TranslateTexts(newText, req.Language, req.ToLanguage)
+		if err != nil {
+			return nil, err
 		} else {
-			contentTexts = append(contentTexts, contentText)
-		}
-		for i := range contentTexts {
-			// before replace
-			// 使用AI翻译
-			if w.PluginTranslate.Engine == config.TranslateEngineAi {
-				tmpContent, err := w.SelfAiTranslate(contentTexts[i], req.ToLanguage)
-				if err != nil {
-					return nil, err
-				}
-				contentTexts[i] = tmpContent
-			} else if w.PluginTranslate.Engine == config.TranslateEngineBaidu {
-				// 百度的默认qps=1
-				time.Sleep(time.Second)
-				// 使用百度翻译
-				baiduTranslate := NewBaiduTranslate(w.PluginTranslate.BaiduAppId, w.PluginTranslate.BaiduAppSecret)
-				content, err := baiduTranslate.Translate(contentTexts[i], req.Language, req.ToLanguage)
-				if err != nil {
-					return nil, err
-				}
-				contentTexts[i] = content
-			} else if w.PluginTranslate.Engine == config.TranslateEngineYoudao {
-				// 有道翻译
-				youdaoTranslate := NewYoudaoTranslate(w.PluginTranslate.YoudaoAppKey, w.PluginTranslate.YoudaoAppSecret)
-				content, err := youdaoTranslate.Translate(contentTexts[i], req.Language, req.ToLanguage)
-				if err != nil {
-					return nil, err
-				}
-				contentTexts[i] = content
-			} else if w.PluginTranslate.Engine == config.TranslateEngineDeepl {
-				// Deepl翻译
-				client := NewDeepl(w.PluginTranslate.DeeplAuthKey)
-				glossariesId, err := client.GetGlossaries()
-				if err != nil {
-					return nil, err
-				}
-				translation, _, err := client.Translate(
-					contentTexts[i],
-					req.Language,
-					req.ToLanguage,
-					glossariesId,
-				)
-				if err != nil {
-					return nil, err
-				}
-
-				contentTexts[i] = translation
+			// 还原到text
+			for i := range result {
+				req.Text[newIndex[i]] = result[i]
 			}
-		}
-		translated := strings.Join(contentTexts, "\n")
-
-		results := strings.Split(translated, "\n")
-		for i := 0; i < len(results); i++ {
-			results[i] = strings.TrimSpace(results[i])
-			if len(results[i]) == 0 {
-				results = append(results[:i], results[i+1:]...)
-				i--
-			}
-		}
-		// 如果有图片，则需要重新插入图片
-		if len(images) > 0 {
-			for i := range images {
-				insertIndex := i*2 + 1
-				if len(results) >= insertIndex {
-					results = append(results[:insertIndex], results[insertIndex-1:]...)
-					results[insertIndex] = images[i]
-				}
-			}
-		}
-
-		req.Content = strings.Join(results, "\n")
-		if w.Content.Editor != "markdown" {
-			req.Content = library.MarkdownToHTML(req.Content, w.System.BaseUrl, w.Content.FilterOutlink)
 		}
 	}
 
@@ -192,15 +94,24 @@ func NewBaiduTranslate(appId, appSecret string) *BaiduTranslate {
 	}
 }
 
+var baiduChan = make(chan struct{}, 1)
+
 func (b *BaiduTranslate) Translate(content string, fromLanguage string, toLanguage string) (string, error) {
+	// 百度翻译的QPS = 1
+	baiduChan <- struct{}{}
+	defer func() {
+		<-baiduChan
+	}()
+	// 为了qps，所以这里暂停1秒
+	time.Sleep(1 * time.Second)
 	// 将请求参数中的 APPID(appid)， 翻译 query(q，注意为UTF-8编码)，随机数(salt)，以及平台分配的密钥(可在管理控制台查看) 按照 appid+q+salt+密钥的顺序拼接得到字符串 1。
 	salt := library.GenerateRandString(5)
 	query := url.Values{}
 	query.Add("appid", b.AppId)
 	query.Add("q", content)
 	query.Add("salt", salt)
-	query.Add("from", fromLanguage)
-	query.Add("to", toLanguage)
+	query.Add("from", library.GetLanguageBaiduCode(fromLanguage))
+	query.Add("to", library.GetLanguageBaiduCode(toLanguage))
 	signStr := b.AppId + content + salt + b.AppSecret
 	sign := library.Md5(signStr)
 	query.Add("sign", sign)
@@ -509,4 +420,439 @@ func (d *Deepl) CreateGlossary(name, sourceLang, targetLang string, entriesTSV i
 	}
 
 	return &createdGlossary, nil
+}
+
+// TranslateHtml 将传入的html中的文字翻译成对应的语言
+func (w *Website) TranslateHtml(content string, from, to string) (string, error) {
+	// 解析HTML
+	doc, err := html.Parse(strings.NewReader(content))
+	if err != nil {
+		return "", err
+	}
+
+	// 提取需要翻译的文本
+	textNodes := extractTextNodes(doc)
+	texts := make([]string, len(textNodes))
+	for i, info := range textNodes {
+		texts[i] = info.text
+	}
+
+	// 翻译文本
+	translatedTexts, err := w.TranslateTexts(texts, from, to)
+	if err != nil {
+		return "", err
+	}
+
+	// 将翻译后的文本替换回HTML
+	for i, info := range textNodes {
+		if i < len(translatedTexts) {
+			if info.node.Type == html.ElementNode {
+				// 处理属性翻译
+				for j, attr := range info.node.Attr {
+					if (attr.Key == "title" || attr.Key == "placeholder" || attr.Key == "alt" || attr.Key == "value") ||
+						(info.node.Data == "meta" && attr.Key == "content" &&
+							(containsAttr(info.node, "name", "description") ||
+								containsAttr(info.node, "name", "keywords") ||
+								containsAttr(info.node, "name", "title") ||
+								containsAttr(info.node, "property", "description") ||
+								containsAttr(info.node, "property", "keywords") ||
+								containsAttr(info.node, "property", "title") ||
+								containsAttr(info.node, "property", "image:alt") ||
+								containsAttr(info.node, "property", "site_name"))) {
+						info.node.Attr[j].Val = translatedTexts[i]
+						break
+					}
+				}
+			} else if info.node.Type == html.TextNode {
+				info.node.Data = translatedTexts[i]
+			}
+		}
+	}
+
+	var output strings.Builder
+	if err = html.Render(&output, doc); err != nil {
+		return "", err
+	}
+
+	return output.String(), nil
+}
+
+// TranslateTexts 翻译文本数组
+func (w *Website) TranslateTexts(texts []string, from, to string) ([]string, error) {
+	// 创建去重映射表
+	textMap := make(map[string]string)
+	textIndices := make(map[string][]int)
+	var uniqueTexts []string
+
+	// 构建去重映射
+	for i, text := range texts {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		// 有一些字符，是不需要走接口翻译的
+		text2, isNeed := localReplace(text)
+		if !isNeed {
+			textMap[text] = text2
+		} else {
+			if _, exists := textMap[text]; !exists {
+				textMap[text] = "" // 添加到映射表，先存空值
+				uniqueTexts = append(uniqueTexts, text)
+			}
+		}
+		textIndices[text] = append(textIndices[text], i)
+	}
+
+	// 处理未缓存的文本
+	if len(uniqueTexts) > 0 {
+		translatedBatch, err := w.translateBatch(uniqueTexts, from, to)
+		if err != nil {
+			return nil, err
+		}
+		for text, translated := range translatedBatch {
+			textMap[text] = translated
+		}
+	}
+
+	// 还原翻译结果到原始顺序
+	translatedTexts := make([]string, len(texts))
+	for text, indices := range textIndices {
+		translated := textMap[text]
+		for _, idx := range indices {
+			translatedTexts[idx] = translated
+		}
+	}
+
+	// 处理空文本
+	for i, text := range texts {
+		if strings.TrimSpace(text) == "" {
+			translatedTexts[i] = text
+		}
+	}
+
+	return translatedTexts, nil
+}
+
+// translateBatch 批量翻译文本
+func (w *Website) translateBatch(texts []string, from, to string) (map[string]string, error) {
+	if from == "" {
+		from = "auto"
+	}
+	result := make(map[string]string)
+	processBatch := func(batchTexts []string, currentBatch1 string) error {
+		if len(batchTexts) == 0 {
+			return nil
+		}
+		// 添加重试机制
+		var translated string
+		var err error
+		// 最多重试10次
+		for retries := 0; retries < 10; retries++ {
+			translated, err = w.TranslateText(currentBatch1, from, to)
+			if err == nil {
+				break
+			}
+			log.Printf("翻译重试 %d/10: %v", retries+1, err)
+			time.Sleep(time.Second * time.Duration(retries+1))
+		}
+		if err != nil {
+			return fmt.Errorf("翻译失败: %w", err)
+		}
+
+		translatedBatch := strings.Split(translated, "\n")
+		if len(translatedBatch) != len(batchTexts) {
+			return fmt.Errorf("翻译结果数量不匹配：原文=%d个, 译文=%d个", len(batchTexts), len(translatedBatch))
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		for i, text := range batchTexts {
+			result[text] = strings.ReplaceAll(translatedBatch[i], "<br/>", "\n")
+		}
+
+		return nil
+	}
+
+	wg := sync.WaitGroup{}
+	var err error
+	var batchTexts []string
+	var currentBatch strings.Builder
+	for _, text := range texts {
+		textWithBr := strings.ReplaceAll(text, "\n", "<br/>")
+		newBatchLength := currentBatch.Len()
+		if len(batchTexts) > 0 {
+			newBatchLength += 1 // 为换行符预留空间
+		}
+		newBatchLength += utf8.RuneCountInString(textWithBr)
+
+		if newBatchLength > 900 && len(batchTexts) > 0 {
+			batchTexts1 := append([]string(nil), batchTexts...)
+			currentBatch1 := currentBatch.String()
+			batchTexts = nil
+			currentBatch.Reset()
+			wg.Add(1)
+			go func() {
+				defer func() {
+					wg.Done()
+				}()
+				err1 := processBatch(batchTexts1, currentBatch1)
+				if err1 != nil {
+					err = err1
+				}
+			}()
+		}
+
+		if len(batchTexts) > 0 {
+			currentBatch.WriteString("\n")
+		}
+		currentBatch.WriteString(textWithBr)
+		batchTexts = append(batchTexts, text)
+	}
+
+	// 处理最后一个批次
+	wg.Add(1)
+	go func() {
+		defer func() {
+			wg.Done()
+		}()
+		err1 := processBatch(batchTexts, currentBatch.String())
+		if err1 != nil {
+			err = err1
+		}
+	}()
+	wg.Wait()
+
+	if err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func (w *Website) TranslateText(text, from, to string) (string, error) {
+	var content string
+	var err error
+	// 使用AI翻译
+	if w.PluginTranslate.Engine == config.TranslateEngineAi {
+		content, err = w.SelfAiTranslate(text, to)
+		if err != nil {
+			return "", err
+		}
+	} else if w.PluginTranslate.Engine == config.TranslateEngineBaidu {
+		// 使用百度翻译
+		baiduTranslate := NewBaiduTranslate(w.PluginTranslate.BaiduAppId, w.PluginTranslate.BaiduAppSecret)
+		content, err = baiduTranslate.Translate(text, from, to)
+		if err != nil {
+			return "", err
+		}
+	} else if w.PluginTranslate.Engine == config.TranslateEngineYoudao {
+		// 有道翻译
+		youdaoTranslate := NewYoudaoTranslate(w.PluginTranslate.YoudaoAppKey, w.PluginTranslate.YoudaoAppSecret)
+		content, err = youdaoTranslate.Translate(text, from, to)
+		if err != nil {
+			return "", err
+		}
+	} else if w.PluginTranslate.Engine == config.TranslateEngineDeepl {
+		// Deepl翻译
+		client := NewDeepl(w.PluginTranslate.DeeplAuthKey)
+		glossariesId, err2 := client.GetGlossaries()
+		if err2 != nil {
+			return "", err2
+		}
+		content, _, err = client.Translate(
+			text,
+			from,
+			to,
+			glossariesId,
+		)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		err = errors.New(w.Tr("NoAiGenerationSourceSelected"))
+	}
+
+	return content, err
+}
+
+// contains 检查字符串是否在切片中
+func contains(slice []string, s string) bool {
+	for _, item := range slice {
+		if item == s {
+			return true
+		}
+	}
+	return false
+}
+
+func containsAttr(node *html.Node, key, val string) bool {
+	for _, attr := range node.Attr {
+		if attr.Key == key && strings.Contains(attr.Val, val) {
+			return true
+		}
+	}
+	return false
+}
+
+type textNodeInfo struct {
+	node  *html.Node
+	text  string
+	index int
+}
+
+// extractTextNodes 从HTML节点中提取需要翻译的文本节点
+func extractTextNodes(n *html.Node) []textNodeInfo {
+	var textNodes []textNodeInfo
+	var traverse func(*html.Node, bool)
+	var ignoreClass = []string{
+		"languages",
+	}
+	var ignoreId = []string{
+		"languages",
+	}
+	traverse = func(node *html.Node, parentSkip bool) {
+		// 如果父节点被跳过，则当前节点及其所有子节点都跳过
+		if parentSkip {
+			return
+		}
+
+		// 跳过script和style标签，code标签
+		if node.Type == html.ElementNode && (node.Data == "script" || node.Data == "style" || node.Data == "code") {
+			return
+		}
+
+		// 检查是否需要跳过该节点
+		shouldSkip := false
+		for _, attr := range node.Attr {
+			// 跳过 ignore-translate 类的节点
+			if attr.Key == "ignore-translate" && attr.Val != "false" {
+				shouldSkip = true
+				break
+			}
+			if attr.Key == "class" && contains(ignoreClass, attr.Val) {
+				shouldSkip = true
+				break
+			}
+			if attr.Key == "id" && contains(ignoreId, attr.Val) {
+				shouldSkip = true
+				break
+			}
+			// 提取需要翻译的属性文本
+			if !shouldSkip && node.Type == html.ElementNode {
+				switch {
+				case (attr.Key == "title" || attr.Key == "placeholder" || attr.Key == "alt" || attr.Key == "value") && strings.TrimSpace(attr.Val) != "":
+					textNodes = append(textNodes, textNodeInfo{
+						node:  node,
+						text:  attr.Val,
+						index: len(textNodes),
+					})
+				case node.Data == "meta" && attr.Key == "content" &&
+					(containsAttr(node, "name", "description") ||
+						containsAttr(node, "name", "keywords") ||
+						containsAttr(node, "name", "title") ||
+						containsAttr(node, "property", "description") ||
+						containsAttr(node, "property", "keywords") ||
+						containsAttr(node, "property", "title") ||
+						containsAttr(node, "property", "image:alt") ||
+						containsAttr(node, "property", "site_name")) && strings.TrimSpace(attr.Val) != "":
+					textNodes = append(textNodes, textNodeInfo{
+						node:  node,
+						text:  attr.Val,
+						index: len(textNodes),
+					})
+				}
+			}
+		}
+
+		if !shouldSkip && node.Type == html.TextNode && strings.TrimSpace(node.Data) != "" {
+			textNodes = append(textNodes, textNodeInfo{
+				node:  node,
+				text:  strings.TrimSpace(node.Data),
+				index: len(textNodes),
+			})
+		}
+
+		// 递归遍历子节点，传递当前节点是否应该被跳过的状态
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			traverse(child, shouldSkip)
+		}
+	}
+
+	traverse(n, false)
+	return textNodes
+}
+
+// localReplace 本地直接替换的部分，不需要翻译。
+// return 字符串，字符串是否还需要翻译
+func localReplace(s string) (string, bool) {
+	// 本地直接替换的部分，不需要翻译。
+	// 从中文的标点符号直接替换为英文的标点符号
+	if len(s) < 2 {
+		return s, false
+	}
+
+	if utf8.RuneCountInString(s) == 1 {
+		// 从中文的标点符号直接替换为英文的标点符号
+		switch s {
+		case "，":
+			return ",", false
+		case "。":
+			return ".", false
+		case "；":
+			return ";", false
+		case "：":
+			return ":", false
+		case "？":
+			return "?", false
+		case "！":
+			return "!", false
+		case "（":
+			return "(", false
+		case "）":
+			return ")", false
+		case "【":
+			return "[", false
+		case "】":
+			return "]", false
+		case "《":
+			return "<", false
+		case "》":
+			return ">", false
+		case "“":
+			return "\"", false
+		case "”":
+			return "\"", false
+		case "‘":
+			return "'", false
+		case "’":
+			return "'", false
+		case "、":
+			return "/", false
+		case "～":
+			return "~", false
+		default:
+			return s, true
+		}
+	} else {
+		// s 是纯数字和点
+		isNumberAndDot := true
+		for _, r := range s {
+			if !((r >= '0' && r <= '9') || r == '.' || r == ' ' || r == ':' || r == '-' || r == '(' || r == ')') {
+				isNumberAndDot = false
+				break
+			}
+		}
+		if isNumberAndDot {
+			return s, false
+		}
+
+		// s 是备案号
+		// 备案号格式：京ICP备12345678号-1 或 粤ICP备12345678号
+		beianRegex := regexp.MustCompile(`^[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤青藏川宁琼使领][A-Z]{2,3}备\d{6,10}号(-\d+)?$`)
+		if beianRegex.MatchString(s) {
+			return s, false
+		}
+	}
+
+	return s, true
 }

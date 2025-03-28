@@ -3,6 +3,7 @@ package manageController
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -63,8 +64,8 @@ func PluginTagDetail(ctx iris.Context) {
 	tagContent, err := currentSite.GetTagContentById(tag.Id)
 	if err == nil {
 		tag.Content = tagContent.Content
-		tag.Extra = tagContent.Extra
-		if tag.Extra != nil {
+		if tagContent.Extra != nil {
+			tag.Extra = tagContent.Extra
 			fields := currentSite.GetTagFields()
 			if len(fields) > 0 {
 				for _, field := range fields {
@@ -125,20 +126,32 @@ func PluginTagDetailForm(ctx iris.Context) {
 					if err == nil {
 						// 同步成功，进行翻译
 						if currentSite.MultiLanguage.AutoTranslate {
-							transReq := provider.AnqiAiRequest{
-								Title:      subTag.Title,
-								Content:    subTag.Description,
+							var content string
+							tagContent, _ := subSite.GetTagContentById(subTag.Id)
+							if tagContent != nil {
+								content = tagContent.Content
+							}
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subTag.Title,       // 0
+									subTag.Description, // 1
+									subTag.Keywords,    // 2
+									content,            // 3
+								},
 								Language:   currentSite.System.Language,
 								ToLanguage: subSite.System.Language,
-								Async:      false, // 同步返回结果
 							}
-							res, err := currentSite.AnqiTranslateString(&transReq)
+							res, err := currentSite.AnqiTranslateString(transReq)
 							if err == nil {
 								// 只处理成功的结果
 								subSite.DB.Model(subTag).UpdateColumns(map[string]interface{}{
-									"title":       res.Title,
-									"description": res.Content,
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"keywords":    res.Text[2],
 								})
+								if res.Text[3] != "" {
+									subSite.DB.Model(&model.TagContent{}).Where("id = ?", subTag.Id).UpdateColumn("content", res.Text[3])
+								}
 							}
 						}
 					}
