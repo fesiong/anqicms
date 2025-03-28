@@ -2,7 +2,6 @@ package manageController
 
 import (
 	"fmt"
-
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -40,6 +39,10 @@ func CategoryList(ctx iris.Context) {
 			}
 			return tx
 		}
+	}
+	// 搜索模式下，不构建tree
+	if title != "" {
+		showType = config.CategoryShowTypeList
 	}
 	categories, err = currentSite.GetCategories(ops, 0, showType)
 	if err != nil {

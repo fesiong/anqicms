@@ -27,6 +27,9 @@ func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, s
 		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 		categories[i].Link = w.GetUrl("category", categories[i], 0)
 	}
+	if showType == config.CategoryShowTypeList {
+		return categories, nil
+	}
 	categoryTree := NewCategoryTree(categories)
 
 	if showType == config.CategoryShowTypeNode {
