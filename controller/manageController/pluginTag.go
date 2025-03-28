@@ -64,8 +64,8 @@ func PluginTagDetail(ctx iris.Context) {
 	tagContent, err := currentSite.GetTagContentById(tag.Id)
 	if err == nil {
 		tag.Content = tagContent.Content
-		tag.Extra = tagContent.Extra
-		if tag.Extra != nil {
+		if tagContent.Extra != nil {
+			tag.Extra = tagContent.Extra
 			fields := currentSite.GetTagFields()
 			if len(fields) > 0 {
 				for _, field := range fields {
