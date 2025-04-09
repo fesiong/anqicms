@@ -50,7 +50,16 @@ func PluginSaveMultiLangConfig(ctx iris.Context) {
 		})
 		return
 	}
-
+	// 处理subSite
+	if req.SiteType == config.MultiLangSiteTypeSingle {
+		for i, v := range currentSite.MultiLanguage.SubSites {
+			if v.Language == req.DefaultLanguage || v.Id == currentSite.Id {
+				currentSite.MultiLanguage.SubSites = append(currentSite.MultiLanguage.SubSites[:i], currentSite.MultiLanguage.SubSites[i+1:]...)
+				i--
+				continue
+			}
+		}
+	}
 	err = currentSite.SaveSettingValue(provider.MultiLangSettingKey, currentSite.MultiLanguage)
 	if err != nil {
 		ctx.JSON(iris.Map{

@@ -62,7 +62,6 @@ func (bs *BackupStatus) dumpTableSchema(tableName string, file *os.File) error {
 
 	// 移除 CHARACTER SET utf8mb4 COLLATE utf8mb4_latvian_ci NOT NULL DEFAULT '',
 	// 移除 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
 	re, _ := regexp.Compile(` COLLATE utf8([a-z0-9_]+)(\s|,)`)
 	data = re.ReplaceAllStringFunc(data, func(s string) string {
 		if strings.HasSuffix(s, " ") {
@@ -70,14 +69,16 @@ func (bs *BackupStatus) dumpTableSchema(tableName string, file *os.File) error {
 		}
 		return ","
 	})
-	re, _ = regexp.Compile(` COLLATE=utf8([a-z0-9_]+)(\s|;)`)
+	re, _ = regexp.Compile(` COLLATE=utf8([a-z0-9_]+)(\s|;)?`)
 	data = re.ReplaceAllStringFunc(data, func(s string) string {
 		if strings.HasSuffix(s, " ") {
 			return " "
 		}
 		return ";"
 	})
-
+	if !strings.HasSuffix(data, ";") {
+		data += ";"
+	}
 	_, err = file.WriteString(fmt.Sprintf("DROP TABLE IF EXISTS `%s`;\n", tableName))
 	data = data + "\n\n"
 	_, err = file.WriteString(data)
@@ -266,7 +267,7 @@ func (bs *BackupStatus) RestoreData(fileName string) error {
 		if err == io.EOF {
 			isEOF = true
 		}
-		log.Println("is eof", isEOF)
+		//log.Println("is eof", isEOF)
 		tmpStr += line
 		if strings.HasSuffix(line, ";\n") || isEOF {
 			curSize += int64(len(tmpStr))

@@ -87,6 +87,9 @@ func ModuleDetailForm(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -168,6 +171,9 @@ func ModuleFieldsDelete(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -223,6 +229,9 @@ func ModuleDelete(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {

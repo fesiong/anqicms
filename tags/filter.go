@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"path/filepath"
 	"strings"
 )
 
@@ -18,6 +19,10 @@ func init() {
 	pongo2.RegisterFilter("index", filterIndex)
 	pongo2.RegisterFilter("repeat", filterRepeat)
 	pongo2.RegisterFilter("dump", filterDump)
+	pongo2.RegisterFilter("thumb", filterThumb)
+	if pongo2.FilterExists("split") {
+		pongo2.ReplaceFilter("split", filterSplit)
+	}
 }
 
 func filterContain(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
@@ -149,4 +154,23 @@ func filterRepeat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2
 
 func filterDump(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
 	return pongo2.AsValue(fmt.Sprintf("%#v", in.Interface())), nil
+}
+
+func filterSplit(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	sep := param.String()
+	if sep == "\\n" {
+		sep = "\n"
+	}
+	chunks := strings.Split(in.String(), sep)
+	return pongo2.AsValue(chunks), nil
+}
+
+func filterThumb(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	loc := in.String()
+	if !strings.Contains(loc, "thumb_") {
+		paths, fileName := filepath.Split(loc)
+		loc = paths + "thumb_" + fileName
+	}
+
+	return pongo2.AsValue(loc), nil
 }

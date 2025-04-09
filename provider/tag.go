@@ -259,7 +259,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 			Content: req.Content,
 			Extra:   req.Extra,
 		}
-		err = w.DB.Save(&tagContent).Error
+		err = w.DB.Save(tagContent).Error
 		if err != nil {
 			return nil, err
 		}
