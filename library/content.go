@@ -265,48 +265,68 @@ func MarkdownToHTML(mdStr string, args ...interface{}) string {
 }
 
 type ContentTitle struct {
+	Anchor string `json:"anchor"`
 	Title  string `json:"title"`
 	Tag    string `json:"tag"`
 	Level  int    `json:"level"`
 	Prefix string `json:"prefix"`
 }
 
-func ParseContentTitles(content string) []ContentTitle {
-	re, _ := regexp.Compile(`(?is)<(h\d)[^>]*>(.*?)</h\d>`)
+func ParseContentTitles(content string) ([]ContentTitle, string) {
+	re, _ := regexp.Compile(`(?is)<(h\d)([^>]*)>(.*?)</h\d>`)
+	re2, _ := regexp.Compile(`<(h\d)([^>]*)>`)
 	var titles []ContentTitle
-	matches := re.FindAllStringSubmatch(content, -1)
 	var level = 0
 	var parent = -1
-	var prefix []int
-	for _, match := range matches {
+	var prefix []int64
+	content = re.ReplaceAllStringFunc(content, func(s string) string {
+		match := re.FindStringSubmatch(s)
 		tag := strings.ToLower(match[1])
 		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
 		if parent == -1 {
 			parent = leaf
 			level = 0
 			prefix = append(prefix, 1)
-		}
-		if parent != leaf {
-			if parent > leaf {
-				prefix = prefix[:len(prefix)-1]
-				prefix[len(prefix)-1]++
-			} else if parent < leaf {
-				prefix = append(prefix, 1)
-			}
-			level -= parent - leaf
-			parent = leaf
 		} else {
-			prefix[len(prefix)-1]++
+			if parent != leaf {
+				if parent > leaf {
+					prefix = prefix[:len(prefix)-1]
+					prefix[len(prefix)-1]++
+				} else if parent < leaf {
+					prefix = append(prefix, 1)
+				}
+				level -= parent - leaf
+				parent = leaf
+			} else {
+				prefix[len(prefix)-1]++
+			}
 		}
-		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[2]), "\n", " "))
+
+		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[3]), "\n", " "))
+		itemPrefix := JoinInt(prefix, ".")
+		anchor := strings.ReplaceAll(itemPrefix, ".", "-") + "-" + GetPinyin(title, true)
 		titles = append(titles, ContentTitle{
+			Anchor: "#" + anchor,
 			Title:  title,
 			Tag:    tag,
 			Level:  level,
-			Prefix: strings.ReplaceAll(fmt.Sprintf("%v", prefix), ",", "."),
+			Prefix: itemPrefix,
 		})
-	}
-	return titles
+		// 替换
+		s = re2.ReplaceAllStringFunc(s, func(s2 string) string {
+			if strings.Contains(s2, "id=\"") {
+				// 先删除原始的id，以及id里的内容
+				re3, _ := regexp.Compile(`(?is)id=".*?"`)
+				s2 = re3.ReplaceAllString(s2, "")
+			}
+
+			return strings.TrimSuffix(s2, ">") + fmt.Sprintf(` id="%s">`, anchor)
+		})
+
+		return s
+	})
+
+	return titles, content
 }
 
 type NameVal struct {
