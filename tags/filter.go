@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/library"
 	"path/filepath"
 	"strings"
 )
@@ -20,6 +21,7 @@ func init() {
 	pongo2.RegisterFilter("repeat", filterRepeat)
 	pongo2.RegisterFilter("dump", filterDump)
 	pongo2.RegisterFilter("thumb", filterThumb)
+	pongo2.RegisterFilter("render", filterRender)
 	if pongo2.FilterExists("split") {
 		pongo2.ReplaceFilter("split", filterSplit)
 	}
@@ -173,4 +175,12 @@ func filterThumb(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.
 	}
 
 	return pongo2.AsValue(loc), nil
+}
+
+func filterRender(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	s := in.String()
+	if !strings.HasPrefix(s, "<") {
+		s = library.MarkdownToHTML(s)
+	}
+	return pongo2.AsValue(s), nil
 }
