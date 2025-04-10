@@ -65,6 +65,9 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		for i := range currentSite.System.ExtraFields {
 			if currentSite.System.ExtraFields[i].Name == fieldName {
 				content = fmt.Sprintf("%v", currentSite.System.ExtraFields[i].Value)
+				if content == "" && currentSite.Contact.ExtraFields[i].Content != "" {
+					content = currentSite.Contact.ExtraFields[i].Content
+				}
 				break
 			}
 		}
