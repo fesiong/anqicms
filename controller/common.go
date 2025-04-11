@@ -623,6 +623,13 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	//page
 	reg = regexp.MustCompile(rewritePattern.PageRule)
 	match = reg.FindStringSubmatch(paramValue)
+	if len(match) == 0 && strings.Contains(rewritePattern.PageRule, "\\?") {
+		// 详情支持带问号的规则
+		paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+		// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
+		reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.PageRule, "$") + "([&#].*)?$")
+		match = reg.FindStringSubmatch(paramValueWithArgs)
+	}
 	if len(match) > 1 {
 		matchMap["match"] = "page"
 		for i, v := range match {
@@ -646,6 +653,13 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	//category
 	reg = regexp.MustCompile(rewritePattern.CategoryRule)
 	match = reg.FindStringSubmatch(paramValue)
+	if len(match) == 0 && strings.Contains(rewritePattern.CategoryRule, "\\?") {
+		// 详情支持带问号的规则
+		paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+		// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
+		reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.CategoryRule, "$") + "([&#].*)?$")
+		match = reg.FindStringSubmatch(paramValueWithArgs)
+	}
 	if len(match) > 1 {
 		matchMap["match"] = "category"
 		for i, v := range match {
