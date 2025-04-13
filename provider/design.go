@@ -1161,6 +1161,7 @@ func (w *Website) SaveDesignStaticFile(req request.SaveDesignFileRequest) error 
 }
 
 func (w *Website) RestoreDesignData(packageName string) error {
+	w2 := GetWebsite(w.Id)
 	dataPath := w.RootPath + "template/" + packageName + "/data.db"
 	_, err := os.Stat(dataPath)
 	if err != nil {
@@ -1175,11 +1176,11 @@ func (w *Website) RestoreDesignData(packageName string) error {
 
 	settings, err := zipReader.Open("settings")
 	if err == nil {
-		w.restoreSingleData("settings", settings)
+		w2.restoreSingleData("settings", settings)
 	}
 	modules, err := zipReader.Open("modules")
 	if err == nil {
-		w.restoreSingleData("modules", modules)
+		w2.restoreSingleData("modules", modules)
 	}
 	// 需要先处理 settings 和 modules，再开始处理其他表
 	for _, f := range zipReader.File {
@@ -1190,10 +1191,11 @@ func (w *Website) RestoreDesignData(packageName string) error {
 		if err != nil {
 			continue
 		}
-		w.restoreSingleData(f.Name, reader)
+		w2.restoreSingleData(f.Name, reader)
 		reader.Close()
 	}
-
+	// 更新缓存
+	w2.Cache.CleanAll()
 	return nil
 }
 
