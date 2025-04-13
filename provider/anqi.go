@@ -910,7 +910,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 				})
 			}()
 		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			buf, err := GetSparkStream(w.AiGenerateConfig.Spark, prompt)
+			buf, _, err := GetSparkStream(w.AiGenerateConfig.Spark, prompt)
 			if err != nil {
 				return "", err
 			}
