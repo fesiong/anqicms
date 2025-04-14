@@ -115,6 +115,15 @@ type PluginStorageConfig struct {
 	SSHPassword   string `json:"ssh_password"`
 	SSHPrivateKey string `json:"ssh_private_key"` // 私钥文件名
 	SSHWebroot    string `json:"ssh_webroot"`
+
+	GoogleProjectId       string `json:"google_project_id"`
+	GoogleCredentialsJson string `json:"google_credentials_json"`
+	GoogleBucketName      string `json:"google_bucket_name"`
+
+	S3Region    string `json:"s3_region"`
+	S3Bucket    string `json:"s3_bucket"`
+	S3AccessKey string `json:"s3_access_key"`
+	S3SecretKey string `json:"s3_secret_key"`
 }
 
 type PluginFulltextConfig struct {

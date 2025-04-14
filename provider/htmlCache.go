@@ -2,10 +2,12 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"kandaoni.com/anqicms/provider/storage"
 	"log"
 	"net/http"
 	"net/url"
@@ -969,23 +971,18 @@ func (w *Website) ReplaceAndSendCacheFile(remotePath string, buf []byte) error {
 		})
 	}
 
-	_, err := w.CacheStorage.UploadFile(remotePath, buf)
+	err := w.CacheStorage.Put(context.Background(), remotePath, bytes.NewReader(buf))
 
 	return err
 }
 
-func (w *Website) GetCacheBucket() (bucket *BucketStorage, err error) {
-	bucket = &BucketStorage{
-		DataPath:            w.DataPath,
-		PublicPath:          w.PublicPath,
-		config:              &w.PluginHtmlCache.PluginStorageConfig,
-		tencentBucketClient: nil,
-		aliyunBucketClient:  nil,
-		qiniuBucketClient:   nil,
-		tryTimes:            0,
+func (w *Website) GetCacheBucket() (bucket storage.Storage, err error) {
+	bucket, err = w.GetBucket(&w.PluginHtmlCache.PluginStorageConfig)
+	if err != nil {
+		// 退回到local
+		log.Println(err.Error())
+		return nil, err
 	}
-
-	err = bucket.initBucket()
 
 	return
 }

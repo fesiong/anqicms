@@ -142,7 +142,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(attachment.FileLocation, buf)
+	_, err = w.UploadFile(attachment.FileLocation, buf)
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(paths+"thumb_"+fileName, buf)
+	_, err = w.UploadFile(paths+"thumb_"+fileName, buf)
 	if err != nil {
 		return err
 	}

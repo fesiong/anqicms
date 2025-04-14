@@ -52,6 +52,8 @@ const (
 	StorageTypeTencent = "tencent"
 	StorageTypeQiniu   = "qiniu"
 	StorageTypeUpyun   = "upyun"
+	StorageTypeGoogle  = "google"
+	StorageTypeAws     = "awss3"
 	StorageTypeFTP     = "ftp"
 	StorageTypeSSH     = "ssh"
 )
