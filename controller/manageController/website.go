@@ -137,11 +137,23 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			req.RootPath = req.RootPath + "/"
 			_, err = os.Stat(req.RootPath)
 			if err != nil {
-				ctx.JSON(iris.Map{
-					"code": config.StatusFailed,
-					"msg":  ctx.Tr("FailedToReadTheSiteDirectory"),
-				})
-				return
+				if os.IsNotExist(err) {
+					// 创建目录
+					err = os.MkdirAll(req.RootPath, os.ModePerm)
+					if err != nil {
+						ctx.JSON(iris.Map{
+							"code": config.StatusFailed,
+							"msg":  ctx.Tr("FailedToReadTheSiteDirectory"),
+						})
+						return
+					}
+				} else {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  ctx.Tr("FailedToReadTheSiteDirectory"),
+					})
+					return
+				}
 			}
 			dbSite.RootPath = req.RootPath
 		}

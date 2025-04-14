@@ -161,7 +161,7 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	err = attach.Delete(currentSite.DB)
+	err = currentSite.DeleteAttachment(attach)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

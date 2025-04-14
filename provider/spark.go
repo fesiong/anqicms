@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"log"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -22,20 +23,26 @@ type SparkMessage struct {
 }
 
 var sparkApiUrls = map[string]string{
-	"1.5": "wss://spark-api.xf-yun.com/v1.1/chat",
-	"3.0": "wss://spark-api.xf-yun.com/v3.1/chat",
-	"3.5": "wss://spark-api.xf-yun.com/v3.5/chat",
-	"4.0": "wss://spark-api.xf-yun.com/v4.0/chat",
-	"pro": "wss://spark-api.xf-yun.com/chat/pro-128k",
+	"1.5":   "wss://spark-api.xf-yun.com/v1.1/chat",
+	"lite":  "wss://spark-api.xf-yun.com/v1.1/chat",
+	"3.0":   "wss://spark-api.xf-yun.com/v3.1/chat",
+	"3.5":   "wss://spark-api.xf-yun.com/v3.5/chat",
+	"4.0":   "wss://spark-api.xf-yun.com/v4.0/chat",
+	"pro":   "wss://spark-api.xf-yun.com/chat/pro-128k",
+	"other": "wss://maas-api.cn-huabei-1.xf-yun.com/v1.1/chat",
 }
 
 var ErrSensitive = errors.New("sensitive")
 
 func GetSparkResponse(sparkKey config.SparkSetting, prompt string) (string, error) {
-	buf, err := GetSparkStream(sparkKey, prompt)
+	buf, code, err := GetSparkStream(sparkKey, prompt)
 	if err != nil {
-		if strings.Contains(err.Error(), "非常抱歉，根据相关法律法规，我们无法提供关于以下内容的答案") {
+		if code == 10014 || code == 10013 {
 			return "", ErrSensitive
+		}
+		if code == 11202 {
+			// 重试
+			return GetSparkResponse(sparkKey, prompt)
 		}
 		return "", err
 	}
@@ -65,14 +72,17 @@ func GetSparkResponse(sparkKey config.SparkSetting, prompt string) (string, erro
 	if strings.HasPrefix(answer, "非常抱歉") || strings.Contains(answer, "非常抱歉，根据相关法律法规，我们无法提供关于以下内容的答案") {
 		return "", ErrSensitive
 	}
+	// 移除 <think>.*</think>
+	re, _ := regexp.Compile(`(?is)<think>.*</think>`)
+	answer = re.ReplaceAllString(answer, "")
 
 	return answer, nil
 }
 
-func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, error) {
+func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, int, error) {
 	apiHost, ok := sparkApiUrls[sparkKey.Version]
 	if !ok {
-		return nil, errors.New("未选择模型版本")
+		apiHost = sparkApiUrls["other"]
 	}
 	d := websocket.Dialer{
 		HandshakeTimeout: 5 * time.Second,
@@ -81,7 +91,7 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, e
 	conn, resp, err := d.Dial(assembleAuthUrl1(apiHost, sparkKey.APIKey, sparkKey.APISecret), nil)
 	if err != nil {
 		log.Println("dial err", err)
-		return nil, err
+		return nil, 0, err
 	}
 	if resp.StatusCode != 101 {
 		b, err2 := io.ReadAll(resp.Body)
@@ -89,7 +99,7 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, e
 			log.Println("err", string(b))
 		}
 		log.Println("err", resp.StatusCode)
-		return nil, errors.New(resp.Status)
+		return nil, resp.StatusCode, errors.New(resp.Status)
 	}
 
 	go func() {
@@ -98,7 +108,7 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, e
 	}()
 
 	var buf = make(chan string, 1)
-
+	var newCode int = resp.StatusCode
 	go func() {
 		//获取返回的数据
 		for {
@@ -128,6 +138,10 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, e
 				if ok {
 					message, _ = header["message"].(string)
 				}
+				code, ok := header["code"].(float64)
+				if ok {
+					newCode = int(code)
+				}
 				err = errors.New(message)
 				buf <- "EOF"
 				return
@@ -153,6 +167,7 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, e
 				buf <- "EOF"
 				return
 			}
+			newCode = int(code)
 			if code != 0 {
 				fmt.Println(data["payload"])
 				err = errors.New("code error")
@@ -178,7 +193,7 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, e
 	}()
 	time.Sleep(1 * time.Second)
 
-	return buf, err
+	return buf, newCode, err
 }
 
 // 生成参数
@@ -187,9 +202,9 @@ func genParams1(appid, question string, ver string) map[string]interface{} { // 
 	messages := []SparkMessage{
 		{Role: "user", Content: question},
 	}
-	domain := "general"
-	if ver == "2.0" {
-		domain = "generalv2"
+	domain := ver
+	if ver == "1.5" || ver == "lite" {
+		domain = "lite"
 	} else if ver == "3.0" {
 		domain = "generalv3"
 	} else if ver == "3.5" {

@@ -1733,10 +1733,11 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			qia.Message = err.Error()
 			continue
 		}
-		if f.Flags == 0 {
-			name, err := library.DecodeToUTF8([]byte(f.Name), simplifiedchinese.GBK)
+		if f.Flags&0x0800 == 0 && !utf8.Valid([]byte(f.Name)) {
+			// 还有可能是flags搞错了
+			gbkName, err := simplifiedchinese.GBK.NewDecoder().String(f.Name)
 			if err == nil {
-				f.Name = string(name)
+				f.Name = gbkName
 			}
 		}
 		// 检查content是否是utf8

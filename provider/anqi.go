@@ -853,9 +853,9 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
-		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
-		if req.Language == config.LanguageEn {
-			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
+		prompt := "以\"" + req.Keyword + "\"为题生成一篇SEO文章。 要求如下: 1.充分理解标题的意思,为文章确定一个主题;2.文章字数1000-1500字,避免冗长,追求表达清晰; 3.自然引用,无明显痕迹;逻辑严谨,内容连贯无歧义; 4.关键词恰当融入,避免堆砌; 5.文章需要一个标题，标题放在第一行; 6.重点内容采用加粗、斜体等标记并且确保文章原创度高于90%;7.文章无需结束语。"
+		if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
+			prompt = "Generate an SEO article titled '" + req.Keyword + "'. The requirements are as follows: 1. Fully understand the meaning of the title and determine a theme for the article; 2. The word count of the article should be 1000-1500 words, avoiding being lengthy and pursuing clear expression; 3. Natural citation without obvious traces; Rigorous logic, coherent and unambiguous content; 4. Incorporate keywords appropriately and avoid piling them up; 5. The article needs a title, which should be placed on the first line; 6. Key content should be marked in bold, italics, etc., and the originality of the article should be ensured to be above 90%; 8. The article does not require a conclusion."
 		}
 		if len(req.Demand) > 0 {
 			prompt += "\n" + req.Demand
@@ -910,7 +910,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 				})
 			}()
 		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			buf, err := GetSparkStream(w.AiGenerateConfig.Spark, prompt)
+			buf, _, err := GetSparkStream(w.AiGenerateConfig.Spark, prompt)
 			if err != nil {
 				return "", err
 			}

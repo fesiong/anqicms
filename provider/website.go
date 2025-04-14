@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"kandaoni.com/anqicms/provider/storage"
 	"net/url"
 	"os"
 	"strconv"
@@ -40,8 +41,8 @@ type Website struct {
 	PublicPath              string
 	DB                      *gorm.DB
 	StatisticLog            *StatisticLog
-	Storage                 *BucketStorage
-	CacheStorage            *BucketStorage
+	Storage                 storage.Storage
+	CacheStorage            storage.Storage
 	parsedPatten            *RewritePatten
 	searcher                fulltext.Service
 	fulltextStatus          *FulltextStatus

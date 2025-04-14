@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"log"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -142,6 +143,27 @@ func (p *ProxyIPs) AddIPs(ips []string) {
 	}
 }
 
+type ProxyItem struct {
+	CityCode string `json:"city_code"`
+	CityName string `json:"city_name"`
+	HTTPPass string `json:"http_pass"`
+	HTTPUser string `json:"http_user"`
+	IP       string `json:"ip"`
+	IPRemain int64  `json:"ip_remain"`
+	Port     int    `json:"port"`
+}
+
+type ProxyResp struct {
+	Code int    `json:"code"`
+	Msg  string `json:"msg"`
+	Data struct {
+		Count           int         `json:"count"`
+		FilterCount     int         `json:"filter_count"`
+		SurplusQuantity int         `json:"surplus_quantity"`
+		ProxyList       []ProxyItem `json:"proxy_list"`
+	} `json:"data"`
+}
+
 func (p *ProxyIPs) loadIPs() {
 	// 巨量IP的获取方式
 	// p.config.Platform == "juliangip"
@@ -160,17 +182,30 @@ func (p *ProxyIPs) loadIPs() {
 			ProxyList       string `json:"proxy_list"`
 		} `json:"data"`
 	}
+
 	err = json.Unmarshal([]byte(resp.Body), &result)
-	if err != nil {
-		// 是IP
-		if strings.Contains(resp.Body, ":") {
-			ips := strings.Split(resp.Body, "\n")
-			for _, ip := range ips {
-				ip = strings.TrimSpace(ip)
-				if ip == "" {
-					continue
-				}
-				tip := "http://" + ip
+	if err == nil && result.Code == 200 {
+		ips := strings.Split(result.Data.ProxyList, "\n")
+		for _, ip := range ips {
+			ip = strings.TrimSpace(ip)
+			if ip == "" {
+				continue
+			}
+			tip := "http://" + ip
+			p.AddIPs([]string{tip})
+			if p.cfg.Expire > 0 {
+				time.AfterFunc(time.Duration(p.cfg.Expire)*time.Second, func() {
+					p.RemoveIP(tip)
+				})
+			}
+		}
+	} else {
+		// 再尝试另一种
+		var result2 ProxyResp
+		err = json.Unmarshal([]byte(resp.Body), &result2)
+		if err == nil && result2.Code == 200 {
+			for _, item := range result2.Data.ProxyList {
+				tip := "http://" + item.IP + ":" + strconv.Itoa(item.Port)
 				p.AddIPs([]string{tip})
 				if p.cfg.Expire > 0 {
 					time.AfterFunc(time.Duration(p.cfg.Expire)*time.Second, func() {
@@ -178,28 +213,25 @@ func (p *ProxyIPs) loadIPs() {
 					})
 				}
 			}
+		} else {
+			// 是IP
+			if strings.Contains(resp.Body, ":") {
+				ips := strings.Split(resp.Body, "\n")
+				for _, ip := range ips {
+					ip = strings.TrimSpace(ip)
+					if ip == "" {
+						continue
+					}
+					tip := "http://" + ip
+					p.AddIPs([]string{tip})
+					if p.cfg.Expire > 0 {
+						time.AfterFunc(time.Duration(p.cfg.Expire)*time.Second, func() {
+							p.RemoveIP(tip)
+						})
+					}
+				}
+			}
 		}
 		return
 	}
-	if result.Code != 200 {
-		log.Println("load proxy error", result.Msg)
-		return
-	}
-
-	ips := strings.Split(result.Data.ProxyList, "\n")
-	for _, ip := range ips {
-		ip = strings.TrimSpace(ip)
-		if ip == "" {
-			continue
-		}
-		tip := "http://" + ip
-		p.AddIPs([]string{tip})
-		if p.cfg.Expire > 0 {
-			time.AfterFunc(time.Duration(p.cfg.Expire)*time.Second, func() {
-				p.RemoveIP(tip)
-			})
-		}
-	}
-
-	p.AddIPs(ips)
 }

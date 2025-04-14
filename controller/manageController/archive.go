@@ -564,6 +564,9 @@ func ArchiveDetailForm(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -664,6 +667,9 @@ func ArchiveRecover(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -708,6 +714,9 @@ func ArchiveRelease(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -754,6 +763,9 @@ func ArchiveDelete(ctx iris.Context) {
 		// 如果开启了多语言，则自动同步文章,分类
 		if currentSite.MultiLanguage.Open {
 			for _, sub := range currentSite.MultiLanguage.SubSites {
+				if sub.Id == currentSite.Id || sub.Id == 0 {
+					continue
+				}
 				// 同步分类，先同步，再添加翻译计划
 				subSite := provider.GetWebsite(sub.Id)
 				if subSite != nil && subSite.Initialed {
@@ -779,6 +791,9 @@ func ArchiveDelete(ctx iris.Context) {
 			// 如果开启了多语言，则自动同步文章,分类
 			if currentSite.MultiLanguage.Open {
 				for _, sub := range currentSite.MultiLanguage.SubSites {
+					if sub.Id == currentSite.Id || sub.Id == 0 {
+						continue
+					}
 					// 同步分类，先同步，再添加翻译计划
 					subSite := provider.GetWebsite(sub.Id)
 					if subSite != nil && subSite.Initialed {
@@ -844,6 +859,9 @@ func ArchiveDeleteImage(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -887,6 +905,9 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -926,6 +947,9 @@ func UpdateArchiveStatus(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -965,6 +989,9 @@ func UpdateArchiveTime(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -1004,6 +1031,9 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -1044,6 +1074,9 @@ func UpdateArchiveSort(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -1086,6 +1119,9 @@ func UpdateArchiveParent(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {
@@ -1125,6 +1161,9 @@ func UpdateArchiveCategory(ctx iris.Context) {
 	// 如果开启了多语言，则自动同步文章,分类
 	if currentSite.MultiLanguage.Open {
 		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
 			// 同步分类，先同步，再添加翻译计划
 			subSite := provider.GetWebsite(sub.Id)
 			if subSite != nil && subSite.Initialed {

@@ -95,11 +95,3 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 
 	return nil
 }
-
-func (attachment *Attachment) Delete(db *gorm.DB) error {
-	if err := db.Delete(attachment).Error; err != nil {
-		return err
-	}
-
-	return nil
-}

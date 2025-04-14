@@ -50,7 +50,14 @@ func main() {
 	// env
 	envDb := os.Getenv("MYSQL_DATABASE")
 	envHost := os.Getenv("MYSQL_HOST")
+	envUser := os.Getenv("MYSQL_USER")
+	if envUser == "" {
+		envUser = "root"
+	}
 	envPwd := os.Getenv("MYSQL_ROOT_PASSWORD")
+	if envPwd == "" {
+		envPwd = os.Getenv("MYSQL_PASSWORD")
+	}
 	envPort := os.Getenv("MYSQL_PORT")
 	if len(envDb) > 0 && len(envHost) > 0 && len(envPwd) > 0 {
 		envPort2, _ := strconv.Atoi(envPort)
@@ -59,7 +66,7 @@ func main() {
 		}
 		config.Server.Mysql = config.MysqlConfig{
 			Database: envDb,
-			User:     "root",
+			User:     envUser,
 			Password: envPwd,
 			Host:     envHost,
 			Port:     envPort2,

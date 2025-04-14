@@ -4,8 +4,10 @@ import (
 	"encoding/json"
 	"errors"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -13,17 +15,18 @@ type cacheData struct {
 	Expire int64
 	key    string
 	val    any
-	prev   *cacheData
-	next   *cacheData
 }
 
 type MemoryCache struct {
-	mu   sync.Mutex
-	list map[string]*cacheData
-	head *cacheData
-	tail *cacheData
-	size int
-	cap  int
+	mu          sync.RWMutex // 使用读写锁提高并发性能
+	list        map[string]*cacheData
+	lastCleanup time.Time // 上次清理时间
+	lastGC      time.Time // 上次GC时间
+
+	// 缓存统计
+	hits   uint64 // 缓存命中次数
+	misses uint64 // 缓存未命中次数
+	total  uint64 // 总访问次数
 }
 
 func (m *MemoryCache) Set(key string, val any, expire int64) error {
@@ -32,27 +35,19 @@ func (m *MemoryCache) Set(key string, val any, expire int64) error {
 	}
 	expire = time.Now().Unix() + expire
 
-	m.mu.Lock()
 	node := &cacheData{
 		Expire: expire,
 		key:    key,
 		val:    val,
 	}
-	if _, ok := m.list[key]; !ok {
-		//不存在
-		m.addToHead(node)
-		m.list[key] = node
-		m.size++
-		if m.size > m.cap {
-			delKey := m.removeTail()
-			delete(m.list, delKey)
-			m.size--
-		}
-	} else {
-		//存在，替换
-		m.list[key].Expire = expire
-		m.list[key].val = val
-		m.moveToHead(m.list[key])
+
+	m.mu.Lock()
+	m.list[key] = node
+
+	// 定期清理过期数据
+	if time.Since(m.lastCleanup) > time.Minute*5 {
+		go m.cleanExpiredOrOldest()
+		m.lastCleanup = time.Now()
 	}
 	m.mu.Unlock()
 
@@ -60,35 +55,50 @@ func (m *MemoryCache) Set(key string, val any, expire int64) error {
 }
 
 func (m *MemoryCache) Get(key string, val any) error {
+	// 增加总访问次数
+	atomic.AddUint64(&m.total, 1)
+
 	rv := reflect.ValueOf(val)
 	if rv.Kind() != reflect.Pointer || rv.IsNil() {
 		return &json.InvalidUnmarshalError{Type: reflect.TypeOf(val)}
 	}
 
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	if _, ok := m.list[key]; !ok {
-		//数据不存在
+	// 先使用读锁检查
+	m.mu.RLock()
+	node, ok := m.list[key]
+	if !ok {
+		m.mu.RUnlock()
+		// 增加未命中次数
+		atomic.AddUint64(&m.misses, 1)
 		return errors.New("没有缓存数据")
 	}
-	if m.list[key].Expire < time.Now().Unix() {
+
+	// 检查是否过期
+	if node.Expire < time.Now().Unix() {
+		m.mu.RUnlock()
+		// 异步删除过期数据
+		go m.Delete(key)
+		// 增加未命中次数
+		atomic.AddUint64(&m.misses, 1)
 		return errors.New("缓存数据已过期")
 	}
-	m.moveToHead(m.list[key])
 
-	rv.Elem().Set(reflect.ValueOf(m.list[key].val))
+	// 复制值，避免在锁内进行可能耗时的反射操作
+	cachedVal := node.val
+	m.mu.RUnlock()
 
+	// 增加命中次数
+	atomic.AddUint64(&m.hits, 1)
+
+	// 设置返回值
+	rv.Elem().Set(reflect.ValueOf(cachedVal))
 	return nil
 }
 
 func (m *MemoryCache) Delete(key string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if _, ok := m.list[key]; ok {
-		m.removeNode(m.list[key])
-		delete(m.list, key)
-		m.size--
-	}
+	delete(m.list, key)
 }
 
 func (m *MemoryCache) CleanAll(prefix ...string) {
@@ -97,79 +107,113 @@ func (m *MemoryCache) CleanAll(prefix ...string) {
 	if len(prefix) > 0 {
 		for k := range m.list {
 			if strings.HasPrefix(k, prefix[0]) {
-				m.removeNode(m.list[k])
 				delete(m.list, k)
-				m.size--
 			}
 		}
 	} else {
+		// 完全重置缓存
 		m.list = make(map[string]*cacheData)
-		m.size = 0
-		m.head = &cacheData{}
-		m.tail = &cacheData{}
-		m.head.next = m.tail
-		m.tail.prev = m.head
 	}
+
+	// 更新最后清理时间
+	m.lastCleanup = time.Now()
 }
 
-func (m *MemoryCache) moveToHead(node *cacheData) {
-	//先删
-	m.removeNode(node)
-	m.addToHead(node)
+// 清理部分缓存，按照过期时间排序，清理最早过期的数据
+func (m *MemoryCache) CleanByPercent(percent float64) int {
+	if percent <= 0 || percent >= 100 {
+		return 0
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// 计算需要删除的数量
+	totalSize := len(m.list)
+	toRemove := int(float64(totalSize) * percent / 100)
+	if toRemove <= 0 {
+		return 0
+	}
+
+	// 收集所有缓存项并按过期时间排序
+	items := make([]*cacheData, 0, totalSize)
+	for _, item := range m.list {
+		items = append(items, item)
+	}
+
+	// 按过期时间排序，优先删除即将过期的
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Expire < items[j].Expire
+	})
+
+	// 删除指定比例的缓存
+	removed := 0
+	for i := 0; i < toRemove && i < len(items); i++ {
+		delete(m.list, items[i].key)
+		removed++
+	}
+
+	// 更新最后清理时间
+	m.lastCleanup = time.Now()
+	return removed
 }
 
-func (m *MemoryCache) addToHead(node *cacheData) {
-	m.head.next.prev = node
-	node.next = m.head.next
-	node.prev = m.head
-	m.head.next = node
-}
+// 清理过期或最旧的数据
+func (m *MemoryCache) cleanExpiredOrOldest() {
+	now := time.Now().Unix()
+	expiredKeys := make([]string, 0, 32) // 预分配一个合理的初始容量
 
-func (m *MemoryCache) removeNode(node *cacheData) {
-	node.prev.next = node.next
-	node.next.prev = node.prev
-}
+	// 先收集过期的key
+	for key, item := range m.list {
+		if item.Expire < now {
+			expiredKeys = append(expiredKeys, key)
+		}
+	}
 
-func (m *MemoryCache) removeTail() string {
-	//拿到最后一个元素
-	node := m.tail.prev
-	m.removeNode(node)
-	return node.key
+	// 批量删除过期数据
+	m.mu.Lock()
+	for _, key := range expiredKeys {
+		delete(m.list, key)
+	}
+	m.mu.Unlock()
+
+	// 如果有过期数据被清理，更新最后清理时间
+	if len(expiredKeys) > 0 {
+		m.lastCleanup = time.Now()
+	}
 }
 
 func (m *MemoryCache) GC() {
 	for {
-		timestamp := time.Now().Unix()
-		m.mu.Lock()
-		for k, v := range m.list {
-			if v.Expire < timestamp {
-				m.removeNode(v)
-				delete(m.list, k)
-				m.size--
+		// 每分钟检查一次系统内存使用情况
+		if time.Since(m.lastGC) > time.Minute {
+			_, appUsedPercent, sysFreePercent := GetSystemMemoryUsage()
+
+			// 如果应用内存使用率超过65%，清理一部分缓存
+			if appUsedPercent > 65 || (sysFreePercent < 10 && len(m.list) > 10000) {
+				// 清理25%的缓存
+				m.CleanByPercent(25)
 			}
+			m.lastGC = time.Now()
 		}
-		m.mu.Unlock()
-		//每次执行完毕休息10秒
-		time.Sleep(10 * time.Second)
+
+		// 定期清理过期数据
+		m.cleanExpiredOrOldest()
+
+		// 每次执行完毕休息30秒
+		time.Sleep(30 * time.Second)
 	}
 }
 
 func InitMemoryCache() Cache {
-	head := &cacheData{}
-	tail := &cacheData{}
-	head.next = tail
-	tail.prev = head
-
-	// 初始化一个1万容量的内存缓存
+	// 初始化内存缓存
 	cache := &MemoryCache{
-		cap:  10000,
-		size: 0,
-		list: map[string]*cacheData{},
-		head: head,
-		tail: tail,
+		list:        make(map[string]*cacheData),
+		lastCleanup: time.Now(),
+		lastGC:      time.Now(),
 	}
 
-	//执行回收
+	// 执行回收
 	go cache.GC()
 
 	return cache

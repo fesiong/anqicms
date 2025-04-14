@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.4.9"
+const Version = "3.4.10"
 
 const (
 	StatusOK         = 0
@@ -52,6 +52,8 @@ const (
 	StorageTypeTencent = "tencent"
 	StorageTypeQiniu   = "qiniu"
 	StorageTypeUpyun   = "upyun"
+	StorageTypeGoogle  = "google"
+	StorageTypeAws     = "awss3"
 	StorageTypeFTP     = "ftp"
 	StorageTypeSSH     = "ssh"
 )

@@ -35,47 +35,58 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.PluginHtmlCache.Open = req.Open
-	currentSite.PluginHtmlCache.IndexCache = req.IndexCache
-	currentSite.PluginHtmlCache.ListCache = req.ListCache
-	currentSite.PluginHtmlCache.DetailCache = req.DetailCache
+	w2 := provider.GetWebsite(currentSite.Id)
+
+	w2.PluginHtmlCache.Open = req.Open
+	w2.PluginHtmlCache.IndexCache = req.IndexCache
+	w2.PluginHtmlCache.ListCache = req.ListCache
+	w2.PluginHtmlCache.DetailCache = req.DetailCache
 	// storage 部分
-	currentSite.PluginHtmlCache.KeepLocal = false
-	currentSite.PluginHtmlCache.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
-	currentSite.PluginHtmlCache.StorageType = req.StorageType
+	w2.PluginHtmlCache.KeepLocal = false
+	w2.PluginHtmlCache.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
+	w2.PluginHtmlCache.StorageType = req.StorageType
 
-	currentSite.PluginHtmlCache.AliyunEndpoint = req.AliyunEndpoint
-	currentSite.PluginHtmlCache.AliyunAccessKeyId = req.AliyunAccessKeyId
-	currentSite.PluginHtmlCache.AliyunAccessKeySecret = req.AliyunAccessKeySecret
-	currentSite.PluginHtmlCache.AliyunBucketName = req.AliyunBucketName
+	w2.PluginHtmlCache.AliyunEndpoint = req.AliyunEndpoint
+	w2.PluginHtmlCache.AliyunAccessKeyId = req.AliyunAccessKeyId
+	w2.PluginHtmlCache.AliyunAccessKeySecret = req.AliyunAccessKeySecret
+	w2.PluginHtmlCache.AliyunBucketName = req.AliyunBucketName
 
-	currentSite.PluginHtmlCache.TencentSecretId = req.TencentSecretId
-	currentSite.PluginHtmlCache.TencentSecretKey = req.TencentSecretKey
-	currentSite.PluginHtmlCache.TencentBucketUrl = req.TencentBucketUrl
+	w2.PluginHtmlCache.TencentSecretId = req.TencentSecretId
+	w2.PluginHtmlCache.TencentSecretKey = req.TencentSecretKey
+	w2.PluginHtmlCache.TencentBucketUrl = req.TencentBucketUrl
 
-	currentSite.PluginHtmlCache.QiniuAccessKey = req.QiniuAccessKey
-	currentSite.PluginHtmlCache.QiniuSecretKey = req.QiniuSecretKey
-	currentSite.PluginHtmlCache.QiniuBucket = req.QiniuBucket
-	currentSite.PluginHtmlCache.QiniuRegion = req.QiniuRegion
+	w2.PluginHtmlCache.QiniuAccessKey = req.QiniuAccessKey
+	w2.PluginHtmlCache.QiniuSecretKey = req.QiniuSecretKey
+	w2.PluginHtmlCache.QiniuBucket = req.QiniuBucket
+	w2.PluginHtmlCache.QiniuRegion = req.QiniuRegion
 
-	currentSite.PluginHtmlCache.UpyunBucket = req.UpyunBucket
-	currentSite.PluginHtmlCache.UpyunOperator = req.UpyunOperator
-	currentSite.PluginHtmlCache.UpyunPassword = req.UpyunPassword
+	w2.PluginHtmlCache.UpyunBucket = req.UpyunBucket
+	w2.PluginHtmlCache.UpyunOperator = req.UpyunOperator
+	w2.PluginHtmlCache.UpyunPassword = req.UpyunPassword
 
-	currentSite.PluginHtmlCache.FTPHost = req.FTPHost
-	currentSite.PluginHtmlCache.FTPPort = req.FTPPort
-	currentSite.PluginHtmlCache.FTPUsername = req.FTPUsername
-	currentSite.PluginHtmlCache.FTPPassword = req.FTPPassword
-	currentSite.PluginHtmlCache.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+	w2.PluginHtmlCache.GoogleProjectId = req.GoogleProjectId
+	w2.PluginHtmlCache.GoogleBucketName = req.GoogleBucketName
+	w2.PluginHtmlCache.GoogleCredentialsJson = req.GoogleCredentialsJson
 
-	currentSite.PluginHtmlCache.SSHHost = req.SSHHost
-	currentSite.PluginHtmlCache.SSHPort = req.SSHPort
-	currentSite.PluginHtmlCache.SSHUsername = req.SSHUsername
-	currentSite.PluginHtmlCache.SSHPassword = req.SSHPassword
-	currentSite.PluginHtmlCache.SSHPrivateKey = req.SSHPrivateKey
-	currentSite.PluginHtmlCache.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+	w2.PluginHtmlCache.S3Region = req.S3Region
+	w2.PluginHtmlCache.S3AccessKey = req.S3AccessKey
+	w2.PluginHtmlCache.S3SecretKey = req.S3SecretKey
+	w2.PluginHtmlCache.S3Bucket = req.S3Bucket
 
-	err := currentSite.SaveSettingValue(provider.HtmlCacheSettingKey, currentSite.PluginHtmlCache)
+	w2.PluginHtmlCache.FTPHost = req.FTPHost
+	w2.PluginHtmlCache.FTPPort = req.FTPPort
+	w2.PluginHtmlCache.FTPUsername = req.FTPUsername
+	w2.PluginHtmlCache.FTPPassword = req.FTPPassword
+	w2.PluginHtmlCache.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+
+	w2.PluginHtmlCache.SSHHost = req.SSHHost
+	w2.PluginHtmlCache.SSHPort = req.SSHPort
+	w2.PluginHtmlCache.SSHUsername = req.SSHUsername
+	w2.PluginHtmlCache.SSHPassword = req.SSHPassword
+	w2.PluginHtmlCache.SSHPrivateKey = req.SSHPrivateKey
+	w2.PluginHtmlCache.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+
+	err := w2.SaveSettingValue(provider.HtmlCacheSettingKey, w2.PluginHtmlCache)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -85,7 +96,6 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateCacheConfiguration"))
-	w2 := provider.GetWebsite(currentSite.Id)
 	w2.InitCacheBucket()
 
 	ctx.JSON(iris.Map{

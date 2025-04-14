@@ -167,3 +167,27 @@ func LevenshteinDistance(s1, s2 string) float64 {
 	maxLen := math.Max(float64(len1), float64(len2))
 	return 1 - distance/maxLen
 }
+
+func JoinInt(is []int64, sep string) string {
+	switch len(is) {
+	case 0:
+		return ""
+	case 1:
+		return strconv.FormatInt(is[0], 10)
+	}
+
+	var n int
+	if len(sep) > 0 {
+		n += len(sep) * (len(is) - 1)
+	}
+	var b strings.Builder
+	b.Grow(n)
+	b.WriteString(strconv.FormatInt(is[0], 10))
+	for _, elem := range is[1:] {
+		s := strconv.FormatInt(elem, 10)
+		b.WriteString(sep)
+		b.WriteString(s)
+	}
+
+	return b.String()
+}

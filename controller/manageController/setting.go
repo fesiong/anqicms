@@ -549,6 +549,9 @@ func DeleteSettingBanner(ctx iris.Context) {
 		return
 	}
 	for i := range currentSite.Banner.Banners {
+		if req.Type == "" {
+			req.Type = currentSite.Banner.Banners[i].Type
+		}
 		if req.Type == currentSite.Banner.Banners[i].Type {
 			for j := range currentSite.Banner.Banners[i].List {
 				if currentSite.Banner.Banners[i].List[j].Id == req.Id {

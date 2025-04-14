@@ -186,7 +186,8 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						tmpContent = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 					}
 					if fieldName == "ContentTitles" {
-						content = library.ParseContentTitles(tmpContent)
+						ctx.Private["showContentTitle"] = true
+						content, _ = library.ParseContentTitles(tmpContent)
 					} else {
 						// lazy load
 						if lazy != "" {
@@ -269,6 +270,9 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 							}
 						}
 						tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
+						if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
+							_, tmpContent = library.ParseContentTitles(tmpContent)
+						}
 						content = tmpContent
 					}
 				}

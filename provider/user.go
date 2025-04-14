@@ -755,7 +755,7 @@ func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl 
 	newImg := library.ThumbnailCrop(256, 256, img, 2)
 	buf, _, _ := encodeImage(newImg, imgType, w.Content.Quality)
 	// 上传图片
-	_, err = w.Storage.UploadFile(fileName, buf)
+	_, err = w.UploadFile(fileName, buf)
 	if err != nil {
 		return "", err
 	}

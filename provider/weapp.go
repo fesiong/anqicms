@@ -75,7 +75,7 @@ func (w *Website) CreateWeappQrcode(weappPath, scene string) (string, error) {
 	tmpName := md5Str + ".png"
 	filePath := fmt.Sprintf("uploads/qrcode/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
 
-	_, err = w.Storage.UploadFile(filePath, bts)
+	_, err = w.UploadFile(filePath, bts)
 	if err != nil {
 		return "", err
 	}

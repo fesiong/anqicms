@@ -353,6 +353,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			})
 			return
 		}
+		archiveDraft, err := currentSite.GetArchiveDraftById(id)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
+			})
+			return
+		}
 	}
 	if len(title) > 0 {
 		archive, err := currentSite.GetArchiveByTitle(title)
@@ -360,6 +368,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
 				"data": archive,
+			})
+			return
+		}
+		archiveDraft, err := currentSite.GetArchiveDraftByTitle(title)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
 			})
 			return
 		}
@@ -373,6 +389,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			})
 			return
 		}
+		archiveDraft, err := currentSite.GetArchiveDraftByOriginUrl(urlToken)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
+			})
+			return
+		}
 	}
 	if len(originUrl) > 0 {
 		archive, err := currentSite.GetArchiveByOriginUrl(originUrl)
@@ -380,6 +404,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
 				"data": archive,
+			})
+			return
+		}
+		archiveDraft, err := currentSite.GetArchiveDraftByOriginUrl(originUrl)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
 			})
 			return
 		}

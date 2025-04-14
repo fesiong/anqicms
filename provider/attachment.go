@@ -127,7 +127,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	if isImage != 1 {
 		bts, _ := io.ReadAll(file)
 		fileSize = int64(len(bts))
-		_, err = w.Storage.UploadFile(filePath+tmpName, bts)
+		_, err = w.UploadFile(filePath+tmpName, bts)
 		if err != nil {
 			return nil, err
 		}
@@ -249,7 +249,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	fileSize = int64(len(buf))
 
 	// 上传原图
-	_, err = w.Storage.UploadFile(filePath+tmpName, buf)
+	_, err = w.UploadFile(filePath+tmpName, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +283,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	// 上传缩略图
-	_, err = w.Storage.UploadFile(filePath+thumbName, buf)
+	_, err = w.UploadFile(filePath+thumbName, buf)
 	if err != nil {
 		return nil, err
 	}
@@ -375,6 +375,19 @@ func (w *Website) GetAttachmentById(id uint) (*model.Attachment, error) {
 	return &attach, nil
 }
 
+func (w *Website) DeleteAttachment(attach *model.Attachment) error {
+	// 删除文件
+	_ = w.DeleteFile(attach.FileLocation)
+	// 删除thumb
+	if attach.IsImage == 1 {
+		paths, fileName := filepath.Split(attach.FileLocation)
+		thumb := paths + "thumb_" + fileName
+		_ = w.DeleteFile(thumb)
+	}
+
+	return w.DB.Unscoped().Delete(&attach).Error
+}
+
 func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
 	var attachments []*model.Attachment
 	offset := (currentPage - 1) * pageSize
@@ -454,7 +467,7 @@ func (w *Website) BuildThumb(fileLocation string) error {
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
 	buf, _, _ := encodeImage(newImg, imgType, quality)
 
-	_, err = w.Storage.UploadFile(thumbPath, buf)
+	_, err = w.UploadFile(thumbPath, buf)
 	if err != nil {
 		return err
 	}
@@ -746,7 +759,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(newFile, buf)
+	_, err = w.UploadFile(newFile, buf)
 	if err != nil {
 		return err
 	}
@@ -769,7 +782,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), buf)
+	_, err = w.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), buf)
 	if err != nil {
 		return err
 	}
