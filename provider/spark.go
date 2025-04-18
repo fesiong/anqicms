@@ -59,7 +59,7 @@ func GetSparkResponse(sparkKey config.SparkSetting, prompt string) (string, erro
 		if line == "EOF" {
 			break
 		}
-		if len(line) > 1 {
+		if len(line) > 0 {
 			answer += line
 		}
 		if isEof {

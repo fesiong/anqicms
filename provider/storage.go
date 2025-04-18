@@ -3,10 +3,11 @@ package provider
 import (
 	"bytes"
 	"context"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/provider/storage"
 	"log"
 	"strings"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider/storage"
 )
 
 func (w *Website) GetBucket(cfg *config.PluginStorageConfig) (storage.Storage, error) {
@@ -23,6 +24,8 @@ func (w *Website) GetBucket(cfg *config.PluginStorageConfig) (storage.Storage, e
 		return storage.NewGoogleStorage(cfg)
 	case config.StorageTypeAws:
 		return storage.NewAwsStorage(cfg)
+	case config.StorageTypeR2:
+		return storage.NewR2Storage(cfg)
 	case config.StorageTypeFTP:
 		return storage.NewFtpStorage(cfg)
 	case config.StorageTypeSSH:

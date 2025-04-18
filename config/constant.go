@@ -54,6 +54,7 @@ const (
 	StorageTypeUpyun   = "upyun"
 	StorageTypeGoogle  = "google"
 	StorageTypeAws     = "awss3"
+	StorageTypeR2      = "r2" // Cloudflare R2
 	StorageTypeFTP     = "ftp"
 	StorageTypeSSH     = "ssh"
 )

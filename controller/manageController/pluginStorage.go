@@ -64,6 +64,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	w2.PluginStorage.S3AccessKey = req.S3AccessKey
 	w2.PluginStorage.S3SecretKey = req.S3SecretKey
 	w2.PluginStorage.S3Bucket = req.S3Bucket
+	w2.PluginStorage.S3Endpoint = req.S3Endpoint
 
 	w2.PluginStorage.FTPHost = req.FTPHost
 	w2.PluginStorage.FTPPort = req.FTPPort

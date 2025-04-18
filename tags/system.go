@@ -77,6 +77,10 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)
+		// 增加header支持
+		if !f.IsValid() {
+			content = currentSite.CtxOri().GetHeader(fieldName)
+		}
 	}
 
 	// output

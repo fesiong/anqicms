@@ -163,6 +163,7 @@ func (m *MemoryCache) cleanExpiredOrOldest() {
 	now := time.Now().Unix()
 	expiredKeys := make([]string, 0, 32) // 预分配一个合理的初始容量
 
+	m.mu.Lock()
 	// 先收集过期的key
 	for key, item := range m.list {
 		if item.Expire < now {
@@ -171,7 +172,6 @@ func (m *MemoryCache) cleanExpiredOrOldest() {
 	}
 
 	// 批量删除过期数据
-	m.mu.Lock()
 	for _, key := range expiredKeys {
 		delete(m.list, key)
 	}
