@@ -23,9 +23,8 @@ type R2Storage struct {
 
 func NewR2Storage(cfg *config.PluginStorageConfig) (*R2Storage, error) {
 	// R2使用S3兼容API，但需要特定的endpoint
-	endpoint := "https://" + cfg.S3AccessKey + ".r2.cloudflarestorage.com"
 	sess, err := session.NewSession(&aws.Config{
-		Endpoint:    aws.String(endpoint),
+		Endpoint:    aws.String(cfg.S3Endpoint),
 		Region:      aws.String(cfg.S3Region),
 		Credentials: credentials.NewStaticCredentials(cfg.S3AccessKey, cfg.S3SecretKey, ""),
 	})

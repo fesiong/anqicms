@@ -72,6 +72,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	w2.PluginHtmlCache.S3AccessKey = req.S3AccessKey
 	w2.PluginHtmlCache.S3SecretKey = req.S3SecretKey
 	w2.PluginHtmlCache.S3Bucket = req.S3Bucket
+	w2.PluginHtmlCache.S3Endpoint = req.S3Endpoint
 
 	w2.PluginHtmlCache.FTPHost = req.FTPHost
 	w2.PluginHtmlCache.FTPPort = req.FTPPort
