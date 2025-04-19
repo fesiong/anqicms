@@ -1,45 +1,42 @@
 package storage
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"io"
 
-	"github.com/aws/aws-sdk-go/aws/awserr"
-	"github.com/aws/aws-sdk-go/aws/credentials"
-
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
-	"github.com/aws/aws-sdk-go/service/s3/s3manager"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsConfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"kandaoni.com/anqicms/config"
 )
 
 type R2Storage struct {
 	bucket string
-	sess   *session.Session
+	client *s3.Client
 }
 
 func NewR2Storage(cfg *config.PluginStorageConfig) (*R2Storage, error) {
-	// R2使用S3兼容API，但需要特定的endpoint
-	sess, err := session.NewSession(&aws.Config{
-		Endpoint:    aws.String(cfg.S3Endpoint),
-		Region:      aws.String(cfg.S3Region),
-		Credentials: credentials.NewStaticCredentials(cfg.S3AccessKey, cfg.S3SecretKey, ""),
-	})
+	defCfg, err := awsConfig.LoadDefaultConfig(context.TODO(),
+		awsConfig.WithRegion("auto"),
+		awsConfig.WithCredentialsProvider(credentials.NewStaticCredentialsProvider(cfg.S3AccessKey, cfg.S3SecretKey, "")),
+	)
 	if err != nil {
 		return nil, err
 	}
 
+	client := s3.NewFromConfig(defCfg, func(o *s3.Options) {
+		o.BaseEndpoint = aws.String(cfg.S3Endpoint)
+	})
+
 	return &R2Storage{
 		bucket: cfg.S3Bucket,
-		sess:   sess,
+		client: client,
 	}, nil
 }
 
 func (s *R2Storage) Put(ctx context.Context, key string, r io.Reader) error {
-	_, err := s3manager.NewUploader(s.sess).UploadWithContext(ctx, &s3manager.UploadInput{
+	_, err := s.client.PutObject(ctx, &s3.PutObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 		Body:   r,
@@ -48,35 +45,33 @@ func (s *R2Storage) Put(ctx context.Context, key string, r io.Reader) error {
 }
 
 func (s *R2Storage) Get(ctx context.Context, key string) (io.ReadCloser, error) {
-	buf := aws.NewWriteAtBuffer([]byte{})
-	_, err := s3manager.NewDownloader(s.sess).DownloadWithContext(ctx, buf, &s3.GetObjectInput{
+	out, err := s.client.GetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
+
 	if err != nil {
 		return nil, err
 	}
-	return io.NopCloser(bytes.NewReader(buf.Bytes())), nil
+
+	return out.Body, nil
 }
 
 func (s *R2Storage) Delete(ctx context.Context, key string) error {
-	_, err := s3.New(s.sess).DeleteObjectWithContext(ctx, &s3.DeleteObjectInput{
+	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
+
 	return err
 }
 
 func (s *R2Storage) Exists(ctx context.Context, key string) (bool, error) {
-	_, err := s3.New(s.sess).HeadObjectWithContext(ctx, &s3.HeadObjectInput{
+	_, err := s.client.HeadObject(ctx, &s3.HeadObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(key),
 	})
 	if err != nil {
-		var aerr awserr.Error
-		if errors.As(err, &aerr) && aerr.Code() == "NotFound" {
-			return false, nil
-		}
 		return false, err
 	}
 	return true, nil
