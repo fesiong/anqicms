@@ -89,6 +89,9 @@ Password: `123456`
 - Latest
   > We have been working hard, exploring, iterating and optimizing to provide users with a better user experience.
 
+- **March 17, 2025, v3.4.7 Released**
+  > Multilingual site: Multilingual enhancement, supporting full page HTML translation.
+  
 - **November 11, 2024, v3.4.1 Released**  
   > **Multi-Language Sites**: Introduced multi-language site support, enabling websites to easily cater to users from different regions and cultural backgrounds, enhancing global service capabilities.  
 
