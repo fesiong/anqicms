@@ -208,6 +208,10 @@ func (s *DjangoEngine) RegisterTag(tagName string, fn TagParser) error {
 	return pongo2.RegisterTag(tagName, fn)
 }
 
+func (s *DjangoEngine) ReplaceTag(tagName string, fn TagParser) error {
+	return pongo2.ReplaceTag(tagName, fn)
+}
+
 // Load parses the templates to the engine.
 // It is responsible to add the necessary global functions.
 //
