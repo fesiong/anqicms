@@ -80,31 +80,33 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			content = f.Interface()
 		}
 		// 支持 extra
+		categoryDetailExtra := map[string]interface{}{}
 		if categoryDetail.Extra != nil {
 			module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
 			if module != nil && len(module.CategoryFields) > 0 {
 				for _, field := range module.CategoryFields {
-					if categoryDetail.Extra[field.FieldName] == nil || categoryDetail.Extra[field.FieldName] == "" {
+					categoryDetailExtra[field.FieldName] = categoryDetail.Extra[field.FieldName]
+					if categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "" {
 						// default
-						categoryDetail.Extra[field.FieldName] = field.Content
+						categoryDetailExtra[field.FieldName] = field.Content
 					}
 					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
-						categoryDetail.Extra[field.FieldName] != nil {
-						value, ok2 := categoryDetail.Extra[field.FieldName].(string)
+						categoryDetailExtra[field.FieldName] != nil {
+						value, ok2 := categoryDetailExtra[field.FieldName].(string)
 						if ok2 {
 							if field.Type == config.CustomFieldTypeEditor && render {
 								value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 							}
-							categoryDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+							categoryDetailExtra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 						}
 					}
-					if field.Type == config.CustomFieldTypeImages && categoryDetail.Extra[field.FieldName] != nil {
-						if val, ok := categoryDetail.Extra[field.FieldName].([]interface{}); ok {
+					if field.Type == config.CustomFieldTypeImages && categoryDetailExtra[field.FieldName] != nil {
+						if val, ok := categoryDetailExtra[field.FieldName].([]interface{}); ok {
 							for j, v2 := range val {
 								v2s, _ := v2.(string)
 								val[j] = currentSite.ReplaceContentUrl(v2s, true)
 							}
-							categoryDetail.Extra[field.FieldName] = val
+							categoryDetailExtra[field.FieldName] = val
 						}
 					}
 				}
@@ -113,7 +115,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 					for _, field := range module.CategoryFields {
 						extras = append(extras, model.CustomField{
 							Name:      field.Name,
-							Value:     categoryDetail.Extra[field.FieldName],
+							Value:     categoryDetailExtra[field.FieldName],
 							Default:   field.Content,
 							Type:      field.Type,
 							FieldName: field.FieldName,
@@ -123,7 +125,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 				}
 			}
 		}
-		if item, ok := categoryDetail.Extra[inputName]; ok {
+		if item, ok := categoryDetailExtra[inputName]; ok {
 			content = item
 		}
 
