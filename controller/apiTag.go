@@ -754,31 +754,34 @@ func ApiCategoryDetail(ctx iris.Context) {
 	if category.Extra != nil {
 		module := currentSite.GetModuleFromCache(category.ModuleId)
 		if module != nil && len(module.CategoryFields) > 0 {
+			categoryExtra := map[string]interface{}{}
 			for _, field := range module.CategoryFields {
-				if category.Extra[field.FieldName] == nil || category.Extra[field.FieldName] == "" {
+				categoryExtra[field.FieldName] = category.Extra
+				if categoryExtra[field.FieldName] == nil || categoryExtra[field.FieldName] == "" {
 					// default
-					category.Extra[field.FieldName] = field.Content
+					categoryExtra[field.FieldName] = field.Content
 				}
 				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
-					category.Extra[field.FieldName] != nil {
-					value, ok2 := category.Extra[field.FieldName].(string)
+					categoryExtra[field.FieldName] != nil {
+					value, ok2 := categoryExtra[field.FieldName].(string)
 					if ok2 {
 						if field.Type == config.CustomFieldTypeEditor && render {
 							value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 						}
-						category.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+						categoryExtra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 					}
 				}
-				if field.Type == config.CustomFieldTypeImages && category.Extra[field.FieldName] != nil {
-					if val, ok := category.Extra[field.FieldName].([]interface{}); ok {
+				if field.Type == config.CustomFieldTypeImages && categoryExtra[field.FieldName] != nil {
+					if val, ok := categoryExtra[field.FieldName].([]interface{}); ok {
 						for j, v2 := range val {
 							v2s, _ := v2.(string)
 							val[j] = currentSite.ReplaceContentUrl(v2s, true)
 						}
-						category.Extra[field.FieldName] = val
+						categoryExtra[field.FieldName] = val
 					}
 				}
 			}
+			category.Extra = categoryExtra
 		}
 	}
 
