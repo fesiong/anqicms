@@ -146,6 +146,7 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
 	_ = pugEngine.RegisterTag("jsonLd", tags.TagJsonLdParser)
 	_ = pugEngine.ReplaceTag("set", tags.TagSetParser)
+	_ = pugEngine.RegisterTag("jump", tags.TagJumpParser)
 
 	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行
