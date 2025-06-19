@@ -99,7 +99,10 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// 读取 extraDate
 	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
 	for i := range archive.Extra {
-		if archive.Extra[i].Value == nil || archive.Extra[i].Value == "" {
+		if (archive.Extra[i].Value == nil || archive.Extra[i].Value == "") &&
+			archive.Extra[i].Type != config.CustomFieldTypeRadio &&
+			archive.Extra[i].Type != config.CustomFieldTypeCheckbox &&
+			archive.Extra[i].Type != config.CustomFieldTypeSelect {
 			archive.Extra[i].Value = archive.Extra[i].Default
 		}
 		if archive.Extra[i].FollowLevel && !archive.HasOrdered {
@@ -687,7 +690,10 @@ func ApiArchiveParams(ctx iris.Context) {
 	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 
 	for i := range archiveParams {
-		if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
+		if (archiveParams[i].Value == nil || archiveParams[i].Value == "") &&
+			archiveParams[i].Type != config.CustomFieldTypeRadio &&
+			archiveParams[i].Type != config.CustomFieldTypeCheckbox &&
+			archiveParams[i].Type != config.CustomFieldTypeSelect {
 			archiveParams[i].Value = archiveParams[i].Default
 		}
 		if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
@@ -757,7 +763,10 @@ func ApiCategoryDetail(ctx iris.Context) {
 			categoryExtra := map[string]interface{}{}
 			for _, field := range module.CategoryFields {
 				categoryExtra[field.FieldName] = category.Extra
-				if categoryExtra[field.FieldName] == nil || categoryExtra[field.FieldName] == "" {
+				if (categoryExtra[field.FieldName] == nil || categoryExtra[field.FieldName] == "") &&
+					field.Type != config.CustomFieldTypeRadio &&
+					field.Type != config.CustomFieldTypeCheckbox &&
+					field.Type != config.CustomFieldTypeSelect {
 					// default
 					categoryExtra[field.FieldName] = field.Content
 				}
@@ -1173,7 +1182,10 @@ func ApiTagDetail(ctx iris.Context) {
 				fields := currentSite.GetTagFields()
 				if len(fields) > 0 {
 					for _, field := range fields {
-						if tagDetail.Extra[field.FieldName] == nil || tagDetail.Extra[field.FieldName] == "" {
+						if (tagDetail.Extra[field.FieldName] == nil || tagDetail.Extra[field.FieldName] == "") &&
+							field.Type != config.CustomFieldTypeRadio &&
+							field.Type != config.CustomFieldTypeCheckbox &&
+							field.Type != config.CustomFieldTypeSelect {
 							// default
 							tagDetail.Extra[field.FieldName] = field.Content
 						}
