@@ -15,7 +15,6 @@ import (
 	"kandaoni.com/anqicms/view"
 	"log"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 )
@@ -113,7 +112,7 @@ func (bootstrap *Bootstrap) Start() {
 		pugEngine.Reload(true)
 	}
 
-	pugEngine.AddFunc("stampToDate", TimestampToDate)
+	pugEngine.AddFunc("stampToDate", tags.TimestampToDate)
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
 	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)
@@ -167,15 +166,6 @@ func (bootstrap *Bootstrap) Start() {
 		library.DebugLog(config.ExecPath, "error.log", time.Now().Format("2006-01-02 15:04:05"), "启动服务出错", err.Error())
 		os.Exit(0)
 	}
-}
-
-func TimestampToDate(in interface{}, layout string) string {
-	in2, _ := strconv.ParseInt(fmt.Sprint(in), 10, 64)
-	if in2 == 0 {
-		return ""
-	}
-	t := time.Unix(in2, 0)
-	return t.Format(layout)
 }
 
 func (bootstrap *Bootstrap) Shutdown() error {
