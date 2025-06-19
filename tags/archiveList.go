@@ -220,6 +220,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			maxPrice, _ = strconv.Atoi(extraParams["max_price"])
 		}
 	}
+	// 支持标签参数搜索
+	module = currentSite.GetModuleFromCache(moduleId)
+	if module != nil {
+		if len(module.Fields) > 0 {
+			// 所有参数的url都附着到query中
+			for _, v := range module.Fields {
+				if args[v.FieldName] != nil {
+					extraParams[v.FieldName] = args[v.FieldName].String()
+				}
+			}
+		}
+	}
 	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
 	if ok {
 		paramPage := requestParams.GetIntDefault("page", 0)
