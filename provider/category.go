@@ -423,6 +423,24 @@ func (w *Website) GetParentCategories(parentId uint) []*model.Category {
 	return categories
 }
 
+func (w *Website) GetTopCategoryId(categoryId uint) uint {
+	if categoryId == 0 {
+		return 0
+	}
+	for {
+		category := w.GetCategoryFromCache(categoryId)
+		if category == nil {
+			break
+		}
+		if category.ParentId == 0 {
+			break
+		}
+		categoryId = category.ParentId
+	}
+
+	return categoryId
+}
+
 func (w *Website) DeleteCacheCategories() {
 	w.Cache.Delete("categories")
 }

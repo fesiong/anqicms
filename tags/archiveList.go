@@ -45,6 +45,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var defaultCategoryId uint
 	var authorId = uint(0)
 	var parentId = int64(0)
+	var tagIds []uint
+	var argIds []int64
 	var categoryDetail *model.Category
 
 	if args["moduleId"] != nil {
@@ -58,6 +60,32 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["parentId"] != nil {
 		parentId = int64(args["parentId"].Integer())
+	}
+	if args["tagId"] != nil {
+		tmpIds := strings.Split(args["tagId"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				tagIds = append(tagIds, uint(tmpId))
+			}
+		}
+	}
+	if args["ids"] != nil {
+		tmpIds := strings.Split(args["ids"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.ParseInt(v, 10, 64)
+			if tmpId > 0 {
+				argIds = append(argIds, tmpId)
+			}
+		}
+	}
+	minPrice := 0
+	maxPrice := 0
+	if args["minPrice"] != nil {
+		minPrice = args["minPrice"].Integer()
+	}
+	if args["maxPrice"] != nil {
+		maxPrice = args["maxPrice"].Integer()
 	}
 	module, _ := ctx.Public["module"].(*model.Module)
 	if module != nil {
@@ -185,6 +213,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		currentPage, _ = strconv.Atoi(urlParams["page"])
 		q = strings.TrimSpace(urlParams["q"])
+		if extraParams["min_price"] != "" {
+			minPrice, _ = strconv.Atoi(extraParams["min_price"])
+		}
+		if extraParams["max_price"] != "" {
+			maxPrice, _ = strconv.Atoi(extraParams["max_price"])
+		}
 	}
 	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
 	if ok {
@@ -216,6 +250,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if currentPage > 1 {
 			offset = (currentPage - 1) * limit
 		}
+		argIds = nil
 	} else {
 		currentPage = 1
 		// list模式则始终使用 argQ
@@ -276,7 +311,35 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				return tx
 			}, "archives.id ASC", 0, limit, offset)
 		} else if like == "relation" {
-			archives = currentSite.GetArchiveRelations(archiveId)
+			if categoryId > 0 || moduleId > 0 || len(excludeCategoryIds) > 0 {
+				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					tx = tx.Table("`archives` as archives").
+						Joins("INNER JOIN `archive_relations` as t ON archives.id = t.relation_id AND t.archive_id = ? AND archives.`id` != ?", archiveId, archiveId)
+					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					}
+					if categoryId > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id = ?", categoryId)
+						} else {
+							tx = tx.Where("archives.`category_id` = ?", categoryId)
+						}
+					} else if moduleId > 0 {
+						tx = tx.Where("archives.`module_id` = ?", moduleId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("archives.`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+
+					return tx
+				}, order, 0, limit, offset)
+			} else {
+				archives = currentSite.GetArchiveRelations(archiveId)
+			}
 		} else if like == "tag" {
 			// 根据tag来调用相关
 			var tagIds []uint
@@ -285,6 +348,26 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					tx = tx.Table("`archives` as archives").
 						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tagIds, archiveId)
+					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					}
+					if categoryId > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id = ?", categoryId)
+						} else {
+							tx = tx.Where("archives.`category_id` = ?", categoryId)
+						}
+					} else if moduleId > 0 {
+						tx = tx.Where("archives.`module_id` = ?", moduleId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("archives.`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+
 					return tx
 				}, order, 0, limit, offset)
 			}
@@ -491,7 +574,18 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 				}
 			}
-			if len(ids) > 0 {
+			if len(tagIds) > 0 {
+				tx = tx.Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?)", tagIds)
+			}
+			if minPrice > 0 {
+				tx = tx.Where("`price` >= ?", minPrice*100)
+			}
+			if maxPrice > 0 {
+				tx = tx.Where("`price` <= ?", maxPrice*100)
+			}
+			if len(argIds) > 0 {
+				tx = tx.Where("archives.`id` IN(?)", argIds)
+			} else if len(ids) > 0 {
 				// 使用了全文索引，拿到了ID
 				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if q != "" {

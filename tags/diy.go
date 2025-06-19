@@ -48,7 +48,10 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 	for _, field := range fields {
 		if field.Name == fieldName {
 			content = field.Value
-			if (field.Value == "" || field.Value == nil) && field.Content != "" {
+			if (field.Value == "" || field.Value == nil) &&
+				field.Type != config.CustomFieldTypeRadio &&
+				field.Type != config.CustomFieldTypeCheckbox &&
+				field.Type != config.CustomFieldTypeSelect && field.Content != "" {
 				content = field.Content
 			}
 			if field.Type == config.CustomFieldTypeEditor && render {

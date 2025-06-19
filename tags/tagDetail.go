@@ -93,7 +93,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 			fields := currentSite.GetTagFields()
 			if len(fields) > 0 {
 				for _, field := range fields {
-					if tagContent.Extra[field.FieldName] == nil || tagContent.Extra[field.FieldName] == "" {
+					if (tagContent.Extra[field.FieldName] == nil || tagContent.Extra[field.FieldName] == "") &&
+						field.Type != config.CustomFieldTypeRadio &&
+						field.Type != config.CustomFieldTypeCheckbox &&
+						field.Type != config.CustomFieldTypeSelect {
 						// default
 						tagContent.Extra[field.FieldName] = field.Content
 					}

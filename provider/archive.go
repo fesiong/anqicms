@@ -54,6 +54,8 @@ func (w *Website) DeleteArchiveCache(id int64, link string) {
 		localPath := transToLocalPath(strings.TrimPrefix(link, w.System.BaseUrl), "")
 		cacheFile := cachePath + localPath
 		_ = os.Remove(cacheFile)
+		memCacheKey := fmt.Sprintf("html-%v-%s", false, localPath)
+		w.Cache.Delete(memCacheKey)
 	}
 }
 
@@ -911,10 +913,10 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 		w.AddFulltextIndex(tinyData)
 		w.FlushIndex()
 	}()
-	// 删除列表缓存
-	w.Cache.CleanAll("archive-list")
-	// 删除首页缓存
-	w.DeleteCacheIndex()
+	//// 删除列表缓存
+	//w.Cache.CleanAll("archive-list")
+	//// 删除首页缓存
+	//w.DeleteCacheIndex()
 
 	//新发布的文章，执行推送
 	if newPost {

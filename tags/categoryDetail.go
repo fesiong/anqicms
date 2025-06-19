@@ -86,7 +86,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			if module != nil && len(module.CategoryFields) > 0 {
 				for _, field := range module.CategoryFields {
 					categoryDetailExtra[field.FieldName] = categoryDetail.Extra[field.FieldName]
-					if categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "" {
+					if (categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "") &&
+						field.Type != config.CustomFieldTypeRadio &&
+						field.Type != config.CustomFieldTypeCheckbox &&
+						field.Type != config.CustomFieldTypeSelect {
 						// default
 						categoryDetailExtra[field.FieldName] = field.Content
 					}
@@ -131,6 +134,9 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 
 		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = categoryDetail.Title
+		}
+		if fieldName == "TopId" {
+			content = currentSite.GetTopCategoryId(categoryDetail.Id)
 		}
 
 		// convert markdown to html

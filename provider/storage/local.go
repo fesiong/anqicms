@@ -24,7 +24,7 @@ func NewLocalStorage(cfg *config.PluginStorageConfig, publicPath string) (*Local
 }
 
 func (s *LocalStorage) Put(ctx context.Context, key string, r io.Reader) error {
-	log.Println("使用aws 上传功能", key)
+	log.Println("使用 local 上传功能", key)
 	realPath := s.PublicPath + key
 	//先判断文件夹是否存在，不存在就先创建
 	pathDir := filepath.Dir(realPath)

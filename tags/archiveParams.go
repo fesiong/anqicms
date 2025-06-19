@@ -78,7 +78,10 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
 			for i := range archiveParams {
-				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
+				if (archiveParams[i].Value == nil || archiveParams[i].Value == "") &&
+					archiveParams[i].Type != config.CustomFieldTypeRadio &&
+					archiveParams[i].Type != config.CustomFieldTypeCheckbox &&
+					archiveParams[i].Type != config.CustomFieldTypeSelect {
 					archiveParams[i].Value = archiveParams[i].Default
 				}
 				if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
