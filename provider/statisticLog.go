@@ -2,18 +2,20 @@ package provider
 
 import (
 	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/jinzhu/now"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"io"
-	"kandaoni.com/anqicms/model"
 	"os"
 	"sort"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jinzhu/now"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/model"
 )
 
 type Statistic struct {
@@ -36,6 +38,9 @@ type StatisticLog struct {
 	cap      int // 日志保留天数
 	lastTime time.Time
 	totals   map[string]int
+	buffer   []*Statistic // 缓冲区
+	ticker   *time.Ticker // 定时器
+	quit     chan bool    // 退出信号
 }
 
 func NewStatisticLog(path string) (*StatisticLog, error) {
@@ -54,6 +59,8 @@ func NewStatisticLog(path string) (*StatisticLog, error) {
 		Path:   path,
 		totals: make(map[string]int),
 		cap:    30,
+		buffer: make([]*Statistic, 0),
+		quit:   make(chan bool),
 	}
 	err = sl.newLog(today)
 	if nil != err {
@@ -62,6 +69,10 @@ func NewStatisticLog(path string) (*StatisticLog, error) {
 		return sl, err
 	}
 	sl.initial = true
+
+	// 启动定时器，每10秒刷新一次缓冲区
+	sl.ticker = time.NewTicker(10 * time.Second)
+	go sl.flushBuffer()
 
 	return sl, nil
 }
@@ -80,6 +91,13 @@ func (s *StatisticLog) newLog(lt time.Time) error {
 }
 
 func (s *StatisticLog) Close() {
+	// 停止定时器
+	if s.ticker != nil {
+		s.ticker.Stop()
+		s.quit <- true
+	}
+	// 刷新剩余数据
+	s.doFlush()
 	_ = s.file.Close()
 }
 
@@ -90,28 +108,12 @@ func (s *StatisticLog) Write(data *Statistic) error {
 	if data.CreatedTime == 0 {
 		data.CreatedTime = time.Now().Unix()
 	}
-	buf, err := json.Marshal(data)
-	if err != nil {
-		return err
-	}
-	buf = append(buf, '\n')
 
 	defer s.rwMu.Unlock()
 	s.rwMu.Lock()
-	// 如果日期已经变了
-	createTime := time.Unix(data.CreatedTime, 0)
-	if createTime.YearDay() != s.lastTime.YearDay() {
-		// 新的一天，写入到新的一天日志里
-		_ = s.file.Close()
-		err = s.newLog(createTime)
-		if err != nil {
-			return err
-		}
-	}
-	s.lastTime = createTime
-	_, err = s.file.Write(buf)
-
-	return err
+	// 添加到缓冲区
+	s.buffer = append(s.buffer, data)
+	return nil
 }
 
 func (s *StatisticLog) Read(fileName string, offset, limit int) ([]*Statistic, int64) {
@@ -300,7 +302,9 @@ func (s *StatisticLog) CalcLog(lt time.Time) (*model.StatisticLog, error) {
 		return nil, err
 	}
 	defer logFile.Close()
-	// 逐行读取文件
+	// 每次读取10MB，减少IO
+	buff := make([]byte, 1024*1024*10)
+	var lineBuffer []byte
 	reader := bufio.NewReader(logFile)
 	var statistic = model.StatisticLog{
 		CreatedTime: lt.Unix(),
@@ -311,7 +315,7 @@ func (s *StatisticLog) CalcLog(lt time.Time) (*model.StatisticLog, error) {
 	var ipMap = map[string]struct{}{}
 
 	for {
-		line, err := reader.ReadBytes('\n')
+		n, err := reader.Read(buff)
 		if err != nil {
 			if err == io.EOF {
 				break
@@ -319,17 +323,45 @@ func (s *StatisticLog) CalcLog(lt time.Time) (*model.StatisticLog, error) {
 			// 也结束循环
 			break
 		}
-		var data Statistic
-		err = json.Unmarshal(line, &data)
-		if err != nil {
-			continue
+		lineBuffer = append(lineBuffer, buff[:n]...)
+		// 逐行处理
+		for {
+			lnIdx := bytes.IndexByte(lineBuffer, '\n')
+			if lnIdx == -1 {
+				break
+			}
+			line := lineBuffer[:lnIdx]
+			lineBuffer = lineBuffer[lnIdx+1:]
+
+			if len(line) > 0 {
+				var data Statistic
+				err = json.Unmarshal(line, &data)
+				if err != nil {
+					continue
+				}
+				// 统计数据
+				if data.Spider != "" {
+					statistic.SpiderCount[data.Spider]++
+				} else {
+					statistic.VisitCount.PVCount++
+					ipMap[data.Ip] = struct{}{}
+				}
+			}
 		}
-		// 统计数据
-		if data.Spider != "" {
-			statistic.SpiderCount[data.Spider]++
-		} else {
-			statistic.VisitCount.PVCount++
-			ipMap[data.Ip] = struct{}{}
+		// 处理剩余内容
+		if len(lineBuffer) > 0 {
+			var data Statistic
+			err = json.Unmarshal(lineBuffer, &data)
+			if err != nil {
+				continue
+			}
+			// 统计数据
+			if data.Spider != "" {
+				statistic.SpiderCount[data.Spider]++
+			} else {
+				statistic.VisitCount.PVCount++
+				ipMap[data.Ip] = struct{}{}
+			}
 		}
 	}
 	// 统计ip
@@ -362,6 +394,69 @@ func (s *StatisticLog) GetLogDates() []string {
 }
 
 // Clear 定期清理超过30天的日志文件, 每天执行一次
+// flushBuffer 定时刷新缓冲区
+func (s *StatisticLog) flushBuffer() {
+	for {
+		select {
+		case <-s.ticker.C:
+			s.doFlush()
+		case <-s.quit:
+			return
+		}
+	}
+}
+
+// doFlush 执行实际的刷新操作
+func (s *StatisticLog) doFlush() {
+	s.rwMu.Lock()
+	defer s.rwMu.Unlock()
+
+	if len(s.buffer) == 0 {
+		return
+	}
+
+	// 按日期分组
+	dataMap := make(map[int][]*Statistic)
+	for _, data := range s.buffer {
+		createTime := time.Unix(data.CreatedTime, 0)
+		dayOfYear := createTime.YearDay()
+		dataMap[dayOfYear] = append(dataMap[dayOfYear], data)
+	}
+
+	// 按日期写入文件
+	for _, dataList := range dataMap {
+		if len(dataList) == 0 {
+			continue
+		}
+		// 使用第一条数据的时间作为基准
+		createTime := time.Unix(dataList[0].CreatedTime, 0)
+		if createTime.YearDay() != s.lastTime.YearDay() {
+			_ = s.file.Close()
+			err := s.newLog(createTime)
+			if err != nil {
+				continue
+			}
+		}
+		s.lastTime = createTime
+
+		// 批量写入
+		var bufs [][]byte
+		for _, data := range dataList {
+			buf, err := json.Marshal(data)
+			if err != nil {
+				continue
+			}
+			bufs = append(bufs, buf)
+		}
+		joindBuf := bytes.Join(bufs, []byte("\n"))
+		joindBuf = append(joindBuf, []byte("\n")...)
+		_, _ = s.file.Write(joindBuf)
+	}
+
+	// 清空缓冲区
+	s.buffer = make([]*Statistic, 0)
+}
+
 func (s *StatisticLog) Clear(force bool) {
 	if s.initial == false {
 		return
