@@ -29,6 +29,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	if args["token"] != nil {
 		token = args["token"].String()
 	}
+	title := ""
+	if args["title"] != nil {
+		title = args["title"].String()
+	}
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -51,6 +55,8 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		tagDetail, _ = currentSite.GetTagById(id)
 	} else if token != "" {
 		tagDetail, _ = currentSite.GetTagByUrlToken(token)
+	} else if title != "" {
+		tagDetail, _ = currentSite.GetTagByTitle(title)
 	}
 
 	fieldName := ""
