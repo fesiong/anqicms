@@ -668,6 +668,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			for i := range archives {
 				for _, d := range archiveData {
 					if d.Id == archives[i].Id {
+						if render {
+							d.Content = library.MarkdownToHTML(d.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
 						archives[i].Content = d.Content
 						break
 					}
