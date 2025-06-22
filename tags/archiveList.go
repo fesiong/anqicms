@@ -176,6 +176,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	argQ := ""
 	child := true
 	showFlag := false
+	showContent := false
+	showExtra := false
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -195,6 +197,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["showFlag"] != nil {
 		showFlag = args["showFlag"].Bool()
+	}
+	if args["showContent"] != nil {
+		showContent = args["showContent"].Bool()
+	}
+	if args["showExtra"] != nil {
+		showExtra = args["showExtra"].Bool()
 	}
 
 	// 支持更多的参数搜索，
@@ -635,16 +643,35 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
-	// 读取flags
-	if showFlag && len(archiveIds) > 0 {
-		var flags []*model.ArchiveFlags
-		currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
-		for i := range archives {
-			for _, f := range flags {
-				if f.ArchiveId == archives[i].Id {
-					archives[i].Flag = f.Flags
-					break
+	// 读取flags,content,extra
+	if len(archiveIds) > 0 {
+		if showFlag {
+			var flags []*model.ArchiveFlags
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			for i := range archives {
+				for _, f := range flags {
+					if f.ArchiveId == archives[i].Id {
+						archives[i].Flag = f.Flags
+						break
+					}
 				}
+			}
+		}
+		if showContent {
+			var archiveData []model.ArchiveData
+			currentSite.DB.WithContext(currentSite.Ctx()).Where("`id` IN (?)", archiveIds).Find(&archiveData)
+			for i := range archives {
+				for _, d := range archiveData {
+					if d.Id == archives[i].Id {
+						archives[i].Content = d.Content
+						break
+					}
+				}
+			}
+		}
+		if showExtra {
+			for i := range archives {
+				archives[i].Extra = currentSite.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, true)
 			}
 		}
 	}
