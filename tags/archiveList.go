@@ -5,6 +5,8 @@ import (
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/fulltext"
@@ -48,7 +50,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var tagIds []uint
 	var argIds []int64
 	var categoryDetail *model.Category
-
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
 	}
@@ -670,8 +675,21 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 		if showExtra {
-			for i := range archives {
-				archives[i].Extra = currentSite.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, true)
+			for j := range archives {
+				archives[j].Extra = currentSite.GetArchiveExtra(archives[j].ModuleId, archives[j].Id, true)
+				if len(archives[j].Extra) > 0 {
+					for i := range archives[j].Extra {
+						if (archives[j].Extra[i].Value == nil || archives[j].Extra[i].Value == "") &&
+							archives[j].Extra[i].Type != config.CustomFieldTypeRadio &&
+							archives[j].Extra[i].Type != config.CustomFieldTypeCheckbox &&
+							archives[j].Extra[i].Type != config.CustomFieldTypeSelect {
+							archives[j].Extra[i].Value = archives[j].Extra[i].Default
+						}
+						if archives[j].Extra[i].Type == config.CustomFieldTypeEditor && render {
+							archives[j].Extra[i].Value = library.MarkdownToHTML(fmt.Sprintf("%v", archives[j].Extra[i].Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
+					}
+				}
 			}
 		}
 	}
