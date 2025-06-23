@@ -318,6 +318,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 	if errs == nil {
 		//处理
 		contentType := strings.ToLower(resp.Header.Get("content-type"))
+		contentType = strings.Split(contentType, ";")[0]
 		if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/png" || contentType == "image/gif" || contentType == "image/webp" {
 			if fileName == "" {
 				fileName = "image"
