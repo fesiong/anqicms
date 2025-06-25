@@ -19,14 +19,6 @@
                     </div>
                 </div>
                 <div class="single-arc markdown-body">
-                    {% archiveDetail contentTitles with name="ContentTitles" %}
-                    <div>
-                    {% for item in contentTitles %}
-                        <div class="{{item.Tag}}" level="{{item.Level}}">
-                            <a href="{{item.Anchor}}">{{item.Prefix}} {{item.Title}}</a>
-                        </div>
-                    {% endfor %}
-                    </div>
                     {% archiveDetail articleContent with name="Content" %}
                     {{articleContent|safe}}
                 </div>
