@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
@@ -170,6 +171,9 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 						}
 						category.Extra[field.FieldName] = val
 					}
+				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
+					buf, _ := json.Marshal(category.Extra[field.FieldName])
+					category.Extra[field.FieldName] = string(buf)
 				}
 			}
 		}

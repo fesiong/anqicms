@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -70,6 +71,17 @@ func ArchiveList(ctx iris.Context) {
 		}
 	} else {
 		// 必须传递分类
+		var paramIds []int64
+		arcId := ctx.URLParam("id")
+		if arcId != "" {
+			tmpIds := strings.Split(arcId, ",")
+			for _, v := range tmpIds {
+				tmpId, _ := strconv.ParseInt(v, 10, 64)
+				if tmpId > 0 {
+					paramIds = append(paramIds, tmpId)
+				}
+			}
+		}
 		title := ctx.URLParam("title")
 		ops = func(tx *gorm.DB) *gorm.DB {
 			if categoryId > 0 {
@@ -101,6 +113,9 @@ func ArchiveList(ctx iris.Context) {
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
+			}
+			if len(paramIds) > 0 {
+				tx = tx.Where("archives.id IN (?)", paramIds)
 			}
 			if title != "" {
 				// 如果开启了全文索引，则尝试使用全文索引搜索，status = "ok" 时有效
@@ -475,7 +490,11 @@ func ArchiveDetail(ctx iris.Context) {
 	// 读取data
 	archiveDraft.ArchiveData, err = currentSite.GetArchiveDataById(archiveDraft.Id)
 	// 读取 extraDat
-	archiveDraft.Extra = currentSite.GetArchiveExtra(archiveDraft.ModuleId, archiveDraft.Id, false)
+	extras := currentSite.GetArchiveExtra(archiveDraft.ModuleId, archiveDraft.Id, false)
+	archiveDraft.Extra = make(map[string]model.CustomField, len(extras))
+	for i := range extras {
+		archiveDraft.Extra[i] = *extras[i]
+	}
 	// 读取relation
 	archiveDraft.Relations = currentSite.GetArchiveRelations(archiveDraft.Id)
 

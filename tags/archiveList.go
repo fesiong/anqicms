@@ -677,21 +677,42 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 			}
 		}
-		if showExtra {
+		if showExtra && module != nil && len(module.Fields) > 0 {
 			for j := range archives {
-				archives[j].Extra = currentSite.GetArchiveExtra(archives[j].ModuleId, archives[j].Id, true)
-				if len(archives[j].Extra) > 0 {
-					for i := range archives[j].Extra {
-						if (archives[j].Extra[i].Value == nil || archives[j].Extra[i].Value == "") &&
-							archives[j].Extra[i].Type != config.CustomFieldTypeRadio &&
-							archives[j].Extra[i].Type != config.CustomFieldTypeCheckbox &&
-							archives[j].Extra[i].Type != config.CustomFieldTypeSelect {
-							archives[j].Extra[i].Value = archives[j].Extra[i].Default
+				archiveParams := currentSite.GetArchiveExtra(archives[j].ModuleId, archives[j].Id, true)
+				if len(archiveParams) > 0 {
+					var extras = make(map[string]model.CustomField, len(archiveParams))
+					for i := range archiveParams {
+						param := *archiveParams[i]
+						if (param.Value == nil || param.Value == "" || param.Value == 0) &&
+							param.Type != config.CustomFieldTypeRadio &&
+							param.Type != config.CustomFieldTypeCheckbox &&
+							param.Type != config.CustomFieldTypeSelect {
+							param.Value = param.Default
 						}
-						if archives[j].Extra[i].Type == config.CustomFieldTypeEditor && render {
-							archives[j].Extra[i].Value = library.MarkdownToHTML(fmt.Sprintf("%v", archives[j].Extra[i].Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						if param.FollowLevel && !archives[j].HasOrdered {
+							continue
 						}
+						if param.Type == config.CustomFieldTypeEditor && render {
+							param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						} else if param.Type == config.CustomFieldTypeArchive || param.Type == config.CustomFieldTypeCategory {
+							value, ok := param.Value.(int64)
+							if !ok && param.Default != "" {
+								value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+							}
+							if value > 0 {
+								if param.Type == config.CustomFieldTypeArchive {
+									param.Value, _ = currentSite.GetArchiveById(value)
+								} else if param.Type == config.CustomFieldTypeCategory {
+									param.Value = currentSite.GetCategoryFromCache(uint(value))
+								}
+							} else {
+								param.Value = nil
+							}
+						}
+						extras[i] = param
 					}
+					archives[j].Extra = extras
 				}
 			}
 		}

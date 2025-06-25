@@ -1,6 +1,7 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
@@ -8,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"reflect"
+	"strconv"
 )
 
 type tagCategoryDetailNode struct {
@@ -86,7 +88,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			if module != nil && len(module.CategoryFields) > 0 {
 				for _, field := range module.CategoryFields {
 					categoryDetailExtra[field.FieldName] = categoryDetail.Extra[field.FieldName]
-					if (categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "") &&
+					if (categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "" || categoryDetailExtra[field.FieldName] == 0) &&
 						field.Type != config.CustomFieldTypeRadio &&
 						field.Type != config.CustomFieldTypeCheckbox &&
 						field.Type != config.CustomFieldTypeSelect {
@@ -102,14 +104,31 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 							}
 							categoryDetailExtra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 						}
-					}
-					if field.Type == config.CustomFieldTypeImages && categoryDetailExtra[field.FieldName] != nil {
+					} else if field.Type == config.CustomFieldTypeImages && categoryDetailExtra[field.FieldName] != nil {
 						if val, ok := categoryDetailExtra[field.FieldName].([]interface{}); ok {
 							for j, v2 := range val {
 								v2s, _ := v2.(string)
 								val[j] = currentSite.ReplaceContentUrl(v2s, true)
 							}
 							categoryDetailExtra[field.FieldName] = val
+						}
+					} else if field.Type == config.CustomFieldTypeTexts && categoryDetailExtra[field.FieldName] != nil {
+						var texts []model.CustomFieldTexts
+						_ = json.Unmarshal([]byte(fmt.Sprint(categoryDetailExtra[field.FieldName])), &texts)
+						categoryDetailExtra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeArchive || field.Type == config.CustomFieldTypeCategory {
+						value, err := strconv.ParseInt(fmt.Sprint(categoryDetailExtra[field.FieldName]), 10, 64)
+						if err != nil && field.Content != "" {
+							value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+						}
+						if value > 0 {
+							if field.Type == config.CustomFieldTypeArchive {
+								categoryDetailExtra[field.FieldName], _ = currentSite.GetArchiveById(value)
+							} else if field.Type == config.CustomFieldTypeCategory {
+								categoryDetailExtra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
+							}
+						} else {
+							categoryDetailExtra[field.FieldName] = nil
 						}
 					}
 				}
@@ -127,9 +146,9 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 					content = extras
 				}
 			}
-		}
-		if item, ok := categoryDetailExtra[inputName]; ok {
-			content = item
+			if item, ok := categoryDetailExtra[inputName]; ok {
+				content = item
+			}
 		}
 
 		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {

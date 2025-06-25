@@ -144,22 +144,34 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			// 数据可能来自自定义字段
 			archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 			if len(archiveParams) > 0 {
-				for i := range archiveParams {
-					if (archiveParams[i].Value == nil || archiveParams[i].Value == "") &&
-						archiveParams[i].Type != config.CustomFieldTypeRadio &&
-						archiveParams[i].Type != config.CustomFieldTypeCheckbox &&
-						archiveParams[i].Type != config.CustomFieldTypeSelect {
-						archiveParams[i].Value = archiveParams[i].Default
-					}
-				}
 				if item, ok := archiveParams[inputName]; ok {
 					if item.FollowLevel && !archiveDetail.HasOrdered {
 						content = ""
 					} else {
-						if item.Type == config.CustomFieldTypeEditor && render {
-							item.Value = library.MarkdownToHTML(fmt.Sprintf("%v", item.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-						}
 						content = item.Value
+						if (content == nil || content == "" || content == 0) &&
+							item.Type != config.CustomFieldTypeRadio &&
+							item.Type != config.CustomFieldTypeCheckbox &&
+							item.Type != config.CustomFieldTypeSelect {
+							content = item.Default
+						}
+						if item.Type == config.CustomFieldTypeEditor && render {
+							content = library.MarkdownToHTML(fmt.Sprint(content), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						} else if item.Type == config.CustomFieldTypeArchive || item.Type == config.CustomFieldTypeCategory {
+							value, ok := content.(int64)
+							if !ok && item.Default != "" {
+								value, _ = strconv.ParseInt(fmt.Sprint(item.Default), 10, 64)
+							}
+							if value > 0 {
+								if item.Type == config.CustomFieldTypeArchive {
+									content, _ = currentSite.GetArchiveById(value)
+								} else if item.Type == config.CustomFieldTypeCategory {
+									content = currentSite.GetCategoryFromCache(uint(value))
+								}
+							} else {
+								content = nil
+							}
+						}
 					}
 				}
 			}
@@ -194,6 +206,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					ctx.Private["showContentTitle"] = true
 					content, _ = library.ParseContentTitles(tmpContent)
 				} else {
+					//添加锚文本, 2 = 渲染的时候替换
+					if currentSite.PluginAnchor.ReplaceWay == 2 {
+						tmpContent, _ = currentSite.ReplaceContentText(nil, tmpContent, archiveDetail.Link)
+					}
 					// lazy load
 					if lazy != "" {
 						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)

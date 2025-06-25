@@ -340,6 +340,14 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 							}
 							result[v.FieldName] = images
 						}
+					} else if v.Type == config.CustomFieldTypeTexts {
+						var texts []model.CustomFieldTexts
+						err := json.Unmarshal([]byte(value), &texts)
+						if err == nil {
+							result[v.FieldName] = texts
+						}
+					} else if v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
+						result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
@@ -555,15 +563,17 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
 						}
-					} else if v.Type == config.CustomFieldTypeNumber {
+					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
-						extraFields[v.FieldName], _ = strconv.Atoi(fmt.Sprintf("%v", extraValue["value"]))
-					} else if v.Type == config.CustomFieldTypeImages {
+						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts {
 						// 存 json
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							for j, v2 := range val {
-								v2s, _ := v2.(string)
-								val[j] = w.ReplaceContentUrl(v2s, false)
+								v2s, ok2 := v2.(string)
+								if ok2 {
+									val[j] = w.ReplaceContentUrl(v2s, false)
+								}
 							}
 							buf, _ := json.Marshal(val)
 							extraFields[v.FieldName] = string(buf)

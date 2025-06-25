@@ -33,11 +33,11 @@ type User struct {
 	LastLogin   int64  `json:"last_login" gorm:"column:last_login;type:int(11);default:0"`
 	ExpireTime  int64  `json:"expire_time" gorm:"column:expire_time;type:int(11);default:0"`
 
-	Extra         map[string]*CustomField `json:"extra" gorm:"-"`
-	Token         string                  `json:"token" gorm:"-"`
-	Group         *UserGroup              `json:"group" gorm:"-"`
-	FullAvatarURL string                  `json:"full_avatar_url" gorm:"-"`
-	Link          string                  `json:"link" gorm:"-"`
+	Extra         map[string]CustomField `json:"extra" gorm:"-"`
+	Token         string                 `json:"token" gorm:"-"`
+	Group         *UserGroup             `json:"group" gorm:"-"`
+	FullAvatarURL string                 `json:"full_avatar_url" gorm:"-"`
+	Link          string                 `json:"link" gorm:"-"`
 }
 
 type UserGroup struct {
