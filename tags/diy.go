@@ -76,7 +76,8 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 				}
 			} else if field.Type == config.CustomFieldTypeTexts && content != nil {
 				var texts []model.CustomFieldTexts
-				_ = json.Unmarshal([]byte(fmt.Sprint(content)), &texts)
+				buf, _ := json.Marshal(content)
+				_ = json.Unmarshal(buf, &texts)
 				content = texts
 			} else if field.Type == config.CustomFieldTypeArchive || field.Type == config.CustomFieldTypeCategory {
 				value, err := strconv.ParseInt(fmt.Sprint(content), 10, 64)
