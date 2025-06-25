@@ -18,7 +18,7 @@ func ArchiveDetail(ctx iris.Context) {
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
 		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.ServeFile(cacheFile)
+		ctx.Write(cacheFile)
 		return
 	}
 	id := ctx.Params().GetInt64Default("id", 0)
@@ -206,7 +206,8 @@ func ArchiveDetail(ctx iris.Context) {
 	if err != nil {
 		ctx.Values().Set("message", err.Error())
 	} else {
-		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.DetailCache > 0 {
+		// 带密码的链接不缓存
+		if currentSite.PluginHtmlCache.Open && currentSite.PluginHtmlCache.DetailCache > 0 && archive.Password == "" {
 			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
 			_ = currentSite.CacheHtmlData(ctx.RequestPath(false), ctx.Request().URL.RawQuery, mobileTemplate, recorder.Body())
 		}
@@ -218,7 +219,7 @@ func ArchiveIndex(ctx iris.Context) {
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
 		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.ServeFile(cacheFile)
+		ctx.Write(cacheFile)
 		return
 	}
 	urlToken := ctx.Params().GetString("module")

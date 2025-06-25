@@ -318,6 +318,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 	if errs == nil {
 		//处理
 		contentType := strings.ToLower(resp.Header.Get("content-type"))
+		contentType = strings.Split(contentType, ";")[0]
 		if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/png" || contentType == "image/gif" || contentType == "image/webp" {
 			if fileName == "" {
 				fileName = "image"
@@ -1161,12 +1162,22 @@ func getWebpPath() (string, error) {
 		binName += ".exe"
 	}
 	binPath := config.ExecPath + "source/" + binName
-	if _, err := os.Stat(binPath); err != nil {
+	if info, err := os.Stat(binPath); err != nil {
 		if os.IsNotExist(err) {
 			// 尝试坚持系统安装的 cwebp
 			binPath, err = exec.LookPath("cwebp")
 			if err != nil {
 				return "", err
+			}
+		} else {
+			// 检查binPath的权限，没有执行权限就添加
+			currentPerm := info.Mode().Perm()
+			if currentPerm&0100 != 0 {
+				newPerm := currentPerm | 0100
+				err = os.Chmod(binPath, newPerm)
+				if err != nil {
+					return "", err
+				}
 			}
 		}
 	}

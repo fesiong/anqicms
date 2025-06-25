@@ -2,12 +2,15 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
-	"strings"
 )
 
 type tagSystemNode struct {
@@ -61,12 +64,23 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		if !strings.HasPrefix(content, "http") {
 			content = currentSite.PluginStorage.StorageUrl + currentSite.System.SiteLogo
 		}
+	} else if fieldName == "Now" {
+		format := ""
+		if args["format"] != nil {
+			format = args["format"].String()
+		}
+		nowTime := time.Now()
+		if format != "" {
+			content = nowTime.Format(format)
+		} else {
+			content = strconv.FormatInt(nowTime.Unix(), 10)
+		}
 	} else if currentSite.System.ExtraFields != nil {
 		for i := range currentSite.System.ExtraFields {
 			if currentSite.System.ExtraFields[i].Name == fieldName {
 				content = fmt.Sprintf("%v", currentSite.System.ExtraFields[i].Value)
-				if content == "" && currentSite.Contact.ExtraFields[i].Content != "" {
-					content = currentSite.Contact.ExtraFields[i].Content
+				if content == "" && currentSite.System.ExtraFields[i].Content != "" {
+					content = currentSite.System.ExtraFields[i].Content
 				}
 				break
 			}

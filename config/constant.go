@@ -21,6 +21,9 @@ const (
 	CustomFieldTypeImage    = "image"
 	CustomFieldTypeFile     = "file"
 	CustomFieldTypeImages   = "images"
+	CustomFieldTypeTexts    = "texts"
+	CustomFieldTypeArchive  = "archive"
+	CustomFieldTypeCategory = "category"
 )
 
 const (

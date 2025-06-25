@@ -21,6 +21,8 @@ func (e extraData) Value() (driver.Value, error) {
 	return json.Marshal(e)
 }
 
+// Scan 这里不报错
 func (e *extraData) Scan(data interface{}) error {
-	return json.Unmarshal(data.([]byte), &e)
+	_ = json.Unmarshal(data.([]byte), &e)
+	return nil
 }

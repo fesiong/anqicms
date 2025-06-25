@@ -1,6 +1,8 @@
 package manageController
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -81,6 +83,10 @@ func PluginTagDetail(ctx iris.Context) {
 							}
 							tag.Extra[field.FieldName] = val
 						}
+					} else if field.Type == config.CustomFieldTypeTexts && tag.Extra[field.FieldName] != nil {
+						var texts []model.CustomFieldTexts
+						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &texts)
+						tag.Extra[field.FieldName] = texts
 					}
 				}
 			}

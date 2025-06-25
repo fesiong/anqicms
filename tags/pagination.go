@@ -95,7 +95,7 @@ func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		if err == nil {
 			urlQuery := urlPatten.Query()
 			for k, v := range urlParams {
-				if k == "page" {
+				if k == "page" || k == "_pjax" {
 					continue
 				}
 				urlQuery.Set(k, v)

@@ -250,6 +250,9 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 							}
 							req.Extra[field.FieldName] = val
 						}
+					} else if field.Type == config.CustomFieldTypeTexts && req.Extra[field.FieldName] != nil {
+						buf, _ := json.Marshal(req.Extra[field.FieldName])
+						req.Extra[field.FieldName] = string(buf)
 					}
 				}
 			}

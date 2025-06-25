@@ -24,6 +24,7 @@ func NewQiniuStorage(cfg *config.PluginStorageConfig) (*QiniuStorage, error) {
 
 	return &QiniuStorage{
 		client: mac,
+		cfg:    cfg,
 	}, nil
 }
 

@@ -33,8 +33,9 @@ type PluginSitemapConfig struct {
 
 type PluginAnchorConfig struct {
 	AnchorDensity int `json:"anchor_density"`
-	ReplaceWay    int `json:"replace_way"`
+	ReplaceWay    int `json:"replace_way"` // 0 = 不替换 1 = 入库替换，2 = 渲染替换
 	KeywordWay    int `json:"keyword_way"`
+	NoStrongTag   int `json:"no_strong_tag"` // 0 = 加粗 1 = 不加粗
 }
 
 type PluginGuestbookConfig struct {
@@ -380,9 +381,9 @@ func (g *CustomField) CheckSetFilter() bool {
 func (g *CustomField) GetFieldColumn() string {
 	column := fmt.Sprintf("`%s`", g.FieldName)
 
-	if g.Type == CustomFieldTypeNumber {
+	if g.Type == CustomFieldTypeNumber || g.Type == CustomFieldTypeArchive || g.Type == CustomFieldTypeCategory {
 		column += " int(10)"
-	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages {
+	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts {
 		column += " text"
 	} else {
 		// mysql 5.6 下，utf8mb4 索引只能用190

@@ -43,7 +43,7 @@ type Website struct {
 	StatisticLog            *StatisticLog
 	Storage                 storage.Storage
 	CacheStorage            storage.Storage
-	parsedPatten            *RewritePatten
+	parsedPattern           *RewritePattern
 	searcher                fulltext.Service
 	fulltextStatus          *FulltextStatus
 	cachedTodayArticleCount *response.CacheArticleCount
@@ -396,7 +396,7 @@ func InitWebsite(mw *model.Website) {
 		}
 	}
 	if w.Initialed {
-		w.GetRewritePatten(true)
+		w.GetRewritePattern(true)
 		// 启动限流器
 		w.InitLimiter()
 		w.InitStatistic()
