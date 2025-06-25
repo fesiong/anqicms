@@ -20,6 +20,7 @@ type User struct {
 	UserName    string `json:"user_name" gorm:"column:user_name;type:varchar(64) not null;default:''"`
 	RealName    string `json:"real_name" gorm:"column:real_name;type:varchar(64) not null;default:''"`
 	AvatarURL   string `json:"avatar_url" gorm:"column:avatar_url;type:varchar(255) not null;default:''"`
+	Introduce   string `json:"introduce" gorm:"column:introduce;type:varchar(1000) not null;default:''"` // 介绍
 	Email       string `json:"email" gorm:"column:email;type:varchar(100) not null;default:'';index:idx_email"`
 	Phone       string `json:"phone" gorm:"column:phone;type:varchar(20) not null;default:'';index"`
 	GroupId     uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`

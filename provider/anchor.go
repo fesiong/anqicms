@@ -5,6 +5,7 @@ import (
 	"io"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 	"math"
 	"mime/multipart"
 	"regexp"
@@ -257,7 +258,7 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 			if len(match) < 4 {
 				return s
 			}
-			if match[2] == anchor.Title && match[1] != "?" {
+			if match[2] == anchor.Title && match[1] != "!" {
 				//更换链接
 				s = strings.Replace(s, match[3], anchor.Link, 1)
 			}
@@ -294,7 +295,7 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	//先遍历文章、产品，添加锚文本
 	//每次取100个
 	limit := 100
-	lastId := uint(0)
+	lastId := int64(0)
 	var archives []*model.Archive
 
 	for {
@@ -312,7 +313,7 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	}
 }
 
-func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemId uint, link string) string {
+func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemId int64, link string) string {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
@@ -392,7 +393,7 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	reg, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
 	content = reg.ReplaceAllStringFunc(content, func(s string) string {
 		match := reg.FindStringSubmatch(s)
-		if len(match) > 2 && match[1] != "?" {
+		if len(match) > 2 && match[1] != "!" {
 			existsKeywords[strings.ToLower(match[2])] = true
 			existsLinks[strings.ToLower(match[3])] = true
 		}
@@ -523,7 +524,7 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	return content
 }
 
-func (w *Website) AutoInsertAnchor(archiveId uint, keywords, link string) {
+func (w *Website) AutoInsertAnchor(archiveId int64, keywords, link string) {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	keywords = strings.ReplaceAll(keywords, "，", ",")
 	keywords = strings.ReplaceAll(keywords, "_", ",")
@@ -546,4 +547,25 @@ func (w *Website) AutoInsertAnchor(archiveId uint, keywords, link string) {
 			w.DB.Save(anchor)
 		}
 	}
+}
+
+func (w *Website) InsertTitleToAnchor(req *request.PluginAnchorAddFromTitle) error {
+	if req.Type == "category" {
+		// from category
+		var categories []*model.Category
+		w.DB.Where("`id` IN (?)", req.Ids).Find(&categories)
+		for _, category := range categories {
+			category.Link = w.GetUrl("category", category, 0)
+			w.AutoInsertAnchor(0, category.Title, category.Link)
+		}
+	} else if req.Type == "archive" {
+		var archives []*model.Archive
+		w.DB.Where("`id` IN (?)", req.Ids).Find(&archives)
+		for _, archive := range archives {
+			archive.Link = w.GetUrl("archive", archive, 0)
+			w.AutoInsertAnchor(archive.Id, archive.Title, archive.Link)
+		}
+	}
+
+	return nil
 }

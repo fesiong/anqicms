@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
-	"github.com/go-pay/gopay/pkg/util"
+	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
@@ -313,6 +313,8 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createWeappPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayAlipay {
 		createAlipayPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayPaypal {
+		createPaypalPayment(ctx, payment, order)
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -329,7 +331,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
-		Set("nonce_str", util.RandomString(32)).
+		Set("nonce_str", library.GenerateRandString(32)).
 		Set("spbill_create_ip", ctx.RemoteAddr()).
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
@@ -392,7 +394,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
-		Set("nonce_str", util.RandomString(32)).
+		Set("nonce_str", library.GenerateRandString(32)).
 		Set("spbill_create_ip", ctx.RemoteAddr()).
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
@@ -516,6 +518,75 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 	return
 }
 
+func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, true)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	var purchases = []*paypal.PurchaseUnit{
+		{
+			ReferenceId: payment.PaymentId,
+			Amount: &paypal.Amount{
+				CurrencyCode: "USD",
+				Value:        fmt.Sprintf("%.2f", float32(payment.Amount)/100),
+			},
+		},
+	}
+
+	bm := make(gopay.BodyMap)
+	bm.Set("intent", "CAPTURE").
+		Set("purchase_units", purchases).
+		SetBodyMap("payment_source", func(b gopay.BodyMap) {
+			b.SetBodyMap("paypal", func(bb gopay.BodyMap) {
+				bb.SetBodyMap("experience_context", func(bbb gopay.BodyMap) {
+					bbb.Set("brand_name", currentSite.System.SiteName).
+						Set("locale", "en-US").
+						Set("shipping_preference", "NO_SHIPPING").
+						Set("user_action", "PAY_NOW").
+						Set("return_url", currentSite.System.BaseUrl+"/return/paypal/pay").
+						Set("cancel_url", currentSite.System.BaseUrl+"/return/paypal/cancel")
+				})
+			})
+		})
+
+	ppRsp, err := client.CreateOrder(ctx, bm)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if ppRsp.Code != 200 {
+		// do something
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ppRsp.Error,
+		})
+		return
+	}
+	// 更新id
+	payment.TerraceId = ppRsp.Response.Id
+	currentSite.DB.Save(payment)
+
+	// payer link
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":  "paypal",
+			"jump_url": ppRsp.Response.Links[1].Href,
+		},
+	})
+}
+
 func ApiPaymentCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	orderId := ctx.URLParam("order_id")
@@ -557,7 +628,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 func ApiArchiveOrderCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
@@ -584,7 +655,7 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 	var req request.ArchivePasswordRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		req.Id, _ = ctx.PostValueUint("id")
+		req.Id = ctx.PostValueInt64Default("id", 0)
 		req.Password = ctx.PostValueTrim("password")
 		if req.Id == 0 || len(req.Password) == 0 {
 			ctx.JSON(iris.Map{
@@ -610,7 +681,7 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 			content = archiveData.Content
 			// render
 			if currentSite.Content.Editor == "markdown" {
-				content = library.MarkdownToHTML(archiveData.Content)
+				content = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 			}
 		}
 		ctx.JSON(iris.Map{

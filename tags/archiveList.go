@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/response"
 	"math"
 	"strconv"
@@ -43,6 +44,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var categoryIds []uint
 	var defaultCategoryId uint
 	var authorId = uint(0)
+	var parentId = int64(0)
 	var categoryDetail *model.Category
 
 	if args["moduleId"] != nil {
@@ -53,6 +55,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["userId"] != nil {
 		authorId = uint(args["userId"].Integer())
+	}
+	if args["parentId"] != nil {
+		parentId = int64(args["parentId"].Integer())
 	}
 	module, _ := ctx.Public["module"].(*model.Module)
 	if module != nil {
@@ -104,30 +109,33 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
+	var excludeFlags []string
+	if args["excludeFlag"] != nil {
+		excludeFlags = strings.Split(args["excludeFlag"].String(), ",")
+	}
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
-		combineId := uint(args["combineId"].Integer())
+		combineId := int64(args["combineId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 	if args["combineFromId"] != nil {
 		combineMode = "from"
-		combineId := uint(args["combineFromId"].Integer())
+		combineId := int64(args["combineFromId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 
 	var order string
 	if args["order"] != nil {
+		order = args["order"].String()
 		if !strings.Contains(order, "rand") {
-			order = "archives." + args["order"].String()
-		} else {
-			order = args["order"].String()
+			order = "archives." + order
 		}
 	} else {
-		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+		if currentSite.Content.UseSort == 1 || parentId > 0 {
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 
@@ -139,6 +147,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	q := ""
 	argQ := ""
 	child := true
+	showFlag := false
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -155,6 +164,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["q"] != nil {
 		q = strings.TrimSpace(args["q"].String())
 		argQ = q
+	}
+	if args["showFlag"] != nil {
+		showFlag = args["showFlag"].Bool()
 	}
 
 	// 支持更多的参数搜索，
@@ -193,8 +205,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -206,6 +218,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	} else {
 		currentPage = 1
+		// list模式则始终使用 argQ
+		q = argQ
 	}
 
 	var tmpResult = make([]*model.Archive, 0, limit)
@@ -213,7 +227,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var total int64
 	if listType == "related" {
 		//获取id
-		archiveId := uint(0)
+		archiveId := int64(0)
 		var keywords string
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 		var categoryId = uint(0)
@@ -263,6 +277,17 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}, "archives.id ASC", 0, limit, offset)
 		} else if like == "relation" {
 			archives = currentSite.GetArchiveRelations(archiveId)
+		} else if like == "tag" {
+			// 根据tag来调用相关
+			var tagIds []uint
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tagIds)
+			if len(tagIds) > 0 {
+				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					tx = tx.Table("`archives` as archives").
+						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tagIds, archiveId)
+					return tx
+				}, order, 0, limit, offset)
+			}
 		} else {
 			// 检查是否有相关文档
 			archives = currentSite.GetArchiveRelations(archiveId)
@@ -323,26 +348,26 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
-		var ids []uint64
+		var ids []int64
 		var searchCatIds []uint
 		var searchTagIds []uint
 		if (listType == "page" && len(q) > 0) || argQ != "" {
-			var tmpIds []uint64
-			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			var tmpDocs []fulltext.TinyArchive
+			tmpDocs, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
 			if err2 == nil {
 				fulltextSearch = true
-				for _, id := range tmpIds {
-					if id < provider.CategoryDivider {
-						ids = append(ids, id)
-					} else if id < provider.TagDivider {
-						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
-					} else if id < provider.TagDividerEnd {
-						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+				for _, doc := range tmpDocs {
+					if doc.Type == fulltext.ArchiveType {
+						ids = append(ids, doc.Id)
+					} else if doc.Type == fulltext.CategoryType {
+						searchCatIds = append(searchCatIds, uint(doc.Id))
+					} else if doc.Type == fulltext.TagType {
+						searchTagIds = append(searchTagIds, uint(doc.Id))
 					} else {
 						// 其他值
 					}
 				}
-				if len(tmpIds) == 0 || len(ids) == 0 {
+				if len(tmpDocs) == 0 || len(ids) == 0 {
 					ids = append(ids, 0)
 				}
 				offset = 0
@@ -354,7 +379,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "category",
-					Id:          cat.Id,
+					Id:          int64(cat.Id),
 					CreatedTime: cat.CreatedTime,
 					UpdatedTime: cat.UpdatedTime,
 					Title:       cat.Title,
@@ -376,9 +401,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			tags := currentSite.GetTagsByIds(searchTagIds)
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
-					Id:          tag.Id,
+					Id:          int64(tag.Id),
 					CreatedTime: tag.CreatedTime,
 					UpdatedTime: tag.UpdatedTime,
 					Title:       tag.Title,
@@ -387,6 +413,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					Keywords:    tag.Keywords,
 					Description: tag.Description,
 					Link:        tag.Link,
+					Logo:        tag.Logo,
+					Thumb:       tag.Thumb,
 				})
 			}
 		}
@@ -394,8 +422,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
 			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
+			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
+			} else if len(excludeFlags) > 0 {
+				tx = tx.Joins("LEFT JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag IN (?)", excludeFlags).Where("archive_flags.archive_id IS NULL")
 			}
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)
@@ -459,9 +492,17 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 			}
 			if len(ids) > 0 {
+				// 使用了全文索引，拿到了ID
 				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if q != "" {
-				tx = tx.Where("`title` like ?", "%"+q+"%")
+				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+				var allArchives int64
+				allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
+				if allArchives > 100000 {
+					tx = tx.Where("`title` like ?", q+"%")
+				} else {
+					tx = tx.Where("`title` like ?", "%"+q+"%")
+				}
 			}
 			return tx
 		}
@@ -474,7 +515,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			total = fulltextTotal
 		}
 	}
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
@@ -489,9 +530,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 	// 读取flags
-	if len(archiveIds) > 0 {
+	if showFlag && len(archiveIds) > 0 {
 		var flags []*model.ArchiveFlags
-		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+		currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
 		for i := range archives {
 			for _, f := range flags {
 				if f.ArchiveId == archives[i].Id {
@@ -502,6 +543,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 	}
 
+	tmpResult = append(archives, tmpResult...)
 	if listType == "page" {
 		var urlPatten string
 		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
@@ -520,8 +562,15 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		pager := makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 		webInfo.TotalPages = pager.TotalPages
 		ctx.Public["pagination"] = pager
+
+		// 公开列表数据
+		if currentSite.PluginJsonLd.Open {
+			ctxOri := currentSite.CtxOri()
+			if ctxOri != nil {
+				ctxOri.ViewData("listData", tmpResult)
+			}
+		}
 	}
-	tmpResult = append(archives, tmpResult...)
 	ctx.Private[node.name] = tmpResult
 	ctx.Private["combine"] = combineArchive
 

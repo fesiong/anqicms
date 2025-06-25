@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"errors"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetNavList(typeId uint) ([]*model.Nav, error) {
@@ -76,6 +78,88 @@ func (w *Website) GetNavTypeByTitle(title string) (*model.NavType, error) {
 	return &navType, nil
 }
 
+func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
+	if req.Title == "" {
+		if req.NavType == model.NavTypeCategory {
+			category := w.GetCategoryFromCache(uint(req.PageId))
+			if category != nil {
+				req.Title = category.Title
+			}
+		} else if req.NavType == model.NavTypeArchive {
+			archive, _ := w.GetArchiveById(req.PageId)
+			if archive != nil {
+				req.Title = archive.Title
+			}
+		}
+	}
+	if req.Title == "" {
+		return nil, errors.New(w.Tr("PleaseFillInTheNavigationDisplayName"))
+	}
+
+	var nav *model.Nav
+	var err error
+	if req.Id > 0 {
+		nav, err = w.GetNavById(req.Id)
+		if err != nil {
+			// 表示不存在，则新建一个
+			nav = &model.Nav{
+				Status: 1,
+			}
+			nav.Id = req.Id
+		}
+	} else {
+		nav = &model.Nav{
+			Status: 1,
+		}
+	}
+
+	nav.Title = req.Title
+	nav.SubTitle = req.SubTitle
+	nav.Description = req.Description
+	nav.ParentId = req.ParentId
+	nav.NavType = req.NavType
+	nav.PageId = req.PageId
+	nav.TypeId = req.TypeId
+	nav.Link = req.Link
+	nav.Sort = req.Sort
+	nav.Status = 1
+
+	err = nav.Save(w.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	return nav, nil
+}
+
+func (w *Website) SaveNavType(req *request.NavTypeRequest) (*model.NavType, error) {
+	var navType *model.NavType
+	var err error
+	if req.Id > 0 {
+		navType, err = w.GetNavTypeById(req.Id)
+		if err != nil {
+			// 表示不存在，则新建一个
+			navType = &model.NavType{}
+			navType.Id = req.Id
+		}
+	} else {
+		// 检查重复标题
+		navType, err = w.GetNavTypeByTitle(req.Title)
+		if err != nil {
+			navType = &model.NavType{}
+		}
+	}
+
+	navType.Title = req.Title
+
+	err = w.DB.Save(navType).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return navType, nil
+}
+
 func (w *Website) DeleteCacheNavs() {
 	w.Cache.Delete("navs")
 }
@@ -91,9 +175,14 @@ func (w *Website) GetCacheNavs() []model.Nav {
 		return navs
 	}
 
-	w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs)
+	err = w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs).Error
+	if err != nil {
+		return nil
+	}
 
-	_ = w.Cache.Set("navs", navs, 0)
+	if len(navs) > 0 {
+		_ = w.Cache.Set("navs", navs, 0)
+	}
 
 	return navs
 }
@@ -107,13 +196,13 @@ func (w *Website) GetNavsFromCache(typeId uint) []*model.Nav {
 			//先获取顶层的
 			//再获取是否有下一层的
 			//嵌套，前台使用
-			navs[i].NavList = nil
+			navs[i].NavList = make([]*model.Nav, 0)
 			for j := range navs {
 				if navs[j].ParentId == navs[i].Id {
 					navs[j].Spacer = "└  "
 					navs[j].Link = w.GetUrl("nav", &navs[j], 0)
 					// 增加三级
-					navs[j].NavList = nil
+					navs[j].NavList = make([]*model.Nav, 0)
 					for k := range navs {
 						if navs[k].ParentId == navs[j].Id {
 							navs[k].Spacer = "└  └  "

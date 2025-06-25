@@ -28,8 +28,8 @@ type OrderRequest struct {
 	Details           []OrderDetail        `json:"details"`
 
 	// 接受单个，不需要detail
-	GoodsId  uint `json:"goods_id"`
-	Quantity int  `json:"quantity"`
+	GoodsId  int64 `json:"goods_id"`
+	Quantity int   `json:"quantity"`
 }
 
 type PaymentRequest struct {
@@ -42,8 +42,8 @@ type OrderDetail struct {
 	Id          uint   `json:"id"`
 	OrderId     string `json:"order_id"`
 	UserId      uint   `json:"user_id"`
-	GoodsId     uint   `json:"goods_id"`
-	GoodsItemId uint   `json:"goods_item_id"`
+	GoodsId     int64  `json:"goods_id"`
+	GoodsItemId int64  `json:"goods_item_id"`
 	Price       int64  `json:"price"`
 	OriginPrice int64  `json:"origin_price"`
 	Amount      int64  `json:"amount"`

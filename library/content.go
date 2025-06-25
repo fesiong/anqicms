@@ -8,6 +8,7 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 	"github.com/kataras/iris/v12"
 	"net"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -68,6 +69,12 @@ func ParseUrlToken(name string) string {
 		name = name[:150]
 	}
 	return name
+}
+
+func IsNumericEnding(s string) bool {
+	// 使用正则表达式判断是否以数字结尾
+	re := regexp.MustCompile(`\d+$`)
+	return re.MatchString(s)
 }
 
 func ReplaceSingleSpace(content string) string {
@@ -188,10 +195,18 @@ func ParseDescription(content string) (description string) {
 	return
 }
 
-func MarkdownToHTML(mdStr string) string {
+// MarkdownToHTML 将markdown转换为html
+// args[0] = baseUrl
+// args[1] = filterOutLink
+func MarkdownToHTML(mdStr string, args ...interface{}) string {
+	if len(mdStr) == 0 {
+		return ""
+	}
+	// 换行转换成p
+	//mdStr = strings.ReplaceAll(mdStr, "\n", "  \n")
 	md := []byte(mdStr)
-	// create markdown parser with extensions
-	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	// create Markdown parser with extensions
+	extensions := parser.CommonExtensions | parser.NoEmptyLineBeforeBlock
 	p := parser.NewWithExtensions(extensions)
 	doc := p.Parse(md)
 
@@ -214,51 +229,159 @@ func MarkdownToHTML(mdStr string) string {
 		buff.WriteString("</pre>")
 		return buff.Bytes()
 	})
+	if len(args) == 2 {
+		baseUrl, _ := args[0].(string)
+		filterOutLink, _ := args[1].(int)
+		if filterOutLink == 2 {
+			baseHost := ""
+			urls, err := url.Parse(baseUrl)
+			if err == nil {
+				baseHost = urls.Host
+			}
+			// 添加 nofollow
+			re, _ = regexp.Compile(`(?is)<a.*?href="(.+?)".*?>`)
+			md = re.ReplaceAllFunc(md, func(bs []byte) []byte {
+				match := re.FindSubmatch(bs)
+				if len(match) < 2 {
+					return bs
+				}
+				if bytes.HasPrefix(match[1], []byte("http")) || bytes.HasPrefix(match[1], []byte("//")) {
+					aUrl, err2 := url.Parse(string(match[1]))
+					if err2 == nil {
+						if aUrl.Host != "" && aUrl.Host != baseHost {
+							//过滤外链
+							newUrl := append(match[1], []byte(`" rel="nofollow`)...)
+							bs = bytes.Replace(bs, match[1], newUrl, 1)
+						}
+					}
+				}
+
+				return bs
+			})
+		}
+	}
 
 	return string(md)
 }
 
 type ContentTitle struct {
+	Anchor string `json:"anchor"`
 	Title  string `json:"title"`
 	Tag    string `json:"tag"`
 	Level  int    `json:"level"`
 	Prefix string `json:"prefix"`
 }
 
-func ParseContentTitles(content string) []ContentTitle {
-	re, _ := regexp.Compile(`(?is)<(h\d)[^>]*>(.*?)</h\d>`)
+func ParseContentTitles(content string) ([]ContentTitle, string) {
+	re, _ := regexp.Compile(`(?is)<(h\d)([^>]*)>(.*?)</h\d>`)
+	re2, _ := regexp.Compile(`<(h\d)([^>]*)>`)
 	var titles []ContentTitle
-	matches := re.FindAllStringSubmatch(content, -1)
 	var level = 0
 	var parent = -1
-	var prefix []int
-	for _, match := range matches {
+	var prefix []int64
+	content = re.ReplaceAllStringFunc(content, func(s string) string {
+		match := re.FindStringSubmatch(s)
 		tag := strings.ToLower(match[1])
 		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
 		if parent == -1 {
 			parent = leaf
 			level = 0
 			prefix = append(prefix, 1)
-		}
-		if parent != leaf {
-			if parent > leaf {
-				prefix = prefix[:len(prefix)-1]
-				prefix[len(prefix)-1]++
-			} else if parent < leaf {
-				prefix = append(prefix, 1)
-			}
-			level -= parent - leaf
-			parent = leaf
 		} else {
-			prefix[len(prefix)-1]++
+			if parent != leaf {
+				if parent > leaf {
+					prefix = prefix[:len(prefix)-1]
+					prefix[len(prefix)-1]++
+				} else if parent < leaf {
+					prefix = append(prefix, 1)
+				}
+				level -= parent - leaf
+				parent = leaf
+			} else {
+				prefix[len(prefix)-1]++
+			}
 		}
-		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[2]), "\n", " "))
+
+		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[3]), "\n", " "))
+		itemPrefix := JoinInt(prefix, ".")
+		anchor := strings.ReplaceAll(itemPrefix, ".", "-") + "-" + GetPinyin(title, true)
 		titles = append(titles, ContentTitle{
+			Anchor: "#" + anchor,
 			Title:  title,
 			Tag:    tag,
 			Level:  level,
-			Prefix: strings.ReplaceAll(fmt.Sprintf("%v", prefix), ",", "."),
+			Prefix: itemPrefix,
 		})
+		// 替换
+		s = re2.ReplaceAllStringFunc(s, func(s2 string) string {
+			if strings.Contains(s2, "id=\"") {
+				// 先删除原始的id，以及id里的内容
+				re3, _ := regexp.Compile(`(?is)id=".*?"`)
+				s2 = re3.ReplaceAllString(s2, "")
+			}
+
+			return strings.TrimSuffix(s2, ">") + fmt.Sprintf(` id="%s">`, anchor)
+		})
+
+		return s
+	})
+
+	return titles, content
+}
+
+type NameVal struct {
+	Name string
+	Val  string
+}
+
+var SpiderNames = []NameVal{
+	{Name: "googlebot", Val: "google"},
+	{Name: "bingbot", Val: "bing"},
+	{Name: "baiduspider", Val: "baidu"},
+	{Name: "360spider", Val: "360"},
+	{Name: "yahoo!", Val: "yahoo"},
+	{Name: "sogou", Val: "sogou"},
+	{Name: "bytespider", Val: "byte"},
+	{Name: "yisouspider", Val: "yisou"},
+	{Name: "yandexbot", Val: "yandex"},
+	{Name: "spider", Val: "other"},
+	{Name: "bot", Val: "other"},
+}
+
+var DeviceNames = []NameVal{
+	{Name: "android", Val: "android"},
+	{Name: "iphone", Val: "iphone"},
+	{Name: "windows", Val: "windows"},
+	{Name: "macintosh", Val: "mac"},
+	{Name: "linux", Val: "linux"},
+	{Name: "mobile", Val: "mobile"},
+	{Name: "curl", Val: "curl"},
+	{Name: "python", Val: "python"},
+	{Name: "client", Val: "client"},
+	{Name: "spider", Val: "spider"},
+	{Name: "bot", Val: "spider"},
+}
+
+func GetSpider(ua string) string {
+	ua = strings.ToLower(ua)
+	//获取蜘蛛
+	for _, v := range SpiderNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
+		}
 	}
-	return titles
+
+	return ""
+}
+
+func GetDevice(ua string) string {
+	ua = strings.ToLower(ua)
+
+	for _, v := range DeviceNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
+		}
+	}
+
+	return "proxy"
 }

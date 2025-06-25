@@ -2,15 +2,12 @@ package provider
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/response"
+	"kandaoni.com/anqicms/provider/storage"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,6 +16,12 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 )
 
 // SpecialCharsMap 查询参数中的特殊字符
@@ -150,7 +153,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		webInfo := &response.WebInfo{
 			Title:    module.Title,
 			PageName: "archiveIndex",
-			NavBar:   module.Id,
+			NavBar:   int64(module.Id),
 		}
 		newCtx.ViewData("webInfo", webInfo)
 		tplName := module.TableName + "/index.html"
@@ -253,7 +256,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	webInfo := &response.WebInfo{
 		Title:    category.Title,
 		PageName: "archiveList",
-		NavBar:   category.Id,
+		NavBar:   int64(category.Id),
 	}
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := module.TableName + "/list.html"
@@ -345,7 +348,7 @@ func (w *Website) BuildArchiveCache() {
 	w.HtmlCacheStatus.FinishedTime = 0
 	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingDocuments")
 	// 生成详情
-	lastId := uint(0)
+	lastId := int64(0)
 	for {
 		var archives []*model.Archive
 		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Limit(1000).Order("id asc").Find(&archives)
@@ -513,7 +516,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	webInfo := &response.WebInfo{
 		Title:    tag.Title,
 		PageName: "tag",
-		NavBar:   tag.Id,
+		NavBar:   int64(tag.Id),
 	}
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := "tag/list.html"
@@ -582,6 +585,13 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if w.PluginHtmlCache.Open == false {
 		return errors.New(w.Tr("StaticCacheFunctionIsNotEnabled"))
 	}
+
+	_, err := w.GetHtmlDataByLocal(urlPath, isMobile)
+
+	return err
+}
+
+func (w *Website) GetHtmlDataByLocal(urlPath string, isMobile bool) ([]byte, error) {
 	if strings.HasPrefix(urlPath, "http") {
 		parsed, err := url.Parse(urlPath)
 		if err == nil {
@@ -595,19 +605,20 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if isMobile && w.System.TemplateType == config.TemplateTypeSeparate {
 		mobileUrl, err := url.Parse(w.System.MobileUrl)
 		if err != nil {
-			return errors.New(w.Tr("MobileDomainNameResolutionFailed"))
+			return nil, errors.New(w.Tr("MobileDomainNameResolutionFailed"))
 		}
 		host = mobileUrl.Hostname()
 	}
 	ua := library.GetUserAgent(isMobile)
 	baseUrl := fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port)
 
+	// 10秒超时
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	req, err := http.NewRequest("GET", baseUrl+urlPath, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", ua)
 	req.Header.Set("X-Host", host)
@@ -615,11 +626,12 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	req.Header.Set("Cache", "true")
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = resp.Body.Close()
+	defer resp.Body.Close()
+	content, _ := io.ReadAll(resp.Body)
 
-	return err
+	return content, nil
 }
 
 func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []byte) error {
@@ -669,7 +681,10 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 	if w.PluginHtmlCache.Open == false {
 		return "", false
 	}
-	if ctx.GetHeader("Cache-Control") == "no-cache" {
+	// 获得路由
+	match := ctx.Params().Get("match")
+	// 首页不允许通过 no-cache 跳过缓存
+	if ctx.GetHeader("Cache-Control") == "no-cache" && match != "index" {
 		return "", false
 	}
 	// 用户登录后，也不缓存
@@ -677,8 +692,6 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 	if userId > 0 {
 		return "", false
 	}
-	// 获得路由
-	match := ctx.Params().Get("match")
 	if match == "index" {
 		if w.PluginHtmlCache.IndexCache == 0 {
 			return "", false
@@ -958,23 +971,18 @@ func (w *Website) ReplaceAndSendCacheFile(remotePath string, buf []byte) error {
 		})
 	}
 
-	_, err := w.CacheStorage.UploadFile(remotePath, buf)
+	err := w.CacheStorage.Put(context.Background(), remotePath, bytes.NewReader(buf))
 
 	return err
 }
 
-func (w *Website) GetCacheBucket() (bucket *BucketStorage, err error) {
-	bucket = &BucketStorage{
-		DataPath:            w.DataPath,
-		PublicPath:          w.PublicPath,
-		config:              &w.PluginHtmlCache.PluginStorageConfig,
-		tencentBucketClient: nil,
-		aliyunBucketClient:  nil,
-		qiniuBucketClient:   nil,
-		tryTimes:            0,
+func (w *Website) GetCacheBucket() (bucket storage.Storage, err error) {
+	bucket, err = w.GetBucket(&w.PluginHtmlCache.PluginStorageConfig)
+	if err != nil {
+		// 退回到local
+		log.Println(err.Error())
+		return nil, err
 	}
-
-	err = bucket.initBucket()
 
 	return
 }

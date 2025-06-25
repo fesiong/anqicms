@@ -129,7 +129,8 @@ func (w *Website) GetRewritePatten(focus bool) *RewritePatten {
 			w.parsedPatten.ArchiveIndex += "(_{page})"
 		}
 	}
-
+	w2 := GetWebsite(w.Id)
+	w2.parsedPatten = w.parsedPatten
 	return w.parsedPatten
 }
 

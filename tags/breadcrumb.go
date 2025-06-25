@@ -189,15 +189,11 @@ func TagBreadcrumbParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pon
 func buildCategoryCrumbs(currentSite *provider.Website, categoryId uint) []*crumb {
 	var crumbs []*crumb
 	if categoryId > 0 {
-		category := currentSite.GetCategoryFromCache(categoryId)
-		if category != nil {
-			if category.ParentId > 0 {
-				crumbs = buildCategoryCrumbs(currentSite, category.ParentId)
-			}
-
+		categories := currentSite.GetParentCategories(categoryId)
+		for i := range categories {
 			crumbs = append(crumbs, &crumb{
-				Name: category.Title,
-				Link: currentSite.GetUrl("category", category, 0),
+				Name: categories[i].Title,
+				Link: currentSite.GetUrl("category", categories[i], 0),
 			})
 		}
 	}

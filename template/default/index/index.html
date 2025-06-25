@@ -17,7 +17,7 @@
 <!-- ind-tag -->
 <div class="ind-tag">
     <div class="container">
-        <span>热门搜索：</span>
+        <span>{% tr 'hot-search:' %}</span>
         {% archiveList products with type="list" flag="c" moduleId="2" limit="5" %}
         {% for item in products %}
         <a href="{{item.Link}}">{{item.Title}}</a>
@@ -33,8 +33,8 @@
         <div class="ind-pro-item">
             <div class="ind-pro-list">
                 <div class="ind-pro-title">
-                    <h2><a href="{% moduleDetail with name='Link' id='2' %}" title="">热门产品</a></h2>
-                    <a href="{% moduleDetail with name='Link' id='2' %}" class="more">更多...</a>
+                    <h2><a href="{% moduleDetail with name='Link' id='2' %}" title="">{% tr 'hot-products' %}</a></h2>
+                    <a href="{% moduleDetail with name='Link' id='2' %}" class="more">{% tr 'more' %}</a>
                 </div>
                 <ul class="ind-pro-ul">
                     {% archiveList products with type="list" moduleId="2" limit="8" %}
@@ -54,7 +54,7 @@
                 </ul>
             </div>
             <div class="ind-pro-nav">
-                <h2>产品中心</h2>
+                <h2>{% tr 'product-center' %}</h2>
                 <div class="accordion">
                     {% categoryList productCategories with moduleId="2" parentId="0" %}
                     {% for item in productCategories %}
@@ -95,7 +95,7 @@
                 <h2>{% pageDetail with name='Title' token='about' %}</h2>
 
                 <p>{% pageDetail with name="Description" token='about' %}</p>
-                <a href="{% pageDetail with name='Link' token='about' %}" class="more">更多详情+</a>
+                <a href="{% pageDetail with name='Link' token='about' %}" class="more">{% tr 'more' %}</a>
             </div>
         </div>
     </div>
@@ -104,7 +104,7 @@
 <!-- ind-case -->
 <div class="section ind-case">
     <div class="container">
-        <div class="ind-case-title">客户案例</div>
+        <div class="ind-case-title">{% tr 'customer-case' %}</div>
         <ul class="ind-case-ul">
             {% archiveList cases with type="list" moduleId="3" limit="4" %}
             {% for item in cases %}
@@ -128,7 +128,7 @@
 <!-- ind-blog -->
 <div class="section ind-blog">
     <div class="container">
-        <div class="ind-case-title">新闻资讯</div>
+        <div class="ind-case-title">{% tr 'news' %}</div>
         <ul class="ind-blog-ul">
             {% archiveList articles with type="list" moduleId="1" limit="6" %}
             {% for item in articles %}
@@ -141,7 +141,7 @@
                     <div class="ind-blog-text">
                         <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
                         <p>{{item.Description}}</p>
-                        <a href="{{item.Link}}" class="more">详情...</a>
+                        <a href="{{item.Link}}" class="more">{% tr 'detail' %}</a>
                     </div>
                 </div>
             </li>
@@ -154,7 +154,7 @@
 <!-- flink -->
 <div class="flink">
     <div class="container">
-        <span>友情链接：</span>
+        <span>{% tr 'friendship-link:' %}</span>
         {% linkList friendLinks %}
         {% for item in friendLinks %}
         <a href="{{item.Link}}" {% if item.Nofollow==1 %} rel="nofollow" {% endif %} target="_blank">{{item.Title}}</a>

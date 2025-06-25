@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -43,9 +44,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	fieldName := ""
+	inputName := ""
 	if args["name"] != nil {
-		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		inputName = args["name"].String()
+		fieldName = library.Case2Camel(inputName)
 	}
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
@@ -77,13 +79,69 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		if f.IsValid() {
 			content = f.Interface()
 		}
+		// 支持 extra
+		categoryDetailExtra := map[string]interface{}{}
+		if categoryDetail.Extra != nil {
+			module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
+			if module != nil && len(module.CategoryFields) > 0 {
+				for _, field := range module.CategoryFields {
+					categoryDetailExtra[field.FieldName] = categoryDetail.Extra[field.FieldName]
+					if categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "" {
+						// default
+						categoryDetailExtra[field.FieldName] = field.Content
+					}
+					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+						categoryDetailExtra[field.FieldName] != nil {
+						value, ok2 := categoryDetailExtra[field.FieldName].(string)
+						if ok2 {
+							if field.Type == config.CustomFieldTypeEditor && render {
+								value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+							}
+							categoryDetailExtra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+						}
+					}
+					if field.Type == config.CustomFieldTypeImages && categoryDetailExtra[field.FieldName] != nil {
+						if val, ok := categoryDetailExtra[field.FieldName].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = currentSite.ReplaceContentUrl(v2s, true)
+							}
+							categoryDetailExtra[field.FieldName] = val
+						}
+					}
+				}
+				if fieldName == "Extra" {
+					var extras = make([]model.CustomField, 0, len(module.CategoryFields))
+					for _, field := range module.CategoryFields {
+						extras = append(extras, model.CustomField{
+							Name:      field.Name,
+							Value:     categoryDetailExtra[field.FieldName],
+							Default:   field.Content,
+							Type:      field.Type,
+							FieldName: field.FieldName,
+						})
+					}
+					content = extras
+				}
+			}
+		}
+		if item, ok := categoryDetailExtra[inputName]; ok {
+			content = item
+		}
 
 		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = categoryDetail.Title
 		}
+
 		// convert markdown to html
-		if fieldName == "Content" && render {
-			content = library.MarkdownToHTML(categoryDetail.Content)
+		if fieldName == "Content" {
+			var value string
+			if render {
+				value = library.MarkdownToHTML(categoryDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			} else {
+				value = categoryDetail.Content
+			}
+			content = currentSite.ReplaceContentUrl(value, true)
 		}
 		// output
 		if node.name == "" {

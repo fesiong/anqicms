@@ -2,23 +2,26 @@ package controller
 
 import (
 	"fmt"
-	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
+		ctx.ContentType(context.ContentHTMLHeaderValue)
 		ctx.ServeFile(cacheFile)
 		return
 	}
-	id := ctx.Params().GetUintDefault("id", 0)
+	id := ctx.Params().GetInt64Default("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
 	var err error
@@ -44,6 +47,20 @@ func ArchiveDetail(ctx iris.Context) {
 				return
 			}
 			category = tmpCat
+		}
+	}
+	// catname 也要验证
+	catName := ctx.Params().GetString("catname")
+	if catName != "" {
+		category = currentSite.GetCategoryFromCacheByToken(catName)
+		if category == nil {
+			NotFound(ctx)
+			return
+		}
+		// 不是上级也不行
+		if category.Id != archive.CategoryId {
+			NotFound(ctx)
+			return
 		}
 	}
 
@@ -78,25 +95,32 @@ func ArchiveDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
-	// 支持 combine
+	// 支持 combine，最多支持5个
 	combineName := ctx.Params().GetString("combine")
-	var combineArchive *model.Archive
+	var combineArchives []*model.Archive
+	var combineIds []int64
 	if combineName != "" {
 		// 需要先验证是否是archive
-		tmpId, err := strconv.Atoi(combineName)
-		if err == nil {
-			combineArchive, err = currentSite.GetArchiveById(uint(tmpId))
-		} else {
-			combineArchive, err = currentSite.GetArchiveByUrlToken(combineName)
+		// 支持多个ID，用 - 隔开
+		combines := strings.Split(combineName, "-")
+		for i, v := range combines {
+			var combineArchive *model.Archive
+			tmpId, err := strconv.ParseInt(v, 10, 64)
+			if err == nil {
+				combineArchive, err = currentSite.GetArchiveById(tmpId)
+			}
+			if err != nil || i > 5 {
+				// 只要有一个不存在，都报错
+				// 超过5个也不行
+				NotFound(ctx)
+				return
+			}
+			combineIds = append(combineIds, combineArchive.Id)
+			combineArchives = append(combineArchives, combineArchive)
 		}
-		if err != nil {
-			// 不存在
-			NotFound(ctx)
-			return
-		}
-		ctx.ViewData("combineId", combineArchive.Id)
+		ctx.ViewData("combineIds", combineIds)
+		ctx.ViewData("combineArchives", combineArchives)
 	}
-	ctx.ViewData("combineArchive", combineArchive)
 
 	// check the archive had paid if the archive need to pay.
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -117,16 +141,21 @@ func ArchiveDetail(ctx iris.Context) {
 		if archive.SeoTitle != "" {
 			webInfo.Title = archive.SeoTitle
 		}
+		if len(combineArchives) > 0 {
+			for _, combineArchive := range combineArchives {
+				webInfo.Title += "_" + combineArchive.Title
+			}
+		}
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
-		webInfo.NavBar = archive.CategoryId
+		webInfo.NavBar = int64(archive.CategoryId)
 		webInfo.PageId = archive.Id
 		//设置页面名称，方便tags识别
 		webInfo.PageName = "archiveDetail"
 		webInfo.CanonicalUrl = archive.CanonicalUrl
 		if webInfo.CanonicalUrl == "" {
-			if combineArchive != nil {
-				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0, combineArchive)
+			if len(combineArchives) > 0 {
+				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0, combineArchives)
 			} else {
 				webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0)
 			}
@@ -159,22 +188,19 @@ func ArchiveDetail(ctx iris.Context) {
 			}
 		}
 	}
-	if tplName == "" {
-		tplName = module.TableName + "/detail.html"
-		tplName2 := module.TableName + "_detail.html"
-		if ViewExists(ctx, tplName2) {
-			tplName = tplName2
+	if tplName != "" {
+		if !strings.HasSuffix(tplName, ".html") {
+			tplName += ".html"
 		}
 	}
-
-	if !strings.HasSuffix(tplName, ".html") {
-		tplName += ".html"
-	}
-
 	tmpTpl := fmt.Sprintf("%s/detail-%d.html", module.TableName, archive.Id)
-	if ViewExists(ctx, tmpTpl) {
-		tplName = tmpTpl
+
+	tplName, ok = currentSite.TemplateExist(tplName, tmpTpl, module.TableName+"/detail.html", module.TableName+"_detail.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
+
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {
@@ -191,6 +217,7 @@ func ArchiveIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
+		ctx.ContentType(context.ContentHTMLHeaderValue)
 		ctx.ServeFile(cacheFile)
 		return
 	}
@@ -200,13 +227,22 @@ func ArchiveIndex(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = module.Title
+		webInfo.Keywords = module.Keywords
+		webInfo.Description = module.Description
 
 		//设置页面名称，方便tags识别
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "archiveIndex"
-		webInfo.NavBar = module.Id
+		webInfo.NavBar = int64(module.Id)
 		webInfo.CanonicalUrl = currentSite.GetUrl("archiveIndex", module, 0)
 		ctx.ViewData("webInfo", webInfo)
 	}
@@ -216,10 +252,10 @@ func ArchiveIndex(ctx iris.Context) {
 
 	// 默认模板规则：表名 / index,list, detail .html
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
-	tplName := module.TableName + "/index.html"
-	tplName2 := module.TableName + "_index.html"
-	if ViewExists(ctx, tplName2) {
-		tplName = tplName2
+	tplName, ok := currentSite.TemplateExist(module.TableName+"/index.html", module.TableName+"_index.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))

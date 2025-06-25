@@ -38,9 +38,9 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "archives.`id` desc"
+	order := "archives.`created_time` desc"
 	if currentSite.Content.UseSort == 1 {
-		order = "archives.`sort` desc, archives.`id` desc"
+		order = "archives.`sort` desc, archives.`created_time` desc"
 	}
 	tagId := uint(0)
 	listType := "list"
@@ -82,8 +82,8 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			} else if len(limitArgs) == 1 {
 				limit, _ = strconv.Atoi(limitArgs[0])
 			}
-			if limit > 100 {
-				limit = 100
+			if limit > currentSite.Content.MaxLimit {
+				limit = currentSite.Content.MaxLimit
 			}
 			if limit < 1 {
 				limit = 1
@@ -105,7 +105,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			return tx
 		}, order, currentPage, limit, offset)
-		var archiveIds = make([]uint, 0, len(archives))
+		var archiveIds = make([]int64, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
 			if len(archives[i].Password) > 0 {
@@ -115,7 +115,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		// 读取flags
 		if len(archiveIds) > 0 {
 			var flags []*model.ArchiveFlags
-			currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
 			for i := range archives {
 				for _, f := range flags {
 					if f.ArchiveId == archives[i].Id {

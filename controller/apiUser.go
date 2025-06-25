@@ -209,6 +209,7 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 	req.RealName = strings.TrimSpace(req.RealName)
 	req.Phone = strings.TrimSpace(req.Phone)
 	req.Email = strings.TrimSpace(req.Email)
+	req.Introduce = strings.TrimSpace(req.Introduce)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	err := currentSite.UpdateUserInfo(userId, &req)
@@ -223,6 +224,37 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  currentSite.TplTr("SaveSuccessfully"),
+	})
+}
+
+func ApiUpdateUserAvatar(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	file, _, err := ctx.FormFile("file")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	defer file.Close()
+
+	avatarUrl, err := currentSite.UploadUserAvatar(userId, file)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("FileSaveFailed"),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("FileUploadCompleted"),
+		"data": iris.Map{
+			"avatar_url": avatarUrl,
+		},
 	})
 }
 

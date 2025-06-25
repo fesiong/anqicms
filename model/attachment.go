@@ -9,6 +9,7 @@ import (
 
 type Attachment struct {
 	Model
+	UserId       uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	FileName     string `json:"file_name" gorm:"column:file_name;type:varchar(250) not null;default:''"`
 	FileLocation string `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
 	FileSize     int64  `json:"file_size" gorm:"column:file_size;type:bigint(20) unsigned not null;default:0"`
@@ -90,14 +91,6 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 		var attachCount int64
 		db.Model(&Attachment{}).Where("`category_id` = ?", attachment.CategoryId).Count(&attachCount)
 		db.Model(&AttachmentCategory{}).Where("`id` = ?", attachment.CategoryId).UpdateColumn("attach_count", attachCount)
-	}
-
-	return nil
-}
-
-func (attachment *Attachment) Delete(db *gorm.DB) error {
-	if err := db.Delete(attachment).Error; err != nil {
-		return err
 	}
 
 	return nil

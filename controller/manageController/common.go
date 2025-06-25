@@ -29,7 +29,7 @@ func AdminFileServ(ctx iris.Context) {
 		if siteId > 0 {
 			// 只有二级目录安装的站点允许这么操作
 			website := provider.GetWebsite(uint(siteId))
-			if len(website.BaseURI) > 1 {
+			if website != nil && len(website.BaseURI) > 1 {
 				ctx.Values().Set("siteId", uint(siteId))
 			}
 		}
@@ -69,8 +69,8 @@ func Version(ctx iris.Context) {
 
 func GetStatisticsSummary(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-
-	result := currentSite.GetStatisticsSummary()
+	exact := ctx.URLParamBoolDefault("exact", false)
+	result := currentSite.GetStatisticsSummary(exact)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -114,11 +114,10 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查新版
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/version.json"
+	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
-		log.Println(ctx.Tr("FailedToObtainNewVersion"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  ctx.Tr("CheckThatTheVersionIsTheLatestVersion"),
@@ -157,11 +156,10 @@ func VersionUpgrade(ctx iris.Context) {
 		return
 	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-v%s.zip", runtime.GOOS, lastVersion.Version)
+	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, lastVersion.Version)
 	// 最长等待10分钟
-	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Minute).Get(link).EndBytes()
+	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(15 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
-		log.Println(ctx.Tr("VersionUpdateFailed"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("VersionUpdateFailed"),
@@ -193,6 +191,9 @@ func VersionUpgrade(ctx iris.Context) {
 		// 删除压缩包
 		os.Remove(tmpFile)
 	}()
+
+	// 删除 system
+	_ = os.RemoveAll(config.ExecPath + "system")
 
 	var errorFiles []string
 	path, _ := os.Executable()
@@ -239,6 +240,10 @@ func VersionUpgrade(ctx iris.Context) {
 
 		reader.Close()
 		_ = newFile.Close()
+		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqicms,cwebp
+		if f.Name == "anqicms" || f.Name == "anqicms.exe" || strings.HasPrefix(f.Name, "cwebp_") {
+			_ = os.Chmod(realName, os.ModePerm)
+		}
 	}
 	// 尝试更换主程序
 	oldPath := execPath + ".old"
@@ -255,7 +260,7 @@ func VersionUpgrade(ctx iris.Context) {
 			err = os.Rename(oldPath, execPath)
 		}
 	} else {
-		log.Println("fail to rename old executable.")
+		log.Println("fail to rename old executable.", err)
 	}
 	if len(errorFiles) > 1 {
 		log.Println("Upgrade error files: ", errorFiles)

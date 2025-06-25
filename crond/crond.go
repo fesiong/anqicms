@@ -2,14 +2,15 @@ package crond
 
 import (
 	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
 	"kandaoni.com/anqicms/provider"
 	"math/rand"
 	"time"
 )
 
+var crontab *cron.Cron
+
 func Crond() {
-	crontab := cron.New(cron.WithSeconds())
+	crontab = cron.New(cron.WithSeconds())
 	//每天执行
 	crontab.AddFunc("@daily", dailyTask)
 	// 每天8点执行
@@ -23,6 +24,12 @@ func Crond() {
 	crontab.Start()
 }
 
+func Stop() {
+	if crontab != nil {
+		crontab.Stop()
+	}
+}
+
 func dailyTask() {
 	//每天执行一次，清理很久的statistic
 	cleanStatistics()
@@ -30,8 +37,6 @@ func dailyTask() {
 	CleanArchives()
 	// 每天检查VIP
 	CleanUserVip()
-	// 每天定期优化表
-	optimizeTable()
 }
 
 func daily8HourTask() {
@@ -46,10 +51,12 @@ func hourlyTask() {
 	startDigKeywords()
 	// 每小时检查一次账号状态
 	CheckAuthValid()
+	// 每小时统计一次统计数据
+	calcStatistics()
 }
 
 func hourly10MinuteTask() {
-	// 每十分钟检查一次提现
+	// 每十分钟检查一次采集
 	CollectArticles()
 }
 
@@ -64,24 +71,6 @@ func minutelyTask() {
 	UpdateTimeFactor()
 	// 每分钟检查一次 AI文章计划
 	AiArticlePlan()
-}
-
-func optimizeTable() {
-	// 需要优化的表
-	tables := []string{
-		"archives",
-		"archive_drafts",
-	}
-
-	websites := provider.GetWebsites()
-	for _, w := range websites {
-		if !w.Initialed {
-			continue
-		}
-		for _, t := range tables {
-			w.DB.Exec("OPTIMIZE TABLE `?`", gorm.Expr(t))
-		}
-	}
 }
 
 func startDigKeywords() {
@@ -101,6 +90,16 @@ func cleanStatistics() {
 			continue
 		}
 		w.CleanStatistics()
+	}
+}
+
+func calcStatistics() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed || w.StatisticLog == nil {
+			continue
+		}
+		w.StatisticLog.Calc(w.DB)
 	}
 }
 

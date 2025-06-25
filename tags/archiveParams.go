@@ -3,6 +3,8 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
@@ -22,7 +24,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if err != nil {
 		return err
 	}
-	id := uint(0)
+	id := int64(0)
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -43,11 +45,15 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			sorted = false
 		}
 	}
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		id = int64(args["id"].Integer())
 		if archiveDetail == nil || archiveDetail.Id != id {
 			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
 			if archiveDetail == nil {
@@ -77,6 +83,10 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				}
 				if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
 					delete(archiveParams, i)
+					continue
+				}
+				if archiveParams[i].Type == config.CustomFieldTypeEditor && render {
+					archiveParams[i].Value = library.MarkdownToHTML(fmt.Sprintf("%v", archiveParams[i].Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 				}
 			}
 			if sorted {

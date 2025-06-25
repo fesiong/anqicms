@@ -30,7 +30,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if err != nil {
 		return err
 	}
-	id := uint(0)
+	id := int64(0)
 	token := ""
 	if args["token"] != nil {
 		token = args["token"].String()
@@ -69,7 +69,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		id = int64(args["id"].Integer())
 		if archiveDetail == nil || archiveDetail.Id != id {
 			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
 			if archiveDetail == nil {
@@ -110,9 +110,18 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if archiveDetail != nil {
 		if len(archiveDetail.Password) > 0 {
 			archiveDetail.HasPassword = true
+			urlParams, ok := ctx.Public["urlParams"].(map[string]string)
+			if ok {
+				password := urlParams["password"]
+				if password == archiveDetail.Password {
+					// 密码验证正确
+					archiveDetail.PasswordValid = true
+				}
+			}
 		}
 		// 读取flag
 		if fieldName == "Flags" || fieldName == "Flag" {
+			fieldName = "Flag"
 			archiveDetail.Flag = currentSite.GetArchiveFlags(archiveDetail.Id)
 		}
 		if fieldName == "Link" {
@@ -136,7 +145,17 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					}
 				}
 				if item, ok := archiveParams[inputName]; ok {
-					content = item.Value
+					if item.Value == nil || item.Value == "" {
+						item.Value = item.Default
+					}
+					if item.FollowLevel && !archiveDetail.HasOrdered {
+						content = ""
+					} else {
+						if item.Type == config.CustomFieldTypeEditor && render {
+							item.Value = library.MarkdownToHTML(fmt.Sprintf("%v", item.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
+						content = item.Value
+					}
 				}
 			}
 		}
@@ -164,10 +183,11 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					tmpContent = archiveData.Content
 					// convert markdown to html
 					if render {
-						tmpContent = library.MarkdownToHTML(archiveData.Content)
+						tmpContent = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 					}
 					if fieldName == "ContentTitles" {
-						content = library.ParseContentTitles(tmpContent)
+						ctx.Private["showContentTitle"] = true
+						content, _ = library.ParseContentTitles(tmpContent)
 					} else {
 						// lazy load
 						if lazy != "" {
@@ -248,6 +268,10 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 								}
 								tmpContent = strings.Join(tmpData, "")
 							}
+						}
+						tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
+						if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
+							_, tmpContent = library.ParseContentTitles(tmpContent)
 						}
 						content = tmpContent
 					}

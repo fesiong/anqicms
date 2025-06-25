@@ -5,6 +5,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -12,8 +13,19 @@ import (
 // GetUrl 生成url
 // 支持的规则：getUrl("archive"|"category"|"page"|"nav"|"archiveIndex", item, int)
 // 如果page == -1，则不对page进行转换。
+// 支持多语言站点功能
 func (w *Website) GetUrl(match string, data interface{}, page int, args ...interface{}) string {
-	rewritePattern := w.ParsePatten(false)
+	mainSite := w.GetMainWebsite()
+	baseUrl := w.System.BaseUrl
+	if mainSite.MultiLanguage.Open {
+		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+			// 替换目录
+			baseUrl = mainSite.System.BaseUrl + "/" + w.System.Language
+		} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+			baseUrl = mainSite.System.BaseUrl
+		}
+	}
+	rewritePattern := mainSite.ParsePatten(false)
 	uri := ""
 	switch match {
 	case "archive":
@@ -37,17 +49,19 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				uri = item.FixedLink
 				break
 			}
-			// 修正
-			if item.UrlToken == "" {
-				_ = w.UpdateArchiveUrlToken(item)
-			}
+			// 修正空白的urlToken
+			_ = w.UpdateArchiveUrlToken(item)
 
 			for _, v := range rewritePattern.ArchiveTags {
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 					if len(args) > 0 {
-						if combine, ok := args[0].(*model.Archive); ok && combine != nil {
-							uri = strings.ReplaceAll(uri, "(/c-{combine})", fmt.Sprintf("/c-%d", combine.Id))
+						if combines, ok := args[0].([]*model.Archive); ok && combines != nil {
+							var combineIds []string
+							for _, combine := range combines {
+								combineIds = append(combineIds, strconv.FormatInt(combine.Id, 10))
+							}
+							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+strings.Join(combineIds, "-"))
 						}
 					}
 				} else if v == "catid" {
@@ -55,8 +69,13 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				} else if v == "filename" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
 					if len(args) > 0 {
-						if combine, ok := args[0].(*model.Archive); ok && combine != nil {
-							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+combine.UrlToken)
+						// combine 只支持ID
+						if combines, ok := args[0].([]*model.Archive); ok && combines != nil {
+							var combineIds []string
+							for _, combine := range combines {
+								combineIds = append(combineIds, strconv.FormatInt(combine.Id, 10))
+							}
+							uri = strings.ReplaceAll(uri, "(/c-{combine})", "/c-"+strings.Join(combineIds, "-"))
 						}
 					}
 				} else if v == "catname" {
@@ -205,11 +224,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 					uri = "/"
 				} else if item.PageId > 0 {
 					//文档首页
-					module := w.GetModuleFromCache(item.PageId)
+					module := w.GetModuleFromCache(uint(item.PageId))
 					uri = w.GetUrl("archiveIndex", module, 0)
 				}
 			} else if item.NavType == model.NavTypeCategory {
-				category := w.GetCategoryFromCache(item.PageId)
+				category := w.GetCategoryFromCache(uint(item.PageId))
 				if category != nil {
 					uri = w.GetUrl("category", category, 0)
 				}
@@ -286,7 +305,7 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 	}
 
 	if strings.HasPrefix(uri, "/") {
-		uri = w.System.BaseUrl + uri
+		uri = baseUrl + uri
 	}
 	return uri
 }

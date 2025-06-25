@@ -11,7 +11,7 @@ import (
 
 func (w *Website) GetLinkList() ([]*model.Link, error) {
 	var links []*model.Link
-	db := w.DB
+	db := w.DB.WithContext(w.Ctx())
 	err := db.Order("sort asc").Find(&links).Error
 	if err != nil {
 		return nil, err

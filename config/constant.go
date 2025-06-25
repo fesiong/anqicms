@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.3.9"
+const Version = "3.4.11"
 
 const (
 	StatusOK         = 0
@@ -20,6 +20,7 @@ const (
 	CustomFieldTypeSelect   = "select"
 	CustomFieldTypeImage    = "image"
 	CustomFieldTypeFile     = "file"
+	CustomFieldTypeImages   = "images"
 )
 
 const (
@@ -28,6 +29,7 @@ const (
 
 	CategoryShowTypeTree = 0
 	CategoryShowTypeNode = 1
+	CategoryShowTypeList = 2
 )
 
 const (
@@ -42,12 +44,17 @@ const (
 	UrlTokenTypeSort = 1
 )
 
+const DefaultQuality = 90
+
 const (
 	StorageTypeLocal   = "local" // or empty
 	StorageTypeAliyun  = "aliyun"
 	StorageTypeTencent = "tencent"
 	StorageTypeQiniu   = "qiniu"
 	StorageTypeUpyun   = "upyun"
+	StorageTypeGoogle  = "google"
+	StorageTypeAws     = "awss3"
+	StorageTypeR2      = "r2" // Cloudflare R2
 	StorageTypeFTP     = "ftp"
 	StorageTypeSSH     = "ssh"
 )
@@ -75,6 +82,7 @@ const (
 	PayWayWeapp   = "weapp"   // 微信小程序支付
 	PayWayAlipay  = "alipay"  // 支付宝支付
 	PayWayOffline = "offline" // 线下支付
+	PayWayPaypal  = "paypal"  // paypal
 )
 
 const (
@@ -108,7 +116,7 @@ const (
 	EnginBing   = "bing"
 	EnginOther  = "other"
 
-	LanguageZh = "zh"
+	LanguageZh = "zh-CN"
 	LanguageEn = "en"
 
 	CollectModeCollect = 0
@@ -170,4 +178,13 @@ const (
 const (
 	InterferenceModeClass = 0 // 添加随机class
 	InterferenceModeText  = 1 // 添加随机隐藏文字
+)
+
+const (
+	MultiLangTypeDomain    = "domain"
+	MultiLangTypeDirectory = "directory"
+	MultiLangTypeSame      = "same"
+
+	MultiLangSiteTypeMulti  = "multi"
+	MultiLangSiteTypeSingle = "single"
 )

@@ -33,3 +33,8 @@ type AnqiFeedbackRequest struct {
 	Platform string   `json:"platform"`
 	Images   []string `json:"images"`
 }
+
+type AnqiExtractRequest struct {
+	Text string `json:"text"`
+	Num  int    `json:"num"`
+}
