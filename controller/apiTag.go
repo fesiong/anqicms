@@ -114,17 +114,30 @@ func ApiArchiveDetail(ctx iris.Context) {
 			}
 			if param.Type == config.CustomFieldTypeEditor && render {
 				param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-			} else if param.Type == config.CustomFieldTypeArchive || param.Type == config.CustomFieldTypeCategory {
+			} else if param.Type == config.CustomFieldTypeArchive {
+				// 列表
+				arcIds, ok := param.Value.([]int64)
+				if !ok && param.Default != "" {
+					value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+					if value > 0 {
+						arcIds = append(arcIds, value)
+					}
+				}
+				if len(arcIds) > 0 {
+					archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+						return tx.Where("archives.`id` IN (?)", arcIds)
+					}, "archives.id ASC", 0, len(arcIds))
+					param.Value = archives
+				} else {
+					param.Value = nil
+				}
+			} else if param.Type == config.CustomFieldTypeCategory {
 				value, ok := param.Value.(int64)
 				if !ok && param.Default != "" {
 					value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 				}
 				if value > 0 {
-					if param.Type == config.CustomFieldTypeArchive {
-						param.Value, _ = currentSite.GetArchiveById(value)
-					} else if param.Type == config.CustomFieldTypeCategory {
-						param.Value = currentSite.GetCategoryFromCache(uint(value))
-					}
+					param.Value = currentSite.GetCategoryFromCache(uint(value))
 				} else {
 					param.Value = nil
 				}
@@ -690,17 +703,30 @@ func ApiArchiveList(ctx iris.Context) {
 						}
 						if param.Type == config.CustomFieldTypeEditor && render {
 							param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-						} else if param.Type == config.CustomFieldTypeArchive || param.Type == config.CustomFieldTypeCategory {
+						} else if param.Type == config.CustomFieldTypeArchive {
+							// 列表
+							arcIds, ok := param.Value.([]int64)
+							if !ok && param.Default != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								arcs, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								param.Value = arcs
+							} else {
+								param.Value = nil
+							}
+						} else if param.Type == config.CustomFieldTypeCategory {
 							value, ok := param.Value.(int64)
 							if !ok && param.Default != "" {
 								value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 							}
 							if value > 0 {
-								if param.Type == config.CustomFieldTypeArchive {
-									param.Value, _ = currentSite.GetArchiveById(value)
-								} else if param.Type == config.CustomFieldTypeCategory {
-									param.Value = currentSite.GetCategoryFromCache(uint(value))
-								}
+								param.Value = currentSite.GetCategoryFromCache(uint(value))
 							} else {
 								param.Value = nil
 							}
@@ -765,17 +791,30 @@ func ApiArchiveParams(ctx iris.Context) {
 			}
 			if param.Type == config.CustomFieldTypeEditor && render {
 				param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-			} else if param.Type == config.CustomFieldTypeArchive || param.Type == config.CustomFieldTypeCategory {
+			} else if param.Type == config.CustomFieldTypeArchive {
+				// 列表
+				arcIds, ok := param.Value.([]int64)
+				if !ok && param.Default != "" {
+					value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+					if value > 0 {
+						arcIds = append(arcIds, value)
+					}
+				}
+				if len(arcIds) > 0 {
+					archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+						return tx.Where("archives.`id` IN (?)", arcIds)
+					}, "archives.id ASC", 0, len(arcIds))
+					param.Value = archives
+				} else {
+					param.Value = nil
+				}
+			} else if param.Type == config.CustomFieldTypeCategory {
 				value, ok := param.Value.(int64)
 				if !ok && param.Default != "" {
 					value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 				}
 				if value > 0 {
-					if param.Type == config.CustomFieldTypeArchive {
-						param.Value, _ = currentSite.GetArchiveById(value)
-					} else if param.Type == config.CustomFieldTypeCategory {
-						param.Value = currentSite.GetCategoryFromCache(uint(value))
-					}
+					param.Value = currentSite.GetCategoryFromCache(uint(value))
 				} else {
 					param.Value = nil
 				}
@@ -885,17 +924,32 @@ func ApiCategoryDetail(ctx iris.Context) {
 					var texts []model.CustomFieldTexts
 					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &texts)
 					categoryExtra[field.FieldName] = texts
-				} else if field.Type == config.CustomFieldTypeArchive || field.Type == config.CustomFieldTypeCategory {
+				} else if field.Type == config.CustomFieldTypeArchive && categoryExtra[field.FieldName] != nil {
+					// 列表
+					var arcIds []int64
+					buf, _ := json.Marshal(categoryExtra[field.FieldName])
+					_ = json.Unmarshal(buf, &arcIds)
+					if len(arcIds) == 0 && field.Content != "" {
+						value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+						if value > 0 {
+							arcIds = append(arcIds, value)
+						}
+					}
+					if len(arcIds) > 0 {
+						archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+							return tx.Where("archives.`id` IN (?)", arcIds)
+						}, "archives.id ASC", 0, len(arcIds))
+						categoryExtra[field.FieldName] = archives
+					} else {
+						categoryExtra[field.FieldName] = nil
+					}
+				} else if field.Type == config.CustomFieldTypeCategory {
 					value, err := strconv.ParseInt(fmt.Sprint(categoryExtra[field.FieldName]), 10, 64)
 					if err != nil && field.Content != "" {
 						value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 					}
 					if value > 0 {
-						if field.Type == config.CustomFieldTypeArchive {
-							categoryExtra[field.FieldName], _ = currentSite.GetArchiveById(value)
-						} else if field.Type == config.CustomFieldTypeCategory {
-							categoryExtra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
-						}
+						categoryExtra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
 					} else {
 						categoryExtra[field.FieldName] = nil
 					}
@@ -1130,17 +1184,32 @@ func ApiDiyField(ctx iris.Context) {
 			var texts []model.CustomFieldTexts
 			_ = json.Unmarshal([]byte(fmt.Sprint(settings[fields[i].Name])), &texts)
 			settings[fields[i].Name] = texts
-		} else if fields[i].Type == config.CustomFieldTypeArchive || fields[i].Type == config.CustomFieldTypeCategory {
+		} else if fields[i].Type == config.CustomFieldTypeArchive && settings[fields[i].Name] != nil {
+			// 列表
+			var arcIds []int64
+			buf, _ := json.Marshal(settings[fields[i].Name])
+			_ = json.Unmarshal(buf, &arcIds)
+			if len(arcIds) == 0 && fields[i].Content != "" {
+				value, _ := strconv.ParseInt(fmt.Sprint(fields[i].Content), 10, 64)
+				if value > 0 {
+					arcIds = append(arcIds, value)
+				}
+			}
+			if len(arcIds) > 0 {
+				archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					return tx.Where("archives.`id` IN (?)", arcIds)
+				}, "archives.id ASC", 0, len(arcIds))
+				settings[fields[i].Name] = archives
+			} else {
+				settings[fields[i].Name] = nil
+			}
+		} else if fields[i].Type == config.CustomFieldTypeCategory {
 			value, err := strconv.ParseInt(fmt.Sprint(settings[fields[i].Name]), 10, 64)
 			if err != nil && fields[i].Content != "" {
 				value, _ = strconv.ParseInt(fmt.Sprint(fields[i].Content), 10, 64)
 			}
 			if value > 0 {
-				if fields[i].Type == config.CustomFieldTypeArchive {
-					settings[fields[i].Name], _ = currentSite.GetArchiveById(value)
-				} else if fields[i].Type == config.CustomFieldTypeCategory {
-					settings[fields[i].Name] = currentSite.GetCategoryFromCache(uint(value))
-				}
+				settings[fields[i].Name] = currentSite.GetCategoryFromCache(uint(value))
 			} else {
 				settings[fields[i].Name] = nil
 			}
@@ -1363,17 +1432,32 @@ func ApiTagDetail(ctx iris.Context) {
 							var texts []model.CustomFieldTexts
 							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
 							tagDetail.Extra[field.FieldName] = texts
-						} else if field.Type == config.CustomFieldTypeArchive || field.Type == config.CustomFieldTypeCategory {
+						} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
+							// 列表
+							var arcIds []int64
+							buf, _ := json.Marshal(tagDetail.Extra[field.FieldName])
+							_ = json.Unmarshal(buf, &arcIds)
+							if len(arcIds) == 0 && field.Content != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								tagDetail.Extra[field.FieldName] = archives
+							} else {
+								tagDetail.Extra[field.FieldName] = nil
+							}
+						} else if field.Type == config.CustomFieldTypeCategory {
 							value, err := strconv.ParseInt(fmt.Sprint(tagDetail.Extra[field.FieldName]), 10, 64)
 							if err != nil && field.Content != "" {
 								value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 							}
 							if value > 0 {
-								if field.Type == config.CustomFieldTypeArchive {
-									tagDetail.Extra[field.FieldName], _ = currentSite.GetArchiveById(value)
-								} else if field.Type == config.CustomFieldTypeCategory {
-									tagDetail.Extra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
-								}
+								tagDetail.Extra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
 							} else {
 								tagDetail.Extra[field.FieldName] = nil
 							}

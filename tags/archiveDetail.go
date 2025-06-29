@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 	"hash/crc32"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -157,17 +158,30 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						}
 						if item.Type == config.CustomFieldTypeEditor && render {
 							content = library.MarkdownToHTML(fmt.Sprint(content), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-						} else if item.Type == config.CustomFieldTypeArchive || item.Type == config.CustomFieldTypeCategory {
+						} else if item.Type == config.CustomFieldTypeArchive {
+							// 列表
+							arcIds, ok := content.([]int64)
+							if !ok && item.Default != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(item.Default), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								content = archives
+							} else {
+								content = nil
+							}
+						} else if item.Type == config.CustomFieldTypeCategory {
 							value, ok := content.(int64)
 							if !ok && item.Default != "" {
 								value, _ = strconv.ParseInt(fmt.Sprint(item.Default), 10, 64)
 							}
 							if value > 0 {
-								if item.Type == config.CustomFieldTypeArchive {
-									content, _ = currentSite.GetArchiveById(value)
-								} else if item.Type == config.CustomFieldTypeCategory {
-									content = currentSite.GetCategoryFromCache(uint(value))
-								}
+								content = currentSite.GetCategoryFromCache(uint(value))
 							} else {
 								content = nil
 							}
