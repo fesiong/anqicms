@@ -237,7 +237,7 @@ func (s *StatisticLog) Read(fileName string, offset, limit int) ([]*Statistic, i
 	return result, int64(total)
 }
 
-// Calc 每10分钟进行一次统计
+// Calc 每10分钟进行一次统计，只统计 200 状态的日志
 func (s *StatisticLog) Calc(db *gorm.DB) {
 	if s.initial == false {
 		return
@@ -342,7 +342,7 @@ func (s *StatisticLog) CalcLog(lt time.Time) (*model.StatisticLog, error) {
 				// 统计数据
 				if data.Spider != "" {
 					statistic.SpiderCount[data.Spider]++
-				} else {
+				} else if data.HttpCode >= 200 && data.HttpCode < 300 {
 					statistic.VisitCount.PVCount++
 					ipMap[data.Ip] = struct{}{}
 				}
@@ -358,7 +358,7 @@ func (s *StatisticLog) CalcLog(lt time.Time) (*model.StatisticLog, error) {
 			// 统计数据
 			if data.Spider != "" {
 				statistic.SpiderCount[data.Spider]++
-			} else {
+			} else if data.HttpCode >= 200 && data.HttpCode < 300 {
 				statistic.VisitCount.PVCount++
 				ipMap[data.Ip] = struct{}{}
 			}
