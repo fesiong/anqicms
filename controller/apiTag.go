@@ -1183,7 +1183,8 @@ func ApiLinkList(ctx iris.Context) {
 func ApiNavList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	typeId := ctx.URLParamIntDefault("typeId", 1)
-	navList := currentSite.GetNavsFromCache(uint(typeId))
+	showType := ctx.URLParamDefault("showType", "children")
+	navList := currentSite.GetNavsFromCache(uint(typeId), showType)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
