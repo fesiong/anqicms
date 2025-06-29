@@ -204,11 +204,11 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				}
 				if fieldName == "ContentTitles" {
 					ctx.Private["showContentTitle"] = true
-					showType := "tree" // 只支持 tree，children
+					showType := "list" // 只支持 list，children
 					if args["showType"] != nil {
 						showType = args["showType"].String()
-						if showType != "tree" && showType != "children" {
-							showType = "tree"
+						if showType != "list" && showType != "children" {
+							showType = "list"
 						}
 					}
 					content, _ = library.ParseContentTitles(tmpContent, showType)
@@ -299,7 +299,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					}
 					tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
 					if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
-						_, tmpContent = library.ParseContentTitles(tmpContent, "tree")
+						_, tmpContent = library.ParseContentTitles(tmpContent, "list")
 					}
 					content = tmpContent
 				}

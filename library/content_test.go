@@ -49,7 +49,7 @@ func TestParseContentTitles(t *testing.T) {
 <h4>H4 title</h4>
 `
 
-	titles, content := ParseContentTitles(str, "children")
+	titles, content := ParseContentTitles(str, "list")
 
 	for i, title := range titles {
 		fmt.Println("Level1", i, title.Prefix, title.Tag, title.Level, title.Title)

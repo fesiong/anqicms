@@ -273,7 +273,7 @@ type ContentTitle struct {
 	Children []*ContentTitle `json:"children,omitempty"`
 }
 
-// ParseContentTitles 获取toc，showType = tree|children
+// ParseContentTitles 获取toc，showType = list|children
 func ParseContentTitles(content, showType string) ([]*ContentTitle, string) {
 	re, _ := regexp.Compile(`(?is)<(h\d)([^>]*)>(.*?)</h\d>`)
 	re2, _ := regexp.Compile(`<(h\d)([^>]*)>`)
@@ -322,7 +322,7 @@ func ParseContentTitles(content, showType string) ([]*ContentTitle, string) {
 		}
 
 		// 根据展示类型构建结构
-		if showType == "tree" {
+		if showType == "list" {
 			titles = append(titles, cTitle)
 		} else { // children模式
 			if len(levelStack) == 1 {
@@ -356,7 +356,7 @@ func ParseContentTitles(content, showType string) ([]*ContentTitle, string) {
 		return s
 	})
 
-	if showType != "tree" {
+	if showType != "list" {
 		return rootTitles, content
 	}
 	return titles, content
