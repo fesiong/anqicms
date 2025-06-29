@@ -41,15 +41,14 @@ type TagContent struct {
 func (tag *Tag) GetThumb(storageUrl, defaultThumb string) string {
 	if tag.Logo != "" {
 		//如果是一个远程地址，则缩略图和原图地址一致
-		if strings.HasPrefix(tag.Logo, "http") || strings.HasPrefix(tag.Logo, "//") {
-			tag.Thumb = tag.Logo
-		} else {
+		if !strings.HasPrefix(tag.Logo, "http") && !strings.HasPrefix(tag.Logo, "//") {
 			tag.Logo = storageUrl + "/" + strings.TrimPrefix(tag.Logo, "/")
+		}
+		if strings.HasPrefix(tag.Logo, storageUrl) && !strings.HasSuffix(tag.Logo, ".svg") {
 			paths, fileName := filepath.Split(tag.Logo)
 			tag.Thumb = paths + "thumb_" + fileName
-			if strings.HasSuffix(tag.Logo, ".svg") {
-				tag.Thumb = tag.Logo
-			}
+		} else {
+			tag.Thumb = tag.Logo
 		}
 	} else if defaultThumb != "" {
 		tag.Thumb = defaultThumb
