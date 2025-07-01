@@ -500,6 +500,14 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 					ignoreIdx++
 					return []byte(idxStr)
 				})
+				// 有特殊标记的link标签不做替换，[data-ignore="true"]
+				re, _ = regexp.Compile(`(?is)<link[^>]*data-ignore="true"[^>]*>`)
+				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
+					ignoreLinks[idxStr] = match
+					ignoreIdx++
+					return []byte(idxStr)
+				})
 				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
 				if len(ignoreLinks) > 0 {
 					re, _ = regexp.Compile(`\$\{ignore-\d+}`)

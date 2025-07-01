@@ -73,3 +73,16 @@ func (s *AwsS3Storage) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	return true, nil
 }
+
+func (s *AwsS3Storage) Move(ctx context.Context, src, dest string) error {
+	_, err := s.client.CopyObject(ctx, &s3.CopyObjectInput{
+		Bucket:     aws.String(s.bucket),
+		CopySource: aws.String(s.bucket + "/" + src),
+		Key:        aws.String(dest),
+	})
+	if err != nil {
+		return err
+	}
+
+	return s.Delete(ctx, src)
+}
