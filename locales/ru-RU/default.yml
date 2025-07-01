@@ -1,4 +1,4 @@
-"PageNum": "Страница %d"
+"Page%d": "Страница %d"
 "QueryFailed": "Запрос не выполнен"
 "LoginFailed": "Ошибка входа"
 "UpdateInfoFailed": "Не удалось обновить информацию"

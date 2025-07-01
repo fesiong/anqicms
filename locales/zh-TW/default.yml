@@ -1,4 +1,4 @@
-"PageNum": "第%d頁"
+"Page%d": "第%d頁"
 "QueryFailed": "查詢失敗"
 "LoginFailed": "登入失敗"
 "UpdateInfoFailed": "更新訊息失敗"

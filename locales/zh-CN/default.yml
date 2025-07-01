@@ -1,4 +1,4 @@
-"PageNum": "第%d页"
+"Page%d": "第%d页"
 "QueryFailed": "查询失败"
 "LoginFailed": "登录失败"
 "UpdateInfoFailed": "更新信息失败"
