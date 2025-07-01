@@ -182,6 +182,16 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			} else {
 				value = categoryDetail.Content
 			}
+			// 对宏函数进行解析
+			var showContentTitle bool
+			value, showContentTitle = currentSite.RenderTemplateMacro(value, ctx.Private)
+			if showContentTitle {
+				ctx.Private["showContentTitle"] = showContentTitle
+			}
+			if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
+				_, value = library.ParseContentTitles(value, "list")
+			}
+			// end
 			content = currentSite.ReplaceContentUrl(value, true)
 		}
 		// output

@@ -231,6 +231,16 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					if currentSite.PluginAnchor.ReplaceWay == 2 {
 						tmpContent, _ = currentSite.ReplaceContentText(nil, tmpContent, archiveDetail.Link)
 					}
+					// 对宏函数进行解析
+					var showContentTitle bool
+					tmpContent, showContentTitle = currentSite.RenderTemplateMacro(tmpContent, ctx.Private)
+					if showContentTitle {
+						ctx.Private["showContentTitle"] = showContentTitle
+					}
+					if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
+						_, tmpContent = library.ParseContentTitles(tmpContent, "list")
+					}
+					// end
 					// lazy load
 					if lazy != "" {
 						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
@@ -312,9 +322,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						}
 					}
 					tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
-					if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
-						_, tmpContent = library.ParseContentTitles(tmpContent, "list")
-					}
+
 					content = tmpContent
 				}
 			}
