@@ -367,12 +367,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		} else if like == "tag" {
 			// 根据tag来调用相关
-			var tagIds []uint
-			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tagIds)
-			if len(tagIds) > 0 {
+			var tmpTagIds []uint
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tmpTagIds)
+			if len(tmpTagIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					tx = tx.Table("`archives` as archives").
-						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tagIds, archiveId)
+						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tmpTagIds, archiveId)
 					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
 					}
