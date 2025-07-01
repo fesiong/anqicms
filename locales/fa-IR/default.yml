@@ -394,7 +394,7 @@
 "Register": "ثبت نام"
 "Home": "صفحه اول"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "کلمه کلیدی که جستجو کردید حاوی کاراکترهای غیرقانونی است"
-"SearchLog": "جستجو: %s"
+"Search%s": "جستجو: %s"
 "TagList": "لیست برچسب"
 "OnlineMessage": "آنلاین پیام بگذارید"
 "ItIsRequired": "%s الزامی است"

@@ -394,7 +394,7 @@
 "Register": "註冊"
 "Home": "首頁"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "您搜尋的關鍵字包含有不允許的字元"
-"SearchLog": "搜尋: %s"
+"Search%s": "搜尋: %s"
 "TagList": "標籤清單"
 "OnlineMessage": "線上留言"
 "ItIsRequired": "%s必填"

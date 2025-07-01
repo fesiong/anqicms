@@ -394,7 +394,7 @@
 "Register": "নিবন্ধন"
 "Home": "প্রথম পাতা"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "আপনি যে কীওয়ার্ডটি অনুসন্ধান করেছেন তাতে অবৈধ অক্ষর রয়েছে"
-"SearchLog": "অনুসন্ধান: %s"
+"Search%s": "অনুসন্ধান: %s"
 "TagList": "ট্যাগ তালিকা"
 "OnlineMessage": "অনলাইনে একটি বার্তা দিন"
 "ItIsRequired": "%s আবশ্যক"

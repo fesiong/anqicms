@@ -394,7 +394,7 @@
 "Register": "daftar"
 "Home": "halaman Depan"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "Kata kunci yang Anda cari mengandung karakter ilegal"
-"SearchLog": "Pencarian: %s"
+"Search%s": "Pencarian: %s"
 "TagList": "daftar tag"
 "OnlineMessage": "Tinggalkan pesan daring"
 "ItIsRequired": "%sDiperlukan"

@@ -394,7 +394,7 @@
 "Register": "registro"
 "Home": "primeira página"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "A palavra-chave que você pesquisou contém caracteres ilegais"
-"SearchLog": "Pesquisa% s"
+"Search%s": "Pesquisa% s"
 "TagList": "lista de tags"
 "OnlineMessage": "Deixe uma mensagem on-line"
 "ItIsRequired": "%sObrigatório"

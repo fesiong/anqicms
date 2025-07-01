@@ -394,7 +394,7 @@
 "Register": "регистр"
 "Home": "титульная страница"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "Ключевое слово, которое вы искали, содержит недопустимые символы."
-"SearchLog": "Поиск: %s"
+"Search%s": "Поиск: %s"
 "TagList": "список тегов"
 "OnlineMessage": "Оставить сообщение онлайн"
 "ItIsRequired": "%sОбязательно"
