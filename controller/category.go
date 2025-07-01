@@ -159,7 +159,7 @@ func SearchPage(ctx iris.Context) {
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = currentSite.TplTr("SearchLog", "")
+		webInfo.Title = currentSite.TplTr("Search%s", "")
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}
