@@ -394,7 +394,7 @@
 "Register": "注册"
 "Home": "首页"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "您搜索的关键词包含有不允许的字符"
-"SearchLog": "搜索: %s"
+"Search%s": "搜索: %s"
 "TagList": "标签列表"
 "OnlineMessage": "在线留言"
 "ItIsRequired": "%s必填"

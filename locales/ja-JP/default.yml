@@ -394,7 +394,7 @@
 "Register": "登録する"
 "Home": "表紙"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "検索したキーワードに不正な文字が含まれています"
-"SearchLog": "検索: %s"
+"Search%s": "検索: %s"
 "TagList": "タグリスト"
 "OnlineMessage": "オンラインでメッセージを残してください"
 "ItIsRequired": "%s必須"

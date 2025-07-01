@@ -394,7 +394,7 @@
 "Register": "Register"
 "Home": "Home"
 "TheKeywordYouSearchedContainsCharactersThatAreNotAllowed": "The keyword you searched contains characters that are not allowed"
-"SearchLog": "Search: %s"
+"Search%s": "Search: %s"
 "TagList": "Tag list"
 "OnlineMessage": "Online message"
 "ItIsRequired": "%s is required"
