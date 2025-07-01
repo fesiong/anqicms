@@ -490,7 +490,23 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		if len(currentSite.System.MobileUrl) > 0 {
 			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
 			if mobileTemplate {
+				// 有特殊标记的a标签不做替换，[data-ignore="true"]
+				re, _ := regexp.Compile(`(?is)<a[^>]*data-ignore="true"[^>]*>(.*?)</a>`)
+				var ignoreLinks = map[string][]byte{}
+				ignoreIdx := 0
+				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
+					ignoreLinks[idxStr] = match
+					ignoreIdx++
+					return []byte(idxStr)
+				})
 				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
+				if len(ignoreLinks) > 0 {
+					re, _ = regexp.Compile(`\$\{ignore-\d+}`)
+					data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+						return ignoreLinks[string(match)]
+					})
+				}
 			}
 		}
 		// 添加json-ld
