@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 )
@@ -10,8 +11,15 @@ import (
 func UserPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.Params().GetUintDefault("id", 0)
-
-	user, err := currentSite.GetUserInfoById(id)
+	urlToken := ctx.Params().GetString("filename")
+	var user *model.User
+	var err error
+	if urlToken != "" {
+		//优先使用urlToken
+		user, err = currentSite.GetUserInfoByUrlToken(urlToken)
+	} else {
+		user, err = currentSite.GetUserInfoById(id)
+	}
 	if err != nil {
 		NotFound(ctx)
 		return

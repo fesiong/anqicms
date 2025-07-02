@@ -68,6 +68,12 @@ func (w *Website) GetUserInfoById(userId uint) (*model.User, error) {
 	})
 }
 
+func (w *Website) GetUserInfoByUrlToken(urlToken string) (*model.User, error) {
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`url_token` = ?", urlToken)
+	})
+}
+
 func (w *Website) GetUserInfoByUserName(userName string) (*model.User, error) {
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`user_name` = ?", userName)
