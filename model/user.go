@@ -18,6 +18,7 @@ type User struct {
 	Model
 	ParentId    uint   `json:"parent_id" gorm:"column:parent_id;type:int(10);unsigned;not null;default:0"`
 	UserName    string `json:"user_name" gorm:"column:user_name;type:varchar(64) not null;default:''"`
+	UrlToken    string `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
 	RealName    string `json:"real_name" gorm:"column:real_name;type:varchar(64) not null;default:''"`
 	AvatarURL   string `json:"avatar_url" gorm:"column:avatar_url;type:varchar(255) not null;default:''"`
 	Introduce   string `json:"introduce" gorm:"column:introduce;type:varchar(1000) not null;default:''"` // 介绍
@@ -80,6 +81,14 @@ func (s *UserGroupSetting) Scan(src interface{}) error {
 	}
 
 	return fmt.Errorf("pq: cannot convert %T", src)
+}
+
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+	if u.UrlToken == "" {
+		u.UrlToken = library.GetPinyin(u.UserName, false)
+	}
+
+	return
 }
 
 func (u *User) AfterCreate(tx *gorm.DB) (err error) {
