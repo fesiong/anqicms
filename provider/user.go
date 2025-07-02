@@ -54,7 +54,7 @@ func (w *Website) GetUserByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.User, er
 		return nil, err
 	}
 	user.GetThumb(w.PluginStorage.StorageUrl)
-	user.Link = w.GetUrl("user", &user, 0)
+	user.Link = w.GetUrl(PatternPeople, &user, 0)
 	user.Extra = w.GetUserExtra(user.Id)
 	return &user, nil
 }

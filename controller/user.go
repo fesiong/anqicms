@@ -23,10 +23,10 @@ func UserPage(ctx iris.Context) {
 		webInfo.Title = user.UserName
 		webInfo.NavBar = int64(user.Id)
 		webInfo.PageName = "userDetail"
-		webInfo.CanonicalUrl = currentSite.GetUrl("user", user, 0)
+		webInfo.CanonicalUrl = currentSite.GetUrl(provider.PatternPeople, user, 0)
 		ctx.ViewData("webInfo", webInfo)
 	}
-	
+
 	tmpTpl := fmt.Sprintf("people/detail-%d.html", user.Id)
 	tplName, ok := currentSite.TemplateExist(tmpTpl, fmt.Sprintf("people-%d.html", user.Id), "people/detail.html", "people_detail.html")
 	if !ok {
