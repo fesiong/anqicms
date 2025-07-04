@@ -1898,6 +1898,18 @@ func ApiGuestbookForm(ctx iris.Context) {
 			extraData[item.Name] = val
 		}
 	}
+	hookCtx := &provider.HookContext{
+		Point: provider.BeforeGuestbookPost,
+		Site:  currentSite,
+		Data:  req,
+	}
+	if err = provider.TriggerHook(hookCtx); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	if ok := SafeVerify(ctx, result, "json", "guestbook"); !ok {
 		return
 	}

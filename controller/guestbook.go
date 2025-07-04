@@ -108,6 +108,22 @@ func GuestbookForm(ctx iris.Context) {
 		}
 		req[item.FieldName] = val
 	}
+	hookCtx := &provider.HookContext{
+		Point: provider.BeforeGuestbookPost,
+		Site:  currentSite,
+		Data:  req,
+	}
+	if err := provider.TriggerHook(hookCtx); err != nil {
+		if returnType == "json" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+		} else {
+			ShowMessage(ctx, err.Error(), nil)
+		}
+		return
+	}
 	if ok := SafeVerify(ctx, req, returnType, "guestbook"); !ok {
 		return
 	}
@@ -136,6 +152,9 @@ func GuestbookForm(ctx iris.Context) {
 		return
 	}
 
+	hookCtx.Point = provider.AfterGuestbookPost
+	hookCtx.Data = guestbook
+	_ = provider.TriggerHook(hookCtx)
 	// akismet 验证
 	go func() {
 		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeGuestbook, guestbook)

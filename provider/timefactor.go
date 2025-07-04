@@ -177,6 +177,14 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 		// 没文章
 		return
 	}
+	hookCtx := &HookContext{
+		Point: BeforeArchiveRelease,
+		Site:  w,
+		Data:  &draft,
+	}
+	if err = TriggerHook(hookCtx); err != nil {
+		return
+	}
 	archive := &draft.Archive
 	archive.CreatedTime = nowStamp
 	archive.UpdatedTime = nowStamp

@@ -375,6 +375,15 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 }
 
 func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
+	hookCtx := &HookContext{
+		Point: BeforeArchivePost,
+		Site:  w,
+		Data:  req,
+	}
+	if err := TriggerHook(hookCtx); err != nil {
+		return nil, err
+	}
+
 	if len(req.CategoryIds) > 0 {
 		for i := 0; i < len(req.CategoryIds); i++ {
 			// 防止 0
@@ -501,6 +510,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		draft.Link = w.GetUrl("archive", &draft.Archive, 0)
 		w.DeleteArchiveCache(draft.Id, draft.Link)
 		w.DeleteArchiveExtraCache(draft.Id)
+
+		hookCtx.Point = AfterArchivePost
+		hookCtx.Data = draft
+		_ = TriggerHook(hookCtx)
 		if isReleased {
 			err = w.SuccessReleaseArchive(&draft.Archive, newPost)
 		}
@@ -889,6 +902,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	w.DeleteArchiveCache(draft.Id, draft.Link)
 	w.DeleteArchiveExtraCache(draft.Id)
 
+	hookCtx.Point = AfterArchivePost
+	hookCtx.Data = draft
+	_ = TriggerHook(hookCtx)
 	if isReleased {
 		draft.ArchiveData = &archiveData
 		err = w.SuccessReleaseArchive(&draft.Archive, newPost)
@@ -900,6 +916,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 // SuccessReleaseArchive
 // 文章发布成功后的一些处理
 func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
+	hookCtx := &HookContext{
+		Point: AfterArchiveRelease,
+		Site:  w,
+		Data:  archive,
+	}
+	_ = TriggerHook(hookCtx)
+
 	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 	if archive.Link == "" {
 		archive.Link = w.GetUrl("archive", archive, 0)
@@ -1322,6 +1345,14 @@ func (w *Website) PublishPlanArchives() {
 }
 
 func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
+	hookCtx := &HookContext{
+		Point: BeforeArchiveRelease,
+		Site:  w,
+		Data:  archiveDraft,
+	}
+	if err := TriggerHook(hookCtx); err != nil {
+		return
+	}
 	// 发布的步骤：将草稿转移到正式表，删除草稿
 	err := w.DB.Save(&archiveDraft.Archive).Error
 	if err != nil {
