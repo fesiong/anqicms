@@ -386,6 +386,16 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		if err := ctx.Request().Context().Err(); err != nil {
 			return err
 		}
+		hookCtx := &provider.HookContext{
+			Point: provider.BeforeViewRender,
+			Site:  currentSite,
+			Data:  bindingData,
+			Extra: map[string]interface{}{
+				"template": filename,
+				"ctx":      ctx,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
 		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
 		if err != nil {
 			return err
@@ -546,7 +556,7 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		exData := &RenderData{
 			Data: data,
 		}
-		hookCtx := &provider.HookContext{
+		hookCtx = &provider.HookContext{
 			Point: provider.AfterViewRender,
 			Site:  currentSite,
 			Data:  exData,
