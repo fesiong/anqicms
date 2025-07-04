@@ -557,6 +557,11 @@ func manageRoute(app *iris.Application) {
 				jsonLd.Get("/config", manageController.PluginGetJsonLdConfig)
 				jsonLd.Post("/config", manageController.PluginSaveJsonLdConfig)
 			}
+			akismet := plugin.Party("/akismet")
+			{
+				akismet.Get("/setting", manageController.PluginGetAkismetSetting)
+				akismet.Post("/setting", manageController.PluginSaveAkismetSetting)
+			}
 		}
 	}
 }

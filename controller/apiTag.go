@@ -1756,6 +1756,13 @@ func ApiCommentPublish(ctx iris.Context) {
 			"msg":  msg,
 		})
 	}
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeComment, comment)
+		if isChecked {
+			currentSite.DB.Model(comment).UpdateColumn("status", spamStatus)
+		}
+	}()
 
 	msg := currentSite.TplTr("PublishSuccessfully")
 	ctx.JSON(iris.Map{
@@ -1914,30 +1921,39 @@ func ApiGuestbookForm(ctx iris.Context) {
 		})
 		return
 	}
-
-	//发送邮件
-	subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
-	var contents []string
-	for _, item := range fields {
-		content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
-
-		contents = append(contents, content)
-	}
-	// 增加来路和IP返回
-	contents = append(contents, currentSite.TplTr("SubmitIp%s", guestbook.Ip)+"\n")
-	contents = append(contents, currentSite.TplTr("SourcePage%s", guestbook.Refer)+"\n")
-	contents = append(contents, currentSite.TplTr("SubmitTime%s", time.Now().Format("2006-01-02 15:04:05"))+"\n")
-
-	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
-		// 后台发信
-		go currentSite.SendMail(subject, strings.Join(contents, ""))
-		// 回复客户
-		recipient, ok := result["email"]
-		if !ok {
-			recipient = result["contact"]
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeGuestbook, guestbook)
+		if isChecked {
+			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
-		go currentSite.ReplyMail(recipient)
-	}
+		if spamStatus == 1 {
+			// 1 是正常，可以发邮件
+			//发送邮件
+			subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
+			var contents []string
+			for _, item := range fields {
+				content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
+
+				contents = append(contents, content)
+			}
+			// 增加来路和IP返回
+			contents = append(contents, currentSite.TplTr("SubmitIp%s", guestbook.Ip)+"\n")
+			contents = append(contents, currentSite.TplTr("SourcePage%s", guestbook.Refer)+"\n")
+			contents = append(contents, currentSite.TplTr("SubmitTime%s", time.Now().Format("2006-01-02 15:04:05"))+"\n")
+
+			if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
+				// 后台发信
+				go currentSite.SendMail(subject, strings.Join(contents, ""))
+				// 回复客户
+				recipient, ok := result["email"]
+				if !ok {
+					recipient = result["contact"]
+				}
+				go currentSite.ReplyMail(recipient)
+			}
+		}
+	}()
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {

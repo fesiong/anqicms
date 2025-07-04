@@ -84,6 +84,13 @@ func CommentPublish(ctx iris.Context) {
 		}
 		return
 	}
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeComment, comment)
+		if isChecked {
+			currentSite.DB.Model(comment).UpdateColumn("status", spamStatus)
+		}
+	}()
 
 	msg := currentSite.TplTr("PublishSuccessfully")
 	if returnType == "json" {

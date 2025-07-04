@@ -54,6 +54,7 @@ type Website struct {
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus
 	quickImportStatus       *QuickImportArchive
+	AkismetClient           *AkismetClient
 
 	System  *config.SystemConfig
 	Content *config.ContentConfig
@@ -368,6 +369,7 @@ func InitWebsite(mw *model.Website) {
 		w.InitBucket()
 		w.InitCacheBucket()
 		w.InitCache()
+		w.InitAkismet()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
 	}

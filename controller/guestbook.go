@@ -136,29 +136,39 @@ func GuestbookForm(ctx iris.Context) {
 		return
 	}
 
-	//发送邮件
-	subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
-	var contents []string
-	for _, item := range fields {
-		content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
-
-		contents = append(contents, content)
-	}
-	// 增加来路和IP返回
-	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitIp"), guestbook.Ip))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SourcePage"), guestbook.Refer))
-	contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
-
-	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
-		// 后台发信
-		go currentSite.SendMail(subject, strings.Join(contents, ""))
-		// 回复客户
-		recipient, ok := req["email"]
-		if !ok {
-			recipient = req["contact"]
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeGuestbook, guestbook)
+		if isChecked {
+			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
-		go currentSite.ReplyMail(recipient)
-	}
+		if spamStatus == 1 {
+			// 1 是正常，可以发邮件
+			//发送邮件
+			subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
+			var contents []string
+			for _, item := range fields {
+				content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
+
+				contents = append(contents, content)
+			}
+			// 增加来路和IP返回
+			contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitIp"), guestbook.Ip))
+			contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SourcePage"), guestbook.Refer))
+			contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
+
+			if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
+				// 后台发信
+				currentSite.SendMail(subject, strings.Join(contents, ""))
+				// 回复客户
+				recipient, ok := req["email"]
+				if !ok {
+					recipient = req["contact"]
+				}
+				currentSite.ReplyMail(recipient)
+			}
+		}
+	}()
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {

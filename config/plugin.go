@@ -248,6 +248,12 @@ type PluginMultiLangConfig struct {
 	SubSites        []MultiLangSite `json:"sub_sites"`
 }
 
+type PluginAkismetConfig struct {
+	Open      bool   `json:"open"`
+	ApiKey    string `json:"api_key"`
+	CheckType []int  `json:"check_type"`
+}
+
 func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite *MultiLangSite) string {
 	if pm.SiteType == MultiLangSiteTypeSingle {
 		if pm.Type == MultiLangTypeDomain {
