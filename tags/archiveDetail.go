@@ -204,7 +204,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			//if archiveDetail.ReadLevel > 0 && fieldName == "Content" {
 			//	userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
 			//	if userGroup == nil || userGroup.Level < archiveDetail.ReadLevel {
-			//		content = fmt.Sprintf(currentSite.TplTr("ThisContentRequiresUserLevelOrAboveToRead"), archiveDetail.ReadLevel)
+			//		content = fmt.Sprintf(currentSite.TplTr("ThisContentRequiresUserLevel%dOrAboveToRead"), archiveDetail.ReadLevel)
 			//	}
 			//} else {
 			var tmpContent string

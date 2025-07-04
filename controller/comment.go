@@ -170,7 +170,7 @@ func CommentList(ctx iris.Context) {
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = currentSite.TplTr("CommentShow", archive.Title)
+		webInfo.Title = currentSite.TplTr("CommentShow%s", archive.Title)
 		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description

@@ -551,13 +551,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		for _, v := range module.Fields {
 			//先检查是否有必填而没有填写的
 			if v.Required && req.Extra[v.FieldName] == nil {
-				return nil, errors.New(w.Tr("ItIsRequired", v.Name))
+				return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 			}
 			if req.Extra[v.FieldName] != nil {
 				extraValue, ok := req.Extra[v.FieldName].(map[string]interface{})
 				if ok {
 					if v.Required && extraValue["value"] == nil && extraValue["value"] == "" {
-						return nil, errors.New(w.Tr("ItIsRequired", v.Name))
+						return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 					}
 					if v.Type == config.CustomFieldTypeCheckbox {
 						//只有这个类型的数据是数组,数组转成,分隔字符串

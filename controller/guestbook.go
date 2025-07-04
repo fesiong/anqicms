@@ -92,7 +92,7 @@ func GuestbookForm(ctx iris.Context) {
 		}
 
 		if item.Required && val == "" {
-			msg := currentSite.TplTr("ItIsRequired", item.Name)
+			msg := currentSite.TplTr("%sIsRequired", item.Name)
 			if returnType == "json" {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
@@ -137,10 +137,10 @@ func GuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := currentSite.TplTr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
+	subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := currentSite.TplTr("s:s", item.Name, req[item.FieldName]) + "\n"
+		content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
