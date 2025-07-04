@@ -84,7 +84,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
-			Content: currentSite.TplTr("ThisContentRequiresUserLevelOrAboveToRead", archive.ReadLevel),
+			Content: currentSite.TplTr("ThisContentRequiresUserLevel%dOrAboveToRead", archive.ReadLevel),
 		}
 	} else {
 		// 读取data
@@ -1916,17 +1916,17 @@ func ApiGuestbookForm(ctx iris.Context) {
 	}
 
 	//发送邮件
-	subject := currentSite.TplTr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
+	subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
 	var contents []string
 	for _, item := range fields {
-		content := currentSite.TplTr("s:s", item.Name, req[item.FieldName]) + "\n"
+		content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
 
 		contents = append(contents, content)
 	}
 	// 增加来路和IP返回
-	contents = append(contents, currentSite.TplTr("SubmitIpLog", guestbook.Ip)+"\n")
-	contents = append(contents, currentSite.TplTr("SourcePageLog", guestbook.Refer)+"\n")
-	contents = append(contents, currentSite.TplTr("SubmitTimeLog", time.Now().Format("2006-01-02 15:04:05"))+"\n")
+	contents = append(contents, currentSite.TplTr("SubmitIp%s", guestbook.Ip)+"\n")
+	contents = append(contents, currentSite.TplTr("SourcePage%s", guestbook.Refer)+"\n")
+	contents = append(contents, currentSite.TplTr("SubmitTime%s", time.Now().Format("2006-01-02 15:04:05"))+"\n")
 
 	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
 		// 后台发信
