@@ -225,6 +225,7 @@
 "FailedToObtainNewVersion": "Failed to obtain new version information"
 "CheckThatTheVersionIsTheLatestVersion": "Check that the version is the latest version"
 "FoundANewVersion": "Found a new version"
+"FoundANewTrialVersion": "Found a new trial version"
 "VersionUpdateFailed": "Version update failed"
 "VersionUpdatePartiallyFailed": "Version update partially failed, the following files were not updated: %v"
 "UpdateSystemVersion": "Update system version: %s => %s"

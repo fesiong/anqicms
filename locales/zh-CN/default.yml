@@ -225,6 +225,7 @@
 "FailedToObtainNewVersion": "获取新版信息失败"
 "CheckThatTheVersionIsTheLatestVersion": "检查版本已是最新版"
 "FoundANewVersion": "发现新版"
+"FoundANewTrialVersion": "发现新的体验版"
 "VersionUpdateFailed": "版本更新失败"
 "VersionUpdatePartiallyFailed": "版本更新部分失败, 以下文件未更新：%v"
 "UpdateSystemVersion": "更新系统版本：%s => %s"
