@@ -23,3 +23,13 @@ type TranslateHtmlLog struct {
 	Status      int    `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	Remark      string `json:"remark" gorm:"column:remark;type:varchar(255);default:null"` // 备注信息，错误之类
 }
+
+type TranslateTextLog struct {
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	Md5         string `json:"md5" gorm:"column:md5;type:varchar(32);default:null;index:idx_md5"` // md5 的来源是 language-to_language-Text
+	Language    string `json:"language" gorm:"column:language;type:varchar(10);default:null"`
+	ToLanguage  string `json:"to_language" gorm:"column:to_language;type:varchar(10);default:null"`
+	Text        string `json:"text" gorm:"column:text;type:text;default:null"`
+	Translated  string `json:"translated" gorm:"column:translated;type:text;default:null"`
+}
