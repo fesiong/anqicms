@@ -1,14 +1,12 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 	"strings"
-	"time"
 )
 
 func GuestbookPage(ctx iris.Context) {
@@ -162,6 +160,8 @@ func GuestbookForm(ctx iris.Context) {
 			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
 		if spamStatus == 1 {
+			// 1 是正常，可以发邮件
+			currentSite.SendGuestbookToMail(guestbook)
 			if currentSite.ParentId > 0 {
 				mainSite := currentSite.GetMainWebsite()
 				parentGuestbook := *guestbook
@@ -169,30 +169,7 @@ func GuestbookForm(ctx iris.Context) {
 				parentGuestbook.Status = spamStatus
 				parentGuestbook.SiteId = currentSite.Id
 				_ = mainSite.DB.Save(&parentGuestbook)
-			}
-			// 1 是正常，可以发邮件
-			//发送邮件
-			subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
-			var contents []string
-			for _, item := range fields {
-				content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
-
-				contents = append(contents, content)
-			}
-			// 增加来路和IP返回
-			contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitIp"), guestbook.Ip))
-			contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SourcePage"), guestbook.Refer))
-			contents = append(contents, fmt.Sprintf("%s：%s\n", currentSite.TplTr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
-
-			if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
-				// 后台发信
-				currentSite.SendMail(subject, strings.Join(contents, ""))
-				// 回复客户
-				recipient, ok := req["email"]
-				if !ok {
-					recipient = req["contact"]
-				}
-				currentSite.ReplyMail(recipient)
+				mainSite.SendGuestbookToMail(&parentGuestbook)
 			}
 		}
 	}()

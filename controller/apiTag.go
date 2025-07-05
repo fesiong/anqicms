@@ -4,9 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/fatih/structs"
+	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"math"
 	"mime/multipart"
 	"net/url"
@@ -15,15 +22,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/fatih/structs"
-	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 )
 
 func ApiArchiveDetail(ctx iris.Context) {
@@ -1940,6 +1938,8 @@ func ApiGuestbookForm(ctx iris.Context) {
 			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
 		if spamStatus == 1 {
+			// 1 是正常，可以发邮件
+			currentSite.SendGuestbookToMail(guestbook)
 			if currentSite.ParentId > 0 {
 				mainSite := currentSite.GetMainWebsite()
 				parentGuestbook := *guestbook
@@ -1947,30 +1947,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 				parentGuestbook.Status = spamStatus
 				parentGuestbook.SiteId = currentSite.Id
 				_ = mainSite.DB.Save(&parentGuestbook)
-			}
-			// 1 是正常，可以发邮件
-			//发送邮件
-			subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
-			var contents []string
-			for _, item := range fields {
-				content := currentSite.TplTr("%s:%s", item.Name, req[item.FieldName]) + "\n"
-
-				contents = append(contents, content)
-			}
-			// 增加来路和IP返回
-			contents = append(contents, currentSite.TplTr("SubmitIp%s", guestbook.Ip)+"\n")
-			contents = append(contents, currentSite.TplTr("SourcePage%s", guestbook.Refer)+"\n")
-			contents = append(contents, currentSite.TplTr("SubmitTime%s", time.Now().Format("2006-01-02 15:04:05"))+"\n")
-
-			if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
-				// 后台发信
-				go currentSite.SendMail(subject, strings.Join(contents, ""))
-				// 回复客户
-				recipient, ok := result["email"]
-				if !ok {
-					recipient = result["contact"]
-				}
-				go currentSite.ReplyMail(recipient)
+				mainSite.SendGuestbookToMail(&parentGuestbook)
 			}
 		}
 	}()
