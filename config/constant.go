@@ -1,6 +1,7 @@
 package config
 
 const Version = "3.4.11"
+const VersionType = ""
 
 const (
 	StatusOK         = 0

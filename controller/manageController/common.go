@@ -114,7 +114,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查新版
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH
+	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
@@ -157,8 +157,11 @@ func VersionUpgrade(ctx iris.Context) {
 	}
 	// 下载压缩包
 	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, lastVersion.Version)
+	if config.VersionType != "" {
+		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, lastVersion.Version)
+	}
 	// 最长等待10分钟
-	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(15 * time.Minute).Get(link).EndBytes()
+	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(20 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
