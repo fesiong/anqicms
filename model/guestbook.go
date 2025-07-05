@@ -13,7 +13,7 @@ type Guestbook struct {
 	Ip        string    `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
 	Status    int       `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"` // 状态，0 未处理，1 正常，2 垃圾
 	Refer     string    `json:"refer" gorm:"column:refer;type:varchar(250) not null;default:''"`
-	SiteId    uint      `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"` // 默认为0 表示本站，如果有ID，表示子站ID
+	SiteId    uint      `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0"` // 默认为0 表示本站，如果有ID，表示子站ID
 	ExtraData extraData `json:"extra_data" gorm:"column:extra_data;type:longtext default null"`
 }
 
