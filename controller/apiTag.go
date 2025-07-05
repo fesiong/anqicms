@@ -1940,6 +1940,14 @@ func ApiGuestbookForm(ctx iris.Context) {
 			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
 		if spamStatus == 1 {
+			if currentSite.ParentId > 0 {
+				mainSite := currentSite.GetMainWebsite()
+				parentGuestbook := *guestbook
+				parentGuestbook.Id = 0
+				parentGuestbook.Status = spamStatus
+				parentGuestbook.SiteId = currentSite.Id
+				_ = mainSite.DB.Save(&parentGuestbook)
+			}
 			// 1 是正常，可以发邮件
 			//发送邮件
 			subject := currentSite.TplTr("%sHasNewMessageFrom%s", currentSite.System.SiteName, guestbook.UserName)
