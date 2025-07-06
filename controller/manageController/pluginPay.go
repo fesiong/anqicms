@@ -61,6 +61,9 @@ func PluginPayConfigForm(ctx iris.Context) {
 	// paypal
 	currentSite.PluginPay.PaypalClientId = req.PaypalClientId
 	currentSite.PluginPay.PaypalClientSecret = req.PaypalClientSecret
+	// stripe
+	currentSite.PluginPay.StripeApiKey = req.StripeApiKey
+	currentSite.PluginPay.StripeAccount = req.StripeAccount
 
 	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
 	if err != nil {
@@ -71,6 +74,11 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 	currentSite.DeleteCacheIndex()
+
+	// 处理 paypal webhook
+	if req.PaypalClientId != "" && req.PaypalClientSecret != "" {
+		currentSite.UpdatePaypalWebhook()
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
 

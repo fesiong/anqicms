@@ -124,6 +124,8 @@ func Register(app *iris.Application) {
 		notify.Get("/weapp/msg", controller.NotifyWeappMsg)
 		notify.Post("/wechat/pay", controller.NotifyWechatPay)
 		notify.Post("/alipay/pay", controller.NotifyAlipay)
+		notify.Post("/paypal/pay", controller.NotifyPayPal)
+		notify.Post("/stripe/pay", controller.NotifyStripe)
 	}
 
 	returnParty := app.Party("/return")

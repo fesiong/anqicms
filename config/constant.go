@@ -86,6 +86,7 @@ const (
 	PayWayAlipay  = "alipay"  // 支付宝支付
 	PayWayOffline = "offline" // 线下支付
 	PayWayPaypal  = "paypal"  // paypal
+	PayWayStripe  = "stripe"  // stripe
 )
 
 const (

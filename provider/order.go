@@ -9,6 +9,7 @@ import (
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
+	"github.com/stripe/stripe-go/v82"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -379,7 +380,11 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 func (w *Website) SetOrderCanceled(order *model.Order) error {
 	order.Status = config.OrderStatusCanceled
 	order.FinishedTime = time.Now().Unix()
-	w.DB.Save(order)
+	w.DB.Model(order).UpdateColumns(map[string]interface{}{
+		"status":        order.Status,
+		"finished_time": order.FinishedTime,
+	})
+	w.DB.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
 
 	return nil
 }
@@ -544,6 +549,11 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			if ppRsp.Code != http.StatusOK && ppRsp.Code != http.StatusCreated {
 				return errors.New(ppRsp.ErrorResponse.Message)
 			}
+
+			// refund success
+		} else if payment.PayWay == config.PayWayStripe {
+			// stripe refund
+			// todo stripe
 
 			// refund success
 		} else {
@@ -1287,6 +1297,9 @@ func (w *Website) AutoCheckOrders() {
 }
 
 func (w *Website) TraceQuery(payment *model.Payment) error {
+	if payment.PaidTime > 0 {
+		return nil
+	}
 	if payment.PayWay == config.PayWayAlipay {
 		client, err := alipay.NewClient(w.PluginPay.AlipayAppId, w.PluginPay.AlipayPrivateKey, true)
 		if err != nil {
@@ -1338,7 +1351,7 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 				return err2
 			}
 			order.PaymentId = payment.PaymentId
-			w.DB.Save(order)
+			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
 			//生成用户支付记录
 			var userBalance int64
 			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
@@ -1372,23 +1385,82 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 			return err
 		}
 		if ppRsp.Code == 0 {
+			status := ppRsp.Response.Status
 			if ppRsp.Response.Status == "APPROVED" {
-				// 需要confirm
-				_, _ = client.OrderCapture(context.Background(), payment.TerraceId, nil)
+				// 需要 capture
+				captureRes, err := client.OrderCapture(context.Background(), payment.TerraceId, nil)
+				if err != nil {
+					log.Println("capture err", err)
+					return err
+				}
+				library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
+				if captureRes.Code == 0 {
+					status = captureRes.Response.Status
+				} else {
+					log.Println("captureRes err", captureRes.Error)
+				}
 			}
+			if status == "COMPLETED" && payment.PaidTime == 0 {
+				// 更新payment
+				payment.PayWay = config.PayWayPaypal
+				payment.PaidTime = time.Now().Unix()
+				payment.BuyerId = ppRsp.Response.Payer.PayerId
+				buf, _ := json.Marshal(ppRsp.Response.PaymentSource)
+				payment.BuyerInfo = string(buf)
+				w.DB.Save(payment)
+				order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
+				if err2 != nil {
+					return err2
+				}
+				order.PaymentId = payment.PaymentId
+				w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
+				//生成用户支付记录
+				var userBalance int64
+				err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
+				//状态更改了，增加一条记录到用户
+				finance := model.Finance{
+					UserId:      payment.UserId,
+					Direction:   config.FinanceOutput,
+					Amount:      payment.Amount,
+					AfterAmount: userBalance,
+					Action:      config.FinanceActionBuy,
+					OrderId:     payment.OrderId,
+					Status:      1,
+				}
+				w.DB.Create(&finance)
+				//支付成功逻辑处理
+				_ = w.SuccessPaidOrder(order)
+			}
+		}
+	} else if payment.PayWay == config.PayWayStripe {
+		// 从Stripe获取最新状态
+		client := stripe.NewClient(w.PluginPay.StripeApiKey)
+
+		pi, err := client.V1PaymentIntents.Retrieve(context.Background(), payment.TerraceId, nil)
+		if err != nil {
+			// 处理创建失败
+			log.Println("stripe payment intent order not found", err.Error())
+			return err
+		}
+		if pi.Status == stripe.PaymentIntentStatusSucceeded {
+			// 已完成
 			// 更新payment
-			payment.PayWay = config.PayWayPaypal
+			payment.PayWay = config.PayWayStripe
 			payment.PaidTime = time.Now().Unix()
-			payment.BuyerId = ppRsp.Response.Payer.PayerId
-			buf, _ := json.Marshal(ppRsp.Response.PaymentSource)
-			payment.BuyerInfo = string(buf)
-			w.DB.Save(payment)
+			payment.BuyerId = pi.PaymentMethod.ID
+			payment.BuyerInfo = "" // todo
+			w.DB.Model(payment).UpdateColumns(map[string]interface{}{
+				"paid_time":  payment.PaidTime,
+				"buyer_id":   payment.BuyerId,
+				"buyer_info": payment.BuyerInfo,
+				"pay_way":    payment.PayWay,
+			})
 			order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
 			if err2 != nil {
 				return err2
 			}
 			order.PaymentId = payment.PaymentId
-			w.DB.Save(order)
+			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
 			//生成用户支付记录
 			var userBalance int64
 			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error

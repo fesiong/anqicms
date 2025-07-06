@@ -109,6 +109,8 @@ func SettingSystemForm(ctx iris.Context) {
 		currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
 	}
 
+	currentSite.UpdatePaypalWebhook()
+
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 
 	// 如果切换了模板，则需要重启

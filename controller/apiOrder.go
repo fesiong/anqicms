@@ -10,11 +10,13 @@ import (
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
+	"github.com/stripe/stripe-go/v82"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"os"
 	"strconv"
 	"time"
@@ -315,6 +317,8 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createAlipayPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayPaypal {
 		createPaypalPayment(ctx, payment, order)
+	} else if req.PayWay == config.PayWayStripe {
+		createStripePayment(ctx, payment, order)
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -370,7 +374,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "wechat",
+			"pay_way":  config.PayWayWechat,
 			"code_url": fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(png)),
 		},
 	})
@@ -437,7 +441,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":   "weapp",
+			"pay_way":   config.PayWayWeapp,
 			"paySign":   paySign,
 			"timeStamp": timeStamp,
 			"package":   packages,
@@ -511,7 +515,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "alipay",
+			"pay_way":  config.PayWayAlipay,
 			"jump_url": payUrl,
 		},
 	})
@@ -581,8 +585,44 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "paypal",
+			"pay_way":  config.PayWayPaypal,
 			"jump_url": ppRsp.Response.Links[1].Href,
+		},
+	})
+}
+
+func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+
+	client := stripe.NewClient(currentSite.PluginPay.StripeApiKey)
+
+	params := &stripe.PaymentIntentCreateParams{
+		Amount:      stripe.Int64(payment.Amount),
+		Currency:    stripe.String(string(stripe.CurrencyUSD)),
+		Description: stripe.String(payment.Remark),
+		AutomaticPaymentMethods: &stripe.PaymentIntentCreateAutomaticPaymentMethodsParams{
+			Enabled: stripe.Bool(true),
+		},
+	}
+	params.AddMetadata("payment_id", payment.PaymentId)
+
+	pi, err := client.V1PaymentIntents.Create(ctx, params)
+	if err != nil {
+		// 处理创建失败
+		log.Println("stripe payment intent create error", err.Error())
+		return
+	}
+	// 更新id
+	payment.TerraceId = pi.ID
+	currentSite.DB.Save(payment)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":       config.PayWayStripe,
+			"client_secret": pi.ClientSecret,
+			"payment_id":    pi.ID,
 		},
 	})
 }

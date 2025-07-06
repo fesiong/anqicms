@@ -1,12 +1,13 @@
 package config
 
 type PluginPayConfig struct {
+	// 支付宝
 	AlipayAppId          string `json:"alipay_app_id"`
 	AlipayPrivateKey     string `json:"alipay_private_key"`
 	AlipayCertPath       string `json:"alipay_cert_path"`        // 应用公钥证书路径
 	AlipayRootCertPath   string `json:"alipay_root_cert_path"`   // 支付宝根证书文件路径
 	AlipayPublicCertPath string `json:"alipay_public_cert_path"` // 支付宝公钥证书文件路径
-
+	// 微信支付
 	WechatAppId     string `json:"wechat_app_id"`     // 公众号
 	WechatAppSecret string `json:"wechat_app_secret"` // 公众号
 	WeappAppId      string `json:"weapp_app_id"`      // 小程序
@@ -15,9 +16,14 @@ type PluginPayConfig struct {
 	WechatApiKey    string `json:"wechat_api_key"`    // 公众号、小程序共用支付密钥
 	WechatCertPath  string `json:"wechat_cert_path"`  // 证书路径
 	WechatKeyPath   string `json:"wechat_key_path"`   // 证书路径
-
+	// PayPal
 	PaypalClientId     string `json:"paypal_client_id"`     // paypal
 	PaypalClientSecret string `json:"paypal_client_secret"` // paypal
+	PaypalWebhookId    string `json:"paypal_webhook_id"`    // webhookID
+	// Stripe
+	StripeApiKey        string `json:"stripe_api_key"`
+	StripeAccount       string `json:"stripe_account"`
+	StripeWebhookSecret string `json:"stripe_webhook_secret"`
 }
 
 type PluginRetailerConfig struct {

@@ -18,6 +18,7 @@ require (
 	github.com/flosch/pongo2/v6 v6.0.0
 	github.com/getlantern/systray v1.2.2
 	github.com/go-pay/gopay v1.5.108
+	github.com/go-pay/xlog v0.0.3
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gomarkdown/markdown v0.0.0-20250207164621-7a1f277a159e
@@ -43,6 +44,7 @@ require (
 	github.com/shirou/gopsutil/v4 v4.25.2
 	github.com/skip2/go-qrcode v0.0.0-20200617195104-da1b6568686e
 	github.com/skratchdot/open-golang v0.0.0-20200116055534-eef842397966
+	github.com/stripe/stripe-go/v82 v82.2.1
 	github.com/tencentyun/cos-go-sdk-v5 v0.7.61
 	github.com/upyun/go-sdk/v3 v3.0.4
 	github.com/xuri/excelize/v2 v2.9.0
@@ -114,7 +116,6 @@ require (
 	github.com/go-ole/go-ole v1.2.6 // indirect
 	github.com/go-pay/crypto v0.0.1 // indirect
 	github.com/go-pay/util v0.0.4 // indirect
-	github.com/go-pay/xlog v0.0.3 // indirect
 	github.com/go-pay/xtime v0.0.2 // indirect
 	github.com/go-sql-driver/mysql v1.7.0 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
