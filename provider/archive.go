@@ -1866,17 +1866,11 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			continue
 		}
 		// 支持在标题中添加#分类名称#来快速创建分类
-		if strings.Contains(archive.Title, "#") {
-			idx := strings.Index(archive.Title, "#")
-			edx := strings.LastIndex(archive.Title, "#")
-			if strings.HasPrefix(archive.Title, "[") {
-				edx = strings.Index(archive.Title, "]")
-			}
-			if edx < idx {
-				edx = idx
-			}
-			categoryTitle := strings.Trim(archive.Title[idx+1:edx], "#] ")
-			archive.Title = archive.Title[edx+1:]
+		re, _ := regexp.Compile(`\[?#([\s\S]+?)#]?`)
+		match := re.FindStringSubmatch(archive.Title)
+		if len(match) > 1 {
+			categoryTitle := match[1]
+			archive.Title = strings.Replace(archive.Title, match[0], "", 1)
 			if categoryTitle != "" {
 				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
 				if err != nil {
@@ -2068,6 +2062,10 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		if i == 0 {
 			// 跳过标题行
 			continue
+		}
+		// 补齐
+		if len(row) < len(rows[0]) {
+			row = append(row, make([]string, len(rows[0])-len(row))...)
 		}
 		qia.Finished++
 		// 支持 txt/html/md
