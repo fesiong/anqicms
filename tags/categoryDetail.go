@@ -1,13 +1,16 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"reflect"
+	"strconv"
 )
 
 type tagCategoryDetailNode struct {
@@ -80,31 +83,68 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			content = f.Interface()
 		}
 		// 支持 extra
+		categoryDetailExtra := map[string]interface{}{}
 		if categoryDetail.Extra != nil {
 			module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
 			if module != nil && len(module.CategoryFields) > 0 {
 				for _, field := range module.CategoryFields {
-					if categoryDetail.Extra[field.FieldName] == nil || categoryDetail.Extra[field.FieldName] == "" {
+					categoryDetailExtra[field.FieldName] = categoryDetail.Extra[field.FieldName]
+					if (categoryDetailExtra[field.FieldName] == nil || categoryDetailExtra[field.FieldName] == "" || categoryDetailExtra[field.FieldName] == 0) &&
+						field.Type != config.CustomFieldTypeRadio &&
+						field.Type != config.CustomFieldTypeCheckbox &&
+						field.Type != config.CustomFieldTypeSelect {
 						// default
-						categoryDetail.Extra[field.FieldName] = field.Content
+						categoryDetailExtra[field.FieldName] = field.Content
 					}
 					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
-						categoryDetail.Extra[field.FieldName] != nil {
-						value, ok2 := categoryDetail.Extra[field.FieldName].(string)
+						categoryDetailExtra[field.FieldName] != nil {
+						value, ok2 := categoryDetailExtra[field.FieldName].(string)
 						if ok2 {
 							if field.Type == config.CustomFieldTypeEditor && render {
 								value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 							}
-							categoryDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+							categoryDetailExtra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
 						}
-					}
-					if field.Type == config.CustomFieldTypeImages && categoryDetail.Extra[field.FieldName] != nil {
-						if val, ok := categoryDetail.Extra[field.FieldName].([]interface{}); ok {
+					} else if field.Type == config.CustomFieldTypeImages && categoryDetailExtra[field.FieldName] != nil {
+						if val, ok := categoryDetailExtra[field.FieldName].([]interface{}); ok {
 							for j, v2 := range val {
 								v2s, _ := v2.(string)
 								val[j] = currentSite.ReplaceContentUrl(v2s, true)
 							}
-							categoryDetail.Extra[field.FieldName] = val
+							categoryDetailExtra[field.FieldName] = val
+						}
+					} else if field.Type == config.CustomFieldTypeTexts && categoryDetailExtra[field.FieldName] != nil {
+						var texts []model.CustomFieldTexts
+						_ = json.Unmarshal([]byte(fmt.Sprint(categoryDetailExtra[field.FieldName])), &texts)
+						categoryDetailExtra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeArchive && categoryDetailExtra[field.FieldName] != nil {
+						// 列表
+						var arcIds []int64
+						buf, _ := json.Marshal(categoryDetailExtra[field.FieldName])
+						_ = json.Unmarshal(buf, &arcIds)
+						if len(arcIds) == 0 && field.Content != "" {
+							value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+							if value > 0 {
+								arcIds = append(arcIds, value)
+							}
+						}
+						if len(arcIds) > 0 {
+							archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+								return tx.Where("archives.`id` IN (?)", arcIds)
+							}, "archives.id ASC", 0, len(arcIds))
+							categoryDetailExtra[field.FieldName] = archives
+						} else {
+							categoryDetailExtra[field.FieldName] = nil
+						}
+					} else if field.Type == config.CustomFieldTypeCategory {
+						value, err := strconv.ParseInt(fmt.Sprint(categoryDetailExtra[field.FieldName]), 10, 64)
+						if err != nil && field.Content != "" {
+							value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+						}
+						if value > 0 {
+							categoryDetailExtra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
+						} else {
+							categoryDetailExtra[field.FieldName] = nil
 						}
 					}
 				}
@@ -113,7 +153,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 					for _, field := range module.CategoryFields {
 						extras = append(extras, model.CustomField{
 							Name:      field.Name,
-							Value:     categoryDetail.Extra[field.FieldName],
+							Value:     categoryDetailExtra[field.FieldName],
 							Default:   field.Content,
 							Type:      field.Type,
 							FieldName: field.FieldName,
@@ -122,13 +162,16 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 					content = extras
 				}
 			}
-		}
-		if item, ok := categoryDetail.Extra[inputName]; ok {
-			content = item
+			if item, ok := categoryDetailExtra[inputName]; ok {
+				content = item
+			}
 		}
 
 		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {
 			content = categoryDetail.Title
+		}
+		if fieldName == "TopId" {
+			content = currentSite.GetTopCategoryId(categoryDetail.Id)
 		}
 
 		// convert markdown to html
@@ -139,6 +182,16 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			} else {
 				value = categoryDetail.Content
 			}
+			// 对宏函数进行解析
+			var showContentTitle bool
+			value, showContentTitle = currentSite.RenderTemplateMacro(value, ctx.Private)
+			if showContentTitle {
+				ctx.Private["showContentTitle"] = showContentTitle
+			}
+			if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
+				_, value = library.ParseContentTitles(value, "list")
+			}
+			// end
 			content = currentSite.ReplaceContentUrl(value, true)
 		}
 		// output

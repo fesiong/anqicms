@@ -61,3 +61,12 @@ func (s *TencentStorage) Exists(ctx context.Context, key string) (bool, error) {
 
 	return exist, err
 }
+
+func (s *TencentStorage) Move(ctx context.Context, src, dest string) error {
+	_, _, err := s.client.Object.Copy(ctx, dest, src, nil)
+	if err != nil {
+		return err
+	}
+
+	return s.Delete(ctx, src)
+}

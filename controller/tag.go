@@ -15,7 +15,7 @@ func TagIndexPage(ctx iris.Context) {
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
 		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.ServeFile(cacheFile)
+		ctx.Write(cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
@@ -54,7 +54,7 @@ func TagPage(ctx iris.Context) {
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
 		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.ServeFile(cacheFile)
+		ctx.Write(cacheFile)
 		return
 	}
 	tagId := ctx.Params().GetUintDefault("id", 0)

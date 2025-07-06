@@ -73,6 +73,19 @@ func GenerateRandString(length int) string {
 	return output.String()
 }
 
+// IsMd5 验证给定的字符串是否是md5值，返回匹配的md5值或者空字符串
+func IsMd5(str string) bool {
+	if len(str) != 32 {
+		return false
+	}
+	for _, c := range str {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}
+
 func Md5(str string) string {
 	h := md5.New()
 	h.Write([]byte(str))

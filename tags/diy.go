@@ -1,11 +1,15 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"strconv"
 )
 
 type tagDiyNode struct {
@@ -39,7 +43,7 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 	fieldName := ""
 	if args["name"] != nil {
 		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		// fieldName = library.Case2Camel(fieldName)
 	}
 
 	var content any
@@ -48,11 +52,63 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 	for _, field := range fields {
 		if field.Name == fieldName {
 			content = field.Value
-			if (field.Value == "" || field.Value == nil) && field.Content != "" {
+			if (field.Value == nil || field.Value == "" || field.Value == 0) &&
+				field.Type != config.CustomFieldTypeRadio &&
+				field.Type != config.CustomFieldTypeCheckbox &&
+				field.Type != config.CustomFieldTypeSelect && field.Content != "" {
 				content = field.Content
 			}
-			if field.Type == config.CustomFieldTypeEditor && render {
-				content = library.MarkdownToHTML(fmt.Sprintf("%v", content), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+				content != nil {
+				value, ok2 := content.(string)
+				if ok2 {
+					if field.Type == config.CustomFieldTypeEditor && render {
+						value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+					}
+					content = currentSite.ReplaceContentUrl(value, true)
+				}
+			} else if field.Type == config.CustomFieldTypeImages && content != nil {
+				if val, ok := content.([]interface{}); ok {
+					for j, v2 := range val {
+						v2s, _ := v2.(string)
+						val[j] = currentSite.ReplaceContentUrl(v2s, true)
+					}
+					content = val
+				}
+			} else if field.Type == config.CustomFieldTypeTexts && content != nil {
+				var texts []model.CustomFieldTexts
+				buf, _ := json.Marshal(content)
+				_ = json.Unmarshal(buf, &texts)
+				content = texts
+			} else if field.Type == config.CustomFieldTypeArchive && content != nil {
+				// 列表
+				var arcIds []int64
+				buf, _ := json.Marshal(content)
+				_ = json.Unmarshal(buf, &arcIds)
+				if len(arcIds) == 0 && field.Content != "" {
+					value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+					if value > 0 {
+						arcIds = append(arcIds, value)
+					}
+				}
+				if len(arcIds) > 0 {
+					archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+						return tx.Where("archives.`id` IN (?)", arcIds)
+					}, "archives.id ASC", 0, len(arcIds))
+					content = archives
+				} else {
+					content = nil
+				}
+			} else if field.Type == config.CustomFieldTypeCategory {
+				value, err := strconv.ParseInt(fmt.Sprint(content), 10, 64)
+				if err != nil && field.Content != "" {
+					value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+				}
+				if value > 0 {
+					content = currentSite.GetCategoryFromCache(uint(value))
+				} else {
+					content = nil
+				}
 			}
 			break
 		}

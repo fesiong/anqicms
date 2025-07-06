@@ -205,6 +205,8 @@ func UploadDesignInfo(ctx iris.Context) {
 		})
 		return
 	}
+	// 需要重载模板
+	config.RestartChan <- 0
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateLog", info.Filename))
 

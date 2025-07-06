@@ -1,7 +1,9 @@
 package provider
 
 import (
+	"bytes"
 	"fmt"
+	"golang.org/x/net/html"
 	"io"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -12,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 )
+
+const AnchorCacheKey = "anchor_list"
 
 type AnchorCSV struct {
 	Title  string `csv:"title"`
@@ -40,10 +44,16 @@ func (w *Website) GetAnchorList(keyword string, currentPage, pageSize int) ([]*m
 
 func (w *Website) GetAllAnchors() ([]*model.Anchor, error) {
 	var anchors []*model.Anchor
-	err := w.DB.Model(&model.Anchor{}).Order("weight desc").Find(&anchors).Error
+	// 先从缓存中读取
+	err := w.Cache.Get(AnchorCacheKey, &anchors)
+	if err == nil {
+		return anchors, nil
+	}
+	err = w.DB.Model(&model.Anchor{}).Order("weight desc").Find(&anchors).Error
 	if err != nil {
 		return nil, err
 	}
+	_ = w.Cache.Set(AnchorCacheKey, anchors, 3600)
 
 	return anchors, nil
 }
@@ -106,6 +116,7 @@ func (w *Website) ImportAnchors(file multipart.File, info *multipart.FileHeader)
 
 		anchor.Save(w.DB)
 	}
+	w.Cache.Delete(AnchorCacheKey)
 
 	return w.Tr("SuccessfullyImportedAnchorTexts", total), nil
 }
@@ -115,7 +126,7 @@ func (w *Website) DeleteAnchor(anchor *model.Anchor) error {
 	if err != nil {
 		return err
 	}
-
+	w.Cache.Delete(AnchorCacheKey)
 	//清理已经存在的anchor
 	go w.CleanAnchor(anchor)
 
@@ -207,6 +218,7 @@ func (w *Website) CleanAnchor(anchor *model.Anchor) {
 }
 
 func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
+	w.Cache.Delete(AnchorCacheKey)
 	//如果锚文本更改了名称，需要移除已经生成锚文本
 	if changeTitle {
 		//清理anchor
@@ -274,6 +286,7 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 
 // ReplaceAnchor 单个替换
 func (w *Website) ReplaceAnchor(anchor *model.Anchor) {
+	w.Cache.Delete(AnchorCacheKey)
 	//交由下方执行
 	if anchor == nil {
 		w.ReplaceAnchors(nil)
@@ -313,23 +326,16 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	}
 }
 
-func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemId int64, link string) string {
+func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, link string) (string, bool) {
+	//content = html.UnescapeString(content)
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
 		if len(anchors) == 0 {
 			//没有关键词，终止执行
-			return ""
+			return content, false
 		}
 	}
-
-	content := ""
-
-	archiveData, err := w.GetArchiveDataById(itemId)
-	if err != nil {
-		return ""
-	}
-	content = archiveData.Content
 
 	//获取纯文本字数
 	stripedContent := library.StripTags(content)
@@ -347,175 +353,292 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	//最大可以替换的数量
 	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(w.PluginAnchor.AnchorDensity)))
 
-	type replaceType struct {
-		Key   string
-		Value string
-	}
+	isModified := false
 
-	existsKeywords := map[string]bool{}
-	existsLinks := map[string]bool{}
-
-	var replacedMatch []*replaceType
-	numCount := 0
-	//所有的a标签计数，并替换掉
-	reg, _ := regexp.Compile("(?i)<a[^>]*>(.*?)</a>")
-	content = reg.ReplaceAllStringFunc(content, func(s string) string {
-
-		reg := regexp.MustCompile("(?i)<a\\s*[^>]*href=[\"']?([^\"']*)[\"']?[^>]*>(.*?)</a>")
-		match := reg.FindStringSubmatch(s)
-		if len(match) > 2 {
-			existsKeywords[strings.ToLower(match[2])] = true
-			existsLinks[strings.ToLower(match[1])] = true
-		}
-
-		key := fmt.Sprintf("{$%d}", numCount)
-		replacedMatch = append(replacedMatch, &replaceType{
-			Key:   key,
-			Value: s,
-		})
-		numCount++
-
-		return key
-	})
-	//所有的strong标签替换掉
-	reg, _ = regexp.Compile("(?i)<strong[^>]*>(.*?)</strong>")
-	content = reg.ReplaceAllStringFunc(content, func(s string) string {
-		key := fmt.Sprintf("{$%d}", numCount)
-		replacedMatch = append(replacedMatch, &replaceType{
-			Key:   key,
-			Value: s,
-		})
-		numCount++
-
-		return key
-	})
-	// [keyword](url)
-	reg, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
-	content = reg.ReplaceAllStringFunc(content, func(s string) string {
-		match := reg.FindStringSubmatch(s)
-		if len(match) > 2 && match[1] != "!" {
-			existsKeywords[strings.ToLower(match[2])] = true
-			existsLinks[strings.ToLower(match[3])] = true
-		}
-
-		key := fmt.Sprintf("{$%d}", numCount)
-		replacedMatch = append(replacedMatch, &replaceType{
-			Key:   key,
-			Value: s,
-		})
-		numCount++
-
-		return key
-	})
-	// **Keyword**
-	reg, _ = regexp.Compile(`(?i)\*\*(.*?)\*\*`)
-	content = reg.ReplaceAllStringFunc(content, func(s string) string {
-		key := fmt.Sprintf("{$%d}", numCount)
-		replacedMatch = append(replacedMatch, &replaceType{
-			Key:   key,
-			Value: s,
-		})
-		numCount++
-
-		return key
-	})
-	//过滤所有属性
-	reg, _ = regexp.Compile("(?i)</?[a-z0-9]+(\\s+[^>]+)>")
-	content = reg.ReplaceAllStringFunc(content, func(s string) string {
-		key := fmt.Sprintf("{$%d}", numCount)
-		replacedMatch = append(replacedMatch, &replaceType{
-			Key:   key,
-			Value: s,
-		})
-		numCount++
-
-		return key
-	})
-
-	if len(existsLinks) < maxAnchorNum {
-		//开始替换关键词
-		for _, anchor := range anchors {
-			if anchor.Title == "" {
-				continue
-			}
-			if strings.HasSuffix(anchor.Link, link) {
-				//当前url，跳过
-				continue
-			}
-			//已经存在存在的关键词，或者链接，跳过
-			if existsKeywords[strings.ToLower(anchor.Title)] || existsLinks[strings.ToLower(anchor.Link)] {
-				continue
-			}
-			//开始替换
-			replaceNum := 0
-			replacer := strings.NewReplacer("\\", "\\\\", "/", "\\/", "{", "\\{", "}", "\\}", "^", "\\^", "$", "\\$", "*", "\\*", "+", "\\+", "?", "\\?", ".", "\\.", "|", "\\|", "-", "\\-", "[", "\\[", "]", "\\]", "(", "\\(", ")", "\\)")
-			matchName := replacer.Replace(anchor.Title)
-
-			reg, _ = regexp.Compile(fmt.Sprintf("(?i)%s", matchName))
-			content = reg.ReplaceAllStringFunc(content, func(s string) string {
-				replaceHtml := ""
-				key := ""
-				if replaceNum == 0 {
-					//第一条替换为锚文本
-					if isMarkdown {
-						replaceHtml = fmt.Sprintf("[%s](%s)", s, anchor.Link)
-					} else {
-						replaceHtml = fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, s)
+	existsKeywords := make(map[string]bool, maxAnchorNum*2)
+	if isMarkdown {
+		// Markdown的处理方式
+		var replaceMdText = func(text string, addStrongTag bool) string {
+			for _, anchor := range anchors {
+				// 创建匹配关键词的正则表达式（考虑单词边界）
+				pattern := regexp.QuoteMeta(anchor.Title)
+				if CheckContentIsEnglish(anchor.Title) {
+					pattern = `(?i)\b` + regexp.QuoteMeta(anchor.Title) + `\b`
+				}
+				re, err := regexp.Compile(pattern)
+				if err != nil {
+					continue
+				}
+				// 查找所有匹配项
+				matchIdx := re.FindAllStringIndex(text, -1)
+				if matchIdx != nil {
+					// 如果是不需要匹配的，则不处理
+					if _, ok2 := existsKeywords[anchor.Title]; !ok2 {
+						isModified = true
+						existsKeywords[anchor.Title] = true
+						var subText bytes.Buffer
+						lastIndex := 0
+						// 只处理1次
+						for k, match := range matchIdx {
+							// 添加匹配前的文本
+							subText.WriteString(text[lastIndex:match[0]])
+							// 添加锚文本链接, strong
+							if k == 0 {
+								subText.WriteString(fmt.Sprintf("[%s](%s)", text[match[0]:match[1]], anchor.Link))
+							} else if addStrongTag {
+								subText.WriteString(fmt.Sprintf("**%s**", text[match[0]:match[1]]))
+							} else {
+								subText.WriteString(text[match[0]:match[1]])
+							}
+							lastIndex = match[1]
+						}
+						// 添加剩余文本
+						subText.WriteString(text[lastIndex:])
+						text = subText.String()
+					} else if addStrongTag {
+						isModified = true
+						// 需要添加 strong
+						var subText bytes.Buffer
+						lastIndex := 0
+						for _, match := range matchIdx {
+							// 添加匹配前的文本
+							subText.WriteString(text[lastIndex:match[0]])
+							// 添加** **
+							subText.WriteString(fmt.Sprintf("**%s**", text[match[0]:match[1]]))
+							lastIndex = match[1]
+						}
+						// 添加剩余文本
+						subText.WriteString(text[lastIndex:])
+						text = subText.String()
 					}
-					key = fmt.Sprintf("{$%d}", numCount)
+				}
+			}
 
-					//加入计数
-					existsLinks[anchor.Link] = true
-					existsKeywords[anchor.Title] = true
+			return text
+		}
+
+		reg, _ := regexp.Compile("(?i)<a[^>]*>(.*?)</a>")
+		matches := reg.FindAllStringSubmatch(content, -1)
+		for _, match := range matches {
+			if len(match) > 2 {
+				existsKeywords[strings.ToLower(match[2])] = true
+			}
+		}
+		// [keyword](url)
+		reg, _ = regexp.Compile(`(?i)(.?)\[(.*?)]\((.*?)\)`)
+		matches = reg.FindAllStringSubmatch(content, -1)
+		for _, match := range matches {
+			if len(match) > 2 && match[1] != "!" {
+				existsKeywords[strings.ToLower(match[2])] = true
+			}
+		}
+		var newText bytes.Buffer
+		// 逐行处理
+		skipLineStart := -1
+		contents := strings.Split(strings.TrimSpace(content), "\n")
+		for i, line := range contents {
+			// 跳过 # 开头的行，连续跳过 ``` 的行
+			if strings.HasPrefix(strings.TrimSpace(line), "#") {
+				newText.WriteString(line + "\n")
+				continue
+			} else if strings.HasPrefix(strings.TrimSpace(line), "```") {
+				if skipLineStart == -1 {
+					skipLineStart = i
 				} else {
-					//其他则加粗
-					if isMarkdown {
-						replaceHtml = fmt.Sprintf("**%s**", s)
-					} else {
-						replaceHtml = fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, s)
+					skipLineStart = -1
+				}
+				newText.WriteString(line + "\n")
+				continue
+			} else if skipLineStart != -1 {
+				newText.WriteString(line + "\n")
+				continue
+			}
+			// 跳过html标签
+			if strings.Contains(line, "<") && strings.Contains(line, ">") {
+				newText.WriteString(line + "\n")
+				continue
+			}
+			if len(existsKeywords) >= maxAnchorNum {
+				// 已达到上限，不再继续
+				newText.WriteString(line + "\n")
+				continue
+			}
+			// 跳过 ` `
+			re, _ := regexp.Compile("`.*`")
+			matchIdx := re.FindAllStringIndex(line, -1)
+			if len(matchIdx) > 0 {
+				var subText bytes.Buffer
+				lastIndex := 0
+				for _, match := range matchIdx {
+					// 添加匹配前的文本
+					subText.WriteString(replaceMdText(line[lastIndex:match[0]], w.PluginAnchor.NoStrongTag == 0))
+					subText.WriteString(line[match[0]:match[1]])
+					lastIndex = match[1]
+				}
+				// 添加剩余文本
+				subText.WriteString(replaceMdText(line[lastIndex:], w.PluginAnchor.NoStrongTag == 0))
+				line = subText.String()
+			} else {
+				// 整段处理
+				line = replaceMdText(line, w.PluginAnchor.NoStrongTag == 0)
+			}
+			newText.WriteString(line)
+			newText.WriteString("\n")
+		}
+		if isModified {
+			content = newText.String()
+		}
+	} else {
+		// 处理html
+		doc, err := html.Parse(strings.NewReader(content))
+		if err != nil {
+			return content, false
+		}
+		// 创建已处理节点的映射，避免重复替换
+		processedNodes := make(map[*html.Node]bool)
+		skipTags := map[string]bool{"a": true, "code": true, "pre": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true}
+		// 遍历并处理文本节点
+		var traverse func(*html.Node)
+		traverse = func(n *html.Node) {
+			if n.Type == html.TextNode && !isInsideTag(n, skipTags) && !processedNodes[n] {
+				if len(existsKeywords) >= maxAnchorNum {
+					// 已达到上限，不再继续
+					return
+				}
+				text := n.Data
+				modified := false
+
+				for _, anchor := range anchors {
+					// 创建匹配关键词的正则表达式（考虑单词边界）
+					pattern := regexp.QuoteMeta(anchor.Title)
+					if CheckContentIsEnglish(anchor.Title) {
+						pattern = `(?i)\b` + regexp.QuoteMeta(anchor.Title) + `\b`
 					}
-					key = fmt.Sprintf("{$%d}", numCount)
+					re, err := regexp.Compile(pattern)
+					if err != nil {
+						continue
+					}
+
+					// 查找所有匹配项
+					matches := re.FindAllStringIndex(text, -1)
+
+					if matches != nil {
+						// 如果是不需要匹配的，则不处理
+						if _, ok2 := existsKeywords[anchor.Title]; !ok2 {
+							existsKeywords[anchor.Title] = true
+							modified = true
+							var newText bytes.Buffer
+							lastIndex := 0
+							// 只处理1次
+							for k, match := range matches {
+								// 添加匹配前的文本
+								newText.WriteString(text[lastIndex:match[0]])
+								// 添加锚文本链接
+								if k == 0 {
+									newText.WriteString(fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, text[match[0]:match[1]]))
+								} else if w.PluginAnchor.NoStrongTag == 0 {
+									// 加粗
+									newText.WriteString(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, text[match[0]:match[1]]))
+								} else {
+									newText.WriteString(text[match[0]:match[1]])
+								}
+								lastIndex = match[1]
+							}
+							// 添加剩余文本
+							newText.WriteString(text[lastIndex:])
+							text = newText.String()
+						} else if w.PluginAnchor.NoStrongTag == 0 {
+							modified = true
+							var newText bytes.Buffer
+							lastIndex := 0
+							// 只处理1次
+							for _, match := range matches {
+								// 添加匹配前的文本
+								newText.WriteString(text[lastIndex:match[0]])
+								// 加粗
+								newText.WriteString(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, text[match[0]:match[1]]))
+								lastIndex = match[1]
+							}
+							// 添加剩余文本
+							newText.WriteString(text[lastIndex:])
+							text = newText.String()
+						}
+					}
 				}
-				replaceNum++
 
-				replacedMatch = append(replacedMatch, &replaceType{
-					Key:   key,
-					Value: replaceHtml,
-				})
-				numCount++
+				if modified {
+					isModified = true
+					// 创建新的文本节点
+					parent := n.Parent
+					newNodes, err := html.ParseFragment(strings.NewReader(text), parent)
+					if err != nil {
+						return
+					}
 
-				return key
-			})
-
-			//如果有更新了，则记录
-			if replaceNum > 0 {
-				//插入记录
-				anchorData := &model.AnchorData{
-					AnchorId: anchor.Id,
-					ItemType: itemType,
-					ItemId:   itemId,
+					// 替换原节点
+					for _, newNode := range newNodes {
+						parent.InsertBefore(newNode, n)
+						processedNodes[newNode] = true
+					}
+					parent.RemoveChild(n)
+					return
 				}
-				w.DB.Save(anchorData)
-				//更新计数
-				var count int64
-				w.DB.Model(&model.AnchorData{}).Where("`anchor_id` = ?", anchor.Id).Count(&count)
-				anchor.ReplaceCount = count
-				w.DB.Save(anchor)
 			}
 
-			//判断数量是否达到了，达到了就跳出
-			if len(existsLinks) >= maxAnchorNum {
-				break
+			// 递归处理子节点
+			for c := n.FirstChild; c != nil; c = c.NextSibling {
+				traverse(c)
+			}
+		}
+
+		traverse(doc)
+		if isModified {
+			// 将处理后的文档转换回字符串
+			var buf bytes.Buffer
+			err = html.Render(&buf, doc)
+			if err != nil {
+				return content, false
+			}
+			content = buf.String()
+			// 只要body部分
+			re2, _ := regexp.Compile(`(?is)<body>(.*)</body>`)
+			content2 := re2.FindStringSubmatch(content)
+			if len(content2) > 0 {
+				content = content2[1]
 			}
 		}
 	}
 
-	//关键词替换完毕，将原来替换的重新替换回去，需要倒序
-	for i := len(replacedMatch) - 1; i >= 0; i-- {
-		content = strings.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)
+	return content, isModified
+}
+
+// isInsideTag 检查节点是否在指定节点内
+func isInsideTag(n *html.Node, tagNames map[string]bool) bool {
+	for p := n.Parent; p != nil; p = p.Parent {
+		if p.Type == html.ElementNode && tagNames[p.Data] {
+			return true
+		}
+	}
+	return false
+}
+
+func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemId int64, link string) string {
+	link = strings.TrimPrefix(link, w.System.BaseUrl)
+	if len(anchors) == 0 {
+		anchors, _ = w.GetAllAnchors()
+		if len(anchors) == 0 {
+			//没有关键词，终止执行
+			return ""
+		}
 	}
 
-	if !strings.EqualFold(archiveData.Content, content) {
+	archiveData, err := w.GetArchiveDataById(itemId)
+	if err != nil {
+		return ""
+	}
+	content, isModified := w.ReplaceContentText(anchors, archiveData.Content, link)
+
+	if isModified {
 		//内容有更新，执行更新
 		archiveData.Content = content
 		w.DB.Save(archiveData)
@@ -547,6 +670,7 @@ func (w *Website) AutoInsertAnchor(archiveId int64, keywords, link string) {
 			w.DB.Save(anchor)
 		}
 	}
+	w.Cache.Delete(AnchorCacheKey)
 }
 
 func (w *Website) InsertTitleToAnchor(req *request.PluginAnchorAddFromTitle) error {
@@ -566,6 +690,7 @@ func (w *Website) InsertTitleToAnchor(req *request.PluginAnchorAddFromTitle) err
 			w.AutoInsertAnchor(archive.Id, archive.Title, archive.Link)
 		}
 	}
+	w.Cache.Delete(AnchorCacheKey)
 
 	return nil
 }

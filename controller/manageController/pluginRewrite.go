@@ -40,7 +40,7 @@ func PluginRewriteForm(ctx iris.Context) {
 			return
 		}
 
-		currentSite.ParsePatten(true)
+		currentSite.ParsePattern(true)
 		currentSite.RemoveHtmlCache()
 	}
 
