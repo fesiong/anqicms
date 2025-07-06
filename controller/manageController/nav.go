@@ -11,7 +11,7 @@ import (
 func SettingNav(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	typeId := uint(ctx.URLParamIntDefault("type_id", 1))
-	navList, _ := currentSite.GetNavList(typeId)
+	navList, _ := currentSite.GetNavList(typeId, "children")
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -7,6 +7,8 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 func AttachmentUpload(ctx iris.Context) {
@@ -197,14 +199,67 @@ func AttachmentEdit(ctx iris.Context) {
 		return
 	}
 
-	attach.FileName = req.FileName
-	err = currentSite.DB.Save(attach).Error
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+	if req.FileName != "" {
+		attach.FileName = req.FileName
+		err = currentSite.DB.Save(attach).Error
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+	// 支持更改路径
+	if req.FileLocation != "" && req.FileLocation != attach.FileLocation {
+		// 后缀不能改
+		if filepath.Ext(req.FileLocation) != filepath.Ext(attach.FileLocation) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		if !provider.CheckContentIsEnglish(req.FileLocation) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		req.FileLocation = strings.ReplaceAll(req.FileLocation, "%20", "-")
+		req.FileLocation = strings.ReplaceAll(req.FileLocation, " ", "-")
+		req.FileLocation = strings.ToLower(req.FileLocation)
+		// 不能超过 200个字符
+		if len(req.FileLocation) > 220 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		// 防止跨目录，不能移动到超过 currentSite.PublicPath + "uploads"
+		realPath := filepath.Join(currentSite.PublicPath, filepath.Clean(req.FileLocation))
+		if !strings.HasPrefix(realPath, filepath.Join(currentSite.PublicPath, "uploads")) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		newLocation := strings.TrimPrefix(req.FileLocation, currentSite.PublicPath)
+
+		err = currentSite.MoveFile(attach.FileLocation, newLocation)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		attach.FileLocation = newLocation
+		_ = currentSite.DB.Save(&attach).Error
+		attach.GetThumb(currentSite.PluginStorage.StorageUrl)
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyImageNameLog", attach.Id, attach.FileName))
@@ -212,6 +267,7 @@ func AttachmentEdit(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ImageNameModified"),
+		"data": attach,
 	})
 }
 

@@ -13,6 +13,7 @@ import (
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"log"
 	"net/http"
 	"net/url"
@@ -539,8 +540,8 @@ func (w *Website) translateBatch(texts []string, from, to string) (map[string]st
 		from = "auto"
 	}
 	result := make(map[string]string)
-	processBatch := func(batchTexts []string, currentBatch1 string) error {
-		if len(batchTexts) == 0 {
+	processBatch := func(text string) error {
+		if len(text) == 0 {
 			return nil
 		}
 		// 添加重试机制
@@ -548,7 +549,7 @@ func (w *Website) translateBatch(texts []string, from, to string) (map[string]st
 		var err error
 		// 最多重试10次
 		for retries := 0; retries < 10; retries++ {
-			translated, err = w.TranslateText(currentBatch1, from, to)
+			translated, err = w.TranslateText(text, from, to)
 			if err == nil {
 				break
 			}
@@ -559,67 +560,28 @@ func (w *Website) translateBatch(texts []string, from, to string) (map[string]st
 			return fmt.Errorf("翻译失败: %w", err)
 		}
 
-		translatedBatch := strings.Split(translated, "\n")
-		if len(translatedBatch) != len(batchTexts) {
-			return fmt.Errorf("翻译结果数量不匹配：原文=%d个, 译文=%d个", len(batchTexts), len(translatedBatch))
-		}
-
 		mu.Lock()
 		defer mu.Unlock()
-		for i, text := range batchTexts {
-			result[text] = strings.ReplaceAll(translatedBatch[i], "<br/>", "\n")
-		}
+		result[text] = translated
 
 		return nil
 	}
 
 	wg := sync.WaitGroup{}
 	var err error
-	var batchTexts []string
-	var currentBatch strings.Builder
 	for _, text := range texts {
-		textWithBr := strings.ReplaceAll(text, "\n", "<br/>")
-		newBatchLength := currentBatch.Len()
-		if len(batchTexts) > 0 {
-			newBatchLength += 1 // 为换行符预留空间
-		}
-		newBatchLength += utf8.RuneCountInString(textWithBr)
-
-		if newBatchLength > 900 && len(batchTexts) > 0 {
-			batchTexts1 := append([]string(nil), batchTexts...)
-			currentBatch1 := currentBatch.String()
-			batchTexts = nil
-			currentBatch.Reset()
-			wg.Add(1)
-			go func() {
-				defer func() {
-					wg.Done()
-				}()
-				err1 := processBatch(batchTexts1, currentBatch1)
-				if err1 != nil {
-					err = err1
-				}
+		wg.Add(1)
+		go func(text string) {
+			defer func() {
+				wg.Done()
 			}()
-		}
-
-		if len(batchTexts) > 0 {
-			currentBatch.WriteString("\n")
-		}
-		currentBatch.WriteString(textWithBr)
-		batchTexts = append(batchTexts, text)
+			err1 := processBatch(text)
+			if err1 != nil {
+				err = err1
+			}
+		}(text)
 	}
 
-	// 处理最后一个批次
-	wg.Add(1)
-	go func() {
-		defer func() {
-			wg.Done()
-		}()
-		err1 := processBatch(batchTexts, currentBatch.String())
-		if err1 != nil {
-			err = err1
-		}
-	}()
 	wg.Wait()
 
 	if err != nil {
@@ -630,6 +592,13 @@ func (w *Website) translateBatch(texts []string, from, to string) (map[string]st
 }
 
 func (w *Website) TranslateText(text, from, to string) (string, error) {
+	// 检查数据库存储内容
+	textMd5 := library.Md5(from + "-" + to + "-" + text)
+	var textLog model.TranslateTextLog
+	if err := w.DB.Where("`md5` = ?", textMd5).First(&textLog).Error; err == nil {
+		return textLog.Translated, nil
+	}
+
 	var content string
 	var err error
 	// 使用AI翻译
@@ -670,6 +639,16 @@ func (w *Website) TranslateText(text, from, to string) (string, error) {
 		}
 	} else {
 		err = errors.New(w.Tr("NoAiGenerationSourceSelected"))
+	}
+	if content != "" {
+		textLog = model.TranslateTextLog{
+			Md5:        textMd5,
+			Language:   from,
+			ToLanguage: to,
+			Text:       text,
+			Translated: content,
+		}
+		_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
 	}
 
 	return content, err

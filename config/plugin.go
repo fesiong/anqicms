@@ -248,6 +248,12 @@ type PluginMultiLangConfig struct {
 	SubSites        []MultiLangSite `json:"sub_sites"`
 }
 
+type PluginAkismetConfig struct {
+	Open      bool   `json:"open"`
+	ApiKey    string `json:"api_key"`
+	CheckType []int  `json:"check_type"`
+}
+
 func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite *MultiLangSite) string {
 	if pm.SiteType == MultiLangSiteTypeSingle {
 		if pm.Type == MultiLangTypeDomain {
@@ -381,9 +387,9 @@ func (g *CustomField) CheckSetFilter() bool {
 func (g *CustomField) GetFieldColumn() string {
 	column := fmt.Sprintf("`%s`", g.FieldName)
 
-	if g.Type == CustomFieldTypeNumber || g.Type == CustomFieldTypeArchive || g.Type == CustomFieldTypeCategory {
+	if g.Type == CustomFieldTypeNumber || g.Type == CustomFieldTypeCategory {
 		column += " int(10)"
-	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts {
+	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts || g.Type == CustomFieldTypeArchive {
 		column += " text"
 	} else {
 		// mysql 5.6 下，utf8mb4 索引只能用190

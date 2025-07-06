@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"log"
+	"path/filepath"
 	"strings"
 
 	"kandaoni.com/anqicms/config"
@@ -81,6 +82,37 @@ func (w *Website) DeleteFile(location string) error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (w *Website) MoveFile(src, dest string) error {
+	//log.Println("存储到", w.PluginStorage.StorageType)
+	src = strings.TrimLeft(src, "/")
+	dest = strings.TrimLeft(dest, "/")
+	// 额外存储一份到本地
+	if w.PluginStorage.KeepLocal && w.PluginStorage.StorageType != config.StorageTypeLocal {
+		//将文件写入本地
+		localStorage, _ := storage.NewLocalStorage(w.PluginStorage, w.PublicPath)
+		err := localStorage.Move(context.Background(), src, dest)
+		if err != nil {
+			log.Println(err.Error())
+			return err
+		}
+	}
+
+	// 移动文件
+	err := w.Storage.Move(context.Background(), src, dest)
+	if err != nil {
+		return err
+	}
+
+	// 移动 thumb
+	paths, fileName := filepath.Split(src)
+	srcThumb := paths + "thumb_" + fileName
+	paths, fileName = filepath.Split(dest)
+	destThumb := paths + "thumb_" + fileName
+	_ = w.Storage.Move(context.Background(), srcThumb, destThumb)
 
 	return nil
 }

@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 	"hash/crc32"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -157,17 +158,30 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						}
 						if item.Type == config.CustomFieldTypeEditor && render {
 							content = library.MarkdownToHTML(fmt.Sprint(content), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-						} else if item.Type == config.CustomFieldTypeArchive || item.Type == config.CustomFieldTypeCategory {
+						} else if item.Type == config.CustomFieldTypeArchive {
+							// 列表
+							arcIds, ok := content.([]int64)
+							if !ok && item.Default != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(item.Default), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								content = archives
+							} else {
+								content = nil
+							}
+						} else if item.Type == config.CustomFieldTypeCategory {
 							value, ok := content.(int64)
 							if !ok && item.Default != "" {
 								value, _ = strconv.ParseInt(fmt.Sprint(item.Default), 10, 64)
 							}
 							if value > 0 {
-								if item.Type == config.CustomFieldTypeArchive {
-									content, _ = currentSite.GetArchiveById(value)
-								} else if item.Type == config.CustomFieldTypeCategory {
-									content = currentSite.GetCategoryFromCache(uint(value))
-								}
+								content = currentSite.GetCategoryFromCache(uint(value))
 							} else {
 								content = nil
 							}
@@ -190,7 +204,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			//if archiveDetail.ReadLevel > 0 && fieldName == "Content" {
 			//	userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
 			//	if userGroup == nil || userGroup.Level < archiveDetail.ReadLevel {
-			//		content = fmt.Sprintf(currentSite.TplTr("ThisContentRequiresUserLevelOrAboveToRead"), archiveDetail.ReadLevel)
+			//		content = fmt.Sprintf(currentSite.TplTr("ThisContentRequiresUserLevel%dOrAboveToRead"), archiveDetail.ReadLevel)
 			//	}
 			//} else {
 			var tmpContent string
@@ -204,12 +218,29 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				}
 				if fieldName == "ContentTitles" {
 					ctx.Private["showContentTitle"] = true
-					content, _ = library.ParseContentTitles(tmpContent)
+					showType := "list" // 只支持 list，children
+					if args["showType"] != nil {
+						showType = args["showType"].String()
+						if showType != "list" && showType != "children" {
+							showType = "list"
+						}
+					}
+					content, _ = library.ParseContentTitles(tmpContent, showType)
 				} else {
 					//添加锚文本, 2 = 渲染的时候替换
 					if currentSite.PluginAnchor.ReplaceWay == 2 {
 						tmpContent, _ = currentSite.ReplaceContentText(nil, tmpContent, archiveDetail.Link)
 					}
+					// 对宏函数进行解析
+					var showContentTitle bool
+					tmpContent, showContentTitle = currentSite.RenderTemplateMacro(tmpContent, ctx.Private)
+					if showContentTitle {
+						ctx.Private["showContentTitle"] = showContentTitle
+					}
+					if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
+						_, tmpContent = library.ParseContentTitles(tmpContent, "list")
+					}
+					// end
 					// lazy load
 					if lazy != "" {
 						re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
@@ -291,9 +322,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						}
 					}
 					tmpContent = currentSite.ReplaceContentUrl(tmpContent, true)
-					if isShow, ok := ctx.Private["showContentTitle"]; ok && isShow == true {
-						_, tmpContent = library.ParseContentTitles(tmpContent)
-					}
+
 					content = tmpContent
 				}
 			}

@@ -54,7 +54,7 @@ func (w *Website) GetUserByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.User, er
 		return nil, err
 	}
 	user.GetThumb(w.PluginStorage.StorageUrl)
-	user.Link = w.GetUrl("user", &user, 0)
+	user.Link = w.GetUrl(PatternPeople, &user, 0)
 	user.Extra = w.GetUserExtra(user.Id)
 	return &user, nil
 }
@@ -65,6 +65,12 @@ func (w *Website) GetUserInfoById(userId uint) (*model.User, error) {
 	}
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", userId)
+	})
+}
+
+func (w *Website) GetUserInfoByUrlToken(urlToken string) (*model.User, error) {
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`url_token` = ?", urlToken)
 	})
 }
 
@@ -155,10 +161,10 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
 						}
-					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeCategory {
+					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
-					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts {
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
 						// 存 json
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							for j, v2 := range val {
@@ -732,7 +738,13 @@ func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 					if err == nil {
 						result[v.FieldName] = texts
 					}
-				} else if v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
+				} else if v.Type == config.CustomFieldTypeArchive {
+					var arcIds []int64
+					err := json.Unmarshal([]byte(value), &arcIds)
+					if err == nil {
+						result[v.FieldName] = arcIds
+					}
+				} else if v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
 					result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 				}
 			}

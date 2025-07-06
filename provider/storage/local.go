@@ -72,3 +72,18 @@ func (s *LocalStorage) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	return false, nil
 }
+
+func (s *LocalStorage) Move(ctx context.Context, src, dest string) error {
+	realSrc := s.PublicPath + src
+	realDest := s.PublicPath + dest
+	_, err := os.Stat(realSrc)
+	if err == nil {
+		//先创建目录
+		_, err = os.Stat(filepath.Dir(realDest))
+		if err != nil {
+			err = os.MkdirAll(filepath.Dir(realDest), os.ModePerm)
+		}
+		return os.Rename(realSrc, realDest)
+	}
+	return nil
+}

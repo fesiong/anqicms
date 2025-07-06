@@ -297,9 +297,9 @@ func AnqiTranslateArticle(ctx iris.Context) {
 	archive.Keywords = result.Text[2]
 	tx := currentSite.DB
 	if isDraft {
-		tx = tx.Model(&model.Archive{})
-	} else {
 		tx = tx.Model(&model.ArchiveDraft{})
+	} else {
+		tx = tx.Model(&model.Archive{})
 	}
 	tx.Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
 		"title":       archive.Title,

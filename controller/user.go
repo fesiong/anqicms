@@ -3,6 +3,7 @@ package controller
 import (
 	"fmt"
 	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 )
@@ -10,8 +11,15 @@ import (
 func UserPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.Params().GetUintDefault("id", 0)
-
-	user, err := currentSite.GetUserInfoById(id)
+	urlToken := ctx.Params().GetString("filename")
+	var user *model.User
+	var err error
+	if urlToken != "" {
+		//优先使用urlToken
+		user, err = currentSite.GetUserInfoByUrlToken(urlToken)
+	} else {
+		user, err = currentSite.GetUserInfoById(id)
+	}
 	if err != nil {
 		NotFound(ctx)
 		return
@@ -23,10 +31,10 @@ func UserPage(ctx iris.Context) {
 		webInfo.Title = user.UserName
 		webInfo.NavBar = int64(user.Id)
 		webInfo.PageName = "userDetail"
-		webInfo.CanonicalUrl = currentSite.GetUrl("user", user, 0)
+		webInfo.CanonicalUrl = currentSite.GetUrl(provider.PatternPeople, user, 0)
 		ctx.ViewData("webInfo", webInfo)
 	}
-	
+
 	tmpTpl := fmt.Sprintf("people/detail-%d.html", user.Id)
 	tplName, ok := currentSite.TemplateExist(tmpTpl, fmt.Sprintf("people-%d.html", user.Id), "people/detail.html", "people_detail.html")
 	if !ok {

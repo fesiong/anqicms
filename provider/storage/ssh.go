@@ -235,3 +235,12 @@ func (s *SSHStorage) Exists(ctx context.Context, key string) (bool, error) {
 	// 文件不存在
 	return false, nil
 }
+
+func (s *SSHStorage) Move(ctx context.Context, src, dest string) error {
+	if err := s.ensureConnection(); err != nil {
+		return fmt.Errorf("connection check failed: %v", err)
+	}
+	realSrc := s.cfg.FTPWebroot + "/" + strings.TrimLeft(src, "/")
+	realDest := s.cfg.FTPWebroot + "/" + strings.TrimLeft(dest, "/")
+	return s.client.Rename(realSrc, realDest)
+}

@@ -12,6 +12,7 @@ type NavConfig struct {
 	Link        string `json:"link"`
 	Sort        uint   `json:"sort"`
 	Status      uint   `json:"status"`
+	Logo        string `json:"logo"`
 }
 
 type NavTypeRequest struct {

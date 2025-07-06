@@ -10,4 +10,5 @@ type Storage interface {
 	Get(ctx context.Context, key string) (io.ReadCloser, error)
 	Delete(ctx context.Context, key string) error
 	Exists(ctx context.Context, key string) (bool, error)
+	Move(ctx context.Context, src, dest string) error
 }

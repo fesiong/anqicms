@@ -169,7 +169,7 @@ func ArchiveDetail(ctx iris.Context) {
 	module := currentSite.GetModuleFromCache(archive.ModuleId)
 	if module == nil {
 		ctx.StatusCode(404)
-		ShowMessage(ctx, currentSite.TplTr("UndefinedModelName", archive.ModuleId), nil)
+		ShowMessage(ctx, currentSite.TplTr("UndefinedModelName%s", archive.ModuleId), nil)
 		return
 	}
 	// 默认模板规则：表名 / index,list, detail .html

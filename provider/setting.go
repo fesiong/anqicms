@@ -57,6 +57,7 @@ const (
 	TranslateSettingKey   = "translate"
 	JsonLdSettingKey      = "json_ld"
 	TagFieldsSettingKey   = "tag_fields"
+	AkismetSettingKey     = "akismet"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -872,6 +873,16 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 	}
 
 	return &limiter
+}
+
+func (w *Website) GetAkismetSetting() *config.PluginAkismetConfig {
+	var cfg config.PluginAkismetConfig
+	value := w.GetSettingValue(AkismetSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &cfg)
+	}
+
+	return &cfg
 }
 
 func (w *Website) ReplaceContentUrl(content string, reverse bool) string {

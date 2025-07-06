@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -79,17 +80,32 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 				buf, _ := json.Marshal(content)
 				_ = json.Unmarshal(buf, &texts)
 				content = texts
-			} else if field.Type == config.CustomFieldTypeArchive || field.Type == config.CustomFieldTypeCategory {
+			} else if field.Type == config.CustomFieldTypeArchive && content != nil {
+				// 列表
+				var arcIds []int64
+				buf, _ := json.Marshal(content)
+				_ = json.Unmarshal(buf, &arcIds)
+				if len(arcIds) == 0 && field.Content != "" {
+					value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+					if value > 0 {
+						arcIds = append(arcIds, value)
+					}
+				}
+				if len(arcIds) > 0 {
+					archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+						return tx.Where("archives.`id` IN (?)", arcIds)
+					}, "archives.id ASC", 0, len(arcIds))
+					content = archives
+				} else {
+					content = nil
+				}
+			} else if field.Type == config.CustomFieldTypeCategory {
 				value, err := strconv.ParseInt(fmt.Sprint(content), 10, 64)
 				if err != nil && field.Content != "" {
 					value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 				}
 				if value > 0 {
-					if field.Type == config.CustomFieldTypeArchive {
-						content, _ = currentSite.GetArchiveById(value)
-					} else if field.Type == config.CustomFieldTypeCategory {
-						content = currentSite.GetCategoryFromCache(uint(value))
-					}
+					content = currentSite.GetCategoryFromCache(uint(value))
 				} else {
 					content = nil
 				}

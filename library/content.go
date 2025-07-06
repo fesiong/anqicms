@@ -265,57 +265,87 @@ func MarkdownToHTML(mdStr string, args ...interface{}) string {
 }
 
 type ContentTitle struct {
-	Anchor string `json:"anchor"`
-	Title  string `json:"title"`
-	Tag    string `json:"tag"`
-	Level  int    `json:"level"`
-	Prefix string `json:"prefix"`
+	Anchor   string          `json:"anchor"`
+	Title    string          `json:"title"`
+	Tag      string          `json:"tag"`
+	Level    int             `json:"level"`
+	Prefix   string          `json:"prefix"`
+	Children []*ContentTitle `json:"children,omitempty"`
 }
 
-func ParseContentTitles(content string) ([]ContentTitle, string) {
+// ParseContentTitles 获取toc，showType = list|children
+func ParseContentTitles(content, showType string) ([]*ContentTitle, string) {
 	re, _ := regexp.Compile(`(?is)<(h\d)([^>]*)>(.*?)</h\d>`)
 	re2, _ := regexp.Compile(`<(h\d)([^>]*)>`)
-	var titles []ContentTitle
-	var level = 0
-	var parent = -1
+	var titles []*ContentTitle
+	var rootTitles []*ContentTitle
+	var levelStack []int
 	var prefix []int64
 	content = re.ReplaceAllStringFunc(content, func(s string) string {
 		match := re.FindStringSubmatch(s)
 		tag := strings.ToLower(match[1])
-		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
-		if parent == -1 {
-			parent = leaf
-			level = 0
-			prefix = append(prefix, 1)
+		currentLevel, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
+
+		// 计算标题层级关系
+		if len(levelStack) == 0 {
+			levelStack = append(levelStack, currentLevel)
 		} else {
-			if parent != leaf {
-				if parent > leaf {
-					prefix = prefix[:len(prefix)-1]
-					prefix[len(prefix)-1]++
-				} else if parent < leaf {
-					prefix = append(prefix, 1)
-				}
-				level -= parent - leaf
-				parent = leaf
-			} else {
-				prefix[len(prefix)-1]++
+			// 如果当前标题等级更高（数字更小），移除栈中比它高的等级
+			for len(levelStack) > 0 && currentLevel <= levelStack[len(levelStack)-1] {
+				levelStack = levelStack[:len(levelStack)-1]
 			}
+			levelStack = append(levelStack, currentLevel)
+		}
+
+		// 构建前缀编号
+		if len(levelStack) <= len(prefix) {
+			prefix = prefix[:len(levelStack)]
+			if len(prefix) > 0 {
+				prefix[len(prefix)-1]++
+			} else {
+				prefix = append(prefix, 1)
+			}
+		} else {
+			prefix = append(prefix, 1)
 		}
 
 		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[3]), "\n", " "))
 		itemPrefix := JoinInt(prefix, ".")
 		anchor := strings.ReplaceAll(itemPrefix, ".", "-") + "-" + GetPinyin(title, true)
-		titles = append(titles, ContentTitle{
-			Anchor: "#" + anchor,
-			Title:  title,
-			Tag:    tag,
-			Level:  level,
-			Prefix: itemPrefix,
-		})
-		// 替换
+		cTitle := &ContentTitle{
+			Anchor:   "#" + anchor,
+			Title:    title,
+			Tag:      tag,
+			Level:    len(levelStack),
+			Prefix:   itemPrefix,
+			Children: make([]*ContentTitle, 0),
+		}
+
+		// 根据展示类型构建结构
+		if showType == "list" {
+			titles = append(titles, cTitle)
+		} else { // children模式
+			if len(levelStack) == 1 {
+				// 顶级标题作为根节点
+				rootTitles = append(rootTitles, cTitle)
+				titles = append(titles, rootTitles[len(rootTitles)-1])
+			} else {
+				// 找到最近的父级标题并添加为子节点
+				for i := len(titles) - 1; i >= 0; i-- {
+					if titles[i].Level == len(levelStack)-1 {
+						titles[i].Children = append(titles[i].Children, cTitle)
+						break
+					}
+				}
+				// 将当前标题也添加到扁平列表中，以便后续查找
+				titles = append(titles, cTitle)
+			}
+		}
+
+		// 替换原始HTML中的标题标签，添加锚点ID
 		s = re2.ReplaceAllStringFunc(s, func(s2 string) string {
 			if strings.Contains(s2, "id=\"") {
-				// 先删除原始的id，以及id里的内容
+				// 先删除原始的id属性
 				re3, _ := regexp.Compile(`(?is)id=".*?"`)
 				s2 = re3.ReplaceAllString(s2, "")
 			}
@@ -326,6 +356,9 @@ func ParseContentTitles(content string) ([]ContentTitle, string) {
 		return s
 	})
 
+	if showType != "list" {
+		return rootTitles, content
+	}
 	return titles, content
 }
 

@@ -58,7 +58,7 @@ func (node *tagUserDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return nil
 	}
 
-	userDetail.Link = currentSite.GetUrl("user", userDetail, 0)
+	userDetail.Link = currentSite.GetUrl(provider.PatternPeople, userDetail, 0)
 
 	if len(node.name) > 0 && len(fieldName) == 0 {
 		ctx.Private[node.name] = userDetail

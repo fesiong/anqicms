@@ -47,15 +47,14 @@ func (category *Category) GetThumb(storageUrl, defaultThumb string) string {
 	}
 	if category.Logo != "" {
 		//如果是一个远程地址，则缩略图和原图地址一致
-		if strings.HasPrefix(category.Logo, "http") || strings.HasPrefix(category.Logo, "//") {
-			category.Thumb = category.Logo
-		} else {
+		if !strings.HasPrefix(category.Logo, "http") && !strings.HasPrefix(category.Logo, "//") {
 			category.Logo = storageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
+		}
+		if strings.HasPrefix(category.Logo, storageUrl) && !strings.HasSuffix(category.Logo, ".svg") {
 			paths, fileName := filepath.Split(category.Logo)
 			category.Thumb = paths + "thumb_" + fileName
-			if strings.HasSuffix(category.Logo, ".svg") {
-				category.Thumb = category.Logo
-			}
+		} else {
+			category.Thumb = category.Logo
 		}
 	} else if defaultThumb != "" {
 		category.Thumb = defaultThumb

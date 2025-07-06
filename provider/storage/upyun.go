@@ -69,3 +69,10 @@ func (s *UpyunStorage) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	return false, nil
 }
+
+func (s *UpyunStorage) Move(ctx context.Context, src, dest string) error {
+	return s.client.Move(&upyun.MoveObjectConfig{
+		SrcPath:  src,
+		DestPath: dest,
+	})
+}

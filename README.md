@@ -2,13 +2,13 @@
 
 <img height="180" src="docs/anqicms.svg" />
 
-# AnQiCMS 一款高性能的内容管理
+# AnQiCMS 一款高性能的内容管理系统
 
 <div align="center">
 <a href="https://github.com/fesiong/anqicms/releases"><img alt="GitHub release" src="https://img.shields.io/github/release/fesiong/anqicms.svg?style=flat-square&include_prereleases" /></a>
 <a href="https://hub.docker.com/r/anqicms/anqicms"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/anqicms/anqicms?style=flat-square" /></a>
 <a href="https://github.com/fesiong/anqicms/commits"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/fesiong/anqicms.svg?style=flat-square" /></a>
-</
+  </div>
 
 [官网](https://www.anqicms.com) · [文档](https://www.anqicms.com/help) · [演示](https://demo.anqicms.com) · [GitCode](https://gitcode.com/anqicms/anqicms) · [更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
 

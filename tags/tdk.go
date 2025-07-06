@@ -63,7 +63,7 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		// 增加分页
 		if webInfo.CurrentPage > 1 {
 			// 从第二页开始，增加分页
-			titleText = append(titleText, currentSite.TplTr("PageNum", webInfo.CurrentPage))
+			titleText = append(titleText, currentSite.TplTr("Page%d", webInfo.CurrentPage))
 		}
 		// 增加上级标题
 		if showParent {

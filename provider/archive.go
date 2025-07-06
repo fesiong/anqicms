@@ -346,7 +346,13 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 						if err == nil {
 							result[v.FieldName] = texts
 						}
-					} else if v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
+					} else if v.Type == config.CustomFieldTypeArchive {
+						var arcIds []int64
+						err := json.Unmarshal([]byte(value), &arcIds)
+						if err == nil {
+							result[v.FieldName] = arcIds
+						}
+					} else if v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
 						result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 					}
 				}
@@ -369,6 +375,15 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 }
 
 func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
+	hookCtx := &HookContext{
+		Point: BeforeArchivePost,
+		Site:  w,
+		Data:  req,
+	}
+	if err := TriggerHook(hookCtx); err != nil {
+		return nil, err
+	}
+
 	if len(req.CategoryIds) > 0 {
 		for i := 0; i < len(req.CategoryIds); i++ {
 			// 防止 0
@@ -495,6 +510,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		draft.Link = w.GetUrl("archive", &draft.Archive, 0)
 		w.DeleteArchiveCache(draft.Id, draft.Link)
 		w.DeleteArchiveExtraCache(draft.Id)
+
+		hookCtx.Point = AfterArchivePost
+		hookCtx.Data = draft
+		_ = TriggerHook(hookCtx)
 		if isReleased {
 			err = w.SuccessReleaseArchive(&draft.Archive, newPost)
 		}
@@ -545,13 +564,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		for _, v := range module.Fields {
 			//先检查是否有必填而没有填写的
 			if v.Required && req.Extra[v.FieldName] == nil {
-				return nil, errors.New(w.Tr("ItIsRequired", v.Name))
+				return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 			}
 			if req.Extra[v.FieldName] != nil {
 				extraValue, ok := req.Extra[v.FieldName].(map[string]interface{})
 				if ok {
 					if v.Required && extraValue["value"] == nil && extraValue["value"] == "" {
-						return nil, errors.New(w.Tr("ItIsRequired", v.Name))
+						return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 					}
 					if v.Type == config.CustomFieldTypeCheckbox {
 						//只有这个类型的数据是数组,数组转成,分隔字符串
@@ -563,10 +582,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
 						}
-					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeCategory {
+					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
-					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts {
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
 						// 存 json
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							for j, v2 := range val {
@@ -883,6 +902,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	w.DeleteArchiveCache(draft.Id, draft.Link)
 	w.DeleteArchiveExtraCache(draft.Id)
 
+	hookCtx.Point = AfterArchivePost
+	hookCtx.Data = draft
+	_ = TriggerHook(hookCtx)
 	if isReleased {
 		draft.ArchiveData = &archiveData
 		err = w.SuccessReleaseArchive(&draft.Archive, newPost)
@@ -894,6 +916,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 // SuccessReleaseArchive
 // 文章发布成功后的一些处理
 func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
+	hookCtx := &HookContext{
+		Point: AfterArchiveRelease,
+		Site:  w,
+		Data:  archive,
+	}
+	_ = TriggerHook(hookCtx)
+
 	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 	if archive.Link == "" {
 		archive.Link = w.GetUrl("archive", archive, 0)
@@ -1316,6 +1345,14 @@ func (w *Website) PublishPlanArchives() {
 }
 
 func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
+	hookCtx := &HookContext{
+		Point: BeforeArchiveRelease,
+		Site:  w,
+		Data:  archiveDraft,
+	}
+	if err := TriggerHook(hookCtx); err != nil {
+		return
+	}
 	// 发布的步骤：将草稿转移到正式表，删除草稿
 	err := w.DB.Save(&archiveDraft.Archive).Error
 	if err != nil {
@@ -1829,17 +1866,11 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			continue
 		}
 		// 支持在标题中添加#分类名称#来快速创建分类
-		if strings.Contains(archive.Title, "#") {
-			idx := strings.Index(archive.Title, "#")
-			edx := strings.LastIndex(archive.Title, "#")
-			if strings.HasPrefix(archive.Title, "[") {
-				edx = strings.Index(archive.Title, "]")
-			}
-			if edx < idx {
-				edx = idx
-			}
-			categoryTitle := strings.Trim(archive.Title[idx+1:edx], "#] ")
-			archive.Title = archive.Title[edx+1:]
+		re, _ := regexp.Compile(`\[?#([\s\S]+?)#]?`)
+		match := re.FindStringSubmatch(archive.Title)
+		if len(match) > 1 {
+			categoryTitle := match[1]
+			archive.Title = strings.Replace(archive.Title, match[0], "", 1)
 			if categoryTitle != "" {
 				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
 				if err != nil {
@@ -2031,6 +2062,10 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		if i == 0 {
 			// 跳过标题行
 			continue
+		}
+		// 补齐
+		if len(row) < len(rows[0]) {
+			row = append(row, make([]string, len(rows[0])-len(row))...)
 		}
 		qia.Finished++
 		// 支持 txt/html/md

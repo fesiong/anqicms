@@ -525,7 +525,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	err := form.Bind(&otherList, "other_list")
 	if err == nil && len(otherList) > 0 {
 		for _, item := range otherList {
-			friendLink, err := currentSite.GetLinkByLink(item["url"])
+			friendLink, err := currentSite.GetLinkByLinkAndTitle(item["url"], item["name"])
 			if err != nil {
 				friendLink = &model.Link{}
 			}
@@ -563,7 +563,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	}
 	remark := ctx.PostValueTrim("remark")
 
-	friendLink, err := currentSite.GetLinkByLink(link)
+	friendLink, err := currentSite.GetLinkByLinkAndTitle(link, title)
 	if err != nil {
 		friendLink = &model.Link{
 			Status: 0,
@@ -615,6 +615,7 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	if linkUrl := ctx.PostValueTrim("url"); linkUrl != "" {
 		link = linkUrl
 	}
+	title := ctx.PostValueTrim("title")
 
 	if link == "" {
 		ctx.JSON(iris.Map{
@@ -624,7 +625,7 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 		return
 	}
 
-	friendLink, err := currentSite.GetLinkByLink(link)
+	friendLink, err := currentSite.GetLinkByLinkAndTitle(link, title)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

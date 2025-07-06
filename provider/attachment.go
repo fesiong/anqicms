@@ -116,6 +116,18 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 	// 生成文件名
 	tmpName := md5Str[8:24] + fileExt
+	// 默认采用用户上传的文件名
+	// 只允许英文名使用,空格转换成-
+	if CheckContentIsEnglish(fileName) {
+		tmpName = strings.ReplaceAll(fileName, "%20", "-")
+		tmpName = strings.ReplaceAll(fileName, " ", "-")
+		tmpName = filepath.Base(strings.ToLower(tmpName))
+		// 不能超过 200个字符
+		if len(tmpName) > 200 {
+			tmpName = tmpName[0:200]
+		}
+		tmpName = tmpName + fileExt
+	}
 	filePath := time.Now().Format("uploads/200601/02/")
 	if attachId > 0 {
 		filePath = filepath.Dir(attachment.FileLocation) + "/"

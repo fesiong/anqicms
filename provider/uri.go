@@ -253,8 +253,13 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			}
 		}
 		if ok && item != nil {
-			uri = strings.ReplaceAll(uri, "{id}", fmt.Sprintf("%d", item.Id))
-			//uri = strings.ReplaceAll(uri, "{filename}", item.UserName)
+			for _, v := range rewritePattern.Tags[PatternPeople] {
+				if v == "id" {
+					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+				} else if v == "filename" {
+					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+				}
+			}
 		}
 	case PatternTagIndex:
 		uri = rewritePattern.Patterns[PatternTagIndex]

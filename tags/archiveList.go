@@ -367,12 +367,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		} else if like == "tag" {
 			// 根据tag来调用相关
-			var tagIds []uint
-			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tagIds)
-			if len(tagIds) > 0 {
+			var tmpTagIds []uint
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tmpTagIds)
+			if len(tmpTagIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					tx = tx.Table("`archives` as archives").
-						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tagIds, archiveId)
+						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tmpTagIds, archiveId)
 					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
 					}
@@ -695,17 +695,30 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						}
 						if param.Type == config.CustomFieldTypeEditor && render {
 							param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-						} else if param.Type == config.CustomFieldTypeArchive || param.Type == config.CustomFieldTypeCategory {
+						} else if param.Type == config.CustomFieldTypeArchive {
+							// 列表
+							arcIds, ok := param.Value.([]int64)
+							if !ok && param.Default != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								arcs, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								param.Value = arcs
+							} else {
+								param.Value = nil
+							}
+						} else if param.Type == config.CustomFieldTypeCategory {
 							value, ok := param.Value.(int64)
 							if !ok && param.Default != "" {
 								value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 							}
 							if value > 0 {
-								if param.Type == config.CustomFieldTypeArchive {
-									param.Value, _ = currentSite.GetArchiveById(value)
-								} else if param.Type == config.CustomFieldTypeCategory {
-									param.Value = currentSite.GetCategoryFromCache(uint(value))
-								}
+								param.Value = currentSite.GetCategoryFromCache(uint(value))
 							} else {
 								param.Value = nil
 							}

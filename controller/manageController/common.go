@@ -63,6 +63,7 @@ func Version(ctx iris.Context) {
 		"msg":  "",
 		"data": iris.Map{
 			"version": config.Version,
+			"trial":   config.Trial,
 		},
 	})
 }
@@ -101,6 +102,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 	result["system"] = currentSite.System
 
 	result["version"] = config.Version
+	result["trial"] = config.Trial
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	result["memory_usage"] = ms.Alloc
@@ -114,7 +116,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查新版
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH
+	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
@@ -129,6 +131,7 @@ func CheckVersion(ctx iris.Context) {
 	if err == nil {
 		result := library.VersionCompare(lastVersion.Version, config.Version)
 		if result == 1 {
+			// 测试
 			// 版本有更新
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
@@ -136,6 +139,15 @@ func CheckVersion(ctx iris.Context) {
 				"data": lastVersion,
 			})
 			return
+		} else if lastVersion.TrialVersion != "" && library.VersionCompare(lastVersion.TrialVersion, config.Version) == 1 {
+			lastVersion.Trial = true
+			lastVersion.Version = lastVersion.TrialVersion
+			lastVersion.Description = lastVersion.TrialDescription
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  ctx.Tr("FoundANewTrialVersion"),
+				"data": lastVersion,
+			})
 		}
 	}
 
@@ -155,10 +167,17 @@ func VersionUpgrade(ctx iris.Context) {
 		})
 		return
 	}
+	var version = lastVersion.Version
+	if lastVersion.Trial {
+		version = lastVersion.TrialVersion
+	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, lastVersion.Version)
+	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
+	if config.VersionType != "" {
+		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
+	}
 	// 最长等待10分钟
-	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(15 * time.Minute).Get(link).EndBytes()
+	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(20 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

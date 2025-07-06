@@ -116,6 +116,7 @@ func PluginUserList(ctx iris.Context) {
 	userName := ctx.URLParam("user_name")
 	realName := ctx.URLParam("realName")
 	phone := ctx.URLParam("phone")
+	q := ctx.URLParam("q")
 
 	ops := func(tx *gorm.DB) *gorm.DB {
 		if userId > 0 {
@@ -124,13 +125,22 @@ func PluginUserList(ctx iris.Context) {
 		if groupId > 0 {
 			tx = tx.Where("`group_id` = ?", userId)
 		}
-		if phone != "" {
+		if phone != "" || q != "" {
+			if phone == "" {
+				phone = q
+			}
 			tx = tx.Where("`phone` = ?", phone)
 		}
-		if userName != "" {
+		if userName != "" || q != "" {
+			if userName == "" {
+				userName = q
+			}
 			tx = tx.Where("`user_name` like ?", "%"+userName+"%")
 		}
-		if realName != "" {
+		if realName != "" || q != "" {
+			if realName == "" {
+				realName = q
+			}
 			tx = tx.Where("`real_name` like ?", "%"+realName+"%")
 		}
 		tx = tx.Order("id desc")
