@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,10 +11,12 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"image"
+	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"log"
 	"mime/multipart"
 	"regexp"
 	"strconv"
@@ -488,6 +491,68 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 		if err != nil {
 			return nil, errors.New(w.Tr("IncompleteUserInfo"))
 		}
+	}
+	if req.InviteId > 0 && user.ParentId == 0 {
+		user.ParentId = req.InviteId
+		w.DB.Save(user)
+	}
+
+	user.Token = w.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(w.DB)
+
+	return user, nil
+}
+
+func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, error) {
+	googleCfg := w.GetGoogleAuthConfig(false)
+	if googleCfg == nil {
+		return nil, errors.New(w.Tr("GoogleAuthDisable"))
+	}
+	ctx, done := context.WithTimeout(context.Background(), 15*time.Second)
+	defer done()
+	tok, err := googleCfg.Exchange(ctx, req.Code)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	client := googleCfg.Client(ctx, tok)
+	userinfo, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	defer userinfo.Body.Close()
+
+	data, err := io.ReadAll(userinfo.Body)
+	if err != nil {
+		return nil, err
+	}
+	var googleUser GoogleUser
+	if err = json.Unmarshal(data, &googleUser); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	// 直接对接 users 表的 email
+	user, err := w.GetUserInfoByEmail(googleUser.Email)
+	if err != nil {
+		// 用户不存在，新建
+		user = &model.User{
+			Email:     googleUser.Email,
+			UserName:  googleUser.Name,
+			AvatarURL: googleUser.Picture,
+			GroupId:   w.PluginUser.DefaultGroupId,
+			Password:  "",
+			Status:    1,
+			Introduce: googleUser.Profile,
+		}
+		if googleUser.GivenName != "" {
+			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		}
+		w.DB.Save(user)
+	} else {
+		user.UserName = googleUser.Name
+		user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		w.DB.Save(user)
 	}
 	if req.InviteId > 0 && user.ParentId == 0 {
 		user.ParentId = req.InviteId

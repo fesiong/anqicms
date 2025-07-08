@@ -22,6 +22,7 @@ type PluginPayConfig struct {
 	PaypalWebhookId    string `json:"paypal_webhook_id"`    // webhookID
 	// Stripe
 	StripeApiKey        string `json:"stripe_api_key"`
+	StripePublicKey     string `json:"stripe_public_key"`
 	StripeAccount       string `json:"stripe_account"`
 	StripeWebhookSecret string `json:"stripe_webhook_secret"`
 }

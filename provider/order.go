@@ -1442,6 +1442,8 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 			log.Println("stripe payment intent order not found", err.Error())
 			return err
 		}
+		buf, _ := json.Marshal(pi)
+		library.DebugLog(w.CachePath, "stripe", string(buf))
 		if pi.Status == stripe.PaymentIntentStatusSucceeded {
 			// 已完成
 			// 更新payment

@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"golang.org/x/oauth2"
 	"kandaoni.com/anqicms/provider/storage"
 	"net/url"
 	"os"
@@ -55,6 +56,7 @@ type Website struct {
 	HtmlCachePushStatus     *HtmlCacheStatus
 	quickImportStatus       *QuickImportArchive
 	AkismetClient           *AkismetClient
+	googleAuthConfig        *oauth2.Config
 
 	System  *config.SystemConfig
 	Content *config.ContentConfig

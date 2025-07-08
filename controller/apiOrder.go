@@ -621,7 +621,9 @@ func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.
 		"msg":  "",
 		"data": iris.Map{
 			"pay_way":       config.PayWayStripe,
+			"amount":        payment.Amount,
 			"client_secret": pi.ClientSecret,
+			"public_key":    currentSite.PluginPay.StripePublicKey,
 			"payment_id":    pi.ID,
 		},
 	})
@@ -639,6 +641,24 @@ func ApiPaymentCheck(ctx iris.Context) {
 		return
 	}
 	if order.Status != config.OrderStatusWaiting {
+		//支付成功
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  currentSite.TplTr("PaymentSuccessful"),
+		})
+		return
+	}
+	// 检查一次订单是否支付成功
+	payment, err := currentSite.GetPaymentInfoByOrderId(order.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	_ = currentSite.TraceQuery(payment)
+	if payment.PaidTime > 0 {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,

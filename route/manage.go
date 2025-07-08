@@ -562,6 +562,11 @@ func manageRoute(app *iris.Application) {
 				akismet.Get("/setting", manageController.PluginGetAkismetSetting)
 				akismet.Post("/setting", manageController.PluginSaveAkismetSetting)
 			}
+			google := plugin.Party("/google")
+			{
+				google.Get("/setting", manageController.PluginGetGoogleSetting)
+				google.Post("/setting", manageController.PluginSaveGoogleSetting)
+			}
 		}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -58,6 +59,7 @@ const (
 	JsonLdSettingKey      = "json_ld"
 	TagFieldsSettingKey   = "tag_fields"
 	AkismetSettingKey     = "akismet"
+	GoogleAuthSettingKey  = "google_auth"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -701,7 +703,11 @@ func (w *Website) GetDiyFieldSetting() []config.ExtraField {
 func (w *Website) Tr(str string, args ...interface{}) string {
 	if I18n == nil {
 		I18n = i18n.New()
-		_ = I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
+		err := I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
+		if err != nil {
+			log.Println("languages err", err)
+			I18n.LoadKV(i18n.LangMap{"zh-CN": map[string]interface{}{"anqicms": "安企CMS"}}, "zh-CN")
+		}
 		// default to chinese
 		lang, exists := os.LookupEnv("LANG")
 		if !exists {
@@ -878,6 +884,16 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 func (w *Website) GetAkismetSetting() *config.PluginAkismetConfig {
 	var cfg config.PluginAkismetConfig
 	value := w.GetSettingValue(AkismetSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &cfg)
+	}
+
+	return &cfg
+}
+
+func (w *Website) GetGoogleAuthSetting() *config.PluginGoogleAuthConfig {
+	var cfg config.PluginGoogleAuthConfig
+	value := w.GetSettingValue(GoogleAuthSettingKey)
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &cfg)
 	}

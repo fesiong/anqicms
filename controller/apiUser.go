@@ -103,6 +103,15 @@ func ApiLogin(ctx iris.Context) {
 			})
 			return
 		}
+	} else if req.Platform == config.PlatformGoogle {
+		user, err = currentSite.LoginViaGoogle(&req)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 	} else {
 		// login via user_name/email/cellphone and password
 		if currentSite.Safe.Captcha == 1 {

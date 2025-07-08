@@ -35,8 +35,8 @@ func Register(app *iris.Application) {
 	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
 
 	// login and register
-	app.Get("/login", controller.LoginPage)
-	app.Get("/register", controller.RegisterPage)
+	app.HandleMany(iris.MethodGet, "/login /login/{platform:string}", controller.LoginPage)
+	app.HandleMany(iris.MethodGet, "/register /register/{platform:string}", controller.RegisterPage)
 	app.Get("/logout", middleware.ParseUserToken, controller.AccountLogout)
 	// account party
 	app.Get("/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
@@ -48,6 +48,8 @@ func Register(app *iris.Application) {
 		api.Get("/wechat/auth", controller.WechatAuthApi)
 		api.Get("/wechat", controller.WechatApi)
 		api.Post("/wechat", controller.WechatApi)
+		// google
+		api.Get("/google/url", controller.GoogleAuthUrl)
 
 		// 友链API
 		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)

@@ -64,6 +64,8 @@ func PluginPayConfigForm(ctx iris.Context) {
 	// stripe
 	currentSite.PluginPay.StripeApiKey = req.StripeApiKey
 	currentSite.PluginPay.StripeAccount = req.StripeAccount
+	currentSite.PluginPay.StripePublicKey = req.StripePublicKey
+	currentSite.PluginPay.StripeWebhookSecret = req.StripeWebhookSecret
 
 	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
 	if err != nil {

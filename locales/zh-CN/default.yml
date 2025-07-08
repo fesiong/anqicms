@@ -795,3 +795,5 @@
 "paymentCanceled": "订单已取消"
 "paymentResultError": "支付结果错误"
 "paymentParameterError": "支付参数错误"
+"GoogleAuthDisable": "Google 登录已禁用"
+"UpdateGoogleConfiguration": "更新 Google 登录配置"
