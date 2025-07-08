@@ -74,6 +74,10 @@ type PluginSendmail struct {
 	ReplySubject string `json:"reply_subject"`
 	ReplyMessage string `json:"reply_message"` // 自动回复内容
 	SendType     []int  `json:"send_type"`
+
+	SignupVerify  bool   `json:"signup_verify"` // 注册邮件验证
+	VerifySubject string `json:"verify_subject"`
+	VerifyMessage string `json:"verify_message"`
 }
 
 type PluginImportApiConfig struct {

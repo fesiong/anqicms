@@ -39,6 +39,7 @@ func Register(app *iris.Application) {
 	app.HandleMany(iris.MethodGet, "/register /register/{platform:string}", controller.RegisterPage)
 	app.Get("/logout", middleware.ParseUserToken, controller.AccountLogout)
 	// account party
+	app.Get("/account/password/reset", controller.AccountPasswordResetPage)
 	app.Get("/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
 
 	api := app.Party("/api", middleware.ParseUserToken)
@@ -59,6 +60,9 @@ func Register(app *iris.Application) {
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
 		api.Post("/register", controller.ApiRegister)
+		api.Get("/verify/email", controller.ApiVerifyEmail)
+		api.Post("/verify/email", controller.ApiSendVerifyEmail)
+		api.Post("/password/reset", controller.ApiResetUserPassword)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
 		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)

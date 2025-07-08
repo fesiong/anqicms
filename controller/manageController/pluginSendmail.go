@@ -118,6 +118,9 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 	currentSite.PluginSendmail.ReplySubject = req.ReplySubject
 	currentSite.PluginSendmail.ReplyMessage = req.ReplyMessage
 	currentSite.PluginSendmail.SendType = req.SendType
+	currentSite.PluginSendmail.SignupVerify = req.SignupVerify
+	currentSite.PluginSendmail.VerifySubject = req.VerifySubject
+	currentSite.PluginSendmail.VerifyMessage = req.VerifyMessage
 
 	err := currentSite.SaveSettingValue(provider.SendmailSettingKey, currentSite.PluginSendmail)
 	if err != nil {

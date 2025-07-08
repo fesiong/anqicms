@@ -23,8 +23,8 @@ var CodeCache verifyCodeCache
 
 func (v *verifyCodeCache) Generate(key string) string {
 	expire := time.Now().Unix() + 1800
-
-	code := strconv.Itoa(100000 + rand.Intn(900000))
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	code := strconv.Itoa(100000 + rd.Intn(900000))
 	if _, ok := v.list[key]; ok {
 		return v.Generate(key)
 	}

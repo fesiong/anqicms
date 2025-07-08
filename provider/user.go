@@ -326,6 +326,9 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if req.UserName == "" || req.Password == "" {
 		return nil, errors.New(w.Tr("PleaseFillInTheUsernameAndPasswordCorrectly"))
 	}
+	if w.PluginSendmail.SignupVerify && !w.VerifyEmailFormat(req.Email) {
+		return nil, errors.New(w.Tr("IncorrectEmail"))
+	}
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
@@ -346,8 +349,13 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		if !w.VerifyEmailFormat(req.Email) {
 			return nil, errors.New(w.Tr("IncorrectEmail"))
 		}
-		_, err := w.GetUserInfoByEmail(req.Email)
+		exist, err := w.GetUserInfoByEmail(req.Email)
 		if err == nil {
+			// 邮箱已存在，如果还没验证，则发送验证邮件
+			if !exist.EmailVerified && w.PluginSendmail.SignupVerify {
+				_ = w.SendVerifyEmail(exist, "verify")
+				return exist, nil
+			}
 			return nil, errors.New(w.Tr("TheEmailHasBeenRegistered"))
 		}
 	}
@@ -367,6 +375,11 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	}
 	user.EncryptPassword(req.Password)
 	w.DB.Save(&user)
+
+	if w.PluginSendmail.SignupVerify {
+		_ = w.SendVerifyEmail(&user, "verify")
+		return &user, nil
+	}
 
 	user.Token = w.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(w.DB)
@@ -537,13 +550,14 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 	if err != nil {
 		// 用户不存在，新建
 		user = &model.User{
-			Email:     googleUser.Email,
-			UserName:  googleUser.Name,
-			AvatarURL: googleUser.Picture,
-			GroupId:   w.PluginUser.DefaultGroupId,
-			Password:  "",
-			Status:    1,
-			Introduce: googleUser.Profile,
+			Email:         googleUser.Email,
+			EmailVerified: googleUser.EmailVerified,
+			UserName:      googleUser.Name,
+			AvatarURL:     googleUser.Picture,
+			GroupId:       w.PluginUser.DefaultGroupId,
+			Password:      "",
+			Status:        1,
+			Introduce:     googleUser.Profile,
 		}
 		if googleUser.GivenName != "" {
 			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
@@ -594,7 +608,10 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 
 	user.Token = w.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(w.DB)
-
+	// 如果要验证邮箱，并且没完成验证，则发送验证邮件
+	if w.PluginSendmail.SignupVerify && !user.EmailVerified {
+		_ = w.SendVerifyEmail(&user, "verify")
+	}
 	return &user, nil
 }
 

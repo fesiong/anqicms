@@ -795,3 +795,7 @@
 "paymentCanceled": "訂單已取消"
 "paymentResultError": "支付結果錯誤"
 "paymentParameterError": "支付參數錯誤"
+"invalidParameter": "參數錯誤"
+"InvalidToken": "無效的TOKEN"
+"verificationSuccessful": "验证成功"
+"PleaseVerifyEmail": "請驗證您的信箱"

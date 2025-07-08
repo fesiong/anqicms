@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"os"
 	"strings"
 	"time"
@@ -92,8 +93,11 @@ func (w *Website) SendMail(subject, content string, recipients ...string) error 
 		//成功配置，则跳过
 		return errors.New(w.Tr("PleaseConfigureSender"))
 	}
-
-	err := w.sendMail(subject, content, recipients, false, true)
+	userHtml := false
+	if strings.HasPrefix(content, "<") {
+		userHtml = true
+	}
+	err := w.sendMail(subject, content, recipients, userHtml, true)
 
 	return err
 }
@@ -204,4 +208,39 @@ func (w *Website) logMailError(address, subject, status string) {
 	if err == nil {
 		library.DebugLog(w.CachePath, MailLogFile, string(content))
 	}
+}
+
+func (w *Website) SendVerifyEmail(user *model.User, state string) error {
+	// 是否需要邮箱验证
+	if w.PluginSendmail.SignupVerify {
+		// 发送验证邮件
+		// 需要替换的内容：{siteName}/{userName}/{email}/{url}/{verifyCode}/{verifyUrl}
+		token := library.Md5(user.Email + user.Password)
+		verifyCode := library.CodeCache.Generate(token)
+		verifyUrl := w.System.BaseUrl + "/api/verify/email?token=" + token + "&code=" + verifyCode + "&state=" + state + "&email=" + user.Email
+		subject := w.PluginSendmail.VerifySubject
+		if subject == "" {
+			subject = "[{siteName}]: Please verify your email address"
+		}
+		subject = strings.ReplaceAll(subject, "{siteName}", w.System.SiteName)
+		subject = strings.ReplaceAll(subject, "{userName}", user.UserName)
+		subject = strings.ReplaceAll(subject, "{email}", user.Email)
+		subject = strings.ReplaceAll(subject, "{url}", w.System.BaseUrl)
+		subject = strings.ReplaceAll(subject, "{verifyUrl}", verifyUrl)
+		subject = strings.ReplaceAll(subject, "{verifyCode}", verifyCode)
+		mailBody := w.PluginSendmail.VerifyMessage
+		if mailBody == "" {
+			mailBody = "<div>Dear {userName},<br><br>Please click the link below to verify your email address:<br><br><a href=\"{verifyUrl}\">{verifyUrl}</a><br><br>If you did not register for this site, please ignore this email.<br><br>Regards,<br>{siteName}</div>"
+		}
+		mailBody = strings.ReplaceAll(mailBody, "{siteName}", w.System.SiteName)
+		mailBody = strings.ReplaceAll(mailBody, "{userName}", user.UserName)
+		mailBody = strings.ReplaceAll(mailBody, "{email}", user.Email)
+		mailBody = strings.ReplaceAll(mailBody, "{url}", w.System.BaseUrl)
+		mailBody = strings.ReplaceAll(mailBody, "{verifyUrl}", verifyUrl)
+		mailBody = strings.ReplaceAll(mailBody, "{verifyCode}", verifyCode)
+
+		_ = w.SendMail(subject, mailBody, user.Email)
+	}
+
+	return nil
 }

@@ -795,3 +795,7 @@
 "paymentCanceled": "Order canceled"
 "paymentResultError": "Payment result error"
 "paymentParameterError": "Payment parameter error"
+"invalidParameter": "Invalid Parameter"
+"InvalidToken": "Invalid Token"
+"verificationSuccessful": "Verification Successful"
+"PleaseVerifyEmail": "Please Verify Your Email"

@@ -3,6 +3,7 @@ package controller
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -36,6 +37,16 @@ func ApiRegister(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if currentSite.PluginSendmail.SignupVerify && user.EmailVerified == false {
+		// 提示正在验证, 并且不登录
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("PleaseVerifyEmail"),
+			"data": user,
 		})
 		return
 	}
@@ -182,6 +193,113 @@ func ApiLogin(ctx iris.Context) {
 		"msg":  "",
 		"data": user,
 	})
+}
+
+func ApiSendVerifyEmail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ApiRegisterRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if !currentSite.VerifyEmailFormat(req.Email) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("invalidParameter"),
+		})
+		return
+	}
+
+	user, err := currentSite.GetUserInfoByEmail(req.Email)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserDoesNotExist"),
+		})
+	}
+	_ = currentSite.SendVerifyEmail(user, "reset")
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  currentSite.TplTr("PleaseVerifyEmail"),
+	})
+}
+
+func ApiVerifyEmail(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	token := ctx.URLParam("token")
+	code := ctx.URLParam("code")
+	email := ctx.URLParam("email")
+	state := ctx.URLParam("state")
+	returnType := ctx.URLParam("return")
+	if !currentSite.VerifyEmailFormat(email) || len(token) == 0 {
+		if returnType == "json" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("invalidParameter"),
+			})
+		} else {
+			ShowMessage(ctx, currentSite.TplTr("invalidParameter"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+		}
+		return
+	}
+	user, err := currentSite.GetUserInfoByEmail(email)
+	if err != nil {
+		if returnType == "json" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("UserDoesNotExist"),
+			})
+		} else {
+			ShowMessage(ctx, currentSite.TplTr("UserDoesNotExist"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+		}
+		return
+	}
+	// 验证Token
+	verifyCode := library.CodeCache.Get(token, true)
+	if verifyCode != code {
+		// 暂时不做验证
+	}
+	verifyToken := library.Md5(user.Email + user.Password)
+	if verifyToken != token {
+		if returnType == "json" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("InvalidToken"),
+			})
+		} else {
+			ShowMessage(ctx, currentSite.TplTr("InvalidToken"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+		}
+		return
+	}
+	if state == "reset" {
+		// 重置密码
+		// 跳到重置密码页面
+		ctx.Redirect(currentSite.System.BaseUrl + "/account/password/reset?token=" + token + "&code=" + code + "&email=" + user.Email)
+		return
+	}
+	// 验证通过
+	user.EmailVerified = true
+	currentSite.DB.Model(user).UpdateColumn("email_verified", true)
+	// 生成登录Token
+	user.Token = currentSite.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(currentSite.DB)
+	// set token to cookie
+	t := iris.CookieExpires(24 * time.Hour)
+	ctx.SetCookieKV("token", user.Token, iris.CookiePath("/"), t)
+	if returnType == "json" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  currentSite.TplTr("verificationSuccessful"),
+		})
+	} else {
+		ShowMessage(ctx, currentSite.TplTr("verificationSuccessful"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+	}
+	return
 }
 
 func ApiGetUserDetail(ctx iris.Context) {
@@ -367,6 +485,70 @@ func ApiUpdateUserPassword(ctx iris.Context) {
 		return
 	}
 	currentSite.DB.Save(user)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  currentSite.TplTr("PasswordChangedSuccessfully"),
+	})
+}
+
+func ApiResetUserPassword(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.UserPasswordRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req.Password = strings.TrimSpace(req.Password)
+	if len(req.Password) < 6 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("PleaseFillInAPasswordOfMoreThan6Digits"),
+		})
+		return
+	}
+	if !currentSite.VerifyEmailFormat(req.Email) || len(req.Token) == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("invalidParameter"),
+		})
+		return
+	}
+	user, err := currentSite.GetUserInfoByEmail(req.Email)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserDoesNotExist"),
+		})
+		return
+	}
+	// 验证Token
+	verifyCode := library.CodeCache.Get(req.Token, true)
+	if verifyCode != req.Code {
+		// 暂时不做验证
+	}
+	verifyToken := library.Md5(user.Email + user.Password)
+	if verifyToken != req.Token {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("InvalidToken"),
+		})
+		return
+	}
+
+	err = user.EncryptPassword(req.Password)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DB.Save(user)
+	// 不直接登录
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
