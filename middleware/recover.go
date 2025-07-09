@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"runtime"
 	"strconv"
+	"time"
 )
 
 func NewRecover() context.Handler {
@@ -32,7 +33,7 @@ func NewRecover() context.Handler {
 				logMessage += fmt.Sprintf("At Request: %s\n", getRequestLogs(ctx))
 				logMessage += fmt.Sprintf("Trace: %s\n", err)
 				logMessage += fmt.Sprintf("\n%s", stacktrace)
-				library.DebugLog(config.ExecPath+"cache/", "error.log", logMessage)
+				library.DebugLog(config.ExecPath+"cache/", "error.log", time.Now().Format("2006-01-02 15:04:05"), logMessage)
 				ctx.Application().Logger().Warn(logMessage)
 				ctx.Values().Set("message", err)
 				ctx.StatusCode(500)

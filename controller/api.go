@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -21,11 +22,14 @@ func ApiImportArchive(ctx iris.Context) {
 		return
 	}
 	currentSite := provider.CurrentSite(ctx)
-	id := uint(ctx.PostValueIntDefault("id", 0))
+	id := ctx.PostValueInt64Default("id", 0)
+	parentId := ctx.PostValueInt64Default("parent_id", 0)
 	title := ctx.PostValueTrim("title")
 	seoTitle := ctx.PostValueTrim("seo_title")
 	content := ctx.PostValueTrim("content")
 	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
+	// 支持分类名称
+	categoryTitle := ctx.PostValueTrim("category_title")
 	keywords := ctx.PostValueTrim("keywords")
 	description := ctx.PostValueTrim("description")
 	logo := ctx.PostValueTrim("logo")
@@ -34,7 +38,28 @@ func ApiImportArchive(ctx iris.Context) {
 	images, _ := ctx.PostValues("images[]")
 	urlToken := ctx.PostValueTrim("url_token")
 	draft, _ := ctx.PostValueBool("draft")
-	cover, _ := ctx.PostValueBool("cover")
+	cover, _ := ctx.PostValueInt("cover") // 0=不覆盖，提示错误，1=覆盖，2=继续插入
+	if cover == 0 {
+		// 兼容旧的bool
+		boolCover, _ := ctx.PostValueBool("cover")
+		if boolCover {
+			cover = 1
+		}
+	}
+	if len(images) == 1 && strings.HasPrefix(images[0], "[") {
+		err := json.Unmarshal([]byte(images[0]), &images)
+		if err != nil {
+			images = nil
+		}
+	}
+	// 验证 images
+	for i := 0; i < len(images); i++ {
+		if len(images[i]) < 10 && !(strings.HasPrefix(images[i], "http") || strings.HasPrefix(images[i], "/")) {
+			// 删除它
+			images = append(images[:i], images[i+1:]...)
+			i--
+		}
+	}
 	template := ctx.PostValueTrim("template")
 	canonicalUrl := ctx.PostValueTrim("canonical_url")
 	fixedLink := ctx.PostValueTrim("fixed_link")
@@ -58,11 +83,33 @@ func ApiImportArchive(ctx iris.Context) {
 		categoryIds = append(categoryIds, categoryId)
 	}
 	if len(categoryIds) == 0 {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("PleaseSelectAColumn"),
-		})
-		return
+		// 支持分类名称
+		if len(categoryTitle) > 0 {
+			category, err := currentSite.GetCategoryByTitle(categoryTitle)
+			if err != nil {
+				// 分类不存在，创建
+				moduleId := uint(ctx.PostValueIntDefault("module_id", 0))
+				if moduleId == 0 {
+					moduleId = 1
+				}
+				category, err = currentSite.SaveCategory(&request.Category{
+					Title:    categoryTitle,
+					ModuleId: moduleId,
+					Status:   1,
+					Type:     config.CategoryTypeArchive,
+				})
+			}
+			if category != nil {
+				categoryIds = append(categoryIds, category.Id)
+			}
+		}
+		if len(categoryIds) == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("PleaseSelectAColumn"),
+			})
+			return
+		}
 	}
 	for _, catId := range categoryIds {
 		category := currentSite.GetCategoryFromCache(catId)
@@ -108,6 +155,7 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 
 	var req = request.Archive{
+		ParentId:     parentId,
 		Title:        title,
 		SeoTitle:     seoTitle,
 		CategoryId:   categoryId,
@@ -138,6 +186,7 @@ func ApiImportArchive(ctx iris.Context) {
 			// 不存在，创建一个
 			archiveDraft := model.ArchiveDraft{
 				Archive: model.Archive{
+					ParentId:    parentId,
 					Title:       title,
 					SeoTitle:    seoTitle,
 					UrlToken:    urlToken,
@@ -166,9 +215,9 @@ func ApiImportArchive(ctx iris.Context) {
 			req.Id = id
 		} else {
 			// 已存在
-			if cover {
+			if cover == 1 {
 				req.Id = id
-			} else {
+			} else if cover == 0 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
 					"msg":  ctx.Tr("DocumentIdIsRepeated"),
@@ -178,7 +227,7 @@ func ApiImportArchive(ctx iris.Context) {
 		}
 	} else {
 		// 标题重复的不允许导入
-		var existId uint
+		var existId int64
 		exists, err := currentSite.GetArchiveByTitle(title)
 		if err == nil {
 			existId = exists.Id
@@ -190,9 +239,9 @@ func ApiImportArchive(ctx iris.Context) {
 			}
 		}
 		if existId > 0 {
-			if cover {
+			if cover == 1 {
 				req.Id = existId
-			} else {
+			} else if cover == 0 {
 				ctx.JSON(iris.Map{
 					"code": config.StatusFailed,
 					"msg":  ctx.Tr("DocumentTitleIsRepeated"),
@@ -213,9 +262,9 @@ func ApiImportArchive(ctx iris.Context) {
 				}
 			}
 			if existId > 0 {
-				if cover {
+				if cover == 1 {
 					req.Id = existId
-				} else {
+				} else if cover == 0 {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
 						"msg":  ctx.Tr("DocumentIsRepeated"),
@@ -290,7 +339,7 @@ func ApiImportArchive(ctx iris.Context) {
 
 func ApiImportGetArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	id := uint(ctx.URLParamIntDefault("id", 0))
+	id := ctx.URLParamInt64Default("id", 0)
 	title := ctx.URLParam("title")
 	urlToken := ctx.URLParam("url_token")
 	originUrl := ctx.URLParam("origin_url")
@@ -304,6 +353,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			})
 			return
 		}
+		archiveDraft, err := currentSite.GetArchiveDraftById(id)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
+			})
+			return
+		}
 	}
 	if len(title) > 0 {
 		archive, err := currentSite.GetArchiveByTitle(title)
@@ -311,6 +368,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
 				"data": archive,
+			})
+			return
+		}
+		archiveDraft, err := currentSite.GetArchiveDraftByTitle(title)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
 			})
 			return
 		}
@@ -324,6 +389,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			})
 			return
 		}
+		archiveDraft, err := currentSite.GetArchiveDraftByOriginUrl(urlToken)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
+			})
+			return
+		}
 	}
 	if len(originUrl) > 0 {
 		archive, err := currentSite.GetArchiveByOriginUrl(originUrl)
@@ -331,6 +404,14 @@ func ApiImportGetArchive(ctx iris.Context) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
 				"data": archive,
+			})
+			return
+		}
+		archiveDraft, err := currentSite.GetArchiveDraftByOriginUrl(originUrl)
+		if err == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"data": archiveDraft,
 			})
 			return
 		}
@@ -385,6 +466,57 @@ func ApiImportGetCategories(ctx iris.Context) {
 	})
 }
 
+// ApiImportMakeSitemap 通过API接口生成Sitemap
+func ApiImportMakeSitemap(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	async := ctx.FormValue("async")
+
+	if async == "true" || async == "1" {
+		go func() {
+			err := currentSite.BuildSitemap()
+			if err == nil {
+				pluginSitemap := currentSite.PluginSitemap
+
+				//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
+				pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
+				// 写入Sitemap的url
+				pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+
+				currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
+			}
+		}()
+
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("SubmittedForBackgroundProcessing"),
+		})
+		return
+	}
+	//开始生成sitemap
+	err := currentSite.BuildSitemap()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	pluginSitemap := currentSite.PluginSitemap
+
+	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
+	pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
+	// 写入Sitemap的url
+	pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SitemapUpdated"),
+		"data": pluginSitemap,
+	})
+}
 func ApiImportCreateFriendLink(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	// 增加支持 didi 友链的批量导入
@@ -393,7 +525,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	err := form.Bind(&otherList, "other_list")
 	if err == nil && len(otherList) > 0 {
 		for _, item := range otherList {
-			friendLink, err := currentSite.GetLinkByLink(item["url"])
+			friendLink, err := currentSite.GetLinkByLinkAndTitle(item["url"], item["name"])
 			if err != nil {
 				friendLink = &model.Link{}
 			}
@@ -431,7 +563,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	}
 	remark := ctx.PostValueTrim("remark")
 
-	friendLink, err := currentSite.GetLinkByLink(link)
+	friendLink, err := currentSite.GetLinkByLinkAndTitle(link, title)
 	if err != nil {
 		friendLink = &model.Link{
 			Status: 0,
@@ -483,6 +615,7 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	if linkUrl := ctx.PostValueTrim("url"); linkUrl != "" {
 		link = linkUrl
 	}
+	title := ctx.PostValueTrim("title")
 
 	if link == "" {
 		ctx.JSON(iris.Map{
@@ -492,7 +625,7 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 		return
 	}
 
-	friendLink, err := currentSite.GetLinkByLink(link)
+	friendLink, err := currentSite.GetLinkByLinkAndTitle(link, title)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

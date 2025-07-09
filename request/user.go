@@ -9,6 +9,7 @@ type UserRequest struct {
 	UserName   string `json:"user_name"`
 	RealName   string `json:"real_name"`
 	AvatarURL  string `json:"avatar_url"`
+	Introduce  string `json:"introduce"`
 	Phone      string `json:"phone"`
 	Email      string `json:"email"`
 	GroupId    uint   `json:"group_id"`

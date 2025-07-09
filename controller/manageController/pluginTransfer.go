@@ -57,8 +57,8 @@ func CreateTransferTask(ctx iris.Context) {
 		})
 		return
 	}
-
-	task, err := currentSite.CreateTransferTask(&req)
+	w2 := provider.GetWebsite(currentSite.Id)
+	task, err := w2.CreateTransferTask(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

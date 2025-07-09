@@ -33,6 +33,9 @@ type bingData2 struct {
 }
 
 func (w *Website) PushArchive(link string) {
+	if len(link) == 0 {
+		return
+	}
 	_ = w.PushBaidu([]string{link})
 	_ = w.PushBing([]string{link})
 	if config.GoogleValid {

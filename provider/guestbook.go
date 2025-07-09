@@ -1,8 +1,11 @@
 package provider
 
 import (
+	"fmt"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
+	"strings"
+	"time"
 )
 
 func (w *Website) GetGuestbookList(keyword string, currentPage, pageSize int) ([]*model.Guestbook, int64, error) {
@@ -116,4 +119,43 @@ func (w *Website) GetGuestbookFields() []*config.CustomField {
 	}
 
 	return fields
+}
+
+func (w *Website) SendGuestbookToMail(guestbook *model.Guestbook) {
+	recipient := guestbook.Contact
+	if !w.VerifyEmailFormat(recipient) {
+		recipient = ""
+		for _, v := range guestbook.ExtraData {
+			vv, _ := v.(string)
+			if w.VerifyEmailFormat(vv) {
+				recipient = vv
+				break
+			}
+		}
+	}
+	//发送邮件
+	subject := w.TplTr("%sHasNewMessageFrom%s", w.System.SiteName, guestbook.UserName)
+	var contents = []string{
+		w.TplTr("%s: %s", "Contact", guestbook.Contact),
+		w.TplTr("%s: %s", "Content", guestbook.Content),
+	}
+
+	for key, value := range guestbook.ExtraData {
+		content := w.TplTr("%s: %s", key, fmt.Sprint(value)) + "\n"
+
+		contents = append(contents, content)
+	}
+	// 增加来路和IP返回
+	contents = append(contents, fmt.Sprintf("%s: %s\n", w.TplTr("SubmitIp"), guestbook.Ip))
+	contents = append(contents, fmt.Sprintf("%s: %s\n", w.TplTr("SourcePage"), guestbook.Refer))
+	contents = append(contents, fmt.Sprintf("%s: %s\n", w.TplTr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
+
+	if w.SendTypeValid(SendTypeGuestbook) {
+		// 后台发信
+		w.SendMail(subject, strings.Join(contents, ""))
+		// 回复客户
+		if recipient != "" {
+			w.ReplyMail(recipient)
+		}
+	}
 }

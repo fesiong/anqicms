@@ -29,6 +29,7 @@ type CollectorJson struct {
 	EndHour            int              `json:"end_hour"`       //每天结束时间
 	DailyLimit         int              `json:"daily_limit"`    //每日限额
 	CustomPatten       []*CustomPatten  `json:"custom_patten"`  // 自定义采集匹配
+	ProxyConfig        ProxyConfig      `json:"proxy_config"`   // 代理配置
 }
 
 type ReplaceKeyword struct {
@@ -42,6 +43,14 @@ type CustomPatten struct {
 	ContentPatten  string           `json:"content_patten"`
 	TitleReplace   []ReplaceKeyword `json:"title_replace"`
 	ContentReplace []ReplaceKeyword `json:"content_replace"`
+}
+
+type ProxyConfig struct {
+	Open       bool   `json:"open"`       // 使用使用代理
+	Platform   string `json:"platform"`   // 提供IP的平台 默认为 juliangip
+	ApiUrl     string `json:"api_url"`    // 请求地址
+	Concurrent int    `json:"concurrent"` // 并发数量
+	Expire     int    `json:"expire"`     // 过期时间，单位秒，填写了，过期时间程序能提前释放IP，提高效率
 }
 
 var DefaultCollectorConfig = CollectorJson{

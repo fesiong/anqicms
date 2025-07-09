@@ -23,12 +23,12 @@ func (node *tagPrevArchiveNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if err != nil {
 		return err
 	}
-	id := uint(0)
+	id := int64(0)
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		id = int64(args["id"].Integer())
 		archiveDetail, _ = currentSite.GetArchiveById(id)
 	}
 

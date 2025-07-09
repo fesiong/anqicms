@@ -29,7 +29,6 @@ func GetDefaultDB() *gorm.DB {
 				library.DebugLog(config.ExecPath, "error.log", time.Now().Format("2006-01-02 15:04:05"), "连接数据库失败", err.Error())
 				os.Exit(-1)
 			}
-
 			defaultDB = db
 		}
 	}
@@ -74,10 +73,14 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	sqlDB.SetMaxIdleConns(1000)
-	sqlDB.SetMaxOpenConns(10000)
-	sqlDB.SetConnMaxLifetime(-1)
-
+	// 连接池设置
+	sqlDB.SetMaxIdleConns(500)
+	sqlDB.SetMaxOpenConns(20)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	err = db.Use(&model.NextArchiveIdPlugin{})
+	if err != nil {
+		return nil, err
+	}
 	return db, nil
 }
 
@@ -101,6 +104,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.NavType{},
 			&model.Link{},
 			&model.Comment{},
+			&model.CommentPraise{},
 			&model.Anchor{},
 			&model.AnchorData{},
 			&model.Guestbook{},
@@ -108,7 +112,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.Material{},
 			&model.MaterialCategory{},
 			&model.MaterialData{},
-			&model.Statistic{},
+			&model.StatisticLog{},
 			&model.Tag{},
 			&model.TagData{},
 			&model.Redirect{},
@@ -122,6 +126,11 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.ArchiveRelation{},
 			&model.ArchiveFlag{},
 			&model.HtmlPushLog{},
+			&model.Archive{},
+			&model.ArchiveDraft{},
+			&model.TranslateLog{},
+			&model.TranslateHtmlLog{},
+			&model.TranslateTextLog{},
 
 			&model.User{},
 			&model.UserGroup{},
@@ -138,47 +147,22 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatMenu{},
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
+			&model.TagContent{},
 		)
 
 		if err != nil {
 			log.Println("migrate table error ", err)
 			return err
 		}
-		// 判断是否支持MyISAM引擎
-		var result struct {
-			Exist int `json:"exist"`
-		}
-		db.Raw("SELECT 1 as exist FROM INFORMATION_SCHEMA.ENGINES WHERE ENGINE = 'MyISAM'").Scan(&result)
-		if result.Exist == 1 {
-			// 支持 MyISAM
-			// 部分表强制使用MyISAM引擎
-			err = db.Set("gorm:table_options", "ENGINE=MyISAM DEFAULT CHARSET=utf8mb4").AutoMigrate(
-				&model.Archive{},
-				&model.ArchiveDraft{},
-			)
-			if err != nil {
-				log.Println("migrate table error ", err)
-				return err
-			}
-			// 升级转换部分
-			engine, _ := getTableEngine(db, "archives")
-			if engine != "MyISAM" {
-				db.Exec("ALTER TABLE archives ENGINE=MyISAM")
-			}
-			engine, _ = getTableEngine(db, "archive_drafts")
-			if engine != "MyISAM" {
-				db.Exec("ALTER TABLE archive_drafts ENGINE=MyISAM")
-			}
-		} else {
-			err = db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
-				&model.Archive{},
-				&model.ArchiveDraft{},
-			)
-			if err != nil {
-				log.Println("migrate table error ", err)
-				return err
-			}
-		}
+		// 取消使用 MyISAM 引擎
+		//engine, _ := getTableEngine(db, "archives")
+		//if engine == "MyISAM" {
+		//	db.Exec("ALTER TABLE archives ENGINE=InnoDB")
+		//}
+		//engine, _ = getTableEngine(db, "archive_drafts")
+		//if engine == "MyISAM" {
+		//	db.Exec("ALTER TABLE archive_drafts ENGINE=InnoDB")
+		//}
 		// 先删除deleteAt
 		if db.Migrator().HasColumn(&model.Archive{}, "deleted_at") {
 			db.Unscoped().Where("`deleted_at` is not null").Delete(model.Archive{})
@@ -208,7 +192,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 		}
 		if db.Migrator().HasColumn(&model.Archive{}, "flag") {
 			var tinyArcs []struct {
-				Id   uint   `json:"id"`
+				Id   int64  `json:"id"`
 				Flag string `json:"flag"`
 			}
 			db.Model(&model.Archive{}).Where("flag IS NOT NULL AND flag != ''").Scan(&tinyArcs)
@@ -251,6 +235,7 @@ func (w *Website) InitModelData() {
 			Model:     model.Model{Id: 1},
 			TableName: "article",
 			UrlToken:  "news",
+			Name:      w.Tr("articleModule"),
 			Title:     w.Tr("ArticleCenter"),
 			Fields:    nil,
 			IsSystem:  1,
@@ -261,6 +246,7 @@ func (w *Website) InitModelData() {
 			Model:     model.Model{Id: 2},
 			TableName: "product",
 			UrlToken:  "product",
+			Name:      w.Tr("productModule"),
 			Title:     w.Tr("ProductCenter"),
 			Fields:    nil,
 			IsSystem:  1,
@@ -270,13 +256,16 @@ func (w *Website) InitModelData() {
 	}
 	for _, m := range modules {
 		m.Database = w.Mysql.Database
-		var exists int64
-		w.DB.Model(&model.Module{}).Where("`id` = ?", m.Id).Count(&exists)
-		if exists == 0 {
+		var dbModule model.Module
+		w.DB.Model(&model.Module{}).Where("`id` = ?", m.Id).Take(&dbModule)
+		if dbModule.Id == 0 {
 			w.DB.Create(&m)
 			// 并生成表
 			tplPath := fmt.Sprintf("%s/%s", w.GetTemplateDir(), m.TableName)
 			m.Migrate(w.DB, tplPath, false)
+		} else if dbModule.Name == "" {
+			// 修复name
+			w.DB.Model(&dbModule).UpdateColumn("name", m.Name)
 		}
 	}
 	// 表字段重新检查

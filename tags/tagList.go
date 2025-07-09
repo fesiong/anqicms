@@ -37,9 +37,22 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	limit := 10
 	offset := 0
 	currentPage := 1
-	itemId := uint(0)
+	itemId := int64(0)
 	listType := "list"
 	order := "id desc"
+	var categoryIds []uint
+	if args["categoryId"] != nil {
+		tmpIds := strings.Split(args["categoryId"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				categoryDetail := currentSite.GetCategoryFromCache(uint(tmpId))
+				if categoryDetail != nil {
+					categoryIds = append(categoryIds, categoryDetail.Id)
+				}
+			}
+		}
+	}
 
 	if args["order"] != nil {
 		order = args["order"].String()
@@ -50,7 +63,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	}
 
 	if args["itemId"] != nil {
-		itemId = uint(args["itemId"].Integer())
+		itemId = int64(args["itemId"].Integer())
 	} else {
 		// 自动获取
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
@@ -81,8 +94,8 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -97,9 +110,10 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		currentPage = 1
 	}
 
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
+	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	}
 
 	if listType == "page" {

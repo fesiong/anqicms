@@ -1,12 +1,37 @@
 package model
 
-type Statistic struct {
-	Model
-	Spider    string `json:"spider" gorm:"column:spider;type:varchar(20) not null;default:'';index"`
-	Host      string `json:"host" gorm:"column:host;type:varchar(100) not null;default:'';index"`
-	Url       string `json:"url" gorm:"column:url;type:varchar(250) not null;default:''"`
-	Ip        string `json:"ip" gorm:"column:ip;type:varchar(15) not null;default:''"`
-	Device    string `json:"device" gorm:"column:device;type:varchar(20) not null;default:'';index"`
-	HttpCode  int    `json:"http_code" gorm:"column:http_code;type:int(3) not null;default:0"`
-	UserAgent string `json:"user_agent" gorm:"column:user_agent;type:varchar(255) not null;default:''"`
+import (
+	"database/sql/driver"
+	"encoding/json"
+)
+
+// StatisticLog * 每天浏览量
+type StatisticLog struct {
+	Id          uint        `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64       `json:"created_time" gorm:"column:created_time;type:int(11);unique"`
+	SpiderCount SpiderCount `json:"spider_count" gorm:"column:spider_count;type:varchar(250) default null"`
+	VisitCount  VisitCount  `json:"visit_count" gorm:"column:visit_count;type:varchar(250) default null"`
+}
+
+type VisitCount struct {
+	IPCount int `json:"ip_count"`
+	PVCount int `json:"pv_count"`
+}
+
+func (v VisitCount) Value() (driver.Value, error) {
+	return json.Marshal(v)
+}
+
+func (v *VisitCount) Scan(data interface{}) error {
+	return json.Unmarshal(data.([]byte), &v)
+}
+
+type SpiderCount map[string]int
+
+func (s SpiderCount) Value() (driver.Value, error) {
+	return json.Marshal(s)
+}
+
+func (s *SpiderCount) Scan(data interface{}) error {
+	return json.Unmarshal(data.([]byte), &s)
 }

@@ -2,11 +2,15 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
-	"strings"
 )
 
 type tagSystemNode struct {
@@ -42,20 +46,55 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 
 	// TemplateUrl 实时算出来, 它的计算方式是 /static/{TemplateName}
 	if fieldName == "TemplateUrl" {
-		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(currentSite.System.BaseUrl, "/"), currentSite.System.TemplateName)
+		// 多语言的调整
+		mainSite := currentSite.GetMainWebsite()
+		baseUrl := currentSite.System.BaseUrl
+		if mainSite.MultiLanguage.Open && mainSite.Id != currentSite.Id {
+			if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
+				// 替换目录
+				baseUrl = mainSite.System.BaseUrl + "/" + currentSite.System.Language
+			} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
+				baseUrl = mainSite.System.BaseUrl
+			}
+		}
+		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(baseUrl, "/"), currentSite.System.TemplateName)
+		// 如果是多站点，除了独立域名外，另外两种方式的静态资源，都采用目录形式，否则会导致加载异常
+	} else if fieldName == "SiteLogo" {
+		content = currentSite.System.SiteLogo
+		if !strings.HasPrefix(content, "http") {
+			content = currentSite.PluginStorage.StorageUrl + currentSite.System.SiteLogo
+		}
+	} else if fieldName == "Now" {
+		format := ""
+		if args["format"] != nil {
+			format = args["format"].String()
+		}
+		nowTime := time.Now()
+		if format != "" {
+			content = nowTime.Format(format)
+		} else {
+			content = strconv.FormatInt(nowTime.Unix(), 10)
+		}
 	} else if currentSite.System.ExtraFields != nil {
 		for i := range currentSite.System.ExtraFields {
 			if currentSite.System.ExtraFields[i].Name == fieldName {
-				content = currentSite.System.ExtraFields[i].Value
+				content = fmt.Sprintf("%v", currentSite.System.ExtraFields[i].Value)
+				if content == "" && currentSite.System.ExtraFields[i].Content != "" {
+					content = currentSite.System.ExtraFields[i].Content
+				}
 				break
 			}
 		}
 	}
 	if content == "" {
-		v := reflect.ValueOf(currentSite.System)
+		v := reflect.ValueOf(*currentSite.System)
 		f := v.FieldByName(fieldName)
 
 		content = fmt.Sprintf("%v", f)
+		// 增加header支持
+		if !f.IsValid() {
+			content = currentSite.CtxOri().GetHeader(fieldName)
+		}
 	}
 
 	// output
