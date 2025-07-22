@@ -454,7 +454,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				continue
 			}
 			// 跳过html标签
-			if strings.Contains(line, "<") && strings.Contains(line, ">") {
+			if strings.HasPrefix(line, "<") && strings.HasSuffix(line, ">") {
 				newText.WriteString(line + "\n")
 				continue
 			}
@@ -463,8 +463,8 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				newText.WriteString(line + "\n")
 				continue
 			}
-			// 跳过 ` `
-			re, _ := regexp.Compile("`.*`")
+			// 跳过 ` `、** **、[...] 和 (...)
+			re, _ := regexp.Compile("`.*?`|\\*\\*.*?\\*\\*|\\[.*?]|\\(.*?\\)|<.*>")
 			matchIdx := re.FindAllStringIndex(line, -1)
 			if len(matchIdx) > 0 {
 				var subText bytes.Buffer
