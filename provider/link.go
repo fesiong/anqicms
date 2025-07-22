@@ -29,14 +29,18 @@ func (w *Website) GetLinkById(id uint) (*model.Link, error) {
 	return &link, nil
 }
 
-func (w *Website) GetLinkByLink(link string) (*model.Link, error) {
+func (w *Website) GetLinkByLinkAndTitle(link, title string) (*model.Link, error) {
 	if link == "" {
 		return nil, errors.New(w.Tr("LinkRequired"))
 	}
 
 	var friendLink model.Link
 	var err error
-	err = w.DB.Where("`link` = ?", link).First(&friendLink).Error
+	tx := w.DB.Where("`link` = ?", link)
+	if title != "" {
+		tx = tx.Where("`title` = ?", title)
+	}
+	err = tx.First(&friendLink).Error
 	if err != nil {
 		// 增加兼容模式查找
 		if strings.HasPrefix(link, "https") {
@@ -44,7 +48,11 @@ func (w *Website) GetLinkByLink(link string) (*model.Link, error) {
 		} else {
 			link = strings.ReplaceAll(link, "http://", "https://")
 		}
-		err = w.DB.Where("`link` = ?", link).First(&friendLink).Error
+		tx = w.DB.Where("`link` = ?", link)
+		if title != "" {
+			tx = tx.Where("`title` = ?", title)
+		}
+		err = tx.First(&friendLink).Error
 	}
 
 	if err != nil {

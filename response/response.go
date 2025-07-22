@@ -32,8 +32,11 @@ type FilterItem struct {
 }
 
 type LastVersion struct {
-	Version     string `json:"version"`
-	Description string `json:"description"`
+	Version          string `json:"version"`
+	Description      string `json:"description"`
+	TrialVersion     string `json:"trial_version"`
+	TrialDescription string `json:"trial_description"`
+	Trial            bool   `json:"trial"`
 }
 
 type ChartData struct {

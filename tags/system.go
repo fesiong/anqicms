@@ -3,7 +3,9 @@ package tags
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
@@ -61,6 +63,17 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		content = currentSite.System.SiteLogo
 		if !strings.HasPrefix(content, "http") {
 			content = currentSite.PluginStorage.StorageUrl + currentSite.System.SiteLogo
+		}
+	} else if fieldName == "Now" {
+		format := ""
+		if args["format"] != nil {
+			format = args["format"].String()
+		}
+		nowTime := time.Now()
+		if format != "" {
+			content = nowTime.Format(format)
+		} else {
+			content = strconv.FormatInt(nowTime.Unix(), 10)
 		}
 	} else if currentSite.System.ExtraFields != nil {
 		for i := range currentSite.System.ExtraFields {

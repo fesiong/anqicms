@@ -9,14 +9,19 @@
             <div class="page-content">
                 <div class="single-content-title">{% tr 'tag-center' %}</div>
                 <ul class="list-blog-ul">
-                    {% tagList tags with type="page" limit="10" %}
+                    {% for letter in "ABCEDFGHIJKLMNOPQRSTUVWXYZ" %}
+                    {% tagList tags with type="list" letter=letter limit="20" %}
+                    {% if tags|length > 0 %}
+                    <h4>{{letter}}</h4>
                     {% for item in tags %}
                     <li>
                         <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
                         <p>{{item.Description}}</p>
                     </li>
                     {% endfor %}
+                    {% endif %}
                     {% endtagList %}
+                    {% endfor %}
                 </ul>
                 {% include "partial/pagination.html" %}
             </div>

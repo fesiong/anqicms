@@ -43,7 +43,7 @@ type Website struct {
 	StatisticLog            *StatisticLog
 	Storage                 storage.Storage
 	CacheStorage            storage.Storage
-	parsedPatten            *RewritePatten
+	parsedPattern           *RewritePattern
 	searcher                fulltext.Service
 	fulltextStatus          *FulltextStatus
 	cachedTodayArticleCount *response.CacheArticleCount
@@ -54,6 +54,7 @@ type Website struct {
 	HtmlCacheStatus         *HtmlCacheStatus
 	HtmlCachePushStatus     *HtmlCacheStatus
 	quickImportStatus       *QuickImportArchive
+	AkismetClient           *AkismetClient
 
 	System  *config.SystemConfig
 	Content *config.ContentConfig
@@ -101,41 +102,6 @@ type Website struct {
 	backLanguage string
 	ctx          iris.Context // 这个类型是指针，因此只能在拷贝后赋值
 	Template     *StoreTemplates
-}
-
-type StoreTemplates struct {
-	Templates map[string]int64
-	mu        sync.Mutex
-}
-
-func (w *Website) SetTemplates(templates map[string]int64) {
-	if w.Template == nil {
-		return
-	}
-	w.Template.mu.Lock()
-	defer w.Template.mu.Unlock()
-	w.Template.Templates = templates
-}
-
-func (w *Website) TemplateExist(tplPaths ...string) (string, bool) {
-	if len(tplPaths) == 0 {
-		return "", false
-	}
-	if w.Template == nil {
-		return tplPaths[0], false
-	}
-	w.Template.mu.Lock()
-	defer w.Template.mu.Unlock()
-	for _, tplPath := range tplPaths {
-		if tplPath == "" {
-			continue
-		}
-		if _, ok := w.Template.Templates[tplPath]; ok {
-			return tplPath, true
-		}
-	}
-
-	return tplPaths[0], false
 }
 
 func (w *Website) Ctx() context.Context {
@@ -396,13 +362,14 @@ func InitWebsite(mw *model.Website) {
 		}
 	}
 	if w.Initialed {
-		w.GetRewritePatten(true)
+		w.GetRewritePattern(true)
 		// 启动限流器
 		w.InitLimiter()
 		w.InitStatistic()
 		w.InitBucket()
 		w.InitCacheBucket()
 		w.InitCache()
+		w.InitAkismet()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
 	}

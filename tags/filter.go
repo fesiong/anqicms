@@ -155,7 +155,7 @@ func filterRepeat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2
 }
 
 func filterDump(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
-	return pongo2.AsValue(fmt.Sprintf("%#v", in.Interface())), nil
+	return pongo2.AsValue(fmt.Sprintf("%+v", in.Interface())), nil
 }
 
 func filterSplit(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {

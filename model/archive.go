@@ -41,23 +41,24 @@ type Archive struct {
 	OriginTitle string `json:"origin_title" gorm:"column:origin_title;type:varchar(190) not null;default:'';index:idx_origin_title"`
 	OriginId    int    `json:"origin_id" gorm:"column:origin_id;type:tinyint(1) unsigned not null;default:0"` // 来源 0， 1 采集，2 AI生成
 	// 其他内容
-	Category       *Category               `json:"category" gorm:"-"`
-	ModuleName     string                  `json:"module_name" gorm:"-"`
-	ArchiveData    *ArchiveData            `json:"data" gorm:"-"`
-	Logo           string                  `json:"logo" gorm:"-"`
-	Thumb          string                  `json:"thumb" gorm:"-"`
-	Extra          map[string]*CustomField `json:"extra" gorm:"-"`
-	Link           string                  `json:"link" gorm:"-"`
-	Tags           []string                `json:"tags,omitempty" gorm:"-"`
-	HasOrdered     bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
-	FavorablePrice int64                   `json:"favorable_price" gorm:"-"`
-	HasPassword    bool                    `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
-	PasswordValid  bool                    `json:"password_valid,omitempty" gorm:"-"` // 验证密码正确
-	CategoryTitles []string                `json:"category_titles" gorm:"-"`
-	CategoryIds    []uint                  `json:"category_ids" gorm:"-"`
-	Flag           string                  `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
-	Type           string                  `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
-	Relations      []*Archive              `json:"relations" gorm:"-"`
+	Category       *Category              `json:"category" gorm:"-"`
+	ModuleName     string                 `json:"module_name" gorm:"-"`
+	ArchiveData    *ArchiveData           `json:"data" gorm:"-"`
+	Logo           string                 `json:"logo" gorm:"-"`
+	Thumb          string                 `json:"thumb" gorm:"-"`
+	Extra          map[string]CustomField `json:"extra" gorm:"-"`
+	Link           string                 `json:"link" gorm:"-"`
+	Tags           []string               `json:"tags,omitempty" gorm:"-"`
+	HasOrdered     bool                   `json:"has_ordered" gorm:"-"` // 是否订购了
+	FavorablePrice int64                  `json:"favorable_price" gorm:"-"`
+	HasPassword    bool                   `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
+	PasswordValid  bool                   `json:"password_valid,omitempty" gorm:"-"` // 验证密码正确
+	CategoryTitles []string               `json:"category_titles" gorm:"-"`
+	CategoryIds    []uint                 `json:"category_ids" gorm:"-"`
+	Flag           string                 `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
+	Type           string                 `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
+	Relations      []*Archive             `json:"relations" gorm:"-"`
+	Content        string                 `json:"content" gorm:"-"` // 列表获取Content的时候，使用这个字段
 }
 
 type ArchiveData struct {
@@ -135,13 +136,10 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 			}
 		}
 		a.Logo = a.Images[0]
-		if strings.HasPrefix(a.Logo, storageUrl) {
+		if strings.HasPrefix(a.Logo, storageUrl) && !strings.HasSuffix(a.Logo, ".svg") {
 			paths, fileName := filepath.Split(a.Logo)
 			a.Thumb = paths + "thumb_" + fileName
 		} else {
-			a.Thumb = a.Logo
-		}
-		if strings.HasSuffix(a.Logo, ".svg") {
 			a.Thumb = a.Logo
 		}
 	} else if defaultThumb != "" {

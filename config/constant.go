@@ -1,6 +1,8 @@
 package config
 
-const Version = "3.4.11"
+const Version = "3.5.0"
+const Trial = false
+const VersionType = ""
 
 const (
 	StatusOK         = 0
@@ -21,6 +23,9 @@ const (
 	CustomFieldTypeImage    = "image"
 	CustomFieldTypeFile     = "file"
 	CustomFieldTypeImages   = "images"
+	CustomFieldTypeTexts    = "texts"
+	CustomFieldTypeArchive  = "archive"
+	CustomFieldTypeCategory = "category"
 )
 
 const (

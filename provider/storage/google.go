@@ -48,3 +48,12 @@ func (s *GoogleStorage) Exists(ctx context.Context, key string) (bool, error) {
 	}
 	return false, nil
 }
+
+func (s *GoogleStorage) Move(ctx context.Context, src, dest string) error {
+	_, err := s.bucket.Object(dest).CopierFrom(s.bucket.Object(src)).Run(ctx)
+	if err != nil {
+		return err
+	}
+
+	return s.Delete(ctx, src)
+}

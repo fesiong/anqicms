@@ -312,6 +312,7 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 	currentSite.PluginAnchor.AnchorDensity = req.AnchorDensity
 	currentSite.PluginAnchor.ReplaceWay = req.ReplaceWay
 	currentSite.PluginAnchor.KeywordWay = req.KeywordWay
+	currentSite.PluginAnchor.NoStrongTag = req.NoStrongTag
 
 	err := currentSite.SaveSettingValue(provider.AnchorSettingKey, currentSite.PluginAnchor)
 	if err != nil {

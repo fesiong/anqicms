@@ -24,6 +24,7 @@ func NewQiniuStorage(cfg *config.PluginStorageConfig) (*QiniuStorage, error) {
 
 	return &QiniuStorage{
 		client: mac,
+		cfg:    cfg,
 	}, nil
 }
 
@@ -88,4 +89,17 @@ func (s *QiniuStorage) Exists(ctx context.Context, key string) (bool, error) {
 	}
 
 	return true, nil
+}
+
+func (s *QiniuStorage) Move(ctx context.Context, src, dest string) error {
+	objectsManager := objects.NewObjectsManager(&objects.ObjectsManagerOptions{
+		Options: http_client.Options{Credentials: s.client},
+	})
+	bucket := objectsManager.Bucket(s.cfg.QiniuBucket)
+	err := bucket.Object(src).MoveTo(s.cfg.QiniuBucket, dest).Call(context.Background())
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

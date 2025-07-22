@@ -362,6 +362,10 @@ func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Templ
 	return nil
 }
 
+type RenderData struct {
+	Data []byte
+}
+
 // ExecuteWriter executes a templates and write its results to the w writer
 // layout here is useless.
 func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bindingData interface{}) error {
@@ -382,12 +386,22 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		if err := ctx.Request().Context().Err(); err != nil {
 			return err
 		}
+		hookCtx := &provider.HookContext{
+			Point: provider.BeforeViewRender,
+			Site:  currentSite,
+			Data:  bindingData,
+			Extra: map[string]interface{}{
+				"template": filename,
+				"ctx":      ctx,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
 		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
 		if err != nil {
 			return err
 		}
 		// 再次检查是否超时
-		if err := ctx.Request().Context().Err(); err != nil {
+		if err = ctx.Request().Context().Err(); err != nil {
 			return err
 		}
 		// 如果启用了防采集
@@ -490,7 +504,31 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		if len(currentSite.System.MobileUrl) > 0 {
 			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
 			if mobileTemplate {
+				// 有特殊标记的a标签不做替换，[data-ignore="true"]
+				re, _ := regexp.Compile(`(?is)<a[^>]*data-ignore="true"[^>]*>(.*?)</a>`)
+				var ignoreLinks = map[string][]byte{}
+				ignoreIdx := 0
+				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
+					ignoreLinks[idxStr] = match
+					ignoreIdx++
+					return []byte(idxStr)
+				})
+				// 有特殊标记的link标签不做替换，[data-ignore="true"]
+				re, _ = regexp.Compile(`(?is)<link[^>]*data-ignore="true"[^>]*>`)
+				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
+					ignoreLinks[idxStr] = match
+					ignoreIdx++
+					return []byte(idxStr)
+				})
 				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
+				if len(ignoreLinks) > 0 {
+					re, _ = regexp.Compile(`\$\{ignore-\d+}`)
+					data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+						return ignoreLinks[string(match)]
+					})
+				}
 			}
 		}
 		// 添加json-ld
@@ -515,7 +553,20 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 			}
 		}
 
-		buf := bytes.NewBuffer(data)
+		exData := &RenderData{
+			Data: data,
+		}
+		hookCtx = &provider.HookContext{
+			Point: provider.AfterViewRender,
+			Site:  currentSite,
+			Data:  exData,
+			Extra: map[string]interface{}{
+				"template": filename,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
+
+		buf := bytes.NewBuffer(exData.Data)
 		_, err = buf.WriteTo(w)
 		return err
 	}

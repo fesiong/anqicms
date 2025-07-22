@@ -1,13 +1,16 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"reflect"
+	"strconv"
 )
 
 type tagTagDetailNode struct {
@@ -28,6 +31,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	token := ""
 	if args["token"] != nil {
 		token = args["token"].String()
+	}
+	title := ""
+	if args["title"] != nil {
+		title = args["title"].String()
 	}
 
 	if args["site_id"] != nil {
@@ -51,6 +58,8 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		tagDetail, _ = currentSite.GetTagById(id)
 	} else if token != "" {
 		tagDetail, _ = currentSite.GetTagByUrlToken(token)
+	} else if title != "" {
+		tagDetail, _ = currentSite.GetTagByTitle(title)
 	}
 
 	fieldName := ""
@@ -93,7 +102,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 			fields := currentSite.GetTagFields()
 			if len(fields) > 0 {
 				for _, field := range fields {
-					if tagContent.Extra[field.FieldName] == nil || tagContent.Extra[field.FieldName] == "" {
+					if (tagContent.Extra[field.FieldName] == nil || tagContent.Extra[field.FieldName] == "" || tagContent.Extra[field.FieldName] == 0) &&
+						field.Type != config.CustomFieldTypeRadio &&
+						field.Type != config.CustomFieldTypeCheckbox &&
+						field.Type != config.CustomFieldTypeSelect {
 						// default
 						tagContent.Extra[field.FieldName] = field.Content
 					}
@@ -114,6 +126,39 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 								val[j] = currentSite.ReplaceContentUrl(v2s, true)
 							}
 							tagContent.Extra[field.FieldName] = val
+						}
+					} else if field.Type == config.CustomFieldTypeTexts && tagContent.Extra[field.FieldName] != nil {
+						var texts []model.CustomFieldTexts
+						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &texts)
+						tagContent.Extra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeArchive && tagContent.Extra[field.FieldName] != nil {
+						// 列表
+						var arcIds []int64
+						buf, _ := json.Marshal(tagContent.Extra[field.FieldName])
+						_ = json.Unmarshal(buf, &arcIds)
+						if len(arcIds) == 0 && field.Content != "" {
+							value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+							if value > 0 {
+								arcIds = append(arcIds, value)
+							}
+						}
+						if len(arcIds) > 0 {
+							archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+								return tx.Where("archives.`id` IN (?)", arcIds)
+							}, "archives.id ASC", 0, len(arcIds))
+							tagContent.Extra[field.FieldName] = archives
+						} else {
+							tagContent.Extra[field.FieldName] = nil
+						}
+					} else if field.Type == config.CustomFieldTypeCategory {
+						value, err := strconv.ParseInt(fmt.Sprint(tagContent.Extra[field.FieldName]), 10, 64)
+						if err != nil && field.Content != "" {
+							value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+						}
+						if value > 0 {
+							tagContent.Extra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
+						} else {
+							tagContent.Extra[field.FieldName] = nil
 						}
 					}
 				}
