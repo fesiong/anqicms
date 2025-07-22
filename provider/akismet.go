@@ -11,8 +11,10 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
+	"unicode"
 )
 
 const (
@@ -71,6 +73,50 @@ func (w *Website) InitAkismet() {
 // checkType = 1，2; return status, ok ;status = 1 正常,2 垃圾;ok = true, false,false 表示检测失败或未检测
 // 检测失败或未检测都返回 1, false
 func (w *Website) AkismentCheck(ctx iris.Context, checkType int, data interface{}) (int, bool) {
+	// 前置判断
+	// 没有来路
+	if !ctx.IsAjax() && ctx.Request().Referer() == "" {
+		return 2, true
+	}
+	// 非标准单词
+	if checkType == CheckTypeGuestbook {
+		guestbook, ok := data.(*model.Guestbook)
+		if ok {
+			var checkData []string
+			if guestbook.Contact != "" && CheckContentIsEnglish(guestbook.Contact) {
+				checkData = append(checkData, guestbook.Contact)
+			}
+			if guestbook.Content != "" && CheckContentIsEnglish(guestbook.Content) {
+				checkData = append(checkData, guestbook.Content)
+			}
+			if guestbook.UserName != "" && CheckContentIsEnglish(guestbook.UserName) {
+				checkData = append(checkData, guestbook.UserName)
+			}
+			for _, v := range checkData {
+				// 纯数字的不检测
+				matched, _ := regexp.MatchString(`^[0-9\s\-]+$`, v)
+				if matched {
+					continue
+				}
+				// 大写字母占比过大
+				upperCount := 0
+				for _, vv := range v {
+					if unicode.IsUpper(vv) {
+						upperCount++
+					}
+				}
+				upperPercent := float64(upperCount) / float64(len(v))
+				if upperPercent > 0.3 && upperPercent < 0.9 {
+					return 2, true
+				}
+				// 未包含元音
+				if !strings.ContainsAny(v, "aeiouAEIOU") {
+					return 2, true
+				}
+			}
+		}
+	}
+	// end
 	if w.AkismetClient == nil {
 		return 1, false
 	}
