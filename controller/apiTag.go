@@ -1179,9 +1179,7 @@ func ApiDiyField(ctx iris.Context) {
 				settings[fields[i].Name] = val
 			}
 		} else if fields[i].Type == config.CustomFieldTypeTexts && settings[fields[i].Name] != nil {
-			var texts []model.CustomFieldTexts
-			_ = json.Unmarshal([]byte(fmt.Sprint(settings[fields[i].Name])), &texts)
-			settings[fields[i].Name] = texts
+			// 不需要处理
 		} else if fields[i].Type == config.CustomFieldTypeArchive && settings[fields[i].Name] != nil {
 			// 列表
 			var arcIds []int64
