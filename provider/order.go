@@ -1243,7 +1243,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 var checkOrderRunning = false
 
 func (w *Website) AutoCheckOrders() {
-	if w.DB == nil {
+	if w.DB == nil || w.PluginOrder == nil {
 		return
 	}
 	if checkOrderRunning {

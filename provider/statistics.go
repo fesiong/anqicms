@@ -245,7 +245,7 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 
 func (w *Website) SendStatisticsMail() {
 	setting := w.PluginSendmail
-	if setting.Account == "" {
+	if setting == nil || setting.Account == "" {
 		//成功配置，则跳过
 		return
 	}

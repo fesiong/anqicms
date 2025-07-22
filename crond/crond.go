@@ -174,8 +174,8 @@ func CleanUserVip() {
 }
 
 func CheckAuthValid() {
-	rand.Seed(time.Now().UnixNano())
-	time.Sleep(time.Duration(rand.Intn(600)+1) * time.Second)
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	time.Sleep(time.Duration(rd.Intn(600)+1) * time.Second)
 	defaultSite := provider.CurrentSite(nil)
 	defaultSite.AnqiCheckLogin(false)
 }
