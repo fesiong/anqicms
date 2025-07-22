@@ -111,7 +111,7 @@ func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawRequest) erro
 var withdrawRunning = false
 
 func (w *Website) CheckWithdrawToWechat() {
-	if w.DB == nil {
+	if w.DB == nil || w.PluginPay == nil {
 		return
 	}
 	if withdrawRunning {
