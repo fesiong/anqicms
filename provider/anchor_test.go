@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"log"
 	"testing"
@@ -14,6 +15,8 @@ func TestReplaceContentText(t *testing.T) {
 	w.PluginAnchor.AnchorDensity = 100
 
 	anchors := []*model.Anchor{
+		{Id: 12, Title: "竞赛compact", Link: "/d"},
+		{Id: 13, Title: "compact", Link: "/e"},
 		{Id: 1, Title: "竞赛", Link: "/a"},
 		{Id: 2, Title: "赛事", Link: "/b"},
 		{Id: 3, Title: "竞争", Link: "/c"},
@@ -24,7 +27,7 @@ func TestReplaceContentText(t *testing.T) {
 
 ### 一、升学竞争力提升
 1. **综合赛事评价竞争材料加分**  
-   该赛事为教育部审核通过的白名单竞赛，决赛奖项可作为科<a>更多竞赛竞争提升</a>长生简历和综合素质评价的重要材料，在高校自主招生、综合评价录取中体现创新与实践能力优势。例如，部分高校在选拔中对信息素养突出的学生给予倾向性评价。  
+   该赛事为教育部审核通过的白名单竞赛compact，决赛奖项可作为科<a>更多竞赛竞争提升</a>长生简历和综合素质评价的重要材料，在高校自主招生、综合评价录取中体现创新与实践能力优势。例如，部分高校在选拔中对信息素养突出的学生给予倾向性评价。  
 2. **保研/考研复试优势**  
    国奖证明获奖者在信息处理、算法设计及创新思维上的专业能力，在保研综合评分中可能成为高权重加分项；考研复试时也能向导师展示技术潜力。  
 3. **留学申请助力**  
@@ -48,6 +51,10 @@ func TestReplaceContentText(t *testing.T) {
    在互联网、金融、数据分析等高度依赖信息技术的行业，国奖是雇主评估技术能力的重要参考，能帮助求职者在同类竞争中脱颖而出。  
 2. **拓宽职业选择范围**  
    获奖者凭借信息素养优势可进入新兴领域（如人工智能开发、大数据分析、市场咨询等），获得更多职业发展机会。`
+
+	content = library.MarkdownToHTML(content)
+	log.Println(content)
+
 	var ok bool
 	for i := 0; i < 5; i++ {
 		content, ok = w.ReplaceContentText(anchors, content, "/")
