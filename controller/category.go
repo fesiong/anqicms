@@ -18,7 +18,7 @@ func CategoryPage(ctx iris.Context) {
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
 		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.ServeFile(cacheFile)
+		ctx.Write(cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
@@ -123,7 +123,7 @@ func SearchPage(ctx iris.Context) {
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
 		ctx.ContentType(context.ContentHTMLHeaderValue)
-		ctx.ServeFile(cacheFile)
+		ctx.Write(cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
@@ -159,7 +159,7 @@ func SearchPage(ctx iris.Context) {
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		webInfo.Title = currentSite.TplTr("SearchLog", "")
+		webInfo.Title = currentSite.TplTr("Search%s", "")
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}

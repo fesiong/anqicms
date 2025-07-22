@@ -25,11 +25,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			baseUrl = mainSite.System.BaseUrl
 		}
 	}
-	rewritePattern := mainSite.ParsePatten(false)
+	rewritePattern := mainSite.ParsePattern(false)
 	uri := ""
 	switch match {
-	case "archive":
-		uri = rewritePattern.Archive
+	case PatternArchive:
+		uri = rewritePattern.Patterns[PatternArchive]
 		item, ok := data.(*model.Archive)
 		if !ok {
 			item2, ok2 := data.(model.Archive)
@@ -52,7 +52,7 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			// 修正空白的urlToken
 			_ = w.UpdateArchiveUrlToken(item)
 
-			for _, v := range rewritePattern.ArchiveTags {
+			for _, v := range rewritePattern.Tags[PatternArchive] {
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 					if len(args) > 0 {
@@ -125,8 +125,8 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 		}
 		//否则删除combine
 		uri = strings.ReplaceAll(uri, "(/c-{combine})", "")
-	case "archiveIndex":
-		uri = rewritePattern.ArchiveIndex
+	case PatternArchiveIndex:
+		uri = rewritePattern.Patterns[PatternArchiveIndex]
 		item, ok := data.(*model.Module)
 		if !ok {
 			item2, ok2 := data.(model.Module)
@@ -136,15 +136,15 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			}
 		}
 		if ok && item != nil {
-			for _, v := range rewritePattern.ArchiveIndexTags {
+			for _, v := range rewritePattern.Tags[PatternArchiveIndex] {
 				// 模型首页，只支持module属性
 				if v == "module" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
 				}
 			}
 		}
-	case "category":
-		uri = rewritePattern.Category
+	case PatternCategory:
+		uri = rewritePattern.Patterns[PatternCategory]
 		item, ok := data.(*model.Category)
 		if !ok {
 			item2, ok2 := data.(model.Category)
@@ -158,7 +158,7 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			if item.Type == config.CategoryTypePage {
 				uri = w.GetUrl("page", item, 0)
 			} else {
-				for _, v := range rewritePattern.CategoryTags {
+				for _, v := range rewritePattern.Tags[PatternCategory] {
 					if v == "id" {
 						uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 					} else if v == "catid" {
@@ -186,8 +186,8 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				}
 			}
 		}
-	case "page":
-		uri = rewritePattern.Page
+	case PatternPage:
+		uri = rewritePattern.Patterns[PatternPage]
 		item, ok := data.(*model.Category)
 		if !ok {
 			item2, ok2 := data.(model.Category)
@@ -197,7 +197,7 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			}
 		}
 		if ok && item != nil {
-			for _, v := range rewritePattern.PageTags {
+			for _, v := range rewritePattern.Tags[PatternPage] {
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 				} else if v == "catid" {
@@ -225,25 +225,25 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				} else if item.PageId > 0 {
 					//文档首页
 					module := w.GetModuleFromCache(uint(item.PageId))
-					uri = w.GetUrl("archiveIndex", module, 0)
+					uri = w.GetUrl(PatternArchiveIndex, module, 0)
 				}
 			} else if item.NavType == model.NavTypeCategory {
 				category := w.GetCategoryFromCache(uint(item.PageId))
 				if category != nil {
-					uri = w.GetUrl("category", category, 0)
+					uri = w.GetUrl(PatternCategory, category, 0)
 				}
 			} else if item.NavType == model.NavTypeArchive {
 				archive, _ := w.GetArchiveById(item.PageId)
 				if archive != nil {
-					uri = w.GetUrl("archive", archive, 0)
+					uri = w.GetUrl(PatternArchive, archive, 0)
 				}
 			} else if item.NavType == model.NavTypeOutlink {
 				//外链
 				uri = item.Link
 			}
 		}
-	case "user":
-		uri = "/people/{id}.html"
+	case PatternPeople:
+		uri = rewritePattern.Patterns[PatternPeople]
 		item, ok := data.(*model.User)
 		if !ok {
 			item2, ok2 := data.(model.User)
@@ -253,13 +253,18 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			}
 		}
 		if ok && item != nil {
-			uri = strings.ReplaceAll(uri, "{id}", fmt.Sprintf("%d", item.Id))
-			//uri = strings.ReplaceAll(uri, "{filename}", item.UserName)
+			for _, v := range rewritePattern.Tags[PatternPeople] {
+				if v == "id" {
+					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
+				} else if v == "filename" {
+					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+				}
+			}
 		}
-	case "tagIndex":
-		uri = rewritePattern.TagIndex
-	case "tag":
-		uri = rewritePattern.Tag
+	case PatternTagIndex:
+		uri = rewritePattern.Patterns[PatternTagIndex]
+	case PatternTag:
+		uri = rewritePattern.Patterns[PatternTag]
 		item, ok := data.(*model.Tag)
 		if !ok {
 			item2, ok2 := data.(model.Tag)
@@ -269,7 +274,7 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			}
 		}
 		if ok && item != nil {
-			for _, v := range rewritePattern.TagTags {
+			for _, v := range rewritePattern.Tags[PatternTag] {
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 				} else if v == "catid" {
@@ -299,10 +304,18 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			//不做处理
 		} else {
 			//否则删除分页内容
-			reg := regexp.MustCompile("\\(.*\\)")
+			reg := regexp.MustCompile("\\(.*?\\)")
 			uri = reg.ReplaceAllString(uri, "")
 		}
 	}
+	// 处理 ()
+	re, _ := regexp.Compile("\\(.*?\\)")
+	uri = re.ReplaceAllStringFunc(uri, func(s string) string {
+		if strings.Contains(s, "page") {
+			return s
+		}
+		return ""
+	})
 
 	if strings.HasPrefix(uri, "/") {
 		uri = baseUrl + uri

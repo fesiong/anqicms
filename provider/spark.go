@@ -176,7 +176,10 @@ func GetSparkStream(sparkKey config.SparkSetting, prompt string) (chan string, i
 			}
 			status := choices["status"].(float64)
 			text := choices["text"].([]interface{})
-			content := text[0].(map[string]interface{})["content"].(string)
+			var content string
+			if cont, ok2 := text[0].(map[string]interface{})["content"]; ok2 {
+				content = cont.(string)
+			}
 
 			buf <- content
 			if status == 2 {

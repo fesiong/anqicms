@@ -684,13 +684,28 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 				content = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 			}
 		}
+		detail := library.StructToMap(archiveDetail)
+		detail["content"] = content
+		detail["status"] = true
+		delete(detail, "password")
+		// extra
+		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
+		for i := range archiveParams {
+			if (archiveParams[i].Value == nil || archiveParams[i].Value == "") &&
+				archiveParams[i].Type != config.CustomFieldTypeRadio &&
+				archiveParams[i].Type != config.CustomFieldTypeCheckbox &&
+				archiveParams[i].Type != config.CustomFieldTypeSelect {
+				archiveParams[i].Value = archiveParams[i].Default
+			}
+			if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
+				delete(archiveParams, i)
+			}
+		}
+		detail["extra"] = archiveParams
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "",
-			"data": iris.Map{
-				"status":  true,
-				"content": content,
-			},
+			"data": detail,
 		})
 		return
 	}

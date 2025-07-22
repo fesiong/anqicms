@@ -18,8 +18,12 @@ func StructToMap(obj interface{}) map[string]interface{} {
 	resultMap := make(map[string]interface{})
 	for i := 0; i < objVal.NumField(); i++ {
 		field := objVal.Field(i)
-		fieldName := objType.Field(i).Name
-		resultMap[strings.ToLower(fieldName)] = field.Interface()
+		fieldName := strings.ToLower(objType.Field(i).Name)
+		jsonTag := objType.Field(i).Tag.Get("json")
+		if jsonTag != "" {
+			fieldName = strings.Split(jsonTag, ",")[0]
+		}
+		resultMap[fieldName] = field.Interface()
 	}
 	return resultMap
 }

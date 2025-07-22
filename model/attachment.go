@@ -57,20 +57,20 @@ func (attachment *Attachment) GetThumb(storageUrl string) {
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
-	if strings.HasPrefix(attachment.FileLocation, "http") || strings.HasPrefix(attachment.FileLocation, "//") {
-		attachment.Logo = attachment.FileLocation
-		attachment.Thumb = attachment.FileLocation
-	} else {
+	attachment.Logo = attachment.FileLocation
+	if !strings.HasPrefix(attachment.Logo, "http") && !strings.HasPrefix(attachment.Logo, "//") {
 		// 兼容旧数据
 		if strings.HasPrefix(attachment.FileLocation, "20") {
 			attachment.FileLocation = "uploads/" + attachment.FileLocation
+			attachment.Logo = attachment.FileLocation
 		}
-		attachment.Logo = storageUrl + "/" + attachment.FileLocation
+		attachment.Logo = storageUrl + "/" + strings.TrimPrefix(attachment.Logo, "/")
+	}
+	if strings.HasPrefix(attachment.Logo, storageUrl) && !strings.HasSuffix(attachment.Logo, ".svg") {
 		paths, fileName := filepath.Split(attachment.Logo)
 		attachment.Thumb = paths + "thumb_" + fileName
-		if strings.HasSuffix(attachment.FileLocation, ".svg") {
-			attachment.Thumb = attachment.Logo
-		}
+	} else {
+		attachment.Thumb = attachment.Logo
 	}
 }
 

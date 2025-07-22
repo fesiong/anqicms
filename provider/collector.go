@@ -109,7 +109,7 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 var runningCollectArticles = false
 
 func (w *Website) CollectArticles() {
-	if w.DB == nil {
+	if w.DB == nil || w.CollectorConfig == nil {
 		return
 	}
 	if !w.CollectorConfig.AutoCollect {
@@ -1081,8 +1081,8 @@ func TrimContents(content string) string {
 
 // CheckContentIsEnglish 统计落在 0-127之间的数量，如果达到95%，则认为是英文, 简单的方式处理
 func CheckContentIsEnglish(content string) bool {
-	if len(content) > 128 {
-		content = content[:128]
+	if len(content) > 512 {
+		content = content[:512]
 	}
 
 	enCount := 0

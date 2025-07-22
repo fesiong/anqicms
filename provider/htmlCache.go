@@ -2,6 +2,7 @@ package provider
 
 import (
 	"bytes"
+	"compress/gzip"
 	"context"
 	"errors"
 	"fmt"
@@ -641,8 +642,8 @@ func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []
 	} else {
 		cachePath += "pc"
 	}
-
-	cacheFile := cachePath + transToLocalPath(oriPath, oriQuery)
+	localPath := transToLocalPath(oriPath, oriQuery)
+	cacheFile := cachePath + localPath
 	if len(oriQuery) > 0 {
 		// 有查询，判断是否无效查询
 		tmpLocalPath := transToLocalPath(oriPath, "")
@@ -677,31 +678,31 @@ func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []
 	return os.WriteFile(cacheFile, body, os.ModePerm)
 }
 
-func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
+func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheData []byte, ok bool) {
 	if w.PluginHtmlCache.Open == false {
-		return "", false
+		return nil, false
 	}
 	// 获得路由
 	match := ctx.Params().Get("match")
 	// 首页不允许通过 no-cache 跳过缓存
 	if ctx.GetHeader("Cache-Control") == "no-cache" && match != "index" {
-		return "", false
+		return nil, false
 	}
 	// 用户登录后，也不缓存
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
-		return "", false
+		return nil, false
 	}
 	if match == "index" {
 		if w.PluginHtmlCache.IndexCache == 0 {
-			return "", false
+			return nil, false
 		}
 	} else if match == "archive" {
 		if w.PluginHtmlCache.DetailCache == 0 {
-			return "", false
+			return nil, false
 		}
 	} else if w.PluginHtmlCache.ListCache == 0 {
-		return "", false
+		return nil, false
 	}
 
 	cachePath := w.CachePath
@@ -713,40 +714,78 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 		cachePath += "pc"
 	}
 	localPath := transToLocalPath(ctx.RequestPath(false), ctx.Request().URL.RawQuery)
-	cacheFile = cachePath + localPath
+	cacheFile := cachePath + localPath
+	// 优先读取内存缓存
+	memCacheKey := fmt.Sprintf("html-%v-%s", mobileTemplate, localPath)
+	err := w.Cache.Get(memCacheKey, &cacheData)
+	if err == nil {
+		buf := bytes.NewBuffer(cacheData)
+		gzr, err := gzip.NewReader(buf)
+		if err == nil {
+			cacheData, _ = io.ReadAll(gzr)
+			_ = gzr.Close()
+		}
+		// 关于缓存的引用
+		if bytes.HasPrefix(cacheData, []byte{'/'}) && len(ctx.Request().URL.RawQuery) > 0 {
+			cacheFile = cachePath + string(cacheData)
+			memCacheKey = fmt.Sprintf("html-%v-%s", mobileTemplate, string(cacheData))
+			err = w.Cache.Get(memCacheKey, &cacheData)
+			if err == nil {
+				buf = bytes.NewBuffer(cacheData)
+				gzr, err = gzip.NewReader(buf)
+				if err == nil {
+					cacheData, _ = io.ReadAll(gzr)
+					_ = gzr.Close()
+				}
+				return cacheData, true
+			}
+		} else {
+			return cacheData, true
+		}
+	}
 
 	info, err := os.Stat(cacheFile)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	// 部分缓存文件是引用别的文件，文件长度小于 500 的就做引用检查，只有有query的时候，才会有可能是引用文件，引用文件内容开头是 /
 	if len(ctx.Request().URL.RawQuery) > 0 && info.Size() < 500 {
 		tmpData, err := os.ReadFile(cacheFile)
 		if err != nil {
-			return "", false
+			return nil, false
 		}
 		if bytes.HasPrefix(tmpData, []byte{'/'}) {
 			cacheFile = cachePath + string(tmpData)
+			memCacheKey = fmt.Sprintf("html-%v-%s", mobileTemplate, string(tmpData))
 			info, err = os.Stat(cacheFile)
 			if err != nil {
-				return "", false
+				return nil, false
 			}
 		}
 	}
 	// 检查是否过期
 	if match == "index" {
 		if info.ModTime().Before(time.Now().Add(time.Duration(-w.PluginHtmlCache.IndexCache) * time.Second)) {
-			return "", false
+			return nil, false
 		}
 	} else if match == "archive" {
 		if info.ModTime().Before(time.Now().Add(time.Duration(-w.PluginHtmlCache.DetailCache) * time.Second)) {
-			return "", false
+			return nil, false
 		}
 	} else if info.ModTime().Before(time.Now().Add(time.Duration(-w.PluginHtmlCache.ListCache) * time.Second)) {
-		return "", false
+		return nil, false
+	}
+	// 重新缓存一份到内存,5分钟，详情页和tag不缓存到内存
+	body, _ := os.ReadFile(cacheFile)
+	if match != "archive" && match != "tag" {
+		buf := bytes.NewBuffer(nil)
+		gzw := gzip.NewWriter(buf)
+		_, _ = gzw.Write(body)
+		_ = gzw.Close()
+		_ = w.Cache.Set(memCacheKey, buf.Bytes(), 300)
 	}
 
-	return cacheFile, true
+	return body, true
 }
 
 func (w *Website) RemoveHtmlCache(oriPaths ...string) {
@@ -761,10 +800,15 @@ func (w *Website) RemoveHtmlCache(oriPaths ...string) {
 			oriPath = transToLocalPath(oriPath, "")
 			_ = os.Remove(cacheFilePc + oriPath)
 			_ = os.Remove(cacheFileMobile + oriPath)
+			memCacheKey := fmt.Sprintf("html-%v-%s", true, oriPath)
+			w.Cache.Delete(memCacheKey)
+			memCacheKey = fmt.Sprintf("html-%v-%s", false, oriPath)
+			w.Cache.Delete(memCacheKey)
 		}
 	} else {
 		_ = os.RemoveAll(cacheFilePc)
 		_ = os.RemoveAll(cacheFileMobile)
+		w.Cache.CleanAll("html-")
 	}
 }
 

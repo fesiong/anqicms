@@ -7,7 +7,7 @@ import (
 )
 
 func (w *Website) TryToRunTimeFactor() {
-	if !w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen {
+	if w.PluginTimeFactor == nil || (!w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen) {
 		return
 	}
 
@@ -175,6 +175,14 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	err := db.Order("id asc").Take(&draft).Error
 	if err != nil {
 		// 没文章
+		return
+	}
+	hookCtx := &HookContext{
+		Point: BeforeArchiveRelease,
+		Site:  w,
+		Data:  &draft,
+	}
+	if err = TriggerHook(hookCtx); err != nil {
 		return
 	}
 	archive := &draft.Archive

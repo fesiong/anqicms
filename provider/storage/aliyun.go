@@ -57,3 +57,12 @@ func (s *AliyunStorage) Exists(ctx context.Context, key string) (bool, error) {
 
 	return exist, err
 }
+
+func (s *AliyunStorage) Move(ctx context.Context, src, dest string) error {
+	_, err := s.client.CopyObject(src, dest)
+	if err != nil {
+		return err
+	}
+
+	return s.Delete(ctx, src)
+}

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"gorm.io/gorm"
@@ -170,6 +171,9 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 						}
 						category.Extra[field.FieldName] = val
 					}
+				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
+					buf, _ := json.Marshal(category.Extra[field.FieldName])
+					category.Extra[field.FieldName] = string(buf)
 				}
 			}
 		}
@@ -421,6 +425,24 @@ func (w *Website) GetParentCategories(parentId uint) []*model.Category {
 	}
 
 	return categories
+}
+
+func (w *Website) GetTopCategoryId(categoryId uint) uint {
+	if categoryId == 0 {
+		return 0
+	}
+	for {
+		category := w.GetCategoryFromCache(categoryId)
+		if category == nil {
+			break
+		}
+		if category.ParentId == 0 {
+			break
+		}
+		categoryId = category.ParentId
+	}
+
+	return categoryId
 }
 
 func (w *Website) DeleteCacheCategories() {

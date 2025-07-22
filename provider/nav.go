@@ -4,44 +4,86 @@ import (
 	"errors"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
+	"strings"
 )
 
-func (w *Website) GetNavList(typeId uint) ([]*model.Nav, error) {
+// GetNavList 获取导航列表，showType = list|children,默认children
+func (w *Website) GetNavList(typeId uint, showType string) ([]*model.Nav, error) {
 	var tmpList []*model.Nav
 	db := w.DB
-	//读取第一层
 	if err := db.Where("type_id = ?", typeId).Order("sort asc").Find(&tmpList).Error; err != nil {
-		//始终返回index
 		return nil, err
 	}
+	for i := range tmpList {
+		tmpList[i].Link = w.GetUrl("nav", tmpList[i], 0)
+		tmpList[i].Thumb = tmpList[i].GetThumb(w.PluginStorage.StorageUrl)
+	}
 
-	var navList []*model.Nav
-	for _, v := range tmpList {
-		if v.ParentId == 0 {
-			v.Link = w.GetUrl("nav", v, 0)
-			//先获取顶层的
-			//再获取是否有下一层的
-			//平铺，后台使用
-			navList = append(navList, v)
-			for _, nv := range tmpList {
-				if nv.ParentId == v.Id {
-					nv.Spacer = "└  "
-					nv.Link = w.GetUrl("nav", nv, 0)
-					navList = append(navList, nv)
-					// 增加三级
-					for _, nv3 := range tmpList {
-						if nv3.ParentId == nv.Id {
-							nv3.Spacer = "└  └  "
-							nv3.Link = w.GetUrl("nav", nv3, 0)
-							navList = append(navList, nv3)
-						}
-					}
-				}
-			}
+	return buildNavTree(tmpList, showType), nil
+}
+
+func buildNavTree(navs []*model.Nav, showType string) []*model.Nav {
+	// 构建导航树的根节点
+	var rootNodes []*model.Nav
+	// 创建一个map用于快速查找节点
+	nodeMap := make(map[uint]*model.Nav)
+
+	// 初始化所有节点到nodeMap，并设置基本属性
+	for _, node := range navs {
+		node.NavList = []*model.Nav{}
+		nodeMap[node.Id] = node
+	}
+
+	// 第一次遍历：构建树结构
+	for _, node := range navs {
+		if node.ParentId == 0 {
+			rootNodes = append(rootNodes, node)
+		} else if parentNode, ok := nodeMap[node.ParentId]; ok {
+			node.Level = parentNode.Level + 1
+			parentNode.NavList = append(parentNode.NavList, node)
 		}
 	}
 
-	return navList, nil
+	// 设置链接和缩进标识
+	var setLinkAndSpacer func(node *model.Nav, level int)
+	setLinkAndSpacer = func(node *model.Nav, level int) {
+		// 设置缩进标识
+		if level > 0 {
+			var spacer strings.Builder
+			for i := 0; i < level-1; i++ {
+				spacer.WriteString("└  ")
+			}
+			node.Spacer = spacer.String()
+		}
+
+		// 递归处理子节点
+		for _, child := range node.NavList {
+			setLinkAndSpacer(child, level+1)
+		}
+	}
+
+	// 第二次遍历：设置链接和缩进标识
+	for _, rootNode := range rootNodes {
+		setLinkAndSpacer(rootNode, 0)
+	}
+
+	var result []*model.Nav
+	if showType == "list" {
+		// 将树结构扁平化为列表
+		var flattenTree func(nodes []*model.Nav)
+		flattenTree = func(nodes []*model.Nav) {
+			for _, node := range nodes {
+				result = append(result, node)
+				flattenTree(node.NavList)
+			}
+		}
+
+		flattenTree(rootNodes)
+	} else {
+		result = rootNodes
+	}
+
+	return result
 }
 
 func (w *Website) GetNavById(id uint) (*model.Nav, error) {
@@ -49,6 +91,7 @@ func (w *Website) GetNavById(id uint) (*model.Nav, error) {
 	if err := w.DB.Where("`id` = ?", id).First(&nav).Error; err != nil {
 		return nil, err
 	}
+	nav.GetThumb(w.PluginStorage.StorageUrl)
 
 	return &nav, nil
 }
@@ -122,6 +165,7 @@ func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
 	nav.TypeId = req.TypeId
 	nav.Link = req.Link
 	nav.Sort = req.Sort
+	nav.Logo = req.Logo
 	nav.Status = 1
 
 	err = nav.Save(w.DB)
@@ -164,11 +208,11 @@ func (w *Website) DeleteCacheNavs() {
 	w.Cache.Delete("navs")
 }
 
-func (w *Website) GetCacheNavs() []model.Nav {
+func (w *Website) GetCacheNavs() []*model.Nav {
 	if w.DB == nil {
 		return nil
 	}
-	var navs []model.Nav
+	var navs []*model.Nav
 
 	err := w.Cache.Get("navs", &navs)
 	if err == nil {
@@ -177,57 +221,31 @@ func (w *Website) GetCacheNavs() []model.Nav {
 
 	err = w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs).Error
 	if err != nil {
+		_ = w.Cache.Set("navs", navs, 60)
 		return nil
 	}
 
 	if len(navs) > 0 {
+		for i := range navs {
+			navs[i].Link = w.GetUrl("nav", navs[i], 0)
+			navs[i].GetThumb(w.PluginStorage.StorageUrl)
+		}
 		_ = w.Cache.Set("navs", navs, 0)
 	}
 
 	return navs
 }
 
-func (w *Website) GetNavsFromCache(typeId uint) []*model.Nav {
-	var tmpNavs []*model.Nav
+func (w *Website) GetNavsFromCache(typeId uint, showType string) []*model.Nav {
 	navs := w.GetCacheNavs()
+	var tmpNavs = make([]*model.Nav, 0, len(navs))
+
 	for i := range navs {
-		if navs[i].ParentId == 0 && navs[i].TypeId == typeId {
-			navs[i].Link = w.GetUrl("nav", &navs[i], 0)
-			//先获取顶层的
-			//再获取是否有下一层的
-			//嵌套，前台使用
-			navs[i].NavList = make([]*model.Nav, 0)
-			for j := range navs {
-				if navs[j].ParentId == navs[i].Id {
-					navs[j].Spacer = "└  "
-					navs[j].Link = w.GetUrl("nav", &navs[j], 0)
-					// 增加三级
-					navs[j].NavList = make([]*model.Nav, 0)
-					for k := range navs {
-						if navs[k].ParentId == navs[j].Id {
-							navs[k].Spacer = "└  └  "
-							navs[k].Link = w.GetUrl("nav", &navs[k], 0)
-							navs[j].NavList = append(navs[j].NavList, &navs[k])
-						}
-					}
-					navs[i].NavList = append(navs[i].NavList, &navs[j])
-				}
-			}
-			tmpNavs = append(tmpNavs, &navs[i])
+		if navs[i].TypeId == typeId {
+			tmpNavs = append(tmpNavs, navs[i])
 		}
 	}
+	result := buildNavTree(tmpNavs, showType)
 
-	if len(tmpNavs) == 0 {
-		return []*model.Nav{
-			{
-				Title:   w.Tr("Home"),
-				Status:  1,
-				NavType: model.NavTypeSystem,
-				PageId:  0,
-				Link:    w.GetUrl("index", nil, 0),
-			},
-		}
-	}
-
-	return tmpNavs
+	return result
 }

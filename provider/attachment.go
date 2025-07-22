@@ -116,6 +116,18 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 	// 生成文件名
 	tmpName := md5Str[8:24] + fileExt
+	// 默认采用用户上传的文件名
+	// 只允许英文名使用,空格转换成-
+	if CheckContentIsEnglish(fileName) {
+		tmpName = strings.ReplaceAll(fileName, "%20", "-")
+		tmpName = strings.ReplaceAll(fileName, " ", "-")
+		tmpName = filepath.Base(strings.ToLower(tmpName))
+		// 不能超过 200个字符
+		if len(tmpName) > 200 {
+			tmpName = tmpName[0:200]
+		}
+		tmpName = tmpName + fileExt
+	}
 	filePath := time.Now().Format("uploads/200601/02/")
 	if attachId > 0 {
 		filePath = filepath.Dir(attachment.FileLocation) + "/"
@@ -318,6 +330,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 	if errs == nil {
 		//处理
 		contentType := strings.ToLower(resp.Header.Get("content-type"))
+		contentType = strings.Split(contentType, ";")[0]
 		if contentType == "image/jpeg" || contentType == "image/jpg" || contentType == "image/png" || contentType == "image/gif" || contentType == "image/webp" {
 			if fileName == "" {
 				fileName = "image"
@@ -1161,12 +1174,22 @@ func getWebpPath() (string, error) {
 		binName += ".exe"
 	}
 	binPath := config.ExecPath + "source/" + binName
-	if _, err := os.Stat(binPath); err != nil {
+	if info, err := os.Stat(binPath); err != nil {
 		if os.IsNotExist(err) {
 			// 尝试坚持系统安装的 cwebp
 			binPath, err = exec.LookPath("cwebp")
 			if err != nil {
 				return "", err
+			}
+		} else {
+			// 检查binPath的权限，没有执行权限就添加
+			currentPerm := info.Mode().Perm()
+			if currentPerm&0100 != 0 {
+				newPerm := currentPerm | 0100
+				err = os.Chmod(binPath, newPerm)
+				if err != nil {
+					return "", err
+				}
 			}
 		}
 	}

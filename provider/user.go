@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/golang-jwt/jwt/v5"
@@ -53,7 +54,7 @@ func (w *Website) GetUserByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.User, er
 		return nil, err
 	}
 	user.GetThumb(w.PluginStorage.StorageUrl)
-	user.Link = w.GetUrl("user", &user, 0)
+	user.Link = w.GetUrl(PatternPeople, &user, 0)
 	user.Extra = w.GetUserExtra(user.Id)
 	return &user, nil
 }
@@ -64,6 +65,12 @@ func (w *Website) GetUserInfoById(userId uint) (*model.User, error) {
 	}
 	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", userId)
+	})
+}
+
+func (w *Website) GetUserInfoByUrlToken(urlToken string) (*model.User, error) {
+	return w.GetUserByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`url_token` = ?", urlToken)
 	})
 }
 
@@ -149,17 +156,34 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							var val2 []string
 							for _, v2 := range val {
-								val2 = append(val2, v2.(string))
+								v2s, _ := v2.(string)
+								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
 						}
-					} else if v.Type == config.CustomFieldTypeNumber {
+					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
-						extraFields[v.FieldName], _ = strconv.Atoi(fmt.Sprintf("%v", extraValue["value"]))
+						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+						// 存 json
+						if val, ok := extraValue["value"].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, ok2 := v2.(string)
+								if ok2 {
+									val[j] = w.ReplaceContentUrl(v2s, false)
+								}
+							}
+							buf, _ := json.Marshal(val)
+							extraFields[v.FieldName] = string(buf)
+						}
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
-							extraFields[v.FieldName] = strings.TrimPrefix(value, w.PluginStorage.StorageUrl)
+							if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+								extraFields[v.FieldName] = w.ReplaceContentUrl(value, false)
+							} else {
+								extraFields[v.FieldName] = extraValue["value"]
+							}
 						} else {
 							extraFields[v.FieldName] = extraValue["value"]
 						}
@@ -681,10 +705,10 @@ func (w *Website) DeleteUserField(fieldName string) error {
 	return err
 }
 
-func (w *Website) GetUserExtra(id uint) map[string]*model.CustomField {
+func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 	//读取extra
 	result := map[string]interface{}{}
-	extraFields := map[string]*model.CustomField{}
+	extraFields := map[string]model.CustomField{}
 	var fields []string
 	for _, v := range w.PluginUser.Fields {
 		fields = append(fields, "`"+v.FieldName+"`")
@@ -698,9 +722,33 @@ func (w *Website) GetUserExtra(id uint) map[string]*model.CustomField {
 			if ok {
 				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
 					result[v.FieldName] = w.ReplaceContentUrl(value, true)
+				} else if v.Type == config.CustomFieldTypeImages {
+					// json 还原
+					var images []string
+					err := json.Unmarshal([]byte(value), &images)
+					if err == nil {
+						for i := range images {
+							images[i] = w.ReplaceContentUrl(images[i], true)
+						}
+						result[v.FieldName] = images
+					}
+				} else if v.Type == config.CustomFieldTypeTexts {
+					var texts []model.CustomFieldTexts
+					err := json.Unmarshal([]byte(value), &texts)
+					if err == nil {
+						result[v.FieldName] = texts
+					}
+				} else if v.Type == config.CustomFieldTypeArchive {
+					var arcIds []int64
+					err := json.Unmarshal([]byte(value), &arcIds)
+					if err == nil {
+						result[v.FieldName] = arcIds
+					}
+				} else if v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
+					result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 				}
 			}
-			extraFields[v.FieldName] = &model.CustomField{
+			extraFields[v.FieldName] = model.CustomField{
 				Name:        v.Name,
 				Value:       result[v.FieldName],
 				Default:     v.Content,

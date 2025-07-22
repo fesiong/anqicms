@@ -50,6 +50,31 @@ func NotFound(ctx iris.Context) {
 	}
 }
 
+func CommonPage(ctx iris.Context) {
+	webInfo := &response.WebInfo{}
+
+	currentSite := provider.CurrentSite(ctx)
+	ctx.ViewData("webInfo", webInfo)
+
+	tplName := "common/index.html"
+	urlToken := ctx.Params().GetString("filename")
+	if urlToken != "" {
+		tplName = "common/" + urlToken + ".html"
+	}
+	var ok bool
+	tplName, ok = currentSite.TemplateExist(tplName, "common/index.html", "common/detail.html")
+	if !ok {
+		NotFound(ctx)
+		return
+	}
+
+	err := ctx.View(GetViewPath(ctx, tplName))
+	if err != nil {
+		ctx.StatusCode(404)
+		ShowMessage(ctx, "common/index.html Not Found", nil)
+	}
+}
+
 func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 	currentSite := provider.CurrentSite(ctx)
 	var tr func(str string, args ...interface{}) string
@@ -474,32 +499,35 @@ func ReRouteContext(ctx iris.Context) {
 	case "notfound":
 		// 走到 not Found
 		break
-	case "archive":
+	case provider.PatternArchive:
 		ArchiveDetail(ctx)
 		return
-	case "archiveIndex":
+	case provider.PatternArchiveIndex:
 		ArchiveIndex(ctx)
 		return
-	case "category":
+	case provider.PatternCategory:
 		CategoryPage(ctx)
 		return
-	case "page":
+	case provider.PatternPage:
 		PagePage(ctx)
 		return
-	case "search":
+	case provider.PatternSearch:
 		SearchPage(ctx)
 		return
-	case "tagIndex":
+	case provider.PatternTagIndex:
 		TagIndexPage(ctx)
 		return
-	case "tag":
+	case provider.PatternTag:
 		TagPage(ctx)
 		return
 	case "index":
 		IndexPage(ctx)
 		return
-	case "user":
+	case provider.PatternPeople:
 		UserPage(ctx)
+		return
+	case provider.PatternCommon:
+		Common(ctx)
 		return
 	}
 
@@ -542,194 +570,190 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	// 如果匹配到固化链接，则直接返回
 	archiveId := currentSite.GetFixedLinkFromCache("/" + paramValue)
 	if archiveId > 0 {
-		matchMap["match"] = "archive"
+		matchMap["match"] = provider.PatternArchive
 		matchMap["id"] = fmt.Sprintf("%d", archiveId)
 		return matchMap, true
 	}
-	// 搜索
-	reg := regexp.MustCompile(`^search(/([^/]+?))?$`)
-	match := reg.FindStringSubmatch(paramValue)
-	if len(match) > 0 {
-		matchMap["match"] = "search"
-		if len(match) == 3 {
-			matchMap["module"] = match[2]
-		}
-		return matchMap, true
+	rewritePattern := useSite.ParsePattern(false)
+	// 处理顺序
+	ruleNames := []string{
+		provider.PatternSearch,       // 搜索
+		provider.PatternArchiveIndex, // 模型页面
+		provider.PatternPeopleIndex,  // 用户列表
+		provider.PatternPeople,       // 用户
+		provider.PatternTagIndex,     // 标签列表
+		provider.PatternTag,          // 标签详情
+		provider.PatternPage,         // 单页
+		provider.PatternCategory,     // 分类列表
+		provider.PatternArchive,      // 文章详情
+		//	provider.PatternCommon,       // common 处理逻辑
 	}
-	rewritePattern := useSite.ParsePatten(false)
-
-	//archivePage
-	reg = regexp.MustCompile(rewritePattern.ArchiveIndexRule)
-	match = reg.FindStringSubmatch(paramValue)
-	if len(match) > 0 {
-		matchMap["match"] = "archiveIndex"
-		for i, v := range match {
-			key := rewritePattern.ArchiveIndexTags[i]
-			if i == 0 {
-				key = "route"
+	for _, ruleName := range ruleNames {
+		reg := regexp.MustCompile(rewritePattern.Rules[ruleName])
+		match := reg.FindStringSubmatch(paramValue)
+		if len(match) == 0 && strings.Contains(rewritePattern.Rules[ruleName], "\\?") {
+			// 支持带问号的规则
+			paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+			// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
+			reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.Rules[ruleName], "$") + "([&#].*)?$")
+			match = reg.FindStringSubmatch(paramValueWithArgs)
+		}
+		if len(match) > 0 {
+			matchMap["match"] = ruleName
+			for i, v := range match {
+				key := rewritePattern.Tags[ruleName][i]
+				if i == 0 {
+					key = "route"
+				}
+				matchMap[key] = v
 			}
-			matchMap[key] = v
-		}
-		// 这个规则可能与下面的冲突，因此检查一遍
-		module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
-		if module != nil {
-			return matchMap, true
-		}
-		matchMap = map[string]string{}
-	}
-	// people
-	reg = regexp.MustCompile("^people/([\\d]+).html$")
-	match = reg.FindStringSubmatch(paramValue)
-
-	if len(match) > 1 {
-		matchMap["match"] = "user"
-		for i, v := range match {
-			key := "id"
-			if i == 0 {
-				key = "route"
+			if ruleName == provider.PatternSearch {
+				if len(match) == 3 {
+					matchMap["module"] = match[2]
+				}
 			}
-			matchMap[key] = v
-		}
-		return matchMap, true
-	}
-	//tagIndex
-	reg = regexp.MustCompile(rewritePattern.TagIndexRule)
-	match = reg.FindStringSubmatch(paramValue)
-	if len(match) > 1 {
-		matchMap["match"] = "tagIndex"
-		for i, v := range match {
-			key := rewritePattern.TagIndexTags[i]
-			if i == 0 {
-				key = "route"
+			if ruleName == provider.PatternArchiveIndex {
+				// 这个规则可能与下面的冲突，因此检查一遍
+				module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
+				if module != nil {
+					return matchMap, true
+				}
+				matchMap = map[string]string{}
+				continue
 			}
-			matchMap[key] = v
-		}
-		return matchMap, true
-	}
-	//tag
-	reg = regexp.MustCompile(rewritePattern.TagRule)
-	match = reg.FindStringSubmatch(paramValue)
-	if len(match) > 1 {
-		matchMap["match"] = "tag"
-		for i, v := range match {
-			key := rewritePattern.TagTags[i]
-			if i == 0 {
-				key = "route"
-			}
-			matchMap[key] = v
-		}
-		return matchMap, true
-	}
-	//page
-	reg = regexp.MustCompile(rewritePattern.PageRule)
-	match = reg.FindStringSubmatch(paramValue)
-	if len(match) == 0 && strings.Contains(rewritePattern.PageRule, "\\?") {
-		// 详情支持带问号的规则
-		paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
-		// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
-		reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.PageRule, "$") + "([&#].*)?$")
-		match = reg.FindStringSubmatch(paramValueWithArgs)
-	}
-	if len(match) > 1 {
-		matchMap["match"] = "page"
-		for i, v := range match {
-			key := rewritePattern.PageTags[i]
-			if i == 0 {
-				key = "route"
-			}
-			matchMap[key] = v
-		}
-		if matchMap["filename"] != "" {
-			// 这个规则可能与下面的冲突，因此检查一遍
-			category := currentSite.GetCategoryFromCacheByToken(matchMap["filename"])
-			if category != nil && category.Type == config.CategoryTypePage {
-				return matchMap, true
-			}
-		} else {
-			return matchMap, true
-		}
-		matchMap = map[string]string{}
-	}
-	//category
-	reg = regexp.MustCompile(rewritePattern.CategoryRule)
-	match = reg.FindStringSubmatch(paramValue)
-	if len(match) == 0 && strings.Contains(rewritePattern.CategoryRule, "\\?") {
-		// 详情支持带问号的规则
-		paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
-		// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
-		reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.CategoryRule, "$") + "([&#].*)?$")
-		match = reg.FindStringSubmatch(paramValueWithArgs)
-	}
-	if len(match) > 1 {
-		matchMap["match"] = "category"
-		for i, v := range match {
-			key := rewritePattern.CategoryTags[i]
-			if i == 0 {
-				key = "route"
-			}
-			matchMap[key] = v
-		}
-		if matchMap["catname"] != "" {
-			matchMap["filename"] = matchMap["catname"]
-		}
-		if matchMap["multicatname"] != "" {
-			chunkCatNames := strings.Split(matchMap["multicatname"], "/")
-			matchMap["filename"] = chunkCatNames[len(chunkCatNames)-1]
-		}
-		if matchMap["module"] != "" {
-			// 需要先验证是否是module
-			module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
-			if module != nil {
+			if ruleName == provider.PatternPage {
 				if matchMap["filename"] != "" {
 					// 这个规则可能与下面的冲突，因此检查一遍
 					category := currentSite.GetCategoryFromCacheByToken(matchMap["filename"])
-					if category != nil && category.Type != config.CategoryTypePage {
+					if category != nil && category.Type == config.CategoryTypePage {
+						return matchMap, true
+					}
+				} else {
+					return matchMap, true
+				}
+				matchMap = map[string]string{}
+				continue
+			}
+			if ruleName == provider.PatternCategory {
+				if matchMap["catname"] != "" {
+					matchMap["filename"] = matchMap["catname"]
+				}
+				if matchMap["multicatname"] != "" {
+					chunkCatNames := strings.Split(matchMap["multicatname"], "/")
+					matchMap["filename"] = chunkCatNames[len(chunkCatNames)-1]
+				}
+				if matchMap["module"] != "" {
+					// 需要先验证是否是module
+					module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
+					if module != nil {
+						if matchMap["filename"] != "" {
+							// 这个规则可能与下面的冲突，因此检查一遍
+							category := currentSite.GetCategoryFromCacheByToken(matchMap["filename"])
+							if category != nil && category.Type != config.CategoryTypePage {
+								return matchMap, true
+							}
+						} else {
+							return matchMap, true
+						}
+					}
+				} else {
+					if matchMap["filename"] != "" {
+						// 这个规则可能与下面的冲突，因此检查一遍
+						category := currentSite.GetCategoryFromCacheByToken(matchMap["filename"])
+						if category != nil && category.Type != config.CategoryTypePage {
+							return matchMap, true
+						}
+					} else {
+						return matchMap, true
+					}
+				}
+				matchMap = map[string]string{}
+				continue
+			}
+			if ruleName == provider.PatternArchive {
+				// 需要先处理模型自定义规则，再处理默认的
+				// 支持模型自定义文档伪静态规则
+				modules := currentSite.GetCacheModules()
+				for x := range modules {
+					diyName := modules[x].UrlToken + ":archive"
+					_, ok := rewritePattern.Rules[diyName]
+					if ok {
+						reg = regexp.MustCompile(rewritePattern.Rules[diyName])
+						match = reg.FindStringSubmatch(paramValue)
+						if len(match) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
+							// 详情支持带问号的规则
+							paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+							// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
+							reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.Rules[diyName], "$") + "([&#].*)?$")
+							match = reg.FindStringSubmatch(paramValueWithArgs)
+						}
+						if len(match) > 1 {
+							matchMap["match"] = provider.PatternArchive
+							for i, v := range match {
+								iKey := i
+								key := rewritePattern.Tags[diyName][iKey]
+								if i == 0 {
+									key = "route"
+								}
+								matchMap[key] = v
+							}
+							if matchMap["module"] != "" && matchMap["module"] == modules[x].UrlToken {
+								// 需要先验证是否是module
+								return matchMap, true
+							} else {
+								return matchMap, true
+							}
+						}
+					}
+				}
+				if matchMap["module"] != "" {
+					// 需要先验证是否是module
+					module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
+					if module != nil {
 						return matchMap, true
 					}
 				} else {
 					return matchMap, true
 				}
 			}
-		} else {
-			if matchMap["filename"] != "" {
-				// 这个规则可能与下面的冲突，因此检查一遍
-				category := currentSite.GetCategoryFromCacheByToken(matchMap["filename"])
-				if category != nil && category.Type != config.CategoryTypePage {
+
+			return matchMap, true
+		}
+	}
+	// 处理common，默认规则6条，超过就额外处理
+	if 6 < len(rewritePattern.Rules) {
+		for ruleName := range rewritePattern.Rules {
+			// 在 ruleNames 之外的算 common
+			exist := false
+			for _, key := range ruleNames {
+				if key == ruleName {
+					exist = true
+					break
+				}
+			}
+			if !exist {
+				reg := regexp.MustCompile(rewritePattern.Rules[ruleName])
+				match := reg.FindStringSubmatch(paramValue)
+				if len(match) == 0 && strings.Contains(rewritePattern.Rules[ruleName], "\\?") {
+					// 支持带问号的规则
+					paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
+					// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
+					reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.Rules[ruleName], "$") + "([&#].*)?$")
+					match = reg.FindStringSubmatch(paramValueWithArgs)
+				}
+				if len(match) > 0 {
+					matchMap["match"] = ruleName
+					for i, v := range match {
+						key := rewritePattern.Tags[ruleName][i]
+						if i == 0 {
+							key = "route"
+						}
+						matchMap[key] = v
+					}
+
 					return matchMap, true
 				}
-			} else {
-				return matchMap, true
 			}
-		}
-		matchMap = map[string]string{}
-	}
-	//最后archive
-	reg = regexp.MustCompile(rewritePattern.ArchiveRule)
-	match = reg.FindStringSubmatch(paramValue)
-	if len(match) == 0 && strings.Contains(rewritePattern.ArchiveRule, "\\?") {
-		// 详情支持带问号的规则
-		paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
-		// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
-		reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.ArchiveRule, "$") + "([&#].*)?$")
-		match = reg.FindStringSubmatch(paramValueWithArgs)
-	}
-	if len(match) > 1 {
-		matchMap["match"] = "archive"
-		for i, v := range match {
-			key := rewritePattern.ArchiveTags[i]
-			if i == 0 {
-				key = "route"
-			}
-			matchMap[key] = v
-		}
-		if matchMap["module"] != "" {
-			// 需要先验证是否是module
-			module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
-			if module != nil {
-				return matchMap, true
-			}
-		} else {
-			return matchMap, true
 		}
 	}
 

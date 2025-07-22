@@ -14,7 +14,7 @@ type Comment struct {
 	Content   string   `json:"content" gorm:"column:content;type:longtext default null"`
 	ParentId  uint     `json:"parent_id" gorm:"column:parent_id;type:int(10) unsigned not null;default:0;index:idx_parent_id"`
 	ToUid     uint     `json:"to_uid" gorm:"column:to_uid;type:int(10) unsigned not null;default:0;index:idx_to_uid"`
-	Status    uint     `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+	Status    uint     `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"` // 状态，0 未处理，1 正常，2 疑似垃圾 3 垃圾
 	ItemTitle string   `json:"item_title" gorm:"-"`
 	Parent    *Comment `json:"parent" gorm:"-"`
 	Active    bool     `json:"active" gorm:"-"`
