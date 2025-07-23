@@ -15,6 +15,9 @@ type PluginPayConfig struct {
 	WechatApiKey    string `json:"wechat_api_key"`    // 公众号、小程序共用支付密钥
 	WechatCertPath  string `json:"wechat_cert_path"`  // 证书路径
 	WechatKeyPath   string `json:"wechat_key_path"`   // 证书路径
+
+	PaypalClientId     string `json:"paypal_client_id"`     // paypal
+	PaypalClientSecret string `json:"paypal_client_secret"` // paypal
 }
 
 type PluginRetailerConfig struct {

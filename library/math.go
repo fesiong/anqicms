@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"math"
 	"math/rand"
 	"os"
 	"strconv"
@@ -52,6 +53,37 @@ func GenerateRandNumber(length uint) uint {
 	}
 	randomNumber, _ := strconv.ParseUint(stringBuilder.String(), 10, 0)
 	return uint(randomNumber)
+}
+
+// GenerateRandString 生成随机字符串
+func GenerateRandString(length int) string {
+	const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	var output strings.Builder
+	output.Grow(length) // 提前分配足够的空间
+
+	// 初始化随机数生成器
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	for i := 0; i < length; i++ {
+		// 随机选择一个字符
+		character := charSet[rd.Intn(len(charSet))]
+		output.WriteByte(character)
+	}
+
+	return output.String()
+}
+
+// IsMd5 验证给定的字符串是否是md5值，返回匹配的md5值或者空字符串
+func IsMd5(str string) bool {
+	if len(str) != 32 {
+		return false
+	}
+	for _, c := range str {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
 }
 
 func Md5(str string) string {
@@ -114,4 +146,61 @@ func min(a, b int) int {
 		return a
 	}
 	return b
+}
+
+func LevenshteinDistance(s1, s2 string) float64 {
+	r1 := []rune(s1)
+	r2 := []rune(s2)
+	len1 := len(r1)
+	len2 := len(r2)
+
+	prev := make([]float64, len2+1)
+	curr := make([]float64, len2+1)
+
+	for j := 0; j <= len2; j++ {
+		prev[j] = float64(j)
+	}
+
+	for i := 1; i <= len1; i++ {
+		curr[0] = float64(i)
+		for j := 1; j <= len2; j++ {
+			var cost float64
+			if r1[i-1] != r2[j-1] {
+				cost = 1
+			}
+			// 计算当前值
+			curr[j] = math.Min(math.Min(prev[j-1]+cost, curr[j-1]+1), prev[j]+1)
+		}
+		// 滚动数组更新
+		prev, curr = curr, prev
+	}
+
+	// 计算相似度
+	distance := prev[len2]
+	maxLen := math.Max(float64(len1), float64(len2))
+	return 1 - distance/maxLen
+}
+
+func JoinInt(is []int64, sep string) string {
+	switch len(is) {
+	case 0:
+		return ""
+	case 1:
+		return strconv.FormatInt(is[0], 10)
+	}
+
+	var n int
+	if len(sep) > 0 {
+		n += len(sep) * (len(is) - 1)
+	}
+	var b strings.Builder
+	b.Grow(n)
+	b.WriteString(strconv.FormatInt(is[0], 10))
+	for _, elem := range is[1:] {
+		s := strconv.FormatInt(elem, 10)
+		b.WriteString(sep)
+		b.WriteString(s)
+	}
+
+	return b.String()
 }

@@ -7,11 +7,12 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
 	"time"
 )
 
 func GetDesignList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	// 读取 设计列表
 	designList := currentSite.GetDesignList()
 
@@ -23,7 +24,7 @@ func GetDesignList(ctx iris.Context) {
 }
 
 func GetDesignInfo(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
 
 	designInfo, err := currentSite.GetDesignInfo(packageName, true)
@@ -43,7 +44,7 @@ func GetDesignInfo(ctx iris.Context) {
 }
 
 func SaveDesignInfo(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -87,7 +88,7 @@ func SaveDesignInfo(ctx iris.Context) {
 }
 
 func UseDesignInfo(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -130,7 +131,7 @@ func UseDesignInfo(ctx iris.Context) {
 }
 
 func DeleteDesignInfo(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -159,7 +160,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 }
 
 func DownloadDesignInfo(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignInfoRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -184,7 +185,8 @@ func DownloadDesignInfo(ctx iris.Context) {
 }
 
 func UploadDesignInfo(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
+	cover := ctx.FormValue("cover")
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -195,7 +197,7 @@ func UploadDesignInfo(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	err = currentSite.UploadDesignZip(file, info)
+	err = currentSite.UploadDesignZip(file, info, cover)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -203,6 +205,8 @@ func UploadDesignInfo(ctx iris.Context) {
 		})
 		return
 	}
+	// 需要重载模板
+	config.RestartChan <- 0
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateLog", info.Filename))
 
@@ -212,8 +216,29 @@ func UploadDesignInfo(ctx iris.Context) {
 	})
 }
 
+// CheckUploadDesignInfo 如果文件名重复，则需要确认是否覆盖
+func CheckUploadDesignInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	packageName := ctx.URLParam("package")
+	packagePath := currentSite.RootPath + "template/" + packageName
+	_, err := os.Stat(packagePath)
+	if err == nil {
+		// 已存在
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+	})
+}
+
 func BackupDesignData(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignDataRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -241,7 +266,7 @@ func BackupDesignData(ctx iris.Context) {
 }
 
 func RestoreDesignData(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignDataRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -256,7 +281,15 @@ func RestoreDesignData(ctx iris.Context) {
 	}
 	if req.AutoBackup {
 		// 如果用户勾选了自动备份
-		err := currentSite.BackupData()
+		status, err := currentSite.NewBackup()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		err = status.BackupData()
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -291,7 +324,7 @@ func RestoreDesignData(ctx iris.Context) {
 }
 
 func UploadDesignFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -330,7 +363,7 @@ func UploadDesignFile(ctx iris.Context) {
 }
 
 func GetDesignFileDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
 	fileName := ctx.URLParam("path")
 	fileType := ctx.URLParam("type")
@@ -352,7 +385,7 @@ func GetDesignFileDetail(ctx iris.Context) {
 }
 
 func GetDesignFileHistories(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
 	fileName := ctx.URLParam("path")
 	fileType := ctx.URLParam("type")
@@ -367,7 +400,7 @@ func GetDesignFileHistories(ctx iris.Context) {
 }
 
 func GetDesignFileHistoryDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
 	fileName := ctx.URLParam("path")
 	fileType := ctx.URLParam("type")
@@ -390,7 +423,7 @@ func GetDesignFileHistoryDetail(ctx iris.Context) {
 }
 
 func DeleteDesignFileHistories(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.RestoreDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -418,7 +451,7 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 }
 
 func RestoreDesignFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.RestoreDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -451,7 +484,7 @@ func RestoreDesignFile(ctx iris.Context) {
 }
 
 func SaveDesignFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SaveDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -482,7 +515,7 @@ func SaveDesignFile(ctx iris.Context) {
 }
 
 func CopyDesignFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CopyDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -511,7 +544,7 @@ func CopyDesignFile(ctx iris.Context) {
 }
 
 func DeleteDesignFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SaveDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -540,7 +573,7 @@ func DeleteDesignFile(ctx iris.Context) {
 }
 
 func GetDesignTemplateFiles(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	packageName := currentSite.System.TemplateName
 	templates, err := currentSite.GetDesignTemplateFiles(packageName)
 	if err != nil {

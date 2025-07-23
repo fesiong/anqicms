@@ -57,8 +57,8 @@ type OrderDetail struct {
 	Model
 	OrderId      string     `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
 	UserId       uint       `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	GoodsId      uint       `json:"goods_id" gorm:"column:goods_id;type:int(10) not null;index"`
-	GoodsItemId  uint       `json:"goods_item_id" gorm:"column:goods_item_id;type:int(10) not null;default:0;index"`
+	GoodsId      int64      `json:"goods_id" gorm:"column:goods_id;type:bigint(20) not null;index"`
+	GoodsItemId  int64      `json:"goods_item_id" gorm:"column:goods_item_id;type:bigint(20) not null;default:0;index"`
 	Price        int64      `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	OriginPrice  int64      `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
 	Amount       int64      `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"` // 实际支付的金额，用于退款的时候进行退款操作
@@ -120,6 +120,8 @@ type Payment struct {
 	PayWay    string `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`       // 支付方式
 	PaidTime  int64  `json:"paid_time" gorm:"column:paid_time;type:int(10) not null;default:0;comment:支付时间"` //该订单支付时间
 	Remark    string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`                     //备注
+	BuyerId   string `json:"buyer_id" gorm:"column:buyer_id;type:varchar(64) not null;default:''"`           //用户标识
+	BuyerInfo string `json:"buyer_info" gorm:"column:buyer_info;type:varchar(255) not null;default:''"`      //买家信息，PayPal有返回
 }
 
 func (p *Payment) AfterCreate(tx *gorm.DB) (err error) {

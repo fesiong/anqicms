@@ -10,7 +10,7 @@ import (
 )
 
 func PluginCommentList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	comments, total, err := currentSite.GetCommentList(0, 0, "id desc", currentPage, pageSize, 0)
@@ -42,7 +42,7 @@ func PluginCommentList(ctx iris.Context) {
 }
 
 func PluginCommentDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	comment, err := currentSite.GetCommentById(id)
 	if err != nil {
@@ -61,7 +61,7 @@ func PluginCommentDetail(ctx iris.Context) {
 }
 
 func PluginCommentDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginComment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -108,7 +108,7 @@ func PluginCommentDetailForm(ctx iris.Context) {
 }
 
 func PluginCommentDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginComment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -145,7 +145,7 @@ func PluginCommentDelete(ctx iris.Context) {
 
 // 处理审核状态
 func PluginCommentCheck(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginComment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
