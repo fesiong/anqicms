@@ -113,6 +113,7 @@ func (bootstrap *Bootstrap) Start() {
 	}
 
 	pugEngine.AddFunc("stampToDate", tags.TimestampToDate)
+	pugEngine.AddFunc("CustomFunc", tags.CustomFunc)
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
 	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)

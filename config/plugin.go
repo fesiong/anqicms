@@ -219,6 +219,8 @@ type PluginLimiter struct {
 	IsAllowSpider bool     `json:"is_allow_spider"`
 	BanEmptyRefer bool     `json:"ban_empty_refer"` // 只限制图片，js之类
 	BanEmptyAgent bool     `json:"ban_empty_agent"` // 限制 curl 等
+	MemLimit      bool     `json:"mem_limit"`
+	MemPercent    int      `json:"mem_percent"`
 }
 
 type MultiLangSite struct {
