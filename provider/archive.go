@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -187,6 +188,13 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		if err == nil {
 			return archives, int64(len(archives)), nil
 		}
+		if wg, ok := w.Cache.Pending(cacheKey); ok {
+			wg.Wait()
+			err = w.Cache.Get(cacheKey, &archives)
+			if err == nil {
+				return archives, int64(len(archives)), nil
+			}
+		}
 	}
 	var builder *gorm.DB
 	if draft {
@@ -233,6 +241,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 	} else {
+		wg := &sync.WaitGroup{}
+		wg.Add(1)
+		w.Cache.AddPending(cacheKey, wg)
 		if strings.Contains(order, "rand") {
 			// 如果文章总量大于10万，则使用下面的方法处理
 			totalArchive := w.GetExplainCount("SELECT id FROM archives")
@@ -263,15 +274,25 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			}
 		}
 		builder = builder.Limit(pageSize).Offset(offset).Order(order)
-		if err := builder.Find(&archives).Error; err != nil {
-			return nil, 0, err
+		var archiveIds []int64
+		builder.Pluck("id", &archiveIds)
+		if len(archiveIds) > 0 {
+			if draft {
+				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			} else {
+				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			}
 		}
 		for i := range archives {
 			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 		// 对于没有分页的list，则缓存
-		_ = w.Cache.Set(cacheKey, archives, 300)
+		if !draft {
+			_ = w.Cache.Set(cacheKey, archives, 600)
+		}
+		w.Cache.DelPending(cacheKey)
+		wg.Done()
 	}
 
 	return archives, total, nil
