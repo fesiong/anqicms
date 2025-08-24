@@ -2,6 +2,7 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"strings"
@@ -47,6 +48,9 @@ func buildNavTree(navs []*model.Nav, showType string) []*model.Nav {
 	// 设置链接和缩进标识
 	var setLinkAndSpacer func(node *model.Nav, level int)
 	setLinkAndSpacer = func(node *model.Nav, level int) {
+		if node == nil || level > 5 {
+			return
+		}
 		// 设置缩进标识
 		if level > 0 {
 			var spacer strings.Builder
@@ -57,8 +61,12 @@ func buildNavTree(navs []*model.Nav, showType string) []*model.Nav {
 		}
 
 		// 递归处理子节点
-		for _, child := range node.NavList {
-			setLinkAndSpacer(child, level+1)
+		if node != nil {
+			for _, child := range node.NavList {
+				if child != nil {
+					setLinkAndSpacer(child, level+1)
+				}
+			}
 		}
 	}
 
@@ -205,47 +213,39 @@ func (w *Website) SaveNavType(req *request.NavTypeRequest) (*model.NavType, erro
 }
 
 func (w *Website) DeleteCacheNavs() {
-	w.Cache.Delete("navs")
+	w.Cache.CleanAll("navs")
 }
 
-func (w *Website) GetCacheNavs() []*model.Nav {
+func (w *Website) GetCacheNavs(typeId uint, showType string) []*model.Nav {
 	if w.DB == nil {
 		return nil
 	}
 	var navs []*model.Nav
-
-	err := w.Cache.Get("navs", &navs)
+	cacheKey := fmt.Sprintf("navs-%d-%s", typeId, showType)
+	err := w.Cache.Get(cacheKey, &navs)
 	if err == nil {
 		return navs
 	}
 
-	err = w.DB.Where(model.Nav{}).Order("sort asc,id asc").Find(&navs).Error
-	if err != nil {
-		_ = w.Cache.Set("navs", navs, 60)
+	var tmpList []*model.Nav
+	db := w.DB
+	if err = db.Where("type_id = ?", typeId).Order("sort asc").Find(&tmpList).Error; err != nil {
 		return nil
 	}
-
-	if len(navs) > 0 {
-		for i := range navs {
-			navs[i].Link = w.GetUrl("nav", navs[i], 0)
-			navs[i].GetThumb(w.PluginStorage.StorageUrl)
-		}
-		_ = w.Cache.Set("navs", navs, 0)
+	for i := range tmpList {
+		tmpList[i].Link = w.GetUrl("nav", tmpList[i], 0)
+		tmpList[i].Thumb = tmpList[i].GetThumb(w.PluginStorage.StorageUrl)
 	}
+
+	navs = buildNavTree(tmpList, showType)
+
+	_ = w.Cache.Set(cacheKey, navs, 0)
 
 	return navs
 }
 
 func (w *Website) GetNavsFromCache(typeId uint, showType string) []*model.Nav {
-	navs := w.GetCacheNavs()
-	var tmpNavs = make([]*model.Nav, 0, len(navs))
+	navs := w.GetCacheNavs(typeId, showType)
 
-	for i := range navs {
-		if navs[i].TypeId == typeId {
-			tmpNavs = append(tmpNavs, navs[i])
-		}
-	}
-	result := buildNavTree(tmpNavs, showType)
-
-	return result
+	return navs
 }
