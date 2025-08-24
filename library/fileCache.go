@@ -16,6 +16,7 @@ type FileCache struct {
 	mu        sync.Mutex
 	suffix    string
 	cachePath string
+	pending   map[string]*sync.WaitGroup
 }
 
 type FileCacheData struct {
@@ -115,6 +116,25 @@ func (m *FileCache) CleanAll(prefix ...string) {
 	}
 }
 
+func (m *FileCache) Pending(key string) (*sync.WaitGroup, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	wg, ok := m.pending[key]
+	return wg, ok
+}
+
+func (m *FileCache) AddPending(key string, wg *sync.WaitGroup) {
+	m.mu.Lock()
+	m.pending[key] = wg
+	m.mu.Unlock()
+}
+
+func (m *FileCache) DelPending(key string) {
+	m.mu.Lock()
+	delete(m.pending, key)
+	m.mu.Unlock()
+}
+
 func InitFileCache(cachePath string) Cache {
 	cachePath = cachePath + "data/"
 	_, err := os.Stat(cachePath)
@@ -127,6 +147,7 @@ func InitFileCache(cachePath string) Cache {
 	cache := &FileCache{
 		suffix:    ".cache.json",
 		cachePath: cachePath,
+		pending:   make(map[string]*sync.WaitGroup),
 	}
 	// 每次初始化前，先清理旧的缓存
 	cache.CleanAll()
