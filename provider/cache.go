@@ -1,15 +1,14 @@
 package provider
 
 import (
-	"github.com/shirou/gopsutil/v3/mem"
 	"kandaoni.com/anqicms/library"
 )
 
 func (w *Website) InitCache() {
 	// 判断内存大小
-	vm, _ := mem.VirtualMemory()
+	usedMb, _, _ := library.GetSystemMemoryUsage()
 	cacheType := w.GetSettingValue(CacheTypeKey)
-	if cacheType == "" && vm.Total <= 1*1024*1024*1024 {
+	if cacheType == "" && usedMb <= 1*1024 {
 		cacheType = "file"
 	}
 	if cacheType == "file" {

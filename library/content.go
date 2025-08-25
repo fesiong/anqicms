@@ -8,6 +8,7 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 	"github.com/kataras/iris/v12"
 	"net"
+	"net/url"
 	"reflect"
 	"regexp"
 	"strconv"
@@ -68,6 +69,12 @@ func ParseUrlToken(name string) string {
 		name = name[:150]
 	}
 	return name
+}
+
+func IsNumericEnding(s string) bool {
+	// 使用正则表达式判断是否以数字结尾
+	re := regexp.MustCompile(`\d+$`)
+	return re.MatchString(s)
 }
 
 func ReplaceSingleSpace(content string) string {
@@ -188,10 +195,18 @@ func ParseDescription(content string) (description string) {
 	return
 }
 
-func MarkdownToHTML(mdStr string) string {
+// MarkdownToHTML 将markdown转换为html
+// args[0] = baseUrl
+// args[1] = filterOutLink
+func MarkdownToHTML(mdStr string, args ...interface{}) string {
+	if len(mdStr) == 0 {
+		return ""
+	}
+	// 换行转换成p
+	//mdStr = strings.ReplaceAll(mdStr, "\n", "  \n")
 	md := []byte(mdStr)
-	// create markdown parser with extensions
-	extensions := parser.CommonExtensions | parser.AutoHeadingIDs | parser.NoEmptyLineBeforeBlock
+	// create Markdown parser with extensions
+	extensions := parser.CommonExtensions | parser.NoEmptyLineBeforeBlock
 	p := parser.NewWithExtensions(extensions)
 	doc := p.Parse(md)
 
@@ -214,51 +229,192 @@ func MarkdownToHTML(mdStr string) string {
 		buff.WriteString("</pre>")
 		return buff.Bytes()
 	})
+	if len(args) == 2 {
+		baseUrl, _ := args[0].(string)
+		filterOutLink, _ := args[1].(int)
+		if filterOutLink == 2 {
+			baseHost := ""
+			urls, err := url.Parse(baseUrl)
+			if err == nil {
+				baseHost = urls.Host
+			}
+			// 添加 nofollow
+			re, _ = regexp.Compile(`(?is)<a.*?href="(.+?)".*?>`)
+			md = re.ReplaceAllFunc(md, func(bs []byte) []byte {
+				match := re.FindSubmatch(bs)
+				if len(match) < 2 {
+					return bs
+				}
+				if bytes.HasPrefix(match[1], []byte("http")) || bytes.HasPrefix(match[1], []byte("//")) {
+					aUrl, err2 := url.Parse(string(match[1]))
+					if err2 == nil {
+						if aUrl.Host != "" && aUrl.Host != baseHost {
+							//过滤外链
+							newUrl := append(match[1], []byte(`" rel="nofollow`)...)
+							bs = bytes.Replace(bs, match[1], newUrl, 1)
+						}
+					}
+				}
+
+				return bs
+			})
+		}
+	}
 
 	return string(md)
 }
 
 type ContentTitle struct {
-	Title  string `json:"title"`
-	Tag    string `json:"tag"`
-	Level  int    `json:"level"`
-	Prefix string `json:"prefix"`
+	Anchor   string          `json:"anchor"`
+	Title    string          `json:"title"`
+	Tag      string          `json:"tag"`
+	Level    int             `json:"level"`
+	Prefix   string          `json:"prefix"`
+	Children []*ContentTitle `json:"children,omitempty"`
 }
 
-func ParseContentTitles(content string) []ContentTitle {
-	re, _ := regexp.Compile(`(?is)<(h\d)[^>]*>(.*?)</h\d>`)
-	var titles []ContentTitle
-	matches := re.FindAllStringSubmatch(content, -1)
-	var level = 0
-	var parent = -1
-	var prefix []int
-	for _, match := range matches {
+// ParseContentTitles 获取toc，showType = list|children
+func ParseContentTitles(content, showType string) ([]*ContentTitle, string) {
+	re, _ := regexp.Compile(`(?is)<(h\d)([^>]*)>(.*?)</h\d>`)
+	re2, _ := regexp.Compile(`<(h\d)([^>]*)>`)
+	var titles []*ContentTitle
+	var rootTitles []*ContentTitle
+	var levelStack []int
+	var prefix []int64
+	content = re.ReplaceAllStringFunc(content, func(s string) string {
+		match := re.FindStringSubmatch(s)
 		tag := strings.ToLower(match[1])
-		leaf, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
-		if parent == -1 {
-			parent = leaf
-			level = 0
-			prefix = append(prefix, 1)
+		currentLevel, _ := strconv.Atoi(strings.TrimLeft(tag, "h"))
+
+		// 计算标题层级关系
+		if len(levelStack) == 0 {
+			levelStack = append(levelStack, currentLevel)
+		} else {
+			// 如果当前标题等级更高（数字更小），移除栈中比它高的等级
+			for len(levelStack) > 0 && currentLevel <= levelStack[len(levelStack)-1] {
+				levelStack = levelStack[:len(levelStack)-1]
+			}
+			levelStack = append(levelStack, currentLevel)
 		}
-		if parent != leaf {
-			if parent > leaf {
-				prefix = prefix[:len(prefix)-1]
+
+		// 构建前缀编号
+		if len(levelStack) <= len(prefix) {
+			prefix = prefix[:len(levelStack)]
+			if len(prefix) > 0 {
 				prefix[len(prefix)-1]++
-			} else if parent < leaf {
+			} else {
 				prefix = append(prefix, 1)
 			}
-			level -= parent - leaf
-			parent = leaf
 		} else {
-			prefix[len(prefix)-1]++
+			prefix = append(prefix, 1)
 		}
-		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[2]), "\n", " "))
-		titles = append(titles, ContentTitle{
-			Title:  title,
-			Tag:    tag,
-			Level:  level,
-			Prefix: strings.ReplaceAll(fmt.Sprintf("%v", prefix), ",", "."),
+
+		title := strings.TrimSpace(strings.ReplaceAll(StripTags(match[3]), "\n", " "))
+		itemPrefix := JoinInt(prefix, ".")
+		anchor := strings.ReplaceAll(itemPrefix, ".", "-") + "-" + GetPinyin(title, true)
+		cTitle := &ContentTitle{
+			Anchor:   "#" + anchor,
+			Title:    title,
+			Tag:      tag,
+			Level:    len(levelStack),
+			Prefix:   itemPrefix,
+			Children: make([]*ContentTitle, 0),
+		}
+
+		// 根据展示类型构建结构
+		if showType == "list" {
+			titles = append(titles, cTitle)
+		} else { // children模式
+			if len(levelStack) == 1 {
+				// 顶级标题作为根节点
+				rootTitles = append(rootTitles, cTitle)
+				titles = append(titles, rootTitles[len(rootTitles)-1])
+			} else {
+				// 找到最近的父级标题并添加为子节点
+				for i := len(titles) - 1; i >= 0; i-- {
+					if titles[i].Level == len(levelStack)-1 {
+						titles[i].Children = append(titles[i].Children, cTitle)
+						break
+					}
+				}
+				// 将当前标题也添加到扁平列表中，以便后续查找
+				titles = append(titles, cTitle)
+			}
+		}
+
+		// 替换原始HTML中的标题标签，添加锚点ID
+		s = re2.ReplaceAllStringFunc(s, func(s2 string) string {
+			if strings.Contains(s2, "id=\"") {
+				// 先删除原始的id属性
+				re3, _ := regexp.Compile(`(?is)id=".*?"`)
+				s2 = re3.ReplaceAllString(s2, "")
+			}
+
+			return strings.TrimSuffix(s2, ">") + fmt.Sprintf(` id="%s">`, anchor)
 		})
+
+		return s
+	})
+
+	if showType != "list" {
+		return rootTitles, content
 	}
-	return titles
+	return titles, content
+}
+
+type NameVal struct {
+	Name string
+	Val  string
+}
+
+var SpiderNames = []NameVal{
+	{Name: "googlebot", Val: "google"},
+	{Name: "bingbot", Val: "bing"},
+	{Name: "baiduspider", Val: "baidu"},
+	{Name: "360spider", Val: "360"},
+	{Name: "yahoo!", Val: "yahoo"},
+	{Name: "sogou", Val: "sogou"},
+	{Name: "bytespider", Val: "byte"},
+	{Name: "yisouspider", Val: "yisou"},
+	{Name: "yandexbot", Val: "yandex"},
+	{Name: "spider", Val: "other"},
+	{Name: "bot", Val: "other"},
+}
+
+var DeviceNames = []NameVal{
+	{Name: "android", Val: "android"},
+	{Name: "iphone", Val: "iphone"},
+	{Name: "windows", Val: "windows"},
+	{Name: "macintosh", Val: "mac"},
+	{Name: "linux", Val: "linux"},
+	{Name: "mobile", Val: "mobile"},
+	{Name: "curl", Val: "curl"},
+	{Name: "python", Val: "python"},
+	{Name: "client", Val: "client"},
+	{Name: "spider", Val: "spider"},
+	{Name: "bot", Val: "spider"},
+}
+
+func GetSpider(ua string) string {
+	ua = strings.ToLower(ua)
+	//获取蜘蛛
+	for _, v := range SpiderNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
+		}
+	}
+
+	return ""
+}
+
+func GetDevice(ua string) string {
+	ua = strings.ToLower(ua)
+
+	for _, v := range DeviceNames {
+		if strings.Contains(ua, v.Name) {
+			return v.Val
+		}
+	}
+
+	return "proxy"
 }

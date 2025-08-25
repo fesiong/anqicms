@@ -31,7 +31,8 @@ func HandleAiGenerateSettingSave(ctx iris.Context) {
 	}
 
 	//将现有配置写回文件
-	err := currentSite.SaveAiGenerateSetting(req, true)
+	w2 := provider.GetWebsite(currentSite.Id)
+	err := w2.SaveAiGenerateSetting(req, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

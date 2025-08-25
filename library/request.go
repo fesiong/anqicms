@@ -229,6 +229,7 @@ func GetURLData(url, refer string, timeout int) (*RequestData, error) {
 	if err != nil {
 		return &RequestData{}, err
 	}
+	defer resp.Body.Close()
 	body, _ := io.ReadAll(resp.Body)
 
 	contentType := resp.Header.Get("Content-Type")

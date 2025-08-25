@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"kandaoni.com/anqicms/library"
 	"log"
 	"math/rand"
 	"os"
@@ -134,4 +135,26 @@ func GenerateRandString(length int) string {
 		buf[i] = byte(b)
 	}
 	return strings.ToLower(string(buf))
+}
+
+func LoadLocales() (languages []string) {
+	// 读取language列表
+	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", ExecPath))
+	var added = map[string]struct{}{}
+	if err == nil {
+		for _, info := range readerInfos {
+			if info.IsDir() {
+				added[info.Name()] = struct{}{}
+				languages = append(languages, info.Name())
+			}
+		}
+	}
+	// 增加所有支持的语言
+	for _, lang := range library.Languages {
+		if _, ok := added[lang.Code]; !ok {
+			languages = append(languages, lang.Code)
+		}
+	}
+
+	return languages
 }

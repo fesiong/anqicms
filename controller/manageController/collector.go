@@ -33,7 +33,8 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 	}
 
 	//将现有配置写回文件
-	err := currentSite.SaveUserCollectorSetting(req, true)
+	w2 := provider.GetWebsite(currentSite.Id)
+	err := w2.SaveUserCollectorSetting(req, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -72,6 +73,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 	collectorJson := config.CollectorJson{
 		ContentReplace: req.ContentReplace,
 	}
+	w2 := provider.GetWebsite(currentSite.Id)
 	err := currentSite.SaveUserCollectorSetting(collectorJson, false)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -85,7 +87,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 
 		currentSite.AddAdminLog(ctx, ctx.Tr("BatchReplaceDocumentContent"))
 
-		go currentSite.ReplaceArticles()
+		go w2.ReplaceArticles()
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  ctx.Tr("ReplacementTaskHasBeenTriggered"),

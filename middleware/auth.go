@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
+	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
@@ -50,6 +51,13 @@ func ParseAdminToken(ctx iris.Context) {
 				})
 				return
 			}
+			// 如果登录过期时间在1小时内，则进行续签，续签只能延长24小时
+			if sec < time.Now().Add(1*time.Hour).Unix() {
+				adminId, _ := strconv.Atoi(userID)
+				newToken := currentSite.GetAdminAuthToken(uint(adminId), false)
+				// 下发新token
+				ctx.Header("update-token", newToken)
+			}
 			ctx.Values().Set("adminId", userID)
 		} else {
 			ctx.JSON(iris.Map{
@@ -74,6 +82,22 @@ func ParseAdminUrl(ctx iris.Context) {
 					"code": config.StatusNoLogin,
 					"msg":  ctx.Tr("PleaseUseTheCorrectEntranceToAccess"),
 				})
+				return
+			}
+		}
+	}
+
+	ctx.Next()
+}
+
+func ParseAdminUrlFile(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	if strings.HasPrefix(currentSite.System.AdminUrl, "http") {
+		parsedUrl, err := url.Parse(currentSite.System.AdminUrl)
+		// 如果解析失败，则跳过
+		if err == nil {
+			if parsedUrl.Hostname() != library.GetHost(ctx) {
+				ctx.StatusCode(http.StatusForbidden)
 				return
 			}
 		}
