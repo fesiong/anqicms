@@ -602,6 +602,9 @@ func SettingBannerForm(ctx iris.Context) {
 		})
 		return
 	}
+	if req.Type == "" {
+		req.Type = "default"
+	}
 	req.Logo = strings.TrimPrefix(req.Logo, currentSite.PluginStorage.StorageUrl)
 	if req.Id == 0 {
 		var exist bool
