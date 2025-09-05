@@ -7,7 +7,7 @@ import (
 )
 
 func (w *Website) TryToRunTimeFactor() {
-	if !w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen {
+	if w.PluginTimeFactor == nil || (!w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen) {
 		return
 	}
 

@@ -136,8 +136,9 @@ func (w *Website) SendGuestbookToMail(guestbook *model.Guestbook) {
 	//发送邮件
 	subject := w.TplTr("%sHasNewMessageFrom%s", w.System.SiteName, guestbook.UserName)
 	var contents = []string{
-		w.TplTr("%s: %s", "Contact", guestbook.Contact),
-		w.TplTr("%s: %s", "Content", guestbook.Content),
+		w.TplTr("%s: %s", "UserName", guestbook.UserName) + "\n",
+		w.TplTr("%s: %s", "Contact", guestbook.Contact) + "\n",
+		w.TplTr("%s: %s", "Content", guestbook.Content) + "\n",
 	}
 
 	for key, value := range guestbook.ExtraData {

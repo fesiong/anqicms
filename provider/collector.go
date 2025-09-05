@@ -109,7 +109,7 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 var runningCollectArticles = false
 
 func (w *Website) CollectArticles() {
-	if w.DB == nil {
+	if w.DB == nil || w.CollectorConfig == nil {
 		return
 	}
 	if !w.CollectorConfig.AutoCollect {

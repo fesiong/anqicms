@@ -359,6 +359,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 	if isMarkdown {
 		// Markdown的处理方式
 		var replaceMdText = func(text string, addStrongTag bool) string {
+			startIndex := 0
 			for _, anchor := range anchors {
 				// 创建匹配关键词的正则表达式（考虑单词边界）
 				pattern := regexp.QuoteMeta(anchor.Title)
@@ -370,46 +371,52 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 					continue
 				}
 				// 查找所有匹配项
-				matchIdx := re.FindAllStringIndex(text, -1)
+				matchIdx := re.FindAllStringIndex(text[startIndex:], -1)
 				if matchIdx != nil {
 					// 如果是不需要匹配的，则不处理
 					if _, ok2 := existsKeywords[anchor.Title]; !ok2 {
 						isModified = true
 						existsKeywords[anchor.Title] = true
 						var subText bytes.Buffer
+						subText.WriteString(text[:startIndex])
 						lastIndex := 0
 						// 只处理1次
 						for k, match := range matchIdx {
 							// 添加匹配前的文本
-							subText.WriteString(text[lastIndex:match[0]])
+							subText.WriteString(text[startIndex+lastIndex : startIndex+match[0]])
 							// 添加锚文本链接, strong
 							if k == 0 {
-								subText.WriteString(fmt.Sprintf("[%s](%s)", text[match[0]:match[1]], anchor.Link))
+								subText.WriteString(fmt.Sprintf("[%s](%s)", text[startIndex+match[0]:startIndex+match[1]], anchor.Link))
 							} else if addStrongTag {
-								subText.WriteString(fmt.Sprintf("**%s**", text[match[0]:match[1]]))
+								subText.WriteString(fmt.Sprintf("**%s**", text[startIndex+match[0]:startIndex+match[1]]))
 							} else {
-								subText.WriteString(text[match[0]:match[1]])
+								subText.WriteString(text[startIndex+match[0] : startIndex+match[1]])
 							}
 							lastIndex = match[1]
 						}
 						// 添加剩余文本
-						subText.WriteString(text[lastIndex:])
+						tmpLen := subText.Len()
+						subText.WriteString(text[startIndex+lastIndex:])
 						text = subText.String()
+						startIndex = tmpLen
 					} else if addStrongTag {
 						isModified = true
 						// 需要添加 strong
 						var subText bytes.Buffer
+						subText.WriteString(text[:startIndex])
 						lastIndex := 0
 						for _, match := range matchIdx {
 							// 添加匹配前的文本
-							subText.WriteString(text[lastIndex:match[0]])
+							subText.WriteString(text[startIndex+lastIndex : startIndex+match[0]])
 							// 添加** **
-							subText.WriteString(fmt.Sprintf("**%s**", text[match[0]:match[1]]))
+							subText.WriteString(fmt.Sprintf("**%s**", text[startIndex+match[0]:startIndex+match[1]]))
 							lastIndex = match[1]
 						}
 						// 添加剩余文本
-						subText.WriteString(text[lastIndex:])
+						tmpLen := subText.Len()
+						subText.WriteString(text[startIndex+lastIndex:])
 						text = subText.String()
+						startIndex = tmpLen
 					}
 				}
 			}
@@ -454,7 +461,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				continue
 			}
 			// 跳过html标签
-			if strings.Contains(line, "<") && strings.Contains(line, ">") {
+			if strings.HasPrefix(line, "<") && strings.HasSuffix(line, ">") {
 				newText.WriteString(line + "\n")
 				continue
 			}
@@ -463,8 +470,8 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				newText.WriteString(line + "\n")
 				continue
 			}
-			// 跳过 ` `
-			re, _ := regexp.Compile("`.*`")
+			// 跳过 ` `、** **、[...] 和 (...)
+			re, _ := regexp.Compile("`.*?`|\\*\\*.*?\\*\\*|\\[.*?]|\\(.*?\\)|<.*>")
 			matchIdx := re.FindAllStringIndex(line, -1)
 			if len(matchIdx) > 0 {
 				var subText bytes.Buffer
@@ -496,7 +503,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		}
 		// 创建已处理节点的映射，避免重复替换
 		processedNodes := make(map[*html.Node]bool)
-		skipTags := map[string]bool{"a": true, "code": true, "pre": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true}
+		skipTags := map[string]bool{"a": true, "code": true, "pre": true, "h1": true, "h2": true, "h3": true, "h4": true, "h5": true, "h6": true, "strong": true, "em": true, "b": true, "i": true, "u": true, "s": true, "del": true, "ins": true, "mark": true}
 		// 遍历并处理文本节点
 		var traverse func(*html.Node)
 		traverse = func(n *html.Node) {
@@ -507,7 +514,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				}
 				text := n.Data
 				modified := false
-
+				startIndex := 0
 				for _, anchor := range anchors {
 					// 创建匹配关键词的正则表达式（考虑单词边界）
 					pattern := regexp.QuoteMeta(anchor.Title)
@@ -520,7 +527,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 					}
 
 					// 查找所有匹配项
-					matches := re.FindAllStringIndex(text, -1)
+					matches := re.FindAllStringIndex(text[startIndex:], -1)
 
 					if matches != nil {
 						// 如果是不需要匹配的，则不处理
@@ -528,40 +535,46 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 							existsKeywords[anchor.Title] = true
 							modified = true
 							var newText bytes.Buffer
+							newText.WriteString(text[:startIndex])
 							lastIndex := 0
 							// 只处理1次
 							for k, match := range matches {
 								// 添加匹配前的文本
-								newText.WriteString(text[lastIndex:match[0]])
+								newText.WriteString(text[startIndex+lastIndex : startIndex+match[0]])
 								// 添加锚文本链接
 								if k == 0 {
-									newText.WriteString(fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, text[match[0]:match[1]]))
+									newText.WriteString(fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, text[startIndex+match[0]:startIndex+match[1]]))
 								} else if w.PluginAnchor.NoStrongTag == 0 {
 									// 加粗
-									newText.WriteString(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, text[match[0]:match[1]]))
+									newText.WriteString(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, text[startIndex+match[0]:startIndex+match[1]]))
 								} else {
-									newText.WriteString(text[match[0]:match[1]])
+									newText.WriteString(text[startIndex+match[0] : startIndex+match[1]])
 								}
 								lastIndex = match[1]
 							}
 							// 添加剩余文本
-							newText.WriteString(text[lastIndex:])
+							tmpLen := newText.Len()
+							newText.WriteString(text[startIndex+lastIndex:])
 							text = newText.String()
+							startIndex = tmpLen
 						} else if w.PluginAnchor.NoStrongTag == 0 {
 							modified = true
 							var newText bytes.Buffer
+							newText.WriteString(text[:startIndex])
 							lastIndex := 0
 							// 只处理1次
 							for _, match := range matches {
 								// 添加匹配前的文本
-								newText.WriteString(text[lastIndex:match[0]])
+								newText.WriteString(text[startIndex+lastIndex : startIndex+match[0]])
 								// 加粗
-								newText.WriteString(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, text[match[0]:match[1]]))
+								newText.WriteString(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, text[startIndex+match[0]:startIndex+match[1]]))
 								lastIndex = match[1]
 							}
 							// 添加剩余文本
-							newText.WriteString(text[lastIndex:])
+							tmpLen := newText.Len()
+							newText.WriteString(text[startIndex+lastIndex:])
 							text = newText.String()
+							startIndex = tmpLen
 						}
 					}
 				}
@@ -642,6 +655,29 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 		//内容有更新，执行更新
 		archiveData.Content = content
 		w.DB.Save(archiveData)
+		// 查找记录
+		re, _ := regexp.Compile(`data-anchor="(\d+)"`)
+		var anchorIds = map[uint]struct{}{}
+		matches := re.FindAllStringSubmatch(content, -1)
+		for _, match := range matches {
+			anchorId, _ := strconv.ParseInt(match[1], 10, 64)
+			if anchorId > 0 {
+				anchorIds[uint(anchorId)] = struct{}{}
+			}
+		}
+		for anchorId := range anchorIds {
+			//插入记录
+			anchorData := &model.AnchorData{
+				AnchorId: anchorId,
+				ItemType: itemType,
+				ItemId:   itemId,
+			}
+			w.DB.Where("`anchor_id` = ? and `item_type` = ? and `item_id` = ?", anchorId, itemType, itemId).FirstOrCreate(anchorData)
+			//更新计数
+			var count int64
+			w.DB.Model(&model.AnchorData{}).Where("`anchor_id` = ?", anchorId).Count(&count)
+			w.DB.Model(&model.Anchor{}).Where("`id` = ?", anchorId).UpdateColumn("replace_count", count)
+		}
 	}
 
 	return content

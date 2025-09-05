@@ -100,6 +100,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 	for _, v := range fields {
 		header = append(header, v.Name)
 	}
+	header = append(header, "Spam")
 
 	var content [][]interface{}
 	//content
@@ -120,6 +121,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 				item = append(item, v.ExtraData[f.Name])
 			}
 		}
+		item = append(item, v.Status == 2)
 
 		content = append(content, item)
 	}

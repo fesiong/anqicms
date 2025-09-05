@@ -3,6 +3,7 @@ package library
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"sort"
 	"strings"
@@ -22,7 +23,7 @@ type MemoryCache struct {
 	list        map[string]*cacheData
 	lastCleanup time.Time // 上次清理时间
 	lastGC      time.Time // 上次GC时间
-
+	pending     map[string]*sync.WaitGroup
 	// 缓存统计
 	hits   uint64 // 缓存命中次数
 	misses uint64 // 缓存未命中次数
@@ -91,8 +92,23 @@ func (m *MemoryCache) Get(key string, val any) error {
 	atomic.AddUint64(&m.hits, 1)
 
 	// 设置返回值
-	rv.Elem().Set(reflect.ValueOf(cachedVal))
-	return nil
+	cachedValRef := reflect.ValueOf(cachedVal)
+	elem := rv.Elem()
+	// 如果类型匹配，直接赋值
+	if cachedValRef.Type().AssignableTo(elem.Type()) {
+		elem.Set(cachedValRef)
+		return nil
+	}
+
+	// 如果缓存值是指针，且指针指向的类型与目标类型匹配，则解引用
+	if cachedValRef.Kind() == reflect.Ptr {
+		if cachedValRef.Elem().Type().AssignableTo(elem.Type()) {
+			elem.Set(cachedValRef.Elem())
+			return nil
+		}
+	}
+
+	return fmt.Errorf("type error: cache: %v, respect: %v", cachedValRef.Type(), elem.Type())
 }
 
 func (m *MemoryCache) Delete(key string) {
@@ -183,6 +199,25 @@ func (m *MemoryCache) cleanExpiredOrOldest() {
 	}
 }
 
+func (m *MemoryCache) Pending(key string) (*sync.WaitGroup, bool) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	wg, ok := m.pending[key]
+	return wg, ok
+}
+
+func (m *MemoryCache) AddPending(key string, wg *sync.WaitGroup) {
+	m.mu.Lock()
+	m.pending[key] = wg
+	m.mu.Unlock()
+}
+
+func (m *MemoryCache) DelPending(key string) {
+	m.mu.Lock()
+	delete(m.pending, key)
+	m.mu.Unlock()
+}
+
 func (m *MemoryCache) GC() {
 	for {
 		// 每分钟检查一次系统内存使用情况
@@ -211,6 +246,7 @@ func InitMemoryCache() Cache {
 		list:        make(map[string]*cacheData),
 		lastCleanup: time.Now(),
 		lastGC:      time.Now(),
+		pending:     make(map[string]*sync.WaitGroup),
 	}
 
 	// 执行回收
