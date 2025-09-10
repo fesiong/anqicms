@@ -2,8 +2,8 @@ package regular
 
 import (
 	"fmt"
-	"jinian/fate"
-	"jinian/services"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/fate"
 	"strings"
 )
 
@@ -40,8 +40,8 @@ type regular struct {
 }
 
 // Run ...
-func (r *regular) Run() {
-	e := setAllRegular(false)
+func (r *regular) Run(db *gorm.DB) {
+	e := setAllRegular(false, db)
 	if e != nil {
 		panic(e)
 	}
@@ -57,7 +57,7 @@ func (r *regular) Run() {
 		for _, ch := range list {
 			r.total++
 			fmt.Printf("character %s is fixing\n", ch)
-			if fixRegular(ch) {
+			if fixRegular(ch, db) {
 				r.fixed++
 			} else {
 				r.unfixed++
@@ -69,19 +69,15 @@ func (r *regular) Run() {
 
 // Regular ...
 type Regular interface {
-	Run()
+	Run(db *gorm.DB)
 }
 
 // New ...
 func New() Regular {
-	return &regular{
-
-	}
+	return &regular{}
 }
 
-func setAllRegular(regular bool) (e error) {
-	db := services.DB
-
+func setAllRegular(regular bool, db *gorm.DB) (e error) {
 	if !regular {
 		e = db.Exec("UPDATE `character` set regular = 0").Error
 	} else {
@@ -93,15 +89,14 @@ func setAllRegular(regular bool) (e error) {
 	return nil
 }
 
-func fixRegular(ch string) bool {
-	db := services.DB
+func fixRegular(ch string, db *gorm.DB) bool {
 	char, err := fate.GetCharacter(fate.Char(ch))
 	if err != nil {
 		fmt.Printf("failed get char(%s) with error (%v)\n", ch, err)
 		return false
 	}
 	char.Regular = true
-	e := db.Where("hash = ?", char.Hash).Update(char).Error
+	e := db.Where("hash = ?", char.Hash).Updates(char).Error
 	if e != nil {
 		fmt.Printf("failed update char(%s) with error (%v)\n", ch, e)
 		return false
