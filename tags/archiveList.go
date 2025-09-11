@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/response"
 	"math"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -314,7 +315,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
 				}
 				if categoryId > 0 {
 					if currentSite.Content.MultiCategory == 1 {
@@ -338,7 +339,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		} else if like == "relation" {
 			if categoryId > 0 || moduleId > 0 || len(excludeCategoryIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Table("`archives` as archives").
+					tx = tx.Table("`archives` as archives").Distinct("archives.id").
 						Joins("INNER JOIN `archive_relations` as t ON archives.id = t.relation_id AND t.archive_id = ? AND archives.`id` != ?", archiveId, archiveId)
 					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -371,7 +372,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tmpTagIds)
 			if len(tmpTagIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Table("`archives` as archives").
+					tx = tx.Table("`archives` as archives").Distinct("archives.id").
 						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tmpTagIds, archiveId)
 					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -404,13 +405,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(excludeCategoryIds) > 0 {
 						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 						}
@@ -421,13 +422,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(excludeCategoryIds) > 0 {
 						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 						}
@@ -538,6 +539,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			} else if len(excludeFlags) > 0 {
 				tx = tx.Joins("LEFT JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag IN (?)", excludeFlags).Where("archive_flags.archive_id IS NULL")
 			}
+			needDistinct := false
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)
 				if module != nil && len(module.Fields) > 0 {
@@ -549,12 +551,16 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						}
 					}
 					if len(fields) > 0 {
+						needDistinct = true
 						tx = tx.InnerJoins(fmt.Sprintf("INNER JOIN `%s` on `%s`.id = `archives`.id", module.TableName, module.TableName))
 						for _, field := range fields {
 							tx = tx.Where(field[0], field[1])
 						}
 					}
 				}
+			}
+			if currentSite.Content.MultiCategory == 1 || needDistinct || flag != "" || len(excludeFlags) > 0 || len(tagIds) > 0 {
+				tx = tx.Distinct("archives.id")
 			}
 			if currentSite.Content.MultiCategory == 1 && (len(categoryIds) > 0 || len(excludeCategoryIds) > 0) {
 				tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -742,6 +748,16 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if ok2 && webInfo.PageName == "archiveIndex" {
 				urlMatch := "archiveIndex"
 				urlPatten = currentSite.GetUrl(urlMatch, module, -1)
+			} else if ok2 && webInfo.PageName == "search" {
+				urlMatch := "search"
+				moduleToken := ""
+				if module != nil {
+					moduleToken = module.UrlToken
+				}
+				urlPatten = currentSite.GetUrl(urlMatch, map[string]interface{}{
+					"q":      url.QueryEscape(q),
+					"module": moduleToken,
+				}, -1)
 			} else {
 				// 其他地方
 				urlPatten = ""

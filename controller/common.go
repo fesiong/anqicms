@@ -1163,19 +1163,21 @@ func UseLimiter(ctx iris.Context) bool {
 		ctx.StatusCode(http.StatusTooManyRequests) // Too Many Requests
 		return true
 	}
-	_, appUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
-	// 触发限流条件（示例阈值，需根据服务器配置调整）
-	if appUsedPercent > 70 || sysFreePercent < 10 {
-		atomic.StoreInt32(&isLimiting, 1)
-		time.AfterFunc(5*time.Second, func() {
-			atomic.StoreInt32(&isLimiting, 0)
-		})
-		ctx.StatusCode(http.StatusTooManyRequests)
-		return true
+	currentSite := provider.CurrentSite(ctx)
+	if currentSite.Limiter != nil && currentSite.Limiter.MemPercent > 50 {
+		_, appUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
+		//触发限流条件（示例阈值，需根据服务器配置调整）
+		if appUsedPercent > float64(currentSite.Limiter.MemPercent) || sysFreePercent < float64(100-currentSite.Limiter.MemPercent) {
+			atomic.StoreInt32(&isLimiting, 1)
+			time.AfterFunc(5*time.Second, func() {
+				atomic.StoreInt32(&isLimiting, 0)
+			})
+			ctx.StatusCode(http.StatusTooManyRequests)
+			return true
+		}
 	}
 	atomic.StoreInt32(&isLimiting, 0)
 	//end
-	currentSite := provider.CurrentSite(ctx)
 	// 没启用拦截器
 	if currentSite.Limiter == nil {
 		return false

@@ -38,6 +38,7 @@ type Limiter struct {
 	MaxTime       time.Duration
 	MaxRequests   int
 	BlockDuration time.Duration
+	MemPercent    int
 }
 
 func (w *Website) InitLimiter() {
@@ -87,6 +88,14 @@ func (l *Limiter) UpdateLimiter(setting *config.PluginLimiter) {
 		setting.BlockHours = 1
 	}
 	l.BlockDuration = time.Duration(setting.BlockHours) * time.Hour
+	if setting.MemLimit {
+		l.MemPercent = setting.MemPercent
+		if l.MemPercent < 50 || l.MemPercent > 100 {
+			l.MemPercent = 90
+		}
+	} else {
+		l.MemPercent = 0
+	}
 }
 
 func (l *Limiter) isPrivateIP(ip string) bool {

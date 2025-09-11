@@ -125,3 +125,10 @@ func TimestampToDate(in interface{}, layout string, args ...string) string {
 	}
 	return t.Format(layout)
 }
+
+type MyFunc struct {
+}
+
+func CustomFunc() *MyFunc {
+	return &MyFunc{}
+}
