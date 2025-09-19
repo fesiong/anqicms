@@ -1,35 +1,38 @@
 package controller
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/fatih/structs"
+	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 	"math"
+	"mime/multipart"
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/fatih/structs"
-	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 )
 
 func ApiArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	id := uint(ctx.URLParamIntDefault("id", 0))
+	id := ctx.URLParamInt64Default("id", 0)
 	filename := ctx.URLParam("filename")
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	// 只有content字段有效
 	render := currentSite.Content.Editor == "markdown"
 	if ctx.URLParamExists("render") {
-		render = ctx.URLParamBoolDefault("render", render)
+		render, _ = ctx.URLParamBool("render")
 	}
 	var archive *model.Archive
 	var err error
@@ -79,7 +82,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 	// if read level larger than 0, then need to check permission
 	if archive.ReadLevel > 0 && !archive.HasOrdered {
 		archive.ArchiveData = &model.ArchiveData{
-			Content: currentSite.TplTr("ThisContentRequiresUserLevelOrAboveToRead", archive.ReadLevel),
+			Content: currentSite.TplTr("ThisContentRequiresUserLevel%dOrAboveToRead", archive.ReadLevel),
 		}
 	} else {
 		// 读取data
@@ -93,13 +96,51 @@ func ApiArchiveDetail(ctx iris.Context) {
 		archive.Category.Link = currentSite.GetUrl("category", archive.Category, 0)
 	}
 	// 读取 extraDate
-	archive.Extra = currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
-	for i := range archive.Extra {
-		if archive.Extra[i].Value == nil || archive.Extra[i].Value == "" {
-			archive.Extra[i].Value = archive.Extra[i].Default
-		}
-		if archive.Extra[i].FollowLevel && !archive.HasOrdered {
-			delete(archive.Extra, i)
+	archiveParams := currentSite.GetArchiveExtra(archive.ModuleId, archive.Id, true)
+	archive.Extra = make(map[string]model.CustomField, len(archiveParams))
+	if len(archiveParams) > 0 {
+		for i := range archiveParams {
+			param := *archiveParams[i]
+			if (param.Value == nil || param.Value == "" || param.Value == 0) &&
+				param.Type != config.CustomFieldTypeRadio &&
+				param.Type != config.CustomFieldTypeCheckbox &&
+				param.Type != config.CustomFieldTypeSelect {
+				param.Value = param.Default
+			}
+			if param.FollowLevel && !archive.HasOrdered {
+				continue
+			}
+			if param.Type == config.CustomFieldTypeEditor && render {
+				param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			} else if param.Type == config.CustomFieldTypeArchive {
+				// 列表
+				arcIds, ok := param.Value.([]int64)
+				if !ok && param.Default != "" {
+					value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+					if value > 0 {
+						arcIds = append(arcIds, value)
+					}
+				}
+				if len(arcIds) > 0 {
+					archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+						return tx.Where("archives.`id` IN (?)", arcIds)
+					}, "archives.id ASC", 0, len(arcIds))
+					param.Value = archives
+				} else {
+					param.Value = nil
+				}
+			} else if param.Type == config.CustomFieldTypeCategory {
+				value, ok := param.Value.(int64)
+				if !ok && param.Default != "" {
+					value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+				}
+				if value > 0 {
+					param.Value = currentSite.GetCategoryFromCache(uint(value))
+				} else {
+					param.Value = nil
+				}
+			}
+			archive.Extra[i] = param
 		}
 	}
 	tags := currentSite.GetTagsByItemId(archive.Id)
@@ -112,14 +153,21 @@ func ApiArchiveDetail(ctx iris.Context) {
 	}
 	if len(archive.Password) > 0 {
 		// password is not visible for user
+		password := ctx.URLParam("password")
+		if password == archive.Password {
+			archive.PasswordValid = true
+		}
 		archive.Password = ""
 		archive.HasPassword = true
-		archive.ArchiveData = nil
+		// 带密码的文档，如果密码不正确，则不显示内容
+		if archive.PasswordValid == false {
+			archive.ArchiveData = nil
+		}
 	}
 	if archive.ArchiveData != nil {
 		// convert markdown to html
 		if render {
-			archive.ArchiveData.Content = library.MarkdownToHTML(archive.ArchiveData.Content)
+			archive.ArchiveData.Content = library.MarkdownToHTML(archive.ArchiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 		}
 		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 		archive.ArchiveData.Content = re.ReplaceAllStringFunc(archive.ArchiveData.Content, func(s string) string {
@@ -212,10 +260,14 @@ func ApiArchiveFilters(ctx iris.Context) {
 
 func ApiArchiveList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
+	parentId := ctx.URLParamInt64Default("parentId", 0)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	showFlag := ctx.URLParamBoolDefault("showFlag", false)
+	showContent := ctx.URLParamBoolDefault("showContent", false)
+	showExtra := ctx.URLParamBoolDefault("showExtra", false)
 	draft := ctx.URLParamBoolDefault("draft", false)
 	draftInt := 0
 	if draft {
@@ -270,6 +322,10 @@ func ApiArchiveList(ctx iris.Context) {
 	if currentPage < 1 {
 		currentPage = 1
 	}
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render, _ = ctx.URLParamBool("render")
+	}
 
 	childTmp, err := ctx.URLParamBool("child")
 	if err == nil {
@@ -284,8 +340,8 @@ func ApiArchiveList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -310,7 +366,6 @@ func ApiArchiveList(ctx iris.Context) {
 		}
 	}
 
-	extraFields := map[uint]map[string]*model.CustomField{}
 	var fields []string
 	fields = append(fields, "id")
 	if module != nil && len(module.Fields) > 0 {
@@ -432,26 +487,26 @@ func ApiArchiveList(ctx iris.Context) {
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
-		var ids []uint64
+		var ids []int64
 		var searchCatIds []uint
 		var searchTagIds []uint
 		if listType == "page" && len(q) > 0 {
-			var tmpIds []uint64
-			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			var tmpDocs []fulltext.TinyArchive
+			tmpDocs, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
 			if err2 == nil {
 				fulltextSearch = true
-				for _, id := range tmpIds {
-					if id < provider.CategoryDivider {
-						ids = append(ids, id)
-					} else if id < provider.TagDivider {
-						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
-					} else if id < provider.TagDividerEnd {
-						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+				for _, doc := range tmpDocs {
+					if doc.Type == fulltext.ArchiveType {
+						ids = append(ids, doc.Id)
+					} else if doc.Type == fulltext.CategoryType {
+						searchCatIds = append(searchCatIds, uint(doc.Id))
+					} else if doc.Type == fulltext.TagType {
+						searchTagIds = append(searchTagIds, uint(doc.Id))
 					} else {
 						// 其他值
 					}
 				}
-				if len(tmpIds) == 0 || len(ids) == 0 {
+				if len(tmpDocs) == 0 || len(ids) == 0 {
 					ids = append(ids, 0)
 				}
 				offset = 0
@@ -463,7 +518,7 @@ func ApiArchiveList(ctx iris.Context) {
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "category",
-					Id:          cat.Id,
+					Id:          int64(cat.Id),
 					CreatedTime: cat.CreatedTime,
 					UpdatedTime: cat.UpdatedTime,
 					Title:       cat.Title,
@@ -485,9 +540,10 @@ func ApiArchiveList(ctx iris.Context) {
 			tags := currentSite.GetTagsByIds(searchTagIds)
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
-					Id:          tag.Id,
+					Id:          int64(tag.Id),
 					CreatedTime: tag.CreatedTime,
 					UpdatedTime: tag.UpdatedTime,
 					Title:       tag.Title,
@@ -496,12 +552,17 @@ func ApiArchiveList(ctx iris.Context) {
 					Keywords:    tag.Keywords,
 					Description: tag.Description,
 					Link:        tag.Link,
+					Logo:        tag.Logo,
+					Thumb:       tag.Thumb,
 				})
 			}
 		}
 		ops := func(tx *gorm.DB) *gorm.DB {
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
+			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
 			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
@@ -574,9 +635,9 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		} else {
 			if currentSite.Content.UseSort == 1 {
-				order = "archives.`sort` desc, archives.`id` desc"
+				order = "archives.`sort` desc, archives.`created_time` desc"
 			} else {
-				order = "archives.`id` desc"
+				order = "archives.`created_time` desc"
 			}
 		}
 		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset, draftInt)
@@ -584,7 +645,7 @@ func ApiArchiveList(ctx iris.Context) {
 			total = fulltextTotal
 		}
 	}
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
@@ -593,36 +654,84 @@ func ApiArchiveList(ctx iris.Context) {
 		}
 	}
 
-	if module != nil && len(fields) > 1 && len(archiveIds) > 0 {
-		var results []map[string]interface{}
-		currentSite.DB.Table(module.TableName).Where("`id` IN(?)", archiveIds).Select("`" + strings.Join(fields, "`,`") + "`").Scan(&results)
-		for _, field := range results {
-			item := map[string]*model.CustomField{}
-			for _, v := range module.Fields {
-				item[v.FieldName] = &model.CustomField{
-					Name:  v.Name,
-					Value: field[v.FieldName],
+	// 读取flags,content,extra
+	if len(archiveIds) > 0 {
+		if showFlag {
+			var flags []*model.ArchiveFlags
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			for i := range archives {
+				for _, f := range flags {
+					if f.ArchiveId == archives[i].Id {
+						archives[i].Flag = f.Flags
+						break
+					}
 				}
 			}
-			if id, ok := field["id"].(uint32); ok {
-				extraFields[uint(id)] = item
+		}
+		if showContent {
+			var archiveData []model.ArchiveData
+			currentSite.DB.WithContext(currentSite.Ctx()).Where("`id` IN (?)", archiveIds).Find(&archiveData)
+			for i := range archives {
+				for _, d := range archiveData {
+					if d.Id == archives[i].Id {
+						if render {
+							d.Content = library.MarkdownToHTML(d.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
+						archives[i].Content = d.Content
+						break
+					}
+				}
 			}
 		}
-		for i := range archives {
-			if extraFields[archives[i].Id] != nil {
-				archives[i].Extra = extraFields[archives[i].Id]
-			}
-		}
-	}
-	// 读取flags
-	if len(archiveIds) > 0 {
-		var flags []*model.ArchiveFlags
-		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
-		for i := range archives {
-			for _, f := range flags {
-				if f.ArchiveId == archives[i].Id {
-					archives[i].Flag = f.Flags
-					break
+		if showExtra && module != nil && len(module.Fields) > 0 {
+			for j := range archives {
+				archiveParams := currentSite.GetArchiveExtra(archives[j].ModuleId, archives[j].Id, true)
+				if len(archiveParams) > 0 {
+					var extras = make(map[string]model.CustomField, len(archiveParams))
+					for i := range archiveParams {
+						param := *archiveParams[i]
+						if (param.Value == nil || param.Value == "" || param.Value == 0) &&
+							param.Type != config.CustomFieldTypeRadio &&
+							param.Type != config.CustomFieldTypeCheckbox &&
+							param.Type != config.CustomFieldTypeSelect {
+							param.Value = param.Default
+						}
+						if param.FollowLevel && !archives[j].HasOrdered {
+							continue
+						}
+						if param.Type == config.CustomFieldTypeEditor && render {
+							param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						} else if param.Type == config.CustomFieldTypeArchive {
+							// 列表
+							arcIds, ok := param.Value.([]int64)
+							if !ok && param.Default != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								arcs, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								param.Value = arcs
+							} else {
+								param.Value = nil
+							}
+						} else if param.Type == config.CustomFieldTypeCategory {
+							value, ok := param.Value.(int64)
+							if !ok && param.Default != "" {
+								value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+							}
+							if value > 0 {
+								param.Value = currentSite.GetCategoryFromCache(uint(value))
+							} else {
+								param.Value = nil
+							}
+						}
+						extras[i] = param
+					}
+					archives[j].Extra = extras
 				}
 			}
 		}
@@ -639,7 +748,11 @@ func ApiArchiveList(ctx iris.Context) {
 
 func ApiArchiveParams(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render, _ = ctx.URLParamBool("render")
+	}
 	sorted := true
 	sortedTmp, err := ctx.URLParamBool("sorted")
 	if err == nil {
@@ -661,8 +774,57 @@ func ApiArchiveParams(ctx iris.Context) {
 	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
 	archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 
+	var extras = make(map[string]model.CustomField, len(archiveParams))
+	if len(archiveParams) > 0 {
+		for i := range archiveParams {
+			param := *archiveParams[i]
+			if (param.Value == nil || param.Value == "" || param.Value == 0) &&
+				param.Type != config.CustomFieldTypeRadio &&
+				param.Type != config.CustomFieldTypeCheckbox &&
+				param.Type != config.CustomFieldTypeSelect {
+				param.Value = param.Default
+			}
+			if param.FollowLevel && !archiveDetail.HasOrdered {
+				continue
+			}
+			if param.Type == config.CustomFieldTypeEditor && render {
+				param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			} else if param.Type == config.CustomFieldTypeArchive {
+				// 列表
+				arcIds, ok := param.Value.([]int64)
+				if !ok && param.Default != "" {
+					value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+					if value > 0 {
+						arcIds = append(arcIds, value)
+					}
+				}
+				if len(arcIds) > 0 {
+					archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+						return tx.Where("archives.`id` IN (?)", arcIds)
+					}, "archives.id ASC", 0, len(arcIds))
+					param.Value = archives
+				} else {
+					param.Value = nil
+				}
+			} else if param.Type == config.CustomFieldTypeCategory {
+				value, ok := param.Value.(int64)
+				if !ok && param.Default != "" {
+					value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+				}
+				if value > 0 {
+					param.Value = currentSite.GetCategoryFromCache(uint(value))
+				} else {
+					param.Value = nil
+				}
+			}
+			extras[i] = param
+		}
+	}
 	for i := range archiveParams {
-		if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
+		if (archiveParams[i].Value == nil || archiveParams[i].Value == "") &&
+			archiveParams[i].Type != config.CustomFieldTypeRadio &&
+			archiveParams[i].Type != config.CustomFieldTypeCheckbox &&
+			archiveParams[i].Type != config.CustomFieldTypeSelect {
 			archiveParams[i].Value = archiveParams[i].Default
 		}
 		if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
@@ -670,11 +832,11 @@ func ApiArchiveParams(ctx iris.Context) {
 		}
 	}
 	if sorted {
-		var extraFields []*model.CustomField
+		var extraFields []model.CustomField
 		module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 		if module != nil && len(module.Fields) > 0 {
 			for _, v := range module.Fields {
-				extraFields = append(extraFields, archiveParams[v.FieldName])
+				extraFields = append(extraFields, extras[v.FieldName])
 			}
 		}
 
@@ -689,7 +851,7 @@ func ApiArchiveParams(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": archiveParams,
+		"data": extras,
 	})
 }
 
@@ -704,26 +866,97 @@ func ApiCategoryDetail(ctx iris.Context) {
 	// 只有content字段有效
 	render := currentSite.Content.Editor == "markdown"
 	if ctx.URLParamExists("render") {
-		render = ctx.URLParamBoolDefault("render", render)
+		render, _ = ctx.URLParamBool("render")
 	}
-	category, err := currentSite.GetCategoryById(id)
-	if err != nil {
+	category := currentSite.GetCategoryFromCache(id)
+	if category == nil {
 		if filename != "" {
-			category, err = currentSite.GetCategoryByUrlToken(filename)
+			category = currentSite.GetCategoryFromCacheByToken(filename)
 		}
 	}
-	if err != nil {
+	if category == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  "not found",
 		})
 		return
 	}
 	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	// convert markdown to html
 	if render {
-		category.Content = library.MarkdownToHTML(category.Content)
+		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 	}
+	category.Content = currentSite.ReplaceContentUrl(category.Content, true)
+	// extra replace
+	if category.Extra != nil {
+		module := currentSite.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			categoryExtra := map[string]interface{}{}
+			for _, field := range module.CategoryFields {
+				categoryExtra[field.FieldName] = category.Extra[field.FieldName]
+				if (categoryExtra[field.FieldName] == nil || categoryExtra[field.FieldName] == "" || categoryExtra[field.FieldName] == 0) &&
+					field.Type != config.CustomFieldTypeRadio &&
+					field.Type != config.CustomFieldTypeCheckbox &&
+					field.Type != config.CustomFieldTypeSelect {
+					// default
+					categoryExtra[field.FieldName] = field.Content
+				}
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					categoryExtra[field.FieldName] != nil {
+					value, ok2 := categoryExtra[field.FieldName].(string)
+					if ok2 {
+						if field.Type == config.CustomFieldTypeEditor && render {
+							value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
+						categoryExtra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+					}
+				} else if field.Type == config.CustomFieldTypeImages && categoryExtra[field.FieldName] != nil {
+					if val, ok := categoryExtra[field.FieldName].([]interface{}); ok {
+						for j, v2 := range val {
+							v2s, _ := v2.(string)
+							val[j] = currentSite.ReplaceContentUrl(v2s, true)
+						}
+						categoryExtra[field.FieldName] = val
+					}
+				} else if field.Type == config.CustomFieldTypeTexts && categoryExtra[field.FieldName] != nil {
+					var texts []model.CustomFieldTexts
+					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &texts)
+					categoryExtra[field.FieldName] = texts
+				} else if field.Type == config.CustomFieldTypeArchive && categoryExtra[field.FieldName] != nil {
+					// 列表
+					var arcIds []int64
+					buf, _ := json.Marshal(categoryExtra[field.FieldName])
+					_ = json.Unmarshal(buf, &arcIds)
+					if len(arcIds) == 0 && field.Content != "" {
+						value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+						if value > 0 {
+							arcIds = append(arcIds, value)
+						}
+					}
+					if len(arcIds) > 0 {
+						archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+							return tx.Where("archives.`id` IN (?)", arcIds)
+						}, "archives.id ASC", 0, len(arcIds))
+						categoryExtra[field.FieldName] = archives
+					} else {
+						categoryExtra[field.FieldName] = nil
+					}
+				} else if field.Type == config.CustomFieldTypeCategory {
+					value, err := strconv.ParseInt(fmt.Sprint(categoryExtra[field.FieldName]), 10, 64)
+					if err != nil && field.Content != "" {
+						value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+					}
+					if value > 0 {
+						categoryExtra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
+					} else {
+						categoryExtra[field.FieldName] = nil
+					}
+				}
+			}
+			category.Extra = categoryExtra
+		}
+	}
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -747,8 +980,8 @@ func ApiCategoryList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -817,7 +1050,7 @@ func ApiModuleList(ctx iris.Context) {
 
 func ApiCommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	userId := uint(ctx.URLParamIntDefault("user_id", 0))
 	order := ctx.URLParamDefault("order", "id desc")
 	limit := 10
@@ -834,8 +1067,8 @@ func ApiCommentList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -910,6 +1143,82 @@ func ApiSystem(ctx iris.Context) {
 	})
 }
 
+func ApiDiyField(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render, _ = ctx.URLParamBool("render")
+	}
+	var settings = map[string]interface{}{}
+
+	fields := currentSite.GetDiyFieldSetting()
+	for i := range fields {
+		settings[fields[i].Name] = fields[i].Value
+		if (settings[fields[i].Name] == nil || settings[fields[i].Name] == "" || settings[fields[i].Name] == 0) &&
+			fields[i].Type != config.CustomFieldTypeRadio &&
+			fields[i].Type != config.CustomFieldTypeCheckbox &&
+			fields[i].Type != config.CustomFieldTypeSelect {
+			// default
+			settings[fields[i].Name] = fields[i].Content
+		}
+		if (fields[i].Type == config.CustomFieldTypeImage || fields[i].Type == config.CustomFieldTypeFile || fields[i].Type == config.CustomFieldTypeEditor) &&
+			settings[fields[i].Name] != nil {
+			value, ok2 := settings[fields[i].Name].(string)
+			if ok2 {
+				if fields[i].Type == config.CustomFieldTypeEditor && render {
+					value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+				}
+				settings[fields[i].Name] = currentSite.ReplaceContentUrl(value, true)
+			}
+		} else if fields[i].Type == config.CustomFieldTypeImages && settings[fields[i].Name] != nil {
+			if val, ok := settings[fields[i].Name].([]interface{}); ok {
+				for j, v2 := range val {
+					v2s, _ := v2.(string)
+					val[j] = currentSite.ReplaceContentUrl(v2s, true)
+				}
+				settings[fields[i].Name] = val
+			}
+		} else if fields[i].Type == config.CustomFieldTypeTexts && settings[fields[i].Name] != nil {
+			// 不需要处理
+		} else if fields[i].Type == config.CustomFieldTypeArchive && settings[fields[i].Name] != nil {
+			// 列表
+			var arcIds []int64
+			buf, _ := json.Marshal(settings[fields[i].Name])
+			_ = json.Unmarshal(buf, &arcIds)
+			if len(arcIds) == 0 && fields[i].Content != "" {
+				value, _ := strconv.ParseInt(fmt.Sprint(fields[i].Content), 10, 64)
+				if value > 0 {
+					arcIds = append(arcIds, value)
+				}
+			}
+			if len(arcIds) > 0 {
+				archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					return tx.Where("archives.`id` IN (?)", arcIds)
+				}, "archives.id ASC", 0, len(arcIds))
+				settings[fields[i].Name] = archives
+			} else {
+				settings[fields[i].Name] = nil
+			}
+		} else if fields[i].Type == config.CustomFieldTypeCategory {
+			value, err := strconv.ParseInt(fmt.Sprint(settings[fields[i].Name]), 10, 64)
+			if err != nil && fields[i].Content != "" {
+				value, _ = strconv.ParseInt(fmt.Sprint(fields[i].Content), 10, 64)
+			}
+			if value > 0 {
+				settings[fields[i].Name] = currentSite.GetCategoryFromCache(uint(value))
+			} else {
+				settings[fields[i].Name] = nil
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": settings,
+	})
+}
+
 func ApiGuestbook(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	fields := currentSite.GetGuestbookFields()
@@ -939,7 +1248,8 @@ func ApiLinkList(ctx iris.Context) {
 func ApiNavList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	typeId := ctx.URLParamIntDefault("typeId", 1)
-	navList := currentSite.GetNavsFromCache(uint(typeId))
+	showType := ctx.URLParamDefault("showType", "children")
+	navList := currentSite.GetNavsFromCache(uint(typeId), showType)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -950,7 +1260,7 @@ func ApiNavList(ctx iris.Context) {
 
 func ApiNextArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -977,7 +1287,7 @@ func ApiNextArchive(ctx iris.Context) {
 
 func ApiPrevArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -1009,25 +1319,25 @@ func ApiPageDetail(ctx iris.Context) {
 	// 只有content字段有效
 	render := currentSite.Content.Editor == "markdown"
 	if ctx.URLParamExists("render") {
-		render = ctx.URLParamBoolDefault("render", render)
+		render, _ = ctx.URLParamBool("render")
 	}
-	category, err := currentSite.GetCategoryById(id)
-	if err != nil {
+	category := currentSite.GetCategoryFromCache(id)
+	if category == nil {
 		if filename != "" {
-			category, err = currentSite.GetCategoryByUrlToken(filename)
+			category = currentSite.GetCategoryFromCacheByToken(filename)
 		}
 	}
-	if err != nil {
+	if category == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  "not found",
 		})
 		return
 	}
 	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	// convert markdown to html
 	if render {
-		category.Content = library.MarkdownToHTML(category.Content)
+		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 	}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -1055,7 +1365,11 @@ func ApiTagDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 	filename := ctx.URLParam("filename")
-
+	// 只有content字段有效
+	render := currentSite.Content.Editor == "markdown"
+	if ctx.URLParamExists("render") {
+		render, _ = ctx.URLParamBool("render")
+	}
 	tagDetail, err := currentSite.GetTagById(id)
 	if err != nil {
 		if filename != "" {
@@ -1072,6 +1386,82 @@ func ApiTagDetail(ctx iris.Context) {
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
+		if err == nil {
+			tagDetail.Content = tagContent.Content
+			// convert markdown to html
+			if render {
+				tagDetail.Content = library.MarkdownToHTML(tagDetail.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+			}
+			tagDetail.Extra = tagContent.Extra
+			if tagDetail.Extra != nil {
+				fields := currentSite.GetTagFields()
+				if len(fields) > 0 {
+					for _, field := range fields {
+						if (tagDetail.Extra[field.FieldName] == nil || tagDetail.Extra[field.FieldName] == "" || tagDetail.Extra[field.FieldName] == 0) &&
+							field.Type != config.CustomFieldTypeRadio &&
+							field.Type != config.CustomFieldTypeCheckbox &&
+							field.Type != config.CustomFieldTypeSelect {
+							// default
+							tagDetail.Extra[field.FieldName] = field.Content
+						}
+						if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+							tagDetail.Extra[field.FieldName] != nil {
+							value, ok2 := tagDetail.Extra[field.FieldName].(string)
+							if ok2 {
+								if field.Type == config.CustomFieldTypeEditor && render {
+									value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+								}
+								tagDetail.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
+							}
+						}
+						if field.Type == config.CustomFieldTypeImages && tagDetail.Extra[field.FieldName] != nil {
+							if val, ok := tagDetail.Extra[field.FieldName].([]interface{}); ok {
+								for j, v2 := range val {
+									v2s, _ := v2.(string)
+									val[j] = currentSite.ReplaceContentUrl(v2s, true)
+								}
+								tagDetail.Extra[field.FieldName] = val
+							}
+						} else if field.Type == config.CustomFieldTypeTexts && tagDetail.Extra[field.FieldName] != nil {
+							var texts []model.CustomFieldTexts
+							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
+							tagDetail.Extra[field.FieldName] = texts
+						} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
+							// 列表
+							var arcIds []int64
+							buf, _ := json.Marshal(tagDetail.Extra[field.FieldName])
+							_ = json.Unmarshal(buf, &arcIds)
+							if len(arcIds) == 0 && field.Content != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								tagDetail.Extra[field.FieldName] = archives
+							} else {
+								tagDetail.Extra[field.FieldName] = nil
+							}
+						} else if field.Type == config.CustomFieldTypeCategory {
+							value, err := strconv.ParseInt(fmt.Sprint(tagDetail.Extra[field.FieldName]), 10, 64)
+							if err != nil && field.Content != "" {
+								value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
+							}
+							if value > 0 {
+								tagDetail.Extra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
+							} else {
+								tagDetail.Extra[field.FieldName] = nil
+							}
+						}
+					}
+				}
+			}
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -1106,9 +1496,9 @@ func ApiTagDataList(ctx iris.Context) {
 	order := ctx.URLParamDefault("order", "")
 	if order == "" {
 		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 	listType := ctx.URLParamDefault("type", "list")
@@ -1122,8 +1512,8 @@ func ApiTagDataList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1140,7 +1530,7 @@ func ApiTagDataList(ctx iris.Context) {
 			Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` = ?", tagDetail.Id)
 		return tx
 	}, order, currentPage, limit, offset)
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
@@ -1174,7 +1564,7 @@ func ApiTagList(ctx iris.Context) {
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
-	itemId := uint(ctx.URLParamIntDefault("itemId", 0))
+	itemId := ctx.URLParamInt64Default("itemId", 0)
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
 	order := ctx.URLParamDefault("order", "id desc")
@@ -1188,8 +1578,8 @@ func ApiTagList(ctx iris.Context) {
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -1201,10 +1591,25 @@ func ApiTagList(ctx iris.Context) {
 			offset = (currentPage - 1) * limit
 		}
 	}
-
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
+	var categoryIds []uint
+	var categoryDetail *model.Category
+	tmpCatId := ctx.URLParam("categoryId")
+	if tmpCatId != "" {
+		tmpIds := strings.Split(tmpCatId, ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
+				if categoryDetail != nil {
+					categoryIds = append(categoryIds, categoryDetail.Id)
+				}
+			}
+		}
+	}
+	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 	}
 
 	ctx.JSON(iris.Map{
@@ -1218,17 +1623,15 @@ func ApiTagList(ctx iris.Context) {
 func ApiBannerList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	bannerType := ctx.URLParamDefault("type", "default")
-	tmpList := currentSite.Banner
-	var bannerList = make([]*config.BannerItem, 0, len(tmpList))
-	for i := range tmpList {
-		if tmpList[i].Type == "" {
-			tmpList[i].Type = "default"
-		}
-		if tmpList[i].Type == bannerType {
-			if !strings.HasPrefix(tmpList[i].Logo, "http") && !strings.HasPrefix(tmpList[i].Logo, "//") {
-				tmpList[i].Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(tmpList[i].Logo, "/")
+	var bannerList = make([]*config.BannerItem, 0, 10)
+	for _, tmpList := range currentSite.Banner.Banners {
+		if tmpList.Type == bannerType {
+			for _, banner := range tmpList.List {
+				if !strings.HasPrefix(banner.Logo, "http") && !strings.HasPrefix(banner.Logo, "//") {
+					banner.Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(banner.Logo, "/")
+				}
+				bannerList = append(bannerList, &banner)
 			}
-			bannerList = append(bannerList, &tmpList[i])
 		}
 	}
 
@@ -1257,6 +1660,32 @@ func ApiIndexTdk(ctx iris.Context) {
 	})
 }
 
+func ApiLanguages(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	// 获取当前的链接
+	mainId := currentSite.ParentId
+	if mainId == 0 {
+		mainId = currentSite.Id
+	}
+
+	mainSite := provider.GetWebsite(mainId)
+	if mainSite.MultiLanguage.Open == false {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": nil,
+		})
+	}
+
+	languageSites := currentSite.GetMultiLangSites(mainId, false)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": languageSites,
+	})
+}
+
 func ApiAttachmentUpload(ctx iris.Context) {
 	AttachmentUpload(ctx)
 }
@@ -1272,19 +1701,21 @@ func ApiCommentPublish(ctx iris.Context) {
 		})
 		return
 	}
-	if ok := SafeVerify(ctx, nil, "json", "comment"); !ok {
+	var req2 = map[string]string{
+		"content":    req.Content,
+		"captcha_id": req.CaptchaId,
+		"captcha":    req.Captcha,
+	}
+	if ok := SafeVerify(ctx, req2, "json", "comment"); !ok {
 		return
 	}
 
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	if userId > 0 {
-		req.Status = 1
-		userInfo := ctx.Values().Get("userInfo")
-		if userInfo != nil {
-			user, ok := userInfo.(*model.User)
-			if ok {
-				req.UserName = user.UserName
-			}
+	userInfo := ctx.Values().Get("userInfo")
+	if userInfo != nil {
+		user, ok := userInfo.(*model.User)
+		if ok {
+			req.UserName = user.UserName
 		}
 	}
 
@@ -1303,7 +1734,7 @@ func ApiCommentPublish(ctx iris.Context) {
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok {
+		if ok && group != nil && group.Setting.ContentNoVerify {
 			contentVerify = !group.Setting.ContentNoVerify
 		}
 	}
@@ -1321,6 +1752,13 @@ func ApiCommentPublish(ctx iris.Context) {
 			"msg":  msg,
 		})
 	}
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeComment, comment)
+		if isChecked {
+			currentSite.DB.Model(comment).UpdateColumn("status", spamStatus)
+		}
+	}()
 
 	msg := currentSite.TplTr("PublishSuccessfully")
 	ctx.JSON(iris.Map{
@@ -1342,7 +1780,17 @@ func ApiCommentPraise(ctx iris.Context) {
 		return
 	}
 
+	userId := ctx.Values().GetIntDefault("userId", 0)
 	comment, err := currentSite.GetCommentById(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 检查是否点赞过
+	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1352,15 +1800,6 @@ func ApiCommentPraise(ctx iris.Context) {
 	}
 
 	comment.VoteCount += 1
-	err = comment.Save(currentSite.DB)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
 	comment.Active = true
 
 	ctx.JSON(iris.Map{
@@ -1372,6 +1811,7 @@ func ApiCommentPraise(ctx iris.Context) {
 
 func ApiGuestbookForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
 	fields := currentSite.GetGuestbookFields()
 	var req = map[string]interface{}{}
 	var err error
@@ -1391,6 +1831,52 @@ func ApiGuestbookForm(ctx iris.Context) {
 			if ok {
 				val = strings.Trim(strings.Join(tmpVal, ","), ",")
 			}
+		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
+			tmpVal, ok := req[item.FieldName].(string)
+			if ok {
+				// 如果有上传文件，则需要用户登录
+				if userId == 0 {
+					msg := currentSite.TplTr("ThisOperationRequiresLogin")
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  msg,
+					})
+					return
+				}
+				tmpfile, err := os.CreateTemp("", "upload")
+				if err != nil {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  "File Not Found",
+					})
+					return
+				}
+				if _, err := tmpfile.Write([]byte(tmpVal)); err != nil {
+					_ = tmpfile.Close()
+					_ = os.Remove(tmpfile.Name())
+
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  "File Not Found",
+					})
+				}
+				tmpfile.Seek(0, 0)
+				fileHeader := &multipart.FileHeader{
+					Filename: filepath.Base(item.FieldName),
+					Header:   nil,
+					Size:     int64(len(tmpVal)),
+				}
+				attach, err := currentSite.AttachmentUpload(tmpfile, fileHeader, 0, 0, userId)
+				if err == nil {
+					val = attach.Logo
+					if attach.Logo == "" {
+						val = attach.FileLocation
+					}
+				}
+
+				_ = tmpfile.Close()
+				_ = os.Remove(tmpfile.Name())
+			}
 		} else {
 			val, _ = req[item.FieldName].(string)
 		}
@@ -1407,6 +1893,18 @@ func ApiGuestbookForm(ctx iris.Context) {
 		if !item.IsSystem {
 			extraData[item.Name] = val
 		}
+	}
+	hookCtx := &provider.HookContext{
+		Point: provider.BeforeGuestbookPost,
+		Site:  currentSite,
+		Data:  req,
+	}
+	if err = provider.TriggerHook(hookCtx); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
 	}
 	if ok := SafeVerify(ctx, result, "json", "guestbook"); !ok {
 		return
@@ -1431,30 +1929,26 @@ func ApiGuestbookForm(ctx iris.Context) {
 		})
 		return
 	}
-
-	//发送邮件
-	subject := currentSite.TplTr("HasNewMessageFromWhere", currentSite.System.SiteName, guestbook.UserName)
-	var contents []string
-	for _, item := range fields {
-		content := currentSite.TplTr("s:s", item.Name, req[item.FieldName]) + "\n"
-
-		contents = append(contents, content)
-	}
-	// 增加来路和IP返回
-	contents = append(contents, currentSite.TplTr("SubmitIpLog", guestbook.Ip)+"\n")
-	contents = append(contents, currentSite.TplTr("SourcePageLog", guestbook.Refer)+"\n")
-	contents = append(contents, currentSite.TplTr("SubmitTimeLog", time.Now().Format("2006-01-02 15:04:05"))+"\n")
-
-	if currentSite.SendTypeValid(provider.SendTypeGuestbook) {
-		// 后台发信
-		go currentSite.SendMail(subject, strings.Join(contents, ""))
-		// 回复客户
-		recipient, ok := result["email"]
-		if !ok {
-			recipient = result["contact"]
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeGuestbook, guestbook)
+		if isChecked {
+			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
-		go currentSite.ReplyMail(recipient)
-	}
+		if spamStatus == 1 {
+			// 1 是正常，可以发邮件
+			currentSite.SendGuestbookToMail(guestbook)
+			if currentSite.ParentId > 0 {
+				mainSite := currentSite.GetMainWebsite()
+				parentGuestbook := *guestbook
+				parentGuestbook.Id = 0
+				parentGuestbook.Status = spamStatus
+				parentGuestbook.SiteId = currentSite.Id
+				_ = mainSite.DB.Save(&parentGuestbook)
+				mainSite.SendGuestbookToMail(&parentGuestbook)
+			}
+		}
+	}()
 
 	msg := currentSite.PluginGuestbook.ReturnMessage
 	if msg == "" {
@@ -1482,7 +1976,7 @@ func ApiArchivePublish(ctx iris.Context) {
 	userGroup := ctx.Values().Get("userGroup")
 	if userGroup != nil {
 		group, ok := userGroup.(*model.UserGroup)
-		if ok {
+		if ok && group != nil && group.Setting.ContentNoVerify {
 			req.Draft = !group.Setting.ContentNoVerify
 		}
 	}

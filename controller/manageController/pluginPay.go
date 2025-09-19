@@ -58,6 +58,10 @@ func PluginPayConfigForm(ctx iris.Context) {
 		currentSite.PluginPay.WechatKeyPath = req.WechatKeyPath
 	}
 
+	// paypal
+	currentSite.PluginPay.PaypalClientId = req.PaypalClientId
+	currentSite.PluginPay.PaypalClientSecret = req.PaypalClientSecret
+
 	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
 	if err != nil {
 		ctx.JSON(iris.Map{

@@ -5,10 +5,14 @@ import (
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/response"
 	"math"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -43,8 +47,14 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var categoryIds []uint
 	var defaultCategoryId uint
 	var authorId = uint(0)
+	var parentId = int64(0)
+	var tagIds []uint
+	var argIds []int64
 	var categoryDetail *model.Category
-
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
 	}
@@ -53,6 +63,35 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["userId"] != nil {
 		authorId = uint(args["userId"].Integer())
+	}
+	if args["parentId"] != nil {
+		parentId = int64(args["parentId"].Integer())
+	}
+	if args["tagId"] != nil {
+		tmpIds := strings.Split(args["tagId"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				tagIds = append(tagIds, uint(tmpId))
+			}
+		}
+	}
+	if args["ids"] != nil {
+		tmpIds := strings.Split(args["ids"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.ParseInt(v, 10, 64)
+			if tmpId > 0 {
+				argIds = append(argIds, tmpId)
+			}
+		}
+	}
+	minPrice := 0
+	maxPrice := 0
+	if args["minPrice"] != nil {
+		minPrice = args["minPrice"].Integer()
+	}
+	if args["maxPrice"] != nil {
+		maxPrice = args["maxPrice"].Integer()
 	}
 	module, _ := ctx.Public["module"].(*model.Module)
 	if module != nil {
@@ -104,30 +143,33 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
+	var excludeFlags []string
+	if args["excludeFlag"] != nil {
+		excludeFlags = strings.Split(args["excludeFlag"].String(), ",")
+	}
 	var combineMode = "to"
 	var combineArchive *model.Archive
 	if args["combineId"] != nil {
-		combineId := uint(args["combineId"].Integer())
+		combineId := int64(args["combineId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 	if args["combineFromId"] != nil {
 		combineMode = "from"
-		combineId := uint(args["combineFromId"].Integer())
+		combineId := int64(args["combineFromId"].Integer())
 		combineArchive, _ = currentSite.GetArchiveById(combineId)
 	}
 
 	var order string
 	if args["order"] != nil {
+		order = args["order"].String()
 		if !strings.Contains(order, "rand") {
-			order = "archives." + args["order"].String()
-		} else {
-			order = args["order"].String()
+			order = "archives." + order
 		}
 	} else {
-		if currentSite.Content.UseSort == 1 {
-			order = "archives.`sort` desc, archives.`id` desc"
+		if currentSite.Content.UseSort == 1 || parentId > 0 {
+			order = "archives.`sort` desc, archives.`created_time` desc"
 		} else {
-			order = "archives.`id` desc"
+			order = "archives.`created_time` desc"
 		}
 	}
 
@@ -139,6 +181,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	q := ""
 	argQ := ""
 	child := true
+	showFlag := false
+	showContent := false
+	showExtra := false
 
 	if args["type"] != nil {
 		listType = args["type"].String()
@@ -155,6 +200,15 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["q"] != nil {
 		q = strings.TrimSpace(args["q"].String())
 		argQ = q
+	}
+	if args["showFlag"] != nil {
+		showFlag = args["showFlag"].Bool()
+	}
+	if args["showContent"] != nil {
+		showContent = args["showContent"].Bool()
+	}
+	if args["showExtra"] != nil {
+		showExtra = args["showExtra"].Bool()
 	}
 
 	// 支持更多的参数搜索，
@@ -173,6 +227,24 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		currentPage, _ = strconv.Atoi(urlParams["page"])
 		q = strings.TrimSpace(urlParams["q"])
+		if extraParams["min_price"] != "" {
+			minPrice, _ = strconv.Atoi(extraParams["min_price"])
+		}
+		if extraParams["max_price"] != "" {
+			maxPrice, _ = strconv.Atoi(extraParams["max_price"])
+		}
+	}
+	// 支持标签参数搜索
+	module = currentSite.GetModuleFromCache(moduleId)
+	if module != nil {
+		if len(module.Fields) > 0 {
+			// 所有参数的url都附着到query中
+			for _, v := range module.Fields {
+				if args[v.FieldName] != nil {
+					extraParams[v.FieldName] = args[v.FieldName].String()
+				}
+			}
+		}
 	}
 	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
 	if ok {
@@ -193,8 +265,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -204,8 +276,11 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if currentPage > 1 {
 			offset = (currentPage - 1) * limit
 		}
+		argIds = nil
 	} else {
 		currentPage = 1
+		// list模式则始终使用 argQ
+		q = argQ
 	}
 
 	var tmpResult = make([]*model.Archive, 0, limit)
@@ -213,7 +288,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var total int64
 	if listType == "related" {
 		//获取id
-		archiveId := uint(0)
+		archiveId := int64(0)
 		var keywords string
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 		var categoryId = uint(0)
@@ -240,7 +315,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
 				}
 				if categoryId > 0 {
 					if currentSite.Content.MultiCategory == 1 {
@@ -262,7 +337,66 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				return tx
 			}, "archives.id ASC", 0, limit, offset)
 		} else if like == "relation" {
-			archives = currentSite.GetArchiveRelations(archiveId)
+			if categoryId > 0 || moduleId > 0 || len(excludeCategoryIds) > 0 {
+				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					tx = tx.Table("`archives` as archives").Distinct("archives.id").
+						Joins("INNER JOIN `archive_relations` as t ON archives.id = t.relation_id AND t.archive_id = ? AND archives.`id` != ?", archiveId, archiveId)
+					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					}
+					if categoryId > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id = ?", categoryId)
+						} else {
+							tx = tx.Where("archives.`category_id` = ?", categoryId)
+						}
+					} else if moduleId > 0 {
+						tx = tx.Where("archives.`module_id` = ?", moduleId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("archives.`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+
+					return tx
+				}, order, 0, limit, offset)
+			} else {
+				archives = currentSite.GetArchiveRelations(archiveId)
+			}
+		} else if like == "tag" {
+			// 根据tag来调用相关
+			var tmpTagIds []uint
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tmpTagIds)
+			if len(tmpTagIds) > 0 {
+				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+					tx = tx.Table("`archives` as archives").Distinct("archives.id").
+						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tmpTagIds, archiveId)
+					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					}
+					if categoryId > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id = ?", categoryId)
+						} else {
+							tx = tx.Where("archives.`category_id` = ?", categoryId)
+						}
+					} else if moduleId > 0 {
+						tx = tx.Where("archives.`module_id` = ?", moduleId)
+					}
+					if len(excludeCategoryIds) > 0 {
+						if currentSite.Content.MultiCategory == 1 {
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+						} else {
+							tx = tx.Where("archives.`category_id` NOT IN (?)", excludeCategoryIds)
+						}
+					}
+
+					return tx
+				}, order, 0, limit, offset)
+			}
 		} else {
 			// 检查是否有相关文档
 			archives = currentSite.GetArchiveRelations(archiveId)
@@ -271,13 +405,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(excludeCategoryIds) > 0 {
 						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 						}
@@ -288,13 +422,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(excludeCategoryIds) > 0 {
 						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 						}
@@ -323,26 +457,26 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		var fulltextSearch bool
 		var fulltextTotal int64
 		var err2 error
-		var ids []uint64
+		var ids []int64
 		var searchCatIds []uint
 		var searchTagIds []uint
 		if (listType == "page" && len(q) > 0) || argQ != "" {
-			var tmpIds []uint64
-			tmpIds, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
+			var tmpDocs []fulltext.TinyArchive
+			tmpDocs, fulltextTotal, err2 = currentSite.Search(q, moduleId, currentPage, limit)
 			if err2 == nil {
 				fulltextSearch = true
-				for _, id := range tmpIds {
-					if id < provider.CategoryDivider {
-						ids = append(ids, id)
-					} else if id < provider.TagDivider {
-						searchCatIds = append(searchCatIds, uint(id-provider.CategoryDivider))
-					} else if id < provider.TagDividerEnd {
-						searchTagIds = append(searchTagIds, uint(id-provider.TagDivider))
+				for _, doc := range tmpDocs {
+					if doc.Type == fulltext.ArchiveType {
+						ids = append(ids, doc.Id)
+					} else if doc.Type == fulltext.CategoryType {
+						searchCatIds = append(searchCatIds, uint(doc.Id))
+					} else if doc.Type == fulltext.TagType {
+						searchTagIds = append(searchTagIds, uint(doc.Id))
 					} else {
 						// 其他值
 					}
 				}
-				if len(tmpIds) == 0 || len(ids) == 0 {
+				if len(tmpDocs) == 0 || len(ids) == 0 {
 					ids = append(ids, 0)
 				}
 				offset = 0
@@ -354,7 +488,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "category",
-					Id:          cat.Id,
+					Id:          int64(cat.Id),
 					CreatedTime: cat.CreatedTime,
 					UpdatedTime: cat.UpdatedTime,
 					Title:       cat.Title,
@@ -376,9 +510,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			tags := currentSite.GetTagsByIds(searchTagIds)
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
+				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
-					Id:          tag.Id,
+					Id:          int64(tag.Id),
 					CreatedTime: tag.CreatedTime,
 					UpdatedTime: tag.UpdatedTime,
 					Title:       tag.Title,
@@ -387,6 +522,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					Keywords:    tag.Keywords,
 					Description: tag.Description,
 					Link:        tag.Link,
+					Logo:        tag.Logo,
+					Thumb:       tag.Thumb,
 				})
 			}
 		}
@@ -394,9 +531,15 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if authorId > 0 {
 				tx = tx.Where("user_id = ?", authorId)
 			}
+			if parentId > 0 {
+				tx = tx.Where("parent_id = ?", parentId)
+			}
 			if flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", flag)
+			} else if len(excludeFlags) > 0 {
+				tx = tx.Joins("LEFT JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag IN (?)", excludeFlags).Where("archive_flags.archive_id IS NULL")
 			}
+			needDistinct := false
 			if len(extraParams) > 0 {
 				module = currentSite.GetModuleFromCache(moduleId)
 				if module != nil && len(module.Fields) > 0 {
@@ -408,12 +551,16 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						}
 					}
 					if len(fields) > 0 {
+						needDistinct = true
 						tx = tx.InnerJoins(fmt.Sprintf("INNER JOIN `%s` on `%s`.id = `archives`.id", module.TableName, module.TableName))
 						for _, field := range fields {
 							tx = tx.Where(field[0], field[1])
 						}
 					}
 				}
+			}
+			if currentSite.Content.MultiCategory == 1 || needDistinct || flag != "" || len(excludeFlags) > 0 || len(tagIds) > 0 {
+				tx = tx.Distinct("archives.id")
 			}
 			if currentSite.Content.MultiCategory == 1 && (len(categoryIds) > 0 || len(excludeCategoryIds) > 0) {
 				tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -458,10 +605,29 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 				}
 			}
-			if len(ids) > 0 {
+			if len(tagIds) > 0 {
+				tx = tx.Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?)", tagIds)
+			}
+			if minPrice > 0 {
+				tx = tx.Where("`price` >= ?", minPrice*100)
+			}
+			if maxPrice > 0 {
+				tx = tx.Where("`price` <= ?", maxPrice*100)
+			}
+			if len(argIds) > 0 {
+				tx = tx.Where("archives.`id` IN(?)", argIds)
+			} else if len(ids) > 0 {
+				// 使用了全文索引，拿到了ID
 				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if q != "" {
-				tx = tx.Where("`title` like ?", "%"+q+"%")
+				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+				var allArchives int64
+				allArchives = currentSite.GetExplainCount("SELECT id FROM archives")
+				if allArchives > 100000 {
+					tx = tx.Where("`title` like ?", q+"%")
+				} else {
+					tx = tx.Where("`title` like ?", "%"+q+"%")
+				}
 			}
 			return tx
 		}
@@ -474,7 +640,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			total = fulltextTotal
 		}
 	}
-	var archiveIds = make([]uint, 0, len(archives))
+	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
 		archiveIds = append(archiveIds, archives[i].Id)
 		if len(archives[i].Password) > 0 {
@@ -488,20 +654,90 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
-	// 读取flags
+	// 读取flags,content,extra
 	if len(archiveIds) > 0 {
-		var flags []*model.ArchiveFlags
-		currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
-		for i := range archives {
-			for _, f := range flags {
-				if f.ArchiveId == archives[i].Id {
-					archives[i].Flag = f.Flags
-					break
+		if showFlag {
+			var flags []*model.ArchiveFlags
+			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+			for i := range archives {
+				for _, f := range flags {
+					if f.ArchiveId == archives[i].Id {
+						archives[i].Flag = f.Flags
+						break
+					}
+				}
+			}
+		}
+		if showContent {
+			var archiveData []model.ArchiveData
+			currentSite.DB.WithContext(currentSite.Ctx()).Where("`id` IN (?)", archiveIds).Find(&archiveData)
+			for i := range archives {
+				for _, d := range archiveData {
+					if d.Id == archives[i].Id {
+						if render {
+							d.Content = library.MarkdownToHTML(d.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						}
+						archives[i].Content = d.Content
+						break
+					}
+				}
+			}
+		}
+		if showExtra && module != nil && len(module.Fields) > 0 {
+			for j := range archives {
+				archiveParams := currentSite.GetArchiveExtra(archives[j].ModuleId, archives[j].Id, true)
+				if len(archiveParams) > 0 {
+					var extras = make(map[string]model.CustomField, len(archiveParams))
+					for i := range archiveParams {
+						param := *archiveParams[i]
+						if (param.Value == nil || param.Value == "" || param.Value == 0) &&
+							param.Type != config.CustomFieldTypeRadio &&
+							param.Type != config.CustomFieldTypeCheckbox &&
+							param.Type != config.CustomFieldTypeSelect {
+							param.Value = param.Default
+						}
+						if param.FollowLevel && !archives[j].HasOrdered {
+							continue
+						}
+						if param.Type == config.CustomFieldTypeEditor && render {
+							param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+						} else if param.Type == config.CustomFieldTypeArchive {
+							// 列表
+							arcIds, ok := param.Value.([]int64)
+							if !ok && param.Default != "" {
+								value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+								if value > 0 {
+									arcIds = append(arcIds, value)
+								}
+							}
+							if len(arcIds) > 0 {
+								arcs, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+									return tx.Where("archives.`id` IN (?)", arcIds)
+								}, "archives.id ASC", 0, len(arcIds))
+								param.Value = arcs
+							} else {
+								param.Value = nil
+							}
+						} else if param.Type == config.CustomFieldTypeCategory {
+							value, ok := param.Value.(int64)
+							if !ok && param.Default != "" {
+								value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+							}
+							if value > 0 {
+								param.Value = currentSite.GetCategoryFromCache(uint(value))
+							} else {
+								param.Value = nil
+							}
+						}
+						extras[i] = param
+					}
+					archives[j].Extra = extras
 				}
 			}
 		}
 	}
 
+	tmpResult = append(archives, tmpResult...)
 	if listType == "page" {
 		var urlPatten string
 		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
@@ -512,6 +748,16 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			if ok2 && webInfo.PageName == "archiveIndex" {
 				urlMatch := "archiveIndex"
 				urlPatten = currentSite.GetUrl(urlMatch, module, -1)
+			} else if ok2 && webInfo.PageName == "search" {
+				urlMatch := "search"
+				moduleToken := ""
+				if module != nil {
+					moduleToken = module.UrlToken
+				}
+				urlPatten = currentSite.GetUrl(urlMatch, map[string]interface{}{
+					"q":      url.QueryEscape(q),
+					"module": moduleToken,
+				}, -1)
 			} else {
 				// 其他地方
 				urlPatten = ""
@@ -520,8 +766,15 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		pager := makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 		webInfo.TotalPages = pager.TotalPages
 		ctx.Public["pagination"] = pager
+
+		// 公开列表数据
+		if currentSite.PluginJsonLd.Open {
+			ctxOri := currentSite.CtxOri()
+			if ctxOri != nil {
+				ctxOri.ViewData("listData", tmpResult)
+			}
+		}
 	}
-	tmpResult = append(archives, tmpResult...)
 	ctx.Private[node.name] = tmpResult
 	ctx.Private["combine"] = combineArchive
 

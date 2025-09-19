@@ -24,6 +24,8 @@ func (w *Website) GetWechatServer(focus bool) *wechat.Server {
 
 	if w.wechatServer == nil || focus {
 		w.wechatServer = wechat.New(cfg)
+		w2 := GetWebsite(w.Id)
+		w2.wechatServer = w.wechatServer
 	}
 
 	return w.wechatServer

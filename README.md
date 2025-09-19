@@ -2,34 +2,57 @@
 
 <img height="180" src="docs/anqicms.svg" />
 
-[更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
+# AnQiCMS 一款高性能的内容管理系统
 
-# AnQiCMS
+<div align="center">
+<a href="https://github.com/fesiong/anqicms/releases"><img alt="GitHub release" src="https://img.shields.io/github/release/fesiong/anqicms.svg?style=flat-square&include_prereleases" /></a>
+<a href="https://hub.docker.com/r/anqicms/anqicms"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/anqicms/anqicms?style=flat-square" /></a>
+<a href="https://github.com/fesiong/anqicms/commits"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/fesiong/anqicms.svg?style=flat-square" /></a>
+  </div>
+
+[官网](https://www.anqicms.com) · [文档](https://www.anqicms.com/help) · [演示](https://demo.anqicms.com) · [GitCode](https://gitcode.com/anqicms/anqicms) · [更新日志](./CHANGELOG.md) · [English](./README-en_US.md) · 中文
 
 </div>
 
 ## 介绍
 
-安企内容管理系统(AnqiCMS)的前身是GoBlog，一款基于 iris 框架，使用 golang 开发的简洁版个人博客系统
+AnQiCMS 是一款高性能的内容管理系统，基于Go语言开发。它支持多站点、多语言管理，提供灵活的内容发布和模板管理功能，同时，系统内置丰富的利于SEO操作的功能，支持包括自定义字段、文档分类、批量导入导出等功能，是您建站的理想选择。
 
-> GoBlog是一个由 golang 编写的开源个人博客系统，界面优雅，小巧、执行速度飞快，并且对seo友好，可以满足日常博客需求。它的使用很简单，部署非常方便，pc和移动端自适应，页面模板使用类似blade模板引擎语法，上手非常容易，适合个人博客使用。
+AnQiCMS旨在为中小型企业提供一个高效、稳定、灵活的内容管理平台，特别是面向需要高安全性、跨站点、多语言支持及大规模数据管理的企业及个人用户。通过Go语言的高性能优势，AnQiCMS不仅满足了企业对内容管理的基本需求，还通过持续的功能扩展和性能优化，解决网站安全、高性能、多站点、多语言等核心问题。
 
-安企内容管理系统(AnqiCMS)，是一款基于 iris 框架，使用 GoLang 开发的企业内容管理系统。它部署简单，软件相对于传统的PHP开发的内容管理系统更加安全，界面优雅，小巧，执行速度飞快，使用 AnqiCMS 搭建的网站可以防止众多常见的安全问题发生。AnqiCMS 的设计对SEO友好，并且内置了大量企业站常用功能，对网站优化有很好的帮助提升，对企业管理网站一定程度上提提高了办事效率，提高企业的竞争力。
-
-AnqiCMS 除了适合做企业站，也适合做营销型网站、企业官网、商品展示站点、政府网站、门户网站、个人博客等等各种类型的网站。
-
-AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以非常容易上手模板制作。网站模式支持 自适应、代码适配、PC+mobile 独立站点 三种模式，根据不用需求，可以选择适合自己的搭配方式来建站。
+传统的 CMS 系统面临着诸多问题，维权风波不断，给企业带来了潜在风险。同时，传统的 CMS 在处理大量文章数据时，服务器资源占用过高，页面加载缓慢，传统优化手段也难以改善。此外，PHP 开发的 CMS 系统存在安全隐患，网站挂马、入侵等问题时有发生，促使我们跳出PHP局限，利用Go语言开发更安全、灵活和稳定的内容管理系统。
 
 我们的追求：让天下都是安全的网站。
 
-我们一直朝着网站安全的方向前进，让 AnqiCMS 为你的网站安全护航。
+我们一直朝着网站安全的方向前进，让 AnQiCMS 为你的网站安全护航。
 
-欢迎您使用 AnqiCMS。
+欢迎您使用 AnQiCMS。
 
 ## 快速开始
 
-[下载最新的 AnqiCMS](https://github.com/fesiong/goblog/releases)  
-[安装一个新的站点](https://www.anqicms.com/help-basic/210.html)  
+### 快速(宝塔)部署
+
+- [宝塔面板(9.2+)一键部署**推荐**](https://www.anqicms.com/help/3628.html)
+- [aaPanel(宝塔国际版)一键部署](https://www.anqicms.com/help/3633.html)
+- [宝塔面板(9.0以前版本)部署](https://www.anqicms.com/help-basic/210.html)
+- [LNMP命令部署](https://www.anqicms.com/courses/3486.html)
+
+Docker 快速体验
+
+```bash
+docker pull anqicms/anqicms:latest
+docker run -d --name anqicms -p 8001:8001 anqicms/anqicms:latest
+```
+
+### 在线体验
+
+环境地址：[https://demo.anqicms.com](https://demo.anqicms.com)  
+后台地址：[https://demo.anqicms.com/system](https://demo.anqicms.com/system)  
+用户名：`admin`  
+密码：`123456`  
+
+### 使用帮助
+
 [查看模板使用教程](https://www.anqicms.com/manual)  
 [查看后台使用帮助](https://www.anqicms.com/help)  
 [查看接口文档](https://www.anqicms.com/anqiapi)
@@ -38,46 +61,47 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 
 ## 网站特色功能
 
-- 自定义文档模型
-- 自定义页面导航
-- 富文本、Markdown 编辑器支持
-- Webp 图片支持
-- 多模板自定义支持
-- 多站点支持
-- 数据统计详细记录
-- 自定义伪静态规则
-- 多个搜索引擎主动推送
-- Sitemap管理
-- Robots.txt管理
-- 友情链接管理
-- 内容评论管理
-- 自动锚文本功能
-- 网站留言管理
-- 关键词库管理
-- 内容素材管理
-- 邮件提醒功能
-- 文章采集功能
-- 文章组合功能
-- 文章导入功能
-- 自定义301跳转功能
-- 网站内容迁移功能
-- 静态页面功能
-- 自定义资源存储
-- 用户管理
-- 用户组管理
-- 小程序支持
-- 全文搜索支持
-- 备份与恢复
-- 文章自动配图支持
-- AI自动写作功能
-- 定时发布/更新功能
-- 防采集干扰功能
-- 图片水印功能
+- **全局设置**：提供站点的统一配置，集中管理系统各项全局设置。
+- **内容安全设置**：包括敏感词过滤和内容审核，确保内容合规。
+- **多站点管理**：支持管理多个独立站点，适用于多品牌、多主题网站。
+- **导航设置**：设置和管理导航栏，提高用户导航体验。
+- **自定义内容模型**：允许用户定义特定内容模型，支持灵活的内容结构。
+- **单页面管理**：针对隐私政策、关于我们等单页面的专用管理工具。
+- **伪静态规则管理**：支持自定义伪静态 URL，优化 SEO 表现。
+- **Sitemap 自动生成**：自动生成站点的 Sitemap，助力搜索引擎抓取。
+- **链接推送管理**：向搜索引擎推送新内容，加速收录。
+- **301 跳转管理**：轻松设置 URL 的 301 重定向，提升 SEO 和用户体验。
+- **Robots.txt 配置**：定制 Robots.txt 文件，控制搜索引擎爬取。
+- **多语言站点支持**：支持多语言站点的配置和切换，适合国际化站点。
+- **用户管理和 VIP 分组**：可为不同用户组设置访问权限，适合会员制网站。
+- **微信公众号对接**：集成微信公众号接口，便于内容推送和管理。
+- **全站替换工具**：可批量替换关键词或链接，方便内容批量更新。
+- **邮件提醒**：根据触发事件（如注册、评论）发送邮件通知，提升用户参与度。
+- **关键词库管理**：集中管理 SEO 关键词，有助于内容优化。
+- **内容采集**：支持从其他网站自动采集内容，实现内容自动化更新。
+- **文档回收站**：支持已删除文档的恢复，防止数据误删。
+- **时间因子-定时发布**：可设定内容的定时发布，支持内容自动运营。
+- **订单管理**：内置订单管理功能，适合电商和服务付费类站点。
+- **财务管理模块**：记录财务数据，管理交易明细，适合订阅、交易网站。
+- **分销管理**：可设置分销渠道，帮助站点实现裂变增长。
+- **防采集干扰码**：生成干扰码，保护内容不被批量采集。
+- **锚文本管理**：可设置站内关键词的自动锚文本链接，有助于 SEO。
+- **水印管理**：为图片添加水印，保护原创图片版权。
+- **标题自动配图**：根据标题内容自动分配图片，提升内容视觉效果。
+- **静态页面缓存**：提高页面访问速度，减少服务器负载。
+- **备份与恢复**：系统支持数据的备份和恢复，保障数据安全。
+- **流量统计和蜘蛛统计**：追踪网站的访问量及搜索引擎爬虫的抓取情况，便于数据分析。
 
 ## AnQiCMS 发展历程
 
 - 最新
   > 我们一直在努力，不断的探索，持续迭代优化，争取给用户们有更好的使用体验。
+- 2025年 03月 17日，v3.4.7 发布
+  > 多语言站点‌：多语言增强，支持整页HTML翻译
+- 2024年 11月 11日，v3.4.1 发布
+  > 多语言站点‌：新增多语言站点功能，使网站能够轻松适应不同地区和文化背景用户需求，提升全球化服务能力
+- 2024年 9月 5日，v3.3.12 发布
+  > 优化了文档查询效率，降低了资源消耗，提升了网站性能，特别针对大文章量场景
 - 2024年 5月 1日，v3.3.5 发布
   > 支持图片水印功能
 - 2023年10月24日，v3.2.5 发布
@@ -137,6 +161,6 @@ AnqiCMS 支持 Django 模板引擎语法，该语法类似 blade 语法，可以
 ![扫码入群讨论](https://www.anqicms.com/uploads/202211/09/1a55bfcde55aa2d6.webp)
 
 ## License
-AnqiCMS 最终用户授权协议
+AGPL-3.0 license
 
-Copyright (c) 2019-NOW  Fesion <tpyzlxy@gmail.com>
+Copyright (c) 2019-NOW  AnQiCMS <tpyzlxy@gmail.com>

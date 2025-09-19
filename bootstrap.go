@@ -92,15 +92,19 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application = iris.New()
 	bootstrap.Application.Logger().SetLevel(bootstrap.LoggerLevel)
 	bootstrap.loadGlobalMiddleware()
-	route.Register(bootstrap.Application)
-	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", loadLocales()...)
+	route.Register(bootstrap.Application, SystemFiles)
+	err := bootstrap.Application.I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
 	if err != nil {
 		log.Println("languages err", err)
 		os.Exit(1)
 	}
+	bootstrap.Application.I18n.Cookie = "lang"
+	bootstrap.Application.I18n.Subdomain = false
+	bootstrap.Application.I18n.PathRedirect = false
 	bootstrap.Application.I18n.SetDefault("zh-CN")
 	// 注入I18n 到 provider
 	provider.SetI18n(bootstrap.Application.I18n)
+	bootstrap.Application.I18n.Tags()
 
 	pugEngine := view.Django(".html")
 	// 开发模式下动态加载
@@ -108,10 +112,12 @@ func (bootstrap *Bootstrap) Start() {
 		pugEngine.Reload(true)
 	}
 
-	pugEngine.AddFunc("stampToDate", TimestampToDate)
+	pugEngine.AddFunc("stampToDate", tags.TimestampToDate)
+	pugEngine.AddFunc("CustomFunc", tags.CustomFunc)
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
 	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)
+	_ = pugEngine.RegisterTag("diy", tags.TagDiyParser)
 	_ = pugEngine.RegisterTag("system", tags.TagSystemParser)
 	_ = pugEngine.RegisterTag("contact", tags.TagContactParser)
 	_ = pugEngine.RegisterTag("navList", tags.TagNavListParser)
@@ -137,6 +143,10 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("userGroupDetail", tags.TagUserGroupDetailParser)
 	_ = pugEngine.RegisterTag("bannerList", tags.TagBannerListParser)
 	_ = pugEngine.RegisterTag("moduleDetail", tags.TagModuleDetailParser)
+	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
+	_ = pugEngine.RegisterTag("jsonLd", tags.TagJsonLdParser)
+	_ = pugEngine.ReplaceTag("set", tags.TagSetParser)
+	_ = pugEngine.RegisterTag("jump", tags.TagJumpParser)
 
 	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行
@@ -146,6 +156,7 @@ func (bootstrap *Bootstrap) Start() {
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
 		iris.WithRemoteAddrHeader("X-Real-IP"),
 		iris.WithRemoteAddrHeader("X-Forwarded-For"),
+		iris.WithHostProxyHeader("X-Host"),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithoutBodyConsumptionOnUnmarshal,
 		iris.WithoutPathCorrection,
@@ -158,27 +169,11 @@ func (bootstrap *Bootstrap) Start() {
 	}
 }
 
-func TimestampToDate(in int64, layout string) string {
-	t := time.Unix(in, 0)
-	return t.Format(layout)
-}
-
 func (bootstrap *Bootstrap) Shutdown() error {
 	bootstrap.Application.Shutdown(stdContext.Background())
-
-	return nil
-}
-
-func loadLocales() (languages []string) {
-	// 读取language列表
-	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", config.ExecPath))
-	if err == nil {
-		for _, info := range readerInfos {
-			if info.IsDir() {
-				languages = append(languages, info.Name())
-			}
-		}
-	}
+	provider.Shutdown()
+	// 关闭一些应用
+	crond.Stop()
 
 	return nil
 }

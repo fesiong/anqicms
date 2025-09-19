@@ -22,7 +22,7 @@ type PluginLink struct {
 
 type PluginComment struct {
 	Id        uint   `json:"id"`
-	ArchiveId uint   `json:"archive_id"`
+	ArchiveId int64  `json:"archive_id"`
 	UserId    uint   `json:"user_id"`
 	UserName  string `json:"user_name"`
 	Ip        string `json:"ip"`
@@ -31,6 +31,8 @@ type PluginComment struct {
 	ParentId  uint   `json:"parent_id"`
 	ToUid     uint   `json:"to_uid"`
 	Status    uint   `json:"status"`
+	CaptchaId string `json:"captcha_id"`
+	Captcha   string `json:"captcha"`
 
 	// 批量更新
 	Ids []uint `json:"ids"`
@@ -46,6 +48,11 @@ type PluginAnchor struct {
 type PluginAnchorDelete struct {
 	Id  uint   `json:"id"`
 	Ids []uint `json:"ids"`
+}
+
+type PluginAnchorAddFromTitle struct {
+	Type string `json:"type"`
+	Ids  []uint `json:"ids"`
 }
 
 type PluginGuestbookDelete struct {
@@ -88,14 +95,19 @@ type PluginMaterialImportRequest struct {
 }
 
 type PluginTag struct {
-	Id          uint   `json:"id"`
-	Title       string `json:"title"`
-	UrlToken    string `json:"url_token"`
-	SeoTitle    string `json:"seo_title"`
-	Keywords    string `json:"keywords"`
-	Description string `json:"description"`
-	FirstLetter string `json:"first_letter"`
-	Status      uint   `json:"status"`
+	Id          uint                   `json:"id"`
+	Title       string                 `json:"title"`
+	CategoryId  uint                   `json:"category_id"`
+	UrlToken    string                 `json:"url_token"`
+	SeoTitle    string                 `json:"seo_title"`
+	Keywords    string                 `json:"keywords"`
+	Description string                 `json:"description"`
+	FirstLetter string                 `json:"first_letter"`
+	Content     string                 `json:"content"`
+	Logo        string                 `json:"logo"`
+	Template    string                 `json:"template"`
+	Status      uint                   `json:"status"`
+	Extra       map[string]interface{} `json:"extra"`
 }
 
 type PluginRedirectRequest struct {
@@ -128,4 +140,22 @@ type PluginTestSendmailRequest struct {
 	Recipient string `json:"recipient"`
 	Subject   string `json:"subject"`
 	Message   string `json:"message"`
+}
+
+type PluginMultiLangSiteRequest struct {
+	Id           uint   `json:"id"`
+	ParentId     uint   `json:"parent_id"`
+	Language     string `json:"language"`
+	LanguageIcon string `json:"language_icon"`
+	BaseUrl      string `json:"base_url"`
+	Focus        bool   `json:"focus"`
+}
+
+type PluginLimiterRemoveIPRequest struct {
+	Ip string `json:"ip"`
+}
+
+type PluginMultiLangCacheRemoveRequest struct {
+	Uris []string `json:"uris"`
+	All  bool     `json:"all"`
 }

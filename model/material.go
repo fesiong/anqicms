@@ -27,7 +27,7 @@ type MaterialData struct {
 	Model
 	MaterialId uint   `json:"material_id" gorm:"column:material_id;type:int(10) not null;default:0;index"`
 	ItemType   string `json:"item_type" gorm:"column:item_type;type:varchar(32) not null;default:'';index:idx_item_type"`
-	ItemId     uint   `json:"item_id" gorm:"column:item_id;type:int(10) unsigned not null;default:0;index:idx_item_type"`
+	ItemId     int64  `json:"item_id" gorm:"column:item_id;type:bigint(20) not null;default:0;index:idx_item_type"`
 }
 
 func (category *MaterialCategory) Delete(db *gorm.DB) error {

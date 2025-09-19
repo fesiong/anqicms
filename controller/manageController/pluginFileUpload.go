@@ -16,7 +16,7 @@ import (
 )
 
 func PluginFileUploadList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	uploadFiles := currentSite.PluginUploadFiles
 
 	for i := range uploadFiles {
@@ -31,7 +31,7 @@ func PluginFileUploadList(ctx iris.Context) {
 }
 
 func PluginFileUploadDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginFileUploadDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -47,8 +47,8 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	for i, v := range uploadFiles {
 		if v.Hash == req.Hash {
 			fileName = v.FileName
-
-			currentSite.PluginUploadFiles = append(currentSite.PluginUploadFiles[:i], currentSite.PluginUploadFiles[i+1:]...)
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.PluginUploadFiles = append(w2.PluginUploadFiles[:i], currentSite.PluginUploadFiles[i+1:]...)
 		}
 	}
 
@@ -92,7 +92,7 @@ func PluginFileUploadDelete(ctx iris.Context) {
 // PluginFileUploadUpload
 // 上传，只允许上传txt,htm,html
 func PluginFileUploadUpload(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -144,16 +144,17 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		}
 	}
 
+	w2 := provider.GetWebsite(currentSite.Id)
 	if !exists {
 		//追加
-		currentSite.PluginUploadFiles = append(currentSite.PluginUploadFiles, config.PluginUploadFile{
+		w2.PluginUploadFiles = append(w2.PluginUploadFiles, config.PluginUploadFile{
 			Hash:        library.Md5(info.Filename),
 			FileName:    info.Filename,
 			CreatedTime: time.Now().Unix(),
 		})
 	}
 
-	err = currentSite.SaveSettingValue(provider.UploadFilesSettingKey, currentSite.PluginUploadFiles)
+	err = w2.SaveSettingValue(provider.UploadFilesSettingKey, w2.PluginUploadFiles)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -163,7 +164,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	}
 
 	// 上传到静态服务器
-	_ = currentSite.SyncHtmlCacheToStorage(filePath, filepath.Base(filePath))
+	_ = w2.SyncHtmlCacheToStorage(filePath, filepath.Base(filePath))
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadVerificationFileLog", info.Filename))
 

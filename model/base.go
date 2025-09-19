@@ -27,3 +27,8 @@ type CustomField struct {
 	Type        string      `json:"-"`
 	FieldName   string      `json:"-"`
 }
+
+type CustomFieldTexts struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}

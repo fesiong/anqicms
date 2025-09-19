@@ -7,7 +7,7 @@ import (
 )
 
 func PluginPush(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	pluginPush := currentSite.PluginPush
 
 	ctx.JSON(iris.Map{
@@ -18,7 +18,7 @@ func PluginPush(ctx iris.Context) {
 }
 
 func PluginPushLogList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//不需要分页，只显示最后20条
 	list, err := currentSite.GetLastPushList()
 	if err != nil {
@@ -37,7 +37,7 @@ func PluginPushLogList(ctx iris.Context) {
 }
 
 func PluginPushForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginPushConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
