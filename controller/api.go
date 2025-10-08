@@ -310,8 +310,23 @@ func ApiImportArchive(ctx iris.Context) {
 			} else {
 				value := ctx.PostValue(v.FieldName)
 				if value != "" {
-					req.Extra[v.FieldName] = map[string]interface{}{
-						"value": value,
+					if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+						// 提交的是JSON字符串
+						var extra any
+						err := json.Unmarshal([]byte(value), &extra)
+						if err == nil {
+							req.Extra[v.FieldName] = map[string]interface{}{
+								"value": extra,
+							}
+						} else {
+							req.Extra[v.FieldName] = map[string]interface{}{
+								"value": value,
+							}
+						}
+					} else {
+						req.Extra[v.FieldName] = map[string]interface{}{
+							"value": value,
+						}
 					}
 				}
 			}
