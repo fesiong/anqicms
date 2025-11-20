@@ -1,6 +1,6 @@
 module kandaoni.com/anqicms
 
-go 1.23.6
+go 1.24.0
 
 require (
 	cloud.google.com/go/storage v1.39.1
@@ -47,10 +47,10 @@ require (
 	github.com/upyun/go-sdk/v3 v3.0.4
 	github.com/xuri/excelize/v2 v2.9.0
 	github.com/zinclabs/sdk-go-zincsearch v0.3.3
-	golang.org/x/crypto v0.36.0
+	golang.org/x/crypto v0.45.0
 	golang.org/x/image v0.24.0
-	golang.org/x/net v0.38.0
-	golang.org/x/text v0.23.0
+	golang.org/x/net v0.47.0
+	golang.org/x/text v0.31.0
 	google.golang.org/api v0.220.0
 	gorm.io/driver/mysql v1.5.7
 	gorm.io/gorm v1.25.12
@@ -179,8 +179,8 @@ require (
 	go.opentelemetry.io/otel/trace v1.34.0 // indirect
 	golang.org/x/exp v0.0.0-20240404231335-c0f41cb1a7a0 // indirect
 	golang.org/x/oauth2 v0.28.0 // indirect
-	golang.org/x/sync v0.12.0 // indirect
-	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/sync v0.18.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/time v0.9.0 // indirect
 	google.golang.org/genproto v0.0.0-20240213162025-012b6fc9bca9 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20241209162323-e6fa225c2576 // indirect
