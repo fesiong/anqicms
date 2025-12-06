@@ -1,6 +1,7 @@
 package config
 
 type AiGenerateConfig struct {
+	IsRunning       bool             `json:"-"`
 	Open            bool             `json:"open"`         // 是否自动写作
 	Language        string           `json:"language"`     // zh|en|cr
 	DoubleTitle     bool             `json:"double_title"` // 是否生成双标题

@@ -1,6 +1,7 @@
 package config
 
 type CollectorJson struct {
+	IsRunning          bool             `json:"-"`
 	AutoCollect        bool             `json:"auto_collect"` // 是否自动采集
 	ErrorTimes         int              `json:"error_times"`  //预留
 	Channels           int              `json:"channels"`     //预留

@@ -138,6 +138,7 @@ func CollectArticles() {
 		ch <- true
 		go func(w2 *provider.Website) {
 			defer func() { <-ch }()
+			go w2.AiGenerateArticles()
 			w2.CollectArticles()
 		}(w)
 	}
