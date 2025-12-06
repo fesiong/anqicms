@@ -55,7 +55,11 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	}
 
 	if args["order"] != nil {
-		order = args["order"].String()
+		tmpOrder := args["order"].String()
+		tmpOrder = provider.OrderByFilter(tmpOrder, "")
+		if tmpOrder != "" {
+			order = tmpOrder
+		}
 	}
 
 	if args["type"] != nil {

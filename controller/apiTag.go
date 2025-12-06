@@ -425,7 +425,7 @@ func ApiArchiveList(ctx iris.Context) {
 				}
 				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", archiveId)
 				return tx
-			}, "archives.id ASC", 0, limit, offset)
+			}, "archives.id DESC", 0, limit, offset)
 		} else if like == "relation" {
 			archives = currentSite.GetArchiveRelations(archiveId)
 		} else {
@@ -630,10 +630,17 @@ func ApiArchiveList(ctx iris.Context) {
 			currentPage = 0
 		}
 		if order != "" {
-			if !strings.Contains(order, "rand") {
-				order = "archives." + order
+			order = provider.OrderByFilter(order, "archives")
+			if order == "" {
+				// 使用默认排序
+				if currentSite.Content.UseSort == 1 {
+					order = "archives.`sort` desc, archives.`created_time` desc"
+				} else {
+					order = "archives.`created_time` desc"
+				}
 			}
 		} else {
+			// 默认排序规则
 			if currentSite.Content.UseSort == 1 {
 				order = "archives.`sort` desc, archives.`created_time` desc"
 			} else {
@@ -1074,6 +1081,7 @@ func ApiCommentList(ctx iris.Context) {
 			limit = 1
 		}
 	}
+	order = provider.OrderByFilter(order, "")
 
 	commentList, total, _ := currentSite.GetCommentList(archiveId, userId, order, currentPage, limit, offset)
 
@@ -1494,6 +1502,7 @@ func ApiTagDataList(ctx iris.Context) {
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	order := ctx.URLParamDefault("order", "")
+	order = provider.OrderByFilter(order, "")
 	if order == "" {
 		if currentSite.Content.UseSort == 1 {
 			order = "archives.`sort` desc, archives.`created_time` desc"
@@ -1568,7 +1577,7 @@ func ApiTagList(ctx iris.Context) {
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
 	order := ctx.URLParamDefault("order", "id desc")
-
+	order = provider.OrderByFilter(order, "")
 	limitTmp := ctx.URLParam("limit")
 	if limitTmp != "" {
 		limitArgs := strings.Split(limitTmp, ",")

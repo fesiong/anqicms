@@ -63,7 +63,11 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	if args["order"] != nil {
-		order = args["order"].String()
+		tmpOrder := args["order"].String()
+		tmpOrder = provider.OrderByFilter(tmpOrder, "")
+		if tmpOrder != "" {
+			order = tmpOrder
+		}
 	}
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")
