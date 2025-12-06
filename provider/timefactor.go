@@ -1,8 +1,10 @@
 package provider
 
 import (
+	"context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
+	"math/rand"
 	"time"
 )
 
@@ -172,7 +174,19 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	}
 	var draft *model.ArchiveDraft
 	// 一次最多读取1个
-	err := db.Order("id asc").Take(&draft).Error
+	var maxId int64
+	var minId int64
+	db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
+	db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
+	if maxId <= 0 || minId <= 0 {
+		return
+	}
+	randId := minId
+	if maxId > minId {
+		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		randId = rd.Int63n(maxId-minId) + minId
+	}
+	err := db.Where("id >= ?", randId).Order("id asc").Take(&draft).Error
 	if err != nil {
 		// 没文章
 		return
