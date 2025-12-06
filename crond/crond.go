@@ -105,11 +105,16 @@ func calcStatistics() {
 
 func PublishPlanContents() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.PublishPlanArchives()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.PublishPlanArchives()
+		}(w)
 	}
 }
 
@@ -125,11 +130,16 @@ func CleanArchives() {
 
 func CollectArticles() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.CollectArticles()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.CollectArticles()
+		}(w)
 	}
 }
 
@@ -182,21 +192,31 @@ func CheckAuthValid() {
 
 func UpdateTimeFactor() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.TryToRunTimeFactor()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.TryToRunTimeFactor()
+		}(w)
 	}
 }
 
 func AiArticlePlan() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.SyncAiArticlePlan()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.SyncAiArticlePlan()
+		}(w)
 	}
 }
 

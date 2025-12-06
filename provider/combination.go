@@ -130,6 +130,8 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		log.Println("保存组合文章出错：", archive.Title, err.Error())
 		return 0, nil
 	}
+	//文章计数
+	w.UpdateTodayArticleCount(1, 0)
 	log.Println(res.Id, res.Title)
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写

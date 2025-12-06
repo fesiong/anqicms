@@ -132,7 +132,7 @@ func (w *Website) CollectArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
+	if w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
 		return
 	}
 
@@ -160,7 +160,7 @@ func (w *Website) CollectArticles() {
 			total, err := w.CollectArticlesByKeyword(*keyword, false)
 			log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
 			// 达到数量了，退出
-			if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
+			if w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
 				return
 			}
 			// 如果没有使用代理，则每个关键词都需要间隔30秒以上
@@ -238,7 +238,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 		return err
 	}
 	//文章计数
-	w.UpdateTodayArticleCount(1)
+	w.UpdateTodayArticleCount(1, 0)
 
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
@@ -1234,6 +1234,9 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 			return w.cachedTodayArticleCount.AiGenerateCount
 		}
 		return w.cachedTodayArticleCount.CollectCount
+	} else if w.cachedTodayArticleCount.Day > 0 {
+		// 不同天
+		return 0
 	}
 
 	w.cachedTodayArticleCount.Day = today.Day()
@@ -1256,8 +1259,14 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 	return w.cachedTodayArticleCount.CollectCount
 }
 
-func (w *Website) UpdateTodayArticleCount(addNum int) {
-	w.cachedTodayArticleCount.CollectCount += int64(addNum)
+func (w *Website) UpdateTodayArticleCount(collectCount, aiCount int) {
+	w.cachedTodayArticleCount.Day = now.BeginningOfDay().Day()
+	if collectCount > 0 {
+		w.cachedTodayArticleCount.CollectCount += int64(collectCount)
+	}
+	if aiCount > 0 {
+		w.cachedTodayArticleCount.AiGenerateCount += int64(aiCount)
+	}
 }
 
 func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {
