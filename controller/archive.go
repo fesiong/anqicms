@@ -35,6 +35,20 @@ func ArchiveDetail(ctx iris.Context) {
 		NotFound(ctx)
 		return
 	}
+	// 验证 module
+	moduleName := ctx.Params().GetString("module")
+	if moduleName != "" {
+		module := currentSite.GetModuleFromCacheByToken(moduleName)
+		if module == nil {
+			NotFound(ctx)
+			return
+		}
+		// 验证 module
+		if module.Id != archive.ModuleId {
+			NotFound(ctx)
+			return
+		}
+	}
 	var category *model.Category
 	multiCatNames := ctx.Params().GetString("multicatname")
 	if multiCatNames != "" {
