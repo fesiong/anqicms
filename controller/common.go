@@ -927,7 +927,7 @@ func NewDriver() *captcha.DriverString {
 func GenerateCaptcha(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	safeSetting := currentSite.Safe
-	if safeSetting == nil || safeSetting.AdminCaptchaOff == 1 {
+	if safeSetting == nil || safeSetting.Captcha != 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "",

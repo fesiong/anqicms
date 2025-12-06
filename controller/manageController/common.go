@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris/v12"
+	captcha "github.com/mojocn/base64Captcha"
 	"github.com/parnurzeal/gorequest"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -295,5 +297,38 @@ func VersionUpgrade(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
+	})
+}
+
+func GenerateCaptcha(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	safeSetting := currentSite.Safe
+	if safeSetting == nil || safeSetting.AdminCaptchaOff == 1 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": iris.Map{
+				"captcha_off": true,
+			},
+		})
+		return
+	}
+
+	var driver = controller.NewDriver().ConvertFonts()
+	c := captcha.NewCaptcha(driver, controller.Store)
+	id, content, answer := c.Driver.GenerateIdQuestionAnswer()
+	item, _ := c.Driver.DrawCaptcha(content)
+	c.Store.Set(id, answer)
+
+	bs64 := item.EncodeB64string()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"captcha_off": false,
+			"captcha_id":  id,
+			"captcha":     bs64,
+		},
 	})
 }
