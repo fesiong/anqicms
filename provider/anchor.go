@@ -327,7 +327,6 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 }
 
 func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, link string) (string, bool) {
-	//content = html.UnescapeString(content)
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
@@ -374,9 +373,9 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				matchIdx := re.FindAllStringIndex(text[startIndex:], -1)
 				if matchIdx != nil {
 					// 如果是不需要匹配的，则不处理
-					if _, ok2 := existsKeywords[anchor.Title]; !ok2 {
+					if _, ok2 := existsKeywords[strings.ToLower(anchor.Title)]; !ok2 {
 						isModified = true
-						existsKeywords[anchor.Title] = true
+						existsKeywords[strings.ToLower(anchor.Title)] = true
 						var subText bytes.Buffer
 						subText.WriteString(text[:startIndex])
 						lastIndex := 0
@@ -427,8 +426,8 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		reg, _ := regexp.Compile("(?i)<a[^>]*>(.*?)</a>")
 		matches := reg.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
-			if len(match) > 2 {
-				existsKeywords[strings.ToLower(match[2])] = true
+			if len(match) > 1 {
+				existsKeywords[strings.ToLower(match[1])] = true
 			}
 		}
 		// [keyword](url)
@@ -496,6 +495,15 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 			content = newText.String()
 		}
 	} else {
+		// 在处理内容之前，预先查找所有已有的锚文本
+		//所有的a标签计数，并替换掉
+		reg, _ := regexp.Compile("(?i)<a[^>]*>(.*?)</a>")
+		aMatches := reg.FindAllStringSubmatch(content, -1)
+		for _, match := range aMatches {
+			if len(match) > 1 {
+				existsKeywords[strings.ToLower(match[1])] = true
+			}
+		}
 		// 处理html
 		doc, err := html.Parse(strings.NewReader(content))
 		if err != nil {
@@ -531,8 +539,8 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 
 					if matches != nil {
 						// 如果是不需要匹配的，则不处理
-						if _, ok2 := existsKeywords[anchor.Title]; !ok2 {
-							existsKeywords[anchor.Title] = true
+						if _, ok2 := existsKeywords[strings.ToLower(anchor.Title)]; !ok2 {
+							existsKeywords[strings.ToLower(anchor.Title)] = true
 							modified = true
 							var newText bytes.Buffer
 							newText.WriteString(text[:startIndex])
