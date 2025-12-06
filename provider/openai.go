@@ -198,18 +198,25 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
 	var result *OpenAIResult
 	var err error
-	prompt := "以\"" + req.Keyword + "\"为题生成一篇SEO文章。 要求如下: 1.充分理解标题的意思,为文章确定一个主题;2.文章字数1000-1500字,避免冗长,追求表达清晰; 3.自然引用,无明显痕迹;逻辑严谨,内容连贯无歧义; 4.关键词恰当融入,避免堆砌; 5.文章需要一个标题，标题放在第一行; 6.重点内容采用加粗、斜体等标记并且确保文章原创度高于90%;7.文章无需结束语。"
+	prompt := "以\"" + req.Keyword + "\"为题生成一篇SEO文章。 要求如下: "
 	if w.AiGenerateConfig.DoubleTitle {
-		prompt += "8.文章标题格式：`主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）`"
-	}
-	if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
-		prompt = "Generate an SEO article titled '" + req.Keyword + "'. The requirements are as follows: 1. Fully understand the meaning of the title and determine a theme for the article; 2. The word count of the article should be 1000-1500 words, avoiding being lengthy and pursuing clear expression; 3. Natural citation without obvious traces; Rigorous logic, coherent and unambiguous content; 4. Incorporate keywords appropriately and avoid piling them up; 5. The article needs a title, which should be placed on the first line; 6. Key content should be marked in bold, italics, etc., and the originality of the article should be ensured to be above 90%; 8. The article does not require a conclusion."
-		if w.AiGenerateConfig.DoubleTitle {
-			prompt += "8. Article Title Format: `Main Title: (Enter main title here)\nSubtitle: (Enter subtitle here)`"
-		}
+		prompt += "文章标题格式：`主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）`"
 	}
 	if len(req.Demand) > 0 {
 		prompt += "\n" + req.Demand
+	} else {
+		prompt += "\n1.充分理解标题的意思,为文章确定一个主题;2.文章字数1000-1500字,避免冗长,追求表达清晰; 3.自然引用,无明显痕迹;逻辑严谨,内容连贯无歧义; 4.关键词恰当融入,避免堆砌; 5.文章需要一个标题，标题放在第一行; 6.重点内容采用加粗、斜体等标记并且确保文章原创度高于90%;7.文章无需结束语。"
+	}
+	if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
+		prompt = "Generate an SEO article titled '" + req.Keyword + "'. The requirements are as follows: "
+		if w.AiGenerateConfig.DoubleTitle {
+			prompt += "Article Title Format: `Main Title: (Enter main title here)\nSubtitle: (Enter subtitle here)`"
+		}
+		if len(req.Demand) > 0 {
+			prompt += "\n" + req.Demand
+		} else {
+			prompt += "1. Fully understand the meaning of the title and determine a theme for the article; 2. The word count of the article should be 1000-1500 words, avoiding being lengthy and pursuing clear expression; 3. Natural citation without obvious traces; Rigorous logic, coherent and unambiguous content; 4. Incorporate keywords appropriately and avoid piling them up; 5. The article needs a title, which should be placed on the first line; 6. Key content should be marked in bold, italics, etc., and the originality of the article should be ensured to be above 90%; 8. The article does not require a conclusion."
+		}
 	}
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI || w.AiGenerateConfig.AiEngine == config.AiEngineDeepSeek {
 		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
