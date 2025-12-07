@@ -5,7 +5,9 @@ import (
 )
 
 type Website struct {
-	Model
+	Id           uint               `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime  int64              `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime  int64              `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	RootPath     string             `json:"root_path" gorm:"column:root_path;type:varchar(190) not null;default:''"`
 	Name         string             `json:"name" gorm:"column:name;type:varchar(128) not null;default:''"`
 	Mysql        config.MysqlConfig `json:"mysql" gorm:"column:mysql;type:text;default null"`

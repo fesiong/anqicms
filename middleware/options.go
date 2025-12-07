@@ -2,17 +2,14 @@ package middleware
 
 import (
 	"github.com/kataras/iris/v12"
+	"strings"
 )
 
 func Cors(ctx iris.Context) {
 	origin := ctx.GetHeader("Origin")
-	if origin == "" {
-		origin = ctx.GetHeader("Referer")
-		if origin == "" {
-			origin = "*"
-		}
+	if strings.HasPrefix(origin, "http://127.0.0.1") || strings.HasPrefix(origin, "http://localhost") {
+		ctx.Header("Access-Control-Allow-Origin", origin)
 	}
-	ctx.Header("Access-Control-Allow-Origin", origin)
 	ctx.Header("Access-Control-Allow-Credentials", "true")
 	ctx.Header("Access-Control-Expose-Headers", "Content-Disposition,Update-Token")
 	ctx.Header("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,PATCH,OPTIONS")

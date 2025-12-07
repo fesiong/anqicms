@@ -1,12 +1,14 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/library"
 	"math"
 	"path/filepath"
 	"strings"
+
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/library"
 )
 
 func init() {
@@ -23,6 +25,7 @@ func init() {
 	pongo2.RegisterFilter("dump", filterDump)
 	pongo2.RegisterFilter("thumb", filterThumb)
 	pongo2.RegisterFilter("render", filterRender)
+	pongo2.RegisterFilter("json", filterJson)
 	if pongo2.FilterExists("split") {
 		pongo2.ReplaceFilter("split", filterSplit)
 	}
@@ -187,6 +190,12 @@ func filterRender(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2
 		s = library.MarkdownToHTML(s)
 	}
 	return pongo2.AsValue(s), nil
+}
+
+func filterJson(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	s := in.Interface()
+	buf, _ := json.Marshal(s)
+	return pongo2.AsValue(string(buf)), nil
 }
 
 func filterWordwrap(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {

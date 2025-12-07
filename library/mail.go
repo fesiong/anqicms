@@ -51,6 +51,7 @@ type Email struct {
 // Based on the mime/multipart.FileHeader struct, Attachment contains the name, MIMEHeader, and content of the attachment in question
 type Attachment struct {
 	Filename string
+	Path     string
 	Header   textproto.MIMEHeader
 	Content  []byte
 }
@@ -229,7 +230,7 @@ func (e *Email) Send() error {
 	}
 
 	if e.Secure == "SSL" {
-		c, err := Dial(e.Host+":"+strconv.Itoa(e.Port))
+		c, err := Dial(e.Host + ":" + strconv.Itoa(e.Port))
 		if err != nil {
 			return err
 		}
@@ -468,7 +469,7 @@ func putBuffer(buf *bytes.Buffer) {
 }
 
 func Dial(addr string) (*smtp.Client, error) {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify:true})
+	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
 	if err != nil {
 		return nil, err
 	}

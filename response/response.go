@@ -18,9 +18,15 @@ type LoginError struct {
 	LastTime int64
 }
 
+type FilterRange struct {
+	Min int64 `json:"min"`
+	Max int64 `json:"max"`
+}
+
 type FilterGroup struct {
 	Name      string       `json:"name"`
 	FieldName string       `json:"field_name"`
+	Range     FilterRange  `json:"range"`
 	Items     []FilterItem `json:"items"`
 }
 

@@ -2,6 +2,11 @@ package tags
 
 import (
 	"fmt"
+	"math"
+	"net/url"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
@@ -11,10 +16,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/response"
-	"math"
-	"net/url"
-	"strconv"
-	"strings"
 )
 
 type tagArchiveListNode struct {
@@ -162,7 +163,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var order string
 	if args["order"] != nil {
 		order = args["order"].String()
-		order = provider.OrderByFilter(order, "archives")
+		order = provider.ParseOrderBy(order, "archives")
 	}
 	if order == "" {
 		if currentSite.Content.UseSort == 1 || parentId > 0 {
@@ -281,6 +282,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		// list模式则始终使用 argQ
 		q = argQ
 	}
+	userId, _ := ctx.Public["userId"].(uint)
 
 	var tmpResult = make([]*model.Archive, 0, limit)
 	var archives []*model.Archive
@@ -782,6 +784,19 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 						extras[i] = param
 					}
 					archives[j].Extra = extras
+				}
+			}
+		}
+		if userId > 0 {
+			// 读取 favorite
+			var archiveFavorites []*model.ArchiveFavorite
+			currentSite.DB.Model(&model.ArchiveFavorite{}).Where("archive_id IN(?) and user_id = ?", archiveIds, userId).Find(&archiveFavorites)
+			for j, archive := range archives {
+				for _, favorite := range archiveFavorites {
+					if archive.Id == favorite.ArchiveId {
+						archives[j].IsFavorite = true
+						break
+					}
 				}
 			}
 		}

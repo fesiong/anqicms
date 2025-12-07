@@ -2,19 +2,20 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v6"
-	"gorm.io/gorm"
 	"hash/crc32"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 type tagArchiveDetailNode struct {
@@ -66,6 +67,8 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if args["render"] != nil {
 		render = args["render"].Bool()
 	}
+
+	userId, _ := ctx.Public["userId"].(uint)
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
@@ -133,6 +136,13 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		if fieldName == "Link" {
 			// 当是获取链接的时候，再生成
 			archiveDetail.Link = currentSite.GetUrl("archive", archiveDetail, 0)
+		}
+		if userId > 0 && fieldName == "IsFavorite" {
+			// 读取 favorite
+			exist := currentSite.CheckFavorites(int64(userId), []int64{archiveDetail.Id})
+			if len(exist) > 0 {
+				archiveDetail.IsFavorite = true
+			}
 		}
 
 		v := reflect.ValueOf(*archiveDetail)

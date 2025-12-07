@@ -1,13 +1,16 @@
 package model
 
 import (
-	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 type Tag struct {
-	Model
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	CategoryId  uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index"`
 	SeoTitle    string `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
@@ -23,7 +26,8 @@ type Tag struct {
 	Thumb         string    `json:"thumb" gorm:"-"`
 	Content       string    `json:"content,omitempty" gorm:"-"`
 	CategoryTitle string    `json:"category_title,omitempty" gorm:"-"`
-	Extra         extraData `json:"extra,omitempty" gorm:"-"`
+	Extra         ExtraData `json:"extra,omitempty" gorm:"-"`
+	ItemId        int64     `json:"item_id,omitempty" gorm:"-"`
 }
 
 type TagData struct {
@@ -35,7 +39,7 @@ type TagData struct {
 type TagContent struct {
 	Id      uint      `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	Content string    `json:"content" gorm:"column:content;type:longtext default null"`
-	Extra   extraData `json:"extra,omitempty" gorm:"column:extra;type:longtext default null"`
+	Extra   ExtraData `json:"extra,omitempty" gorm:"column:extra;type:longtext default null"`
 }
 
 func (tag *Tag) GetThumb(storageUrl, defaultThumb string) string {

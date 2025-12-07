@@ -3,9 +3,10 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"strings"
+
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"strings"
 )
 
 // GetNavList 获取导航列表，showType = list|children,默认children
@@ -174,6 +175,7 @@ func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
 	nav.Link = req.Link
 	nav.Sort = req.Sort
 	nav.Logo = req.Logo
+	nav.Style = req.Style
 	nav.Status = 1
 
 	err = nav.Save(w.DB)
@@ -213,7 +215,7 @@ func (w *Website) SaveNavType(req *request.NavTypeRequest) (*model.NavType, erro
 }
 
 func (w *Website) DeleteCacheNavs() {
-	w.Cache.CleanAll("navs")
+	w.Cache.Delete("navs")
 }
 
 func (w *Website) GetCacheNavs(typeId uint, showType string) []*model.Nav {

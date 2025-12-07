@@ -3,13 +3,14 @@ package provider
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
+	"time"
+
 	"github.com/jinzhu/now"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
-	"strconv"
-	"time"
 )
 
 type SpiderData struct {
@@ -90,7 +91,7 @@ func (w *Website) GetStatisticDates() []string {
 	return w.StatisticLog.GetLogDates()
 }
 
-func (w *Website) StatisticDetail(filename string, currentPage, limit int) ([]*Statistic, int64, error) {
+func (w *Website) StatisticDetail(filename string, searchType string, currentPage, limit int) ([]*Statistic, int64, error) {
 	if w.StatisticLog == nil {
 		return nil, 0, errors.New("statistic log is not ready")
 	}
@@ -107,7 +108,7 @@ func (w *Website) StatisticDetail(filename string, currentPage, limit int) ([]*S
 	}
 	offset := (currentPage - 1) * limit
 
-	statistics, total = w.StatisticLog.Read(filename, offset, limit)
+	statistics, total = w.StatisticLog.Read(filename, searchType, offset, limit)
 
 	return statistics, total, nil
 }
@@ -443,7 +444,7 @@ func (w *Website) SendStatisticsMail() {
 </html>`
 
 		// 不记录错误
-		_ = w.sendMail(subject, content, nil, true, false)
+		_ = w.sendMail(subject, content, nil, nil, true, false)
 	}
 }
 

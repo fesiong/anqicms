@@ -208,7 +208,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			adminInfo, err := current.GetAdminInfoById(1)
 			if err != nil {
 				adminInfo = &model.Admin{
-					Model:   model.Model{Id: 1},
+					Id:      1,
 					Status:  1,
 					GroupId: 1,
 				}

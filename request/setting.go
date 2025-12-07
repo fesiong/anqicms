@@ -11,6 +11,7 @@ type NavConfig struct {
 	TypeId      uint   `json:"type_id"`
 	Link        string `json:"link"`
 	Sort        uint   `json:"sort"`
+	Style       string `json:"style"`
 	Status      uint   `json:"status"`
 	Logo        string `json:"logo"`
 }

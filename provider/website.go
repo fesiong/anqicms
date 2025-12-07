@@ -3,12 +3,14 @@ package provider
 import (
 	"context"
 	"errors"
-	"kandaoni.com/anqicms/provider/storage"
 	"net/url"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang.org/x/oauth2"
+	"kandaoni.com/anqicms/provider/storage"
 
 	"github.com/esap/wechat"
 	"github.com/kataras/iris/v12"
@@ -55,6 +57,7 @@ type Website struct {
 	HtmlCachePushStatus     *HtmlCacheStatus
 	quickImportStatus       *QuickImportArchive
 	AkismetClient           *AkismetClient
+	googleAuthConfig        *oauth2.Config
 
 	System  *config.SystemConfig
 	Content *config.ContentConfig
@@ -224,7 +227,7 @@ func InitWebsites() {
 		db.AutoMigrate(&model.Website{})
 	}
 	defaultSite := model.Website{
-		Model:    model.Model{Id: 1},
+		Id:       1,
 		RootPath: config.ExecPath,
 		Name:     "Default Website",
 		Status:   1,

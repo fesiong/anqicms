@@ -87,3 +87,9 @@ type QuickImportArchiveRequest struct {
 	Images          []string `form:"images[]"`
 	ImageCategoryId int      `form:"image_category_id"`
 }
+
+type ArchiveFavoriteRequest struct {
+	ArchiveId  int64   `json:"archive_id"`
+	SkuId      int64   `json:"sku_id"`
+	ArchiveIds []int64 `json:"archive_ids"`
+}

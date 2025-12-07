@@ -499,13 +499,7 @@ func ArchiveDetail(ctx iris.Context) {
 	archiveDraft.Relations = currentSite.GetArchiveRelations(archiveDraft.Id)
 
 	tags := currentSite.GetTagsByItemId(archiveDraft.Id)
-	if len(tags) > 0 {
-		var tagNames = make([]string, 0, len(tags))
-		for _, v := range tags {
-			tagNames = append(tagNames, v.Title)
-		}
-		archiveDraft.Tags = tagNames
-	}
+	archiveDraft.Tags = tags
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -1,10 +1,11 @@
 package crond
 
 import (
-	"github.com/robfig/cron/v3"
-	"kandaoni.com/anqicms/provider"
 	"math/rand"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"kandaoni.com/anqicms/provider"
 )
 
 var crontab *cron.Cron
@@ -51,13 +52,13 @@ func hourlyTask() {
 	startDigKeywords()
 	// 每小时检查一次账号状态
 	CheckAuthValid()
-	// 每小时统计一次统计数据
-	calcStatistics()
 }
 
 func hourly10MinuteTask() {
 	// 每十分钟检查一次采集
 	CollectArticles()
+	// 每十分钟统计一次统计数据
+	calcStatistics()
 }
 
 func minutelyTask() {

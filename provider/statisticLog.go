@@ -116,7 +116,7 @@ func (s *StatisticLog) Write(data *Statistic) error {
 	return nil
 }
 
-func (s *StatisticLog) Read(fileName string, offset, limit int) ([]*Statistic, int64) {
+func (s *StatisticLog) Read(fileName string, searchType string, offset, limit int) ([]*Statistic, int64) {
 	if s.initial == false {
 		return nil, 0
 	}
@@ -186,7 +186,9 @@ func (s *StatisticLog) Read(fileName string, offset, limit int) ([]*Statistic, i
 
 			line := lineBuffer[newLineIdx+1:]
 			lineBuffer = lineBuffer[:newLineIdx]
-
+			if searchType == "spider" && strings.Contains(line, `"spider":""`) {
+				continue
+			}
 			if line != "" {
 				curLine++
 				if curLine <= offset {
@@ -203,7 +205,10 @@ func (s *StatisticLog) Read(fileName string, offset, limit int) ([]*Statistic, i
 
 		// 处理剩余内容
 		if curPos == 0 && lineBuffer != "" && len(lines) < limit {
-			lines = append(lines, lineBuffer)
+			if searchType == "spider" && strings.Contains(lineBuffer, `"spider":""`) {
+			} else {
+				lines = append(lines, lineBuffer)
+			}
 		}
 		// 如果已经获取到需要的行数，跳出循环
 		if len(lines) >= limit {
@@ -232,6 +237,9 @@ func (s *StatisticLog) Read(fileName string, offset, limit int) ([]*Statistic, i
 		if fileName != time.Now().Format("20060102") {
 			s.totals[fileName] = total
 		}
+	}
+	if limit > len(result) {
+		total = offset + len(result)
 	}
 
 	return result, int64(total)

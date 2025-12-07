@@ -2,14 +2,15 @@ package manageController
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"os"
-	"strings"
-	"time"
 )
 
 func SettingSystem(ctx iris.Context) {
@@ -108,6 +109,8 @@ func SettingSystemForm(ctx iris.Context) {
 	if currentSite.MultiLanguage != nil {
 		currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
 	}
+
+	currentSite.UpdatePaypalWebhook()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 

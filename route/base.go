@@ -3,6 +3,7 @@ package route
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/controller/graphql"
 	"kandaoni.com/anqicms/middleware"
 )
 
@@ -14,17 +15,18 @@ func Register(app *iris.Application) {
 	app.OnErrorCode(iris.StatusInternalServerError, controller.InternalServerError)
 	app.Use(controller.CheckTemplateType)
 	app.Use(controller.Common)
+
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath)
 	app.Get("/{path:path}", middleware.Check301, middleware.ParseUserToken, middleware.HandlerTimeout, controller.ReRouteContext)
 
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
-	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPublish)
-	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
-	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, middleware.HandlerTimeout, controller.CommentList)
+	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", middleware.ParseUserToken, controller.CommentPublish)
+	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
+	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", middleware.ParseUserToken, middleware.HandlerTimeout, controller.CommentList)
 
-	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, middleware.HandlerTimeout, controller.GuestbookPage)
+	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, middleware.HandlerTimeout, controller.GuestbookPage)
 	app.HandleMany(iris.MethodPost, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
 
 	// 内容导入API
@@ -35,19 +37,27 @@ func Register(app *iris.Application) {
 	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
 
 	// login and register
-	app.Get("/login", controller.LoginPage)
-	app.Get("/register", controller.RegisterPage)
+	app.HandleMany(iris.MethodGet, "/login /login/{platform:string}", controller.LoginPage)
+	app.HandleMany(iris.MethodGet, "/register /register/{platform:string}", controller.RegisterPage)
 	app.Get("/logout", middleware.ParseUserToken, controller.AccountLogout)
 	// account party
+	app.Get("/account/password/reset", controller.AccountPasswordResetPage)
 	app.Get("/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
+	// order
+	app.Get("/order/{route:path}", middleware.ParseUserToken, controller.OrderIndexPage)
 
 	api := app.Party("/api", middleware.ParseUserToken)
 	{
+		// 注册GraphQL API v2路由
+		graphql.RegisterRoutes(api)
 		api.Get("/captcha", controller.GenerateCaptcha)
 		// WeChat official account api
 		api.Get("/wechat/auth", controller.WechatAuthApi)
 		api.Get("/wechat", controller.WechatApi)
 		api.Post("/wechat", controller.WechatApi)
+		// google
+		api.Get("/google/url", controller.GoogleAuthUrl)
+		api.Get("/log", controller.ApiLogStatistic)
 
 		// 友链API
 		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)
@@ -57,6 +67,9 @@ func Register(app *iris.Application) {
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
 		api.Post("/register", controller.ApiRegister)
+		api.Get("/verify/email", controller.ApiVerifyEmail)
+		api.Post("/verify/email", controller.ApiSendVerifyEmail)
+		api.Post("/password/reset", controller.ApiResetUserPassword)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
 		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)
@@ -64,14 +77,15 @@ func Register(app *iris.Application) {
 		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
 		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
 		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
-		api.Post("/order/create", middleware.UserAuth, controller.ApiCreateOrder)
+		api.Post("/order/create", controller.ApiCreateOrder)
+		api.Get("/order/addresses", middleware.UserAuth, controller.ApiGetOrderAddresses)
 		api.Get("/order/address", middleware.UserAuth, controller.ApiGetOrderAddress)
 		api.Post("/order/address", middleware.UserAuth, controller.ApiSaveOrderAddress)
-		api.Get("/order/detail", middleware.UserAuth, controller.ApiGetOrderDetail)
+		api.Get("/order/detail", controller.ApiGetOrderDetail)
 		api.Post("/order/cancel", middleware.UserAuth, controller.ApiCancelOrder)
 		api.Post("/order/refund", middleware.UserAuth, controller.ApiApplyRefundOrder)
 		api.Post("/order/finish", middleware.UserAuth, controller.ApiFinishedOrder)
-		api.Post("/order/payment", middleware.UserAuth, controller.ApiCreateOrderPayment)
+		api.Post("/order/payment", controller.ApiCreateOrderPayment)
 		api.Post("/weapp/qrcode", middleware.UserAuth, controller.ApiCreateWeappQrcode)
 		//检查支付情况
 		api.Get("/archive/order/check", controller.ApiArchiveOrderCheck)
@@ -85,6 +99,10 @@ func Register(app *iris.Application) {
 		api.Post("/retailer/withdraw", middleware.UserAuth, controller.ApiRetailerWithdraw)
 		api.Get("/retailer/members", middleware.UserAuth, controller.ApiGetRetailerMembers)
 		api.Get("/retailer/commissions", middleware.UserAuth, controller.ApiGetRetailerCommissions)
+		api.Get("/favorite/list", middleware.UserAuth, controller.ApiGetFavorites)
+		api.Get("/favorite/check", middleware.UserAuth, controller.ApiCheckFavorites)
+		api.Post("/favorite/add", middleware.UserAuth, controller.ApiAddFavorite)
+		api.Post("/favorite/delete", middleware.UserAuth, controller.ApiDeleteFavorite)
 		// 发布文档
 		api.Post("/archive/publish", middleware.UserAuth, controller.ApiArchivePublish)
 		// common api
@@ -113,8 +131,8 @@ func Register(app *iris.Application) {
 		api.Get("/tag/data/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagDataList)
 		api.Get("/tag/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagList)
 		api.Get("/banner/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiBannerList)
-		api.Post("/attachment/upload", controller.CheckApiOpen, middleware.UserAuth, controller.ApiAttachmentUpload)
-		api.Post("/comment/publish", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPublish)
+		api.Post("/attachment/upload", controller.CheckApiOpen, controller.ApiAttachmentUpload)
+		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
 		api.Post("/comment/praise", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
 	}
@@ -124,6 +142,7 @@ func Register(app *iris.Application) {
 		notify.Get("/weapp/msg", controller.NotifyWeappMsg)
 		notify.Post("/wechat/pay", controller.NotifyWechatPay)
 		notify.Post("/alipay/pay", controller.NotifyAlipay)
+		notify.Post("/paypal/pay", controller.NotifyPayPal)
 	}
 
 	returnParty := app.Party("/return")

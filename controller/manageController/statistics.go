@@ -1,13 +1,14 @@
 package manageController
 
 import (
+	"time"
+
 	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"time"
 )
 
 // StatisticSpider 蜘蛛爬行情况
@@ -51,8 +52,9 @@ func StatisticDetail(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	date := ctx.URLParam("date")
+	searchType := ctx.URLParam("type")
 
-	list, total, _ := currentSite.StatisticDetail(date, currentPage, pageSize)
+	list, total, _ := currentSite.StatisticDetail(date, searchType, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

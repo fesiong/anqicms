@@ -2,12 +2,13 @@ package manageController
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"time"
 )
 
 func PluginOrderList(ctx iris.Context) {
@@ -360,6 +361,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	currentSite.PluginOrder.AutoFinishDay = req.AutoFinishDay
 	currentSite.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
 	currentSite.PluginOrder.SellerPercent = req.SellerPercent
+	currentSite.PluginOrder.NoNeedLogin = req.NoNeedLogin
 
 	err := currentSite.SaveSettingValue(provider.OrderSettingKey, currentSite.PluginOrder)
 	if err != nil {

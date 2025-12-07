@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider/fulltext"
-	"kandaoni.com/anqicms/request"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
@@ -21,6 +22,13 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
 	}
+	if order != "" {
+		order = ParseOrderBy(order, "")
+	} else {
+		// 默认排序规则
+		order = "id desc"
+	}
+
 	var total int64
 
 	builder := w.DB.WithContext(w.Ctx()).Model(&model.Tag{}).Order(order)
@@ -342,8 +350,32 @@ func (w *Website) GetTagsByItemId(itemId int64) []*model.Tag {
 	if len(tagIds) > 0 {
 		w.DB.Where("id IN(?)", tagIds).Find(&tags)
 	}
+	for _, tag := range tags {
+		tag.Link = w.GetUrl(PatternTag, tag, 0)
+	}
 
 	return tags
+}
+
+func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
+	var tags []*model.Tag
+	var tagData []*model.TagData
+	w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` in(?)", itemIds).Find(&tagData)
+	var tagIds []uint
+	if len(tagIds) > 0 {
+		w.DB.Where("id IN(?)", tagIds).Find(&tags)
+	}
+	var result = make(map[int64][]*model.Tag)
+	for _, tag := range tags {
+		tag.Link = w.GetUrl(PatternTag, tag, 0)
+		for _, datum := range tagData {
+			tag.ItemId = datum.ItemId
+			break
+		}
+		result[tag.ItemId] = append(result[tag.ItemId], tag)
+	}
+
+	return result
 }
 
 func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) string {

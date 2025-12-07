@@ -1,20 +1,26 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
+	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
+	"github.com/go-pay/xlog"
 	"github.com/kataras/iris/v12"
 	"github.com/medivhzhan/weapp/v3/server"
-	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"log"
-	"os"
-	"time"
 )
 
 func NotifyWeappMsg(ctx iris.Context) {
@@ -265,6 +271,71 @@ func NotifyAlipay(ctx iris.Context) {
 
 	//通知成功
 	ctx.WriteString("success")
+}
+
+func NotifyPayPal(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	terraceId := strings.TrimSpace(ctx.URLParam("token"))
+	if terraceId == "" {
+		ShowMessage(ctx, ctx.Tr("paymentParameterError"), nil)
+		return
+	}
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
+	if err != nil {
+		// 处理token获取失败
+		ctx.WriteString("failed")
+		return
+	}
+	body, err := ctx.GetBody()
+	if err != nil {
+		xlog.Errorf("Read body error: %v", err)
+		return
+	}
+	library.DebugLog(currentSite.CachePath, "paypal_notify", string(body))
+	bm := make(gopay.BodyMap)
+	bm.Set("auth_algo", ctx.GetHeader("Paypal-Auth-Algo")).
+		Set("cert_url", ctx.GetHeader("Paypal-Cert-Url")).
+		Set("transmission_id", ctx.GetHeader("Paypal-Transmission-Id")).
+		Set("transmission_sig", ctx.GetHeader("Paypal-Transmission-Sig")).
+		Set("transmission_time", ctx.GetHeader("Paypal-Transmission-Time")).
+		Set("webhook_id", currentSite.PluginPay.PaypalWebhookId).
+		SetBodyMap("webhook_event", func(b gopay.BodyMap) {
+			err = json.Unmarshal(body, &b)
+			if err != nil {
+				xlog.Errorf("[%+v]: %v, bytes: %s", gopay.UnmarshalErr, err, string(body))
+			}
+		})
+
+	xlog.Debug("bm：", bm.JsonBody())
+	verifyRes, err := client.VerifyWebhookSignature(ctx, bm)
+	if err != nil {
+		xlog.Error(err)
+		return
+	}
+	xlog.Debugf("verifyRes: %+v", verifyRes)
+
+	if verifyRes.VerificationStatus != "SUCCESS" {
+		// 处理验证失败
+		xlog.Error("paypal webhook verify error")
+		return
+	}
+	// 处理结果
+	var event paypal.WebhookEvent
+	if err = json.Unmarshal(body, &event); err != nil {
+		xlog.Errorf("JSON unmarshal error: %v", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		ctx.WriteString("Invalid event format")
+		return
+	}
+
+	// 4. 处理事件
+	xlog.Infof("Received %s event: %s", event.EventType, event.Summary)
+
+	// 使用协程异步处理事件，避免阻塞响应
+	go currentSite.ProcessPaypalEvent(&event)
+
+	ctx.StatusCode(http.StatusOK)
+	ctx.WriteString("Webhook processed")
 }
 
 // SubscribeMsgPopup 订阅消息弹框事件

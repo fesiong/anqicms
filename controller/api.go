@@ -2,6 +2,10 @@ package controller
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -10,9 +14,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func ApiImportArchive(ctx iris.Context) {
@@ -715,4 +716,31 @@ func CheckApiOpen(ctx iris.Context) {
 	}
 
 	ctx.Next()
+}
+
+// 接收 post 请求
+func ApiLogStatistic(ctx iris.Context) {
+	var req request.LogStatisticRequest
+	err := ctx.ReadBody(&req)
+	ctx.ContentType("text/javascript")
+	if err != nil {
+		ctx.StatusCode(iris.StatusBadRequest)
+		return
+	}
+	currentSite := provider.CurrentSite(ctx)
+
+	if req.Action == request.LogActionViews {
+		LogAccess(ctx, &req)
+		// 记录archive的浏览量
+		if req.Type == request.LogTypeArchive {
+			var archive model.Archive
+			currentSite.DB.Model(&archive).Where("id = ?", req.Id).Select("id, module_id").Scan(&archive)
+			if archive.Id > 0 {
+				_ = archive.AddViews(currentSite.DB)
+			}
+		}
+	}
+
+	ctx.StatusCode(iris.StatusOK)
+	return
 }

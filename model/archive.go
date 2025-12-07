@@ -1,12 +1,13 @@
 package model
 
 import (
-	"github.com/lib/pq"
-	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lib/pq"
+	"gorm.io/gorm"
 )
 
 type Archive struct {
@@ -48,7 +49,7 @@ type Archive struct {
 	Thumb          string                 `json:"thumb" gorm:"-"`
 	Extra          map[string]CustomField `json:"extra" gorm:"-"`
 	Link           string                 `json:"link" gorm:"-"`
-	Tags           []string               `json:"tags,omitempty" gorm:"-"`
+	Tags           []*Tag                 `json:"tags,omitempty" gorm:"-"`
 	HasOrdered     bool                   `json:"has_ordered" gorm:"-"` // 是否订购了
 	FavorablePrice int64                  `json:"favorable_price" gorm:"-"`
 	HasPassword    bool                   `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
@@ -58,7 +59,8 @@ type Archive struct {
 	Flag           string                 `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
 	Type           string                 `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
 	Relations      []*Archive             `json:"relations" gorm:"-"`
-	Content        string                 `json:"content" gorm:"-"` // 列表获取Content的时候，使用这个字段
+	Content        string                 `json:"content" gorm:"-"`     // 列表获取Content的时候，使用这个字段
+	IsFavorite     bool                   `json:"is_favorite" gorm:"-"` // 是否收藏了
 }
 
 type ArchiveData struct {

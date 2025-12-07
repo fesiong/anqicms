@@ -23,7 +23,8 @@ func (v VisitCount) Value() (driver.Value, error) {
 }
 
 func (v *VisitCount) Scan(data interface{}) error {
-	return json.Unmarshal(data.([]byte), &v)
+	_ = json.Unmarshal(data.([]byte), &v)
+	return nil
 }
 
 type SpiderCount map[string]int
@@ -33,5 +34,6 @@ func (s SpiderCount) Value() (driver.Value, error) {
 }
 
 func (s *SpiderCount) Scan(data interface{}) error {
-	return json.Unmarshal(data.([]byte), &s)
+	_ = json.Unmarshal(data.([]byte), &s)
+	return nil
 }

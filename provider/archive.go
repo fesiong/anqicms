@@ -93,6 +93,40 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 	})
 }
 
+func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		if categoryId > 0 {
+			tx = tx.Where("`category_id` = ?", categoryId)
+		}
+		return tx.Where("`id` < ?", id).Order("`id` DESC")
+	})
+	if err != nil {
+		return nil, err
+	}
+	if archive.Password != "" {
+		archive.HasPassword = true
+		archive.Password = ""
+	}
+	return archive, nil
+}
+
+func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		if categoryId > 0 {
+			tx = tx.Where("`category_id` = ?", categoryId)
+		}
+		return tx.Where("`id` > ?", id).Order("`id` ASC")
+	})
+	if err != nil {
+		return nil, err
+	}
+	if archive.Password != "" {
+		archive.HasPassword = true
+		archive.Password = ""
+	}
+	return archive, nil
+}
+
 func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
 	var archive model.Archive
 	err := ops(w.DB.WithContext(w.Ctx())).Take(&archive).Error
@@ -168,7 +202,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 	var draft = false
 	if len(offsets) > 0 {
-		offset = offsets[0]
+		if offsets[0] > 0 {
+			offset = offsets[0]
+		}
 		if len(offsets) > 1 {
 			draft = offsets[1] == 1
 		}

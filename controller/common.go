@@ -2,7 +2,6 @@ package controller
 
 import (
 	"fmt"
-	"github.com/kataras/iris/v12/context"
 	"log"
 	"net"
 	"net/http"
@@ -13,6 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kataras/iris/v12/context"
+	"kandaoni.com/anqicms/request"
 
 	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
@@ -85,7 +87,7 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 			return str
 		}
 	}
-	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + tr("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + tr("返回") + "</a>"
+	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + tr("Info") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + tr("Back") + "</a>"
 
 	if len(buttons) > 0 {
 		for _, btn := range buttons {
@@ -403,13 +405,27 @@ func FileServe(ctx iris.Context) bool {
 }
 
 func ReRouteContext(ctx iris.Context) {
-	params, _ := parseRoute(ctx)
+	params, _ := ParseRoute(ctx)
 	// 先验证文件是否真的存在，如果存在，则fileServe
 	exists := FileServe(ctx)
 	if exists {
 		return
 	}
-	defer LogAccess(ctx)
+	defer func() {
+		// 这里只记录蜘蛛行为
+		userAgent := ctx.GetHeader("User-Agent")
+		//获取蜘蛛
+		spider := library.GetSpider(userAgent)
+		if spider != "" {
+			req := request.LogStatisticRequest{
+				Action: request.LogActionViews,
+				Code:   ctx.GetStatusCode(),
+				Path:   ctx.FullRequestURI(),
+				Type:   request.LogTypeArchive,
+			}
+			LogAccess(ctx, &req)
+		}
+	}()
 	closed := CheckCloseSite(ctx)
 	if closed {
 		return
@@ -535,7 +551,7 @@ func ReRouteContext(ctx iris.Context) {
 	NotFound(ctx)
 }
 
-func parseRoute(ctx iris.Context) (map[string]string, bool) {
+func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 	currentSite := provider.CurrentSite(ctx)
 	//这里总共有6条正则规则，需要逐一匹配
 	// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
@@ -599,6 +615,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 			match = reg.FindStringSubmatch(paramValueWithArgs)
 		}
 		if len(match) > 0 {
+			matchMap["pattern"] = rewritePattern.Rules[ruleName]
 			matchMap["match"] = ruleName
 			for i, v := range match {
 				key := rewritePattern.Tags[ruleName][i]
@@ -742,6 +759,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 					match = reg.FindStringSubmatch(paramValueWithArgs)
 				}
 				if len(match) > 0 {
+					matchMap["pattern"] = rewritePattern.Rules[ruleName]
 					matchMap["match"] = ruleName
 					for i, v := range match {
 						key := rewritePattern.Tags[ruleName][i]
@@ -838,46 +856,15 @@ func CheckTemplateType(ctx iris.Context) {
 	ctx.Next()
 }
 
-func LogAccess(ctx iris.Context) {
+func LogAccess(ctx iris.Context, req *request.LogStatisticRequest) {
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite == nil || currentSite.StatisticLog == nil {
-		ctx.Next()
 		return
 	}
-	if ctx.IsAjax() || ctx.Method() != "GET" {
-		ctx.Next()
-		return
-	}
-	// html cache 步骤不做记录
-	if ctx.GetHeader("Cache") == "true" {
-		ctx.Next()
-		return
-	}
-	currentPath := ctx.Request().RequestURI
-	//后台不做记录
-	if strings.HasPrefix(currentPath, "/system") {
-		ctx.Next()
-		return
-	}
-	//静态资源不做记录
-	if strings.HasPrefix(currentPath, "/static") ||
-		strings.HasPrefix(currentPath, "/uploads") ||
-		strings.Contains(currentPath, "/js") ||
-		strings.Contains(currentPath, "/css") ||
-		strings.Contains(currentPath, "/image") ||
-		strings.HasSuffix(currentPath, ".ico") ||
-		strings.HasSuffix(currentPath, ".jpg") ||
-		strings.HasSuffix(currentPath, ".png") ||
-		strings.HasSuffix(currentPath, ".jpeg") ||
-		strings.HasSuffix(currentPath, ".gif") ||
-		strings.HasSuffix(currentPath, ".js") ||
-		strings.HasSuffix(currentPath, ".css") ||
-		strings.HasSuffix(currentPath, ".map") ||
-		strings.HasSuffix(currentPath, ".webp") {
-		ctx.Next()
-		return
-	}
-
+	refer := ctx.GetReferrer()
+	// 记录访问
+	req.Path = refer.String()
+	currentPath := req.Path
 	userAgent := ctx.GetHeader("User-Agent")
 	//获取蜘蛛
 	spider := library.GetSpider(userAgent)
@@ -902,13 +889,11 @@ func LogAccess(ctx iris.Context) {
 		Url:       currentPath,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
-		HttpCode:  ctx.GetStatusCode(),
+		HttpCode:  req.Code,
 		UserAgent: userAgent,
 	}
 	// 这里不需要等待
 	go currentSite.StatisticLog.Write(statistic)
-
-	ctx.Next()
 }
 
 func NewDriver() *captcha.DriverString {

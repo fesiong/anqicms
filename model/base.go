@@ -29,6 +29,7 @@ type CustomField struct {
 }
 
 type CustomFieldTexts struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	Key    string   `json:"key"`
+	Value  string   `json:"value"`
+	Values []string `json:"values"` // 更多的字段
 }

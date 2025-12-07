@@ -2,12 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
-	"strings"
 )
 
 type tagTagListNode struct {
@@ -56,7 +57,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 
 	if args["order"] != nil {
 		tmpOrder := args["order"].String()
-		tmpOrder = provider.OrderByFilter(tmpOrder, "")
+		tmpOrder = provider.ParseOrderBy(tmpOrder, "")
 		if tmpOrder != "" {
 			order = tmpOrder
 		}
