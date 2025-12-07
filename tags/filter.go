@@ -1,11 +1,14 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/library"
+	"math"
 	"path/filepath"
 	"strings"
+
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/library"
 )
 
 func init() {
@@ -22,8 +25,12 @@ func init() {
 	pongo2.RegisterFilter("dump", filterDump)
 	pongo2.RegisterFilter("thumb", filterThumb)
 	pongo2.RegisterFilter("render", filterRender)
+	pongo2.RegisterFilter("json", filterJson)
 	if pongo2.FilterExists("split") {
 		pongo2.ReplaceFilter("split", filterSplit)
+	}
+	if pongo2.FilterExists("wordwrap") {
+		pongo2.ReplaceFilter("wordwrap", filterWordwrap)
 	}
 }
 
@@ -183,4 +190,26 @@ func filterRender(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2
 		s = library.MarkdownToHTML(s)
 	}
 	return pongo2.AsValue(s), nil
+}
+
+func filterJson(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	s := in.Interface()
+	buf, _ := json.Marshal(s)
+	return pongo2.AsValue(string(buf)), nil
+}
+
+func filterWordwrap(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	words := strings.Fields(in.String())
+	wordsLen := len(words)
+	wrapAt := param.Integer()
+	if wrapAt <= 0 {
+		return in, nil
+	}
+
+	linecount := int(math.Ceil(float64(wordsLen) / float64(wrapAt)))
+	lines := make([]string, 0, linecount)
+	for i := 0; i < linecount; i++ {
+		lines = append(lines, strings.Join(words[wrapAt*i:min(wrapAt*(i+1), wordsLen)], " "))
+	}
+	return pongo2.AsValue(strings.Join(lines, "\n")), nil
 }

@@ -3,15 +3,16 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"log"
-	"os"
-	"strings"
-	"time"
 )
 
 var defaultDB *gorm.DB
@@ -148,6 +149,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
 			&model.TagContent{},
+			&model.ArchiveFavorite{},
 		)
 
 		if err != nil {
@@ -232,7 +234,7 @@ func (w *Website) InitModelData() {
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
 	var modules = []model.Module{
 		{
-			Model:     model.Model{Id: 1},
+			Id:        1,
 			TableName: "article",
 			UrlToken:  "news",
 			Name:      w.Tr("articleModule"),
@@ -243,7 +245,7 @@ func (w *Website) InitModelData() {
 			Status:    1,
 		},
 		{
-			Model:     model.Model{Id: 2},
+			Id:        2,
 			TableName: "product",
 			UrlToken:  "product",
 			Name:      w.Tr("productModule"),
@@ -283,7 +285,7 @@ func (w *Website) InitModelData() {
 	_ = w.InitAdmin("admin", "123456", false)
 	// 检查分组
 	adminGroup := model.AdminGroup{
-		Model:       model.Model{Id: 1},
+		Id:          1,
 		Title:       w.Tr("SuperAdministrator"),
 		Description: w.Tr("SuperAdministratorGroup"),
 		Status:      1,
@@ -301,13 +303,13 @@ func (w *Website) InitModelData() {
 			Status: 1,
 		},
 		{
-			Model:  model.Model{Id: 2},
+			Id:     2,
 			Title:  w.Tr("IntermediateUser"),
 			Level:  1,
 			Status: 1,
 		},
 		{
-			Model:  model.Model{Id: 3},
+			Id:     3,
 			Title:  w.Tr("AdvancedUser"),
 			Level:  2,
 			Status: 1,

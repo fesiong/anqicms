@@ -44,6 +44,12 @@ func (w *Website) GetCommentList(archiveId int64, userId uint, order string, cur
 		builder = builder.Where("user_id = ?", userId)
 	}
 	if order != "" {
+		order = ParseOrderBy(order, "")
+	} else {
+		// 默认排序规则
+		order = "id desc"
+	}
+	if order != "" {
 		builder = builder.Order(order)
 	}
 	if err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&comments).Error; err != nil {

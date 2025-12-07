@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
@@ -15,9 +19,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"strconv"
-	"time"
 )
 
 func ApiGetOrders(ctx iris.Context) {
@@ -51,7 +52,7 @@ func ApiGetOrderDetail(ctx iris.Context) {
 		})
 		return
 	}
-	if order.UserId != userId {
+	if order.UserId != userId && currentSite.PluginOrder.NoNeedLogin == false {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("InsufficientPermissions"),
@@ -76,7 +77,15 @@ func ApiCreateOrder(ctx iris.Context) {
 		})
 		return
 	}
+	// check login
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId == 0 && currentSite.PluginOrder.NoNeedLogin == false {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("PleaseLogin"),
+		})
+		return
+	}
 
 	order, err := currentSite.CreateOrder(userId, &req)
 	if err != nil {
@@ -223,6 +232,26 @@ func ApiFinishedOrder(ctx iris.Context) {
 	})
 }
 
+func ApiGetOrderAddresses(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+
+	addresses, err := currentSite.GetOrderAddressesByUserId(userId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  nil,
+		"data": addresses,
+	})
+}
+
 func ApiGetOrderAddress(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -283,6 +312,13 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	}
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId == 0 && currentSite.PluginOrder.NoNeedLogin == false {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("PleaseLogin"),
+		})
+		return
+	}
 	//注入userID
 	req.UserId = userId
 
@@ -370,7 +406,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "wechat",
+			"pay_way":  config.PayWayWechat,
 			"code_url": fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(png)),
 		},
 	})
@@ -437,7 +473,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":   "weapp",
+			"pay_way":   config.PayWayWeapp,
 			"paySign":   paySign,
 			"timeStamp": timeStamp,
 			"package":   packages,
@@ -511,7 +547,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "alipay",
+			"pay_way":  config.PayWayAlipay,
 			"jump_url": payUrl,
 		},
 	})
@@ -520,7 +556,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 
 func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
 	currentSite := provider.CurrentSite(ctx)
-	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, true)
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -581,7 +617,7 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "paypal",
+			"pay_way":  config.PayWayPaypal,
 			"jump_url": ppRsp.Response.Links[1].Href,
 		},
 	})
@@ -599,6 +635,24 @@ func ApiPaymentCheck(ctx iris.Context) {
 		return
 	}
 	if order.Status != config.OrderStatusWaiting {
+		//支付成功
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  currentSite.TplTr("PaymentSuccessful"),
+		})
+		return
+	}
+	// 检查一次订单是否支付成功
+	payment, err := currentSite.GetPaymentInfoByOrderId(order.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	_ = currentSite.TraceQuery(payment)
+	if payment.PaidTime > 0 {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,

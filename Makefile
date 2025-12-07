@@ -7,7 +7,6 @@ GOARCH ?= $(shell $(GO) env GOARCH)
 LDFLAGS := -ldflags '-w -s'
 ifeq ($(GOOS),windows)
 	BIN_SUFFIX := .exe
-	LDFLAGS := -ldflags '-w -s -H=windowsgui'
 endif
 ifeq ($(version),)
 	version := $(shell git describe --tags --always --dirty="-dev")

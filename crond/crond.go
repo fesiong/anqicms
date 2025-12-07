@@ -1,10 +1,11 @@
 package crond
 
 import (
-	"github.com/robfig/cron/v3"
-	"kandaoni.com/anqicms/provider"
 	"math/rand"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"kandaoni.com/anqicms/provider"
 )
 
 var crontab *cron.Cron
@@ -51,13 +52,13 @@ func hourlyTask() {
 	startDigKeywords()
 	// 每小时检查一次账号状态
 	CheckAuthValid()
-	// 每小时统计一次统计数据
-	calcStatistics()
 }
 
 func hourly10MinuteTask() {
 	// 每十分钟检查一次采集
 	CollectArticles()
+	// 每十分钟统计一次统计数据
+	calcStatistics()
 }
 
 func minutelyTask() {
@@ -105,11 +106,16 @@ func calcStatistics() {
 
 func PublishPlanContents() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.PublishPlanArchives()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.PublishPlanArchives()
+		}(w)
 	}
 }
 
@@ -125,11 +131,17 @@ func CleanArchives() {
 
 func CollectArticles() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.CollectArticles()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			go w2.AiGenerateArticles()
+			w2.CollectArticles()
+		}(w)
 	}
 }
 
@@ -182,21 +194,31 @@ func CheckAuthValid() {
 
 func UpdateTimeFactor() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.TryToRunTimeFactor()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.TryToRunTimeFactor()
+		}(w)
 	}
 }
 
 func AiArticlePlan() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.SyncAiArticlePlan()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.SyncAiArticlePlan()
+		}(w)
 	}
 }
 

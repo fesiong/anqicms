@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -106,8 +107,6 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 	return nil
 }
 
-var runningCollectArticles = false
-
 func (w *Website) CollectArticles() {
 	if w.DB == nil || w.CollectorConfig == nil {
 		return
@@ -115,12 +114,12 @@ func (w *Website) CollectArticles() {
 	if !w.CollectorConfig.AutoCollect {
 		return
 	}
-	if runningCollectArticles {
+	if w.CollectorConfig.IsRunning {
 		return
 	}
-	runningCollectArticles = true
+	w.CollectorConfig.IsRunning = true
 	defer func() {
-		runningCollectArticles = false
+		w.CollectorConfig.IsRunning = false
 	}()
 
 	if w.CollectorConfig.StartHour > 0 && time.Now().Hour() < w.CollectorConfig.StartHour {
@@ -132,49 +131,70 @@ func (w *Website) CollectArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
+	if w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
 		return
 	}
 
-	lastId := uint(0)
+	var maxId int64
+	var minId int64
+	db := w.DB.Model(model.Keyword{}).Where("last_time = 0")
+	db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
+	db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
+	if maxId <= 0 || minId <= 0 {
+		return
+	}
+	var maxTry = maxId - minId + 1
+	var errTimes = 0
 	for {
-		var keywords []*model.Keyword
-		w.DB.Where("id > ? and last_time = 0", lastId).Order("id asc").Limit(10).Find(&keywords)
-		if len(keywords) == 0 {
+		maxTry--
+		if maxTry < 0 {
 			break
 		}
-		lastId = keywords[len(keywords)-1].Id
-		for i := 0; i < len(keywords); i++ {
-			keyword := keywords[i]
-			// 检查是否采集过
-			if w.checkArticleExists(keyword.Title, "", "") {
-				// 跳过这个关键词
-				if keyword.ArticleCount == 0 {
-					keyword.ArticleCount = 1
-				}
-				keyword.LastTime = time.Now().Unix()
-				w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
-				//log.Println("已存在于数据库", keyword.Title)
-				continue
+		if errTimes > 10 {
+			break
+		}
+
+		randId := minId
+		if maxId > minId {
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			randId = rd.Int63n(maxId-minId) + minId
+		}
+		var keyword model.Keyword
+		err := w.DB.Where("id >= ? and last_time = 0", randId).Order("id asc").Take(&keyword).Error
+		if err != nil {
+			// 重试
+			log.Println("采集关键词获取失败，正在重试...")
+			time.Sleep(time.Second)
+			continue
+		}
+		// 检查是否采集过
+		if w.checkArticleExists(keyword.Title, "", "") {
+			// 跳过这个关键词
+			if keyword.ArticleCount == 0 {
+				keyword.ArticleCount = 1
 			}
-			total, err := w.CollectArticlesByKeyword(*keyword, false)
-			log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
-			// 达到数量了，退出
-			if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
-				return
-			}
-			// 如果没有使用代理，则每个关键词都需要间隔30秒以上
-			if w.Proxy == nil {
-				time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
-			}
-			if err != nil {
-				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
-				// 延时 10分钟以上
-				// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
-				if w.Proxy == nil {
-					break
-				}
-			}
+			keyword.LastTime = time.Now().Unix()
+			w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
+			//log.Println("已存在于数据库", keyword.Title)
+			continue
+		}
+		total, err := w.CollectArticlesByKeyword(keyword, false)
+		log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
+		// 达到数量了，退出
+		if w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
+			return
+		}
+		// 如果没有使用代理，则每个关键词都需要间隔30秒以上
+		if w.Proxy == nil {
+			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
+		}
+		time.Sleep(time.Second)
+		if err != nil {
+			// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
+			// 延时 10分钟以上
+			// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
+			errTimes++
+			continue
 		}
 	}
 }
@@ -238,7 +258,7 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 		return err
 	}
 	//文章计数
-	w.UpdateTodayArticleCount(1)
+	w.UpdateTodayArticleCount(1, 0)
 
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
@@ -1234,6 +1254,9 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 			return w.cachedTodayArticleCount.AiGenerateCount
 		}
 		return w.cachedTodayArticleCount.CollectCount
+	} else if w.cachedTodayArticleCount.Day > 0 {
+		// 不同天
+		return 0
 	}
 
 	w.cachedTodayArticleCount.Day = today.Day()
@@ -1256,8 +1279,14 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 	return w.cachedTodayArticleCount.CollectCount
 }
 
-func (w *Website) UpdateTodayArticleCount(addNum int) {
-	w.cachedTodayArticleCount.CollectCount += int64(addNum)
+func (w *Website) UpdateTodayArticleCount(collectCount, aiCount int) {
+	w.cachedTodayArticleCount.Day = now.BeginningOfDay().Day()
+	if collectCount > 0 {
+		w.cachedTodayArticleCount.CollectCount += int64(collectCount)
+	}
+	if aiCount > 0 {
+		w.cachedTodayArticleCount.AiGenerateCount += int64(aiCount)
+	}
 }
 
 func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {

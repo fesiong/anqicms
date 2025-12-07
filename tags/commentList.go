@@ -2,12 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
-	"strings"
 )
 
 type tagCommentListNode struct {
@@ -63,7 +64,11 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 
 	if args["order"] != nil {
-		order = args["order"].String()
+		tmpOrder := args["order"].String()
+		tmpOrder = provider.ParseOrderBy(tmpOrder, "")
+		if tmpOrder != "" {
+			order = tmpOrder
+		}
 	}
 	if args["limit"] != nil {
 		limitArgs := strings.Split(args["limit"].String(), ",")

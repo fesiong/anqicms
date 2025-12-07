@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/h2non/filetype"
-	"github.com/parnurzeal/gorequest"
-	"golang.org/x/image/webp"
 	"image"
 	"image/color"
 	"image/draw"
@@ -16,11 +13,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
 	"math/rand"
@@ -33,6 +25,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/h2non/filetype"
+	"github.com/parnurzeal/gorequest"
+	"golang.org/x/image/webp"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 // imageMagickPath 检测Imagemagick是否可用
@@ -99,13 +100,6 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	} else if exists != nil {
 		attachment = exists
 		// 已存在
-		if attachment.DeletedAt.Valid {
-			//更新
-			err = db.Unscoped().Model(attachment).Update("deleted_at", nil).Error
-			if err != nil {
-				return nil, err
-			}
-		}
 		// 如果更换了分类
 		if categoryId > 0 && attachment.CategoryId != categoryId {
 			db.Model(attachment).UpdateColumn("category_id", categoryId)
@@ -851,11 +845,6 @@ func (w *Website) AttachmentScanUploads(baseDir string) {
 			var exist model.Attachment
 			err = w.DB.Unscoped().Model(&model.Attachment{}).Where("`file_location` = ?", fileLocation).Take(&exist).Error
 			if err == nil {
-				// 如果文件呗删了，则需要更新状态
-				if exist.DeletedAt.Valid {
-					//更新
-					w.DB.Unscoped().Model(&exist).Update("deleted_at", nil)
-				}
 				continue
 			}
 			md5Str, err := library.Md5File(name)

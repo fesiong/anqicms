@@ -4,7 +4,6 @@ import (
 	"embed"
 
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
@@ -17,7 +16,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{
 		manage.Post("/login", manageController.AdminLogin)
-		manage.Get("/captcha", controller.GenerateCaptcha)
+		manage.Get("/captcha", manageController.GenerateCaptcha)
 		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
 
 		password := manage.Party("/password")
@@ -560,6 +559,11 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			{
 				akismet.Get("/setting", manageController.PluginGetAkismetSetting)
 				akismet.Post("/setting", manageController.PluginSaveAkismetSetting)
+			}
+			google := plugin.Party("/google")
+			{
+				google.Get("/setting", manageController.PluginGetGoogleSetting)
+				google.Post("/setting", manageController.PluginSaveGoogleSetting)
 			}
 		}
 	}

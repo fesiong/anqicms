@@ -44,8 +44,8 @@ func (s *MeiliSearchService) Create(doc TinyArchive) error {
 	documents := []map[string]interface{}{
 		data,
 	}
-
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, "id")
+	keyName := "id"
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, &keyName)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -63,8 +63,8 @@ func (s *MeiliSearchService) Update(doc TinyArchive) error {
 	documents := []map[string]interface{}{
 		data,
 	}
-
-	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, "id")
+	keyName := "id"
+	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, &keyName)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -98,8 +98,8 @@ func (s *MeiliSearchService) Bulk(docs []TinyArchive) error {
 
 		data = append(data, item)
 	}
-
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, "id")
+	keyName := "id"
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, &keyName)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -131,15 +131,31 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 
 	var docs = make([]TinyArchive, 0, pageSize)
 	for _, hit := range resp.Hits {
-		item, ok := hit.(map[string]interface{})
-		if ok {
-			tmpId, _ := item["id"].(string)
-			id, _ := strconv.ParseInt(tmpId, 10, 64)
-			doc := TinyArchive{}
-			_ = library.MapToStruct(item, &doc)
-			doc.Id, doc.Type = GetId(id)
-			docs = append(docs, doc)
+		id, _ := strconv.ParseInt(string(hit["id"]), 10, 64)
+		doc := TinyArchive{
+			Id: id,
 		}
+		if _, ok := hit["type"]; ok {
+			doc.Type = string(hit["type"])
+		}
+		if _, ok := hit["title"]; ok {
+			doc.Title = string(hit["title"])
+		}
+		if _, ok := hit["description"]; ok {
+			doc.Description = string(hit["description"])
+		}
+		if _, ok := hit["content"]; ok {
+			doc.Content = string(hit["content"])
+		}
+		if _, ok := hit["keywords"]; ok {
+			doc.Keywords = string(hit["keywords"])
+		}
+		if _, ok := hit["module_id"]; ok {
+			tmpId, _ := strconv.ParseUint(string(hit["module_id"]), 10, 64)
+			doc.ModuleId = uint(tmpId)
+		}
+		doc.Id, doc.Type = GetId(id)
+		docs = append(docs, doc)
 	}
 	total := resp.TotalHits
 

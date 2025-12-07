@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.5.1"
+const Version = "3.5.2"
 const Trial = false
 const VersionType = ""
 
@@ -141,6 +141,7 @@ const (
 	PlatformQQ       = "qq"       // qq
 	PlatformWeapp    = "weapp"    // weapp mini program
 	PlatformWechat   = "wechat"   // WeChat official account
+	PlatformGoogle   = "google"   // google +
 	PlatformInWechat = "inwechat" // in the wechat browser
 	PlatformWebsite  = "website"  // normal login way, like email/cellphone/username
 )

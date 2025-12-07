@@ -5,6 +5,8 @@ import (
 	"hash/crc32"
 	"io"
 	"io/fs"
+	"kandaoni.com/anqicms/request"
+	"net/url"
 	"os"
 	stdPath "path"
 	"regexp"
@@ -19,6 +21,7 @@ import (
 	"golang.org/x/net/html"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 
@@ -552,6 +555,42 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 				}
 			}
 		}
+		// 自动添加统计数据
+		query := make(url.Values)
+		query.Set("action", request.LogActionViews)
+		query.Set("path", ctx.FullRequestURI())
+		query.Set("code", strconv.FormatInt(int64(ctx.GetStatusCode()), 10))
+		dataMap, ok := bindingData.(map[string]interface{})
+		if ok {
+			webInfo, ok := dataMap["webInfo"].(*response.WebInfo)
+			if ok {
+				if webInfo.PageName == "order" {
+					route, ok := dataMap["route"].(string)
+					if ok && route == "checkout" || route == "confirm" {
+						query.Set("type", route)
+					}
+				} else if webInfo.PageName == "archiveDetail" {
+					query.Set("type", request.LogTypeArchive)
+					archive, ok := dataMap["archive"].(*model.Archive)
+					if ok {
+						query.Set("id", strconv.FormatInt(int64(archive.Id), 10))
+					}
+				}
+			}
+		}
+		queryEncode := query.Encode()
+		logBuf := []byte("\n<script>\n(function() {\n  var al = document.createElement(\"script\");\n  al.src = \"/api/log?" + queryEncode + "&nonce=\"+Date.now();\n  document.body.appendChild(al);\n})();\n</script>\n")
+		if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+			index = index + 7
+			tmpData := make([]byte, len(data)+len(logBuf))
+			copy(tmpData, data[:index])
+			copy(tmpData[index:], logBuf)
+			copy(tmpData[index+len(logBuf):], data[index:])
+			data = tmpData
+		} else {
+			data = append(data, logBuf...)
+		}
+		// end log
 
 		exData := &RenderData{
 			Data: data,

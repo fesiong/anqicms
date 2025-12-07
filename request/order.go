@@ -1,7 +1,7 @@
 package request
 
 type OrderRequest struct {
-	Id                uint                 `json:"id"`
+	Id                int64                `json:"id"`
 	OrderId           string               `json:"order_id"`
 	PaymentId         string               `json:"payment_id"`
 	UserId            uint                 `json:"user_id"`
@@ -17,7 +17,9 @@ type OrderRequest struct {
 	DeliverTime       int64                `json:"deliver_time"`
 	FinishedTime      int64                `json:"finished_time"`
 	DiscountAmount    int64                `json:"discount_amount"` // 可能一个订单支持多个优惠
-	CouponCodeId      string               `json:"-"`
+	CouponId          int64                `json:"coupon_id"`
+	CouponCodeId      int64                `json:"coupon_code_id"`
+	CouponCode        string               `json:"coupon_code"`
 	ShareUserId       uint                 `json:"share_user_id"`       // 分享者
 	ShareAmount       int64                `json:"share_amount"`        // 分销可得金额
 	ShareParentAmount int64                `json:"share_parent_amount"` // 分销可得金额
@@ -61,11 +63,15 @@ type OrderAddressRequest struct {
 	Id          uint   `json:"id"`
 	UserId      uint   `json:"user_id"`
 	Name        string `json:"name"`
+	LastName    string `json:"last_name"`
 	Phone       string `json:"phone"`
+	Email       string `json:"email"`
 	Province    string `json:"province"`
 	City        string `json:"city"`
+	Town        string `json:"town"`
 	Country     string `json:"country"`
 	AddressInfo string `json:"address_info"`
+	Company     string `json:"company"`
 	Postcode    string `json:"postcode"`
 	Status      int    `json:"status"`
 }

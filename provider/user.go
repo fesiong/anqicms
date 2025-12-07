@@ -1,24 +1,28 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/medivhzhan/weapp/v3"
-	"golang.org/x/image/webp"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"image"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
+	"io"
+	"log"
 	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/medivhzhan/weapp/v3"
+	"golang.org/x/image/webp"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetUserList(ops func(tx *gorm.DB) *gorm.DB, page, pageSize int) ([]*model.User, int64) {
@@ -123,6 +127,8 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 
 	user.UserName = req.UserName
 	user.RealName = req.RealName
+	user.FirstName = req.FirstName
+	user.LastName = req.LastName
 	user.AvatarURL = req.AvatarURL
 	user.Introduce = req.Introduce
 	user.Phone = req.Phone
@@ -323,6 +329,9 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if req.UserName == "" || req.Password == "" {
 		return nil, errors.New(w.Tr("PleaseFillInTheUsernameAndPasswordCorrectly"))
 	}
+	if w.PluginSendmail.SignupVerify && !w.VerifyEmailFormat(req.Email) {
+		return nil, errors.New(w.Tr("IncorrectEmail"))
+	}
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
@@ -343,8 +352,13 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		if !w.VerifyEmailFormat(req.Email) {
 			return nil, errors.New(w.Tr("IncorrectEmail"))
 		}
-		_, err := w.GetUserInfoByEmail(req.Email)
+		exist, err := w.GetUserInfoByEmail(req.Email)
 		if err == nil {
+			// 邮箱已存在，如果还没验证，则发送验证邮件
+			if !exist.EmailVerified && w.PluginSendmail.SignupVerify {
+				_ = w.SendVerifyEmail(exist, "verify")
+				return exist, nil
+			}
 			return nil, errors.New(w.Tr("TheEmailHasBeenRegistered"))
 		}
 	}
@@ -364,6 +378,11 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	}
 	user.EncryptPassword(req.Password)
 	w.DB.Save(&user)
+
+	if w.PluginSendmail.SignupVerify {
+		_ = w.SendVerifyEmail(&user, "verify")
+		return &user, nil
+	}
 
 	user.Token = w.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(w.DB)
@@ -500,6 +519,69 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 	return user, nil
 }
 
+func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, error) {
+	googleCfg := w.GetGoogleAuthConfig(false)
+	if googleCfg == nil {
+		return nil, errors.New(w.Tr("GoogleAuthDisable"))
+	}
+	ctx, done := context.WithTimeout(context.Background(), 15*time.Second)
+	defer done()
+	tok, err := googleCfg.Exchange(ctx, req.Code)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	client := googleCfg.Client(ctx, tok)
+	userinfo, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	defer userinfo.Body.Close()
+
+	data, err := io.ReadAll(userinfo.Body)
+	if err != nil {
+		return nil, err
+	}
+	var googleUser GoogleUser
+	if err = json.Unmarshal(data, &googleUser); err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	// 直接对接 users 表的 email
+	user, err := w.GetUserInfoByEmail(googleUser.Email)
+	if err != nil {
+		// 用户不存在，新建
+		user = &model.User{
+			Email:         googleUser.Email,
+			EmailVerified: googleUser.EmailVerified,
+			UserName:      googleUser.Name,
+			AvatarURL:     googleUser.Picture,
+			GroupId:       w.PluginUser.DefaultGroupId,
+			Password:      "",
+			Status:        1,
+			Introduce:     googleUser.Profile,
+		}
+		if googleUser.GivenName != "" {
+			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		}
+		w.DB.Save(user)
+	} else {
+		user.UserName = googleUser.Name
+		user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		w.DB.Save(user)
+	}
+	if req.InviteId > 0 && user.ParentId == 0 {
+		user.ParentId = req.InviteId
+		w.DB.Save(user)
+	}
+
+	user.Token = w.GetUserAuthToken(user.Id, true)
+	_ = user.LogLogin(w.DB)
+
+	return user, nil
+}
+
 func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, error) {
 	var user model.User
 	if w.VerifyEmailFormat(req.UserName) {
@@ -529,7 +611,10 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 
 	user.Token = w.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(w.DB)
-
+	// 如果要验证邮箱，并且没完成验证，则发送验证邮件
+	if w.PluginSendmail.SignupVerify && !user.EmailVerified {
+		_ = w.SendVerifyEmail(&user, "verify")
+	}
 	return &user, nil
 }
 
@@ -602,9 +687,9 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 		req.Email = ""
 	}
 	if req.Phone != "" {
-		if !w.VerifyCellphoneFormat(req.Phone) {
-			return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
-		}
+		// if !w.VerifyCellphoneFormat(req.Phone) {
+		// 	return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
+		// }
 		exist, err = w.GetUserInfoByPhone(req.Phone)
 		if err == nil && exist.Id != user.Id {
 			return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
@@ -623,6 +708,11 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	}
 	user.UserName = req.UserName
 	user.RealName = req.RealName
+	user.FirstName = req.FirstName
+	user.LastName = req.LastName
+	if req.FirstName != "" {
+		user.RealName = req.FirstName + " " + req.LastName
+	}
 	user.Introduce = req.Introduce
 	if user.GroupId == 0 {
 		user.GroupId = w.PluginUser.DefaultGroupId
@@ -646,7 +736,7 @@ func (w *Website) CleanUserVip() {
 }
 
 func (w *Website) GetUserDiscount(userId uint, user *model.User) int64 {
-	if user == nil {
+	if user == nil && userId > 0 {
 		user, _ = w.GetUserInfoById(userId)
 	}
 	if user != nil {

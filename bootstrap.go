@@ -3,6 +3,11 @@ package anqicms
 import (
 	stdContext "context"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
@@ -13,10 +18,6 @@ import (
 	"kandaoni.com/anqicms/route"
 	"kandaoni.com/anqicms/tags"
 	"kandaoni.com/anqicms/view"
-	"log"
-	"os"
-	"strings"
-	"time"
 )
 
 type Bootstrap struct {
@@ -77,7 +78,7 @@ func (bootstrap *Bootstrap) Serve() {
 				_ = provider.Restart()
 			} else if restart == 2 {
 				fmt.Println("监听到退出信号")
-				_ = bootstrap.Shutdown()
+				//_ = bootstrap.Shutdown()
 				os.Exit(0)
 			} else {
 				// reload template
@@ -154,8 +155,7 @@ func (bootstrap *Bootstrap) Start() {
 
 	err = bootstrap.Application.Run(
 		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
-		iris.WithRemoteAddrHeader("X-Real-IP"),
-		iris.WithRemoteAddrHeader("X-Forwarded-For"),
+		iris.WithRemoteAddrHeader("X-Real-IP", "X-Forwarded-For", "CF-Connecting-IP"),
 		iris.WithHostProxyHeader("X-Host"),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithoutBodyConsumptionOnUnmarshal,

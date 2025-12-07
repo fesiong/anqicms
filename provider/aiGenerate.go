@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -71,8 +72,6 @@ func (w *Website) SaveAiGenerateSetting(req config.AiGenerateConfig, focus bool)
 	return nil
 }
 
-var runningAiGenerateArticles = false
-
 func (w *Website) AiGenerateArticles() {
 	if w.DB == nil {
 		return
@@ -80,12 +79,12 @@ func (w *Website) AiGenerateArticles() {
 	if !w.AiGenerateConfig.Open {
 		return
 	}
-	if runningAiGenerateArticles {
+	if w.AiGenerateConfig.IsRunning {
 		return
 	}
-	runningAiGenerateArticles = true
+	w.AiGenerateConfig.IsRunning = true
 	defer func() {
-		runningAiGenerateArticles = false
+		w.AiGenerateConfig.IsRunning = false
 	}()
 
 	if w.AiGenerateConfig.StartHour > 0 && time.Now().Hour() < w.AiGenerateConfig.StartHour {
@@ -101,40 +100,58 @@ func (w *Website) AiGenerateArticles() {
 		return
 	}
 
-	lastId := uint(0)
+	var maxId int64
+	var minId int64
+	db := w.DB.Model(model.Keyword{}).Where("last_time = 0")
+	db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
+	db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
+	if maxId <= 0 || minId <= 0 {
+		return
+	}
+	var maxTry = maxId - minId + 1
+	var errTimes = 0
 	for {
-		var keywords []*model.Keyword
-		w.DB.Where("id > ? and last_time = 0", lastId).Order("id asc").Limit(10).Find(&keywords)
-		if len(keywords) == 0 {
+		maxTry--
+		if maxTry < 0 {
 			break
 		}
-		lastId = keywords[len(keywords)-1].Id
-		for i := 0; i < len(keywords); i++ {
-			keyword := keywords[i]
-			// 检查是否采集过
-			if w.checkArticleExists(keyword.Title, "", "") {
-				// 跳过这个关键词
-				if keyword.ArticleCount == 0 {
-					keyword.ArticleCount = 1
-				}
-				keyword.LastTime = time.Now().Unix()
-				w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
-				continue
+		if errTimes > 5 {
+			break
+		}
+
+		randId := minId
+		if maxId > minId {
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			randId = rd.Int63n(maxId-minId) + minId
+		}
+		var keyword model.Keyword
+		err := w.DB.Where("id >= ? and last_time = 0", randId).Order("id asc").Take(&keyword).Error
+		if err != nil {
+			// 重试
+			log.Println("AI写作关键词获取失败，正在重试...")
+			time.Sleep(time.Second)
+			continue
+		}
+		// 检查是否采集过
+		if w.checkArticleExists(keyword.Title, "", "") {
+			// 跳过这个关键词
+			if keyword.ArticleCount == 0 {
+				keyword.ArticleCount = 1
 			}
-			total, err := w.AiGenerateArticlesByKeyword(*keyword, false)
-			log.Printf("关键词：%s 生成了 %d 篇文章, %v", keyword.Title, total, err)
-			// 达到数量了，退出
-			if w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
-				return
-			}
-			// 每个关键词都需要间隔30秒以上
-			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
-			if err != nil {
-				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
-				// 延时 10分钟以上
-				// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
-				break
-			}
+			keyword.LastTime = time.Now().Unix()
+			w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
+			continue
+		}
+		total, err := w.AiGenerateArticlesByKeyword(keyword, false)
+		log.Printf("关键词：%s 生成了 %d 篇文章, %v", keyword.Title, total, err)
+		// 达到数量了，退出
+		if w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
+			return
+		}
+		time.Sleep(time.Second)
+		if err != nil {
+			errTimes++
+			continue
 		}
 	}
 }

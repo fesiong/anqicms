@@ -5,6 +5,7 @@ import (
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"strconv"
@@ -57,6 +58,20 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["tagId"] != nil {
 		tagId = uint(args["tagId"].Integer())
 		tagDetail, _ = currentSite.GetTagById(tagId)
+	}
+
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
+	showFlag := false
+	showContent := false
+
+	if args["showFlag"] != nil {
+		showFlag = args["showFlag"].Bool()
+	}
+	if args["showContent"] != nil {
+		showContent = args["showContent"].Bool()
 	}
 
 	if tagDetail != nil {
@@ -112,19 +127,37 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives[i].HasPassword = true
 			}
 		}
-		// 读取flags
+		// 读取flags,content
 		if len(archiveIds) > 0 {
-			var flags []*model.ArchiveFlags
-			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
-			for i := range archives {
-				for _, f := range flags {
-					if f.ArchiveId == archives[i].Id {
-						archives[i].Flag = f.Flags
-						break
+			if showFlag {
+				var flags []*model.ArchiveFlags
+				currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+				for i := range archives {
+					for _, f := range flags {
+						if f.ArchiveId == archives[i].Id {
+							archives[i].Flag = f.Flags
+							break
+						}
+					}
+				}
+			}
+			if showContent {
+				var archiveData []model.ArchiveData
+				currentSite.DB.WithContext(currentSite.Ctx()).Where("`id` IN (?)", archiveIds).Find(&archiveData)
+				for i := range archives {
+					for _, d := range archiveData {
+						if d.Id == archives[i].Id {
+							if render {
+								d.Content = library.MarkdownToHTML(d.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+							}
+							archives[i].Content = d.Content
+							break
+						}
 					}
 				}
 			}
 		}
+
 		ctx.Private[node.name] = archives
 		if listType == "page" {
 			// 分页

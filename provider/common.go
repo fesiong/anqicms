@@ -1,9 +1,10 @@
 package provider
 
 import (
+	"log"
+
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
 )
 
 func (w *Website) DeleteCacheIndex() {

@@ -598,6 +598,8 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			log.Println("保存AI文章出错：", archiveReq.Title, err2.Error())
 			return 0, nil
 		}
+		//文章计数
+		w.UpdateTodayArticleCount(0, 1)
 		// 添加到plan，并标记完成
 		result := AnqiAiResult{
 			Type:      config.AiArticleTypeGenerate,
@@ -767,6 +769,8 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				log.Println("保存AI文章出错：", archive.Title, err.Error())
 				return err
 			}
+			//文章计数
+			w.UpdateTodayArticleCount(0, 1)
 			// 更新plan
 			plan.ArticleId = res.Id
 			plan.Status = config.AiArticleStatusCompleted
