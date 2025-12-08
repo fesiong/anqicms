@@ -241,6 +241,9 @@ func InitWebsites() {
 	// 检查多语言站点
 	values := websites.Values()
 	for _, w := range values {
+		if !w.Initialed {
+			continue
+		}
 		if w.MultiLanguage != nil && w.MultiLanguage.Open {
 			if w.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
 				// 读取子站点
@@ -478,6 +481,9 @@ func cloneWithContext(w *Website, ctx iris.Context) *Website {
 // URI和主机匹配逻辑
 func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *Website {
 	for _, w := range sites {
+		if !w.Initialed {
+			continue
+		}
 		// 检查所有相关URL配置
 		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.MobileUrl, w.System.AdminUrl} {
 			if urlToCheck == "" {
@@ -506,6 +512,9 @@ func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *We
 // 根路径和后备匹配逻辑
 func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Website {
 	for _, w := range sites {
+		if !w.Initialed {
+			continue
+		}
 		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.MobileUrl, w.System.AdminUrl} {
 			if urlToCheck == "" {
 				continue
@@ -678,6 +687,9 @@ func CurrentSite2(ctx iris.Context) *Website {
 		values := websites.Values()
 		if uri != "/" {
 			for _, w := range values {
+				if !w.Initialed {
+					continue
+				}
 				parsed, err := url.Parse(w.System.BaseUrl)
 				if err != nil {
 					continue
