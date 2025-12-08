@@ -241,7 +241,7 @@ func InitWebsites() {
 	// 检查多语言站点
 	values := websites.Values()
 	for _, w := range values {
-		if w.MultiLanguage.Open {
+		if w.MultiLanguage != nil && w.MultiLanguage.Open {
 			if w.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
 				// 读取子站点
 				multiLangSites := w.GetMultiLangSites(w.Id, false)
