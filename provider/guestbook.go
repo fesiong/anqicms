@@ -2,21 +2,21 @@ package provider
 
 import (
 	"fmt"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"strings"
 	"time"
 )
 
-func (w *Website) GetGuestbookList(keyword string, currentPage, pageSize int) ([]*model.Guestbook, int64, error) {
+func (w *Website) GetGuestbookList(ops func(tx *gorm.DB) *gorm.DB, currentPage, pageSize int) ([]*model.Guestbook, int64, error) {
 	var guestbooks []*model.Guestbook
 	offset := (currentPage - 1) * pageSize
 	var total int64
 
 	builder := w.DB.Model(&model.Guestbook{}).Order("id desc")
-	if keyword != "" {
-		//模糊搜索
-		builder = builder.Where("(`user_name` like ? OR `contact` like ?)", "%"+keyword+"%", "%"+keyword+"%")
+	if ops != nil {
+		builder = ops(builder)
 	}
 
 	err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&guestbooks).Error
@@ -46,6 +46,12 @@ func (w *Website) GetGuestbookById(id uint) (*model.Guestbook, error) {
 	}
 
 	return &guestbook, nil
+}
+
+func (w *Website) UpdateGuestbookStatus(id uint, status int) error {
+	err := w.DB.Model(&model.Guestbook{}).Where("`id` = ?", id).Update("status", status).Error
+
+	return err
 }
 
 func (w *Website) DeleteGuestbook(guestbook *model.Guestbook) error {

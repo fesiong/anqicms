@@ -288,7 +288,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 					MinId int `json:"min_id"`
 					MaxId int `json:"max_id"`
 				}
-				builder.WithContext(context.Background()).Select("MIN(id) as min_id, MAX(id) as max_id").Scan(&minMax)
+				builder.WithContext(context.Background()).Select("MIN(archives.id) as min_id, MAX(archives.id) as max_id").Scan(&minMax)
 				if minMax.MinId == 0 || minMax.MaxId == 0 {
 					return nil, 0, errors.New("empty archive")
 				}
@@ -297,21 +297,21 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 				for i := 0; i < pageSize; i++ {
 					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
 					var findId int64
-					builder.WithContext(context.Background()).Where("id >= ?", tmpId).Select("id").Limit(1).Pluck("id", &findId)
+					builder.WithContext(context.Background()).Where("archives.id >= ?", tmpId).Select("archives.id").Limit(1).Pluck("id", &findId)
 					if findId > 0 {
 						existIds = append(existIds, findId)
 					}
 				}
 				if len(existIds) > 0 {
-					builder = builder.Where("id IN (?)", existIds)
+					builder = builder.Where("archives.id IN (?)", existIds)
 				} else {
-					builder = builder.Where("id = 0")
+					builder = builder.Where("archives.id = 0")
 				}
 			}
 		}
 		builder = builder.Limit(pageSize).Offset(offset).Order(order)
 		var archiveIds []int64
-		builder.Pluck("id", &archiveIds)
+		builder.Select("archives.id").Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
 				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
@@ -1635,7 +1635,7 @@ func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) err
 func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
 	var relationIds []int64
-	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Distinct("archive_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Group("archive_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
 		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {

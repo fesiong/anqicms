@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
@@ -16,7 +17,24 @@ func PluginGuestbookList(ctx iris.Context) {
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 
-	guestbookList, total, err := currentSite.GetGuestbookList(keyword, currentPage, pageSize)
+	guestbookList, total, err := currentSite.GetGuestbookList(func(tx *gorm.DB) *gorm.DB {
+		if keyword != "" {
+			tx = tx.Where("user_name like ? or contact like ? or content like ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+		}
+		tmpStatus := ctx.URLParam("status")
+		status := -1
+		if tmpStatus == "default" {
+			status = 0
+		} else if tmpStatus == "ok" {
+			status = 1
+		} else if tmpStatus == "spam" {
+			status = 2
+		}
+		if status != -1 {
+			tx = tx.Where("`status` = ?", status)
+		}
+		return tx
+	}, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -30,6 +48,56 @@ func PluginGuestbookList(ctx iris.Context) {
 		"msg":   "",
 		"total": total,
 		"data":  guestbookList,
+	})
+}
+
+func PluginGuestbookUpdateStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.PluginGuestbookDelete
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Id > 0 {
+		//一条
+		guestbook, err := currentSite.GetGuestbookById(req.Id)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+
+		err = currentSite.UpdateGuestbookStatus(guestbook.Id, req.Status)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	} else if len(req.Ids) > 0 {
+		//多条
+		for _, id := range req.Ids {
+			guestbook, err := currentSite.GetGuestbookById(id)
+			if err != nil {
+				continue
+			}
+
+			_ = currentSite.UpdateGuestbookStatus(guestbook.Id, req.Status)
+		}
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateGuestbookStatusLog", req.Id, req.Ids))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("DeleteOperationHasBeenPerformed"),
 	})
 }
 

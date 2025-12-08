@@ -262,7 +262,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		} else if req.Like == "relation" {
 			if categoryId > 0 || req.ModuleId > 0 || len(req.ExcludeCategoryIds) > 0 {
 				archives, total, _ = w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Table("`archives` as archives").Distinct("archives.id").
+					tx = tx.Table("`archives` as archives").Group("archives.id").
 						Joins("INNER JOIN `archive_relations` as t ON archives.id = t.relation_id AND t.archive_id = ? AND archives.`id` != ?", req.Id, req.Id)
 					if w.Content.MultiCategory == 1 && (categoryId > 0 || len(req.ExcludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -295,7 +295,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", req.Id).Pluck("tag_id", &tmpTagIds)
 			if len(tmpTagIds) > 0 {
 				archives, total, _ = w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Table("`archives` as archives").Distinct("archives.id").
+					tx = tx.Table("`archives` as archives").Group("archives.id").
 						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tmpTagIds, req.Id)
 					if w.Content.MultiCategory == 1 && (categoryId > 0 || len(req.ExcludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -379,13 +379,13 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 				archives1, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if w.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Group("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(req.ExcludeCategoryIds) > 0 {
 						if w.Content.MultiCategory == 1 {
-							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
+							tx = tx.Group("archives.id").Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", req.ExcludeCategoryIds)
 						}
@@ -396,13 +396,13 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 				archives2, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if w.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Group("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(req.ExcludeCategoryIds) > 0 {
 						if w.Content.MultiCategory == 1 {
-							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
+							tx = tx.Group("archives.id").Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", req.ExcludeCategoryIds)
 						}

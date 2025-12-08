@@ -316,7 +316,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			archives, _, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
-					tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
+					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id").Group("archives.id")
 				}
 				if categoryId > 0 {
 					if currentSite.Content.MultiCategory == 1 {
@@ -340,7 +340,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		} else if like == "relation" {
 			if categoryId > 0 || moduleId > 0 || len(excludeCategoryIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Table("`archives` as archives").Distinct("archives.id").
+					tx = tx.Table("`archives` as archives").Group("archives.id").
 						Joins("INNER JOIN `archive_relations` as t ON archives.id = t.relation_id AND t.archive_id = ? AND archives.`id` != ?", archiveId, archiveId)
 					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -373,7 +373,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", archiveId).Pluck("tag_id", &tmpTagIds)
 			if len(tmpTagIds) > 0 {
 				archives, total, _ = currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-					tx = tx.Table("`archives` as archives").Distinct("archives.id").
+					tx = tx.Table("`archives` as archives").Group("archives.id").
 						Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?) AND archives.`id` != ?", tmpTagIds, archiveId)
 					if currentSite.Content.MultiCategory == 1 && (categoryId > 0 || len(excludeCategoryIds) > 0) {
 						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -457,13 +457,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives1, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId).Group("archives.id")
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(excludeCategoryIds) > 0 {
 						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds).Group("archives.id")
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 						}
@@ -474,13 +474,13 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				archives2, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 					if currentSite.Content.MultiCategory == 1 {
 						// 多分类支持
-						tx = tx.Distinct("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
+						tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId).Group("archives.id")
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
 					if len(excludeCategoryIds) > 0 {
 						if currentSite.Content.MultiCategory == 1 {
-							tx = tx.Distinct("archives.id").Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds)
+							tx = tx.Where("archive_categories.category_id NOT IN (?)", excludeCategoryIds).Group("archives.id")
 						} else {
 							tx = tx.Where("`category_id` NOT IN (?)", excludeCategoryIds)
 						}
@@ -612,7 +612,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				}
 			}
 			if currentSite.Content.MultiCategory == 1 || needDistinct || flag != "" || len(excludeFlags) > 0 || len(tagIds) > 0 {
-				tx = tx.Distinct("archives.id")
+				tx = tx.Group("archives.id")
 			}
 			if currentSite.Content.MultiCategory == 1 && (len(categoryIds) > 0 || len(excludeCategoryIds) > 0) {
 				tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
