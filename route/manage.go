@@ -271,6 +271,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			guestbook := plugin.Party("/guestbook")
 			{
 				guestbook.Get("/list", manageController.PluginGuestbookList)
+				guestbook.Post("/status", manageController.PluginGuestbookUpdateStatus)
 				guestbook.Post("/delete", manageController.PluginGuestbookDelete)
 				guestbook.Post("/export", manageController.PluginGuestbookExport)
 				guestbook.Get("/setting", manageController.PluginGuestbookSetting)

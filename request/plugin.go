@@ -56,8 +56,9 @@ type PluginAnchorAddFromTitle struct {
 }
 
 type PluginGuestbookDelete struct {
-	Id  uint   `json:"id"`
-	Ids []uint `json:"ids"`
+	Id     uint   `json:"id"`
+	Ids    []uint `json:"ids"`
+	Status int    `json:"status"`
 }
 
 type PluginKeyword struct {
