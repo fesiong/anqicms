@@ -93,7 +93,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 		forceChangeArchiveTitle(db)
 
 		//自动迁移数据库
-		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
+		var models = []interface{}{
 			&model.Admin{},
 			&model.AdminGroup{},
 			&model.AdminLoginLog{},
@@ -150,25 +150,20 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatReplyRule{},
 			&model.TagContent{},
 			&model.ArchiveFavorite{},
-		)
+		}
+		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
 
 		if err != nil {
 			log.Println("migrate table error ", err)
 			return err
 		}
-		// 取消使用 MyISAM 引擎
-		//engine, _ := getTableEngine(db, "archives")
-		//if engine == "MyISAM" {
-		//	db.Exec("ALTER TABLE archives ENGINE=InnoDB")
-		//}
-		//engine, _ = getTableEngine(db, "archive_drafts")
-		//if engine == "MyISAM" {
-		//	db.Exec("ALTER TABLE archive_drafts ENGINE=InnoDB")
-		//}
-		// 先删除deleteAt
-		if db.Migrator().HasColumn(&model.Archive{}, "deleted_at") {
-			db.Unscoped().Where("`deleted_at` is not null").Delete(model.Archive{})
-			_ = db.Migrator().DropColumn(&model.Archive{}, "deleted_at")
+		// 循环所有表，逐个删除 deleted_at
+		for _, table := range models {
+			// 检查表是否有 deleted_at 列
+			if db.Migrator().HasColumn(table, "deleted_at") {
+				db.Unscoped().Where("`deleted_at` is not null").Delete(table)
+				_ = db.Migrator().DropColumn(table, "deleted_at")
+			}
 		}
 		// 转换archives的草稿部分数据到archive_drafts
 		if db.Migrator().HasColumn(&model.Archive{}, "status") {
