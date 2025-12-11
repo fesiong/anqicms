@@ -172,7 +172,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
-	var draft *model.ArchiveDraft
+	var draft model.ArchiveDraft
 	// 一次最多读取1个
 	var maxId int64
 	var minId int64
