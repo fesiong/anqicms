@@ -187,6 +187,7 @@ type PluginTimeFactor struct {
 	DailyUpdate int      `json:"daily_update"` // 自动更新用
 	TodayUpdate int      `json:"today_update"` // 当天更新了多少
 	LastUpdate  int64    `json:"last_update"`  // 最后更新时间
+	Random      bool     `json:"random"`
 
 	UpdateRunning bool `json:"-"`
 }
