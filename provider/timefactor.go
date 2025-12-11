@@ -172,24 +172,34 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
+	var err error
 	var draft model.ArchiveDraft
-	// 一次最多读取1个
-	var maxId int64
-	var minId int64
-	db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
-	db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
-	if maxId <= 0 || minId <= 0 {
-		return
-	}
-	randId := minId
-	if maxId > minId {
-		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-		randId = rd.Int63n(maxId-minId) + minId
-	}
-	err := db.Where("id >= ?", randId).Order("id asc").Take(&draft).Error
-	if err != nil {
-		// 没文章
-		return
+	if setting.Random {
+		// 一次最多读取1个
+		var maxId int64
+		var minId int64
+		db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
+		db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
+		if maxId <= 0 || minId <= 0 {
+			return
+		}
+		randId := minId
+		if maxId > minId {
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			randId = rd.Int63n(maxId-minId) + minId
+		}
+		err = db.Where("id >= ?", randId).Order("id asc").Take(&draft).Error
+		if err != nil {
+			// 没文章
+			return
+		}
+	} else {
+		// 一次最多读取1个
+		err = db.Order("id asc").Take(&draft).Error
+		if err != nil {
+			// 没文章
+			return
+		}
 	}
 	hookCtx := &HookContext{
 		Point: BeforeArchiveRelease,
