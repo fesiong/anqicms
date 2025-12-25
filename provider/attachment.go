@@ -131,9 +131,8 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	// 不是图片的时候的处理方法
 	if isImage != 1 {
-		bts, _ := io.ReadAll(file)
-		fileSize = int64(len(bts))
-		_, err = w.UploadFile(filePath+tmpName, bts)
+		fileSize = info.Size
+		_, err = w.UploadFile(filePath+tmpName, file)
 		if err != nil {
 			return nil, err
 		}
@@ -255,7 +254,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	fileSize = int64(len(buf))
 
 	// 上传原图
-	_, err = w.UploadFile(filePath+tmpName, buf)
+	_, err = w.UploadFile(filePath+tmpName, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +288,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	// 上传缩略图
-	_, err = w.UploadFile(filePath+thumbName, buf)
+	_, err = w.UploadFile(filePath+thumbName, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
@@ -474,7 +473,7 @@ func (w *Website) BuildThumb(fileLocation string) error {
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
 	buf, _, _ := encodeImage(newImg, imgType, quality)
 
-	_, err = w.UploadFile(thumbPath, buf)
+	_, err = w.UploadFile(thumbPath, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -766,7 +765,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.UploadFile(newFile, buf)
+	_, err = w.UploadFile(newFile, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -789,7 +788,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), buf)
+	_, err = w.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
