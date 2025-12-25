@@ -3,11 +3,12 @@ package fulltext
 import (
 	"context"
 	"errors"
+	"log"
+	"strconv"
+
 	client "github.com/zinclabs/sdk-go-zincsearch"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
-	"strconv"
 )
 
 type ZincSearchService struct {
