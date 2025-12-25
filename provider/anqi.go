@@ -526,6 +526,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
+		Demand:   w.AiGenerateConfig.Demand,
 		Async:    true,
 	}
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
