@@ -1935,6 +1935,7 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 					tmpCategory, _ = qia.w.SaveCategory(&request.Category{
 						Title:    categoryTitle,
 						ModuleId: category.ModuleId,
+						ParentId: category.Id,
 						Status:   1,
 						Type:     config.CategoryTypeArchive,
 					})
@@ -2171,6 +2172,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 			}
 		}
 		// 如果分类字段填写的是分类名称
+		parentId := categoryId
 		if colId, ok := existFields["category_title"]; ok {
 			categoryTitle := strings.TrimSpace(row[colId])
 			if len(categoryTitle) > 0 {
@@ -2182,6 +2184,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 					}
 					tmpCategory, err = qia.w.SaveCategory(&request.Category{
 						Title:    categoryTitle,
+						ParentId: parentId,
 						ModuleId: moduleId,
 						Status:   1,
 						Type:     config.CategoryTypeArchive,
@@ -2211,15 +2214,20 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		}
 
 		// 检查标题重复问题
+		var existArchive model.Archive
+		var existInRelease bool
 		if qia.CheckDuplicate {
-			var count int64
-			qia.w.DB.Model(&model.Archive{}).Where("title = ?", archive.Title).Count(&count)
-			if count > 0 {
-				continue
-			}
-			qia.w.DB.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Count(&count)
-			if count > 0 {
-				continue
+			err = qia.w.DB.Model(&model.Archive{}).Where("title = ?", archive.Title).Last(&existArchive).Error
+			if err == nil {
+				archive.Id = existArchive.Id
+				archive.CreatedTime = existArchive.CreatedTime
+				existInRelease = true
+			} else {
+				err = qia.w.DB.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Last(&existArchive).Error
+				if err == nil {
+					archive.Id = existArchive.Id
+					archive.CreatedTime = existArchive.CreatedTime
+				}
 			}
 		}
 		// 步进
@@ -2382,16 +2390,16 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		// 先对主表进行入库
 		tx := qia.w.DB.Begin()
 		// 需要写入表 archive_category, archive_data，archives, archive_drafts, tag_data, tag
-		if qia.PlanType != 0 {
-			// 入库到 draft
-			err = tx.Save(&archive).Error
+		if existInRelease || qia.PlanType == 0 {
+			// release mode
+			err = tx.Save(&archive.Archive).Error
 			if err != nil {
 				tx.Rollback()
 				continue
 			}
 		} else {
-			// release mode
-			err = tx.Save(&archive.Archive).Error
+			// 入库到 draft
+			err = tx.Save(&archive).Error
 			if err != nil {
 				tx.Rollback()
 				continue
