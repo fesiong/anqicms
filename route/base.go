@@ -100,7 +100,7 @@ func Register(app *iris.Application) {
 		api.Get("/retailer/members", middleware.UserAuth, controller.ApiGetRetailerMembers)
 		api.Get("/retailer/commissions", middleware.UserAuth, controller.ApiGetRetailerCommissions)
 		api.Get("/favorite/list", middleware.UserAuth, controller.ApiGetFavorites)
-		api.Get("/favorite/check", middleware.UserAuth, controller.ApiCheckFavorites)
+		api.Post("/favorite/check", middleware.UserAuth, controller.ApiCheckFavorites)
 		api.Post("/favorite/add", middleware.UserAuth, controller.ApiAddFavorite)
 		api.Post("/favorite/delete", middleware.UserAuth, controller.ApiDeleteFavorite)
 		// 发布文档
