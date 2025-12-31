@@ -75,6 +75,7 @@ type AnqiAttachmentResult struct {
 type AnqiAiRequest struct {
 	Keyword    string `json:"keyword"`
 	Demand     string `json:"demand"`
+	Prompt     string `json:"prompt"`
 	Language   string `json:"language"`
 	ToLanguage string `json:"to_language"`
 	Title      string `json:"title"`
@@ -154,6 +155,11 @@ type AnqiExtractResult struct {
 	Code int      `json:"code"`
 	Msg  string   `json:"msg"`
 	Data []string `json:"data"`
+}
+
+type AnqiAiChatResult struct {
+	Status  int    `json:"status"`
+	Content string `json:"content"`
 }
 
 type AnqiTranslateHtmlRequest struct {
