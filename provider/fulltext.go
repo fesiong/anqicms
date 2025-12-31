@@ -3,11 +3,12 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"log"
+
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider/fulltext"
-	"log"
 )
 
 const (
@@ -63,6 +64,9 @@ func (w *Website) InitFulltext(focus bool) {
 		return
 	}
 	if focus || w.PluginFulltext.Initialed == false {
+		// index
+		w.searcher.Index(nil)
+
 		w.fulltextStatus.Total = w.GetExplainCount(w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Model(&model.Archive{}).Where("`module_id` IN(?)", w.PluginFulltext.Modules).Find(&[]*model.Archive{})
 		}))

@@ -46,6 +46,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
+			anqi.Post("/ai/chat", manageController.AuthAiChat)
 			anqi.Post("/extract/keywords", manageController.AuthExtractKeywords)
 			anqi.Post("/extract/description", manageController.AuthExtractDescription)
 			anqi.Post("/restart", manageController.RestartAnqicms)

@@ -1,12 +1,19 @@
 package manageController
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"github.com/kataras/iris/v12"
 	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"net/http"
+	"regexp"
 	"strings"
 	"time"
 )
@@ -414,6 +421,167 @@ func AuthAiGenerateStreamData(ctx iris.Context) {
 		"msg":  "",
 		"data": content,
 	})
+}
+
+func AuthAiChat(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req provider.AnqiAiRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.ContentType("text/event-stream")
+	ctx.Header("Cache-Control", "no-cache")
+	ctx.Header("Connection", "keep-alive")
+	isFirst := true
+	if currentSite.AiGenerateConfig.AiEngine != config.AiEngineDefault {
+		if currentSite.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+			if !currentSite.AiGenerateConfig.ApiValid {
+				ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", currentSite.Tr("InterfaceUnavailable")))
+				return
+			}
+			key := currentSite.GetOpenAIKey()
+			if key == "" {
+				ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", currentSite.Tr("NoAvailableKey")))
+				return
+			}
+			stream, err := currentSite.GetOpenAIStreamResponse(key, req.Prompt)
+			if err != nil {
+				msg := err.Error()
+				re, _ := regexp.Compile(`code: (\d+),`)
+				match := re.FindStringSubmatch(msg)
+				if len(match) > 1 {
+					if match[1] == "401" || match[1] == "429" {
+						// Key 已失效
+						currentSite.SetOpenAIKeyInvalid(key)
+					}
+				}
+				ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", msg))
+				return
+			}
+			defer stream.Close()
+			for {
+				resp, err2 := stream.Recv()
+				if errors.Is(err2, io.EOF) {
+					break
+				}
+				if err2 != nil {
+					err = err2
+					fmt.Printf("\nStream error: %v\n", err2)
+					break
+				}
+				tmpData := provider.AnqiAiChatResult{
+					Content: resp.Choices[0].Delta.Content,
+					Status:  1,
+				}
+				if isFirst {
+					tmpData.Status = 0
+					isFirst = false
+				}
+				tmpDataJson, _ := json.Marshal(tmpData)
+				ctx.WriteString(fmt.Sprintf("data: %s\n\n", tmpDataJson))
+				ctx.ResponseWriter().Flush()
+			}
+			if err != nil {
+				if strings.Contains(err.Error(), "You exceeded your current quota") {
+					currentSite.SetOpenAIKeyInvalid(key)
+				}
+				ctx.WriteString(fmt.Sprintf("data: {\"status\": 2, \"content\": \"%s\"}\n\n", err.Error()))
+			} else {
+				time.Sleep(2 * time.Second)
+				ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", ""))
+			}
+			ctx.ResponseWriter().Flush()
+		} else if currentSite.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+			buf, _, err := provider.GetSparkStream(currentSite.AiGenerateConfig.Spark, req.Prompt)
+			if err != nil {
+				ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", err.Error()))
+				return
+			}
+			for {
+				line := <-buf
+
+				if line == "EOF" {
+					break
+				}
+				tmpData := provider.AnqiAiChatResult{
+					Content: line,
+					Status:  1,
+				}
+				if isFirst {
+					tmpData.Status = 0
+					isFirst = false
+				}
+				tmpDataJson, _ := json.Marshal(tmpData)
+				ctx.WriteString(fmt.Sprintf("data: %s\n\n", tmpDataJson))
+				ctx.ResponseWriter().Flush()
+			}
+			ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", ""))
+		} else {
+			// 错误
+			ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", currentSite.Tr("NoAiGenerationSourceSelected")))
+			return
+		}
+	} else {
+		client := &http.Client{
+			Timeout: 300 * time.Second,
+		}
+		buf, _ := json.Marshal(req)
+		anqiReq, err := http.NewRequest("POST", provider.AnqiApi+"/ai/chat", bytes.NewReader(buf))
+		if err != nil {
+			ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", err.Error()))
+			return
+		}
+		anqiReq.Header.Add("token", config.AnqiUser.Token)
+		anqiReq.Header.Add("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
+		anqiReq.Header.Add("domain", currentSite.System.BaseUrl)
+		resp, err := client.Do(anqiReq)
+		if err != nil {
+			ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", err.Error()))
+			return
+		}
+
+		// 开始处理
+		defer resp.Body.Close()
+		reader := bufio.NewReader(resp.Body)
+		for {
+			line, err2 := reader.ReadBytes('\n')
+			var isEof bool
+			if err2 != nil {
+				isEof = true
+			}
+			var aiResponse provider.AnqiAiStreamResult
+			err2 = json.Unmarshal(line, &aiResponse)
+			if err2 != nil {
+				if isEof {
+					time.Sleep(1 * time.Second)
+					ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", ""))
+					break
+				}
+				continue
+			}
+			tmpData := provider.AnqiAiChatResult{
+				Content: aiResponse.Data,
+				Status:  1,
+			}
+			if isFirst {
+				tmpData.Status = 0
+				isFirst = false
+			}
+			tmpDataJson, _ := json.Marshal(tmpData)
+			ctx.WriteString(fmt.Sprintf("data: %s\n\n", tmpDataJson))
+			ctx.ResponseWriter().Flush()
+
+			if aiResponse.Code != 0 {
+				ctx.WriteString(fmt.Sprintf("event: close\ndata: {\"status\": 2, \"content\": \"%s\"}\n\n", aiResponse.Msg))
+				return
+			}
+		}
+	}
 }
 
 func RestartAnqicms(ctx iris.Context) {

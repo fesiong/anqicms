@@ -151,6 +151,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.TagContent{},
 			&model.ArchiveFavorite{},
 		}
+		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
 
 		if err != nil {

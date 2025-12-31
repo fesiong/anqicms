@@ -3,14 +3,15 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/wechat"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"log"
-	"time"
 )
 
 func (w *Website) GetWithdrawList(page, pageSize int) ([]*model.UserWithdraw, int64) {
@@ -111,7 +112,7 @@ func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawRequest) erro
 var withdrawRunning = false
 
 func (w *Website) CheckWithdrawToWechat() {
-	if w.DB == nil || w.PluginPay == nil {
+	if w.DB == nil || w.PluginPay == nil || !w.PluginPay.WechatOpen {
 		return
 	}
 	if withdrawRunning {

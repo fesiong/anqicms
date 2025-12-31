@@ -75,6 +75,7 @@ type AnqiAttachmentResult struct {
 type AnqiAiRequest struct {
 	Keyword    string `json:"keyword"`
 	Demand     string `json:"demand"`
+	Prompt     string `json:"prompt"`
 	Language   string `json:"language"`
 	ToLanguage string `json:"to_language"`
 	Title      string `json:"title"`
@@ -154,6 +155,11 @@ type AnqiExtractResult struct {
 	Code int      `json:"code"`
 	Msg  string   `json:"msg"`
 	Data []string `json:"data"`
+}
+
+type AnqiAiChatResult struct {
+	Status  int    `json:"status"`
+	Content string `json:"content"`
 }
 
 type AnqiTranslateHtmlRequest struct {
@@ -526,6 +532,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
+		Demand:   w.AiGenerateConfig.Demand,
 		Async:    true,
 	}
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {

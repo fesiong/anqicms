@@ -1,12 +1,15 @@
 package fulltext
 
 import (
+	"encoding/json"
 	"fmt"
+	"log"
+	"strconv"
+	"time"
+
 	"github.com/meilisearch/meilisearch-go"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
-	"strconv"
 )
 
 type MeiliSearchService struct {
@@ -31,7 +34,23 @@ func NewMeiliSearchService(cfg *config.PluginFulltextConfig, indexName string) (
 }
 
 func (s *MeiliSearchService) Index(body interface{}) error {
-	// no need to add first
+	index := s.apiClient.Index(s.indexName)
+
+	task, err := index.UpdateSearchableAttributes(&[]string{"title", "keywords", "description", "content"})
+	if err != nil {
+		log.Println("配置可搜索属性失败: ", err)
+		return err
+	}
+	for {
+		time.Sleep(1 * time.Second)
+		task2, _ := s.apiClient.GetTask(task.TaskUID)
+		log.Printf("task status %v", task2.Status)
+		if task2.Status == "succeeded" {
+			break
+		}
+	}
+
+	fmt.Println("已成功配置搜索属性。")
 
 	return nil
 }
@@ -128,36 +147,36 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 		log.Printf("Full HTTP response: %v\n", resp)
 		return nil, 0, err
 	}
-
 	var docs = make([]TinyArchive, 0, pageSize)
 	for _, hit := range resp.Hits {
-		id, _ := strconv.ParseInt(string(hit["id"]), 10, 64)
+		var idStr string
+		json.Unmarshal(hit["id"], &idStr)
+		id, _ := strconv.ParseInt(idStr, 10, 64)
 		doc := TinyArchive{
 			Id: id,
 		}
 		if _, ok := hit["type"]; ok {
-			doc.Type = string(hit["type"])
+			json.Unmarshal(hit["type"], &doc.Type)
 		}
 		if _, ok := hit["title"]; ok {
-			doc.Title = string(hit["title"])
+			json.Unmarshal(hit["title"], &doc.Title)
 		}
 		if _, ok := hit["description"]; ok {
-			doc.Description = string(hit["description"])
+			json.Unmarshal(hit["description"], &doc.Description)
 		}
 		if _, ok := hit["content"]; ok {
-			doc.Content = string(hit["content"])
+			json.Unmarshal(hit["content"], &doc.Content)
 		}
 		if _, ok := hit["keywords"]; ok {
-			doc.Keywords = string(hit["keywords"])
+			json.Unmarshal(hit["keywords"], &doc.Keywords)
 		}
 		if _, ok := hit["module_id"]; ok {
-			tmpId, _ := strconv.ParseUint(string(hit["module_id"]), 10, 64)
-			doc.ModuleId = uint(tmpId)
+			json.Unmarshal(hit["module_id"], &doc.ModuleId)
 		}
 		doc.Id, doc.Type = GetId(id)
 		docs = append(docs, doc)
 	}
-	total := resp.TotalHits
+	total := resp.EstimatedTotalHits
 
 	return docs, total, nil
 }

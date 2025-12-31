@@ -552,7 +552,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				logoPath := mainSite.PublicPath + strings.TrimPrefix(attachment.FileLocation, "/")
 				logoBuf, err := os.ReadFile(logoPath)
 				if err == nil {
-					_, err = targetSite.UploadFile(attachment.FileLocation, logoBuf)
+					_, err = targetSite.UploadFile(attachment.FileLocation, bytes.NewReader(logoBuf))
 				}
 				// 复制 thumb
 				paths, fileName := filepath.Split(attachment.FileLocation)
@@ -560,7 +560,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				thumbPath := mainSite.PublicPath + strings.TrimPrefix(thumbLocation, "/")
 				thumbBuf, err := os.ReadFile(thumbPath)
 				if err == nil {
-					_, err = targetSite.UploadFile(thumbLocation, thumbBuf)
+					_, err = targetSite.UploadFile(thumbLocation, bytes.NewReader(thumbBuf))
 				}
 			}
 		}

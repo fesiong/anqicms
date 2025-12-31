@@ -218,6 +218,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 			prompt += "1. Fully understand the meaning of the title and determine a theme for the article; 2. The word count of the article should be 1000-1500 words, avoiding being lengthy and pursuing clear expression; 3. Natural citation without obvious traces; Rigorous logic, coherent and unambiguous content; 4. Incorporate keywords appropriately and avoid piling them up; 5. The article needs a title, which should be placed on the first line; 6. Key content should be marked in bold, italics, etc., and the originality of the article should be ensured to be above 90%; 8. The article does not require a conclusion."
 		}
 	}
+	library.DebugLog(config.ExecPath+"cache/", "ailog.log", "ai engine: ", w.AiGenerateConfig.AiEngine, "prompt: ", prompt)
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI || w.AiGenerateConfig.AiEngine == config.AiEngineDeepSeek {
 		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 			if !w.AiGenerateConfig.ApiValid {
@@ -230,6 +231,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 		}
 		// DeepSeek和openai共用一个处理方法
 		result, err = w.GetOpenAIResponse(key, prompt)
+		library.DebugLog(config.ExecPath+"cache/", "ailog.log", "result: ", prompt)
 		if err != nil {
 			if result.Code == 401 || result.Code == 429 {
 				w.SetOpenAIKeyInvalid(key)
@@ -238,6 +240,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 		}
 	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
 		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
+		library.DebugLog(config.ExecPath+"cache/", "ailog.log", "result: ", prompt)
 		if err != nil {
 			return nil, err
 		}

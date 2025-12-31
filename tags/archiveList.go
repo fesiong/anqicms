@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -536,6 +537,33 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		if len(searchCatIds) > 0 {
 			cats := currentSite.GetCacheCategoriesByIds(searchCatIds)
+			// 将cats 按 searchCatIds 顺序排列
+			idToIndex := make(map[uint]int)
+			// 建立ID到索引的映射关系
+			for i, id := range searchCatIds {
+				idToIndex[id] = i
+			}
+
+			// 按照映射的索引进行排序
+			sort.Slice(cats, func(i, j int) bool {
+				indexI, existsI := idToIndex[cats[i].Id]
+				indexJ, existsJ := idToIndex[cats[j].Id]
+
+				// 如果两个ID都在指定列表中，则按指定顺序排序
+				if existsI && existsJ {
+					return indexI < indexJ
+				}
+				// 如果只有i在列表中，则i排在前面
+				if existsI && !existsJ {
+					return true
+				}
+				// 如果只有j在列表中，则j排在前面
+				if !existsI && existsJ {
+					return false
+				}
+				// 如果都不在列表中，则保持原有顺序
+				return i < j
+			})
 			for _, cat := range cats {
 				cat.Link = currentSite.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
@@ -560,6 +588,33 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		if len(searchTagIds) > 0 {
 			tags := currentSite.GetTagsByIds(searchTagIds)
+			// 将tags 按 searchTagIds 顺序排列
+			idToIndex := make(map[uint]int)
+			// 建立ID到索引的映射关系
+			for i, id := range searchTagIds {
+				idToIndex[id] = i
+			}
+
+			// 按照映射的索引进行排序
+			sort.Slice(tags, func(i, j int) bool {
+				indexI, existsI := idToIndex[tags[i].Id]
+				indexJ, existsJ := idToIndex[tags[j].Id]
+
+				// 如果两个ID都在指定列表中，则按指定顺序排序
+				if existsI && existsJ {
+					return indexI < indexJ
+				}
+				// 如果只有i在列表中，则i排在前面
+				if existsI && !existsJ {
+					return true
+				}
+				// 如果只有j在列表中，则j排在前面
+				if !existsI && existsJ {
+					return false
+				}
+				// 如果都不在列表中，则保持原有顺序
+				return i < j
+			})
 			for _, tag := range tags {
 				tag.Link = currentSite.GetUrl("tag", tag, 0)
 				tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
@@ -687,9 +742,51 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			// 如果不是分页，则不查询count
 			currentPage = 0
 		}
-		archives, total, _ = currentSite.GetArchiveList(ops, order, currentPage, limit, offset)
+		tmpPage := currentPage
+		if fulltextSearch {
+			tmpPage = 1
+		}
+		archives, total, _ = currentSite.GetArchiveList(ops, order, tmpPage, limit, offset)
 		if fulltextSearch {
 			total = fulltextTotal
+		}
+		// 如果存在 argIds 或 ids，则按他们的顺序排序
+		if len(argIds) > 0 || len(ids) > 0 {
+			// 创建ID到位置索引的映射
+			idToIndex := make(map[int64]int)
+			var sortIds []int64
+
+			if len(argIds) > 0 {
+				sortIds = argIds
+			} else {
+				sortIds = ids
+			}
+
+			// 建立ID到索引的映射关系
+			for i, id := range sortIds {
+				idToIndex[id] = i
+			}
+
+			// 按照映射的索引进行排序
+			sort.Slice(archives, func(i, j int) bool {
+				indexI, existsI := idToIndex[archives[i].Id]
+				indexJ, existsJ := idToIndex[archives[j].Id]
+
+				// 如果两个ID都在指定列表中，则按指定顺序排序
+				if existsI && existsJ {
+					return indexI < indexJ
+				}
+				// 如果只有i在列表中，则i排在前面
+				if existsI && !existsJ {
+					return true
+				}
+				// 如果只有j在列表中，则j排在前面
+				if !existsI && existsJ {
+					return false
+				}
+				// 如果都不在列表中，则保持原有顺序
+				return i < j
+			})
 		}
 	}
 	var archiveIds = make([]int64, 0, len(archives))
