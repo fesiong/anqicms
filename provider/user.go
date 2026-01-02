@@ -639,7 +639,7 @@ func (w *Website) DownloadAvatar(avatarUrl string, userInfo *model.User) {
 	//生成用户文件
 	tmpName := fmt.Sprintf("%010d.jpg", userInfo.Id)
 	filePath := fmt.Sprintf("/uploads/avatar/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
-	attach, err := w.DownloadRemoteImage(avatarUrl, filePath)
+	attach, err := w.DownloadRemoteImage(avatarUrl, filePath, 0)
 	if err != nil {
 		return
 	}

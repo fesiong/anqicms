@@ -318,7 +318,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	return attachment, nil
 }
 
-func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attachment, error) {
+func (w *Website) DownloadRemoteImage(src string, fileName string, replaceId uint) (*model.Attachment, error) {
 	resp, body, errs := gorequest.New().Set("referer", src).Timeout(15 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
@@ -346,7 +346,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 				Size:     int64(len(body)),
 			}
 
-			return w.AttachmentUpload(tmpfile, fileHeader, 0, 0, 0)
+			return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
 		} else {
 			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}

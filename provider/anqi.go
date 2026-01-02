@@ -18,6 +18,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -88,6 +89,13 @@ type AnqiAiRequest struct {
 
 	Type  int   `json:"type"`
 	ReqId int64 `json:"req_id"`
+}
+
+type AnqiImageAiRequest struct {
+	Image  string `json:"image"` // 图生图的时候提供，格式：仅支持其中一种方式：- 通过图片 URL 传入远程图像（字符串，格式为 URI）- 通过base64传输图像，格式为 base64 编码的字符串
+	Prompt string `json:"prompt"`
+	Size   string `json:"size"`
+	Type   int    `json:"type"` // 0 = 文生图，2 = 图生图
 }
 
 type AnqiTranslateTextRequest struct {
@@ -186,6 +194,29 @@ type AnqiTranslateHtmlResponse struct {
 	Code int                     `json:"code"`
 	Msg  string                  `json:"msg"`
 	Data AnqiTranslateHtmlResult `json:"data"`
+}
+
+type AnqiAiImage struct {
+	Id          int    `json:"id"`
+	Usage       int64  `json:"usage"` // 本次请求用量，Token，单次 10000 Token
+	Prompt      string `json:"prompt"`
+	Type        int    `json:"type"`   // 0 文生图，2 图生图 ...
+	Status      string `json:"status"` // waiting / in_progress / success / failure / cancelled
+	Result      string `json:"result"` // 链接，有效期1天
+	CreatedTime int64  `json:"created_time"`
+}
+
+type AnqiImageAiResult struct {
+	Code int         `json:"code"`
+	Msg  string      `json:"msg"`
+	Data AnqiAiImage `json:"data"`
+}
+
+type AnqiImageAiHistoriesResult struct {
+	Code  int           `json:"code"`
+	Msg   string        `json:"msg"`
+	Data  []AnqiAiImage `json:"data"`
+	Total int64         `json:"total"`
 }
 
 // AnqiLogin
@@ -1138,6 +1169,33 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 	AddTranslateHtmlLog(&res.Data)
 
 	return res.Data.Html, nil
+}
+
+func (w *Website) AnqiGetImageAiResponse(req *AnqiImageAiRequest) (*AnqiAiImage, error) {
+	var result AnqiImageAiResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/image").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+	log.Printf("AnqiGetImageAiResponse: %#v", result)
+
+	return &result.Data, nil
+}
+
+func (w *Website) AnqiGetAiGenerateImageHistories(page int, pageSize int) ([]AnqiAiImage, int64) {
+	var result AnqiImageAiHistoriesResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Get(AnqiApi + "/ai/image/histories").Query(map[string]string{
+		"page":  strconv.Itoa(page),
+		"limit": strconv.Itoa(pageSize),
+	}).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, 0
+	}
+
+	return result.Data, result.Total
 }
 
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
