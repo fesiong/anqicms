@@ -2,10 +2,11 @@ package provider
 
 import (
 	"context"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
 	"math/rand"
 	"time"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) TryToRunTimeFactor() {
@@ -176,17 +177,21 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	var draft model.ArchiveDraft
 	if setting.Random {
 		// 一次最多读取1个
-		var maxId int64
-		var minId int64
-		db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
-		db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
-		if maxId <= 0 || minId <= 0 {
+		var maxId struct {
+			MaxId int64 `json:"max_id"`
+		}
+		var minId struct {
+			MinId int64 `json:"min_id"`
+		}
+		db.WithContext(context.Background()).Select("max(id) as max_id").Take(&maxId)
+		db.WithContext(context.Background()).Select("min(id) as min_id").Take(&minId)
+		if maxId.MaxId <= 0 || minId.MinId <= 0 {
 			return
 		}
-		randId := minId
-		if maxId > minId {
+		randId := minId.MinId
+		if maxId.MaxId > minId.MinId {
 			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-			randId = rd.Int63n(maxId-minId) + minId
+			randId = rd.Int63n(maxId.MaxId-minId.MinId) + minId.MinId
 		}
 		err = db.Where("id >= ?", randId).Order("id asc").Take(&draft).Error
 		if err != nil {

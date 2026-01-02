@@ -1374,9 +1374,9 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		}
 
 		// 自动同步验签（只支持证书模式）
-		certPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
-		rootCertPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
-		publicCertPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
+		certPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
+		rootCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
+		publicCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
 		publicKey, err := os.ReadFile(publicCertPath)
 		if err != nil {
 			return err

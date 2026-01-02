@@ -3,19 +3,23 @@ package manageController
 import (
 	"bufio"
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"net/http"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func AnqiLogin(ctx iris.Context) {
@@ -582,6 +586,123 @@ func AuthAiChat(ctx iris.Context) {
 			}
 		}
 	}
+}
+
+func AuthAiGenerateImage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req provider.AnqiImageAiRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Prompt == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("PromptCannotBeEmpty"),
+		})
+		return
+	}
+	if req.Image != "" {
+		resp, err := library.GetURLData(req.Image, "", 30)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		// 生成base64字符串
+		req.Image = base64.StdEncoding.EncodeToString([]byte(resp.Body))
+	}
+	// 开始提交生图
+	aiResp, err := currentSite.AnqiGetImageAiResponse(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": aiResp,
+	})
+}
+
+type AuthAiImageConfirmRequest struct {
+	Action    int    `json:"action"` // 0: 舍弃 1: 保存
+	Url       string `json:"url"`    // 图片地址
+	Title     string `json:"title"`  // 标题
+	Replace   bool   `json:"replace"`
+	ReplaceId int    `json:"replace_id"` // attach id
+}
+
+func AuthAiGenerateImageConfirm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req AuthAiImageConfirmRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Action == 1 {
+		// 保存到 数据库
+		if req.Replace && req.ReplaceId > 0 {
+			attach, err := currentSite.GetAttachmentById(uint(req.ReplaceId))
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  err.Error(),
+				})
+				return
+			}
+			if req.Title == "" {
+				req.Title = attach.FileName
+			}
+		} else {
+			req.ReplaceId = 0
+		}
+		if len(req.Title) == 0 {
+			req.Title = filepath.Base(req.Url)
+		}
+
+		_, err := currentSite.DownloadRemoteImage(req.Url, req.Title, uint(req.ReplaceId))
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+	})
+}
+
+func AuthAiGenerateImageHistories(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+
+	histories, total := currentSite.AnqiGetAiGenerateImageHistories(currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  histories,
+	})
 }
 
 func RestartAnqicms(ctx iris.Context) {
