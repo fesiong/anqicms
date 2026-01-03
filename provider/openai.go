@@ -3,9 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"github.com/sashabaranov/go-openai"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -15,6 +12,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/sashabaranov/go-openai"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 )
 
 type OpenAIResult struct {
@@ -24,7 +25,8 @@ type OpenAIResult struct {
 }
 
 func (w *Website) SelfAiTranslate(content string, toLanguage string) (string, error) {
-	prompt := "请将下列文字翻译成" + toLanguage + "：\n" + content
+	langName := library.GetLanguageCnName(toLanguage) + "(" + library.GetLanguageName(toLanguage) + ")"
+	prompt := "请将下列文字翻译成" + langName + "，请直接返回翻译结果，不要返回任何其他额外的内容：\n" + content
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 		if !w.AiGenerateConfig.ApiValid {
 			return "", errors.New(w.Tr("InterfaceUnavailable"))

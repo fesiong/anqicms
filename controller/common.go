@@ -487,17 +487,22 @@ func ReRouteContext(ctx iris.Context) {
 						uri = parsed.String()
 					}
 				}
-				content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
-				if err != nil {
-					log.Println("translate err", err)
-					// 翻译错误的时候，就设置 no-index
-					// x-robots-tag: noindex, follow
-					ctx.Header("X-Robots-Tag", "noindex, follow")
+				// 多语言站点下，static 目录 和 uploads 目录需特殊处理
+				if strings.HasPrefix(uri, "/static/") || strings.HasPrefix(uri, "/uploads/") {
+					// 能走到这里的，就表示这些资源不存在，直接跳过翻译环节，减少资源消耗
+				} else if strings.HasPrefix(uri, "/") {
+					content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
+					if err != nil {
+						log.Println("translate err", err)
+						// 翻译错误的时候，就设置 no-index
+						// x-robots-tag: noindex, follow
+						ctx.Header("X-Robots-Tag", "noindex, follow")
+					}
+					ctx.ContentType(context.ContentHTMLHeaderValue)
+					ctx.Header("Content-Language", langSite.Language)
+					ctx.WriteString(content)
+					return
 				}
-				ctx.ContentType(context.ContentHTMLHeaderValue)
-				ctx.Header("Content-Language", langSite.Language)
-				ctx.WriteString(content)
-				return
 			}
 		}
 		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
