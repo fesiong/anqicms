@@ -899,6 +899,7 @@ func (w *Website) GetGoogleAuthSetting() *config.PluginGoogleAuthConfig {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &cfg)
 	}
+	cfg.RedirectUrl = w.System.BaseUrl + "/login/google"
 
 	return &cfg
 }

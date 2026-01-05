@@ -3,14 +3,15 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"log"
+	"strings"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/xlog"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
-	"strings"
-	"time"
 )
 
 type PaypalWebhookResource struct {
@@ -94,7 +95,6 @@ func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) {
 	default:
 		xlog.Warnf("Unhandled event type: %s", event.EventType)
 	}
-
 }
 
 func (w *Website) isDuplicateEvent(ctx context.Context, eventId string) bool {

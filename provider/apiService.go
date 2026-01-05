@@ -4,6 +4,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
+	"net/url"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"unicode"
+
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -11,12 +19,6 @@ import (
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"log"
-	"math"
-	"regexp"
-	"strconv"
-	"strings"
-	"unicode"
 )
 
 func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive, error) {
@@ -201,7 +203,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		}
 	}
 	module = w.GetModuleFromCache(uint(req.ModuleId))
-
+	if req.TagId > 0 {
+		req.TagIds = append(req.TagIds, req.TagId)
+	}
 	var tmpResult = make([]*model.Archive, 0, req.Limit)
 	var archives []*model.Archive
 	var total int64
@@ -434,7 +438,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		var ids []int64
 		var searchCatIds []uint
 		var searchTagIds []uint
-		if req.Type == "page" && len(req.Q) > 0 {
+		if len(req.Q) > 0 {
 			var tmpDocs []fulltext.TinyArchive
 			tmpDocs, fulltextTotal, err2 = w.Search(req.Q, uint(req.ModuleId), req.Page, req.Limit)
 			if err2 == nil {
@@ -458,6 +462,33 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		}
 		if len(searchCatIds) > 0 {
 			cats := w.GetCacheCategoriesByIds(searchCatIds)
+			// 将cats 按 searchCatIds 顺序排列
+			idToIndex := make(map[uint]int)
+			// 建立ID到索引的映射关系
+			for i, id := range searchCatIds {
+				idToIndex[id] = i
+			}
+
+			// 按照映射的索引进行排序
+			sort.Slice(cats, func(i, j int) bool {
+				indexI, existsI := idToIndex[cats[i].Id]
+				indexJ, existsJ := idToIndex[cats[j].Id]
+
+				// 如果两个ID都在指定列表中，则按指定顺序排序
+				if existsI && existsJ {
+					return indexI < indexJ
+				}
+				// 如果只有i在列表中，则i排在前面
+				if existsI && !existsJ {
+					return true
+				}
+				// 如果只有j在列表中，则j排在前面
+				if !existsI && existsJ {
+					return false
+				}
+				// 如果都不在列表中，则保持原有顺序
+				return i < j
+			})
 			for _, cat := range cats {
 				cat.Link = w.GetUrl("category", cat, 0)
 				tmpResult = append(tmpResult, &model.Archive{
@@ -482,6 +513,33 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		}
 		if len(searchTagIds) > 0 {
 			tags := w.GetTagsByIds(searchTagIds)
+			// 将tags 按 searchTagIds 顺序排列
+			idToIndex := make(map[uint]int)
+			// 建立ID到索引的映射关系
+			for i, id := range searchTagIds {
+				idToIndex[id] = i
+			}
+
+			// 按照映射的索引进行排序
+			sort.Slice(tags, func(i, j int) bool {
+				indexI, existsI := idToIndex[tags[i].Id]
+				indexJ, existsJ := idToIndex[tags[j].Id]
+
+				// 如果两个ID都在指定列表中，则按指定顺序排序
+				if existsI && existsJ {
+					return indexI < indexJ
+				}
+				// 如果只有i在列表中，则i排在前面
+				if existsI && !existsJ {
+					return true
+				}
+				// 如果只有j在列表中，则j排在前面
+				if !existsI && existsJ {
+					return false
+				}
+				// 如果都不在列表中，则保持原有顺序
+				return i < j
+			})
 			for _, tag := range tags {
 				tag.Link = w.GetUrl("tag", tag, 0)
 				tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
@@ -510,17 +568,58 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			}
 			if req.Flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", req.Flag)
+			} else if len(req.ExcludeFlags) > 0 {
+				tx = tx.Joins("LEFT JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag IN (?)", req.ExcludeFlags).Where("archive_flags.archive_id IS NULL")
 			}
-			if len(req.ExtraFields) > 1 {
-				for key, v := range req.ExtraFields {
-					// 如果有筛选条件，从这里开始筛选
-					// 验证字段名是否合法，防止SQL注入
-					if !regexp.MustCompile(`^[a-zA-Z0-9_]+$`).MatchString(key) {
-						continue
+			needDistinct := false
+			if len(req.ExtraFields) > 0 {
+				needDistinct = true
+				// 先查询module 的字段
+				module = w.GetModuleFromCache(uint(req.ModuleId))
+				if module != nil && len(module.Fields) > 0 {
+					var fields [][2]interface{}
+					for _, v := range module.Fields {
+						// 如果有筛选条件，从这里开始筛选
+						if param, ok := req.ExtraFields[v.FieldName]; ok && param != "" {
+							paramValues := strings.Split(fmt.Sprint(param), ",")
+							var validValues []string
+							for _, val := range paramValues {
+								val = strings.TrimSpace(val)
+								if val != "" {
+									validValues = append(validValues, val)
+								}
+							}
+							if len(validValues) > 1 {
+								fields = append(fields, [2]interface{}{"`" + module.TableName + "`.`" + v.FieldName + "` IN(?)", validValues})
+							} else if len(validValues) == 1 {
+								fields = append(fields, [2]interface{}{"`" + module.TableName + "`.`" + v.FieldName + "` = ?", validValues[0]})
+							}
+						}
 					}
-					tx = tx.Where("`"+key+"` = ?", v)
-
+					if len(fields) > 0 {
+						tx = tx.InnerJoins(fmt.Sprintf("INNER JOIN `%s` on `%s`.id = `archives`.id", module.TableName, module.TableName))
+						for _, field := range fields {
+							tx = tx.Where(field[0], field[1])
+						}
+					}
 				}
+				// 其它字段，价格字段也在这里，skuOptions字段也在这类
+				if tmpPrice, ok := req.ExtraFields["price"]; ok {
+					price := fmt.Sprint(tmpPrice)
+					price = strings.ReplaceAll(price, "~", "-")
+					price = strings.ReplaceAll(price, ",", "-")
+					priceItems := strings.Split(price, "-")
+					minPrice, _ := strconv.Atoi(priceItems[0])
+					if len(priceItems) > 1 {
+						maxPrice, _ := strconv.Atoi(priceItems[1])
+						tx = tx.Where("`price` >= ? AND `price` <= ?", minPrice, maxPrice)
+					} else {
+						tx = tx.Where("`price` >= ?", minPrice)
+					}
+				}
+			}
+			if w.Content.MultiCategory == 1 || needDistinct || req.Flag != "" || len(req.ExcludeFlags) > 0 || len(req.TagIds) > 0 {
+				tx = tx.Group("archives.id")
 			}
 			if w.Content.MultiCategory == 1 && (len(req.CategoryIds) > 0 || len(req.ExcludeCategoryIds) > 0) {
 				tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
@@ -559,16 +658,32 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					tx = tx.Where("`category_id` NOT IN (?)", req.ExcludeCategoryIds)
 				}
 			}
-			if len(ids) > 0 {
+			if len(req.TagIds) > 0 {
+				tx = tx.Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?)", req.TagIds)
+			}
+			if len(req.Ids) > 0 {
+				tx = tx.Where("archives.`id` IN(?)", req.Ids)
+			} else if len(ids) > 0 {
 				tx = tx.Where("archives.`id` IN(?)", ids)
 			} else if req.Q != "" {
-				tx = tx.Where("`title` like ?", "%"+req.Q+"%")
+				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
+				var allArchives int64
+				allArchives = w.GetExplainCount("SELECT id FROM archives")
+				if allArchives > 100000 {
+					tx = tx.Where("`title` like ?", req.Q+"%")
+				} else {
+					tx = tx.Where("`title` like ?", "%"+req.Q+"%")
+				}
 			}
 			return tx
 		}
 		if req.Type != "page" {
 			// 如果不是分页，则不查询count
 			req.Page = 0
+		}
+		tmpPage := req.Page
+		if fulltextSearch {
+			tmpPage = 1
 		}
 		if req.Order != "" {
 			req.Order = ParseOrderBy(req.Order, "archives")
@@ -584,10 +699,51 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		if req.Draft {
 			draftInt = 1
 		}
-		archives, total, _ = w.GetArchiveList(ops, req.Order, req.Page, req.Limit, req.Offset, draftInt)
+		archives, total, _ = w.GetArchiveList(ops, req.Order, tmpPage, req.Limit, req.Offset, draftInt)
 		if fulltextSearch {
 			total = fulltextTotal
 		}
+		// 如果存在 argIds 或 ids，则按他们的顺序排序
+		if len(req.Ids) > 0 || len(ids) > 0 {
+			// 创建ID到位置索引的映射
+			idToIndex := make(map[int64]int)
+			var sortIds []int64
+
+			if len(req.Ids) > 0 {
+				sortIds = req.Ids
+			} else {
+				sortIds = ids
+			}
+			// 建立ID到索引的映射关系
+			for i, id := range sortIds {
+				idToIndex[id] = i
+			}
+
+			// 按照映射的索引进行排序
+			sort.Slice(archives, func(i, j int) bool {
+				indexI, existsI := idToIndex[archives[i].Id]
+				indexJ, existsJ := idToIndex[archives[j].Id]
+
+				// 如果两个ID都在指定列表中，则按指定顺序排序
+				if existsI && existsJ {
+					return indexI < indexJ
+				}
+				// 如果只有i在列表中，则i排在前面
+				if existsI && !existsJ {
+					return true
+				}
+				// 如果只有j在列表中，则j排在前面
+				if !existsI && existsJ {
+					return false
+				}
+				// 如果都不在列表中，则保持原有顺序
+				return i < j
+			})
+		}
+	}
+	var combineArchive *model.Archive
+	if req.CombineId > 0 {
+		combineArchive, _ = w.GetArchiveById(req.CombineId)
 	}
 	var archiveIds = make([]int64, 0, len(archives))
 	for i := range archives {
@@ -595,6 +751,13 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		if len(archives[i].Password) > 0 {
 			archives[i].Password = ""
 			archives[i].HasPassword = true
+		}
+		if combineArchive != nil {
+			if req.CombineMode == "from" {
+				archives[i].Link = w.GetUrl("archive", combineArchive, 0, archives[i])
+			} else {
+				archives[i].Link = w.GetUrl("archive", archives[i], 0, combineArchive)
+			}
 		}
 	}
 
@@ -733,6 +896,37 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 		req.AllText = ""
 	}
 
+	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉，并且不是跟随阅读等级
+	var newParams = make(url.Values)
+	if len(req.UrlParams) > 0 {
+		for k, v := range req.UrlParams {
+			if k == "page" {
+				continue
+			}
+			newParams.Set(k, v)
+		}
+	}
+	newQuery := newParams.Encode()
+	urlMatch := ""
+	var matchData interface{}
+	if req.CategoryId > 0 {
+		category := w.GetCategoryFromCache(uint(req.CategoryId))
+		if category != nil {
+			matchData = category
+			urlMatch = "category"
+		}
+	} else {
+		matchData = module
+		urlMatch = "archiveIndex"
+	}
+
+	urlPatten := w.GetUrl(urlMatch, matchData, 1)
+	if strings.Contains(urlPatten, "?") {
+		urlPatten += "&"
+	} else {
+		urlPatten += "?"
+	}
+
 	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉
 	var filterFields []config.CustomField
 	var filterGroups []response.FilterGroup
@@ -750,17 +944,40 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			if len(values) == 0 {
 				continue
 			}
+			var tmpUrlParam = map[string]bool{}
+			if req.UrlParams != nil && req.UrlParams[v.FieldName] != "" {
+				tmpData := strings.Split(req.UrlParams[v.FieldName], ",")
+				for _, v := range tmpData {
+					tmpUrlParam[v] = true
+				}
+			}
 
 			var filterItems []response.FilterItem
 			if req.AllText != "" {
+				tmpParams, _ := url.ParseQuery(newQuery)
+				tmpParams.Set(v.FieldName, "")
+				isCurrent := false
+				if len(tmpUrlParam) == 0 {
+					isCurrent = true
+				}
 				// 需要插入 全部 标签
 				filterItems = append(filterItems, response.FilterItem{
-					Label: req.AllText,
+					Label:     req.AllText,
+					Link:      urlPatten + tmpParams.Encode(),
+					IsCurrent: isCurrent,
 				})
 			}
 			for _, val := range values {
+				tmpParams, _ := url.ParseQuery(newQuery)
+				tmpParams.Set(v.FieldName, val)
+				isCurrent := false
+				if tmpUrlParam[val] {
+					isCurrent = true
+				}
 				filterItems = append(filterItems, response.FilterItem{
-					Label: val,
+					Label:     val,
+					Link:      urlPatten + tmpParams.Encode(),
+					IsCurrent: isCurrent,
 				})
 			}
 			filterGroups = append(filterGroups, response.FilterGroup{
@@ -774,14 +991,34 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 		// maxPrice
 		var maxPrice int64
 		w.DB.Model(model.Archive{}).Select("max(price)").Scan(&maxPrice)
+		tmpParams, _ := url.ParseQuery(newQuery)
+		tmpParams.Set("price", "0-0")
 		// 把价格范围分成5份
 		filterGroups = append(filterGroups, response.FilterGroup{
 			Name:      "Price",
 			FieldName: "price",
 			Range: response.FilterRange{
-				Max: maxPrice,
-				Min: 0,
+				Max:  int64(math.Ceil(float64(maxPrice) / 100)),
+				Min:  0,
+				Link: urlPatten + tmpParams.Encode(),
 			},
+		})
+	}
+	if req.ShowCategory {
+		categories := w.GetCategoriesFromCache(uint(req.ModuleId), uint(req.ParentId), config.CategoryTypeArchive, false)
+		var categoryItems []response.FilterItem
+		for _, v := range categories {
+			v.Link = w.GetUrl("category", v, 0)
+			categoryItems = append(categoryItems, response.FilterItem{
+				Label:     v.Title,
+				Link:      v.Link,
+				IsCurrent: v.Id == uint(req.CategoryId),
+			})
+		}
+		filterGroups = append(filterGroups, response.FilterGroup{
+			Name:      "Category",
+			FieldName: "category",
+			Items:     categoryItems,
 		})
 	}
 
@@ -1378,8 +1615,6 @@ func (w *Website) ApiGetDiyFields(render bool) []config.ExtraField {
 
 		newFields = append(newFields, field)
 	}
-
-	log.Printf("fields = %#v", fields)
 
 	return fields
 }

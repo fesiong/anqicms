@@ -900,6 +900,18 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 	return nil
 }
 
+func (w *Website) GetTextLogs(toLanguage string) []*model.TranslateTextLog {
+	var textLogs []*model.TranslateTextLog
+	cacheKey := "translate-texts-" + toLanguage
+	err := w.Cache.Get(cacheKey, &textLogs)
+	if err != nil {
+		w.DB.Model(&model.TranslateTextLog{}).Select("to_language", "text", "translated").Where("to_language = ?", toLanguage).Order("id desc").Limit(10000).Find(&textLogs)
+		w.Cache.Set(cacheKey, textLogs, 600)
+	}
+
+	return textLogs
+}
+
 var uriLangLocks = sync.Map{}
 
 // GetOrSetMultiLangCache siteType = single 模式下，翻译缓存的页面内容
@@ -939,8 +951,8 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string) (string, error
 		Html:        string(buf),
 		Language:    w.System.Language,
 		ToLanguage:  lang,
-		IgnoreClass: []string{"languages"},
-		IgnoreId:    []string{"languages"},
+		IgnoreClass: []string{"languages", "language"},
+		IgnoreId:    []string{"languages", "language"},
 	}
 	result, err := w.AnqiTranslateHtml(req)
 	if err != nil {
@@ -948,6 +960,16 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string) (string, error
 		log.Println("translate html failed:", err)
 		return string(buf), err
 	}
+	// 进行一下必要的替换
+	textLogs := w.GetTextLogs(lang)
+	if len(textLogs) > 0 {
+		buf := []byte(result)
+		for _, textLog := range textLogs {
+			buf, _ = w.ReplaceTranslateText(buf, textLog.Text, textLog.Translated)
+		}
+		result = string(buf)
+	}
+
 	// 翻译完毕，修改lang
 	re, _ := regexp.Compile(`(?i)<html.*?>`)
 	result = re.ReplaceAllString(result, fmt.Sprintf(`<html lang="%s">`, req.ToLanguage))

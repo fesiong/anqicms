@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -74,12 +75,29 @@ func ApiArchiveFilters(ctx iris.Context) {
 		showAll = false
 	}
 	showPrice := ctx.URLParamBoolDefault("showPrice", false)
+	showCategory := ctx.URLParamBoolDefault("showCategory", false)
+	parentId := ctx.URLParamInt64Default("parentId", 0)
+	categoryId := ctx.URLParamInt64Default("categoryId", 0)
+
+	var urlParams = map[string]string{}
+	refer, err := url.Parse(ctx.Request().Referer())
+	if err == nil {
+		q := refer.Query()
+
+		for k, v := range q {
+			urlParams[k] = strings.Join(v, ",")
+		}
+	}
 
 	req := request.ApiFilterRequest{
-		ModuleId:  int64(moduleId),
-		ShowAll:   showAll,
-		AllText:   allText,
-		ShowPrice: showPrice,
+		ModuleId:     int64(moduleId),
+		ShowAll:      showAll,
+		AllText:      allText,
+		ShowPrice:    showPrice,
+		ShowCategory: showCategory,
+		ParentId:     parentId,
+		CategoryId:   categoryId,
+		UrlParams:    urlParams,
 	}
 
 	filterGroups, err := currentSite.ApiGetFilters(&req)
@@ -109,6 +127,7 @@ func ApiArchiveList(ctx iris.Context) {
 	showContent := ctx.URLParamBoolDefault("showContent", false)
 	showExtra := ctx.URLParamBoolDefault("showExtra", false)
 	draft := ctx.URLParamBoolDefault("draft", false)
+	showCategory := ctx.URLParamBoolDefault("showCategory", false)
 
 	tmpUserId := ctx.URLParam("userId")
 	if tmpUserId == "self" {
@@ -198,7 +217,7 @@ func ApiArchiveList(ctx iris.Context) {
 	fields = append(fields, "id")
 	if module != nil && len(module.Fields) > 0 {
 		for _, v := range module.Fields {
-			if ctx.URLParamExists(v.FieldName) {
+			if v.FieldName != "type" && ctx.URLParamExists(v.FieldName) {
 				extraFields[v.FieldName] = ctx.URLParam(v.FieldName)
 			}
 		}
@@ -219,6 +238,7 @@ func ApiArchiveList(ctx iris.Context) {
 		ShowFlag:           showFlag,
 		ShowContent:        showContent,
 		ShowExtra:          showExtra,
+		ShowCategory:       showCategory,
 		Draft:              draft,
 		Child:              child,
 		Order:              order,

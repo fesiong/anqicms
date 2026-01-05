@@ -10,6 +10,7 @@ type UserRequest struct {
 	RealName   string `json:"real_name"`
 	FirstName  string `json:"first_name"`
 	LastName   string `json:"last_name"`
+	Birthday   int64  `json:"birthday"`
 	AvatarURL  string `json:"avatar_url"`
 	Introduce  string `json:"introduce"`
 	Phone      string `json:"phone"`

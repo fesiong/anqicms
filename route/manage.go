@@ -554,6 +554,9 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				translate.Get("/config", manageController.PluginGetTranslateConfig)
 				translate.Post("/config", manageController.PluginSaveTranslateConfig)
 				translate.Get("/logs", manageController.PluginTranslateLogList)
+				translate.Get("/log/texts", manageController.PluginGetTranslateTextLog)
+				translate.Post("/log/text/remove", manageController.PluginRemoveTranslateTextLog)
+				translate.Post("/log/text/save", manageController.PluginSaveTranslateTextLog)
 			}
 			jsonLd := plugin.Party("/jsonld")
 			{

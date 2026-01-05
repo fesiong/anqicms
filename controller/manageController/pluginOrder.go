@@ -146,7 +146,7 @@ func PluginOrderSetPay(ctx iris.Context) {
 	}
 
 	//支付成功逻辑处理
-	err = currentSite.SuccessPaidOrder(order)
+	err = currentSite.SuccessPaidOrder(order, payment)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

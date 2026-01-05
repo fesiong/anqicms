@@ -36,6 +36,11 @@ func NewMeiliSearchService(cfg *config.PluginFulltextConfig, indexName string) (
 func (s *MeiliSearchService) Index(body interface{}) error {
 	index := s.apiClient.Index(s.indexName)
 
+	task0, err := index.UpdateFilterableAttributes(&[]interface{}{"module_id"})
+	if err != nil {
+		log.Println("配置可搜索属性失败: ", err)
+		return err
+	}
 	task, err := index.UpdateSearchableAttributes(&[]string{"title", "keywords", "description", "content"})
 	if err != nil {
 		log.Println("配置可搜索属性失败: ", err)
@@ -44,8 +49,9 @@ func (s *MeiliSearchService) Index(body interface{}) error {
 	for {
 		time.Sleep(1 * time.Second)
 		task2, _ := s.apiClient.GetTask(task.TaskUID)
+		task3, _ := s.apiClient.GetTask(task0.TaskUID)
 		log.Printf("task status %v", task2.Status)
-		if task2.Status == "succeeded" {
+		if task2.Status == "succeeded" && task3.Status == "succeeded" {
 			break
 		}
 	}

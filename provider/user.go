@@ -7,13 +7,15 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	"io"
 	"log"
 	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"google.golang.org/api/oauth2/v2"
+	"google.golang.org/api/option"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/medivhzhan/weapp/v3"
@@ -34,7 +36,7 @@ func (w *Website) GetUserList(ops func(tx *gorm.DB) *gorm.DB, page, pageSize int
 	if ops != nil {
 		tx = ops(tx)
 	} else {
-		tx = tx.Order("id desc")
+		tx = tx.Order("users.id desc")
 	}
 	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&users)
 	if len(users) > 0 {
@@ -130,6 +132,7 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 	user.RealName = req.RealName
 	user.FirstName = req.FirstName
 	user.LastName = req.LastName
+	user.Birthday = req.Birthday
 	user.AvatarURL = req.AvatarURL
 	user.Introduce = req.Introduce
 	user.Phone = req.Phone
@@ -533,43 +536,35 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		return nil, err
 	}
 	client := googleCfg.Client(ctx, tok)
-	userinfo, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	defer userinfo.Body.Close()
-
-	data, err := io.ReadAll(userinfo.Body)
-	if err != nil {
-		return nil, err
-	}
-	var googleUser GoogleUser
-	if err = json.Unmarshal(data, &googleUser); err != nil {
-		log.Println(err)
-		return nil, err
-	}
+	oauth2Service, err := oauth2.NewService(context.Background(), option.WithHTTPClient(client))
+	userInfo, err := oauth2Service.Userinfo.Get().Do()
 	// 直接对接 users 表的 email
-	user, err := w.GetUserInfoByEmail(googleUser.Email)
+	user, err := w.GetUserInfoByEmail(userInfo.Email)
 	if err != nil {
 		// 用户不存在，新建
 		user = &model.User{
-			Email:         googleUser.Email,
-			EmailVerified: googleUser.EmailVerified,
-			UserName:      googleUser.Name,
-			AvatarURL:     googleUser.Picture,
+			Email:         userInfo.Email,
+			EmailVerified: *userInfo.VerifiedEmail,
+			UserName:      userInfo.Name,
+			AvatarURL:     userInfo.Picture,
+			GoogleId:      userInfo.Id,
 			GroupId:       w.PluginUser.DefaultGroupId,
 			Password:      "",
 			Status:        1,
-			Introduce:     googleUser.Profile,
 		}
-		if googleUser.GivenName != "" {
-			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		if userInfo.GivenName != "" {
+			user.RealName = userInfo.GivenName + " " + userInfo.FamilyName
 		}
 		w.DB.Save(user)
 	} else {
-		user.UserName = googleUser.Name
-		user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		user.GoogleId = userInfo.Id
+		user.UserName = userInfo.Name
+		if userInfo.GivenName != "" {
+			user.RealName = userInfo.GivenName + " " + userInfo.FamilyName
+		}
+		if user.AvatarURL == "" {
+			user.AvatarURL = userInfo.Picture
+		}
 		w.DB.Save(user)
 	}
 	if req.InviteId > 0 && user.ParentId == 0 {

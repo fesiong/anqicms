@@ -5,13 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"github.com/jinzhu/now"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"math/rand"
 	"net/url"
@@ -20,6 +13,14 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"github.com/jinzhu/now"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 var emptyLinkPatternStr = `(^data:)|(^tel:)|(^mailto:)|(about:blank)|(javascript:)`
@@ -131,7 +132,7 @@ func (w *Website) CollectArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
+	if w.CollectorConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
 		return
 	}
 
@@ -181,7 +182,7 @@ func (w *Website) CollectArticles() {
 		total, err := w.CollectArticlesByKeyword(keyword, false)
 		log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
 		// 达到数量了，退出
-		if w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
+		if w.CollectorConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
 			return
 		}
 		// 如果没有使用代理，则每个关键词都需要间隔30秒以上

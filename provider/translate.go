@@ -8,12 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"golang.org/x/net/html"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"log"
 	"net/http"
 	"net/url"
@@ -23,6 +18,12 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) SelfAiTranslateResult(req *AnqiTranslateTextRequest) (*AnqiTranslateTextRequest, error) {
@@ -834,4 +835,27 @@ func localReplace(s string) (string, bool) {
 	}
 
 	return s, true
+}
+
+func (w *Website) ReplaceTranslateText(buf []byte, oldText, newText string) ([]byte, bool) {
+	if len(oldText) == 0 {
+		return buf, false
+	}
+	if bytes.Contains(buf, []byte(oldText)) {
+		// 只替换 >.*< 以及 alt=".*" 之间的内容
+		buf = regexp.MustCompile(`(>[^<]*?)`+regexp.QuoteMeta(oldText)+`([^<]*<)`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		buf = regexp.MustCompile(`(\balt\s*=\s*["\'][^"\']*?)`+regexp.QuoteMeta(oldText)+`([^"\']*?["\'])`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		buf = regexp.MustCompile(`(\btitle\s*=\s*["\'][^"\']*?)`+regexp.QuoteMeta(oldText)+`([^"\']*?["\'])`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		buf = regexp.MustCompile(`(\bcontent\s*=\s*["\'][^"\']*?)`+regexp.QuoteMeta(oldText)+`([^"\']*?["\'])`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		return buf, true
+	}
+	return buf, false
 }

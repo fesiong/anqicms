@@ -215,7 +215,7 @@ func (w *Website) SaveNavType(req *request.NavTypeRequest) (*model.NavType, erro
 }
 
 func (w *Website) DeleteCacheNavs() {
-	w.Cache.Delete("navs")
+	w.Cache.CleanAll("navs")
 }
 
 func (w *Website) GetCacheNavs(typeId uint, showType string) []*model.Nav {

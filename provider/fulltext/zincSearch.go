@@ -221,7 +221,7 @@ func (s *ZincSearchService) Search(keyword string, moduleId uint, page int, page
 		trimQuery.SetValue(moduleIdStr)
 		subTrimQuery := *client.NewMetaQuery()
 		subTrimQuery.SetTerm(map[string]client.MetaTermQuery{
-			"type": trimQuery,
+			"module_id": trimQuery,
 		})
 
 		// {
