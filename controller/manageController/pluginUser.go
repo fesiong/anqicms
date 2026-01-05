@@ -1,14 +1,15 @@
 package manageController
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"regexp"
-	"strings"
 )
 
 func PluginUserFieldsSetting(ctx iris.Context) {
@@ -143,7 +144,7 @@ func PluginUserList(ctx iris.Context) {
 			}
 			tx = tx.Where("`real_name` like ?", "%"+realName+"%")
 		}
-		tx = tx.Order("id desc")
+		tx = tx.Order("users.id desc")
 		return tx
 	}
 	users, total := currentSite.GetUserList(ops, currentPage, pageSize)

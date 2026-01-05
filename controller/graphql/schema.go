@@ -202,6 +202,39 @@ func init() {
 		},
 	})
 
+	customFieldType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "CustomField",
+		Fields: graphql.Fields{
+			"name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"field_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"type": &graphql.Field{
+				Type: graphql.String,
+			},
+			"required": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"is_system": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"is_filter": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"follow_level": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"content": &graphql.Field{
+				Type: graphql.String,
+			},
+			"items": &graphql.Field{
+				Type: graphql.NewList(graphql.String),
+			},
+		},
+	})
+
 	var archiveType *graphql.Object
 	archiveType = graphql.NewObject(graphql.ObjectConfig{
 		Name: "Archive",
@@ -418,8 +451,9 @@ func init() {
 				Type: graphql.NewObject(graphql.ObjectConfig{
 					Name: "Range",
 					Fields: graphql.Fields{
-						"min": &graphql.Field{Type: graphql.Int},
-						"max": &graphql.Field{Type: graphql.Int},
+						"min":  &graphql.Field{Type: graphql.Int},
+						"max":  &graphql.Field{Type: graphql.Int},
+						"link": &graphql.Field{Type: graphql.String},
 					},
 				}),
 			},
@@ -713,39 +747,6 @@ func init() {
 			},
 			"content": &graphql.Field{
 				Type: graphql.String,
-			},
-		},
-	})
-
-	customFieldType := graphql.NewObject(graphql.ObjectConfig{
-		Name: "CustomField",
-		Fields: graphql.Fields{
-			"name": &graphql.Field{
-				Type: graphql.String,
-			},
-			"field_name": &graphql.Field{
-				Type: graphql.String,
-			},
-			"type": &graphql.Field{
-				Type: graphql.String,
-			},
-			"required": &graphql.Field{
-				Type: graphql.Boolean,
-			},
-			"is_system": &graphql.Field{
-				Type: graphql.Boolean,
-			},
-			"is_filter": &graphql.Field{
-				Type: graphql.Boolean,
-			},
-			"follow_level": &graphql.Field{
-				Type: graphql.Boolean,
-			},
-			"content": &graphql.Field{
-				Type: graphql.String,
-			},
-			"items": &graphql.Field{
-				Type: graphql.NewList(graphql.String),
 			},
 		},
 	})
@@ -1144,6 +1145,9 @@ func init() {
 					"tag_id": &graphql.ArgumentConfig{
 						Type: graphql.Int,
 					},
+					"tag_ids": &graphql.ArgumentConfig{
+						Type: graphql.NewList(graphql.Int),
+					},
 					"flag": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
@@ -1185,6 +1189,15 @@ func init() {
 					},
 					"show_price": &graphql.ArgumentConfig{
 						Type: graphql.Boolean,
+					},
+					"show_category": &graphql.ArgumentConfig{
+						Type: graphql.Boolean,
+					},
+					"parent_id": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"category_id": &graphql.ArgumentConfig{
+						Type: graphql.Int,
 					},
 				},
 				Resolve: resolveFilters,

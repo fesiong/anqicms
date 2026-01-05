@@ -3,6 +3,10 @@ package graphql
 import (
 	"errors"
 	"fmt"
+	"log"
+	"net/url"
+	"strings"
+
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/kataras/iris/v12"
@@ -12,9 +16,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"log"
-	"net/url"
-	"strings"
 )
 
 // 查询解析器
@@ -378,7 +379,6 @@ func resolveArchives(p graphql.ResolveParams) (interface{}, error) {
 		page = 1
 	}
 
-	log.Printf("args %#v", p.Args)
 	//curUserId := ctx.Values().GetUintDefault("userId", 0)
 
 	extraFields := map[string]interface{}{}
@@ -446,12 +446,18 @@ func resolveFilters(p graphql.ResolveParams) (interface{}, error) {
 	showAll, _ := p.Args["show_all"].(bool)
 	allText, _ := p.Args["all_text"].(string)
 	showPrice, _ := p.Args["show_price"].(bool)
+	showCategory, _ := p.Args["show_category"].(bool)
+	parentId, _ := p.Args["parent_id"].(int)
+	categoryId, _ := p.Args["category_id"].(int)
 
 	req := request.ApiFilterRequest{
-		ModuleId:  int64(moduleId),
-		ShowAll:   showAll,
-		AllText:   allText,
-		ShowPrice: showPrice,
+		ModuleId:     int64(moduleId),
+		ShowAll:      showAll,
+		AllText:      allText,
+		ShowPrice:    showPrice,
+		ShowCategory: showCategory,
+		ParentId:     int64(parentId),
+		CategoryId:   int64(categoryId),
 	}
 
 	return currentSite.ApiGetFilters(&req)

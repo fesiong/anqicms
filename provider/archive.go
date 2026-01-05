@@ -848,7 +848,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 				imgUrl, err2 := url.Parse(v)
 				if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
 					// 自动下载
-					attachment, err2 := w.DownloadRemoteImage(v, "", 0)
+					attachment, err2 := w.DownloadRemoteImage(v, req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						draft.Images[i] = strings.TrimPrefix(attachment.Logo, w.PluginStorage.StorageUrl)
@@ -875,7 +875,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "", 0)
+					attachment, err2 := w.DownloadRemoteImage(match[1], req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -896,7 +896,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[2], "", 0)
+					attachment, err2 := w.DownloadRemoteImage(match[2], req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -1635,7 +1635,7 @@ func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) err
 func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
 	var relationIds []int64
-	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Group("archive_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
 		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {
@@ -2327,7 +2327,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 					imgUrl, err2 := url.Parse(v)
 					if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
 						// 自动下载
-						attachment, err2 := qia.w.DownloadRemoteImage(v, "", 0)
+						attachment, err2 := qia.w.DownloadRemoteImage(v, archive.Title, 0)
 						if err2 == nil {
 							// 下载完成
 							archive.Images[ii] = strings.TrimPrefix(attachment.Logo, qia.w.PluginStorage.StorageUrl)

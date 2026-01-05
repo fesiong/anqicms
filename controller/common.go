@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -609,6 +610,16 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 		provider.PatternArchive,      // 文章详情
 		//	provider.PatternCommon,       // common 处理逻辑
 	}
+	// 添加自定义模块规则
+	modules := currentSite.GetCacheModules()
+	for x := range modules {
+		diyName := modules[x].UrlToken + ":archive"
+		_, ok := rewritePattern.Rules[diyName]
+		if ok {
+			ruleNames = append(ruleNames, diyName)
+		}
+	}
+	// end
 	for _, ruleName := range ruleNames {
 		reg := regexp.MustCompile(rewritePattern.Rules[ruleName])
 		match := reg.FindStringSubmatch(paramValue)
@@ -701,29 +712,45 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 					_, ok := rewritePattern.Rules[diyName]
 					if ok {
 						reg = regexp.MustCompile(rewritePattern.Rules[diyName])
-						match = reg.FindStringSubmatch(paramValue)
-						if len(match) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
+						diyMatch := reg.FindStringSubmatch(paramValue)
+						if len(diyMatch) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
 							// 详情支持带问号的规则
 							paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
 							// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
 							reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.Rules[diyName], "$") + "([&#].*)?$")
-							match = reg.FindStringSubmatch(paramValueWithArgs)
+							diyMatch = reg.FindStringSubmatch(paramValueWithArgs)
 						}
-						if len(match) > 1 {
-							matchMap["match"] = provider.PatternArchive
-							for i, v := range match {
+						if len(diyMatch) > 1 {
+							tmpMatchMap := map[string]string{}
+							tmpMatchMap["match"] = provider.PatternArchive
+							for i, v := range diyMatch {
 								iKey := i
 								key := rewritePattern.Tags[diyName][iKey]
 								if i == 0 {
 									key = "route"
 								}
-								matchMap[key] = v
+								tmpMatchMap[key] = v
 							}
-							if matchMap["module"] != "" && matchMap["module"] == modules[x].UrlToken {
+							if tmpMatchMap["module"] != "" && tmpMatchMap["module"] == modules[x].UrlToken {
 								// 需要先验证是否是module
-								return matchMap, true
+								return tmpMatchMap, true
 							} else {
-								return matchMap, true
+								// 由于可能导致重复，因此需要验证module
+								if tmpMatchMap["id"] != "" {
+									id, _ := strconv.ParseInt(tmpMatchMap["id"], 10, 64)
+									if id > 0 {
+										archive, err := currentSite.GetArchiveById(id)
+										if err == nil && archive.ModuleId == modules[x].Id {
+											return tmpMatchMap, true
+										}
+									}
+								} else if tmpMatchMap["filename"] != "" {
+									archive, err := currentSite.GetArchiveByUrlToken(tmpMatchMap["filename"])
+									if err == nil && archive.ModuleId == modules[x].Id {
+										return tmpMatchMap, true
+									}
+								}
+								// end
 							}
 						}
 					}
@@ -731,12 +758,48 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 				if matchMap["module"] != "" {
 					// 需要先验证是否是module
 					module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
-					if module != nil {
+					if module != nil && module.UrlToken == matchMap["module"] {
 						return matchMap, true
+					} else {
+						matchMap = map[string]string{}
+						continue
 					}
 				} else {
 					return matchMap, true
 				}
+			}
+			if strings.HasSuffix(ruleName, ":archive") {
+				matchMap["match"] = provider.PatternArchive
+				tmpToken := strings.TrimSuffix(ruleName, ":archive")
+				if matchMap["module"] != "" && matchMap["module"] == tmpToken {
+					// 需要先验证是否是module
+					return matchMap, true
+				} else {
+					// 由于可能导致重复，因此需要验证module
+					if matchMap["id"] != "" {
+						id, _ := strconv.ParseInt(matchMap["id"], 10, 64)
+						if id > 0 {
+							archive, err := currentSite.GetArchiveById(id)
+							if err == nil {
+								module := currentSite.GetModuleFromCache(archive.ModuleId)
+								if module != nil && module.UrlToken == tmpToken {
+									return matchMap, true
+								}
+							}
+						} else if matchMap["filename"] != "" {
+							archive, err := currentSite.GetArchiveByUrlToken(matchMap["filename"])
+							if err == nil {
+								module := currentSite.GetModuleFromCache(archive.ModuleId)
+								if module != nil && module.UrlToken == tmpToken {
+									return matchMap, true
+								}
+							}
+						}
+						// end
+					}
+				}
+				matchMap = map[string]string{}
+				continue
 			}
 
 			return matchMap, true

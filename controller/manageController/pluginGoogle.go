@@ -9,7 +9,6 @@ import (
 func PluginGetGoogleSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetGoogleAuthSetting()
-	setting.RedirectUrl = currentSite.GetUrl("/login/google", nil, 0)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
