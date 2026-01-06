@@ -1360,8 +1360,8 @@ func (w *Website) ApiGetTags(req *request.ApiTagListRequest) ([]*model.Tag, int6
 }
 
 var (
-	fieldNameRegex  = regexp.MustCompile(`^[a-zA-Z0-9_]+$`)
-	tableFieldRegex = regexp.MustCompile(`^[a-zA-Z0-9_]+\.[a-zA-Z0-9_]+$`)
+	fieldNameRegex  = regexp.MustCompile("^`?[a-zA-Z0-9_]+`?$")
+	tableFieldRegex = regexp.MustCompile("^`?[a-zA-Z0-9_]+`?\\.`?[a-zA-Z0-9_]+`?$")
 	sqlFuncRegex    = regexp.MustCompile(`^[a-zA-Z_][a-zA-Z0-9_]*\(.*\)$`)
 )
 
@@ -1474,7 +1474,7 @@ func isValidSQLFunction(funcCall string) bool {
 	allowedFunctions := map[string]bool{
 		"rand": true, "random": true, "length": true, "char_length": true,
 		"upper": true, "lower": true, "substr": true, "substring": true,
-		"concat": true, "coalesce": true, "nullif": true,
+		"concat": true, "coalesce": true, "nullif": true, "max": true, "min": true, "sum": true,
 	}
 
 	funcNameLower := strings.ToLower(funcName)
