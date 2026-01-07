@@ -786,17 +786,17 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 									return matchMap, true
 								}
 							}
-						} else if matchMap["filename"] != "" {
-							archive, err := currentSite.GetArchiveByUrlToken(matchMap["filename"])
-							if err == nil {
-								module := currentSite.GetModuleFromCache(archive.ModuleId)
-								if module != nil && module.UrlToken == tmpToken {
-									return matchMap, true
-								}
+						}
+					} else if matchMap["filename"] != "" {
+						archive, err := currentSite.GetArchiveByUrlToken(matchMap["filename"])
+						if err == nil {
+							module := currentSite.GetModuleFromCache(archive.ModuleId)
+							if module != nil && module.UrlToken == tmpToken {
+								return matchMap, true
 							}
 						}
-						// end
 					}
+					// end
 				}
 				matchMap = map[string]string{}
 				continue

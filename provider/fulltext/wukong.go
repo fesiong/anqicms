@@ -2,11 +2,12 @@ package fulltext
 
 import (
 	"errors"
-	"github.com/huichen/wukong/engine"
-	"github.com/huichen/wukong/types"
+	"strconv"
+
+	"github.com/fesiong/wukong/engine"
+	"github.com/fesiong/wukong/types"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"strconv"
 )
 
 // WukongService
