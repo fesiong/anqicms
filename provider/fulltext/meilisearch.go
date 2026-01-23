@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/meilisearch/meilisearch-go"
@@ -64,6 +65,10 @@ func (s *MeiliSearchService) Index(body interface{}) error {
 func (s *MeiliSearchService) Create(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
+	newTitle := strings.ReplaceAll(doc.Title, "-", "")
+	newTitle = strings.ReplaceAll(newTitle, "/", "")
+	newTitle = strings.ReplaceAll(newTitle, " ", "")
+	doc.Title = doc.Title + " " + newTitle
 	data := library.StructToMap(doc)
 	data["id"] = docId
 	documents := []map[string]interface{}{
@@ -83,6 +88,10 @@ func (s *MeiliSearchService) Create(doc TinyArchive) error {
 func (s *MeiliSearchService) Update(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
+	newTitle := strings.ReplaceAll(doc.Title, "-", "")
+	newTitle = strings.ReplaceAll(newTitle, "/", "")
+	newTitle = strings.ReplaceAll(newTitle, " ", "")
+	doc.Title = doc.Title + " " + newTitle
 	data := library.StructToMap(doc)
 	data["id"] = docId
 	documents := []map[string]interface{}{
@@ -117,6 +126,10 @@ func (s *MeiliSearchService) Bulk(docs []TinyArchive) error {
 	var data []map[string]interface{}
 	for _, v := range docs {
 		docId := v.GetId()
+		newTitle := strings.ReplaceAll(v.Title, "-", "")
+		newTitle = strings.ReplaceAll(newTitle, "/", "")
+		newTitle = strings.ReplaceAll(newTitle, " ", "")
+		v.Title = v.Title + " " + newTitle
 		item := library.StructToMap(v)
 		// docId
 		item["id"] = strconv.FormatInt(docId, 10)
