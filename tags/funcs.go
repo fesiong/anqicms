@@ -126,6 +126,39 @@ func TimestampToDate(in interface{}, layout string, args ...string) string {
 	return t.Format(layout)
 }
 
+// 价格格式化，输入的是分
+func PriceFormat(in interface{}, args ...string) string {
+	in2, _ := strconv.ParseInt(fmt.Sprint(in), 10, 64)
+	if in2 == 0 {
+		return ""
+	}
+	// 将分转换为元（除以100）
+	price := float64(in2) / 100.0
+
+	// 默认格式为保留两位小数
+	format := "%.2f"
+
+	// 如果提供了格式参数，则使用提供的格式
+	if len(args) > 0 {
+		switch strings.ToLower(args[0]) {
+		case "int", "integer", "0":
+			// 只显示整数部分
+			return fmt.Sprintf("%.0f", price)
+		case "one", "1":
+			// 保留一位小数
+			return fmt.Sprintf("%.1f", price)
+		case "two", "2":
+			// 保留两位小数（默认）
+			return fmt.Sprintf("%.2f", price)
+		default:
+			// 使用自定义格式
+			format = args[0]
+		}
+	}
+
+	return fmt.Sprintf(format, price)
+}
+
 type MyFunc struct {
 }
 
