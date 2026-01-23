@@ -186,7 +186,7 @@ func ArchiveList(ctx iris.Context) {
 	if len(archiveIds) > 0 {
 		dbTable(currentSite.DB).Where("id IN (?)", archiveIds).Order(orderBy).Scan(&archives)
 		for i := range archives {
-			archives[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+			archives[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = currentSite.GetUrl("archive", archives[i], 0)
 		}
 	}

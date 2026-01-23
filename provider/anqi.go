@@ -26,6 +26,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/parnurzeal/gorequest"
+	"golang.org/x/net/html"
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -105,6 +106,9 @@ type AnqiTranslateTextRequest struct {
 	Usage      int64    `json:"usage"`  // 消耗Token
 	Status     int      `json:"status"` // 返回的时候包含
 	UseSelf    bool     `json:"-"`
+	Uri        string   `json:"uri"`
+	Remark     string   `json:"remark"`
+	Count      int64    `json:"count"` // 总量
 
 	OriginTitle   string `json:"origin_title"`
 	OriginContent string `json:"origin_content"`
@@ -185,8 +189,8 @@ type AnqiTranslateHtmlResult struct {
 	Language   string `json:"language"`
 	ToLanguage string `json:"to_language"`
 	Status     int    `json:"status"`
-	Count      int64  `json:"count"`     // 总量
-	UseCount   int64  `json:"use_count"` // 用量
+	Count      int64  `json:"count"` // 总量
+	Usage      int64  `json:"usage"` // 用量
 	Remark     string `json:"remark"`
 }
 
@@ -194,6 +198,12 @@ type AnqiTranslateHtmlResponse struct {
 	Code int                     `json:"code"`
 	Msg  string                  `json:"msg"`
 	Data AnqiTranslateHtmlResult `json:"data"`
+}
+
+type AnqiTranslateTextResponse struct {
+	Code int                      `json:"code"`
+	Msg  string                   `json:"msg"`
+	Data AnqiTranslateTextRequest `json:"data"`
 }
 
 type AnqiAiImage struct {
@@ -1116,7 +1126,7 @@ func AddTranslateHtmlLog(result *AnqiTranslateHtmlResult) {
 		Language:   result.Language,
 		ToLanguage: result.ToLanguage,
 		Count:      result.Count,
-		UseCount:   result.UseCount,
+		UseCount:   result.Usage,
 		Status:     result.Status,
 		Remark:     result.Remark,
 	}
@@ -1133,42 +1143,180 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 		return "", errors.New(w.Tr("PleaseSelectTargetLanguage"))
 	}
 
-	var res AnqiTranslateHtmlResponse
-	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate/html").Send(req).EndStruct(&res)
-	if len(errs) > 0 {
-		msg := errs[0].Error()
-		if utf8.RuneCountInString(msg) > 190 {
-			msg = string([]rune(msg)[:190])
-		}
-		AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
-			Uri:        req.Uri,
-			Html:       "",
-			Language:   req.Language,
-			ToLanguage: req.ToLanguage,
-			Remark:     msg,
-		})
-		return "", errs[0]
+	// 先转成texts，再翻译
+	// 解析HTML
+	doc, err := html.Parse(strings.NewReader(req.Html))
+	if err != nil {
+		return "", err
 	}
-	if res.Code != 0 {
-		msg := res.Msg
-		if utf8.RuneCountInString(msg) > 190 {
-			msg = string([]rune(msg)[:190])
-		}
-		AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
-			Uri:        req.Uri,
-			Html:       "",
-			Language:   req.Language,
-			ToLanguage: req.ToLanguage,
-			Remark:     msg,
-		})
-		return "", errors.New(res.Msg)
-	}
-	// 是否需要记录翻译日志？要的
-	res.Data.Uri = req.Uri // 因为返回的没有这个，因此这里要补上
-	res.Data.Status = 1
-	AddTranslateHtmlLog(&res.Data)
 
-	return res.Data.Html, nil
+	// 提取需要翻译的文本
+	textNodes := extractTextNodes(doc)
+	texts := make([]string, len(textNodes))
+	for i, info := range textNodes {
+		texts[i] = info.text
+	}
+
+	// 翻译文本
+	// 创建去重映射表
+	textMap := make(map[string]string)
+	textIndices := make(map[string][]int)
+	var uniqueTexts []string
+
+	// 构建去重映射
+	for i, text := range texts {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		// 有一些字符，是不需要走接口翻译的
+		text2, isNeed := localReplace(text)
+		if !isNeed {
+			textMap[text] = text2
+		} else {
+			if _, exists := textMap[text]; !exists {
+				textMap[text] = "" // 添加到映射表，先存空值
+				uniqueTexts = append(uniqueTexts, text)
+			}
+		}
+		textIndices[text] = append(textIndices[text], i)
+	}
+
+	// 从缓存中批量获取已翻译的文本
+	var uncachedTexts = make([]string, 0, len(uniqueTexts))
+	for _, text := range uniqueTexts {
+		// 使用MD5哈希作为缓存键
+		textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
+		var textLog model.TranslateTextLog
+		if err := w.DB.Where("`md5` = ?", textMd5).First(&textLog).Error; err == nil {
+			textMap[text] = textLog.Translated
+		} else {
+			uncachedTexts = append(uncachedTexts, text)
+		}
+	}
+	//
+	uniqueTexts = uncachedTexts
+	// 处理未缓存的文本
+	if len(uniqueTexts) > 0 {
+		var req2 = AnqiTranslateTextRequest{
+			Text:       uniqueTexts,
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Uri:        req.Uri,
+		}
+
+		var res AnqiTranslateTextResponse
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate/text").Send(req2).EndStruct(&res)
+		if len(errs) > 0 {
+			msg := errs[0].Error()
+			if utf8.RuneCountInString(msg) > 190 {
+				msg = string([]rune(msg)[:190])
+			}
+			AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+				Uri:        req.Uri,
+				Html:       "",
+				Language:   req.Language,
+				ToLanguage: req.ToLanguage,
+				Remark:     msg,
+			})
+			return "", errs[0]
+		}
+		if res.Code != 0 {
+			msg := res.Msg
+			if utf8.RuneCountInString(msg) > 190 {
+				msg = string([]rune(msg)[:190])
+			}
+			AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+				Uri:        req.Uri,
+				Html:       "",
+				Language:   req.Language,
+				ToLanguage: req.ToLanguage,
+				Remark:     msg,
+			})
+			return "", errors.New(res.Msg)
+		}
+		// 是否需要记录翻译日志？要的
+		res.Data.Uri = req.Uri // 因为返回的没有这个，因此这里要补上
+		res.Data.Status = 1
+		AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+			Uri:        req.Uri,
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Count:      res.Data.Count,
+			Remark:     res.Data.Remark,
+			Usage:      res.Data.Usage,
+			Status:     res.Data.Status,
+		})
+
+		ln := len(res.Data.Text)
+		for i, text := range uniqueTexts {
+			if i < ln {
+				translated := res.Data.Text[i]
+				// 数据库存储内容
+				textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
+				textLog := model.TranslateTextLog{
+					Md5:        textMd5,
+					Language:   req.Language,
+					ToLanguage: req.ToLanguage,
+					Text:       text,
+					Translated: translated,
+				}
+				_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
+
+				textMap[text] = translated
+			}
+		}
+	}
+
+	// 还原翻译结果到原始顺序
+	translatedTexts := make([]string, len(texts))
+	for text, indices := range textIndices {
+		translated := textMap[text]
+		for _, idx := range indices {
+			translatedTexts[idx] = translated
+		}
+	}
+
+	// 处理空文本
+	for i, text := range texts {
+		if strings.TrimSpace(text) == "" {
+			translatedTexts[i] = text
+		}
+	}
+
+	// 将翻译后的文本替换回HTML
+	for i, info := range textNodes {
+		if i < len(translatedTexts) {
+			if info.node.Type == html.ElementNode {
+				// 处理属性翻译
+				for j, attr := range info.node.Attr {
+					if (attr.Key == "title" || attr.Key == "placeholder" || attr.Key == "alt" || attr.Key == "value") ||
+						(info.node.Data == "meta" && attr.Key == "content" &&
+							(containsAttr(info.node, "name", "description") ||
+								containsAttr(info.node, "name", "keywords") ||
+								containsAttr(info.node, "name", "title") ||
+								containsAttr(info.node, "property", "description") ||
+								containsAttr(info.node, "property", "keywords") ||
+								containsAttr(info.node, "property", "title") ||
+								containsAttr(info.node, "property", "image:alt") ||
+								containsAttr(info.node, "property", "site_name"))) {
+						info.node.Attr[j].Val = translatedTexts[i]
+						break
+					}
+				}
+			} else if info.node.Type == html.TextNode {
+				info.node.Data = translatedTexts[i]
+			}
+		}
+	}
+
+	var output strings.Builder
+	if err = html.Render(&output, doc); err != nil {
+		return "", err
+	}
+	//////////
+
+	return output.String(), nil
 }
 
 func (w *Website) AnqiGetImageAiResponse(req *AnqiImageAiRequest) (*AnqiAiImage, error) {

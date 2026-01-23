@@ -72,7 +72,7 @@ func (w *Website) GetFavoriteList(userId int64, currentPage int, pageSize int) (
 		for _, a := range archives {
 			if a.Id == v.ArchiveId {
 				a.Link = w.GetUrl(PatternArchive, a, 0)
-				a.Thumb = a.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+				a.Thumb = a.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(a.Id)))
 				archive = a
 				break
 			}

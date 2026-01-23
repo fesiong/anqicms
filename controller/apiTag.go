@@ -124,6 +124,7 @@ func ApiArchiveList(ctx iris.Context) {
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	showFlag := ctx.URLParamBoolDefault("showFlag", false)
+	showTag := ctx.URLParamBoolDefault("showTag", false)
 	showContent := ctx.URLParamBoolDefault("showContent", false)
 	showExtra := ctx.URLParamBoolDefault("showExtra", false)
 	draft := ctx.URLParamBoolDefault("draft", false)
@@ -236,6 +237,7 @@ func ApiArchiveList(ctx iris.Context) {
 		ModuleId:           int64(moduleId),
 		AuthorId:           int64(authorId),
 		ShowFlag:           showFlag,
+		ShowTag:            showTag,
 		ShowContent:        showContent,
 		ShowExtra:          showExtra,
 		ShowCategory:       showCategory,
@@ -587,14 +589,8 @@ func ApiNextArchive(ctx iris.Context) {
 		return
 	}
 
-	nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Order("`id` ASC")
-	})
-	if nextArchive != nil && len(nextArchive.Password) > 0 {
-		// password is not visible for user
-		nextArchive.Password = ""
-		nextArchive.HasPassword = true
-	}
+	nextArchive, _ := currentSite.GetNextArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -614,14 +610,8 @@ func ApiPrevArchive(ctx iris.Context) {
 		return
 	}
 
-	prevArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Order("`id` DESC")
-	})
-	if prevArchive != nil && len(prevArchive.Password) > 0 {
-		// password is not visible for user
-		prevArchive.Password = ""
-		prevArchive.HasPassword = true
-	}
+	prevArchive, _ := currentSite.GetPreviousArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -651,7 +641,7 @@ func ApiPageDetail(ctx iris.Context) {
 		})
 		return
 	}
-	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(category.Id)))
 	// convert markdown to html
 	if render {
 		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
@@ -695,7 +685,7 @@ func ApiPageList(ctx iris.Context) {
 			break
 		}
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
-		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(pageList[i].Id)))
 
 		resultList = append(resultList, pageList[i])
 	}
@@ -732,7 +722,7 @@ func ApiTagDetail(ctx iris.Context) {
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
-		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagDetail.Id)))
 		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
 		if err == nil {
 			tagDetail.Content = tagContent.Content
@@ -914,6 +904,7 @@ func ApiTagList(ctx iris.Context) {
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
 	order := ctx.URLParamDefault("order", "id desc")
+	q := ctx.URLParam("q")
 
 	limitTmp := ctx.URLParam("limit")
 	if limitTmp != "" {
@@ -952,10 +943,10 @@ func ApiTagList(ctx iris.Context) {
 			}
 		}
 	}
-	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
-		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))
 	}
 
 	ctx.JSON(iris.Map{

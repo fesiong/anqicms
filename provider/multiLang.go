@@ -80,6 +80,7 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []config.MultiLangSit
 		ParentId:     0,
 		LanguageIcon: mainSite.LanguageIcon,
 		IsCurrent:    w.Id == mainSite.Id,
+		IsMain:       true,
 	}
 
 	// more
@@ -116,6 +117,7 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []config.MultiLangSit
 					Status:       allSites[i].Initialed,
 					ParentId:     allSites[i].ParentId,
 					LanguageIcon: allSites[i].LanguageIcon,
+					IsMain:       false,
 					IsCurrent:    w.Id == allSites[i].Id,
 					ErrorMsg:     allSites[i].ErrorMsg,
 				}
@@ -149,6 +151,7 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []config.MultiLangSit
 				ParentId:     mainId,
 				LanguageIcon: mainSite.MultiLanguage.SubSites[i].LanguageIcon,
 				IsCurrent:    w.Id == mainSite.MultiLanguage.SubSites[i].Id,
+				IsMain:       false,
 				Language:     mainSite.MultiLanguage.SubSites[i].Language,
 				BaseUrl:      mainSite.MultiLanguage.SubSites[i].BaseUrl,
 			}
@@ -920,7 +923,8 @@ var uriLangLocks = sync.Map{}
 // 如果获取缓存时没有缓存，则进行翻译，并写入缓存，再返回
 // 如果翻译失败，则回退到原始内容
 // 存储的第一行，为文件的uri。第二行开始为内容，因为文件名不是真实的uri
-func (w *Website) GetOrSetMultiLangCache(uri string, lang string) (string, error) {
+// 首页缓存10分钟，列表页缓存1小时，内页长期缓存，如使用 no-cache，则不缓存
+func (w *Website) GetOrSetMultiLangCache(uri string, lang string, params map[string]string) (string, error) {
 	uriHash := library.Md5(uri)
 	cachePath := w.CachePath + "multiLang/" + lang + "/" + uriHash
 	lock, _ := uriLangLocks.LoadOrStore(uriHash, &sync.Mutex{})
@@ -930,21 +934,38 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string) (string, error
 	defer mutex.Unlock()
 	defer uriLangLocks.Delete(uriHash)
 
+	// 默认1小时
+	var expireTime int64 = 3600
+	if params["match"] == "index" {
+		// 首页缓存10分钟
+		expireTime = 600
+	} else if params["match"] == PatternArchive || params["match"] == PatternPage {
+		// 详情页缓存1个月
+		expireTime = 3600 * 24 * 30
+	}
+	if params["Cache-Control"] == "no-cache" {
+		expireTime = 0
+	}
+
+	var oldBuf []byte
 	// 先检查缓存文件是否存在，如果存在，直接返回
-	if _, err := os.Stat(cachePath); err == nil {
+	if info, err := os.Stat(cachePath); err == nil {
 		// 读取缓存文件
 		buf, err := os.ReadFile(cachePath)
 		if err == nil {
 			// 删除第一行的内容
 			// 找到第一个\n的位置
 			pos := bytes.Index(buf, []byte("\n"))
-			return string(buf[pos+1:]), nil
+			oldBuf = buf[pos+1:]
+			if info.ModTime().Unix()+expireTime > time.Now().Unix() {
+				return string(oldBuf), nil
+			}
 		}
 	}
 	// 如果不存在，则先获取原始内容，并进行翻译
 	buf, err := w.GetHtmlDataByLocal(uri, false)
 	if err != nil {
-		return "", err
+		return string(oldBuf), err
 	}
 	req := &AnqiTranslateHtmlRequest{
 		Uri:         uri,
@@ -958,16 +979,10 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string) (string, error
 	if err != nil {
 		// 如果翻译失败，则回退到原始内容
 		log.Println("translate html failed:", err)
-		return string(buf), err
-	}
-	// 进行一下必要的替换
-	textLogs := w.GetTextLogs(lang)
-	if len(textLogs) > 0 {
-		buf := []byte(result)
-		for _, textLog := range textLogs {
-			buf, _ = w.ReplaceTranslateText(buf, textLog.Text, textLog.Translated)
+		if len(oldBuf) > 0 {
+			return string(oldBuf), err
 		}
-		result = string(buf)
+		return string(buf), err
 	}
 
 	// 翻译完毕，修改lang
@@ -1091,7 +1106,7 @@ type TranslateHtmlCacheFile struct {
 }
 
 // GetTranslateHtmlCaches 获取所有已缓存的翻译文件
-func (w *Website) GetTranslateHtmlCaches(lang string, page, pageSize int) ([]*TranslateHtmlCacheFile, int64) {
+func (w *Website) GetTranslateHtmlCaches(lang, uri string, page, pageSize int) ([]*TranslateHtmlCacheFile, int64) {
 	cachePath := w.CachePath + "multiLang/"
 	// 读取已缓存的语言
 	var caches []*TranslateHtmlCacheFile
@@ -1178,6 +1193,9 @@ outer:
 				firstLine = scanner.Text()
 			}
 			file.Close()
+			if uri != "" && firstLine != uri {
+				continue
+			}
 
 			cache := &TranslateHtmlCacheFile{
 				Uri:     firstLine,

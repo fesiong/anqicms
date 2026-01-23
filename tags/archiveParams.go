@@ -2,13 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
 )
 
 type tagArchiveParamsNode struct {
@@ -58,20 +59,15 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		id = int64(args["id"].Integer())
 		if archiveDetail == nil || archiveDetail.Id != id {
 			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
-			if archiveDetail == nil {
-				archiveDetail, _ = currentSite.GetArchiveById(id)
-				if archiveDetail != nil {
-					// if read level larger than 0, then need to check permission
-					userId := uint(0)
-					userInfo, ok := ctx.Public["userInfo"].(*model.User)
-					if ok && userInfo.Id > 0 {
-						userId = userInfo.Id
-					}
-					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-					archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
-
-					currentSite.AddArchiveCache(archiveDetail)
+			if archiveDetail != nil {
+				// if read level larger than 0, then need to check permission
+				userId := uint(0)
+				userInfo, ok := ctx.Public["userInfo"].(*model.User)
+				if ok && userInfo.Id > 0 {
+					userId = userInfo.Id
 				}
+				userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+				archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 			}
 		}
 	}

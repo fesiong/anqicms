@@ -21,7 +21,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 	if mainSite.MultiLanguage.Open {
 		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
 			// 替换目录
-			baseUrl = mainSite.System.BaseUrl + "/" + w.System.Language
+			if mainSite.Id == w.Id && mainSite.MultiLanguage.ShowMainDir == false {
+				// 无需处理
+			} else {
+				baseUrl = mainSite.System.BaseUrl + "/" + w.System.Language
+			}
 		} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
 			baseUrl = mainSite.System.BaseUrl
 		}

@@ -77,10 +77,18 @@ func PluginGetTranslateTextLog(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	text := ctx.URLParam("text")
+	translated := ctx.URLParam("translated")
 
 	var total int64
 	var logs []*model.TranslateTextLog
 	tx := currentSite.DB.Model(&model.TranslateTextLog{})
+	if text != "" {
+		tx = tx.Where("text = ?", text)
+	}
+	if translated != "" {
+		tx = tx.Where("translated = ?", translated)
+	}
 	offset := 0
 	if currentPage > 0 {
 		offset = (currentPage - 1) * pageSize

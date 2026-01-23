@@ -368,6 +368,19 @@ func (w *Website) GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
 	return &attach, nil
 }
 
+func (w *Website) GetAttachmentByFileLocation(fileLocation string) (*model.Attachment, error) {
+	db := w.DB
+	var attach model.Attachment
+
+	if err := db.Unscoped().Where("`file_location` = ?", fileLocation).First(&attach).Error; err != nil {
+		return nil, err
+	}
+
+	attach.GetThumb(w.PluginStorage.StorageUrl)
+
+	return &attach, nil
+}
+
 func (w *Website) GetAttachmentById(id uint) (*model.Attachment, error) {
 	db := w.DB
 	var attach model.Attachment
@@ -722,9 +735,11 @@ func (w *Website) StartConvertImageToWebp() {
 				w.Contact.Qrcode = results[x].To
 				update = true
 			}
-			if w.Content.DefaultThumb == results[x].From {
-				w.Content.DefaultThumb = results[x].To
-				update = true
+			for i := range w.Content.DefaultThumbs {
+				if w.Content.DefaultThumbs[i] == results[x].From {
+					w.Content.DefaultThumbs[i] = results[x].To
+					update = true
+				}
 			}
 		}
 		if update {

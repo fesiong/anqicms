@@ -94,7 +94,7 @@ func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	if err := w.DB.WithContext(w.Ctx()).Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
-	tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	tag.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tag.Id)))
 	return &tag, nil
 }
 
@@ -362,6 +362,9 @@ func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
 	var tagData []*model.TagData
 	w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` in(?)", itemIds).Find(&tagData)
 	var tagIds []uint
+	for _, datum := range tagData {
+		tagIds = append(tagIds, datum.TagId)
+	}
 	if len(tagIds) > 0 {
 		w.DB.Where("id IN(?)", tagIds).Find(&tags)
 	}
