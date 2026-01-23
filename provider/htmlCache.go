@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/provider/storage"
 	"log"
 	"net/http"
 	"net/url"
@@ -17,6 +16,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/provider/storage"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
@@ -685,7 +686,7 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheData []byte, ok bool) {
 	// 获得路由
 	match := ctx.Params().Get("match")
 	// 首页不允许通过 no-cache 跳过缓存
-	if ctx.GetHeader("Cache-Control") == "no-cache" && match != "index" {
+	if ctx.GetHeader("Cache-Control") == "no-cache" {
 		return nil, false
 	}
 	// 用户登录后，也不缓存

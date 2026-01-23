@@ -67,6 +67,13 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		listType = args["type"].String()
 	}
 
+	q := ""
+	argQ := ""
+	if args["q"] != nil {
+		q = strings.TrimSpace(args["q"].String())
+		argQ = q
+	}
+
 	if args["itemId"] != nil {
 		itemId = int64(args["itemId"].Integer())
 	} else {
@@ -83,6 +90,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
 	if ok {
 		currentPage, _ = strconv.Atoi(urlParams["page"])
+		q = strings.TrimSpace(urlParams["q"])
 	}
 	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
 	if ok {
@@ -113,12 +121,14 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		}
 	} else {
 		currentPage = 1
+		// list模式则始终使用 argQ
+		q = argQ
 	}
 
-	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
-		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))
 	}
 
 	if listType == "page" {

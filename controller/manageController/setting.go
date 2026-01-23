@@ -130,8 +130,11 @@ func SettingSystemForm(ctx iris.Context) {
 func SettingContent(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Content
-	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") && !strings.HasPrefix(system.DefaultThumb, "//") {
-		system.DefaultThumb = currentSite.PluginStorage.StorageUrl + system.DefaultThumb
+
+	for i := range system.DefaultThumbs {
+		if !strings.HasPrefix(system.DefaultThumbs[i], "http") && !strings.HasPrefix(system.DefaultThumbs[i], "//") {
+			system.DefaultThumbs[i] = currentSite.PluginStorage.StorageUrl + system.DefaultThumbs[i]
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -157,7 +160,9 @@ func SettingContentForm(ctx iris.Context) {
 		needUpgrade = true
 	}
 
-	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, currentSite.PluginStorage.StorageUrl)
+	for i := range req.DefaultThumbs {
+		req.DefaultThumbs[i] = strings.TrimPrefix(req.DefaultThumbs[i], currentSite.PluginStorage.StorageUrl)
+	}
 
 	currentSite.Content.RemoteDownload = req.RemoteDownload
 	currentSite.Content.FilterOutlink = req.FilterOutlink
@@ -173,6 +178,9 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.ThumbWidth = req.ThumbWidth
 	currentSite.Content.ThumbHeight = req.ThumbHeight
 	currentSite.Content.DefaultThumb = req.DefaultThumb
+	currentSite.Content.DefaultThumbType = req.DefaultThumbType
+	currentSite.Content.DefaultThumbs = req.DefaultThumbs
+	currentSite.Content.ThumbCategoryId = req.ThumbCategoryId
 	currentSite.Content.Editor = req.Editor
 	currentSite.Content.MaxPage = req.MaxPage
 	currentSite.Content.MaxLimit = req.MaxLimit

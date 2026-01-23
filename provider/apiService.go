@@ -26,12 +26,6 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 	var err error
 	if req.Id > 0 {
 		archive = w.GetArchiveByIdFromCache(req.Id)
-		if archive == nil {
-			archive, err = w.GetArchiveById(req.Id)
-			if archive != nil {
-				w.AddArchiveCache(archive)
-			}
-		}
 	}
 	if req.UrlToken != "" {
 		// 处理特殊的 prev and next
@@ -209,7 +203,6 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 	var tmpResult = make([]*model.Archive, 0, req.Limit)
 	var archives []*model.Archive
 	var total int64
-	var err error
 	if req.Type == "related" {
 		//获取id
 		var categoryId = uint(0)
@@ -219,13 +212,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		}
 		if req.Id > 0 {
 			archive := w.GetArchiveByIdFromCache(req.Id)
-			if archive == nil {
-				archive, err = w.GetArchiveById(req.Id)
-				if archive != nil {
-					w.AddArchiveCache(archive)
-				}
-			}
-			if err == nil {
+			if archive != nil {
 				categoryId = archive.CategoryId
 				keywords = strings.Split(strings.ReplaceAll(archive.Keywords, "，", ","), ",")[0]
 				category := w.GetCategoryFromCache(categoryId)
@@ -542,7 +529,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			})
 			for _, tag := range tags {
 				tag.Link = w.GetUrl("tag", tag, 0)
-				tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+				tag.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tag.Id)))
 				tmpResult = append(tmpResult, &model.Archive{
 					Type:        "tag",
 					Id:          int64(tag.Id),
@@ -1030,12 +1017,6 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]model.C
 	var err error
 	if req.Id > 0 {
 		archive = w.GetArchiveByIdFromCache(req.Id)
-		if archive == nil {
-			archive, err = w.GetArchiveById(req.Id)
-			if archive != nil {
-				w.AddArchiveCache(archive)
-			}
-		}
 	}
 	if req.UrlToken != "" {
 		// 处理特殊的 prev and next
@@ -1145,7 +1126,7 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 		return nil, errors.New("no category found")
 	}
 
-	category.Thumb = category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.Thumb = category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	// convert markdown to html
 	if req.Render {
 		category.Content = library.MarkdownToHTML(category.Content, w.System.BaseUrl, w.Content.FilterOutlink)
@@ -1236,7 +1217,7 @@ func (w *Website) ApiGetCategories(req *request.ApiCategoryListRequest) ([]*mode
 		if req.Limit > 0 && i >= (req.Limit+req.Offset) {
 			break
 		}
-		categoryList[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categoryList[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categoryList[i].Id)))
 		categoryList[i].Link = w.GetUrl("category", categoryList[i], 0)
 		categoryList[i].IsCurrent = false
 		resultList = append(resultList, categoryList[i])
@@ -1259,7 +1240,7 @@ func (w *Website) ApiGetTag(req *request.ApiTagRequest) (*model.Tag, error) {
 	}
 
 	tagDetail.Link = w.GetUrl("tag", tagDetail, 0)
-	tagDetail.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	tagDetail.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tagDetail.Id)))
 	tagContent, err := w.GetTagContentById(tagDetail.Id)
 	if err == nil {
 		tagDetail.Content = tagContent.Content
@@ -1353,7 +1334,7 @@ func (w *Website) ApiGetTags(req *request.ApiTagListRequest) ([]*model.Tag, int6
 	tagList, total, _ := w.GetTagList(req.ItemId, "", categoryIds, req.Letter, req.Page, req.Limit, req.Offset, req.Order)
 	for i := range tagList {
 		tagList[i].Link = w.GetUrl("tag", tagList[i], 0)
-		tagList[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		tagList[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tagList[i].Id)))
 	}
 
 	return tagList, total

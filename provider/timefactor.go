@@ -109,7 +109,7 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 				// 重新推送
 				go w.PushArchive(archive.Link)
 				// 清除缓存
-				w.DeleteArchiveCache(archive.Id, archive.Link)
+				w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
 				w.DeleteArchiveExtraCache(archive.Id)
 			}
 			// 如果有限制时间，则在这里进行等待，并且小于1分钟，才进行等待
@@ -227,7 +227,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	archive.Link = w.GetUrl("archive", archive, 0)
 	_ = w.SuccessReleaseArchive(archive, true)
 	// 清除缓存
-	w.DeleteArchiveCache(archive.Id, archive.Link)
+	w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
 	w.DeleteArchiveExtraCache(archive.Id)
 
 	setting.TodayCount++

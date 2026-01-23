@@ -76,7 +76,7 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 			webInfo.Title = "404 Not Found"
 			break
 		}
-		archive.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		archive.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(archive.Id)))
 		webInfo.Title = archive.Title
 		if archive.SeoTitle != "" {
 			webInfo.Title = archive.SeoTitle
@@ -153,7 +153,7 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 			webInfo.Title = "404 Not Found"
 			break
 		}
-		category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(category.Id)))
 		webInfo.Title = category.Title
 		if category.SeoTitle != "" {
 			webInfo.Title = category.SeoTitle
@@ -194,7 +194,7 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 			webInfo.CanonicalUrl = currentSite.GetUrl("category", category, 0)
 			break
 		}
-		category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(category.Id)))
 		webInfo.Title = category.Title
 		if category.SeoTitle != "" {
 			webInfo.Title = category.SeoTitle
@@ -245,7 +245,7 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 			webInfo.Title = "404 Not Found"
 			break
 		}
-		tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tag.Id)))
 		webInfo.Title = tag.Title
 		if tag.SeoTitle != "" {
 			webInfo.Title = tag.SeoTitle
@@ -582,7 +582,7 @@ func resolvePages(p graphql.ResolveParams) (interface{}, error) {
 			break
 		}
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
-		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(pageList[i].Id)))
 
 		resultList = append(resultList, pageList[i])
 	}

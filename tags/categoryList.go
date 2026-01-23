@@ -2,13 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strconv"
-	"strings"
 )
 
 type tagCategoryListNode struct {
@@ -103,7 +104,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 			break
 		}
 		categoryList[i].Link = currentSite.GetUrl("category", categoryList[i], 0)
-		categoryList[i].Thumb = categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		categoryList[i].Thumb = categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(categoryList[i].Id)))
 		categoryList[i].IsCurrent = false
 		if webOk {
 			if (webInfo.PageName == "archiveList" || webInfo.PageName == "archiveDetail") && int64(categoryList[i].Id) == webInfo.NavBar {

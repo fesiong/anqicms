@@ -74,44 +74,32 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if args["id"] != nil {
 		id = int64(args["id"].Integer())
-		if archiveDetail == nil || archiveDetail.Id != id {
-			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
-			if archiveDetail == nil {
-				archiveDetail, _ = currentSite.GetArchiveById(id)
-				if archiveDetail != nil {
-					currentSite.AddArchiveCache(archiveDetail)
-				}
-			}
-		}
 	}
 	if id > 0 {
-		archiveDetail = currentSite.GetArchiveByIdFromCache(id)
-		if archiveDetail == nil {
-			archiveDetail, _ = currentSite.GetArchiveById(id)
-			if archiveDetail != nil {
-				// check has Order
-				if fieldName == "HasOrdered" {
-					// if read level larger than 0, then need to check permission
-					userId := uint(0)
-					userInfo, ok := ctx.Public["userInfo"].(*model.User)
-					if ok && userInfo.Id > 0 {
-						userId = userInfo.Id
-						discount := currentSite.GetUserDiscount(userInfo.Id, userInfo)
-						if discount > 0 {
-							archiveDetail.FavorablePrice = archiveDetail.Price * discount / 100
-						}
-					}
-					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-					archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
-				}
-				currentSite.AddArchiveCache(archiveDetail)
-			}
+		if archiveDetail == nil || archiveDetail.Id != id {
+			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
 		}
 	} else if token != "" {
 		archiveDetail, _ = currentSite.GetArchiveByUrlToken(token)
 	}
 
 	if archiveDetail != nil {
+		// check has Order
+		if fieldName == "HasOrdered" {
+			// if read level larger than 0, then need to check permission
+			userId := uint(0)
+			userInfo, ok := ctx.Public["userInfo"].(*model.User)
+			if ok && userInfo.Id > 0 {
+				userId = userInfo.Id
+				discount := currentSite.GetUserDiscount(userInfo.Id, userInfo)
+				if discount > 0 {
+					archiveDetail.FavorablePrice = archiveDetail.Price * discount / 100
+				}
+			}
+			userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+			archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
+		}
+
 		if len(archiveDetail.Password) > 0 {
 			archiveDetail.HasPassword = true
 			urlParams, ok := ctx.Public["urlParams"].(map[string]string)
@@ -259,7 +247,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 							if len(match) < 2 {
 								return s
 							}
-							res := fmt.Sprintf("%s\" %s=\"%s", currentSite.Content.DefaultThumb, lazy, match[1])
+							res := fmt.Sprintf("%s\" %s=\"%s", currentSite.GetDefaultThumb(int(archiveDetail.Id)), lazy, match[1])
 							s = strings.Replace(s, match[1], res, 1)
 							return s
 						})

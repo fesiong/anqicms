@@ -3,14 +3,15 @@ package tags
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
-	"strconv"
 )
 
 type tagCategoryDetailNode struct {
@@ -74,7 +75,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 
 	if categoryDetail != nil {
 		categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
-		categoryDetail.Thumb = categoryDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		categoryDetail.Thumb = categoryDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(categoryDetail.Id)))
 		v := reflect.ValueOf(*categoryDetail)
 
 		f := v.FieldByName(fieldName)

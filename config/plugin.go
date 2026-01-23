@@ -239,6 +239,7 @@ type MultiLangSite struct {
 	LanguageEmoji string `json:"language_emoji,omitempty"`
 	LanguageName  string `json:"language_name,omitempty"`
 	Language      string `json:"language"`
+	IsMain        bool   `json:"is_main"`
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	Link          string `json:"link,omitempty"`
 	BaseUrl       string `json:"base_url,omitempty"`
@@ -251,7 +252,8 @@ type PluginMultiLangConfig struct {
 	Type            string          `json:"type"`
 	DefaultLanguage string          `json:"default_language"` // 该语言只是调用系统的设置
 	AutoTranslate   bool            `json:"auto_translate"`
-	SiteType        string          `json:"site_type"` // multi|single
+	SiteType        string          `json:"site_type"`     // multi|single
+	ShowMainDir     bool            `json:"show_main_dir"` // 显示主站目录
 	SubSites        []MultiLangSite `json:"sub_sites"`
 }
 
@@ -270,7 +272,11 @@ func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite 
 			if strings.HasPrefix(oriUrl, baseUrl+"/"+pm.DefaultLanguage) {
 				oriUrl = strings.Replace(oriUrl, baseUrl+"/"+pm.DefaultLanguage, baseUrl, 1)
 			}
-			oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+			if langSite.IsMain && pm.ShowMainDir == false {
+				// 无需处理
+			} else {
+				oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+			}
 		} else if pm.Type == MultiLangTypeSame {
 			// 相同
 			if strings.Contains(oriUrl, "?") {

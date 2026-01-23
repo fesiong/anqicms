@@ -26,7 +26,7 @@ func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, s
 		return nil, err
 	}
 	for i := range categories {
-		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categories[i].Id)))
 		categories[i].Link = w.GetUrl("category", categories[i], 0)
 	}
 	if showType == config.CategoryShowTypeList {
@@ -70,7 +70,7 @@ func (w *Website) GetCategoryByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Cate
 	if err != nil {
 		return nil, err
 	}
-	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	category.Link = w.GetUrl("category", &category, 0)
 
 	return &category, nil
@@ -371,7 +371,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		})
 		w.FlushIndex()
 	}
-	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	w.DeleteCacheCategories()
 	w.DeleteCacheIndex()
 
@@ -469,7 +469,7 @@ func (w *Website) GetCacheCategories() []*model.Category {
 		return nil
 	}
 	for i := range categories {
-		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categories[i].Id)))
 	}
 	categoryTree := NewCategoryTree(categories)
 	categories = categoryTree.GetTree(0, "")

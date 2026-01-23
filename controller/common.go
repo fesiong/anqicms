@@ -406,7 +406,6 @@ func FileServe(ctx iris.Context) bool {
 }
 
 func ReRouteContext(ctx iris.Context) {
-	params, _ := ParseRoute(ctx)
 	// 先验证文件是否真的存在，如果存在，则fileServe
 	exists := FileServe(ctx)
 	if exists {
@@ -431,6 +430,7 @@ func ReRouteContext(ctx iris.Context) {
 	if closed {
 		return
 	}
+	params, _ := ParseRoute(ctx)
 	for i, v := range params {
 		if len(i) == 0 {
 			continue
@@ -492,7 +492,8 @@ func ReRouteContext(ctx iris.Context) {
 				if strings.HasPrefix(uri, "/static/") || strings.HasPrefix(uri, "/uploads/") {
 					// 能走到这里的，就表示这些资源不存在，直接跳过翻译环节，减少资源消耗
 				} else if strings.HasPrefix(uri, "/") {
-					content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
+					params["Cache-Control"] = ctx.GetHeader("Cache-Control")
+					content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language, params)
 					if err != nil {
 						log.Println("translate err", err)
 						// 翻译错误的时候，就设置 no-index
@@ -735,19 +736,32 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 								// 需要先验证是否是module
 								return tmpMatchMap, true
 							} else {
+								preview := ctx.URLParam("preview")
 								// 由于可能导致重复，因此需要验证module
 								if tmpMatchMap["id"] != "" {
 									id, _ := strconv.ParseInt(tmpMatchMap["id"], 10, 64)
 									if id > 0 {
-										archive, err := currentSite.GetArchiveById(id)
-										if err == nil && archive.ModuleId == modules[x].Id {
+										archive := currentSite.GetArchiveByIdFromCache(id)
+										if archive != nil && archive.ModuleId == modules[x].Id {
 											return tmpMatchMap, true
+										}
+										if preview != "" {
+											archiveDraft, _ := currentSite.GetArchiveDraftById(id)
+											if archiveDraft != nil && archiveDraft.ModuleId == modules[x].Id {
+												return tmpMatchMap, true
+											}
 										}
 									}
 								} else if tmpMatchMap["filename"] != "" {
-									archive, err := currentSite.GetArchiveByUrlToken(tmpMatchMap["filename"])
-									if err == nil && archive.ModuleId == modules[x].Id {
+									archive := currentSite.GetArchiveByUrlTokenFromCache(tmpMatchMap["filename"])
+									if archive != nil && archive.ModuleId == modules[x].Id {
 										return tmpMatchMap, true
+									}
+									if preview != "" {
+										archiveDraft, _ := currentSite.GetArchiveDraftByUrlToken(tmpMatchMap["filename"])
+										if archiveDraft != nil && archiveDraft.ModuleId == modules[x].Id {
+											return tmpMatchMap, true
+										}
 									}
 								}
 								// end
