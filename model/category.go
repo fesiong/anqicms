@@ -64,6 +64,8 @@ func (category *Category) GetThumb(storageUrl, defaultThumb string) string {
 		if !strings.HasPrefix(category.Thumb, "http") && !strings.HasPrefix(category.Thumb, "//") {
 			category.Thumb = storageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
 		}
+		paths, fileName := filepath.Split(category.Thumb)
+		category.Thumb = paths + "thumb_" + fileName
 	}
 
 	return category.Thumb
