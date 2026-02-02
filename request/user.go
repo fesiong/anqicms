@@ -84,3 +84,9 @@ type ApiLoginRequest struct {
 	CaptchaId string `json:"captcha_id"`
 	Captcha   string `json:"captcha"`
 }
+
+type ApiUserBalanceRequest struct {
+	UserId uint   `json:"user_id"`
+	Amount int64  `json:"amount"`
+	Remark string `json:"remark"`
+}

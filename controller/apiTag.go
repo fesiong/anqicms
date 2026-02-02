@@ -223,6 +223,13 @@ func ApiArchiveList(ctx iris.Context) {
 			}
 		}
 	}
+	urlParams := ctx.URLParams()
+	for k, v := range urlParams {
+		if k == "price" || strings.HasPrefix(k, "filter") {
+			extraFields[k] = v
+		}
+	}
+
 	tag := ctx.URLParam("tag")
 	tagId := ctx.URLParamInt64Default("tagId", 0)
 	like := ctx.URLParam("like")
@@ -764,6 +771,10 @@ func ApiTagDetail(ctx iris.Context) {
 							var texts []model.CustomFieldTexts
 							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
 							tagDetail.Extra[field.FieldName] = texts
+						} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
+							var val model.TimelineField
+							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
+							tagDetail.Extra[field.FieldName] = val
 						} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
 							// 列表
 							var arcIds []int64
@@ -1142,15 +1153,6 @@ func ApiGuestbookForm(ctx iris.Context) {
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			tmpVal, ok := req[item.FieldName].(string)
 			if ok {
-				// 如果有上传文件，则需要用户登录
-				if userId == 0 {
-					msg := currentSite.TplTr("ThisOperationRequiresLogin")
-					ctx.JSON(iris.Map{
-						"code": config.StatusFailed,
-						"msg":  msg,
-					})
-					return
-				}
 				tmpfile, err := os.CreateTemp("", "upload")
 				if err != nil {
 					ctx.JSON(iris.Map{
@@ -1325,5 +1327,41 @@ func ApiArchivePublish(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  msg,
 		"data": archive,
+	})
+}
+
+func ApiMetadata(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	path := ctx.URLParam("path")
+
+	parsed, err := url.Parse(path)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.Params().Set("path", parsed.Path)
+
+	// 解析路由
+	params, _ := ParseRoute(ctx)
+	for i, v := range params {
+		if len(i) == 0 {
+			continue
+		}
+		ctx.Params().Set(i, v)
+	}
+
+	for k, v := range parsed.Query() {
+		params[k] = strings.Join(v, ",")
+	}
+
+	webInfo := currentSite.GetMetadata(params)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": webInfo,
 	})
 }

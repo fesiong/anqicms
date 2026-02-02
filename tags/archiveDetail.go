@@ -83,6 +83,12 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		archiveDetail, _ = currentSite.GetArchiveByUrlToken(token)
 	}
 
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		ctx.Private[node.name] = archiveDetail
+		return nil
+	}
+
 	if archiveDetail != nil {
 		// check has Order
 		if fieldName == "HasOrdered" {

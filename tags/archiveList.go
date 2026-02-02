@@ -160,13 +160,6 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		order = args["order"].String()
 		order = provider.ParseOrderBy(order, "archives")
 	}
-	if order == "" {
-		if currentSite.Content.UseSort == 1 || parentId > 0 {
-			order = "archives.`sort` desc, archives.`created_time` desc"
-		} else {
-			order = "archives.`created_time` desc"
-		}
-	}
 
 	limit := 10
 	offset := 0
@@ -179,6 +172,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	showFlag := false
 	showContent := false
 	showExtra := false
+	showTag := false
 	showCategory := false
 
 	if args["type"] != nil {
@@ -206,6 +200,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["showExtra"] != nil {
 		showExtra = args["showExtra"].Bool()
 	}
+	if args["showTag"] != nil {
+		showTag = args["showTag"].Bool()
+	}
 	if args["showCategory"] != nil {
 		showCategory = args["showCategory"].Bool()
 	}
@@ -226,6 +223,16 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 		currentPage, _ = strconv.Atoi(urlParams["page"])
 		q = strings.TrimSpace(urlParams["q"])
+		if urlParams["order"] != "" {
+			order = provider.ParseOrderBy(urlParams["order"], "archives")
+		}
+	}
+	if order == "" {
+		if currentSite.Content.UseSort == 1 || parentId > 0 {
+			order = "archives.`sort` desc, archives.`created_time` desc"
+		} else {
+			order = "archives.`created_time` desc"
+		}
 	}
 	if price != "" {
 		extraParams["price"] = price
@@ -316,6 +323,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		ShowContent:        showContent,
 		ShowExtra:          showExtra,
 		ShowCategory:       showCategory,
+		ShowTag:            showTag,
 		Draft:              false,
 		Child:              child,
 		Order:              order,
@@ -366,6 +374,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		pager := makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
 		webInfo.TotalPages = pager.TotalPages
 		ctx.Public["pagination"] = pager
+		ctx.Private["totalItems"] = total
 
 		// 公开列表数据
 		if currentSite.PluginJsonLd.Open {

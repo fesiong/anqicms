@@ -261,6 +261,10 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 					} else if field.Type == config.CustomFieldTypeTexts && req.Extra[field.FieldName] != nil {
 						buf, _ := json.Marshal(req.Extra[field.FieldName])
 						req.Extra[field.FieldName] = string(buf)
+					} else if field.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(req.Extra[field.FieldName])
+						req.Extra[field.FieldName] = string(buf)
 					}
 				}
 			}

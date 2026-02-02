@@ -186,6 +186,10 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 							buf, _ := json.Marshal(val)
 							extraFields[v.FieldName] = string(buf)
 						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(extraValue["value"])
+						extraFields[v.FieldName] = string(buf)
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
@@ -229,6 +233,44 @@ func (w *Website) DeleteUserInfo(userId uint) error {
 	err = w.DB.Delete(&user).Error
 
 	return err
+}
+
+func (w *Website) UpdateUserBalance(req *request.ApiUserBalanceRequest) error {
+	var user model.User
+	err := w.DB.Where("`id` = ?", req.UserId).Take(&user).Error
+
+	if err != nil {
+		return err
+	}
+
+	tx := w.DB.Begin()
+	//生成用户支付记录
+	err = tx.Model(user).Where("id = ?", user.Id).UpdateColumn("balance", gorm.Expr("`balance` + ?", req.Amount)).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	var userBalance int64
+	tx.Model(&model.User{}).Where("`id` = ?", req.UserId).Pluck("balance", &userBalance)
+	//状态更改了，增加一条记录到用户
+	finance := model.Finance{
+		UserId:      req.UserId,
+		Direction:   config.FinanceIncome,
+		Amount:      req.Amount,
+		AfterAmount: userBalance,
+		Action:      config.FinanceActionCharge,
+		Remark:      req.Remark,
+		Status:      1,
+	}
+	err = tx.Create(&finance).Error
+	if err != nil {
+		tx.Rollback()
+
+		return err
+	}
+	tx.Commit()
+
+	return nil
 }
 
 func (w *Website) GetUserGroups() []*model.UserGroup {
@@ -333,9 +375,6 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if req.UserName == "" || req.Password == "" {
 		return nil, errors.New(w.Tr("PleaseFillInTheUsernameAndPasswordCorrectly"))
 	}
-	if w.PluginSendmail.SignupVerify && !w.VerifyEmailFormat(req.Email) {
-		return nil, errors.New(w.Tr("IncorrectEmail"))
-	}
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
@@ -424,11 +463,12 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 	if userErr != nil {
 		//系统没记录，则插入一条记录
 		user = &model.User{
-			UserName:  wecahtUserInfo.Nickname,
-			AvatarURL: wecahtUserInfo.Avatar,
-			ParentId:  req.InviteId,
-			GroupId:   w.PluginUser.DefaultGroupId,
-			Status:    1,
+			UserName:      wecahtUserInfo.Nickname,
+			AvatarURL:     wecahtUserInfo.Avatar,
+			ParentId:      req.InviteId,
+			GroupId:       w.PluginUser.DefaultGroupId,
+			ResetPassword: true,
+			Status:        1,
 		}
 
 		err = w.DB.Save(user).Error
@@ -497,11 +537,12 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 	var user *model.User
 	if userWechat.UserId == 0 {
 		user = &model.User{
-			UserName:  userWechat.Nickname,
-			AvatarURL: userWechat.AvatarURL,
-			GroupId:   w.PluginUser.DefaultGroupId,
-			Password:  "",
-			Status:    1,
+			UserName:      userWechat.Nickname,
+			AvatarURL:     userWechat.AvatarURL,
+			GroupId:       w.PluginUser.DefaultGroupId,
+			Password:      "",
+			ResetPassword: true,
+			Status:        1,
 		}
 		w.DB.Save(user)
 		userWechat.UserId = user.Id
@@ -550,6 +591,7 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 			GoogleId:      userInfo.Id,
 			GroupId:       w.PluginUser.DefaultGroupId,
 			Password:      "",
+			ResetPassword: true,
 			Status:        1,
 		}
 		if userInfo.GivenName != "" {
@@ -824,6 +866,10 @@ func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 					if err == nil {
 						result[v.FieldName] = texts
 					}
+				} else if v.Type == config.CustomFieldTypeTimeline {
+					var val model.TimelineField
+					_ = json.Unmarshal([]byte(value), &val)
+					result[v.FieldName] = val
 				} else if v.Type == config.CustomFieldTypeArchive {
 					var arcIds []int64
 					err := json.Unmarshal([]byte(value), &arcIds)

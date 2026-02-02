@@ -452,6 +452,12 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 						if err == nil {
 							result[v.FieldName] = texts
 						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						var val model.TimelineField
+						err := json.Unmarshal([]byte(value), &val)
+						if err == nil {
+							result[v.FieldName] = val
+						}
 					} else if v.Type == config.CustomFieldTypeArchive {
 						var arcIds []int64
 						err := json.Unmarshal([]byte(value), &arcIds)
@@ -703,6 +709,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 							buf, _ := json.Marshal(val)
 							extraFields[v.FieldName] = string(buf)
 						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(extraValue["value"])
+						extraFields[v.FieldName] = string(buf)
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {

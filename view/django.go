@@ -5,7 +5,6 @@ import (
 	"hash/crc32"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/request"
 	"net/url"
 	"os"
 	stdPath "path"
@@ -23,6 +22,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 
 	"github.com/fatih/structs"

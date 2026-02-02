@@ -464,6 +464,12 @@ func init() {
 						"label": &graphql.Field{
 							Type: graphql.String,
 						},
+						"value": &graphql.Field{
+							Type: graphql.String,
+						},
+						"color": &graphql.Field{
+							Type: graphql.String,
+						},
 						"link": &graphql.Field{
 							Type: graphql.String,
 						},

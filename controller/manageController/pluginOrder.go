@@ -82,7 +82,7 @@ func PluginOrderSetPay(ctx iris.Context) {
 			})
 			return
 		}
-		payment, err = currentSite.GeneratePayment(order, req.PayWay)
+		payment, err = currentSite.GeneratePayment(order, &req)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,

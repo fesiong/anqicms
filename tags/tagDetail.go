@@ -77,6 +77,12 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagDetail.Id)))
 		v := reflect.ValueOf(*tagDetail)
 
+		// 支持获取整个detail
+		if fieldName == "" && node.name != "" {
+			ctx.Private[node.name] = tagDetail
+			return nil
+		}
+
 		f := v.FieldByName(fieldName)
 		if f.IsValid() {
 			content = f.Interface()
@@ -132,6 +138,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 						var texts []model.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &texts)
 						tagContent.Extra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeTimeline && tagContent.Extra[field.FieldName] != nil {
+						var val model.TimelineField
+						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &val)
+						tagContent.Extra[field.FieldName] = val
 					} else if field.Type == config.CustomFieldTypeArchive && tagContent.Extra[field.FieldName] != nil {
 						// 列表
 						var arcIds []int64

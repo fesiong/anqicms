@@ -34,6 +34,7 @@ type User struct {
 	GroupId       uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
 	GoogleId      string `json:"google_id" gorm:"column:google_id;type:varchar(255) not null;default:''"`
 	Password      string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`
+	ResetPassword bool   `json:"reset_password" gorm:"column:reset_password;type:tinyint(1) not null;default:0"` // 是否需要重置密码，重置密码可以不用旧密码，因为tauth2登录，没有密码
 	Status        int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
 	IsRetailer    int    `json:"is_retailer" gorm:"column:is_retailer;type:tinyint(1) not null;default:0"` // 是否是分销员
 	Balance       int64  `json:"balance" gorm:"column:balance;type:bigint(20) not null;default:0;comment:'用户余额'"`

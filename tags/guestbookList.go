@@ -2,9 +2,10 @@ package tags
 
 import (
 	"fmt"
-	"gorm.io/gorm"
 	"strconv"
 	"strings"
+
+	"gorm.io/gorm"
 
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
@@ -85,6 +86,7 @@ func (node *tagGuestbookListNode) Execute(ctx *pongo2.ExecutionContext, writer p
 
 	if listType == "page" {
 		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, "", 5)
+		ctx.Private["totalItems"] = total
 	}
 	ctx.Private[node.name] = guestbookList
 	//execute

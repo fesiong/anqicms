@@ -363,6 +363,7 @@ func manageRoute(app *iris.Application) {
 				user.Get("/list", manageController.PluginUserList)
 				user.Get("/detail", manageController.PluginUserDetail)
 				user.Post("/detail", manageController.PluginUserDetailForm)
+				user.Post("/balance", manageController.PluginUserChangeBalance)
 				user.Post("/delete", manageController.PluginUserDelete)
 				user.Get("/group/list", manageController.PluginUserGroupList)
 				user.Get("/group/detail", manageController.PluginUserGroupDetail)

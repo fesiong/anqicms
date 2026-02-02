@@ -226,6 +226,7 @@ func ApiSendVerifyEmail(ctx iris.Context) {
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("UserDoesNotExist"),
 		})
+		return
 	}
 	_ = currentSite.SendVerifyEmail(user, req.State)
 
@@ -235,6 +236,7 @@ func ApiSendVerifyEmail(ctx iris.Context) {
 	})
 }
 
+// ApiVerifyEmail 验证邮箱, state := verify = 邮件验证|reset = 重置密码|exist = 检查邮箱已存在
 func ApiVerifyEmail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	token := ctx.URLParam("token")
@@ -242,7 +244,7 @@ func ApiVerifyEmail(ctx iris.Context) {
 	email := ctx.URLParam("email")
 	state := ctx.URLParam("state")
 	returnType := ctx.URLParam("return")
-	if !currentSite.VerifyEmailFormat(email) || (len(token) == 0 && state != "verify") {
+	if !currentSite.VerifyEmailFormat(email) || (len(token) == 0 && state != "exist") {
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -255,7 +257,7 @@ func ApiVerifyEmail(ctx iris.Context) {
 	}
 	user, err := currentSite.GetUserInfoByEmail(email)
 	if err != nil {
-		if returnType == "json" || state == "verify" {
+		if returnType == "json" || state == "exist" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  currentSite.TplTr("UserDoesNotExist"),
@@ -265,8 +267,8 @@ func ApiVerifyEmail(ctx iris.Context) {
 		}
 		return
 	}
-	// 验证用户状态
-	if state == "verify" {
+	// 验证用户是否存在
+	if state == "exist" {
 		// 只能是JSON格式返回
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,

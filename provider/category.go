@@ -175,6 +175,10 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
 					buf, _ := json.Marshal(category.Extra[field.FieldName])
 					category.Extra[field.FieldName] = string(buf)
+				} else if field.Type == config.CustomFieldTypeTimeline {
+					// 存 json
+					buf, _ := json.Marshal(category.Extra[field.FieldName])
+					category.Extra[field.FieldName] = string(buf)
 				}
 			}
 		}

@@ -3,8 +3,6 @@ package graphql
 import (
 	"errors"
 	"fmt"
-	"log"
-	"net/url"
 	"strings"
 
 	"github.com/graphql-go/graphql"
@@ -15,7 +13,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 )
 
 // 查询解析器
@@ -46,253 +43,8 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 		params[i] = fmt.Sprintf("%v", v)
 		ctx.Params().Set(i, params[i])
 	}
-	currentPage := ctx.Params().GetIntDefault("page", 1)
-	log.Printf("resolvePageMeta path:%s", path)
-	log.Printf("resolvePageMeta params:%v", params)
-	webInfo := &response.WebInfo{
-		StatusCode: 200,
-		Params:     params,
-	}
 
-	switch params["match"] {
-	case "notfound":
-		// 走到 not Found
-		webInfo.StatusCode = 404
-		webInfo.Title = "404 Not Found"
-		break
-	case provider.PatternArchive:
-		id := ctx.Params().GetInt64Default("id", 0)
-		urlToken := ctx.Params().GetString("filename")
-		var archive *model.Archive
-		var err error
-		if urlToken != "" {
-			//优先使用urlToken
-			archive, err = currentSite.GetArchiveByUrlToken(urlToken)
-		} else {
-			archive, err = currentSite.GetArchiveById(id)
-		}
-		if err != nil {
-			webInfo.StatusCode = 404
-			webInfo.Title = "404 Not Found"
-			break
-		}
-		archive.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(archive.Id)))
-		webInfo.Title = archive.Title
-		if archive.SeoTitle != "" {
-			webInfo.Title = archive.SeoTitle
-		}
-		webInfo.Keywords = archive.Keywords
-		webInfo.Description = archive.Description
-		webInfo.NavBar = int64(archive.CategoryId)
-		webInfo.PageId = archive.Id
-		webInfo.ModuleId = int64(archive.ModuleId)
-		webInfo.Image = archive.Logo
-		//设置页面名称，方便tags识别
-		webInfo.PageName = "archiveDetail"
-		webInfo.CanonicalUrl = archive.CanonicalUrl
-		if webInfo.CanonicalUrl == "" {
-			webInfo.CanonicalUrl = currentSite.GetUrl("archive", archive, 0)
-		}
-		break
-	case provider.PatternArchiveIndex:
-		urlToken := ctx.Params().GetString("module")
-		module := currentSite.GetModuleFromCacheByToken(urlToken)
-		if module == nil {
-			webInfo.StatusCode = 404
-			webInfo.Title = "404 Not Found"
-			break
-		}
-		webInfo.Title = module.Title
-		webInfo.Keywords = module.Keywords
-		webInfo.Description = module.Description
-
-		//设置页面名称，方便tags识别
-		webInfo.CurrentPage = currentPage
-		webInfo.PageName = "archiveIndex"
-		webInfo.NavBar = int64(module.Id)
-		webInfo.PageId = int64(module.Id)
-		webInfo.ModuleId = int64(module.Id)
-		webInfo.CanonicalUrl = currentSite.GetUrl("archiveIndex", module, 0)
-		break
-	case provider.PatternCategory:
-		categoryId := ctx.Params().GetUintDefault("id", 0)
-		catId := ctx.Params().GetUintDefault("catid", 0)
-		if catId > 0 {
-			categoryId = catId
-		}
-		var category *model.Category
-		urlToken := ctx.Params().GetString("filename")
-		multiCatNames := ctx.Params().GetString("multicatname")
-		if multiCatNames != "" {
-			chunkCatNames := strings.Split(multiCatNames, "/")
-			urlToken = chunkCatNames[len(chunkCatNames)-1]
-			isErr := false
-			for _, catName := range chunkCatNames {
-				tmpCat := currentSite.GetCategoryFromCacheByToken(catName, category)
-				if tmpCat == nil || (category != nil && tmpCat.ParentId != category.Id) {
-					isErr = true
-					break
-				}
-				category = tmpCat
-			}
-			if isErr {
-				webInfo.StatusCode = 404
-				webInfo.Title = "404 Not Found"
-				break
-			}
-		} else {
-			if urlToken != "" {
-				//优先使用urlToken
-				category = currentSite.GetCategoryFromCacheByToken(urlToken)
-			} else {
-				category = currentSite.GetCategoryFromCache(categoryId)
-			}
-		}
-		if category == nil || category.Status != config.ContentStatusOK {
-			webInfo.StatusCode = 404
-			webInfo.Title = "404 Not Found"
-			break
-		}
-		category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(category.Id)))
-		webInfo.Title = category.Title
-		if category.SeoTitle != "" {
-			webInfo.Title = category.SeoTitle
-		}
-		webInfo.CurrentPage = currentPage
-		webInfo.Keywords = category.Keywords
-		webInfo.Description = category.Description
-		webInfo.NavBar = int64(category.Id)
-		webInfo.PageId = int64(category.Id)
-		webInfo.ModuleId = int64(category.ModuleId)
-		webInfo.PageName = "archiveList"
-		webInfo.CanonicalUrl = currentSite.GetUrl("category", category, currentPage)
-		break
-	case provider.PatternPage:
-		categoryId := ctx.Params().GetUintDefault("id", 0)
-		urlToken := ctx.Params().GetString("filename")
-		catId := ctx.Params().GetUintDefault("catid", 0)
-		if catId > 0 {
-			categoryId = catId
-		}
-		var category *model.Category
-		if urlToken != "" {
-			//优先使用urlToken
-			category = currentSite.GetCategoryFromCacheByToken(urlToken)
-		} else {
-			category = currentSite.GetCategoryFromCache(categoryId)
-		}
-		if category == nil || category.Status != config.ContentStatusOK {
-			webInfo.StatusCode = 404
-			webInfo.Title = "404 Not Found"
-			break
-		}
-
-		//修正，如果这里读到的的category，则跳到category中
-		if category.Type != config.CategoryTypePage {
-			webInfo.StatusCode = 301
-			webInfo.Title = "301 Redirect"
-			webInfo.CanonicalUrl = currentSite.GetUrl("category", category, 0)
-			break
-		}
-		category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(category.Id)))
-		webInfo.Title = category.Title
-		if category.SeoTitle != "" {
-			webInfo.Title = category.SeoTitle
-		}
-		webInfo.Keywords = category.Keywords
-		webInfo.Description = category.Description
-		webInfo.NavBar = int64(category.Id)
-		webInfo.PageId = int64(category.Id)
-		webInfo.PageName = "pageDetail"
-		webInfo.CanonicalUrl = currentSite.GetUrl("page", category, 0)
-		break
-	case provider.PatternSearch:
-		q := strings.TrimSpace(ctx.Params().GetString("q"))
-		moduleToken := ctx.Params().GetString("module")
-		var module *model.Module
-		if len(moduleToken) > 0 {
-			module = currentSite.GetModuleFromCacheByToken(moduleToken)
-		}
-
-		webInfo.Title = currentSite.TplTr("Search%s", "")
-		if module != nil {
-			webInfo.Title = module.Title + webInfo.Title
-			webInfo.ModuleId = int64(module.Id)
-		}
-		webInfo.CurrentPage = currentPage
-		webInfo.PageName = "search"
-		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", url.QueryEscape(q)), nil, currentPage)
-		break
-	case provider.PatternTagIndex:
-		webInfo.Title = currentSite.TplTr("TagList")
-		webInfo.CurrentPage = currentPage
-		webInfo.PageName = "tagIndex"
-		webInfo.CanonicalUrl = currentSite.GetUrl("tagIndex", nil, currentPage)
-		break
-	case provider.PatternTag:
-		tagId := ctx.Params().GetUintDefault("id", 0)
-		urlToken := ctx.Params().GetString("filename")
-		var tag *model.Tag
-		var err error
-		if urlToken != "" {
-			//优先使用urlToken
-			tag, err = currentSite.GetTagByUrlToken(urlToken)
-		} else {
-			tag, err = currentSite.GetTagById(tagId)
-		}
-		if err != nil {
-			webInfo.StatusCode = 404
-			webInfo.Title = "404 Not Found"
-			break
-		}
-		tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tag.Id)))
-		webInfo.Title = tag.Title
-		if tag.SeoTitle != "" {
-			webInfo.Title = tag.SeoTitle
-		}
-		webInfo.CurrentPage = currentPage
-		webInfo.Keywords = tag.Keywords
-		webInfo.Description = tag.Description
-		webInfo.NavBar = int64(tag.Id)
-		webInfo.PageId = int64(tag.Id)
-		webInfo.PageName = "tag"
-		webInfo.CanonicalUrl = currentSite.GetUrl("tag", tag, currentPage)
-		break
-	case "index":
-		webTitle := currentSite.Index.SeoTitle
-		webInfo.Title = webTitle
-		webInfo.Keywords = currentSite.Index.SeoKeywords
-		webInfo.Description = currentSite.Index.SeoDescription
-		webInfo.Image = currentSite.System.SiteLogo
-		//设置页面名称，方便tags识别
-		webInfo.CurrentPage = currentPage
-		webInfo.PageName = "index"
-		webInfo.CanonicalUrl = currentSite.GetUrl("", nil, 0)
-		break
-	case provider.PatternPeople:
-		id := ctx.Params().GetUintDefault("id", 0)
-		urlToken := ctx.Params().GetString("filename")
-		var user *model.User
-		var err error
-		if urlToken != "" {
-			//优先使用urlToken
-			user, err = currentSite.GetUserInfoByUrlToken(urlToken)
-		} else {
-			user, err = currentSite.GetUserInfoById(id)
-		}
-		if err != nil {
-			webInfo.StatusCode = 404
-			webInfo.Title = "404 Not Found"
-			break
-		}
-
-		webInfo.Title = user.UserName
-		webInfo.NavBar = int64(user.Id)
-		webInfo.PageId = int64(user.Id)
-		webInfo.PageName = "userDetail"
-		webInfo.CanonicalUrl = currentSite.GetUrl(provider.PatternPeople, user, 0)
-		break
-	}
+	webInfo := currentSite.GetMetadata(params)
 
 	return webInfo, nil
 }
@@ -397,6 +149,11 @@ func resolveArchives(p graphql.ResolveParams) (interface{}, error) {
 					extraFields[field.FieldName], _ = p.Args[field.FieldName]
 				}
 			}
+		}
+	}
+	for k, v := range p.Args {
+		if k == "price" || strings.HasPrefix(k, "filter") {
+			extraFields[k] = v
 		}
 	}
 

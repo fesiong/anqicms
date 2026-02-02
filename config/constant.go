@@ -26,6 +26,11 @@ const (
 	CustomFieldTypeTexts    = "texts"
 	CustomFieldTypeArchive  = "archive"
 	CustomFieldTypeCategory = "category"
+	CustomFieldTypeDate     = "date"
+	CustomFieldTypeTime     = "time"
+	CustomFieldTypeDatetime = "datetime"
+	CustomFieldTypeColor    = "color"
+	CustomFieldTypeTimeline = "timeline"
 )
 
 const (
@@ -87,6 +92,7 @@ const (
 	PayWayWeapp   = "weapp"   // 微信小程序支付
 	PayWayAlipay  = "alipay"  // 支付宝支付
 	PayWayOffline = "offline" // 线下支付
+	PayWayBalance = "balance" // 余额支付
 	PayWayPaypal  = "paypal"  // paypal
 )
 

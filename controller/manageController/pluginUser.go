@@ -204,6 +204,49 @@ func PluginUserDetailForm(ctx iris.Context) {
 	})
 }
 
+func PluginUserChangeBalance(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ApiUserBalanceRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Amount == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseEnterTheAmount"),
+		})
+		return
+	}
+
+	if req.Remark == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseEnterRemarks"),
+		})
+		return
+	}
+
+	err := currentSite.UpdateUserBalance(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserLog", req.UserId, "balance"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
+	})
+}
+
 func PluginUserDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.UserRequest

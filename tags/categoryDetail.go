@@ -76,6 +76,13 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if categoryDetail != nil {
 		categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
 		categoryDetail.Thumb = categoryDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(categoryDetail.Id)))
+
+		// 支持获取整个detail
+		if fieldName == "" && node.name != "" {
+			ctx.Private[node.name] = categoryDetail
+			return nil
+		}
+
 		v := reflect.ValueOf(*categoryDetail)
 
 		f := v.FieldByName(fieldName)
@@ -118,6 +125,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 						var texts []model.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(categoryDetailExtra[field.FieldName])), &texts)
 						categoryDetailExtra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeTimeline && categoryDetailExtra[field.FieldName] != nil {
+						var val model.TimelineField
+						_ = json.Unmarshal([]byte(fmt.Sprint(categoryDetailExtra[field.FieldName])), &val)
+						categoryDetailExtra[field.FieldName] = val
 					} else if field.Type == config.CustomFieldTypeArchive && categoryDetailExtra[field.FieldName] != nil {
 						// 列表
 						var arcIds []int64

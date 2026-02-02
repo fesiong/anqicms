@@ -3,16 +3,17 @@ package provider
 import (
 	"bytes"
 	"fmt"
-	"golang.org/x/net/html"
 	"io"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"math"
 	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"golang.org/x/net/html"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 const AnchorCacheKey = "anchor_list"

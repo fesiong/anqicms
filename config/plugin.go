@@ -404,6 +404,8 @@ func (g *CustomField) GetFieldColumn() string {
 		column += " int(10)"
 	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts || g.Type == CustomFieldTypeArchive {
 		column += " text"
+	} else if g.Type == CustomFieldTypeTimeline {
+		column += " longtext"
 	} else {
 		// mysql 5.6 下，utf8mb4 索引只能用190
 		column += " varchar(190)"

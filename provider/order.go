@@ -188,7 +188,7 @@ func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error
 	return &payment, nil
 }
 
-func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Payment, error) {
+func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentRequest) (*model.Payment, error) {
 	payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil
@@ -200,7 +200,7 @@ func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Pay
 		Amount:  order.Amount,
 		Status:  0,
 		Remark:  order.Remark,
-		PayWay:  payWay,
+		PayWay:  req.PayWay,
 	}
 	err = w.DB.Save(payment).Error
 	if err != nil {

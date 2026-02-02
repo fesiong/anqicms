@@ -43,41 +43,74 @@ func TimestampToDate(in interface{}, layout string, args ...string) string {
 			lang = strings.ToLower(args[0])
 		}
 		now := time.Now()
-		diff := now.Sub(t)
+		// 计算时间差，如果是过去时间则显示已过去多久，如果是未来时间则显示还剩多久
+		var diff time.Duration
+		var isFuture bool
+		if t.After(now) {
+			// 未来时间，计算剩余时间
+			diff = t.Sub(now)
+			isFuture = true
+		} else {
+			// 过去时间，计算已过去时间
+			diff = now.Sub(t)
+			isFuture = false
+		}
 
 		var result string
 		// 多语言支持
 		var hourStr, minuteStr, secondStr, justStr string
-		var todayStr, yesterdayStr, daysAgoStr, weekAgoStr, monthAgoStr, yearAgoStr string
+		var daysAfterStr, weekAfterStr, monthAfterStr, yearAfterStr string
+		var daysAgoStr, weekAgoStr, monthAgoStr, yearAgoStr string
 
 		// 默认中文
-		hourStr = "小时前"
-		minuteStr = "分钟前"
-		secondStr = "秒前"
-		justStr = "刚刚"
+		if isFuture {
+			hourStr = "小时后"
+			minuteStr = "分钟后"
+			secondStr = "秒后"
+			justStr = "马上到期"
 
-		todayStr = "今天"
-		yesterdayStr = "昨天"
-		daysAgoStr = "天前"
-		weekAgoStr = "周前"
-		monthAgoStr = "月前"
-		yearAgoStr = "年前"
-		// 其它按英文处理
-		if !strings.HasPrefix(lang, "zh") {
-			hourStr = " hour ago"
-			minuteStr = " minute ago"
-			secondStr = " second ago"
-			justStr = " Just"
+			daysAfterStr = "天后"
+			weekAfterStr = "周后"
+			monthAfterStr = "月后"
+			yearAfterStr = "年后"
+		} else {
+			hourStr = "小时前"
+			minuteStr = "分钟前"
+			secondStr = "秒前"
+			justStr = "刚刚"
 
-			todayStr = "Today"
-			yesterdayStr = "Yesterday"
-			daysAgoStr = " days ago"
-			weekAgoStr = " weeks ago"
-			monthAgoStr = " months ago"
-			yearAgoStr = " years ago"
+			daysAgoStr = "天前"
+			weekAgoStr = "周前"
+			monthAgoStr = "月前"
+			yearAgoStr = "年前"
 		}
 
-		if diff < 1 {
+		// 其它按英文处理
+		if !strings.HasPrefix(lang, "zh") {
+			if isFuture {
+				hourStr = " hours remaining"
+				minuteStr = " minutes remaining"
+				secondStr = " seconds remaining"
+				justStr = " Imminent"
+
+				daysAfterStr = " days remaining"
+				weekAfterStr = " weeks remaining"
+				monthAfterStr = " months remaining"
+				yearAfterStr = " years remaining"
+			} else {
+				hourStr = " hours ago"
+				minuteStr = " minutes ago"
+				secondStr = " seconds ago"
+				justStr = " Just now"
+
+				daysAgoStr = " days ago"
+				weekAgoStr = " weeks ago"
+				monthAgoStr = " months ago"
+				yearAgoStr = " years ago"
+			}
+		}
+
+		if diff < 1*time.Second && isFuture {
 			return justStr
 		} else if diff < time.Minute {
 			seconds := int(diff.Seconds())
@@ -85,40 +118,49 @@ func TimestampToDate(in interface{}, layout string, args ...string) string {
 		} else if diff < time.Hour {
 			minutes := int(diff.Minutes())
 			result = fmt.Sprintf("%d%s", minutes, minuteStr)
-		} else if diff < 10*time.Hour {
+		} else if diff < 24*time.Hour {
 			hours := int(diff.Hours())
 			result = fmt.Sprintf("%d%s", hours, hourStr)
-		} else if t.YearDay() == now.YearDay() {
-			result = fmt.Sprintf("%s %s", todayStr, t.Format("15:04"))
-		} else if t.YearDay()+1 == now.YearDay() && t.Year() == now.Year() {
-			result = yesterdayStr
-		} else if t.YearDay()+7 > now.YearDay() && t.Year() == now.Year() {
-			days := now.Day() - t.Day()
-			if days < 0 {
-				days = -days
-			}
-			result = fmt.Sprintf("%d%s", days, daysAgoStr)
-		} else if t.Month() == now.Month() && t.Year() == now.Year() {
-			weeks := int(diff.Hours() / 24 / 7)
-			if weeks == 0 {
-				weeks = 1
-			}
-			result = fmt.Sprintf("%d%s", weeks, weekAgoStr)
-		} else if t.Year() == now.Year() {
-			months := int(now.Month() - t.Month())
-			if months < 0 {
-				months = -months
-			}
-			result = fmt.Sprintf("%d%s", months, monthAgoStr)
-		} else {
-			years := now.Year() - t.Year()
-			if years <= 1 {
-				months := 12 - int(t.Month()) + int(now.Month())
-				if months <= 12 {
-					return fmt.Sprintf("%d%s", months, monthAgoStr)
+		} else if diff < 7*24*time.Hour {
+			// 不足一周，显示天数
+			days := int(diff.Hours()) / 24
+			result = fmt.Sprintf("%d%s", days, func() string {
+				if isFuture {
+					return daysAfterStr
+				} else {
+					return daysAgoStr
 				}
-			}
-			result = fmt.Sprintf("%d%s", years, yearAgoStr)
+			}())
+		} else if diff < 30*24*time.Hour {
+			// 不足一个月，显示周数
+			weeks := int(diff.Hours()) / 24 / 7
+			result = fmt.Sprintf("%d%s", weeks, func() string {
+				if isFuture {
+					return weekAfterStr
+				} else {
+					return weekAgoStr
+				}
+			}())
+		} else if diff < 365*24*time.Hour {
+			// 不足一年，显示月数
+			months := int(diff.Hours()) / 24 / 30
+			result = fmt.Sprintf("%d%s", months, func() string {
+				if isFuture {
+					return monthAfterStr
+				} else {
+					return monthAgoStr
+				}
+			}())
+		} else {
+			// 显示年数
+			years := int(diff.Hours()) / 24 / 365
+			result = fmt.Sprintf("%d%s", years, func() string {
+				if isFuture {
+					return yearAfterStr
+				} else {
+					return yearAgoStr
+				}
+			}())
 		}
 
 		return result

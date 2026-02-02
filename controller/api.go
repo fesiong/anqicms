@@ -311,7 +311,7 @@ func ApiImportArchive(ctx iris.Context) {
 			} else {
 				value := ctx.PostValue(v.FieldName)
 				if value != "" {
-					if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+					if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeTimeline {
 						// 提交的是JSON字符串
 						var extra any
 						err := json.Unmarshal([]byte(value), &extra)

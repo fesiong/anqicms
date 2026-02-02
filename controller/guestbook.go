@@ -1,12 +1,13 @@
 package controller
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 func GuestbookPage(ctx iris.Context) {
@@ -62,19 +63,6 @@ func GuestbookForm(ctx iris.Context) {
 			tmpVal, _ := ctx.PostValues(item.FieldName + "[]")
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
-			// 如果有上传文件，则需要用户登录
-			if userId == 0 {
-				msg := currentSite.TplTr("ThisOperationRequiresLogin")
-				if returnType == "json" {
-					ctx.JSON(iris.Map{
-						"code": config.StatusFailed,
-						"msg":  msg,
-					})
-				} else {
-					ShowMessage(ctx, msg, nil)
-				}
-				return
-			}
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
 				attach, err := currentSite.AttachmentUpload(file, info, 0, 0, userId)

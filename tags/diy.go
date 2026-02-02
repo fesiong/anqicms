@@ -3,13 +3,14 @@ package tags
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
 )
 
 type tagDiyNode struct {
@@ -80,6 +81,11 @@ func (node *tagDiyNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 				buf, _ := json.Marshal(content)
 				_ = json.Unmarshal(buf, &texts)
 				content = texts
+			} else if field.Type == config.CustomFieldTypeTimeline && content != nil {
+				var val model.TimelineField
+				buf, _ := json.Marshal(content)
+				_ = json.Unmarshal(buf, &val)
+				content = val
 			} else if field.Type == config.CustomFieldTypeArchive && content != nil {
 				// 列表
 				var arcIds []int64

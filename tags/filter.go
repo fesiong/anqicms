@@ -26,6 +26,8 @@ func init() {
 	pongo2.RegisterFilter("thumb", filterThumb)
 	pongo2.RegisterFilter("render", filterRender)
 	pongo2.RegisterFilter("json", filterJson)
+	pongo2.RegisterFilter("priceFormat", filterPriceFormat)
+	pongo2.RegisterFilter("dateFormat", filterDateFormat)
 	if pongo2.FilterExists("split") {
 		pongo2.ReplaceFilter("split", filterSplit)
 	}
@@ -212,4 +214,21 @@ func filterWordwrap(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pong
 		lines = append(lines, strings.Join(words[wrapAt*i:min(wrapAt*(i+1), wordsLen)], " "))
 	}
 	return pongo2.AsValue(strings.Join(lines, "\n")), nil
+}
+
+func filterPriceFormat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	format := param.String()
+
+	result := PriceFormat(in.String(), format)
+	return pongo2.AsValue(result), nil
+}
+
+func filterDateFormat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	format := param.String()
+	if format == "" {
+		format = "2006-01-02"
+	}
+
+	result := TimestampToDate(in.String(), format)
+	return pongo2.AsValue(result), nil
 }

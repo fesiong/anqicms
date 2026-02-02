@@ -597,11 +597,14 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					price = strings.ReplaceAll(price, ",", "-")
 					priceItems := strings.Split(price, "-")
 					minPrice, _ := strconv.Atoi(priceItems[0])
+					maxPrice := 0
 					if len(priceItems) > 1 {
-						maxPrice, _ := strconv.Atoi(priceItems[1])
-						tx = tx.Where("`price` >= ? AND `price` <= ?", minPrice, maxPrice)
+						maxPrice, _ = strconv.Atoi(priceItems[1])
+					}
+					if maxPrice >= minPrice {
+						tx = tx.Where("archives.price >= ? AND archives.price <= ?", minPrice, maxPrice)
 					} else {
-						tx = tx.Where("`price` >= ?", minPrice)
+						tx = tx.Where("archives.price >= ?", minPrice)
 					}
 				}
 			}
@@ -950,6 +953,7 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 				// 需要插入 全部 标签
 				filterItems = append(filterItems, response.FilterItem{
 					Label:     req.AllText,
+					Value:     "",
 					Link:      urlPatten + tmpParams.Encode(),
 					IsCurrent: isCurrent,
 				})
@@ -963,6 +967,7 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 				}
 				filterItems = append(filterItems, response.FilterItem{
 					Label:     val,
+					Value:     val,
 					Link:      urlPatten + tmpParams.Encode(),
 					IsCurrent: isCurrent,
 				})
@@ -979,15 +984,16 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 		var maxPrice int64
 		w.DB.Model(model.Archive{}).Select("max(price)").Scan(&maxPrice)
 		tmpParams, _ := url.ParseQuery(newQuery)
-		tmpParams.Set("price", "0-0")
+		tmpParams.Set("price", req.UrlParams["price"])
 		// 把价格范围分成5份
 		filterGroups = append(filterGroups, response.FilterGroup{
 			Name:      "Price",
 			FieldName: "price",
-			Range: response.FilterRange{
-				Max:  int64(math.Ceil(float64(maxPrice) / 100)),
-				Min:  0,
-				Link: urlPatten + tmpParams.Encode(),
+			Range: &response.FilterRange{
+				Max:   int64(math.Ceil(float64(maxPrice) / 100)),
+				Min:   0,
+				Value: req.UrlParams["price"],
+				Link:  urlPatten + tmpParams.Encode(),
 			},
 		})
 	}
@@ -998,6 +1004,7 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			v.Link = w.GetUrl("category", v, 0)
 			categoryItems = append(categoryItems, response.FilterItem{
 				Label:     v.Title,
+				Value:     fmt.Sprintf("%d", v.Id),
 				Link:      v.Link,
 				IsCurrent: v.Id == uint(req.CategoryId),
 			})
@@ -1167,6 +1174,10 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 					var texts []model.CustomFieldTexts
 					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &texts)
 					categoryExtra[field.FieldName] = texts
+				} else if field.Type == config.CustomFieldTypeTimeline && categoryExtra[field.FieldName] != nil {
+					var val model.TimelineField
+					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &val)
+					categoryExtra[field.FieldName] = val
 				} else if field.Type == config.CustomFieldTypeArchive && categoryExtra[field.FieldName] != nil {
 					// 列表
 					var arcIds []int64
@@ -1282,6 +1293,10 @@ func (w *Website) ApiGetTag(req *request.ApiTagRequest) (*model.Tag, error) {
 						var texts []model.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
 						tagDetail.Extra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
+						var val model.TimelineField
+						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
+						tagDetail.Extra[field.FieldName] = val
 					} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
 						// 列表
 						var arcIds []int64
@@ -1563,6 +1578,10 @@ func (w *Website) ApiGetDiyFields(render bool) []config.ExtraField {
 			var texts []model.CustomFieldTexts
 			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &texts)
 			field.Value = texts
+		} else if field.Type == config.CustomFieldTypeTimeline && field.Value != nil {
+			var val model.TimelineField
+			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &val)
+			field.Value = val
 		} else if field.Type == config.CustomFieldTypeArchive && field.Value != nil {
 			// 列表
 			var arcIds []int64
@@ -1641,4 +1660,261 @@ func (w *Website) ApiGetLanguages() ([]config.MultiLangSite, error) {
 	languages := w.GetMultiLangSites(mainId, false)
 
 	return languages, nil
+}
+
+func (w *Website) GetMetadata(params map[string]string) *response.WebInfo {
+	var err error
+	var currentPage = 1
+	if params["page"] != "" {
+		currentPage, err = strconv.Atoi(params["page"])
+		if err != nil {
+			currentPage = 1
+		}
+	}
+	webInfo := &response.WebInfo{
+		StatusCode: 200,
+		Params:     params,
+	}
+
+	switch params["match"] {
+	case "notfound":
+		// 走到 not Found
+		webInfo.StatusCode = 404
+		webInfo.Title = "404 Not Found"
+		break
+	case PatternArchive:
+		id, _ := strconv.ParseInt(params["id"], 10, 64)
+		urlToken := params["filename"]
+		var archive *model.Archive
+		var err error
+		if urlToken != "" {
+			//优先使用urlToken
+			archive, err = w.GetArchiveByUrlToken(urlToken)
+		} else {
+			archive, err = w.GetArchiveById(id)
+		}
+		if err != nil {
+			webInfo.StatusCode = 404
+			webInfo.Title = "404 Not Found"
+			break
+		}
+		archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		webInfo.Title = archive.Title
+		if archive.SeoTitle != "" {
+			webInfo.Title = archive.SeoTitle
+		}
+		webInfo.Keywords = archive.Keywords
+		webInfo.Description = archive.Description
+		webInfo.NavBar = int64(archive.CategoryId)
+		webInfo.PageId = archive.Id
+		webInfo.ModuleId = int64(archive.ModuleId)
+		webInfo.Image = archive.Logo
+		//设置页面名称，方便tags识别
+		webInfo.PageName = "archiveDetail"
+		webInfo.CanonicalUrl = archive.CanonicalUrl
+		if webInfo.CanonicalUrl == "" {
+			webInfo.CanonicalUrl = w.GetUrl("archive", archive, 0)
+		}
+		break
+	case PatternArchiveIndex:
+		urlToken := params["module"]
+		module := w.GetModuleFromCacheByToken(urlToken)
+		if module == nil {
+			webInfo.StatusCode = 404
+			webInfo.Title = "404 Not Found"
+			break
+		}
+		webInfo.Title = module.Title
+		webInfo.Keywords = module.Keywords
+		webInfo.Description = module.Description
+
+		//设置页面名称，方便tags识别
+		webInfo.CurrentPage = currentPage
+		webInfo.PageName = "archiveIndex"
+		webInfo.NavBar = int64(module.Id)
+		webInfo.PageId = int64(module.Id)
+		webInfo.ModuleId = int64(module.Id)
+		webInfo.CanonicalUrl = w.GetUrl("archiveIndex", module, 0)
+		break
+	case PatternCategory:
+		categoryId, _ := strconv.ParseInt(params["id"], 10, 64)
+		catId, _ := strconv.ParseInt(params["catid"], 10, 64)
+		if catId > 0 {
+			categoryId = catId
+		}
+		var category *model.Category
+		urlToken := params["filename"]
+		multiCatNames := params["multicatname"]
+		if multiCatNames != "" {
+			chunkCatNames := strings.Split(multiCatNames, "/")
+			urlToken = chunkCatNames[len(chunkCatNames)-1]
+			isErr := false
+			for _, catName := range chunkCatNames {
+				tmpCat := w.GetCategoryFromCacheByToken(catName, category)
+				if tmpCat == nil || (category != nil && tmpCat.ParentId != category.Id) {
+					isErr = true
+					break
+				}
+				category = tmpCat
+			}
+			if isErr {
+				webInfo.StatusCode = 404
+				webInfo.Title = "404 Not Found"
+				break
+			}
+		} else {
+			if urlToken != "" {
+				//优先使用urlToken
+				category = w.GetCategoryFromCacheByToken(urlToken)
+			} else {
+				category = w.GetCategoryFromCache(uint(categoryId))
+			}
+		}
+		if category == nil || category.Status != config.ContentStatusOK {
+			webInfo.StatusCode = 404
+			webInfo.Title = "404 Not Found"
+			break
+		}
+		category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		webInfo.Title = category.Title
+		if category.SeoTitle != "" {
+			webInfo.Title = category.SeoTitle
+		}
+		webInfo.CurrentPage = currentPage
+		webInfo.Keywords = category.Keywords
+		webInfo.Description = category.Description
+		webInfo.NavBar = int64(category.Id)
+		webInfo.PageId = int64(category.Id)
+		webInfo.ModuleId = int64(category.ModuleId)
+		webInfo.PageName = "archiveList"
+		webInfo.CanonicalUrl = w.GetUrl("category", category, currentPage)
+		break
+	case PatternPage:
+		categoryId, _ := strconv.ParseInt(params["id"], 10, 64)
+		catId, _ := strconv.ParseInt(params["catid"], 10, 64)
+		if catId > 0 {
+			categoryId = catId
+		}
+		urlToken := params["filename"]
+		var category *model.Category
+		if urlToken != "" {
+			//优先使用urlToken
+			category = w.GetCategoryFromCacheByToken(urlToken)
+		} else {
+			category = w.GetCategoryFromCache(uint(categoryId))
+		}
+		if category == nil || category.Status != config.ContentStatusOK {
+			webInfo.StatusCode = 404
+			webInfo.Title = "404 Not Found"
+			break
+		}
+
+		//修正，如果这里读到的的category，则跳到category中
+		if category.Type != config.CategoryTypePage {
+			webInfo.StatusCode = 301
+			webInfo.Title = "301 Redirect"
+			webInfo.CanonicalUrl = w.GetUrl("category", category, 0)
+			break
+		}
+		category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		webInfo.Title = category.Title
+		if category.SeoTitle != "" {
+			webInfo.Title = category.SeoTitle
+		}
+		webInfo.Keywords = category.Keywords
+		webInfo.Description = category.Description
+		webInfo.NavBar = int64(category.Id)
+		webInfo.PageId = int64(category.Id)
+		webInfo.PageName = "pageDetail"
+		webInfo.CanonicalUrl = w.GetUrl("page", category, 0)
+		break
+	case PatternSearch:
+		q := strings.TrimSpace(params["q"])
+		moduleToken := params["module"]
+		var module *model.Module
+		if len(moduleToken) > 0 {
+			module = w.GetModuleFromCacheByToken(moduleToken)
+		}
+
+		webInfo.Title = w.TplTr("Search%s", "")
+		if module != nil {
+			webInfo.Title = module.Title + webInfo.Title
+			webInfo.ModuleId = int64(module.Id)
+		}
+		webInfo.CurrentPage = currentPage
+		webInfo.PageName = "search"
+		webInfo.CanonicalUrl = w.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", url.QueryEscape(q)), nil, currentPage)
+		break
+	case PatternTagIndex:
+		webInfo.Title = w.TplTr("TagList")
+		webInfo.CurrentPage = currentPage
+		webInfo.PageName = "tagIndex"
+		webInfo.CanonicalUrl = w.GetUrl("tagIndex", nil, currentPage)
+		break
+	case PatternTag:
+		tagId, _ := strconv.ParseInt(params["id"], 10, 64)
+		urlToken := params["filename"]
+		var tag *model.Tag
+		var err error
+		if urlToken != "" {
+			//优先使用urlToken
+			tag, err = w.GetTagByUrlToken(urlToken)
+		} else {
+			tag, err = w.GetTagById(uint(tagId))
+		}
+		if err != nil {
+			webInfo.StatusCode = 404
+			webInfo.Title = "404 Not Found"
+			break
+		}
+		tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		webInfo.Title = tag.Title
+		if tag.SeoTitle != "" {
+			webInfo.Title = tag.SeoTitle
+		}
+		webInfo.CurrentPage = currentPage
+		webInfo.Keywords = tag.Keywords
+		webInfo.Description = tag.Description
+		webInfo.NavBar = int64(tag.Id)
+		webInfo.PageId = int64(tag.Id)
+		webInfo.PageName = "tag"
+		webInfo.CanonicalUrl = w.GetUrl("tag", tag, currentPage)
+		break
+	case "index":
+		webTitle := w.Index.SeoTitle
+		webInfo.Title = webTitle
+		webInfo.Keywords = w.Index.SeoKeywords
+		webInfo.Description = w.Index.SeoDescription
+		webInfo.Image = w.System.SiteLogo
+		//设置页面名称，方便tags识别
+		webInfo.CurrentPage = currentPage
+		webInfo.PageName = "index"
+		webInfo.CanonicalUrl = w.GetUrl("", nil, 0)
+		break
+	case PatternPeople:
+		id, _ := strconv.ParseInt(params["id"], 10, 64)
+		urlToken := params["filename"]
+		var user *model.User
+		var err error
+		if urlToken != "" {
+			//优先使用urlToken
+			user, err = w.GetUserInfoByUrlToken(urlToken)
+		} else {
+			user, err = w.GetUserInfoById(uint(id))
+		}
+		if err != nil {
+			webInfo.StatusCode = 404
+			webInfo.Title = "404 Not Found"
+			break
+		}
+
+		webInfo.Title = user.UserName
+		webInfo.NavBar = int64(user.Id)
+		webInfo.PageId = int64(user.Id)
+		webInfo.PageName = "userDetail"
+		webInfo.CanonicalUrl = w.GetUrl(PatternPeople, user, 0)
+		break
+	}
+
+	return webInfo
 }
