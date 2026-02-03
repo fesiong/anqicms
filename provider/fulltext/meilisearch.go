@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/meilisearch/meilisearch-go"
 	"kandaoni.com/anqicms/config"
@@ -35,9 +36,12 @@ func NewMeiliSearchService(cfg *config.PluginFulltextConfig, indexName string) (
 }
 
 func (s *MeiliSearchService) Index(body interface{}) error {
+	// features
+	s.apiClient.ExperimentalFeatures().SetContainsFilter(true).Update()
+
 	index := s.apiClient.Index(s.indexName)
 
-	task0, err := index.UpdateFilterableAttributes(&[]interface{}{"module_id"})
+	task0, err := index.UpdateFilterableAttributes(&[]interface{}{"module_id", "title"})
 	if err != nil {
 		log.Println("配置可搜索属性失败: ", err)
 		return err
@@ -74,8 +78,7 @@ func (s *MeiliSearchService) Create(doc TinyArchive) error {
 	documents := []map[string]interface{}{
 		data,
 	}
-	keyName := "id"
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, &keyName)
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -97,8 +100,7 @@ func (s *MeiliSearchService) Update(doc TinyArchive) error {
 	documents := []map[string]interface{}{
 		data,
 	}
-	keyName := "id"
-	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, &keyName)
+	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -112,7 +114,7 @@ func (s *MeiliSearchService) Delete(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
 
-	task, err := s.apiClient.Index(s.indexName).DeleteDocument(docId)
+	task, err := s.apiClient.Index(s.indexName).DeleteDocument(docId, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -136,8 +138,7 @@ func (s *MeiliSearchService) Bulk(docs []TinyArchive) error {
 
 		data = append(data, item)
 	}
-	keyName := "id"
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, &keyName)
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -156,8 +157,24 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 		Limit:  int64(pageSize),
 		Offset: int64((page - 1) * pageSize),
 	}
+	if s.config.RankingScore > 0 {
+		query.RankingScoreThreshold = float64(s.config.RankingScore) / 100
+	}
+	var queryFilter []string
 	if moduleId > 0 {
-		query.Filter = fmt.Sprintf("module_id = %d", moduleId) // 过滤 moduleId
+		queryFilter = append(queryFilter, fmt.Sprintf("module_id = %d", moduleId)) // 过滤 moduleId
+	}
+	if s.config.ContainLength > 0 {
+		// 匹配搜索词的开头
+		contain := keyword
+		if utf8.RuneCountInString(contain) > s.config.ContainLength {
+			contain = string([]rune(contain)[:s.config.ContainLength])
+		}
+		// "title STARTS WITH 'keyword'")
+		queryFilter = append(queryFilter, fmt.Sprintf("title CONTAINS '%s'", contain))
+	}
+	if len(queryFilter) > 0 {
+		query.Filter = queryFilter
 	}
 
 	resp, err := s.apiClient.Index(s.indexName).Search(keyword, query)

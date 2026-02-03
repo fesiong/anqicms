@@ -33,7 +33,7 @@ require (
 	github.com/kataras/iris/v12 v12.2.11
 	github.com/lib/pq v1.10.9
 	github.com/medivhzhan/weapp/v3 v3.8.4
-	github.com/meilisearch/meilisearch-go v0.34.2
+	github.com/meilisearch/meilisearch-go v0.36.0
 	github.com/melbahja/goph v1.4.0
 	github.com/mojocn/base64Captcha v1.3.8
 	github.com/mozillazg/go-pinyin v0.21.0
@@ -126,7 +126,6 @@ require (
 	github.com/go-sql-driver/mysql v1.8.1 // indirect
 	github.com/go-stack/stack v1.8.0 // indirect
 	github.com/gofrs/flock v0.8.1 // indirect
-	github.com/golang-jwt/jwt/v4 v4.5.2 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
 	github.com/google/go-querystring v1.1.0 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
