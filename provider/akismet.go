@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 )
 
 const (
@@ -149,6 +150,7 @@ func (w *Website) AkismentCheck(ctx iris.Context, checkType int, data interface{
 		if ok {
 			akiComment.CommentAuthor = comment.UserName
 			akiComment.CommentContent = comment.Content
+			akiComment.CommentAuthorEmail = comment.Email
 			if comment.UserId > 0 {
 				user, err := w.GetUserInfoById(comment.UserId)
 				if err == nil {

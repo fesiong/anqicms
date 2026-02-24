@@ -146,7 +146,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		}
 
 		//支付成功逻辑处理
-		err = currentSite.SuccessPaidOrder(order)
+		err = currentSite.SuccessPaidOrder(order, payment)
 		if err != nil {
 			library.DebugLog(currentSite.CachePath, "wechat.log", "err", "order pay failed")
 			rsp.ReturnCode = gopay.FAIL
@@ -262,7 +262,7 @@ func NotifyAlipay(ctx iris.Context) {
 			return
 		}
 		//支付成功逻辑处理
-		err = currentSite.SuccessPaidOrder(order)
+		err = currentSite.SuccessPaidOrder(order, payment)
 		if err != nil {
 			ctx.WriteString("success")
 			return
@@ -280,18 +280,36 @@ func NotifyPayPal(ctx iris.Context) {
 		ShowMessage(ctx, ctx.Tr("paymentParameterError"), nil)
 		return
 	}
-	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
-	if err != nil {
-		// 处理token获取失败
-		ctx.WriteString("failed")
-		return
-	}
 	body, err := ctx.GetBody()
 	if err != nil {
 		xlog.Errorf("Read body error: %v", err)
 		return
 	}
 	library.DebugLog(currentSite.CachePath, "paypal_notify", string(body))
+	// 处理结果
+	var event paypal.WebhookEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		xlog.Errorf("JSON unmarshal error: %v", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		ctx.WriteString("Invalid event format")
+		return
+	}
+
+	// 4. 处理事件
+	xlog.Infof("Received %s event: %s", event.EventType, event.Summary)
+	// 获取payment信息
+	var resp provider.PaypalWebhookResource
+	err = json.Unmarshal(event.Resource, &resp)
+	if err != nil {
+		xlog.Errorf("Failed to unmarshal resource: %v, %v", err, string(event.Resource))
+		return
+	}
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
+	if err != nil {
+		// 处理token获取失败
+		ctx.WriteString("failed")
+		return
+	}
 	bm := make(gopay.BodyMap)
 	bm.Set("auth_algo", ctx.GetHeader("Paypal-Auth-Algo")).
 		Set("cert_url", ctx.GetHeader("Paypal-Cert-Url")).
@@ -319,17 +337,6 @@ func NotifyPayPal(ctx iris.Context) {
 		xlog.Error("paypal webhook verify error")
 		return
 	}
-	// 处理结果
-	var event paypal.WebhookEvent
-	if err = json.Unmarshal(body, &event); err != nil {
-		xlog.Errorf("JSON unmarshal error: %v", err)
-		ctx.StatusCode(http.StatusBadRequest)
-		ctx.WriteString("Invalid event format")
-		return
-	}
-
-	// 4. 处理事件
-	xlog.Infof("Received %s event: %s", event.EventType, event.Summary)
 
 	// 使用协程异步处理事件，避免阻塞响应
 	go currentSite.ProcessPaypalEvent(&event)

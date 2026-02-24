@@ -114,6 +114,8 @@ func (bootstrap *Bootstrap) Start() {
 	}
 
 	pugEngine.AddFunc("stampToDate", tags.TimestampToDate)
+	pugEngine.AddFunc("priceFormat", tags.PriceFormat)
+	pugEngine.AddFunc("range", tags.Range)
 	pugEngine.AddFunc("CustomFunc", tags.CustomFunc)
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
@@ -147,6 +149,7 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("moduleDetail", tags.TagModuleDetailParser)
 	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
 	_ = pugEngine.RegisterTag("jsonLd", tags.TagJsonLdParser)
+	_ = pugEngine.RegisterTag("attachment", tags.TagAttachmentParser)
 	_ = pugEngine.ReplaceTag("set", tags.TagSetParser)
 	_ = pugEngine.RegisterTag("jump", tags.TagJumpParser)
 

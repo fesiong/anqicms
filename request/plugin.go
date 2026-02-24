@@ -25,6 +25,7 @@ type PluginComment struct {
 	ArchiveId int64  `json:"archive_id"`
 	UserId    uint   `json:"user_id"`
 	UserName  string `json:"user_name"`
+	Email     string `json:"email"`
 	Ip        string `json:"ip"`
 	VoteCount uint   `json:"vote_count"`
 	Content   string `json:"content"`

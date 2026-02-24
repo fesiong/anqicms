@@ -3,13 +3,14 @@ package provider
 import (
 	"context"
 	"encoding/json"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"log"
 	"math/rand"
 	"os"
 	"time"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) GetAiGenerateSetting() config.AiGenerateConfig {
@@ -96,7 +97,7 @@ func (w *Website) AiGenerateArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
+	if w.AiGenerateConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
 		return
 	}
 
@@ -145,7 +146,7 @@ func (w *Website) AiGenerateArticles() {
 		total, err := w.AiGenerateArticlesByKeyword(keyword, false)
 		log.Printf("关键词：%s 生成了 %d 篇文章, %v", keyword.Title, total, err)
 		// 达到数量了，退出
-		if w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
+		if w.AiGenerateConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
 			return
 		}
 		time.Sleep(time.Second)

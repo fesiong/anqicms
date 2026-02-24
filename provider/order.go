@@ -188,7 +188,7 @@ func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error
 	return &payment, nil
 }
 
-func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Payment, error) {
+func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentRequest) (*model.Payment, error) {
 	payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil
@@ -200,7 +200,7 @@ func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Pay
 		Amount:  order.Amount,
 		Status:  0,
 		Remark:  order.Remark,
-		PayWay:  payWay,
+		PayWay:  req.PayWay,
 	}
 	err = w.DB.Save(payment).Error
 	if err != nil {
@@ -619,7 +619,7 @@ func (w *Website) GetOrderRefundByOrderId(orderId string) (*model.OrderRefund, e
 	return &order, nil
 }
 
-func (w *Website) SuccessPaidOrder(order *model.Order) error {
+func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) error {
 	if order.Status == config.OrderStatusPaid {
 		//支付成功
 		return nil
@@ -636,7 +636,8 @@ func (w *Website) SuccessPaidOrder(order *model.Order) error {
 	}
 
 	db.Commit()
-
+	// 更新用户字段
+	w.DB.Model(model.User{}).Where("id = ?", order.UserId).UpdateColumn("order_count", gorm.Expr("`order_count` + 1"))
 	// 支付成功
 	if w.SendTypeValid(SendTypePayOrder) {
 		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("OrderPaymentSuccessNotification")
@@ -1374,9 +1375,9 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		}
 
 		// 自动同步验签（只支持证书模式）
-		certPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
-		rootCertPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
-		publicCertPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
+		certPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
+		rootCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
+		publicCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
 		publicKey, err := os.ReadFile(publicCertPath)
 		if err != nil {
 			return err
@@ -1420,7 +1421,7 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 			}
 			w.DB.Create(&finance)
 			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order)
+			_ = w.SuccessPaidOrder(order, payment)
 		}
 	} else if payment.PayWay == config.PayWayWechat {
 		// 微信就不管了
@@ -1482,7 +1483,7 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 				}
 				w.DB.Create(&finance)
 				//支付成功逻辑处理
-				_ = w.SuccessPaidOrder(order)
+				_ = w.SuccessPaidOrder(order, payment)
 			}
 		}
 	}

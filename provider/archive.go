@@ -37,18 +37,32 @@ import (
 func (w *Website) GetArchiveByIdFromCache(id int64) (archive *model.Archive) {
 	err := w.Cache.Get(fmt.Sprintf("archive-%d", id), archive)
 	if err != nil {
-		return nil
+		archive, err = w.GetArchiveById(id)
+		if err != nil {
+			return nil
+		}
+		_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
 	}
 
 	return archive
 }
 
-func (w *Website) AddArchiveCache(archive *model.Archive) {
-	_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
+func (w *Website) GetArchiveByUrlTokenFromCache(urlToken string) (archive *model.Archive) {
+	err := w.Cache.Get(fmt.Sprintf("archive-%s", urlToken), archive)
+	if err != nil {
+		archive, err = w.GetArchiveByUrlToken(urlToken)
+		if err != nil {
+			return nil
+		}
+		_ = w.Cache.Set(fmt.Sprintf("archive-%s", archive.UrlToken), archive, 300)
+	}
+
+	return archive
 }
 
-func (w *Website) DeleteArchiveCache(id int64, link string) {
+func (w *Website) DeleteArchiveCache(id int64, urlToken string, link string) {
 	w.Cache.Delete(fmt.Sprintf("archive-%d", id))
+	w.Cache.Delete(fmt.Sprintf("archive-%s", urlToken))
 	// 同时清理html缓存，如果可以的话
 	if link != "" && w.PluginHtmlCache.Open != false {
 		cachePath := w.CachePath + "pc"
@@ -58,6 +72,8 @@ func (w *Website) DeleteArchiveCache(id int64, link string) {
 		memCacheKey := fmt.Sprintf("html-%v-%s", false, localPath)
 		w.Cache.Delete(memCacheKey)
 	}
+	// 如果开启了多语言，还需要删除多语言缓存
+	w.DeleteMultiLangCache([]string{link})
 }
 
 func (w *Website) GetArchiveById(id int64) (*model.Archive, error) {
@@ -94,11 +110,19 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 }
 
 func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
 		if categoryId > 0 {
 			tx = tx.Where("`category_id` = ?", categoryId)
 		}
-		return tx.Where("`id` < ?", id).Order("`id` DESC")
+		return tx.Where("`id` < ?", id).Order("`id` DESC").Select("id").Limit(1).Find(&model.Archive{})
+	})
+	var archiveId int64
+	err := w.DB.Raw(sql).Take(&archiveId).Error
+	if archiveId == 0 {
+		return nil, err
+	}
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`id` = ?", archiveId)
 	})
 	if err != nil {
 		return nil, err
@@ -111,11 +135,19 @@ func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, erro
 }
 
 func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
-	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
 		if categoryId > 0 {
 			tx = tx.Where("`category_id` = ?", categoryId)
 		}
-		return tx.Where("`id` > ?", id).Order("`id` ASC")
+		return tx.Where("`id` > ?", id).Order("`id` ASC").Select("id").Limit(1).Find(&model.Archive{})
+	})
+	var archiveId int64
+	err := w.DB.Raw(sql).Take(&archiveId).Error
+	if archiveId == 0 {
+		return nil, err
+	}
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`id` = ?", archiveId)
 	})
 	if err != nil {
 		return nil, err
@@ -128,12 +160,21 @@ func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
 }
 
 func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	sql := ops(w.DB.WithContext(w.Ctx())).ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Select("id").Limit(1).Find(&model.Archive{})
+	})
+	var archiveId int64
+	err := w.DB.Raw(sql).Take(&archiveId).Error
+	if archiveId == 0 {
+		return nil, err
+	}
+
 	var archive model.Archive
-	err := ops(w.DB.WithContext(w.Ctx())).Take(&archive).Error
+	err = w.DB.Model(&model.Archive{}).Where("id = ?", archiveId).Take(&archive).Error
 	if err != nil {
 		return nil, err
 	}
-	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
 	archive.Link = w.GetUrl("archive", &archive, 0)
 	return &archive, nil
 }
@@ -177,7 +218,7 @@ func (w *Website) GetArchiveDraftByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.
 	if err != nil {
 		return nil, err
 	}
-	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
 	archive.Link = w.GetUrl("archive", &archive, 0)
 	return &archive, nil
 }
@@ -264,7 +305,11 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		// 分页提速，先查出ID，再查询结果
 		// 先查询ID
 		var archiveIds []int64
-		builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order).Pluck("id", &archiveIds)
+		builder = builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order)
+		sql := builder.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Find(&[]model.Archive{})
+		})
+		w.DB.Raw(sql).Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
 				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
@@ -273,7 +318,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			}
 		}
 		for i := range archives {
-			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 	} else {
@@ -309,9 +354,13 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 				}
 			}
 		}
-		builder = builder.Limit(pageSize).Offset(offset).Order(order)
+		builder = builder.Limit(pageSize).Offset(offset).Order(order).Select("archives.id")
 		var archiveIds []int64
-		builder.Select("archives.id").Pluck("id", &archiveIds)
+		sql := builder.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Find(&[]model.Archive{})
+		})
+		w.DB.Raw(sql).Pluck("id", &archiveIds)
+		//	builder.Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
 				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
@@ -320,7 +369,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			}
 		}
 		for i := range archives {
-			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 		// 对于没有分页的list，则缓存
@@ -402,6 +451,12 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 						err := json.Unmarshal([]byte(value), &texts)
 						if err == nil {
 							result[v.FieldName] = texts
+						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						var val model.TimelineField
+						err := json.Unmarshal([]byte(value), &val)
+						if err == nil {
+							result[v.FieldName] = val
 						}
 					} else if v.Type == config.CustomFieldTypeArchive {
 						var arcIds []int64
@@ -565,7 +620,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 
 		// 清除缓存
 		draft.Link = w.GetUrl("archive", &draft.Archive, 0)
-		w.DeleteArchiveCache(draft.Id, draft.Link)
+		w.DeleteArchiveCache(draft.Id, draft.UrlToken, draft.Link)
 		w.DeleteArchiveExtraCache(draft.Id)
 
 		hookCtx.Point = AfterArchivePost
@@ -654,6 +709,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 							buf, _ := json.Marshal(val)
 							extraFields[v.FieldName] = string(buf)
 						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(extraValue["value"])
+						extraFields[v.FieldName] = string(buf)
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
@@ -848,7 +907,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 				imgUrl, err2 := url.Parse(v)
 				if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
 					// 自动下载
-					attachment, err2 := w.DownloadRemoteImage(v, "")
+					attachment, err2 := w.DownloadRemoteImage(v, req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						draft.Images[i] = strings.TrimPrefix(attachment.Logo, w.PluginStorage.StorageUrl)
@@ -875,7 +934,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					attachment, err2 := w.DownloadRemoteImage(match[1], req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -896,7 +955,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					attachment, err2 := w.DownloadRemoteImage(match[2], req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -956,7 +1015,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 清除缓存
 	draft.Link = w.GetUrl("archive", &draft.Archive, 0)
-	w.DeleteArchiveCache(draft.Id, draft.Link)
+	w.DeleteArchiveCache(draft.Id, draft.UrlToken, draft.Link)
 	w.DeleteArchiveExtraCache(draft.Id)
 
 	hookCtx.Point = AfterArchivePost
@@ -980,7 +1039,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 	}
 	_ = TriggerHook(hookCtx)
 
-	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
 	if archive.Link == "" {
 		archive.Link = w.GetUrl("archive", archive, 0)
 	}
@@ -1635,11 +1694,11 @@ func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) err
 func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
 	var relationIds []int64
-	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	w.DB.WithContext(w.Ctx()).Debug().Model(&model.ArchiveRelation{}).Group("relation_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
 		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {
-			relations[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			relations[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(relations[i].Id)))
 			relations[i].Link = w.GetUrl("archive", relations[i], 0)
 		}
 		return relations
@@ -2327,7 +2386,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 					imgUrl, err2 := url.Parse(v)
 					if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
 						// 自动下载
-						attachment, err2 := qia.w.DownloadRemoteImage(v, "")
+						attachment, err2 := qia.w.DownloadRemoteImage(v, archive.Title, 0)
 						if err2 == nil {
 							// 下载完成
 							archive.Images[ii] = strings.TrimPrefix(attachment.Logo, qia.w.PluginStorage.StorageUrl)

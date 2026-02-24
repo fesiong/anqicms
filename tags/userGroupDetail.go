@@ -2,12 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"log"
+	"reflect"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"log"
-	"reflect"
 )
 
 type tagUserGroupDetailNode struct {
@@ -51,6 +52,12 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 	}
 
 	if groupDetail == nil {
+		return nil
+	}
+
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		ctx.Private[node.name] = groupDetail
 		return nil
 	}
 

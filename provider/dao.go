@@ -44,6 +44,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 	db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
+		PrepareStmt:                              false,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {

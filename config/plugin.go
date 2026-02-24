@@ -140,10 +140,12 @@ type PluginFulltextConfig struct {
 	Modules     []uint `json:"modules"`
 	Initialed   bool   `json:"initialed"` //是否已经生成过索引
 
-	Engine     string `json:"engine"` // 支持的搜索引擎：default(wukong)|Elasticsearch|ZincSearch|Meilisearch
-	EngineUrl  string `json:"engine_url"`
-	EngineUser string `json:"engine_user"`
-	EnginePass string `json:"engine_pass"`
+	Engine        string `json:"engine"` // 支持的搜索引擎：default(wukong)|Elasticsearch|ZincSearch|Meilisearch
+	EngineUrl     string `json:"engine_url"`
+	EngineUser    string `json:"engine_user"`
+	EnginePass    string `json:"engine_pass"`
+	RankingScore  int    `json:"ranking_score"`  // 可设置评分 0-100分，默认 0分 高于这个评分的结果才显示
+	ContainLength int    `json:"contain_length"` // 可设置包含长度，默认 0，低于x个需要全包含，高于x个则至少包含x个字符
 }
 
 type PluginTitleImageConfig struct {
@@ -239,6 +241,7 @@ type MultiLangSite struct {
 	LanguageEmoji string `json:"language_emoji,omitempty"`
 	LanguageName  string `json:"language_name,omitempty"`
 	Language      string `json:"language"`
+	IsMain        bool   `json:"is_main"`
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	Link          string `json:"link,omitempty"`
 	BaseUrl       string `json:"base_url,omitempty"`
@@ -251,7 +254,8 @@ type PluginMultiLangConfig struct {
 	Type            string          `json:"type"`
 	DefaultLanguage string          `json:"default_language"` // 该语言只是调用系统的设置
 	AutoTranslate   bool            `json:"auto_translate"`
-	SiteType        string          `json:"site_type"` // multi|single
+	SiteType        string          `json:"site_type"`     // multi|single
+	ShowMainDir     bool            `json:"show_main_dir"` // 显示主站目录
 	SubSites        []MultiLangSite `json:"sub_sites"`
 }
 
@@ -270,7 +274,11 @@ func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite 
 			if strings.HasPrefix(oriUrl, baseUrl+"/"+pm.DefaultLanguage) {
 				oriUrl = strings.Replace(oriUrl, baseUrl+"/"+pm.DefaultLanguage, baseUrl, 1)
 			}
-			oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+			if langSite.IsMain && pm.ShowMainDir == false {
+				// 无需处理
+			} else {
+				oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+			}
 		} else if pm.Type == MultiLangTypeSame {
 			// 相同
 			if strings.Contains(oriUrl, "?") {
@@ -398,6 +406,8 @@ func (g *CustomField) GetFieldColumn() string {
 		column += " int(10)"
 	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts || g.Type == CustomFieldTypeArchive {
 		column += " text"
+	} else if g.Type == CustomFieldTypeTimeline {
+		column += " longtext"
 	} else {
 		// mysql 5.6 下，utf8mb4 索引只能用190
 		column += " varchar(190)"

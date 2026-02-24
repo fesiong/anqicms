@@ -149,7 +149,8 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 		if !strings.HasPrefix(a.Logo, "http") && !strings.HasPrefix(a.Logo, "//") {
 			a.Logo = storageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
 		}
-		a.Thumb = a.Logo
+		paths, fileName := filepath.Split(a.Logo)
+		a.Thumb = paths + "thumb_" + fileName
 	}
 
 	return a.Thumb

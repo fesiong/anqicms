@@ -28,8 +28,9 @@ func (w *Website) GetGoogleAuthConfig(focus bool) *oauth2.Config {
 		w.googleAuthConfig = &oauth2.Config{
 			ClientID:     setting.ClientId,
 			ClientSecret: setting.ClientSecret,
-			RedirectURL:  w.System.BaseUrl + "/login/google",
+			RedirectURL:  setting.RedirectUrl,
 			Scopes: []string{
+				"openid",
 				"https://www.googleapis.com/auth/userinfo.email", // You have to select your own scope from here -> https://developers.google.com/identity/protocols/googlescopes#google_sign-in
 				"https://www.googleapis.com/auth/userinfo.profile",
 			},

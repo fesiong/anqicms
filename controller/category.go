@@ -165,7 +165,10 @@ func SearchPage(ctx iris.Context) {
 		}
 		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "search"
-		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", url.QueryEscape(q)), nil, currentPage)
+		webInfo.CanonicalUrl = currentSite.GetUrl(provider.PatternSearch, map[string]interface{}{
+			"q":      url.QueryEscape(q),
+			"module": moduleToken,
+		}, currentPage)
 		ctx.ViewData("webInfo", webInfo)
 	}
 

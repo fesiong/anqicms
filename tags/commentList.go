@@ -117,6 +117,7 @@ func (node *tagCommentListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		}
 
 		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
+		ctx.Private["totalItems"] = total
 	}
 	ctx.Private[node.name] = commentList
 	//execute

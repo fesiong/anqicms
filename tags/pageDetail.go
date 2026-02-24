@@ -2,12 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
 )
 
 type tagPageDetailNode struct {
@@ -66,7 +67,13 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		return nil
 	}
 	pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
-	pageDetail.Thumb = pageDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+	pageDetail.Thumb = pageDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(pageDetail.Id)))
+
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		ctx.Private[node.name] = pageDetail
+		return nil
+	}
 
 	v := reflect.ValueOf(*pageDetail)
 

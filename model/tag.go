@@ -59,6 +59,8 @@ func (tag *Tag) GetThumb(storageUrl, defaultThumb string) string {
 		if !strings.HasPrefix(tag.Thumb, "http") && !strings.HasPrefix(tag.Thumb, "//") {
 			tag.Thumb = storageUrl + "/" + strings.TrimPrefix(tag.Thumb, "/")
 		}
+		paths, fileName := filepath.Split(tag.Thumb)
+		tag.Thumb = paths + "thumb_" + fileName
 	}
 
 	return tag.Thumb

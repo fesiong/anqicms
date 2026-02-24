@@ -2,13 +2,14 @@ package controller
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 func CommentPublish(ctx iris.Context) {
@@ -47,6 +48,7 @@ func CommentPublish(ctx iris.Context) {
 	// 采用post接收
 	req.ArchiveId = ctx.PostValueInt64Default("archive_id", 0)
 	req.UserName = ctx.PostValueTrim("user_name")
+	req.Email = ctx.PostValueTrim("email")
 	req.Ip = ctx.PostValueTrim("ip")
 	req.Content = ctx.PostValueTrim("content")
 	req.ParentId = uint(ctx.PostValueIntDefault("parent_id", 0))

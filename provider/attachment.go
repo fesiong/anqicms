@@ -318,7 +318,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	return attachment, nil
 }
 
-func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attachment, error) {
+func (w *Website) DownloadRemoteImage(src string, fileName string, replaceId uint) (*model.Attachment, error) {
 	resp, body, errs := gorequest.New().Set("referer", src).Timeout(15 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
@@ -346,7 +346,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 				Size:     int64(len(body)),
 			}
 
-			return w.AttachmentUpload(tmpfile, fileHeader, 0, 0, 0)
+			return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
 		} else {
 			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}
@@ -360,6 +360,19 @@ func (w *Website) GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
 	var attach model.Attachment
 
 	if err := db.Unscoped().Where("`file_md5` = ?", md5).First(&attach).Error; err != nil {
+		return nil, err
+	}
+
+	attach.GetThumb(w.PluginStorage.StorageUrl)
+
+	return &attach, nil
+}
+
+func (w *Website) GetAttachmentByFileLocation(fileLocation string) (*model.Attachment, error) {
+	db := w.DB
+	var attach model.Attachment
+
+	if err := db.Unscoped().Where("`file_location` = ?", fileLocation).First(&attach).Error; err != nil {
 		return nil, err
 	}
 
@@ -722,9 +735,11 @@ func (w *Website) StartConvertImageToWebp() {
 				w.Contact.Qrcode = results[x].To
 				update = true
 			}
-			if w.Content.DefaultThumb == results[x].From {
-				w.Content.DefaultThumb = results[x].To
-				update = true
+			for i := range w.Content.DefaultThumbs {
+				if w.Content.DefaultThumbs[i] == results[x].From {
+					w.Content.DefaultThumbs[i] = results[x].To
+					update = true
+				}
 			}
 		}
 		if update {

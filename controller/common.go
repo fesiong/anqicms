@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -396,16 +397,17 @@ func FileServe(ctx iris.Context) bool {
 	// 自动生成robots.txt
 	if strings.HasSuffix(uri, "robots.txt") && !ctx.Values().GetBoolDefault("robots", false) {
 		robots := "User-agent: *\nDisallow: /system\nDisallow: /static\nSitemap: "
-		_ = currentSite.SaveRobots(robots)
+		//	_ = currentSite.SaveRobots(robots)
 		ctx.Values().Set("robots", true)
-		return FileServe(ctx)
+		//return FileServe(ctx)
+		ctx.Text(robots)
+		return true
 	}
 
 	return false
 }
 
 func ReRouteContext(ctx iris.Context) {
-	params, _ := ParseRoute(ctx)
 	// 先验证文件是否真的存在，如果存在，则fileServe
 	exists := FileServe(ctx)
 	if exists {
@@ -430,6 +432,7 @@ func ReRouteContext(ctx iris.Context) {
 	if closed {
 		return
 	}
+	params, _ := ParseRoute(ctx)
 	for i, v := range params {
 		if len(i) == 0 {
 			continue
@@ -487,17 +490,23 @@ func ReRouteContext(ctx iris.Context) {
 						uri = parsed.String()
 					}
 				}
-				content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
-				if err != nil {
-					log.Println("translate err", err)
-					// 翻译错误的时候，就设置 no-index
-					// x-robots-tag: noindex, follow
-					ctx.Header("X-Robots-Tag", "noindex, follow")
+				// 多语言站点下，static 目录 和 uploads 目录需特殊处理
+				if strings.HasPrefix(uri, "/static/") || strings.HasPrefix(uri, "/uploads/") {
+					// 能走到这里的，就表示这些资源不存在，直接跳过翻译环节，减少资源消耗
+				} else if strings.HasPrefix(uri, "/") {
+					params["Cache-Control"] = ctx.GetHeader("Cache-Control")
+					content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language, params)
+					if err != nil {
+						log.Println("translate err", err)
+						// 翻译错误的时候，就设置 no-index
+						// x-robots-tag: noindex, follow
+						ctx.Header("X-Robots-Tag", "noindex, follow")
+					}
+					ctx.ContentType(context.ContentHTMLHeaderValue)
+					ctx.Header("Content-Language", langSite.Language)
+					ctx.WriteString(content)
+					return
 				}
-				ctx.ContentType(context.ContentHTMLHeaderValue)
-				ctx.Header("Content-Language", langSite.Language)
-				ctx.WriteString(content)
-				return
 			}
 		}
 		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
@@ -604,6 +613,16 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 		provider.PatternArchive,      // 文章详情
 		//	provider.PatternCommon,       // common 处理逻辑
 	}
+	// 添加自定义模块规则
+	modules := currentSite.GetCacheModules()
+	for x := range modules {
+		diyName := modules[x].UrlToken + ":archive"
+		_, ok := rewritePattern.Rules[diyName]
+		if ok {
+			ruleNames = append(ruleNames, diyName)
+		}
+	}
+	// end
 	for _, ruleName := range ruleNames {
 		reg := regexp.MustCompile(rewritePattern.Rules[ruleName])
 		match := reg.FindStringSubmatch(paramValue)
@@ -696,29 +715,58 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 					_, ok := rewritePattern.Rules[diyName]
 					if ok {
 						reg = regexp.MustCompile(rewritePattern.Rules[diyName])
-						match = reg.FindStringSubmatch(paramValue)
-						if len(match) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
+						diyMatch := reg.FindStringSubmatch(paramValue)
+						if len(diyMatch) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
 							// 详情支持带问号的规则
 							paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
 							// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
 							reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.Rules[diyName], "$") + "([&#].*)?$")
-							match = reg.FindStringSubmatch(paramValueWithArgs)
+							diyMatch = reg.FindStringSubmatch(paramValueWithArgs)
 						}
-						if len(match) > 1 {
-							matchMap["match"] = provider.PatternArchive
-							for i, v := range match {
+						if len(diyMatch) > 1 {
+							tmpMatchMap := map[string]string{}
+							tmpMatchMap["match"] = provider.PatternArchive
+							for i, v := range diyMatch {
 								iKey := i
 								key := rewritePattern.Tags[diyName][iKey]
 								if i == 0 {
 									key = "route"
 								}
-								matchMap[key] = v
+								tmpMatchMap[key] = v
 							}
-							if matchMap["module"] != "" && matchMap["module"] == modules[x].UrlToken {
+							if tmpMatchMap["module"] != "" && tmpMatchMap["module"] == modules[x].UrlToken {
 								// 需要先验证是否是module
-								return matchMap, true
+								return tmpMatchMap, true
 							} else {
-								return matchMap, true
+								preview := ctx.URLParam("preview")
+								// 由于可能导致重复，因此需要验证module
+								if tmpMatchMap["id"] != "" {
+									id, _ := strconv.ParseInt(tmpMatchMap["id"], 10, 64)
+									if id > 0 {
+										archive := currentSite.GetArchiveByIdFromCache(id)
+										if archive != nil && archive.ModuleId == modules[x].Id {
+											return tmpMatchMap, true
+										}
+										if preview != "" {
+											archiveDraft, _ := currentSite.GetArchiveDraftById(id)
+											if archiveDraft != nil && archiveDraft.ModuleId == modules[x].Id {
+												return tmpMatchMap, true
+											}
+										}
+									}
+								} else if tmpMatchMap["filename"] != "" {
+									archive := currentSite.GetArchiveByUrlTokenFromCache(tmpMatchMap["filename"])
+									if archive != nil && archive.ModuleId == modules[x].Id {
+										return tmpMatchMap, true
+									}
+									if preview != "" {
+										archiveDraft, _ := currentSite.GetArchiveDraftByUrlToken(tmpMatchMap["filename"])
+										if archiveDraft != nil && archiveDraft.ModuleId == modules[x].Id {
+											return tmpMatchMap, true
+										}
+									}
+								}
+								// end
 							}
 						}
 					}
@@ -726,12 +774,48 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 				if matchMap["module"] != "" {
 					// 需要先验证是否是module
 					module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
-					if module != nil {
+					if module != nil && module.UrlToken == matchMap["module"] {
 						return matchMap, true
+					} else {
+						matchMap = map[string]string{}
+						continue
 					}
 				} else {
 					return matchMap, true
 				}
+			}
+			if strings.HasSuffix(ruleName, ":archive") {
+				matchMap["match"] = provider.PatternArchive
+				tmpToken := strings.TrimSuffix(ruleName, ":archive")
+				if matchMap["module"] != "" && matchMap["module"] == tmpToken {
+					// 需要先验证是否是module
+					return matchMap, true
+				} else {
+					// 由于可能导致重复，因此需要验证module
+					if matchMap["id"] != "" {
+						id, _ := strconv.ParseInt(matchMap["id"], 10, 64)
+						if id > 0 {
+							archive, err := currentSite.GetArchiveById(id)
+							if err == nil {
+								module := currentSite.GetModuleFromCache(archive.ModuleId)
+								if module != nil && module.UrlToken == tmpToken {
+									return matchMap, true
+								}
+							}
+						}
+					} else if matchMap["filename"] != "" {
+						archive, err := currentSite.GetArchiveByUrlToken(matchMap["filename"])
+						if err == nil {
+							module := currentSite.GetModuleFromCache(archive.ModuleId)
+							if module != nil && module.UrlToken == tmpToken {
+								return matchMap, true
+							}
+						}
+					}
+					// end
+				}
+				matchMap = map[string]string{}
+				continue
 			}
 
 			return matchMap, true

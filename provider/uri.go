@@ -2,12 +2,13 @@ package provider
 
 import (
 	"fmt"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 )
 
 // GetUrl 生成url
@@ -20,7 +21,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 	if mainSite.MultiLanguage.Open {
 		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
 			// 替换目录
-			baseUrl = mainSite.System.BaseUrl + "/" + w.System.Language
+			if mainSite.Id == w.Id && mainSite.MultiLanguage.ShowMainDir == false {
+				// 无需处理
+			} else {
+				baseUrl = mainSite.System.BaseUrl + "/" + w.System.Language
+			}
 		} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
 			baseUrl = mainSite.System.BaseUrl
 		}
@@ -29,7 +34,8 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 	uri := ""
 	switch match {
 	case PatternArchive:
-		uri = rewritePattern.Patterns[PatternArchive]
+		patternName := PatternArchive
+		uri = rewritePattern.Patterns[patternName]
 		item, ok := data.(*model.Archive)
 		if !ok {
 			item2, ok2 := data.(model.Archive)
@@ -51,8 +57,18 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 			}
 			// 修正空白的urlToken
 			_ = w.UpdateArchiveUrlToken(item)
+			// 如果自定义了模型的伪静态规则，则使用
+			module := w.GetModuleFromCache(item.ModuleId)
+			if module != nil {
+				tmpPatternName := module.UrlToken + ":archive"
+				tmpUri, ok := rewritePattern.Patterns[tmpPatternName]
+				if ok {
+					uri = tmpUri
+					patternName = tmpPatternName
+				}
+			}
 
-			for _, v := range rewritePattern.Tags[PatternArchive] {
+			for _, v := range rewritePattern.Tags[patternName] {
 				if v == "id" {
 					uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), fmt.Sprintf("%d", item.Id))
 					if len(args) > 0 {
@@ -261,6 +277,31 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				}
 			}
 		}
+	case PatternSearch:
+		uri = rewritePattern.Patterns[PatternSearch]
+		var q string
+		var module string
+		data2, ok := data.(map[string]interface{})
+		if ok {
+			q, _ = data2["q"].(string)
+			module, _ = data2["module"].(string)
+		}
+		if q != "" {
+			uri = strings.ReplaceAll(uri, "{filename}", q)
+		}
+		if module != "" {
+			uri = strings.ReplaceAll(uri, "{module}", module)
+		}
+		re, _ := regexp.Compile(`\(.*?\)`)
+		uri = re.ReplaceAllStringFunc(uri, func(s string) string {
+			if strings.Contains(s, "{page}") {
+				return s
+			} else if strings.Contains(s, "{") {
+				return ""
+			} else {
+				return strings.Trim(s, "()")
+			}
+		})
 	case PatternTagIndex:
 		uri = rewritePattern.Patterns[PatternTagIndex]
 	case PatternTag:

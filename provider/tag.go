@@ -94,7 +94,7 @@ func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	if err := w.DB.WithContext(w.Ctx()).Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
-	tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	tag.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tag.Id)))
 	return &tag, nil
 }
 
@@ -261,6 +261,10 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 					} else if field.Type == config.CustomFieldTypeTexts && req.Extra[field.FieldName] != nil {
 						buf, _ := json.Marshal(req.Extra[field.FieldName])
 						req.Extra[field.FieldName] = string(buf)
+					} else if field.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(req.Extra[field.FieldName])
+						req.Extra[field.FieldName] = string(buf)
 					}
 				}
 			}
@@ -362,6 +366,9 @@ func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
 	var tagData []*model.TagData
 	w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` in(?)", itemIds).Find(&tagData)
 	var tagIds []uint
+	for _, datum := range tagData {
+		tagIds = append(tagIds, datum.TagId)
+	}
 	if len(tagIds) > 0 {
 		w.DB.Where("id IN(?)", tagIds).Find(&tags)
 	}
@@ -369,8 +376,10 @@ func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
 	for _, tag := range tags {
 		tag.Link = w.GetUrl(PatternTag, tag, 0)
 		for _, datum := range tagData {
-			tag.ItemId = datum.ItemId
-			break
+			if datum.TagId == tag.Id {
+				tag.ItemId = datum.ItemId
+				break
+			}
 		}
 		result[tag.ItemId] = append(result[tag.ItemId], tag)
 	}

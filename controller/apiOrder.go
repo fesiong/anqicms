@@ -14,6 +14,7 @@ import (
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -81,7 +82,7 @@ func ApiCreateOrder(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId == 0 && currentSite.PluginOrder.NoNeedLogin == false {
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusNoLogin,
 			"msg":  currentSite.TplTr("PleaseLogin"),
 		})
 		return
@@ -314,7 +315,7 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId == 0 && currentSite.PluginOrder.NoNeedLogin == false {
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusNoLogin,
 			"msg":  currentSite.TplTr("PleaseLogin"),
 		})
 		return
@@ -331,7 +332,7 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		return
 	}
 
-	payment, err := currentSite.GeneratePayment(order, req.PayWay)
+	payment, err := currentSite.GeneratePayment(order, &req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -351,6 +352,8 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createAlipayPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayPaypal {
 		createPaypalPayment(ctx, payment, order)
+	} else if req.PayWay == config.PayWayBalance {
+		createBalancePayment(ctx, payment, order)
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -619,6 +622,79 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		"data": iris.Map{
 			"pay_way":  config.PayWayPaypal,
 			"jump_url": ppRsp.Response.Links[1].Href,
+		},
+	})
+}
+
+func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+	// 检查用户余额是否足够
+	user, err := currentSite.GetUserInfoById(payment.UserId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	if user.Balance < payment.Amount {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("BalanceNotEnough"),
+		})
+		return
+	}
+	tx := currentSite.DB.Begin()
+	// this is a pay order
+	payment.PayWay = config.PayWayBalance
+	payment.PaidTime = time.Now().Unix()
+	payment.TerraceId = fmt.Sprintf("%d", payment.PaidTime)
+	tx.Save(payment)
+	order.PaymentId = payment.PaymentId
+	tx.Save(order)
+
+	//生成用户支付记录
+	tx.Model(user).Where("id = ?", user.Id).UpdateColumn("balance", gorm.Expr("`balance` - ?", payment.Amount))
+	var userBalance int64
+	tx.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance)
+	//状态更改了，增加一条记录到用户
+	finance := model.Finance{
+		UserId:      payment.UserId,
+		Direction:   config.FinanceOutput,
+		Amount:      payment.Amount,
+		AfterAmount: userBalance,
+		Action:      config.FinanceActionBuy,
+		OrderId:     payment.OrderId,
+		Status:      1,
+	}
+	err = tx.Create(&finance).Error
+	if err != nil {
+		tx.Rollback()
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
+	tx.Commit()
+
+	//支付成功逻辑处理
+	err = currentSite.SuccessPaidOrder(order, payment)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("PaymentSuccessful"),
+		"data": iris.Map{
+			"payment_id": payment.PaymentId,
+			"order_id":   order.OrderId,
+			"status":     1,
 		},
 	})
 }

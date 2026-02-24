@@ -14,7 +14,7 @@ func ApiGetFavorites(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId == 0 {
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusNoLogin,
 			"msg":  currentSite.TplTr("PleaseLogIn"),
 		})
 		return

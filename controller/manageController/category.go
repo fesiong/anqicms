@@ -3,6 +3,7 @@ package manageController
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -159,6 +160,10 @@ func CategoryDetail(ctx iris.Context) {
 					var texts []model.CustomFieldTexts
 					_ = json.Unmarshal([]byte(fmt.Sprint(category.Extra[field.FieldName])), &texts)
 					category.Extra[field.FieldName] = texts
+				} else if field.Type == config.CustomFieldTypeTimeline && category.Extra[field.FieldName] != nil {
+					var val model.TimelineField
+					_ = json.Unmarshal([]byte(fmt.Sprint(category.Extra[field.FieldName])), &val)
+					category.Extra[field.FieldName] = val
 				}
 			}
 		}

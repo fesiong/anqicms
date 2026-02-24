@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -74,12 +75,29 @@ func ApiArchiveFilters(ctx iris.Context) {
 		showAll = false
 	}
 	showPrice := ctx.URLParamBoolDefault("showPrice", false)
+	showCategory := ctx.URLParamBoolDefault("showCategory", false)
+	parentId := ctx.URLParamInt64Default("parentId", 0)
+	categoryId := ctx.URLParamInt64Default("categoryId", 0)
+
+	var urlParams = map[string]string{}
+	refer, err := url.Parse(ctx.Request().Referer())
+	if err == nil {
+		q := refer.Query()
+
+		for k, v := range q {
+			urlParams[k] = strings.Join(v, ",")
+		}
+	}
 
 	req := request.ApiFilterRequest{
-		ModuleId:  int64(moduleId),
-		ShowAll:   showAll,
-		AllText:   allText,
-		ShowPrice: showPrice,
+		ModuleId:     int64(moduleId),
+		ShowAll:      showAll,
+		AllText:      allText,
+		ShowPrice:    showPrice,
+		ShowCategory: showCategory,
+		ParentId:     parentId,
+		CategoryId:   categoryId,
+		UrlParams:    urlParams,
 	}
 
 	filterGroups, err := currentSite.ApiGetFilters(&req)
@@ -106,9 +124,11 @@ func ApiArchiveList(ctx iris.Context) {
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	showFlag := ctx.URLParamBoolDefault("showFlag", false)
+	showTag := ctx.URLParamBoolDefault("showTag", false)
 	showContent := ctx.URLParamBoolDefault("showContent", false)
 	showExtra := ctx.URLParamBoolDefault("showExtra", false)
 	draft := ctx.URLParamBoolDefault("draft", false)
+	showCategory := ctx.URLParamBoolDefault("showCategory", false)
 
 	tmpUserId := ctx.URLParam("userId")
 	if tmpUserId == "self" {
@@ -198,11 +218,18 @@ func ApiArchiveList(ctx iris.Context) {
 	fields = append(fields, "id")
 	if module != nil && len(module.Fields) > 0 {
 		for _, v := range module.Fields {
-			if ctx.URLParamExists(v.FieldName) {
+			if v.FieldName != "type" && ctx.URLParamExists(v.FieldName) {
 				extraFields[v.FieldName] = ctx.URLParam(v.FieldName)
 			}
 		}
 	}
+	urlParams := ctx.URLParams()
+	for k, v := range urlParams {
+		if k == "price" || strings.HasPrefix(k, "filter") {
+			extraFields[k] = v
+		}
+	}
+
 	tag := ctx.URLParam("tag")
 	tagId := ctx.URLParamInt64Default("tagId", 0)
 	like := ctx.URLParam("like")
@@ -217,8 +244,10 @@ func ApiArchiveList(ctx iris.Context) {
 		ModuleId:           int64(moduleId),
 		AuthorId:           int64(authorId),
 		ShowFlag:           showFlag,
+		ShowTag:            showTag,
 		ShowContent:        showContent,
 		ShowExtra:          showExtra,
+		ShowCategory:       showCategory,
 		Draft:              draft,
 		Child:              child,
 		Order:              order,
@@ -567,14 +596,8 @@ func ApiNextArchive(ctx iris.Context) {
 		return
 	}
 
-	nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Order("`id` ASC")
-	})
-	if nextArchive != nil && len(nextArchive.Password) > 0 {
-		// password is not visible for user
-		nextArchive.Password = ""
-		nextArchive.HasPassword = true
-	}
+	nextArchive, _ := currentSite.GetNextArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -594,14 +617,8 @@ func ApiPrevArchive(ctx iris.Context) {
 		return
 	}
 
-	prevArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-		return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` < ?", archiveDetail.Id).Order("`id` DESC")
-	})
-	if prevArchive != nil && len(prevArchive.Password) > 0 {
-		// password is not visible for user
-		prevArchive.Password = ""
-		prevArchive.HasPassword = true
-	}
+	prevArchive, _ := currentSite.GetPreviousArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -631,7 +648,7 @@ func ApiPageDetail(ctx iris.Context) {
 		})
 		return
 	}
-	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+	category.Thumb = category.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(category.Id)))
 	// convert markdown to html
 	if render {
 		category.Content = library.MarkdownToHTML(category.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
@@ -675,7 +692,7 @@ func ApiPageList(ctx iris.Context) {
 			break
 		}
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
-		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(pageList[i].Id)))
 
 		resultList = append(resultList, pageList[i])
 	}
@@ -712,7 +729,7 @@ func ApiTagDetail(ctx iris.Context) {
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
-		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagDetail.Id)))
 		tagContent, err := currentSite.GetTagContentById(tagDetail.Id)
 		if err == nil {
 			tagDetail.Content = tagContent.Content
@@ -754,6 +771,10 @@ func ApiTagDetail(ctx iris.Context) {
 							var texts []model.CustomFieldTexts
 							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
 							tagDetail.Extra[field.FieldName] = texts
+						} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
+							var val model.TimelineField
+							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
+							tagDetail.Extra[field.FieldName] = val
 						} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
 							// 列表
 							var arcIds []int64
@@ -894,6 +915,7 @@ func ApiTagList(ctx iris.Context) {
 	listType := ctx.URLParamDefault("type", "list")
 	letter := ctx.URLParam("letter")
 	order := ctx.URLParamDefault("order", "id desc")
+	q := ctx.URLParam("q")
 
 	limitTmp := ctx.URLParam("limit")
 	if limitTmp != "" {
@@ -932,10 +954,10 @@ func ApiTagList(ctx iris.Context) {
 			}
 		}
 	}
-	tagList, total, _ := currentSite.GetTagList(itemId, "", categoryIds, letter, currentPage, limit, offset, order)
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
-		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))
 	}
 
 	ctx.JSON(iris.Map{
@@ -1131,15 +1153,6 @@ func ApiGuestbookForm(ctx iris.Context) {
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			tmpVal, ok := req[item.FieldName].(string)
 			if ok {
-				// 如果有上传文件，则需要用户登录
-				if userId == 0 {
-					msg := currentSite.TplTr("ThisOperationRequiresLogin")
-					ctx.JSON(iris.Map{
-						"code": config.StatusFailed,
-						"msg":  msg,
-					})
-					return
-				}
 				tmpfile, err := os.CreateTemp("", "upload")
 				if err != nil {
 					ctx.JSON(iris.Map{
@@ -1314,5 +1327,41 @@ func ApiArchivePublish(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  msg,
 		"data": archive,
+	})
+}
+
+func ApiMetadata(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	path := ctx.URLParam("path")
+
+	parsed, err := url.Parse(path)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.Params().Set("path", parsed.Path)
+
+	// 解析路由
+	params, _ := ParseRoute(ctx)
+	for i, v := range params {
+		if len(i) == 0 {
+			continue
+		}
+		ctx.Params().Set(i, v)
+	}
+
+	for k, v := range parsed.Query() {
+		params[k] = strings.Join(v, ",")
+	}
+
+	webInfo := currentSite.GetMetadata(params)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": webInfo,
 	})
 }

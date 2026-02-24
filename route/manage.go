@@ -47,6 +47,9 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
 			anqi.Post("/ai/chat", manageController.AuthAiChat)
+			anqi.Post("/ai/image", manageController.AuthAiGenerateImage)
+			anqi.Post("/ai/image/confirm", manageController.AuthAiGenerateImageConfirm)
+			anqi.Get("/ai/image/histories", manageController.AuthAiGenerateImageHistories)
 			anqi.Post("/extract/keywords", manageController.AuthExtractKeywords)
 			anqi.Post("/extract/description", manageController.AuthExtractDescription)
 			anqi.Post("/restart", manageController.RestartAnqicms)
@@ -359,6 +362,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				user.Get("/list", manageController.PluginUserList)
 				user.Get("/detail", manageController.PluginUserDetail)
 				user.Post("/detail", manageController.PluginUserDetailForm)
+				user.Post("/balance", manageController.PluginUserChangeBalance)
 				user.Post("/delete", manageController.PluginUserDelete)
 				user.Get("/group/list", manageController.PluginUserGroupList)
 				user.Get("/group/detail", manageController.PluginUserGroupDetail)
@@ -551,6 +555,9 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				translate.Get("/config", manageController.PluginGetTranslateConfig)
 				translate.Post("/config", manageController.PluginSaveTranslateConfig)
 				translate.Get("/logs", manageController.PluginTranslateLogList)
+				translate.Get("/log/texts", manageController.PluginGetTranslateTextLog)
+				translate.Post("/log/text/remove", manageController.PluginRemoveTranslateTextLog)
+				translate.Post("/log/text/save", manageController.PluginSaveTranslateTextLog)
 			}
 			jsonLd := plugin.Party("/jsonld")
 			{

@@ -17,6 +17,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 )
 
 const (
@@ -155,6 +156,37 @@ func (w *Website) LoadContentSetting(value string) {
 	}
 	if w.Content.MaxLimit < 1 {
 		w.Content.MaxLimit = 100
+	}
+	if w.Content.DefaultThumb != "" && len(w.Content.DefaultThumbs) == 0 {
+		w.Content.DefaultThumbs = []string{w.Content.DefaultThumb}
+	}
+}
+
+func (w *Website) GetDefaultThumb(tmpId int) string {
+	if w.Content.DefaultThumbType == 0 {
+		if len(w.Content.DefaultThumbs) == 0 {
+			return ""
+		}
+		if len(w.Content.DefaultThumbs) == 1 {
+			return w.Content.DefaultThumbs[0]
+		}
+		// 随机一个
+		return w.Content.DefaultThumbs[tmpId%len(w.Content.DefaultThumbs)]
+	} else {
+		cacheKey := fmt.Sprintf("tiny-attachments-%d", w.Content.ThumbCategoryId)
+		var attaches []*response.TinyAttachment
+		err := w.Cache.Get(cacheKey, &attaches)
+		if err != nil {
+			attaches = w.GetCategoryImages(w.Content.ThumbCategoryId)
+			w.Cache.Set(cacheKey, attaches, 600)
+		}
+		if len(attaches) == 0 {
+			return ""
+		}
+		if len(attaches) == 1 {
+			return attaches[0].FileLocation
+		}
+		return attaches[tmpId%len(attaches)].FileLocation
 	}
 }
 
@@ -899,6 +931,7 @@ func (w *Website) GetGoogleAuthSetting() *config.PluginGoogleAuthConfig {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &cfg)
 	}
+	cfg.RedirectUrl = w.System.BaseUrl + "/login/google"
 
 	return &cfg
 }

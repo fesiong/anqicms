@@ -4,11 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"math/rand"
 	"net/url"
@@ -17,6 +12,12 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type WebLink struct {

@@ -3,14 +3,15 @@ package tags
 import (
 	"encoding/json"
 	"fmt"
+	"reflect"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
-	"strconv"
 )
 
 type tagTagDetailNode struct {
@@ -73,8 +74,14 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 
 	if tagDetail != nil {
 		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
-		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagDetail.Id)))
 		v := reflect.ValueOf(*tagDetail)
+
+		// 支持获取整个detail
+		if fieldName == "" && node.name != "" {
+			ctx.Private[node.name] = tagDetail
+			return nil
+		}
 
 		f := v.FieldByName(fieldName)
 		if f.IsValid() {
@@ -131,6 +138,10 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 						var texts []model.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &texts)
 						tagContent.Extra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeTimeline && tagContent.Extra[field.FieldName] != nil {
+						var val model.TimelineField
+						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &val)
+						tagContent.Extra[field.FieldName] = val
 					} else if field.Type == config.CustomFieldTypeArchive && tagContent.Extra[field.FieldName] != nil {
 						// 列表
 						var arcIds []int64

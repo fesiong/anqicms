@@ -25,13 +25,16 @@ type User struct {
 	RealName      string `json:"real_name" gorm:"column:real_name;type:varchar(64) not null;default:''"`
 	FirstName     string `json:"first_name" gorm:"column:first_name;type:varchar(32) not null;default:''"`
 	LastName      string `json:"last_name" gorm:"column:last_name;type:varchar(32) not null;default:''"`
+	Birthday      int64  `json:"birthday" gorm:"column:birthday;type:int(11);default:0"` // 生日
 	AvatarURL     string `json:"avatar_url" gorm:"column:avatar_url;type:varchar(255) not null;default:''"`
 	Introduce     string `json:"introduce" gorm:"column:introduce;type:varchar(1000) not null;default:''"` // 介绍
 	Email         string `json:"email" gorm:"column:email;type:varchar(100) not null;default:'';index:idx_email"`
 	EmailVerified bool   `json:"email_verified" gorm:"column:email_verified;type:tinyint(1) not null;default:0"`
 	Phone         string `json:"phone" gorm:"column:phone;type:varchar(20) not null;default:'';index"`
 	GroupId       uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
+	GoogleId      string `json:"google_id" gorm:"column:google_id;type:varchar(255) not null;default:''"`
 	Password      string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`
+	ResetPassword bool   `json:"reset_password" gorm:"column:reset_password;type:tinyint(1) not null;default:0"` // 是否需要重置密码，重置密码可以不用旧密码，因为tauth2登录，没有密码
 	Status        int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
 	IsRetailer    int    `json:"is_retailer" gorm:"column:is_retailer;type:tinyint(1) not null;default:0"` // 是否是分销员
 	Balance       int64  `json:"balance" gorm:"column:balance;type:bigint(20) not null;default:0;comment:'用户余额'"`

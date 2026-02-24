@@ -21,6 +21,10 @@ func ArchiveDetail(ctx iris.Context) {
 		ctx.Write(cacheFile)
 		return
 	}
+	preview := ctx.URLParam("preview")
+	if preview != "" {
+		ctx.Header("X-Robots-Tag", "noindex, nofollow")
+	}
 	id := ctx.Params().GetInt64Default("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
@@ -30,6 +34,19 @@ func ArchiveDetail(ctx iris.Context) {
 		archive, err = currentSite.GetArchiveByUrlToken(urlToken)
 	} else {
 		archive, err = currentSite.GetArchiveById(id)
+	}
+	if preview != "" && err != nil {
+		var archiveDraft *model.ArchiveDraft
+		// 尝试获取预览内容
+		if urlToken != "" {
+			//优先使用urlToken
+			archiveDraft, err = currentSite.GetArchiveDraftByUrlToken(urlToken)
+		} else {
+			archiveDraft, err = currentSite.GetArchiveDraftById(id)
+		}
+		if err == nil {
+			archive = &archiveDraft.Archive
+		}
 	}
 	if err != nil {
 		NotFound(ctx)

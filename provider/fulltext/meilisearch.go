@@ -5,7 +5,9 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/meilisearch/meilisearch-go"
 	"kandaoni.com/anqicms/config"
@@ -34,8 +36,16 @@ func NewMeiliSearchService(cfg *config.PluginFulltextConfig, indexName string) (
 }
 
 func (s *MeiliSearchService) Index(body interface{}) error {
+	// features
+	s.apiClient.ExperimentalFeatures().SetContainsFilter(true).Update()
+
 	index := s.apiClient.Index(s.indexName)
 
+	task0, err := index.UpdateFilterableAttributes(&[]interface{}{"module_id", "title"})
+	if err != nil {
+		log.Println("配置可搜索属性失败: ", err)
+		return err
+	}
 	task, err := index.UpdateSearchableAttributes(&[]string{"title", "keywords", "description", "content"})
 	if err != nil {
 		log.Println("配置可搜索属性失败: ", err)
@@ -44,8 +54,9 @@ func (s *MeiliSearchService) Index(body interface{}) error {
 	for {
 		time.Sleep(1 * time.Second)
 		task2, _ := s.apiClient.GetTask(task.TaskUID)
+		task3, _ := s.apiClient.GetTask(task0.TaskUID)
 		log.Printf("task status %v", task2.Status)
-		if task2.Status == "succeeded" {
+		if task2.Status == "succeeded" && task3.Status == "succeeded" {
 			break
 		}
 	}
@@ -58,13 +69,16 @@ func (s *MeiliSearchService) Index(body interface{}) error {
 func (s *MeiliSearchService) Create(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
+	newTitle := strings.ReplaceAll(doc.Title, "-", "")
+	newTitle = strings.ReplaceAll(newTitle, "/", "")
+	newTitle = strings.ReplaceAll(newTitle, " ", "")
+	doc.Title = doc.Title + " " + newTitle
 	data := library.StructToMap(doc)
 	data["id"] = docId
 	documents := []map[string]interface{}{
 		data,
 	}
-	keyName := "id"
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, &keyName)
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -77,13 +91,16 @@ func (s *MeiliSearchService) Create(doc TinyArchive) error {
 func (s *MeiliSearchService) Update(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
+	newTitle := strings.ReplaceAll(doc.Title, "-", "")
+	newTitle = strings.ReplaceAll(newTitle, "/", "")
+	newTitle = strings.ReplaceAll(newTitle, " ", "")
+	doc.Title = doc.Title + " " + newTitle
 	data := library.StructToMap(doc)
 	data["id"] = docId
 	documents := []map[string]interface{}{
 		data,
 	}
-	keyName := "id"
-	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, &keyName)
+	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -97,7 +114,7 @@ func (s *MeiliSearchService) Delete(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
 
-	task, err := s.apiClient.Index(s.indexName).DeleteDocument(docId)
+	task, err := s.apiClient.Index(s.indexName).DeleteDocument(docId, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -111,14 +128,17 @@ func (s *MeiliSearchService) Bulk(docs []TinyArchive) error {
 	var data []map[string]interface{}
 	for _, v := range docs {
 		docId := v.GetId()
+		newTitle := strings.ReplaceAll(v.Title, "-", "")
+		newTitle = strings.ReplaceAll(newTitle, "/", "")
+		newTitle = strings.ReplaceAll(newTitle, " ", "")
+		v.Title = v.Title + " " + newTitle
 		item := library.StructToMap(v)
 		// docId
 		item["id"] = strconv.FormatInt(docId, 10)
 
 		data = append(data, item)
 	}
-	keyName := "id"
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, &keyName)
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, nil)
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -137,8 +157,24 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 		Limit:  int64(pageSize),
 		Offset: int64((page - 1) * pageSize),
 	}
+	if s.config.RankingScore > 0 {
+		query.RankingScoreThreshold = float64(s.config.RankingScore) / 100
+	}
+	var queryFilter []string
 	if moduleId > 0 {
-		query.Filter = fmt.Sprintf("module_id = %d", moduleId) // 过滤 moduleId
+		queryFilter = append(queryFilter, fmt.Sprintf("module_id = %d", moduleId)) // 过滤 moduleId
+	}
+	if s.config.ContainLength > 0 {
+		// 匹配搜索词的开头
+		contain := keyword
+		if utf8.RuneCountInString(contain) > s.config.ContainLength {
+			contain = string([]rune(contain)[:s.config.ContainLength])
+		}
+		// "title STARTS WITH 'keyword'")
+		queryFilter = append(queryFilter, fmt.Sprintf("title CONTAINS '%s'", contain))
+	}
+	if len(queryFilter) > 0 {
+		query.Filter = queryFilter
 	}
 
 	resp, err := s.apiClient.Index(s.indexName).Search(keyword, query)

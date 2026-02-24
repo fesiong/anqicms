@@ -30,23 +30,26 @@ type SystemConfig struct {
 }
 
 type ContentConfig struct {
-	RemoteDownload int    `json:"remote_download"`
-	FilterOutlink  int    `json:"filter_outlink"`
-	UrlTokenType   int    `json:"url_token_type"`
-	UseWebp        int    `json:"use_webp"`
-	ConvertGif     int    `json:"convert_gif"` // 在转换成webp的时候，是否转换gif，1=true
-	Quality        int    `json:"quality"`
-	ResizeImage    int    `json:"resize_image"`
-	ResizeWidth    int    `json:"resize_width"`
-	ThumbCrop      int    `json:"thumb_crop"`
-	ThumbWidth     int    `json:"thumb_width"`
-	ThumbHeight    int    `json:"thumb_height"`
-	DefaultThumb   string `json:"default_thumb"`
-	MultiCategory  int    `json:"multi_category"` // 是否启用多分类支持
-	Editor         string `json:"editor"`         // 使用的editor，默认为空，支持 空值|default|markdown
-	UseSort        int    `json:"use_sort"`       // 启用文档排序
-	MaxPage        int    `json:"max_page"`       // 最大显示页码
-	MaxLimit       int    `json:"max_limit"`      // 最大显示条数
+	RemoteDownload   int      `json:"remote_download"`
+	FilterOutlink    int      `json:"filter_outlink"`
+	UrlTokenType     int      `json:"url_token_type"`
+	UseWebp          int      `json:"use_webp"`
+	ConvertGif       int      `json:"convert_gif"` // 在转换成webp的时候，是否转换gif，1=true
+	Quality          int      `json:"quality"`
+	ResizeImage      int      `json:"resize_image"`
+	ResizeWidth      int      `json:"resize_width"`
+	ThumbCrop        int      `json:"thumb_crop"`
+	ThumbWidth       int      `json:"thumb_width"`
+	ThumbHeight      int      `json:"thumb_height"`
+	DefaultThumbType int      `json:"default_thumb_type"` // 0 = default, 3 = category id
+	DefaultThumb     string   `json:"default_thumb"`
+	DefaultThumbs    []string `json:"default_thumbs"`
+	ThumbCategoryId  int      `json:"thumb_category_id"`
+	MultiCategory    int      `json:"multi_category"` // 是否启用多分类支持
+	Editor           string   `json:"editor"`         // 使用的editor，默认为空，支持 空值|default|markdown
+	UseSort          int      `json:"use_sort"`       // 启用文档排序
+	MaxPage          int      `json:"max_page"`       // 最大显示页码
+	MaxLimit         int      `json:"max_limit"`      // 最大显示条数
 }
 
 type IndexConfig struct {
