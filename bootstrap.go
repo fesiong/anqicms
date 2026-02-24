@@ -115,6 +115,7 @@ func (bootstrap *Bootstrap) Start() {
 
 	pugEngine.AddFunc("stampToDate", tags.TimestampToDate)
 	pugEngine.AddFunc("priceFormat", tags.PriceFormat)
+	pugEngine.AddFunc("range", tags.Range)
 	pugEngine.AddFunc("CustomFunc", tags.CustomFunc)
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)

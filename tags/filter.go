@@ -218,6 +218,9 @@ func filterWordwrap(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pong
 
 func filterPriceFormat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
 	format := param.String()
+	if format == "" {
+		format = "%.2f"
+	}
 
 	result := PriceFormat(in.String(), format)
 	return pongo2.AsValue(result), nil

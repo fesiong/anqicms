@@ -37,6 +37,7 @@ func (node *tagAttachmentNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		if after, ok := strings.CutPrefix(name, currentSite.PluginStorage.StorageUrl); ok {
 			name = after
 		}
+		name = strings.TrimPrefix(name, "/")
 		attachment, _ = currentSite.GetAttachmentByFileLocation(name)
 	}
 

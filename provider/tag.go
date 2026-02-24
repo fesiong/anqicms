@@ -376,8 +376,10 @@ func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
 	for _, tag := range tags {
 		tag.Link = w.GetUrl(PatternTag, tag, 0)
 		for _, datum := range tagData {
-			tag.ItemId = datum.ItemId
-			break
+			if datum.TagId == tag.Id {
+				tag.ItemId = datum.ItemId
+				break
+			}
 		}
 		result[tag.ItemId] = append(result[tag.ItemId], tag)
 	}

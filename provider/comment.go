@@ -24,6 +24,7 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 	comment.Status = req.Status
 	comment.UserName = req.UserName
 	comment.Content = req.Content
+	comment.Email = req.Email
 
 	err = comment.Save(w.DB)
 	return

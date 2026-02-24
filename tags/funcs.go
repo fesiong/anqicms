@@ -169,7 +169,7 @@ func TimestampToDate(in interface{}, layout string, args ...string) string {
 }
 
 // 价格格式化，输入的是分
-func PriceFormat(in interface{}, args ...string) string {
+func PriceFormat(in interface{}, args ...interface{}) string {
 	in2, _ := strconv.ParseInt(fmt.Sprint(in), 10, 64)
 	if in2 == 0 {
 		return ""
@@ -182,7 +182,8 @@ func PriceFormat(in interface{}, args ...string) string {
 
 	// 如果提供了格式参数，则使用提供的格式
 	if len(args) > 0 {
-		switch strings.ToLower(args[0]) {
+		format = fmt.Sprint(args[0])
+		switch strings.ToLower(format) {
 		case "int", "integer", "0":
 			// 只显示整数部分
 			return fmt.Sprintf("%.0f", price)
@@ -194,11 +195,136 @@ func PriceFormat(in interface{}, args ...string) string {
 			return fmt.Sprintf("%.2f", price)
 		default:
 			// 使用自定义格式
-			format = args[0]
 		}
 	}
 
 	return fmt.Sprintf(format, price)
+}
+
+// Range 实现 range(start, end, step) 功能
+// Range 支持整数范围和字符范围
+// Range 实现 range(start, end, step) 功能
+// 支持整数范围和字符范围
+func Range(params ...interface{}) []interface{} {
+	// 解析参数
+	paramCount := len(params)
+
+	if paramCount < 1 || paramCount > 3 {
+		return nil
+	}
+
+	// 默认值
+	var start, stop interface{}
+	var step int = 1
+
+	switch paramCount {
+	case 1:
+		// 单个参数：可能是 stop（整数）或字符范围的结束值
+		switch val := params[0].(type) {
+		case int, int64, float64:
+			start = 0
+			stop = toInt(val)
+		case string:
+			if isChar(val) {
+				start = 'a' // 默认从 'a' 开始
+				stop = rune(val[0])
+			} else {
+				return nil // 参数非法
+			}
+		default:
+			return nil // 参数非法
+		}
+	case 2:
+		// 两个参数：start 和 stop
+		startVal := params[0]
+		stopVal := params[1]
+
+		switch startVal.(type) {
+		case int, int64, float64:
+			if _, ok := stopVal.(int); !ok {
+				return nil // 类型不匹配
+			}
+			start = toInt(startVal)
+			stop = toInt(stopVal)
+		case string:
+			if stopStr, ok := stopVal.(string); ok && isChar(startVal.(string)) && isChar(stopStr) {
+				start = rune(startVal.(string)[0])
+				stop = rune(stopStr[0])
+			} else {
+				return nil // 参数非法
+			}
+		default:
+			return nil // 参数非法
+		}
+	case 3:
+		// 三个参数：start、stop 和 step
+		startVal := params[0]
+		stopVal := params[1]
+		stepVal := params[2]
+
+		// 提取 step
+		step = toInt(stepVal)
+		if step == 0 {
+			return nil // step 非法
+		}
+
+		switch startVal.(type) {
+		case int, int64, float64:
+			if _, ok := stopVal.(int); !ok {
+				return nil // 类型不匹配
+			}
+			start = toInt(startVal)
+			stop = toInt(stopVal)
+		case string:
+			if stopStr, ok := stopVal.(string); ok && isChar(startVal.(string)) && isChar(stopStr) {
+				start = rune(startVal.(string)[0])
+				stop = rune(stopStr[0])
+			} else {
+				return nil // 参数非法
+			}
+		default:
+			return nil // 参数非法
+		}
+	}
+
+	// 生成范围
+	result := make([]interface{}, 0)
+
+	switch s := start.(type) {
+	case int:
+		// 整数范围
+		end := stop.(int)
+		for i := s; (step > 0 && i <= end) || (step < 0 && i > end); i += step {
+			result = append(result, i)
+		}
+	case rune:
+		// 字符范围
+		end := stop.(rune)
+		for ch := s; (step > 0 && ch <= end) || (step < 0 && ch > end); ch += rune(step) {
+			result = append(result, string(ch))
+		}
+	}
+
+	return result
+}
+
+// toInt 将 interface{} 转换为 int
+func toInt(val interface{}) int {
+	switch v := val.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
+}
+
+// isChar 判断字符串是否为单个字符
+func isChar(s string) bool {
+	return len(s) == 1 && ((s[0] >= 'a' && s[0] <= 'z' || s[0] >= 'A' && s[0] <= 'Z') || (s[0] >= '0' && s[0] <= '9'))
 }
 
 type MyFunc struct {
