@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -967,8 +968,8 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string, params map[str
 	if err != nil {
 		return string(oldBuf), err
 	}
-	// 验证内容是否是html，如果不是，则不进行翻译
-	if !bytes.Contains(buf, []byte("<html")) {
+	// 如果不是正常的文本，如读取的是二进制文件，如图片内容等，则不进行翻译
+	if !utf8.Valid(buf) {
 		return string(buf), nil
 	}
 	req := &AnqiTranslateHtmlRequest{
