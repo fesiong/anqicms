@@ -1077,7 +1077,7 @@ func newResponseWriter() responseWriterJustWriter {
 
 func (responseWriterJustWriter) Header() http.Header {
 	log.Println("should not be called")
-	return nil
+	return http.Header{}
 }
 func (responseWriterJustWriter) WriteHeader(int) {
 	log.Println("should not be called")
