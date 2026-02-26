@@ -165,8 +165,6 @@ func ArchiveDetail(ctx iris.Context) {
 		}
 	}
 
-	go archive.AddViews(currentSite.DB)
-
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = archive.Title
 		if archive.SeoTitle != "" {

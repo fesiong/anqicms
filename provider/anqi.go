@@ -458,7 +458,10 @@ func (w *Website) AnqiTranslateString(req *AnqiTranslateTextRequest) (result *An
 	if req.ToLanguage == "" {
 		return nil, errors.New(w.Tr("PleaseSelectTargetLanguage"))
 	}
-
+	// 如果不是正常的文本，如读取的是二进制文件，如图片内容等，则不进行翻译
+	if !utf8.ValidString(strings.Join(req.Text, "")) {
+		return req, nil
+	}
 	// 如果设置了使用AI翻译，则使用自己翻译
 	if w.PluginTranslate.Engine != config.TranslateEngineDefault {
 		result, err = w.SelfAiTranslateResult(req)
