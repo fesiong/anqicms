@@ -164,6 +164,7 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			// 分页
 			urlPatten := currentSite.GetUrl("tag", tagDetail, -1)
 			ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
+			ctx.Private["totalItems"] = total
 		}
 	}
 
