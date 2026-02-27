@@ -1,32 +1,34 @@
 package model
 
 import (
-	"github.com/lib/pq"
-	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lib/pq"
+	"gorm.io/gorm"
 )
 
 type Archive struct {
 	//默认字段
-	Id           uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey;index:idx_category_archive_id,priority:2;index:idx_module_archive_id,priority:2"`
-	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	Id           int64          `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey"`
+	ParentId     int64          `json:"parent_id" gorm:"column:parent_id;type:bigint(20) not null;default:0;index"`
+	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time;index:idx_category_created_time,priority:2;index:idx_module_created_time,priority:2"`
 	UpdatedTime  int64          `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title        string         `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';index"`
 	SeoTitle     string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	UrlToken     string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
 	Keywords     string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
 	Description  string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
-	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_archive_id,priority:1"`
-	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_archive_id,priority:1"`
+	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_created_time,priority:1"`
+	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_created_time,priority:1"`
 	Views        uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
 	CommentCount uint           `json:"comment_count" gorm:"column:comment_count;type:int(10) unsigned not null;default:0"`
 	Images       pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Template     string         `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
 	CanonicalUrl string         `json:"canonical_url" gorm:"column:canonical_url;type:varchar(250) not null;default:''"` // 规范链接
-	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null"`              // 固化的链接
+	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null;index"`        // 固化的链接
 	UserId       uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Price        int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	Stock        int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`
@@ -40,26 +42,29 @@ type Archive struct {
 	OriginTitle string `json:"origin_title" gorm:"column:origin_title;type:varchar(190) not null;default:'';index:idx_origin_title"`
 	OriginId    int    `json:"origin_id" gorm:"column:origin_id;type:tinyint(1) unsigned not null;default:0"` // 来源 0， 1 采集，2 AI生成
 	// 其他内容
-	Category       *Category               `json:"category" gorm:"-"`
-	ModuleName     string                  `json:"module_name" gorm:"-"`
-	ArchiveData    *ArchiveData            `json:"data" gorm:"-"`
-	Logo           string                  `json:"logo" gorm:"-"`
-	Thumb          string                  `json:"thumb" gorm:"-"`
-	Extra          map[string]*CustomField `json:"extra" gorm:"-"`
-	Link           string                  `json:"link" gorm:"-"`
-	Tags           []string                `json:"tags,omitempty" gorm:"-"`
-	HasOrdered     bool                    `json:"has_ordered" gorm:"-"` // 是否订购了
-	FavorablePrice int64                   `json:"favorable_price" gorm:"-"`
-	HasPassword    bool                    `json:"has_password" gorm:"-"` // 需要密码的时候，这个字段为true
-	CategoryTitles []string                `json:"category_titles" gorm:"-"`
-	CategoryIds    []uint                  `json:"category_ids" gorm:"-"`
-	Flag           string                  `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
-	Type           string                  `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
-	Relations      []*Archive              `json:"relations" gorm:"-"`
+	Category       *Category              `json:"category" gorm:"-"`
+	ModuleName     string                 `json:"module_name" gorm:"-"`
+	ArchiveData    *ArchiveData           `json:"data" gorm:"-"`
+	Logo           string                 `json:"logo" gorm:"-"`
+	Thumb          string                 `json:"thumb" gorm:"-"`
+	Extra          map[string]CustomField `json:"extra" gorm:"-"`
+	Link           string                 `json:"link" gorm:"-"`
+	Tags           []*Tag                 `json:"tags,omitempty" gorm:"-"`
+	HasOrdered     bool                   `json:"has_ordered" gorm:"-"` // 是否订购了
+	FavorablePrice int64                  `json:"favorable_price" gorm:"-"`
+	HasPassword    bool                   `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
+	PasswordValid  bool                   `json:"password_valid,omitempty" gorm:"-"` // 验证密码正确
+	CategoryTitles []string               `json:"category_titles" gorm:"-"`
+	CategoryIds    []uint                 `json:"category_ids" gorm:"-"`
+	Flag           string                 `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
+	Type           string                 `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
+	Relations      []*Archive             `json:"relations" gorm:"-"`
+	Content        string                 `json:"content" gorm:"-"`     // 列表获取Content的时候，使用这个字段
+	IsFavorite     bool                   `json:"is_favorite" gorm:"-"` // 是否收藏了
 }
 
 type ArchiveData struct {
-	Id      uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	Id      int64  `json:"id" gorm:"column:id;type:bigint(20) unsigned not null AUTO_INCREMENT;primaryKey"`
 	Content string `json:"content" gorm:"column:content;type:longtext default null"`
 }
 
@@ -72,23 +77,36 @@ type ArchiveDraft struct {
 }
 
 func (a *ArchiveDraft) BeforeCreate(tx *gorm.DB) (err error) {
-	a.Id = GetNextArchiveId(tx)
+	if a.Id == 0 {
+		a.Id = GetNextArchiveId(tx, false)
+	}
 	return
 }
 
-var nextArchiveId uint = 0
-var nextArchiveIdTime int64 = 0
-var nextArchiveIdMutex sync.Mutex
+type NextArchiveId struct {
+	Id        int64 `json:"-"`
+	QueryTime int64 `json:"-"`
+}
+
+var nextArchiveIdStore = sync.Mutex{}
 
 // GetNextArchiveId
 // ArchiveId 同时检查 archives表和archive_drafts表
 // 每次获取，自动加 1
-func GetNextArchiveId(tx *gorm.DB) uint {
-	nextArchiveIdMutex.Lock()
-	defer nextArchiveIdMutex.Unlock()
+func GetNextArchiveId(tx *gorm.DB, forceUpdate bool) int64 {
+	plugin := tx.Config.Plugins["nextArchiveId"]
+	pluginNext, _ := plugin.(*NextArchiveIdPlugin)
+	nextArchiveIdStore.Lock()
+	defer nextArchiveIdStore.Unlock()
 	// 仅缓存60秒
-	if nextArchiveIdTime+60 > time.Now().Unix() {
+	nextArchiveId, nextTime := pluginNext.GetId()
+	if nextTime+60 > time.Now().Unix() {
 		nextArchiveId += 1
+		if forceUpdate {
+			nextTime = time.Now().Unix()
+		}
+		_ = pluginNext.SetId(nextArchiveId, nextTime)
+
 		return nextArchiveId
 	}
 	// 从数据库读取
@@ -100,8 +118,8 @@ func GetNextArchiveId(tx *gorm.DB) uint {
 		lastId = lastIdTmp
 	}
 	// 下一个ID
-	nextArchiveId = uint(lastId) + 1
-	nextArchiveIdTime = time.Now().Unix()
+	nextArchiveId = lastId + 1
+	_ = pluginNext.SetId(nextArchiveId, time.Now().Unix()+60)
 
 	return nextArchiveId
 }
@@ -120,9 +138,10 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 			}
 		}
 		a.Logo = a.Images[0]
-		paths, fileName := filepath.Split(a.Logo)
-		a.Thumb = paths + "thumb_" + fileName
-		if strings.HasSuffix(a.Logo, ".svg") {
+		if strings.HasPrefix(a.Logo, storageUrl) && !strings.HasSuffix(a.Logo, ".svg") {
+			paths, fileName := filepath.Split(a.Logo)
+			a.Thumb = paths + "thumb_" + fileName
+		} else {
 			a.Thumb = a.Logo
 		}
 	} else if defaultThumb != "" {
@@ -130,8 +149,33 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 		if !strings.HasPrefix(a.Logo, "http") && !strings.HasPrefix(a.Logo, "//") {
 			a.Logo = storageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
 		}
-		a.Thumb = a.Logo
+		paths, fileName := filepath.Split(a.Logo)
+		a.Thumb = paths + "thumb_" + fileName
 	}
 
 	return a.Thumb
+}
+
+type NextArchiveIdPlugin struct {
+	Id        int64 `json:"-"`
+	QueryTime int64 `json:"-"`
+}
+
+func (n *NextArchiveIdPlugin) Name() string {
+	return "nextArchiveId"
+}
+
+func (n *NextArchiveIdPlugin) Initialize(*gorm.DB) error {
+	return nil
+}
+
+func (n *NextArchiveIdPlugin) SetId(id int64, nextTime int64) (err error) {
+	n.Id = id
+	n.QueryTime = nextTime
+
+	return nil
+}
+
+func (n *NextArchiveIdPlugin) GetId() (int64, int64) {
+	return n.Id, n.QueryTime
 }

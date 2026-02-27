@@ -1,0 +1,43 @@
+{% extends 'base.html' %}
+
+{% block container %}
+
+<a href="javascript:;" id="google-login">login via Google</a>
+
+{% endblock %}
+
+{%- block bottom %}
+<script>
+    $('#google-login').click(function() {
+        // 获取跳转URL
+        $.get("/api/google/url").then(res => {
+            if (res.data) {
+                console.log(res.data.url)
+                sessionStorage.setItem('state', res.data.state)
+                //window.location.href = res.data.url;
+            }
+        }, 'json')
+    })
+    // 检查路由中有 code 参数，则请求后端检查
+    if (window.location.href.indexOf('code') > -1) {
+        // 获取 参数 code
+        var urlParams = new URLSearchParams(window.location.search);
+        var code = urlParams.get('code');
+        var state = urlParams.get('state');
+        $.ajax({
+            type: 'POST',
+            url: '/api/login',
+            data: JSON.stringify({
+                platform:"google",
+                "state": state,
+                "code": code,
+            }),
+            contentType: "application/json",
+            dataType: 'json',
+            success: function (res) {
+                console.log(res)
+            }
+        })
+    }
+</script>
+{%- endblock %}

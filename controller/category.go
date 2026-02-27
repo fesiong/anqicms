@@ -2,22 +2,31 @@ package controller
 
 import (
 	"fmt"
+	"net/url"
+	"strings"
+
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 func CategoryPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ServeFile(cacheFile)
+		ctx.ContentType(context.ContentHTMLHeaderValue)
+		ctx.Write(cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	categoryId := ctx.Params().GetUintDefault("id", 0)
 	catId := ctx.Params().GetUintDefault("catid", 0)
 	if catId > 0 {
@@ -41,12 +50,12 @@ func CategoryPage(ctx iris.Context) {
 	} else {
 		if urlToken != "" {
 			//优先使用urlToken
-			category, err = currentSite.GetCategoryByUrlToken(urlToken)
+			category = currentSite.GetCategoryFromCacheByToken(urlToken)
 		} else {
-			category, err = currentSite.GetCategoryById(categoryId)
+			category = currentSite.GetCategoryFromCache(categoryId)
 		}
 	}
-	if err != nil || category.Status != config.ContentStatusOK {
+	if category == nil || category.Status != config.ContentStatusOK {
 		NotFound(ctx)
 		return
 	}
@@ -70,12 +79,10 @@ func CategoryPage(ctx iris.Context) {
 		if category.SeoTitle != "" {
 			webInfo.Title = category.SeoTitle
 		}
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = category.Keywords
 		webInfo.Description = category.Description
-		webInfo.NavBar = category.Id
+		webInfo.NavBar = int64(category.Id)
 		webInfo.PageName = "archiveList"
 		webInfo.CanonicalUrl = currentSite.GetUrl("category", category, currentPage)
 		ctx.ViewData("webInfo", webInfo)
@@ -83,24 +90,21 @@ func CategoryPage(ctx iris.Context) {
 
 	ctx.ViewData("category", category)
 
-	tplName := module.TableName + "/list.html"
-	tplName2 := module.TableName + "_list.html"
-	if ViewExists(ctx, tplName2) {
-		tplName = tplName2
-	}
+	tmpTpl := fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
-	if category.Template != "" {
-		tplName = category.Template
-	} else if ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
-		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
-	} else {
-		categoryTemplate := currentSite.GetCategoryTemplate(category)
-		if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
-			tplName = categoryTemplate.Template
+	var catTpl string
+	categoryTemplate := currentSite.GetCategoryTemplate(category)
+	if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
+		catTpl = categoryTemplate.Template
+		if !strings.HasSuffix(catTpl, ".html") {
+			catTpl += ".html"
 		}
 	}
-	if !strings.HasSuffix(tplName, ".html") {
-		tplName += ".html"
+	tokenTpl := fmt.Sprintf("%s/%s.html", module.TableName, category.UrlToken)
+	tplName, ok := currentSite.TemplateExist(catTpl, tokenTpl, tmpTpl, module.TableName+"/list.html", module.TableName+"_list.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err = ctx.View(GetViewPath(ctx, tplName))
@@ -118,7 +122,14 @@ func SearchPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ServeFile(cacheFile)
+		ctx.ContentType(context.ContentHTMLHeaderValue)
+		ctx.Write(cacheFile)
+		return
+	}
+	currentPage := ctx.Values().GetIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
 		return
 	}
 	q := strings.TrimSpace(ctx.URLParam("q"))
@@ -148,31 +159,29 @@ func SearchPage(ctx iris.Context) {
 	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.Values().GetIntDefault("page", 1)
-		webInfo.Title = currentSite.TplTr("SearchLog", q)
+		webInfo.Title = currentSite.TplTr("Search%s", "")
 		if module != nil {
 			webInfo.Title = module.Title + webInfo.Title
 		}
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "search"
-		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", q), nil, currentPage)
+		webInfo.CanonicalUrl = currentSite.GetUrl(provider.PatternSearch, map[string]interface{}{
+			"q":      url.QueryEscape(q),
+			"module": moduleToken,
+		}, currentPage)
 		ctx.ViewData("webInfo", webInfo)
 	}
 
 	ctx.ViewData("q", q)
 
-	tplName := "search/index.html"
-	if ViewExists(ctx, "search.html") {
-		tplName = "search.html"
-	}
+	var tmpTpl string
 	if module != nil {
-		if ViewExists(ctx, "search/"+module.UrlToken+".html") {
-			tplName = "search/" + module.UrlToken + ".html"
-		} else if ViewExists(ctx, "search_"+module.UrlToken+".html") {
-			tplName = "search_" + module.UrlToken + ".html"
-		}
+		tmpTpl = "search/" + module.UrlToken + ".html"
+	}
+	tplName, ok := currentSite.TemplateExist(tmpTpl, "search/index.html", "search.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))

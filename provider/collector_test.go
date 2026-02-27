@@ -12,7 +12,7 @@ import (
 func (w *Website) TestCollectSingleArticle(t *testing.T) {
 	link := &response.WebLink{Url: "http://blog.niunan.net/blog/show/1295"}
 	keyword := &model.Keyword{Title: "PHP 报错"}
-	result, err := w.CollectSingleArticle(link, keyword)
+	result, err := w.CollectSingleArticle(link, keyword, 0)
 
 	if err != nil {
 		t.Fatal(err)

@@ -1,14 +1,18 @@
 package provider
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/library"
 	"os"
 	"strings"
 	"time"
+
+	_ "github.com/wneessen/go-mail"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 const MailLogFile = "mail.log"
@@ -92,13 +96,16 @@ func (w *Website) SendMail(subject, content string, recipients ...string) error 
 		//成功配置，则跳过
 		return errors.New(w.Tr("PleaseConfigureSender"))
 	}
-
-	err := w.sendMail(subject, content, recipients, false, true)
+	userHtml := false
+	if strings.HasPrefix(content, "<") {
+		userHtml = true
+	}
+	err := w.sendMail(subject, content, nil, recipients, userHtml, true)
 
 	return err
 }
 
-func (w *Website) sendMail(subject, content string, recipients []string, useHtml bool, setLog bool) error {
+func (w *Website) sendMail(subject, content string, attachments []*library.Attachment, recipients []string, useHtml bool, setLog bool) error {
 	setting := w.PluginSendmail
 	port := setting.Port
 	if port == 0 {
@@ -125,6 +132,9 @@ func (w *Website) sendMail(subject, content string, recipients []string, useHtml
 		email.Secure = "SSL"
 	}
 	email.Password = setting.Password
+	for _, attach := range attachments {
+		email.Attach(bytes.NewReader(attach.Content), attach.Filename, attach.Header.Get("Content-Type"))
+	}
 
 	if len(recipients) == 0 {
 		if setting.Recipient != "" {
@@ -204,4 +214,39 @@ func (w *Website) logMailError(address, subject, status string) {
 	if err == nil {
 		library.DebugLog(w.CachePath, MailLogFile, string(content))
 	}
+}
+
+func (w *Website) SendVerifyEmail(user *model.User, state string) error {
+	// 是否需要邮箱验证
+	if w.PluginSendmail.SignupVerify {
+		// 发送验证邮件
+		// 需要替换的内容：{siteName}/{userName}/{email}/{url}/{verifyCode}/{verifyUrl}
+		token := library.Md5(user.Email + user.Password)
+		verifyCode := library.CodeCache.Generate(token)
+		verifyUrl := w.System.BaseUrl + "/api/verify/email?token=" + token + "&code=" + verifyCode + "&state=" + state + "&email=" + user.Email
+		subject := w.PluginSendmail.VerifySubject
+		if subject == "" {
+			subject = "[{siteName}]: Please verify your email address"
+		}
+		subject = strings.ReplaceAll(subject, "{siteName}", w.System.SiteName)
+		subject = strings.ReplaceAll(subject, "{userName}", user.UserName)
+		subject = strings.ReplaceAll(subject, "{email}", user.Email)
+		subject = strings.ReplaceAll(subject, "{url}", w.System.BaseUrl)
+		subject = strings.ReplaceAll(subject, "{verifyUrl}", verifyUrl)
+		subject = strings.ReplaceAll(subject, "{verifyCode}", verifyCode)
+		mailBody := w.PluginSendmail.VerifyMessage
+		if mailBody == "" {
+			mailBody = "<div>Dear {userName},<br><br>Please click the link below to verify your email address:<br><br><a href=\"{verifyUrl}\">{verifyUrl}</a><br><br>If you did not register for this site, please ignore this email.<br><br>Regards,<br>{siteName}</div>"
+		}
+		mailBody = strings.ReplaceAll(mailBody, "{siteName}", w.System.SiteName)
+		mailBody = strings.ReplaceAll(mailBody, "{userName}", user.UserName)
+		mailBody = strings.ReplaceAll(mailBody, "{email}", user.Email)
+		mailBody = strings.ReplaceAll(mailBody, "{url}", w.System.BaseUrl)
+		mailBody = strings.ReplaceAll(mailBody, "{verifyUrl}", verifyUrl)
+		mailBody = strings.ReplaceAll(mailBody, "{verifyCode}", verifyCode)
+
+		_ = w.SendMail(subject, mailBody, user.Email)
+	}
+
+	return nil
 }

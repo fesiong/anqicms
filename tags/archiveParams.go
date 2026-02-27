@@ -2,7 +2,12 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
@@ -22,7 +27,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if err != nil {
 		return err
 	}
-	id := uint(0)
+	id := int64(0)
 
 	if args["site_id"] != nil {
 		args["siteId"] = args["site_id"]
@@ -43,27 +48,26 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			sorted = false
 		}
 	}
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
 
 	archiveDetail, _ := ctx.Public["archive"].(*model.Archive)
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		id = int64(args["id"].Integer())
 		if archiveDetail == nil || archiveDetail.Id != id {
 			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
-			if archiveDetail == nil {
-				archiveDetail, _ = currentSite.GetArchiveById(id)
-				if archiveDetail != nil {
-					// if read level larger than 0, then need to check permission
-					userId := uint(0)
-					userInfo, ok := ctx.Public["userInfo"].(*model.User)
-					if ok && userInfo.Id > 0 {
-						userId = userInfo.Id
-					}
-					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-					archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
-
-					currentSite.AddArchiveCache(archiveDetail)
+			if archiveDetail != nil {
+				// if read level larger than 0, then need to check permission
+				userId := uint(0)
+				userInfo, ok := ctx.Public["userInfo"].(*model.User)
+				if ok && userInfo.Id > 0 {
+					userId = userInfo.Id
 				}
+				userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+				archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 			}
 		}
 	}
@@ -71,20 +75,56 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if archiveDetail != nil {
 		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
+			var extras = make(map[string]model.CustomField, len(archiveParams))
 			for i := range archiveParams {
-				if archiveParams[i].Value == nil || archiveParams[i].Value == "" {
-					archiveParams[i].Value = archiveParams[i].Default
+				param := *archiveParams[i]
+				if (param.Value == nil || param.Value == "" || param.Value == 0) &&
+					param.Type != config.CustomFieldTypeRadio &&
+					param.Type != config.CustomFieldTypeCheckbox &&
+					param.Type != config.CustomFieldTypeSelect {
+					param.Value = param.Default
 				}
-				if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
-					delete(archiveParams, i)
+				if param.FollowLevel && !archiveDetail.HasOrdered {
+					continue
 				}
+				if param.Type == config.CustomFieldTypeEditor && render {
+					param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+				} else if param.Type == config.CustomFieldTypeArchive {
+					// 列表
+					arcIds, ok := param.Value.([]int64)
+					if !ok && param.Default != "" {
+						value, _ := strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+						if value > 0 {
+							arcIds = append(arcIds, value)
+						}
+					}
+					if len(arcIds) > 0 {
+						arcs, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
+							return tx.Where("archives.`id` IN (?)", arcIds)
+						}, "archives.id ASC", 0, len(arcIds))
+						param.Value = arcs
+					} else {
+						param.Value = nil
+					}
+				} else if param.Type == config.CustomFieldTypeCategory {
+					value, ok := param.Value.(int64)
+					if !ok && param.Default != "" {
+						value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
+					}
+					if value > 0 {
+						param.Value = currentSite.GetCategoryFromCache(uint(value))
+					} else {
+						param.Value = nil
+					}
+				}
+				extras[i] = param
 			}
 			if sorted {
-				var extraFields []*model.CustomField
+				var extraFields []model.CustomField
 				module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 				if module != nil && len(module.Fields) > 0 {
 					for _, v := range module.Fields {
-						extraFields = append(extraFields, archiveParams[v.FieldName])
+						extraFields = append(extraFields, extras[v.FieldName])
 					}
 				}
 
@@ -92,12 +132,12 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			} else {
 				if len(name) > 0 {
 					var content interface{}
-					if item, ok := archiveParams[name]; ok {
+					if item, ok := extras[name]; ok {
 						content = item.Value
 					}
 					ctx.Private[node.name] = content
 				} else {
-					ctx.Private[node.name] = archiveParams
+					ctx.Private[node.name] = extras
 				}
 			}
 		}

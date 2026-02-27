@@ -1,7 +1,7 @@
 package request
 
 type OrderRequest struct {
-	Id                uint                 `json:"id"`
+	Id                int64                `json:"id"`
 	OrderId           string               `json:"order_id"`
 	PaymentId         string               `json:"payment_id"`
 	UserId            uint                 `json:"user_id"`
@@ -17,7 +17,9 @@ type OrderRequest struct {
 	DeliverTime       int64                `json:"deliver_time"`
 	FinishedTime      int64                `json:"finished_time"`
 	DiscountAmount    int64                `json:"discount_amount"` // 可能一个订单支持多个优惠
-	CouponCodeId      string               `json:"-"`
+	CouponId          int64                `json:"coupon_id"`
+	CouponCodeId      int64                `json:"coupon_code_id"`
+	CouponCode        string               `json:"coupon_code"`
 	ShareUserId       uint                 `json:"share_user_id"`       // 分享者
 	ShareAmount       int64                `json:"share_amount"`        // 分销可得金额
 	ShareParentAmount int64                `json:"share_parent_amount"` // 分销可得金额
@@ -28,8 +30,8 @@ type OrderRequest struct {
 	Details           []OrderDetail        `json:"details"`
 
 	// 接受单个，不需要detail
-	GoodsId  uint `json:"goods_id"`
-	Quantity int  `json:"quantity"`
+	GoodsId  int64 `json:"goods_id"`
+	Quantity int   `json:"quantity"`
 }
 
 type PaymentRequest struct {
@@ -42,8 +44,8 @@ type OrderDetail struct {
 	Id          uint   `json:"id"`
 	OrderId     string `json:"order_id"`
 	UserId      uint   `json:"user_id"`
-	GoodsId     uint   `json:"goods_id"`
-	GoodsItemId uint   `json:"goods_item_id"`
+	GoodsId     int64  `json:"goods_id"`
+	GoodsItemId int64  `json:"goods_item_id"`
 	Price       int64  `json:"price"`
 	OriginPrice int64  `json:"origin_price"`
 	Amount      int64  `json:"amount"`
@@ -61,11 +63,15 @@ type OrderAddressRequest struct {
 	Id          uint   `json:"id"`
 	UserId      uint   `json:"user_id"`
 	Name        string `json:"name"`
+	LastName    string `json:"last_name"`
 	Phone       string `json:"phone"`
+	Email       string `json:"email"`
 	Province    string `json:"province"`
 	City        string `json:"city"`
+	Town        string `json:"town"`
 	Country     string `json:"country"`
 	AddressInfo string `json:"address_info"`
+	Company     string `json:"company"`
 	Postcode    string `json:"postcode"`
 	Status      int    `json:"status"`
 }

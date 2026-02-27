@@ -8,7 +8,11 @@ type UserRequest struct {
 	Id         uint   `json:"id"`
 	UserName   string `json:"user_name"`
 	RealName   string `json:"real_name"`
+	FirstName  string `json:"first_name"`
+	LastName   string `json:"last_name"`
+	Birthday   int64  `json:"birthday"`
 	AvatarURL  string `json:"avatar_url"`
+	Introduce  string `json:"introduce"`
 	Phone      string `json:"phone"`
 	Email      string `json:"email"`
 	GroupId    uint   `json:"group_id"`
@@ -26,6 +30,10 @@ type UserRequest struct {
 type UserPasswordRequest struct {
 	OldPassword string `json:"old_password"`
 	Password    string `json:"password"`
+
+	Email string `json:"email"`
+	Token string `json:"token"`
+	Code  string `json:"code"`
 }
 
 type UserGroupRequest struct {
@@ -49,6 +57,7 @@ type ApiRegisterRequest struct {
 	CaptchaId string `json:"captcha_id"`
 	Captcha   string `json:"captcha"`
 	Code      string `json:"code"` //phone verify code
+	State     string `json:"state"`
 }
 
 type ApiLoginRequest struct {
@@ -69,7 +78,15 @@ type ApiLoginRequest struct {
 
 	Remember  bool   `json:"remember"` // keep login state
 	UserName  string `json:"user_name"`
+	Email     string `json:"email"`
+	Phone     string `json:"phone"`
 	Password  string `json:"password"`
 	CaptchaId string `json:"captcha_id"`
 	Captcha   string `json:"captcha"`
+}
+
+type ApiUserBalanceRequest struct {
+	UserId uint   `json:"user_id"`
+	Amount int64  `json:"amount"`
+	Remark string `json:"remark"`
 }

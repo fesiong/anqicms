@@ -2,11 +2,12 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
 )
 
 type tagModuleDetailNode struct {
@@ -59,6 +60,12 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 
 	if module != nil {
 		module.Link = currentSite.GetUrl("archiveIndex", module, 0)
+
+		// 支持获取整个detail
+		if fieldName == "" && node.name != "" {
+			ctx.Private[node.name] = module
+			return nil
+		}
 
 		v := reflect.ValueOf(*module)
 

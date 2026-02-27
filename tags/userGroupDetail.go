@@ -2,11 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"log"
+	"reflect"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
 )
 
 type tagUserGroupDetailNode struct {
@@ -23,10 +25,16 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 	if err != nil {
 		return err
 	}
-	id := uint(0)
+	var queryDetail *model.UserGroup
 
 	if args["id"] != nil {
-		id = uint(args["id"].Integer())
+		id := uint(args["id"].Integer())
+		queryDetail, _ = currentSite.GetUserGroupInfo(id)
+	}
+	if args["level"] != nil {
+		level := args["level"].Integer()
+		log.Println("level", level)
+		queryDetail, _ = currentSite.GetUserGroupInfoByLevel(level)
 	}
 	fieldName := ""
 	if args["name"] != nil {
@@ -35,21 +43,21 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 	}
 
 	groupDetail, ok := ctx.Public["userGroup"].(*model.UserGroup)
-	if !ok && id == 0 {
+	if !ok && queryDetail == nil {
 		return nil
 	}
 	//不是同一个，重新获取
-	if groupDetail != nil && (id > 0 && groupDetail.Id != id) {
-		groupDetail = nil
+	if groupDetail == nil || (queryDetail != nil && queryDetail.Id != groupDetail.Id) {
+		groupDetail = queryDetail
 	}
 
-	if groupDetail == nil && id > 0 {
-		groupDetail, _ = currentSite.GetUserGroupInfo(id)
-		if groupDetail == nil {
-			return nil
-		}
-	}
 	if groupDetail == nil {
+		return nil
+	}
+
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		ctx.Private[node.name] = groupDetail
 		return nil
 	}
 

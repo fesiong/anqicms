@@ -4,20 +4,22 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
-	"github.com/go-pay/gopay/pkg/util"
+	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"strconv"
-	"time"
 )
 
 func ApiGetOrders(ctx iris.Context) {
@@ -51,7 +53,7 @@ func ApiGetOrderDetail(ctx iris.Context) {
 		})
 		return
 	}
-	if order.UserId != userId {
+	if order.UserId != userId && currentSite.PluginOrder.NoNeedLogin == false {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("InsufficientPermissions"),
@@ -76,7 +78,15 @@ func ApiCreateOrder(ctx iris.Context) {
 		})
 		return
 	}
+	// check login
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId == 0 && currentSite.PluginOrder.NoNeedLogin == false {
+		ctx.JSON(iris.Map{
+			"code": config.StatusNoLogin,
+			"msg":  currentSite.TplTr("PleaseLogin"),
+		})
+		return
+	}
 
 	order, err := currentSite.CreateOrder(userId, &req)
 	if err != nil {
@@ -223,6 +233,26 @@ func ApiFinishedOrder(ctx iris.Context) {
 	})
 }
 
+func ApiGetOrderAddresses(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+
+	addresses, err := currentSite.GetOrderAddressesByUserId(userId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  nil,
+		"data": addresses,
+	})
+}
+
 func ApiGetOrderAddress(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
@@ -283,6 +313,13 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	}
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	if userId == 0 && currentSite.PluginOrder.NoNeedLogin == false {
+		ctx.JSON(iris.Map{
+			"code": config.StatusNoLogin,
+			"msg":  currentSite.TplTr("PleaseLogin"),
+		})
+		return
+	}
 	//注入userID
 	req.UserId = userId
 
@@ -295,7 +332,7 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		return
 	}
 
-	payment, err := currentSite.GeneratePayment(order, req.PayWay)
+	payment, err := currentSite.GeneratePayment(order, &req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -313,6 +350,10 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createWeappPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayAlipay {
 		createAlipayPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayPaypal {
+		createPaypalPayment(ctx, payment, order)
+	} else if req.PayWay == config.PayWayBalance {
+		createBalancePayment(ctx, payment, order)
 	} else {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -329,7 +370,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
-		Set("nonce_str", util.RandomString(32)).
+		Set("nonce_str", library.GenerateRandString(32)).
 		Set("spbill_create_ip", ctx.RemoteAddr()).
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
@@ -368,7 +409,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "wechat",
+			"pay_way":  config.PayWayWechat,
 			"code_url": fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(png)),
 		},
 	})
@@ -392,7 +433,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
-		Set("nonce_str", util.RandomString(32)).
+		Set("nonce_str", library.GenerateRandString(32)).
 		Set("spbill_create_ip", ctx.RemoteAddr()).
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
@@ -435,7 +476,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":   "weapp",
+			"pay_way":   config.PayWayWeapp,
 			"paySign":   paySign,
 			"timeStamp": timeStamp,
 			"package":   packages,
@@ -509,11 +550,153 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"pay_way":  "alipay",
+			"pay_way":  config.PayWayAlipay,
 			"jump_url": payUrl,
 		},
 	})
 	return
+}
+
+func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	var purchases = []*paypal.PurchaseUnit{
+		{
+			ReferenceId: payment.PaymentId,
+			Amount: &paypal.Amount{
+				CurrencyCode: "USD",
+				Value:        fmt.Sprintf("%.2f", float32(payment.Amount)/100),
+			},
+		},
+	}
+
+	bm := make(gopay.BodyMap)
+	bm.Set("intent", "CAPTURE").
+		Set("purchase_units", purchases).
+		SetBodyMap("payment_source", func(b gopay.BodyMap) {
+			b.SetBodyMap("paypal", func(bb gopay.BodyMap) {
+				bb.SetBodyMap("experience_context", func(bbb gopay.BodyMap) {
+					bbb.Set("brand_name", currentSite.System.SiteName).
+						Set("locale", "en-US").
+						Set("shipping_preference", "NO_SHIPPING").
+						Set("user_action", "PAY_NOW").
+						Set("return_url", currentSite.System.BaseUrl+"/return/paypal/pay").
+						Set("cancel_url", currentSite.System.BaseUrl+"/return/paypal/cancel")
+				})
+			})
+		})
+
+	ppRsp, err := client.CreateOrder(ctx, bm)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if ppRsp.Code != 200 {
+		// do something
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ppRsp.Error,
+		})
+		return
+	}
+	// 更新id
+	payment.TerraceId = ppRsp.Response.Id
+	currentSite.DB.Save(payment)
+
+	// payer link
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":  config.PayWayPaypal,
+			"jump_url": ppRsp.Response.Links[1].Href,
+		},
+	})
+}
+
+func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+	// 检查用户余额是否足够
+	user, err := currentSite.GetUserInfoById(payment.UserId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	if user.Balance < payment.Amount {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("BalanceNotEnough"),
+		})
+		return
+	}
+	tx := currentSite.DB.Begin()
+	// this is a pay order
+	payment.PayWay = config.PayWayBalance
+	payment.PaidTime = time.Now().Unix()
+	payment.TerraceId = fmt.Sprintf("%d", payment.PaidTime)
+	tx.Save(payment)
+	order.PaymentId = payment.PaymentId
+	tx.Save(order)
+
+	//生成用户支付记录
+	tx.Model(user).Where("id = ?", user.Id).UpdateColumn("balance", gorm.Expr("`balance` - ?", payment.Amount))
+	var userBalance int64
+	tx.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance)
+	//状态更改了，增加一条记录到用户
+	finance := model.Finance{
+		UserId:      payment.UserId,
+		Direction:   config.FinanceOutput,
+		Amount:      payment.Amount,
+		AfterAmount: userBalance,
+		Action:      config.FinanceActionBuy,
+		OrderId:     payment.OrderId,
+		Status:      1,
+	}
+	err = tx.Create(&finance).Error
+	if err != nil {
+		tx.Rollback()
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
+	tx.Commit()
+
+	//支付成功逻辑处理
+	err = currentSite.SuccessPaidOrder(order, payment)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PaymentFailed"),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("PaymentSuccessful"),
+		"data": iris.Map{
+			"payment_id": payment.PaymentId,
+			"order_id":   order.OrderId,
+			"status":     1,
+		},
+	})
 }
 
 func ApiPaymentCheck(ctx iris.Context) {
@@ -528,6 +711,24 @@ func ApiPaymentCheck(ctx iris.Context) {
 		return
 	}
 	if order.Status != config.OrderStatusWaiting {
+		//支付成功
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  currentSite.TplTr("PaymentSuccessful"),
+		})
+		return
+	}
+	// 检查一次订单是否支付成功
+	payment, err := currentSite.GetPaymentInfoByOrderId(order.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	_ = currentSite.TraceQuery(payment)
+	if payment.PaidTime > 0 {
 		//支付成功
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
@@ -557,7 +758,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 
 func ApiArchiveOrderCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	archiveId := uint(ctx.URLParamIntDefault("id", 0))
+	archiveId := ctx.URLParamInt64Default("id", 0)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	archiveDetail, err := currentSite.GetArchiveById(archiveId)
@@ -584,7 +785,7 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 	var req request.ArchivePasswordRequest
 	var err error
 	if err = ctx.ReadJSON(&req); err != nil {
-		req.Id, _ = ctx.PostValueUint("id")
+		req.Id = ctx.PostValueInt64Default("id", 0)
 		req.Password = ctx.PostValueTrim("password")
 		if req.Id == 0 || len(req.Password) == 0 {
 			ctx.JSON(iris.Map{
@@ -610,16 +811,31 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 			content = archiveData.Content
 			// render
 			if currentSite.Content.Editor == "markdown" {
-				content = library.MarkdownToHTML(archiveData.Content)
+				content = library.MarkdownToHTML(archiveData.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 			}
 		}
+		detail := library.StructToMap(archiveDetail)
+		detail["content"] = content
+		detail["status"] = true
+		delete(detail, "password")
+		// extra
+		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
+		for i := range archiveParams {
+			if (archiveParams[i].Value == nil || archiveParams[i].Value == "") &&
+				archiveParams[i].Type != config.CustomFieldTypeRadio &&
+				archiveParams[i].Type != config.CustomFieldTypeCheckbox &&
+				archiveParams[i].Type != config.CustomFieldTypeSelect {
+				archiveParams[i].Value = archiveParams[i].Default
+			}
+			if archiveParams[i].FollowLevel && !archiveDetail.HasOrdered {
+				delete(archiveParams, i)
+			}
+		}
+		detail["extra"] = archiveParams
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "",
-			"data": iris.Map{
-				"status":  true,
-				"content": content,
-			},
+			"data": detail,
 		})
 		return
 	}

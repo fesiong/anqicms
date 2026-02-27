@@ -1,40 +1,82 @@
 package provider
 
 import (
+	"archive/zip"
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
+	"math"
+	"math/rand"
+	"mime/multipart"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
 	"github.com/jinzhu/now"
+	"github.com/xuri/excelize/v2"
+	"golang.org/x/text/encoding/simplifiedchinese"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
-	"net/url"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
-	"unicode/utf8"
+	"kandaoni.com/anqicms/response"
 )
 
-func (w *Website) GetArchiveByIdFromCache(id uint) (archive *model.Archive) {
+func (w *Website) GetArchiveByIdFromCache(id int64) (archive *model.Archive) {
 	err := w.Cache.Get(fmt.Sprintf("archive-%d", id), archive)
 	if err != nil {
-		return nil
+		archive, err = w.GetArchiveById(id)
+		if err != nil {
+			return nil
+		}
+		_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
 	}
 
 	return archive
 }
 
-func (w *Website) AddArchiveCache(archive *model.Archive) {
-	_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
+func (w *Website) GetArchiveByUrlTokenFromCache(urlToken string) (archive *model.Archive) {
+	err := w.Cache.Get(fmt.Sprintf("archive-%s", urlToken), archive)
+	if err != nil {
+		archive, err = w.GetArchiveByUrlToken(urlToken)
+		if err != nil {
+			return nil
+		}
+		_ = w.Cache.Set(fmt.Sprintf("archive-%s", archive.UrlToken), archive, 300)
+	}
+
+	return archive
 }
 
-func (w *Website) DeleteArchiveCache(id uint) {
+func (w *Website) DeleteArchiveCache(id int64, urlToken string, link string) {
 	w.Cache.Delete(fmt.Sprintf("archive-%d", id))
+	w.Cache.Delete(fmt.Sprintf("archive-%s", urlToken))
+	// 同时清理html缓存，如果可以的话
+	if link != "" && w.PluginHtmlCache.Open != false {
+		cachePath := w.CachePath + "pc"
+		localPath := transToLocalPath(strings.TrimPrefix(link, w.System.BaseUrl), "")
+		cacheFile := cachePath + localPath
+		_ = os.Remove(cacheFile)
+		memCacheKey := fmt.Sprintf("html-%v-%s", false, localPath)
+		w.Cache.Delete(memCacheKey)
+	}
+	// 如果开启了多语言，还需要删除多语言缓存
+	w.DeleteMultiLangCache([]string{link})
 }
 
-func (w *Website) GetArchiveById(id uint) (*model.Archive, error) {
+func (w *Website) GetArchiveById(id int64) (*model.Archive, error) {
 	return w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", id)
 	})
@@ -67,18 +109,77 @@ func (w *Website) GetArchiveByOriginUrl(keyword string) (*model.Archive, error) 
 	})
 }
 
-func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
-	var archive model.Archive
-	err := ops(w.DB).Take(&archive).Error
+func (w *Website) GetPreviousArchive(categoryId, id int64) (*model.Archive, error) {
+	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		if categoryId > 0 {
+			tx = tx.Where("`category_id` = ?", categoryId)
+		}
+		return tx.Where("`id` < ?", id).Order("`id` DESC").Select("id").Limit(1).Find(&model.Archive{})
+	})
+	var archiveId int64
+	err := w.DB.Raw(sql).Take(&archiveId).Error
+	if archiveId == 0 {
+		return nil, err
+	}
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`id` = ?", archiveId)
+	})
 	if err != nil {
 		return nil, err
 	}
-	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	if archive.Password != "" {
+		archive.HasPassword = true
+		archive.Password = ""
+	}
+	return archive, nil
+}
+
+func (w *Website) GetNextArchive(categoryId, id int64) (*model.Archive, error) {
+	sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		if categoryId > 0 {
+			tx = tx.Where("`category_id` = ?", categoryId)
+		}
+		return tx.Where("`id` > ?", id).Order("`id` ASC").Select("id").Limit(1).Find(&model.Archive{})
+	})
+	var archiveId int64
+	err := w.DB.Raw(sql).Take(&archiveId).Error
+	if archiveId == 0 {
+		return nil, err
+	}
+	archive, err := w.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("`id` = ?", archiveId)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if archive.Password != "" {
+		archive.HasPassword = true
+		archive.Password = ""
+	}
+	return archive, nil
+}
+
+func (w *Website) GetArchiveByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Archive, error) {
+	sql := ops(w.DB.WithContext(w.Ctx())).ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return tx.Select("id").Limit(1).Find(&model.Archive{})
+	})
+	var archiveId int64
+	err := w.DB.Raw(sql).Take(&archiveId).Error
+	if archiveId == 0 {
+		return nil, err
+	}
+
+	var archive model.Archive
+	err = w.DB.Model(&model.Archive{}).Where("id = ?", archiveId).Take(&archive).Error
+	if err != nil {
+		return nil, err
+	}
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
 	archive.Link = w.GetUrl("archive", &archive, 0)
 	return &archive, nil
 }
 
-func (w *Website) GetArchiveDraftById(id uint) (*model.ArchiveDraft, error) {
+func (w *Website) GetArchiveDraftById(id int64) (*model.ArchiveDraft, error) {
 	return w.GetArchiveDraftByFunc(func(tx *gorm.DB) *gorm.DB {
 		return tx.Where("`id` = ?", id)
 	})
@@ -117,17 +218,18 @@ func (w *Website) GetArchiveDraftByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.
 	if err != nil {
 		return nil, err
 	}
-	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
 	archive.Link = w.GetUrl("archive", &archive, 0)
 	return &archive, nil
 }
-
-func (w *Website) GetArchiveDataById(id uint) (*model.ArchiveData, error) {
+func (w *Website) GetArchiveDataById(id int64) (*model.ArchiveData, error) {
 	var data model.ArchiveData
-	err := w.DB.Where("`id` = ?", id).First(&data).Error
+	err := w.DB.WithContext(w.Ctx()).Where("`id` = ?", id).First(&data).Error
 	if err != nil {
 		return nil, err
 	}
+	// 对内容进行处理
+	data.Content = w.ReplaceContentUrl(data.Content, true)
 
 	return &data, nil
 }
@@ -141,7 +243,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	}
 	var draft = false
 	if len(offsets) > 0 {
-		offset = offsets[0]
+		if offsets[0] > 0 {
+			offset = offsets[0]
+		}
 		if len(offsets) > 1 {
 			draft = offsets[1] == 1
 		}
@@ -150,7 +254,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	// 对于没有分页的list，则缓存
 	var cacheKey = ""
 	if currentPage == 0 && !draft {
-		sql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql := w.DB.WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
 				tx = ops(tx)
 			}
@@ -161,12 +265,19 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		if err == nil {
 			return archives, int64(len(archives)), nil
 		}
+		if wg, ok := w.Cache.Pending(cacheKey); ok {
+			wg.Wait()
+			err = w.Cache.Get(cacheKey, &archives)
+			if err == nil {
+				return archives, int64(len(archives)), nil
+			}
+		}
 	}
 	var builder *gorm.DB
 	if draft {
-		builder = w.DB.Table("`archive_drafts` as archives").Order(order)
+		builder = w.DB.Table("`archive_drafts` as archives").WithContext(w.Ctx())
 	} else {
-		builder = w.DB.Model(&model.Archive{}).Order(order)
+		builder = w.DB.Model(&model.Archive{}).WithContext(w.Ctx())
 	}
 
 	if ops != nil {
@@ -184,13 +295,21 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		cacheKeyCount := "archive-list-count" + library.Md5(sqlCount)[8:24]
 		err := w.Cache.Get(cacheKeyCount, &total)
 		if err != nil {
-			builder.Count(&total)
+			// 如果使用explain分析行数大于10万，则不再使用count统计行数
+			total = w.GetExplainCount(sqlCount)
+			if total < 100000 {
+				builder.Count(&total)
+			}
 			_ = w.Cache.Set(cacheKeyCount, total, 300)
 		}
 		// 分页提速，先查出ID，再查询结果
 		// 先查询ID
-		var archiveIds []uint
-		builder.Limit(pageSize).Offset(offset).Select("archives.id").Pluck("id", &archiveIds)
+		var archiveIds []int64
+		builder = builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order)
+		sql := builder.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Find(&[]model.Archive{})
+		})
+		w.DB.Raw(sql).Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
 				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
@@ -199,26 +318,83 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 			}
 		}
 		for i := range archives {
-			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 	} else {
-		builder = builder.Limit(pageSize).Offset(offset)
-		if err := builder.Find(&archives).Error; err != nil {
-			return nil, 0, err
+		wg := &sync.WaitGroup{}
+		wg.Add(1)
+		w.Cache.AddPending(cacheKey, wg)
+		if strings.Contains(order, "rand") {
+			// 如果文章总量大于10万，则使用下面的方法处理
+			totalArchive := w.GetExplainCount("SELECT id FROM archives")
+			if totalArchive > 100000 {
+				var minMax struct {
+					MinId int `json:"min_id"`
+					MaxId int `json:"max_id"`
+				}
+				builder.WithContext(context.Background()).Select("MIN(archives.id) as min_id, MAX(archives.id) as max_id").Scan(&minMax)
+				if minMax.MinId == 0 || minMax.MaxId == 0 {
+					return nil, 0, errors.New("empty archive")
+				}
+				var existIds []int64
+				randId := rand.New(rand.NewSource(time.Now().UnixNano()))
+				for i := 0; i < pageSize; i++ {
+					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					var findId int64
+					builder.WithContext(context.Background()).Where("archives.id >= ?", tmpId).Select("archives.id").Limit(1).Pluck("id", &findId)
+					if findId > 0 {
+						existIds = append(existIds, findId)
+					}
+				}
+				if len(existIds) > 0 {
+					builder = builder.Where("archives.id IN (?)", existIds)
+				} else {
+					builder = builder.Where("archives.id = 0")
+				}
+			}
+		}
+		builder = builder.Limit(pageSize).Offset(offset).Order(order).Select("archives.id")
+		var archiveIds []int64
+		sql := builder.ToSQL(func(tx *gorm.DB) *gorm.DB {
+			return tx.Find(&[]model.Archive{})
+		})
+		w.DB.Raw(sql).Pluck("id", &archiveIds)
+		//	builder.Pluck("id", &archiveIds)
+		if len(archiveIds) > 0 {
+			if draft {
+				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			} else {
+				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+			}
 		}
 		for i := range archives {
-			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archives[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = w.GetUrl("archive", archives[i], 0)
 		}
 		// 对于没有分页的list，则缓存
-		_ = w.Cache.Set(cacheKey, archives, 300)
+		if !draft {
+			_ = w.Cache.Set(cacheKey, archives, 600)
+		}
+		w.Cache.DelPending(cacheKey)
+		wg.Done()
 	}
 
 	return archives, total, nil
 }
 
-func (w *Website) GetArchiveExtraFromCache(archiveId uint) (extra map[string]*model.CustomField) {
+type ExplainCount struct {
+	Rows int64
+}
+
+func (w *Website) GetExplainCount(sql string) int64 {
+	var result ExplainCount
+	w.DB.Raw("EXPLAIN " + sql).Scan(&result)
+
+	return result.Rows
+}
+
+func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*model.CustomField) {
 	err := w.Cache.Get(fmt.Sprintf("archive-extra-%d", archiveId), &extra)
 	if err != nil {
 		return nil
@@ -227,15 +403,15 @@ func (w *Website) GetArchiveExtraFromCache(archiveId uint) (extra map[string]*mo
 	return extra
 }
 
-func (w *Website) AddArchiveExtraCache(archiveId uint, extra map[string]*model.CustomField) {
+func (w *Website) AddArchiveExtraCache(archiveId int64, extra map[string]*model.CustomField) {
 	_ = w.Cache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 60)
 }
 
-func (w *Website) DeleteArchiveExtraCache(archiveId uint) {
+func (w *Website) DeleteArchiveExtraCache(archiveId int64) {
 	w.Cache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
 }
 
-func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]*model.CustomField {
+func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[string]*model.CustomField {
 	if loadCache {
 		cached := w.GetArchiveExtraFromCache(id)
 		if cached != nil {
@@ -253,20 +429,43 @@ func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]
 		}
 		//从数据库中取出来
 		if len(fields) > 0 {
-			w.DB.Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
+			w.DB.WithContext(w.Ctx()).Table(module.TableName).Where("`id` = ?", id).Select(strings.Join(fields, ",")).Scan(&result)
 			//extra的CheckBox的值
 			for _, v := range module.Fields {
-				if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile {
-					value, ok := result[v.FieldName].(string)
-					if ok && value != "" && !strings.HasPrefix(value, "http") && !strings.HasPrefix(value, "//") {
-						result[v.FieldName] = w.PluginStorage.StorageUrl + value
-					}
-				}
-				// render
-				if v.Type == config.CustomFieldTypeEditor && w.Content.Editor == "markdown" {
-					value, ok := result[v.FieldName].(string)
-					if ok {
-						result[v.FieldName] = library.MarkdownToHTML(value)
+				value, ok := result[v.FieldName].(string)
+				if ok {
+					if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+						result[v.FieldName] = w.ReplaceContentUrl(value, true)
+					} else if v.Type == config.CustomFieldTypeImages {
+						// json 还原
+						var images []string
+						err := json.Unmarshal([]byte(value), &images)
+						if err == nil {
+							for i := range images {
+								images[i] = w.ReplaceContentUrl(images[i], true)
+							}
+							result[v.FieldName] = images
+						}
+					} else if v.Type == config.CustomFieldTypeTexts {
+						var texts []model.CustomFieldTexts
+						err := json.Unmarshal([]byte(value), &texts)
+						if err == nil {
+							result[v.FieldName] = texts
+						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						var val model.TimelineField
+						err := json.Unmarshal([]byte(value), &val)
+						if err == nil {
+							result[v.FieldName] = val
+						}
+					} else if v.Type == config.CustomFieldTypeArchive {
+						var arcIds []int64
+						err := json.Unmarshal([]byte(value), &arcIds)
+						if err == nil {
+							result[v.FieldName] = arcIds
+						}
+					} else if v.Type == config.CustomFieldTypeCategory || v.Type == config.CustomFieldTypeNumber {
+						result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 					}
 				}
 				extraFields[v.FieldName] = &model.CustomField{
@@ -288,6 +487,15 @@ func (w *Website) GetArchiveExtra(moduleId, id uint, loadCache bool) map[string]
 }
 
 func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
+	hookCtx := &HookContext{
+		Point: BeforeArchivePost,
+		Site:  w,
+		Data:  req,
+	}
+	if err := TriggerHook(hookCtx); err != nil {
+		return nil, err
+	}
+
 	if len(req.CategoryIds) > 0 {
 		for i := 0; i < len(req.CategoryIds); i++ {
 			// 防止 0
@@ -329,13 +537,17 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		if err != nil {
 			archive, err := w.GetArchiveById(req.Id)
 			if err != nil {
-				return nil, err
+				// 表示不存在，则新建一个
+				newPost = true
+				draft = &model.ArchiveDraft{}
+				draft.Id = req.Id
+			} else {
+				draft = &model.ArchiveDraft{
+					Archive: *archive,
+					Status:  config.ContentStatusOK,
+				}
+				isReleased = true
 			}
-			draft = &model.ArchiveDraft{
-				Archive: *archive,
-				Status:  config.ContentStatusOK,
-			}
-			isReleased = true
 		}
 	} else {
 		newPost = true
@@ -356,14 +568,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		draft.Status = config.ContentStatusDraft
 	}
 	// 判断重复
-	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-	}
-	if req.UrlToken == "" {
-		req.UrlToken = time.Now().Format("a-20060102150405")
-	}
-	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, draft.Id)
+	draft.UrlToken = w.VerifyArchiveUrlToken(req.UrlToken, req.Title, draft.Id)
 	if utf8.RuneCountInString(req.Title) > 190 {
 		req.Title = string([]rune(req.Title)[:190])
 		if strings.Count(req.Title, " ") > 1 {
@@ -414,8 +619,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		_ = w.SaveTagData(draft.Id, req.Tags)
 
 		// 清除缓存
-		w.DeleteArchiveCache(draft.Id)
+		draft.Link = w.GetUrl("archive", &draft.Archive, 0)
+		w.DeleteArchiveCache(draft.Id, draft.UrlToken, draft.Link)
 		w.DeleteArchiveExtraCache(draft.Id)
+
+		hookCtx.Point = AfterArchivePost
+		hookCtx.Data = draft
+		_ = TriggerHook(hookCtx)
 		if isReleased {
 			err = w.SuccessReleaseArchive(&draft.Archive, newPost)
 		}
@@ -424,6 +634,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 正常的保存行为
 	draft.ModuleId = category.ModuleId
+	draft.ParentId = req.ParentId
 	draft.Title = req.Title
 	draft.SeoTitle = req.SeoTitle
 	draft.Keywords = req.Keywords
@@ -465,30 +676,51 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		for _, v := range module.Fields {
 			//先检查是否有必填而没有填写的
 			if v.Required && req.Extra[v.FieldName] == nil {
-				return nil, errors.New(w.Tr("ItIsRequired", v.Name))
+				return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 			}
 			if req.Extra[v.FieldName] != nil {
 				extraValue, ok := req.Extra[v.FieldName].(map[string]interface{})
 				if ok {
 					if v.Required && extraValue["value"] == nil && extraValue["value"] == "" {
-						return nil, errors.New(w.Tr("ItIsRequired", v.Name))
+						return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 					}
 					if v.Type == config.CustomFieldTypeCheckbox {
 						//只有这个类型的数据是数组,数组转成,分隔字符串
 						if val, ok := extraValue["value"].([]interface{}); ok {
 							var val2 []string
 							for _, v2 := range val {
-								val2 = append(val2, v2.(string))
+								v2s, _ := v2.(string)
+								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
 						}
-					} else if v.Type == config.CustomFieldTypeNumber {
+					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
-						extraFields[v.FieldName], _ = strconv.Atoi(fmt.Sprintf("%v", extraValue["value"]))
+						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue["value"]), 10, 64)
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+						// 存 json
+						if val, ok := extraValue["value"].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, ok2 := v2.(string)
+								if ok2 {
+									val[j] = w.ReplaceContentUrl(v2s, false)
+								}
+							}
+							buf, _ := json.Marshal(val)
+							extraFields[v.FieldName] = string(buf)
+						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(extraValue["value"])
+						extraFields[v.FieldName] = string(buf)
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
-							extraFields[v.FieldName] = strings.TrimPrefix(value, w.PluginStorage.StorageUrl)
+							if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+								extraFields[v.FieldName] = w.ReplaceContentUrl(value, false)
+							} else {
+								extraFields[v.FieldName] = extraValue["value"]
+							}
 						} else {
 							extraFields[v.FieldName] = extraValue["value"]
 						}
@@ -520,32 +752,29 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	// todo 应该只替换 src,href 中的 baseUrl
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
 		baseHost = urls.Host
 	}
-	autoAddImage := false
 	//提取缩略图
 	if len(draft.Images) == 0 {
 		re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
 		match := re.FindStringSubmatch(req.Content)
 		if len(match) > 1 {
 			draft.Images = append(draft.Images, match[1])
-			autoAddImage = true
 		} else {
 			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
 			match = re.FindStringSubmatch(req.Content)
 			if len(match) > 2 {
 				draft.Images = append(draft.Images, match[2])
-				autoAddImage = true
 			}
 		}
 	}
-	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	// 过滤外链，1=移除，2=nofollow
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -556,7 +785,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(s, match[1], newUrl, 1)
+					}
 				}
 			}
 			return s
@@ -577,7 +811,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[1]
+					if w.Content.FilterOutlink == 1 {
+						return match[1]
+					}
+					// 添加 nofollow 不在这里处理，因为md不支持
 				}
 			}
 			return s
@@ -589,7 +826,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 	// 如果是 已经发布了的，则保存到正式表
 	if isReleased {
-		err = w.DB.Debug().Save(&draft.Archive).Error
+		err = w.DB.Save(&draft.Archive).Error
 		if err != nil {
 			return nil, err
 		}
@@ -605,7 +842,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 	} else {
 		// 保存到草稿
-		err = w.DB.Debug().Save(draft).Error
+		err = w.DB.Save(draft).Error
 		if err != nil {
 			return nil, err
 		}
@@ -632,6 +869,16 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	_ = w.SaveArchiveFlags(draft.Id, req.Flags)
 	// 保存分类ID
 	_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
+	if isReleased {
+		// 更新分类的文档计数
+		// 如果文档数量大于100万，则不自动计数
+		totalArchive := w.GetExplainCount("SELECT id FROM archives")
+		if totalArchive < 1000000 {
+			for _, catId := range req.CategoryIds {
+				w.UpdateCategoryArchiveCount(catId)
+			}
+		}
+	}
 	// 保存 Relations
 	_ = w.SaveArchiveRelations(draft.Id, req.RelationIds)
 	//检查有多少个material
@@ -650,7 +897,33 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	go w.LogMaterialData(materialIds, "archive", draft.Id)
 	// 自动提取远程图片改成保存后处理
 	if w.Content.RemoteDownload == 1 {
+		// 处理 images
 		hasChangeImg := false
+		for i, v := range draft.Images {
+			if strings.HasPrefix(v, w.PluginStorage.StorageUrl) {
+				continue
+			}
+			if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "http") {
+				imgUrl, err2 := url.Parse(v)
+				if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
+					// 自动下载
+					attachment, err2 := w.DownloadRemoteImage(v, req.Title, 0)
+					if err2 == nil {
+						// 下载完成
+						draft.Images[i] = strings.TrimPrefix(attachment.Logo, w.PluginStorage.StorageUrl)
+						hasChangeImg = true
+					}
+				}
+			}
+		}
+		if hasChangeImg {
+			if isReleased {
+				w.DB.Model(&draft.Archive).UpdateColumn("images", draft.Images)
+			} else {
+				w.DB.Model(draft).UpdateColumn("images", draft.Images)
+			}
+		}
+		hasChangeImg = false
 		re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
 		archiveData.Content = re.ReplaceAllStringFunc(archiveData.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -661,7 +934,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					attachment, err2 := w.DownloadRemoteImage(match[1], req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -682,7 +955,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					attachment, err2 := w.DownloadRemoteImage(match[2], req.Title, 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -694,35 +967,13 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		})
 		if hasChangeImg {
 			w.DB.Model(&archiveData).UpdateColumn("content", archiveData.Content)
-			// 更新data
-			if autoAddImage {
-				//提取缩略图
-				draft.Images = draft.Images[:0]
-				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-				match := re.FindStringSubmatch(archiveData.Content)
-				if len(match) > 1 {
-					draft.Images = append(draft.Images, match[1])
-				} else {
-					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
-					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-					match = re.FindStringSubmatch(archiveData.Content)
-					if len(match) > 2 {
-						draft.Images = append(draft.Images, match[2])
-					}
-				}
-				if isReleased {
-					w.DB.Model(&draft.Archive).UpdateColumn("images", draft.Images)
-				} else {
-					w.DB.Model(draft).UpdateColumn("images", draft.Images)
-				}
-			}
 		}
 	}
 	//extra
 	if len(extraFields) > 0 {
 		//入库
 		// 先检查是否存在
-		var existsId uint
+		var existsId int64
 		w.DB.Table(module.TableName).Where("`id` = ?", draft.Id).Pluck("id", &existsId)
 		if existsId > 0 {
 			// 已存在
@@ -763,21 +1014,15 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		w.DeleteCacheFixedLinks()
 	}
 	// 清除缓存
-	w.DeleteArchiveCache(draft.Id)
+	draft.Link = w.GetUrl("archive", &draft.Archive, 0)
+	w.DeleteArchiveCache(draft.Id, draft.UrlToken, draft.Link)
 	w.DeleteArchiveExtraCache(draft.Id)
 
+	hookCtx.Point = AfterArchivePost
+	hookCtx.Data = draft
+	_ = TriggerHook(hookCtx)
 	if isReleased {
-		// 尝试添加全文索引
-		w.AddFulltextIndex(&TinyArchive{
-			Id:          uint64(draft.Id),
-			ModuleId:    draft.ModuleId,
-			Title:       draft.Title,
-			Keywords:    draft.Keywords,
-			Description: draft.Description,
-			Content:     archiveData.Content,
-		})
-		w.FlushIndex()
-
+		draft.ArchiveData = &archiveData
 		err = w.SuccessReleaseArchive(&draft.Archive, newPost)
 	}
 
@@ -787,89 +1032,118 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 // SuccessReleaseArchive
 // 文章发布成功后的一些处理
 func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) error {
-	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
-	archive.Link = w.GetUrl("archive", archive, 0)
+	hookCtx := &HookContext{
+		Point: AfterArchiveRelease,
+		Site:  w,
+		Data:  archive,
+	}
+	_ = TriggerHook(hookCtx)
+
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(archive.Id)))
+	if archive.Link == "" {
+		archive.Link = w.GetUrl("archive", archive, 0)
+	}
 	//添加锚文本
 	if w.PluginAnchor.ReplaceWay == 1 {
 		go w.ReplaceContent(nil, "archive", archive.Id, archive.Link)
 	}
 	//提取锚文本
 	if w.PluginAnchor.KeywordWay == 1 {
-
 		go w.AutoInsertAnchor(archive.Id, archive.Keywords, archive.Link)
 	}
-
-	w.DeleteCacheIndex()
-	// 删除列表缓存
-	w.Cache.CleanAll("archive-list")
+	// 添加索引
+	go func() {
+		// 尝试添加全文索引
+		tinyData := fulltext.TinyArchive{
+			Id:          archive.Id,
+			Type:        fulltext.ArchiveType,
+			ModuleId:    archive.ModuleId,
+			Title:       archive.Title,
+			Keywords:    archive.Keywords,
+			Description: archive.Description,
+		}
+		if archive.ArchiveData != nil {
+			tinyData.Content = archive.ArchiveData.Content
+		}
+		w.AddFulltextIndex(tinyData)
+		w.FlushIndex()
+	}()
+	//// 删除列表缓存
+	//w.Cache.CleanAll("archive-list")
+	//// 删除首页缓存
+	//w.DeleteCacheIndex()
 
 	//新发布的文章，执行推送
 	if newPost {
 		go func() {
 			w.PushArchive(archive.Link)
-			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"))
-			}
 		}()
+		if w.PluginSitemap.AutoBuild == 1 {
+			go w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
+		}
 	}
 	// 更新缓存
-	go func() {
-		// 生成文章页，生成栏目页，生成首页，生成tag
-		// 上传到静态服务器
-		cachePath := w.CachePath + "pc"
-		// 生成文章页
-		link := w.GetUrl("archive", archive, 0)
-		link = strings.TrimPrefix(link, w.System.BaseUrl)
-		_ = w.GetAndCacheHtmlData(link, false)
-		if w.System.TemplateType != config.TemplateTypeAuto {
-			_ = w.GetAndCacheHtmlData(link, true)
-		}
-		archivePath := cachePath + transToLocalPath(link, "")
-		_ = w.SyncHtmlCacheToStorage(archivePath, link)
-		// 生成栏目页，只生成第一页
-		category := w.GetCategoryFromCache(archive.CategoryId)
-		if category != nil {
-			link = w.GetUrl("category", category, 0)
+	if w.PluginHtmlCache.Open && w.PluginHtmlCache.StorageType != "" && w.CacheStorage != nil {
+		go func() {
+			// 生成文章页，生成栏目页，生成首页，生成tag
+			// 上传到静态服务器
+			cachePath := w.CachePath + "pc"
+			// 生成首页
+			w.BuildIndexCache()
+			_ = w.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
+			// 生成文章页
+			link := w.GetUrl("archive", archive, 0)
 			link = strings.TrimPrefix(link, w.System.BaseUrl)
 			_ = w.GetAndCacheHtmlData(link, false)
 			if w.System.TemplateType != config.TemplateTypeAuto {
 				_ = w.GetAndCacheHtmlData(link, true)
 			}
-			categoryPath := cachePath + transToLocalPath(link, "")
-			_ = w.SyncHtmlCacheToStorage(categoryPath, link)
-		}
-		// 生成Tag，只生成第一页
-		tags := w.GetTagsByItemId(archive.Id)
-		if len(tags) > 0 {
-			link = w.GetUrl("tagIndex", nil, 0)
-			link = strings.TrimPrefix(link, w.System.BaseUrl)
-			// 先生成首页
-			_ = w.GetAndCacheHtmlData(link, false)
-			if w.System.TemplateType != config.TemplateTypeAuto {
-				_ = w.GetAndCacheHtmlData(link, true)
-			}
-			tagPath := cachePath + transToLocalPath(link, "")
-			_ = w.SyncHtmlCacheToStorage(tagPath, link)
-			for _, tag := range tags {
-				link = w.GetUrl("tag", tag, 0)
+			archivePath := cachePath + transToLocalPath(link, "")
+			_ = w.SyncHtmlCacheToStorage(archivePath, link)
+			// 生成栏目页，只生成第一页
+			category := w.GetCategoryFromCache(archive.CategoryId)
+			if category != nil {
+				link = w.GetUrl("category", category, 0)
 				link = strings.TrimPrefix(link, w.System.BaseUrl)
 				_ = w.GetAndCacheHtmlData(link, false)
 				if w.System.TemplateType != config.TemplateTypeAuto {
 					_ = w.GetAndCacheHtmlData(link, true)
 				}
-				tagPath = cachePath + transToLocalPath(link, "")
-				_ = w.SyncHtmlCacheToStorage(tagPath, link)
+				categoryPath := cachePath + transToLocalPath(link, "")
+				_ = w.SyncHtmlCacheToStorage(categoryPath, link)
 			}
-		}
-	}()
+			// 生成Tag，只生成第一页
+			tags := w.GetTagsByItemId(archive.Id)
+			if len(tags) > 0 {
+				link = w.GetUrl("tagIndex", nil, 0)
+				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				// 先生成首页
+				_ = w.GetAndCacheHtmlData(link, false)
+				if w.System.TemplateType != config.TemplateTypeAuto {
+					_ = w.GetAndCacheHtmlData(link, true)
+				}
+				tagPath := cachePath + transToLocalPath(link, "")
+				_ = w.SyncHtmlCacheToStorage(tagPath, link)
+				for _, tag := range tags {
+					link = w.GetUrl("tag", tag, 0)
+					link = strings.TrimPrefix(link, w.System.BaseUrl)
+					_ = w.GetAndCacheHtmlData(link, false)
+					if w.System.TemplateType != config.TemplateTypeAuto {
+						_ = w.GetAndCacheHtmlData(link, true)
+					}
+					tagPath = cachePath + transToLocalPath(link, "")
+					_ = w.SyncHtmlCacheToStorage(tagPath, link)
+				}
+			}
+		}()
+	}
 
 	return nil
 }
 
 func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 	if archive.UrlToken == "" {
-		newToken := library.GetPinyin(archive.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-		archive.UrlToken = w.VerifyArchiveUrlToken(newToken, archive.Id)
+		archive.UrlToken = w.VerifyArchiveUrlToken(archive.UrlToken, archive.Title, archive.Id)
 
 		w.DB.Model(&model.Archive{}).Where("`id` = ?", archive.Id).UpdateColumn("url_token", archive.UrlToken)
 	}
@@ -879,12 +1153,11 @@ func (w *Website) UpdateArchiveUrlToken(archive *model.Archive) error {
 
 func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
-
 	go func() {
-		var doc TinyArchive
-		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content").Where("archives.`id` > ?", draft.Id).Take(&doc)
+		var doc fulltext.TinyArchive
+		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
 		// 尝试添加全文索引
-		w.AddFulltextIndex(&doc)
+		w.AddFulltextIndex(doc)
 	}()
 
 	return nil
@@ -904,7 +1177,12 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	if err = w.DB.Unscoped().Delete(archive).Error; err != nil {
 		return err
 	}
-
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
+	if totalArchive < 1000000 {
+		// 更新文档计数
+		w.UpdateCategoryArchiveCount(archive.CategoryId)
+	}
 	if archive.FixedLink != "" {
 		w.DeleteCacheFixedLinks()
 	}
@@ -912,7 +1190,7 @@ func (w *Website) DeleteArchive(archive *model.Archive) error {
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-	w.RemoveFulltextIndex(uint64(archive.Id))
+	w.RemoveFulltextIndex(fulltext.TinyArchive{Id: archive.Id, Type: fulltext.ArchiveType})
 	// 每次删除文档，都清理一次Sitemap
 	if w.PluginSitemap.AutoBuild == 1 {
 		w.DeleteSitemap(w.PluginSitemap.Type)
@@ -985,7 +1263,7 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 				hasFixedLink = true
 			}
 			w.RemoveHtmlCache(w.GetUrl("archive", archive, 0))
-			w.RemoveFulltextIndex(uint64(archive.Id))
+			w.RemoveFulltextIndex(fulltext.TinyArchive{Id: archive.Id, Type: fulltext.ArchiveType})
 		}
 		if hasFixedLink {
 			w.DeleteCacheFixedLinks()
@@ -1072,6 +1350,21 @@ func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) e
 	return nil
 }
 
+func (w *Website) UpdateArchiveParent(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Tr("NoDocumentToOperate"))
+	}
+
+	// 同步更新
+	w.DB.Model(&model.Archive{}).Where("id IN(?)", req.Ids).UpdateColumn("parent_id", req.ParentId)
+	w.DB.Model(&model.ArchiveDraft{}).Where("id IN(?)", req.Ids).UpdateColumn("parent_id", req.ParentId)
+	// 删除列表缓存
+	w.Cache.CleanAll("archive-list")
+	// end
+
+	return nil
+}
+
 func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
@@ -1118,11 +1411,11 @@ func (w *Website) DeleteCacheFixedLinks() {
 	w.Cache.Delete("fixedLinks")
 }
 
-func (w *Website) GetCacheFixedLinks() map[string]uint {
+func (w *Website) GetCacheFixedLinks() map[string]int64 {
 	if w.DB == nil {
 		return nil
 	}
-	var fixedLinks = map[string]uint{}
+	var fixedLinks = map[string]int64{}
 
 	err := w.Cache.Get("fixedLinks", &fixedLinks)
 	if err == nil {
@@ -1130,7 +1423,10 @@ func (w *Website) GetCacheFixedLinks() map[string]uint {
 	}
 
 	var archives []model.Archive
-	w.DB.Model(model.Archive{}).Where("`fixed_link` != ''").Select("fixed_link", "id").Scan(&archives)
+	err = w.DB.Model(model.Archive{}).Where("`fixed_link` != ''").Select("fixed_link", "id").Scan(&archives).Error
+	if err != nil {
+		return nil
+	}
 	for i := range archives {
 		fixedLinks[archives[i].FixedLink] = archives[i].Id
 	}
@@ -1140,7 +1436,7 @@ func (w *Website) GetCacheFixedLinks() map[string]uint {
 	return fixedLinks
 }
 
-func (w *Website) GetFixedLinkFromCache(fixedLink string) uint {
+func (w *Website) GetFixedLinkFromCache(fixedLink string) int64 {
 	links := w.GetCacheFixedLinks()
 
 	archiveId, ok := links[fixedLink]
@@ -1165,10 +1461,27 @@ func (w *Website) PublishPlanArchives() {
 }
 
 func (w *Website) PublishPlanArchive(archiveDraft *model.ArchiveDraft) {
+	hookCtx := &HookContext{
+		Point: BeforeArchiveRelease,
+		Site:  w,
+		Data:  archiveDraft,
+	}
+	if err := TriggerHook(hookCtx); err != nil {
+		return
+	}
 	// 发布的步骤：将草稿转移到正式表，删除草稿
-	w.DB.Save(&archiveDraft.Archive)
-
+	err := w.DB.Save(&archiveDraft.Archive).Error
+	if err != nil {
+		log.Println("写入文档正式表失败，可能表损坏或磁盘满了")
+		return
+	}
 	w.DB.Delete(archiveDraft)
+	// 更新文档计数
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
+	if totalArchive < 1000000 {
+		w.UpdateCategoryArchiveCount(archiveDraft.CategoryId)
+	}
 
 	_ = w.SuccessReleaseArchive(&archiveDraft.Archive, true)
 }
@@ -1196,38 +1509,72 @@ func (w *Website) CleanArchives() {
 	}
 }
 
-func (w *Website) VerifyArchiveUrlToken(urlToken string, id uint) string {
-	index := 0
-	// 防止超出长度
-	if len(urlToken) > 150 {
-		urlToken = urlToken[:150]
+// VerifyArchiveUrlToken token增加a标记：token-a-id
+func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string {
+	newToken := false
+	if urlToken == "" {
+		urlToken = library.GetPinyin(title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
+		}
+		if id > 0 {
+			// 判断archive
+			tmpArc, err := w.GetArchiveByUrlToken(urlToken)
+			if err == nil && tmpArc.Id != id {
+				urlToken += "-a" + strconv.FormatInt(id, 10)
+				return urlToken
+			}
+			// 判断archiveDraft
+			tmpDraft, err := w.GetArchiveDraftByUrlToken(urlToken)
+			if err == nil && tmpDraft.Id != id {
+				urlToken += "-a" + strconv.FormatInt(id, 10)
+				return urlToken
+			}
+		}
+		// 如果id=0，则在beforeCreate 中添加后缀
+		newToken = true
 	}
-	urlToken = strings.ToLower(urlToken)
-	for {
-		tmpToken := urlToken
-		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+	if newToken == false {
+		urlToken = strings.ToLower(library.ParseUrlToken(urlToken))
+		// 防止超出长度
+		if len(urlToken) > 100 {
+			urlToken = urlToken[:100]
+			idx := strings.LastIndex(urlToken, "-")
+			if idx > 0 {
+				urlToken = urlToken[:idx]
+			}
 		}
-		// 判断分类
-		_, err := w.GetCategoryByUrlToken(tmpToken)
-		if err == nil {
-			index++
-			continue
+		index := 0
+		for {
+			tmpToken := urlToken
+			if index > 0 {
+				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+			}
+			// 判断分类
+			_, err := w.GetCategoryByUrlToken(tmpToken)
+			if err == nil {
+				index++
+				continue
+			}
+			// 判断archive
+			tmpArc, err := w.GetArchiveByUrlToken(tmpToken)
+			if err == nil && tmpArc.Id != id {
+				index++
+				continue
+			}
+			// 判断archiveDraft
+			tmpDraft, err := w.GetArchiveDraftByUrlToken(tmpToken)
+			if err == nil && tmpDraft.Id != id {
+				index++
+				continue
+			}
+			urlToken = tmpToken
+			break
 		}
-		// 判断archive
-		tmpArc, err := w.GetArchiveByUrlToken(tmpToken)
-		if err == nil && tmpArc.Id != id {
-			index++
-			continue
-		}
-		// 判断archiveDraft
-		tmpDraft, err := w.GetArchiveDraftByUrlToken(tmpToken)
-		if err == nil && tmpDraft.Id != id {
-			index++
-			continue
-		}
-		urlToken = tmpToken
-		break
 	}
 
 	return urlToken
@@ -1242,7 +1589,7 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 			archive.HasOrdered = true
 		} else if archive.Price > 0 {
 			var exist int64
-			w.DB.Debug().Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
+			w.DB.WithContext(w.Ctx()).Table("`orders` as o").Joins("INNER JOIN `order_details` as d ON o.order_id = d.order_id AND d.`goods_id` = ?", archive.Id).Where("o.user_id = ? AND o.`status` IN(?)", userId, []int{
 				config.OrderStatusPaid,
 				config.OrderStatusDelivering,
 				config.OrderStatusCompleted}).Count(&exist)
@@ -1264,10 +1611,10 @@ func (w *Website) CheckArchiveHasOrder(userId uint, archive *model.Archive, user
 
 func (w *Website) UpgradeMultiCategory() {
 	type tinyArchive struct {
-		Id         uint `json:"id"`
-		CategoryId uint `json:"category_id"`
+		Id         int64 `json:"id"`
+		CategoryId uint  `json:"category_id"`
 	}
-	var lastId uint = 0
+	var lastId int64 = 0
 	for {
 		var archives []*tinyArchive
 		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Order("id asc").Limit(1000).Scan(&archives)
@@ -1285,14 +1632,14 @@ func (w *Website) UpgradeMultiCategory() {
 	}
 }
 
-func (w *Website) GetArchiveFlags(archiveId uint) string {
+func (w *Website) GetArchiveFlags(archiveId int64) string {
 	var flags []string
-	w.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` = ?", archiveId).Pluck("flag", &flags)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` = ?", archiveId).Pluck("flag", &flags)
 
 	return strings.Join(flags, ",")
 }
 
-func (w *Website) SaveArchiveFlags(archiveId uint, flags []string) error {
+func (w *Website) SaveArchiveFlags(archiveId int64, flags []string) error {
 	if len(flags) == 0 {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveFlag{})
 		return nil
@@ -1310,33 +1657,48 @@ func (w *Website) SaveArchiveFlags(archiveId uint, flags []string) error {
 	return nil
 }
 
-func (w *Website) SaveArchiveCategories(archiveId uint, categoryIds []uint) error {
+func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) error {
 	if len(categoryIds) == 0 {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveCategory{})
 		return nil
 	}
+	// 如果文档数量大于100万，则不自动计数
+	totalArchive := w.GetExplainCount("SELECT id FROM archives")
 	for _, catId := range categoryIds {
 		arcCategory := model.ArchiveCategory{
 			CategoryId: catId,
 			ArchiveId:  archiveId,
 		}
 		w.DB.Model(&model.ArchiveCategory{}).Where("`archive_id` = ? and `category_id` = ?", archiveId, catId).FirstOrCreate(&arcCategory)
+		// 更新文档计数
+		if totalArchive < 1000000 {
+			w.UpdateCategoryArchiveCount(catId)
+		}
 	}
 	// 删除额外的
-	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Delete(&model.ArchiveCategory{})
+	var archiveCategories []*model.ArchiveCategory
+	w.DB.Unscoped().Where("`archive_id` = ? and `category_id` NOT IN (?)", archiveId, categoryIds).Find(&archiveCategories)
+	if len(archiveCategories) > 0 {
+		for _, v := range archiveCategories {
+			w.DB.Unscoped().Model(v).Delete(&model.ArchiveCategory{})
+			if totalArchive < 1000000 {
+				w.UpdateCategoryArchiveCount(v.CategoryId)
+			}
+		}
+	}
 
 	return nil
 }
 
 // GetArchiveRelations 仅返回正式的文档
-func (w *Website) GetArchiveRelations(archiveId uint) []*model.Archive {
+func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
-	var relationIds []uint
-	w.DB.Model(&model.ArchiveRelation{}).Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	var relationIds []int64
+	w.DB.WithContext(w.Ctx()).Debug().Model(&model.ArchiveRelation{}).Group("relation_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
-		w.DB.Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
+		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {
-			relations[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			relations[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(relations[i].Id)))
 			relations[i].Link = w.GetUrl("archive", relations[i], 0)
 		}
 		return relations
@@ -1345,7 +1707,7 @@ func (w *Website) GetArchiveRelations(archiveId uint) []*model.Archive {
 	return nil
 }
 
-func (w *Website) SaveArchiveRelations(archiveId uint, relationIds []uint) error {
+func (w *Website) SaveArchiveRelations(archiveId int64, relationIds []int64) error {
 	if len(relationIds) == 0 {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveRelation{})
 		return nil
@@ -1361,4 +1723,834 @@ func (w *Website) SaveArchiveRelations(archiveId uint, relationIds []uint) error
 	w.DB.Unscoped().Where("`archive_id` = ? and `relation_id` NOT IN (?)", archiveId, relationIds).Delete(&model.ArchiveRelation{})
 
 	return nil
+}
+
+type QuickImportArchive struct {
+	Total      int  `json:"total"`
+	Finished   int  `json:"finished"`
+	IsFinished bool `json:"is_finished"`
+	Succeed    int  `json:"succeed"`
+	DailyCount int  `json:"daily_count"` // 每天发布数量
+	w          *Website
+	PlanType   int `json:"plan_type"`  // 发布类型，0 = 发布到正式文章，1 = 发布到草稿箱，2 = 发布到草稿箱并定时发布
+	PlanStart  int `json:"plan_start"` // 计划开始时间 0 立即 1 跟随最后一篇 2 半小时 3 1小时 4 2小时 5 4小时 6 8小时 7 12小时 8 24小时
+	Days       int `json:"days"`       // 分成多少天发布
+
+	FileName        string `json:"file_name"`
+	Size            int64  `json:"size"` // 文件大小
+	Md5             string `json:"md5"`
+	Chunk           int    `json:"chunk"`
+	Chunks          int    `json:"chunks"`
+	CategoryId      uint   `json:"category_id"`
+	TitleType       int    `json:"title_type"`
+	CheckDuplicate  bool   `json:"check_duplicate"` // 是否检查重复标题
+	Message         string `json:"message"`
+	InsertImage     int    `json:"insert_image"` // 0 不插入，1不插入，2 自定义插入图片 3 从图片分类里插入
+	ImageCategoryId int    `json:"image_category_id"`
+
+	images    []*response.TinyAttachment
+	nextImage int
+
+	current   time.Time
+	between   time.Duration
+	curDayNum int
+}
+
+func (w *Website) NewQuickImportArchive(req *request.QuickImportArchiveRequest) (*QuickImportArchive, error) {
+	if w.quickImportStatus != nil && w.quickImportStatus.IsFinished == false {
+		return nil, errors.New(w.Tr("prevTaskIsRunning"))
+	}
+	var images = make([]*response.TinyAttachment, 0, len(req.Images))
+	if req.InsertImage == config.CollectImageInsert {
+		for _, image := range req.Images {
+			images = append(images, &response.TinyAttachment{
+				FileName:     filepath.Base(image),
+				FileLocation: image,
+			})
+		}
+	}
+	w.quickImportStatus = &QuickImportArchive{
+		w:               w,
+		FileName:        req.FileName,
+		Md5:             req.Md5,
+		Chunks:          req.Chunks,
+		Chunk:           req.Chunk,
+		CategoryId:      req.CategoryId,
+		TitleType:       req.TitleType,
+		Size:            req.Size,
+		PlanType:        req.PlanType,
+		PlanStart:       req.PlanStart,
+		Days:            req.Days,
+		CheckDuplicate:  req.CheckDuplicate,
+		InsertImage:     req.InsertImage,
+		ImageCategoryId: req.ImageCategoryId,
+		images:          images,
+		nextImage:       0,
+	}
+
+	return w.quickImportStatus, nil
+}
+
+func (w *Website) GetQuickImportStatus() *QuickImportArchive {
+	if w.quickImportStatus != nil && w.quickImportStatus.IsFinished {
+		time.AfterFunc(500*time.Millisecond, func() {
+			w.quickImportStatus = nil
+		})
+		return nil
+	}
+	return w.quickImportStatus
+}
+
+func (qia *QuickImportArchive) setCurrentTime() {
+	// // 计划开始时间 0 立即 1 跟随最后一篇 2 半小时 3 1小时 4 2小时 5 4小时 6 8小时 7 12小时 8 24小时，9 3天 10 7天 11 1个月 12 6个月 13 1年
+	if qia.PlanStart == 2 {
+		qia.current = qia.current.Add(30 * time.Minute)
+	} else if qia.PlanStart == 3 {
+		qia.current = qia.current.Add(60 * time.Minute)
+	} else if qia.PlanStart == 4 {
+		qia.current = qia.current.Add(2 * time.Hour)
+	} else if qia.PlanStart == 5 {
+		qia.current = qia.current.Add(4 * time.Hour)
+	} else if qia.PlanStart == 6 {
+		qia.current = qia.current.Add(8 * time.Hour)
+	} else if qia.PlanStart == 7 {
+		qia.current = qia.current.Add(12 * time.Hour)
+	} else if qia.PlanStart == 8 {
+		qia.current = qia.current.Add(24 * time.Hour)
+	} else if qia.PlanStart == 9 {
+		qia.current = qia.current.AddDate(0, 0, 3)
+	} else if qia.PlanStart == 10 {
+		qia.current = qia.current.AddDate(0, 0, 7)
+	} else if qia.PlanStart == 11 {
+		qia.current = qia.current.AddDate(0, 1, 0)
+	} else if qia.PlanStart == 12 {
+		qia.current = qia.current.AddDate(0, 6, 0)
+	} else if qia.PlanStart == 13 {
+		qia.current = qia.current.AddDate(1, 0, 0)
+	} else if qia.PlanStart == 1 {
+		// start follow last
+		var lastArchive model.ArchiveDraft
+		qia.w.DB.Model(&model.ArchiveDraft{}).Last(&lastArchive)
+		if lastArchive.CreatedTime > qia.current.Unix() {
+			qia.current = time.Unix(lastArchive.CreatedTime, 0).Add(qia.between)
+		}
+	}
+}
+
+func (qia *QuickImportArchive) Start(file multipart.File) error {
+	defer func() {
+		qia.IsFinished = true
+		_ = file.Close()
+	}()
+
+	if strings.HasSuffix(qia.FileName, ".xlsx") {
+		// xlsx
+		return qia.startExcel(file)
+	} else {
+		// zip
+		return qia.startZip(file)
+	}
+}
+
+func (qia *QuickImportArchive) startZip(file multipart.File) error {
+	category, err := qia.w.GetCategoryById(qia.CategoryId)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+	// 解压zip
+	zipReader, err := zip.NewReader(file, qia.Size)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+
+	// 读取图片
+	if qia.InsertImage == config.CollectImageCategory {
+		qia.images = qia.w.GetCategoryImages(qia.ImageCategoryId)
+	}
+
+	qia.Total = len(zipReader.File)
+	qia.between = 0
+	qia.current = time.Now()
+	if qia.PlanType == 2 {
+		qia.DailyCount = int(math.Ceil(float64(qia.Total) / float64(qia.Days)))
+		qia.between = time.Hour * 24 / time.Duration(qia.DailyCount)
+		if qia.PlanStart > 0 {
+			qia.setCurrentTime()
+		}
+	}
+
+	var archives = make([]model.ArchiveDraft, 0, 2000)
+	for _, f := range zipReader.File {
+		qia.Finished++
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		reader, err := f.Open()
+		if err != nil {
+			qia.Message = err.Error()
+			continue
+		}
+		content, err := io.ReadAll(reader)
+		_ = reader.Close()
+		if err != nil {
+			qia.Message = err.Error()
+			continue
+		}
+		if f.Flags&0x0800 == 0 && !utf8.Valid([]byte(f.Name)) {
+			// 还有可能是flags搞错了
+			gbkName, err := simplifiedchinese.GBK.NewDecoder().String(f.Name)
+			if err == nil {
+				f.Name = gbkName
+			}
+		}
+		// 检查content是否是utf8
+		if !utf8.Valid(content) {
+			tmpContent, err := simplifiedchinese.GBK.NewDecoder().Bytes(content)
+			if err == nil {
+				content = tmpContent
+			}
+		}
+		fileExt := filepath.Ext(f.Name)
+		// 支持 txt/html/md
+		status := config.ContentStatusOK
+		if qia.PlanType == 2 {
+			status = config.ContentStatusPlan
+		} else if qia.PlanType == 1 {
+			status = config.ContentStatusDraft
+		}
+		archive := model.ArchiveDraft{
+			Archive: model.Archive{
+				Title:       strings.TrimSuffix(filepath.Base(f.Name), fileExt),
+				CreatedTime: qia.current.Unix(),
+				UpdatedTime: time.Now().Unix(),
+				CategoryId:  category.Id,
+				ModuleId:    category.ModuleId,
+			},
+			Status: uint(status),
+		}
+		var articleContent string
+		if fileExt == ".html" {
+			re, _ := regexp.Compile(`<title.*?>(.+?)</title>`)
+			match := re.Match(content)
+			if match {
+				// 普通html文档，需要解析
+				arc := &request.Archive{
+					OriginUrl:   "",
+					ContentText: string(content),
+				}
+				err = qia.w.ParseArticleDetail(arc)
+				if err != nil {
+					qia.Message = err.Error()
+					// html文档解析失败
+					continue
+				}
+				if qia.TitleType == 1 && arc.Title != "" {
+					archive.Title = arc.Title
+				}
+				articleContent = arc.Content
+			} else {
+				if qia.TitleType == 1 {
+					contents := bytes.Split(content, []byte{'\n'})
+					if len(contents) > 1 {
+						archive.Title = string(contents[0])
+						content = bytes.Join(contents[1:], []byte{'\n'})
+					}
+				}
+				articleContent = string(content)
+			}
+		} else if fileExt == ".md" || fileExt == ".txt" {
+			if len(content) == 0 {
+				continue
+			}
+			if bytes.HasPrefix(content, []byte("#")) || qia.TitleType == 1 {
+				// 第一行是标题
+				contents := bytes.Split(content, []byte{'\n'})
+				if len(contents) > 1 {
+					archive.Title = strings.Trim(string(contents[0]), "# *")
+					content = bytes.Join(contents[1:], []byte{'\n'})
+				}
+			}
+
+			articleContent = strings.TrimSpace(string(content))
+			if (fileExt == ".md" || content[0] != '<') && qia.w.Content.Editor != "markdown" {
+				articleContent = library.MarkdownToHTML(articleContent, qia.w.System.BaseUrl, qia.w.Content.FilterOutlink)
+			}
+		} else {
+			// 不支持的文件类型，也跳过
+			continue
+		}
+		// 支持在标题中添加#分类名称#来快速创建分类
+		re, _ := regexp.Compile(`\[?#([\s\S]+?)#]?`)
+		match := re.FindStringSubmatch(archive.Title)
+		if len(match) > 1 {
+			categoryTitle := match[1]
+			archive.Title = strings.Replace(archive.Title, match[0], "", 1)
+			if categoryTitle != "" {
+				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
+				if err != nil {
+					// 分类不存在，创建
+					tmpCategory, _ = qia.w.SaveCategory(&request.Category{
+						Title:    categoryTitle,
+						ModuleId: category.ModuleId,
+						ParentId: category.Id,
+						Status:   1,
+						Type:     config.CategoryTypeArchive,
+					})
+				}
+				if tmpCategory != nil {
+					archive.CategoryId = tmpCategory.Id
+				}
+			}
+		}
+		// 检查标题重复问题
+		if qia.CheckDuplicate {
+			var count int64
+			qia.w.DB.Model(&model.Archive{}).Where("title = ?", archive.Title).Count(&count)
+			if count > 0 {
+				continue
+			}
+			qia.w.DB.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Count(&count)
+			if count > 0 {
+				continue
+			}
+		}
+		// 步进
+		if qia.between > 0 {
+			qia.current = qia.current.Add(qia.between)
+		}
+		// e
+		// 插入图片
+		if len(qia.images) > 0 {
+			var img string
+			if qia.ImageCategoryId == -2 {
+				// 按关键词匹配
+				keywordSplit := WordSplit(archive.Title, false)
+				for _, word := range keywordSplit {
+					if img != "" {
+						break
+					}
+					for _, v := range qia.images {
+						if strings.Contains(v.FileName, word) {
+							img = v.FileLocation
+							break
+						}
+					}
+				}
+			} else {
+				// 随机一张，已经随机过了，因此这里就是顺序
+				img = qia.images[qia.nextImage].FileLocation
+				qia.nextImage = (qia.nextImage + 1) % len(qia.images)
+			}
+			if img != "" {
+				imgTag := "<img src='" + img + "' alt='" + archive.Title + "' />"
+
+				var contents = strings.Split(articleContent, "\n")
+				if len(contents) < 2 && strings.Contains(articleContent, ">") {
+					contents = strings.SplitAfter(articleContent, ">")
+				}
+				index := len(contents) / 3
+				contents = append(contents, "")
+				copy(contents[index+1:], contents[index:])
+				// ![新的图片](http://xxx/xxx.webp)
+				if qia.w.Content.Editor == "markdown" {
+					imgTag = fmt.Sprintf("![%s](%s)", archive.Title, img)
+				}
+				contents[index] = imgTag
+				articleContent = strings.Join(contents, "")
+				archive.Images = []string{img}
+			}
+		} else {
+			// 提取缩略图
+			re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
+			match := re.FindStringSubmatch(articleContent)
+			if len(match) > 1 {
+				archive.Images = append(archive.Images, match[1])
+			} else {
+				// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+				re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+				match = re.FindStringSubmatch(articleContent)
+				if len(match) > 2 {
+					archive.Images = append(archive.Images, match[2])
+				}
+			}
+		}
+		// 解析description
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		// 解析urlToken
+		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
+		archive.ArchiveData = &model.ArchiveData{
+			Content: articleContent,
+		}
+		archives = append(archives, archive)
+		// 分批入库
+		if len(archives) >= 1000 {
+			qia.SaveBatches(archives)
+			archives = make([]model.ArchiveDraft, 0, 1000)
+			qia.Succeed += len(archives)
+		}
+	}
+	if len(archives) > 0 {
+		qia.SaveBatches(archives)
+	}
+	qia.IsFinished = true
+
+	return nil
+}
+
+func (qia *QuickImportArchive) startExcel(file multipart.File) error {
+	category, err := qia.w.GetCategoryById(qia.CategoryId)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+	excelReader, err := excelize.OpenReader(file)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+
+	// 读取图片
+	if qia.InsertImage == config.CollectImageCategory {
+		qia.images = qia.w.GetCategoryImages(qia.ImageCategoryId)
+	}
+	// 实际上，我们只处理第一个表
+	sheets := excelReader.GetSheetList()
+	sheetName := sheets[0]
+	rows, err := excelReader.GetRows(sheetName)
+	if err != nil {
+		qia.Message = err.Error()
+		return err
+	}
+	if len(rows) < 2 {
+		qia.Message = "Excel is empty"
+		return errors.New(qia.Message)
+	}
+	// 确认字段，第一行为字段
+	// 根据分类，先读取出对应的模型以及字段
+	module := qia.w.GetModuleFromCache(category.ModuleId)
+	if module == nil {
+		qia.Message = "Module is empty"
+		return errors.New(qia.Message)
+	}
+	var extraFields = make(map[string]int)
+	var existFields = make(map[string]int)
+	for i, col := range rows[0] {
+		// 匹配自定义字段
+		existExtra := false
+		if len(module.Fields) > 0 {
+			for _, field := range module.Fields {
+				if field.FieldName == col {
+					extraFields[field.FieldName] = i
+					existExtra = true
+					break
+				}
+			}
+		}
+		if !existExtra {
+			// 主表字段
+			existFields[col] = i
+		}
+	}
+	// 如果没有标题，则不允许插入
+	if _, ok := existFields["title"]; !ok {
+		qia.Message = "Title is empty"
+		return errors.New(qia.Message)
+	}
+
+	qia.Total = len(rows) - 1
+	qia.between = 0
+	qia.current = time.Now()
+	if qia.PlanType == 2 {
+		qia.DailyCount = int(math.Ceil(float64(qia.Total) / float64(qia.Days)))
+		qia.between = time.Hour * 24 / time.Duration(qia.DailyCount)
+		if qia.PlanStart > 0 {
+			qia.setCurrentTime()
+		}
+	}
+	baseHost := ""
+	urls, err := url.Parse(qia.w.System.BaseUrl)
+	if err == nil {
+		baseHost = urls.Host
+	}
+	// excel 导入不使用 批量导入方式，而是逐个入库
+	for i, row := range rows {
+		if i == 0 {
+			// 跳过标题行
+			continue
+		}
+		// 补齐
+		if len(row) < len(rows[0]) {
+			row = append(row, make([]string, len(rows[0])-len(row))...)
+		}
+		qia.Finished++
+		// 支持 txt/html/md
+		status := config.ContentStatusOK
+		if qia.PlanType == 2 {
+			status = config.ContentStatusPlan
+		} else if qia.PlanType == 1 {
+			status = config.ContentStatusDraft
+		}
+		title := strings.TrimSpace(row[existFields["title"]])
+		if title == "" {
+			// 标题为空，跳过
+			continue
+		}
+		categoryId := category.Id
+		moduleId := category.ModuleId
+		extraTableName := module.TableName
+		extra := extraFields
+		if colId, ok := existFields["category_id"]; ok {
+			tmpId, _ := strconv.Atoi(row[colId])
+			if tmpId > 0 {
+				tmpCategory := qia.w.GetCategoryFromCache(uint(tmpId))
+				if tmpCategory != nil {
+					categoryId = tmpCategory.Id
+					moduleId = tmpCategory.ModuleId
+					if moduleId != module.Id {
+						// 模型不一致，重新获取 extraFields
+						tmpModule := qia.w.GetModuleFromCache(tmpCategory.ModuleId)
+						extra = make(map[string]int)
+						if tmpModule != nil {
+							extraTableName = tmpModule.TableName
+							if len(tmpModule.Fields) > 0 {
+								for ri, col := range rows[0] {
+									// 匹配自定义字段
+									for _, field := range tmpModule.Fields {
+										if field.FieldName == col {
+											extra[field.FieldName] = ri
+											break
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		// 如果分类字段填写的是分类名称
+		parentId := categoryId
+		if colId, ok := existFields["category_title"]; ok {
+			categoryTitle := strings.TrimSpace(row[colId])
+			if len(categoryTitle) > 0 {
+				tmpCategory, err := qia.w.GetCategoryByTitle(categoryTitle)
+				if err != nil {
+					// 分类不存在，创建
+					if moduleId == 0 {
+						moduleId = 1
+					}
+					tmpCategory, err = qia.w.SaveCategory(&request.Category{
+						Title:    categoryTitle,
+						ParentId: parentId,
+						ModuleId: moduleId,
+						Status:   1,
+						Type:     config.CategoryTypeArchive,
+					})
+				}
+				if tmpCategory != nil {
+					categoryId = tmpCategory.Id
+				}
+			}
+		}
+
+		archive := model.ArchiveDraft{
+			Archive: model.Archive{
+				Title:       title,
+				CreatedTime: qia.current.Unix(),
+				UpdatedTime: time.Now().Unix(),
+				CategoryId:  categoryId,
+				ModuleId:    moduleId,
+			},
+			Status: uint(status),
+		}
+		articleContent := strings.TrimSpace(row[existFields["content"]])
+		if len(articleContent) > 0 {
+			if (articleContent[0] != '<') && qia.w.Content.Editor != "markdown" {
+				articleContent = library.MarkdownToHTML(articleContent, qia.w.System.BaseUrl, qia.w.Content.FilterOutlink)
+			}
+		}
+
+		// 检查标题重复问题
+		var existArchive model.Archive
+		var existInRelease bool
+		if qia.CheckDuplicate {
+			err = qia.w.DB.Model(&model.Archive{}).Where("title = ?", archive.Title).Last(&existArchive).Error
+			if err == nil {
+				archive.Id = existArchive.Id
+				archive.CreatedTime = existArchive.CreatedTime
+				existInRelease = true
+			} else {
+				err = qia.w.DB.Model(&model.ArchiveDraft{}).Where("title = ?", archive.Title).Last(&existArchive).Error
+				if err == nil {
+					archive.Id = existArchive.Id
+					archive.CreatedTime = existArchive.CreatedTime
+				}
+			}
+		}
+		// 步进
+		if qia.between > 0 {
+			qia.current = qia.current.Add(qia.between)
+		}
+		// e
+		// 插入图片
+		if len(qia.images) > 0 {
+			var img string
+			if qia.ImageCategoryId == -2 {
+				// 按关键词匹配
+				keywordSplit := WordSplit(archive.Title, false)
+				for _, word := range keywordSplit {
+					if img != "" {
+						break
+					}
+					for _, v := range qia.images {
+						if strings.Contains(v.FileName, word) {
+							img = v.FileLocation
+							break
+						}
+					}
+				}
+			} else {
+				// 随机一张，已经随机过了，因此这里就是顺序
+				img = qia.images[qia.nextImage].FileLocation
+				qia.nextImage = (qia.nextImage + 1) % len(qia.images)
+			}
+			if img != "" {
+				imgTag := "<img src='" + img + "' alt='" + archive.Title + "' />"
+
+				var contents = strings.Split(articleContent, "\n")
+				if len(contents) < 2 && strings.Contains(articleContent, ">") {
+					contents = strings.SplitAfter(articleContent, ">")
+				}
+				index := len(contents) / 3
+				contents = append(contents, "")
+				copy(contents[index+1:], contents[index:])
+				// ![新的图片](http://xxx/xxx.webp)
+				if qia.w.Content.Editor == "markdown" {
+					imgTag = fmt.Sprintf("![%s](%s)", archive.Title, img)
+				}
+				contents[index] = imgTag
+				articleContent = strings.Join(contents, "")
+				archive.Images = []string{img}
+			}
+		} else {
+			// 提取缩略图
+			re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
+			match := re.FindStringSubmatch(articleContent)
+			if len(match) > 1 {
+				archive.Images = append(archive.Images, match[1])
+			} else {
+				// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+				re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+				match = re.FindStringSubmatch(articleContent)
+				if len(match) > 2 {
+					archive.Images = append(archive.Images, match[2])
+				}
+			}
+		}
+		// 解析description
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		// 解析urlToken
+		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
+		// 处理更多主表字段
+		// id, parent_id, seo_title, url_token,logo,images, keywords, description, user_id, price, stock, read_level, password, sort, origin_url, origin_title
+		if colId, ok := existFields["id"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Id = tmpId
+			}
+		}
+		if colId, ok := existFields["parent_id"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.ParentId = tmpId
+			}
+		}
+		if colId, ok := existFields["logo"]; ok {
+			logo := strings.TrimSpace(row[colId])
+			if len(logo) > 0 {
+				archive.Images = append(archive.Images, logo)
+			}
+		}
+		if colId, ok := existFields["images"]; ok {
+			archive.Images = strings.Split(strings.TrimSpace(row[colId]), ",")
+		}
+		if qia.w.Content.RemoteDownload == 1 {
+			// 处理 images
+			for ii, v := range archive.Images {
+				if strings.HasPrefix(v, qia.w.PluginStorage.StorageUrl) {
+					continue
+				}
+				if strings.HasPrefix(v, "//") || strings.HasPrefix(v, "http") {
+					imgUrl, err2 := url.Parse(v)
+					if err2 == nil && imgUrl.Host != "" && imgUrl.Host != baseHost {
+						// 自动下载
+						attachment, err2 := qia.w.DownloadRemoteImage(v, archive.Title, 0)
+						if err2 == nil {
+							// 下载完成
+							archive.Images[ii] = strings.TrimPrefix(attachment.Logo, qia.w.PluginStorage.StorageUrl)
+						}
+					}
+				}
+			}
+		}
+		if colId, ok := existFields["seo_title"]; ok {
+			archive.SeoTitle = row[colId]
+		}
+		if colId, ok := existFields["url_token"]; ok {
+			archive.UrlToken = row[colId]
+		}
+		if colId, ok := existFields["keywords"]; ok {
+			archive.Keywords = row[colId]
+		}
+		if colId, ok := existFields["description"]; ok {
+			archive.Description = row[colId]
+		}
+		if colId, ok := existFields["user_id"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.UserId = uint(tmpId)
+			}
+		}
+		if colId, ok := existFields["price"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Price = tmpId
+			}
+		}
+		if colId, ok := existFields["stock"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Stock = tmpId
+			}
+		}
+		if colId, ok := existFields["read_level"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.ReadLevel = int(tmpId)
+			}
+		}
+		if colId, ok := existFields["password"]; ok {
+			archive.Password = row[colId]
+		}
+		if colId, ok := existFields["sort"]; ok {
+			tmpId, _ := strconv.ParseInt(row[colId], 10, 64)
+			if tmpId > 0 {
+				archive.Sort = uint(tmpId)
+			}
+		}
+		if colId, ok := existFields["origin_url"]; ok {
+			archive.OriginUrl = row[colId]
+		}
+		if colId, ok := existFields["origin_title"]; ok {
+			archive.OriginTitle = row[colId]
+		}
+		// 先对主表进行入库
+		tx := qia.w.DB.Begin()
+		// 需要写入表 archive_category, archive_data，archives, archive_drafts, tag_data, tag
+		if existInRelease || qia.PlanType == 0 {
+			// release mode
+			err = tx.Save(&archive.Archive).Error
+			if err != nil {
+				tx.Rollback()
+				continue
+			}
+		} else {
+			// 入库到 draft
+			err = tx.Save(&archive).Error
+			if err != nil {
+				tx.Rollback()
+				continue
+			}
+		}
+		// 保存 content
+		archiveData := model.ArchiveData{
+			Id:      archive.Id,
+			Content: articleContent,
+		}
+		err = tx.Save(&archiveData).Error
+		if err != nil {
+			tx.Rollback()
+			continue
+		}
+		tx.Commit()
+		// 保存Flags
+		var flags []string
+		if colId, ok := existFields["flag"]; ok {
+			flags = strings.Split(row[colId], ",")
+			if len(flags) > 0 {
+				_ = qia.w.SaveArchiveFlags(archive.Id, flags)
+			}
+		}
+		// 保存分类ID
+		_ = qia.w.SaveArchiveCategories(archive.Id, []uint{archive.CategoryId})
+		// 处理 tag
+		if colId, ok := existFields["tag"]; ok {
+			tags := strings.Split(strings.ReplaceAll(row[colId], "，", ","), ",")
+			if len(tags) > 0 {
+				_ = qia.w.SaveTagData(archive.Id, tags)
+			}
+		}
+		// 处理附表
+		if len(extra) > 0 {
+			var extraData = make(map[string]interface{})
+			for k, colId := range extra {
+				extraData[k] = row[colId]
+			}
+			// 先检查是否存在
+			var existsId int64
+			qia.w.DB.Table(extraTableName).Where("`id` = ?", archive.Id).Pluck("id", &existsId)
+			if existsId > 0 {
+				// 已存在
+				qia.w.DB.Table(extraTableName).Where("`id` = ?", archive.Id).Updates(extraData)
+			} else {
+				// 新建
+				extraData["id"] = archive.Id
+				qia.w.DB.Table(extraTableName).Where("`id` = ?", archive.Id).Create(extraData)
+			}
+		}
+
+		qia.Succeed++
+	}
+
+	qia.IsFinished = true
+
+	return nil
+}
+
+func (qia *QuickImportArchive) SaveBatches(archives []model.ArchiveDraft) {
+	tx := qia.w.DB.Begin()
+	defer tx.Commit()
+
+	var archiveCategories = make([]model.ArchiveCategory, 0, len(archives))
+	var archiveData = make([]model.ArchiveData, 0, len(archives))
+	var lastId int64
+	for i := range archives {
+		lastId = model.GetNextArchiveId(tx, true)
+		archives[i].Id = lastId
+		archiveCategories = append(archiveCategories, model.ArchiveCategory{
+			CategoryId: archives[i].CategoryId,
+			ArchiveId:  archives[i].Id,
+		})
+		archives[i].ArchiveData.Id = archives[i].Id
+		archiveData = append(archiveData, *archives[i].ArchiveData)
+	}
+
+	if qia.PlanType != 0 {
+		// 入库到 draft
+		tx.CreateInBatches(archives, 1000)
+	} else {
+		// release mode
+		var release = make([]model.Archive, 0, len(archives))
+		for _, v := range archives {
+			release = append(release, v.Archive)
+		}
+		tx.CreateInBatches(release, 1000)
+	}
+	tx.CreateInBatches(archiveData, 1000)
+	tx.CreateInBatches(archiveCategories, 1000)
+	log.Println("in id ", lastId)
+	qia.Message = qia.w.Tr("currentInsertId%d", lastId)
+	qia.Succeed += len(archives)
 }

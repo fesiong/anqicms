@@ -2,6 +2,7 @@ package controller
 
 import (
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
 )
@@ -10,29 +11,33 @@ func IndexPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	cacheFile, ok := currentSite.LoadCachedHtml(ctx)
 	if ok {
-		ctx.ServeFile(cacheFile)
+		ctx.ContentType(context.ContentHTMLHeaderValue)
+		ctx.Write(cacheFile)
 		return
 	}
 	currentPage := ctx.Values().GetIntDefault("page", 1)
-	webTitle := currentSite.Index.SeoTitle
-	if currentPage > 1 {
-		webTitle += " - " + currentSite.TplTr("PageNum", currentPage)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
 	}
-
+	webTitle := currentSite.Index.SeoTitle
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = webTitle
 		webInfo.Keywords = currentSite.Index.SeoKeywords
 		webInfo.Description = currentSite.Index.SeoDescription
 		//设置页面名称，方便tags识别
+		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "index"
 		webInfo.CanonicalUrl = currentSite.GetUrl("", nil, 0)
 		ctx.ViewData("webInfo", webInfo)
 	}
 
 	// 支持2种文件结构，一种是目录式的，一种是扁平式的
-	tplName := "index/index.html"
-	if ViewExists(ctx, "index.html") {
-		tplName = "index.html"
+	tplName, ok := currentSite.TemplateExist("index/index.html", "index.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))

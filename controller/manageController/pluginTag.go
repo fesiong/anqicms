@@ -1,18 +1,27 @@
 package manageController
 
 import (
+	"encoding/json"
+	"fmt"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
 
 func PluginTagList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	title := ctx.URLParam("title")
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	tags, total, err := currentSite.GetTagList(0, title, "", currentPage, pageSize, 0, "id desc")
+	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
+	var categoryIds []uint
+	if categoryId > 0 {
+		categoryIds = append(categoryIds, categoryId)
+	}
+	tags, total, err := currentSite.GetTagList(0, title, categoryIds, "", currentPage, pageSize, 0, "id desc")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -24,6 +33,14 @@ func PluginTagList(ctx iris.Context) {
 	// 生成链接
 	for i := range tags {
 		tags[i].Link = currentSite.GetUrl("tag", tags[i], 0)
+		tags[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tags[i].Id)))
+		// categoryTitle
+		if tags[i].CategoryId > 0 {
+			category := currentSite.GetCategoryFromCache(tags[i].CategoryId)
+			if category != nil {
+				tags[i].CategoryTitle = category.Title
+			}
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -35,16 +52,50 @@ func PluginTagList(ctx iris.Context) {
 }
 
 func PluginTagDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
-	id := ctx.Params().GetUintDefault("id", 0)
+	currentSite := provider.CurrentSubSite(ctx)
+	id := ctx.URLParamIntDefault("id", 0)
 
-	tag, err := currentSite.GetTagById(id)
+	tag, err := currentSite.GetTagById(uint(id))
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
 		return
+	}
+	tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tag.Id)))
+	tagContent, err := currentSite.GetTagContentById(tag.Id)
+	if err == nil {
+		tag.Content = tagContent.Content
+		if tagContent.Extra != nil {
+			tag.Extra = tagContent.Extra
+			fields := currentSite.GetTagFields()
+			if len(fields) > 0 {
+				for _, field := range fields {
+					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+						tag.Extra[field.FieldName] != nil {
+						tag.Extra[field.FieldName] = currentSite.ReplaceContentUrl(tag.Extra[field.FieldName].(string), true)
+					}
+					if field.Type == config.CustomFieldTypeImages && tag.Extra[field.FieldName] != nil {
+						if val, ok := tag.Extra[field.FieldName].([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, _ := v2.(string)
+								val[j] = currentSite.ReplaceContentUrl(v2s, true)
+							}
+							tag.Extra[field.FieldName] = val
+						}
+					} else if field.Type == config.CustomFieldTypeTexts && tag.Extra[field.FieldName] != nil {
+						var texts []model.CustomFieldTexts
+						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &texts)
+						tag.Extra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeTimeline && tag.Extra[field.FieldName] != nil {
+						var val model.TimelineField
+						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &val)
+						tag.Extra[field.FieldName] = val
+					}
+				}
+			}
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -55,7 +106,7 @@ func PluginTagDetail(ctx iris.Context) {
 }
 
 func PluginTagDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginTag
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -72,6 +123,66 @@ func PluginTagDetailForm(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 插入记录
+				if req.Id == 0 {
+					req.Id = tag.Id
+					subTag, err := subSite.SaveTag(&req)
+					if err == nil {
+						// 同步成功，进行翻译
+						if currentSite.MultiLanguage.AutoTranslate {
+							var content string
+							tagContent, _ := subSite.GetTagContentById(subTag.Id)
+							if tagContent != nil {
+								content = tagContent.Content
+							}
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subTag.Title,       // 0
+									subTag.Description, // 1
+									subTag.Keywords,    // 2
+									content,            // 3
+								},
+								Language:   currentSite.System.Language,
+								ToLanguage: subSite.System.Language,
+							}
+							res, err := currentSite.AnqiTranslateString(transReq)
+							if err == nil {
+								// 只处理成功的结果
+								subSite.DB.Model(subTag).UpdateColumns(map[string]interface{}{
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"keywords":    res.Text[2],
+								})
+								if res.Text[3] != "" {
+									subSite.DB.Model(&model.TagContent{}).Where("id = ?", subTag.Id).UpdateColumn("content", res.Text[3])
+								}
+							}
+						}
+					}
+				} else {
+					// 修改的话，就排除 title, seo_title，description，keywords 字段
+					tmpTag, err := subSite.GetTagById(req.Id)
+					if err == nil {
+						req.Title = tmpTag.Title
+						req.SeoTitle = tmpTag.SeoTitle
+						req.Description = tmpTag.Description
+						req.Keywords = tmpTag.Keywords
+						req.Content = tmpTag.Content
+					}
+					_, _ = subSite.SaveTag(&req)
+				}
+			}
+		}
 	}
 	// 更新缓存
 	go func() {
@@ -91,7 +202,7 @@ func PluginTagDetailForm(ctx iris.Context) {
 }
 
 func PluginTagDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginTag
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -117,11 +228,62 @@ func PluginTagDelete(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 同步删除
+				_ = subSite.DeleteTag(tag.Id)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentTagLog", tag.Id, tag.Title))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("TagDeleted"),
+	})
+}
+
+func PluginTagFields(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	fields := currentSite.GetTagFields()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": fields,
+	})
+}
+
+func PluginTagFieldsForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req []config.CustomField
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if err := currentSite.SaveTagFields(req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }

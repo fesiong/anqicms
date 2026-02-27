@@ -1,6 +1,15 @@
 package manageController
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"fmt"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -8,15 +17,14 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"os"
-	"strings"
-	"time"
 )
 
 func GetWebsiteList(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
-	dbSites, total := provider.GetDBWebsites(currentPage, pageSize)
+	name := ctx.URLParam("name")
+	baseUrl := ctx.URLParam("base_url")
+	dbSites, total := provider.GetDBWebsites(name, baseUrl, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
@@ -40,8 +48,13 @@ func GetWebsiteInfo(ctx iris.Context) {
 	}
 
 	website := provider.GetWebsite(dbSite.Id)
-	adminInfo, err := website.GetAdminInfoById(1)
-	if err != nil {
+	var adminInfo *model.Admin
+	if website != nil {
+		adminInfo, err = website.GetAdminInfoById(1)
+		if err != nil {
+			adminInfo = &model.Admin{}
+		}
+	} else {
 		adminInfo = &model.Admin{}
 	}
 	result := request.WebsiteRequest{
@@ -51,8 +64,10 @@ func GetWebsiteInfo(ctx iris.Context) {
 		Status:    dbSite.Status,
 		Mysql:     dbSite.Mysql,
 		AdminUser: adminInfo.UserName,
-		BaseUrl:   website.System.BaseUrl,
-		Initialed: website.Initialed,
+	}
+	if website != nil {
+		result.BaseUrl = website.System.BaseUrl
+		result.Initialed = website.Initialed
 	}
 	if dbSite.Id == 1 {
 		result.Mysql = config.Server.Mysql
@@ -122,11 +137,23 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			req.RootPath = req.RootPath + "/"
 			_, err = os.Stat(req.RootPath)
 			if err != nil {
-				ctx.JSON(iris.Map{
-					"code": config.StatusFailed,
-					"msg":  ctx.Tr("FailedToReadTheSiteDirectory"),
-				})
-				return
+				if os.IsNotExist(err) {
+					// 创建目录
+					err = os.MkdirAll(req.RootPath, os.ModePerm)
+					if err != nil {
+						ctx.JSON(iris.Map{
+							"code": config.StatusFailed,
+							"msg":  ctx.Tr("FailedToReadTheSiteDirectory"),
+						})
+						return
+					}
+				} else {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  ctx.Tr("FailedToReadTheSiteDirectory"),
+					})
+					return
+				}
 			}
 			dbSite.RootPath = req.RootPath
 		}
@@ -135,6 +162,9 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		//修改站点，可以修改全部信息，但是不再同步内容
 		dbSite.Name = req.Name
 		dbSite.Status = req.Status
+		if dbSite.TokenSecret == "" {
+			dbSite.TokenSecret = config.GenerateRandString(32)
+		}
 		err = provider.GetDefaultDB().Save(dbSite).Error
 		if err != nil {
 			ctx.JSON(iris.Map{
@@ -178,7 +208,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			adminInfo, err := current.GetAdminInfoById(1)
 			if err != nil {
 				adminInfo = &model.Admin{
-					Model:   model.Model{Id: 1},
+					Id:      1,
 					Status:  1,
 					GroupId: 1,
 				}
@@ -246,9 +276,10 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		}
 		// 先检查数据库
 		dbSite = &model.Website{
-			RootPath: req.RootPath,
-			Name:     req.Name,
-			Status:   req.Status,
+			RootPath:    req.RootPath,
+			Name:        req.Name,
+			Status:      req.Status,
+			TokenSecret: config.GenerateRandString(32),
 		}
 		if req.Mysql.UseDefault {
 			req.Mysql.User = config.Server.Mysql.User
@@ -417,5 +448,89 @@ func GetCurrentSiteInfo(ctx iris.Context) {
 			"base_url": currentSite.System.BaseUrl,
 			"name":     website.Name,
 		},
+	})
+}
+
+func LoginSubWebsite(ctx iris.Context) {
+	var req request.WebsiteLoginRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.SiteId == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("SiteDoesNotExist"),
+		})
+		return
+	}
+	// 只有默认站点才可以进行站点的创建
+	currentSite := provider.CurrentSite(ctx)
+	// 只有默认站点和多语言站点的主站点才可以进行站点的创建
+	if currentSite.Id != 1 {
+		isSub := false
+		if currentSite.MultiLanguage.Open {
+			// 需要判断是不是子站
+			for _, sub := range currentSite.MultiLanguage.SubSites {
+				if sub.Id == req.SiteId {
+					// 存在这样的子站点
+					isSub = true
+					break
+				}
+			}
+		}
+		if !isSub {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("InsufficientPermissions"),
+			})
+			return
+		}
+	}
+	subSite := provider.GetWebsite(req.SiteId)
+	if subSite == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("SiteDoesNotExist"),
+		})
+		return
+	}
+	// 登录第一个账号
+	var admin model.Admin
+	err := subSite.DB.First(&admin).Error
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("UserDoesNotExist"),
+		})
+		return
+	}
+	// 构造登录链接
+	nonce := strconv.FormatInt(time.Now().UnixMicro(), 10)
+	signHash := sha256.New()
+	signHash.Write([]byte(admin.Password + nonce))
+	sign := signHash.Sum(nil)
+
+	loginUrl := subSite.System.BaseUrl
+	if subSite.System.AdminUrl != "" {
+		loginUrl = subSite.System.AdminUrl
+	}
+	// 如果loginUrl包含了目录，则需要将目录清除
+	parsed, err := url.Parse(loginUrl)
+	if err == nil {
+		if len(parsed.Path) > 1 {
+			parsed.Path = ""
+			loginUrl = parsed.String()
+		}
+	}
+	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", loginUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": link,
 	})
 }

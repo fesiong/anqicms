@@ -8,7 +8,7 @@ import (
 
 func PluginTimeFactorSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	setting := currentSite.GetTimeFactorSetting()
+	setting := currentSite.PluginTimeFactor
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -28,9 +28,11 @@ func PluginTimeFactorSettingSave(ctx iris.Context) {
 		return
 	}
 
-	setting := currentSite.GetTimeFactorSetting()
+	setting := currentSite.PluginTimeFactor
 	req.TodayCount = setting.TodayCount
 	req.LastSent = setting.LastSent
+	req.TodayUpdate = setting.TodayUpdate
+	req.LastUpdate = setting.LastUpdate
 	err := currentSite.SaveSettingValue(provider.TimeFactorKey, &req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -39,6 +41,10 @@ func PluginTimeFactorSettingSave(ctx iris.Context) {
 		})
 		return
 	}
+	// 回写
+	req.UpdateRunning = setting.UpdateRunning
+	w2 := provider.GetWebsite(currentSite.Id)
+	w2.PluginTimeFactor = &req
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateTimeFactorTimedReleaseConfiguration"))
 

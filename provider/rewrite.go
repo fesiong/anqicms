@@ -2,70 +2,73 @@ package provider
 
 import (
 	"fmt"
-	"kandaoni.com/anqicms/config"
+	"regexp"
 	"strings"
 	"sync"
+
+	"kandaoni.com/anqicms/config"
 )
 
-type RewritePatten struct {
-	Archive      string `json:"archive"`
-	Category     string `json:"category"`
-	ArchiveIndex string `json:"archive_index"`
-	Page         string `json:"page"`
-	TagIndex     string `json:"tag_index"`
-	Tag          string `json:"tag"`
+// 支持的字段有：
+const (
+	PatternArchive      = "archive"      // 文章详情
+	PatternCategory     = "category"     // 分类列表
+	PatternPage         = "page"         // 单页
+	PatternArchiveIndex = "archiveIndex" // 列表页
+	PatternTagIndex     = "tagIndex"     // 标签列表
+	PatternTag          = "tag"          // 标签详情
+	PatternPeople       = "people"       // 用户
+	PatternPeopleIndex  = "peopleIndex"  // 用户列表
+	PatternSearch       = "search"       // 搜索
+	PatternCommon       = "common"
+)
 
-	ArchiveRule      string
-	CategoryRule     string
-	PageRule         string
-	ArchiveIndexRule string
-	TagIndexRule     string
-	TagRule          string
+type RewriteMode map[string]string
 
-	ArchiveTags      map[int]string
-	CategoryTags     map[int]string
-	PageTags         map[int]string
-	ArchiveIndexTags map[int]string
-	TagIndexTags     map[int]string
-	TagTags          map[int]string
+type RewriteTag map[string]map[int]string
+
+type RewritePattern struct {
+	Patterns RewriteMode
+	Rules    RewriteMode
+	Tags     RewriteTag
 
 	Parsed bool
 }
 
-var rewriteNumberModePatten = RewritePatten{
-	Archive:      "/{module}/{id}(_{page}).html",
-	Category:     "/{module}/{catid}(/{page})",
-	Page:         "/{id}.html",
-	ArchiveIndex: "/{module}(_{page})",
-	TagIndex:     "/tags(/{page})",
-	Tag:          "/tag/{id}(/{page})",
+var rewriteNumberModePattern = RewriteMode{
+	PatternArchive:      "/{module}/{id}(_{page}).html",
+	PatternCategory:     "/{module}/{catid}(/{page})",
+	PatternPage:         "/{id}.html",
+	PatternArchiveIndex: "/{module}(_{page})",
+	PatternTagIndex:     "/tags(/{page})",
+	PatternTag:          "/tag/{id}(/{page})",
 }
 
-var rewriteStringMode1Patten = RewritePatten{
-	Archive:      "/{module}/{filename}(_{page}).html",
-	Category:     "/{module}/{catname}(/{page})",
-	Page:         "/{filename}.html",
-	ArchiveIndex: "/{module}(_{page})",
-	TagIndex:     "/tags(/{page})",
-	Tag:          "/tag/{filename}(/{page})",
+var rewriteStringMode1Pattern = RewriteMode{
+	PatternArchive:      "/{module}/{filename}(_{page}).html",
+	PatternCategory:     "/{module}/{catname}(/{page})",
+	PatternPage:         "/{filename}.html",
+	PatternArchiveIndex: "/{module}(_{page})",
+	PatternTagIndex:     "/tags(/{page})",
+	PatternTag:          "/tag/{filename}(/{page})",
 }
 
-var rewriteStringMode2Patten = RewritePatten{
-	Archive:      "/{catname}/{id}(_{page}).html",
-	Category:     "/{catname}(/{page})",
-	Page:         "/{filename}.html",
-	ArchiveIndex: "/{module}(_{page})",
-	TagIndex:     "/tags(/{page})",
-	Tag:          "/tag/{id}(/{page})",
+var rewriteStringMode2Pattern = RewriteMode{
+	PatternArchive:      "/{catname}/{id}(_{page}).html",
+	PatternCategory:     "/{catname}(/{page})",
+	PatternPage:         "/{filename}.html",
+	PatternArchiveIndex: "/{module}(_{page})",
+	PatternTagIndex:     "/tags(/{page})",
+	PatternTag:          "/tag/{id}(/{page})",
 }
 
-var rewriteStringMode3Patten = RewritePatten{
-	Archive:      "/{catname}/{filename}(_{page}).html",
-	Category:     "/{catname}(/{page})",
-	Page:         "/{filename}.html",
-	ArchiveIndex: "/{module}(_{page})",
-	TagIndex:     "/tags(/{page})",
-	Tag:          "/tag/{filename}(/{page})",
+var rewriteStringMode3Pattern = RewriteMode{
+	PatternArchive:      "/{catname}/{filename}(_{page}).html",
+	PatternCategory:     "/{catname}(/{page})",
+	PatternPage:         "/{filename}.html",
+	PatternArchiveIndex: "/{module}(_{page})",
+	PatternTagIndex:     "/tags(/{page})",
+	PatternTag:          "/tag/{filename}(/{page})",
 }
 
 type replaceChar struct {
@@ -100,138 +103,129 @@ var replaceParams = map[string]string{
 	"{second}":       "([\\d]{2})",
 	"{page}":         "([\\d]+)",
 	"{combine}":      "([^\\/]+?)",
+	// any but not slash
+	"{any}": "([^\\/]+?)",
 }
 
-//var parsedPatten *RewritePatten
-
-func (w *Website) GetRewritePatten(focus bool) *RewritePatten {
-	if w.parsedPatten != nil && !focus {
-		return w.parsedPatten
+func (w *Website) GetRewritePattern(focus bool) *RewritePattern {
+	if w.parsedPattern != nil && !focus {
+		return w.parsedPattern
 	}
 	if w.PluginRewrite.Mode == config.RewriteNumberMode {
-		w.parsedPatten = &rewriteNumberModePatten
+		w.parsedPattern = &RewritePattern{
+			Patterns: rewriteNumberModePattern,
+			Rules:    RewriteMode{},
+			Tags:     RewriteTag{},
+		}
 	} else if w.PluginRewrite.Mode == config.RewriteStringMode1 {
-		w.parsedPatten = &rewriteStringMode1Patten
+		w.parsedPattern = &RewritePattern{
+			Patterns: rewriteStringMode1Pattern,
+			Rules:    RewriteMode{},
+			Tags:     RewriteTag{},
+		}
 	} else if w.PluginRewrite.Mode == config.RewriteStringMode2 {
-		w.parsedPatten = &rewriteStringMode2Patten
+		w.parsedPattern = &RewritePattern{
+			Patterns: rewriteStringMode2Pattern,
+			Rules:    RewriteMode{},
+			Tags:     RewriteTag{},
+		}
 	} else if w.PluginRewrite.Mode == config.RewriteStringMode3 {
-		w.parsedPatten = &rewriteStringMode3Patten
-	} else if w.PluginRewrite.Mode == config.RewritePattenMode {
-		w.parsedPatten = parseRewritePatten(w.PluginRewrite.Patten)
+		w.parsedPattern = &RewritePattern{
+			Patterns: rewriteStringMode3Pattern,
+			Rules:    RewriteMode{},
+			Tags:     RewriteTag{},
+		}
+	} else if w.PluginRewrite.Mode == config.RewritePatternMode {
+		w.parsedPattern = parseRewritePattern(w.PluginRewrite.Patten) // 原来拼写错误的单词，不改
+	}
+	// 如果没有填写tag的规则，则给一个默认的
+	if w.parsedPattern.Patterns[PatternTagIndex] == "" {
+		w.parsedPattern.Patterns[PatternTagIndex] = "/tags(/{page})"
+	}
+	if w.parsedPattern.Patterns[PatternTag] == "" {
+		w.parsedPattern.Patterns[PatternTag] = "/tag/{id}(/{page})"
+	}
+	if w.parsedPattern.Patterns[PatternPeople] == "" {
+		w.parsedPattern.Patterns[PatternPeople] = "/people/{id}.html"
+	}
+	if w.parsedPattern.Patterns[PatternPeopleIndex] == "" {
+		w.parsedPattern.Patterns[PatternPeopleIndex] = "/peoples(/{page})"
+	}
+	if w.parsedPattern.Patterns[PatternSearch] == "" {
+		w.parsedPattern.Patterns[PatternSearch] = "/search(/{module})"
 	}
 	// 强制加page
-	if !strings.Contains(w.parsedPatten.Archive, "{page}") {
-		if strings.HasSuffix(w.parsedPatten.ArchiveIndex, ".html") {
-			strings.ReplaceAll(w.parsedPatten.ArchiveIndex, ".html", "(_{page}).html")
-		} else if strings.HasSuffix(w.parsedPatten.ArchiveIndex, "/") {
-			w.parsedPatten.ArchiveIndex = strings.TrimRight(w.parsedPatten.ArchiveIndex, "/") + "(_{page})/"
+	if !strings.Contains(w.parsedPattern.Patterns[PatternArchive], "{page}") {
+		if strings.HasSuffix(w.parsedPattern.Patterns[PatternArchive], ".html") {
+			strings.ReplaceAll(w.parsedPattern.Patterns[PatternArchive], ".html", "(_{page}).html")
+		} else if strings.HasSuffix(w.parsedPattern.Patterns[PatternArchive], "/") {
+			w.parsedPattern.Patterns[PatternArchive] = strings.TrimRight(w.parsedPattern.Patterns[PatternArchive], "/") + "(_{page})/"
 		} else {
-			w.parsedPatten.ArchiveIndex += "(_{page})"
+			w.parsedPattern.Patterns[PatternArchive] += "(/{page})"
 		}
 	}
-
-	return w.parsedPatten
+	w2 := GetWebsite(w.Id)
+	w2.parsedPattern = w.parsedPattern
+	return w.parsedPattern
 }
 
-// 只有 RewritePattenMode 模式下，才需要解析
+// 只有 RewritePatternMode 模式下，才需要解析
 // 一共4行,分别是文章详情、产品详情、分类、页面,===和前面部分不可修改。
 // 变量由花括号包裹{},如{id}。可用的变量有:数据ID {id}、数据自定义链接名 {filename}、分类自定义链接名 {catname}、分类ID {catid},分页ID {page}，分页需要使用()处理，用来首页忽略。如：(/{page})或(_{page})
-func parseRewritePatten(patten string) *RewritePatten {
-	parsedPatten := &RewritePatten{}
+func parseRewritePattern(patten string) *RewritePattern {
+	parsedPattern := &RewritePattern{
+		Patterns: RewriteMode{},
+		Rules:    RewriteMode{},
+		Tags:     RewriteTag{},
+	}
 	// 再解开
 	pattenSlice := strings.Split(patten, "\n")
 	for _, v := range pattenSlice {
-		singlePatten := strings.Split(v, "===")
-		if len(singlePatten) == 2 {
-			val := strings.TrimSpace(singlePatten[1])
-
-			switch strings.TrimSpace(singlePatten[0]) {
-			case "archive":
-				parsedPatten.Archive = val
-			case "category":
-				parsedPatten.Category = val
-			case "page":
-				parsedPatten.Page = val
-			case "archiveIndex":
-				parsedPatten.ArchiveIndex = val
-			case "tagIndex":
-				parsedPatten.TagIndex = val
-			case "tag":
-				parsedPatten.Tag = val
-			}
+		singlePattern := strings.Split(v, "===")
+		if len(singlePattern) == 2 {
+			val := strings.TrimSpace(singlePattern[1])
+			key := strings.TrimSpace(singlePattern[0])
+			parsedPattern.Patterns[key] = val
 		}
 	}
-	// 如果没有填写tag的规则，则给一个默认的
-	if parsedPatten.TagIndex == "" {
-		parsedPatten.TagIndex = "/tags(/{page})"
-	}
-	if parsedPatten.Tag == "" {
-		parsedPatten.Tag = "/tag/{id}(/{page})"
-	}
 
-	return parsedPatten
+	return parsedPattern
 }
 
 var mu sync.Mutex
 
-func (w *Website) ParsePatten(focus bool) *RewritePatten {
+func (w *Website) ParsePattern(focus bool) *RewritePattern {
 	mu.Lock()
 	defer mu.Unlock()
-	w.GetRewritePatten(focus)
-	if w.parsedPatten.Parsed {
-		return w.parsedPatten
+	w.GetRewritePattern(focus)
+	if w.parsedPattern.Parsed {
+		return w.parsedPattern
 	}
 
 	// archive 支持combine
-	if strings.Contains(w.parsedPatten.Archive, "{id}") {
-		w.parsedPatten.Archive = strings.Replace(w.parsedPatten.Archive, "{id}", "{id}(/c-{combine})", 1)
-	} else if strings.Contains(w.parsedPatten.Archive, "{filename}") {
-		w.parsedPatten.Archive = strings.Replace(w.parsedPatten.Archive, "{filename}", "{filename}(/c-{combine})", 1)
+	if strings.Contains(w.parsedPattern.Patterns["archive"], "{id}") {
+		w.parsedPattern.Patterns["archive"] = strings.Replace(w.parsedPattern.Patterns["archive"], "{id}", "{id}(/c-{combine})", 1)
+	} else if strings.Contains(w.parsedPattern.Patterns["archive"], "{filename}") {
+		w.parsedPattern.Patterns["archive"] = strings.Replace(w.parsedPattern.Patterns["archive"], "{filename}", "{filename}(/c-{combine})", 1)
 	}
 
-	w.parsedPatten.ArchiveTags = map[int]string{}
-	w.parsedPatten.CategoryTags = map[int]string{}
-	w.parsedPatten.PageTags = map[int]string{}
-	w.parsedPatten.ArchiveIndexTags = map[int]string{}
-	w.parsedPatten.TagIndexTags = map[int]string{}
-	w.parsedPatten.TagTags = map[int]string{}
-
-	pattens := map[string]string{
-		"archive":      w.parsedPatten.Archive,
-		"category":     w.parsedPatten.Category,
-		"page":         w.parsedPatten.Page,
-		"archiveIndex": w.parsedPatten.ArchiveIndex,
-		"tagIndex":     w.parsedPatten.TagIndex,
-		"tag":          w.parsedPatten.Tag,
-	}
-
-	for key, item := range pattens {
+	for key, item := range w.parsedPattern.Patterns {
 		n := 0
 		str := ""
 		for _, v := range item {
+			if v == '(' {
+				n++
+				continue
+			}
 			if v == '{' {
 				n++
 				str += string(v)
 			} else if v == '}' {
 				str = strings.TrimLeft(str, "{")
-				if str == "page" || str == "combine" {
-					//page+1
-					n++
+				if w.parsedPattern.Tags[key] == nil {
+					w.parsedPattern.Tags[key] = make(map[int]string)
 				}
-				switch key {
-				case "archive":
-					w.parsedPatten.ArchiveTags[n] = str
-				case "category":
-					w.parsedPatten.CategoryTags[n] = str
-				case "page":
-					w.parsedPatten.PageTags[n] = str
-				case "archiveIndex":
-					w.parsedPatten.ArchiveIndexTags[n] = str
-				case "tagIndex":
-					w.parsedPatten.TagIndexTags[n] = str
-				case "tag":
-					w.parsedPatten.TagTags[n] = str
-				}
+				w.parsedPattern.Tags[key][n] = str
 				//重置
 				str = ""
 			} else if str != "" {
@@ -241,64 +235,28 @@ func (w *Website) ParsePatten(focus bool) *RewritePatten {
 	}
 
 	//移除首个 /
-	w.parsedPatten.ArchiveRule = strings.TrimLeft(w.parsedPatten.Archive, "/")
-	w.parsedPatten.CategoryRule = strings.TrimLeft(w.parsedPatten.Category, "/")
-	w.parsedPatten.PageRule = strings.TrimLeft(w.parsedPatten.Page, "/")
-	w.parsedPatten.ArchiveIndexRule = strings.TrimLeft(w.parsedPatten.ArchiveIndex, "/")
-	w.parsedPatten.TagIndexRule = strings.TrimLeft(w.parsedPatten.TagIndex, "/")
-	w.parsedPatten.TagRule = strings.TrimLeft(w.parsedPatten.Tag, "/")
-
-	for _, r := range needReplace {
-		if strings.Contains(w.parsedPatten.ArchiveRule, r.Key) {
-			w.parsedPatten.ArchiveRule = strings.ReplaceAll(w.parsedPatten.ArchiveRule, r.Key, r.Value)
+	rep, _ := regexp.Compile(`\{.+?}`)
+	for k, v := range w.parsedPattern.Patterns {
+		rule := strings.TrimLeft(v, "/")
+		for _, r := range needReplace {
+			if strings.Contains(rule, r.Key) {
+				rule = strings.ReplaceAll(rule, r.Key, r.Value)
+			}
 		}
-		if strings.Contains(w.parsedPatten.CategoryRule, r.Key) {
-			w.parsedPatten.CategoryRule = strings.ReplaceAll(w.parsedPatten.CategoryRule, r.Key, r.Value)
-		}
-		if strings.Contains(w.parsedPatten.PageRule, r.Key) {
-			w.parsedPatten.PageRule = strings.ReplaceAll(w.parsedPatten.PageRule, r.Key, r.Value)
-		}
-		if strings.Contains(w.parsedPatten.ArchiveIndexRule, r.Key) {
-			w.parsedPatten.ArchiveIndexRule = strings.ReplaceAll(w.parsedPatten.ArchiveIndexRule, r.Key, r.Value)
-		}
-		if strings.Contains(w.parsedPatten.TagIndexRule, r.Key) {
-			w.parsedPatten.TagIndexRule = strings.ReplaceAll(w.parsedPatten.TagIndexRule, r.Key, r.Value)
-		}
-		if strings.Contains(w.parsedPatten.TagRule, r.Key) {
-			w.parsedPatten.TagRule = strings.ReplaceAll(w.parsedPatten.TagRule, r.Key, r.Value)
-		}
+		rule = rep.ReplaceAllStringFunc(rule, func(s string) string {
+			if replaceParams[s] != "" {
+				return replaceParams[s]
+			} else {
+				// any param
+				return replaceParams["{any}"]
+			}
+		})
+		//修改为强制包裹
+		w.parsedPattern.Rules[k] = fmt.Sprintf("^%s$", rule)
 	}
-
-	for s, r := range replaceParams {
-		if strings.Contains(w.parsedPatten.ArchiveRule, s) {
-			w.parsedPatten.ArchiveRule = strings.ReplaceAll(w.parsedPatten.ArchiveRule, s, r)
-		}
-		if strings.Contains(w.parsedPatten.CategoryRule, s) {
-			w.parsedPatten.CategoryRule = strings.ReplaceAll(w.parsedPatten.CategoryRule, s, r)
-		}
-		if strings.Contains(w.parsedPatten.PageRule, s) {
-			w.parsedPatten.PageRule = strings.ReplaceAll(w.parsedPatten.PageRule, s, r)
-		}
-		if strings.Contains(w.parsedPatten.ArchiveIndexRule, s) {
-			w.parsedPatten.ArchiveIndexRule = strings.ReplaceAll(w.parsedPatten.ArchiveIndexRule, s, r)
-		}
-		if strings.Contains(w.parsedPatten.TagIndexRule, s) {
-			w.parsedPatten.TagIndexRule = strings.ReplaceAll(w.parsedPatten.TagIndexRule, s, r)
-		}
-		if strings.Contains(w.parsedPatten.TagRule, s) {
-			w.parsedPatten.TagRule = strings.ReplaceAll(w.parsedPatten.TagRule, s, r)
-		}
-	}
-	//修改为强制包裹
-	w.parsedPatten.ArchiveRule = fmt.Sprintf("^%s$", w.parsedPatten.ArchiveRule)
-	w.parsedPatten.CategoryRule = fmt.Sprintf("^%s$", w.parsedPatten.CategoryRule)
-	w.parsedPatten.PageRule = fmt.Sprintf("^%s$", w.parsedPatten.PageRule)
-	w.parsedPatten.ArchiveIndexRule = fmt.Sprintf("^%s$", w.parsedPatten.ArchiveIndexRule)
-	w.parsedPatten.TagIndexRule = fmt.Sprintf("^%s$", w.parsedPatten.TagIndexRule)
-	w.parsedPatten.TagRule = fmt.Sprintf("^%s$", w.parsedPatten.TagRule)
 
 	//标记替换过
-	w.parsedPatten.Parsed = true
+	w.parsedPattern.Parsed = true
 
-	return w.parsedPatten
+	return w.parsedPattern
 }

@@ -1,22 +1,41 @@
 package manageController
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strings"
 )
 
 func PluginGuestbookList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	keyword := ctx.URLParam("keyword")
 
-	guestbookList, total, err := currentSite.GetGuestbookList(keyword, currentPage, pageSize)
+	guestbookList, total, err := currentSite.GetGuestbookList(func(tx *gorm.DB) *gorm.DB {
+		if keyword != "" {
+			tx = tx.Where("user_name like ? or contact like ? or content like ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+		}
+		tmpStatus := ctx.URLParam("status")
+		status := -1
+		if tmpStatus == "default" {
+			status = 0
+		} else if tmpStatus == "ok" {
+			status = 1
+		} else if tmpStatus == "spam" {
+			status = 2
+		}
+		if status != -1 {
+			tx = tx.Where("`status` = ?", status)
+		}
+		return tx
+	}, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -33,8 +52,58 @@ func PluginGuestbookList(ctx iris.Context) {
 	})
 }
 
+func PluginGuestbookUpdateStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.PluginGuestbookDelete
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Id > 0 {
+		//一条
+		guestbook, err := currentSite.GetGuestbookById(req.Id)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+
+		err = currentSite.UpdateGuestbookStatus(guestbook.Id, req.Status)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	} else if len(req.Ids) > 0 {
+		//多条
+		for _, id := range req.Ids {
+			guestbook, err := currentSite.GetGuestbookById(id)
+			if err != nil {
+				continue
+			}
+
+			_ = currentSite.UpdateGuestbookStatus(guestbook.Id, req.Status)
+		}
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateGuestbookStatusLog", req.Id, req.Ids))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("DeleteOperationHasBeenPerformed"),
+	})
+}
+
 func PluginGuestbookDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginGuestbookDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -84,7 +153,7 @@ func PluginGuestbookDelete(ctx iris.Context) {
 }
 
 func PluginGuestbookExport(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	guestbooks, err := currentSite.GetAllGuestbooks()
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -100,6 +169,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 	for _, v := range fields {
 		header = append(header, v.Name)
 	}
+	header = append(header, "Spam")
 
 	var content [][]interface{}
 	//content
@@ -120,6 +190,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 				item = append(item, v.ExtraData[f.Name])
 			}
 		}
+		item = append(item, v.Status == 2)
 
 		content = append(content, item)
 	}
@@ -137,7 +208,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 }
 
 func PluginGuestbookSetting(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
@@ -149,7 +220,7 @@ func PluginGuestbookSetting(ctx iris.Context) {
 }
 
 func PluginGuestbookSettingForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginGuestbookConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

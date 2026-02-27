@@ -121,8 +121,8 @@ func (w *Website) GetCacheRedirects() map[string]string {
 	}
 
 	baseUrl, err := url.Parse(w.System.BaseUrl)
-	if err == nil {
-		baseUrl.Host = "127.0.0.1:8001"
+	if err != nil {
+		baseUrl, _ = url.Parse("http://127.0.0.1:8001")
 	}
 
 	var tmpData []model.Redirect

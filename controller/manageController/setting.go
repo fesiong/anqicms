@@ -2,18 +2,19 @@ package manageController
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"os"
-	"strings"
-	"time"
 )
 
 func SettingSystem(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.System
 	if system.SiteLogo != "" && !strings.HasPrefix(system.SiteLogo, "http") && !strings.HasPrefix(system.SiteLogo, "//") {
 		system.SiteLogo = currentSite.PluginStorage.StorageUrl + system.SiteLogo
@@ -48,7 +49,7 @@ func SettingSystem(ctx iris.Context) {
 }
 
 func SettingSystemForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SystemConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -105,6 +106,11 @@ func SettingSystemForm(ctx iris.Context) {
 		})
 		return
 	}
+	if currentSite.MultiLanguage != nil {
+		currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
+	}
+
+	currentSite.UpdatePaypalWebhook()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 
@@ -122,10 +128,13 @@ func SettingSystemForm(ctx iris.Context) {
 }
 
 func SettingContent(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Content
-	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") && !strings.HasPrefix(system.DefaultThumb, "//") {
-		system.DefaultThumb = currentSite.PluginStorage.StorageUrl + system.DefaultThumb
+
+	for i := range system.DefaultThumbs {
+		if !strings.HasPrefix(system.DefaultThumbs[i], "http") && !strings.HasPrefix(system.DefaultThumbs[i], "//") {
+			system.DefaultThumbs[i] = currentSite.PluginStorage.StorageUrl + system.DefaultThumbs[i]
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -136,7 +145,7 @@ func SettingContent(ctx iris.Context) {
 }
 
 func SettingContentForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContentConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -151,7 +160,9 @@ func SettingContentForm(ctx iris.Context) {
 		needUpgrade = true
 	}
 
-	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, currentSite.PluginStorage.StorageUrl)
+	for i := range req.DefaultThumbs {
+		req.DefaultThumbs[i] = strings.TrimPrefix(req.DefaultThumbs[i], currentSite.PluginStorage.StorageUrl)
+	}
 
 	currentSite.Content.RemoteDownload = req.RemoteDownload
 	currentSite.Content.FilterOutlink = req.FilterOutlink
@@ -159,6 +170,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.MultiCategory = req.MultiCategory
 	currentSite.Content.UseSort = req.UseSort
 	currentSite.Content.UseWebp = req.UseWebp
+	currentSite.Content.ConvertGif = req.ConvertGif
 	currentSite.Content.Quality = req.Quality
 	currentSite.Content.ResizeImage = req.ResizeImage
 	currentSite.Content.ResizeWidth = req.ResizeWidth
@@ -166,7 +178,12 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.ThumbWidth = req.ThumbWidth
 	currentSite.Content.ThumbHeight = req.ThumbHeight
 	currentSite.Content.DefaultThumb = req.DefaultThumb
+	currentSite.Content.DefaultThumbType = req.DefaultThumbType
+	currentSite.Content.DefaultThumbs = req.DefaultThumbs
+	currentSite.Content.ThumbCategoryId = req.ThumbCategoryId
 	currentSite.Content.Editor = req.Editor
+	currentSite.Content.MaxPage = req.MaxPage
+	currentSite.Content.MaxLimit = req.MaxLimit
 
 	err := currentSite.SaveSettingValue(provider.ContentSettingKey, currentSite.Content)
 	if err != nil {
@@ -191,7 +208,7 @@ func SettingContentForm(ctx iris.Context) {
 
 // 重建所有的thumb
 func SettingThumbRebuild(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go currentSite.ThumbRebuild()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("RegenerateAllThumbnails"))
@@ -203,7 +220,7 @@ func SettingThumbRebuild(ctx iris.Context) {
 }
 
 func SettingIndex(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Index
 
 	ctx.JSON(iris.Map{
@@ -214,7 +231,7 @@ func SettingIndex(ctx iris.Context) {
 }
 
 func SettingIndexForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.IndexConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -247,7 +264,7 @@ func SettingIndexForm(ctx iris.Context) {
 }
 
 func SettingContact(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Contact
 	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") && !strings.HasPrefix(system.Qrcode, "//") {
 		system.Qrcode = currentSite.PluginStorage.StorageUrl + system.Qrcode
@@ -261,7 +278,7 @@ func SettingContact(ctx iris.Context) {
 }
 
 func SettingContactForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContactConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -315,7 +332,7 @@ func SettingContactForm(ctx iris.Context) {
 }
 
 func SettingCache(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	filePath := currentSite.CachePath + "cache_clear.log"
 	info, err := os.Stat(filePath)
 	var lastUpdate int64
@@ -334,7 +351,7 @@ func SettingCache(ctx iris.Context) {
 }
 
 func SettingCacheForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.CacheConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -354,7 +371,8 @@ func SettingCacheForm(ctx iris.Context) {
 		currentSite.DB.Save(&setting)
 		if oldCacheType != req.CacheType {
 			// 重新初始化缓存
-			currentSite.InitCache()
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.InitCache()
 		}
 		currentSite.AddAdminLog(ctx, ctx.Tr("ChangeCacheType"))
 	} else {
@@ -370,7 +388,7 @@ func SettingCacheForm(ctx iris.Context) {
 }
 
 func SettingSafe(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Safe
 
 	ctx.JSON(iris.Map{
@@ -381,7 +399,7 @@ func SettingSafe(ctx iris.Context) {
 }
 
 func SettingSafeForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SafeConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -420,8 +438,49 @@ func SettingSafeForm(ctx iris.Context) {
 	})
 }
 
+func SettingDiyField(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	fields := currentSite.GetDiyFieldSetting()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": fields,
+	})
+}
+
+func SettingDiyFieldForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req []config.ExtraField
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.SaveSettingValue(provider.DiyFieldsKey, req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.Cache.Delete(provider.DiyFieldsKey)
+	currentSite.DeleteCacheIndex()
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSecuritySettings"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
 func SaveSystemFavicon(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	file, _, err := ctx.FormFile("file")
 	if err != nil {
@@ -450,7 +509,7 @@ func SaveSystemFavicon(ctx iris.Context) {
 }
 
 func DeleteSystemFavicon(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	_, err := os.Stat(currentSite.PublicPath + "favicon.ico")
 	if err == nil {
@@ -473,53 +532,17 @@ func DeleteSystemFavicon(ctx iris.Context) {
 }
 
 func SettingBanner(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
-	type Banner struct {
-		Type string              `json:"type"`
-		List []config.BannerItem `json:"list"`
-	}
-	var banners []*Banner
-	var mapBanners = map[string][]config.BannerItem{}
-
-	for i := range currentSite.Banner {
-		if currentSite.Banner[i].Type == "" {
-			currentSite.Banner[i].Type = "default"
-		}
-	}
-	for _, v := range currentSite.Banner {
-		if !strings.HasPrefix(v.Logo, "http") && !strings.HasPrefix(v.Logo, "//") {
-			v.Logo = currentSite.PluginStorage.StorageUrl + v.Logo
-		}
-		if _, ok := mapBanners[v.Type]; !ok {
-			mapBanners[v.Type] = []config.BannerItem{}
-		}
-		mapBanners[v.Type] = append(mapBanners[v.Type], v)
-	}
-	for i := range currentSite.Banner {
-		if item, ok := mapBanners[currentSite.Banner[i].Type]; ok {
-			banner := &Banner{
-				Type: currentSite.Banner[i].Type,
-				List: item,
-			}
-			banners = append(banners, banner)
-			delete(mapBanners, currentSite.Banner[i].Type)
-		}
-	}
-	if len(banners) == 0 {
-		banners = append(banners, &Banner{
-			Type: "default",
-		})
-	}
+	currentSite := provider.CurrentSubSite(ctx)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": banners,
+		"data": currentSite.Banner.Banners,
 	})
 }
 
 func DeleteSettingBanner(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.BannerItem
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -536,9 +559,20 @@ func DeleteSettingBanner(ctx iris.Context) {
 		})
 		return
 	}
-	for i := range currentSite.Banner {
-		if currentSite.Banner[i].Id == req.Id {
-			currentSite.Banner = append(currentSite.Banner[:i], currentSite.Banner[i+1:]...)
+	for i := range currentSite.Banner.Banners {
+		if req.Type == "" {
+			req.Type = currentSite.Banner.Banners[i].Type
+		}
+		if req.Type == currentSite.Banner.Banners[i].Type {
+			for j := range currentSite.Banner.Banners[i].List {
+				if currentSite.Banner.Banners[i].List[j].Id == req.Id {
+					currentSite.Banner.Banners[i].List = append(currentSite.Banner.Banners[i].List[:j], currentSite.Banner.Banners[i].List[j+1:]...)
+					if len(currentSite.Banner.Banners[i].List) == 0 && req.Type != "default" {
+						currentSite.Banner.Banners = append(currentSite.Banner.Banners[:i], currentSite.Banner.Banners[i+1:]...)
+					}
+					break
+				}
+			}
 			break
 		}
 	}
@@ -562,7 +596,7 @@ func DeleteSettingBanner(ctx iris.Context) {
 }
 
 func SettingBannerForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.BannerItem
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -579,18 +613,43 @@ func SettingBannerForm(ctx iris.Context) {
 		})
 		return
 	}
+	if req.Type == "" {
+		req.Type = "default"
+	}
 	req.Logo = strings.TrimPrefix(req.Logo, currentSite.PluginStorage.StorageUrl)
 	if req.Id == 0 {
-		if len(currentSite.Banner) > 0 {
-			req.Id = currentSite.Banner[len(currentSite.Banner)-1].Id + 1
-		} else {
-			req.Id = 1
+		var exist bool
+		for i := range currentSite.Banner.Banners {
+			if req.Type == currentSite.Banner.Banners[i].Type {
+				exist = true
+				if len(currentSite.Banner.Banners[i].List) > 0 {
+					req.Id = currentSite.Banner.Banners[i].List[len(currentSite.Banner.Banners[i].List)-1].Id + 1
+				} else {
+					req.Id = 1
+				}
+				currentSite.Banner.Banners[i].List = append(currentSite.Banner.Banners[i].List, req)
+				break
+			}
+
 		}
-		currentSite.Banner = append(currentSite.Banner, req)
+		if !exist {
+			req.Id = 1
+			currentSite.Banner.Banners = append(currentSite.Banner.Banners, config.Banner{
+				Type: req.Type,
+				List: []config.BannerItem{
+					req,
+				},
+			})
+		}
 	} else {
-		for i := range currentSite.Banner {
-			if currentSite.Banner[i].Id == req.Id {
-				currentSite.Banner[i] = req
+		for i := range currentSite.Banner.Banners {
+			if req.Type == currentSite.Banner.Banners[i].Type {
+				for j := range currentSite.Banner.Banners[i].List {
+					if currentSite.Banner.Banners[i].List[j].Id == req.Id {
+						currentSite.Banner.Banners[i].List[j] = req
+						break
+					}
+				}
 				break
 			}
 		}
@@ -615,7 +674,7 @@ func SettingBannerForm(ctx iris.Context) {
 }
 
 func SettingMigrateDB(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	err := provider.AutoMigrateDB(currentSite.DB, true)
 

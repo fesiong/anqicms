@@ -4,18 +4,20 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"math/rand"
 	"net/url"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type WebLink struct {
@@ -74,8 +76,8 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 
 	}
 	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
-		rand.Seed(time.Now().UnixMicro())
-		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		img := w.CollectorConfig.Images[rd.Intn(len(w.CollectorConfig.Images))]
 		index := len(content) / 3
 		content = append(content, "")
 		copy(content[index+1:], content[index:])
@@ -115,11 +117,11 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		KeywordId:  keyword.Id,
 		OriginUrl:  keyword.Title,
 	}
+	isDraft := false
 	if w.CollectorConfig.SaveType == 0 {
-		archive.Draft = true
-	} else {
-		archive.Draft = false
+		isDraft = true
 	}
+	archive.Draft = isDraft
 	// 保存前再检查一次
 	if w.checkArticleExists(keyword.Title, "", archive.Title) {
 		return 1, nil
@@ -129,14 +131,51 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		log.Println("保存组合文章出错：", archive.Title, err.Error())
 		return 0, nil
 	}
+	//文章计数
+	w.UpdateTodayArticleCount(1, 0)
 	log.Println(res.Id, res.Title)
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
-		_ = w.AnqiAiPseudoArticle(res)
+		_ = w.AnqiAiPseudoArticle(res, isDraft)
 	}
 	if w.CollectorConfig.AutoTranslate {
 		// AI 改写
-		_ = w.AnqiTranslateArticle(res, w.CollectorConfig.ToLanguage)
+		// 读取 data
+		archiveData, err := w.GetArchiveDataById(res.Id)
+		if err != nil {
+			return 1, nil
+		}
+		transReq := &AnqiTranslateTextRequest{
+			Text: []string{
+				res.Title,           // 0
+				res.Description,     // 1
+				res.Keywords,        // 2
+				archiveData.Content, // 3
+			},
+			Language:   w.CollectorConfig.Language,
+			ToLanguage: w.CollectorConfig.ToLanguage,
+		}
+		result, err := w.AnqiTranslateString(transReq)
+		if err != nil {
+			return 1, nil
+		}
+		// 翻译成功，更新文档
+		res.Title = result.Text[0]
+		res.Description = result.Text[1]
+		res.Keywords = result.Text[2]
+		tx := w.DB
+		if isDraft {
+			tx = tx.Model(&model.ArchiveDraft{})
+		} else {
+			tx = tx.Model(&model.Archive{})
+		}
+		tx.Where("id = ?", res.Id).UpdateColumns(map[string]interface{}{
+			"title":       res.Title,
+			"description": res.Description,
+			"keywords":    res.Keywords,
+		})
+		// 再保存内容
+		w.DB.Model(&model.ArchiveData{}).Where("id = ?", archiveData.Id).UpdateColumn("content", result.Text[3])
 	}
 
 	return 1, nil
@@ -233,7 +272,7 @@ func (w *Website) collectCombinationMaterials(keyword *model.Keyword) ([]*model.
 func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, error) {
 	searchUrl := fmt.Sprintf("https://wenda.so.com/search/?q=%s", url.QueryEscape(keyword.Title))
 
-	body, err := getEnginData(searchUrl)
+	body, err := w.getEnginData(searchUrl, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -262,6 +301,17 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 	matches := re.FindAllStringSubmatch(body, -1)
 	var existLinks = map[string]struct{}{}
 	var count int
+	// 如果是使用了代理，则使用并发处理，最大10并发
+	chNum := 1
+	if w.Proxy != nil {
+		chNum = w.Proxy.cfg.Concurrent * 2
+		if chNum > 10 {
+			chNum = 10
+		}
+	}
+	wg := sync.WaitGroup{}
+	ch := make(chan int, chNum)
+	defer close(ch)
 	for _, v := range matches {
 		if !strings.Contains(v[0], "item__title") {
 			continue
@@ -283,21 +333,30 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 		}
 		existLinks[v[1]] = struct{}{}
 		link := "https://wenda.so.com" + v[1]
-		// 逐个解析内容
-		item, fetch, err2 := w.getAnswerSection(link, title, keyword)
-		//log.Println(item, err2)
-		if err2 == nil {
-			count++
-			links = append(links, item)
-		}
 		if count >= 5 {
 			break
 		}
-		// 360 需要停顿
-		if fetch {
-			time.Sleep(5 * time.Second)
-		}
+		ch <- 1
+		wg.Add(1)
+		go func(link string, title string) {
+			defer func() {
+				<-ch
+				wg.Done()
+			}()
+			// 逐个解析内容
+			item, fetch, err2 := w.getAnswerSection(link, title, keyword)
+			//log.Println(item, err2)
+			if err2 == nil {
+				count++
+				links = append(links, item)
+			}
+			// 360 需要停顿
+			if fetch && w.Proxy == nil {
+				time.Sleep(5 * time.Second)
+			}
+		}(link, title)
 	}
+	wg.Wait()
 
 	return links, nil
 }
@@ -305,7 +364,7 @@ func (w *Website) getDataFrom360(keyword *model.Keyword) ([]*model.Material, err
 func (w *Website) getDataFromBaidu(keyword *model.Keyword) ([]*model.Material, error) {
 	searchUrl := fmt.Sprintf("https://zhidao.baidu.com/search?pn=0&tn=ikaslist&rn=10&word=%s", keyword.Title)
 
-	body, err := getEnginData(searchUrl)
+	body, err := w.getEnginData(searchUrl, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -315,6 +374,17 @@ func (w *Website) getDataFromBaidu(keyword *model.Keyword) ([]*model.Material, e
 	matches := re.FindAllStringSubmatch(body, -1)
 	var existLinks = map[string]struct{}{}
 	var count int
+	// 如果是使用了代理，则使用并发处理，最大10并发
+	chNum := 1
+	if w.Proxy != nil {
+		chNum = w.Proxy.cfg.Concurrent * 2
+		if chNum > 10 {
+			chNum = 10
+		}
+	}
+	wg := sync.WaitGroup{}
+	ch := make(chan int, chNum)
+	defer close(ch)
 	for _, v := range matches {
 		// 如果标题不合格，则要抛弃
 		title := strings.ReplaceAll(library.StripTags(v[2]), "\n", "")
@@ -323,19 +393,28 @@ func (w *Website) getDataFromBaidu(keyword *model.Keyword) ([]*model.Material, e
 		}
 		existLinks[v[1]] = struct{}{}
 		link := v[1]
-		// 逐个解析内容
-		item, fetch, err2 := w.getAnswerSection(link, title, keyword)
-		if err2 == nil {
-			count++
-			links = append(links, item)
-		}
 		if count >= 5 {
 			break
 		}
-		if fetch {
-			time.Sleep(2 * time.Second)
-		}
+		ch <- 1
+		wg.Add(1)
+		go func(link string, title string) {
+			defer func() {
+				<-ch
+				wg.Done()
+			}()
+			// 逐个解析内容
+			item, fetch, err2 := w.getAnswerSection(link, title, keyword)
+			if err2 == nil {
+				count++
+				links = append(links, item)
+			}
+			if fetch && w.Proxy == nil {
+				time.Sleep(2 * time.Second)
+			}
+		}(link, title)
 	}
+	wg.Wait()
 
 	return links, nil
 }
@@ -343,7 +422,7 @@ func (w *Website) getDataFromBaidu(keyword *model.Keyword) ([]*model.Material, e
 func (w *Website) getDataFromSogou(keyword *model.Keyword) ([]*model.Material, error) {
 	searchUrl := fmt.Sprintf("https://www.sogou.com/sogou?query=%s&ie=utf8&insite=wenwen.sogou.com", keyword.Title)
 
-	body, err := getEnginData(searchUrl)
+	body, err := w.getEnginData(searchUrl, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -353,6 +432,17 @@ func (w *Website) getDataFromSogou(keyword *model.Keyword) ([]*model.Material, e
 	matches := re.FindAllStringSubmatch(body, -1)
 	var existLinks = map[string]struct{}{}
 	var count int
+	// 如果是使用了代理，则使用并发处理，最大10并发
+	chNum := 1
+	if w.Proxy != nil {
+		chNum = w.Proxy.cfg.Concurrent * 2
+		if chNum > 10 {
+			chNum = 10
+		}
+	}
+	wg := sync.WaitGroup{}
+	ch := make(chan int, chNum)
+	defer close(ch)
 	for _, v := range matches {
 		// 如果标题不合格，则要抛弃
 		// nginx是什么意思 - 搜狗问问
@@ -362,27 +452,36 @@ func (w *Website) getDataFromSogou(keyword *model.Keyword) ([]*model.Material, e
 		}
 		existLinks[v[1]] = struct{}{}
 		link := "https://www.sogou.com" + v[1]
-		// 逐个解析内容
-		item, fetch, err2 := w.getAnswerSection(link, title, keyword)
-		//log.Println(item, err2)
-		if err2 == nil {
-			count++
-			links = append(links, item)
-		}
 		if count >= 5 {
 			break
 		}
-		if fetch {
-			time.Sleep(5 * time.Second)
-		}
+		ch <- 1
+		wg.Add(1)
+		go func(link string, title string) {
+			defer func() {
+				<-ch
+				wg.Done()
+			}()
+			// 逐个解析内容
+			item, fetch, err2 := w.getAnswerSection(link, title, keyword)
+			//log.Println(item, err2)
+			if err2 == nil {
+				count++
+				links = append(links, item)
+			}
+			if fetch && w.Proxy == nil {
+				time.Sleep(5 * time.Second)
+			}
+		}(link, title)
 	}
+	wg.Wait()
 
 	return links, nil
 }
 
 func (w *Website) getDataFromToutiao(keyword *model.Keyword) ([]*model.Material, error) {
 	collectUrl := fmt.Sprintf("https://search5-search-lq.toutiaoapi.com/search?keyword=%s&pd=question&original_source=&format=json", keyword.Title)
-	body, err := getEnginData(collectUrl)
+	body, err := w.getEnginData(collectUrl, 0)
 	if err != nil {
 		return nil, err
 	}
@@ -390,19 +489,39 @@ func (w *Website) getDataFromToutiao(keyword *model.Keyword) ([]*model.Material,
 	var items []*model.Material
 	links := w.ParseToutiaoJson(body)
 	var count int
-	for _, link := range links {
-		item, fetch, err2 := w.getAnswerSection(link.Url, link.Name, keyword)
-		if err2 == nil {
-			count++
-			items = append(items, item)
+	// 如果是使用了代理，则使用并发处理，最大10并发
+	chNum := 1
+	if w.Proxy != nil {
+		chNum = w.Proxy.cfg.Concurrent * 2
+		if chNum > 10 {
+			chNum = 10
 		}
+	}
+	wg := sync.WaitGroup{}
+	ch := make(chan int, chNum)
+	defer close(ch)
+	for _, link := range links {
 		if count >= 5 {
 			break
 		}
-		if fetch {
-			//time.Sleep(5 * time.Second)
-		}
+		ch <- 1
+		wg.Add(1)
+		go func(link *WebLink) {
+			defer func() {
+				<-ch
+				wg.Done()
+			}()
+			item, fetch, err2 := w.getAnswerSection(link.Url, link.Name, keyword)
+			if err2 == nil {
+				count++
+				items = append(items, item)
+			}
+			if fetch {
+				//time.Sleep(5 * time.Second)
+			}
+		}(link)
 	}
+	wg.Wait()
 
 	return items, nil
 }
@@ -453,7 +572,7 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 	if err == nil {
 		return material, false, nil
 	}
-	body, err := getEnginData(link)
+	body, err := w.getEnginData(link, 0)
 	if err != nil {
 		return nil, false, err
 	}
@@ -603,7 +722,11 @@ func (w *Website) getAnswerSection(link, title string, keyword *model.Keyword) (
 	return &item, true, nil
 }
 
-func getEnginData(link string) (string, error) {
+func (w *Website) getEnginData(link string, retry int) (string, error) {
+	var proxyIp string
+	if w.Proxy != nil {
+		proxyIp = w.Proxy.GetIP()
+	}
 	ops := &library.Options{
 		Timeout:  5,
 		IsMobile: false,
@@ -612,48 +735,58 @@ func getEnginData(link string) (string, error) {
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
 			"Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
 		},
+		Proxy: proxyIp,
 	}
 
 	resp, err := library.Request(link, ops)
 	if err != nil {
+		if proxyIp != "" {
+			w.Proxy.RemoveIP(proxyIp)
+			// 重试2次
+			if retry < 2 {
+				return w.getEnginData(link, retry+1)
+			}
+		}
 		return "", err
 	}
 	// sogou.com 可能需要中转
 	re, _ := regexp.Compile(`(?i)<META http-equiv="refresh"[^>]+?URL='(.+?)'[^>]*>`)
 	match := re.FindStringSubmatch(resp.Body)
 	if len(match) > 1 {
-		return getEnginData(match[1])
+		return w.getEnginData(match[1], 0)
 	}
-	// 如果出现验证码
-	if strings.Contains(resp.Body, "百度安全验证") ||
-		strings.Contains(resp.Body, "系统检测到您网络中存在异常访问请求") ||
-		strings.Contains(resp.Body, "通过验证才能继续操作哦") ||
-		strings.Contains(resp.Body, "请输入验证码以便正常访问") {
-		// 出现验证码
-		if strings.Contains(link, "baidu.com") {
-			baiduForbid = true
-			go func() {
-				select {
-				case <-time.After(15 * time.Minute):
-					baiduForbid = false
-				}
-			}()
-		} else if strings.Contains(link, "sogou.com") {
-			sogouForbid = true
-			go func() {
-				select {
-				case <-time.After(15 * time.Minute):
-					sogouForbid = false
-				}
-			}()
-		} else if strings.Contains(link, "so.com") || strings.Contains(link, "360.cn") {
-			soForbid = true
-			go func() {
-				select {
-				case <-time.After(15 * time.Minute):
-					soForbid = false
-				}
-			}()
+	// 如果出现验证码，并没有使用代理，则暂停一段时间
+	if proxyIp == "" {
+		if strings.Contains(resp.Body, "百度安全验证") ||
+			strings.Contains(resp.Body, "系统检测到您网络中存在异常访问请求") ||
+			strings.Contains(resp.Body, "通过验证才能继续操作哦") ||
+			strings.Contains(resp.Body, "请输入验证码以便正常访问") {
+			// 出现验证码
+			if strings.Contains(link, "baidu.com") {
+				baiduForbid = true
+				go func() {
+					select {
+					case <-time.After(15 * time.Minute):
+						baiduForbid = false
+					}
+				}()
+			} else if strings.Contains(link, "sogou.com") {
+				sogouForbid = true
+				go func() {
+					select {
+					case <-time.After(15 * time.Minute):
+						sogouForbid = false
+					}
+				}()
+			} else if strings.Contains(link, "so.com") || strings.Contains(link, "360.cn") {
+				soForbid = true
+				go func() {
+					select {
+					case <-time.After(15 * time.Minute):
+						soForbid = false
+					}
+				}()
+			}
 		}
 	}
 

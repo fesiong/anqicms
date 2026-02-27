@@ -5,42 +5,55 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"golang.org/x/crypto/bcrypt"
-	"gorm.io/gorm"
 	"hash/crc32"
-	"kandaoni.com/anqicms/library"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
 )
 
 type User struct {
-	Model
-	ParentId    uint   `json:"parent_id" gorm:"column:parent_id;type:int(10);unsigned;not null;default:0"`
-	UserName    string `json:"user_name" gorm:"column:user_name;type:varchar(64) not null;default:''"`
-	RealName    string `json:"real_name" gorm:"column:real_name;type:varchar(64) not null;default:''"`
-	AvatarURL   string `json:"avatar_url" gorm:"column:avatar_url;type:varchar(255) not null;default:''"`
-	Email       string `json:"email" gorm:"column:email;type:varchar(100) not null;default:'';index:idx_email"`
-	Phone       string `json:"phone" gorm:"column:phone;type:varchar(20) not null;default:'';index"`
-	GroupId     uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
-	Password    string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`
-	Status      int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
-	IsRetailer  int    `json:"is_retailer" gorm:"column:is_retailer;type:tinyint(1) not null;default:0"` // 是否是分销员
-	Balance     int64  `json:"balance" gorm:"column:balance;type:bigint(20) not null;default:0;comment:'用户余额'"`
-	TotalReward int64  `json:"total_reward" gorm:"column:total_reward;type:bigint(20) not null;default:0;comment:''"` // 分销员累计收益
-	InviteCode  string `json:"invite_code" gorm:"column:invite_code;type:varchar(100) not null;default:'';index:idx_invite_code"`
-	LastLogin   int64  `json:"last_login" gorm:"column:last_login;type:int(11);default:0"`
-	ExpireTime  int64  `json:"expire_time" gorm:"column:expire_time;type:int(11);default:0"`
+	Id            uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime   int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime   int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	ParentId      uint   `json:"parent_id" gorm:"column:parent_id;type:int(10);unsigned;not null;default:0"`
+	UserName      string `json:"user_name" gorm:"column:user_name;type:varchar(64) not null;default:''"`
+	UrlToken      string `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
+	RealName      string `json:"real_name" gorm:"column:real_name;type:varchar(64) not null;default:''"`
+	FirstName     string `json:"first_name" gorm:"column:first_name;type:varchar(32) not null;default:''"`
+	LastName      string `json:"last_name" gorm:"column:last_name;type:varchar(32) not null;default:''"`
+	Birthday      int64  `json:"birthday" gorm:"column:birthday;type:int(11);default:0"` // 生日
+	AvatarURL     string `json:"avatar_url" gorm:"column:avatar_url;type:varchar(255) not null;default:''"`
+	Introduce     string `json:"introduce" gorm:"column:introduce;type:varchar(1000) not null;default:''"` // 介绍
+	Email         string `json:"email" gorm:"column:email;type:varchar(100) not null;default:'';index:idx_email"`
+	EmailVerified bool   `json:"email_verified" gorm:"column:email_verified;type:tinyint(1) not null;default:0"`
+	Phone         string `json:"phone" gorm:"column:phone;type:varchar(20) not null;default:'';index"`
+	GroupId       uint   `json:"group_id" gorm:"column:group_id;type:int(10) unsigned not null;default:0"`
+	GoogleId      string `json:"google_id" gorm:"column:google_id;type:varchar(255) not null;default:''"`
+	Password      string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`
+	ResetPassword bool   `json:"reset_password" gorm:"column:reset_password;type:tinyint(1) not null;default:0"` // 是否需要重置密码，重置密码可以不用旧密码，因为tauth2登录，没有密码
+	Status        int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
+	IsRetailer    int    `json:"is_retailer" gorm:"column:is_retailer;type:tinyint(1) not null;default:0"` // 是否是分销员
+	Balance       int64  `json:"balance" gorm:"column:balance;type:bigint(20) not null;default:0;comment:'用户余额'"`
+	TotalReward   int64  `json:"total_reward" gorm:"column:total_reward;type:bigint(20) not null;default:0;comment:''"` // 分销员累计收益
+	InviteCode    string `json:"invite_code" gorm:"column:invite_code;type:varchar(100) not null;default:'';index:idx_invite_code"`
+	LastLogin     int64  `json:"last_login" gorm:"column:last_login;type:int(11);default:0"`
+	ExpireTime    int64  `json:"expire_time" gorm:"column:expire_time;type:int(11);default:0"`
 
-	Extra         map[string]*CustomField `json:"extra" gorm:"-"`
-	Token         string                  `json:"token" gorm:"-"`
-	Group         *UserGroup              `json:"group" gorm:"-"`
-	FullAvatarURL string                  `json:"full_avatar_url" gorm:"-"`
-	Link          string                  `json:"link" gorm:"-"`
+	Extra         map[string]CustomField `json:"extra" gorm:"-"`
+	Token         string                 `json:"token" gorm:"-"`
+	Group         *UserGroup             `json:"group" gorm:"-"`
+	FullAvatarURL string                 `json:"full_avatar_url" gorm:"-"`
+	Link          string                 `json:"link" gorm:"-"`
 }
 
 type UserGroup struct {
-	Model
+	Id             uint             `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime    int64            `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime    int64            `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title          string           `json:"title" gorm:"column:title;type:varchar(32) not null;default:''"`
 	Description    string           `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
 	Level          int              `json:"level" gorm:"column:level;type:int(10) not null;default:0"` // group level
@@ -79,6 +92,14 @@ func (s *UserGroupSetting) Scan(src interface{}) error {
 	}
 
 	return fmt.Errorf("pq: cannot convert %T", src)
+}
+
+func (u *User) BeforeCreate(tx *gorm.DB) (err error) {
+	if u.UrlToken == "" {
+		u.UrlToken = library.GetPinyin(u.UserName, false)
+	}
+
+	return
 }
 
 func (u *User) AfterCreate(tx *gorm.DB) (err error) {

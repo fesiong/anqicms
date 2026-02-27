@@ -1,18 +1,19 @@
 package manageController
 
 import (
+	"encoding/json"
 	"fmt"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
 
 func CategoryList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	categoryType := uint(ctx.URLParamIntDefault("type", 0))
 	showType := ctx.URLParamIntDefault("show_type", 0)
@@ -41,6 +42,10 @@ func CategoryList(ctx iris.Context) {
 			return tx
 		}
 	}
+	// 搜索模式下，不构建tree
+	if title != "" {
+		showType = config.CategoryShowTypeList
+	}
 	categories, err = currentSite.GetCategories(ops, 0, showType)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -63,28 +68,33 @@ func CategoryList(ctx iris.Context) {
 			// 默认的
 			if categories[i].Type == config.CategoryTypePage {
 				categories[i].Template = ctx.Tr("(Default)") + " page/detail.html"
-				if controller.ViewExists(ctx, "page_detail.html") {
-					categories[i].Template = ctx.Tr("(Default)") + " page_detail.html"
+				tmpTpl, ok := currentSite.TemplateExist("page_detail.html")
+				if ok {
+					categories[i].Template = ctx.Tr("(Default)") + " " + tmpTpl
 				}
-				tmpTpl := fmt.Sprintf("page/detail-%d.html", categories[i].Id)
-				if controller.ViewExists(ctx, tmpTpl) {
+				tmpTpl0 := fmt.Sprintf("page/%s.html", categories[i].UrlToken)
+				tmpTpl1 := fmt.Sprintf("page/detail-%d.html", categories[i].Id)
+				tmpTpl2 := fmt.Sprintf("page-%d.html", categories[i].Id)
+				tmpTpl, ok = currentSite.TemplateExist(tmpTpl0, tmpTpl1, tmpTpl2)
+				if ok {
 					categories[i].Template = "(ID) " + tmpTpl
-				} else if controller.ViewExists(ctx, fmt.Sprintf("page-%d.html", categories[i].Id)) {
-					categories[i].Template = "(ID) " + fmt.Sprintf("page-%d.html", categories[i].Id)
-				} else {
-					categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
-					if categoryTemplate != nil {
-						categories[i].Template = categoryTemplate.Template
-					}
+				}
+				categoryTemplate := currentSite.GetCategoryTemplate(categories[i])
+				if categoryTemplate != nil {
+					categories[i].Template = categoryTemplate.Template
 				}
 			} else {
 				categories[i].Template = ctx.Tr("(Default)") + mapModules[categories[i].ModuleId].TableName + "/list.html"
 				tplName2 := mapModules[categories[i].ModuleId].TableName + "_list.html"
-				if controller.ViewExists(ctx, tplName2) {
-					categories[i].Template = ctx.Tr("(Default)") + tplName2
+				tmpTpl, ok := currentSite.TemplateExist(tplName2)
+				if ok {
+					categories[i].Template = ctx.Tr("(Default)") + tmpTpl
 				}
-				if controller.ViewExists(ctx, fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)) {
-					categories[i].Template = "(ID) " + fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)
+				tmpTpl0 := fmt.Sprintf("%s/%s.html", mapModules[categories[i].ModuleId].TableName, categories[i].UrlToken)
+				tmpTpl1 := fmt.Sprintf("%s/list-%d.html", mapModules[categories[i].ModuleId].TableName, categories[i].Id)
+				tmpTpl, ok = currentSite.TemplateExist(tmpTpl0, tmpTpl1)
+				if ok {
+					categories[i].Template = "(ID) " + tmpTpl
 				}
 				// 跟随上级
 				if categories[i].ParentId > 0 {
@@ -102,8 +112,9 @@ func CategoryList(ctx iris.Context) {
 		if categories[i].DetailTemplate == "" && categories[i].Type != config.CategoryTypePage {
 			categories[i].DetailTemplate = ctx.Tr("(Default)") + mapModules[categories[i].ModuleId].TableName + "/detail.html"
 			tplName2 := mapModules[categories[i].ModuleId].TableName + "_detail.html"
-			if controller.ViewExists(ctx, tplName2) {
-				categories[i].DetailTemplate = ctx.Tr("(Default)") + tplName2
+			tmpTpl, ok := currentSite.TemplateExist(tplName2)
+			if ok {
+				categories[i].DetailTemplate = ctx.Tr("(Default)") + tmpTpl
 			}
 		}
 	}
@@ -116,7 +127,7 @@ func CategoryList(ctx iris.Context) {
 }
 
 func CategoryDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
 	category, err := currentSite.GetCategoryById(id)
@@ -127,6 +138,36 @@ func CategoryDetail(ctx iris.Context) {
 		})
 		return
 	}
+	category.Content = currentSite.ReplaceContentUrl(category.Content, true)
+	// extra replace
+	if category.Extra != nil {
+		module := currentSite.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			for _, field := range module.CategoryFields {
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					category.Extra[field.FieldName] != nil {
+					category.Extra[field.FieldName] = currentSite.ReplaceContentUrl(category.Extra[field.FieldName].(string), true)
+				}
+				if field.Type == config.CustomFieldTypeImages && category.Extra[field.FieldName] != nil {
+					if val, ok := category.Extra[field.FieldName].([]interface{}); ok {
+						for j, v2 := range val {
+							v2s, _ := v2.(string)
+							val[j] = currentSite.ReplaceContentUrl(v2s, true)
+						}
+						category.Extra[field.FieldName] = val
+					}
+				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
+					var texts []model.CustomFieldTexts
+					_ = json.Unmarshal([]byte(fmt.Sprint(category.Extra[field.FieldName])), &texts)
+					category.Extra[field.FieldName] = texts
+				} else if field.Type == config.CustomFieldTypeTimeline && category.Extra[field.FieldName] != nil {
+					var val model.TimelineField
+					_ = json.Unmarshal([]byte(fmt.Sprint(category.Extra[field.FieldName])), &val)
+					category.Extra[field.FieldName] = val
+				}
+			}
+		}
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -136,7 +177,7 @@ func CategoryDetail(ctx iris.Context) {
 }
 
 func CategoryDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -154,6 +195,59 @@ func CategoryDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 插入记录
+				if req.Id == 0 {
+					req.Id = category.Id
+					subCategory, err := subSite.SaveCategory(&req)
+					if err == nil {
+						// 同步成功，进行翻译
+						if currentSite.MultiLanguage.AutoTranslate {
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subCategory.Title,       // 0
+									subCategory.Description, // 1
+									subCategory.Keywords,    // 2
+									subCategory.Content,     // 3
+								},
+								Language:   currentSite.System.Language,
+								ToLanguage: subSite.System.Language,
+							}
+							res, err := currentSite.AnqiTranslateString(transReq)
+							if err == nil {
+								// 只处理成功的结果
+								subSite.DB.Model(subCategory).UpdateColumns(map[string]interface{}{
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"keywords":    res.Text[2],
+									"content":     res.Text[3],
+								})
+							}
+						}
+					}
+				} else {
+					// 修改的话，就排除 title, content，description，keywords 字段
+					tmpCategory, err := subSite.GetCategoryById(req.Id)
+					if err == nil {
+						req.Title = tmpCategory.Title
+						req.Content = tmpCategory.Content
+						req.Description = tmpCategory.Description
+						req.Keywords = tmpCategory.Keywords
+					}
+					_, _ = subSite.SaveCategory(&req)
+				}
+			}
+		}
+	}
+
 	// 更新缓存
 	go func() {
 		currentSite.BuildModuleCache(ctx)
@@ -172,7 +266,7 @@ func CategoryDetailForm(ctx iris.Context) {
 }
 
 func CategoryDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -198,6 +292,20 @@ func CategoryDelete(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 同步删除
+				_ = category.Delete(subSite.DB)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentCategoryLog", category.Id, category.Title))
 
@@ -207,5 +315,16 @@ func CategoryDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("CategoryDeleted"),
+	})
+}
+
+func CategoryUpdateArchiveCount(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	currentSite.UpdateCategoryArchiveCounts()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
 	})
 }

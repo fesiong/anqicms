@@ -57,7 +57,11 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if req.Id > 0 {
 		module, err = w.GetModuleById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			module = &model.Module{
+				Status: 1,
+			}
+			module.Id = req.Id
 		}
 	} else {
 		module = &model.Module{
@@ -87,18 +91,48 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	}
 	// 检查fields
 	for i := range req.Fields {
+		// 不允许使用已存在的字段
+		archiveFields, err := getColumns(w.DB, &model.Archive{})
+		if err == nil {
+			for _, val := range archiveFields {
+				if val == req.Fields[i].FieldName {
+					return nil, errors.New(req.Fields[i].FieldName + w.Tr("FieldAlreadyExists"))
+				}
+			}
+		}
 		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.Fields[i].FieldName)
 		if err != nil || !match {
 			return nil, errors.New(req.Fields[i].FieldName + w.Tr("IncorrectNaming"))
 		}
 	}
+	// 检查 categoryFields
+	// 检查fields
+	for i := range req.CategoryFields {
+		// 不允许使用已存在的字段
+		categoryFields, err := getColumns(w.DB, &model.Category{})
+		if err == nil {
+			for _, val := range categoryFields {
+				if val == req.CategoryFields[i].FieldName {
+					return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("FieldAlreadyExists"))
+				}
+			}
+		}
+		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.CategoryFields[i].FieldName)
+		if err != nil || !match {
+			return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("IncorrectNaming"))
+		}
+	}
 
 	module.Fields = req.Fields
 	module.Title = req.Title
+	module.Name = req.Name
 	module.Fields = req.Fields
+	module.CategoryFields = req.CategoryFields
 	module.TitleName = req.TitleName
 	module.UrlToken = req.UrlToken
 	module.Status = req.Status
+	module.Keywords = req.Keywords
+	module.Description = req.Description
 
 	err = w.DB.Save(module).Error
 	if err != nil {
@@ -177,13 +211,17 @@ func (w *Website) GetCacheModules() []model.Module {
 	var modules []model.Module
 
 	err := w.Cache.Get("modules", &modules)
-	if err == nil {
+	if err == nil && len(modules) > 0 {
 		return modules
 	}
 
-	w.DB.Model(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules)
-
-	_ = w.Cache.Set("modules", modules, 0)
+	err = w.DB.Model(model.Module{}).Where("`status` = ?", config.ContentStatusOK).Find(&modules).Error
+	if err != nil {
+		return nil
+	}
+	if len(modules) > 0 {
+		_ = w.Cache.Set("modules", modules, 0)
+	}
 
 	return modules
 }

@@ -12,7 +12,7 @@ import (
 )
 
 func PluginStorageConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginStorage
 
 	ctx.JSON(iris.Map{
@@ -23,7 +23,7 @@ func PluginStorageConfig(ctx iris.Context) {
 }
 
 func PluginStorageConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginStorageConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -32,43 +32,54 @@ func PluginStorageConfigForm(ctx iris.Context) {
 		})
 		return
 	}
+	w2 := provider.GetWebsite(currentSite.Id)
 
-	currentSite.PluginStorage.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
-	currentSite.PluginStorage.StorageType = req.StorageType
-	currentSite.PluginStorage.KeepLocal = req.KeepLocal
+	w2.PluginStorage.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
+	w2.PluginStorage.StorageType = req.StorageType
+	w2.PluginStorage.KeepLocal = req.KeepLocal
 
-	currentSite.PluginStorage.AliyunEndpoint = req.AliyunEndpoint
-	currentSite.PluginStorage.AliyunAccessKeyId = req.AliyunAccessKeyId
-	currentSite.PluginStorage.AliyunAccessKeySecret = req.AliyunAccessKeySecret
-	currentSite.PluginStorage.AliyunBucketName = req.AliyunBucketName
+	w2.PluginStorage.AliyunEndpoint = req.AliyunEndpoint
+	w2.PluginStorage.AliyunAccessKeyId = req.AliyunAccessKeyId
+	w2.PluginStorage.AliyunAccessKeySecret = req.AliyunAccessKeySecret
+	w2.PluginStorage.AliyunBucketName = req.AliyunBucketName
 
-	currentSite.PluginStorage.TencentSecretId = req.TencentSecretId
-	currentSite.PluginStorage.TencentSecretKey = req.TencentSecretKey
-	currentSite.PluginStorage.TencentBucketUrl = req.TencentBucketUrl
+	w2.PluginStorage.TencentSecretId = req.TencentSecretId
+	w2.PluginStorage.TencentSecretKey = req.TencentSecretKey
+	w2.PluginStorage.TencentBucketUrl = req.TencentBucketUrl
 
-	currentSite.PluginStorage.QiniuAccessKey = req.QiniuAccessKey
-	currentSite.PluginStorage.QiniuSecretKey = req.QiniuSecretKey
-	currentSite.PluginStorage.QiniuBucket = req.QiniuBucket
-	currentSite.PluginStorage.QiniuRegion = req.QiniuRegion
+	w2.PluginStorage.QiniuAccessKey = req.QiniuAccessKey
+	w2.PluginStorage.QiniuSecretKey = req.QiniuSecretKey
+	w2.PluginStorage.QiniuBucket = req.QiniuBucket
+	w2.PluginStorage.QiniuRegion = req.QiniuRegion
 
-	currentSite.PluginStorage.UpyunBucket = req.UpyunBucket
-	currentSite.PluginStorage.UpyunOperator = req.UpyunOperator
-	currentSite.PluginStorage.UpyunPassword = req.UpyunPassword
+	w2.PluginStorage.UpyunBucket = req.UpyunBucket
+	w2.PluginStorage.UpyunOperator = req.UpyunOperator
+	w2.PluginStorage.UpyunPassword = req.UpyunPassword
 
-	currentSite.PluginStorage.FTPHost = req.FTPHost
-	currentSite.PluginStorage.FTPPort = req.FTPPort
-	currentSite.PluginStorage.FTPUsername = req.FTPUsername
-	currentSite.PluginStorage.FTPPassword = req.FTPPassword
-	currentSite.PluginStorage.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+	w2.PluginStorage.GoogleProjectId = req.GoogleProjectId
+	w2.PluginStorage.GoogleBucketName = req.GoogleBucketName
+	w2.PluginStorage.GoogleCredentialsJson = req.GoogleCredentialsJson
 
-	currentSite.PluginStorage.SSHHost = req.SSHHost
-	currentSite.PluginStorage.SSHPort = req.SSHPort
-	currentSite.PluginStorage.SSHUsername = req.SSHUsername
-	currentSite.PluginStorage.SSHPassword = req.SSHPassword
-	currentSite.PluginStorage.SSHPrivateKey = req.SSHPrivateKey
-	currentSite.PluginStorage.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+	w2.PluginStorage.S3Region = req.S3Region
+	w2.PluginStorage.S3AccessKey = req.S3AccessKey
+	w2.PluginStorage.S3SecretKey = req.S3SecretKey
+	w2.PluginStorage.S3Bucket = req.S3Bucket
+	w2.PluginStorage.S3Endpoint = req.S3Endpoint
 
-	err := currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
+	w2.PluginStorage.FTPHost = req.FTPHost
+	w2.PluginStorage.FTPPort = req.FTPPort
+	w2.PluginStorage.FTPUsername = req.FTPUsername
+	w2.PluginStorage.FTPPassword = req.FTPPassword
+	w2.PluginStorage.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+
+	w2.PluginStorage.SSHHost = req.SSHHost
+	w2.PluginStorage.SSHPort = req.SSHPort
+	w2.PluginStorage.SSHUsername = req.SSHUsername
+	w2.PluginStorage.SSHPassword = req.SSHPassword
+	w2.PluginStorage.SSHPrivateKey = req.SSHPrivateKey
+	w2.PluginStorage.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+
+	err := w2.SaveSettingValue(provider.StorageSettingKey, w2.PluginStorage)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -78,8 +89,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateStorageConfiguration"))
-
-	currentSite.InitBucket()
+	w2.InitBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -88,7 +98,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 }
 
 func PluginStorageUploadFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	file, _, err := ctx.FormFile("file")
 	if err != nil {

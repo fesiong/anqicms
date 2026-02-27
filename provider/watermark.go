@@ -1,26 +1,28 @@
 package provider
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"github.com/chai2010/webp"
-	"github.com/disintegration/imaging"
-	"github.com/golang/freetype"
-	"github.com/golang/freetype/truetype"
-	"golang.org/x/image/font"
-	"golang.org/x/image/math/fixed"
 	"image"
 	"image/color"
 	"image/draw"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"log"
 	"math/rand"
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/disintegration/imaging"
+	"github.com/golang/freetype"
+	"github.com/golang/freetype/truetype"
+	"golang.org/x/image/font"
+	"golang.org/x/image/math/fixed"
+	"golang.org/x/image/webp"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 type Watermark struct {
@@ -77,7 +79,7 @@ func (w *Website) GenerateAllWatermark() {
 	// 根据attachment表读取每一张图片
 	lastId := uint(0)
 	limit := 500
-	wm := w.NewWatermark(&w.PluginWatermark)
+	wm := w.NewWatermark(w.PluginWatermark)
 	if wm == nil {
 		return
 	}
@@ -125,7 +127,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	quality := w.Content.Quality
 	if quality == 0 {
 		// 默认质量是90
-		quality = webp.DefaulQuality
+		quality = config.DefaultQuality
 	}
 
 	// gif 不处理
@@ -136,13 +138,13 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	if err != nil {
 		return err
 	}
-	buf, _ := encodeImage(img, imgType, quality)
+	buf, _, _ := encodeImage(img, imgType, quality)
 
 	err = os.WriteFile(originPath, buf, os.ModePerm)
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(attachment.FileLocation, buf)
+	_, err = w.UploadFile(attachment.FileLocation, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -155,13 +157,13 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	thumbPath := w.PublicPath + paths + "thumb_" + fileName
 
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
-	buf, _ = encodeImage(newImg, imgType, quality)
+	buf, _, _ = encodeImage(newImg, imgType, quality)
 
 	err = os.WriteFile(thumbPath, buf, os.ModePerm)
 	if err != nil {
 		return err
 	}
-	_, err = w.Storage.UploadFile(paths+"thumb_"+fileName, buf)
+	_, err = w.UploadFile(paths+"thumb_"+fileName, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -263,7 +265,7 @@ func (t *Watermark) DrawWatermarkPreview() string {
 }
 
 func (t *Watermark) EncodeB64string(img image.Image) string {
-	buf, _ := encodeImage(img, "webp", 85)
+	buf, _, _ := encodeImage(img, "webp", config.DefaultQuality)
 	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
 }
 

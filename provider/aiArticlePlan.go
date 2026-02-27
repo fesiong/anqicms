@@ -3,11 +3,23 @@ package provider
 import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
+	"log"
 )
 
-func (w *Website) GetAiArticlePlanByReqId(reqId uint) (*model.AiArticlePlan, error) {
+func (w *Website) GetAiArticlePlanByReqId(reqId int64) (*model.AiArticlePlan, error) {
 	var plan model.AiArticlePlan
 	err := w.DB.Where("`req_id` = ?", reqId).Take(&plan).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &plan, nil
+}
+
+func (w *Website) GetAiArticlePlanById(id uint) (*model.AiArticlePlan, error) {
+	var plan model.AiArticlePlan
+	err := w.DB.Where("`id` = ?", id).Take(&plan).Error
 
 	if err != nil {
 		return nil, err
@@ -37,15 +49,16 @@ func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult, useSelf bool) (*model.Ai
 	}
 
 	plan := &model.AiArticlePlan{
-		Type:      resp.Type,
-		ReqId:     resp.ReqId,
-		Language:  resp.Language,
-		Keyword:   resp.Keyword,
-		Demand:    resp.Demand,
-		ArticleId: resp.ArticleId,
-		PayCount:  resp.PayCount,
-		UseSelf:   useSelf,
-		Status:    resp.Status,
+		Type:       resp.Type,
+		ReqId:      resp.ReqId,
+		Language:   resp.Language,
+		ToLanguage: resp.ToLanguage,
+		Keyword:    resp.Keyword,
+		Demand:     resp.Demand,
+		ArticleId:  resp.ArticleId,
+		PayCount:   resp.PayCount,
+		UseSelf:    useSelf,
+		Status:     resp.Status,
 	}
 
 	err := w.DB.Save(plan).Error
@@ -58,6 +71,9 @@ func (w *Website) SaveAiArticlePlan(resp *AnqiAiResult, useSelf bool) (*model.Ai
 
 // SyncAiArticlePlan 从服务器中拉取进行中的任务
 func (w *Website) SyncAiArticlePlan() {
+	//if !w.AiGenerateConfig.Open {
+	//	return
+	//}
 	var plans []*model.AiArticlePlan
 	w.DB.Model(&model.AiArticlePlan{}).Where("`status` = ? and `use_self` = 0", config.AiArticleStatusDoing).Find(&plans)
 
@@ -66,6 +82,9 @@ func (w *Website) SyncAiArticlePlan() {
 	}
 
 	for _, plan := range plans {
-		w.AnqiSyncAiPlanResult(plan)
+		err := w.AnqiSyncAiPlanResult(plan)
+		if err != nil {
+			log.Println("plan text", plan.Id, err)
+		}
 	}
 }

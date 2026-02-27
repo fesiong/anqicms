@@ -1,20 +1,26 @@
 package controller
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
+	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
+	"github.com/go-pay/xlog"
 	"github.com/kataras/iris/v12"
 	"github.com/medivhzhan/weapp/v3/server"
-	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"log"
-	"os"
-	"time"
 )
 
 func NotifyWeappMsg(ctx iris.Context) {
@@ -112,6 +118,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		payment.PayWay = "wechat"
 		payment.TerraceId = notifyReq.GetString("transaction_id")
 		payment.PaidTime = time.Now().Unix()
+		payment.BuyerId = notifyReq.GetString("openid")
 		currentSite.DB.Save(payment)
 		order.PaymentId = payment.PaymentId
 		currentSite.DB.Save(order)
@@ -139,7 +146,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		}
 
 		//支付成功逻辑处理
-		err = currentSite.SuccessPaidOrder(order)
+		err = currentSite.SuccessPaidOrder(order, payment)
 		if err != nil {
 			library.DebugLog(currentSite.CachePath, "wechat.log", "err", "order pay failed")
 			rsp.ReturnCode = gopay.FAIL
@@ -228,6 +235,11 @@ func NotifyAlipay(ctx iris.Context) {
 		payment.PayWay = "alipay"
 		payment.PaidTime = time.Now().Unix()
 		payment.TerraceId = bm.GetString("trade_no")
+		payment.BuyerId = bm.GetString("buyer_id")
+		if bm.GetString("buyer_open_id") != "" {
+			payment.BuyerId = bm.GetString("buyer_open_id")
+		}
+		payment.BuyerInfo = bm.GetString("buyer_logon_id")
 		currentSite.DB.Save(payment)
 		order.PaymentId = payment.PaymentId
 		currentSite.DB.Save(order)
@@ -250,7 +262,7 @@ func NotifyAlipay(ctx iris.Context) {
 			return
 		}
 		//支付成功逻辑处理
-		err = currentSite.SuccessPaidOrder(order)
+		err = currentSite.SuccessPaidOrder(order, payment)
 		if err != nil {
 			ctx.WriteString("success")
 			return
@@ -259,6 +271,78 @@ func NotifyAlipay(ctx iris.Context) {
 
 	//通知成功
 	ctx.WriteString("success")
+}
+
+func NotifyPayPal(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	terraceId := strings.TrimSpace(ctx.URLParam("token"))
+	if terraceId == "" {
+		ShowMessage(ctx, ctx.Tr("paymentParameterError"), nil)
+		return
+	}
+	body, err := ctx.GetBody()
+	if err != nil {
+		xlog.Errorf("Read body error: %v", err)
+		return
+	}
+	library.DebugLog(currentSite.CachePath, "paypal_notify", string(body))
+	// 处理结果
+	var event paypal.WebhookEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		xlog.Errorf("JSON unmarshal error: %v", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		ctx.WriteString("Invalid event format")
+		return
+	}
+
+	// 4. 处理事件
+	xlog.Infof("Received %s event: %s", event.EventType, event.Summary)
+	// 获取payment信息
+	var resp provider.PaypalWebhookResource
+	err = json.Unmarshal(event.Resource, &resp)
+	if err != nil {
+		xlog.Errorf("Failed to unmarshal resource: %v, %v", err, string(event.Resource))
+		return
+	}
+	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
+	if err != nil {
+		// 处理token获取失败
+		ctx.WriteString("failed")
+		return
+	}
+	bm := make(gopay.BodyMap)
+	bm.Set("auth_algo", ctx.GetHeader("Paypal-Auth-Algo")).
+		Set("cert_url", ctx.GetHeader("Paypal-Cert-Url")).
+		Set("transmission_id", ctx.GetHeader("Paypal-Transmission-Id")).
+		Set("transmission_sig", ctx.GetHeader("Paypal-Transmission-Sig")).
+		Set("transmission_time", ctx.GetHeader("Paypal-Transmission-Time")).
+		Set("webhook_id", currentSite.PluginPay.PaypalWebhookId).
+		SetBodyMap("webhook_event", func(b gopay.BodyMap) {
+			err = json.Unmarshal(body, &b)
+			if err != nil {
+				xlog.Errorf("[%+v]: %v, bytes: %s", gopay.UnmarshalErr, err, string(body))
+			}
+		})
+
+	xlog.Debug("bm：", bm.JsonBody())
+	verifyRes, err := client.VerifyWebhookSignature(ctx, bm)
+	if err != nil {
+		xlog.Error(err)
+		return
+	}
+	xlog.Debugf("verifyRes: %+v", verifyRes)
+
+	if verifyRes.VerificationStatus != "SUCCESS" {
+		// 处理验证失败
+		xlog.Error("paypal webhook verify error")
+		return
+	}
+
+	// 使用协程异步处理事件，避免阻塞响应
+	go currentSite.ProcessPaypalEvent(&event)
+
+	ctx.StatusCode(http.StatusOK)
+	ctx.WriteString("Webhook processed")
 }
 
 // SubscribeMsgPopup 订阅消息弹框事件

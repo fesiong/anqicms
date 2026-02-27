@@ -1,30 +1,36 @@
 package provider
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
-	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
-	err := ops(w.DB).Omit("content").Find(&categories).Error
+	err := ops(w.DB).Omit("content", "extra_data").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
 	for i := range categories {
-		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categories[i].Id)))
 		categories[i].Link = w.GetUrl("category", categories[i], 0)
+	}
+	if showType == config.CategoryShowTypeList {
+		return categories, nil
 	}
 	categoryTree := NewCategoryTree(categories)
 
@@ -64,7 +70,7 @@ func (w *Website) GetCategoryByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Cate
 	if err != nil {
 		return nil, err
 	}
-	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	category.Link = w.GetUrl("category", &category, 0)
 
 	return &category, nil
@@ -75,7 +81,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if req.Id > 0 {
 		category, err = w.GetCategoryById(req.Id)
 		if err != nil {
-			return nil, err
+			// 表示不存在，则新建一个
+			category = &model.Category{
+				Status: 1,
+			}
+			category.Id = req.Id
+			newPost = true
 		}
 	} else {
 		category = &model.Category{
@@ -97,6 +108,9 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	category.IsInherit = req.IsInherit
 	category.Images = req.Images
 	category.Logo = req.Logo
+	if req.Extra != nil {
+		category.Extra = req.Extra
+	}
 	for i, v := range category.Images {
 		category.Images[i] = strings.TrimPrefix(v, w.PluginStorage.StorageUrl)
 	}
@@ -138,7 +152,37 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	}
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
+	if category.Extra != nil {
+		module := w.GetModuleFromCache(category.ModuleId)
+		if module != nil && len(module.CategoryFields) > 0 {
+			for _, field := range module.CategoryFields {
+				if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
+					category.Extra[field.FieldName] != nil {
+					value, ok := category.Extra[field.FieldName].(string)
+					if ok {
+						category.Extra[field.FieldName] = w.ReplaceContentUrl(value, false)
+					}
+				}
+				if field.Type == config.CustomFieldTypeImages {
+					if val, ok := category.Extra[field.FieldName].([]interface{}); ok {
+						for j, v2 := range val {
+							v2s, _ := v2.(string)
+							val[j] = w.ReplaceContentUrl(v2s, false)
+						}
+						category.Extra[field.FieldName] = val
+					}
+				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
+					buf, _ := json.Marshal(category.Extra[field.FieldName])
+					category.Extra[field.FieldName] = string(buf)
+				} else if field.Type == config.CustomFieldTypeTimeline {
+					// 存 json
+					buf, _ := json.Marshal(category.Extra[field.FieldName])
+					category.Extra[field.FieldName] = string(buf)
+				}
+			}
+		}
+	}
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
@@ -172,7 +216,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}
 	}
 	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -183,7 +227,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(s, match[1], newUrl, 1)
+					}
 				}
 			}
 			return s
@@ -204,7 +253,10 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[1]
+					if w.Content.FilterOutlink == 1 {
+						return match[1]
+					}
+					// 添加 nofollow 不在这里处理，因为md不支持
 				}
 			}
 			return s
@@ -229,7 +281,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			}
 		}
 	}
-	go w.LogMaterialData(materialIds, "category", category.Id)
+	go w.LogMaterialData(materialIds, "category", int64(category.Id))
 	// 自动提取远程图片改成保存后处理
 	if w.Content.RemoteDownload == 1 {
 		hasChangeImg := false
@@ -243,7 +295,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					attachment, err2 := w.DownloadRemoteImage(match[1], "", 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -264,7 +316,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					attachment, err2 := w.DownloadRemoteImage(match[2], "", 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -307,13 +359,14 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		go func() {
 			w.PushArchive(link)
 			if w.PluginSitemap.AutoBuild == 1 {
-				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"))
+				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"), category)
 			}
 		}()
 	}
 	if w.PluginFulltext.UseCategory {
-		w.AddFulltextIndex(&TinyArchive{
-			Id:          CategoryDivider + uint64(category.Id),
+		w.AddFulltextIndex(fulltext.TinyArchive{
+			Id:          int64(category.Id),
+			Type:        fulltext.CategoryType,
 			ModuleId:    category.ModuleId,
 			Title:       category.Title,
 			Keywords:    category.Keywords,
@@ -322,7 +375,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		})
 		w.FlushIndex()
 	}
-	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	w.DeleteCacheCategories()
 	w.DeleteCacheIndex()
 
@@ -358,6 +411,45 @@ func (w *Website) GetCategoryTemplate(category *model.Category) *response.Catego
 	return nil
 }
 
+func (w *Website) GetParentCategories(parentId uint) []*model.Category {
+	var categories []*model.Category
+	if parentId == 0 {
+		return nil
+	}
+	for {
+		category := w.GetCategoryFromCache(parentId)
+		if category == nil {
+			break
+		}
+		categories = append(categories, category)
+		parentId = category.ParentId
+	}
+	// 将 categories 翻转
+	for i, j := 0, len(categories)-1; i < j; i, j = i+1, j-1 {
+		categories[i], categories[j] = categories[j], categories[i]
+	}
+
+	return categories
+}
+
+func (w *Website) GetTopCategoryId(categoryId uint) uint {
+	if categoryId == 0 {
+		return 0
+	}
+	for {
+		category := w.GetCategoryFromCache(categoryId)
+		if category == nil {
+			break
+		}
+		if category.ParentId == 0 {
+			break
+		}
+		categoryId = category.ParentId
+	}
+
+	return categoryId
+}
+
 func (w *Website) DeleteCacheCategories() {
 	w.Cache.Delete("categories")
 }
@@ -372,18 +464,23 @@ func (w *Website) GetCacheCategories() []*model.Category {
 
 	err := w.Cache.Get("categories", &categories)
 
-	if err == nil {
+	if err == nil && len(categories) > 0 {
 		return categories
 	}
 
-	w.DB.Model(model.Category{}).Order("sort asc").Find(&categories)
+	err = w.DB.Model(model.Category{}).Order("sort asc").Find(&categories).Error
+	if err != nil {
+		return nil
+	}
 	for i := range categories {
-		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categories[i].Id)))
 	}
 	categoryTree := NewCategoryTree(categories)
 	categories = categoryTree.GetTree(0, "")
 
-	_ = w.Cache.Set("categories", categories, 0)
+	if len(categories) > 0 {
+		_ = w.Cache.Set("categories", categories, 0)
+	}
 
 	return categories
 }
@@ -512,4 +609,25 @@ func (w *Website) VerifyCategoryUrlToken(urlToken string, id uint) string {
 	}
 
 	return urlToken
+}
+
+func (w *Website) UpdateCategoryArchiveCounts() {
+	var categories []*model.Category
+	w.DB.Model(model.Category{}).Find(&categories)
+	for _, category := range categories {
+		w.UpdateCategoryArchiveCount(category.Id)
+	}
+}
+
+func (w *Website) UpdateCategoryArchiveCount(categoryId uint) {
+	var archiveCount int64
+	// 同时计算子分类文章数量
+	var subIds = w.GetSubCategoryIds(categoryId, nil)
+	subIds = append(subIds, categoryId)
+	if w.Content.MultiCategory == 1 {
+		w.DB.Model(&model.ArchiveCategory{}).Joins("JOIN archives ON archives.id = archive_categories.archive_id").Where("archive_categories.category_id in (?)", subIds).Count(&archiveCount)
+	} else {
+		w.DB.Model(&model.Archive{}).Where("category_id in (?)", subIds).Count(&archiveCount)
+	}
+	w.DB.Model(&model.Category{}).Where("id = ?", categoryId).UpdateColumn("archive_count", archiveCount)
 }

@@ -60,10 +60,14 @@ func HEXToRGB(h string) color.Color {
 	if err != nil {
 		return color.RGBA{}
 	}
-	if len(bs) != 3 {
+	if len(bs) < 3 {
 		return color.RGBA{}
 	}
-	return color.RGBA{R: bs[0], G: bs[1], B: bs[2], A: 255}
+	var a uint8 = 255
+	if len(bs) == 4 {
+		a = bs[3]
+	}
+	return color.RGBA{R: bs[0], G: bs[1], B: bs[2], A: a}
 }
 
 // Errors

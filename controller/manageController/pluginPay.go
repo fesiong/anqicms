@@ -2,12 +2,13 @@ package manageController
 
 import (
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 )
 
 func PluginPayConfig(ctx iris.Context) {
@@ -32,6 +33,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 
+	currentSite.PluginPay.AlipayOpen = req.AlipayOpen
 	currentSite.PluginPay.AlipayAppId = req.AlipayAppId
 	currentSite.PluginPay.AlipayPrivateKey = req.AlipayPrivateKey
 	if req.AlipayCertPath != "" {
@@ -44,6 +46,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 		currentSite.PluginPay.AlipayPublicCertPath = req.AlipayPublicCertPath
 	}
 
+	currentSite.PluginPay.WechatOpen = req.WechatOpen
 	currentSite.PluginPay.WechatAppId = req.WechatAppId
 	currentSite.PluginPay.WechatAppSecret = req.WechatAppSecret
 	currentSite.PluginPay.WeappAppId = req.WeappAppId
@@ -58,6 +61,12 @@ func PluginPayConfigForm(ctx iris.Context) {
 		currentSite.PluginPay.WechatKeyPath = req.WechatKeyPath
 	}
 
+	// paypal
+	currentSite.PluginPay.PaypalOpen = req.PaypalOpen
+	currentSite.PluginPay.PaypalClientId = req.PaypalClientId
+	currentSite.PluginPay.PaypalClientSecret = req.PaypalClientSecret
+	currentSite.PluginPay.PaypalSandbox = req.PaypalSandbox
+
 	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -67,6 +76,11 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 	currentSite.DeleteCacheIndex()
+
+	// 处理 paypal webhook
+	if req.PaypalClientId != "" && req.PaypalClientSecret != "" {
+		currentSite.UpdatePaypalWebhook()
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
 

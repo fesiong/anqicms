@@ -1,12 +1,14 @@
 package route
 
 import (
+	"embed"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/controller/graphql"
 	"kandaoni.com/anqicms/middleware"
 )
 
-func Register(app *iris.Application) {
+func Register(app *iris.Application, systemFiles embed.FS) {
 	//注册macros
 	//设置错误
 	app.Use(controller.Inspect)
@@ -14,40 +16,49 @@ func Register(app *iris.Application) {
 	app.OnErrorCode(iris.StatusInternalServerError, controller.InternalServerError)
 	app.Use(controller.CheckTemplateType)
 	app.Use(controller.Common)
+
 	//由于使用了自定义路由，它不能同时解析两条到一起，因此这里不能启用fileserver，需要用nginx设置，有没研究出方法了再改进
 	//app.HandleDir("/", fmt.Sprintf("%spublic", config.ExecPath)
-	app.Get("/{path:path}", middleware.Check301, middleware.ParseUserToken, controller.ReRouteContext)
+	app.Get("/{path:path}", middleware.Check301, middleware.ParseUserToken, middleware.HandlerTimeout, controller.ReRouteContext)
 
 	app.Get("/install", controller.Install)
 	app.Post("/install", controller.InstallForm)
+	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", middleware.ParseUserToken, controller.CommentPublish)
+	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", middleware.ParseUserToken, middleware.UserAuth, controller.CommentPraise)
+	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", middleware.ParseUserToken, middleware.HandlerTimeout, controller.CommentList)
 
-	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, controller.AttachmentUpload)
-
-	app.HandleMany(iris.MethodPost, "/comment/publish /{base:string}/comment/publish", controller.LogAccess, middleware.ParseUserToken, controller.CommentPublish)
-	app.HandleMany(iris.MethodPost, "/comment/praise /{base:string}/comment/praise", controller.LogAccess, middleware.ParseUserToken, controller.CommentPraise)
-	app.HandleMany(iris.MethodGet, "/comment/{id:uint} /{base:string}/comment/{id:uint}", controller.LogAccess, middleware.ParseUserToken, controller.CommentList)
-
-	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", controller.LogAccess, middleware.ParseUserToken, controller.GuestbookPage)
+	app.HandleMany(iris.MethodGet, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, middleware.HandlerTimeout, controller.GuestbookPage)
 	app.HandleMany(iris.MethodPost, "/guestbook.html /{base:string}/guestbook.html", middleware.ParseUserToken, controller.GuestbookForm)
 
 	// 内容导入API
+
+	app.HandleMany(iris.MethodPost, "/attachment/upload /{base:string}/attachment/upload", middleware.ParseUserToken, controller.VerifyApiToken, controller.AttachmentUpload)
 	app.HandleMany("GET POST", "/api/import/archive /{base:string}/api/import/archive", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportArchive)
 	app.HandleMany("GET POST", "/api/import/categories /{base:string}/api/import/categories", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportGetCategories)
+	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
 
 	// login and register
-	app.Get("/login", controller.LoginPage)
-	app.Get("/register", controller.RegisterPage)
+	app.HandleMany(iris.MethodGet, "/login /login/{platform:string}", controller.LoginPage)
+	app.HandleMany(iris.MethodGet, "/register /register/{platform:string}", controller.RegisterPage)
 	app.Get("/logout", middleware.ParseUserToken, controller.AccountLogout)
 	// account party
+	app.Get("/account/password/reset", controller.AccountPasswordResetPage)
 	app.Get("/account/{route:path}", middleware.ParseUserToken, controller.AccountIndexPage)
+	// order
+	app.Get("/order/{route:path}", middleware.ParseUserToken, controller.OrderIndexPage)
 
 	api := app.Party("/api", middleware.ParseUserToken)
 	{
+		// 注册GraphQL API v2路由
+		graphql.RegisterRoutes(api)
 		api.Get("/captcha", controller.GenerateCaptcha)
 		// WeChat official account api
 		api.Get("/wechat/auth", controller.WechatAuthApi)
 		api.Get("/wechat", controller.WechatApi)
 		api.Post("/wechat", controller.WechatApi)
+		// google
+		api.Get("/google/url", controller.GoogleAuthUrl)
+		api.Get("/log", controller.ApiLogStatistic)
 
 		// 友链API
 		api.Post("/friendlink/create", controller.VerifyApiLinkToken, controller.ApiImportCreateFriendLink)
@@ -57,20 +68,25 @@ func Register(app *iris.Application) {
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
 		api.Post("/register", controller.ApiRegister)
+		api.Get("/verify/email", controller.ApiVerifyEmail)
+		api.Post("/verify/email", controller.ApiSendVerifyEmail)
+		api.Post("/password/reset", controller.ApiResetUserPassword)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
+		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)
 		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
 		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
 		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
 		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
-		api.Post("/order/create", middleware.UserAuth, controller.ApiCreateOrder)
+		api.Post("/order/create", controller.ApiCreateOrder)
+		api.Get("/order/addresses", middleware.UserAuth, controller.ApiGetOrderAddresses)
 		api.Get("/order/address", middleware.UserAuth, controller.ApiGetOrderAddress)
 		api.Post("/order/address", middleware.UserAuth, controller.ApiSaveOrderAddress)
-		api.Get("/order/detail", middleware.UserAuth, controller.ApiGetOrderDetail)
+		api.Get("/order/detail", controller.ApiGetOrderDetail)
 		api.Post("/order/cancel", middleware.UserAuth, controller.ApiCancelOrder)
 		api.Post("/order/refund", middleware.UserAuth, controller.ApiApplyRefundOrder)
 		api.Post("/order/finish", middleware.UserAuth, controller.ApiFinishedOrder)
-		api.Post("/order/payment", middleware.UserAuth, controller.ApiCreateOrderPayment)
+		api.Post("/order/payment", controller.ApiCreateOrderPayment)
 		api.Post("/weapp/qrcode", middleware.UserAuth, controller.ApiCreateWeappQrcode)
 		//检查支付情况
 		api.Get("/archive/order/check", controller.ApiArchiveOrderCheck)
@@ -84,35 +100,42 @@ func Register(app *iris.Application) {
 		api.Post("/retailer/withdraw", middleware.UserAuth, controller.ApiRetailerWithdraw)
 		api.Get("/retailer/members", middleware.UserAuth, controller.ApiGetRetailerMembers)
 		api.Get("/retailer/commissions", middleware.UserAuth, controller.ApiGetRetailerCommissions)
+		api.Get("/favorite/list", middleware.UserAuth, controller.ApiGetFavorites)
+		api.Post("/favorite/check", middleware.UserAuth, controller.ApiCheckFavorites)
+		api.Post("/favorite/add", middleware.UserAuth, controller.ApiAddFavorite)
+		api.Post("/favorite/delete", middleware.UserAuth, controller.ApiDeleteFavorite)
 		// 发布文档
 		api.Post("/archive/publish", middleware.UserAuth, controller.ApiArchivePublish)
 		// common api
-		api.Get("/archive/detail", controller.CheckApiOpen, controller.ApiArchiveDetail)
-		api.Get("/archive/filters", controller.CheckApiOpen, controller.ApiArchiveFilters)
-		api.Get("/archive/list", controller.CheckApiOpen, controller.ApiArchiveList)
-		api.Get("/archive/params", controller.CheckApiOpen, controller.ApiArchiveParams)
-		api.Get("/category/detail", controller.CheckApiOpen, controller.ApiCategoryDetail)
-		api.Get("/category/list", controller.CheckApiOpen, controller.ApiCategoryList)
-		api.Get("/module/detail", controller.CheckApiOpen, controller.ApiModuleDetail)
-		api.Get("/module/list", controller.CheckApiOpen, controller.ApiModuleList)
-		api.Get("/comment/list", controller.CheckApiOpen, controller.ApiCommentList)
-		api.Get("/setting/contact", controller.CheckApiOpen, controller.ApiContact)
-		api.Get("/setting/system", controller.CheckApiOpen, controller.ApiSystem)
-		api.Get("/setting/index", controller.CheckApiOpen, controller.ApiIndexTdk)
-		api.Get("/guestbook/fields", controller.CheckApiOpen, controller.CheckApiOpen, controller.ApiGuestbook)
-		api.Get("/friendlink/list", controller.CheckApiOpen, controller.ApiLinkList)
-		api.Get("/nav/list", controller.CheckApiOpen, controller.ApiNavList)
-		api.Get("/archive/next", controller.CheckApiOpen, controller.ApiNextArchive)
-		api.Get("/archive/prev", controller.CheckApiOpen, controller.ApiPrevArchive)
-		api.Get("/page/detail", controller.CheckApiOpen, controller.ApiPageDetail)
-		api.Get("/page/list", controller.CheckApiOpen, controller.ApiPageList)
-		api.Get("/tag/detail", controller.CheckApiOpen, controller.ApiTagDetail)
-		api.Get("/tag/data/list", controller.CheckApiOpen, controller.ApiTagDataList)
-		api.Get("/tag/list", controller.CheckApiOpen, controller.ApiTagList)
-		api.Get("/banner/list", controller.CheckApiOpen, controller.ApiBannerList)
+		api.Get("/archive/detail", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiArchiveDetail)
+		api.Get("/archive/filters", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiArchiveFilters)
+		api.Get("/archive/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiArchiveList)
+		api.Get("/archive/params", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiArchiveParams)
+		api.Get("/category/detail", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiCategoryDetail)
+		api.Get("/category/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiCategoryList)
+		api.Get("/module/detail", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiModuleDetail)
+		api.Get("/module/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiModuleList)
+		api.Get("/comment/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiCommentList)
+		api.Get("/setting/contact", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiContact)
+		api.Get("/setting/system", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiSystem)
+		api.Get("/setting/diy", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiDiyField)
+		api.Get("/setting/index", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiIndexTdk)
+		api.Get("/languages", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiLanguages)
+		api.Get("/guestbook/fields", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiGuestbook)
+		api.Get("/friendlink/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiLinkList)
+		api.Get("/nav/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiNavList)
+		api.Get("/archive/next", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiNextArchive)
+		api.Get("/archive/prev", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiPrevArchive)
+		api.Get("/page/detail", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiPageDetail)
+		api.Get("/page/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiPageList)
+		api.Get("/tag/detail", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagDetail)
+		api.Get("/tag/data/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagDataList)
+		api.Get("/tag/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagList)
+		api.Get("/banner/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiBannerList)
+		api.Get("/metadata", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiMetadata)
 		api.Post("/attachment/upload", controller.CheckApiOpen, controller.ApiAttachmentUpload)
 		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
-		api.Post("/comment/praise", controller.CheckApiOpen, controller.ApiCommentPraise)
+		api.Post("/comment/praise", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
 	}
 
@@ -121,8 +144,15 @@ func Register(app *iris.Application) {
 		notify.Get("/weapp/msg", controller.NotifyWeappMsg)
 		notify.Post("/wechat/pay", controller.NotifyWechatPay)
 		notify.Post("/alipay/pay", controller.NotifyAlipay)
+		notify.Post("/paypal/pay", controller.NotifyPayPal)
+	}
+
+	returnParty := app.Party("/return")
+	{
+		returnParty.Get("/paypal/pay", controller.PaypalReturnResult)
+		returnParty.Get("/paypal/cancel", controller.PaypalCancelResult)
 	}
 
 	//后台管理路由相关
-	manageRoute(app)
+	manageRoute(app, systemFiles)
 }

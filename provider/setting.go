@@ -6,15 +6,18 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/kataras/iris/v12/i18n"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
+	"log"
 	"os"
 	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kataras/iris/v12/i18n"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 )
 
 const (
@@ -27,29 +30,39 @@ const (
 	SensitiveWordsKey = "sensitive_words"
 	InstallTimeKey    = "install_time"
 	CacheTypeKey      = "cache_type"
+	DiyFieldsKey      = "diy_fields"
 
-	PushSettingKey        = "push"
-	SitemapSettingKey     = "sitemap"
-	RewriteSettingKey     = "rewrite"
-	AnchorSettingKey      = "anchor"
-	GuestbookSettingKey   = "guestbook"
-	UploadFilesSettingKey = "upload_file"
-	SendmailSettingKey    = "sendmail"
-	ImportApiSettingKey   = "import_api"
-	StorageSettingKey     = "storage"
-	PaySettingKey         = "pay"
-	WeappSettingKey       = "weapp"
-	WechatSettingKey      = "wechat"
-	RetailerSettingKey    = "retailer"
-	UserSettingKey        = "user"
-	OrderSettingKey       = "order"
-	FulltextSettingKey    = "fulltext"
-	TitleImageSettingKey  = "title_image"
-	WatermarkSettingKey   = "watermark"
-	HtmlCacheSettingKey   = "html_cache"
-	AnqiSettingKey        = "anqi"
-	AiGenerateSettingKey  = "ai_generate"
-	TimeFactorKey         = "time_factor"
+	PushSettingKey          = "push"
+	SitemapSettingKey       = "sitemap"
+	RewriteSettingKey       = "rewrite"
+	AnchorSettingKey        = "anchor"
+	GuestbookSettingKey     = "guestbook"
+	UploadFilesSettingKey   = "upload_file"
+	SendmailSettingKey      = "sendmail"
+	ImportApiSettingKey     = "import_api"
+	StorageSettingKey       = "storage"
+	PaySettingKey           = "pay"
+	WeappSettingKey         = "weapp"
+	WechatSettingKey        = "wechat"
+	RetailerSettingKey      = "retailer"
+	UserSettingKey          = "user"
+	OrderSettingKey         = "order"
+	FulltextSettingKey      = "fulltext"
+	TitleImageSettingKey    = "title_image"
+	WatermarkSettingKey     = "watermark"
+	HtmlCacheSettingKey     = "html_cache"
+	AnqiSettingKey          = "anqi"
+	AiGenerateSettingKey    = "ai_generate"
+	TimeFactorKey           = "time_factor"
+	LimiterSettingKey       = "limiter"
+	MultiLangSettingKey     = "multi_lang"
+	TranslateSettingKey     = "translate"
+	JsonLdSettingKey        = "json_ld"
+	TagFieldsSettingKey     = "tag_fields"
+	AkismetSettingKey       = "akismet"
+	GoogleAuthSettingKey    = "google_auth"
+	CurrencySettingKey      = "currency"
+	CommunicationSettingKey = "communication"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -65,54 +78,67 @@ func SetI18n(i *i18n.I18n) {
 }
 
 func (w *Website) InitSetting() {
+	if w.DB == nil {
+		return
+	}
 	// load setting from db
-	w.LoadSystemSetting()
-	w.LoadContentSetting()
-	w.LoadIndexSetting()
-	w.LoadContactSetting()
-	w.LoadSafeSetting()
-	w.LoadBannerSetting()
-	w.LoadSensitiveWords()
+	var settings []*model.Setting
+	w.DB.Find(&settings)
+	var settingMap = map[string]string{}
+	for _, item := range settings {
+		settingMap[item.Key] = item.Value
+	}
+	w.LoadSystemSetting(settingMap[SystemSettingKey])
+	w.LoadContentSetting(settingMap[ContentSettingKey])
+	w.LoadIndexSetting(settingMap[IndexSettingKey])
+	w.LoadContactSetting(settingMap[ContactSettingKey])
+	w.LoadSafeSetting(settingMap[SafeSettingKey])
+	w.LoadBannerSetting(settingMap[BannerSettingKey])
+	w.LoadSensitiveWords(settingMap[SensitiveWordsKey])
 
-	w.LoadPushSetting()
-	w.LoadSitemapSetting()
-	w.LoadRewriteSetting()
-	w.LoadAnchorSetting()
-	w.LoadGuestbookSetting()
-	w.LoadUploadFilesSetting()
-	w.LoadSendmailSetting()
-	w.LoadImportApiSetting()
-	w.LoadStorageSetting()
-	w.LoadPaySetting()
-	w.LoadWeappSetting()
-	w.LoadWechatSetting()
-	w.LoadRetailerSetting()
-	w.LoadUserSetting()
-	w.LoadOrderSetting()
-	w.LoadFulltextSetting()
-	w.LoadTitleImageSetting()
-	w.LoadHtmlCacheSetting()
-	w.LoadAnqiUser()
-	w.LoadAiGenerateSetting()
-	w.LoadCollectorSetting()
-	w.LoadKeywordSetting()
-	w.LoadInterferenceSetting()
-	w.LoadWatermarkSetting()
+	w.LoadPushSetting(settingMap[PushSettingKey])
+	w.LoadSitemapSetting(settingMap[SitemapSettingKey])
+	w.LoadRewriteSetting(settingMap[RewriteSettingKey])
+	w.LoadAnchorSetting(settingMap[AnchorSettingKey])
+	w.LoadGuestbookSetting(settingMap[GuestbookSettingKey])
+	w.LoadUploadFilesSetting(settingMap[UploadFilesSettingKey])
+	w.LoadSendmailSetting(settingMap[SendmailSettingKey])
+	w.LoadImportApiSetting(settingMap[ImportApiSettingKey])
+	w.LoadStorageSetting(settingMap[StorageSettingKey])
+	w.LoadPaySetting(settingMap[PaySettingKey])
+	w.LoadWeappSetting(settingMap[WeappSettingKey])
+	w.LoadWechatSetting(settingMap[WechatSettingKey])
+	w.LoadRetailerSetting(settingMap[RetailerSettingKey])
+	w.LoadUserSetting(settingMap[UserSettingKey])
+	w.LoadOrderSetting(settingMap[OrderSettingKey])
+	w.LoadFulltextSetting(settingMap[FulltextSettingKey])
+	w.LoadTitleImageSetting(settingMap[TitleImageSettingKey])
+	w.LoadHtmlCacheSetting(settingMap[HtmlCacheSettingKey])
+	w.LoadAnqiUser(settingMap[AnqiSettingKey])
+	w.LoadAiGenerateSetting(settingMap[AiGenerateSettingKey])
+	w.LoadCollectorSetting(settingMap[CollectorSettingKey])
+	w.LoadKeywordSetting(settingMap[KeywordSettingKey])
+	w.LoadInterferenceSetting(settingMap[InterferenceKey])
+	w.LoadWatermarkSetting(settingMap[WatermarkSettingKey])
+	w.LoadTimeFactorSetting(settingMap[TimeFactorKey])
+	w.LoadMultiLangSetting(settingMap[MultiLangSettingKey])
+	w.LoadTranslateSetting(settingMap[TranslateSettingKey])
+	w.LoadJsonLdSetting(settingMap[JsonLdSettingKey])
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
 
-func (w *Website) LoadSystemSetting() {
-	value := w.GetSettingValue(SystemSettingKey)
+func (w *Website) LoadSystemSetting(value string) {
+	w.System = &config.SystemConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.System)
+		_ = json.Unmarshal([]byte(value), w.System)
 	}
 	//如果没有设置模板，则默认是default
 	if w.System.TemplateName == "" {
 		w.System.TemplateName = "default"
 	}
 	if w.System.Language == "" {
-		w.System.Language = "zh"
+		w.System.Language = "zh-CN"
 	}
 	// 默认站点
 	if w.Id == 1 {
@@ -120,52 +146,118 @@ func (w *Website) LoadSystemSetting() {
 	}
 }
 
-func (w *Website) LoadContentSetting() {
-	value := w.GetSettingValue(ContentSettingKey)
+func (w *Website) LoadContentSetting(value string) {
+	w.Content = &config.ContentConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Content)
+		_ = json.Unmarshal([]byte(value), w.Content)
+	}
+	if w.Content.MaxPage < 1 {
+		w.Content.MaxPage = 1000
+	}
+	if w.Content.MaxLimit < 1 {
+		w.Content.MaxLimit = 100
+	}
+	if w.Content.DefaultThumb != "" && len(w.Content.DefaultThumbs) == 0 {
+		w.Content.DefaultThumbs = []string{w.Content.DefaultThumb}
 	}
 }
 
-func (w *Website) LoadIndexSetting() {
-	value := w.GetSettingValue(IndexSettingKey)
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Index)
+func (w *Website) GetDefaultThumb(tmpId int) string {
+	if w.Content.DefaultThumbType == 0 {
+		if len(w.Content.DefaultThumbs) == 0 {
+			return ""
+		}
+		if len(w.Content.DefaultThumbs) == 1 {
+			return w.Content.DefaultThumbs[0]
+		}
+		// 随机一个
+		return w.Content.DefaultThumbs[tmpId%len(w.Content.DefaultThumbs)]
+	} else {
+		cacheKey := fmt.Sprintf("tiny-attachments-%d", w.Content.ThumbCategoryId)
+		var attaches []*response.TinyAttachment
+		err := w.Cache.Get(cacheKey, &attaches)
+		if err != nil {
+			attaches = w.GetCategoryImages(w.Content.ThumbCategoryId)
+			w.Cache.Set(cacheKey, attaches, 600)
+		}
+		if len(attaches) == 0 {
+			return ""
+		}
+		if len(attaches) == 1 {
+			return attaches[0].FileLocation
+		}
+		return attaches[tmpId%len(attaches)].FileLocation
 	}
 }
 
-func (w *Website) LoadBannerSetting() {
-	value := w.GetSettingValue(BannerSettingKey)
+func (w *Website) LoadIndexSetting(value string) {
+	w.Index = &config.IndexConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Banner)
+		_ = json.Unmarshal([]byte(value), w.Index)
 	}
 }
 
-func (w *Website) LoadSensitiveWords() {
-	value := w.GetSettingValue(SensitiveWordsKey)
+func (w *Website) LoadBannerSetting(value string) {
+	w.Banner = &config.BannerConfig{}
+	if value != "" {
+		err := json.Unmarshal([]byte(value), &w.Banner)
+		if err != nil {
+			// 旧版的，做一下兼容
+			var banners []config.BannerItem
+			if err = json.Unmarshal([]byte(value), &banners); err == nil {
+				for i := range banners {
+					if banners[i].Type == "" {
+						banners[i].Type = "default"
+					}
+				}
+				var mapBanners = map[string][]config.BannerItem{}
+				for _, v := range banners {
+					mapBanners[v.Type] = append(mapBanners[v.Type], v)
+				}
+				for i := range banners {
+					if item, ok := mapBanners[banners[i].Type]; ok {
+						banner := config.Banner{
+							Type: banners[i].Type,
+							List: item,
+						}
+						w.Banner.Banners = append(w.Banner.Banners, banner)
+						delete(mapBanners, banners[i].Type)
+					}
+				}
+			}
+		}
+	}
+	if len(w.Banner.Banners) == 0 {
+		w.Banner.Banners = append(w.Banner.Banners, config.Banner{
+			Type: "default",
+		})
+	}
+}
+
+func (w *Website) LoadSensitiveWords(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.SensitiveWords)
 	}
 }
 
-func (w *Website) LoadContactSetting() {
-	value := w.GetSettingValue(ContactSettingKey)
+func (w *Website) LoadContactSetting(value string) {
+	w.Contact = &config.ContactConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Contact)
+		_ = json.Unmarshal([]byte(value), w.Contact)
 	}
 }
 
-func (w *Website) LoadSafeSetting() {
-	value := w.GetSettingValue(SafeSettingKey)
+func (w *Website) LoadSafeSetting(value string) {
+	w.Safe = &config.SafeConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.Safe)
+		_ = json.Unmarshal([]byte(value), w.Safe)
 	}
 }
 
-func (w *Website) LoadPushSetting() {
-	value := w.GetSettingValue(PushSettingKey)
+func (w *Website) LoadPushSetting(value string) {
+	w.PluginPush = &config.PluginPushConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginPush)
+		_ = json.Unmarshal([]byte(value), w.PluginPush)
 	}
 	// 兼容旧版 jscode
 	if w.PluginPush.JsCode != "" {
@@ -179,10 +271,10 @@ func (w *Website) LoadPushSetting() {
 	}
 }
 
-func (w *Website) LoadSitemapSetting() {
-	value := w.GetSettingValue(SitemapSettingKey)
+func (w *Website) LoadSitemapSetting(value string) {
+	w.PluginSitemap = &config.PluginSitemapConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginSitemap)
+		_ = json.Unmarshal([]byte(value), w.PluginSitemap)
 	}
 	// sitemap
 	if w.PluginSitemap.Type != "xml" {
@@ -190,48 +282,47 @@ func (w *Website) LoadSitemapSetting() {
 	}
 }
 
-func (w *Website) LoadRewriteSetting() {
-	value := w.GetSettingValue(RewriteSettingKey)
+func (w *Website) LoadRewriteSetting(value string) {
+	w.PluginRewrite = &config.PluginRewriteConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginRewrite)
+		_ = json.Unmarshal([]byte(value), w.PluginRewrite)
 	}
 }
 
-func (w *Website) LoadAnchorSetting() {
-	value := w.GetSettingValue(AnchorSettingKey)
+func (w *Website) LoadAnchorSetting(value string) {
+	w.PluginAnchor = &config.PluginAnchorConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginAnchor)
+		_ = json.Unmarshal([]byte(value), w.PluginAnchor)
 	}
 }
 
-func (w *Website) LoadGuestbookSetting() {
-	value := w.GetSettingValue(GuestbookSettingKey)
+func (w *Website) LoadGuestbookSetting(value string) {
+	w.PluginGuestbook = &config.PluginGuestbookConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginGuestbook)
+		_ = json.Unmarshal([]byte(value), w.PluginGuestbook)
 	}
 }
 
-func (w *Website) LoadUploadFilesSetting() {
-	value := w.GetSettingValue(UploadFilesSettingKey)
+func (w *Website) LoadUploadFilesSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.PluginUploadFiles)
 	}
 }
 
-func (w *Website) LoadSendmailSetting() {
-	value := w.GetSettingValue(SendmailSettingKey)
+func (w *Website) LoadSendmailSetting(value string) {
+	w.PluginSendmail = &config.PluginSendmail{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginSendmail)
+		_ = json.Unmarshal([]byte(value), w.PluginSendmail)
 	}
 	if len(w.PluginSendmail.SendType) == 0 {
 		w.PluginSendmail.SendType = []int{SendTypeGuestbook}
 	}
 }
 
-func (w *Website) LoadImportApiSetting() {
-	value := w.GetSettingValue(ImportApiSettingKey)
+func (w *Website) LoadImportApiSetting(value string) {
+	w.PluginImportApi = &config.PluginImportApiConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginImportApi)
+		_ = json.Unmarshal([]byte(value), w.PluginImportApi)
 	}
 	// 导入API生成
 	if w.PluginImportApi.Token == "" || w.PluginImportApi.LinkToken == "" {
@@ -249,62 +340,62 @@ func (w *Website) LoadImportApiSetting() {
 
 }
 
-func (w *Website) LoadStorageSetting() {
-	value := w.GetSettingValue(StorageSettingKey)
+func (w *Website) LoadStorageSetting(value string) {
+	w.PluginStorage = &config.PluginStorageConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginStorage)
-	}
-	// 配置默认的storageUrl
-	if w.PluginStorage.StorageUrl == "" {
-		w.PluginStorage.StorageUrl = w.System.BaseUrl
+		_ = json.Unmarshal([]byte(value), w.PluginStorage)
 	}
 	if w.PluginStorage.StorageType == "" {
 		w.PluginStorage.StorageType = config.StorageTypeLocal
 	}
-}
-
-func (w *Website) LoadPaySetting() {
-	value := w.GetSettingValue(PaySettingKey)
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginPay)
+	// 配置默认的storageUrl
+	if w.PluginStorage.StorageUrl == "" || w.PluginStorage.StorageType == config.StorageTypeLocal {
+		w.PluginStorage.StorageUrl = w.System.BaseUrl
 	}
 }
 
-func (w *Website) LoadWeappSetting() {
-	value := w.GetSettingValue(WeappSettingKey)
+func (w *Website) LoadPaySetting(value string) {
+	w.PluginPay = &config.PluginPayConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginWeapp)
+		_ = json.Unmarshal([]byte(value), w.PluginPay)
 	}
 }
 
-func (w *Website) LoadWechatSetting() {
-	value := w.GetSettingValue(WechatSettingKey)
+func (w *Website) LoadWeappSetting(value string) {
+	w.PluginWeapp = &config.PluginWeappConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginWechat)
+		_ = json.Unmarshal([]byte(value), w.PluginWeapp)
 	}
 }
 
-func (w *Website) LoadRetailerSetting() {
-	value := w.GetSettingValue(RetailerSettingKey)
+func (w *Website) LoadWechatSetting(value string) {
+	w.PluginWechat = &config.PluginWeappConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginRetailer)
+		_ = json.Unmarshal([]byte(value), w.PluginWechat)
 	}
 }
 
-func (w *Website) LoadUserSetting() {
-	value := w.GetSettingValue(UserSettingKey)
+func (w *Website) LoadRetailerSetting(value string) {
+	w.PluginRetailer = &config.PluginRetailerConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginUser)
+		_ = json.Unmarshal([]byte(value), w.PluginRetailer)
+	}
+}
+
+func (w *Website) LoadUserSetting(value string) {
+	w.PluginUser = &config.PluginUserConfig{}
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), w.PluginUser)
 	}
 	if w.PluginUser.DefaultGroupId == 0 {
 		w.PluginUser.DefaultGroupId = 1
 	}
 }
 
-func (w *Website) LoadOrderSetting() {
-	value := w.GetSettingValue(OrderSettingKey)
+func (w *Website) LoadOrderSetting(value string) {
+	w.PluginOrder = &config.PluginOrderConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginOrder)
+		_ = json.Unmarshal([]byte(value), w.PluginOrder)
 	}
 	if w.PluginOrder.AutoFinishDay <= 0 {
 		// default auto finish day
@@ -312,17 +403,17 @@ func (w *Website) LoadOrderSetting() {
 	}
 }
 
-func (w *Website) LoadFulltextSetting() {
-	value := w.GetSettingValue(FulltextSettingKey)
+func (w *Website) LoadFulltextSetting(value string) {
+	w.PluginFulltext = &config.PluginFulltextConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginFulltext)
+		_ = json.Unmarshal([]byte(value), w.PluginFulltext)
 	}
 }
 
-func (w *Website) LoadTitleImageSetting() {
-	value := w.GetSettingValue(TitleImageSettingKey)
+func (w *Website) LoadTitleImageSetting(value string) {
+	w.PluginTitleImage = &config.PluginTitleImageConfig{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginTitleImage)
+		_ = json.Unmarshal([]byte(value), w.PluginTitleImage)
 	}
 	if w.PluginTitleImage.Width == 0 {
 		w.PluginTitleImage.Width = 800
@@ -338,10 +429,10 @@ func (w *Website) LoadTitleImageSetting() {
 	}
 }
 
-func (w *Website) LoadWatermarkSetting() {
-	value := w.GetSettingValue(WatermarkSettingKey)
+func (w *Website) LoadWatermarkSetting(value string) {
+	w.PluginWatermark = &config.PluginWatermark{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginWatermark)
+		_ = json.Unmarshal([]byte(value), w.PluginWatermark)
 	}
 	if w.PluginWatermark.Size == 0 {
 		w.PluginWatermark.Size = 20
@@ -360,10 +451,10 @@ func (w *Website) LoadWatermarkSetting() {
 	}
 }
 
-func (w *Website) LoadHtmlCacheSetting() {
-	value := w.GetSettingValue(HtmlCacheSettingKey)
+func (w *Website) LoadHtmlCacheSetting(value string) {
+	w.PluginHtmlCache = &config.PluginHtmlCache{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginHtmlCache)
+		_ = json.Unmarshal([]byte(value), w.PluginHtmlCache)
 	}
 	// if no item, set to default
 	// index default cache 5 minutes
@@ -376,8 +467,7 @@ func (w *Website) LoadHtmlCacheSetting() {
 	}
 }
 
-func (w *Website) LoadAnqiUser() {
-	value := w.GetSettingValue(AnqiSettingKey)
+func (w *Website) LoadAnqiUser(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &config.AnqiUser)
 	}
@@ -385,22 +475,21 @@ func (w *Website) LoadAnqiUser() {
 	go w.AnqiCheckLogin(false)
 }
 
-func (w *Website) LoadAiGenerateSetting() {
-	value := w.GetSettingValue(AiGenerateSettingKey)
+func (w *Website) LoadAiGenerateSetting(value string) {
+	w.AiGenerateConfig = &config.AiGenerateConfig{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &w.AiGenerateConfig); err != nil {
+	if err := json.Unmarshal([]byte(value), w.AiGenerateConfig); err != nil {
 		return
 	}
 }
 
-func (w *Website) LoadCollectorSetting() {
+func (w *Website) LoadCollectorSetting(value string) {
 	//先读取默认配置
-	w.CollectorConfig = config.DefaultCollectorConfig
+	w.CollectorConfig = &config.DefaultCollectorConfig
 	//再根据用户配置来覆盖
-	value := w.GetSettingValue(CollectorSettingKey)
 	if value == "" {
 		return
 	}
@@ -410,6 +499,15 @@ func (w *Website) LoadCollectorSetting() {
 		return
 	}
 
+	// 配置代理
+	if collector.ProxyConfig.Open && collector.ProxyConfig.ApiUrl != "" {
+		w.CollectorConfig.ProxyConfig = collector.ProxyConfig
+		// 启用代理
+		w.Proxy = NewProxyIPs(&w.CollectorConfig.ProxyConfig)
+	} else {
+		// 释放代理
+		w.Proxy = nil
+	}
 	//开始处理
 	if collector.ErrorTimes != 0 {
 		w.CollectorConfig.ErrorTimes = collector.ErrorTimes
@@ -520,17 +618,15 @@ func (w *Website) LoadCollectorSetting() {
 	}
 }
 
-func (w *Website) LoadKeywordSetting() {
+func (w *Website) LoadKeywordSetting(value string) {
 	//先读取默认配置
-	w.KeywordConfig = config.DefaultKeywordConfig
-	value := w.GetSettingValue(KeywordSettingKey)
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.KeywordConfig)
-	}
+	w.KeywordConfig = &config.DefaultKeywordConfig
 	//再根据用户配置来覆盖
 	if value == "" {
 		return
 	}
+
+	_ = json.Unmarshal([]byte(value), w.KeywordConfig)
 
 	var keyword config.KeywordJson
 	if err := json.Unmarshal([]byte(value), &keyword); err != nil {
@@ -565,34 +661,123 @@ func (w *Website) LoadKeywordSetting() {
 	}
 }
 
-func (w *Website) GetTimeFactorSetting() (setting config.PluginTimeFactor) {
-	value := w.GetSettingValue(TimeFactorKey)
+func (w *Website) LoadTimeFactorSetting(value string) {
+	w.PluginTimeFactor = &config.PluginTimeFactor{}
 	if value == "" {
 		return
 	}
 
-	if err := json.Unmarshal([]byte(value), &setting); err != nil {
+	if err := json.Unmarshal([]byte(value), w.PluginTimeFactor); err != nil {
 		return
 	}
 
 	return
 }
 
-// Tr as Translate, formats according to a format specifier and returns the resulting string after translate.
-// 这是一个兼容函数，请使用 ctx.Tr
-func (w *Website) Tr(str string, args ...interface{}) string {
-	if I18n != nil {
-		return I18n.Tr(w.backLanguage, str, args...)
+func (w *Website) LoadMultiLangSetting(value string) {
+	w.MultiLanguage = &config.PluginMultiLangConfig{}
+	if value == "" {
+		return
 	}
 
-	return fmt.Sprintf(str, args...)
+	if err := json.Unmarshal([]byte(value), w.MultiLanguage); err != nil {
+		return
+	}
+	if w.MultiLanguage.SiteType == "" {
+		w.MultiLanguage.SiteType = config.MultiLangSiteTypeMulti
+	}
+	w.MultiLanguage.DefaultLanguage = w.System.Language
+	return
+}
+
+func (w *Website) LoadTranslateSetting(value string) {
+	w.PluginTranslate = &config.PluginTranslateConfig{}
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), w.PluginTranslate); err != nil {
+		return
+	}
+
+	return
+}
+
+func (w *Website) LoadJsonLdSetting(value string) {
+	w.PluginJsonLd = &config.PluginJsonLdConfig{}
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), w.PluginJsonLd); err != nil {
+		return
+	}
+
+	return
+}
+
+func (w *Website) GetDiyFieldSetting() []config.ExtraField {
+	var fields []config.ExtraField
+	err := w.Cache.Get(DiyFieldsKey, &fields)
+	if err != nil {
+		value := w.GetSettingValue(DiyFieldsKey)
+		if value != "" {
+			err = json.Unmarshal([]byte(value), &fields)
+			if err == nil {
+				_ = w.Cache.Set(DiyFieldsKey, fields, 86400)
+			}
+		}
+	}
+
+	return fields
+}
+
+// Tr as Translate
+// 这是一个兼容函数，请使用 ctx.Tr
+func (w *Website) Tr(str string, args ...interface{}) string {
+	if I18n == nil {
+		I18n = i18n.New()
+		err := I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)
+		if err != nil {
+			log.Println("languages err", err)
+			I18n.LoadKV(i18n.LangMap{"zh-CN": map[string]interface{}{"anqicms": "安企CMS"}}, "zh-CN")
+		}
+		// default to chinese
+		lang, exists := os.LookupEnv("LANG")
+		if !exists {
+			lang = "zh-CN"
+		} else {
+			lang = strings.ReplaceAll(strings.Split(lang, ".")[0], "_", "-")
+		}
+		I18n.SetDefault(lang)
+	}
+	if I18n != nil && w != nil {
+		tmpStr := I18n.Tr(w.backLanguage, str, args...)
+		if tmpStr != "" {
+			return tmpStr
+		}
+	}
+
+	//return fmt.Sprintf(str, args...)
+	if len(args) > 0 {
+		return str + fmt.Sprintf("%v", args)
+	}
+	return str
 }
 
 func (w *Website) TplTr(str string, args ...interface{}) string {
-	if I18n != nil {
-		return I18n.Tr(w.System.Language, str, args...)
+	if w.TplI18n != nil {
+		tmpStr := w.TplI18n.Tr(w.System.Language, str, args...)
+		if tmpStr != "" {
+			return tmpStr
+		}
 	}
-
+	if I18n != nil {
+		tmpStr := I18n.Tr(w.System.Language, str, args...)
+		if tmpStr != "" {
+			return tmpStr
+		}
+	}
 	return fmt.Sprintf(str, args...)
 }
 
@@ -638,7 +823,7 @@ func (w *Website) DeleteCache() {
 	// todo, 清理缓存
 	w.Cache.CleanAll()
 	// 释放词典
-	library.DictClose()
+	DictClose()
 	// 记录
 	filePath := w.CachePath + "cache_clear.log"
 	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
@@ -692,6 +877,17 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 		}
 		if bytes.Contains(content, []byte(word)) {
 			content = bytes.ReplaceAll(content, []byte(word), bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
+		} else {
+			// 增加支持正则表达式替换，定义正则表达式以{开头}结束，如：{[1-9]\d{4,10}}
+			if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
+				// 移除首尾花括号
+				newWord := word[1 : len(word)-1]
+				re, err := regexp.Compile(newWord)
+				if err == nil {
+					content = re.ReplaceAll(content, bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
+				}
+				continue
+			}
 		}
 	}
 	// 替换回来
@@ -702,9 +898,92 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 	return content
 }
 
-func (w *Website) LoadInterferenceSetting() {
-	value := w.GetSettingValue(InterferenceKey)
+func (w *Website) LoadInterferenceSetting(value string) {
+	w.PluginInterference = &config.PluginInterference{}
 	if value != "" {
-		_ = json.Unmarshal([]byte(value), &w.PluginInterference)
+		_ = json.Unmarshal([]byte(value), w.PluginInterference)
 	}
+}
+
+func (w *Website) GetLimiterSetting() *config.PluginLimiter {
+	var limiter config.PluginLimiter
+	value := w.GetSettingValue(LimiterSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &limiter)
+	}
+
+	return &limiter
+}
+
+func (w *Website) GetAkismetSetting() *config.PluginAkismetConfig {
+	var cfg config.PluginAkismetConfig
+	value := w.GetSettingValue(AkismetSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &cfg)
+	}
+
+	return &cfg
+}
+
+func (w *Website) GetGoogleAuthSetting() *config.PluginGoogleAuthConfig {
+	var cfg config.PluginGoogleAuthConfig
+	value := w.GetSettingValue(GoogleAuthSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &cfg)
+	}
+	cfg.RedirectUrl = w.System.BaseUrl + "/login/google"
+
+	return &cfg
+}
+
+func (w *Website) ReplaceContentUrl(content string, reverse bool) string {
+	if len(content) == 0 {
+		return content
+	}
+	// todo，替换的时候，还需要考虑 Markdown
+	// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
+	mdRe, _ := regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
+	if mdRe.MatchString(content) {
+		content = mdRe.ReplaceAllStringFunc(content, func(s string) string {
+			match := mdRe.FindStringSubmatch(s)
+			if len(match) < 3 {
+				return s
+			}
+			if reverse {
+				// 恢复
+				if strings.HasPrefix(match[2], "/uploads") {
+					s = strings.Replace(s, match[2], w.PluginStorage.StorageUrl+match[2], 1)
+				}
+			} else {
+				s = strings.Replace(s, match[2], strings.TrimPrefix(match[2], w.PluginStorage.StorageUrl), 1)
+			}
+
+			return s
+		})
+	}
+
+	if reverse {
+		// 支持替换url
+		if strings.HasPrefix(content, "/uploads") {
+			content = w.PluginStorage.StorageUrl + content
+		} else {
+			// 恢复
+			content = strings.ReplaceAll(content, "\"/uploads", "\""+w.PluginStorage.StorageUrl+"/uploads")
+		}
+		return content
+	} else {
+		// todo 应该只替换 src,href 中的 baseUrl
+		// 图片都上传到 uploads
+		if strings.HasPrefix(content, w.PluginStorage.StorageUrl) {
+			content = strings.TrimPrefix(content, w.PluginStorage.StorageUrl)
+		} else {
+			content = strings.ReplaceAll(content, "\""+w.PluginStorage.StorageUrl+"/uploads", "\"/uploads")
+			// 如果baseUrl 是 127.0.0.1 或者localhost，则把它们全部替换
+			if strings.Contains(w.System.BaseUrl, "127.0.0.1") || strings.Contains(w.System.BaseUrl, "localhost") {
+				content = strings.ReplaceAll(content, w.System.BaseUrl, "")
+			}
+		}
+	}
+
+	return content
 }

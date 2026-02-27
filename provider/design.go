@@ -6,13 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"gorm.io/gorm/clause"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"mime/multipart"
 	"os"
 	"path"
@@ -20,6 +14,13 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func (w *Website) GetDesignList() []response.DesignPackage {
@@ -274,7 +275,7 @@ func (w *Website) GetDesignTemplateFiles(packageName string) ([]response.DesignF
 	return templates, nil
 }
 
-func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) error {
+func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader, cover string) error {
 	// 解压
 	zipReader, err := zip.NewReader(file, info.Size)
 	if err != nil {
@@ -299,15 +300,20 @@ func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader) 
 	_, err = os.Stat(packagePath)
 	if err == nil {
 		// 已存在
-		i := 1
-		for {
-			packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
-			_, err = os.Stat(packagePath)
-			if err != nil {
-				packageName = fmt.Sprintf("%s%d", packageName, i)
-				break
+		if cover == "cover" {
+			// 覆盖
+		} else {
+			// 新名称
+			i := 1
+			for {
+				packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
+				_, err = os.Stat(packagePath)
+				if err != nil {
+					packageName = fmt.Sprintf("%s%d", packageName, i)
+					break
+				}
+				i++
 			}
-			i++
 		}
 	}
 
@@ -439,6 +445,7 @@ func compress(file *os.File, prefix string, zw *zip.Writer) error {
 	} else {
 		header, err := zip.FileInfoHeader(info)
 		header.Name = prefix + header.Name
+		header.Method = zip.Deflate
 		if err != nil {
 			return err
 		}
@@ -1155,6 +1162,7 @@ func (w *Website) SaveDesignStaticFile(req request.SaveDesignFileRequest) error 
 }
 
 func (w *Website) RestoreDesignData(packageName string) error {
+	w2 := GetWebsite(w.Id)
 	dataPath := w.RootPath + "template/" + packageName + "/data.db"
 	_, err := os.Stat(dataPath)
 	if err != nil {
@@ -1169,11 +1177,11 @@ func (w *Website) RestoreDesignData(packageName string) error {
 
 	settings, err := zipReader.Open("settings")
 	if err == nil {
-		w.restoreSingleData("settings", settings)
+		w2.restoreSingleData("settings", settings)
 	}
 	modules, err := zipReader.Open("modules")
 	if err == nil {
-		w.restoreSingleData("modules", modules)
+		w2.restoreSingleData("modules", modules)
 	}
 	// 需要先处理 settings 和 modules，再开始处理其他表
 	for _, f := range zipReader.File {
@@ -1184,10 +1192,11 @@ func (w *Website) RestoreDesignData(packageName string) error {
 		if err != nil {
 			continue
 		}
-		w.restoreSingleData(f.Name, reader)
+		w2.restoreSingleData(f.Name, reader)
 		reader.Close()
 	}
-
+	// 更新缓存
+	w2.Cache.CleanAll()
 	return nil
 }
 
@@ -1516,10 +1525,14 @@ func (w *Website) BackupDesignData(packageName string) error {
 	var archives []model.Archive
 	w.DB.Order("`id` desc").Limit(maxLimit).Find(&archives)
 	if len(archives) > 0 {
-		var archiveIds = make([]uint, 0, len(archives))
+		var archiveIds = make([]int64, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
-			archives[i].Extra = w.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, false)
+			extras := w.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, false)
+			archives[i].Extra = make(map[string]model.CustomField, len(extras))
+			for j := range extras {
+				archives[i].Extra[j] = *extras[j]
+			}
 		}
 		_ = w.writeDataToZip("archives", archives, zw)
 		var archiveData []model.ArchiveData
@@ -1654,6 +1667,7 @@ func (w *Website) writeFileToZip(name string, filePath string, zw *zip.Writer) e
 	info, _ := file.Stat()
 	header, err := zip.FileInfoHeader(info)
 	header.Name = name
+	header.Method = zip.Deflate
 	if err != nil {
 		return err
 	}
@@ -1681,6 +1695,7 @@ func (w *Website) writeDataToZip(name string, data interface{}, zw *zip.Writer) 
 	header := &zip.FileHeader{
 		Name:               name,
 		UncompressedSize64: uint64(size),
+		Method:             zip.Deflate,
 	}
 	header.Modified = time.Now()
 	header.SetMode(os.ModePerm)

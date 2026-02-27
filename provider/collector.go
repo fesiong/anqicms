@@ -1,9 +1,19 @@
 package provider
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"math/rand"
+	"net/url"
+	"regexp"
+	"strings"
+	"sync"
+	"time"
+	"unicode/utf8"
+
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jinzhu/now"
 	"kandaoni.com/anqicms/config"
@@ -11,13 +21,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"log"
-	"math/rand"
-	"net/url"
-	"regexp"
-	"strings"
-	"time"
-	"unicode/utf8"
 )
 
 var emptyLinkPatternStr = `(^data:)|(^tel:)|(^mailto:)|(about:blank)|(javascript:)`
@@ -97,7 +100,7 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 
 	_ = w.SaveSettingValue(CollectorSettingKey, collector)
 	//重新读取配置
-	w.LoadCollectorSetting()
+	w.LoadCollectorSetting(w.GetSettingValue(CollectorSettingKey))
 	if collector.AutoCollect {
 		go w.CollectArticles()
 	}
@@ -105,21 +108,19 @@ func (w *Website) SaveUserCollectorSetting(req config.CollectorJson, focus bool)
 	return nil
 }
 
-var runningCollectArticles = false
-
 func (w *Website) CollectArticles() {
-	if w.DB == nil {
+	if w.DB == nil || w.CollectorConfig == nil {
 		return
 	}
 	if !w.CollectorConfig.AutoCollect {
 		return
 	}
-	if runningCollectArticles {
+	if w.CollectorConfig.IsRunning {
 		return
 	}
-	runningCollectArticles = true
+	w.CollectorConfig.IsRunning = true
 	defer func() {
-		runningCollectArticles = false
+		w.CollectorConfig.IsRunning = false
 	}()
 
 	if w.CollectorConfig.StartHour > 0 && time.Now().Hour() < w.CollectorConfig.StartHour {
@@ -131,45 +132,70 @@ func (w *Website) CollectArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
+	if w.CollectorConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
 		return
 	}
 
-	lastId := uint(0)
+	var maxId int64
+	var minId int64
+	db := w.DB.Model(model.Keyword{}).Where("last_time = 0")
+	db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
+	db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
+	if maxId <= 0 || minId <= 0 {
+		return
+	}
+	var maxTry = maxId - minId + 1
+	var errTimes = 0
 	for {
-		var keywords []*model.Keyword
-		w.DB.Where("id > ? and last_time = 0", lastId).Order("id asc").Limit(10).Find(&keywords)
-		if len(keywords) == 0 {
+		maxTry--
+		if maxTry < 0 {
 			break
 		}
-		lastId = keywords[len(keywords)-1].Id
-		for i := 0; i < len(keywords); i++ {
-			keyword := keywords[i]
-			// 检查是否采集过
-			if w.checkArticleExists(keyword.Title, "", "") {
-				// 跳过这个关键词
-				if keyword.ArticleCount == 0 {
-					keyword.ArticleCount = 1
-				}
-				keyword.LastTime = time.Now().Unix()
-				w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
-				//log.Println("已存在于数据库", keyword.Title)
-				continue
+		if errTimes > 10 {
+			break
+		}
+
+		randId := minId
+		if maxId > minId {
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			randId = rd.Int63n(maxId-minId) + minId
+		}
+		var keyword model.Keyword
+		err := w.DB.Where("id >= ? and last_time = 0", randId).Order("id asc").Take(&keyword).Error
+		if err != nil {
+			// 重试
+			log.Println("采集关键词获取失败，正在重试...")
+			time.Sleep(time.Second)
+			continue
+		}
+		// 检查是否采集过
+		if w.checkArticleExists(keyword.Title, "", "") {
+			// 跳过这个关键词
+			if keyword.ArticleCount == 0 {
+				keyword.ArticleCount = 1
 			}
-			total, err := w.CollectArticlesByKeyword(*keyword, false)
-			log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
-			// 达到数量了，退出
-			if w.GetTodayArticleCount(config.ArchiveFromCollect) > int64(w.CollectorConfig.DailyLimit) {
-				return
-			}
-			// 每个关键词都需要间隔30秒以上
+			keyword.LastTime = time.Now().Unix()
+			w.DB.Model(keyword).Select("article_count", "last_time").Updates(keyword)
+			//log.Println("已存在于数据库", keyword.Title)
+			continue
+		}
+		total, err := w.CollectArticlesByKeyword(keyword, false)
+		log.Printf("关键词：%s 采集了 %d 篇文章, %v", keyword.Title, total, err)
+		// 达到数量了，退出
+		if w.CollectorConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromCollect) >= int64(w.CollectorConfig.DailyLimit) {
+			return
+		}
+		// 如果没有使用代理，则每个关键词都需要间隔30秒以上
+		if w.Proxy == nil {
 			time.Sleep(time.Duration(20+rand.Intn(20)) * time.Second)
-			if err != nil {
-				// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
-				// 延时 10分钟以上
-				// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
-				break
-			}
+		}
+		time.Sleep(time.Second)
+		if err != nil {
+			// 采集出错了，多半是出验证码了，跳过该任务，等下次开始
+			// 延时 10分钟以上
+			// time.Sleep(time.Duration(10+rand.Intn(20)) * time.Minute)
+			errTimes++
+			continue
 		}
 	}
 }
@@ -178,7 +204,7 @@ func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (t
 	if w.CollectorConfig.CollectMode == config.CollectModeCombine {
 		total, err = w.GenerateCombination(&keyword)
 	} else {
-		total, err = w.CollectArticleFromBaidu(&keyword, focus)
+		total, err = w.CollectArticleFromBaidu(&keyword, focus, 0)
 	}
 
 	if err != nil {
@@ -222,37 +248,75 @@ func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Ke
 	archive.CategoryId = categoryId
 	//log.Println("draft:", w.CollectorConfig.SaveType)
 	// 如果不是正常发布，则存到草稿
+	isDraft := false
 	if w.CollectorConfig.SaveType == 0 {
-		archive.Draft = true
-	} else {
-		archive.Draft = false
+		isDraft = true
 	}
+	archive.Draft = isDraft
 	res, err := w.SaveArchive(archive)
 	if err != nil {
 		log.Println("保存文章出错：", archive.Title, err.Error())
 		return err
 	}
+	//文章计数
+	w.UpdateTodayArticleCount(1, 0)
+
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写
-		_ = w.AnqiAiPseudoArticle(res)
+		_ = w.AnqiAiPseudoArticle(res, isDraft)
 	}
 	if w.CollectorConfig.AutoTranslate {
-		// AI 改写
-		_ = w.AnqiTranslateArticle(res, w.CollectorConfig.ToLanguage)
+		// AI 翻译
+		// 读取 data
+		archiveData, err := w.GetArchiveDataById(res.Id)
+		if err != nil {
+			return nil
+		}
+		transReq := &AnqiTranslateTextRequest{
+			Text: []string{
+				res.Title,           // 0
+				res.Description,     // 1
+				res.Keywords,        // 2
+				archiveData.Content, // 3
+			},
+			Language:   w.CollectorConfig.Language,
+			ToLanguage: w.CollectorConfig.ToLanguage,
+		}
+		result, err := w.AnqiTranslateString(transReq)
+		if err != nil {
+			return nil
+		}
+		// 更新文档
+		res.Title = result.Text[0]
+		res.Description = result.Text[1]
+		res.Keywords = result.Text[2]
+		tx := w.DB
+		if isDraft {
+			tx = tx.Model(&model.ArchiveDraft{})
+		} else {
+			tx = tx.Model(&model.Archive{})
+		}
+		tx.Where("id = ?", res.Id).UpdateColumns(map[string]interface{}{
+			"title":       res.Title,
+			"description": res.Description,
+			"keywords":    res.Keywords,
+		})
+		// 再保存内容
+		w.DB.Model(&model.ArchiveData{}).Where("id = ?", archiveData.Id).UpdateColumn("content", result.Text[3])
 	}
-
-	//文章计数
-	w.UpdateTodayArticleCount(1)
 
 	return nil
 }
 
-func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (int, error) {
+func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool, retry int) (int, error) {
 	collectUrl := fmt.Sprintf("https://www.baidu.com/s?wd=%s&tn=json&rn=50&pn=10", keyword.Title)
 	if w.CollectorConfig.FromWebsite != "" {
 		collectUrl = fmt.Sprintf("https://www.baidu.com/s?wd=inurl%%3A%s%%20%s&tn=json&rn=50&pn=10", keyword.Title, w.CollectorConfig.FromWebsite)
 	}
-
+	var proxyIp string
+	if w.Proxy != nil {
+		proxyIp = w.Proxy.GetIP()
+	}
 	resp, err := library.Request(collectUrl, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
@@ -261,13 +325,32 @@ func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (i
 			"Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
 			"Accept-Language": "en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7",
 		},
+		Proxy: proxyIp,
 	})
 	if err != nil {
+		if proxyIp != "" {
+			w.Proxy.RemoveIP(proxyIp)
+			// 重试2次
+			if retry < 2 {
+				return w.CollectArticleFromBaidu(keyword, focus, retry+1)
+			}
+		}
 		return 0, err
 	}
 
 	var total int
 	links := w.ParseBaiduJson(resp.Body)
+	// 如果是使用了代理，则使用并发处理，最大10并发
+	chNum := 1
+	if w.Proxy != nil {
+		chNum = w.Proxy.cfg.Concurrent * 2
+		if chNum > 10 {
+			chNum = 10
+		}
+	}
+	wg := sync.WaitGroup{}
+	ch := make(chan int, chNum)
+	defer close(ch)
 	for _, link := range links {
 		//需要过滤可能不是内容的链接，/ 结尾的全部抛弃
 		//if strings.HasSuffix(link.Url, "/") {
@@ -295,33 +378,55 @@ func (w *Website) CollectArticleFromBaidu(keyword *model.Keyword, focus bool) (i
 			continue
 		}
 
-		archive, err := w.CollectSingleArticle(link, keyword)
-		if err == nil {
-			err = w.SaveCollectArticle(archive, keyword)
-
+		ch <- 1
+		wg.Add(1)
+		go func(wl *response.WebLink) {
+			defer func() {
+				<-ch
+				wg.Done()
+			}()
+			archive, err := w.CollectSingleArticle(wl, keyword, 0)
 			if err == nil {
-				total++
-				if !focus {
-					//根据设置的时间，休息一定秒数
-					time.Sleep(15 * time.Second)
+				err = w.SaveCollectArticle(archive, keyword)
+
+				if err == nil {
+					total++
+					if !focus && proxyIp == "" {
+						//如果没有使用代理，根据设置的时间，休息一定秒数
+						time.Sleep(15 * time.Second)
+					}
 				}
 			}
-		}
+		}(link)
 	}
+	wg.Wait()
 
 	return total, nil
 }
 
-func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Keyword) (*request.Archive, error) {
+func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Keyword, retry int) (*request.Archive, error) {
 	//百度的不使用 chromedp
+	var proxyIp string
+	if w.Proxy != nil {
+		proxyIp = w.Proxy.GetIP()
+	}
 	resp, err := library.Request(link.Url, &library.Options{
 		Timeout:  5,
 		IsMobile: false,
 		Header: map[string]string{
 			"Referer": fmt.Sprintf("https://www.baidu.com/s?wd=%s", url.QueryEscape(keyword.Title)),
 		},
+		Proxy: proxyIp,
 	})
 	if err != nil {
+		//log.Println("请求出错：", link.Url, err.Error())
+		if proxyIp != "" {
+			w.Proxy.RemoveIP(proxyIp)
+			// 重试2次
+			if retry < 2 {
+				return w.CollectSingleArticle(link, keyword, retry+1)
+			}
+		}
 		return nil, err
 	}
 
@@ -358,8 +463,8 @@ func (w *Website) CollectSingleArticle(link *response.WebLink, keyword *model.Ke
 		archive.Content = RemoveTags(re.ReplaceAllString(archive.Content, ""))
 	}
 	if w.CollectorConfig.InsertImage == config.CollectImageInsert && len(w.CollectorConfig.Images) > 0 {
-		rand.Seed(time.Now().UnixMicro())
-		img := w.CollectorConfig.Images[rand.Intn(len(w.CollectorConfig.Images))]
+		rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+		img := w.CollectorConfig.Images[rd.Intn(len(w.CollectorConfig.Images))]
 		content := strings.SplitAfter(archive.Content, ">")
 
 		index := len(content) / 3
@@ -997,8 +1102,8 @@ func TrimContents(content string) string {
 
 // CheckContentIsEnglish 统计落在 0-127之间的数量，如果达到95%，则认为是英文, 简单的方式处理
 func CheckContentIsEnglish(content string) bool {
-	if len(content) > 128 {
-		content = content[:128]
+	if len(content) > 512 {
+		content = content[:512]
 	}
 
 	enCount := 0
@@ -1016,7 +1121,7 @@ func CheckContentIsEnglish(content string) bool {
 }
 
 func (w *Website) ReplaceArticles() {
-	startId := uint(0)
+	startId := int64(0)
 	var archives []*model.Archive
 	for {
 		tx := w.DB.Model(&model.Archive{})
@@ -1150,6 +1255,9 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 			return w.cachedTodayArticleCount.AiGenerateCount
 		}
 		return w.cachedTodayArticleCount.CollectCount
+	} else if w.cachedTodayArticleCount.Day > 0 {
+		// 不同天
+		return 0
 	}
 
 	w.cachedTodayArticleCount.Day = today.Day()
@@ -1172,8 +1280,14 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 	return w.cachedTodayArticleCount.CollectCount
 }
 
-func (w *Website) UpdateTodayArticleCount(addNum int) {
-	w.cachedTodayArticleCount.CollectCount += int64(addNum)
+func (w *Website) UpdateTodayArticleCount(collectCount, aiCount int) {
+	w.cachedTodayArticleCount.Day = now.BeginningOfDay().Day()
+	if collectCount > 0 {
+		w.cachedTodayArticleCount.CollectCount += int64(collectCount)
+	}
+	if aiCount > 0 {
+		w.cachedTodayArticleCount.AiGenerateCount += int64(aiCount)
+	}
 }
 
 func (w *Website) GetArticleTotalByKeywordId(id uint) int64 {

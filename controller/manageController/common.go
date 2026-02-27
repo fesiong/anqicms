@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/kataras/iris/v12"
+	captcha "github.com/mojocn/base64Captcha"
 	"github.com/parnurzeal/gorequest"
 	"io"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -29,7 +31,7 @@ func AdminFileServ(ctx iris.Context) {
 		if siteId > 0 {
 			// 只有二级目录安装的站点允许这么操作
 			website := provider.GetWebsite(uint(siteId))
-			if len(website.BaseURI) > 1 {
+			if website != nil && len(website.BaseURI) > 1 {
 				ctx.Values().Set("siteId", uint(siteId))
 			}
 		}
@@ -63,14 +65,15 @@ func Version(ctx iris.Context) {
 		"msg":  "",
 		"data": iris.Map{
 			"version": config.Version,
+			"trial":   config.Trial,
 		},
 	})
 }
 
 func GetStatisticsSummary(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-
-	result := currentSite.GetStatisticsSummary()
+	exact := ctx.URLParamBoolDefault("exact", false)
+	result := currentSite.GetStatisticsSummary(exact)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -101,6 +104,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 	result["system"] = currentSite.System
 
 	result["version"] = config.Version
+	result["trial"] = config.Trial
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	result["memory_usage"] = ms.Alloc
@@ -114,11 +118,10 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查新版
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/version.json"
+	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
-		log.Println(ctx.Tr("FailedToObtainNewVersion"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  ctx.Tr("CheckThatTheVersionIsTheLatestVersion"),
@@ -130,6 +133,7 @@ func CheckVersion(ctx iris.Context) {
 	if err == nil {
 		result := library.VersionCompare(lastVersion.Version, config.Version)
 		if result == 1 {
+			// 测试
 			// 版本有更新
 			ctx.JSON(iris.Map{
 				"code": config.StatusOK,
@@ -137,6 +141,15 @@ func CheckVersion(ctx iris.Context) {
 				"data": lastVersion,
 			})
 			return
+		} else if lastVersion.TrialVersion != "" && library.VersionCompare(lastVersion.TrialVersion, config.Version) == 1 {
+			lastVersion.Trial = true
+			lastVersion.Version = lastVersion.TrialVersion
+			lastVersion.Description = lastVersion.TrialDescription
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  ctx.Tr("FoundANewTrialVersion"),
+				"data": lastVersion,
+			})
 		}
 	}
 
@@ -156,12 +169,18 @@ func VersionUpgrade(ctx iris.Context) {
 		})
 		return
 	}
+	var version = lastVersion.Version
+	if lastVersion.Trial {
+		version = lastVersion.TrialVersion
+	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-v%s.zip", runtime.GOOS, lastVersion.Version)
+	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
+	if config.VersionType != "" {
+		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
+	}
 	// 最长等待10分钟
-	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Minute).Get(link).EndBytes()
+	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(20 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
-		log.Println(ctx.Tr("VersionUpdateFailed"))
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("VersionUpdateFailed"),
@@ -193,6 +212,9 @@ func VersionUpgrade(ctx iris.Context) {
 		// 删除压缩包
 		os.Remove(tmpFile)
 	}()
+
+	// 删除 system
+	_ = os.RemoveAll(config.ExecPath + "system")
 
 	var errorFiles []string
 	path, _ := os.Executable()
@@ -239,6 +261,10 @@ func VersionUpgrade(ctx iris.Context) {
 
 		reader.Close()
 		_ = newFile.Close()
+		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqicms,cwebp
+		if f.Name == "anqicms" || f.Name == "anqicms.exe" || strings.HasPrefix(f.Name, "cwebp_") {
+			_ = os.Chmod(realName, os.ModePerm)
+		}
 	}
 	// 尝试更换主程序
 	oldPath := execPath + ".old"
@@ -255,7 +281,7 @@ func VersionUpgrade(ctx iris.Context) {
 			err = os.Rename(oldPath, execPath)
 		}
 	} else {
-		log.Println("fail to rename old executable.")
+		log.Println("fail to rename old executable.", err)
 	}
 	if len(errorFiles) > 1 {
 		log.Println("Upgrade error files: ", errorFiles)
@@ -271,5 +297,38 @@ func VersionUpgrade(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  msg,
+	})
+}
+
+func GenerateCaptcha(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	safeSetting := currentSite.Safe
+	if safeSetting == nil || safeSetting.AdminCaptchaOff == 1 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": iris.Map{
+				"captcha_off": true,
+			},
+		})
+		return
+	}
+
+	var driver = controller.NewDriver().ConvertFonts()
+	c := captcha.NewCaptcha(driver, controller.Store)
+	id, content, answer := c.Driver.GenerateIdQuestionAnswer()
+	item, _ := c.Driver.DrawCaptcha(content)
+	c.Store.Set(id, answer)
+
+	bs64 := item.EncodeB64string()
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"captcha_off": false,
+			"captcha_id":  id,
+			"captcha":     bs64,
+		},
 	})
 }

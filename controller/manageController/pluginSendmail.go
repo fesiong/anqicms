@@ -8,7 +8,7 @@ import (
 )
 
 func PluginSendmailList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//不需要分页，只显示最后20条
 	list, err := currentSite.GetLastSendmailList()
 	if err != nil {
@@ -27,7 +27,7 @@ func PluginSendmailList(ctx iris.Context) {
 }
 
 func PluginSendmailTest(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginSendmail
 	if setting.Account == "" {
 		ctx.JSON(iris.Map{
@@ -87,7 +87,7 @@ func PluginSendmailTest(ctx iris.Context) {
 }
 
 func PluginSendmailSetting(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginSendmail
 
 	ctx.JSON(iris.Map{
@@ -98,7 +98,7 @@ func PluginSendmailSetting(ctx iris.Context) {
 }
 
 func PluginSendmailSettingForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSendmail
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -118,6 +118,9 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 	currentSite.PluginSendmail.ReplySubject = req.ReplySubject
 	currentSite.PluginSendmail.ReplyMessage = req.ReplyMessage
 	currentSite.PluginSendmail.SendType = req.SendType
+	currentSite.PluginSendmail.SignupVerify = req.SignupVerify
+	currentSite.PluginSendmail.VerifySubject = req.VerifySubject
+	currentSite.PluginSendmail.VerifyMessage = req.VerifyMessage
 
 	err := currentSite.SaveSettingValue(provider.SendmailSettingKey, currentSite.PluginSendmail)
 	if err != nil {

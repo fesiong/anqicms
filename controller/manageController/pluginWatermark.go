@@ -1,8 +1,8 @@
 package manageController
 
 import (
-	"github.com/chai2010/webp"
 	"github.com/kataras/iris/v12"
+	"golang.org/x/image/webp"
 	"image"
 	"io"
 	"kandaoni.com/anqicms/config"
@@ -82,7 +82,7 @@ func PluginWatermarkPreview(ctx iris.Context) {
 
 	cfg := currentSite.PluginWatermark
 	cfg.Open = true
-	wm := currentSite.NewWatermark(&cfg)
+	wm := currentSite.NewWatermark(cfg)
 	if wm == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -132,7 +132,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 		fileName = "uploads/watermark/watermark_font.ttf"
 	} else {
 		// image
-		_, _, err := image.Decode(file)
+		_, _, err = image.Decode(file)
 		if err != nil {
 			file.Seek(0, 0)
 			if strings.HasSuffix(info.Filename, "webp") {

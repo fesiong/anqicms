@@ -9,9 +9,9 @@ import (
 )
 
 func SettingNav(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	typeId := uint(ctx.URLParamIntDefault("type_id", 1))
-	navList, _ := currentSite.GetNavList(typeId)
+	navList, _ := currentSite.GetNavList(typeId, "children")
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -21,7 +21,7 @@ func SettingNav(ctx iris.Context) {
 }
 
 func SettingNavForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -31,62 +31,62 @@ func SettingNavForm(ctx iris.Context) {
 		return
 	}
 
-	if req.Title == "" {
-		if req.NavType == model.NavTypeCategory {
-			category := currentSite.GetCategoryFromCache(req.PageId)
-			if category != nil {
-				req.Title = category.Title
-			}
-		} else if req.NavType == model.NavTypeArchive {
-			archive, _ := currentSite.GetArchiveById(req.PageId)
-			if archive != nil {
-				req.Title = archive.Title
-			}
-		}
-	}
-	if req.Title == "" {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  ctx.Tr("PleaseFillInTheNavigationDisplayName"),
-		})
-		return
-	}
-
-	var nav *model.Nav
-	var err error
-	if req.Id > 0 {
-		nav, err = currentSite.GetNavById(req.Id)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  err.Error(),
-			})
-			return
-		}
-	} else {
-		nav = &model.Nav{
-			Status: 1,
-		}
-	}
-
-	nav.Title = req.Title
-	nav.SubTitle = req.SubTitle
-	nav.Description = req.Description
-	nav.ParentId = req.ParentId
-	nav.NavType = req.NavType
-	nav.PageId = req.PageId
-	nav.TypeId = req.TypeId
-	nav.Link = req.Link
-	nav.Sort = req.Sort
-	nav.Status = 1
-
-	err = nav.Save(currentSite.DB)
+	nav, err := currentSite.SaveNav(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 插入记录
+				if req.Id == 0 {
+					req.Id = nav.Id
+					subNav, err := subSite.SaveNav(&req)
+					if err == nil {
+						// 同步成功，进行翻译
+						if currentSite.MultiLanguage.AutoTranslate {
+							transReq := &provider.AnqiTranslateTextRequest{
+								Text: []string{
+									subNav.Title,       // 0
+									subNav.Description, // 1
+									subNav.SubTitle,    // 2
+								},
+								Language:   currentSite.System.Language,
+								ToLanguage: subSite.System.Language,
+							}
+							res, err := currentSite.AnqiTranslateString(transReq)
+							if err == nil {
+								// 只处理成功的结果
+								subSite.DB.Model(subNav).UpdateColumns(map[string]interface{}{
+									"title":       res.Text[0],
+									"description": res.Text[1],
+									"sub_title":   res.Text[2],
+								})
+							}
+						}
+					}
+				} else {
+					// 修改的话，就排除 title, content，description，keywords 字段
+					tmpNav, err := subSite.GetNavById(req.Id)
+					if err == nil {
+						req.Title = tmpNav.Title
+						req.SubTitle = tmpNav.SubTitle
+						req.Description = tmpNav.Description
+					}
+					_, _ = subSite.SaveNav(&req)
+				}
+			}
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateNavigationLog", nav.Id, nav.Title))
@@ -101,7 +101,7 @@ func SettingNavForm(ctx iris.Context) {
 }
 
 func SettingNavDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -127,6 +127,20 @@ func SettingNavDelete(ctx iris.Context) {
 		})
 		return
 	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 同步删除
+				_ = nav.Delete(subSite.DB)
+			}
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteNavigationLog", nav.Id, nav.Title))
 
@@ -140,7 +154,7 @@ func SettingNavDelete(ctx iris.Context) {
 }
 
 func SettingNavType(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	navTypes, _ := currentSite.GetNavTypeList()
 
 	ctx.JSON(iris.Map{
@@ -151,7 +165,7 @@ func SettingNavType(ctx iris.Context) {
 }
 
 func SettingNavTypeForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -161,34 +175,37 @@ func SettingNavTypeForm(ctx iris.Context) {
 		return
 	}
 
-	var navType *model.NavType
-	var err error
-	if req.Id > 0 {
-		navType, err = currentSite.GetNavTypeById(req.Id)
-		if err != nil {
-			ctx.JSON(iris.Map{
-				"code": config.StatusFailed,
-				"msg":  err.Error(),
-			})
-			return
-		}
-	} else {
-		// 检查重复标题
-		navType, err = currentSite.GetNavTypeByTitle(req.Title)
-		if err != nil {
-			navType = &model.NavType{}
-		}
-	}
-
-	navType.Title = req.Title
-
-	err = currentSite.DB.Save(navType).Error
+	navType, err := currentSite.SaveNavType(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 插入记录
+				if req.Id == 0 {
+					req.Id = navType.Id
+					_, _ = subSite.SaveNavType(&req)
+				} else {
+					// 修改的话，就排除 title, content，description，keywords 字段
+					tmpNav, err := subSite.GetNavById(req.Id)
+					if err == nil {
+						req.Title = tmpNav.Title
+					}
+					_, _ = subSite.SaveNavType(&req)
+				}
+			}
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateNavigationCategoryLog", navType.Id, navType.Title))
@@ -202,7 +219,7 @@ func SettingNavTypeForm(ctx iris.Context) {
 }
 
 func SettingNavTypeDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -237,6 +254,22 @@ func SettingNavTypeDelete(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 同步删除
+				// 删除一类导航
+				subSite.DB.Where("`type_id` = ?", navType).Delete(&model.Nav{})
+				subSite.DB.Delete(navType)
+			}
+		}
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteNavigationCategoryLog", navType.Id, navType.Title))

@@ -7,13 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/parnurzeal/gorequest"
+	"image"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"math/rand"
 	"mime/multipart"
@@ -23,10 +18,21 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
+	"unicode/utf8"
+
+	"github.com/parnurzeal/gorequest"
+	"golang.org/x/net/html"
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 const AnqiApi = "https://auth.anqicms.com/auth"
@@ -71,44 +77,78 @@ type AnqiAttachmentResult struct {
 type AnqiAiRequest struct {
 	Keyword    string `json:"keyword"`
 	Demand     string `json:"demand"`
+	Prompt     string `json:"prompt"`
 	Language   string `json:"language"`
 	ToLanguage string `json:"to_language"`
 	Title      string `json:"title"`
 	Content    string `json:"content"`
 	TextLength int64  `json:"text_length"`
 	AiRemain   int64  `json:"ai_remain"`
-	Async      bool   `json:"async"` // 是否异步处理
-	Cost       bool   `json:"cost"`  // 支付需要支付
+	Async      bool   `json:"async"`      // 是否异步处理
+	Cost       bool   `json:"cost"`       // 支付需要支付
+	ArticleId  int64  `json:"article_id"` // 本地的文档ID
 
-	Type  int  `json:"type"`
-	ReqId uint `json:"req_id"`
+	Type  int   `json:"type"`
+	ReqId int64 `json:"req_id"`
+}
+
+type AnqiImageAiRequest struct {
+	Image  string `json:"image"` // 图生图的时候提供，格式：仅支持其中一种方式：- 通过图片 URL 传入远程图像（字符串，格式为 URI）- 通过base64传输图像，格式为 base64 编码的字符串
+	Prompt string `json:"prompt"`
+	Size   string `json:"size"`
+	Type   int    `json:"type"` // 0 = 文生图，2 = 图生图
+}
+
+type AnqiTranslateTextRequest struct {
+	Language   string   `json:"language"`
+	ToLanguage string   `json:"to_language"`
+	Text       []string `json:"text"`   // 需要翻译的文本。可以是字符串，也可以是HTML文章
+	Usage      int64    `json:"usage"`  // 消耗Token
+	Status     int      `json:"status"` // 返回的时候包含
+	UseSelf    bool     `json:"-"`
+	Uri        string   `json:"uri"`
+	Remark     string   `json:"remark"`
+	Count      int64    `json:"count"` // 总量
+
+	OriginTitle   string `json:"origin_title"`
+	OriginContent string `json:"origin_content"`
 }
 
 type AnqiAiPlanRequest struct {
-	ReqId uint `json:"req_id"`
+	ReqId int64 `json:"req_id"`
 }
 
 // AnqiAiResult 是结合了2中结构体的内容，一种是plan，一种是article
 type AnqiAiResult struct {
-	Id          uint   `json:"id"`
+	Id          int64  `json:"id"`
 	CreatedTime int64  `json:"created_time"`
 	Type        int    `json:"type"`
 	Language    string `json:"language"`
+	ToLanguage  string `json:"to_language"`
 	Keyword     string `json:"keyword"`
 	Demand      string `json:"demand"`
 	PayCount    int64  `json:"pay_count"`
 	Status      int    `json:"status"`
 
-	Title     string `json:"title"`
-	Content   string `json:"content"`
-	ReqId     uint   `json:"req_id"`
-	ArticleId uint   `json:"-"`
+	Title         string `json:"title"`
+	Content       string `json:"content"`
+	ReqId         int64  `json:"req_id"`
+	ArticleId     int64  `json:"-"`
+	UseSelf       bool   `json:"-"`
+	OriginTitle   string `json:"origin_title"`
+	OriginContent string `json:"origin_content"`
 }
 
 type AnqiAiResponse struct {
 	Code int          `json:"code"`
 	Msg  string       `json:"msg"`
 	Data AnqiAiResult `json:"data"`
+}
+
+type AnqiTranslateResponse struct {
+	Code int                      `json:"code"`
+	Msg  string                   `json:"msg"`
+	Data AnqiTranslateTextRequest `json:"data"`
 }
 
 type AnqiAiStreamResult struct {
@@ -121,6 +161,72 @@ type AnqiSensitiveResult struct {
 	Code int      `json:"code"`
 	Msg  string   `json:"msg"`
 	Data []string `json:"data"`
+}
+
+type AnqiExtractResult struct {
+	Code int      `json:"code"`
+	Msg  string   `json:"msg"`
+	Data []string `json:"data"`
+}
+
+type AnqiAiChatResult struct {
+	Status  int    `json:"status"`
+	Content string `json:"content"`
+}
+
+type AnqiTranslateHtmlRequest struct {
+	Uri         string   `json:"uri"`
+	Html        string   `json:"html"`
+	Language    string   `json:"language"`    // 源语言，如果不传，则会自动推断
+	ToLanguage  string   `json:"to_language"` // 目标语言，必传
+	IgnoreClass []string `json:"ignore_class"`
+	IgnoreId    []string `json:"ignore_id"`
+}
+
+type AnqiTranslateHtmlResult struct {
+	Uri        string `json:"uri"` // 这个一般不用传
+	Html       string `json:"html"`
+	Language   string `json:"language"`
+	ToLanguage string `json:"to_language"`
+	Status     int    `json:"status"`
+	Count      int64  `json:"count"` // 总量
+	Usage      int64  `json:"usage"` // 用量
+	Remark     string `json:"remark"`
+}
+
+type AnqiTranslateHtmlResponse struct {
+	Code int                     `json:"code"`
+	Msg  string                  `json:"msg"`
+	Data AnqiTranslateHtmlResult `json:"data"`
+}
+
+type AnqiTranslateTextResponse struct {
+	Code int                      `json:"code"`
+	Msg  string                   `json:"msg"`
+	Data AnqiTranslateTextRequest `json:"data"`
+}
+
+type AnqiAiImage struct {
+	Id          int    `json:"id"`
+	Usage       int64  `json:"usage"` // 本次请求用量，Token，单次 10000 Token
+	Prompt      string `json:"prompt"`
+	Type        int    `json:"type"`   // 0 文生图，2 图生图 ...
+	Status      string `json:"status"` // waiting / in_progress / success / failure / cancelled
+	Result      string `json:"result"` // 链接，有效期1天
+	CreatedTime int64  `json:"created_time"`
+}
+
+type AnqiImageAiResult struct {
+	Code int         `json:"code"`
+	Msg  string      `json:"msg"`
+	Data AnqiAiImage `json:"data"`
+}
+
+type AnqiImageAiHistoriesResult struct {
+	Code  int           `json:"code"`
+	Msg   string        `json:"msg"`
+	Data  []AnqiAiImage `json:"data"`
+	Total int64         `json:"total"`
 }
 
 // AnqiLogin
@@ -189,9 +295,12 @@ func (w *Website) AnqiCheckLogin(force bool) {
 		config.AnqiUser.AuthId = result.Data.AuthId
 		config.AnqiUser.UserName = result.Data.UserName
 		config.AnqiUser.ExpireTime = result.Data.ExpireTime
-		config.AnqiUser.AiRemain = result.Data.AiRemain
 		config.AnqiUser.Integral = result.Data.Integral
 		config.AnqiUser.Status = result.Data.Status
+		config.AnqiUser.FreeToken = result.Data.FreeToken
+		config.AnqiUser.TotalToken = result.Data.TotalToken
+		config.AnqiUser.UnPayToken = result.Data.UnPayToken
+		config.AnqiUser.IsOweFee = result.Data.IsOweFee
 	}
 	config.AnqiUser.CheckTime = time.Now().Unix()
 	_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
@@ -280,6 +389,16 @@ func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachmen
 		return nil, errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
 	}
 
+	// 上传之前，先进行图片处理，减少数据的传输
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err == nil {
+		// 处理成 webp
+		buf, _, err := encodeImage(img, "webp", 85)
+		if err == nil {
+			data = buf
+		}
+	}
+
 	var result AnqiAttachmentResult
 	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).Post(AnqiApi+"/template/upload").SendFile(data, name, "attach").EndStruct(&result)
 	if len(errs) > 0 {
@@ -323,7 +442,7 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	file := bytes.NewReader(body)
 
 	// 将模板写入到本地
-	err := w.UploadDesignZip(file, info)
+	err := w.UploadDesignZip(file, info, "")
 	if err != nil {
 		return err
 	}
@@ -331,71 +450,54 @@ func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
 	return nil
 }
 
-func (w *Website) AnqiTranslateArticle(archive *model.Archive, toLanguage string) error {
-	archiveData, err := w.GetArchiveDataById(archive.Id)
-	if err != nil {
-		return err
-	}
-	req := &AnqiAiRequest{
-		Title:      archive.Title,
-		Content:    archiveData.Content,
-		ToLanguage: toLanguage,
-		Async:      true, // 异步返回结果
-	}
+// AnqiTranslateString 翻译任意文本内容
+func (w *Website) AnqiTranslateString(req *AnqiTranslateTextRequest) (result *AnqiTranslateTextRequest, err error) {
 	if req.Language == "" {
-		isEnglish := CheckContentIsEnglish(req.Title)
-		if isEnglish {
-			req.Language = config.LanguageEn
-		} else {
-			req.Language = config.LanguageZh
-		}
+		req.Language = w.System.Language
 	}
-
-	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
-		req, err = w.SelfAiTranslateResult(req)
+	if req.ToLanguage == "" {
+		return nil, errors.New(w.Tr("PleaseSelectTargetLanguage"))
+	}
+	// 如果不是正常的文本，如读取的是二进制文件，如图片内容等，则不进行翻译
+	if !utf8.ValidString(strings.Join(req.Text, "")) {
+		return req, nil
+	}
+	// 如果设置了使用AI翻译，则使用自己翻译
+	if w.PluginTranslate.Engine != config.TranslateEngineDefault {
+		result, err = w.SelfAiTranslateResult(req)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		archive.Title = req.Title
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
-		err = w.DB.Save(archive).Error
-		// 再保存内容
-		archiveData.Content = req.Content
-		w.DB.Save(archiveData)
-		// 添加到plan，并标记完成
-		result := AnqiAiResult{
-			Type:      config.AiArticleTypeTranslate,
-			Language:  req.Language,
-			Keyword:   req.Keyword,
-			Demand:    req.Demand,
-			Status:    config.AiArticleStatusCompleted,
-			Title:     req.Title,
-			Content:   req.Content,
-			ArticleId: archive.Id,
+		if len(result.Text) < len(req.Text) {
+			return nil, errors.New("text num error")
 		}
-		_, err = w.SaveAiArticlePlan(&result, true)
+		result.UseSelf = true
+
+		// 记录翻译记录
+		AddTranslateLog(result)
+
+		return result, nil
 	} else {
-		var result AnqiAiResponse
-		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&result)
+		var res AnqiTranslateResponse
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate").Send(req).EndStruct(&res)
 		if len(errs) > 0 {
-			return errs[0]
+			return nil, errs[0]
 		}
-		if result.Code != 0 {
-			return errors.New(result.Msg)
+		if res.Code != 0 {
+			return nil, errors.New(res.Msg)
 		}
-		// 添加到plan中
-		result.Data.Status = config.AiArticleStatusDoing
-		result.Data.ArticleId = archive.Id
-		_, err = w.SaveAiArticlePlan(&result.Data, false)
-		if err != nil {
-			return err
+		if len(res.Data.Text) < len(req.Text) {
+			return nil, errors.New("text num error")
 		}
-	}
+		res.Data.UseSelf = false
+		// 记录翻译记录
+		AddTranslateLog(&res.Data)
 
-	return nil
+		return &res.Data, nil
+	}
 }
 
-func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
+func (w *Website) AnqiAiPseudoArticle(archive *model.Archive, isDraft bool) error {
 	archiveData, err := w.GetArchiveDataById(archive.Id)
 	if err != nil {
 		return err
@@ -415,7 +517,17 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive) error {
 		archive.Title = req.Title
 		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
 		archive.HasPseudo = 1
-		err = w.DB.Save(archive).Error
+		tx := w.DB
+		if isDraft {
+			tx = tx.Model(&model.ArchiveDraft{})
+		} else {
+			tx = tx.Model(&model.Archive{})
+		}
+		err = tx.Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
+			"title":       archive.Title,
+			"description": archive.Description,
+			"has_pseudo":  archive.HasPseudo,
+		}).Error
 		// 再保存内容
 		archiveData.Content = req.Content
 		w.DB.Save(archiveData)
@@ -464,6 +576,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 	req := &AnqiAiRequest{
 		Keyword:  keyword.Title,
 		Language: w.System.Language, // 以系统语言为标准
+		Demand:   w.AiGenerateConfig.Demand,
 		Async:    true,
 	}
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
@@ -473,8 +586,8 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 		}
 		var content = strings.Split(req.Content, "\n")
 		if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
-			rand.Seed(time.Now().UnixMicro())
-			img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			img := w.AiGenerateConfig.Images[rd.Intn(len(w.AiGenerateConfig.Images))]
 			index := len(content) / 3
 			content = append(content, "")
 			copy(content[index+1:], content[index:])
@@ -536,6 +649,8 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			log.Println("保存AI文章出错：", archiveReq.Title, err2.Error())
 			return 0, nil
 		}
+		//文章计数
+		w.UpdateTodayArticleCount(0, 1)
 		// 添加到plan，并标记完成
 		result := AnqiAiResult{
 			Type:      config.AiArticleTypeGenerate,
@@ -583,9 +698,14 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 	var err error
 	// 重新检查状态
-	plan, err = w.GetAiArticlePlanByReqId(plan.ReqId)
+	plan, err = w.GetAiArticlePlanById(plan.Id)
 	if err != nil {
+		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
 		return err
+	}
+	if plan.ReqId == 0 {
+		w.DB.Model(plan).UpdateColumn("status", config.AiArticleStatusError)
+		return errors.New("req-id is empty")
 	}
 	if plan.Status != config.AiArticleStatusDoing {
 		return errors.New(w.Tr("ThePlanHasBeenProcessed"))
@@ -608,10 +728,20 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 		return ErrDoing
 	}
 	if result.Data.Status == config.AiArticleStatusCompleted {
+		// 异步返回的不记录log
 		// 成功
 		if plan.ArticleId > 0 {
 			// 更新文章
-			w.DB.Model(&model.Archive{}).Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
+			// 如果是草稿，则更新草稿箱，查询正式表不存在的话，就认为是草稿
+			_, err = w.GetArchiveById(plan.ArticleId)
+			tx := w.DB
+			if err != nil {
+				// 不存在，视为草稿
+				tx = tx.Model(&model.ArchiveDraft{})
+			} else {
+				tx = tx.Model(&model.Archive{})
+			}
+			tx.Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
 				"title":       result.Data.Title,
 				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " ")),
 			})
@@ -631,8 +761,8 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			}
 			var content = strings.Split(req.Content, "\n")
 			if w.AiGenerateConfig.InsertImage == config.CollectImageInsert && len(w.AiGenerateConfig.Images) > 0 {
-				rand.Seed(time.Now().UnixMicro())
-				img := w.AiGenerateConfig.Images[rand.Intn(len(w.AiGenerateConfig.Images))]
+				rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+				img := w.AiGenerateConfig.Images[rd.Intn(len(w.AiGenerateConfig.Images))]
 				index := len(content) / 3
 				content = append(content, "")
 				copy(content[index+1:], content[index:])
@@ -690,6 +820,8 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				log.Println("保存AI文章出错：", archive.Title, err.Error())
 				return err
 			}
+			//文章计数
+			w.UpdateTodayArticleCount(0, 1)
 			// 更新plan
 			plan.ArticleId = res.Id
 			plan.Status = config.AiArticleStatusCompleted
@@ -776,15 +908,9 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 
 	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
-		prompt := "请根据关键词生成一篇中文文章。关键词：" + req.Keyword
-		if w.Content.Editor == "markdown" {
-			prompt += "\n请使用 Markdown 格式输出"
-		}
-		if req.Language == config.LanguageEn {
-			prompt = "Please generate an English article based on the keywords. Keywords: '" + req.Keyword + "'"
-			if w.Content.Editor == "markdown" {
-				prompt += "\nPlease output in Markdown format."
-			}
+		prompt := "以\"" + req.Keyword + "\"为题生成一篇SEO文章。 要求如下: 1.充分理解标题的意思,为文章确定一个主题;2.文章字数1000-1500字,避免冗长,追求表达清晰; 3.自然引用,无明显痕迹;逻辑严谨,内容连贯无歧义; 4.关键词恰当融入,避免堆砌; 5.文章需要一个标题，标题放在第一行; 6.重点内容采用加粗、斜体等标记并且确保文章原创度高于90%;7.文章无需结束语。"
+		if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
+			prompt = "Generate an SEO article titled '" + req.Keyword + "'. The requirements are as follows: 1. Fully understand the meaning of the title and determine a theme for the article; 2. The word count of the article should be 1000-1500 words, avoiding being lengthy and pursuing clear expression; 3. Natural citation without obvious traces; Rigorous logic, coherent and unambiguous content; 4. Incorporate keywords appropriately and avoid piling them up; 5. The article needs a title, which should be placed on the first line; 6. Key content should be marked in bold, italics, etc., and the originality of the article should be ensured to be above 90%; 8. The article does not require a conclusion."
 		}
 		if len(req.Demand) > 0 {
 			prompt += "\n" + req.Demand
@@ -797,7 +923,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			if key == "" {
 				return "", errors.New(w.Tr("NoAvailableKey"))
 			}
-			stream, err := GetOpenAIStreamResponse(key, prompt)
+			stream, err := w.GetOpenAIStreamResponse(key, prompt)
 			if err != nil {
 				msg := err.Error()
 				re, _ := regexp.Compile(`code: (\d+),`)
@@ -839,7 +965,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 				})
 			}()
 		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			buf, err := GetSparkStream(w.AiGenerateConfig.Spark, prompt)
+			buf, _, err := GetSparkStream(w.AiGenerateConfig.Spark, prompt)
 			if err != nil {
 				return "", err
 			}
@@ -925,10 +1051,302 @@ func (w *Website) AnqiSyncSensitiveWords() error {
 
 	if len(result.Data) > 0 {
 		w.SensitiveWords = result.Data
+		w2 := websites.MustGet(w.Id)
+		w2.SensitiveWords = result.Data
 		w.SaveSettingValue(SensitiveWordsKey, w.SensitiveWords)
 	}
 
 	return nil
+}
+
+func (w *Website) AnqiExtractKeywords(req *request.AnqiExtractRequest) ([]string, error) {
+	var result AnqiExtractResult
+
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/extract/keywords").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	if len(result.Data) > 0 {
+		return result.Data, nil
+	}
+
+	return nil, nil
+}
+
+func (w *Website) AnqiExtractDescription(req *request.AnqiExtractRequest) ([]string, error) {
+	var result AnqiExtractResult
+
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/extract/summarize").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	if len(result.Data) > 0 {
+		return result.Data, nil
+	}
+
+	return nil, nil
+}
+
+func AddTranslateLog(result *AnqiTranslateTextRequest) {
+	if len(result.Text) == 0 {
+		return
+	}
+	// translate log 只记录到主站点的库里
+	db := GetDefaultDB()
+	title := result.Text[0]
+	if utf8.RuneCountInString(title) > 190 {
+		title = string([]rune(title)[:190])
+	}
+	// md5 的值 = 原始字符串+翻译的语言
+	md5Str := library.Md5(fmt.Sprintf("%v", result.Text) + "-" + result.ToLanguage)
+	logData := model.TranslateLog{
+		Language:    result.Language,
+		ToLanguage:  result.ToLanguage,
+		OriginTitle: title,
+		Md5:         md5Str,
+	}
+
+	db.Model(&model.TranslateLog{}).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "md5"}},
+		UpdateAll: true,
+	}).Where("`md5` = ?", md5Str).Create(&logData)
+}
+
+func AddTranslateHtmlLog(result *AnqiTranslateHtmlResult) {
+	// translate log 只记录到主站点的库里
+	db := GetDefaultDB()
+
+	logData := model.TranslateHtmlLog{
+		Uri:        result.Uri,
+		Language:   result.Language,
+		ToLanguage: result.ToLanguage,
+		Count:      result.Count,
+		UseCount:   result.Usage,
+		Status:     result.Status,
+		Remark:     result.Remark,
+	}
+
+	db.Model(&model.TranslateHtmlLog{}).Create(&logData)
+}
+
+// AnqiTranslateHtml 多语言html翻译，只能使用官方接口，从原站语言翻译成目标语言
+func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content string, err error) {
+	if req.Language == "" {
+		req.Language = w.System.Language
+	}
+	if req.ToLanguage == "" {
+		return "", errors.New(w.Tr("PleaseSelectTargetLanguage"))
+	}
+
+	// 先转成texts，再翻译
+	// 解析HTML
+	doc, err := html.Parse(strings.NewReader(req.Html))
+	if err != nil {
+		return "", err
+	}
+
+	// 提取需要翻译的文本
+	textNodes := extractTextNodes(doc)
+	texts := make([]string, len(textNodes))
+	for i, info := range textNodes {
+		texts[i] = info.text
+	}
+
+	// 翻译文本
+	// 创建去重映射表
+	textMap := make(map[string]string)
+	textIndices := make(map[string][]int)
+	var uniqueTexts []string
+
+	// 构建去重映射
+	for i, text := range texts {
+		text = strings.TrimSpace(text)
+		if text == "" {
+			continue
+		}
+		// 有一些字符，是不需要走接口翻译的
+		text2, isNeed := localReplace(text)
+		if !isNeed {
+			textMap[text] = text2
+		} else {
+			if _, exists := textMap[text]; !exists {
+				textMap[text] = "" // 添加到映射表，先存空值
+				uniqueTexts = append(uniqueTexts, text)
+			}
+		}
+		textIndices[text] = append(textIndices[text], i)
+	}
+
+	// 从缓存中批量获取已翻译的文本
+	var uncachedTexts = make([]string, 0, len(uniqueTexts))
+	for _, text := range uniqueTexts {
+		// 使用MD5哈希作为缓存键
+		textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
+		var textLog model.TranslateTextLog
+		if err := w.DB.Where("`md5` = ?", textMd5).First(&textLog).Error; err == nil {
+			textMap[text] = textLog.Translated
+		} else {
+			uncachedTexts = append(uncachedTexts, text)
+		}
+	}
+	//
+	uniqueTexts = uncachedTexts
+	// 处理未缓存的文本
+	if len(uniqueTexts) > 0 {
+		var req2 = AnqiTranslateTextRequest{
+			Text:       uniqueTexts,
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Uri:        req.Uri,
+		}
+
+		var res AnqiTranslateTextResponse
+		_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/translate/text").Send(req2).EndStruct(&res)
+		if len(errs) > 0 {
+			msg := errs[0].Error()
+			if utf8.RuneCountInString(msg) > 190 {
+				msg = string([]rune(msg)[:190])
+			}
+			AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+				Uri:        req.Uri,
+				Html:       "",
+				Language:   req.Language,
+				ToLanguage: req.ToLanguage,
+				Remark:     msg,
+			})
+			return "", errs[0]
+		}
+		if res.Code != 0 {
+			msg := res.Msg
+			if utf8.RuneCountInString(msg) > 190 {
+				msg = string([]rune(msg)[:190])
+			}
+			AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+				Uri:        req.Uri,
+				Html:       "",
+				Language:   req.Language,
+				ToLanguage: req.ToLanguage,
+				Remark:     msg,
+			})
+			return "", errors.New(res.Msg)
+		}
+		// 是否需要记录翻译日志？要的
+		res.Data.Uri = req.Uri // 因为返回的没有这个，因此这里要补上
+		res.Data.Status = 1
+		AddTranslateHtmlLog(&AnqiTranslateHtmlResult{
+			Uri:        req.Uri,
+			Language:   req.Language,
+			ToLanguage: req.ToLanguage,
+			Count:      res.Data.Count,
+			Remark:     res.Data.Remark,
+			Usage:      res.Data.Usage,
+			Status:     res.Data.Status,
+		})
+
+		ln := len(res.Data.Text)
+		for i, text := range uniqueTexts {
+			if i < ln {
+				translated := res.Data.Text[i]
+				// 数据库存储内容
+				textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
+				textLog := model.TranslateTextLog{
+					Md5:        textMd5,
+					Language:   req.Language,
+					ToLanguage: req.ToLanguage,
+					Text:       text,
+					Translated: translated,
+				}
+				_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
+
+				textMap[text] = translated
+			}
+		}
+	}
+
+	// 还原翻译结果到原始顺序
+	translatedTexts := make([]string, len(texts))
+	for text, indices := range textIndices {
+		translated := textMap[text]
+		for _, idx := range indices {
+			translatedTexts[idx] = translated
+		}
+	}
+
+	// 处理空文本
+	for i, text := range texts {
+		if strings.TrimSpace(text) == "" {
+			translatedTexts[i] = text
+		}
+	}
+
+	// 将翻译后的文本替换回HTML
+	for i, info := range textNodes {
+		if i < len(translatedTexts) {
+			if info.node.Type == html.ElementNode {
+				// 处理属性翻译
+				for j, attr := range info.node.Attr {
+					if (attr.Key == "title" || attr.Key == "placeholder" || attr.Key == "alt" || attr.Key == "value") ||
+						(info.node.Data == "meta" && attr.Key == "content" &&
+							(containsAttr(info.node, "name", "description") ||
+								containsAttr(info.node, "name", "keywords") ||
+								containsAttr(info.node, "name", "title") ||
+								containsAttr(info.node, "property", "description") ||
+								containsAttr(info.node, "property", "keywords") ||
+								containsAttr(info.node, "property", "title") ||
+								containsAttr(info.node, "property", "image:alt") ||
+								containsAttr(info.node, "property", "site_name"))) {
+						info.node.Attr[j].Val = translatedTexts[i]
+						break
+					}
+				}
+			} else if info.node.Type == html.TextNode {
+				info.node.Data = translatedTexts[i]
+			}
+		}
+	}
+
+	var output strings.Builder
+	if err = html.Render(&output, doc); err != nil {
+		return "", err
+	}
+	//////////
+
+	return output.String(), nil
+}
+
+func (w *Website) AnqiGetImageAiResponse(req *AnqiImageAiRequest) (*AnqiAiImage, error) {
+	var result AnqiImageAiResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/image").Send(req).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, errs[0]
+	}
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+	log.Printf("AnqiGetImageAiResponse: %#v", result)
+
+	return &result.Data, nil
+}
+
+func (w *Website) AnqiGetAiGenerateImageHistories(page int, pageSize int) ([]AnqiAiImage, int64) {
+	var result AnqiImageAiHistoriesResult
+	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Get(AnqiApi + "/ai/image/histories").Query(map[string]string{
+		"page":  strconv.Itoa(page),
+		"limit": strconv.Itoa(pageSize),
+	}).EndStruct(&result)
+	if len(errs) > 0 {
+		return nil, 0
+	}
+
+	return result.Data, result.Total
 }
 
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
@@ -972,4 +1390,21 @@ func Restart() error {
 		return err
 	}
 	return syscall.Exec(self, args, env)
+}
+
+func Shutdown() {
+	sites := GetWebsites()
+	for _, w := range sites {
+		// 关闭数据库
+		if w.DB != nil {
+			db, err := w.DB.DB()
+			if err == nil {
+				_ = db.Close()
+			}
+		}
+		// 关闭日志文件
+		if w.StatisticLog != nil {
+			w.StatisticLog.Close()
+		}
+	}
 }

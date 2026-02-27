@@ -1,14 +1,15 @@
 package manageController
 
 import (
+	"regexp"
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"regexp"
-	"strings"
 )
 
 func PluginUserFieldsSetting(ctx iris.Context) {
@@ -116,6 +117,7 @@ func PluginUserList(ctx iris.Context) {
 	userName := ctx.URLParam("user_name")
 	realName := ctx.URLParam("realName")
 	phone := ctx.URLParam("phone")
+	q := ctx.URLParam("q")
 
 	ops := func(tx *gorm.DB) *gorm.DB {
 		if userId > 0 {
@@ -124,16 +126,25 @@ func PluginUserList(ctx iris.Context) {
 		if groupId > 0 {
 			tx = tx.Where("`group_id` = ?", userId)
 		}
-		if phone != "" {
+		if phone != "" || q != "" {
+			if phone == "" {
+				phone = q
+			}
 			tx = tx.Where("`phone` = ?", phone)
 		}
-		if userName != "" {
+		if userName != "" || q != "" {
+			if userName == "" {
+				userName = q
+			}
 			tx = tx.Where("`user_name` like ?", "%"+userName+"%")
 		}
-		if realName != "" {
+		if realName != "" || q != "" {
+			if realName == "" {
+				realName = q
+			}
 			tx = tx.Where("`real_name` like ?", "%"+realName+"%")
 		}
-		tx = tx.Order("id desc")
+		tx = tx.Order("users.id desc")
 		return tx
 	}
 	users, total := currentSite.GetUserList(ops, currentPage, pageSize)
@@ -186,6 +197,49 @@ func PluginUserDetailForm(ctx iris.Context) {
 		return
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserLog", req.Id, req.UserName))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("SaveSuccessfully"),
+	})
+}
+
+func PluginUserChangeBalance(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.ApiUserBalanceRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Amount == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseEnterTheAmount"),
+		})
+		return
+	}
+
+	if req.Remark == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseEnterRemarks"),
+		})
+		return
+	}
+
+	err := currentSite.UpdateUserBalance(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserLog", req.UserId, "balance"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

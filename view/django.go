@@ -2,22 +2,28 @@ package view
 
 import (
 	"bytes"
-	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
-	view2 "github.com/kataras/iris/v12/view"
 	"hash/crc32"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
+	"net/url"
 	"os"
 	stdPath "path"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
+	"github.com/kataras/iris/v12/i18n"
+	view2 "github.com/kataras/iris/v12/view"
+	"golang.org/x/net/html"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 
 	"github.com/fatih/structs"
 	"github.com/flosch/pongo2/v6"
@@ -205,6 +211,10 @@ func (s *DjangoEngine) RegisterTag(tagName string, fn TagParser) error {
 	return pongo2.RegisterTag(tagName, fn)
 }
 
+func (s *DjangoEngine) ReplaceTag(tagName string, fn TagParser) error {
+	return pongo2.ReplaceTag(tagName, fn)
+}
+
 // Load parses the templates to the engine.
 // It is responsible to add the necessary global functions.
 //
@@ -227,8 +237,11 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 		if !site.Initialed {
 			continue
 		}
+		// 检查模板是否有多语言
+		var mapLocales = map[string]struct{}{}
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
+		var tplFiles = make(map[string]int64, 100)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				if throw {
@@ -239,6 +252,13 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 
 			if info == nil || info.IsDir() {
 				return nil
+			}
+			// 判断是否有多语言
+			if strings.HasPrefix(path, "locales") {
+				pathSplit := strings.Split(path, "/")
+				if len(pathSplit) > 2 {
+					mapLocales[pathSplit[1]] = struct{}{}
+				}
 			}
 
 			if s.extension != "" {
@@ -259,13 +279,25 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 				}
 				return nil
 			}
-
+			tplFiles[path] = info.Size()
 			err = s.ParseTemplate(site, path, contents)
 			if err != nil && throw {
 				return err
 			}
 			return nil
 		})
+		site.SetTemplates(tplFiles)
+		if len(mapLocales) > 0 {
+			var locales = make([]string, 0, len(mapLocales))
+			for k := range mapLocales {
+				locales = append(locales, k)
+			}
+			tplI18n := i18n.New()
+			err = tplI18n.LoadFS(sfs, "./locales/*/*.yml", locales...)
+			if err == nil {
+				site.TplI18n = tplI18n
+			}
+		}
 	}
 
 	return err
@@ -287,7 +319,7 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 	if err == nil {
 		s.templateCache[site.Id][name] = tmpl
 	} else {
-		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
+		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error() + "<br/> on file " + name))
 	}
 
 	return nil
@@ -333,6 +365,10 @@ func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Templ
 	return nil
 }
 
+type RenderData struct {
+	Data []byte
+}
+
 // ExecuteWriter executes a templates and write its results to the w writer
 // layout here is useless.
 func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bindingData interface{}) error {
@@ -343,10 +379,32 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		}
 	}
 	ctx := w.(iris.Context)
+	// 检查是否已经超时
+	if err := ctx.Request().Context().Err(); err != nil {
+		return err
+	}
 	currentSite := provider.CurrentSite(ctx)
 	if tmpl := s.fromCache(currentSite.Id, filename); tmpl != nil {
+		// 在执行模板渲染前再次检查超时状态
+		if err := ctx.Request().Context().Err(); err != nil {
+			return err
+		}
+		hookCtx := &provider.HookContext{
+			Point: provider.BeforeViewRender,
+			Site:  currentSite,
+			Data:  bindingData,
+			Extra: map[string]interface{}{
+				"template": filename,
+				"ctx":      ctx,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
 		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
 		if err != nil {
+			return err
+		}
+		// 再次检查是否超时
+		if err = ctx.Request().Context().Err(); err != nil {
 			return err
 		}
 		// 如果启用了防采集
@@ -424,10 +482,159 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		}
 		// 对data进行敏感词替换
 		data = currentSite.ReplaceSensitiveWords(data)
-		buf := bytes.NewBuffer(data)
+		pjax := ctx.GetHeader("X-Pjax")
+		var pjaxContainer string
+		if pjax == "true" {
+			pjaxContainer = ctx.GetHeader("X-Pjax-Container")
+			if pjaxContainer == "" {
+				pjaxContainer = ctx.URLParam("_pjax")
+			}
+			if pjaxContainer == "" {
+				pjaxContainer = "pjax-container"
+			} else {
+				pjaxContainer = strings.TrimLeft(pjaxContainer, "#")
+			}
+			doc, err := html.Parse(bytes.NewBuffer(data))
+			if err == nil {
+				// 查找 #pjax-container 节点
+				node := findNodeByID(doc, pjaxContainer)
+				if node != nil {
+					data = getInnerHTML(node)
+				}
+			}
+		}
+		// 对于模板是pc+mobile的域名，需要做替换
+		if len(currentSite.System.MobileUrl) > 0 {
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			if mobileTemplate {
+				// 有特殊标记的a标签不做替换，[data-ignore="true"]
+				re, _ := regexp.Compile(`(?is)<a[^>]*data-ignore="true"[^>]*>(.*?)</a>`)
+				var ignoreLinks = map[string][]byte{}
+				ignoreIdx := 0
+				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
+					ignoreLinks[idxStr] = match
+					ignoreIdx++
+					return []byte(idxStr)
+				})
+				// 有特殊标记的link标签不做替换，[data-ignore="true"]
+				re, _ = regexp.Compile(`(?is)<link[^>]*data-ignore="true"[^>]*>`)
+				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
+					ignoreLinks[idxStr] = match
+					ignoreIdx++
+					return []byte(idxStr)
+				})
+				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
+				if len(ignoreLinks) > 0 {
+					re, _ = regexp.Compile(`\$\{ignore-\d+}`)
+					data = re.ReplaceAllFunc(data, func(match []byte) []byte {
+						return ignoreLinks[string(match)]
+					})
+				}
+			}
+		}
+		// 添加json-ld
+		if currentSite.PluginJsonLd.Open {
+			// 需要先检查页面是否存在ls+json,如果已存在，则不再添加
+			re, _ := regexp.Compile(`<script.+?type="application/ld\+json".*?>`)
+			if !re.Match(data) {
+				jsonLd := currentSite.GetJsonLd(ctx)
+				if len(jsonLd) > 0 {
+					jsonLdBuf := []byte("\n<script type=\"application/ld+json\">\n" + jsonLd + "\n</script>\n")
+					if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+						index = index + 7
+						tmpData := make([]byte, len(data)+len(jsonLdBuf))
+						copy(tmpData, data[:index])
+						copy(tmpData[index:], jsonLdBuf)
+						copy(tmpData[index+len(jsonLdBuf):], data[index:])
+						data = tmpData
+					} else {
+						data = append(data, jsonLdBuf...)
+					}
+				}
+			}
+		}
+		// 自动添加统计数据
+		query := make(url.Values)
+		query.Set("action", request.LogActionViews)
+		query.Set("path", ctx.FullRequestURI())
+		query.Set("code", strconv.FormatInt(int64(ctx.GetStatusCode()), 10))
+		dataMap, ok := bindingData.(map[string]interface{})
+		if ok {
+			webInfo, ok := dataMap["webInfo"].(*response.WebInfo)
+			if ok {
+				if webInfo.PageName == "order" {
+					route, ok := dataMap["route"].(string)
+					if ok && route == "checkout" || route == "confirm" {
+						query.Set("type", route)
+					}
+				} else if webInfo.PageName == "archiveDetail" {
+					query.Set("type", request.LogTypeArchive)
+					archive, ok := dataMap["archive"].(*model.Archive)
+					if ok {
+						query.Set("id", strconv.FormatInt(int64(archive.Id), 10))
+					}
+				}
+			}
+		}
+		queryEncode := query.Encode()
+		logBuf := []byte("\n<script>\n(function() {\n  var al = document.createElement(\"script\");\n  al.src = \"/api/log?" + queryEncode + "&nonce=\"+Date.now();\n  document.body.appendChild(al);\n})();\n</script>\n")
+		if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
+			index = index + 7
+			tmpData := make([]byte, len(data)+len(logBuf))
+			copy(tmpData, data[:index])
+			copy(tmpData[index:], logBuf)
+			copy(tmpData[index+len(logBuf):], data[index:])
+			data = tmpData
+		} else {
+			data = append(data, logBuf...)
+		}
+		// end log
+
+		exData := &RenderData{
+			Data: data,
+		}
+		hookCtx = &provider.HookContext{
+			Point: provider.AfterViewRender,
+			Site:  currentSite,
+			Data:  exData,
+			Extra: map[string]interface{}{
+				"template": filename,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
+
+		buf := bytes.NewBuffer(exData.Data)
 		_, err = buf.WriteTo(w)
 		return err
 	}
 
 	return view2.ErrNotExist{Name: filename, IsLayout: false, Data: bindingData}
+}
+func findNodeByID(n *html.Node, id string) *html.Node {
+	if n.Type == html.ElementNode {
+		for _, attr := range n.Attr {
+			if attr.Key == "id" && attr.Val == id {
+				return n
+			}
+		}
+	}
+
+	// 递归查找子节点
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if result := findNodeByID(child, id); result != nil {
+			return result
+		}
+	}
+
+	return nil
+}
+
+func getInnerHTML(n *html.Node) []byte {
+	var buf bytes.Buffer
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		html.Render(&buf, child)
+	}
+	return buf.Bytes()
 }

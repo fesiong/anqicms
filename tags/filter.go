@@ -1,9 +1,14 @@
 package tags
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/flosch/pongo2/v6"
+	"math"
+	"path/filepath"
 	"strings"
+
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/library"
 )
 
 func init() {
@@ -18,6 +23,17 @@ func init() {
 	pongo2.RegisterFilter("index", filterIndex)
 	pongo2.RegisterFilter("repeat", filterRepeat)
 	pongo2.RegisterFilter("dump", filterDump)
+	pongo2.RegisterFilter("thumb", filterThumb)
+	pongo2.RegisterFilter("render", filterRender)
+	pongo2.RegisterFilter("json", filterJson)
+	pongo2.RegisterFilter("priceFormat", filterPriceFormat)
+	pongo2.RegisterFilter("dateFormat", filterDateFormat)
+	if pongo2.FilterExists("split") {
+		pongo2.ReplaceFilter("split", filterSplit)
+	}
+	if pongo2.FilterExists("wordwrap") {
+		pongo2.ReplaceFilter("wordwrap", filterWordwrap)
+	}
 }
 
 func filterContain(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
@@ -148,5 +164,74 @@ func filterRepeat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2
 }
 
 func filterDump(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
-	return pongo2.AsValue(fmt.Sprintf("%#v", in.Interface())), nil
+	return pongo2.AsValue(fmt.Sprintf("%+v", in.Interface())), nil
+}
+
+func filterSplit(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	sep := param.String()
+	if sep == "\\n" {
+		sep = "\n"
+	}
+	chunks := strings.Split(in.String(), sep)
+	return pongo2.AsValue(chunks), nil
+}
+
+func filterThumb(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	loc := in.String()
+	if !strings.Contains(loc, "thumb_") {
+		paths, fileName := filepath.Split(loc)
+		loc = paths + "thumb_" + fileName
+	}
+
+	return pongo2.AsValue(loc), nil
+}
+
+func filterRender(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	s := in.String()
+	if !strings.HasPrefix(s, "<") {
+		s = library.MarkdownToHTML(s)
+	}
+	return pongo2.AsValue(s), nil
+}
+
+func filterJson(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	s := in.Interface()
+	buf, _ := json.Marshal(s)
+	return pongo2.AsValue(string(buf)), nil
+}
+
+func filterWordwrap(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	words := strings.Fields(in.String())
+	wordsLen := len(words)
+	wrapAt := param.Integer()
+	if wrapAt <= 0 {
+		return in, nil
+	}
+
+	linecount := int(math.Ceil(float64(wordsLen) / float64(wrapAt)))
+	lines := make([]string, 0, linecount)
+	for i := 0; i < linecount; i++ {
+		lines = append(lines, strings.Join(words[wrapAt*i:min(wrapAt*(i+1), wordsLen)], " "))
+	}
+	return pongo2.AsValue(strings.Join(lines, "\n")), nil
+}
+
+func filterPriceFormat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	format := param.String()
+	if format == "" {
+		format = "%.2f"
+	}
+
+	result := PriceFormat(in.String(), format)
+	return pongo2.AsValue(result), nil
+}
+
+func filterDateFormat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	format := param.String()
+	if format == "" {
+		format = "2006-01-02"
+	}
+
+	result := TimestampToDate(in.String(), format)
+	return pongo2.AsValue(result), nil
 }

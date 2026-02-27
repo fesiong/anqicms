@@ -4,21 +4,28 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"os"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
-	"os"
 )
 
 type Module struct {
-	Model
-	TableName string       `json:"table_name" gorm:"column:table_name;type:varchar(50) not null;default:''"`
-	UrlToken  string       `json:"url_token" gorm:"column:url_token;type:varchar(50) not null;default:''"` // 定义
-	Title     string       `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
-	Fields    moduleFields `json:"fields" gorm:"column:fields;type:longtext default null"`
-	IsSystem  int          `json:"is_system" gorm:"column:is_system;type:tinyint(1) unsigned not null;default:0"`
-	TitleName string       `json:"title_name" gorm:"column:title_name;type:varchar(50) not null;default:''"`
-	Status    uint         `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+	Id             uint         `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime    int64        `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime    int64        `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	TableName      string       `json:"table_name" gorm:"column:table_name;type:varchar(50) not null;default:''"`
+	Name           string       `json:"name" gorm:"column:name;type:varchar(50) not null;default:''"`
+	UrlToken       string       `json:"url_token" gorm:"column:url_token;type:varchar(50) not null;default:''"` // 定义
+	Title          string       `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	Keywords       string       `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
+	Description    string       `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
+	Fields         moduleFields `json:"fields" gorm:"column:fields;type:longtext default null"`
+	CategoryFields moduleFields `json:"category_fields" gorm:"column:category_fields;type:longtext default null"`
+	IsSystem       int          `json:"is_system" gorm:"column:is_system;type:tinyint(1) unsigned not null;default:0"`
+	TitleName      string       `json:"title_name" gorm:"column:title_name;type:varchar(50) not null;default:''"`
+	Status         uint         `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 
 	Database string `json:"-" gorm:"-"`
 	Link     string `json:"link" gorm:"-"`
@@ -36,7 +43,7 @@ func (a *moduleFields) Scan(data interface{}) error {
 
 func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 	if !tx.Migrator().HasTable(m.TableName) {
-		tx.Exec("CREATE TABLE `?` (`id` int(10) unsigned NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) DEFAULT CHARSET=utf8mb4;", gorm.Expr(m.TableName))
+		tx.Exec("CREATE TABLE `?` (`id` bigint(20) NOT NULL AUTO_INCREMENT, PRIMARY KEY (`id`)) DEFAULT CHARSET=utf8mb4;", gorm.Expr(m.TableName))
 	}
 	// 根据表单字段，生成数据
 	for _, field := range m.Fields {

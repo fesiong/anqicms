@@ -19,7 +19,11 @@ func (w *Website) ReplaceValues(req *request.PluginReplaceRequest) (updateCount 
 			updateCount += total
 			break
 		case "archive":
+			// 正式表
 			total := w.replaceArchiveValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
+			// 草稿
+			total = w.replaceArchiveDraftValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
 			break
 		case "category":
@@ -69,7 +73,10 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 					if ok {
 						innerUpdate := false
 						for i := range val {
-							val2 := w.replaceContentText(val[i].Value, replacer)
+							val2, ok := val[i].Value.(string)
+							if ok {
+								val2 = w.replaceContentText(val2, replacer)
+							}
 							if val2 != val[i].Value {
 								updateCount++
 								innerUpdate = true
@@ -105,10 +112,106 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 }
 
 func (w *Website) replaceArchiveValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
-	startId := uint(0)
+	startId := int64(0)
 	var archives []*model.Archive
 	for {
 		tx := w.DB.Model(&model.Archive{})
+		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&archives)
+		if len(archives) == 0 {
+			break
+		}
+		startId = archives[len(archives)-1].Id
+		for _, archive := range archives {
+			needUpdate := false
+			title := w.replaceContentText(archive.Title, replacer)
+			if archive.Title != title {
+				archive.Title = title
+				updateCount++
+				needUpdate = true
+			}
+			seoTitle := w.replaceContentText(archive.SeoTitle, replacer)
+			if archive.SeoTitle != seoTitle {
+				archive.SeoTitle = seoTitle
+				updateCount++
+				needUpdate = true
+			}
+			keywords := w.replaceContentText(archive.Keywords, replacer)
+			if archive.Keywords != keywords {
+				archive.Keywords = keywords
+				updateCount++
+				needUpdate = true
+			}
+			description := w.replaceContentText(archive.Description, replacer)
+			if archive.Description != description {
+				archive.Description = description
+				updateCount++
+				needUpdate = true
+			}
+			for i, img := range archive.Images {
+				img2 := w.replaceContentText(img, replacer)
+				if img != img2 {
+					archive.Images[i] = img2
+					updateCount++
+					needUpdate = true
+				}
+			}
+			//替换完了
+			if needUpdate {
+				w.DB.Model(archive).Updates(archive)
+			}
+			var archiveData model.ArchiveData
+			w.DB.Where("id = ?", archive.Id).Take(&archiveData)
+			var content string
+			if replaceTag {
+				content = w.replaceContentText(archiveData.Content, replacer)
+			} else {
+				content = w.ReplaceContentFromConfig(archiveData.Content, replacer)
+			}
+			if content != archiveData.Content {
+				updateCount++
+				archiveData.Content = content
+				w.DB.Model(&archiveData).UpdateColumns(archiveData)
+			}
+			// extra
+			result := map[string]interface{}{}
+			module := w.GetModuleFromCache(archive.ModuleId)
+			if module != nil {
+				var fields []string
+				for _, v := range module.Fields {
+					fields = append(fields, "`"+v.FieldName+"`")
+				}
+				//从数据库中取出来
+				if len(fields) > 0 {
+					w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Select(strings.Join(fields, ",")).Scan(&result)
+					//extra的CheckBox的值
+					innerUpdate := false
+					for k, v := range result {
+						val, ok := v.(string)
+						if ok {
+							val2 := w.replaceContentText(val, replacer)
+							if val2 != val {
+								result[k] = val2
+								updateCount++
+								innerUpdate = true
+							}
+						}
+					}
+					if innerUpdate {
+						w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Updates(result)
+					}
+				}
+			}
+		}
+	}
+
+	return updateCount
+}
+
+func (w *Website) replaceArchiveDraftValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
+	startId := int64(0)
+	var archives []*model.ArchiveDraft
+	for {
+		tx := w.DB.Model(&model.ArchiveDraft{})
 		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&archives)
 		if len(archives) == 0 {
 			break

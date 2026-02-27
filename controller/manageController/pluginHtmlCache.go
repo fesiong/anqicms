@@ -15,7 +15,7 @@ import (
 )
 
 func PluginHtmlCacheConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	pluginHtmlCache := currentSite.PluginHtmlCache
 
 	ctx.JSON(iris.Map{
@@ -26,7 +26,7 @@ func PluginHtmlCacheConfig(ctx iris.Context) {
 }
 
 func PluginHtmlCacheConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -35,47 +35,59 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.PluginHtmlCache.Open = req.Open
-	currentSite.PluginHtmlCache.IndexCache = req.IndexCache
-	currentSite.PluginHtmlCache.ListCache = req.ListCache
-	currentSite.PluginHtmlCache.DetailCache = req.DetailCache
+	w2 := provider.GetWebsite(currentSite.Id)
+
+	w2.PluginHtmlCache.Open = req.Open
+	w2.PluginHtmlCache.IndexCache = req.IndexCache
+	w2.PluginHtmlCache.ListCache = req.ListCache
+	w2.PluginHtmlCache.DetailCache = req.DetailCache
 	// storage 部分
-	currentSite.PluginHtmlCache.KeepLocal = false
-	currentSite.PluginHtmlCache.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
-	currentSite.PluginHtmlCache.StorageType = req.StorageType
+	w2.PluginHtmlCache.KeepLocal = false
+	w2.PluginHtmlCache.StorageUrl = strings.TrimRight(req.StorageUrl, "/")
+	w2.PluginHtmlCache.StorageType = req.StorageType
 
-	currentSite.PluginHtmlCache.AliyunEndpoint = req.AliyunEndpoint
-	currentSite.PluginHtmlCache.AliyunAccessKeyId = req.AliyunAccessKeyId
-	currentSite.PluginHtmlCache.AliyunAccessKeySecret = req.AliyunAccessKeySecret
-	currentSite.PluginHtmlCache.AliyunBucketName = req.AliyunBucketName
+	w2.PluginHtmlCache.AliyunEndpoint = req.AliyunEndpoint
+	w2.PluginHtmlCache.AliyunAccessKeyId = req.AliyunAccessKeyId
+	w2.PluginHtmlCache.AliyunAccessKeySecret = req.AliyunAccessKeySecret
+	w2.PluginHtmlCache.AliyunBucketName = req.AliyunBucketName
 
-	currentSite.PluginHtmlCache.TencentSecretId = req.TencentSecretId
-	currentSite.PluginHtmlCache.TencentSecretKey = req.TencentSecretKey
-	currentSite.PluginHtmlCache.TencentBucketUrl = req.TencentBucketUrl
+	w2.PluginHtmlCache.TencentSecretId = req.TencentSecretId
+	w2.PluginHtmlCache.TencentSecretKey = req.TencentSecretKey
+	w2.PluginHtmlCache.TencentBucketUrl = req.TencentBucketUrl
 
-	currentSite.PluginHtmlCache.QiniuAccessKey = req.QiniuAccessKey
-	currentSite.PluginHtmlCache.QiniuSecretKey = req.QiniuSecretKey
-	currentSite.PluginHtmlCache.QiniuBucket = req.QiniuBucket
-	currentSite.PluginHtmlCache.QiniuRegion = req.QiniuRegion
+	w2.PluginHtmlCache.QiniuAccessKey = req.QiniuAccessKey
+	w2.PluginHtmlCache.QiniuSecretKey = req.QiniuSecretKey
+	w2.PluginHtmlCache.QiniuBucket = req.QiniuBucket
+	w2.PluginHtmlCache.QiniuRegion = req.QiniuRegion
 
-	currentSite.PluginHtmlCache.UpyunBucket = req.UpyunBucket
-	currentSite.PluginHtmlCache.UpyunOperator = req.UpyunOperator
-	currentSite.PluginHtmlCache.UpyunPassword = req.UpyunPassword
+	w2.PluginHtmlCache.UpyunBucket = req.UpyunBucket
+	w2.PluginHtmlCache.UpyunOperator = req.UpyunOperator
+	w2.PluginHtmlCache.UpyunPassword = req.UpyunPassword
 
-	currentSite.PluginHtmlCache.FTPHost = req.FTPHost
-	currentSite.PluginHtmlCache.FTPPort = req.FTPPort
-	currentSite.PluginHtmlCache.FTPUsername = req.FTPUsername
-	currentSite.PluginHtmlCache.FTPPassword = req.FTPPassword
-	currentSite.PluginHtmlCache.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+	w2.PluginHtmlCache.GoogleProjectId = req.GoogleProjectId
+	w2.PluginHtmlCache.GoogleBucketName = req.GoogleBucketName
+	w2.PluginHtmlCache.GoogleCredentialsJson = req.GoogleCredentialsJson
 
-	currentSite.PluginHtmlCache.SSHHost = req.SSHHost
-	currentSite.PluginHtmlCache.SSHPort = req.SSHPort
-	currentSite.PluginHtmlCache.SSHUsername = req.SSHUsername
-	currentSite.PluginHtmlCache.SSHPassword = req.SSHPassword
-	currentSite.PluginHtmlCache.SSHPrivateKey = req.SSHPrivateKey
-	currentSite.PluginHtmlCache.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+	w2.PluginHtmlCache.S3Region = req.S3Region
+	w2.PluginHtmlCache.S3AccessKey = req.S3AccessKey
+	w2.PluginHtmlCache.S3SecretKey = req.S3SecretKey
+	w2.PluginHtmlCache.S3Bucket = req.S3Bucket
+	w2.PluginHtmlCache.S3Endpoint = req.S3Endpoint
 
-	err := currentSite.SaveSettingValue(provider.HtmlCacheSettingKey, currentSite.PluginHtmlCache)
+	w2.PluginHtmlCache.FTPHost = req.FTPHost
+	w2.PluginHtmlCache.FTPPort = req.FTPPort
+	w2.PluginHtmlCache.FTPUsername = req.FTPUsername
+	w2.PluginHtmlCache.FTPPassword = req.FTPPassword
+	w2.PluginHtmlCache.FTPWebroot = strings.TrimRight(req.FTPWebroot, "\\/")
+
+	w2.PluginHtmlCache.SSHHost = req.SSHHost
+	w2.PluginHtmlCache.SSHPort = req.SSHPort
+	w2.PluginHtmlCache.SSHUsername = req.SSHUsername
+	w2.PluginHtmlCache.SSHPassword = req.SSHPassword
+	w2.PluginHtmlCache.SSHPrivateKey = req.SSHPrivateKey
+	w2.PluginHtmlCache.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
+
+	err := w2.SaveSettingValue(provider.HtmlCacheSettingKey, w2.PluginHtmlCache)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -85,8 +97,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateCacheConfiguration"))
-
-	currentSite.InitCacheBucket()
+	w2.InitCacheBucket()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -95,7 +106,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuild(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -104,9 +115,9 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 		})
 		return
 	}
-
+	w2 := provider.GetWebsite(currentSite.Id)
 	//开始生成
-	go currentSite.BuildHtmlCache(ctx)
+	go w2.BuildHtmlCache(ctx)
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateCacheManually"))
 
@@ -117,12 +128,13 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildIndex(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildIndexCache()
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
-		_ = currentSite.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildIndexCache()
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
+		_ = w2.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateHomepageCacheManually"))
 
@@ -133,14 +145,15 @@ func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildCategory(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildModuleCache(ctx)
-		currentSite.BuildCategoryCache(ctx)
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildModuleCache(ctx)
+		w2.BuildCategoryCache(ctx)
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
 		// 更新的html
-		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+		_ = w2.ReadAndSendLocalFiles(cachePath)
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateColumnCacheManually"))
 
@@ -151,13 +164,14 @@ func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildArchive(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildArchiveCache()
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildArchiveCache()
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
 		// 更新的html
-		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+		_ = w2.ReadAndSendLocalFiles(cachePath)
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateDocumentCacheManually"))
 
@@ -168,14 +182,15 @@ func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildTag(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
-		currentSite.BuildTagIndexCache(ctx)
-		currentSite.BuildTagCache(ctx)
-		currentSite.HtmlCacheStatus.FinishedTime = time.Now().Unix()
-		cachePath := currentSite.CachePath + "pc"
+		w2 := provider.GetWebsite(currentSite.Id)
+		w2.BuildTagIndexCache(ctx)
+		w2.BuildTagCache(ctx)
+		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		cachePath := w2.CachePath + "pc"
 		// 更新的html
-		_ = currentSite.ReadAndSendLocalFiles(cachePath)
+		_ = w2.ReadAndSendLocalFiles(cachePath)
 	}()
 	currentSite.AddAdminLog(ctx, ctx.Tr("GenerateTagCacheManually"))
 
@@ -186,13 +201,14 @@ func PluginHtmlCacheBuildTag(ctx iris.Context) {
 }
 
 func PluginHtmlCacheBuildStatus(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetHtmlCacheStatus()
 
 	if status != nil && status.FinishedTime > 0 && !status.Removing {
 		status.Removing = true
 		time.AfterFunc(30*time.Second, func() {
-			currentSite.HtmlCacheStatus = nil
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.HtmlCacheStatus = nil
 		})
 	}
 
@@ -204,7 +220,7 @@ func PluginHtmlCacheBuildStatus(ctx iris.Context) {
 }
 
 func PluginCleanHtmlCache(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentSite.RemoveHtmlCache()
 
 	ctx.JSON(iris.Map{
@@ -214,7 +230,7 @@ func PluginCleanHtmlCache(ctx iris.Context) {
 }
 
 func PluginHtmlCacheUploadFile(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	file, _, err := ctx.FormFile("file")
 	if err != nil {
@@ -273,7 +289,7 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 }
 
 func PluginHtmlCachePush(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginHtmlCachePushRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -282,6 +298,7 @@ func PluginHtmlCachePush(ctx iris.Context) {
 		})
 		return
 	}
+	w2 := provider.GetWebsite(currentSite.Id)
 	// 开始执行推送
 	if len(req.Paths) > 0 {
 		// 逐个进行
@@ -296,15 +313,15 @@ func PluginHtmlCachePush(ctx iris.Context) {
 				cachePath := currentSite.CachePath + "pc"
 				remotePath = strings.TrimPrefix(fullName, cachePath)
 			}
-			_ = currentSite.SyncHtmlCacheToStorage(fullName, remotePath)
+			_ = w2.SyncHtmlCacheToStorage(fullName, remotePath)
 		}
 	} else {
 		go func() {
 			if req.All {
 				// 全量推送，重置所有推送数据
-				currentSite.CleanHtmlPushLog()
+				w2.CleanHtmlPushLog()
 			}
-			_ = currentSite.SyncHtmlCacheToStorage("", "")
+			_ = w2.SyncHtmlCacheToStorage("", "")
 		}()
 	}
 
@@ -317,13 +334,14 @@ func PluginHtmlCachePush(ctx iris.Context) {
 }
 
 func PluginHtmlCachePushStatus(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetHtmlCachePushStatus()
 
 	if status != nil && status.FinishedTime > 0 && !status.Removing {
 		status.Removing = true
 		time.AfterFunc(30*time.Second, func() {
-			currentSite.HtmlCachePushStatus = nil
+			w2 := provider.GetWebsite(currentSite.Id)
+			w2.HtmlCachePushStatus = nil
 		})
 	}
 
@@ -335,7 +353,7 @@ func PluginHtmlCachePushStatus(ctx iris.Context) {
 }
 
 func PluginHtmlCachePushLogs(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
