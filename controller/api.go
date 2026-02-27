@@ -720,6 +720,9 @@ func CheckApiOpen(ctx iris.Context) {
 
 // 接收 post 请求
 func ApiLogStatistic(ctx iris.Context) {
+	// no-index
+	// x-robots-tag: noindex
+	ctx.Header("X-Robots-Tag", "noindex, nofollow")
 	var req request.LogStatisticRequest
 	err := ctx.ReadBody(&req)
 	ctx.ContentType("text/javascript")
