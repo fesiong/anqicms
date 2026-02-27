@@ -3,6 +3,7 @@ package fulltext
 import (
 	"errors"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/fesiong/wukong/engine"
 	"github.com/fesiong/wukong/types"
@@ -19,12 +20,30 @@ type WukongService struct {
 	searcher *engine.Engine
 }
 
+type DiyScoringCriteria struct {
+	RankingScore float32
+}
+
+func (criteria DiyScoringCriteria) Score(doc types.IndexedDocument, fields interface{}) []float32 {
+	// if doc.TokenProximity > MaxTokenProximity {
+	// 	return []float32{}
+	// }
+	// 判断 RankingScore，如果评分低于 RankingScore 分，则排除
+	if criteria.RankingScore > 0 && doc.BM25 < criteria.RankingScore {
+		return []float32{}
+	}
+
+	return []float32{doc.BM25}
+}
+
 func NewWukongService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
 	s := &WukongService{
 		config:   cfg,
 		searcher: new(engine.Engine),
 	}
-	s.searcher.Init(types.EngineInitOptions{SegmenterDictionaries: config.ExecPath + "dictionary.txt"})
+	s.searcher.Init(types.EngineInitOptions{
+		SegmenterDictionaries: config.ExecPath + "dictionary.txt",
+	})
 
 	return s, nil
 }
@@ -95,12 +114,18 @@ func (s *WukongService) Search(keyword string, moduleId uint, page int, pageSize
 	if moduleId > 0 {
 		labels = append(labels, strconv.Itoa(int(moduleId)))
 	}
+	// 根据 ContainLength 截断搜索词，增强“至少包含x个字符”的效果
+	text := keyword
+	if s.config.ContainLength > 0 && utf8.RuneCountInString(keyword) > s.config.ContainLength {
+		text = string([]rune(keyword)[:s.config.ContainLength])
+	}
 	output := s.searcher.Search(types.SearchRequest{
-		Text:   keyword,
+		Text:   text,
 		Labels: labels,
 		RankOptions: &types.RankOptions{
-			OutputOffset: pageSize * (page - 1),
-			MaxOutputs:   pageSize,
+			ScoringCriteria: DiyScoringCriteria{RankingScore: float32(s.config.RankingScore)},
+			OutputOffset:    pageSize * (page - 1),
+			MaxOutputs:      pageSize,
 		}})
 	var ids []uint64
 	for _, doc := range output.Docs {

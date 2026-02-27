@@ -41,7 +41,7 @@ func (s *MeiliSearchService) Index(body interface{}) error {
 
 	index := s.apiClient.Index(s.indexName)
 
-	task0, err := index.UpdateFilterableAttributes(&[]interface{}{"module_id", "title"})
+	task0, err := index.UpdateFilterableAttributes(&[]interface{}{"module_id", "title", "description", "content"})
 	if err != nil {
 		log.Println("配置可搜索属性失败: ", err)
 		return err
@@ -165,13 +165,13 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 		queryFilter = append(queryFilter, fmt.Sprintf("module_id = %d", moduleId)) // 过滤 moduleId
 	}
 	if s.config.ContainLength > 0 {
-		// 匹配搜索词的开头
+		// 匹配搜索词的包含
 		contain := keyword
 		if utf8.RuneCountInString(contain) > s.config.ContainLength {
 			contain = string([]rune(contain)[:s.config.ContainLength])
 		}
-		// "title STARTS WITH 'keyword'")
-		queryFilter = append(queryFilter, fmt.Sprintf("title CONTAINS '%s'", contain))
+		// 同时支持 title/description/content
+		queryFilter = append(queryFilter, fmt.Sprintf("(title CONTAINS '%s' OR description CONTAINS '%s' OR content CONTAINS '%s')", contain, contain, contain))
 	}
 	if len(queryFilter) > 0 {
 		query.Filter = queryFilter

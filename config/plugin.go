@@ -145,7 +145,7 @@ type PluginFulltextConfig struct {
 	EngineUser    string `json:"engine_user"`
 	EnginePass    string `json:"engine_pass"`
 	RankingScore  int    `json:"ranking_score"`  // 可设置评分 0-100分，默认 0分 高于这个评分的结果才显示
-	ContainLength int    `json:"contain_length"` // 可设置包含长度，默认 0，低于x个需要全包含，高于x个则至少包含x个字符
+	ContainLength int    `json:"contain_length"` // 可设置搜索词包含长度，默认 0，低于x个需要全包含，高于x个则至少包含x个字符
 }
 
 type PluginTitleImageConfig struct {

@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
 	es8 "github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"kandaoni.com/anqicms/config"
-	"log"
-	"strconv"
 )
 
 type ElasticSearchService struct {
@@ -204,15 +207,40 @@ func (s *ElasticSearchService) Search(keyword string, moduleId uint, page int, p
 		return nil, 0, err
 	}
 
+	// 归一化分值
+	var maxScore types.Float64
+	if resp.Hits.MaxScore != nil {
+		maxScore = *resp.Hits.MaxScore
+	} else {
+		for _, hit := range resp.Hits.Hits {
+			if hit.Score_ != nil && *hit.Score_ > maxScore {
+				maxScore = *hit.Score_
+			}
+		}
+	}
+
 	var docs = make([]TinyArchive, 0, pageSize)
 	for _, hit := range resp.Hits.Hits {
 		id, _ := strconv.ParseInt(*hit.Id_, 10, 64)
 		doc := TinyArchive{}
 		_ = json.Unmarshal(hit.Source_, &doc)
 		doc.Id, doc.Type = GetId(id)
+		// ContainLength 过滤：title/description/content 至少包含
+		if s.config.ContainLength > 0 {
+			if !containsByLength(keyword, s.config.ContainLength, doc.Title, doc.Description, doc.Content) {
+				continue
+			}
+		}
+		// RankingScore 过滤：按页内最大分值归一到 0-1
+		if s.config.RankingScore > 0 && maxScore > 0 && hit.Score_ != nil {
+			norm := *hit.Score_ / maxScore
+			if norm < types.Float64(s.config.RankingScore)/100.0 {
+				continue
+			}
+		}
 		docs = append(docs, doc)
 	}
-	total := resp.Hits.Total.Value
+	total := int64(len(docs))
 
 	return docs, total, nil
 }
@@ -221,4 +249,24 @@ func (s *ElasticSearchService) Close() {
 }
 
 func (s *ElasticSearchService) Flush() {
+}
+
+// containsByLength 判断在任一字段中是否包含关键字；当关键字长度小于等于阈值时要求完整包含；
+// 当关键字长度大于阈值时，要求至少包含任意连续阈值长度的子串。
+func containsByLength(keyword string, length int, fields ...string) bool {
+	if length <= 0 {
+		return true
+	}
+	joined := strings.Join(fields, " ")
+	kr := []rune(keyword)
+	if utf8.RuneCountInString(keyword) <= length {
+		return strings.Contains(joined, keyword)
+	}
+	for i := 0; i <= len(kr)-length; i++ {
+		sub := string(kr[i : i+length])
+		if strings.Contains(joined, sub) {
+			return true
+		}
+	}
+	return false
 }
