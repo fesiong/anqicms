@@ -410,7 +410,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		"msg":  "",
 		"data": iris.Map{
 			"pay_way":  config.PayWayWechat,
-			"code_url": fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(png)),
+			"code_url": "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
 		},
 	})
 	return
@@ -505,9 +505,9 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		SetReturnUrl(currentSite.System.BaseUrl + "/")
 
 	// 自动同步验签（只支持证书模式）
-	certPath := fmt.Sprintf(currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayCertPath)
-	rootCertPath := fmt.Sprintf(currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayRootCertPath)
-	publicCertPath := fmt.Sprintf(currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayPublicCertPath)
+	certPath := currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayCertPath
+	rootCertPath := currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayRootCertPath
+	publicCertPath := currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayPublicCertPath
 	publicKey, err := os.ReadFile(publicCertPath)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -533,7 +533,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm.Set("subject", payment.Remark)
 	bm.Set("out_trade_no", payment.PaymentId)
-	bm.Set("total_amount", fmt.Sprintf("%.2f", float32(payment.Amount)/100))
+	bm.Set("total_amount", fmt.Sprintf("%.2f", float64(payment.Amount)/100))
 
 	//创建订单
 	payUrl, err := client.TradePagePay(context.Background(), bm)
@@ -573,7 +573,7 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 			ReferenceId: payment.PaymentId,
 			Amount: &paypal.Amount{
 				CurrencyCode: "USD",
-				Value:        fmt.Sprintf("%.2f", float32(payment.Amount)/100),
+				Value:        fmt.Sprintf("%.2f", float64(payment.Amount)/100),
 			},
 		},
 	}
@@ -602,7 +602,7 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		})
 		return
 	}
-	if ppRsp.Code != 200 {
+	if ppRsp.ErrorResponse != nil {
 		// do something
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -648,7 +648,7 @@ func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model
 	// this is a pay order
 	payment.PayWay = config.PayWayBalance
 	payment.PaidTime = time.Now().Unix()
-	payment.TerraceId = fmt.Sprintf("%d", payment.PaidTime)
+	payment.TerraceId = strconv.FormatInt(payment.PaidTime, 10)
 	tx.Save(payment)
 	order.PaymentId = payment.PaymentId
 	tx.Save(order)

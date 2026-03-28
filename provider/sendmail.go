@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"strings"
@@ -68,7 +67,7 @@ func (w *Website) GetLastSendmailList() ([]*MailLog, error) {
 			tmp = ""
 		}
 
-		tmp = fmt.Sprintf("%s%s", string(char), tmp)
+		tmp = string(char) + tmp
 
 		if cursor == -fileSize {
 			// stop if we are at the beginning

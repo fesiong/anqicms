@@ -266,10 +266,10 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		args := []string{"-coalesce", "-resize"}
 		if w.Content.ThumbCrop == 0 {
 			// 等比缩放
-			args = append(args, fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+			args = append(args, strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight))
 		} else if w.Content.ThumbCrop == 1 {
 			// 补白
-			args = append(args, fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight), "-background", "white", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+			args = append(args, strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight), "-background", "white", "-extent", strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight))
 		} else {
 			// 裁剪
 			args = append(args, fmt.Sprintf("%dx%d^", w.Content.ThumbWidth, w.Content.ThumbHeight), "-gravity", "center", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))

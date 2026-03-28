@@ -86,7 +86,7 @@ func (w *Website) InitFulltext(focus bool) {
 			}
 			archiveCount += int64(len(archives))
 			lastId = archives[len(archives)-1].Id
-			w.fulltextStatus.Msg = fmt.Sprintf("Archive id: %d", archives[0].Id)
+			w.fulltextStatus.Msg = fmt.Sprintf("Archive id: %d, Progress: %d/%d", archives[0].Id, archiveCount, w.fulltextStatus.Total)
 			w.BulkFulltextIndex(archives)
 			w.fulltextStatus.Current = archiveCount
 		}
@@ -108,7 +108,7 @@ func (w *Website) InitFulltext(focus bool) {
 				}
 				archiveCount += int64(len(categories))
 				lastId = categories[len(categories)-1].Id
-				w.fulltextStatus.Msg = fmt.Sprintf("Category id: %d", categories[0].Id)
+				w.fulltextStatus.Msg = fmt.Sprintf("Category id: %d, Progress: %d/%d", categories[0].Id, archiveCount, w.fulltextStatus.Total)
 				w.BulkFulltextIndex(categories)
 				w.fulltextStatus.Current = archiveCount
 			}
@@ -127,7 +127,7 @@ func (w *Website) InitFulltext(focus bool) {
 				}
 				archiveCount += int64(len(tags))
 				lastId = tags[len(tags)-1].Id
-				w.fulltextStatus.Msg = fmt.Sprintf("Tag id: %d", tags[0].Id)
+				w.fulltextStatus.Msg = fmt.Sprintf("Tag id: %d, Progress: %d/%d", tags[0].Id, archiveCount, w.fulltextStatus.Total)
 				w.BulkFulltextIndex(tags)
 				w.fulltextStatus.Current = archiveCount
 			}
@@ -206,6 +206,19 @@ func (w *Website) Search(key string, moduleId uint, page, pageSize int) (docs []
 	if w.searcher == nil {
 		err = errors.New(w.Tr("Uninitialized"))
 		return
+	}
+	if moduleId > 0 && len(w.PluginFulltext.Modules) > 0 {
+		var exist bool
+		for _, mid := range w.PluginFulltext.Modules {
+			if mid == moduleId {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			err = errors.New(w.Tr("Module not found"))
+			return
+		}
 	}
 
 	docs, total, err = w.searcher.Search(key, moduleId, page, pageSize)

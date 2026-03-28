@@ -73,6 +73,15 @@ var AsValue = pongo2.AsValue
 // Shortcut for `pongo2.AsSafeValue`.
 var AsSafeValue = pongo2.AsSafeValue
 
+var (
+	mobileReplaceRegexCache sync.Map // map[string]*regexp.Regexp
+	mobileIgnoreTagsPart    = `(?is)<a[^>]*data-ignore="true"[^>]*>.*?</a>|<link[^>]*data-ignore="true"[^>]*>`
+
+	interferenceTagRegex   = regexp.MustCompile(`(?i)<(a|article|div|h1|h2|h3|h4|h5|h6|img|p|span|table|section)[\S\s]*?>`)
+	interferenceClassRegex = regexp.MustCompile(`(?i)class="(.*?)"`)
+	jsonLdRegex            = regexp.MustCompile(`<script.+?type="application/ld\+json".*?>`)
+)
+
 type tDjangoAssetLoader struct {
 	rootDir string
 	fs      fs.FS
@@ -412,52 +421,48 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 			if currentSite.PluginInterference.DisableSelection ||
 				currentSite.PluginInterference.DisableCopy ||
 				currentSite.PluginInterference.DisableRightClick {
-				addonText := "<script type=\"text/javascript\">\nwindow.onload = function() {\n"
+				var addonText bytes.Buffer
+				addonText.WriteString("<script type=\"text/javascript\">\nwindow.onload = function() {\n")
 				if currentSite.PluginInterference.DisableSelection {
-					addonText += "document.onselectstart = function (e) {e.preventDefault();};\n"
+					addonText.WriteString("document.onselectstart = function (e) {e.preventDefault();};\n")
 				}
 				if currentSite.PluginInterference.DisableCopy {
-					addonText += "document.oncopy = function(e) {e.preventDefault();}\n"
+					addonText.WriteString("document.oncopy = function(e) {e.preventDefault();}\n")
 				}
 				if currentSite.PluginInterference.DisableRightClick {
-					addonText += "document.oncontextmenu = function(e){e.preventDefault();}\n"
+					addonText.WriteString("document.oncontextmenu = function(e){e.preventDefault();}\n")
 				}
-				addonText += "}</script>"
-				if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
-					index = index + 7
-					tmpData := make([]byte, len(data)+len(addonText))
-					copy(tmpData, data[:index])
-					copy(tmpData[index:], addonText)
-					copy(tmpData[index+len(addonText):], data[index:])
-					data = tmpData
-				} else {
-					data = append(data, addonText...)
-				}
+				addonText.WriteString("}</script>")
+				data = insertAtTag(data, []byte("</body>"), addonText.Bytes(), true, false)
 			}
 			// 基于每个页面独立不变，则这里需要根据页面URL确定唯一值
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok && len(webInfo.CanonicalUrl) > 0 {
 				if currentSite.PluginInterference.Mode == config.InterferenceModeClass {
 					// 添加随机class
-					re, _ := regexp.Compile(`(?i)<(a|article|div|h1|h2|h3|h4|h5|h6|img|p|span|table|section)[\S\s]*?>`)
-					classRe, _ := regexp.Compile(`(?i)class="(.*?)"`)
 					index := 0
-					data = re.ReplaceAllFunc(data, func(b []byte) []byte {
+					data = interferenceTagRegex.ReplaceAllFunc(data, func(b []byte) []byte {
 						index++
 						randClass := crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(index)))
-						match := classRe.FindSubmatch(b)
+						match := interferenceClassRegex.FindSubmatch(b)
+						classStr := library.DecimalToLetter(int64(randClass))
 						if len(match) == 2 {
-							tmpB := make([]byte, len(match[0]))
-							copy(tmpB, match[0])
-							tmpB = append(tmpB[:len(tmpB)-1], " "+library.DecimalToLetter(int64(randClass))+"\""...)
-							b = bytes.Replace(b, match[0], tmpB, 1)
+							// 已经在 interferenceClassRegex.FindSubmatch 匹配了，直接替换
+							oldClass := match[0]
+							newClass := make([]byte, len(oldClass)+len(classStr)+1)
+							copy(newClass, oldClass[:len(oldClass)-1])
+							newClass[len(oldClass)-1] = ' '
+							copy(newClass[len(oldClass):], classStr)
+							newClass[len(newClass)-1] = '"'
+							b = bytes.Replace(b, oldClass, newClass, 1)
 						} else {
-							b = bytes.Replace(b, []byte{'>'}, []byte(" class=\""+library.DecimalToLetter(int64(randClass))+"\">"), 1)
+							b = bytes.Replace(b, []byte{'>'}, []byte(" class=\""+classStr+"\">"), 1)
 						}
 						return b
 					})
 				} else if currentSite.PluginInterference.Mode == config.InterferenceModeText {
 					// 生成10个隐藏的class
-					addonStyle := "<style type=\"text/css\">\n"
+					var addonStyle bytes.Buffer
+					addonStyle.WriteString("<style type=\"text/css\">\n")
 					hiddenStyles := []string{
 						"{display: inline-block;width: .1px;height: .1px;overflow: hidden;visibility: hidden;}\n",
 						"{display: inline-block;font-size: 0!important;width: 1em;height: 1em;visibility: hidden;line-height: 0;}\n",
@@ -465,18 +470,12 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 					}
 					for i := 0; i < 5; i++ {
 						tmpClass := library.DecimalToLetter(int64(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(i)))))
-						addonStyle += "    ." + tmpClass + hiddenStyles[i%len(hiddenStyles)]
+						addonStyle.WriteString("    .")
+						addonStyle.WriteString(tmpClass)
+						addonStyle.WriteString(hiddenStyles[i%len(hiddenStyles)])
 					}
-					addonStyle += "</style>\n"
-					if index := bytes.Index(data, []byte("</head>")); index != -1 {
-						tmpData := make([]byte, len(data)+len(addonStyle))
-						copy(tmpData, data[:index])
-						copy(tmpData[index:], addonStyle)
-						copy(tmpData[index+len(addonStyle):], data[index:])
-						data = tmpData
-					} else {
-						data = append(data, addonStyle...)
-					}
+					addonStyle.WriteString("</style>\n")
+					data = insertAtTag(data, []byte("</head>"), addonStyle.Bytes(), false, true)
 				}
 			}
 		}
@@ -506,89 +505,62 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		// 对于模板是pc+mobile的域名，需要做替换
 		if len(currentSite.System.MobileUrl) > 0 {
 			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
-			if mobileTemplate {
-				// 有特殊标记的a标签不做替换，[data-ignore="true"]
-				re, _ := regexp.Compile(`(?is)<a[^>]*data-ignore="true"[^>]*>(.*?)</a>`)
-				var ignoreLinks = map[string][]byte{}
-				ignoreIdx := 0
-				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
-					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
-					ignoreLinks[idxStr] = match
-					ignoreIdx++
-					return []byte(idxStr)
-				})
-				// 有特殊标记的link标签不做替换，[data-ignore="true"]
-				re, _ = regexp.Compile(`(?is)<link[^>]*data-ignore="true"[^>]*>`)
-				data = re.ReplaceAllFunc(data, func(match []byte) []byte {
-					idxStr := "${ignore-" + strconv.Itoa(ignoreIdx) + "}"
-					ignoreLinks[idxStr] = match
-					ignoreIdx++
-					return []byte(idxStr)
-				})
-				data = bytes.ReplaceAll(data, []byte(currentSite.System.BaseUrl), []byte(currentSite.System.MobileUrl))
-				if len(ignoreLinks) > 0 {
-					re, _ = regexp.Compile(`\$\{ignore-\d+}`)
-					data = re.ReplaceAllFunc(data, func(match []byte) []byte {
-						return ignoreLinks[string(match)]
-					})
+			baseUrl := currentSite.System.BaseUrl
+			if mobileTemplate && baseUrl != "" {
+				mobileUrl := []byte(currentSite.System.MobileUrl)
+				baseUrlBytes := []byte(baseUrl)
+				re, ok := mobileReplaceRegexCache.Load(baseUrl)
+				if !ok {
+					re, _ = regexp.Compile(mobileIgnoreTagsPart + "|" + regexp.QuoteMeta(baseUrl))
+					mobileReplaceRegexCache.Store(baseUrl, re)
 				}
+				data = re.(*regexp.Regexp).ReplaceAllFunc(data, func(match []byte) []byte {
+					if bytes.Equal(match, baseUrlBytes) {
+						return mobileUrl
+					}
+					return match
+				})
 			}
 		}
 		// 添加json-ld
 		if currentSite.PluginJsonLd.Open {
 			// 需要先检查页面是否存在ls+json,如果已存在，则不再添加
-			re, _ := regexp.Compile(`<script.+?type="application/ld\+json".*?>`)
-			if !re.Match(data) {
+			if !jsonLdRegex.Match(data) {
 				jsonLd := currentSite.GetJsonLd(ctx)
 				if len(jsonLd) > 0 {
 					jsonLdBuf := []byte("\n<script type=\"application/ld+json\">\n" + jsonLd + "\n</script>\n")
-					if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
-						index = index + 7
-						tmpData := make([]byte, len(data)+len(jsonLdBuf))
-						copy(tmpData, data[:index])
-						copy(tmpData[index:], jsonLdBuf)
-						copy(tmpData[index+len(jsonLdBuf):], data[index:])
-						data = tmpData
-					} else {
-						data = append(data, jsonLdBuf...)
-					}
+					data = insertAtTag(data, []byte("</body>"), jsonLdBuf, true, false)
 				}
 			}
 		}
 		// 自动添加统计数据
-		query := make(url.Values)
-		query.Set("action", request.LogActionViews)
-		query.Set("path", ctx.FullRequestURI())
-		query.Set("code", strconv.FormatInt(int64(ctx.GetStatusCode()), 10))
-		dataMap, ok := bindingData.(map[string]interface{})
-		if ok {
-			webInfo, ok := dataMap["webInfo"].(*response.WebInfo)
+		spider := library.GetSpider(ctx.GetHeader("User-Agent"))
+		if spider == "" {
+			query := make(url.Values)
+			query.Set("action", request.LogActionViews)
+			query.Set("path", ctx.FullRequestURI())
+			query.Set("code", strconv.FormatInt(int64(ctx.GetStatusCode()), 10))
+			dataMap, ok := bindingData.(map[string]interface{})
 			if ok {
-				if webInfo.PageName == "order" {
-					route, ok := dataMap["route"].(string)
-					if ok && route == "checkout" || route == "confirm" {
-						query.Set("type", route)
-					}
-				} else if webInfo.PageName == "archiveDetail" {
-					query.Set("type", request.LogTypeArchive)
-					archive, ok := dataMap["archive"].(*model.Archive)
-					if ok {
-						query.Set("id", strconv.FormatInt(int64(archive.Id), 10))
+				webInfo, ok := dataMap["webInfo"].(*response.WebInfo)
+				if ok {
+					if webInfo.PageName == "order" {
+						route, ok := dataMap["route"].(string)
+						if ok && route == "checkout" || route == "confirm" {
+							query.Set("type", route)
+						}
+					} else if webInfo.PageName == "archiveDetail" {
+						query.Set("type", request.LogTypeArchive)
+						archive, ok := dataMap["archive"].(*model.Archive)
+						if ok {
+							query.Set("id", strconv.FormatInt(int64(archive.Id), 10))
+						}
 					}
 				}
 			}
-		}
-		queryEncode := query.Encode()
-		logBuf := []byte("\n<script>\n(function() {\n  var al = document.createElement(\"script\");\n  al.src = \"/api/log?" + queryEncode + "&nonce=\"+Date.now();\n  document.body.appendChild(al);\n})();\n</script>\n")
-		if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
-			index = index + 7
-			tmpData := make([]byte, len(data)+len(logBuf))
-			copy(tmpData, data[:index])
-			copy(tmpData[index:], logBuf)
-			copy(tmpData[index+len(logBuf):], data[index:])
-			data = tmpData
-		} else {
-			data = append(data, logBuf...)
+			queryEncode := query.Encode()
+			logBuf := []byte("\n<script>\n(function() {\n  var al = document.createElement(\"script\");\n  al.src = \"/api/log?" + queryEncode + "&nonce=\"+Date.now();\n  document.body.appendChild(al);\n})();\n</script>\n")
+			data = insertAtTag(data, []byte("</body>"), logBuf, true, false)
 		}
 		// end log
 
@@ -637,4 +609,22 @@ func getInnerHTML(n *html.Node) []byte {
 		html.Render(&buf, child)
 	}
 	return buf.Bytes()
+}
+
+func insertAtTag(data []byte, tag []byte, content []byte, after bool, appendIfMissing bool) []byte {
+	index := bytes.LastIndex(data, tag)
+	if index != -1 {
+		if after {
+			index += len(tag)
+		}
+		tmpData := make([]byte, len(data)+len(content))
+		copy(tmpData, data[:index])
+		copy(tmpData[index:], content)
+		copy(tmpData[index+len(content):], data[index:])
+		return tmpData
+	}
+	if appendIfMissing {
+		return append(data, content...)
+	}
+	return data
 }

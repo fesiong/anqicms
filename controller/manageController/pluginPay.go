@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -111,7 +110,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 	}
 	defer file.Close()
 	fileName := name + ".pem"
-	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
+	filePath := currentSite.DataPath + "cert/" + fileName
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{

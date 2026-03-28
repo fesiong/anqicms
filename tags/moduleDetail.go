@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"reflect"
+	"strings"
 
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
@@ -41,13 +42,33 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		id = uint(args["id"].Integer())
 	}
 	module, _ := ctx.Public["module"].(*model.Module)
-	if args["id"] != nil {
-		id = uint(args["id"].Integer())
-	}
+	// 使用上下文缓存避免重复查找
+	cacheKey := "module_detail_cache_"
 	if id > 0 {
-		module = currentSite.GetModuleFromCache(id)
+		cacheKey += fmt.Sprintf("id_%d", id)
 	} else if token != "" {
-		module = currentSite.GetModuleFromCacheByToken(token)
+		cacheKey += "token_" + token
+	} else {
+		cacheKey += "default"
+	}
+
+	if cached, ok := ctx.Private[cacheKey].(*model.Module); ok {
+		module = cached
+	} else {
+		if id > 0 {
+			module = currentSite.GetModuleFromCache(id)
+		} else if token != "" {
+			module = currentSite.GetModuleFromCacheByToken(token)
+		}
+		if module != nil {
+			module.Link = currentSite.GetUrl("archiveIndex", module, 0)
+			// 存入缓存
+			ctx.Private[cacheKey] = module
+		}
+	}
+
+	if module == nil {
+		return nil
 	}
 
 	fieldName := ""
@@ -56,31 +77,63 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		fieldName = library.Case2Camel(fieldName)
 	}
 
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		ctx.Private[node.name] = module
+		return nil
+	}
+
 	var content interface{}
-
-	if module != nil {
-		module.Link = currentSite.GetUrl("archiveIndex", module, 0)
-
-		// 支持获取整个detail
-		if fieldName == "" && node.name != "" {
-			ctx.Private[node.name] = module
-			return nil
+	// 消除反射，改用直接字段访问
+	switch fieldName {
+	case "Id":
+		content = module.Id
+	case "TableName":
+		content = module.TableName
+	case "Name":
+		content = module.Name
+	case "UrlToken":
+		content = module.UrlToken
+	case "Title":
+		content = module.Title
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, module)
 		}
-
+	case "SeoTitle":
+		content = module.Title
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, module)
+		}
+	case "Keywords":
+		content = module.Keywords
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, module)
+		}
+	case "Description":
+		content = module.Description
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, module)
+		}
+	case "TitleName":
+		content = module.TitleName
+	case "Link":
+		content = module.Link
+	case "CreatedTime":
+		content = module.CreatedTime
+	case "UpdatedTime":
+		content = module.UpdatedTime
+	default:
+		// 备选方案：使用反射获取其他字段
 		v := reflect.ValueOf(*module)
-
 		f := v.FieldByName(fieldName)
 		if f.IsValid() {
 			content = f.Interface()
-		}
-		if content == "" && fieldName == "SeoTitle" {
-			content = module.Title
 		}
 	}
 
 	// output
 	if node.name == "" {
-		writer.WriteString(fmt.Sprintf("%v", content))
+		writer.WriteString(fmt.Sprint(content))
 	} else {
 		ctx.Private[node.name] = content
 	}

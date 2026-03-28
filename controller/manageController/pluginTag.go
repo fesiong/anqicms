@@ -85,11 +85,11 @@ func PluginTagDetail(ctx iris.Context) {
 							tag.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && tag.Extra[field.FieldName] != nil {
-						var texts []model.CustomFieldTexts
+						var texts []config.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &texts)
 						tag.Extra[field.FieldName] = texts
 					} else if field.Type == config.CustomFieldTypeTimeline && tag.Extra[field.FieldName] != nil {
-						var val model.TimelineField
+						var val config.TimelineField
 						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &val)
 						tag.Extra[field.FieldName] = val
 					}

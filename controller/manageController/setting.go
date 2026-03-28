@@ -1,7 +1,6 @@
 package manageController
 
 import (
-	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -29,7 +28,7 @@ func SettingSystem(ctx iris.Context) {
 
 	// 读取language列表
 	var languages []string
-	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", config.ExecPath))
+	readerInfos, err := os.ReadDir(config.ExecPath + "/locales")
 	if err == nil {
 		for _, info := range readerInfos {
 			if info.IsDir() {
@@ -451,7 +450,7 @@ func SettingDiyField(ctx iris.Context) {
 
 func SettingDiyFieldForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req []config.ExtraField
+	var req []config.CustomField
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

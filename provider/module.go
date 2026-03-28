@@ -2,7 +2,6 @@ package provider
 
 import (
 	"errors"
-	"fmt"
 	"regexp"
 
 	"gorm.io/gorm/clause"
@@ -145,7 +144,7 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 		}
 	}
 	module.Database = w.Mysql.Database
-	tplPath := fmt.Sprintf("%s/%s", w.GetTemplateDir(), module.TableName)
+	tplPath := w.GetTemplateDir() + "/" + module.TableName
 	module.Migrate(w.DB, tplPath, true)
 
 	w.DeleteCacheModules()

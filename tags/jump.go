@@ -2,9 +2,10 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
 )
 
 // tagJumpNode 翻译
@@ -32,10 +33,10 @@ func (node *tagJumpNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Tem
 	var jumpLink string
 	jumpType := 302
 	if len(args) > 0 {
-		jumpLink = fmt.Sprintf("%v", args[0])
+		jumpLink = fmt.Sprint(args[0])
 	}
 	if len(args) > 1 {
-		val := fmt.Sprintf("%v", args[1])
+		val := fmt.Sprint(args[1])
 		jumpType, _ = strconv.Atoi(val)
 	}
 

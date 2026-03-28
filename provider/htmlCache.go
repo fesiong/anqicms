@@ -267,10 +267,11 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		tplName = tplName2
 	}
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
+	tmpName := fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	if category.Template != "" {
 		tplName = category.Template
-	} else if ViewExists(newCtx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
-		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
+	} else if ViewExists(newCtx, tmpName) {
+		tplName = tmpName
 	} else {
 		categoryTemplate := w.GetCategoryTemplate(category)
 		if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
@@ -795,8 +796,8 @@ func (w *Website) RemoveHtmlCache(oriPaths ...string) {
 
 	if len(oriPaths) > 0 {
 		for _, oriPath := range oriPaths {
-			if strings.HasPrefix(oriPath, w.System.BaseUrl) {
-				oriPath = strings.TrimPrefix(oriPath, w.System.BaseUrl)
+			if after, ok := strings.CutPrefix(oriPath, w.System.BaseUrl); ok {
+				oriPath = after
 			}
 			oriPath = transToLocalPath(oriPath, "")
 			_ = os.Remove(cacheFilePc + oriPath)

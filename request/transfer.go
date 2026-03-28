@@ -4,6 +4,7 @@ type TransferWebsite struct {
 	Name     string `json:"name"`
 	BaseUrl  string `json:"base_url"`
 	Token    string `json:"token"`
+	TargetId string `json:"target_id"`
 	Provider string `json:"provider"`
 }
 

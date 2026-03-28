@@ -35,34 +35,36 @@ import (
 )
 
 func (w *Website) GetArchiveByIdFromCache(id int64) (archive *model.Archive) {
-	err := w.Cache.Get(fmt.Sprintf("archive-%d", id), archive)
+	cacheKey := "archive-" + strconv.FormatInt(id, 10)
+	err := w.Cache.Get(cacheKey, archive)
 	if err != nil {
 		archive, err = w.GetArchiveById(id)
 		if err != nil {
 			return nil
 		}
-		_ = w.Cache.Set(fmt.Sprintf("archive-%d", archive.Id), archive, 300)
+		_ = w.Cache.Set(cacheKey, archive, 300)
 	}
 
 	return archive
 }
 
 func (w *Website) GetArchiveByUrlTokenFromCache(urlToken string) (archive *model.Archive) {
-	err := w.Cache.Get(fmt.Sprintf("archive-%s", urlToken), archive)
+	cacheKey := "archive-" + urlToken
+	err := w.Cache.Get(cacheKey, archive)
 	if err != nil {
 		archive, err = w.GetArchiveByUrlToken(urlToken)
 		if err != nil {
 			return nil
 		}
-		_ = w.Cache.Set(fmt.Sprintf("archive-%s", archive.UrlToken), archive, 300)
+		_ = w.Cache.Set(cacheKey, archive, 300)
 	}
 
 	return archive
 }
 
 func (w *Website) DeleteArchiveCache(id int64, urlToken string, link string) {
-	w.Cache.Delete(fmt.Sprintf("archive-%d", id))
-	w.Cache.Delete(fmt.Sprintf("archive-%s", urlToken))
+	w.Cache.Delete("archive-" + strconv.FormatInt(id, 10))
+	w.Cache.Delete("archive-" + urlToken)
 	// 同时清理html缓存，如果可以的话
 	if link != "" && w.PluginHtmlCache.Open != false {
 		cachePath := w.CachePath + "pc"
@@ -394,8 +396,9 @@ func (w *Website) GetExplainCount(sql string) int64 {
 	return result.Rows
 }
 
-func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*model.CustomField) {
-	err := w.Cache.Get(fmt.Sprintf("archive-extra-%d", archiveId), &extra)
+func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*config.CustomField) {
+	cacheKey := "archive-extra-" + strconv.FormatInt(archiveId, 10)
+	err := w.Cache.Get(cacheKey, &extra)
 	if err != nil {
 		return nil
 	}
@@ -403,15 +406,16 @@ func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*m
 	return extra
 }
 
-func (w *Website) AddArchiveExtraCache(archiveId int64, extra map[string]*model.CustomField) {
-	_ = w.Cache.Set(fmt.Sprintf("archive-extra-%d", archiveId), extra, 60)
+func (w *Website) AddArchiveExtraCache(archiveId int64, extra map[string]*config.CustomField) {
+	cacheKey := "archive-extra-" + strconv.FormatInt(archiveId, 10)
+	_ = w.Cache.Set(cacheKey, extra, 60)
 }
 
 func (w *Website) DeleteArchiveExtraCache(archiveId int64) {
-	w.Cache.Delete(fmt.Sprintf("archive-extra-%d", archiveId))
+	w.Cache.Delete("archive-extra-" + strconv.FormatInt(archiveId, 10))
 }
 
-func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[string]*model.CustomField {
+func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[string]*config.CustomField {
 	if loadCache {
 		cached := w.GetArchiveExtraFromCache(id)
 		if cached != nil {
@@ -420,7 +424,7 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 	}
 	//读取extra
 	result := map[string]interface{}{}
-	extraFields := map[string]*model.CustomField{}
+	extraFields := map[string]*config.CustomField{}
 	module := w.GetModuleFromCache(moduleId)
 	if module != nil {
 		var fields []string
@@ -442,18 +446,20 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 						err := json.Unmarshal([]byte(value), &images)
 						if err == nil {
 							for i := range images {
-								images[i] = w.ReplaceContentUrl(images[i], true)
+								if !strings.HasPrefix(images[i], "http") && !strings.HasPrefix(images[i], "//") {
+									images[i] = w.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(images[i], "/")
+								}
 							}
 							result[v.FieldName] = images
 						}
 					} else if v.Type == config.CustomFieldTypeTexts {
-						var texts []model.CustomFieldTexts
+						var texts []config.CustomFieldTexts
 						err := json.Unmarshal([]byte(value), &texts)
 						if err == nil {
 							result[v.FieldName] = texts
 						}
 					} else if v.Type == config.CustomFieldTypeTimeline {
-						var val model.TimelineField
+						var val config.TimelineField
 						err := json.Unmarshal([]byte(value), &val)
 						if err == nil {
 							result[v.FieldName] = val
@@ -468,7 +474,7 @@ func (w *Website) GetArchiveExtra(moduleId uint, id int64, loadCache bool) map[s
 						result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 					}
 				}
-				extraFields[v.FieldName] = &model.CustomField{
+				extraFields[v.FieldName] = &config.CustomField{
 					Name:        v.Name,
 					Value:       result[v.FieldName],
 					Default:     v.Content,
@@ -1552,7 +1558,7 @@ func (w *Website) VerifyArchiveUrlToken(urlToken, title string, id int64) string
 		for {
 			tmpToken := urlToken
 			if index > 0 {
-				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+				tmpToken = urlToken + "-" + strconv.Itoa(index)
 			}
 			// 判断分类
 			_, err := w.GetCategoryByUrlToken(tmpToken)

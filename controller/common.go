@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"log"
 	"net"
 	"net/http"
@@ -348,7 +347,7 @@ func FileServe(ctx iris.Context) bool {
 	currentSite := provider.CurrentSite(ctx)
 	uri := ctx.RequestPath(false)
 	if uri != currentSite.BaseURI && !strings.HasSuffix(uri, "/") {
-		baseDir := fmt.Sprintf("%spublic", currentSite.RootPath)
+		baseDir := currentSite.RootPath + "public"
 		uriFile := baseDir + strings.TrimPrefix(uri, strings.TrimRight(currentSite.BaseURI, "/"))
 		_, err := os.Stat(uriFile)
 		if err == nil {
@@ -359,7 +358,7 @@ func FileServe(ctx iris.Context) bool {
 		mainSite := currentSite.GetMainWebsite()
 		if mainSite.MultiLanguage != nil && mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
 			if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
-				baseDir2 := fmt.Sprintf("%spublic", mainSite.RootPath)
+				baseDir2 := mainSite.RootPath + "public"
 				uriFile2 := baseDir2 + strings.TrimPrefix(uri, strings.TrimRight(mainSite.BaseURI, "/"))
 				_, err = os.Stat(uriFile2)
 				if err == nil {
@@ -596,7 +595,7 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 	archiveId := currentSite.GetFixedLinkFromCache("/" + paramValue)
 	if archiveId > 0 {
 		matchMap["match"] = provider.PatternArchive
-		matchMap["id"] = fmt.Sprintf("%d", archiveId)
+		matchMap["id"] = strconv.FormatInt(archiveId, 10)
 		return matchMap, true
 	}
 	rewritePattern := useSite.ParsePattern(false)
@@ -869,7 +868,7 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 func GetViewPath(ctx iris.Context, tplName string) string {
 	mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
 	if mobileTemplate {
-		tplName = fmt.Sprintf("mobile/%s", tplName)
+		tplName = "mobile/" + tplName
 	}
 	return tplName
 }

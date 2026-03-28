@@ -57,7 +57,7 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 				baseUrl = mainSite.System.BaseUrl
 			}
 		}
-		content = fmt.Sprintf("%s/static/%s/", strings.TrimRight(baseUrl, "/"), currentSite.System.TemplateName)
+		content = strings.TrimRight(baseUrl, "/") + "/static/" + currentSite.System.TemplateName + "/"
 		// 如果是多站点，除了独立域名外，另外两种方式的静态资源，都采用目录形式，否则会导致加载异常
 	} else if fieldName == "SiteLogo" {
 		content = currentSite.System.SiteLogo
@@ -75,14 +75,32 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		} else {
 			content = strconv.FormatInt(nowTime.Unix(), 10)
 		}
-	} else if currentSite.System.ExtraFields != nil {
-		for i := range currentSite.System.ExtraFields {
-			if currentSite.System.ExtraFields[i].Name == fieldName {
-				content = fmt.Sprintf("%v", currentSite.System.ExtraFields[i].Value)
-				if content == "" && currentSite.System.ExtraFields[i].Content != "" {
-					content = currentSite.System.ExtraFields[i].Content
+	} else if fieldName == "SeoTitle" {
+		content = currentSite.Index.SeoTitle
+	} else if fieldName == "SeoKeywords" {
+		content = currentSite.Index.SeoKeywords
+	} else if fieldName == "SeoDescription" {
+		content = currentSite.Index.SeoDescription
+	} else if fieldName == "Sep" {
+		content = currentSite.Index.Sep
+		if content == "" {
+			content = " - "
+		}
+	} else if fieldName == "SiteName" {
+		content = currentSite.System.SiteName
+	} else if fieldName == "SiteUrl" || fieldName == "BaseUrl" {
+		content = currentSite.System.BaseUrl
+	}
+	if content == "" {
+		if currentSite.System.ExtraFields != nil {
+			for i := range currentSite.System.ExtraFields {
+				if currentSite.System.ExtraFields[i].Name == fieldName {
+					content = fmt.Sprint(currentSite.System.ExtraFields[i].Value)
+					if content == "" && currentSite.System.ExtraFields[i].Content != "" {
+						content = currentSite.System.ExtraFields[i].Content
+					}
+					break
 				}
-				break
 			}
 		}
 	}
@@ -90,7 +108,7 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		v := reflect.ValueOf(*currentSite.System)
 		f := v.FieldByName(fieldName)
 
-		content = fmt.Sprintf("%v", f)
+		content = fmt.Sprint(f)
 		// 增加header支持
 		if !f.IsValid() {
 			content = currentSite.CtxOri().GetHeader(fieldName)

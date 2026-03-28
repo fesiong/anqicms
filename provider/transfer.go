@@ -8,10 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"mime/multipart"
 	"net/url"
@@ -21,10 +17,16 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type TransferWebsite struct {
 	w        *Website
+	TargetId string `json:"target_id"` // 目标网站id
 	Name     string `json:"name"`
 	BaseUrl  string `json:"base_url"`
 	Token    string `json:"token"`
@@ -47,35 +49,38 @@ type TransferResult struct {
 }
 
 type ModuleData struct {
-	Id        uint                 `json:"id"`
-	TableName string               `json:"table_name"`
-	UrlToken  string               `json:"url_token"`
-	Title     string               `json:"title"`
-	Fields    []config.CustomField `json:"fields"`
-	IsSystem  int                  `json:"is_system"`
-	TitleName string               `json:"title_name"`
-	Status    uint                 `json:"status"`
+	Id             uint                 `json:"id"`
+	TableName      string               `json:"table_name"`
+	UrlToken       string               `json:"url_token"`
+	Title          string               `json:"title"`
+	Name           string               `json:"name"`
+	Fields         []config.CustomField `json:"fields"`
+	CategoryFields []config.CustomField `json:"category_fields"`
+	IsSystem       int                  `json:"is_system"`
+	TitleName      string               `json:"title_name"`
+	Status         uint                 `json:"status"`
 }
 
 type CategoryData struct {
-	Id             uint     `json:"id"`
-	Title          string   `json:"title"`
-	SeoTitle       string   `json:"seo_title"`
-	Keywords       string   `json:"keywords"`
-	Description    string   `json:"description"`
-	Content        string   `json:"content"`
-	ModuleId       uint     `json:"module_id"`
-	ParentId       uint     `json:"parent_id"`
-	Sort           uint     `json:"sort"`
-	Status         uint     `json:"status"`
-	Type           uint     `json:"type"`
-	Template       string   `json:"template"`
-	DetailTemplate string   `json:"detail_template"`
-	UrlToken       string   `json:"url_token"`
-	Images         []string `json:"images"`
-	Logo           string   `json:"logo"`
-	IsInherit      uint     `json:"is_inherit"`
-	CreatedTime    int64    `json:"created_time"`
+	Id             uint                   `json:"id"`
+	Title          string                 `json:"title"`
+	SeoTitle       string                 `json:"seo_title"`
+	Keywords       string                 `json:"keywords"`
+	Description    string                 `json:"description"`
+	Content        string                 `json:"content"`
+	ModuleId       uint                   `json:"module_id"`
+	ParentId       uint                   `json:"parent_id"`
+	Sort           uint                   `json:"sort"`
+	Status         uint                   `json:"status"`
+	Type           uint                   `json:"type"`
+	Template       string                 `json:"template"`
+	DetailTemplate string                 `json:"detail_template"`
+	UrlToken       string                 `json:"url_token"`
+	Images         []string               `json:"images"`
+	Logo           string                 `json:"logo"`
+	IsInherit      uint                   `json:"is_inherit"`
+	CreatedTime    int64                  `json:"created_time"`
+	Extra          map[string]interface{} `json:"extra"`
 }
 
 type TagData struct {
@@ -153,6 +158,7 @@ func (w *Website) GetTransferTask() *TransferWebsite {
 func (w *Website) CreateTransferTask(website *request.TransferWebsite) (*TransferWebsite, error) {
 	w.transferWebsite = &TransferWebsite{
 		w:        w,
+		TargetId: website.TargetId,
 		Name:     website.Name,
 		BaseUrl:  strings.TrimRight(website.BaseUrl, "/"),
 		Token:    website.Token,
@@ -160,7 +166,7 @@ func (w *Website) CreateTransferTask(website *request.TransferWebsite) (*Transfe
 		Status:   0,
 	}
 	// 尝试链接文件
-	remoteUrl := w.transferWebsite.BaseUrl + "/" + w.transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms"
+	remoteUrl := w.transferWebsite.BaseUrl + "/" + w.transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms&target_id=" + w.transferWebsite.TargetId
 	resp, err := library.Request(remoteUrl, &library.Options{Method: "POST", Type: "json", Data: w.transferWebsite})
 	if err != nil {
 		return nil, err
@@ -316,14 +322,20 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 		if !exist {
 			continue
 		}
+		name := result.Data[i].Name
+		if name == "" {
+			name = result.Data[i].Title
+		}
 		module := model.Module{
-			TableName: result.Data[i].TableName,
-			UrlToken:  result.Data[i].UrlToken,
-			Title:     result.Data[i].Title,
-			Fields:    result.Data[i].Fields,
-			IsSystem:  result.Data[i].IsSystem,
-			TitleName: result.Data[i].TitleName,
-			Status:    result.Data[i].Status,
+			TableName:      result.Data[i].TableName,
+			UrlToken:       result.Data[i].UrlToken,
+			Title:          result.Data[i].Title,
+			Name:           name,
+			Fields:         result.Data[i].Fields,
+			CategoryFields: result.Data[i].CategoryFields,
+			IsSystem:       result.Data[i].IsSystem,
+			TitleName:      result.Data[i].TitleName,
+			Status:         result.Data[i].Status,
 		}
 		module.Id = result.Data[i].Id
 		if module.UrlToken == "" {
@@ -331,7 +343,7 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 		}
 		t.w.DB.Save(&module)
 		module.Database = t.w.Mysql.Database
-		tplPath := fmt.Sprintf("%s/%s", t.w.GetTemplateDir(), module.TableName)
+		tplPath := t.w.GetTemplateDir() + "/" + module.TableName
 		module.Migrate(t.w.DB, tplPath, true)
 	}
 	t.w.DeleteCacheModules()
@@ -360,11 +372,18 @@ func (t *TransferWebsite) transferCategories() error {
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
+		logo := strings.Replace(result.Data[i].Logo, t.BaseUrl, "", 1)
+		var images []string
+		for _, v := range result.Data[i].Images {
+			images = append(images, strings.Replace(v, t.BaseUrl, "", 1))
+		}
 		category := model.Category{
 			Title:       result.Data[i].Title,
 			SeoTitle:    result.Data[i].SeoTitle,
 			Keywords:    result.Data[i].Keywords,
 			UrlToken:    result.Data[i].UrlToken,
+			Logo:        logo,
+			Images:      images,
 			Description: result.Data[i].Description,
 			Content:     ParseContent(result.Data[i].Content),
 			ModuleId:    result.Data[i].ModuleId,
@@ -372,6 +391,7 @@ func (t *TransferWebsite) transferCategories() error {
 			Type:        config.CategoryTypeArchive,
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
+			Extra:       result.Data[i].Extra,
 		}
 		if utf8.RuneCountInString(category.Title) > 190 {
 			category.Title = string([]rune(category.Title)[:190])
@@ -572,15 +592,12 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
 			archive.Id = result.Data[i].Id
 			archive.UrlToken = t.w.VerifyArchiveUrlToken(archive.UrlToken, archive.Title, archive.Id)
-			// 先保存为草稿
-			t.w.DB.Save(&archive)
-			// 如果status == 1，则保存为正式表
 			if archive.Status == config.ContentStatusOK {
-				realArchive := &archive.Archive
 				// 保存到正式表
-				t.w.DB.Save(&realArchive)
-				// 并删除草稿
-				t.w.DB.Delete(&archive)
+				t.w.DB.Save(&archive.Archive)
+			} else {
+				// 保存为草稿
+				t.w.DB.Save(&archive)
 			}
 			// 保存内容表
 			archiveData := model.ArchiveData{
@@ -637,6 +654,152 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 				_ = t.w.SaveArchiveFlags(archive.Id, strings.Split(result.Data[i].Flag, ","))
 			}
 		}
+	}
+
+	return nil
+}
+
+func (t *TransferWebsite) transferArchivesTmp(moduleIds []uint) error {
+	t.Current = "archive"
+	t.LastId = 0
+	t.LastMod = ""
+	for {
+		resp, err := t.getWebData("archive", t.LastId, t.LastMod)
+		if err != nil {
+			t.ErrorMsg = err.Error()
+			t.Status = 2 // done
+			return err
+		}
+		var result TransferArchives
+		err = json.Unmarshal([]byte(resp.Body), &result)
+		if err != nil {
+			t.ErrorMsg = err.Error()
+			t.Status = 2 // done
+			return errors.New(resp.Body)
+		}
+		if result.Code != 0 {
+			t.ErrorMsg = result.Msg
+			t.Status = 2 // done
+			return errors.New(result.Msg)
+		}
+		if len(result.Data) == 0 {
+			break
+		}
+		t.LastMod = result.LastMod
+		t.LastId = int64(result.Data[len(result.Data)-1].Id)
+
+		var extras = make([]map[string]interface{}, 0, len(result.Data))
+		var archives = make([]model.ArchiveDraft, 0, len(result.Data))
+		for i := range result.Data {
+			// 如果选择了模块，则只导入对应模块
+			if len(moduleIds) > 0 {
+				exist := false
+				for _, tmpModId := range moduleIds {
+					if tmpModId == result.Data[i].ModuleId {
+						exist = true
+						break
+					}
+				}
+				if !exist {
+					continue
+				}
+			}
+			// 迁移过来需要保持ID不变
+			archive := model.ArchiveDraft{
+				Archive: model.Archive{
+					Title:       result.Data[i].Title,
+					SeoTitle:    result.Data[i].SeoTitle,
+					UrlToken:    result.Data[i].UrlToken,
+					Keywords:    result.Data[i].Keywords,
+					Description: result.Data[i].Description,
+					ModuleId:    result.Data[i].ModuleId,
+					CategoryId:  result.Data[i].CategoryId,
+					Views:       result.Data[i].Views,
+					Images:      result.Data[i].Images,
+				},
+				Status: result.Data[i].Status,
+			}
+			if utf8.RuneCountInString(archive.Title) > 190 {
+				archive.Title = string([]rune(archive.Title)[:190])
+			}
+			if utf8.RuneCountInString(archive.Keywords) > 250 {
+				archive.Keywords = string([]rune(archive.Keywords)[:250])
+			}
+			if utf8.RuneCountInString(archive.SeoTitle) > 250 {
+				archive.SeoTitle = string([]rune(archive.SeoTitle)[:250])
+			}
+			if archive.Description == "" {
+				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "))
+			} else if utf8.RuneCountInString(archive.Description) > 1000 {
+				// 字段最大支持1000
+				archive.Description = string([]rune(archive.Description)[:1000])
+			}
+			if result.Data[i].Logo != "" {
+				archive.Images = append(archive.Images, result.Data[i].Logo)
+			}
+			for x := range archive.Images {
+				archive.Images[x] = strings.Replace(archive.Images[x], t.BaseUrl, "", 1)
+			}
+			archive.CreatedTime = result.Data[i].CreatedTime
+			archive.UpdatedTime = result.Data[i].UpdatedTime
+			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
+			archive.Id = result.Data[i].Id
+			if archive.UrlToken == "" {
+				archive.UrlToken = library.GetPinyin(archive.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
+			}
+			archive.ArchiveData = &model.ArchiveData{
+				Content: ParseContent(result.Data[i].Content),
+			}
+			archives = append(archives, archive)
+			if len(result.Data[i].Extra) > 0 {
+				result.Data[i].Extra["id"] = archive.Id
+				extras = append(extras, result.Data[i].Extra)
+			}
+		}
+		t.SaveBatches(archives, extras)
+	}
+
+	return nil
+}
+
+func (t *TransferWebsite) SaveBatches(archives []model.ArchiveDraft, extras []map[string]interface{}) error {
+	tx := t.w.DB.Begin()
+	defer tx.Commit()
+
+	var archiveCategories = make([]model.ArchiveCategory, 0, len(archives))
+	var archiveData = make([]model.ArchiveData, 0, len(archives))
+	var draftArchives = make([]model.ArchiveDraft, 0, len(archives))
+	var releaseArchives = make([]model.Archive, 0, len(archives))
+	var moduleId uint
+	for i := range archives {
+		if moduleId == 0 {
+			moduleId = archives[i].ModuleId
+		}
+		archiveCategories = append(archiveCategories, model.ArchiveCategory{
+			CategoryId: archives[i].CategoryId,
+			ArchiveId:  archives[i].Id,
+		})
+		archives[i].ArchiveData.Id = archives[i].Id
+		archiveData = append(archiveData, *archives[i].ArchiveData)
+		if archives[i].Status == config.ContentStatusOK {
+			releaseArchives = append(releaseArchives, archives[i].Archive)
+		} else {
+			draftArchives = append(draftArchives, archives[i])
+		}
+	}
+
+	if len(draftArchives) > 0 {
+		// 入库到 draft
+		tx.CreateInBatches(draftArchives, 1000)
+	} else {
+		// release mode
+		tx.CreateInBatches(releaseArchives, 1000)
+	}
+	tx.CreateInBatches(archiveData, 1000)
+	tx.CreateInBatches(archiveCategories, 1000)
+	if len(extras) > 0 {
+		module := t.w.GetModuleFromCache(moduleId)
+		tx.Table(module.TableName).CreateInBatches(extras, 1000)
 	}
 
 	return nil
@@ -844,6 +1007,11 @@ func (w *Website) insertAttachment(realName string, isImage int) {
 		return
 	}
 	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+	exists2, _ := w.GetAttachmentByMd5(md5Str)
+	if exists2 != nil {
+		// 已存在，跳过
+		return
+	}
 
 	attachment := &model.Attachment{
 		FileName:     filepath.Base(fileLocation),
@@ -880,6 +1048,7 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64, lastMod 
 	query.Set("from", "anqicms")
 	query.Set("_t", _t)
 	query.Set("token", library.Md5(t.Token+_t))
+	query.Set("target_id", t.TargetId)
 	query.Set("type", transferType)
 	query.Set("last_id", fmt.Sprintf("%d", lastId))
 	query.Set("last_mod", lastMod)

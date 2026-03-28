@@ -3,10 +3,10 @@ package manageController
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net"
 	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -572,7 +572,7 @@ func FindPasswordChooseWay(ctx iris.Context) {
 	if currentSite.FindPasswordInfo == nil {
 		w2 := provider.GetWebsite(currentSite.Id)
 		w2.FindPasswordInfo = &response.FindPasswordInfo{
-			Token: library.Md5(currentSite.TokenSecret + fmt.Sprintf("%d", time.Now().UnixNano())),
+			Token: library.Md5(currentSite.TokenSecret + strconv.FormatInt(time.Now().UnixNano(), 10)),
 		}
 		currentSite.FindPasswordInfo = w2.FindPasswordInfo
 	} else {

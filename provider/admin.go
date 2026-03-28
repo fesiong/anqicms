@@ -3,14 +3,15 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"strings"
-	"time"
-	"unicode/utf8"
 )
 
 func (w *Website) InitAdmin(userName string, password string, force bool) error {
@@ -189,8 +190,8 @@ func (w *Website) GetAdminAuthToken(userId uint, remember bool) string {
 		t = t.AddDate(0, 0, 29)
 	}
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"adminId": fmt.Sprintf("%d", userId),
-		"t":       fmt.Sprintf("%d", t.Unix()),
+		"adminId": fmt.Sprint(userId),
+		"t":       fmt.Sprint(t.Unix()),
 	})
 	// 获取签名字符串
 	tokenString, err := jwtToken.SignedString([]byte(w.TokenSecret + "-admin-token"))

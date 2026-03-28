@@ -1,7 +1,6 @@
 package controller
 
 import (
-	"fmt"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
@@ -11,7 +10,7 @@ func OrderIndexPage(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 
 	route := ctx.Params().GetStringDefault("route", "index")
-	tpl := fmt.Sprintf("order/%s.html", route)
+	tpl := "order/" + route + ".html"
 	tpl, ok := currentSite.TemplateExist(tpl)
 	if !ok {
 		ctx.StatusCode(iris.StatusNotFound)

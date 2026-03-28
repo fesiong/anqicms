@@ -1,13 +1,12 @@
 package tags
 
 import (
-	"encoding/json"
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 
 	"github.com/flosch/pongo2/v6"
-	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -55,12 +54,39 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	if args["id"] != nil {
 		id = uint(args["id"].Integer())
 	}
+	// 使用上下文缓存避免重复查找
+	cacheKey := "tag_detail_cache_"
 	if id > 0 {
-		tagDetail, _ = currentSite.GetTagById(id)
+		cacheKey += fmt.Sprintf("id_%d", id)
 	} else if token != "" {
-		tagDetail, _ = currentSite.GetTagByUrlToken(token)
+		cacheKey += "token_" + token
 	} else if title != "" {
-		tagDetail, _ = currentSite.GetTagByTitle(title)
+		cacheKey += "title_" + title
+	} else {
+		cacheKey += "default"
+	}
+
+	if cached, ok := ctx.Private[cacheKey].(*model.Tag); ok {
+		tagDetail = cached
+	} else {
+		if id > 0 {
+			tagDetail, _ = currentSite.GetTagById(id)
+		} else if token != "" {
+			tagDetail, _ = currentSite.GetTagByUrlToken(token)
+		} else if title != "" {
+			tagDetail, _ = currentSite.GetTagByTitle(title)
+		}
+
+		if tagDetail != nil {
+			tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
+			tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagDetail.Id)))
+			// 存入缓存
+			ctx.Private[cacheKey] = tagDetail
+		}
+	}
+
+	if tagDetail == nil {
+		return nil
 	}
 
 	fieldName := ""
@@ -68,135 +94,113 @@ func (node *tagTagDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	if args["name"] != nil {
 		inputName = args["name"].String()
 		fieldName = library.Case2Camel(inputName)
+		if fieldName == "Extra" {
+			inputName = ""
+		}
+	}
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		ctx.Private[node.name] = tagDetail
+		return nil
 	}
 
 	var content interface{}
-
-	if tagDetail != nil {
-		tagDetail.Link = currentSite.GetUrl("tag", tagDetail, 0)
-		tagDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagDetail.Id)))
-		v := reflect.ValueOf(*tagDetail)
-
-		// 支持获取整个detail
-		if fieldName == "" && node.name != "" {
-			ctx.Private[node.name] = tagDetail
-			return nil
-		}
-
-		f := v.FieldByName(fieldName)
-		if f.IsValid() {
-			content = f.Interface()
-		}
-		if tagDetail.SeoTitle == "" && fieldName == "SeoTitle" {
+	// 消除反射，改用直接字段访问
+	switch fieldName {
+	case "Id":
+		content = tagDetail.Id
+	case "Title":
+		content = tagDetail.Title
+	case "SeoTitle":
+		content = tagDetail.SeoTitle
+		if tagDetail.SeoTitle == "" {
 			content = tagDetail.Title
 		}
-		tmpKey := "tagContent" + fmt.Sprintf("%d", tagDetail.Id)
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, tagDetail)
+		}
+	case "Keywords":
+		content = tagDetail.Keywords
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, tagDetail)
+		}
+	case "Description":
+		content = tagDetail.Description
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, tagDetail)
+		}
+	case "Link":
+		content = tagDetail.Link
+	case "Thumb":
+		content = tagDetail.Thumb
+	case "Logo":
+		content = tagDetail.Logo
+	case "CreatedTime":
+		content = tagDetail.CreatedTime
+	case "UpdatedTime":
+		content = tagDetail.UpdatedTime
+	case "Content":
+		tmpKey := "tagContent" + strconv.Itoa(int(tagDetail.Id))
 		var tagContent *model.TagContent
 		if ctx.Public[tmpKey] != nil {
 			tagContent, _ = ctx.Public[tmpKey].(*model.TagContent)
 		}
 		if tagContent == nil {
 			tagContent, _ = currentSite.GetTagContentById(tagDetail.Id)
+			if tagContent != nil {
+				ctx.Public[tmpKey] = tagContent
+			}
 		}
-		if fieldName == "Content" && tagContent != nil {
-			content = tagContent.Content
-			// convert markdown to html
-			if render {
-				content = library.MarkdownToHTML(tagContent.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+		if tagContent != nil {
+			content = parseContent(tagContent.Content, render, currentSite, ctx)
+		}
+	default:
+		// 备选方案：使用反射获取
+		if fieldName != "Extra" {
+			v := reflect.ValueOf(*tagDetail)
+			f := v.FieldByName(fieldName)
+			if f.IsValid() {
+				content = f.Interface()
+			}
+		}
+		// 数据可能来自自定义字段
+		tmpKey := "tagContent" + strconv.Itoa(int(tagDetail.Id))
+		var tagContent *model.TagContent
+		if ctx.Public[tmpKey] != nil {
+			tagContent, _ = ctx.Public[tmpKey].(*model.TagContent)
+		}
+		if tagContent == nil {
+			tagContent, _ = currentSite.GetTagContentById(tagDetail.Id)
+			if tagContent != nil {
+				ctx.Public[tmpKey] = tagContent
 			}
 		}
 		if tagContent != nil && tagContent.Extra != nil {
 			fields := currentSite.GetTagFields()
 			if len(fields) > 0 {
-				for _, field := range fields {
-					if (tagContent.Extra[field.FieldName] == nil || tagContent.Extra[field.FieldName] == "" || tagContent.Extra[field.FieldName] == 0) &&
-						field.Type != config.CustomFieldTypeRadio &&
-						field.Type != config.CustomFieldTypeCheckbox &&
-						field.Type != config.CustomFieldTypeSelect {
-						// default
-						tagContent.Extra[field.FieldName] = field.Content
-					}
-					if (field.Type == config.CustomFieldTypeImage || field.Type == config.CustomFieldTypeFile || field.Type == config.CustomFieldTypeEditor) &&
-						tagContent.Extra[field.FieldName] != nil {
-						value, ok2 := tagContent.Extra[field.FieldName].(string)
-						if ok2 {
-							if field.Type == config.CustomFieldTypeEditor && render {
-								value = library.MarkdownToHTML(value, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
-							}
-							tagContent.Extra[field.FieldName] = currentSite.ReplaceContentUrl(value, true)
-						}
-					}
-					if field.Type == config.CustomFieldTypeImages && tagContent.Extra[field.FieldName] != nil {
-						if val, ok := tagContent.Extra[field.FieldName].([]interface{}); ok {
-							for j, v2 := range val {
-								v2s, _ := v2.(string)
-								val[j] = currentSite.ReplaceContentUrl(v2s, true)
-							}
-							tagContent.Extra[field.FieldName] = val
-						}
-					} else if field.Type == config.CustomFieldTypeTexts && tagContent.Extra[field.FieldName] != nil {
-						var texts []model.CustomFieldTexts
-						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &texts)
-						tagContent.Extra[field.FieldName] = texts
-					} else if field.Type == config.CustomFieldTypeTimeline && tagContent.Extra[field.FieldName] != nil {
-						var val model.TimelineField
-						_ = json.Unmarshal([]byte(fmt.Sprint(tagContent.Extra[field.FieldName])), &val)
-						tagContent.Extra[field.FieldName] = val
-					} else if field.Type == config.CustomFieldTypeArchive && tagContent.Extra[field.FieldName] != nil {
-						// 列表
-						var arcIds []int64
-						buf, _ := json.Marshal(tagContent.Extra[field.FieldName])
-						_ = json.Unmarshal(buf, &arcIds)
-						if len(arcIds) == 0 && field.Content != "" {
-							value, _ := strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
-							if value > 0 {
-								arcIds = append(arcIds, value)
-							}
-						}
-						if len(arcIds) > 0 {
-							archives, _, _ := currentSite.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-								return tx.Where("archives.`id` IN (?)", arcIds)
-							}, "archives.id ASC", 0, len(arcIds))
-							tagContent.Extra[field.FieldName] = archives
-						} else {
-							tagContent.Extra[field.FieldName] = nil
-						}
-					} else if field.Type == config.CustomFieldTypeCategory {
-						value, err := strconv.ParseInt(fmt.Sprint(tagContent.Extra[field.FieldName]), 10, 64)
-						if err != nil && field.Content != "" {
-							value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
-						}
-						if value > 0 {
-							tagContent.Extra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
-						} else {
-							tagContent.Extra[field.FieldName] = nil
-						}
-					}
-				}
+				extraData := provider.ProcessExtra(tagContent.Extra, fields, currentSite, render, inputName)
 				if fieldName == "Extra" {
-					var extras = make([]model.CustomField, 0, len(fields))
+					var extras = make([]config.CustomField, 0, len(fields))
 					for _, field := range fields {
-						extras = append(extras, model.CustomField{
+						extras = append(extras, config.CustomField{
 							Name:      field.Name,
-							Value:     tagContent.Extra[field.FieldName],
+							Value:     extraData[field.FieldName],
 							Default:   field.Content,
 							Type:      field.Type,
 							FieldName: field.FieldName,
 						})
 					}
 					content = extras
+				} else if item, ok := extraData[inputName]; ok {
+					content = item
 				}
 			}
-			if item, ok := tagContent.Extra[inputName]; ok {
-				content = item
-			}
 		}
-
 	}
 
 	// output
 	if node.name == "" {
-		writer.WriteString(fmt.Sprintf("%v", content))
+		writer.WriteString(fmt.Sprint(content))
 	} else {
 		ctx.Private[node.name] = content
 	}

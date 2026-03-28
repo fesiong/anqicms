@@ -222,7 +222,10 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 		currentPage, _ = strconv.Atoi(urlParams["page"])
-		q = strings.TrimSpace(urlParams["q"])
+		tmpQ := strings.TrimSpace(urlParams["q"])
+		if tmpQ != "" {
+			q = tmpQ
+		}
 		if urlParams["order"] != "" {
 			order = provider.ParseOrderBy(urlParams["order"], "archives")
 		}
@@ -306,6 +309,23 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if args["siteId"] != nil {
 			moduleId = 0
 			categoryIds = categoryIds[:0]
+		}
+	} else if like == "relation" {
+		// 默认没分类
+		moduleId = 0
+		categoryIds = categoryIds[:0]
+		if args["categoryId"] != nil {
+			tmpIds := strings.Split(args["categoryId"].String(), ",")
+			for _, v := range tmpIds {
+				tmpId, _ := strconv.Atoi(v)
+				if tmpId > 0 {
+					categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
+					if categoryDetail != nil {
+						categoryIds = append(categoryIds, int(categoryDetail.Id))
+						moduleId = categoryDetail.ModuleId
+					}
+				}
+			}
 		}
 	}
 

@@ -705,7 +705,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 				if len(extraData) == 0 {
 					break
 				}
-				tmpId, _ := strconv.Atoi(fmt.Sprintf("%v", extraData[len(extraData)-1]["id"]))
+				tmpId, _ := strconv.Atoi(fmt.Sprint(extraData[len(extraData)-1]["id"]))
 				if tmpId == 0 {
 					break
 				}
@@ -718,7 +718,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 					ms.Message = ms.w.Tr("Syncing%s:%s", "Archive Extra", tmpId)
 					targetSite.DB.Table(module.TableName).Create(&data)
 					// 自动翻译
-					dataId, _ := strconv.Atoi(fmt.Sprintf("%v", data["id"]))
+					dataId, _ := strconv.Atoi(fmt.Sprint(data["id"]))
 					if mainSite.MultiLanguage.AutoTranslate {
 						ms.FinishCount++
 						ms.TotalCount++
@@ -992,7 +992,7 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string, params map[str
 
 	// 翻译完毕，修改lang
 	re, _ := regexp.Compile(`(?i)<html.*?>`)
-	result = re.ReplaceAllString(result, fmt.Sprintf(`<html lang="%s">`, req.ToLanguage))
+	result = re.ReplaceAllString(result, "<html lang=\""+req.ToLanguage+"\">")
 	// 替换URL
 	langSite := w.MultiLanguage.GetSite(lang)
 	if langSite != nil {

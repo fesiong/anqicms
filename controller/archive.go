@@ -94,6 +94,9 @@ func ArchiveDetail(ctx iris.Context) {
 			return
 		}
 	}
+	if category == nil {
+		category = currentSite.GetCategoryFromCache(archive.CategoryId)
+	}
 
 	createTime := time.Unix(archive.CreatedTime, 0)
 	year := ctx.Params().GetString("year")
@@ -192,6 +195,7 @@ func ArchiveDetail(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 	ctx.ViewData("archive", archive)
+	ctx.ViewData("category", category)
 	//设置页面名称，方便tags识别
 	ctx.ViewData("pageName", "archiveDetail")
 
@@ -207,9 +211,6 @@ func ArchiveDetail(ctx iris.Context) {
 	if archive.Template != "" {
 		tplName = archive.Template
 	} else {
-		if category == nil {
-			category = currentSite.GetCategoryFromCache(archive.CategoryId)
-		}
 		if category != nil {
 			categoryTemplate := currentSite.GetCategoryTemplate(category)
 			if categoryTemplate != nil {

@@ -3,7 +3,6 @@ package provider
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -422,7 +421,7 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 		for {
 			tmpToken := urlToken
 			if index > 0 {
-				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+				tmpToken = urlToken + "-" + strconv.FormatInt(int64(index), 10)
 			}
 			// 判断分类
 			_, err := w.GetCategoryByUrlToken(tmpToken)

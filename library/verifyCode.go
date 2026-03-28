@@ -49,7 +49,7 @@ func (v *verifyCodeCache) Get(key string, clear bool) string {
 		return ""
 	}
 	if clear {
-		delete(v.list, key)
+		defer delete(v.list, key)
 	}
 
 	return v.list[key].code

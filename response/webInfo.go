@@ -14,4 +14,5 @@ type WebInfo struct {
 	CurrentPage  int               `json:"current_page"`
 	StatusCode   int               `json:"status_code"`
 	Params       map[string]string `json:"params"`
+	Sep          string            `json:"sep"` // 临时变量，tdk的地方用到
 }

@@ -103,7 +103,7 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 	}
 	// 读取 extraDate
 	archiveParams := w.GetArchiveExtra(archive.ModuleId, archive.Id, true)
-	archive.Extra = make(map[string]model.CustomField, len(archiveParams))
+	archive.Extra = make(map[string]config.CustomField, len(archiveParams))
 	if len(archiveParams) > 0 {
 		for i := range archiveParams {
 			param := *archiveParams[i]
@@ -117,7 +117,7 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 				continue
 			}
 			if param.Type == config.CustomFieldTypeEditor && req.Render {
-				param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), w.System.BaseUrl, w.Content.FilterOutlink)
+				param.Value = library.MarkdownToHTML(fmt.Sprint(param.Value), w.System.BaseUrl, w.Content.FilterOutlink)
 			} else if param.Type == config.CustomFieldTypeArchive {
 				// 列表
 				arcIds, ok := param.Value.([]int64)
@@ -210,7 +210,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		if len(req.CategoryIds) > 0 {
 			categoryId = uint(req.CategoryIds[0])
 		}
-		if req.Id > 0 {
+		if req.Like != "relation" && req.Id > 0 {
 			archive := w.GetArchiveByIdFromCache(req.Id)
 			if archive != nil {
 				categoryId = archive.CategoryId
@@ -553,6 +553,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			if req.ParentId > 0 {
 				tx = tx.Where("parent_id = ?", req.ParentId)
 			}
+			if req.ModuleId > 0 {
+				tx = tx.Where("module_id = ?", req.ModuleId)
+			}
 			if req.Flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", req.Flag)
 			} else if len(req.ExcludeFlags) > 0 {
@@ -638,8 +641,6 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 						tx = tx.Where("`category_id` IN(?)", req.CategoryIds)
 					}
 				}
-			} else if req.ModuleId > 0 {
-				tx = tx.Where("`module_id` = ?", req.ModuleId)
 			}
 			if len(req.ExcludeCategoryIds) > 0 {
 				if w.Content.MultiCategory == 1 {
@@ -805,7 +806,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			for j := range archives {
 				archiveParams := w.GetArchiveExtra(archives[j].ModuleId, archives[j].Id, true)
 				if len(archiveParams) > 0 {
-					var extras = make(map[string]model.CustomField, len(archiveParams))
+					var extras = make(map[string]config.CustomField, len(archiveParams))
 					for i := range archiveParams {
 						param := *archiveParams[i]
 						if (param.Value == nil || param.Value == "" || param.Value == 0) &&
@@ -818,7 +819,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 							continue
 						}
 						if param.Type == config.CustomFieldTypeEditor && req.Render {
-							param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), w.System.BaseUrl, w.Content.FilterOutlink)
+							param.Value = library.MarkdownToHTML(fmt.Sprint(param.Value), w.System.BaseUrl, w.Content.FilterOutlink)
 						} else if param.Type == config.CustomFieldTypeArchive {
 							// 列表
 							arcIds, ok := param.Value.([]int64)
@@ -1004,7 +1005,7 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			v.Link = w.GetUrl("category", v, 0)
 			categoryItems = append(categoryItems, response.FilterItem{
 				Label:     v.Title,
-				Value:     fmt.Sprintf("%d", v.Id),
+				Value:     strconv.Itoa(int(v.Id)),
 				Link:      v.Link,
 				IsCurrent: v.Id == uint(req.CategoryId),
 			})
@@ -1019,7 +1020,7 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 	return filterGroups, nil
 }
 
-func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]model.CustomField, error) {
+func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]config.CustomField, error) {
 	var archive *model.Archive
 	var err error
 	if req.Id > 0 {
@@ -1062,7 +1063,7 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]model.C
 		}
 	}
 
-	var extras = make(map[string]model.CustomField, len(archiveParams))
+	var extras = make(map[string]config.CustomField, len(archiveParams))
 	if len(archiveParams) > 0 {
 		for i := range archiveParams {
 			param := *archiveParams[i]
@@ -1076,7 +1077,7 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]model.C
 				continue
 			}
 			if param.Type == config.CustomFieldTypeEditor && req.Render {
-				param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), w.System.BaseUrl, w.Content.FilterOutlink)
+				param.Value = library.MarkdownToHTML(fmt.Sprint(param.Value), w.System.BaseUrl, w.Content.FilterOutlink)
 			} else if param.Type == config.CustomFieldTypeArchive {
 				// 列表
 				arcIds, ok := param.Value.([]int64)
@@ -1109,7 +1110,7 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]model.C
 		}
 	}
 
-	var extraFields []model.CustomField
+	var extraFields []config.CustomField
 	module := w.GetModuleFromCache(archive.ModuleId)
 	if module != nil && len(module.Fields) > 0 {
 		for _, v := range module.Fields {
@@ -1171,11 +1172,11 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 						categoryExtra[field.FieldName] = val
 					}
 				} else if field.Type == config.CustomFieldTypeTexts && categoryExtra[field.FieldName] != nil {
-					var texts []model.CustomFieldTexts
+					var texts []config.CustomFieldTexts
 					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &texts)
 					categoryExtra[field.FieldName] = texts
 				} else if field.Type == config.CustomFieldTypeTimeline && categoryExtra[field.FieldName] != nil {
-					var val model.TimelineField
+					var val config.TimelineField
 					_ = json.Unmarshal([]byte(fmt.Sprint(categoryExtra[field.FieldName])), &val)
 					categoryExtra[field.FieldName] = val
 				} else if field.Type == config.CustomFieldTypeArchive && categoryExtra[field.FieldName] != nil {
@@ -1290,11 +1291,11 @@ func (w *Website) ApiGetTag(req *request.ApiTagRequest) (*model.Tag, error) {
 							tagDetail.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && tagDetail.Extra[field.FieldName] != nil {
-						var texts []model.CustomFieldTexts
+						var texts []config.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
 						tagDetail.Extra[field.FieldName] = texts
 					} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
-						var val model.TimelineField
+						var val config.TimelineField
 						_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
 						tagDetail.Extra[field.FieldName] = val
 					} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
@@ -1546,9 +1547,9 @@ func (w *Website) ApiGetIndexSetting() *config.IndexConfig {
 	return &setting
 }
 
-func (w *Website) ApiGetDiyFields(render bool) []config.ExtraField {
+func (w *Website) ApiGetDiyFields(render bool) []config.CustomField {
 	fields := w.GetDiyFieldSetting()
-	var newFields = make([]config.ExtraField, 0, len(fields))
+	var newFields = make([]config.CustomField, 0, len(fields))
 	for _, field := range fields {
 		if (field.Value == nil || field.Value == "" || field.Value == 0) &&
 			field.Type != config.CustomFieldTypeRadio &&
@@ -1575,11 +1576,11 @@ func (w *Website) ApiGetDiyFields(render bool) []config.ExtraField {
 				field.Value = val
 			}
 		} else if field.Type == config.CustomFieldTypeTexts && field.Value != nil {
-			var texts []model.CustomFieldTexts
+			var texts []config.CustomFieldTexts
 			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &texts)
 			field.Value = texts
 		} else if field.Type == config.CustomFieldTypeTimeline && field.Value != nil {
-			var val model.TimelineField
+			var val config.TimelineField
 			_ = json.Unmarshal([]byte(fmt.Sprint(field.Value)), &val)
 			field.Value = val
 		} else if field.Type == config.CustomFieldTypeArchive && field.Value != nil {

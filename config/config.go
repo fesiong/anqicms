@@ -70,7 +70,7 @@ func initPath() {
 }
 
 func initJSON() {
-	rawConfig, err := os.ReadFile(fmt.Sprintf("%sconfig.json", ExecPath))
+	rawConfig, err := os.ReadFile(ExecPath + "config.json")
 	if err != nil {
 		//未初始化
 		Server.Server.Env = "production"
@@ -105,7 +105,7 @@ func init() {
 
 func WriteConfig() error {
 	//将现有配置写回文件
-	configFile, err := os.OpenFile(fmt.Sprintf("%sconfig.json", ExecPath), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
+	configFile, err := os.OpenFile(ExecPath+"config.json", os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0666)
 	if err != nil {
 		return err
 	}
@@ -140,7 +140,7 @@ func GenerateRandString(length int) string {
 
 func LoadLocales() (languages []string) {
 	// 读取language列表
-	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", ExecPath))
+	readerInfos, err := os.ReadDir(ExecPath + "locales")
 	var added = map[string]struct{}{}
 	if err == nil {
 		for _, info := range readerInfos {
