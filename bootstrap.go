@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -54,7 +55,7 @@ func (bootstrap *Bootstrap) Serve() {
 	go func() {
 		time.Sleep(1 * time.Second)
 		currentSite := provider.CurrentSite(nil)
-		link := fmt.Sprintf("http://127.0.0.1:%d", bootstrap.Port)
+		link := "http://127.0.0.1:" + strconv.Itoa(bootstrap.Port)
 		if currentSite != nil && currentSite.System.BaseUrl != "" {
 			if strings.Contains(currentSite.System.BaseUrl, "127.0.0.1") {
 				currentSite.System.BaseUrl = link
@@ -67,24 +68,20 @@ func (bootstrap *Bootstrap) Serve() {
 		}
 	}()
 	// 伪静态规则和模板更改变化
-	for {
-		select {
-		case restart := <-config.RestartChan:
-			if restart == 1 {
-				fmt.Println("监听到路由更改")
-				_ = bootstrap.Shutdown()
-				log.Println("进程结束，开始重启")
-				// 重启
-				_ = provider.Restart()
-			} else if restart == 2 {
-				fmt.Println("监听到退出信号")
-				//_ = bootstrap.Shutdown()
-				os.Exit(0)
-			} else {
-				// reload template
-				fmt.Println("重载模板")
-				bootstrap.viewEngine.Load()
-			}
+	for restart := range config.RestartChan {
+		switch restart {
+		case 1:
+			fmt.Println("监听到路由更改")
+			_ = bootstrap.Shutdown()
+			log.Println("进程结束，开始重启")
+			_ = provider.Restart()
+		case 2:
+			fmt.Println("监听到退出信号")
+			//_ = bootstrap.Shutdown()
+			os.Exit(0)
+		default:
+			fmt.Println("重载模板")
+			bootstrap.viewEngine.Load()
 		}
 	}
 }
@@ -158,7 +155,7 @@ func (bootstrap *Bootstrap) Start() {
 	bootstrap.Application.RegisterView(pugEngine)
 
 	err = bootstrap.Application.Run(
-		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
+		iris.Addr(":"+strconv.Itoa(bootstrap.Port)),
 		iris.WithRemoteAddrHeader("X-Real-IP", "X-Forwarded-For", "CF-Connecting-IP"),
 		iris.WithHostProxyHeader("X-Host"),
 		iris.WithoutServerError(iris.ErrServerClosed),

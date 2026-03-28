@@ -2,13 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"reflect"
-	"strings"
 )
 
 type tagTdkNode struct {
@@ -42,16 +43,34 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		return nil
 	}
 
-	v := reflect.ValueOf(*webInfo)
-
-	f := v.FieldByName(fieldName)
-
-	content := fmt.Sprintf("%v", f)
-	if fieldName == "Title" {
-		sep := " - "
-		if args["sep"] != nil {
-			sep = args["sep"].String()
+	var content string
+	switch fieldName {
+	case "Title":
+		content = webInfo.Title
+	case "Keywords":
+		content = webInfo.Keywords
+	case "Description":
+		content = webInfo.Description
+	case "CanonicalUrl":
+		content = webInfo.CanonicalUrl
+	default:
+		// 备选方案：使用反射获取其他字段
+		v := reflect.ValueOf(*webInfo)
+		f := v.FieldByName(fieldName)
+		if f.IsValid() {
+			content = fmt.Sprint(f.Interface())
 		}
+	}
+
+	sep := " - "
+	if args["sep"] != nil {
+		sep = args["sep"].String()
+	} else if currentSite.Index.Sep != "" {
+		sep = currentSite.Index.Sep
+	}
+	webInfo.Sep = sep
+
+	if fieldName == "Title" {
 		var titleText = make([]string, 0, 10)
 		if len(content) > 0 {
 			titleText = append(titleText, content)
@@ -61,34 +80,33 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 			showParent = args["showParent"].Bool()
 		}
 		// 增加分页
-		if webInfo.CurrentPage > 1 {
+		if webInfo.CurrentPage > 1 && !strings.Contains(content, "{page}") {
 			// 从第二页开始，增加分页
 			titleText = append(titleText, currentSite.TplTr("Page%d", webInfo.CurrentPage))
 		}
 		// 增加上级标题
-		if showParent {
+		if showParent && !strings.Contains(content, "{multicatname}") {
 			parentId := uint(0)
 			if webInfo.PageName == "archiveDetail" {
 				archive, ok := ctx.Public["archive"].(*model.Archive)
 				if ok {
 					parentId = archive.CategoryId
-
 				}
 			} else if webInfo.PageName == "archiveList" {
 				categoryInfo, ok := ctx.Public["category"].(*model.Category)
 				if ok {
 					parentId = categoryInfo.ParentId
-
 				}
 			}
-			categories := currentSite.GetParentCategories(parentId)
-			// 先翻转categories
-			for i := len(categories)/2 - 1; i >= 0; i-- {
-				opp := len(categories) - 1 - i
-				categories[i], categories[opp] = categories[opp], categories[i]
-			}
-			for _, category := range categories {
-				titleText = append(titleText, category.Title)
+			if parentId > 0 {
+				categories := currentSite.GetParentCategories(parentId)
+				// 先翻转categories
+				for i, j := 0, len(categories)-1; i < j; i, j = i+1, j-1 {
+					categories[i], categories[j] = categories[j], categories[i]
+				}
+				for _, category := range categories {
+					titleText = append(titleText, category.Title)
+				}
 			}
 		}
 		if siteName && len(currentSite.System.SiteName) > 0 {
@@ -99,6 +117,25 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 			// 保持标题至少是网站名称
 			content = currentSite.System.SiteName
 		}
+	}
+
+	// 查找{param}并执行批量替换
+	if strings.Contains(content, "{") {
+		var currentItem interface{}
+		switch webInfo.PageName {
+		case "archiveDetail":
+			currentItem, _ = ctx.Public["archive"].(*model.Archive)
+		case "archiveIndex":
+			currentItem, _ = ctx.Public["module"].(*model.Module)
+		case "archiveList":
+			currentItem, _ = ctx.Public["category"].(*model.Category)
+		case "pageDetail":
+			currentItem, _ = ctx.Public["page"].(*model.Category)
+		case "tag":
+			currentItem, _ = ctx.Public["tag"].(*model.Tag)
+		}
+
+		content = parseTdkParams(content, currentSite, ctx, currentItem)
 	}
 
 	// output

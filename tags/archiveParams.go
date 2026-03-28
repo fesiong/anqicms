@@ -75,7 +75,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if archiveDetail != nil {
 		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
-			var extras = make(map[string]model.CustomField, len(archiveParams))
+			var extras = make(map[string]config.CustomField, len(archiveParams))
 			for i := range archiveParams {
 				param := *archiveParams[i]
 				if (param.Value == nil || param.Value == "" || param.Value == 0) &&
@@ -88,7 +88,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					continue
 				}
 				if param.Type == config.CustomFieldTypeEditor && render {
-					param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+					param.Value = library.MarkdownToHTML(fmt.Sprint(param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 				} else if param.Type == config.CustomFieldTypeArchive {
 					// 列表
 					arcIds, ok := param.Value.([]int64)
@@ -120,7 +120,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				extras[i] = param
 			}
 			if sorted {
-				var extraFields []model.CustomField
+				var extraFields []config.CustomField
 				module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 				if module != nil && len(module.Fields) > 0 {
 					for _, v := range module.Fields {

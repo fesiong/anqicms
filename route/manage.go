@@ -1,8 +1,6 @@
 package route
 
 import (
-	"fmt"
-
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller/manageController"
@@ -12,7 +10,7 @@ import (
 func manageRoute(app *iris.Application) {
 	system := app.Party("/system", middleware.ParseAdminUrlFile, manageController.AdminFileServ)
 	{
-		system.HandleDir("/", fmt.Sprintf("%ssystem", config.ExecPath))
+		system.HandleDir("/", config.ExecPath+"system")
 	}
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{

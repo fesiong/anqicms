@@ -2,12 +2,12 @@ package tags
 
 import (
 	"fmt"
-	"kandaoni.com/anqicms/provider"
 	"reflect"
 	"strings"
 
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 )
 
 type tagContactNode struct {
@@ -41,26 +41,61 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 
 	var content string
 
-	if currentSite.Contact.ExtraFields != nil {
-		for i := range currentSite.Contact.ExtraFields {
-			if currentSite.Contact.ExtraFields[i].Name == fieldName {
-				content = fmt.Sprintf("%v", currentSite.Contact.ExtraFields[i].Value)
-				if content == "" && currentSite.Contact.ExtraFields[i].Content != "" {
-					content = currentSite.Contact.ExtraFields[i].Content
-				}
-				break
+	if currentSite.Contact != nil {
+		switch fieldName {
+		case "UserName":
+			content = currentSite.Contact.UserName
+		case "Cellphone":
+			content = currentSite.Contact.Cellphone
+		case "Address":
+			content = currentSite.Contact.Address
+		case "Email":
+			content = currentSite.Contact.Email
+		case "Wechat":
+			content = currentSite.Contact.Wechat
+		case "QQ":
+			content = currentSite.Contact.QQ
+		case "WhatsApp":
+			content = currentSite.Contact.WhatsApp
+		case "Facebook":
+			content = currentSite.Contact.Facebook
+		case "Twitter":
+			content = currentSite.Contact.Twitter
+		case "Tiktok":
+			content = currentSite.Contact.Tiktok
+		case "Pinterest":
+			content = currentSite.Contact.Pinterest
+		case "Linkedin":
+			content = currentSite.Contact.Linkedin
+		case "Instagram":
+			content = currentSite.Contact.Instagram
+		case "Youtube":
+			content = currentSite.Contact.Youtube
+		case "Qrcode":
+			content = currentSite.Contact.Qrcode
+			if !strings.HasPrefix(content, "http") && !strings.HasPrefix(content, "//") {
+				content = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
 			}
-		}
-	}
-	if content == "" {
-		v := reflect.ValueOf(*currentSite.Contact)
-		f := v.FieldByName(fieldName)
-
-		content = fmt.Sprintf("%v", f)
-	}
-	if fieldName == "Qrcode" {
-		if !strings.HasPrefix(content, "http") && !strings.HasPrefix(content, "//") {
-			content = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
+		default:
+			if currentSite.Contact.ExtraFields != nil {
+				for i := range currentSite.Contact.ExtraFields {
+					if currentSite.Contact.ExtraFields[i].Name == fieldName {
+						content = fmt.Sprint(currentSite.Contact.ExtraFields[i].Value)
+						if content == "" && currentSite.Contact.ExtraFields[i].Content != "" {
+							content = currentSite.Contact.ExtraFields[i].Content
+						}
+						break
+					}
+				}
+			}
+			// 备选方案：使用反射获取
+			if content == "" {
+				v := reflect.ValueOf(*currentSite.Contact)
+				f := v.FieldByName(fieldName)
+				if f.IsValid() {
+					content = fmt.Sprintf("%v", f.Interface())
+				}
+			}
 		}
 	}
 

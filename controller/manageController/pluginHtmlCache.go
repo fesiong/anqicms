@@ -1,17 +1,17 @@
 package manageController
 
 import (
-	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginHtmlCacheConfig(ctx iris.Context) {
@@ -242,7 +242,7 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 	}
 	defer file.Close()
 	fileName := "htmlcache_ssh_private_key.key"
-	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
+	filePath := currentSite.DataPath + "cert/" + fileName
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{

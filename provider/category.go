@@ -3,7 +3,6 @@ package provider
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -567,7 +566,7 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int, 
 		if categories[i].Type != uint(pageType) {
 			continue
 		}
-		if moduleId > 0 && pageType != config.CategoryTypePage {
+		if parentId == 0 && moduleId > 0 && pageType != config.CategoryTypePage {
 			if categories[i].ModuleId != moduleId {
 				continue
 			}
@@ -590,7 +589,7 @@ func (w *Website) VerifyCategoryUrlToken(urlToken string, id uint) string {
 	for {
 		tmpToken := urlToken
 		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+			tmpToken = urlToken + "-" + strconv.Itoa(index)
 		}
 		// 判断分类
 		tmpCat, err := w.GetCategoryByUrlToken(tmpToken)

@@ -27,7 +27,7 @@ func NotifyWeappMsg(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	srv, err := server.NewServer(currentSite.PluginWeapp.AppID, currentSite.PluginWeapp.Token, currentSite.PluginWeapp.EncodingAESKey, currentSite.PluginPay.WechatMchId, currentSite.PluginPay.WechatApiKey, true, nil)
 	if err != nil {
-		log.Println(fmt.Sprintf("init server error: %s", err))
+		log.Printf("init server error: %s", err)
 	}
 
 	srv.OnSubscribeMsgPopup(func(popupEvent *server.SubscribeMsgPopupEvent) {
@@ -39,7 +39,7 @@ func NotifyWeappMsg(ctx iris.Context) {
 
 	err = srv.Serve(ctx.ResponseWriter(), ctx.Request())
 	if err != nil {
-		log.Println(fmt.Sprintf("serving error: %s", err))
+		log.Printf("serving error: %s", err)
 	}
 }
 
@@ -53,7 +53,7 @@ func NotifyWechatPay(ctx iris.Context) {
 
 	ok, err := wechat.VerifySign(currentSite.PluginPay.WechatApiKey, wechat.SignType_MD5, notifyReq)
 	if !ok {
-		library.DebugLog(currentSite.CachePath, "wechat.log", "err", err, fmt.Sprintf("%#v", notifyReq))
+		library.DebugLog(currentSite.CachePath, "wechat.log", "err", err, fmt.Sprintf("%+v", notifyReq))
 		rsp.ReturnCode = gopay.FAIL
 		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 		ctx.WriteString(rsp.ToXmlString())

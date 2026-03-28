@@ -1,18 +1,18 @@
 package manageController
 
 import (
-	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"os"
 	"path"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginFileUploadList(ctx iris.Context) {
@@ -117,7 +117,7 @@ func PluginFileUploadUpload(ctx iris.Context) {
 		return
 	}
 
-	filePath := fmt.Sprintf(currentSite.PublicPath + info.Filename)
+	filePath := currentSite.PublicPath + info.Filename
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{

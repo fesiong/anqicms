@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -173,7 +174,7 @@ func (w *Website) GetDefaultThumb(tmpId int) string {
 		// 随机一个
 		return w.Content.DefaultThumbs[tmpId%len(w.Content.DefaultThumbs)]
 	} else {
-		cacheKey := fmt.Sprintf("tiny-attachments-%d", w.Content.ThumbCategoryId)
+		cacheKey := "tiny-attachments-" + strconv.Itoa(w.Content.ThumbCategoryId)
 		var attaches []*response.TinyAttachment
 		err := w.Cache.Get(cacheKey, &attaches)
 		if err != nil {
@@ -237,6 +238,43 @@ func (w *Website) LoadBannerSetting(value string) {
 func (w *Website) LoadSensitiveWords(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.SensitiveWords)
+	}
+	w.compileSensitiveWords()
+}
+
+func (w *Website) compileSensitiveWords() {
+	if len(w.SensitiveWords) == 0 {
+		w.sensitiveAcMatcher = nil
+		w.sensitiveRegexes = nil
+		return
+	}
+
+	var fixedPatterns []string
+	var regexes []*regexp.Regexp
+
+	for _, word := range w.SensitiveWords {
+		if len(word) == 0 {
+			continue
+		}
+		if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
+			newWord := word[1 : len(word)-1]
+			re, err := regexp.Compile(newWord)
+			if err == nil {
+				regexes = append(regexes, re)
+			}
+		} else {
+			fixedPatterns = append(fixedPatterns, word)
+		}
+	}
+
+	if len(fixedPatterns) > 0 {
+		w.sensitiveAcMatcher = library.NewAhoCorasick(fixedPatterns)
+	} else {
+		w.sensitiveAcMatcher = nil
+	}
+	w.sensitiveRegexes = regexes
+	if w.htmlTagRegex == nil {
+		w.htmlTagRegex = regexp.MustCompile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
 	}
 }
 
@@ -327,7 +365,7 @@ func (w *Website) LoadImportApiSetting(value string) {
 	// 导入API生成
 	if w.PluginImportApi.Token == "" || w.PluginImportApi.LinkToken == "" {
 		h := md5.New()
-		h.Write([]byte(fmt.Sprintf("%d", time.Now().Nanosecond())))
+		h.Write([]byte(strconv.FormatInt(time.Now().UnixNano(), 10)))
 		if w.PluginImportApi.Token == "" {
 			w.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
 		}
@@ -716,8 +754,8 @@ func (w *Website) LoadJsonLdSetting(value string) {
 	return
 }
 
-func (w *Website) GetDiyFieldSetting() []config.ExtraField {
-	var fields []config.ExtraField
+func (w *Website) GetDiyFieldSetting() []config.CustomField {
+	var fields []config.CustomField
 	err := w.Cache.Get(DiyFieldsKey, &fields)
 	if err != nil {
 		value := w.GetSettingValue(DiyFieldsKey)
@@ -760,7 +798,7 @@ func (w *Website) Tr(str string, args ...interface{}) string {
 
 	//return fmt.Sprintf(str, args...)
 	if len(args) > 0 {
-		return str + fmt.Sprintf("%v", args)
+		return str + fmt.Sprint(args...)
 	}
 	return str
 }
@@ -813,7 +851,7 @@ func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
 	}
 	setting := model.Setting{
 		Key:   key,
-		Value: fmt.Sprintf("%v", value),
+		Value: fmt.Sprint(value),
 	}
 
 	return w.DB.Save(&setting).Error
@@ -826,21 +864,33 @@ func (w *Website) DeleteCache() {
 	DictClose()
 	// 记录
 	filePath := w.CachePath + "cache_clear.log"
-	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+	os.WriteFile(filePath, []byte(strconv.FormatInt(time.Now().Unix(), 10)), os.ModePerm)
 }
 
 func (w *Website) MatchSensitiveWords(content string) (matches []string) {
 	if len(w.SensitiveWords) == 0 || len(content) == 0 {
 		return
 	}
+
+	if w.sensitiveAcMatcher == nil && len(w.sensitiveRegexes) == 0 {
+		w.compileSensitiveWords()
+	}
+
 	// content 需要移除代码
 	content = library.StripTags(content)
-	for _, word := range w.SensitiveWords {
-		if len(word) == 0 {
-			continue
+	contentBytes := []byte(content)
+
+	if w.sensitiveAcMatcher != nil {
+		acMatches := w.sensitiveAcMatcher.MultiMatch(contentBytes)
+		for _, m := range acMatches {
+			matches = append(matches, string(m.Pattern))
 		}
-		if strings.Contains(content, word) {
-			matches = append(matches, word)
+	}
+
+	for _, re := range w.sensitiveRegexes {
+		reMatches := re.FindAll(contentBytes, -1)
+		for _, m := range reMatches {
+			matches = append(matches, string(m))
 		}
 	}
 
@@ -852,15 +902,22 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 		return content
 	}
 
+	if w.sensitiveAcMatcher == nil && len(w.sensitiveRegexes) == 0 {
+		w.compileSensitiveWords()
+	}
+
 	type replaceType struct {
 		Key   []byte
 		Value []byte
 	}
 	var replacedMatch []*replaceType
 	numCount := 0
-	//过滤所有属性
-	reg, _ := regexp.Compile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
-	content = reg.ReplaceAllFunc(content, func(s []byte) []byte {
+	// 过滤所有属性
+	if w.htmlTagRegex == nil {
+		w.htmlTagRegex = regexp.MustCompile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
+	}
+
+	content = w.htmlTagRegex.ReplaceAllFunc(content, func(s []byte) []byte {
 		key := []byte(fmt.Sprintf("{$%d}", numCount))
 		replacedMatch = append(replacedMatch, &replaceType{
 			Key:   key,
@@ -870,26 +927,21 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 
 		return key
 	})
-	// 替换所有敏感词为星号
-	for _, word := range w.SensitiveWords {
-		if len(word) == 0 {
-			continue
-		}
-		if bytes.Contains(content, []byte(word)) {
-			content = bytes.ReplaceAll(content, []byte(word), bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
-		} else {
-			// 增加支持正则表达式替换，定义正则表达式以{开头}结束，如：{[1-9]\d{4,10}}
-			if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
-				// 移除首尾花括号
-				newWord := word[1 : len(word)-1]
-				re, err := regexp.Compile(newWord)
-				if err == nil {
-					content = re.ReplaceAll(content, bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
-				}
-				continue
-			}
-		}
+
+	// 替换固定字符串敏感词
+	if w.sensitiveAcMatcher != nil {
+		content = w.sensitiveAcMatcher.ReplaceAll(content, func(match library.ACMatch) []byte {
+			return bytes.Repeat([]byte("*"), utf8.RuneCount(match.Pattern))
+		})
 	}
+
+	// 替换正则表达式敏感词
+	for _, re := range w.sensitiveRegexes {
+		content = re.ReplaceAllFunc(content, func(s []byte) []byte {
+			return bytes.Repeat([]byte("*"), utf8.RuneCount(s))
+		})
+	}
+
 	// 替换回来
 	for i := len(replacedMatch) - 1; i >= 0; i-- {
 		content = bytes.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)

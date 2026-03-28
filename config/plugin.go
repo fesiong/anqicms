@@ -1,7 +1,6 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 )
@@ -44,15 +43,33 @@ type PluginGuestbookConfig struct {
 }
 
 type CustomField struct {
-	Name        string   `json:"name"`
-	FieldName   string   `json:"field_name"`
-	Type        string   `json:"type"`
-	Required    bool     `json:"required"`
-	IsSystem    bool     `json:"is_system"`
-	IsFilter    bool     `json:"is_filter"`
-	FollowLevel bool     `json:"follow_level"`
-	Content     string   `json:"content"`
-	Items       []string `json:"-"`
+	Name        string      `json:"name"`
+	FieldName   string      `json:"field_name,omitempty"`
+	Type        string      `json:"type,omitempty"`
+	Value       interface{} `json:"value"`
+	Default     interface{} `json:"default"`
+	Remark      string      `json:"remark,omitempty"`
+	Required    bool        `json:"required,omitempty"`
+	IsSystem    bool        `json:"is_system,omitempty"`
+	IsFilter    bool        `json:"is_filter,omitempty"`
+	FollowLevel bool        `json:"follow_level"`
+	Content     string      `json:"content,omitempty"`
+	Items       []string    `json:"-"`
+}
+
+type CustomFieldTexts struct {
+	Key    string   `json:"key"`
+	Value  string   `json:"value"`
+	Values []string `json:"values"` // 更多的字段
+}
+
+type TimelineField struct {
+	Title   string            `json:"title"`
+	Content string            `json:"content"`
+	Status  string            `json:"status"`
+	Images  []string          `json:"images"`
+	Extra   map[string]string `json:"extra"`
+	Items   []TimelineField   `json:"items,omitempty"`
 }
 
 type PluginUploadFile struct {
@@ -400,15 +417,18 @@ func (g *CustomField) CheckSetFilter() bool {
 }
 
 func (g *CustomField) GetFieldColumn() string {
-	column := fmt.Sprintf("`%s`", g.FieldName)
+	column := "`" + g.FieldName + "`"
 
-	if g.Type == CustomFieldTypeNumber || g.Type == CustomFieldTypeCategory {
+	switch g.Type {
+	case CustomFieldTypeNumber, CustomFieldTypeCategory:
 		column += " int(10)"
-	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts || g.Type == CustomFieldTypeArchive {
+	case CustomFieldTypeTextarea, CustomFieldTypeEditor, CustomFieldTypeImages, CustomFieldTypeTexts, CustomFieldTypeArchive:
 		column += " text"
-	} else if g.Type == CustomFieldTypeTimeline {
+	case CustomFieldTypeTimeline:
 		column += " longtext"
-	} else {
+	case CustomFieldTypeCheckbox:
+		column += " varchar(500)"
+	default:
 		// mysql 5.6 下，utf8mb4 索引只能用190
 		column += " varchar(190)"
 	}

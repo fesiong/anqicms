@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -92,6 +93,11 @@ type Website struct {
 	MultiLanguage      *config.PluginMultiLangConfig
 	PluginTranslate    *config.PluginTranslateConfig
 	PluginJsonLd       *config.PluginJsonLdConfig
+
+	sensitiveAcMatcher *library.AhoCorasick
+	sensitiveRegexes   []*regexp.Regexp
+	htmlTagRegex       *regexp.Regexp
+	anchorAcMatcher    *library.AhoCorasick
 
 	CollectorConfig *config.CollectorJson
 	KeywordConfig   *config.KeywordJson

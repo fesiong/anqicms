@@ -307,7 +307,7 @@ func ApiArchiveParams(ctx iris.Context) {
 
 	params, err := currentSite.ApiGetArchiveParams(&req)
 	if sorted == false {
-		var extras = make(map[string]model.CustomField, len(params))
+		var extras = make(map[string]config.CustomField, len(params))
 		for _, v := range params {
 			extras[v.FieldName] = v
 		}
@@ -768,11 +768,11 @@ func ApiTagDetail(ctx iris.Context) {
 								tagDetail.Extra[field.FieldName] = val
 							}
 						} else if field.Type == config.CustomFieldTypeTexts && tagDetail.Extra[field.FieldName] != nil {
-							var texts []model.CustomFieldTexts
+							var texts []config.CustomFieldTexts
 							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &texts)
 							tagDetail.Extra[field.FieldName] = texts
 						} else if field.Type == config.CustomFieldTypeTimeline && tagDetail.Extra[field.FieldName] != nil {
-							var val model.TimelineField
+							var val config.TimelineField
 							_ = json.Unmarshal([]byte(fmt.Sprint(tagDetail.Extra[field.FieldName])), &val)
 							tagDetail.Extra[field.FieldName] = val
 						} else if field.Type == config.CustomFieldTypeArchive && tagDetail.Extra[field.FieldName] != nil {
@@ -1192,7 +1192,7 @@ func ApiGuestbookForm(ctx iris.Context) {
 		}
 
 		if item.Required && val == "" {
-			msg := fmt.Sprintf("%s必填", item.Name)
+			msg := currentSite.TplTr("%sIsRequired", item.Name)
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  msg,

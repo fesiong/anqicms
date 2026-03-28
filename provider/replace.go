@@ -3,11 +3,12 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
+	"strings"
+
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"regexp"
-	"strings"
 )
 
 func (w *Website) ReplaceValues(req *request.PluginReplaceRequest) (updateCount int64) {
@@ -69,7 +70,7 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 			needUpdate := false
 			for k, v := range values {
 				if k == "extra_fields" {
-					val, ok := v.([]config.ExtraField)
+					val, ok := v.([]config.CustomField)
 					if ok {
 						innerUpdate := false
 						for i := range val {

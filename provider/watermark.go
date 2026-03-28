@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/base64"
 	"errors"
-	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
@@ -266,7 +265,7 @@ func (t *Watermark) DrawWatermarkPreview() string {
 
 func (t *Watermark) EncodeB64string(img image.Image) string {
 	buf, _, _ := encodeImage(img, "webp", config.DefaultQuality)
-	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
+	return "data:image/webp;base64," + base64.StdEncoding.EncodeToString(buf)
 }
 
 // countLetter 计算字体宽度

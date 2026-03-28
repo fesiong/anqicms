@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/flosch/pongo2/v6"
@@ -28,6 +29,7 @@ func init() {
 	pongo2.RegisterFilter("json", filterJson)
 	pongo2.RegisterFilter("priceFormat", filterPriceFormat)
 	pongo2.RegisterFilter("dateFormat", filterDateFormat)
+	pongo2.RegisterFilter("lazy", filterLazy)
 	if pongo2.FilterExists("split") {
 		pongo2.ReplaceFilter("split", filterSplit)
 	}
@@ -234,4 +236,20 @@ func filterDateFormat(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *po
 
 	result := TimestampToDate(in.String(), format)
 	return pongo2.AsValue(result), nil
+}
+
+func filterLazy(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
+	tmpContent := in.String()
+	lazy := param.String()
+	re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+	tmpContent = re.ReplaceAllStringFunc(tmpContent, func(s string) string {
+		match := re.FindStringSubmatch(s)
+		if len(match) < 2 {
+			return s
+		}
+		res := fmt.Sprintf("%s\" %s=\"%s", "", lazy, match[1])
+		s = strings.Replace(s, match[1], res, 1)
+		return s
+	})
+	return pongo2.AsValue(tmpContent), nil
 }

@@ -833,10 +833,10 @@ func (w *Website) DeleteUserField(fieldName string) error {
 	return err
 }
 
-func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
+func (w *Website) GetUserExtra(id uint) map[string]*config.CustomField {
 	//读取extra
-	result := map[string]interface{}{}
-	extraFields := map[string]model.CustomField{}
+	result := model.ExtraData{}
+	extraFields := map[string]*config.CustomField{}
 	var fields []string
 	for _, v := range w.PluginUser.Fields {
 		fields = append(fields, "`"+v.FieldName+"`")
@@ -861,13 +861,13 @@ func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 						result[v.FieldName] = images
 					}
 				} else if v.Type == config.CustomFieldTypeTexts {
-					var texts []model.CustomFieldTexts
+					var texts []config.CustomFieldTexts
 					err := json.Unmarshal([]byte(value), &texts)
 					if err == nil {
 						result[v.FieldName] = texts
 					}
 				} else if v.Type == config.CustomFieldTypeTimeline {
-					var val model.TimelineField
+					var val config.TimelineField
 					_ = json.Unmarshal([]byte(value), &val)
 					result[v.FieldName] = val
 				} else if v.Type == config.CustomFieldTypeArchive {
@@ -880,7 +880,7 @@ func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 					result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 				}
 			}
-			extraFields[v.FieldName] = model.CustomField{
+			extraFields[v.FieldName] = &config.CustomField{
 				Name:        v.Name,
 				Value:       result[v.FieldName],
 				Default:     v.Content,
@@ -900,8 +900,8 @@ func (w *Website) GetUserAuthToken(userId uint, remember bool) string {
 		t = t.AddDate(0, 0, 29)
 	}
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": fmt.Sprintf("%d", userId),
-		"t":      fmt.Sprintf("%d", t.Unix()),
+		"userId": fmt.Sprint(userId),
+		"t":      fmt.Sprint(t.Unix()),
 	})
 	// 获取签名字符串
 	tokenString, err := jwtToken.SignedString([]byte(w.TokenSecret + "-user-token"))

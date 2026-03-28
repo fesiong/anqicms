@@ -491,7 +491,7 @@ func ArchiveDetail(ctx iris.Context) {
 	archiveDraft.ArchiveData, err = currentSite.GetArchiveDataById(archiveDraft.Id)
 	// 读取 extraDat
 	extras := currentSite.GetArchiveExtra(archiveDraft.ModuleId, archiveDraft.Id, false)
-	archiveDraft.Extra = make(map[string]model.CustomField, len(extras))
+	archiveDraft.Extra = make(map[string]config.CustomField, len(extras))
 	for i := range extras {
 		archiveDraft.Extra[i] = *extras[i]
 	}

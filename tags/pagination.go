@@ -2,13 +2,15 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"math"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 const PagePlaceholder = "{page}"
@@ -246,7 +248,7 @@ func (p *pagination) getNextPage() *pageItem {
 
 func (p *pagination) createPage(page int) *pageItem {
 	item := &pageItem{
-		Name:      fmt.Sprintf("%d", page),
+		Name:      strconv.Itoa(page),
 		Link:      p.getPageUrl(page),
 		IsCurrent: page == p.CurrentPage,
 	}
@@ -314,7 +316,7 @@ func (p *pagination) getPageUrl(page int) string {
 
 	//如果是第一页，不需要携带页码
 	if page > 1 {
-		link = strings.ReplaceAll(link, PagePlaceholder, fmt.Sprintf("%d", page))
+		link = strings.ReplaceAll(link, PagePlaceholder, strconv.Itoa(page))
 		link = strings.ReplaceAll(link, "(", "")
 		link = strings.ReplaceAll(link, ")", "")
 	} else {

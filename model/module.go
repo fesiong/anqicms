@@ -3,7 +3,6 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
 	"os"
 
 	"gorm.io/gorm"
@@ -58,7 +57,7 @@ func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 		}
 
 		if field.IsFilter {
-			idxName := fmt.Sprintf("idx_%s", field.FieldName)
+			idxName := "idx_" + field.FieldName
 			if !m.HasIndex(tx, idxName) {
 				tx.Exec("CREATE INDEX `?` ON `?` (`?`)", gorm.Expr(idxName), gorm.Expr(m.TableName), gorm.Expr(field.FieldName))
 			}
@@ -68,7 +67,7 @@ func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 	_, err := os.Stat(tplPath)
 	if err != nil && os.IsNotExist(err) {
 		// 还需要考虑扁平化的情况
-		dir2 := fmt.Sprintf("%s_detail.html", tplPath)
+		dir2 := tplPath + "_detail.html"
 		_, err = os.Stat(dir2)
 		if err != nil {
 			// 创建文件夹

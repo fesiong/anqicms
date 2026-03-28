@@ -69,7 +69,7 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 		content = f.Interface()
 	}
 	if node.name == "" {
-		writer.WriteString(fmt.Sprintf("%v", content))
+		writer.WriteString(fmt.Sprint(content))
 	} else {
 		ctx.Private[node.name] = content
 	}

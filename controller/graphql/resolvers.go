@@ -40,7 +40,7 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 		ctx.Params().Set(i, v)
 	}
 	for i, v := range searchParams {
-		params[i] = fmt.Sprintf("%v", v)
+		params[i] = fmt.Sprint(v)
 		ctx.Params().Set(i, params[i])
 	}
 

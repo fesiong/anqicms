@@ -19,7 +19,7 @@ import (
 func (w *Website) UpdateSitemapTime() error {
 	path := w.CachePath + "sitemap-time.log"
 
-	nowTime := fmt.Sprintf("%d", time.Now().Unix())
+	nowTime := strconv.FormatInt(time.Now().Unix(), 10)
 	err := os.WriteFile(path, []byte(nowTime), 0666)
 
 	if err != nil {
@@ -36,7 +36,7 @@ func (w *Website) GetSitemapTime() int64 {
 		return 0
 	}
 
-	timeInt, err := strconv.Atoi(string(timeBytes))
+	timeInt, err := strconv.ParseInt(string(timeBytes), 10, 64)
 	if err != nil {
 		return 0
 	}

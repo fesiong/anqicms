@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/parnurzeal/gorequest"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/response"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/parnurzeal/gorequest"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/response"
 )
 
 // SitemapLimit 单个sitemap文件可包含的连接数
@@ -172,7 +173,7 @@ func (w *Website) GetLastPushList() ([]response.PushLog, error) {
 			tmp = ""
 		}
 
-		tmp = fmt.Sprintf("%s%s", string(char), tmp)
+		tmp = string(char) + tmp
 
 		if cursor == -fileSize {
 			// stop if we are at the beginning

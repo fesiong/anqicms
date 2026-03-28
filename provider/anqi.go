@@ -906,7 +906,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 		Language: w.System.Language, // 以系统语言为标准
 	}
 
-	streamId := fmt.Sprintf("a%d", time.Now().UnixMilli())
+	streamId := strconv.FormatInt(time.Now().UnixMilli(), 10)
 	if w.AiGenerateConfig.AiEngine != config.AiEngineDefault {
 		prompt := "以\"" + req.Keyword + "\"为题生成一篇SEO文章。 要求如下: 1.充分理解标题的意思,为文章确定一个主题;2.文章字数1000-1500字,避免冗长,追求表达清晰; 3.自然引用,无明显痕迹;逻辑严谨,内容连贯无歧义; 4.关键词恰当融入,避免堆砌; 5.文章需要一个标题，标题放在第一行; 6.重点内容采用加粗、斜体等标记并且确保文章原创度高于90%;7.文章无需结束语。"
 		if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
@@ -1000,7 +1000,7 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			return "", err
 		}
 		anqiReq.Header.Add("token", config.AnqiUser.Token)
-		anqiReq.Header.Add("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
+		anqiReq.Header.Add("User-Agent", "anqicms/"+config.Version)
 		anqiReq.Header.Add("domain", w.System.BaseUrl)
 		resp, err := client.Do(anqiReq)
 		if err != nil {
@@ -1106,7 +1106,7 @@ func AddTranslateLog(result *AnqiTranslateTextRequest) {
 		title = string([]rune(title)[:190])
 	}
 	// md5 的值 = 原始字符串+翻译的语言
-	md5Str := library.Md5(fmt.Sprintf("%v", result.Text) + "-" + result.ToLanguage)
+	md5Str := library.Md5(fmt.Sprint(result.Text) + "-" + result.ToLanguage)
 	logData := model.TranslateLog{
 		Language:    result.Language,
 		ToLanguage:  result.ToLanguage,
@@ -1359,7 +1359,7 @@ func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
 		//set key header
 		Set("domain", w.System.BaseUrl).
 		//set oem header
-		Set("User-Agent", fmt.Sprintf("anqicms/%s", config.Version))
+		Set("User-Agent", "anqicms/"+config.Version)
 
 	return req
 }

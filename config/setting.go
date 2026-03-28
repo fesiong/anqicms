@@ -10,23 +10,23 @@ const (
 )
 
 type SystemConfig struct {
-	SiteName      string       `json:"site_name"`
-	SiteLogo      string       `json:"site_logo"`
-	SiteIcp       string       `json:"site_icp"`
-	SiteCopyright string       `json:"site_copyright"`
-	BaseUrl       string       `json:"base_url"`
-	MobileUrl     string       `json:"mobile_url"`
-	AdminUrl      string       `json:"admin_url"`
-	SiteClose     int          `json:"site_close"`
-	SiteCloseTips string       `json:"site_close_tips"`
-	BanSpider     int          `json:"ban_spider"`
-	TemplateName  string       `json:"template_name"`
-	TemplateType  int          `json:"template_type"`
-	TemplateUrl   string       `json:"template_url"` // template 的静态文件目录
-	Language      string       `json:"language"`     // 语言包引用
-	ExtraFields   []ExtraField `json:"extra_fields"` // 用户自定义字段
-	Favicon       string       `json:"favicon"`
-	DefaultSite   bool         `json:"default_site"` // 是否是默认站点，每次读取的时候会检查
+	SiteName      string        `json:"site_name"`
+	SiteLogo      string        `json:"site_logo"`
+	SiteIcp       string        `json:"site_icp"`
+	SiteCopyright string        `json:"site_copyright"`
+	BaseUrl       string        `json:"base_url"`
+	MobileUrl     string        `json:"mobile_url"`
+	AdminUrl      string        `json:"admin_url"`
+	SiteClose     int           `json:"site_close"`
+	SiteCloseTips string        `json:"site_close_tips"`
+	BanSpider     int           `json:"ban_spider"`
+	TemplateName  string        `json:"template_name"`
+	TemplateType  int           `json:"template_type"`
+	TemplateUrl   string        `json:"template_url"` // template 的静态文件目录
+	Language      string        `json:"language"`     // 语言包引用
+	ExtraFields   []CustomField `json:"extra_fields"` // 用户自定义字段
+	Favicon       string        `json:"favicon"`
+	DefaultSite   bool          `json:"default_site"` // 是否是默认站点，每次读取的时候会检查
 }
 
 type ContentConfig struct {
@@ -56,25 +56,26 @@ type IndexConfig struct {
 	SeoTitle       string `json:"seo_title"`
 	SeoKeywords    string `json:"seo_keywords"`
 	SeoDescription string `json:"seo_description"`
+	Sep            string `json:"sep"` // 分隔符
 }
 
 type ContactConfig struct {
-	UserName    string       `json:"user_name"`
-	Cellphone   string       `json:"cellphone"`
-	Address     string       `json:"address"`
-	Email       string       `json:"email"`
-	Wechat      string       `json:"wechat"`
-	QQ          string       `json:"qq"`
-	WhatsApp    string       `json:"whats_app"`
-	Facebook    string       `json:"facebook"`
-	Twitter     string       `json:"twitter"`
-	Tiktok      string       `json:"tiktok"`
-	Pinterest   string       `json:"pinterest"`
-	Linkedin    string       `json:"linkedin"`
-	Instagram   string       `json:"instagram"`
-	Youtube     string       `json:"youtube"`
-	Qrcode      string       `json:"qrcode"`
-	ExtraFields []ExtraField `json:"extra_fields"` // 用户自定义字段
+	UserName    string        `json:"user_name"`
+	Cellphone   string        `json:"cellphone"`
+	Address     string        `json:"address"`
+	Email       string        `json:"email"`
+	Wechat      string        `json:"wechat"`
+	QQ          string        `json:"qq"`
+	WhatsApp    string        `json:"whats_app"`
+	Facebook    string        `json:"facebook"`
+	Twitter     string        `json:"twitter"`
+	Tiktok      string        `json:"tiktok"`
+	Pinterest   string        `json:"pinterest"`
+	Linkedin    string        `json:"linkedin"`
+	Instagram   string        `json:"instagram"`
+	Youtube     string        `json:"youtube"`
+	Qrcode      string        `json:"qrcode"`
+	ExtraFields []CustomField `json:"extra_fields"` // 用户自定义字段
 }
 
 type SafeConfig struct {
@@ -88,14 +89,6 @@ type SafeConfig struct {
 	APIOpen          int    `json:"api_open"`
 	APIPublish       int    `json:"api_publish"`
 	AdminCaptchaOff  int    `json:"admin_captcha_off"`
-}
-
-type ExtraField struct {
-	Name    string      `json:"name"`
-	Type    string      `json:"type"`
-	Value   interface{} `json:"value"`
-	Remark  string      `json:"remark"`
-	Content string      `json:"content"`
 }
 
 type BannerItem struct {
