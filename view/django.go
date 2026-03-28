@@ -2,22 +2,28 @@ package view
 
 import (
 	"bytes"
-	"github.com/kataras/iris/v12"
-	"github.com/kataras/iris/v12/context"
-	view2 "github.com/kataras/iris/v12/view"
 	"hash/crc32"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
+	"net/url"
 	"os"
 	stdPath "path"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/context"
+	"github.com/kataras/iris/v12/i18n"
+	view2 "github.com/kataras/iris/v12/view"
+	"golang.org/x/net/html"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 
 	"github.com/fatih/structs"
 	"github.com/flosch/pongo2/v6"
@@ -66,6 +72,15 @@ var AsValue = pongo2.AsValue
 // AsSafeValue works like AsValue, but does not apply the 'escape' filter.
 // Shortcut for `pongo2.AsSafeValue`.
 var AsSafeValue = pongo2.AsSafeValue
+
+var (
+	mobileReplaceRegexCache sync.Map // map[string]*regexp.Regexp
+	mobileIgnoreTagsPart    = `(?is)<a[^>]*data-ignore="true"[^>]*>.*?</a>|<link[^>]*data-ignore="true"[^>]*>`
+
+	interferenceTagRegex   = regexp.MustCompile(`(?i)<(a|article|div|h1|h2|h3|h4|h5|h6|img|p|span|table|section)[\S\s]*?>`)
+	interferenceClassRegex = regexp.MustCompile(`(?i)class="(.*?)"`)
+	jsonLdRegex            = regexp.MustCompile(`<script.+?type="application/ld\+json".*?>`)
+)
 
 type tDjangoAssetLoader struct {
 	rootDir string
@@ -205,6 +220,10 @@ func (s *DjangoEngine) RegisterTag(tagName string, fn TagParser) error {
 	return pongo2.RegisterTag(tagName, fn)
 }
 
+func (s *DjangoEngine) ReplaceTag(tagName string, fn TagParser) error {
+	return pongo2.ReplaceTag(tagName, fn)
+}
+
 // Load parses the templates to the engine.
 // It is responsible to add the necessary global functions.
 //
@@ -227,8 +246,11 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 		if !site.Initialed {
 			continue
 		}
+		// 检查模板是否有多语言
+		var mapLocales = map[string]struct{}{}
 		sfs := getFS(site.GetTemplateDir())
 		rootDirName := getRootDirName(sfs)
+		var tplFiles = make(map[string]int64, 100)
 		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				if throw {
@@ -239,6 +261,13 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 
 			if info == nil || info.IsDir() {
 				return nil
+			}
+			// 判断是否有多语言
+			if strings.HasPrefix(path, "locales") {
+				pathSplit := strings.Split(path, "/")
+				if len(pathSplit) > 2 {
+					mapLocales[pathSplit[1]] = struct{}{}
+				}
 			}
 
 			if s.extension != "" {
@@ -259,13 +288,25 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 				}
 				return nil
 			}
-
+			tplFiles[path] = info.Size()
 			err = s.ParseTemplate(site, path, contents)
 			if err != nil && throw {
 				return err
 			}
 			return nil
 		})
+		site.SetTemplates(tplFiles)
+		if len(mapLocales) > 0 {
+			var locales = make([]string, 0, len(mapLocales))
+			for k := range mapLocales {
+				locales = append(locales, k)
+			}
+			tplI18n := i18n.New()
+			err = tplI18n.LoadFS(sfs, "./locales/*/*.yml", locales...)
+			if err == nil {
+				site.TplI18n = tplI18n
+			}
+		}
 	}
 
 	return err
@@ -287,7 +328,7 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 	if err == nil {
 		s.templateCache[site.Id][name] = tmpl
 	} else {
-		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error()))
+		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error() + "<br/> on file " + name))
 	}
 
 	return nil
@@ -333,6 +374,10 @@ func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Templ
 	return nil
 }
 
+type RenderData struct {
+	Data []byte
+}
+
 // ExecuteWriter executes a templates and write its results to the w writer
 // layout here is useless.
 func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bindingData interface{}) error {
@@ -343,10 +388,32 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		}
 	}
 	ctx := w.(iris.Context)
+	// 检查是否已经超时
+	if err := ctx.Request().Context().Err(); err != nil {
+		return err
+	}
 	currentSite := provider.CurrentSite(ctx)
 	if tmpl := s.fromCache(currentSite.Id, filename); tmpl != nil {
+		// 在执行模板渲染前再次检查超时状态
+		if err := ctx.Request().Context().Err(); err != nil {
+			return err
+		}
+		hookCtx := &provider.HookContext{
+			Point: provider.BeforeViewRender,
+			Site:  currentSite,
+			Data:  bindingData,
+			Extra: map[string]interface{}{
+				"template": filename,
+				"ctx":      ctx,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
 		data, err := tmpl.ExecuteBytes(getPongoContext(bindingData))
 		if err != nil {
+			return err
+		}
+		// 再次检查是否超时
+		if err = ctx.Request().Context().Err(); err != nil {
 			return err
 		}
 		// 如果启用了防采集
@@ -354,52 +421,48 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 			if currentSite.PluginInterference.DisableSelection ||
 				currentSite.PluginInterference.DisableCopy ||
 				currentSite.PluginInterference.DisableRightClick {
-				addonText := "<script type=\"text/javascript\">\nwindow.onload = function() {\n"
+				var addonText bytes.Buffer
+				addonText.WriteString("<script type=\"text/javascript\">\nwindow.onload = function() {\n")
 				if currentSite.PluginInterference.DisableSelection {
-					addonText += "document.onselectstart = function (e) {e.preventDefault();};\n"
+					addonText.WriteString("document.onselectstart = function (e) {e.preventDefault();};\n")
 				}
 				if currentSite.PluginInterference.DisableCopy {
-					addonText += "document.oncopy = function(e) {e.preventDefault();}\n"
+					addonText.WriteString("document.oncopy = function(e) {e.preventDefault();}\n")
 				}
 				if currentSite.PluginInterference.DisableRightClick {
-					addonText += "document.oncontextmenu = function(e){e.preventDefault();}\n"
+					addonText.WriteString("document.oncontextmenu = function(e){e.preventDefault();}\n")
 				}
-				addonText += "}</script>"
-				if index := bytes.LastIndex(data, []byte("</body>")); index != -1 {
-					index = index + 7
-					tmpData := make([]byte, len(data)+len(addonText))
-					copy(tmpData, data[:index])
-					copy(tmpData[index:], addonText)
-					copy(tmpData[index+len(addonText):], data[index:])
-					data = tmpData
-				} else {
-					data = append(data, addonText...)
-				}
+				addonText.WriteString("}</script>")
+				data = insertAtTag(data, []byte("</body>"), addonText.Bytes(), true, false)
 			}
 			// 基于每个页面独立不变，则这里需要根据页面URL确定唯一值
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok && len(webInfo.CanonicalUrl) > 0 {
 				if currentSite.PluginInterference.Mode == config.InterferenceModeClass {
 					// 添加随机class
-					re, _ := regexp.Compile(`(?i)<(a|article|div|h1|h2|h3|h4|h5|h6|img|p|span|table|section)[\S\s]*?>`)
-					classRe, _ := regexp.Compile(`(?i)class="(.*?)"`)
 					index := 0
-					data = re.ReplaceAllFunc(data, func(b []byte) []byte {
+					data = interferenceTagRegex.ReplaceAllFunc(data, func(b []byte) []byte {
 						index++
 						randClass := crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(index)))
-						match := classRe.FindSubmatch(b)
+						match := interferenceClassRegex.FindSubmatch(b)
+						classStr := library.DecimalToLetter(int64(randClass))
 						if len(match) == 2 {
-							tmpB := make([]byte, len(match[0]))
-							copy(tmpB, match[0])
-							tmpB = append(tmpB[:len(tmpB)-1], " "+library.DecimalToLetter(int64(randClass))+"\""...)
-							b = bytes.Replace(b, match[0], tmpB, 1)
+							// 已经在 interferenceClassRegex.FindSubmatch 匹配了，直接替换
+							oldClass := match[0]
+							newClass := make([]byte, len(oldClass)+len(classStr)+1)
+							copy(newClass, oldClass[:len(oldClass)-1])
+							newClass[len(oldClass)-1] = ' '
+							copy(newClass[len(oldClass):], classStr)
+							newClass[len(newClass)-1] = '"'
+							b = bytes.Replace(b, oldClass, newClass, 1)
 						} else {
-							b = bytes.Replace(b, []byte{'>'}, []byte(" class=\""+library.DecimalToLetter(int64(randClass))+"\">"), 1)
+							b = bytes.Replace(b, []byte{'>'}, []byte(" class=\""+classStr+"\">"), 1)
 						}
 						return b
 					})
 				} else if currentSite.PluginInterference.Mode == config.InterferenceModeText {
 					// 生成10个隐藏的class
-					addonStyle := "<style type=\"text/css\">\n"
+					var addonStyle bytes.Buffer
+					addonStyle.WriteString("<style type=\"text/css\">\n")
 					hiddenStyles := []string{
 						"{display: inline-block;width: .1px;height: .1px;overflow: hidden;visibility: hidden;}\n",
 						"{display: inline-block;font-size: 0!important;width: 1em;height: 1em;visibility: hidden;line-height: 0;}\n",
@@ -407,27 +470,161 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 					}
 					for i := 0; i < 5; i++ {
 						tmpClass := library.DecimalToLetter(int64(crc32.ChecksumIEEE([]byte(webInfo.CanonicalUrl + strconv.Itoa(i)))))
-						addonStyle += "    ." + tmpClass + hiddenStyles[i%len(hiddenStyles)]
+						addonStyle.WriteString("    .")
+						addonStyle.WriteString(tmpClass)
+						addonStyle.WriteString(hiddenStyles[i%len(hiddenStyles)])
 					}
-					addonStyle += "</style>\n"
-					if index := bytes.Index(data, []byte("</head>")); index != -1 {
-						tmpData := make([]byte, len(data)+len(addonStyle))
-						copy(tmpData, data[:index])
-						copy(tmpData[index:], addonStyle)
-						copy(tmpData[index+len(addonStyle):], data[index:])
-						data = tmpData
-					} else {
-						data = append(data, addonStyle...)
-					}
+					addonStyle.WriteString("</style>\n")
+					data = insertAtTag(data, []byte("</head>"), addonStyle.Bytes(), false, true)
 				}
 			}
 		}
 		// 对data进行敏感词替换
 		data = currentSite.ReplaceSensitiveWords(data)
-		buf := bytes.NewBuffer(data)
+		pjax := ctx.GetHeader("X-Pjax")
+		var pjaxContainer string
+		if pjax == "true" {
+			pjaxContainer = ctx.GetHeader("X-Pjax-Container")
+			if pjaxContainer == "" {
+				pjaxContainer = ctx.URLParam("_pjax")
+			}
+			if pjaxContainer == "" {
+				pjaxContainer = "pjax-container"
+			} else {
+				pjaxContainer = strings.TrimLeft(pjaxContainer, "#")
+			}
+			doc, err := html.Parse(bytes.NewBuffer(data))
+			if err == nil {
+				// 查找 #pjax-container 节点
+				node := findNodeByID(doc, pjaxContainer)
+				if node != nil {
+					data = getInnerHTML(node)
+				}
+			}
+		}
+		// 对于模板是pc+mobile的域名，需要做替换
+		if len(currentSite.System.MobileUrl) > 0 {
+			mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
+			baseUrl := currentSite.System.BaseUrl
+			if mobileTemplate && baseUrl != "" {
+				mobileUrl := []byte(currentSite.System.MobileUrl)
+				baseUrlBytes := []byte(baseUrl)
+				re, ok := mobileReplaceRegexCache.Load(baseUrl)
+				if !ok {
+					re, _ = regexp.Compile(mobileIgnoreTagsPart + "|" + regexp.QuoteMeta(baseUrl))
+					mobileReplaceRegexCache.Store(baseUrl, re)
+				}
+				data = re.(*regexp.Regexp).ReplaceAllFunc(data, func(match []byte) []byte {
+					if bytes.Equal(match, baseUrlBytes) {
+						return mobileUrl
+					}
+					return match
+				})
+			}
+		}
+		// 添加json-ld
+		if currentSite.PluginJsonLd.Open {
+			// 需要先检查页面是否存在ls+json,如果已存在，则不再添加
+			if !jsonLdRegex.Match(data) {
+				jsonLd := currentSite.GetJsonLd(ctx)
+				if len(jsonLd) > 0 {
+					jsonLdBuf := []byte("\n<script type=\"application/ld+json\">\n" + jsonLd + "\n</script>\n")
+					data = insertAtTag(data, []byte("</body>"), jsonLdBuf, true, false)
+				}
+			}
+		}
+		// 自动添加统计数据
+		spider := library.GetSpider(ctx.GetHeader("User-Agent"))
+		if spider == "" {
+			query := make(url.Values)
+			query.Set("action", request.LogActionViews)
+			query.Set("path", ctx.FullRequestURI())
+			query.Set("code", strconv.FormatInt(int64(ctx.GetStatusCode()), 10))
+			dataMap, ok := bindingData.(map[string]interface{})
+			if ok {
+				webInfo, ok := dataMap["webInfo"].(*response.WebInfo)
+				if ok {
+					if webInfo.PageName == "order" {
+						route, ok := dataMap["route"].(string)
+						if ok && route == "checkout" || route == "confirm" {
+							query.Set("type", route)
+						}
+					} else if webInfo.PageName == "archiveDetail" {
+						query.Set("type", request.LogTypeArchive)
+						archive, ok := dataMap["archive"].(*model.Archive)
+						if ok {
+							query.Set("id", strconv.FormatInt(int64(archive.Id), 10))
+						}
+					}
+				}
+			}
+			queryEncode := query.Encode()
+			logBuf := []byte("\n<script>\n(function() {\n  var al = document.createElement(\"script\");\n  al.src = \"/api/log?" + queryEncode + "&nonce=\"+Date.now();\n  document.body.appendChild(al);\n})();\n</script>\n")
+			data = insertAtTag(data, []byte("</body>"), logBuf, true, false)
+		}
+		// end log
+
+		exData := &RenderData{
+			Data: data,
+		}
+		hookCtx = &provider.HookContext{
+			Point: provider.AfterViewRender,
+			Site:  currentSite,
+			Data:  exData,
+			Extra: map[string]interface{}{
+				"template": filename,
+			},
+		}
+		_ = provider.TriggerHook(hookCtx)
+
+		buf := bytes.NewBuffer(exData.Data)
 		_, err = buf.WriteTo(w)
 		return err
 	}
 
 	return view2.ErrNotExist{Name: filename, IsLayout: false, Data: bindingData}
+}
+func findNodeByID(n *html.Node, id string) *html.Node {
+	if n.Type == html.ElementNode {
+		for _, attr := range n.Attr {
+			if attr.Key == "id" && attr.Val == id {
+				return n
+			}
+		}
+	}
+
+	// 递归查找子节点
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		if result := findNodeByID(child, id); result != nil {
+			return result
+		}
+	}
+
+	return nil
+}
+
+func getInnerHTML(n *html.Node) []byte {
+	var buf bytes.Buffer
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		html.Render(&buf, child)
+	}
+	return buf.Bytes()
+}
+
+func insertAtTag(data []byte, tag []byte, content []byte, after bool, appendIfMissing bool) []byte {
+	index := bytes.LastIndex(data, tag)
+	if index != -1 {
+		if after {
+			index += len(tag)
+		}
+		tmpData := make([]byte, len(data)+len(content))
+		copy(tmpData, data[:index])
+		copy(tmpData[index:], content)
+		copy(tmpData[index+len(content):], data[index:])
+		return tmpData
+	}
+	if appendIfMissing {
+		return append(data, content...)
+	}
+	return data
 }

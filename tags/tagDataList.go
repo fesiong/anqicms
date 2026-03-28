@@ -2,13 +2,15 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
-	"strings"
 )
 
 type tagTagDataListNode struct {
@@ -38,9 +40,9 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	limit := 10
 	offset := 0
 	currentPage := 1
-	order := "archives.`id` desc"
+	order := "archives.`created_time` desc"
 	if currentSite.Content.UseSort == 1 {
-		order = "archives.`sort` desc, archives.`id` desc"
+		order = "archives.`sort` desc, archives.`created_time` desc"
 	}
 	tagId := uint(0)
 	listType := "list"
@@ -57,6 +59,20 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if args["tagId"] != nil {
 		tagId = uint(args["tagId"].Integer())
 		tagDetail, _ = currentSite.GetTagById(tagId)
+	}
+
+	render := currentSite.Content.Editor == "markdown"
+	if args["render"] != nil {
+		render = args["render"].Bool()
+	}
+	showFlag := false
+	showContent := false
+
+	if args["showFlag"] != nil {
+		showFlag = args["showFlag"].Bool()
+	}
+	if args["showContent"] != nil {
+		showContent = args["showContent"].Bool()
 	}
 
 	if tagDetail != nil {
@@ -82,8 +98,8 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			} else if len(limitArgs) == 1 {
 				limit, _ = strconv.Atoi(limitArgs[0])
 			}
-			if limit > 100 {
-				limit = 100
+			if limit > currentSite.Content.MaxLimit {
+				limit = currentSite.Content.MaxLimit
 			}
 			if limit < 1 {
 				limit = 1
@@ -105,31 +121,50 @@ func (node *tagTagDataListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 			return tx
 		}, order, currentPage, limit, offset)
-		var archiveIds = make([]uint, 0, len(archives))
+		var archiveIds = make([]int64, 0, len(archives))
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
 			if len(archives[i].Password) > 0 {
 				archives[i].HasPassword = true
 			}
 		}
-		// 读取flags
+		// 读取flags,content
 		if len(archiveIds) > 0 {
-			var flags []*model.ArchiveFlags
-			currentSite.DB.Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
-			for i := range archives {
-				for _, f := range flags {
-					if f.ArchiveId == archives[i].Id {
-						archives[i].Flag = f.Flags
-						break
+			if showFlag {
+				var flags []*model.ArchiveFlags
+				currentSite.DB.WithContext(currentSite.Ctx()).Model(&model.ArchiveFlag{}).Where("`archive_id` IN (?)", archiveIds).Select("archive_id", "GROUP_CONCAT(`flag`) as flags").Group("archive_id").Scan(&flags)
+				for i := range archives {
+					for _, f := range flags {
+						if f.ArchiveId == archives[i].Id {
+							archives[i].Flag = f.Flags
+							break
+						}
+					}
+				}
+			}
+			if showContent {
+				var archiveData []model.ArchiveData
+				currentSite.DB.WithContext(currentSite.Ctx()).Where("`id` IN (?)", archiveIds).Find(&archiveData)
+				for i := range archives {
+					for _, d := range archiveData {
+						if d.Id == archives[i].Id {
+							if render {
+								d.Content = library.MarkdownToHTML(d.Content, currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+							}
+							archives[i].Content = d.Content
+							break
+						}
 					}
 				}
 			}
 		}
+
 		ctx.Private[node.name] = archives
 		if listType == "page" {
 			// 分页
 			urlPatten := currentSite.GetUrl("tag", tagDetail, -1)
 			ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
+			ctx.Private["totalItems"] = total
 		}
 	}
 

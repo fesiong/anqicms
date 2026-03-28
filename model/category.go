@@ -1,14 +1,17 @@
 package model
 
 import (
-	"github.com/lib/pq"
-	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
+
+	"github.com/lib/pq"
+	"gorm.io/gorm"
 )
 
 type Category struct {
-	Model
+	Id             uint           `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime    int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime    int64          `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title          string         `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	SeoTitle       string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	Keywords       string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
@@ -24,6 +27,8 @@ type Category struct {
 	IsInherit      uint           `json:"is_inherit" gorm:"column:is_inherit;type:int(1) unsigned not null;default:0"` // 模板是否被继承
 	Images         pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
 	Logo           string         `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
+	Extra          ExtraData      `json:"extra,omitempty" gorm:"column:extra;type:longtext default null"`                                             // 分类自定义字段
+	ArchiveCount   int64          `json:"archive_count" gorm:"column:archive_count;type:int(10) unsigned not null;default:0;index:idx_archive_count"` // 内容数量统计
 	Status         uint           `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	Spacer         string         `json:"spacer" gorm:"-"`
 	HasChildren    bool           `json:"has_children" gorm:"-"`
@@ -45,21 +50,22 @@ func (category *Category) GetThumb(storageUrl, defaultThumb string) string {
 	}
 	if category.Logo != "" {
 		//如果是一个远程地址，则缩略图和原图地址一致
-		if strings.HasPrefix(category.Logo, "http") || strings.HasPrefix(category.Logo, "//") {
-			category.Thumb = category.Logo
-		} else {
+		if !strings.HasPrefix(category.Logo, "http") && !strings.HasPrefix(category.Logo, "//") {
 			category.Logo = storageUrl + "/" + strings.TrimPrefix(category.Logo, "/")
+		}
+		if strings.HasPrefix(category.Logo, storageUrl) && !strings.HasSuffix(category.Logo, ".svg") {
 			paths, fileName := filepath.Split(category.Logo)
 			category.Thumb = paths + "thumb_" + fileName
-			if strings.HasSuffix(category.Logo, ".svg") {
-				category.Thumb = category.Logo
-			}
+		} else {
+			category.Thumb = category.Logo
 		}
 	} else if defaultThumb != "" {
 		category.Thumb = defaultThumb
 		if !strings.HasPrefix(category.Thumb, "http") && !strings.HasPrefix(category.Thumb, "//") {
 			category.Thumb = storageUrl + "/" + strings.TrimPrefix(category.Thumb, "/")
 		}
+		paths, fileName := filepath.Split(category.Thumb)
+		category.Thumb = paths + "thumb_" + fileName
 	}
 
 	return category.Thumb

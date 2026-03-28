@@ -2,12 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
 )
 
 type tagPageDetailNode struct {
@@ -53,44 +55,103 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 
 	pageDetail, _ := ctx.Public["page"].(*model.Category)
+	// 使用上下文缓存避免重复查找
+	cacheKey := "page_detail_cache_"
 	if id > 0 {
-		pageDetail = currentSite.GetCategoryFromCache(id)
+		cacheKey += fmt.Sprintf("id_%d", id)
 	} else if token != "" {
-		pageDetail = currentSite.GetCategoryFromCacheByToken(token)
+		cacheKey += "token_" + token
+	} else {
+		cacheKey += "default"
 	}
+
+	if cached, ok := ctx.Private[cacheKey].(*model.Category); ok {
+		pageDetail = cached
+	} else {
+		if id > 0 {
+			pageDetail = currentSite.GetCategoryFromCache(id)
+		} else if token != "" {
+			pageDetail = currentSite.GetCategoryFromCacheByToken(token)
+		}
+		if pageDetail != nil {
+			if pageDetail.Type != config.CategoryTypePage {
+				return nil
+			}
+			// 存入缓存
+			ctx.Private[cacheKey] = pageDetail
+		}
+	}
+
 	if pageDetail == nil {
 		return nil
 	}
 
-	if pageDetail.Type != config.CategoryTypePage {
+	// 支持获取整个detail
+	if fieldName == "" && node.name != "" {
+		pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
+		ctx.Private[node.name] = pageDetail
 		return nil
 	}
-	pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
-	pageDetail.Thumb = pageDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
 
-	v := reflect.ValueOf(*pageDetail)
-
-	f := v.FieldByName(fieldName)
 	var content interface{}
-	if f.IsValid() {
-		content = f.Interface()
+	// 消除反射，改用直接字段访问
+	switch fieldName {
+	case "Id":
+		content = pageDetail.Id
+	case "Title":
+		content = pageDetail.Title
+	case "SeoTitle":
+		content = pageDetail.SeoTitle
+		if pageDetail.SeoTitle == "" {
+			content = pageDetail.Title
+		}
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, pageDetail)
+		}
+	case "Keywords":
+		content = pageDetail.Keywords
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, pageDetail)
+		}
+	case "Description":
+		content = pageDetail.Description
+		if strings.Contains(content.(string), "{") {
+			content = parseTdkParams(content.(string), currentSite, ctx, pageDetail)
+		}
+	case "Content":
+		content = parseContent(pageDetail.Content, render, currentSite, ctx)
+	case "Link":
+		pageDetail.Link = currentSite.GetUrl("page", pageDetail, 0)
+		content = pageDetail.Link
+	case "Thumb":
+		content = pageDetail.Thumb
+	case "Logo":
+		content = pageDetail.Logo
+	case "Images":
+		content = pageDetail.Images
+	case "ParentId":
+		content = pageDetail.ParentId
+	case "ModuleId":
+		content = pageDetail.ModuleId
+	case "CreatedTime":
+		content = pageDetail.CreatedTime
+	case "UpdatedTime":
+		content = pageDetail.UpdatedTime
+	case "ArchiveCount":
+		content = pageDetail.ArchiveCount
+	default:
+		// 备选方案：极少数非核心字段使用反射
+		v := reflect.ValueOf(*pageDetail)
+		f := v.FieldByName(fieldName)
+		if f.IsValid() {
+			content = f.Interface()
+		}
 	}
 
-	if pageDetail.SeoTitle == "" && fieldName == "SeoTitle" {
-		content = pageDetail.Title
-	}
-	// convert markdown to html
-	if fieldName == "Content" && render {
-		content = library.MarkdownToHTML(pageDetail.Content)
-	}
 	if node.name == "" {
-		writer.WriteString(fmt.Sprintf("%v", content))
+		writer.WriteString(fmt.Sprint(content))
 	} else {
-		if fieldName == "Images" {
-			ctx.Private[node.name] = pageDetail.Images
-		} else {
-			ctx.Private[node.name] = content
-		}
+		ctx.Private[node.name] = content
 	}
 
 	return nil

@@ -2,13 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strconv"
-	"strings"
 )
 
 type tagCategoryListNode struct {
@@ -53,7 +54,7 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		if args["parentId"].String() == "parent" {
 			if categoryDetail != nil {
 				parentId = categoryDetail.ParentId
-				excludeId = categoryDetail.Id
+				//	excludeId = categoryDetail.Id
 			}
 		} else {
 			parentId = uint(args["parentId"].Integer())
@@ -83,8 +84,8 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -103,10 +104,10 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 			break
 		}
 		categoryList[i].Link = currentSite.GetUrl("category", categoryList[i], 0)
-		categoryList[i].Thumb = categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		categoryList[i].Thumb = categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(categoryList[i].Id)))
 		categoryList[i].IsCurrent = false
 		if webOk {
-			if (webInfo.PageName == "archiveList" || webInfo.PageName == "archiveDetail") && categoryList[i].Id == webInfo.NavBar {
+			if (webInfo.PageName == "archiveList" || webInfo.PageName == "archiveDetail") && int64(categoryList[i].Id) == webInfo.NavBar {
 				categoryList[i].IsCurrent = true
 			}
 		}

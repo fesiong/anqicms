@@ -10,7 +10,7 @@ import (
 )
 
 func PluginAnchorList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
@@ -38,7 +38,7 @@ func PluginAnchorList(ctx iris.Context) {
 }
 
 func PluginAnchorDetail(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
 	anchor, err := currentSite.GetAnchorById(id)
@@ -58,7 +58,7 @@ func PluginAnchorDetail(ctx iris.Context) {
 }
 
 func PluginAnchorDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchor
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -138,7 +138,7 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 }
 
 func PluginAnchorReplace(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchor
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -173,7 +173,7 @@ func PluginAnchorReplace(ctx iris.Context) {
 }
 
 func PluginAnchorDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchorDelete
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -223,7 +223,7 @@ func PluginAnchorDelete(ctx iris.Context) {
 }
 
 func PluginAnchorExport(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	anchors, err := currentSite.GetAllAnchors()
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -254,7 +254,7 @@ func PluginAnchorExport(ctx iris.Context) {
 }
 
 func PluginAnchorImport(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -284,7 +284,7 @@ func PluginAnchorImport(ctx iris.Context) {
 }
 
 func PluginAnchorSetting(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	pluginAnchor := currentSite.PluginAnchor
 
 	ctx.JSON(iris.Map{
@@ -295,7 +295,7 @@ func PluginAnchorSetting(ctx iris.Context) {
 }
 
 func PluginAnchorSettingForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginAnchorConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -312,6 +312,7 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 	currentSite.PluginAnchor.AnchorDensity = req.AnchorDensity
 	currentSite.PluginAnchor.ReplaceWay = req.ReplaceWay
 	currentSite.PluginAnchor.KeywordWay = req.KeywordWay
+	currentSite.PluginAnchor.NoStrongTag = req.NoStrongTag
 
 	err := currentSite.SaveSettingValue(provider.AnchorSettingKey, currentSite.PluginAnchor)
 	if err != nil {
@@ -327,5 +328,33 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
+func PluginAnchorAddFromTitle(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.PluginAnchorAddFromTitle
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.InsertTitleToAnchor(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("ImportAnchorTextLog", req))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("UploadCompleted"),
 	})
 }

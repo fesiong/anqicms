@@ -2,28 +2,32 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/go-pay/gopay"
-	"github.com/go-pay/gopay/alipay"
-	"github.com/go-pay/gopay/pkg/util"
-	"github.com/go-pay/gopay/wechat"
-	"gorm.io/gorm"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/go-pay/gopay"
+	"github.com/go-pay/gopay/alipay"
+	"github.com/go-pay/gopay/paypal"
+	"github.com/go-pay/gopay/wechat"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func (w *Website) GetOrderList(userId uint, orderId, userName, status string, page, pageSize int) ([]*model.Order, int64) {
 	var orders []*model.Order
 	var total int64
 	offset := (page - 1) * pageSize
-	tx := w.DB.Model(&model.Order{}).Debug()
+	tx := w.DB.Model(&model.Order{})
 	if userId > 0 {
 		tx = tx.Where("`user_id` = ?", userId)
 	}
@@ -52,6 +56,9 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 		if status == "refunding" {
 			tx = tx.Where("`status` = 8")
 		}
+		if status == "closed" {
+			tx = tx.Where("`status` = -1")
+		}
 	}
 
 	tx.Count(&total).Order("id desc").Limit(pageSize).Offset(offset).Find(&orders)
@@ -66,7 +73,7 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 		var details []*model.OrderDetail
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -84,7 +91,7 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
 						if orders[i].Type == config.OrderTypeVip {
-							group, err := w.GetUserGroupInfo(details[j].GoodsId)
+							group, err := w.GetUserGroupInfo(uint(details[j].GoodsId))
 							if err == nil {
 								details[i].Group = group
 							}
@@ -118,12 +125,12 @@ func (w *Website) GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 	w.DB.Where("`order_id` = ?", order.OrderId).Find(&details)
 	if len(details) > 0 {
 		if order.Type == config.OrderTypeVip {
-			group, err := w.GetUserGroupInfo(details[0].GoodsId)
+			group, err := w.GetUserGroupInfo(uint(details[0].GoodsId))
 			if err == nil {
 				details[0].Group = group
 			}
 		} else {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -159,6 +166,17 @@ func (w *Website) GetPaymentInfoByPaymentId(paymentId string) (*model.Payment, e
 	return &payment, nil
 }
 
+func (w *Website) GetPaymentInfoByTerraceId(terraceId string) (*model.Payment, error) {
+	var payment model.Payment
+	err := w.DB.Where("`terrace_id` = ?", terraceId).Take(&payment).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &payment, nil
+}
+
 func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error) {
 	var payment model.Payment
 	err := w.DB.Where("`order_id` = ?", orderId).Take(&payment).Error
@@ -170,7 +188,7 @@ func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error
 	return &payment, nil
 }
 
-func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Payment, error) {
+func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentRequest) (*model.Payment, error) {
 	payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil
@@ -182,7 +200,7 @@ func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Pay
 		Amount:  order.Amount,
 		Status:  0,
 		Remark:  order.Remark,
-		PayWay:  payWay,
+		PayWay:  req.PayWay,
 	}
 	err = w.DB.Save(payment).Error
 	if err != nil {
@@ -365,7 +383,21 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 func (w *Website) SetOrderCanceled(order *model.Order) error {
 	order.Status = config.OrderStatusCanceled
 	order.FinishedTime = time.Now().Unix()
-	w.DB.Save(order)
+	w.DB.Model(order).UpdateColumns(map[string]interface{}{
+		"status":        order.Status,
+		"finished_time": order.FinishedTime,
+	})
+	w.DB.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
+	// 退还库存
+	if order.Type != config.OrderTypeVip {
+		var details []*model.OrderDetail
+		w.DB.Where("order_id = ?", order.OrderId).Find(&details)
+		for _, detail := range details {
+			if detail.GoodsId > 0 {
+				w.DB.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+			}
+		}
+	}
 
 	return nil
 }
@@ -391,7 +423,7 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 
 			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", util.RandomString(32)).
+			bm.Set("nonce_str", library.GenerateRandString(32)).
 				Set("out_trade_no", order.PaymentId).
 				Set("out_refund_no", refund.RefundId).
 				Set("total_fee", order.Amount).
@@ -426,7 +458,7 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 
 			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", util.RandomString(32)).
+			bm.Set("nonce_str", library.GenerateRandString(32)).
 				Set("out_trade_no", order.PaymentId).
 				Set("out_refund_no", refund.RefundId).
 				Set("total_fee", order.Amount).
@@ -508,6 +540,30 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 				w.DB.Model(refund).UpdateColumn("status", refund.Status)
 				return errors.New(refund.Remark)
 			}
+		} else if payment.PayWay == config.PayWayPaypal {
+			// paypal refund
+			client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, w.PluginPay.PaypalSandbox == false)
+			if err != nil {
+				return err
+			}
+			bm := make(gopay.BodyMap)
+			if payment.Amount > refund.Amount {
+				// refund amount is less than capture amount
+				bm.Set("note_to_payer", refund.Remark).
+					SetBodyMap("amount", func(bm gopay.BodyMap) {
+						bm.Set("currency_code", "USD"). // the same as capture
+										Set("value", fmt.Sprintf("%.2f", float32(refund.Amount)/100))
+					})
+			}
+			ppRsp, err := client.PaymentCaptureRefund(context.Background(), payment.TerraceId, bm)
+			if err != nil {
+				return err
+			}
+			if ppRsp.Code != http.StatusOK && ppRsp.Code != http.StatusCreated {
+				return errors.New(ppRsp.ErrorResponse.Message)
+			}
+
+			// refund success
 		} else {
 			// 线下支付，的退款流程
 			// 不用处理
@@ -563,7 +619,7 @@ func (w *Website) GetOrderRefundByOrderId(orderId string) (*model.OrderRefund, e
 	return &order, nil
 }
 
-func (w *Website) SuccessPaidOrder(order *model.Order) error {
+func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) error {
 	if order.Status == config.OrderStatusPaid {
 		//支付成功
 		return nil
@@ -580,7 +636,8 @@ func (w *Website) SuccessPaidOrder(order *model.Order) error {
 	}
 
 	db.Commit()
-
+	// 更新用户字段
+	w.DB.Model(model.User{}).Where("id = ?", order.UserId).UpdateColumn("order_count", gorm.Expr("`order_count` + 1"))
 	// 支付成功
 	if w.SendTypeValid(SendTypePayOrder) {
 		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("OrderPaymentSuccessNotification")
@@ -588,7 +645,7 @@ func (w *Website) SuccessPaidOrder(order *model.Order) error {
 			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
 			"\n" + w.Tr("PaymentTime:") + time.Unix(order.PaidTime, 0).Format("2006-01-02 15:04:05") +
 			"\n" + w.Tr("PayingMemberId:") + strconv.Itoa(int(order.UserId))
-		_ = w.sendMail(subject, content, nil, false, false)
+		go w.sendMail(subject, content, nil, nil, false, false)
 	}
 
 	if w.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
@@ -678,8 +735,29 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 
 func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	user, err := w.GetUserInfoById(userId)
-	if err != nil {
+	if err != nil && w.PluginOrder.NoNeedLogin == false {
 		return nil, err
+	}
+	if user == nil {
+		// 匿名用户
+		user = &model.User{}
+		if req.Address != nil {
+			user.UserName = req.Address.Name + " " + req.Address.LastName
+			user.Email = req.Address.Email
+			user.Phone = req.Address.Phone
+			if user.Email != "" {
+				existUser, err := w.GetUserInfoByEmail(user.Email)
+				if err == nil {
+					user = existUser
+				}
+			}
+			if user.Phone != "" {
+				existUser, err := w.GetUserInfoByPhone(user.Phone)
+				if err == nil {
+					user = existUser
+				}
+			}
+		}
 	}
 	if len(req.Details) == 0 && req.GoodsId == 0 {
 		return nil, errors.New(w.Tr("PleaseSelectTheProduct"))
@@ -703,7 +781,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	var sellerId uint = 0
 	if remark == "" {
 		if req.Type == config.OrderTypeVip {
-			group, err := w.GetUserGroupInfo(req.Details[0].GoodsId)
+			group, err := w.GetUserGroupInfo(uint(req.Details[0].GoodsId))
 			if err != nil {
 				tx.Rollback()
 				return nil, err
@@ -726,7 +804,11 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					}
 				}
 				if remark == "" {
-					remark += archive.Title + w.Tr("Wait")
+					remark += archive.Title
+					if len(req.Details) > 1 {
+						remark += "..."
+					}
+					break
 				}
 			}
 		}
@@ -749,17 +831,20 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	// 计算商品总价
 	if req.Type == config.OrderTypeVip {
-		group, err := w.GetUserGroupInfo(req.Details[0].GoodsId)
+		group, err := w.GetUserGroupInfo(uint(req.Details[0].GoodsId))
 		if err != nil {
 			tx.Rollback()
 			return nil, err
+		}
+		if req.Details[0].Quantity == 0 {
+			req.Details[0].Quantity = 1
 		}
 		//计算价格
 		price := group.Price
 		originPrice := price
 		discount := w.GetUserDiscount(userId, user)
 		if discount > 0 {
-			price = originPrice * discount / 100
+			price = price * discount / 100
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
@@ -789,15 +874,18 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				tx.Rollback()
 				return nil, err
 			}
+			if v.Quantity == 0 {
+				v.Quantity = 1
+			}
 			//计算价格
 			price := archive.Price
 			originPrice := price
 			discount := w.GetUserDiscount(userId, user)
 			if discount > 0 {
-				price = originPrice * discount / 100
+				price = price * discount / 100
 			}
 			detailAmount := price * int64(v.Quantity)
-			originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+			originDetailAmount := originPrice * int64(v.Quantity)
 			amount += detailAmount
 			originAmount += originDetailAmount
 			//给每条子订单入库
@@ -866,10 +954,20 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			"\n" + w.Tr("OrderTime:") + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
 			"\n" + w.Tr("OrderingMember:") + user.UserName +
 			"\n" + w.Tr("OrderingMemberId:") + strconv.Itoa(int(order.UserId))
-		_ = w.sendMail(subject, content, nil, false, false)
+		_ = w.sendMail(subject, content, nil, nil, false, false)
 	}
 
 	return &order, nil
+}
+
+func (w *Website) GetOrderAddressesByUserId(userId uint) ([]*model.OrderAddress, error) {
+	var orderAddress []*model.OrderAddress
+	err := w.DB.Where("`user_id` = ?", userId).Order("id desc").Find(&orderAddress).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return orderAddress, nil
 }
 
 func (w *Website) GetOrderAddressByUserId(userId uint) (*model.OrderAddress, error) {
@@ -912,11 +1010,15 @@ func (w *Website) SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderA
 		}
 	}
 	orderAddress.Name = req.Name
+	orderAddress.LastName = req.LastName
 	orderAddress.Phone = req.Phone
+	orderAddress.Email = req.Email
 	orderAddress.Province = req.Province
 	orderAddress.City = req.City
+	orderAddress.Town = req.Town
 	orderAddress.Country = req.Country
 	orderAddress.AddressInfo = req.AddressInfo
+	orderAddress.Company = req.Company
 	orderAddress.Postcode = req.Postcode
 	orderAddress.Status = 1
 
@@ -944,7 +1046,7 @@ func (w *Website) GetRetailerOrders(retailerId uint, page, pageSize int) ([]*mod
 		var details []*model.OrderDetail
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -962,7 +1064,7 @@ func (w *Website) GetRetailerOrders(retailerId uint, page, pageSize int) ([]*mod
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
 						if orders[i].Type == config.OrderTypeVip {
-							group, err := w.GetUserGroupInfo(details[j].GoodsId)
+							group, err := w.GetUserGroupInfo(uint(details[j].GoodsId))
 							if err == nil {
 								details[i].Group = group
 							}
@@ -1114,7 +1216,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 		var details []*model.OrderDetail
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
-			var archiveIds = make([]uint, 0, len(details))
+			var archiveIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
 			}
@@ -1132,7 +1234,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 				for j := range details {
 					if orders[i].OrderId == details[j].OrderId {
 						if orders[i].Type == config.OrderTypeVip {
-							group, err := w.GetUserGroupInfo(details[j].GoodsId)
+							group, err := w.GetUserGroupInfo(uint(details[j].GoodsId))
 							if err == nil {
 								details[i].Group = group
 							}
@@ -1205,7 +1307,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 var checkOrderRunning = false
 
 func (w *Website) AutoCheckOrders() {
-	if w.DB == nil {
+	if w.DB == nil || w.PluginOrder == nil {
 		return
 	}
 	if checkOrderRunning {
@@ -1220,16 +1322,173 @@ func (w *Website) AutoCheckOrders() {
 	// auto close order
 	if w.PluginOrder.AutoCloseMinute > 0 {
 		closeStamp := currentStamp - w.PluginOrder.AutoCloseMinute*60
-		w.DB.Model(&model.Order{}).Where("`status` = ? and created_time < ?", config.OrderStatusWaiting, closeStamp)
+		// check the order that was paid or not
+		var orders []model.Order
+		w.DB.Model(&model.Order{}).Where("`status` = ? and created_time < ?", config.OrderStatusWaiting, closeStamp).Find(&orders)
+		for _, order := range orders {
+			payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
+			if err != nil {
+				w.DB.Model(&order).Update("status", config.OrderStatusCanceled)
+				continue
+			}
+			_ = w.TraceQuery(payment)
+			if payment.PaidTime > 0 {
+				// 支付成功
+				// 这里不需要操作
+			} else {
+				w.DB.Model(&order).Update("status", config.OrderStatusCanceled)
+			}
+		}
 	}
 	// auto finish order
 	var orders []*model.Order
 	w.DB.Where("`status` = ? and end_time < ?", config.OrderStatusDelivering, currentStamp).Find(&orders)
 	if len(orders) > 0 {
 		for _, v := range orders {
-			w.SetOrderFinished(v)
+			_ = w.SetOrderFinished(v)
 		}
 	}
+}
+
+func (w *Website) TraceQuery(payment *model.Payment) error {
+	if payment.PaidTime > 0 {
+		return nil
+	}
+	if payment.PayWay == config.PayWayAlipay {
+		client, err := alipay.NewClient(w.PluginPay.AlipayAppId, w.PluginPay.AlipayPrivateKey, true)
+		if err != nil {
+			return err
+		}
+		// 请求参数
+		bm := make(gopay.BodyMap)
+		bm.Set("out_trade_no", payment.PaymentId)
+
+		// 查询订单
+		aliRsp, err := client.TradeQuery(context.Background(), bm)
+		if err != nil {
+			if bizErr, ok := alipay.IsBizError(err); ok {
+				log.Printf("%+v", bizErr)
+				// do something
+				return err
+			}
+			return err
+		}
+
+		// 自动同步验签（只支持证书模式）
+		certPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
+		rootCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
+		publicCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
+		publicKey, err := os.ReadFile(publicCertPath)
+		if err != nil {
+			return err
+		}
+		client.AutoVerifySign(publicKey)
+
+		// 传入证书内容
+		err = client.SetCertSnByPath(certPath, rootCertPath, publicCertPath)
+		if err != nil {
+			return err
+		}
+
+		if aliRsp.Response.TradeStatus == "TRADE_SUCCESS" {
+			// this is a pay order
+			payment.PaidTime = time.Now().Unix()
+			payment.TerraceId = aliRsp.Response.TradeNo
+			payment.BuyerId = aliRsp.Response.BuyerUserId
+			if aliRsp.Response.BuyerOpenId != "" {
+				payment.BuyerId = aliRsp.Response.BuyerOpenId
+			}
+			payment.BuyerInfo = aliRsp.Response.BuyerLogonId
+			w.DB.Save(payment)
+			order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
+			if err2 != nil {
+				return err2
+			}
+			order.PaymentId = payment.PaymentId
+			w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
+			//生成用户支付记录
+			var userBalance int64
+			err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
+			//状态更改了，增加一条记录到用户
+			finance := model.Finance{
+				UserId:      payment.UserId,
+				Direction:   config.FinanceOutput,
+				Amount:      payment.Amount,
+				AfterAmount: userBalance,
+				Action:      config.FinanceActionBuy,
+				OrderId:     payment.OrderId,
+				Status:      1,
+			}
+			w.DB.Create(&finance)
+			//支付成功逻辑处理
+			_ = w.SuccessPaidOrder(order, payment)
+		}
+	} else if payment.PayWay == config.PayWayWechat {
+		// 微信就不管了
+	} else if payment.PayWay == config.PayWayWeapp {
+		// 微信就不管了
+	} else if payment.PayWay == config.PayWayPaypal {
+		client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, w.PluginPay.PaypalSandbox == false)
+		if err != nil {
+			log.Println("client err", err)
+			return err
+		}
+		bm := make(gopay.BodyMap)
+		ppRsp, err := client.OrderDetail(context.Background(), payment.TerraceId, bm)
+		if err != nil {
+			return err
+		}
+		if ppRsp.Code == 0 {
+			status := ppRsp.Response.Status
+			if ppRsp.Response.Status == "APPROVED" {
+				// 需要 capture
+				captureRes, err := client.OrderCapture(context.Background(), payment.TerraceId, nil)
+				if err != nil {
+					log.Println("capture err", err)
+					return err
+				}
+				library.DebugLog(w.CachePath, "paypalCapture", captureRes.Response)
+				if captureRes.Code == 0 {
+					status = captureRes.Response.Status
+				} else {
+					log.Println("captureRes err", captureRes.Error)
+				}
+			}
+			if status == "COMPLETED" && payment.PaidTime == 0 {
+				// 更新payment
+				payment.PayWay = config.PayWayPaypal
+				payment.PaidTime = time.Now().Unix()
+				payment.BuyerId = ppRsp.Response.Payer.PayerId
+				buf, _ := json.Marshal(ppRsp.Response.PaymentSource)
+				payment.BuyerInfo = string(buf)
+				w.DB.Save(payment)
+				order, err2 := w.GetOrderInfoByOrderId(payment.OrderId)
+				if err2 != nil {
+					return err2
+				}
+				order.PaymentId = payment.PaymentId
+				w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
+				//生成用户支付记录
+				var userBalance int64
+				err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
+				//状态更改了，增加一条记录到用户
+				finance := model.Finance{
+					UserId:      payment.UserId,
+					Direction:   config.FinanceOutput,
+					Amount:      payment.Amount,
+					AfterAmount: userBalance,
+					Action:      config.FinanceActionBuy,
+					OrderId:     payment.OrderId,
+					Status:      1,
+				}
+				w.DB.Create(&finance)
+				//支付成功逻辑处理
+				_ = w.SuccessPaidOrder(order, payment)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (w *Website) getOrderStatus(status int) string {

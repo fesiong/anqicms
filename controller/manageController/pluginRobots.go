@@ -8,7 +8,7 @@ import (
 )
 
 func PluginRobots(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	robots := currentSite.GetRobots()
 
 	ctx.JSON(iris.Map{
@@ -21,7 +21,7 @@ func PluginRobots(ctx iris.Context) {
 }
 
 func PluginRobotsForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginRobotsConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

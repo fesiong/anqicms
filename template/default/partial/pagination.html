@@ -1,7 +1,7 @@
 {% pagination pages with show="5" %}
 <!-- pageination -->
 <div class="pagnavi">
-    <a href="{{pages.FirstPage.Link}}" class="{% if pages.FirstPage.IsCurrent %}current{% endif %}">首页</a>
+    <a href="{{pages.FirstPage.Link}}" class="{% if pages.FirstPage.IsCurrent %}current{% endif %}">{% tr 'first-page' %}</a>
     {% if pages.PrevPage %}
     <a href="{{pages.PrevPage.Link}}"><i class="fa fa-angle-left"></i></a>
     {% endif %}
@@ -15,7 +15,8 @@
     {% if pages.NextPage %}
     <a href="{{pages.NextPage.Link}}"><i class="fa fa-angle-right"></i></a>
     {% endif %}
-    <a href="{{pages.LastPage.Link}}" class="{% if pages.LastPage.IsCurrent %}current{% endif %}">尾页</a>
+    <a href="{{pages.LastPage.Link}}" class="{% if pages.LastPage.IsCurrent %}current{% endif %}">{% tr 'last-page' %}</a>
+    <a href="javascript:;">{% tr 'total-items%d' pages.TotalItems %}</a>
 </div>
 <!-- pagination -->
 {% endpagination %}

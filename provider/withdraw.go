@@ -3,14 +3,15 @@ package provider
 import (
 	"context"
 	"fmt"
-	"github.com/go-pay/gopay"
-	"github.com/go-pay/gopay/pkg/util"
-	"github.com/go-pay/gopay/wechat"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"time"
+
+	"github.com/go-pay/gopay"
+	"github.com/go-pay/gopay/wechat"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetWithdrawList(page, pageSize int) ([]*model.UserWithdraw, int64) {
@@ -111,7 +112,7 @@ func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawRequest) erro
 var withdrawRunning = false
 
 func (w *Website) CheckWithdrawToWechat() {
-	if w.DB == nil {
+	if w.DB == nil || w.PluginPay == nil || !w.PluginPay.WechatOpen {
 		return
 	}
 	if withdrawRunning {
@@ -121,6 +122,9 @@ func (w *Website) CheckWithdrawToWechat() {
 	defer func() {
 		withdrawRunning = false
 	}()
+	if w.PluginPay.WechatKeyPath == "" || (w.PluginPay.WechatAppId == "" && w.PluginPay.WeappAppId == "") {
+		return
+	}
 	var withdraws []model.UserWithdraw
 
 	w.DB.Where("status = ?", config.CommissionStatusWait).Find(&withdraws)
@@ -194,7 +198,7 @@ func (w *Website) CheckWithdrawToWechat() {
 		}
 
 		bm := make(gopay.BodyMap)
-		bm.Set("nonce_str", util.RandomString(32)).
+		bm.Set("nonce_str", library.GenerateRandString(32)).
 			Set("partner_trade_no", fmt.Sprintf("%d", withdraw.Id)).
 			Set("openid", userWechat.Openid).
 			Set("check_name", "FORCE_CHECK").

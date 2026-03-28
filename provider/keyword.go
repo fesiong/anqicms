@@ -3,12 +3,12 @@ package provider
 import (
 	"encoding/json"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"mime/multipart"
 	"strconv"
 	"strings"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 )
 
 type KeywordCSV struct {
@@ -54,7 +54,7 @@ func (w *Website) SaveUserKeywordSetting(req config.KeywordJson, focus bool) err
 
 	_ = w.SaveSettingValue(KeywordSettingKey, keywordJson)
 	//重新读取配置
-	w.LoadKeywordSetting()
+	w.LoadKeywordSetting(w.GetSettingValue(KeywordSettingKey))
 
 	return nil
 }
@@ -167,7 +167,7 @@ func (w *Website) DeleteKeyword(keyword *model.Keyword) error {
 // StartDigKeywords 开始挖掘关键词，通过核心词来拓展
 // 最多只10万关键词，抓取前3级，如果超过3级，则每次只执行一级
 func (w *Website) StartDigKeywords(focus bool) {
-	if w.DB == nil {
+	if w.DB == nil || w.KeywordConfig == nil {
 		return
 	}
 	if w.KeywordConfig.AutoDig == false && !focus {
@@ -190,7 +190,7 @@ func ContainKeywords(title, keyword string) bool {
 		return false
 	}
 	title = strings.ToLower(title)
-	words := library.WordSplit(strings.ToLower(keyword), false)
+	words := WordSplit(strings.ToLower(keyword), false)
 	maxLen := 0
 	matchLen := 0
 	for _, wd := range words {

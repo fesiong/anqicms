@@ -1,7 +1,9 @@
 package model
 
 type UserWithdraw struct {
-	Model
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Amount      int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"`             // 提现金额
 	SuccessTime int64  `json:"success_time" gorm:"column:success_time;type:int(11);default:0"`             // 成功时间

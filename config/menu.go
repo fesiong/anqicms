@@ -65,6 +65,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "导航设置",
 				Backend:  "/setting/nav",
 			},
+			{
+				Path:     "/setting/diyfield",
+				GroupKey: "setting",
+				Name:     "自定义字段",
+				Backend:  "/setting/diyfield",
+			},
 		},
 	},
 	{
@@ -95,6 +101,11 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "文档分类",
 			},
 			{
+				Path:     "/archive/category/detail",
+				GroupKey: "archive",
+				Name:     "文档分类详情",
+			},
+			{
 				Path:     "/archive/tag",
 				GroupKey: "archive",
 				Name:     "文档标签",
@@ -102,8 +113,13 @@ var DefaultMenuGroups = []*MenuGroup{
 			},
 			{
 				Path:     "/archive/page",
-				GroupKey: "content",
+				GroupKey: "archive",
 				Name:     "单页面管理",
+			},
+			{
+				Path:     "/archive/page/detail",
+				GroupKey: "archive",
+				Name:     "单页面详情",
 			},
 			{
 				Path:     "/archive/module",
@@ -112,7 +128,7 @@ var DefaultMenuGroups = []*MenuGroup{
 			},
 			{
 				Path:     "/archive/attachment",
-				GroupKey: "content",
+				GroupKey: "archive",
 				Name:     "图片资源管理",
 				Backend:  "/attachment",
 			},
@@ -236,7 +252,7 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/user",
 			},
 			{
-				Path:     "/plugin/user/group",
+				Path:     "/plugin/group",
 				GroupKey: "plugin",
 				Name:     "用户组VIP",
 				Backend:  "/plugin/user/group",
@@ -310,7 +326,7 @@ var DefaultMenuGroups = []*MenuGroup{
 			{
 				Path:     "/plugin/aigenerate",
 				GroupKey: "plugin",
-				Name:     "静态页面缓存",
+				Name:     "AI自动写作",
 				Backend:  "/plugin/aigenerate",
 			},
 			{
@@ -324,6 +340,36 @@ var DefaultMenuGroups = []*MenuGroup{
 				GroupKey: "plugin",
 				Name:     "防采集干扰码",
 				Backend:  "/plugin/interference",
+			},
+			{
+				Path:     "/plugin/watermark",
+				GroupKey: "plugin",
+				Name:     "水印管理",
+				Backend:  "/plugin/watermark",
+			},
+			{
+				Path:     "/plugin/limiter",
+				GroupKey: "plugin",
+				Name:     "限流器",
+				Backend:  "/plugin/limiter",
+			},
+			{
+				Path:     "/plugin/translate",
+				GroupKey: "plugin",
+				Name:     "翻译功能",
+				Backend:  "/plugin/translate",
+			},
+			{
+				Path:     "/plugin/multilang",
+				GroupKey: "plugin",
+				Name:     "多语言站点",
+				Backend:  "/plugin/multilang",
+			},
+			{
+				Path:     "/plugin/jsonld",
+				GroupKey: "plugin",
+				Name:     "结构化数据标记",
+				Backend:  "/plugin/jsonld",
 			},
 		},
 	},
@@ -427,6 +473,18 @@ var DefaultMenuGroups = []*MenuGroup{
 				GroupKey: "account",
 				Name:     "操作记录",
 				Backend:  "/admin/logs/action",
+			},
+		},
+	},
+	{
+		Key:  "website",
+		Name: "多站点",
+		Menus: []*Menu{
+			{
+				Path:     "/website",
+				GroupKey: "tool",
+				Name:     "多站点管理",
+				Backend:  "/website/list",
 			},
 		},
 	},

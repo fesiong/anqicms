@@ -3,14 +3,15 @@ package provider
 import (
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"net/url"
 	"regexp"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, pageSize int) ([]*model.Material, int64, error) {
@@ -31,6 +32,9 @@ func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, 
 	err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&materials).Error
 	if err != nil {
 		return nil, 0, err
+	}
+	for i, v := range materials {
+		materials[i].Content = w.ReplaceContentUrl(v.Content, true)
 	}
 
 	//增加分类名称
@@ -69,14 +73,14 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = strings.ReplaceAll(req.Content, w.System.BaseUrl, "")
+	req.Content = w.ReplaceContentUrl(req.Content, false)
 	baseHost := ""
 	urls, err := url.Parse(w.System.BaseUrl)
 	if err == nil {
 		baseHost = urls.Host
 	}
 	// 过滤外链
-	if w.Content.FilterOutlink == 1 {
+	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
 		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
@@ -87,7 +91,12 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 			if err2 == nil {
 				if aUrl.Host != "" && aUrl.Host != baseHost {
 					//过滤外链
-					return match[2]
+					if w.Content.FilterOutlink == 1 {
+						return match[2]
+					} else if !strings.Contains(match[0], "nofollow") {
+						newUrl := match[1] + `" rel="nofollow`
+						s = strings.Replace(match[0], match[1], newUrl, 1)
+					}
 				}
 			}
 			return s
@@ -104,7 +113,7 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					attachment, err2 := w.DownloadRemoteImage(match[1], "", 0)
 					if err2 == nil {
 						// 下载完成
 						s = strings.Replace(s, match[1], attachment.Logo, 1)
@@ -228,7 +237,7 @@ func (w *Website) SaveMaterialCategory(req *request.PluginMaterialCategory) (cat
 	return
 }
 
-func (w *Website) LogMaterialData(materialIds []uint, itemType string, itemId uint) {
+func (w *Website) LogMaterialData(materialIds []uint, itemType string, itemId int64) {
 	//清理不存在的
 	w.DB.Unscoped().Model(&model.MaterialData{}).Where("`material_id` not in(?) and `item_type` = ? and `item_id` = ?", materialIds, itemType, itemId).Delete(model.MaterialData{})
 	//先检查是否存在

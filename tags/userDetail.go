@@ -2,11 +2,12 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
 )
 
 type tagUserDetailNode struct {
@@ -49,36 +50,82 @@ func (node *tagUserDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	}
 
 	if userDetail == nil && id > 0 {
-		userDetail, _ = currentSite.GetUserInfoById(id)
-		if userDetail == nil {
-			return nil
+		cacheKey := fmt.Sprintf("userDetail_%d", id)
+		if cached, ok := ctx.Private[cacheKey].(*model.User); ok {
+			userDetail = cached
+		} else {
+			userDetail, _ = currentSite.GetUserInfoById(id)
+			if userDetail != nil {
+				ctx.Private[cacheKey] = userDetail
+			}
 		}
 	}
 	if userDetail == nil {
 		return nil
 	}
 
-	userDetail.Link = currentSite.GetUrl("user", userDetail, 0)
-
 	if len(node.name) > 0 && len(fieldName) == 0 {
 		ctx.Private[node.name] = userDetail
 		return nil
 	}
 
-	v := reflect.ValueOf(*userDetail)
-
-	f := v.FieldByName(fieldName)
 	var content interface{}
-	if f.IsValid() {
-		content = f.Interface()
-	}
-	// 检查 extra field
-	if extra, ok := userDetail.Extra[inputName]; ok {
-		content = extra.Value
+	switch fieldName {
+	case "Id":
+		content = userDetail.Id
+	case "CreatedTime":
+		content = userDetail.CreatedTime
+	case "UpdatedTime":
+		content = userDetail.UpdatedTime
+	case "ParentId":
+		content = userDetail.ParentId
+	case "UserName":
+		content = userDetail.UserName
+	case "UrlToken":
+		content = userDetail.UrlToken
+	case "RealName":
+		content = userDetail.RealName
+	case "FirstName":
+		content = userDetail.FirstName
+	case "LastName":
+		content = userDetail.LastName
+	case "Birthday":
+		content = userDetail.Birthday
+	case "AvatarURL":
+		content = userDetail.AvatarURL
+	case "Introduce":
+		content = userDetail.Introduce
+	case "Email":
+		content = userDetail.Email
+	case "Phone":
+		content = userDetail.Phone
+	case "GroupId":
+		content = userDetail.GroupId
+	case "Status":
+		content = userDetail.Status
+	case "Balance":
+		content = userDetail.Balance
+	case "IsRetailer":
+		content = userDetail.IsRetailer
+	case "InviteCode":
+		content = userDetail.InviteCode
+	case "ExpireTime":
+		content = userDetail.ExpireTime
+	case "Link":
+		userDetail.Link = currentSite.GetUrl(provider.PatternPeople, userDetail, 0)
+		content = userDetail.Link
+	default:
+		v := reflect.ValueOf(*userDetail)
+		f := v.FieldByName(fieldName)
+		if f.IsValid() {
+			content = f.Interface()
+		} else if extra, ok := userDetail.Extra[inputName]; ok {
+			content = extra.Value
+		}
 	}
 
 	if node.name == "" {
-		writer.WriteString(fmt.Sprintf("%v", content))
+		writer.WriteString(fmt.Sprint(content))
 	} else {
 		ctx.Private[node.name] = content
 	}

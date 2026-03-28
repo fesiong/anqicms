@@ -1,23 +1,22 @@
 package route
 
 import (
-	"fmt"
+	"embed"
+
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
 
-func manageRoute(app *iris.Application) {
-	system := app.Party("/system", manageController.AdminFileServ)
+func manageRoute(app *iris.Application, systemFiles embed.FS) {
+	system := app.Party("/system", middleware.ParseAdminUrlFile, manageController.AdminFileServ)
 	{
-		system.HandleDir("/", fmt.Sprintf("%ssystem", config.ExecPath))
+		system.HandleDir("/", systemFiles)
 	}
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{
 		manage.Post("/login", manageController.AdminLogin)
-		manage.Get("/captcha", controller.GenerateCaptcha)
+		manage.Get("/captcha", manageController.GenerateCaptcha)
 		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
 
 		password := manage.Party("/password")
@@ -47,6 +46,12 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
+			anqi.Post("/ai/chat", manageController.AuthAiChat)
+			anqi.Post("/ai/image", manageController.AuthAiGenerateImage)
+			anqi.Post("/ai/image/confirm", manageController.AuthAiGenerateImageConfirm)
+			anqi.Get("/ai/image/histories", manageController.AuthAiGenerateImageHistories)
+			anqi.Post("/extract/keywords", manageController.AuthExtractKeywords)
+			anqi.Post("/extract/description", manageController.AuthExtractDescription)
 			anqi.Post("/restart", manageController.RestartAnqicms)
 		}
 
@@ -56,6 +61,7 @@ func manageRoute(app *iris.Application) {
 			website.Get("/info", manageController.GetWebsiteInfo)
 			website.Post("/save", manageController.SaveWebsiteInfo)
 			website.Post("/delete", manageController.DeleteWebsite)
+			website.Post("/login", manageController.LoginSubWebsite)
 		}
 
 		admin := manage.Party("/admin", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -84,6 +90,7 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/contact", manageController.SettingContact)
 			setting.Get("/cache", manageController.SettingCache)
 			setting.Get("/safe", manageController.SettingSafe)
+			setting.Get("/diyfield", manageController.SettingDiyField)
 
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
@@ -97,6 +104,7 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/cache", manageController.SettingCacheForm)
 			setting.Post("/convert/webp", manageController.ConvertImageToWebp)
 			setting.Post("/safe", manageController.SettingSafeForm)
+			setting.Post("/diyfield", manageController.SettingDiyFieldForm)
 			setting.Post("/favicon", manageController.SaveSystemFavicon)
 			setting.Post("/favicon/delete", manageController.DeleteSystemFavicon)
 			setting.Get("/banner", manageController.SettingBanner)
@@ -151,6 +159,7 @@ func manageRoute(app *iris.Application) {
 			category.Get("/detail", manageController.CategoryDetail)
 			category.Post("/detail", manageController.CategoryDetailForm)
 			category.Post("/delete", manageController.CategoryDelete)
+			category.Post("/count", manageController.CategoryUpdateArchiveCount)
 		}
 
 		archive := manage.Party("/archive", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -166,14 +175,19 @@ func manageRoute(app *iris.Application) {
 			archive.Post("/status", manageController.UpdateArchiveStatus)
 			archive.Post("/time", manageController.UpdateArchiveTime)
 			archive.Post("/sort", manageController.UpdateArchiveSort)
+			archive.Post("/parent", manageController.UpdateArchiveParent)
 			archive.Post("/plan", manageController.UpdateArchiveReleasePlan)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
+			archive.Post("/import", manageController.QuickImportArchive)
+			archive.Get("/import/status", manageController.GetQuickImportArchiveStatus)
+			archive.Post("/import/exceltemplate", manageController.GetQuickImportExcelTemplate)
 		}
 
 		statistic := manage.Party("/statistic", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			statistic.Get("/spider", manageController.StatisticSpider)
 			statistic.Get("/traffic", manageController.StatisticTraffic)
+			statistic.Get("/dates", manageController.StatisticDates)
 			statistic.Get("/detail", manageController.StatisticDetail)
 			statistic.Get("/include", manageController.GetSpiderInclude)
 			statistic.Get("/include/detail", manageController.GetSpiderIncludeDetail)
@@ -188,6 +202,7 @@ func manageRoute(app *iris.Application) {
 			design.Post("/save", manageController.SaveDesignInfo)
 			design.Post("/delete", manageController.DeleteDesignInfo)
 			design.Post("/download", manageController.DownloadDesignInfo)
+			design.Get("/upload/check", manageController.CheckUploadDesignInfo)
 			design.Post("/upload", manageController.UploadDesignInfo)
 			design.Post("/use", manageController.UseDesignInfo)
 			design.Post("/data/restore", manageController.RestoreDesignData)
@@ -254,11 +269,13 @@ func manageRoute(app *iris.Application) {
 				anchor.Post("/import", manageController.PluginAnchorImport)
 				anchor.Get("/setting", manageController.PluginAnchorSetting)
 				anchor.Post("/setting", manageController.PluginAnchorSettingForm)
+				anchor.Post("/addfromtitle", manageController.PluginAnchorAddFromTitle)
 			}
 
 			guestbook := plugin.Party("/guestbook")
 			{
 				guestbook.Get("/list", manageController.PluginGuestbookList)
+				guestbook.Post("/status", manageController.PluginGuestbookUpdateStatus)
 				guestbook.Post("/delete", manageController.PluginGuestbookDelete)
 				guestbook.Post("/export", manageController.PluginGuestbookExport)
 				guestbook.Get("/setting", manageController.PluginGuestbookSetting)
@@ -316,6 +333,8 @@ func manageRoute(app *iris.Application) {
 				tag.Get("/detail", manageController.PluginTagDetail)
 				tag.Post("/detail", manageController.PluginTagDetailForm)
 				tag.Post("/delete", manageController.PluginTagDelete)
+				tag.Get("/fields", manageController.PluginTagFields)
+				tag.Post("/fields", manageController.PluginTagFieldsForm)
 			}
 
 			redirect := plugin.Party("/redirect")
@@ -343,6 +362,7 @@ func manageRoute(app *iris.Application) {
 				user.Get("/list", manageController.PluginUserList)
 				user.Get("/detail", manageController.PluginUserDetail)
 				user.Post("/detail", manageController.PluginUserDetailForm)
+				user.Post("/balance", manageController.PluginUserChangeBalance)
 				user.Post("/delete", manageController.PluginUserDelete)
 				user.Get("/group/list", manageController.PluginUserGroupList)
 				user.Get("/group/detail", manageController.PluginUserGroupDetail)
@@ -429,12 +449,15 @@ func manageRoute(app *iris.Application) {
 			{
 				fulltext.Get("/config", manageController.PluginFulltextConfig)
 				fulltext.Post("/config", manageController.PluginFulltextConfigForm)
+				fulltext.Post("/rebuild", manageController.PluginFulltextRebuild)
+				fulltext.Get("/status", manageController.PluginFulltextStatus)
 			}
 
 			backup := plugin.Party("/backup")
 			{
 				backup.Get("/list", manageController.PluginBackupList)
 				backup.Post("/dump", manageController.PluginBackupDump)
+				backup.Get("/status", manageController.PluginBackupStatus)
 				backup.Post("/restore", manageController.PluginBackupRestore)
 				backup.Post("/delete", manageController.PluginBackupDelete)
 				backup.Post("/export", manageController.PluginBackupExport)
@@ -505,6 +528,51 @@ func manageRoute(app *iris.Application) {
 			{
 				interference.Get("/config", manageController.PluginInterferenceConfig)
 				interference.Post("/config", manageController.PluginInterferenceConfigForm)
+			}
+			limiter := plugin.Party("/limiter")
+			{
+				limiter.Get("/setting", manageController.PluginGetLimiterSetting)
+				limiter.Post("/setting", manageController.PluginSaveLimiterSetting)
+				limiter.Get("/blockedips", manageController.PluginGetBlockedIPs)
+				limiter.Post("/blockedip/remove", manageController.PluginRemoveBlockedIP)
+			}
+			multiLang := plugin.Party("/multilang")
+			{
+				multiLang.Get("/config", manageController.PluginGetMultiLangConfig)
+				multiLang.Post("/config", manageController.PluginSaveMultiLangConfig)
+				multiLang.Get("/sites", manageController.PluginGetMultiLangSites)
+				multiLang.Get("/validsites", manageController.GetValidWebsiteList)
+				multiLang.Post("/site/remove", manageController.PluginRemoveMultiLangSite)
+				multiLang.Post("/site/save", manageController.PluginSaveMultiLangSite)
+				multiLang.Post("/site/sync", manageController.PluginSyncMultiLangSiteContent)
+				multiLang.Get("/site/sync/status", manageController.PluginMultiSiteSyncStatus)
+				multiLang.Get("/site/html/logs", manageController.GetTranslateHtmlLogs)
+				multiLang.Get("/site/html/caches", manageController.GetTranslateHtmlCaches)
+				multiLang.Post("/site/html/cache/remove", manageController.PluginRemoveTranslateHtmlCache)
+			}
+			translate := plugin.Party("/translate")
+			{
+				translate.Get("/config", manageController.PluginGetTranslateConfig)
+				translate.Post("/config", manageController.PluginSaveTranslateConfig)
+				translate.Get("/logs", manageController.PluginTranslateLogList)
+				translate.Get("/log/texts", manageController.PluginGetTranslateTextLog)
+				translate.Post("/log/text/remove", manageController.PluginRemoveTranslateTextLog)
+				translate.Post("/log/text/save", manageController.PluginSaveTranslateTextLog)
+			}
+			jsonLd := plugin.Party("/jsonld")
+			{
+				jsonLd.Get("/config", manageController.PluginGetJsonLdConfig)
+				jsonLd.Post("/config", manageController.PluginSaveJsonLdConfig)
+			}
+			akismet := plugin.Party("/akismet")
+			{
+				akismet.Get("/setting", manageController.PluginGetAkismetSetting)
+				akismet.Post("/setting", manageController.PluginSaveAkismetSetting)
+			}
+			google := plugin.Party("/google")
+			{
+				google.Get("/setting", manageController.PluginGetGoogleSetting)
+				google.Post("/setting", manageController.PluginSaveGoogleSetting)
 			}
 		}
 	}
