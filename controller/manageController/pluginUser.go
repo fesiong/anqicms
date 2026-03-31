@@ -126,23 +126,18 @@ func PluginUserList(ctx iris.Context) {
 		if groupId > 0 {
 			tx = tx.Where("`group_id` = ?", userId)
 		}
-		if phone != "" || q != "" {
-			if phone == "" {
-				phone = q
+		if q != "" {
+			tx = tx.Where("`user_name` like ? or `real_name` like ? or `phone` like ?", "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		} else {
+			if phone != "" {
+				tx = tx.Where("`phone` = ?", phone)
 			}
-			tx = tx.Where("`phone` = ?", phone)
-		}
-		if userName != "" || q != "" {
-			if userName == "" {
-				userName = q
+			if userName != "" {
+				tx = tx.Where("`user_name` like ?", "%"+userName+"%")
 			}
-			tx = tx.Where("`user_name` like ?", "%"+userName+"%")
-		}
-		if realName != "" || q != "" {
-			if realName == "" {
-				realName = q
+			if realName != "" {
+				tx = tx.Where("`real_name` like ?", "%"+realName+"%")
 			}
-			tx = tx.Where("`real_name` like ?", "%"+realName+"%")
 		}
 		tx = tx.Order("users.id desc")
 		return tx

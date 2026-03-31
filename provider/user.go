@@ -378,8 +378,13 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
-	_, err := w.GetUserInfoByUserName(req.UserName)
+	exist, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil {
+		// 邮箱已存在，如果还没验证，则发送验证邮件
+		if !exist.EmailVerified && w.PluginSendmail.SignupVerify {
+			_ = w.SendVerifyEmail(exist, "verify")
+			return exist, nil
+		}
 		return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
 	}
 	if req.Phone != "" {
