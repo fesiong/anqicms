@@ -3,8 +3,6 @@ package provider
 import (
 	"context"
 	"errors"
-	"github.com/sashabaranov/go-openai"
-	"kandaoni.com/anqicms/config"
 	"math/rand"
 	"net/http"
 	"net/url"
@@ -14,6 +12,10 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/sashabaranov/go-openai"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 )
 
 type OpenAIResult struct {
@@ -22,134 +24,43 @@ type OpenAIResult struct {
 	Code    int    `json:"code"`
 }
 
-func (w *Website) SelfAiTranslateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
-	var result *OpenAIResult
-	var err error
-	// 翻译标题
-	prompt := "请将下列文字翻译成英文：\n" + req.Title
-	if req.Language == config.LanguageEn {
-		prompt = "Please translate the following text into Chinese:\n" + req.Title
-	}
-
+func (w *Website) SelfAiTranslate(content string, toLanguage string) (string, error) {
+	langName := library.GetLanguageCnName(toLanguage) + "(" + library.GetLanguageName(toLanguage) + ")"
+	prompt := "请将下列文字翻译成" + langName + "，请直接返回翻译结果，不要返回任何其他额外的内容：\n" + content
 	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
 		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New(w.Tr("InterfaceUnavailable"))
+			return "", errors.New(w.Tr("InterfaceUnavailable"))
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
-			return nil, errors.New(w.Tr("NoAvailableKey"))
+			return "", errors.New(w.Tr("NoAvailableKey"))
 		}
 
-		result, err = GetOpenAIResponse(key, prompt)
+		result, err := w.GetOpenAIResponse(key, prompt)
 		if err != nil {
-			if result.Code == 401 || result.Code == 429 {
+			if result != nil && (result.Code == 401 || result.Code == 429) {
 				w.SetOpenAIKeyInvalid(key)
 			}
-			return nil, err
+			return "", err
 		}
-	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
-		if err != nil {
-			return nil, err
-		}
-		result = &OpenAIResult{
-			Content: content,
-			Usage:   0,
-			Code:    200,
-		}
-	} else {
-		// 错误
-		return nil, errors.New(w.Tr("NoAiGenerationSourceSelected"))
-	}
-
-	if len(result.Content) == 0 {
-		return nil, errors.New(w.Tr("InsufficientTextContent"))
-	}
-	req.Title = result.Content
-
-	// 先获取文章img，如果有的话
-	re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-	images := re.FindAllString(req.Content, -1)
-
-	contentText := ParsePlanText(req.Content, "")
-	texts := strings.Split(contentText, "\n")
-	start := 0
-	var contentTexts []string
-	if utf8.RuneCountInString(contentText) > 1000 {
-		for i := 1; i <= len(texts); i++ {
-			if utf8.RuneCountInString(strings.Join(texts[start:i], "\n")) > 1000 {
-				tmpText := strings.Join(texts[start:i-1], "\n")
-				contentTexts = append(contentTexts, tmpText)
-				start = i - 1
-			}
-		}
-		tmpText := strings.Join(texts[start:], "\n")
-		contentTexts = append(contentTexts, tmpText)
-	} else {
-		contentTexts = append(contentTexts, contentText)
-	}
-	for i := range contentTexts {
-		// before replace
-		prompt = "请将下列文字翻译成英文：\n" + contentTexts[i]
-		if req.Language == config.LanguageEn {
-			prompt = "Please translate the following text into Chinese:\n" + contentTexts[i]
-		}
-		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
-			key := w.GetOpenAIKey()
-			if key == "" {
-				return nil, errors.New(w.Tr("NoAvailableKey"))
-			}
-			result, err = GetOpenAIResponse(key, prompt)
-			if err != nil {
-				if result.Code == 401 || result.Code == 429 {
-					w.SetOpenAIKeyInvalid(key)
-				}
-				return nil, err
-			}
-		} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
-			content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
-			if err != nil {
-				return nil, err
-			}
-			result = &OpenAIResult{
-				Content: content,
-				Usage:   0,
-				Code:    200,
-			}
-		}
-
 		if len(result.Content) == 0 {
-			return nil, errors.New(w.Tr("InsufficientTextContent"))
+			return "", errors.New(w.Tr("InsufficientTextContent"))
 		}
 
-		contentTexts[i] = result.Content
-	}
-	translated := strings.Join(contentTexts, "\n")
-
-	results := strings.Split(translated, "\n")
-	for i := 0; i < len(results); i++ {
-		results[i] = strings.TrimSpace(results[i])
-		if len(results[i]) == 0 {
-			results = append(results[:i], results[i+1:]...)
-			i--
-		} else {
-			results[i] = "<p>" + results[i] + "</p>"
+		return result.Content, nil
+	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
+		tmpContent, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
+		if err != nil {
+			return "", err
 		}
-	}
-	// 如果有图片，则需要重新插入图片
-	if len(images) > 0 {
-		for i := range images {
-			insertIndex := i*2 + 1
-			if len(results) >= insertIndex {
-				results = append(results[:insertIndex], results[insertIndex-1:]...)
-				results[insertIndex] = images[i]
-			}
+		if len(tmpContent) == 0 {
+			return "", errors.New(w.Tr("InsufficientTextContent"))
 		}
+
+		return tmpContent, nil
 	}
 
-	req.Content = strings.Join(results, "\n")
-
-	return req, nil
+	return "", errors.New(w.Tr("NoAiGenerationSourceSelected"))
 }
 
 func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
@@ -169,7 +80,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
 
-		result, err = GetOpenAIResponse(key, prompt)
+		result, err = w.GetOpenAIResponse(key, prompt)
 		if err != nil {
 			if result.Code == 401 || result.Code == 429 {
 				w.SetOpenAIKeyInvalid(key)
@@ -232,7 +143,7 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 				return nil, errors.New(w.Tr("NoAvailableKey"))
 			}
 
-			result, err = GetOpenAIResponse(key, prompt)
+			result, err = w.GetOpenAIResponse(key, prompt)
 			if err != nil {
 				if result.Code == 401 || result.Code == 429 {
 					w.SetOpenAIKeyInvalid(key)
@@ -265,8 +176,6 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 		if len(results[i]) == 0 {
 			results = append(results[:i], results[i+1:]...)
 			i--
-		} else {
-			results[i] = "<p>" + results[i] + "</p>"
 		}
 	}
 	// 如果有图片，则需要重新插入图片
@@ -281,6 +190,9 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 	}
 
 	req.Content = strings.Join(results, "\n")
+	if w.Content.Editor != "markdown" {
+		req.Content = library.MarkdownToHTML(req.Content, w.System.BaseUrl, w.Content.FilterOutlink)
+	}
 
 	return req, nil
 }
@@ -288,32 +200,40 @@ func (w *Website) SelfAiPseudoResult(req *AnqiAiRequest) (*AnqiAiRequest, error)
 func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, error) {
 	var result *OpenAIResult
 	var err error
-	prompt := "请根据关键词生成一篇中文文章，将文章标题放在第一行。关键词：" + req.Keyword
+	prompt := "以\"" + req.Keyword + "\"为题生成一篇SEO文章。 要求如下: "
 	if w.AiGenerateConfig.DoubleTitle {
-		prompt = "请您基于关键词'" + req.Keyword + "'生成一篇双标题文章，输出格式'主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）正文：（在此处输入正文内容）'，要求表意清晰，主题鲜明，分段表述"
-	}
-	if w.Content.Editor == "markdown" {
-		prompt += "\n请使用 Markdown 格式输出"
-	}
-	if req.Language == config.LanguageEn {
-		prompt = "Please generate an English article based on the keywords, and put the article title on the first line. Keywords: " + req.Keyword
-		if w.Content.Editor == "markdown" {
-			prompt += "\nPlease output in Markdown format."
-		}
+		prompt += "文章标题格式：`主标题：（在此处输入主标题）\n副标题：（在此处输入副标题）`"
 	}
 	if len(req.Demand) > 0 {
 		prompt += "\n" + req.Demand
+	} else {
+		prompt += "\n1.充分理解标题的意思,为文章确定一个主题;2.文章字数1000-1500字,避免冗长,追求表达清晰; 3.自然引用,无明显痕迹;逻辑严谨,内容连贯无歧义; 4.关键词恰当融入,避免堆砌; 5.文章需要一个标题，标题放在第一行; 6.重点内容采用加粗、斜体等标记并且确保文章原创度高于90%;7.文章无需结束语。"
 	}
-	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
-		if !w.AiGenerateConfig.ApiValid {
-			return nil, errors.New(w.Tr("InterfaceUnavailable"))
+	if strings.HasPrefix(req.Language, config.LanguageEn) || strings.HasPrefix(w.AiGenerateConfig.Language, config.LanguageEn) {
+		prompt = "Generate an SEO article titled '" + req.Keyword + "'. The requirements are as follows: "
+		if w.AiGenerateConfig.DoubleTitle {
+			prompt += "Article Title Format: `Main Title: (Enter main title here)\nSubtitle: (Enter subtitle here)`"
+		}
+		if len(req.Demand) > 0 {
+			prompt += "\n" + req.Demand
+		} else {
+			prompt += "1. Fully understand the meaning of the title and determine a theme for the article; 2. The word count of the article should be 1000-1500 words, avoiding being lengthy and pursuing clear expression; 3. Natural citation without obvious traces; Rigorous logic, coherent and unambiguous content; 4. Incorporate keywords appropriately and avoid piling them up; 5. The article needs a title, which should be placed on the first line; 6. Key content should be marked in bold, italics, etc., and the originality of the article should be ensured to be above 90%; 8. The article does not require a conclusion."
+		}
+	}
+	library.DebugLog(config.ExecPath+"cache/", "ailog.log", "ai engine: ", w.AiGenerateConfig.AiEngine, "prompt: ", prompt)
+	if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI || w.AiGenerateConfig.AiEngine == config.AiEngineDeepSeek {
+		if w.AiGenerateConfig.AiEngine == config.AiEngineOpenAI {
+			if !w.AiGenerateConfig.ApiValid {
+				return nil, errors.New(w.Tr("InterfaceUnavailable"))
+			}
 		}
 		key := w.GetOpenAIKey()
 		if key == "" {
 			return nil, errors.New(w.Tr("NoAvailableKey"))
 		}
-
-		result, err = GetOpenAIResponse(key, prompt)
+		// DeepSeek和openai共用一个处理方法
+		result, err = w.GetOpenAIResponse(key, prompt)
+		library.DebugLog(config.ExecPath+"cache/", "ailog.log", "result: ", prompt)
 		if err != nil {
 			if result.Code == 401 || result.Code == 429 {
 				w.SetOpenAIKeyInvalid(key)
@@ -322,6 +242,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 		}
 	} else if w.AiGenerateConfig.AiEngine == config.AiEngineSpark {
 		content, err := GetSparkResponse(w.AiGenerateConfig.Spark, prompt)
+		library.DebugLog(config.ExecPath+"cache/", "ailog.log", "result: ", prompt)
 		if err != nil {
 			return nil, err
 		}
@@ -399,7 +320,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	}
 	// 获取标题
 	results := strings.Split(result.Content, "\n")
-	title := strings.TrimLeft(results[0], "# ")
+	title := strings.Trim(results[0], "# *")
 	if w.AiGenerateConfig.DoubleTitle {
 		if strings.Contains(title, "主标题：") {
 			title = strings.TrimPrefix(title, "主标题：")
@@ -446,6 +367,7 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 	title = strings.TrimPrefix(title, "副标题：")
 	title = strings.Replace(title, "副标题", "", 1)
 	title = strings.Replace(title, "：", "，", 1)
+	title = strings.Trim(title, "# *")
 	if utf8.RuneCountInString(title) > 150 {
 		title = string([]rune(title)[:150])
 	}
@@ -473,18 +395,21 @@ func (w *Website) SelfAiGenerateResult(req *AnqiAiRequest) (*AnqiAiRequest, erro
 				results[i] = seps[1]
 			}
 		}
-		if w.Content.Editor != "markdown" {
-			results[i] = "<p>" + results[i] + "</p>"
-		}
 	}
 	req.Title = title
 	req.Content = strings.Join(results, "\n")
+	if w.Content.Editor != "markdown" {
+		req.Content = library.MarkdownToHTML(req.Content, w.System.BaseUrl, w.Content.FilterOutlink)
+	}
 
 	return req, nil
 }
 
-func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
+func (w *Website) GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 	cfg := openai.DefaultConfig(apiKey)
+	if w.AiGenerateConfig.OpenAiApi != "" {
+		cfg.BaseURL = w.AiGenerateConfig.OpenAiApi
+	}
 	transport := &http.Transport{}
 	proxy := os.Getenv("HTTP_PROXY")
 	if len(proxy) > 0 {
@@ -497,10 +422,14 @@ func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 		Transport: transport,
 	}
 	client := openai.NewClientWithConfig(cfg)
+	model := openai.GPT3Dot5Turbo
+	if w.AiGenerateConfig.OpenAIModel != "" {
+		model = w.AiGenerateConfig.OpenAIModel
+	}
 	resp, err := client.CreateChatCompletion(
 		context.Background(),
 		openai.ChatCompletionRequest{
-			Model: openai.GPT3Dot5Turbo,
+			Model: model,
 			Messages: []openai.ChatCompletionMessage{
 				{
 					Role:    openai.ChatMessageRoleUser,
@@ -527,8 +456,11 @@ func GetOpenAIResponse(apiKey, prompt string) (*OpenAIResult, error) {
 	return result, nil
 }
 
-func GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStream, error) {
+func (w *Website) GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStream, error) {
 	cfg := openai.DefaultConfig(apiKey)
+	if w.AiGenerateConfig.OpenAiApi != "" {
+		cfg.BaseURL = w.AiGenerateConfig.OpenAiApi
+	}
 	transport := &http.Transport{}
 	proxy := os.Getenv("HTTP_PROXY")
 	if len(proxy) > 0 {
@@ -542,9 +474,12 @@ func GetOpenAIStreamResponse(apiKey, prompt string) (*openai.ChatCompletionStrea
 	}
 	client := openai.NewClientWithConfig(cfg)
 	ctx := context.Background()
-
+	model := openai.GPT3Dot5Turbo
+	if w.AiGenerateConfig.OpenAIModel != "" {
+		model = w.AiGenerateConfig.OpenAIModel
+	}
 	req := openai.ChatCompletionRequest{
-		Model: openai.GPT3Dot5Turbo,
+		Model: model,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleUser,

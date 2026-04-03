@@ -2,13 +2,15 @@ package tags
 
 import (
 	"fmt"
-	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"math"
 	"net/url"
 	"regexp"
+	"strconv"
 	"strings"
+
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 const PagePlaceholder = "{page}"
@@ -27,6 +29,7 @@ type pagination struct {
 	CurrentPage  int
 	urlPatten    string
 	maxPagesShow int
+	maxPages     int
 
 	FirstPage *pageItem
 	LastPage  *pageItem
@@ -94,7 +97,7 @@ func (node *tagPaginationNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 		if err == nil {
 			urlQuery := urlPatten.Query()
 			for k, v := range urlParams {
-				if k == "page" {
+				if k == "page" || k == "_pjax" {
 					continue
 				}
 				urlQuery.Set(k, v)
@@ -179,6 +182,7 @@ func makePagination(currentSite *provider.Website, TotalItems int64, currentPage
 		CurrentPage:  currentPage,
 		urlPatten:    urlPatten,
 		maxPagesShow: maxPagesShow,
+		maxPages:     currentSite.Content.MaxPage, // 最大显示1000页
 	}
 
 	//计算TotalPages
@@ -201,12 +205,16 @@ func (p *pagination) getFirstPage() *pageItem {
 }
 
 func (p *pagination) getLastPage() *pageItem {
+	lastPage := p.TotalPages
+	if lastPage > p.maxPages {
+		lastPage = p.maxPages
+	}
 	item := &pageItem{
 		Name: p.w.TplTr("LastPage"),
-		Link: p.getPageUrl(p.TotalPages),
+		Link: p.getPageUrl(lastPage),
 	}
 
-	if p.CurrentPage == p.TotalPages {
+	if p.CurrentPage == lastPage {
 		item.IsCurrent = true
 	}
 
@@ -240,7 +248,7 @@ func (p *pagination) getNextPage() *pageItem {
 
 func (p *pagination) createPage(page int) *pageItem {
 	item := &pageItem{
-		Name:      fmt.Sprintf("%d", page),
+		Name:      strconv.Itoa(page),
 		Link:      p.getPageUrl(page),
 		IsCurrent: page == p.CurrentPage,
 	}
@@ -263,16 +271,19 @@ func (p *pagination) getPages() []*pageItem {
 	if p.TotalPages <= 1 {
 		return pages
 	}
-
-	if p.TotalPages <= p.maxPagesShow {
-		for i := 1; i <= p.TotalPages; i++ {
+	lastPage := p.TotalPages
+	if lastPage > p.maxPages {
+		lastPage = p.maxPages
+	}
+	if lastPage <= p.maxPagesShow {
+		for i := 1; i <= lastPage; i++ {
 			pages = append(pages, p.createPage(i))
 		}
 	} else {
 		slidingStart := 1
 		numAdjacent := (p.maxPagesShow - 3) / 2
-		if p.CurrentPage+numAdjacent > p.TotalPages {
-			slidingStart = p.TotalPages - p.maxPagesShow + 2
+		if p.CurrentPage+numAdjacent > lastPage {
+			slidingStart = lastPage - p.maxPagesShow + 2
 		} else {
 			slidingStart = p.CurrentPage - numAdjacent
 		}
@@ -280,8 +291,8 @@ func (p *pagination) getPages() []*pageItem {
 			slidingStart = 2
 		}
 		slidingEnd := slidingStart + p.maxPagesShow - 3
-		if slidingEnd >= p.TotalPages {
-			slidingEnd = p.TotalPages - 1
+		if slidingEnd >= lastPage {
+			slidingEnd = lastPage - 1
 		}
 		pages = append(pages, p.createPage(1))
 		if slidingStart > 2 {
@@ -290,11 +301,11 @@ func (p *pagination) getPages() []*pageItem {
 		for i := slidingStart; i <= slidingEnd; i++ {
 			pages = append(pages, p.createPage(i))
 		}
-		if slidingEnd < p.TotalPages-1 {
+		if slidingEnd < lastPage-1 {
 			pages = append(pages, p.createPageEllipsis())
 		}
 
-		pages = append(pages, p.createPage(p.TotalPages))
+		pages = append(pages, p.createPage(lastPage))
 	}
 
 	return pages
@@ -305,7 +316,7 @@ func (p *pagination) getPageUrl(page int) string {
 
 	//如果是第一页，不需要携带页码
 	if page > 1 {
-		link = strings.ReplaceAll(link, PagePlaceholder, fmt.Sprintf("%d", page))
+		link = strings.ReplaceAll(link, PagePlaceholder, strconv.Itoa(page))
 		link = strings.ReplaceAll(link, "(", "")
 		link = strings.ReplaceAll(link, ")", "")
 	} else {

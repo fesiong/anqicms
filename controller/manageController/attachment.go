@@ -3,18 +3,124 @@ package manageController
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"os"
+	"path/filepath"
+	"strings"
 )
 
 func AttachmentUpload(ctx iris.Context) {
-	//复用上传接口
-	controller.AttachmentUpload(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
+	// 增加分类
+	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
+	attachId := uint(ctx.PostValueIntDefault("id", 0))
+	file, info, err := ctx.FormFile("file")
+	if err != nil {
+		file, info, err = ctx.FormFile("file1")
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+	defer file.Close()
+
+	if attachId > 0 {
+		adminId := ctx.Values().GetUintDefault("adminId", 0)
+		if adminId == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("UnableToModifyTheImage"),
+			})
+			return
+		}
+		_, err := currentSite.GetAttachmentById(attachId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("TheImageResourceToBeReplacedDoesNotExist"),
+			})
+			return
+		}
+	}
+
+	var attachment *model.Attachment
+	// 增加支持分片上传
+	chunks := ctx.PostValueIntDefault("chunks", 0)
+	if chunks > 0 {
+		chunk := ctx.PostValueIntDefault("chunk", 0)
+		fileName := ctx.PostValue("file_name")
+		fileMd5 := ctx.PostValue("md5")
+		// 使用了分片上传
+		tmpFile, err := currentSite.UploadByChunks(file, fileMd5, chunk, chunks)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if tmpFile == nil {
+			// 表示分片上传，不需要返回结果
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  "",
+			})
+			return
+		}
+		defer func() {
+			tmpName := tmpFile.Name()
+			_ = tmpFile.Close()
+			_ = os.Remove(tmpName)
+		}()
+		stat, err := tmpFile.Stat()
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+
+		info.Filename = fileName
+		info.Size = stat.Size()
+		tmpFile.Seek(0, 0)
+
+		attachment, err = currentSite.AttachmentUpload(tmpFile, info, categoryId, attachId, 0)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	} else {
+		// 普通上传
+		attachment, err = currentSite.AttachmentUpload(file, info, categoryId, attachId, 0)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UploadResourceAttachmentLog", attachment.Id, attachment.FileLocation))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": attachment,
+	})
 }
 
 func AttachmentList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
@@ -39,7 +145,7 @@ func AttachmentList(ctx iris.Context) {
 }
 
 func AttachmentDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Attachment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -57,7 +163,7 @@ func AttachmentDelete(ctx iris.Context) {
 		return
 	}
 
-	err = attach.Delete(currentSite.DB)
+	err = currentSite.DeleteAttachment(attach)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -75,7 +181,7 @@ func AttachmentDelete(ctx iris.Context) {
 }
 
 func AttachmentEdit(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Attachment
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -93,14 +199,67 @@ func AttachmentEdit(ctx iris.Context) {
 		return
 	}
 
-	attach.FileName = req.FileName
-	err = currentSite.DB.Save(attach).Error
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+	if req.FileName != "" {
+		attach.FileName = req.FileName
+		err = currentSite.DB.Save(attach).Error
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+	// 支持更改路径
+	if req.FileLocation != "" && req.FileLocation != attach.FileLocation {
+		// 后缀不能改
+		if filepath.Ext(req.FileLocation) != filepath.Ext(attach.FileLocation) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		if !provider.CheckContentIsEnglish(req.FileLocation) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		req.FileLocation = strings.ReplaceAll(req.FileLocation, "%20", "-")
+		req.FileLocation = strings.ReplaceAll(req.FileLocation, " ", "-")
+		req.FileLocation = strings.ToLower(req.FileLocation)
+		// 不能超过 200个字符
+		if len(req.FileLocation) > 220 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		// 防止跨目录，不能移动到超过 currentSite.PublicPath + "uploads"
+		realPath := filepath.Join(currentSite.PublicPath, filepath.Clean(req.FileLocation))
+		if !strings.HasPrefix(realPath, filepath.Join(currentSite.PublicPath, "uploads")) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		newLocation := strings.TrimPrefix(req.FileLocation, currentSite.PublicPath)
+
+		err = currentSite.MoveFile(attach.FileLocation, newLocation)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("IncorrectFile"),
+			})
+			return
+		}
+		attach.FileLocation = newLocation
+		_ = currentSite.DB.Save(&attach).Error
+		attach.GetThumb(currentSite.PluginStorage.StorageUrl)
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyImageNameLog", attach.Id, attach.FileName))
@@ -108,11 +267,12 @@ func AttachmentEdit(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ImageNameModified"),
+		"data": attach,
 	})
 }
 
 func AttachmentScanUploads(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	// 仅扫描uploads目录
 	go currentSite.AttachmentScanUploads(currentSite.PublicPath + "uploads")
@@ -124,7 +284,7 @@ func AttachmentScanUploads(ctx iris.Context) {
 }
 
 func AttachmentChangeCategory(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ChangeAttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -152,7 +312,7 @@ func AttachmentChangeCategory(ctx iris.Context) {
 }
 
 func AttachmentCategoryList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 
 	categories, err := currentSite.GetAttachmentCategories()
 	if err != nil {
@@ -171,7 +331,7 @@ func AttachmentCategoryList(ctx iris.Context) {
 }
 
 func AttachmentCategoryDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.AttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -200,7 +360,7 @@ func AttachmentCategoryDetailForm(ctx iris.Context) {
 }
 
 func AttachmentCategoryDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.AttachmentCategory
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -228,7 +388,7 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 }
 
 func ConvertImageToWebp(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	go currentSite.StartConvertImageToWebp()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("BatchConvertImagesToWebp"))

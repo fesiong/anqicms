@@ -2,11 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"reflect"
 )
 
 type tagCategoryDetailNode struct {
@@ -43,9 +46,13 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	fieldName := ""
+	inputName := ""
 	if args["name"] != nil {
-		fieldName = args["name"].String()
-		fieldName = library.Case2Camel(fieldName)
+		inputName = args["name"].String()
+		fieldName = library.Case2Camel(inputName)
+		if fieldName == "Extra" {
+			inputName = ""
+		}
 	}
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
@@ -56,7 +63,7 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 
 	if args["id"] != nil {
 		if args["id"].String() == "parent" && categoryDetail != nil {
-			id = categoryDetail.Id
+			id = categoryDetail.ParentId
 		} else {
 			id = uint(args["id"].Integer())
 		}
@@ -68,32 +75,99 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	}
 
 	if categoryDetail != nil {
-		categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
-		categoryDetail.Thumb = categoryDetail.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
-		v := reflect.ValueOf(*categoryDetail)
+		// 支持获取整个detail
+		if fieldName == "" && node.name != "" {
+			categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
+			ctx.Private[node.name] = categoryDetail
+			return nil
+		}
 
-		f := v.FieldByName(fieldName)
 		var content interface{}
-		if f.IsValid() {
-			content = f.Interface()
+		// 消除反射，改用直接字段访问
+		switch fieldName {
+		case "Id":
+			content = categoryDetail.Id
+		case "Title":
+			content = categoryDetail.Title
+		case "SeoTitle":
+			content = categoryDetail.SeoTitle
+			if categoryDetail.SeoTitle == "" {
+				content = categoryDetail.Title
+			}
+			if strings.Contains(content.(string), "{") {
+				content = parseTdkParams(content.(string), currentSite, ctx, categoryDetail)
+			}
+		case "Keywords":
+			content = categoryDetail.Keywords
+			if strings.Contains(content.(string), "{") {
+				content = parseTdkParams(content.(string), currentSite, ctx, categoryDetail)
+			}
+		case "Description":
+			content = categoryDetail.Description
+			if strings.Contains(content.(string), "{") {
+				content = parseTdkParams(content.(string), currentSite, ctx, categoryDetail)
+			}
+		case "Content":
+			content = parseContent(categoryDetail.Content, render, currentSite, ctx)
+		case "Link":
+			categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
+			content = categoryDetail.Link
+		case "Thumb":
+			content = categoryDetail.Thumb
+		case "Logo":
+			content = categoryDetail.Logo
+		case "Images":
+			content = categoryDetail.Images
+		case "ParentId":
+			content = categoryDetail.ParentId
+		case "ModuleId":
+			content = categoryDetail.ModuleId
+		case "CreatedTime":
+			content = categoryDetail.CreatedTime
+		case "UpdatedTime":
+			content = categoryDetail.UpdatedTime
+		case "ArchiveCount":
+			content = categoryDetail.ArchiveCount
+		case "TopId":
+			content = currentSite.GetTopCategoryId(categoryDetail.Id)
+		default:
+			// 备选方案：非核心字段使用反射
+			if fieldName != "Extra" {
+				v := reflect.ValueOf(*categoryDetail)
+				f := v.FieldByName(fieldName)
+				if f.IsValid() {
+					content = f.Interface()
+				}
+			}
+			// 支持 extra
+			if content == nil && categoryDetail.Extra != nil {
+				module := currentSite.GetModuleFromCache(categoryDetail.ModuleId)
+				if module != nil && len(module.CategoryFields) > 0 {
+					extraData := provider.ProcessExtra(categoryDetail.Extra, module.CategoryFields, currentSite, render, inputName)
+					if fieldName == "Extra" {
+						var extras = make([]config.CustomField, 0, len(module.CategoryFields))
+						for _, field := range module.CategoryFields {
+							extras = append(extras, config.CustomField{
+								Name:      field.Name,
+								Value:     extraData[field.FieldName],
+								Default:   field.Content,
+								Type:      field.Type,
+								FieldName: field.FieldName,
+							})
+						}
+						content = extras
+					} else if item, ok := extraData[inputName]; ok {
+						content = item
+					}
+				}
+			}
 		}
 
-		if categoryDetail.SeoTitle == "" && fieldName == "SeoTitle" {
-			content = categoryDetail.Title
-		}
-		// convert markdown to html
-		if fieldName == "Content" && render {
-			content = library.MarkdownToHTML(categoryDetail.Content)
-		}
 		// output
 		if node.name == "" {
-			writer.WriteString(fmt.Sprintf("%v", content))
+			writer.WriteString(fmt.Sprint(content))
 		} else {
-			if fieldName == "Images" {
-				ctx.Private[node.name] = categoryDetail.Images
-			} else {
-				ctx.Private[node.name] = content
-			}
+			ctx.Private[node.name] = content
 		}
 	}
 

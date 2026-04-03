@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/binary"
 	"errors"
-	"github.com/chai2010/webp"
 	"github.com/disintegration/imaging"
 	"golang.org/x/image/bmp"
+	"golang.org/x/image/webp"
 	"image"
 	"image/png"
 	"io"
@@ -25,7 +25,7 @@ func (w *Website) SaveFavicon(file multipart.File) error {
 	}
 	// 先转成32*32
 	img = imaging.Thumbnail(img, 32, 32, imaging.Lanczos)
-	buf, err := compressImage(img, 90)
+	buf, _, err := encodeImage(img, "png", 90)
 	if err != nil {
 		return err
 	}

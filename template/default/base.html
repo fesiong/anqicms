@@ -9,11 +9,19 @@
     <meta name="keywords" content="{% tdk with name='Keywords' %}">
     <meta name="description" content="{% tdk description with name='Description' %}{{description|escape}}">
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/nprogress.css" />
     <link rel="stylesheet" type="text/css" href="{% system with name='TemplateUrl' %}css/style.css" />
     {%- tdk canonical with name="CanonicalUrl" %}
     {%- if canonical %}
     <link rel="canonical" href="{{canonical}}" />
     {%- endif %}
+
+    {%- languages websites %}
+    {%- for item in websites %}
+    <link rel="alternate" href="{{item.Link}}" hreflang="{{item.Language}}">
+    {%- endfor %}
+    {%- endLanguages %}
+
     {% block head %}
     {% endblock %}
 </head>
@@ -24,7 +32,7 @@
     <div class="top">
         <div class="container">
             <div class="top-item">
-                <div class="top-left">欢迎来到{% system with name="SiteName" %}官方网站!</div>
+                <div class="top-left">{% system siteName with name="SiteName" %}{% tr 'welcome%s' siteName %}</div>
                 <div class="top-right">
                     {% navList navList with typeId=2 %}
                     {%- for item in navList %}
@@ -32,6 +40,22 @@
                     {% endfor %}
                     {% endnavList %}
                 </div>
+                {%- languages languages %}
+                <div class="languages">
+                    {%- for item in languages %}
+                    <a href="{{item.Link}}" class="{% if item.IsCurrent %}active{% endif %}" data-pjax="false">
+                        <div class="language-item">
+                            {%- if item.LanguageIcon %}
+                            <img class="language-icon" src="{{item.LanguageIcon}}" />
+                            {%- else %}
+                            <span class="language-icon">{{item.LanguageEmoji}}</span>
+                            {% endif %}
+                            <span>{{item.LanguageName}}</span>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {%- endLanguages %}
             </div>
         </div>
     </div>
@@ -84,8 +108,8 @@
                         {% endnavList %}
                     </ul>
                     <div class="logo-tel">
-                        <p><i class="fa fa-phone"></i> 全国服务热线：</p>
-                        <a href="tel:{% contact with name='Cellphone' %}" title="电话">{% contact with name="Cellphone" %}</a>
+                        <p><i class="fa fa-phone"></i> {% tr 'service-hotline' %}</p>
+                        <a href="tel:{% contact with name='Cellphone' %}" title="{% tr 'cellphone' %}">{% contact with name="Cellphone" %}</a>
                     </div>
                 </div>
                 <i class="fa fa-bars m-menu-open"></i>
@@ -95,11 +119,13 @@
     </header>
     <!-- header -->
     <!-- layout -->
+    <div id="pjax-container">
     {% block container %}
     <div>
         请不要编辑这里
     </div>
     {% endblock %}
+    </div>
     <!-- layout -->
     {% block footer %}
     {% endblock %}
@@ -108,7 +134,7 @@
         <div class="container">
             <div class="section footer-item">
                 <div class="foot">
-                    <h2>产品分类</h2>
+                    <h2>{% tr 'product-category' %}</h2>
                     <ul class="footer-ul">
                         {% categoryList productCategories with moduleId="2" parentId="0" limit="5" %}
                         {% for item in productCategories %}
@@ -118,7 +144,7 @@
                     </ul>
                 </div>
                 <div class="foot">
-                    <h2>热门产品</h2>
+                    <h2>{% tr 'hot-products' %}</h2>
                     <ul class="footer-ul">
                         {% archiveList products with type="list" moduleId="2" categoryId=0 limit="5" %}
                         {% for item in products %}
@@ -128,20 +154,20 @@
                     </ul>
                 </div>
                 <div class="foot">
-                    <h2>联系方式</h2>
-                    <p><i class="fa fa-phone"></i> 电话:{% contact with name="Cellphone" %}</p>
-                    <p><i class="fa fa-envelope-o"></i> 邮箱:{% contact with name="Email" %}</p>
-                    <p><i class="fa fa-qq"></i> 微信:{% contact with name="Wechat" %}</p>
-                    <p><i class="fa fa-home"></i> 地址:{% contact with name="Address" %}</p>
+                    <h2>{% tr 'contact' %}</h2>
+                    <p><i class="fa fa-phone"></i> {% tr 'cellphone' %}:{% contact with name="Cellphone" %}</p>
+                    <p><i class="fa fa-envelope-o"></i> {% tr 'e-mail' %}:{% contact with name="Email" %}</p>
+                    <p><i class="fa fa-qq"></i> {% tr 'wechat' %}:{% contact with name="Wechat" %}</p>
+                    <p><i class="fa fa-home"></i> {% tr 'address' %}:{% contact with name="Address" %}</p>
                 </div>
                 <div class="foot">
-                    <h3>扫码联系</h3>
+                    <h3>{% tr 'scan-to-contact' %}</h3>
                     <img src="{% contact with name='Qrcode' %}" alt="">
                 </div>
             </div>
         </div>
         <div class="footer-bottom">
-            Copyright &copy; {% now "2006" %} {% system with name="SiteName" %}.版权所有 All Rights Reserved, Created By <a href="https://www.anqicms.com/" target="_blank">安企内容管理系统(AnqiCMS)</a>
+            Copyright &copy; {% now "2006" %} {% system with name="SiteName" %}. {% tr 'copyright' %}, Created By <a href="https://www.anqicms.com/" target="_blank">{% tr 'anqicms' %}</a>
             {% system siteIcp with name="SiteIcp" %}
             {% if siteIcp %}
             <a href="https://beian.miit.gov.cn/" rel="nofollow" target="_blank">{{siteIcp}}</a>
@@ -154,27 +180,27 @@
         <div class="tool-item">
             <a href="#" class="tool-item-cap active" rel="nofollow">
                 <i class="fa fa-headphones"></i>
-                <div class="tool-item-name">在线客服</div>
+                <div class="tool-item-name">{% tr 'online-service' %}</div>
             </a>
         </div>
         <div class="tool-item">
             <div class="tool-item-cap">
                 <i class="fa fa-wechat"></i>
-                <div class="tool-item-name">微信联系</div>
+                <div class="tool-item-name">{% tr 'contact-wechat' %}</div>
             </div>
             <div class="tool-item-sub tool-qrcode">
                 <div class="wechat-qrcode">
                     <div class="qrcode">
-                        <img src="{% contact with name='Qrcode' %}" alt="客服">
+                        <img src="{% contact with name='Qrcode' %}" alt="{% tr 'customer-service' %}">
                     </div>
-                    <div class="qrcode-name">扫码加微信(手机同号)</div>
+                    <div class="qrcode-name">{% tr 'scan-to-add-wechat' %}</div>
                 </div>
             </div>
         </div>
         <div class="tool-item">
             <div class="tool-item-cap">
                 <i class="fa fa-phone"></i>
-                <div class="tool-item-name">电话咨询</div>
+                <div class="tool-item-name">{% tr 'contact-cellphone' %}</div>
             </div>
             <div class="tool-item-sub tool-tel">
                 <a href="tel:{% contact with name='Cellphone' %}" rel="nofollow"><i class="fa fa-phone"></i>
@@ -184,18 +210,22 @@
         <div class="tool-item">
             <div class="tool-item-cap back-top js-to-top">
                 <i class="fa fa-hand-o-up"></i>
-                <div class="tool-item-name">返回顶部</div>
+                <div class="tool-item-name">{% tr 'back-top' %}</div>
             </div>
         </div>
     </div>
     <!-- tool bar -->
     <!-- js -->
     <script src="{% system with name='TemplateUrl' %}js/jquery-3.3.1.min.js" type="text/javascript"></script>
+    <script src="{% system with name='TemplateUrl' %}js/jquery.pjax.js" type="text/javascript"></script>
+    <script src="{% system with name='TemplateUrl' %}js/nprogress.js" type="text/javascript"></script>
     <script src="{% system with name='TemplateUrl' %}js/js.js" type="text/javascript"></script>
     <!-- js -->
     <div class="hide">
         {{- pluginJsCode|safe }}
     </div>
+    {%- block bottom %}
+    {%- endblock %}
 </body>
 
 </html>

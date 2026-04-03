@@ -1,5 +1,7 @@
 package library
 
+import "sync"
+
 // Cache
 // 缓存，默认使用 memory，如果客户机器内存小于2G，则改成使用 file 缓存
 type Cache interface {
@@ -7,4 +9,7 @@ type Cache interface {
 	Set(key string, val any, expire int64) error
 	Delete(key string)
 	CleanAll(prefix ...string)
+	Pending(key string) (*sync.WaitGroup, bool)
+	AddPending(key string, wg *sync.WaitGroup)
+	DelPending(key string)
 }

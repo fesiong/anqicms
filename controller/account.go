@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 func LoginPage(ctx iris.Context) {
@@ -49,6 +50,33 @@ func AccountLogout(ctx iris.Context) {
 	}
 
 	ShowMessage(ctx, currentSite.TplTr("LoggedOut"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+}
+
+func AccountPasswordResetPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	token := ctx.URLParam("token")
+	code := ctx.URLParam("code")
+	email := ctx.URLParam("email")
+	if !currentSite.VerifyEmailFormat(email) || len(token) == 0 {
+		ShowMessage(ctx, currentSite.TplTr("invalidParameter"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+		return
+	}
+	user, err := currentSite.GetUserInfoByEmail(email)
+	if err != nil {
+		ShowMessage(ctx, currentSite.TplTr("UserDoesNotExist"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
+		return
+	}
+
+	ctx.ViewData("user", user)
+	ctx.ViewData("token", token)
+	ctx.ViewData("email", email)
+	ctx.ViewData("code", code)
+
+	err = ctx.View(GetViewPath(ctx, "account/password_reset.html"))
+	if err != nil {
+		ctx.StatusCode(404)
+		ctx.Values().Set("message", err.Error())
+	}
 }
 
 func AccountIndexPage(ctx iris.Context) {

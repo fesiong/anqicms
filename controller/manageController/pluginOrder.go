@@ -2,12 +2,13 @@ package manageController
 
 import (
 	"fmt"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"time"
 )
 
 func PluginOrderList(ctx iris.Context) {
@@ -72,11 +73,23 @@ func PluginOrderSetPay(ctx iris.Context) {
 
 	payment, err := currentSite.GetPaymentInfoByOrderId(req.OrderId)
 	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
+		// 生成一个payment
+		order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		payment, err = currentSite.GeneratePayment(order, &req)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
 	}
 
 	if payment.PaidTime > 0 {
@@ -133,7 +146,7 @@ func PluginOrderSetPay(ctx iris.Context) {
 	}
 
 	//支付成功逻辑处理
-	err = currentSite.SuccessPaidOrder(order)
+	err = currentSite.SuccessPaidOrder(order, payment)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -348,6 +361,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	currentSite.PluginOrder.AutoFinishDay = req.AutoFinishDay
 	currentSite.PluginOrder.AutoCloseMinute = req.AutoCloseMinute
 	currentSite.PluginOrder.SellerPercent = req.SellerPercent
+	currentSite.PluginOrder.NoNeedLogin = req.NoNeedLogin
 
 	err := currentSite.SaveSettingValue(provider.OrderSettingKey, currentSite.PluginOrder)
 	if err != nil {

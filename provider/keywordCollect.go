@@ -113,7 +113,7 @@ func (k *KeywordCollect) InitRootWords() {
 
 	var result = make([][]string, 0, len(rootKeywords))
 	for i := range rootKeywords {
-		result = append(result, library.WordSplit(strings.ToLower(rootKeywords[i]), false))
+		result = append(result, WordSplit(strings.ToLower(rootKeywords[i]), false))
 		k.ExistsWords.Store(rootKeywords[i], 0)
 	}
 
@@ -303,6 +303,13 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		}
 	} else if strings.Contains(link, "so.360.cn") {
 		var result SoSugJson
+		idxs := strings.Index(content, "{")
+		idxe := strings.LastIndex(content, "}")
+		if idxs < 0 || idxe < 0 {
+			log.Println("解析json失败4")
+			return words
+		}
+		content = content[idxs : idxe+1]
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
 			log.Println("解析json失败4")
@@ -352,6 +359,13 @@ func (k *KeywordCollect) CollectKeywords(content string, link string) []*model.K
 		}
 	} else if strings.Contains(link, "api.bing.com") {
 		var result BingJson
+		idxs := strings.Index(content, "{")
+		idxe := strings.LastIndex(content, "}")
+		if idxs < 0 || idxe < 0 {
+			log.Println("解析json失败7")
+			return words
+		}
+		content = content[idxs : idxe+1]
 		err := json.Unmarshal([]byte(content), &result)
 		if err != nil {
 			log.Println("解析json失败7")

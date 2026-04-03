@@ -24,24 +24,31 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 	comment.Status = req.Status
 	comment.UserName = req.UserName
 	comment.Content = req.Content
+	comment.Email = req.Email
 
 	err = comment.Save(w.DB)
 	return
 }
 
-func (w *Website) GetCommentList(archiveId, userId uint, order string, currentPage int, pageSize int, offset int) ([]*model.Comment, int64, error) {
+func (w *Website) GetCommentList(archiveId int64, userId uint, order string, currentPage int, pageSize int, offset int) ([]*model.Comment, int64, error) {
 	var comments []*model.Comment
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
 	}
 	var total int64
 
-	builder := w.DB.Model(&model.Comment{})
+	builder := w.DB.Model(&model.Comment{}).WithContext(w.Ctx())
 	if archiveId > 0 {
 		builder = builder.Where("archive_id = ?", archiveId)
 	}
 	if userId > 0 {
 		builder = builder.Where("user_id = ?", userId)
+	}
+	if order != "" {
+		order = ParseOrderBy(order, "")
+	} else {
+		// 默认排序规则
+		order = "id desc"
 	}
 	if order != "" {
 		builder = builder.Order(order)
@@ -63,7 +70,7 @@ func (w *Website) GetCommentList(archiveId, userId uint, order string, currentPa
 
 func (w *Website) GetCommentById(id uint) (*model.Comment, error) {
 	var comment model.Comment
-	if err := w.DB.Where("id = ?", id).First(&comment).Error; err != nil {
+	if err := w.DB.WithContext(w.Ctx()).Where("id = ?", id).First(&comment).Error; err != nil {
 		return nil, err
 	}
 	//获取itemItile
@@ -75,10 +82,36 @@ func (w *Website) GetCommentById(id uint) (*model.Comment, error) {
 	//获取parent
 	if comment.ParentId > 0 {
 		var parent model.Comment
-		if err := w.DB.Where("id = ?", comment.ParentId).First(&parent).Error; err == nil {
+		if err := w.DB.WithContext(w.Ctx()).Where("id = ?", comment.ParentId).First(&parent).Error; err == nil {
 			comment.Parent = &parent
 		}
 	}
 
 	return &comment, nil
+}
+
+func (w *Website) GetCommentPraise(userId uint, commentId int64) (*model.CommentPraise, error) {
+	var praise model.CommentPraise
+	if err := w.DB.WithContext(w.Ctx()).Where("user_id = ? and comment_id = ?", userId, commentId).Take(&praise).Error; err != nil {
+		return nil, err
+	}
+
+	return &praise, nil
+}
+
+func (w *Website) AddCommentPraise(userId uint, commentId int64, archiveId int64) (praise *model.CommentPraise, err error) {
+	praise, err = w.GetCommentPraise(userId, commentId)
+	if err != nil {
+		praise = &model.CommentPraise{
+			UserId:    userId,
+			CommentId: commentId,
+			ArchiveId: archiveId,
+			Rate:      1,
+		}
+		if err = w.DB.Create(praise).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return praise, nil
 }

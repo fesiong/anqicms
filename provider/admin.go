@@ -3,14 +3,15 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+	"unicode/utf8"
+
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"strings"
-	"unicode/utf8"
 )
 
 func (w *Website) InitAdmin(userName string, password string, force bool) error {
@@ -85,6 +86,10 @@ func (w *Website) GetAdminGroupInfo(groupId uint) (*model.AdminGroup, error) {
 	if err != nil {
 		return nil, err
 	}
+	if group.Id == 1 {
+		// 1 为超级管理员，不能被修改
+		group.Setting.Permissions = nil
+	}
 
 	return &group, nil
 }
@@ -116,6 +121,10 @@ func (w *Website) DeleteAdminGroup(groupId uint) error {
 	if err != nil {
 		return err
 	}
+	// 不能删除超级管理员
+	if group.Id == 1 {
+		return errors.New("permission denied")
+	}
 
 	err = w.DB.Delete(&group).Error
 
@@ -128,6 +137,10 @@ func (w *Website) DeleteAdminInfo(adminId uint) error {
 
 	if err != nil {
 		return err
+	}
+	// 不能删除超级管理员
+	if admin.Id == 1 {
+		return errors.New("permission denied")
 	}
 
 	err = w.DB.Delete(&admin).Error
@@ -147,6 +160,9 @@ func (w *Website) GetAdminByUserName(userName string) (*model.Admin, error) {
 
 func (w *Website) GetAdminInfoById(id uint) (*model.Admin, error) {
 	var admin model.Admin
+	if w.DB == nil {
+		return nil, errors.New("database not ready")
+	}
 	db := w.DB
 	err := db.Where("`id` = ?", id).First(&admin).Error
 	if err != nil {
@@ -167,14 +183,15 @@ func (w *Website) GetAdminInfoByName(name string) (*model.Admin, error) {
 }
 
 func (w *Website) GetAdminAuthToken(userId uint, remember bool) string {
-	t := now.BeginningOfDay().AddDate(0, 0, 1)
+	// 默认24小时
+	t := time.Now().Add(24 * time.Hour)
 	// 记住会记住30天
 	if remember {
 		t = t.AddDate(0, 0, 29)
 	}
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"adminId": fmt.Sprintf("%d", userId),
-		"t":       fmt.Sprintf("%d", t.Unix()),
+		"adminId": fmt.Sprint(userId),
+		"t":       fmt.Sprint(t.Unix()),
 	})
 	// 获取签名字符串
 	tokenString, err := jwtToken.SignedString([]byte(w.TokenSecret + "-admin-token"))
