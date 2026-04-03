@@ -451,9 +451,10 @@ func init() {
 				Type: graphql.NewObject(graphql.ObjectConfig{
 					Name: "Range",
 					Fields: graphql.Fields{
-						"min":  &graphql.Field{Type: graphql.Int},
-						"max":  &graphql.Field{Type: graphql.Int},
-						"link": &graphql.Field{Type: graphql.String},
+						"min":   &graphql.Field{Type: graphql.Int},
+						"max":   &graphql.Field{Type: graphql.Int},
+						"value": &graphql.Field{Type: graphql.String},
+						"link":  &graphql.Field{Type: graphql.String},
 					},
 				}),
 			},
@@ -521,6 +522,12 @@ func init() {
 				Type: graphql.Int,
 			},
 			"user_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"first_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"last_name": &graphql.Field{
 				Type: graphql.String,
 			},
 			"url_token": &graphql.Field{

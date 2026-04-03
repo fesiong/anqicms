@@ -36,8 +36,8 @@ type User struct {
 	GoogleId      string `json:"google_id" gorm:"column:google_id;type:varchar(255) not null;default:''"`
 	Password      string `json:"-" gorm:"column:password;type:varchar(255) not null;default:''"`
 	ResetPassword bool   `json:"reset_password" gorm:"column:reset_password;type:tinyint(1) not null;default:0"` // 是否需要重置密码，重置密码可以不用旧密码，因为tauth2登录，没有密码
-	Status        int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
-	IsRetailer    int    `json:"is_retailer" gorm:"column:is_retailer;type:tinyint(1) not null;default:0"` // 是否是分销员
+	Status        int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`                 // 1 正常，0 待审核，-1 禁止
+	IsRetailer    int    `json:"is_retailer" gorm:"column:is_retailer;type:tinyint(1) not null;default:0"`       // 是否是分销员
 	Balance       int64  `json:"balance" gorm:"column:balance;type:bigint(20) not null;default:0;comment:'用户余额'"`
 	TotalReward   int64  `json:"total_reward" gorm:"column:total_reward;type:bigint(20) not null;default:0;comment:''"` // 分销员累计收益
 	InviteCode    string `json:"invite_code" gorm:"column:invite_code;type:varchar(100) not null;default:'';index:idx_invite_code"`

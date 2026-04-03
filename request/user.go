@@ -49,6 +49,8 @@ type UserGroupRequest struct {
 type ApiRegisterRequest struct {
 	InviteId  uint   `json:"invite_id"` // 邀请用户ID
 	UserName  string `json:"user_name"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
 	Password  string `json:"password"`
 	RealName  string `json:"real_name"`
 	AvatarURL string `json:"avatar_url"`

@@ -122,7 +122,7 @@ func ApiArchiveList(ctx iris.Context) {
 	parentId := ctx.URLParamInt64Default("parentId", 0)
 	moduleId := uint(ctx.URLParamIntDefault("moduleId", 0))
 	authorId := uint(ctx.URLParamIntDefault("authorId", 0))
-	userId := ctx.Values().GetUintDefault("userId", 0)
+	userId := uint(ctx.URLParamIntDefault("userId", 0))
 	showFlag := ctx.URLParamBoolDefault("showFlag", false)
 	showTag := ctx.URLParamBoolDefault("showTag", false)
 	showContent := ctx.URLParamBoolDefault("showContent", false)

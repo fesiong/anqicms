@@ -1224,6 +1224,8 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 			})
 			return "", errs[0]
 		}
+		log.Printf("req = %#v", req2)
+		log.Printf("res = %#v", res)
 		if res.Code != 0 {
 			msg := res.Msg
 			if utf8.RuneCountInString(msg) > 190 {
@@ -1256,15 +1258,19 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 			if i < ln {
 				translated := res.Data.Text[i]
 				// 数据库存储内容
-				textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
-				textLog := model.TranslateTextLog{
-					Md5:        textMd5,
-					Language:   req.Language,
-					ToLanguage: req.ToLanguage,
-					Text:       text,
-					Translated: translated,
+				if translated != "" {
+					textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
+					textLog := model.TranslateTextLog{
+						Md5:        textMd5,
+						Language:   req.Language,
+						ToLanguage: req.ToLanguage,
+						Text:       text,
+						Translated: translated,
+					}
+					_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
+				} else {
+					log.Printf("no translate text, %+v", text)
 				}
-				_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
 
 				textMap[text] = translated
 			}

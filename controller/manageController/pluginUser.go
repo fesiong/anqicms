@@ -118,6 +118,7 @@ func PluginUserList(ctx iris.Context) {
 	realName := ctx.URLParam("realName")
 	phone := ctx.URLParam("phone")
 	q := ctx.URLParam("q")
+	status := ctx.URLParam("status")
 
 	ops := func(tx *gorm.DB) *gorm.DB {
 		if userId > 0 {
@@ -126,23 +127,27 @@ func PluginUserList(ctx iris.Context) {
 		if groupId > 0 {
 			tx = tx.Where("`group_id` = ?", userId)
 		}
-		if phone != "" || q != "" {
-			if phone == "" {
-				phone = q
+		if q != "" {
+			tx = tx.Where("`user_name` like ? or `real_name` like ? or `phone` like ?", "%"+q+"%", "%"+q+"%", "%"+q+"%")
+		} else {
+			if phone != "" {
+				tx = tx.Where("`phone` = ?", phone)
 			}
-			tx = tx.Where("`phone` = ?", phone)
+			if userName != "" {
+				tx = tx.Where("`user_name` like ?", "%"+userName+"%")
+			}
+			if realName != "" {
+				tx = tx.Where("`real_name` like ?", "%"+realName+"%")
+			}
 		}
-		if userName != "" || q != "" {
-			if userName == "" {
-				userName = q
+		if status != "" {
+			if status == "normal" {
+				tx = tx.Where("`status` = ?", 1)
+			} else if status == "blocked" {
+				tx = tx.Where("`status` = ?", -1)
+			} else if status == "pending" {
+				tx = tx.Where("`status` = ?", 0)
 			}
-			tx = tx.Where("`user_name` like ?", "%"+userName+"%")
-		}
-		if realName != "" || q != "" {
-			if realName == "" {
-				realName = q
-			}
-			tx = tx.Where("`real_name` like ?", "%"+realName+"%")
 		}
 		tx = tx.Order("users.id desc")
 		return tx
