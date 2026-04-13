@@ -2,11 +2,12 @@ package provider
 
 import (
 	"encoding/json"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
-	"strings"
-	"time"
 )
 
 // GetJsonLd 该方法用于生成 json-ld
@@ -123,9 +124,13 @@ func (w *Website) GetJsonLd(ctx iris.Context) string {
 				}
 			}
 		} else if webInfo.PageName == "index" {
+			frontUrl := w.System.BaseUrl
+			if w.System.FrontUrl != "" {
+				frontUrl = w.System.FrontUrl
+			}
 			jsonLd["@type"] = "WebSite"
 			jsonLd["name"] = w.System.SiteName
-			jsonLd["url"] = w.System.BaseUrl
+			jsonLd["url"] = frontUrl
 			jsonLd["description"] = w.Index.SeoDescription
 			siteLogo := w.System.SiteLogo
 			if siteLogo != "" && !strings.HasPrefix(siteLogo, "http") && !strings.HasPrefix(siteLogo, "//") {
@@ -134,7 +139,7 @@ func (w *Website) GetJsonLd(ctx iris.Context) string {
 			jsonLd["logo"] = siteLogo
 			jsonLd["potentialAction"] = iris.Map{
 				"@type":       "SearchAction",
-				"target":      w.System.BaseUrl + "/search?q={search_term_string}",
+				"target":      frontUrl + "/search?q={search_term_string}",
 				"query-input": "required name=search_term_string",
 			}
 		}

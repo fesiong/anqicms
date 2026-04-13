@@ -1,9 +1,10 @@
 package model
 
 import (
-	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -14,7 +15,9 @@ const (
 )
 
 type Nav struct {
-	Model
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	SubTitle    string `json:"sub_title" gorm:"column:sub_title;type:varchar(250) not null;default:''"`
 	Description string `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
@@ -24,6 +27,7 @@ type Nav struct {
 	TypeId      uint   `json:"type_id" gorm:"column:type_id;type:int(10) unsigned not null;default:1;index:idx_type_id"`
 	Link        string `json:"link" gorm:"column:link;type:varchar(250) not null;default:''"`
 	Logo        string `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
+	Style       string `json:"style" gorm:"column:style;type:varchar(250) not null;default:''"`
 	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 	NavList     []*Nav `json:"nav_list,omitempty" gorm:"-"`
@@ -34,8 +38,10 @@ type Nav struct {
 }
 
 type NavType struct {
-	Model
-	Title string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 }
 
 func (nav *Nav) Save(db *gorm.DB) error {

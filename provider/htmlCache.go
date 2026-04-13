@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/provider/storage"
 	"log"
 	"net/http"
 	"net/url"
@@ -17,6 +16,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/provider/storage"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
@@ -128,6 +129,11 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		}
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	// 生成栏目
 	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingModel")
 	var modules []*model.Module
@@ -137,7 +143,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		w.HtmlCacheStatus.Current = w.Tr("GeneratingModelLog", module.Title)
 		// 模型只生成第一页
 		link := w.GetUrl("archiveIndex", module, 0)
-		link = strings.TrimPrefix(link, w.System.BaseUrl)
+		link = strings.TrimPrefix(link, frontUrl)
 		err := w.GetAndCacheHtmlData(link, false)
 		if err != nil {
 			w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
@@ -168,7 +174,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 			// 当存在多页的时候，则循环生成
 			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("archiveIndex", module, page)
-				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				link = strings.TrimPrefix(link, frontUrl)
 				err = w.GetAndCacheHtmlData(link, false)
 				if err != nil {
 					w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
@@ -191,7 +197,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 				// 当存在多页的时候，则循环生成
 				for page := 2; page <= webInfo.TotalPages; page++ {
 					link = w.GetUrl("archiveIndex", module, page)
-					link = strings.TrimPrefix(link, w.System.BaseUrl)
+					link = strings.TrimPrefix(link, frontUrl)
 					err = w.GetAndCacheHtmlData(link, true)
 					if err != nil {
 						w.HtmlCacheStatus.ErrorMsg = w.Tr("GenerateModelFailed", module.Title, err.Error())
@@ -230,9 +236,14 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	if w.HtmlCacheStatus != nil {
 		w.HtmlCacheStatus.Current = w.Tr("GeneratingColumnsLog", category.Title)
 	}
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	// 栏目只生成第一页
 	link := w.GetUrl("category", category, 0)
-	link = strings.TrimPrefix(link, w.System.BaseUrl)
+	link = strings.TrimPrefix(link, frontUrl)
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
 		if w.HtmlCacheStatus != nil {
@@ -266,10 +277,11 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		tplName = tplName2
 	}
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
+	tmpName := fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	if category.Template != "" {
 		tplName = category.Template
-	} else if ViewExists(newCtx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
-		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
+	} else if ViewExists(newCtx, tmpName) {
+		tplName = tmpName
 	} else {
 		categoryTemplate := w.GetCategoryTemplate(category)
 		if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
@@ -287,7 +299,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		// 当存在多页的时候，则循环生成
 		for page := 2; page <= webInfo.TotalPages; page++ {
 			link = w.GetUrl("category", category, page)
-			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			link = strings.TrimPrefix(link, frontUrl)
 			err = w.GetAndCacheHtmlData(link, false)
 			if err != nil {
 				if w.HtmlCacheStatus != nil {
@@ -321,7 +333,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 			// 当存在多页的时候，则循环生成
 			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("category", category, page)
-				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				link = strings.TrimPrefix(link, frontUrl)
 				err = w.GetAndCacheHtmlData(link, true)
 				if err != nil {
 					if w.HtmlCacheStatus != nil {
@@ -348,6 +360,11 @@ func (w *Website) BuildArchiveCache() {
 	}
 	w.HtmlCacheStatus.FinishedTime = 0
 	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingDocuments")
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	// 生成详情
 	lastId := int64(0)
 	for {
@@ -361,7 +378,7 @@ func (w *Website) BuildArchiveCache() {
 		for _, arc := range archives {
 			w.HtmlCacheStatus.Current = w.Tr("GeneratingDocuments:s", arc.Title)
 			link := w.GetUrl("archive", arc, 0)
-			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			link = strings.TrimPrefix(link, frontUrl)
 			err := w.GetAndCacheHtmlData(link, false)
 			if err != nil {
 				w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingDocumentFailed", arc.Title, err.Error())
@@ -399,6 +416,11 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 		w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagHomepageFailed") + err.Error()
 		return
 	}
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	// 检查模型是否有分页，如果有，则继续生成分页
 	newCtx := ctx.Clone()
 	writer := newResponseWriter()
@@ -420,7 +442,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 		// 当存在多页的时候，则循环生成
 		for page := 2; page <= webInfo.TotalPages; page++ {
 			link = w.GetUrl("tagIndex", nil, page)
-			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			link = strings.TrimPrefix(link, frontUrl)
 			err = w.GetAndCacheHtmlData(link, false)
 			if err != nil {
 				w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagHomepageFailed") + err.Error()
@@ -445,7 +467,7 @@ func (w *Website) BuildTagIndexCache(ctx iris.Context) {
 			// 当存在多页的时候，则循环生成
 			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("tagIndex", nil, page)
-				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				link = strings.TrimPrefix(link, frontUrl)
 				err = w.GetAndCacheHtmlData(link, true)
 				if err != nil {
 					w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingTagHomepageFailed") + err.Error()
@@ -495,8 +517,13 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	if w.HtmlCacheStatus != nil {
 		w.HtmlCacheStatus.Current = w.Tr("GeneratingTagsLog", tag.Title)
 	}
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	link := w.GetUrl("tag", tag, 0)
-	link = strings.TrimPrefix(link, w.System.BaseUrl)
+	link = strings.TrimPrefix(link, frontUrl)
 	err := w.GetAndCacheHtmlData(link, false)
 	if err != nil {
 		if w.HtmlCacheStatus != nil {
@@ -532,7 +559,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 		// 当存在多页的时候，则循环生成
 		for page := 2; page <= webInfo.TotalPages; page++ {
 			link = w.GetUrl("tag", tag, page)
-			link = strings.TrimPrefix(link, w.System.BaseUrl)
+			link = strings.TrimPrefix(link, frontUrl)
 			err = w.GetAndCacheHtmlData(link, false)
 			if err != nil {
 				if w.HtmlCacheStatus != nil {
@@ -566,7 +593,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 			// 当存在多页的时候，则循环生成
 			for page := 2; page <= webInfo.TotalPages; page++ {
 				link = w.GetUrl("tag", tag, page)
-				link = strings.TrimPrefix(link, w.System.BaseUrl)
+				link = strings.TrimPrefix(link, frontUrl)
 				err = w.GetAndCacheHtmlData(link, true)
 				if err != nil {
 					if w.HtmlCacheStatus != nil {
@@ -685,7 +712,7 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheData []byte, ok bool) {
 	// 获得路由
 	match := ctx.Params().Get("match")
 	// 首页不允许通过 no-cache 跳过缓存
-	if ctx.GetHeader("Cache-Control") == "no-cache" && match != "index" {
+	if ctx.GetHeader("Cache-Control") == "no-cache" {
 		return nil, false
 	}
 	// 用户登录后，也不缓存
@@ -792,10 +819,14 @@ func (w *Website) RemoveHtmlCache(oriPaths ...string) {
 	cacheFilePc := w.CachePath + "mobile"
 	cacheFileMobile := w.CachePath + "pc"
 
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	if len(oriPaths) > 0 {
 		for _, oriPath := range oriPaths {
-			if strings.HasPrefix(oriPath, w.System.BaseUrl) {
-				oriPath = strings.TrimPrefix(oriPath, w.System.BaseUrl)
+			if after, ok := strings.CutPrefix(oriPath, frontUrl); ok {
+				oriPath = after
 			}
 			oriPath = transToLocalPath(oriPath, "")
 			_ = os.Remove(cacheFilePc + oriPath)
@@ -995,7 +1026,11 @@ func (w *Website) ReadAndSendLocalFiles(baseDir string) (err error) {
 
 func (w *Website) ReplaceAndSendCacheFile(remotePath string, buf []byte) error {
 	// 开始执行一些替换操作
-	localUrl := strings.TrimRight(w.System.BaseUrl, "/")
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	localUrl := strings.TrimRight(frontUrl, "/")
 	remoteUrl := strings.TrimRight(w.PluginHtmlCache.StorageUrl, "/")
 
 	if len(localUrl) > 0 && bytes.Contains(buf, []byte(localUrl)) {
@@ -1076,7 +1111,7 @@ func newResponseWriter() responseWriterJustWriter {
 
 func (responseWriterJustWriter) Header() http.Header {
 	log.Println("should not be called")
-	return nil
+	return http.Header{}
 }
 func (responseWriterJustWriter) WriteHeader(int) {
 	log.Println("should not be called")

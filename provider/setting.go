@@ -9,6 +9,7 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,6 +18,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 )
 
 const (
@@ -31,35 +33,38 @@ const (
 	CacheTypeKey      = "cache_type"
 	DiyFieldsKey      = "diy_fields"
 
-	PushSettingKey        = "push"
-	SitemapSettingKey     = "sitemap"
-	RewriteSettingKey     = "rewrite"
-	AnchorSettingKey      = "anchor"
-	GuestbookSettingKey   = "guestbook"
-	UploadFilesSettingKey = "upload_file"
-	SendmailSettingKey    = "sendmail"
-	ImportApiSettingKey   = "import_api"
-	StorageSettingKey     = "storage"
-	PaySettingKey         = "pay"
-	WeappSettingKey       = "weapp"
-	WechatSettingKey      = "wechat"
-	RetailerSettingKey    = "retailer"
-	UserSettingKey        = "user"
-	OrderSettingKey       = "order"
-	FulltextSettingKey    = "fulltext"
-	TitleImageSettingKey  = "title_image"
-	WatermarkSettingKey   = "watermark"
-	HtmlCacheSettingKey   = "html_cache"
-	AnqiSettingKey        = "anqi"
-	AiGenerateSettingKey  = "ai_generate"
-	TimeFactorKey         = "time_factor"
-	LimiterSettingKey     = "limiter"
-	MultiLangSettingKey   = "multi_lang"
-	TranslateSettingKey   = "translate"
-	JsonLdSettingKey      = "json_ld"
-	TagFieldsSettingKey   = "tag_fields"
-	AkismetSettingKey     = "akismet"
-	GoogleAuthSettingKey  = "google_auth"
+	PushSettingKey           = "push"
+	SitemapSettingKey        = "sitemap"
+	RewriteSettingKey        = "rewrite"
+	AnchorSettingKey         = "anchor"
+	GuestbookSettingKey      = "guestbook"
+	UploadFilesSettingKey    = "upload_file"
+	SendmailSettingKey       = "sendmail"
+	ImportApiSettingKey      = "import_api"
+	StorageSettingKey        = "storage"
+	PaySettingKey            = "pay"
+	WeappSettingKey          = "weapp"
+	WechatSettingKey         = "wechat"
+	RetailerSettingKey       = "retailer"
+	UserSettingKey           = "user"
+	OrderSettingKey          = "order"
+	FulltextSettingKey       = "fulltext"
+	TitleImageSettingKey     = "title_image"
+	WatermarkSettingKey      = "watermark"
+	HtmlCacheSettingKey      = "html_cache"
+	AnqiSettingKey           = "anqi"
+	AiGenerateSettingKey     = "ai_generate"
+	TimeFactorKey            = "time_factor"
+	LimiterSettingKey        = "limiter"
+	MultiLangSettingKey      = "multi_lang"
+	TranslateSettingKey      = "translate"
+	JsonLdSettingKey         = "json_ld"
+	TagFieldsSettingKey      = "tag_fields"
+	AkismetSettingKey        = "akismet"
+	GoogleAuthSettingKey     = "google_auth"
+	CurrencySettingKey       = "currency"
+	CommunicationSettingKey  = "communication"
+	GoogleMerchantSettingKey = "google_merchant"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -102,7 +107,6 @@ func (w *Website) InitSetting() {
 	w.LoadSendmailSetting(settingMap[SendmailSettingKey])
 	w.LoadImportApiSetting(settingMap[ImportApiSettingKey])
 	w.LoadStorageSetting(settingMap[StorageSettingKey])
-	w.LoadPaySetting(settingMap[PaySettingKey])
 	w.LoadWeappSetting(settingMap[WeappSettingKey])
 	w.LoadWechatSetting(settingMap[WechatSettingKey])
 	w.LoadRetailerSetting(settingMap[RetailerSettingKey])
@@ -121,6 +125,7 @@ func (w *Website) InitSetting() {
 	w.LoadMultiLangSetting(settingMap[MultiLangSettingKey])
 	w.LoadTranslateSetting(settingMap[TranslateSettingKey])
 	w.LoadJsonLdSetting(settingMap[JsonLdSettingKey])
+	w.LoadCurrencySetting(settingMap[CurrencySettingKey])
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -153,6 +158,37 @@ func (w *Website) LoadContentSetting(value string) {
 	}
 	if w.Content.MaxLimit < 1 {
 		w.Content.MaxLimit = 100
+	}
+	if w.Content.DefaultThumb != "" && len(w.Content.DefaultThumbs) == 0 {
+		w.Content.DefaultThumbs = []string{w.Content.DefaultThumb}
+	}
+}
+
+func (w *Website) GetDefaultThumb(tmpId int) string {
+	if w.Content.DefaultThumbType == 0 {
+		if len(w.Content.DefaultThumbs) == 0 {
+			return ""
+		}
+		if len(w.Content.DefaultThumbs) == 1 {
+			return w.Content.DefaultThumbs[0]
+		}
+		// 随机一个
+		return w.Content.DefaultThumbs[tmpId%len(w.Content.DefaultThumbs)]
+	} else {
+		cacheKey := "tiny-attachments-" + strconv.Itoa(w.Content.ThumbCategoryId)
+		var attaches []*response.TinyAttachment
+		err := w.Cache.Get(cacheKey, &attaches)
+		if err != nil {
+			attaches = w.GetCategoryImages(w.Content.ThumbCategoryId)
+			w.Cache.Set(cacheKey, attaches, 600)
+		}
+		if len(attaches) == 0 {
+			return ""
+		}
+		if len(attaches) == 1 {
+			return attaches[0].FileLocation
+		}
+		return attaches[tmpId%len(attaches)].FileLocation
 	}
 }
 
@@ -203,6 +239,43 @@ func (w *Website) LoadBannerSetting(value string) {
 func (w *Website) LoadSensitiveWords(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &w.SensitiveWords)
+	}
+	w.compileSensitiveWords()
+}
+
+func (w *Website) compileSensitiveWords() {
+	if len(w.SensitiveWords) == 0 {
+		w.sensitiveAcMatcher = nil
+		w.sensitiveRegexes = nil
+		return
+	}
+
+	var fixedPatterns []string
+	var regexes []*regexp.Regexp
+
+	for _, word := range w.SensitiveWords {
+		if len(word) == 0 {
+			continue
+		}
+		if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
+			newWord := word[1 : len(word)-1]
+			re, err := regexp.Compile(newWord)
+			if err == nil {
+				regexes = append(regexes, re)
+			}
+		} else {
+			fixedPatterns = append(fixedPatterns, word)
+		}
+	}
+
+	if len(fixedPatterns) > 0 {
+		w.sensitiveAcMatcher = library.NewAhoCorasick(fixedPatterns)
+	} else {
+		w.sensitiveAcMatcher = nil
+	}
+	w.sensitiveRegexes = regexes
+	if w.htmlTagRegex == nil {
+		w.htmlTagRegex = regexp.MustCompile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
 	}
 }
 
@@ -280,9 +353,10 @@ func (w *Website) LoadSendmailSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), w.PluginSendmail)
 	}
-	if len(w.PluginSendmail.SendType) == 0 {
-		w.PluginSendmail.SendType = []int{SendTypeGuestbook}
-	}
+	// todo
+	// if len(w.PluginSendmail.SendType) == 0 {
+	// 	w.PluginSendmail.SendType = []int{SendTypeGuestbook}
+	// }
 }
 
 func (w *Website) LoadImportApiSetting(value string) {
@@ -293,7 +367,7 @@ func (w *Website) LoadImportApiSetting(value string) {
 	// 导入API生成
 	if w.PluginImportApi.Token == "" || w.PluginImportApi.LinkToken == "" {
 		h := md5.New()
-		h.Write([]byte(fmt.Sprintf("%d", time.Now().Nanosecond())))
+		h.Write([]byte(strconv.FormatInt(time.Now().UnixNano(), 10)))
 		if w.PluginImportApi.Token == "" {
 			w.PluginImportApi.Token = hex.EncodeToString(h.Sum(nil))
 		}
@@ -317,13 +391,6 @@ func (w *Website) LoadStorageSetting(value string) {
 	// 配置默认的storageUrl
 	if w.PluginStorage.StorageUrl == "" || w.PluginStorage.StorageType == config.StorageTypeLocal {
 		w.PluginStorage.StorageUrl = w.System.BaseUrl
-	}
-}
-
-func (w *Website) LoadPaySetting(value string) {
-	w.PluginPay = &config.PluginPayConfig{}
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), w.PluginPay)
 	}
 }
 
@@ -355,6 +422,9 @@ func (w *Website) LoadUserSetting(value string) {
 	}
 	if w.PluginUser.DefaultGroupId == 0 {
 		w.PluginUser.DefaultGroupId = 1
+	}
+	if w.PluginUser.DefaultStatus == "" {
+		w.PluginUser.DefaultStatus = "normal"
 	}
 }
 
@@ -682,8 +752,26 @@ func (w *Website) LoadJsonLdSetting(value string) {
 	return
 }
 
-func (w *Website) GetDiyFieldSetting() []config.ExtraField {
-	var fields []config.ExtraField
+func (w *Website) LoadCurrencySetting(value string) {
+	w.Currency = &config.CurrencyConfig{
+		Currency: "USD",
+		Symbol:   "$",
+	}
+	if value == "" {
+		return
+	}
+	err := json.Unmarshal([]byte(value), w.Currency)
+	if err != nil {
+		// 默认没有
+		w.Currency = &config.CurrencyConfig{
+			Currency: "USD",
+			Symbol:   "$",
+		}
+	}
+}
+
+func (w *Website) GetDiyFieldSetting() []config.CustomField {
+	var fields []config.CustomField
 	err := w.Cache.Get(DiyFieldsKey, &fields)
 	if err != nil {
 		value := w.GetSettingValue(DiyFieldsKey)
@@ -696,6 +784,27 @@ func (w *Website) GetDiyFieldSetting() []config.ExtraField {
 	}
 
 	return fields
+}
+
+func (w *Website) GetCommunicationSetting() *config.CommunicationConfig {
+	var setting config.CommunicationConfig
+	err := w.Cache.Get(CommunicationSettingKey, &setting)
+	if err != nil {
+		value := w.GetSettingValue(CommunicationSettingKey)
+		if value != "" {
+			err = json.Unmarshal([]byte(value), &setting)
+			if err == nil {
+				_ = w.Cache.Set(CommunicationSettingKey, setting, 86400)
+			}
+		}
+	}
+
+	return &setting
+}
+
+func (w *Website) SaveCommunicationSetting(setting *config.CommunicationConfig) {
+	_ = w.SaveSettingValue(CommunicationSettingKey, setting)
+	w.Cache.Delete(CommunicationSettingKey)
 }
 
 // Tr as Translate
@@ -726,7 +835,7 @@ func (w *Website) Tr(str string, args ...interface{}) string {
 
 	//return fmt.Sprintf(str, args...)
 	if len(args) > 0 {
-		return str + fmt.Sprintf("%v", args)
+		return str + fmt.Sprint(args...)
 	}
 	return str
 }
@@ -779,7 +888,7 @@ func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
 	}
 	setting := model.Setting{
 		Key:   key,
-		Value: fmt.Sprintf("%v", value),
+		Value: fmt.Sprint(value),
 	}
 
 	return w.DB.Save(&setting).Error
@@ -792,21 +901,33 @@ func (w *Website) DeleteCache() {
 	DictClose()
 	// 记录
 	filePath := w.CachePath + "cache_clear.log"
-	os.WriteFile(filePath, []byte(fmt.Sprintf("%d", time.Now().Unix())), os.ModePerm)
+	os.WriteFile(filePath, []byte(strconv.FormatInt(time.Now().Unix(), 10)), os.ModePerm)
 }
 
 func (w *Website) MatchSensitiveWords(content string) (matches []string) {
 	if len(w.SensitiveWords) == 0 || len(content) == 0 {
 		return
 	}
+
+	if w.sensitiveAcMatcher == nil && len(w.sensitiveRegexes) == 0 {
+		w.compileSensitiveWords()
+	}
+
 	// content 需要移除代码
 	content = library.StripTags(content)
-	for _, word := range w.SensitiveWords {
-		if len(word) == 0 {
-			continue
+	contentBytes := []byte(content)
+
+	if w.sensitiveAcMatcher != nil {
+		acMatches := w.sensitiveAcMatcher.MultiMatch(contentBytes)
+		for _, m := range acMatches {
+			matches = append(matches, string(m.Pattern))
 		}
-		if strings.Contains(content, word) {
-			matches = append(matches, word)
+	}
+
+	for _, re := range w.sensitiveRegexes {
+		reMatches := re.FindAll(contentBytes, -1)
+		for _, m := range reMatches {
+			matches = append(matches, string(m))
 		}
 	}
 
@@ -818,15 +939,22 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 		return content
 	}
 
+	if w.sensitiveAcMatcher == nil && len(w.sensitiveRegexes) == 0 {
+		w.compileSensitiveWords()
+	}
+
 	type replaceType struct {
 		Key   []byte
 		Value []byte
 	}
 	var replacedMatch []*replaceType
 	numCount := 0
-	//过滤所有属性
-	reg, _ := regexp.Compile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
-	content = reg.ReplaceAllFunc(content, func(s []byte) []byte {
+	// 过滤所有属性
+	if w.htmlTagRegex == nil {
+		w.htmlTagRegex = regexp.MustCompile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
+	}
+
+	content = w.htmlTagRegex.ReplaceAllFunc(content, func(s []byte) []byte {
 		key := []byte(fmt.Sprintf("{$%d}", numCount))
 		replacedMatch = append(replacedMatch, &replaceType{
 			Key:   key,
@@ -836,26 +964,21 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 
 		return key
 	})
-	// 替换所有敏感词为星号
-	for _, word := range w.SensitiveWords {
-		if len(word) == 0 {
-			continue
-		}
-		if bytes.Contains(content, []byte(word)) {
-			content = bytes.ReplaceAll(content, []byte(word), bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
-		} else {
-			// 增加支持正则表达式替换，定义正则表达式以{开头}结束，如：{[1-9]\d{4,10}}
-			if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
-				// 移除首尾花括号
-				newWord := word[1 : len(word)-1]
-				re, err := regexp.Compile(newWord)
-				if err == nil {
-					content = re.ReplaceAll(content, bytes.Repeat([]byte("*"), utf8.RuneCountInString(word)))
-				}
-				continue
-			}
-		}
+
+	// 替换固定字符串敏感词
+	if w.sensitiveAcMatcher != nil {
+		content = w.sensitiveAcMatcher.ReplaceAll(content, func(match library.ACMatch) []byte {
+			return bytes.Repeat([]byte("*"), utf8.RuneCount(match.Pattern))
+		})
 	}
+
+	// 替换正则表达式敏感词
+	for _, re := range w.sensitiveRegexes {
+		content = re.ReplaceAllFunc(content, func(s []byte) []byte {
+			return bytes.Repeat([]byte("*"), utf8.RuneCount(s))
+		})
+	}
+
 	// 替换回来
 	for i := len(replacedMatch) - 1; i >= 0; i-- {
 		content = bytes.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)
@@ -897,6 +1020,26 @@ func (w *Website) GetGoogleAuthSetting() *config.PluginGoogleAuthConfig {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &cfg)
 	}
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	cfg.RedirectUrl = frontUrl + "/login/google"
+
+	return &cfg
+}
+
+func (w *Website) GetGoogleMerchantSetting() *config.PluginGoogleMerchantConfig {
+	var cfg config.PluginGoogleMerchantConfig
+	value := w.GetSettingValue(GoogleMerchantSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &cfg)
+	}
+	baseUrl := w.System.BaseUrl
+	if w.System.AdminUrl != "" {
+		baseUrl = w.System.AdminUrl
+	}
+	cfg.RedirectUrl = baseUrl + "/system/promotion/googlemerchant/callback"
 
 	return &cfg
 }

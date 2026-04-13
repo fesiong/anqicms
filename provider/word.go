@@ -1,11 +1,11 @@
 package provider
 
 import (
-	"fmt"
-	"github.com/huichen/sego"
-	"kandaoni.com/anqicms/config"
 	"log"
 	"strings"
+
+	"github.com/huichen/sego"
+	"kandaoni.com/anqicms/config"
 )
 
 var segmenter sego.Segmenter
@@ -65,7 +65,7 @@ func initDict() {
 			log.Println("初始化 sego 失败:", err)
 		}
 	}()
-	dictFile := fmt.Sprintf("%s%s.txt", config.ExecPath, "dictionary")
+	dictFile := config.ExecPath + "dictionary.txt"
 	segmenter.LoadDictionary(dictFile)
 	dictLoaded = true
 }

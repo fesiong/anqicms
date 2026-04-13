@@ -3,6 +3,13 @@ package controller
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
@@ -12,23 +19,17 @@ import (
 	"github.com/medivhzhan/weapp/v3/server"
 	"github.com/stripe/stripe-go/v82"
 	"github.com/stripe/stripe-go/v82/webhook"
-	"io"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"log"
-	"net/http"
-	"os"
-	"strings"
-	"time"
 )
 
 func NotifyWeappMsg(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	srv, err := server.NewServer(currentSite.PluginWeapp.AppID, currentSite.PluginWeapp.Token, currentSite.PluginWeapp.EncodingAESKey, currentSite.PluginPay.WechatMchId, currentSite.PluginPay.WechatApiKey, true, nil)
+	srv, err := server.NewServer(currentSite.PluginWeapp.AppID, currentSite.PluginWeapp.Token, currentSite.PluginWeapp.EncodingAESKey, "", "", true, nil)
 	if err != nil {
-		log.Println(fmt.Sprintf("init server error: %s", err))
+		log.Printf("init server error: %s", err)
 	}
 
 	srv.OnSubscribeMsgPopup(func(popupEvent *server.SubscribeMsgPopupEvent) {
@@ -40,7 +41,7 @@ func NotifyWeappMsg(ctx iris.Context) {
 
 	err = srv.Serve(ctx.ResponseWriter(), ctx.Request())
 	if err != nil {
-		log.Println(fmt.Sprintf("serving error: %s", err))
+		log.Printf("serving error: %s", err)
 	}
 }
 
@@ -52,18 +53,27 @@ func NotifyWechatPay(ctx iris.Context) {
 	notifyReq, err := wechat.ParseNotifyToBodyMap(ctx.Request())
 	rsp := new(wechat.NotifyResponse) // 回复微信的数据
 
-	ok, err := wechat.VerifySign(currentSite.PluginPay.WechatApiKey, wechat.SignType_MD5, notifyReq)
-	if !ok {
-		library.DebugLog(currentSite.CachePath, "wechat.log", "err", err, fmt.Sprintf("%#v", notifyReq))
+	//检查payment订单
+	payment, err := currentSite.GetPaymentInfoByPaymentId(notifyReq.GetString("out_trade_no"))
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "wechat.log", "err", "payment-not found")
 		rsp.ReturnCode = gopay.FAIL
 		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 		ctx.WriteString(rsp.ToXmlString())
 		return
 	}
-	//检查payment订单
-	payment, err := currentSite.GetPaymentInfoByPaymentId(notifyReq.GetString("out_trade_no"))
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
 	if err != nil {
-		library.DebugLog(currentSite.CachePath, "wechat.log", "err", "payment-not found")
+		library.DebugLog(currentSite.CachePath, "wechat.log", "err", "account-not found")
+		rsp.ReturnCode = gopay.FAIL
+		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
+		ctx.WriteString(rsp.ToXmlString())
+		return
+	}
+
+	ok, err := wechat.VerifySign(account.PayConfig.AppId, wechat.SignType_MD5, notifyReq)
+	if !ok {
+		library.DebugLog(currentSite.CachePath, "wechat.log", "err", err, fmt.Sprintf("%#v", notifyReq))
 		rsp.ReturnCode = gopay.FAIL
 		rsp.ReturnMsg = ctx.Tr("PaymentFailed")
 		ctx.WriteString(rsp.ToXmlString())
@@ -147,7 +157,7 @@ func NotifyWechatPay(ctx iris.Context) {
 		}
 
 		//支付成功逻辑处理
-		err = currentSite.SuccessPaidOrder(order)
+		err = currentSite.SuccessPaidOrder(order, payment)
 		if err != nil {
 			library.DebugLog(currentSite.CachePath, "wechat.log", "err", "order pay failed")
 			rsp.ReturnCode = gopay.FAIL
@@ -177,8 +187,22 @@ func NotifyAlipay(ctx iris.Context) {
 			bm.Set(k, v[0])
 		}
 	}
-
-	file, err := os.Open(currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayPublicCertPath)
+	//检查payment订单
+	payment, err := currentSite.GetPaymentInfoByPaymentId(bm.GetString("out_trade_no"))
+	if err != nil {
+		return
+	}
+	if payment.PaidTime > 0 {
+		ctx.WriteString("success")
+		return
+	}
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "alipay.log", "account-notfound", err)
+		ctx.WriteString("fail")
+		return
+	}
+	file, err := os.Open(currentSite.DataPath + "cert/" + account.PayConfig.PublicCertPath)
 	if err != nil {
 		return
 	}
@@ -191,15 +215,6 @@ func NotifyAlipay(ctx iris.Context) {
 		return
 	}
 
-	//检查payment订单
-	payment, err := currentSite.GetPaymentInfoByPaymentId(bm.GetString("out_trade_no"))
-	if err != nil {
-		return
-	}
-	if payment.PaidTime > 0 {
-		ctx.WriteString("success")
-		return
-	}
 	order, err := currentSite.GetOrderInfoByOrderId(payment.OrderId)
 	if err != nil {
 		//ctx.WriteString(bm.NotOK("支付失败"))
@@ -263,7 +278,7 @@ func NotifyAlipay(ctx iris.Context) {
 			return
 		}
 		//支付成功逻辑处理
-		err = currentSite.SuccessPaidOrder(order)
+		err = currentSite.SuccessPaidOrder(order, payment)
 		if err != nil {
 			ctx.WriteString("success")
 			return
@@ -281,25 +296,54 @@ func NotifyPayPal(ctx iris.Context) {
 		ShowMessage(ctx, ctx.Tr("paymentParameterError"), nil)
 		return
 	}
-	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, true)
-	if err != nil {
-		// 处理token获取失败
-		ctx.WriteString("failed")
-		return
-	}
 	body, err := ctx.GetBody()
 	if err != nil {
 		xlog.Errorf("Read body error: %v", err)
 		return
 	}
 	library.DebugLog(currentSite.CachePath, "paypal_notify", string(body))
+	// 处理结果
+	var event paypal.WebhookEvent
+	if err := json.Unmarshal(body, &event); err != nil {
+		xlog.Errorf("JSON unmarshal error: %v", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		ctx.WriteString("Invalid event format")
+		return
+	}
+
+	// 4. 处理事件
+	xlog.Infof("Received %s event: %s", event.EventType, event.Summary)
+	// 获取payment信息
+	var resp provider.PaypalWebhookResource
+	err = json.Unmarshal(event.Resource, &resp)
+	if err != nil {
+		xlog.Errorf("Failed to unmarshal resource: %v, %v", err, string(event.Resource))
+		return
+	}
+	payment, err := currentSite.GetPaymentInfoByTerraceId(resp.Id)
+	if err != nil {
+		xlog.Errorf("Failed to get payment info: %v", err)
+		return
+	}
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "alipay.log", "account-notfound", err)
+		ctx.WriteString("fail")
+		return
+	}
+	client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, account.PayConfig.Sandbox == false)
+	if err != nil {
+		// 处理token获取失败
+		ctx.WriteString("failed")
+		return
+	}
 	bm := make(gopay.BodyMap)
 	bm.Set("auth_algo", ctx.GetHeader("Paypal-Auth-Algo")).
 		Set("cert_url", ctx.GetHeader("Paypal-Cert-Url")).
 		Set("transmission_id", ctx.GetHeader("Paypal-Transmission-Id")).
 		Set("transmission_sig", ctx.GetHeader("Paypal-Transmission-Sig")).
 		Set("transmission_time", ctx.GetHeader("Paypal-Transmission-Time")).
-		Set("webhook_id", currentSite.PluginPay.PaypalWebhookId).
+		Set("webhook_id", account.PayConfig.WebhookId).
 		SetBodyMap("webhook_event", func(b gopay.BodyMap) {
 			err = json.Unmarshal(body, &b)
 			if err != nil {
@@ -320,17 +364,6 @@ func NotifyPayPal(ctx iris.Context) {
 		xlog.Error("paypal webhook verify error")
 		return
 	}
-	// 处理结果
-	var event paypal.WebhookEvent
-	if err = json.Unmarshal(body, &event); err != nil {
-		xlog.Errorf("JSON unmarshal error: %v", err)
-		ctx.StatusCode(http.StatusBadRequest)
-		ctx.WriteString("Invalid event format")
-		return
-	}
-
-	// 4. 处理事件
-	xlog.Infof("Received %s event: %s", event.EventType, event.Summary)
 
 	// 使用协程异步处理事件，避免阻塞响应
 	go currentSite.ProcessPaypalEvent(&event)
@@ -349,8 +382,28 @@ func NotifyStripe(ctx iris.Context) {
 	}
 	library.DebugLog(currentSite.CachePath, "stripe_notify", string(body))
 	// 验证Webhook签名
+	e := stripe.Event{}
+	if err = json.Unmarshal(body, &e); err != nil {
+		log.Printf("Failed to parse webhook body json: %s", err.Error())
+		ctx.StatusCode(http.StatusServiceUnavailable)
+		return
+	}
+	payment, err := currentSite.GetPaymentInfoByPaymentId(e.ID)
+	if err != nil {
+		return
+	}
+	if payment.PaidTime > 0 {
+		ctx.StatusCode(http.StatusOK)
+		return
+	}
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "stripe.log", "account-notfound", err)
+		ctx.WriteString("fail")
+		return
+	}
 
-	endpointSecret := currentSite.PluginPay.StripeWebhookSecret
+	endpointSecret := account.PayConfig.WebhookId
 	signatureHeader := ctx.GetHeader("Stripe-Signature")
 
 	event, err := webhook.ConstructEvent(body, signatureHeader, endpointSecret)
@@ -371,7 +424,7 @@ func NotifyStripe(ctx iris.Context) {
 			return
 		}
 		//检查payment订单
-		payment, err := currentSite.GetPaymentInfoByPaymentId(pi.ID)
+		payment, err = currentSite.GetPaymentInfoByPaymentId(pi.ID)
 		if err != nil {
 			return
 		}
@@ -398,14 +451,14 @@ func NotifyStripe(ctx iris.Context) {
 		}
 	case "payment_intent.payment_failed":
 		var pi stripe.PaymentIntent
-		err := json.Unmarshal(event.Data.Raw, &pi)
+		err = json.Unmarshal(event.Data.Raw, &pi)
 		if err != nil {
 			log.Printf("Error parsing payment intent: %v", err)
 			ctx.StatusCode(http.StatusBadRequest)
 			return
 		}
 		//检查payment订单
-		payment, err := currentSite.GetPaymentInfoByPaymentId(pi.ID)
+		payment, err = currentSite.GetPaymentInfoByPaymentId(pi.ID)
 		if err != nil {
 			return
 		}

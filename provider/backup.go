@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"os"
 	"reflect"
@@ -14,6 +12,9 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/response"
 )
 
 const ChunkSizeInMB = 16
@@ -121,7 +122,7 @@ func (bs *BackupStatus) dumpTable(table string, file *os.File) (err error) {
 			if !ok || d == nil {
 				values = append(values, "NULL")
 			} else {
-				str := fmt.Sprintf("%v", d)
+				str := fmt.Sprint(d)
 				switch reflect.TypeOf(d).Kind() {
 				case reflect.Int16, reflect.Int8, reflect.Int32, reflect.Int64, reflect.Int, reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Float32, reflect.Float64:
 					values = append(values, str)

@@ -1,15 +1,16 @@
 package controller
 
 import (
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"net/url"
-	"regexp"
-	"strings"
-	"time"
 )
 
 func Install(ctx iris.Context) {
@@ -392,7 +393,7 @@ func InstallForm(ctx iris.Context) {
 
 	dbWebsite := model.Website{
 		// 首个站点ID为1
-		Model: model.Model{Id: 1},
+		Id: 1,
 		// 首个站点为安装目录
 		RootPath:    config.ExecPath,
 		Name:        defaultSite.Tr("AnqiCMS(AnqiCMS)"),

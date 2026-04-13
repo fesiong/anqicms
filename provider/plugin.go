@@ -4,16 +4,17 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/parnurzeal/gorequest"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/response"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/parnurzeal/gorequest"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/response"
 )
 
 // SitemapLimit 单个sitemap文件可包含的连接数
@@ -67,10 +68,13 @@ func (w *Website) PushBing(list []string) error {
 	if bingApi == "" {
 		return errors.New(w.Tr("BingActivePushIsNotConfigured"))
 	}
-
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	// bing 推送有2种方式，一种是传统的api，另一种是 IndexNow
 	if strings.HasPrefix(bingApi, "https://www.bing.com/indexnow") {
-		baseUrl, err := url.Parse(w.System.BaseUrl)
+		baseUrl, err := url.Parse(frontUrl)
 		if err != nil {
 			return err
 		}
@@ -92,7 +96,7 @@ func (w *Website) PushBing(list []string) error {
 		postData := bingData2{
 			Host:        baseUrl.Host,
 			Key:         apiKey,
-			KeyLocation: w.System.BaseUrl + "/" + apiKey + ".txt",
+			KeyLocation: frontUrl + "/" + apiKey + ".txt",
 			UrlList:     list,
 		}
 		resp, body, errs := gorequest.New().Timeout(10*time.Second).Set("Content-Type", "application/json; charset=utf-8").Post(bingApi).Send(postData).End()
@@ -106,7 +110,7 @@ func (w *Website) PushBing(list []string) error {
 		w.logPushResult("bing", fmt.Sprintf("%v, %s", list, body))
 	} else {
 		postData := bingData{
-			SiteUrl: w.System.BaseUrl,
+			SiteUrl: frontUrl,
 			UrlList: list,
 		}
 
@@ -172,7 +176,7 @@ func (w *Website) GetLastPushList() ([]response.PushLog, error) {
 			tmp = ""
 		}
 
-		tmp = fmt.Sprintf("%s%s", string(char), tmp)
+		tmp = string(char) + tmp
 
 		if cursor == -fileSize {
 			// stop if we are at the beginning

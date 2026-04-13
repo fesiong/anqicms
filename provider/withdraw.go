@@ -3,14 +3,15 @@ package provider
 import (
 	"context"
 	"fmt"
+	"log"
+	"time"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/wechat"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"log"
-	"time"
 )
 
 func (w *Website) GetWithdrawList(page, pageSize int) ([]*model.UserWithdraw, int64) {
@@ -121,7 +122,8 @@ func (w *Website) CheckWithdrawToWechat() {
 	defer func() {
 		withdrawRunning = false
 	}()
-	if w.PluginPay.WechatKeyPath == "" || (w.PluginPay.WechatAppId == "" && w.PluginPay.WeappAppId == "") {
+	account := w.GetSingleValidPaymentAccount(config.PayWayWechat, 0)
+	if account == nil {
 		return
 	}
 	var withdraws []model.UserWithdraw
@@ -135,17 +137,9 @@ func (w *Website) CheckWithdrawToWechat() {
 	var wechatClient *wechat.Client
 	var weapp2Client *wechat.Client
 	var err error
-	if w.PluginPay.WechatAppId != "" {
-		wechatClient = wechat.NewClient(w.PluginPay.WechatAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-		err = wechatClient.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
-		if err != nil {
-			log.Println("微信证书错误：", err.Error())
-			return
-		}
-	}
-	if w.PluginPay.WeappAppId != "" {
-		weapp2Client = wechat.NewClient(w.PluginPay.WeappAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-		err = weapp2Client.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
+	if account.PayConfig.AppId != "" {
+		wechatClient = wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, true)
+		err = wechatClient.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
 		if err != nil {
 			log.Println("微信证书错误：", err.Error())
 			return

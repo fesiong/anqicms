@@ -186,7 +186,7 @@ func ArchiveList(ctx iris.Context) {
 	if len(archiveIds) > 0 {
 		dbTable(currentSite.DB).Where("id IN (?)", archiveIds).Order(orderBy).Scan(&archives)
 		for i := range archives {
-			archives[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+			archives[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = currentSite.GetUrl("archive", archives[i], 0)
 		}
 	}
@@ -491,7 +491,7 @@ func ArchiveDetail(ctx iris.Context) {
 	archiveDraft.ArchiveData, err = currentSite.GetArchiveDataById(archiveDraft.Id)
 	// 读取 extraDat
 	extras := currentSite.GetArchiveExtra(archiveDraft.ModuleId, archiveDraft.Id, false)
-	archiveDraft.Extra = make(map[string]model.CustomField, len(extras))
+	archiveDraft.Extra = make(map[string]config.CustomField, len(extras))
 	for i := range extras {
 		archiveDraft.Extra[i] = *extras[i]
 	}
@@ -499,13 +499,11 @@ func ArchiveDetail(ctx iris.Context) {
 	archiveDraft.Relations = currentSite.GetArchiveRelations(archiveDraft.Id)
 
 	tags := currentSite.GetTagsByItemId(archiveDraft.Id)
-	if len(tags) > 0 {
-		var tagNames = make([]string, 0, len(tags))
-		for _, v := range tags {
-			tagNames = append(tagNames, v.Title)
-		}
-		archiveDraft.Tags = tagNames
-	}
+	archiveDraft.Tags = tags
+	// 读取options
+	archiveDraft.Options, _ = currentSite.GetArchiveOptions(archiveDraft.Id)
+	archiveDraft.Skus, _ = currentSite.GetArchiveSkus(archiveDraft.Id)
+	archiveDraft.WholesaleRules, _ = currentSite.GetArchiveWholesaleRules(archiveDraft.Id)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

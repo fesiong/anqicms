@@ -3,7 +3,13 @@ package manageController
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
+	"net"
+	"net/url"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -13,11 +19,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"net"
-	"net/url"
-	"os"
-	"strings"
-	"time"
 )
 
 func AdminLogin(ctx iris.Context) {
@@ -571,7 +572,7 @@ func FindPasswordChooseWay(ctx iris.Context) {
 	if currentSite.FindPasswordInfo == nil {
 		w2 := provider.GetWebsite(currentSite.Id)
 		w2.FindPasswordInfo = &response.FindPasswordInfo{
-			Token: library.Md5(currentSite.TokenSecret + fmt.Sprintf("%d", time.Now().UnixNano())),
+			Token: library.Md5(currentSite.TokenSecret + strconv.FormatInt(time.Now().UnixNano(), 10)),
 		}
 		currentSite.FindPasswordInfo = w2.FindPasswordInfo
 	} else {
@@ -665,9 +666,7 @@ func FindPasswordReset(ctx iris.Context) {
 	admin, err := currentSite.GetAdminInfoById(1)
 	if err != nil {
 		admin = &model.Admin{
-			Model: model.Model{
-				Id: 1,
-			},
+			Id: 1,
 		}
 	}
 	admin.UserName = req.UserName

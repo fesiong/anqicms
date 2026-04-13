@@ -67,6 +67,7 @@ func GetWebsiteInfo(ctx iris.Context) {
 	}
 	if website != nil {
 		result.BaseUrl = website.System.BaseUrl
+		result.FrontUrl = website.System.FrontUrl
 		result.Initialed = website.Initialed
 	}
 	if dbSite.Id == 1 {
@@ -208,7 +209,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			adminInfo, err := current.GetAdminInfoById(1)
 			if err != nil {
 				adminInfo = &model.Admin{
-					Model:   model.Model{Id: 1},
+					Id:      1,
 					Status:  1,
 					GroupId: 1,
 				}

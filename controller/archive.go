@@ -21,6 +21,10 @@ func ArchiveDetail(ctx iris.Context) {
 		ctx.Write(cacheFile)
 		return
 	}
+	preview := ctx.URLParam("preview")
+	if preview != "" {
+		ctx.Header("X-Robots-Tag", "noindex, nofollow")
+	}
 	id := ctx.Params().GetInt64Default("id", 0)
 	urlToken := ctx.Params().GetString("filename")
 	var archive *model.Archive
@@ -31,9 +35,60 @@ func ArchiveDetail(ctx iris.Context) {
 	} else {
 		archive, err = currentSite.GetArchiveById(id)
 	}
+	if preview != "" && err != nil {
+		var archiveDraft *model.ArchiveDraft
+		// 尝试获取预览内容
+		if urlToken != "" {
+			//优先使用urlToken
+			archiveDraft, err = currentSite.GetArchiveDraftByUrlToken(urlToken)
+		} else {
+			archiveDraft, err = currentSite.GetArchiveDraftById(id)
+		}
+		if err == nil {
+			archive = &archiveDraft.Archive
+		}
+	}
 	if err != nil {
-		NotFound(ctx)
-		return
+		// 检查 sku
+		archiveSku, err := currentSite.GetArchiveSkuByUrlToken(urlToken)
+		if err != nil {
+			NotFound(ctx)
+			return
+		}
+		archive, err = currentSite.GetArchiveById(archiveSku.ArchiveId)
+		if err != nil {
+			NotFound(ctx)
+			return
+		}
+		archive.Sku = archiveSku
+		// 设置sku
+		ctx.ViewData("sku", archiveSku)
+	}
+	// 检查是否接收 variant
+	if ctx.URLParamExists("variant") {
+		variant := ctx.URLParamInt64Default("variant", 0)
+		archiveSku, err := currentSite.GetArchiveSkuById(archive.Id, variant)
+		if err == nil {
+			archive.Sku = archiveSku
+			// options, _ := currentSite.GetArchiveOptions(archive.Id)
+			// archiveSku.Values = archiveSku.BuildValues(options)
+			// 设置sku
+			ctx.ViewData("sku", archiveSku)
+		}
+	}
+	// 验证 module
+	moduleName := ctx.Params().GetString("module")
+	if moduleName != "" {
+		module := currentSite.GetModuleFromCacheByToken(moduleName)
+		if module == nil {
+			NotFound(ctx)
+			return
+		}
+		// 验证 module
+		if module.Id != archive.ModuleId {
+			NotFound(ctx)
+			return
+		}
 	}
 	var category *model.Category
 	multiCatNames := ctx.Params().GetString("multicatname")
@@ -62,6 +117,9 @@ func ArchiveDetail(ctx iris.Context) {
 			NotFound(ctx)
 			return
 		}
+	}
+	if category == nil {
+		category = currentSite.GetCategoryFromCache(archive.CategoryId)
 	}
 
 	createTime := time.Unix(archive.CreatedTime, 0)
@@ -134,8 +192,6 @@ func ArchiveDetail(ctx iris.Context) {
 		}
 	}
 
-	go archive.AddViews(currentSite.DB)
-
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = archive.Title
 		if archive.SeoTitle != "" {
@@ -163,6 +219,7 @@ func ArchiveDetail(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 	ctx.ViewData("archive", archive)
+	ctx.ViewData("category", category)
 	//设置页面名称，方便tags识别
 	ctx.ViewData("pageName", "archiveDetail")
 
@@ -178,9 +235,6 @@ func ArchiveDetail(ctx iris.Context) {
 	if archive.Template != "" {
 		tplName = archive.Template
 	} else {
-		if category == nil {
-			category = currentSite.GetCategoryFromCache(archive.CategoryId)
-		}
 		if category != nil {
 			categoryTemplate := currentSite.GetCategoryTemplate(category)
 			if categoryTemplate != nil {

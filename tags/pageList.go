@@ -2,6 +2,7 @@ package tags
 
 import (
 	"fmt"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -34,7 +35,7 @@ func (node *tagPageListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2
 	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage, true)
 	for i := range pageList {
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
-		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(pageList[i].Id)))
 	}
 
 	ctx.Private[node.name] = pageList

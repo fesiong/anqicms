@@ -5,14 +5,15 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
+	"os"
+	"strconv"
+
 	"github.com/getlantern/systray"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
-	"os"
-	"strconv"
 )
 
 func main() {
@@ -24,7 +25,7 @@ func main() {
 	if inuse {
 		//端口被占用，说明已经打开了
 		log.Println("端口已经被占用，可能软件已经启动")
-		_ = open.Run(fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port))
+		_ = open.Run("http://127.0.0.1:" + strconv.Itoa(config.Server.Server.Port))
 
 		os.Exit(-1)
 	}

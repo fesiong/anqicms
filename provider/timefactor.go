@@ -1,13 +1,16 @@
 package provider
 
 import (
+	"context"
+	"math/rand"
+	"time"
+
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
-	"time"
 )
 
 func (w *Website) TryToRunTimeFactor() {
-	if !w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen {
+	if w.PluginTimeFactor == nil || (!w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen) {
 		return
 	}
 
@@ -106,7 +109,7 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 				// 重新推送
 				go w.PushArchive(archive.Link)
 				// 清除缓存
-				w.DeleteArchiveCache(archive.Id, archive.Link)
+				w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
 				w.DeleteArchiveExtraCache(archive.Id)
 			}
 			// 如果有限制时间，则在这里进行等待，并且小于1分钟，才进行等待
@@ -170,12 +173,38 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
-	var draft *model.ArchiveDraft
-	// 一次最多读取1个
-	err := db.Order("id asc").Take(&draft).Error
-	if err != nil {
-		// 没文章
-		return
+	var err error
+	var draft model.ArchiveDraft
+	if setting.Random {
+		// 一次最多读取1个
+		var maxId struct {
+			MaxId int64 `json:"max_id"`
+		}
+		var minId struct {
+			MinId int64 `json:"min_id"`
+		}
+		db.WithContext(context.Background()).Select("max(id) as max_id").Take(&maxId)
+		db.WithContext(context.Background()).Select("min(id) as min_id").Take(&minId)
+		if maxId.MaxId <= 0 || minId.MinId <= 0 {
+			return
+		}
+		randId := minId.MinId
+		if maxId.MaxId > minId.MinId {
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			randId = rd.Int63n(maxId.MaxId-minId.MinId) + minId.MinId
+		}
+		err = db.Where("id >= ?", randId).Order("id asc").Take(&draft).Error
+		if err != nil {
+			// 没文章
+			return
+		}
+	} else {
+		// 一次最多读取1个
+		err = db.Order("id asc").Take(&draft).Error
+		if err != nil {
+			// 没文章
+			return
+		}
 	}
 	hookCtx := &HookContext{
 		Point: BeforeArchiveRelease,
@@ -198,7 +227,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	archive.Link = w.GetUrl("archive", archive, 0)
 	_ = w.SuccessReleaseArchive(archive, true)
 	// 清除缓存
-	w.DeleteArchiveCache(archive.Id, archive.Link)
+	w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
 	w.DeleteArchiveExtraCache(archive.Id)
 
 	setting.TodayCount++

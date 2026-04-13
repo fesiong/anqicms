@@ -11,6 +11,7 @@ type WebsiteRequest struct {
 	AdminUser     string             `json:"admin_user" validate:"required"`
 	AdminPassword string             `json:"admin_password" validate:"required"`
 	BaseUrl       string             `json:"base_url"`
+	FrontUrl      string             `json:"front_url"`
 	PreviewData   bool               `json:"preview_data"`
 	Initialed     bool               `json:"initialed"`
 	RemoveFile    bool               `json:"remove_file"`

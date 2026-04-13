@@ -1,6 +1,7 @@
 .idea
 .DS_Store
 .vscode
+.trae
 vendor
 /config.json
 goblog

@@ -1,15 +1,17 @@
 package provider
 
 import (
+	"bytes"
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/medivhzhan/weapp/v3"
 	"io"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"net/http"
 	"time"
+
+	"github.com/medivhzhan/weapp/v3"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) GetWeappClient(focus bool) *weapp.Client {
@@ -75,7 +77,7 @@ func (w *Website) CreateWeappQrcode(weappPath, scene string) (string, error) {
 	tmpName := md5Str + ".png"
 	filePath := fmt.Sprintf("uploads/qrcode/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
 
-	_, err = w.UploadFile(filePath, bts)
+	_, err = w.UploadFile(filePath, bytes.NewReader(bts))
 	if err != nil {
 		return "", err
 	}

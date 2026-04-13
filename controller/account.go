@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 func LoginPage(ctx iris.Context) {

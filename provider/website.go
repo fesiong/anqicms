@@ -3,13 +3,15 @@ package provider
 import (
 	"context"
 	"errors"
-	"golang.org/x/oauth2"
-	"kandaoni.com/anqicms/provider/storage"
 	"net/url"
 	"os"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync"
+
+	"golang.org/x/oauth2"
+	"kandaoni.com/anqicms/provider/storage"
 
 	"github.com/esap/wechat"
 	"github.com/kataras/iris/v12"
@@ -57,6 +59,7 @@ type Website struct {
 	quickImportStatus       *QuickImportArchive
 	AkismetClient           *AkismetClient
 	googleAuthConfig        *oauth2.Config
+	googleMerchantConfig    *oauth2.Config
 
 	System  *config.SystemConfig
 	Content *config.ContentConfig
@@ -74,7 +77,6 @@ type Website struct {
 	PluginSendmail     *config.PluginSendmail
 	PluginImportApi    *config.PluginImportApiConfig
 	PluginStorage      *config.PluginStorageConfig
-	PluginPay          *config.PluginPayConfig
 	PluginWeapp        *config.PluginWeappConfig
 	PluginWechat       *config.PluginWeappConfig
 	PluginRetailer     *config.PluginRetailerConfig
@@ -91,6 +93,12 @@ type Website struct {
 	MultiLanguage      *config.PluginMultiLangConfig
 	PluginTranslate    *config.PluginTranslateConfig
 	PluginJsonLd       *config.PluginJsonLdConfig
+	Currency           *config.CurrencyConfig
+
+	sensitiveAcMatcher *library.AhoCorasick
+	sensitiveRegexes   []*regexp.Regexp
+	htmlTagRegex       *regexp.Regexp
+	anchorAcMatcher    *library.AhoCorasick
 
 	CollectorConfig *config.CollectorJson
 	KeywordConfig   *config.KeywordJson
@@ -104,6 +112,8 @@ type Website struct {
 	backLanguage string
 	ctx          iris.Context // 这个类型是指针，因此只能在拷贝后赋值
 	Template     *StoreTemplates
+	ShopCountLog *ShopCountLog
+	MailService  *MailService
 }
 
 func (w *Website) Ctx() context.Context {
@@ -226,7 +236,7 @@ func InitWebsites() {
 		db.AutoMigrate(&model.Website{})
 	}
 	defaultSite := model.Website{
-		Model:    model.Model{Id: 1},
+		Id:       1,
 		RootPath: config.ExecPath,
 		Name:     "Default Website",
 		Status:   1,
@@ -240,12 +250,18 @@ func InitWebsites() {
 	// 检查多语言站点
 	values := websites.Values()
 	for _, w := range values {
-		if w.MultiLanguage.Open {
+		if !w.Initialed {
+			continue
+		}
+		if w.MultiLanguage != nil && w.MultiLanguage.Open {
 			if w.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
 				// 读取子站点
 				multiLangSites := w.GetMultiLangSites(w.Id, false)
 				w.MultiLanguage.SubSites = make([]config.MultiLangSite, 0, len(multiLangSites)*2)
 				mainBaseUrl := w.System.BaseUrl
+				if w.System.FrontUrl != "" {
+					mainBaseUrl = w.System.FrontUrl
+				}
 				for _, v := range multiLangSites {
 					tmpSite := config.MultiLangSite{
 						Id:           v.Id,
@@ -372,6 +388,7 @@ func InitWebsite(mw *model.Website) {
 		w.InitCacheBucket()
 		w.InitCache()
 		w.InitAkismet()
+		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
 	}
@@ -477,8 +494,11 @@ func cloneWithContext(w *Website, ctx iris.Context) *Website {
 // URI和主机匹配逻辑
 func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *Website {
 	for _, w := range sites {
+		if !w.Initialed {
+			continue
+		}
 		// 检查所有相关URL配置
-		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.MobileUrl, w.System.AdminUrl} {
+		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.FrontUrl, w.System.MobileUrl, w.System.AdminUrl} {
 			if urlToCheck == "" {
 				continue
 			}
@@ -505,7 +525,10 @@ func matchByURIAndHost(sites []*Website, uri, host string, ctx iris.Context) *We
 // 根路径和后备匹配逻辑
 func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Website {
 	for _, w := range sites {
-		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.MobileUrl, w.System.AdminUrl} {
+		if !w.Initialed {
+			continue
+		}
+		for _, urlToCheck := range []string{w.System.BaseUrl, w.System.FrontUrl, w.System.MobileUrl, w.System.AdminUrl} {
 			if urlToCheck == "" {
 				continue
 			}
@@ -531,7 +554,11 @@ func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Webs
 // 处理多语言配置
 func handleMultiLanguage(w *Website, host, uri string, ctx iris.Context) *Website {
 	// 多语言只根据 baseUrl 来处理
-	parsed, err := url.Parse(w.System.BaseUrl)
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	parsed, err := url.Parse(frontUrl)
 	if err != nil || parsed.Hostname() != host {
 		return nil
 	}
@@ -677,6 +704,9 @@ func CurrentSite2(ctx iris.Context) *Website {
 		values := websites.Values()
 		if uri != "/" {
 			for _, w := range values {
+				if !w.Initialed {
+					continue
+				}
 				parsed, err := url.Parse(w.System.BaseUrl)
 				if err != nil {
 					continue

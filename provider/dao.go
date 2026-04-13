@@ -3,15 +3,16 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"log"
+	"os"
+	"strings"
+	"time"
+
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"log"
-	"os"
-	"strings"
-	"time"
 )
 
 var defaultDB *gorm.DB
@@ -43,6 +44,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 	db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
+		PrepareStmt:                              false,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {
@@ -92,7 +94,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 		forceChangeArchiveTitle(db)
 
 		//自动迁移数据库
-		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(
+		var models = []interface{}{
 			&model.Admin{},
 			&model.AdminGroup{},
 			&model.AdminLoginLog{},
@@ -134,6 +136,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 
 			&model.User{},
 			&model.UserGroup{},
+			&model.LoginLog{},
 			&model.UserWechat{},
 			&model.UserWithdraw{},
 			&model.WeappQrcode{},
@@ -148,25 +151,49 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
 			&model.TagContent{},
-		)
+			&model.ExchangeRate{},
+			&model.ExchangeRateHistory{},
+			&model.ArchiveOption{},
+			&model.ArchiveOptionValue{},
+			&model.ArchiveSku{},
+			&model.Coupon{},
+			&model.CouponCode{},
+			&model.CouponArchive{},
+			&model.Subscriber{},
+			&model.SubscriberCategory{},
+			&model.Wishlist{},
+			&model.OrderReview{},
+			&model.OrderReviewPraise{},
+			&model.ArchiveFavorite{},
+			&model.Cart{},
+			&model.SearchLog{},
+			&model.WholesaleRule{},
+			&model.CommunicationOrder{},
+			&model.CommunicationMessage{},
+			&model.Activity{},
+			&model.ActivitySku{},
+			&model.OrderService{},
+			&model.OrderServiceAddon{},
+			&model.ProductSyncStatus{},
+			&model.ProductSyncLog{},
+			&model.PaymentAccount{},
+			&model.PaymentStatistic{},
+			&model.MailPlan{},
+		}
+		//自动迁移数据库
+		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
 
 		if err != nil {
 			log.Println("migrate table error ", err)
 			return err
 		}
-		// 取消使用 MyISAM 引擎
-		//engine, _ := getTableEngine(db, "archives")
-		//if engine == "MyISAM" {
-		//	db.Exec("ALTER TABLE archives ENGINE=InnoDB")
-		//}
-		//engine, _ = getTableEngine(db, "archive_drafts")
-		//if engine == "MyISAM" {
-		//	db.Exec("ALTER TABLE archive_drafts ENGINE=InnoDB")
-		//}
-		// 先删除deleteAt
-		if db.Migrator().HasColumn(&model.Archive{}, "deleted_at") {
-			db.Unscoped().Where("`deleted_at` is not null").Delete(model.Archive{})
-			_ = db.Migrator().DropColumn(&model.Archive{}, "deleted_at")
+		// 循环所有表，逐个删除 deleted_at
+		for _, table := range models {
+			// 检查表是否有 deleted_at 列
+			if db.Migrator().HasColumn(table, "deleted_at") {
+				db.Unscoped().Where("`deleted_at` is not null").Delete(table)
+				_ = db.Migrator().DropColumn(table, "deleted_at")
+			}
 		}
 		// 转换archives的草稿部分数据到archive_drafts
 		if db.Migrator().HasColumn(&model.Archive{}, "status") {
@@ -232,7 +259,7 @@ func (w *Website) InitModelData() {
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
 	var modules = []model.Module{
 		{
-			Model:     model.Model{Id: 1},
+			Id:        1,
 			TableName: "article",
 			UrlToken:  "news",
 			Name:      w.Tr("articleModule"),
@@ -243,7 +270,7 @@ func (w *Website) InitModelData() {
 			Status:    1,
 		},
 		{
-			Model:     model.Model{Id: 2},
+			Id:        2,
 			TableName: "product",
 			UrlToken:  "product",
 			Name:      w.Tr("productModule"),
@@ -283,7 +310,7 @@ func (w *Website) InitModelData() {
 	_ = w.InitAdmin("admin", "123456", false)
 	// 检查分组
 	adminGroup := model.AdminGroup{
-		Model:       model.Model{Id: 1},
+		Id:          1,
 		Title:       w.Tr("SuperAdministrator"),
 		Description: w.Tr("SuperAdministratorGroup"),
 		Status:      1,
@@ -301,13 +328,13 @@ func (w *Website) InitModelData() {
 			Status: 1,
 		},
 		{
-			Model:  model.Model{Id: 2},
+			Id:     2,
 			Title:  w.Tr("IntermediateUser"),
 			Level:  1,
 			Status: 1,
 		},
 		{
-			Model:  model.Model{Id: 3},
+			Id:     3,
 			Title:  w.Tr("AdvancedUser"),
 			Level:  2,
 			Status: 1,

@@ -3,6 +3,7 @@ package manageController
 import (
 	"encoding/json"
 	"fmt"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -32,7 +33,7 @@ func PluginTagList(ctx iris.Context) {
 	// 生成链接
 	for i := range tags {
 		tags[i].Link = currentSite.GetUrl("tag", tags[i], 0)
-		tags[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		tags[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tags[i].Id)))
 		// categoryTitle
 		if tags[i].CategoryId > 0 {
 			category := currentSite.GetCategoryFromCache(tags[i].CategoryId)
@@ -62,7 +63,7 @@ func PluginTagDetail(ctx iris.Context) {
 		})
 		return
 	}
-	tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+	tag.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tag.Id)))
 	tagContent, err := currentSite.GetTagContentById(tag.Id)
 	if err == nil {
 		tag.Content = tagContent.Content
@@ -84,9 +85,13 @@ func PluginTagDetail(ctx iris.Context) {
 							tag.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && tag.Extra[field.FieldName] != nil {
-						var texts []model.CustomFieldTexts
+						var texts []config.CustomFieldTexts
 						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &texts)
 						tag.Extra[field.FieldName] = texts
+					} else if field.Type == config.CustomFieldTypeTimeline && tag.Extra[field.FieldName] != nil {
+						var val config.TimelineField
+						_ = json.Unmarshal([]byte(fmt.Sprint(tag.Extra[field.FieldName])), &val)
+						tag.Extra[field.FieldName] = val
 					}
 				}
 			}

@@ -1,18 +1,20 @@
 package controller
 
 import (
-	"fmt"
-	"github.com/kataras/iris/v12/context"
 	"log"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"github.com/kataras/iris/v12/context"
+	"kandaoni.com/anqicms/request"
 
 	"github.com/jinzhu/now"
 	"github.com/kataras/iris/v12"
@@ -85,7 +87,7 @@ func ShowMessage(ctx iris.Context, message string, buttons []Button) {
 			return str
 		}
 	}
-	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + tr("提示信息") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + tr("返回") + "</a>"
+	str := "<!DOCTYPE html><html><head><meta charset=utf-8><meta name=\"viewport\" content=\"width=device-width,height=device-height,initial-scale=1.0, minimum-scale=1.0, maximum-scale=1.0, user-scalable=no,viewport-fit=cover\"><meta http-equiv=X-UA-Compatible content=\"IE=edge,chrome=1\"><title>" + tr("Info") + "</title><style>a{text-decoration: none;color: #777;}</style></head><body style=\"background: #f4f5f7;margin: 0;padding: 20px;\"><div style=\"margin-left: auto;margin-right: auto;margin-top: 50px;padding: 20px;border: 1px solid #eee;background:#fff;max-width: 640px;\"><div>" + message + "</div><div style=\"margin-top: 30px;text-align: right;\"><a style=\"display: inline-block;border:1px solid #777;padding: 8px 16px;\" href=\"javascript:history.back();\">" + tr("Back") + "</a>"
 
 	if len(buttons) > 0 {
 		for _, btn := range buttons {
@@ -345,7 +347,7 @@ func FileServe(ctx iris.Context) bool {
 	currentSite := provider.CurrentSite(ctx)
 	uri := ctx.RequestPath(false)
 	if uri != currentSite.BaseURI && !strings.HasSuffix(uri, "/") {
-		baseDir := fmt.Sprintf("%spublic", currentSite.RootPath)
+		baseDir := currentSite.RootPath + "public"
 		uriFile := baseDir + strings.TrimPrefix(uri, strings.TrimRight(currentSite.BaseURI, "/"))
 		_, err := os.Stat(uriFile)
 		if err == nil {
@@ -356,7 +358,7 @@ func FileServe(ctx iris.Context) bool {
 		mainSite := currentSite.GetMainWebsite()
 		if mainSite.MultiLanguage != nil && mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
 			if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
-				baseDir2 := fmt.Sprintf("%spublic", mainSite.RootPath)
+				baseDir2 := mainSite.RootPath + "public"
 				uriFile2 := baseDir2 + strings.TrimPrefix(uri, strings.TrimRight(mainSite.BaseURI, "/"))
 				_, err = os.Stat(uriFile2)
 				if err == nil {
@@ -394,26 +396,42 @@ func FileServe(ctx iris.Context) bool {
 	// 自动生成robots.txt
 	if strings.HasSuffix(uri, "robots.txt") && !ctx.Values().GetBoolDefault("robots", false) {
 		robots := "User-agent: *\nDisallow: /system\nDisallow: /static\nSitemap: "
-		_ = currentSite.SaveRobots(robots)
+		//	_ = currentSite.SaveRobots(robots)
 		ctx.Values().Set("robots", true)
-		return FileServe(ctx)
+		//return FileServe(ctx)
+		ctx.Text(robots)
+		return true
 	}
 
 	return false
 }
 
 func ReRouteContext(ctx iris.Context) {
-	params, _ := parseRoute(ctx)
 	// 先验证文件是否真的存在，如果存在，则fileServe
 	exists := FileServe(ctx)
 	if exists {
 		return
 	}
-	defer LogAccess(ctx)
+	defer func() {
+		// 这里只记录蜘蛛行为
+		userAgent := ctx.GetHeader("User-Agent")
+		//获取蜘蛛
+		spider := library.GetSpider(userAgent)
+		if spider != "" {
+			req := request.LogStatisticRequest{
+				Action: request.LogActionViews,
+				Code:   ctx.GetStatusCode(),
+				Path:   ctx.FullRequestURI(),
+				Type:   request.LogTypeArchive,
+			}
+			LogAccess(ctx, &req)
+		}
+	}()
 	closed := CheckCloseSite(ctx)
 	if closed {
 		return
 	}
+	params, _ := ParseRoute(ctx)
 	for i, v := range params {
 		if len(i) == 0 {
 			continue
@@ -471,17 +489,23 @@ func ReRouteContext(ctx iris.Context) {
 						uri = parsed.String()
 					}
 				}
-				content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language)
-				if err != nil {
-					log.Println("translate err", err)
-					// 翻译错误的时候，就设置 no-index
-					// x-robots-tag: noindex, follow
-					ctx.Header("X-Robots-Tag", "noindex, follow")
+				// 多语言站点下，static 目录 和 uploads 目录需特殊处理
+				if strings.HasPrefix(uri, "/static/") || strings.HasPrefix(uri, "/uploads/") {
+					// 能走到这里的，就表示这些资源不存在，直接跳过翻译环节，减少资源消耗
+				} else if strings.HasPrefix(uri, "/") {
+					params["Cache-Control"] = ctx.GetHeader("Cache-Control")
+					content, err := mainSite.GetOrSetMultiLangCache(uri, langSite.Language, params)
+					if err != nil {
+						log.Println("translate err", err)
+						// 翻译错误的时候，就设置 no-index
+						// x-robots-tag: noindex, follow
+						ctx.Header("X-Robots-Tag", "noindex, follow")
+					}
+					ctx.ContentType(context.ContentHTMLHeaderValue)
+					ctx.Header("Content-Language", langSite.Language)
+					ctx.WriteString(content)
+					return
 				}
-				ctx.ContentType(context.ContentHTMLHeaderValue)
-				ctx.Header("Content-Language", langSite.Language)
-				ctx.WriteString(content)
-				return
 			}
 		}
 		if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
@@ -535,7 +559,7 @@ func ReRouteContext(ctx iris.Context) {
 	NotFound(ctx)
 }
 
-func parseRoute(ctx iris.Context) (map[string]string, bool) {
+func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 	currentSite := provider.CurrentSite(ctx)
 	//这里总共有6条正则规则，需要逐一匹配
 	// 由于用户可能会采用相同的配置，因此这里需要尝试多次读取
@@ -571,7 +595,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 	archiveId := currentSite.GetFixedLinkFromCache("/" + paramValue)
 	if archiveId > 0 {
 		matchMap["match"] = provider.PatternArchive
-		matchMap["id"] = fmt.Sprintf("%d", archiveId)
+		matchMap["id"] = strconv.FormatInt(archiveId, 10)
 		return matchMap, true
 	}
 	rewritePattern := useSite.ParsePattern(false)
@@ -588,6 +612,16 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 		provider.PatternArchive,      // 文章详情
 		//	provider.PatternCommon,       // common 处理逻辑
 	}
+	// 添加自定义模块规则
+	modules := currentSite.GetCacheModules()
+	for x := range modules {
+		diyName := modules[x].UrlToken + ":archive"
+		_, ok := rewritePattern.Rules[diyName]
+		if ok {
+			ruleNames = append(ruleNames, diyName)
+		}
+	}
+	// end
 	for _, ruleName := range ruleNames {
 		reg := regexp.MustCompile(rewritePattern.Rules[ruleName])
 		match := reg.FindStringSubmatch(paramValue)
@@ -599,6 +633,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 			match = reg.FindStringSubmatch(paramValueWithArgs)
 		}
 		if len(match) > 0 {
+			matchMap["pattern"] = rewritePattern.Rules[ruleName]
 			matchMap["match"] = ruleName
 			for i, v := range match {
 				key := rewritePattern.Tags[ruleName][i]
@@ -679,29 +714,58 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 					_, ok := rewritePattern.Rules[diyName]
 					if ok {
 						reg = regexp.MustCompile(rewritePattern.Rules[diyName])
-						match = reg.FindStringSubmatch(paramValue)
-						if len(match) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
+						diyMatch := reg.FindStringSubmatch(paramValue)
+						if len(diyMatch) == 0 && strings.Contains(rewritePattern.Rules[diyName], "\\?") {
 							// 详情支持带问号的规则
 							paramValueWithArgs := strings.TrimPrefix(ctx.Request().RequestURI, "/")
 							// 去掉末尾的$,带问号的，后面只能跟&，否则就不匹配
 							reg = regexp.MustCompile(strings.TrimSuffix(rewritePattern.Rules[diyName], "$") + "([&#].*)?$")
-							match = reg.FindStringSubmatch(paramValueWithArgs)
+							diyMatch = reg.FindStringSubmatch(paramValueWithArgs)
 						}
-						if len(match) > 1 {
-							matchMap["match"] = provider.PatternArchive
-							for i, v := range match {
+						if len(diyMatch) > 1 {
+							tmpMatchMap := map[string]string{}
+							tmpMatchMap["match"] = provider.PatternArchive
+							for i, v := range diyMatch {
 								iKey := i
 								key := rewritePattern.Tags[diyName][iKey]
 								if i == 0 {
 									key = "route"
 								}
-								matchMap[key] = v
+								tmpMatchMap[key] = v
 							}
-							if matchMap["module"] != "" && matchMap["module"] == modules[x].UrlToken {
+							if tmpMatchMap["module"] != "" && tmpMatchMap["module"] == modules[x].UrlToken {
 								// 需要先验证是否是module
-								return matchMap, true
+								return tmpMatchMap, true
 							} else {
-								return matchMap, true
+								preview := ctx.URLParam("preview")
+								// 由于可能导致重复，因此需要验证module
+								if tmpMatchMap["id"] != "" {
+									id, _ := strconv.ParseInt(tmpMatchMap["id"], 10, 64)
+									if id > 0 {
+										archive := currentSite.GetArchiveByIdFromCache(id)
+										if archive != nil && archive.ModuleId == modules[x].Id {
+											return tmpMatchMap, true
+										}
+										if preview != "" {
+											archiveDraft, _ := currentSite.GetArchiveDraftById(id)
+											if archiveDraft != nil && archiveDraft.ModuleId == modules[x].Id {
+												return tmpMatchMap, true
+											}
+										}
+									}
+								} else if tmpMatchMap["filename"] != "" {
+									archive := currentSite.GetArchiveByUrlTokenFromCache(tmpMatchMap["filename"])
+									if archive != nil && archive.ModuleId == modules[x].Id {
+										return tmpMatchMap, true
+									}
+									if preview != "" {
+										archiveDraft, _ := currentSite.GetArchiveDraftByUrlToken(tmpMatchMap["filename"])
+										if archiveDraft != nil && archiveDraft.ModuleId == modules[x].Id {
+											return tmpMatchMap, true
+										}
+									}
+								}
+								// end
 							}
 						}
 					}
@@ -709,12 +773,48 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 				if matchMap["module"] != "" {
 					// 需要先验证是否是module
 					module := currentSite.GetModuleFromCacheByToken(matchMap["module"])
-					if module != nil {
+					if module != nil && module.UrlToken == matchMap["module"] {
 						return matchMap, true
+					} else {
+						matchMap = map[string]string{}
+						continue
 					}
 				} else {
 					return matchMap, true
 				}
+			}
+			if strings.HasSuffix(ruleName, ":archive") {
+				matchMap["match"] = provider.PatternArchive
+				tmpToken := strings.TrimSuffix(ruleName, ":archive")
+				if matchMap["module"] != "" && matchMap["module"] == tmpToken {
+					// 需要先验证是否是module
+					return matchMap, true
+				} else {
+					// 由于可能导致重复，因此需要验证module
+					if matchMap["id"] != "" {
+						id, _ := strconv.ParseInt(matchMap["id"], 10, 64)
+						if id > 0 {
+							archive, err := currentSite.GetArchiveById(id)
+							if err == nil {
+								module := currentSite.GetModuleFromCache(archive.ModuleId)
+								if module != nil && module.UrlToken == tmpToken {
+									return matchMap, true
+								}
+							}
+						}
+					} else if matchMap["filename"] != "" {
+						archive, err := currentSite.GetArchiveByUrlToken(matchMap["filename"])
+						if err == nil {
+							module := currentSite.GetModuleFromCache(archive.ModuleId)
+							if module != nil && module.UrlToken == tmpToken {
+								return matchMap, true
+							}
+						}
+					}
+					// end
+				}
+				matchMap = map[string]string{}
+				continue
 			}
 
 			return matchMap, true
@@ -742,6 +842,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 					match = reg.FindStringSubmatch(paramValueWithArgs)
 				}
 				if len(match) > 0 {
+					matchMap["pattern"] = rewritePattern.Rules[ruleName]
 					matchMap["match"] = ruleName
 					for i, v := range match {
 						key := rewritePattern.Tags[ruleName][i]
@@ -767,7 +868,7 @@ func parseRoute(ctx iris.Context) (map[string]string, bool) {
 func GetViewPath(ctx iris.Context, tplName string) string {
 	mobileTemplate := ctx.Values().GetBoolDefault("mobileTemplate", false)
 	if mobileTemplate {
-		tplName = fmt.Sprintf("mobile/%s", tplName)
+		tplName = "mobile/" + tplName
 	}
 	return tplName
 }
@@ -838,46 +939,15 @@ func CheckTemplateType(ctx iris.Context) {
 	ctx.Next()
 }
 
-func LogAccess(ctx iris.Context) {
+func LogAccess(ctx iris.Context, req *request.LogStatisticRequest) {
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite == nil || currentSite.StatisticLog == nil {
-		ctx.Next()
 		return
 	}
-	if ctx.IsAjax() || ctx.Method() != "GET" {
-		ctx.Next()
-		return
-	}
-	// html cache 步骤不做记录
-	if ctx.GetHeader("Cache") == "true" {
-		ctx.Next()
-		return
-	}
-	currentPath := ctx.Request().RequestURI
-	//后台不做记录
-	if strings.HasPrefix(currentPath, "/system") {
-		ctx.Next()
-		return
-	}
-	//静态资源不做记录
-	if strings.HasPrefix(currentPath, "/static") ||
-		strings.HasPrefix(currentPath, "/uploads") ||
-		strings.Contains(currentPath, "/js") ||
-		strings.Contains(currentPath, "/css") ||
-		strings.Contains(currentPath, "/image") ||
-		strings.HasSuffix(currentPath, ".ico") ||
-		strings.HasSuffix(currentPath, ".jpg") ||
-		strings.HasSuffix(currentPath, ".png") ||
-		strings.HasSuffix(currentPath, ".jpeg") ||
-		strings.HasSuffix(currentPath, ".gif") ||
-		strings.HasSuffix(currentPath, ".js") ||
-		strings.HasSuffix(currentPath, ".css") ||
-		strings.HasSuffix(currentPath, ".map") ||
-		strings.HasSuffix(currentPath, ".webp") {
-		ctx.Next()
-		return
-	}
-
+	refer := ctx.GetReferrer()
+	// 记录访问
+	req.Path = refer.String()
+	currentPath := req.Path
 	userAgent := ctx.GetHeader("User-Agent")
 	//获取蜘蛛
 	spider := library.GetSpider(userAgent)
@@ -902,13 +972,11 @@ func LogAccess(ctx iris.Context) {
 		Url:       currentPath,
 		Ip:        ctx.RemoteAddr(),
 		Device:    device,
-		HttpCode:  ctx.GetStatusCode(),
+		HttpCode:  req.Code,
 		UserAgent: userAgent,
 	}
 	// 这里不需要等待
 	go currentSite.StatisticLog.Write(statistic)
-
-	ctx.Next()
 }
 
 func NewDriver() *captcha.DriverString {
@@ -927,7 +995,7 @@ func NewDriver() *captcha.DriverString {
 func GenerateCaptcha(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	safeSetting := currentSite.Safe
-	if safeSetting == nil || safeSetting.AdminCaptchaOff == 1 {
+	if safeSetting == nil || safeSetting.Captcha != 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "",
@@ -1163,19 +1231,21 @@ func UseLimiter(ctx iris.Context) bool {
 		ctx.StatusCode(http.StatusTooManyRequests) // Too Many Requests
 		return true
 	}
-	_, appUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
-	// 触发限流条件（示例阈值，需根据服务器配置调整）
-	if appUsedPercent > 70 || sysFreePercent < 10 {
-		atomic.StoreInt32(&isLimiting, 1)
-		time.AfterFunc(5*time.Second, func() {
-			atomic.StoreInt32(&isLimiting, 0)
-		})
-		ctx.StatusCode(http.StatusTooManyRequests)
-		return true
+	currentSite := provider.CurrentSite(ctx)
+	if currentSite.Limiter != nil && currentSite.Limiter.MemPercent > 50 {
+		_, appUsedPercent, sysFreePercent := library.GetSystemMemoryUsage()
+		//触发限流条件（示例阈值，需根据服务器配置调整）
+		if appUsedPercent > float64(currentSite.Limiter.MemPercent) || sysFreePercent < float64(100-currentSite.Limiter.MemPercent) {
+			atomic.StoreInt32(&isLimiting, 1)
+			time.AfterFunc(5*time.Second, func() {
+				atomic.StoreInt32(&isLimiting, 0)
+			})
+			ctx.StatusCode(http.StatusTooManyRequests)
+			return true
+		}
 	}
 	atomic.StoreInt32(&isLimiting, 0)
 	//end
-	currentSite := provider.CurrentSite(ctx)
 	// 没启用拦截器
 	if currentSite.Limiter == nil {
 		return false

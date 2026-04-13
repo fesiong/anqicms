@@ -1,9 +1,11 @@
 package config
 
 import (
-	"fmt"
 	"strings"
 	"sync"
+
+	"golang.org/x/oauth2"
+	content "google.golang.org/api/content/v2.1"
 )
 
 type CodeItem struct {
@@ -44,15 +46,33 @@ type PluginGuestbookConfig struct {
 }
 
 type CustomField struct {
-	Name        string   `json:"name"`
-	FieldName   string   `json:"field_name"`
-	Type        string   `json:"type"`
-	Required    bool     `json:"required"`
-	IsSystem    bool     `json:"is_system"`
-	IsFilter    bool     `json:"is_filter"`
-	FollowLevel bool     `json:"follow_level"`
-	Content     string   `json:"content"`
-	Items       []string `json:"-"`
+	Name        string      `json:"name"`
+	FieldName   string      `json:"field_name,omitempty"`
+	Type        string      `json:"type,omitempty"`
+	Value       interface{} `json:"value"`
+	Default     interface{} `json:"default"`
+	Remark      string      `json:"remark,omitempty"`
+	Required    bool        `json:"required,omitempty"`
+	IsSystem    bool        `json:"is_system,omitempty"`
+	IsFilter    bool        `json:"is_filter,omitempty"`
+	FollowLevel bool        `json:"follow_level"`
+	Content     string      `json:"content,omitempty"`
+	Items       []string    `json:"-"`
+}
+
+type CustomFieldTexts struct {
+	Key    string   `json:"key"`
+	Value  string   `json:"value"`
+	Values []string `json:"values"` // 更多的字段
+}
+
+type TimelineField struct {
+	Title   string            `json:"title"`
+	Content string            `json:"content"`
+	Status  string            `json:"status"`
+	Images  []string          `json:"images"`
+	Extra   map[string]string `json:"extra"`
+	Items   []TimelineField   `json:"items,omitempty"`
 }
 
 type PluginUploadFile struct {
@@ -63,21 +83,16 @@ type PluginUploadFile struct {
 }
 
 type PluginSendmail struct {
-	Server    string `json:"server"`
-	UseSSL    int    `json:"use_ssl"`
-	Port      int    `json:"port"`
-	Account   string `json:"account"`
-	Password  string `json:"password"`
-	Recipient string `json:"recipient"`
+	Server      string `json:"server"`
+	UseSSL      int    `json:"use_ssl"`
+	Port        int    `json:"port"`
+	Account     string `json:"account"`
+	Password    string `json:"password"`
+	Recipient   string `json:"recipient"`
+	UseBrevo    bool   `json:"use_brevo"`
+	BrevoApiKey string `json:"brevo_api_key"`
 
-	AutoReply    bool   `json:"auto_reply"`
-	ReplySubject string `json:"reply_subject"`
-	ReplyMessage string `json:"reply_message"` // 自动回复内容
-	SendType     []int  `json:"send_type"`
-
-	SignupVerify  bool   `json:"signup_verify"` // 注册邮件验证
-	VerifySubject string `json:"verify_subject"`
-	VerifyMessage string `json:"verify_message"`
+	Templates []EmailTemplate `json:"templates"` // 启用的模板
 }
 
 type PluginImportApiConfig struct {
@@ -140,10 +155,12 @@ type PluginFulltextConfig struct {
 	Modules     []uint `json:"modules"`
 	Initialed   bool   `json:"initialed"` //是否已经生成过索引
 
-	Engine     string `json:"engine"` // 支持的搜索引擎：default(wukong)|Elasticsearch|ZincSearch|Meilisearch
-	EngineUrl  string `json:"engine_url"`
-	EngineUser string `json:"engine_user"`
-	EnginePass string `json:"engine_pass"`
+	Engine        string `json:"engine"` // 支持的搜索引擎：default(wukong)|Elasticsearch|ZincSearch|Meilisearch
+	EngineUrl     string `json:"engine_url"`
+	EngineUser    string `json:"engine_user"`
+	EnginePass    string `json:"engine_pass"`
+	RankingScore  int    `json:"ranking_score"`  // 可设置评分 0-100分，默认 0分 高于这个评分的结果才显示
+	ContainLength int    `json:"contain_length"` // 可设置搜索词包含长度，默认 0，低于x个需要全包含，高于x个则至少包含x个字符
 }
 
 type PluginTitleImageConfig struct {
@@ -187,6 +204,7 @@ type PluginTimeFactor struct {
 	DailyUpdate int      `json:"daily_update"` // 自动更新用
 	TodayUpdate int      `json:"today_update"` // 当天更新了多少
 	LastUpdate  int64    `json:"last_update"`  // 最后更新时间
+	Random      bool     `json:"random"`
 
 	UpdateRunning bool `json:"-"`
 }
@@ -223,6 +241,8 @@ type PluginLimiter struct {
 	IsAllowSpider bool     `json:"is_allow_spider"`
 	BanEmptyRefer bool     `json:"ban_empty_refer"` // 只限制图片，js之类
 	BanEmptyAgent bool     `json:"ban_empty_agent"` // 限制 curl 等
+	MemLimit      bool     `json:"mem_limit"`
+	MemPercent    int      `json:"mem_percent"`
 }
 
 type MultiLangSite struct {
@@ -236,6 +256,7 @@ type MultiLangSite struct {
 	LanguageEmoji string `json:"language_emoji,omitempty"`
 	LanguageName  string `json:"language_name,omitempty"`
 	Language      string `json:"language"`
+	IsMain        bool   `json:"is_main"`
 	IsCurrent     bool   `json:"is_current,omitempty"`
 	Link          string `json:"link,omitempty"`
 	BaseUrl       string `json:"base_url,omitempty"`
@@ -248,7 +269,8 @@ type PluginMultiLangConfig struct {
 	Type            string          `json:"type"`
 	DefaultLanguage string          `json:"default_language"` // 该语言只是调用系统的设置
 	AutoTranslate   bool            `json:"auto_translate"`
-	SiteType        string          `json:"site_type"` // multi|single
+	SiteType        string          `json:"site_type"`     // multi|single
+	ShowMainDir     bool            `json:"show_main_dir"` // 显示主站目录
 	SubSites        []MultiLangSite `json:"sub_sites"`
 }
 
@@ -256,6 +278,29 @@ type PluginAkismetConfig struct {
 	Open      bool   `json:"open"`
 	ApiKey    string `json:"api_key"`
 	CheckType []int  `json:"check_type"`
+}
+
+const EmailTypeSystem = "system"
+const EmailTypeUser = "user"
+
+type EmailTemplate struct {
+	Open        bool   `json:"open"`
+	Type        string `json:"type"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Readonly    bool   `json:"readonly"`
+
+	Delay   int64  `json:"delay"`   // 延迟多少秒发送
+	Subject string `json:"subject"` // 邮件标题
+	Content string `json:"content"` // 邮件内容
+}
+
+type CommunicationConfig struct {
+	SummitedTemplate EmailTemplate  `json:"summited_template"` // 提交成功模板
+	QuoteTemplate    EmailTemplate  `json:"quote_template"`    // 报价模板
+	ReplyTemplate    EmailTemplate  `json:"reply_template"`    // 消息回复模板
+	OrderFields      []*CustomField `json:"order_fields"`      // 需要哪些自定义字段
 }
 
 func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite *MultiLangSite) string {
@@ -267,7 +312,11 @@ func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite 
 			if strings.HasPrefix(oriUrl, baseUrl+"/"+pm.DefaultLanguage) {
 				oriUrl = strings.Replace(oriUrl, baseUrl+"/"+pm.DefaultLanguage, baseUrl, 1)
 			}
-			oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+			if langSite.IsMain && pm.ShowMainDir == false {
+				// 无需处理
+			} else {
+				oriUrl = strings.Replace(oriUrl, baseUrl, baseUrl+"/"+langSite.Language, 1)
+			}
 		} else if pm.Type == MultiLangTypeSame {
 			// 相同
 			if strings.Contains(oriUrl, "?") {
@@ -359,6 +408,29 @@ type PluginJsonLdConfig struct {
 	DefaultBrand  string `json:"brand"`
 }
 
+type PluginGoogleMerchantConfig struct {
+	Open         bool   `json:"open"`
+	RedirectUrl  string `json:"redirect_url"`
+	ClientId     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	PlacesApiKey string `json:"places_api_key"`
+
+	Email      string `json:"email"`
+	Name       string `json:"name"`
+	GivenName  string `json:"given_name"`
+	FamilyName string `json:"family_name"`
+
+	Token *oauth2.Token `json:"token"`
+
+	Accounts     []*content.AccountIdentifier `json:"accounts"`
+	MerchantId   uint64                       `json:"merchant_id"`
+	AggregatorId uint64                       `json:"aggregator_id"`
+	AccessToken  string                       `json:"access_token"`
+	RefreshToken string                       `json:"refresh_token"`
+	TokenType    string                       `json:"token_type"`
+	ExpireTme    int64                        `json:"expire_tme"`
+}
+
 func (g *CustomField) SplitContent() []string {
 	var items []string
 	contents := strings.Split(g.Content, "\n")
@@ -389,13 +461,18 @@ func (g *CustomField) CheckSetFilter() bool {
 }
 
 func (g *CustomField) GetFieldColumn() string {
-	column := fmt.Sprintf("`%s`", g.FieldName)
+	column := "`" + g.FieldName + "`"
 
-	if g.Type == CustomFieldTypeNumber || g.Type == CustomFieldTypeCategory {
+	switch g.Type {
+	case CustomFieldTypeNumber, CustomFieldTypeCategory:
 		column += " int(10)"
-	} else if g.Type == CustomFieldTypeTextarea || g.Type == CustomFieldTypeEditor || g.Type == CustomFieldTypeImages || g.Type == CustomFieldTypeTexts || g.Type == CustomFieldTypeArchive {
+	case CustomFieldTypeTextarea, CustomFieldTypeEditor, CustomFieldTypeImages, CustomFieldTypeTexts, CustomFieldTypeArchive:
 		column += " text"
-	} else {
+	case CustomFieldTypeTimeline:
+		column += " longtext"
+	case CustomFieldTypeCheckbox:
+		column += " varchar(500)"
+	default:
 		// mysql 5.6 下，utf8mb4 索引只能用190
 		column += " varchar(190)"
 	}

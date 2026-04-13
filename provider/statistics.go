@@ -3,13 +3,15 @@ package provider
 import (
 	"encoding/json"
 	"errors"
+	"strconv"
+	"sync"
+	"time"
+
 	"github.com/jinzhu/now"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/response"
-	"strconv"
-	"time"
 )
 
 type SpiderData struct {
@@ -56,13 +58,13 @@ func (w *Website) StatisticTraffic() []response.ChartData {
 
 	timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
 	var tmpResult []*model.StatisticLog
-	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count").Order("created_time ASC").Find(&tmpResult)
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count", "shop_count").Order("created_time ASC").Find(&tmpResult)
 	if len(tmpResult) == 0 {
 		// 首次访问没有数据，则先尝试生成
 		if w.StatisticLog != nil {
 			w.StatisticLog.Calc(w.DB)
 			// 再次查询
-			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count").Order("created_time ASC").Find(&tmpResult)
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count", "shop_count").Order("created_time ASC").Find(&tmpResult)
 		}
 	}
 	for _, v := range tmpResult {
@@ -90,7 +92,7 @@ func (w *Website) GetStatisticDates() []string {
 	return w.StatisticLog.GetLogDates()
 }
 
-func (w *Website) StatisticDetail(filename string, currentPage, limit int) ([]*Statistic, int64, error) {
+func (w *Website) StatisticDetail(filename string, searchType string, currentPage, limit int) ([]*Statistic, int64, error) {
 	if w.StatisticLog == nil {
 		return nil, 0, errors.New("statistic log is not ready")
 	}
@@ -107,12 +109,15 @@ func (w *Website) StatisticDetail(filename string, currentPage, limit int) ([]*S
 	}
 	offset := (currentPage - 1) * limit
 
-	statistics, total = w.StatisticLog.Read(filename, offset, limit)
+	statistics, total = w.StatisticLog.Read(filename, searchType, offset, limit)
 
 	return statistics, total, nil
 }
 
 func (w *Website) CleanStatistics() {
+	// 删除 searchLog
+	w.DB.Where("created_time < ?", now.BeginningOfDay().Add(-30*24*time.Hour).Unix()).Delete(&model.SearchLog{})
+
 	//清理一个月前的记录
 	if w.StatisticLog == nil {
 		return
@@ -243,12 +248,281 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 	return &result
 }
 
-func (w *Website) SendStatisticsMail() {
-	setting := w.PluginSendmail
-	if setting.Account == "" {
-		//成功配置，则跳过
-		return
+func (w *Website) StatisticCoupon(startTime int64, endTime int64) []response.ChartData {
+	// 优惠券领取数量
+	// 优惠券使用数量
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.CouponCode{}).Where("get_time >= ? and get_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(get_time)) AS `date`, count(*) as `value`, 'gain' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.CouponCode{}).Where("use_time >= ? and use_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(use_time)) AS `date`, count(*) as `value`, 'used' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+
+	return append(tmpResult, tmpResult2...)
+}
+
+func (w *Website) StatisticSearch(startTime int64, endTime int64) []response.ChartData {
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.SearchLog{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'search' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	return tmpResult
+}
+
+func (w *Website) StatisticCustomer(startTime int64, endTime int64) []response.ChartData {
+	// 新注册用户数量
+	// 活跃用户数量
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.User{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'register' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.LoginLog{}).Where("created_time >= ? and created_time < ? and status = 1", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'login' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+
+	return append(tmpResult, tmpResult2...)
+}
+
+func (w *Website) StatisticProduct(startTime int64, endTime int64) []response.ChartData {
+	// 上新
+	// 访问
+	var result []response.ChartData
+	w.DB.Model(&model.Archive{}).Where("module_id = 2 and created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'new' as `label`").Group("`date`").Order("`date`").Scan(&result)
+	// 如果结束时间是今天，则今天的数据需要获取最新的数据
+	today := now.EndOfDay().Unix()
+	if endTime == today {
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+		}
 	}
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+		}
+	}
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		result = append(result,
+			response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.ProductView,
+				Label: "views",
+			})
+	}
+
+	return result
+}
+
+func (w *Website) StatisticOrder(startTime int64, endTime int64) []response.ChartData {
+	// 下单
+	// 支付
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'create' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	var tmpResult3 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+
+	tmpResult = append(tmpResult, tmpResult2...)
+	tmpResult = append(tmpResult, tmpResult3...)
+	return tmpResult
+}
+
+func (w *Website) StatisticConversion(startTime int64, endTime int64) []response.ChartData {
+	// 转化率
+	// 点击
+	// 加购
+	// checkout
+	// confirm
+	// pay
+	var result []response.ChartData
+
+	// 如果结束时间是今天，则今天的数据需要获取最新的数据
+	today := now.EndOfDay().Unix()
+	if endTime == today {
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+		}
+	}
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+		}
+	}
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		result = append(result,
+			response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.ProductView,
+				Label: "views",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.Cart,
+				Label: "cart",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.Checkout,
+				Label: "checkout",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.OrderCreate,
+				Label: "order_create",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.PayCreate,
+				Label: "pay_create",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.Payment,
+				Label: "payment",
+			})
+	}
+
+	return result
+}
+
+func (w *Website) StatisticLive(startTime int64, endTime int64) map[string][]response.ChartData {
+	// 销售额，按天
+	var results = map[string][]response.ChartData{}
+	// 销售额
+	var tmpResult1 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult1)
+	results["amount"] = tmpResult1
+	// 平均订单金额
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, ROUND(sum(amount)/count(*)) as `value`, 'average' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	results["average_amount"] = tmpResult2
+	// 订单数量
+	var tmpResult3 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'count' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+	results["order_count"] = tmpResult3
+
+	// 如果结束时间是今天，则今天的数据需要获取最新的数据
+	today := now.EndOfDay().Unix()
+	if endTime == today {
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+		}
+	}
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+		}
+	}
+	// 访问量 等
+	var productView []response.ChartData
+	// 复购，新客
+	var order []response.ChartData
+	// coupon
+	var coupon []response.ChartData
+	// 转化率
+	var conversion []response.ChartData
+	// customer
+	var customer []response.ChartData
+
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		// 访问量
+		productView = append(productView, response.ChartData{
+			Date:  vDate,
+			Label: "view",
+			Value: v.ShopCount.ProductView,
+		})
+		// 复购，新客
+		order = append(order, response.ChartData{
+			Date:  vDate,
+			Label: "first_order",
+			Value: v.ShopCount.FirstOrder,
+		}, response.ChartData{
+			Date:  vDate,
+			Label: "repurchase",
+			Value: v.ShopCount.Repurchase,
+		})
+		// coupon 使用量
+		coupon = append(coupon, response.ChartData{
+			Date:  vDate,
+			Label: "coupon_get",
+			Value: v.ShopCount.CouponGet,
+		}, response.ChartData{
+			Date:  vDate,
+			Label: "coupon_use",
+			Value: v.ShopCount.CouponUse,
+		})
+		// 转化率
+		conversion = append(conversion, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.ProductView,
+			Label: "views",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.Cart,
+			Label: "cart",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.Checkout,
+			Label: "checkout",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.OrderCreate,
+			Label: "order_create",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.ProductView,
+			Label: "pay_create",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.ProductView,
+			Label: "payment",
+		})
+		//  客户
+		customer = append(customer, response.ChartData{
+			Date:  vDate,
+			Label: "new_user",
+			Value: v.ShopCount.UserCreate,
+		}, response.ChartData{
+			Date:  vDate,
+			Label: "active",
+			Value: v.ShopCount.UserLogin,
+		})
+	}
+
+	results["product_view"] = productView
+	results["order"] = order
+	results["coupon"] = coupon
+	results["conversion"] = conversion
+	results["customer"] = customer
+
+	return results
+}
+
+func (w *Website) StatisticSearchDetail(currentPage, limit int) ([]*model.SearchLog, int64) {
+	var total int64
+	var tmpResult []*model.SearchLog
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	offset := (currentPage - 1) * limit
+
+	w.DB.Model(&model.SearchLog{}).Count(&total)
+	w.DB.Offset(offset).Limit(limit).Order("id desc").Find(&tmpResult)
+
+	return tmpResult, total
+}
+
+func (w *Website) SendStatisticsMail() {
 	// 开始统计数据
 	// 需要发送以下数据
 	// 各个搜索引擎收录数据
@@ -278,6 +552,16 @@ func (w *Website) SendStatisticsMail() {
 		}
 	}
 
+	setting := w.PluginSendmail
+	if setting == nil || setting.Account == "" {
+		//成功配置，则跳过
+		return
+	}
+	template, exist := w.GetEmailTemplateInfo("report")
+	if !exist || template.Open == false {
+		return
+	}
+
 	// 访问量
 	var totalVisit = statisticResult.VisitCount.PVCount
 	// 文档等数据
@@ -303,10 +587,13 @@ func (w *Website) SendStatisticsMail() {
 	var adminLogCount int64
 	w.DB.Model(&model.AdminLog{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&adminLogCount)
 
-	if w.SendTypeValid(SendTypeDaily) {
-		// 开始写邮件内容
-		subject := time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.Tr("s(s)SiteData", w.System.SiteName, w.System.BaseUrl)
-		content := `<html>
+	// 开始写邮件内容
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	subject := time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.Tr("s(s)SiteData", w.System.SiteName, frontUrl)
+	content := `<html>
 <head>
   <style>
     body {
@@ -350,101 +637,100 @@ func (w *Website) SendStatisticsMail() {
   </style>
 </head>
 <body>`
-		content += "<h1>" + subject + "</h1>\n"
-		content += "<h2>" + w.Tr("Inclusion") + "</h2>\n"
-		content += `<table>
+	content += "<h1>" + subject + "</h1>\n"
+	content += "<h2>" + w.Tr("Inclusion") + "</h2>\n"
+	content += `<table>
     <thead>
       <tr>`
-		content += "<th>" + w.Tr("Baidu") + "</th>\n"
-		content += "<th>" + w.Tr("Sogou") + "</th>\n"
-		content += "<th>" + w.Tr("360") + "</th>\n"
-		content += "<th>" + w.Tr("Bing") + "</th>\n"
-		content += "<th>" + w.Tr("Google") + "</th>\n"
-		content += `</tr>
+	content += "<th>" + w.Tr("Baidu") + "</th>\n"
+	content += "<th>" + w.Tr("Sogou") + "</th>\n"
+	content += "<th>" + w.Tr("360") + "</th>\n"
+	content += "<th>" + w.Tr("Bing") + "</th>\n"
+	content += "<th>" + w.Tr("Google") + "</th>\n"
+	content += `</tr>
     </thead>
     <tbody>
       <tr>`
-		content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
-		content += `</tr>
+	content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
+	content += `</tr>
     </tbody>
   </table>`
-		content += "<h2>" + w.Tr("SpiderCrawling") + "</h2>\n"
-		content += `<table>
+	content += "<h2>" + w.Tr("SpiderCrawling") + "</h2>\n"
+	content += `<table>
     <thead>
       <tr>`
-		for _, v := range spiderResult {
-			content += "<th>" + v.Spider + "</th>"
-		}
-		content += `
+	for _, v := range spiderResult {
+		content += "<th>" + v.Spider + "</th>"
+	}
+	content += `
       </tr>
     </thead>
     <tfoot>
       <tr>`
-		content += "<td>" + w.Tr("Total") + "</td>\n"
-		content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
-		content += `</tr>
+	content += "<td>" + w.Tr("Total") + "</td>\n"
+	content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
+	content += `</tr>
     </tfoot>
     <tbody>
       <tr>`
-		for _, v := range spiderResult {
-			content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
-		}
-		content += `
+	for _, v := range spiderResult {
+		content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
+	}
+	content += `
       </tr>
     </tbody>
   </table>`
-		content += "<h2>" + w.Tr("Visits") + "</h2>"
-		content += `<table>
+	content += "<h2>" + w.Tr("Visits") + "</h2>"
+	content += `<table>
     <thead>
       <tr>`
-		content += "<th>" + w.Tr("Time") + "</th>"
-		content += "<th>" + w.Tr("Visit") + "</th>"
-		content += `</tr>
+	content += "<th>" + w.Tr("Time") + "</th>"
+	content += "<th>" + w.Tr("Visit") + "</th>"
+	content += `</tr>
     </thead>
     <tfoot>
       <tr>`
-		content += "<td>" + w.Tr("Total") + "</td>"
-		content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
-		content += `
+	content += "<td>" + w.Tr("Total") + "</td>"
+	content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
+	content += `
       </tr>
     </tfoot>
     <tbody>`
-		content += `
+	content += `
     </tbody>
   </table>`
-		content += "<h2>" + w.Tr("SiteClickData") + "</h2>"
-		content += `<table>
+	content += "<h2>" + w.Tr("SiteClickData") + "</h2>"
+	content += `<table>
     <thead>
       <tr>`
-		content += "<th>" + w.Tr("Entry") + "</th>"
-		content += "<th>" + w.Tr("Quantity") + "</th>"
-		content += `</tr>
+	content += "<th>" + w.Tr("Entry") + "</th>"
+	content += "<th>" + w.Tr("Quantity") + "</th>"
+	content += `</tr>
     </thead>
     <tbody>`
-		content += "<tr>\n        <td>" + w.Tr("Document") + "</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddDocument") + "</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("Category") + "</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("SinglePage") + "</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("FriendlyLink") + "</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddMessage") + "</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddComment") + "</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddUser") + "</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("BackstageLogin") + "</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("BackstageOperation") + "</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
-		content += `
+	content += "<tr>\n        <td>" + w.Tr("Document") + "</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddDocument") + "</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("Category") + "</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("SinglePage") + "</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("FriendlyLink") + "</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddMessage") + "</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddComment") + "</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddUser") + "</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("BackstageLogin") + "</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("BackstageOperation") + "</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
+	content += `
     </tbody>
   </table>
 </body>
 
 </html>`
 
-		// 不记录错误
-		_ = w.sendMail(subject, content, nil, true, false)
-	}
+	// 不记录错误
+	_ = w.SendMail(subject, content, nil)
 }
 
 func calcSpider(data map[string]int) int64 {
@@ -454,4 +740,11 @@ func calcSpider(data map[string]int) int64 {
 	}
 
 	return int64(count)
+}
+
+// shop count cache
+type CachedShopCount struct {
+	mu             sync.Mutex
+	Counts         model.ShopCount
+	lastStoredTime int64
 }

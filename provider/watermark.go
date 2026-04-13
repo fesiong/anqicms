@@ -1,26 +1,27 @@
 package provider
 
 import (
+	"bytes"
 	"encoding/base64"
 	"errors"
-	"fmt"
+	"image"
+	"image/color"
+	"image/draw"
+	"log"
+	"math/rand"
+	"os"
+	"path/filepath"
+	"time"
+
 	"github.com/disintegration/imaging"
 	"github.com/golang/freetype"
 	"github.com/golang/freetype/truetype"
 	"golang.org/x/image/font"
 	"golang.org/x/image/math/fixed"
 	"golang.org/x/image/webp"
-	"image"
-	"image/color"
-	"image/draw"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"log"
-	"math/rand"
-	"os"
-	"path/filepath"
-	"time"
 )
 
 type Watermark struct {
@@ -142,7 +143,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	if err != nil {
 		return err
 	}
-	_, err = w.UploadFile(attachment.FileLocation, buf)
+	_, err = w.UploadFile(attachment.FileLocation, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -161,7 +162,7 @@ func (w *Website) addWatermark(wm *Watermark, attachment *model.Attachment) erro
 	if err != nil {
 		return err
 	}
-	_, err = w.UploadFile(paths+"thumb_"+fileName, buf)
+	_, err = w.UploadFile(paths+"thumb_"+fileName, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -264,7 +265,7 @@ func (t *Watermark) DrawWatermarkPreview() string {
 
 func (t *Watermark) EncodeB64string(img image.Image) string {
 	buf, _, _ := encodeImage(img, "webp", config.DefaultQuality)
-	return fmt.Sprintf("data:%s;base64,%s", "image/webp", base64.StdEncoding.EncodeToString(buf))
+	return "data:image/webp;base64," + base64.StdEncoding.EncodeToString(buf)
 }
 
 // countLetter 计算字体宽度

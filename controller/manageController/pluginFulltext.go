@@ -38,6 +38,8 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	currentSite.PluginFulltext.EngineUrl = req.EngineUrl
 	currentSite.PluginFulltext.EngineUser = req.EngineUser
 	currentSite.PluginFulltext.EnginePass = req.EnginePass
+	currentSite.PluginFulltext.ContainLength = req.ContainLength
+	currentSite.PluginFulltext.RankingScore = req.RankingScore
 
 	err := currentSite.SaveSettingValue(provider.FulltextSettingKey, currentSite.PluginFulltext)
 	if err != nil {

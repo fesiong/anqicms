@@ -1,0 +1,51 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-4">
+        <div class="text-center mb-5">
+          <h1 class="fw-bold h2">Login</h1>
+        </div>
+
+        <form id="loginForm" onsubmit="return false;">
+          <div class="form-floating mb-3">
+            <input type="email" name="email" class="form-control border-dark" id="loginEmail" placeholder="name@example.com" required>
+            <label for="loginEmail">Email</label>
+          </div>
+          <div class="form-floating mb-2">
+            <input type="password" name="password" class="form-control border-dark" id="loginPassword" placeholder="Password" required>
+            <label for="loginPassword">Password</label>
+          </div>
+
+          <div class="text-start mb-4">
+            <a href="{% system with name='BaseUrl' %}/account/forgot-password.html" class="text-dark small text-decoration-underline">Forgot your password?</a>
+          </div>
+
+          <div class="d-grid gap-3 mb-4">
+            <button type="submit" class="btn btn-dark py-3">Login</button>
+
+            <div class="position-relative text-center my-2">
+              <hr class="bg-dark">
+              <span class="position-absolute top-50 start-50 translate-middle bg-white px-3 small text-muted">OR</span>
+            </div>
+
+            <button type="button" class="btn btn-outline-dark py-3 d-flex align-items-center justify-content-center gap-2 google-login-btn">
+              <svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">
+                <path d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908c1.702-1.567 2.684-3.874 2.684-6.615z" fill="#4285F4" />
+                <path d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z" fill="#34A853" />
+                <path d="M3.964 10.706c-.18-.54-.282-1.117-.282-1.706s.102-1.166.282-1.706V4.962H.957C.347 6.177 0 7.548 0 9s.348 2.823.957 4.038l3.007-2.332z" fill="#FBBC05" />
+                <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0 5.482 0 2.443 2.057.957 4.962L3.964 7.294C4.672 5.167 6.656 3.58 9 3.58z" fill="#EA4335" />
+              </svg>
+              <span>Continue with Google</span>
+            </button>
+
+            <a href="{% system with name='BaseUrl' %}/register" class="text-center text-dark small text-decoration-underline">Create account</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}

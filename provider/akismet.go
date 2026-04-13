@@ -4,15 +4,16 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/model"
 	"log"
 	"net/http"
 	"net/url"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 )
 
 const (
@@ -57,8 +58,11 @@ func (w *Website) InitAkismet() {
 		APIKey:    setting.ApiKey,
 		CheckType: setting.CheckType,
 	}
-
-	if err := c.VerifyKey(context.Background(), w.System.BaseUrl); err != nil {
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	if err := c.VerifyKey(context.Background(), frontUrl); err != nil {
 		log.Printf("Akismet api key verify error: %v", err)
 		w.AkismetClient = nil
 		return
@@ -89,8 +93,12 @@ func (w *Website) AkismentCheck(ctx iris.Context, checkType int, data interface{
 	if !ok {
 		return 1, false
 	}
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	var akiComment = &AkismentComment{
-		Blog:                w.System.BaseUrl,
+		Blog:                frontUrl,
 		UserIP:              ctx.RemoteAddr(),
 		UserAgent:           ctx.GetHeader("User-Agent"),
 		Referrer:            ctx.Request().Referer(),
@@ -106,6 +114,7 @@ func (w *Website) AkismentCheck(ctx iris.Context, checkType int, data interface{
 		if ok {
 			akiComment.CommentAuthor = comment.UserName
 			akiComment.CommentContent = comment.Content
+			akiComment.CommentAuthorEmail = comment.Email
 			if comment.UserId > 0 {
 				user, err := w.GetUserInfoById(comment.UserId)
 				if err == nil {

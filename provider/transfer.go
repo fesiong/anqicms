@@ -8,10 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"mime/multipart"
 	"net/url"
@@ -21,10 +17,16 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type TransferWebsite struct {
 	w        *Website
+	TargetId string `json:"target_id"` // 目标网站id
 	Name     string `json:"name"`
 	BaseUrl  string `json:"base_url"`
 	Token    string `json:"token"`
@@ -47,35 +49,38 @@ type TransferResult struct {
 }
 
 type ModuleData struct {
-	Id        uint                 `json:"id"`
-	TableName string               `json:"table_name"`
-	UrlToken  string               `json:"url_token"`
-	Title     string               `json:"title"`
-	Fields    []config.CustomField `json:"fields"`
-	IsSystem  int                  `json:"is_system"`
-	TitleName string               `json:"title_name"`
-	Status    uint                 `json:"status"`
+	Id             uint                 `json:"id"`
+	TableName      string               `json:"table_name"`
+	UrlToken       string               `json:"url_token"`
+	Title          string               `json:"title"`
+	Name           string               `json:"name"`
+	Fields         []config.CustomField `json:"fields"`
+	CategoryFields []config.CustomField `json:"category_fields"`
+	IsSystem       int                  `json:"is_system"`
+	TitleName      string               `json:"title_name"`
+	Status         uint                 `json:"status"`
 }
 
 type CategoryData struct {
-	Id             uint     `json:"id"`
-	Title          string   `json:"title"`
-	SeoTitle       string   `json:"seo_title"`
-	Keywords       string   `json:"keywords"`
-	Description    string   `json:"description"`
-	Content        string   `json:"content"`
-	ModuleId       uint     `json:"module_id"`
-	ParentId       uint     `json:"parent_id"`
-	Sort           uint     `json:"sort"`
-	Status         uint     `json:"status"`
-	Type           uint     `json:"type"`
-	Template       string   `json:"template"`
-	DetailTemplate string   `json:"detail_template"`
-	UrlToken       string   `json:"url_token"`
-	Images         []string `json:"images"`
-	Logo           string   `json:"logo"`
-	IsInherit      uint     `json:"is_inherit"`
-	CreatedTime    int64    `json:"created_time"`
+	Id             uint                   `json:"id"`
+	Title          string                 `json:"title"`
+	SeoTitle       string                 `json:"seo_title"`
+	Keywords       string                 `json:"keywords"`
+	Description    string                 `json:"description"`
+	Content        string                 `json:"content"`
+	ModuleId       uint                   `json:"module_id"`
+	ParentId       uint                   `json:"parent_id"`
+	Sort           uint                   `json:"sort"`
+	Status         uint                   `json:"status"`
+	Type           uint                   `json:"type"`
+	Template       string                 `json:"template"`
+	DetailTemplate string                 `json:"detail_template"`
+	UrlToken       string                 `json:"url_token"`
+	Images         []string               `json:"images"`
+	Logo           string                 `json:"logo"`
+	IsInherit      uint                   `json:"is_inherit"`
+	CreatedTime    int64                  `json:"created_time"`
+	Extra          map[string]interface{} `json:"extra"`
 }
 
 type TagData struct {
@@ -151,16 +156,21 @@ func (w *Website) GetTransferTask() *TransferWebsite {
 }
 
 func (w *Website) CreateTransferTask(website *request.TransferWebsite) (*TransferWebsite, error) {
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
 	w.transferWebsite = &TransferWebsite{
 		w:        w,
+		TargetId: website.TargetId,
 		Name:     website.Name,
-		BaseUrl:  strings.TrimRight(website.BaseUrl, "/"),
+		BaseUrl:  strings.TrimRight(frontUrl, "/"),
 		Token:    website.Token,
 		Provider: website.Provider,
 		Status:   0,
 	}
 	// 尝试链接文件
-	remoteUrl := w.transferWebsite.BaseUrl + "/" + w.transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms"
+	remoteUrl := frontUrl + "/" + w.transferWebsite.Provider + "2anqicms.php?a=config&from=anqicms&target_id=" + w.transferWebsite.TargetId
 	resp, err := library.Request(remoteUrl, &library.Options{Method: "POST", Type: "json", Data: w.transferWebsite})
 	if err != nil {
 		return nil, err
@@ -316,14 +326,20 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 		if !exist {
 			continue
 		}
+		name := result.Data[i].Name
+		if name == "" {
+			name = result.Data[i].Title
+		}
 		module := model.Module{
-			TableName: result.Data[i].TableName,
-			UrlToken:  result.Data[i].UrlToken,
-			Title:     result.Data[i].Title,
-			Fields:    result.Data[i].Fields,
-			IsSystem:  result.Data[i].IsSystem,
-			TitleName: result.Data[i].TitleName,
-			Status:    result.Data[i].Status,
+			TableName:      result.Data[i].TableName,
+			UrlToken:       result.Data[i].UrlToken,
+			Title:          result.Data[i].Title,
+			Name:           name,
+			Fields:         result.Data[i].Fields,
+			CategoryFields: result.Data[i].CategoryFields,
+			IsSystem:       result.Data[i].IsSystem,
+			TitleName:      result.Data[i].TitleName,
+			Status:         result.Data[i].Status,
 		}
 		module.Id = result.Data[i].Id
 		if module.UrlToken == "" {
@@ -331,7 +347,7 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 		}
 		t.w.DB.Save(&module)
 		module.Database = t.w.Mysql.Database
-		tplPath := fmt.Sprintf("%s/%s", t.w.GetTemplateDir(), module.TableName)
+		tplPath := t.w.GetTemplateDir() + "/" + module.TableName
 		module.Migrate(t.w.DB, tplPath, true)
 	}
 	t.w.DeleteCacheModules()
@@ -360,11 +376,18 @@ func (t *TransferWebsite) transferCategories() error {
 		return errors.New(result.Msg)
 	}
 	for i := range result.Data {
+		logo := strings.Replace(result.Data[i].Logo, t.BaseUrl, "", 1)
+		var images []string
+		for _, v := range result.Data[i].Images {
+			images = append(images, strings.Replace(v, t.BaseUrl, "", 1))
+		}
 		category := model.Category{
 			Title:       result.Data[i].Title,
 			SeoTitle:    result.Data[i].SeoTitle,
 			Keywords:    result.Data[i].Keywords,
 			UrlToken:    result.Data[i].UrlToken,
+			Logo:        logo,
+			Images:      images,
 			Description: result.Data[i].Description,
 			Content:     ParseContent(result.Data[i].Content),
 			ModuleId:    result.Data[i].ModuleId,
@@ -372,6 +395,7 @@ func (t *TransferWebsite) transferCategories() error {
 			Type:        config.CategoryTypeArchive,
 			Sort:        result.Data[i].Sort,
 			Status:      result.Data[i].Status,
+			Extra:       result.Data[i].Extra,
 		}
 		if utf8.RuneCountInString(category.Title) > 190 {
 			category.Title = string([]rune(category.Title)[:190])
@@ -572,15 +596,12 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
 			archive.Id = result.Data[i].Id
 			archive.UrlToken = t.w.VerifyArchiveUrlToken(archive.UrlToken, archive.Title, archive.Id)
-			// 先保存为草稿
-			t.w.DB.Save(&archive)
-			// 如果status == 1，则保存为正式表
 			if archive.Status == config.ContentStatusOK {
-				realArchive := &archive.Archive
 				// 保存到正式表
-				t.w.DB.Save(&realArchive)
-				// 并删除草稿
-				t.w.DB.Delete(&archive)
+				t.w.DB.Save(&archive.Archive)
+			} else {
+				// 保存为草稿
+				t.w.DB.Save(&archive)
 			}
 			// 保存内容表
 			archiveData := model.ArchiveData{
@@ -844,6 +865,11 @@ func (w *Website) insertAttachment(realName string, isImage int) {
 		return
 	}
 	md5Str := hex.EncodeToString(md5hash.Sum(nil))
+	exists2, _ := w.GetAttachmentByMd5(md5Str)
+	if exists2 != nil {
+		// 已存在，跳过
+		return
+	}
 
 	attachment := &model.Attachment{
 		FileName:     filepath.Base(fileLocation),
@@ -880,6 +906,7 @@ func (t *TransferWebsite) getWebData(transferType string, lastId int64, lastMod 
 	query.Set("from", "anqicms")
 	query.Set("_t", _t)
 	query.Set("token", library.Md5(t.Token+_t))
+	query.Set("target_id", t.TargetId)
 	query.Set("type", transferType)
 	query.Set("last_id", fmt.Sprintf("%d", lastId))
 	query.Set("last_mod", lastMod)

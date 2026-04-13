@@ -31,6 +31,27 @@ type Archive struct {
 	Sort         uint                   `json:"sort"`         // 数值越大，越靠前
 	Draft        bool                   `json:"draft"`        // 是否是存草稿
 	RelationIds  []int64                `json:"relation_ids"` // 相关文档的ID
+	// 产品的字段
+	OriginPrice    int64                `json:"origin_price"`
+	CostPrice      int64                `json:"cost_price"`
+	VideoUrl       string               `json:"video_url"`
+	NeedLogistics  bool                 `json:"need_logistics"`
+	IsFreeShipping bool                 `json:"is_free_shipping"`
+	SoldCount      int64                `json:"sold_count"`
+	ReviewCount    int64                `json:"review_count"`
+	OptionType     int                  `json:"option_type"`
+	Weight         float32              `json:"weight"`
+	WeightUnit     string               `json:"weight_unit"`
+	Skus           []*ArchiveSku        `json:"skus"`
+	Options        []*ArchiveOption     `json:"options"`
+	IsWholesale    bool                 `json:"is_wholesale"`
+	AllowOversold  bool                 `json:"allow_oversold"`
+	WholesaleRules []*WholesaleRule     `json:"wholesale_rules"`
+	HasOrderFields bool                 `json:"has_order_fields"`
+	OrderFields    []config.CustomField `json:"order_fields,omitempty"`
+	MinQuantity    int                  `json:"min_quantity"`  // 最小购买数量
+	MaxQuantity    int                  `json:"max_quantity"`  // 最大购买数量
+	StepQuantity   int                  `json:"step_quantity"` // 购买数量步长
 
 	// 是否强制保存
 	ForceSave  bool   `json:"force_save"`
@@ -41,6 +62,53 @@ type Archive struct {
 	OriginUrl   string `json:"origin_url"`
 	OriginTitle string `json:"origin_title"`
 	ContentText string `json:"-"`
+}
+
+type ArchiveSku struct {
+	Id          int64                `json:"id"`
+	ArchiveId   int64                `json:"archive_id"`
+	Title       string               `json:"title"`     // sku 组合名字
+	UrlToken    string               `json:"url_token"` // sku的token
+	Sku         string               `json:"sku"`       // sku 货号
+	Barcode     string               `json:"barcode"`   //  条形码
+	HsCode      string               `json:"hs_code"`   //  海关编码
+	Images      []string             `json:"images"`
+	Stock       int64                `json:"stock"`
+	Price       int64                `json:"price"`
+	OriginPrice int64                `json:"origin_price"` // 原始价格
+	CostPrice   int64                `json:"cost_price"`   // 成本价
+	Weight      float32              `json:"weight"`       // 重量
+	WeightUnit  string               `json:"weight_unit"`
+	Values      []ArchiveOptionValue `json:"values"`
+}
+
+type ArchiveOptionValue struct {
+	Id          int64    `json:"id"`
+	ArchiveId   int64    `json:"archive_id"`
+	OptionId    int64    `json:"option_id"`
+	Title       string   `json:"title"`
+	Color       string   `json:"color"`
+	Images      []string `json:"images"`
+	Price       int64    `json:"price"` // 加价，sku加价模式使用
+	IsDefault   bool     `json:"is_default"`
+	OptionTitle string   `json:"option_title"`
+}
+
+type ArchiveOption struct {
+	Id          int64                 `json:"id"`
+	ArchiveId   int64                 `json:"archive_id"`
+	Title       string                `json:"title"`
+	IsMain      uint                  `json:"is_main"`      // 是否主规格
+	IsAttribute bool                  `json:"is_attribute"` // 是否是属性，属性不参与sku计算
+	Values      []*ArchiveOptionValue `json:"values"`
+}
+
+type WholesaleRule struct {
+	Id           int64 `json:"id"`
+	ArchiveId    int64 `json:"archive_id"`
+	MinQuantity  int   `json:"min_quantity"`
+	MaxQuantity  int   `json:"max_quantity"`
+	DiscountRate int   `json:"discount_rate"`
 }
 
 type ArchiveImageDeleteRequest struct {
@@ -86,4 +154,10 @@ type QuickImportArchiveRequest struct {
 	InsertImage     int      `form:"insert_image"`    // 0 不插入，1不插入，2 自定义插入图片 3 从图片分类里插入
 	Images          []string `form:"images[]"`
 	ImageCategoryId int      `form:"image_category_id"`
+}
+
+type ArchiveFavoriteRequest struct {
+	ArchiveId  int64   `json:"archive_id"`
+	SkuId      int64   `json:"sku_id"`
+	ArchiveIds []int64 `json:"archive_ids"`
 }

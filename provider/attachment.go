@@ -6,9 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/h2non/filetype"
-	"github.com/parnurzeal/gorequest"
-	"golang.org/x/image/webp"
 	"image"
 	"image/color"
 	"image/draw"
@@ -16,11 +13,6 @@ import (
 	"image/jpeg"
 	"image/png"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"math"
 	"math/rand"
@@ -33,6 +25,15 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/h2non/filetype"
+	"github.com/parnurzeal/gorequest"
+	"golang.org/x/image/webp"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 // imageMagickPath 检测Imagemagick是否可用
@@ -99,13 +100,6 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	} else if exists != nil {
 		attachment = exists
 		// 已存在
-		if attachment.DeletedAt.Valid {
-			//更新
-			err = db.Unscoped().Model(attachment).Update("deleted_at", nil).Error
-			if err != nil {
-				return nil, err
-			}
-		}
 		// 如果更换了分类
 		if categoryId > 0 && attachment.CategoryId != categoryId {
 			db.Model(attachment).UpdateColumn("category_id", categoryId)
@@ -137,9 +131,8 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	// 不是图片的时候的处理方法
 	if isImage != 1 {
-		bts, _ := io.ReadAll(file)
-		fileSize = int64(len(bts))
-		_, err = w.UploadFile(filePath+tmpName, bts)
+		fileSize = info.Size
+		_, err = w.UploadFile(filePath+tmpName, file)
 		if err != nil {
 			return nil, err
 		}
@@ -261,7 +254,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	fileSize = int64(len(buf))
 
 	// 上传原图
-	_, err = w.UploadFile(filePath+tmpName, buf)
+	_, err = w.UploadFile(filePath+tmpName, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
@@ -273,10 +266,10 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		args := []string{"-coalesce", "-resize"}
 		if w.Content.ThumbCrop == 0 {
 			// 等比缩放
-			args = append(args, fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+			args = append(args, strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight))
 		} else if w.Content.ThumbCrop == 1 {
 			// 补白
-			args = append(args, fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight), "-background", "white", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+			args = append(args, strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight), "-background", "white", "-extent", strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight))
 		} else {
 			// 裁剪
 			args = append(args, fmt.Sprintf("%dx%d^", w.Content.ThumbWidth, w.Content.ThumbHeight), "-gravity", "center", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
@@ -295,7 +288,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	// 上传缩略图
-	_, err = w.UploadFile(filePath+thumbName, buf)
+	_, err = w.UploadFile(filePath+thumbName, bytes.NewReader(buf))
 	if err != nil {
 		return nil, err
 	}
@@ -325,7 +318,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	return attachment, nil
 }
 
-func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attachment, error) {
+func (w *Website) DownloadRemoteImage(src string, fileName string, replaceId uint) (*model.Attachment, error) {
 	resp, body, errs := gorequest.New().Set("referer", src).Timeout(15 * time.Second).Get(src).EndBytes()
 	if errs == nil {
 		//处理
@@ -353,7 +346,7 @@ func (w *Website) DownloadRemoteImage(src string, fileName string) (*model.Attac
 				Size:     int64(len(body)),
 			}
 
-			return w.AttachmentUpload(tmpfile, fileHeader, 0, 0, 0)
+			return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
 		} else {
 			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}
@@ -367,6 +360,19 @@ func (w *Website) GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
 	var attach model.Attachment
 
 	if err := db.Unscoped().Where("`file_md5` = ?", md5).First(&attach).Error; err != nil {
+		return nil, err
+	}
+
+	attach.GetThumb(w.PluginStorage.StorageUrl)
+
+	return &attach, nil
+}
+
+func (w *Website) GetAttachmentByFileLocation(fileLocation string) (*model.Attachment, error) {
+	db := w.DB
+	var attach model.Attachment
+
+	if err := db.Unscoped().Where("`file_location` = ?", fileLocation).First(&attach).Error; err != nil {
 		return nil, err
 	}
 
@@ -480,7 +486,7 @@ func (w *Website) BuildThumb(fileLocation string) error {
 	newImg := library.ThumbnailCrop(w.Content.ThumbWidth, w.Content.ThumbHeight, img, w.Content.ThumbCrop)
 	buf, _, _ := encodeImage(newImg, imgType, quality)
 
-	_, err = w.UploadFile(thumbPath, buf)
+	_, err = w.UploadFile(thumbPath, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -729,9 +735,11 @@ func (w *Website) StartConvertImageToWebp() {
 				w.Contact.Qrcode = results[x].To
 				update = true
 			}
-			if w.Content.DefaultThumb == results[x].From {
-				w.Content.DefaultThumb = results[x].To
-				update = true
+			for i := range w.Content.DefaultThumbs {
+				if w.Content.DefaultThumbs[i] == results[x].From {
+					w.Content.DefaultThumbs[i] = results[x].To
+					update = true
+				}
 			}
 		}
 		if update {
@@ -772,7 +780,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.UploadFile(newFile, buf)
+	_, err = w.UploadFile(newFile, bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -795,7 +803,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 	if err != nil {
 		return err
 	}
-	_, err = w.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), buf)
+	_, err = w.UploadFile(strings.TrimPrefix(newThumbPath, w.PublicPath), bytes.NewReader(buf))
 	if err != nil {
 		return err
 	}
@@ -851,11 +859,6 @@ func (w *Website) AttachmentScanUploads(baseDir string) {
 			var exist model.Attachment
 			err = w.DB.Unscoped().Model(&model.Attachment{}).Where("`file_location` = ?", fileLocation).Take(&exist).Error
 			if err == nil {
-				// 如果文件呗删了，则需要更新状态
-				if exist.DeletedAt.Valid {
-					//更新
-					w.DB.Unscoped().Model(&exist).Update("deleted_at", nil)
-				}
 				continue
 			}
 			md5Str, err := library.Md5File(name)

@@ -1,15 +1,16 @@
 package manageController
 
 import (
-	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"os"
-	"strings"
-	"time"
 )
 
 func SettingSystem(ctx iris.Context) {
@@ -28,7 +29,7 @@ func SettingSystem(ctx iris.Context) {
 
 	// 读取language列表
 	var languages []string
-	readerInfos, err := os.ReadDir(fmt.Sprintf("%slocales", config.ExecPath))
+	readerInfos, err := os.ReadDir(config.ExecPath + "/locales")
 	if err == nil {
 		for _, info := range readerInfos {
 			if info.IsDir() {
@@ -79,6 +80,9 @@ func SettingSystemForm(ctx iris.Context) {
 		}
 	}
 	req.BaseUrl = strings.TrimRight(req.BaseUrl, "/")
+	if req.FrontUrl != "" {
+		req.FrontUrl = strings.TrimRight(req.FrontUrl, "/")
+	}
 	currentSite.System.SiteName = req.SiteName
 	currentSite.System.SiteLogo = req.SiteLogo
 	currentSite.System.SiteIcp = req.SiteIcp
@@ -93,6 +97,7 @@ func SettingSystemForm(ctx iris.Context) {
 		currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
 	}
 	currentSite.System.BaseUrl = req.BaseUrl
+	currentSite.System.FrontUrl = req.FrontUrl
 	currentSite.System.MobileUrl = req.MobileUrl
 	currentSite.System.Language = req.Language
 	currentSite.System.ExtraFields = req.ExtraFields
@@ -109,7 +114,14 @@ func SettingSystemForm(ctx iris.Context) {
 		currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
 	}
 
-	currentSite.UpdatePaypalWebhook()
+	accounts := currentSite.GetPaymentAccounts(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("pay_way = ? and status = 1", config.PayWayPaypal)
+	})
+	if len(accounts) > 0 {
+		for _, account := range accounts {
+			currentSite.UpdatePaypalWebhook(account)
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 
@@ -129,8 +141,11 @@ func SettingSystemForm(ctx iris.Context) {
 func SettingContent(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Content
-	if system.DefaultThumb != "" && !strings.HasPrefix(system.DefaultThumb, "http") && !strings.HasPrefix(system.DefaultThumb, "//") {
-		system.DefaultThumb = currentSite.PluginStorage.StorageUrl + system.DefaultThumb
+
+	for i := range system.DefaultThumbs {
+		if !strings.HasPrefix(system.DefaultThumbs[i], "http") && !strings.HasPrefix(system.DefaultThumbs[i], "//") {
+			system.DefaultThumbs[i] = currentSite.PluginStorage.StorageUrl + system.DefaultThumbs[i]
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -156,7 +171,9 @@ func SettingContentForm(ctx iris.Context) {
 		needUpgrade = true
 	}
 
-	req.DefaultThumb = strings.TrimPrefix(req.DefaultThumb, currentSite.PluginStorage.StorageUrl)
+	for i := range req.DefaultThumbs {
+		req.DefaultThumbs[i] = strings.TrimPrefix(req.DefaultThumbs[i], currentSite.PluginStorage.StorageUrl)
+	}
 
 	currentSite.Content.RemoteDownload = req.RemoteDownload
 	currentSite.Content.FilterOutlink = req.FilterOutlink
@@ -172,6 +189,9 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.ThumbWidth = req.ThumbWidth
 	currentSite.Content.ThumbHeight = req.ThumbHeight
 	currentSite.Content.DefaultThumb = req.DefaultThumb
+	currentSite.Content.DefaultThumbType = req.DefaultThumbType
+	currentSite.Content.DefaultThumbs = req.DefaultThumbs
+	currentSite.Content.ThumbCategoryId = req.ThumbCategoryId
 	currentSite.Content.Editor = req.Editor
 	currentSite.Content.MaxPage = req.MaxPage
 	currentSite.Content.MaxLimit = req.MaxLimit
@@ -260,6 +280,9 @@ func SettingContact(ctx iris.Context) {
 	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") && !strings.HasPrefix(system.Qrcode, "//") {
 		system.Qrcode = currentSite.PluginStorage.StorageUrl + system.Qrcode
 	}
+	if system.ShopLogo != "" && !strings.HasPrefix(system.ShopLogo, "http") && !strings.HasPrefix(system.ShopLogo, "//") {
+		system.ShopLogo = currentSite.PluginStorage.StorageUrl + system.ShopLogo
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -280,6 +303,7 @@ func SettingContactForm(ctx iris.Context) {
 	}
 
 	req.Qrcode = strings.TrimPrefix(req.Qrcode, currentSite.PluginStorage.StorageUrl)
+	req.ShopLogo = strings.TrimPrefix(req.ShopLogo, currentSite.PluginStorage.StorageUrl)
 
 	if req.ExtraFields != nil {
 		for i := range req.ExtraFields {
@@ -303,6 +327,13 @@ func SettingContactForm(ctx iris.Context) {
 	currentSite.Contact.Instagram = req.Instagram
 	currentSite.Contact.Youtube = req.Youtube
 	currentSite.Contact.ExtraFields = req.ExtraFields
+	currentSite.Contact.ShopName = req.ShopName
+	currentSite.Contact.ShopLogo = req.ShopLogo
+	currentSite.Contact.ShopDescription = req.ShopDescription
+	currentSite.Contact.BusinessHours = req.BusinessHours
+	currentSite.Contact.DeliveryLocation = req.DeliveryLocation
+	currentSite.Contact.ShippingTime = req.ShippingTime
+	currentSite.Contact.ShippingTimeRemark = req.ShippingTimeRemark
 
 	err := currentSite.SaveSettingValue(provider.ContactSettingKey, currentSite.Contact)
 	if err != nil {
@@ -442,7 +473,7 @@ func SettingDiyField(ctx iris.Context) {
 
 func SettingDiyFieldForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req []config.ExtraField
+	var req []config.CustomField
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -604,6 +635,9 @@ func SettingBannerForm(ctx iris.Context) {
 		})
 		return
 	}
+	if req.Type == "" {
+		req.Type = "default"
+	}
 	req.Logo = strings.TrimPrefix(req.Logo, currentSite.PluginStorage.StorageUrl)
 	if req.Id == 0 {
 		var exist bool
@@ -677,5 +711,47 @@ func SettingMigrateDB(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("DatabaseTableUpdated"),
+	})
+}
+
+func SettingCurrency(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": currentSite.Currency,
+	})
+}
+
+func SettingCurrencyForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req config.CurrencyConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.Currency.Name = req.Name
+	currentSite.Currency.Currency = req.Currency
+	currentSite.Currency.Symbol = req.Symbol
+
+	err := currentSite.SaveSettingValue(provider.CurrencySettingKey, currentSite.Currency)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

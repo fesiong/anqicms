@@ -1,10 +1,11 @@
 package crond
 
 import (
-	"github.com/robfig/cron/v3"
-	"kandaoni.com/anqicms/provider"
 	"math/rand"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"kandaoni.com/anqicms/provider"
 )
 
 var crontab *cron.Cron
@@ -37,6 +38,8 @@ func dailyTask() {
 	CleanArchives()
 	// 每天检查VIP
 	CleanUserVip()
+	// 同步 brevo 数据
+	SyncBrevo()
 }
 
 func daily8HourTask() {
@@ -51,13 +54,17 @@ func hourlyTask() {
 	startDigKeywords()
 	// 每小时检查一次账号状态
 	CheckAuthValid()
-	// 每小时统计一次统计数据
-	calcStatistics()
+	// 取消活动
+	UpdateActivities()
+	// 检查购物车，订单
+	CheckCartAndOrders()
 }
 
 func hourly10MinuteTask() {
 	// 每十分钟检查一次采集
 	CollectArticles()
+	// 每十分钟统计一次统计数据
+	calcStatistics()
 }
 
 func minutelyTask() {
@@ -71,6 +78,8 @@ func minutelyTask() {
 	UpdateTimeFactor()
 	// 每分钟检查一次 AI文章计划
 	AiArticlePlan()
+	// 优惠券过期
+	CouponExpire()
 }
 
 func startDigKeywords() {
@@ -105,11 +114,16 @@ func calcStatistics() {
 
 func PublishPlanContents() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.PublishPlanArchives()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.PublishPlanArchives()
+		}(w)
 	}
 }
 
@@ -125,11 +139,17 @@ func CleanArchives() {
 
 func CollectArticles() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.CollectArticles()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			go w2.AiGenerateArticles()
+			w2.CollectArticles()
+		}(w)
 	}
 }
 
@@ -153,6 +173,26 @@ func CheckWithdrawToWechat() {
 	}
 }
 
+func CouponExpire() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckCouponCodeExpire()
+	}
+}
+
+func UpdateActivities() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckActivities()
+	}
+}
+
 func AutoCheckOrders() {
 	websites := provider.GetWebsites()
 	for _, w := range websites {
@@ -160,6 +200,16 @@ func AutoCheckOrders() {
 			continue
 		}
 		w.AutoCheckOrders()
+	}
+}
+
+func CheckCartAndOrders() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckCartAndOrders()
 	}
 }
 
@@ -174,29 +224,39 @@ func CleanUserVip() {
 }
 
 func CheckAuthValid() {
-	rand.Seed(time.Now().UnixNano())
-	time.Sleep(time.Duration(rand.Intn(600)+1) * time.Second)
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	time.Sleep(time.Duration(rd.Intn(600)+1) * time.Second)
 	defaultSite := provider.CurrentSite(nil)
 	defaultSite.AnqiCheckLogin(false)
 }
 
 func UpdateTimeFactor() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.TryToRunTimeFactor()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.TryToRunTimeFactor()
+		}(w)
 	}
 }
 
 func AiArticlePlan() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.SyncAiArticlePlan()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.SyncAiArticlePlan()
+		}(w)
 	}
 }
 
@@ -207,5 +267,16 @@ func SendStatisticsMail() {
 			continue
 		}
 		w.SendStatisticsMail()
+	}
+}
+
+func SyncBrevo() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.SyncBrevo()
+		w.RecoverPurchase()
 	}
 }

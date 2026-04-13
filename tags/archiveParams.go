@@ -2,13 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+
 	"github.com/flosch/pongo2/v6"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
 )
 
 type tagArchiveParamsNode struct {
@@ -58,20 +59,15 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		id = int64(args["id"].Integer())
 		if archiveDetail == nil || archiveDetail.Id != id {
 			archiveDetail = currentSite.GetArchiveByIdFromCache(id)
-			if archiveDetail == nil {
-				archiveDetail, _ = currentSite.GetArchiveById(id)
-				if archiveDetail != nil {
-					// if read level larger than 0, then need to check permission
-					userId := uint(0)
-					userInfo, ok := ctx.Public["userInfo"].(*model.User)
-					if ok && userInfo.Id > 0 {
-						userId = userInfo.Id
-					}
-					userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
-					archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
-
-					currentSite.AddArchiveCache(archiveDetail)
+			if archiveDetail != nil {
+				// if read level larger than 0, then need to check permission
+				userId := uint(0)
+				userInfo, ok := ctx.Public["userInfo"].(*model.User)
+				if ok && userInfo.Id > 0 {
+					userId = userInfo.Id
 				}
+				userGroup, _ := ctx.Public["userGroup"].(*model.UserGroup)
+				archiveDetail = currentSite.CheckArchiveHasOrder(userId, archiveDetail, userGroup)
 			}
 		}
 	}
@@ -79,7 +75,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if archiveDetail != nil {
 		archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 		if len(archiveParams) > 0 {
-			var extras = make(map[string]model.CustomField, len(archiveParams))
+			var extras = make(map[string]config.CustomField, len(archiveParams))
 			for i := range archiveParams {
 				param := *archiveParams[i]
 				if (param.Value == nil || param.Value == "" || param.Value == 0) &&
@@ -92,7 +88,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 					continue
 				}
 				if param.Type == config.CustomFieldTypeEditor && render {
-					param.Value = library.MarkdownToHTML(fmt.Sprintf("%v", param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
+					param.Value = library.MarkdownToHTML(fmt.Sprint(param.Value), currentSite.System.BaseUrl, currentSite.Content.FilterOutlink)
 				} else if param.Type == config.CustomFieldTypeArchive {
 					// 列表
 					arcIds, ok := param.Value.([]int64)
@@ -124,7 +120,7 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				extras[i] = param
 			}
 			if sorted {
-				var extraFields []model.CustomField
+				var extraFields []config.CustomField
 				module := currentSite.GetModuleFromCache(archiveDetail.ModuleId)
 				if module != nil && len(module.Fields) > 0 {
 					for _, v := range module.Fields {

@@ -1,27 +1,31 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/medivhzhan/weapp/v3"
-	"golang.org/x/image/webp"
-	"gorm.io/gorm"
-	"gorm.io/gorm/clause"
 	"image"
-	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"google.golang.org/api/oauth2/v2"
+	"google.golang.org/api/option"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/medivhzhan/weapp/v3"
+	"golang.org/x/image/webp"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetUserList(ops func(tx *gorm.DB) *gorm.DB, page, pageSize int) ([]*model.User, int64) {
@@ -32,7 +36,7 @@ func (w *Website) GetUserList(ops func(tx *gorm.DB) *gorm.DB, page, pageSize int
 	if ops != nil {
 		tx = ops(tx)
 	} else {
-		tx = tx.Order("id desc")
+		tx = tx.Order("users.id desc")
 	}
 	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&users)
 	if len(users) > 0 {
@@ -124,8 +128,13 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 		user = &model.User{}
 	}
 
+	oldGroupId := user.GroupId
+
 	user.UserName = req.UserName
 	user.RealName = req.RealName
+	user.FirstName = req.FirstName
+	user.LastName = req.LastName
+	user.Birthday = req.Birthday
 	user.AvatarURL = req.AvatarURL
 	user.Introduce = req.Introduce
 	user.Phone = req.Phone
@@ -147,6 +156,15 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 	}
 
 	err = w.DB.Save(user).Error
+	if req.Id == 0 {
+		w.ProcessNewUser(user)
+	}
+	// 判断订阅
+	subscriber, err2 := w.GetSubscriberByEmail(req.Email)
+	if err2 == nil {
+		// 添加订阅
+		w.DB.Model(&model.Subscriber{}).Where("id = ?", subscriber.Id).UpdateColumn("user_id", int64(user.Id))
+	}
 	//extra
 	extraFields := map[string]interface{}{}
 	if len(w.PluginUser.Fields) > 0 {
@@ -179,6 +197,10 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 							buf, _ := json.Marshal(val)
 							extraFields[v.FieldName] = string(buf)
 						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(extraValue["value"])
+						extraFields[v.FieldName] = string(buf)
 					} else {
 						value, ok := extraValue["value"].(string)
 						if ok {
@@ -208,6 +230,17 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 		//入库
 		w.DB.Model(model.User{}).Where("`id` = ?", user.Id).Updates(extraFields)
 	}
+
+	// 发送用户组变更邮件
+	if oldGroupId > 0 && oldGroupId != user.GroupId {
+		oldGroup, err := w.GetUserGroupInfo(oldGroupId)
+		if err == nil {
+			newGroup, _ := w.GetUserGroupInfo(user.GroupId)
+			user.Group = newGroup
+			w.SendUserGroupChangeEmail(user, oldGroup)
+		}
+	}
+
 	return err
 }
 
@@ -222,6 +255,44 @@ func (w *Website) DeleteUserInfo(userId uint) error {
 	err = w.DB.Delete(&user).Error
 
 	return err
+}
+
+func (w *Website) UpdateUserBalance(req *request.ApiUserBalanceRequest) error {
+	var user model.User
+	err := w.DB.Where("`id` = ?", req.UserId).Take(&user).Error
+
+	if err != nil {
+		return err
+	}
+
+	tx := w.DB.Begin()
+	//生成用户支付记录
+	err = tx.Model(user).Where("id = ?", user.Id).UpdateColumn("balance", gorm.Expr("`balance` + ?", req.Amount)).Error
+	if err != nil {
+		tx.Rollback()
+		return err
+	}
+	var userBalance int64
+	tx.Model(&model.User{}).Where("`id` = ?", req.UserId).Pluck("balance", &userBalance)
+	//状态更改了，增加一条记录到用户
+	finance := model.Finance{
+		UserId:      req.UserId,
+		Direction:   config.FinanceIncome,
+		Amount:      req.Amount,
+		AfterAmount: userBalance,
+		Action:      config.FinanceActionCharge,
+		Remark:      req.Remark,
+		Status:      1,
+	}
+	err = tx.Create(&finance).Error
+	if err != nil {
+		tx.Rollback()
+
+		return err
+	}
+	tx.Commit()
+
+	return nil
 }
 
 func (w *Website) GetUserGroups() []*model.UserGroup {
@@ -326,14 +397,17 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if req.UserName == "" || req.Password == "" {
 		return nil, errors.New(w.Tr("PleaseFillInTheUsernameAndPasswordCorrectly"))
 	}
-	if w.PluginSendmail.SignupVerify && !w.VerifyEmailFormat(req.Email) {
-		return nil, errors.New(w.Tr("IncorrectEmail"))
-	}
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
-	_, err := w.GetUserInfoByUserName(req.UserName)
+	template, tplExist := w.GetEmailTemplateInfo("register")
+	exist, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil {
+		// 邮箱已存在，如果还没验证，则发送验证邮件
+		if !exist.EmailVerified && tplExist && template.Open {
+			_ = w.SendVerifyEmail(exist, "verify")
+			return exist, nil
+		}
 		return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
 	}
 	if req.Phone != "" {
@@ -352,7 +426,7 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		exist, err := w.GetUserInfoByEmail(req.Email)
 		if err == nil {
 			// 邮箱已存在，如果还没验证，则发送验证邮件
-			if !exist.EmailVerified && w.PluginSendmail.SignupVerify {
+			if !exist.EmailVerified && tplExist && template.Open {
 				_ = w.SendVerifyEmail(exist, "verify")
 				return exist, nil
 			}
@@ -368,15 +442,89 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		RealName:  req.RealName,
 		AvatarURL: req.AvatarURL,
 		ParentId:  req.InviteId,
+		FirstName: req.FirstName,
+		LastName:  req.LastName,
+		Birthday:  req.Birthday,
+		Introduce: req.Introduce,
 		Phone:     req.Phone,
 		Email:     req.Email,
 		GroupId:   w.PluginUser.DefaultGroupId,
-		Status:    1,
+		Status:    w.PluginUser.GetDefaultStatus(),
 	}
+	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
+	req.Password = strings.TrimSpace(req.Password)
 	user.EncryptPassword(req.Password)
 	w.DB.Save(&user)
 
-	if w.PluginSendmail.SignupVerify {
+	//extra
+	extraFields := map[string]interface{}{}
+	if len(w.PluginUser.Fields) > 0 {
+		for _, v := range w.PluginUser.Fields {
+			if req.Extra[v.FieldName] != nil {
+				extraValue, ok := req.Extra[v.FieldName]
+				if ok {
+					if v.Type == config.CustomFieldTypeCheckbox {
+						//只有这个类型的数据是数组,数组转成,分隔字符串
+						if val, ok := extraValue.([]interface{}); ok {
+							var val2 []string
+							for _, v2 := range val {
+								v2s, _ := v2.(string)
+								val2 = append(val2, v2s)
+							}
+							extraFields[v.FieldName] = strings.Join(val2, ",")
+						}
+					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
+						//只有这个类型的数据是数字，转成数字
+						extraFields[v.FieldName], _ = strconv.ParseInt(fmt.Sprint(extraValue), 10, 64)
+					} else if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive {
+						// 存 json
+						if val, ok := extraValue.([]interface{}); ok {
+							for j, v2 := range val {
+								v2s, ok2 := v2.(string)
+								if ok2 {
+									val[j] = w.ReplaceContentUrl(v2s, false)
+								}
+							}
+							buf, _ := json.Marshal(val)
+							extraFields[v.FieldName] = string(buf)
+						}
+					} else if v.Type == config.CustomFieldTypeTimeline {
+						// 存 json
+						buf, _ := json.Marshal(extraValue)
+						extraFields[v.FieldName] = string(buf)
+					} else {
+						value, ok := extraValue.(string)
+						if ok {
+							if v.Type == config.CustomFieldTypeImage || v.Type == config.CustomFieldTypeFile || v.Type == config.CustomFieldTypeEditor {
+								extraFields[v.FieldName] = w.ReplaceContentUrl(value, false)
+							} else {
+								extraFields[v.FieldName] = extraValue
+							}
+						} else {
+							extraFields[v.FieldName] = extraValue
+						}
+					}
+				}
+			} else {
+				if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
+					//只有这个类型的数据是数字，转成数字
+					extraFields[v.FieldName] = 0
+				} else {
+					extraFields[v.FieldName] = ""
+				}
+			}
+		}
+	}
+
+	//extra
+	if len(extraFields) > 0 {
+		//入库
+		w.DB.Model(model.User{}).Where("`id` = ?", user.Id).Updates(extraFields)
+	}
+
+	w.ProcessNewUser(&user)
+
+	if tplExist && template.Open && user.Email != "" {
 		_ = w.SendVerifyEmail(&user, "verify")
 		return &user, nil
 	}
@@ -417,11 +565,12 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 	if userErr != nil {
 		//系统没记录，则插入一条记录
 		user = &model.User{
-			UserName:  wecahtUserInfo.Nickname,
-			AvatarURL: wecahtUserInfo.Avatar,
-			ParentId:  req.InviteId,
-			GroupId:   w.PluginUser.DefaultGroupId,
-			Status:    1,
+			UserName:      wecahtUserInfo.Nickname,
+			AvatarURL:     wecahtUserInfo.Avatar,
+			ParentId:      req.InviteId,
+			GroupId:       w.PluginUser.DefaultGroupId,
+			ResetPassword: true,
+			Status:        w.PluginUser.GetDefaultStatus(),
 		}
 
 		err = w.DB.Save(user).Error
@@ -446,6 +595,8 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 			w.DB.Delete(user)
 			return nil, err
 		}
+
+		w.ProcessNewUser(user)
 
 		go w.DownloadAvatar(userWechat.AvatarURL, user)
 	} else {
@@ -490,15 +641,18 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 	var user *model.User
 	if userWechat.UserId == 0 {
 		user = &model.User{
-			UserName:  userWechat.Nickname,
-			AvatarURL: userWechat.AvatarURL,
-			GroupId:   w.PluginUser.DefaultGroupId,
-			Password:  "",
-			Status:    1,
+			UserName:      userWechat.Nickname,
+			AvatarURL:     userWechat.AvatarURL,
+			GroupId:       w.PluginUser.DefaultGroupId,
+			Password:      "",
+			ResetPassword: true,
+			Status:        w.PluginUser.GetDefaultStatus(),
 		}
 		w.DB.Save(user)
 		userWechat.UserId = user.Id
 		w.DB.Save(userWechat)
+
+		w.ProcessNewUser(user)
 	} else {
 		user, err = w.GetUserInfoById(userWechat.UserId)
 		if err != nil {
@@ -529,43 +683,37 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		return nil, err
 	}
 	client := googleCfg.Client(ctx, tok)
-	userinfo, err := client.Get("https://www.googleapis.com/oauth2/v3/userinfo")
-	if err != nil {
-		log.Println(err)
-		return nil, err
-	}
-	defer userinfo.Body.Close()
-
-	data, err := io.ReadAll(userinfo.Body)
-	if err != nil {
-		return nil, err
-	}
-	var googleUser GoogleUser
-	if err = json.Unmarshal(data, &googleUser); err != nil {
-		log.Println(err)
-		return nil, err
-	}
+	oauth2Service, err := oauth2.NewService(context.Background(), option.WithHTTPClient(client))
+	userInfo, err := oauth2Service.Userinfo.Get().Do()
 	// 直接对接 users 表的 email
-	user, err := w.GetUserInfoByEmail(googleUser.Email)
+	user, err := w.GetUserInfoByEmail(userInfo.Email)
 	if err != nil {
 		// 用户不存在，新建
 		user = &model.User{
-			Email:         googleUser.Email,
-			EmailVerified: googleUser.EmailVerified,
-			UserName:      googleUser.Name,
-			AvatarURL:     googleUser.Picture,
+			Email:         userInfo.Email,
+			EmailVerified: *userInfo.VerifiedEmail,
+			UserName:      userInfo.Name,
+			AvatarURL:     userInfo.Picture,
+			GoogleId:      userInfo.Id,
 			GroupId:       w.PluginUser.DefaultGroupId,
 			Password:      "",
-			Status:        1,
-			Introduce:     googleUser.Profile,
+			ResetPassword: true,
+			Status:        w.PluginUser.GetDefaultStatus(),
 		}
-		if googleUser.GivenName != "" {
-			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		if userInfo.GivenName != "" {
+			user.RealName = userInfo.GivenName + " " + userInfo.FamilyName
 		}
 		w.DB.Save(user)
+		w.ProcessNewUser(user)
 	} else {
-		user.UserName = googleUser.Name
-		user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
+		user.GoogleId = userInfo.Id
+		user.UserName = userInfo.Name
+		if userInfo.GivenName != "" {
+			user.RealName = userInfo.GivenName + " " + userInfo.FamilyName
+		}
+		if user.AvatarURL == "" {
+			user.AvatarURL = userInfo.Picture
+		}
 		w.DB.Save(user)
 	}
 	if req.InviteId > 0 && user.ParentId == 0 {
@@ -609,7 +757,8 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 	user.Token = w.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(w.DB)
 	// 如果要验证邮箱，并且没完成验证，则发送验证邮件
-	if w.PluginSendmail.SignupVerify && !user.EmailVerified {
+	template, tplExist := w.GetEmailTemplateInfo("register")
+	if user.Email != "" && !user.EmailVerified && tplExist && template.Open {
 		_ = w.SendVerifyEmail(&user, "verify")
 	}
 	return &user, nil
@@ -635,7 +784,7 @@ func (w *Website) DownloadAvatar(avatarUrl string, userInfo *model.User) {
 	//生成用户文件
 	tmpName := fmt.Sprintf("%010d.jpg", userInfo.Id)
 	filePath := fmt.Sprintf("/uploads/avatar/%s/%s/%s", tmpName[:3], tmpName[3:6], tmpName[6:])
-	attach, err := w.DownloadRemoteImage(avatarUrl, filePath)
+	attach, err := w.DownloadRemoteImage(avatarUrl, filePath, 0)
 	if err != nil {
 		return
 	}
@@ -672,22 +821,24 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 		return err
 	}
 
-	exist, err := w.GetUserInfoByUserName(req.UserName)
-	if err == nil && exist.Id != user.Id {
-		return errors.New(w.Tr("TheUsernameHasBeenRegistered"))
+	if req.UserName != "" {
+		exist, err := w.GetUserInfoByUserName(req.UserName)
+		if err == nil && exist.Id != user.Id {
+			return errors.New(w.Tr("TheUsernameHasBeenRegistered"))
+		}
 	}
 
-	if user.Phone != "" {
-		req.Phone = ""
-	}
-	if user.Email != "" {
-		req.Email = ""
-	}
+	// if user.Phone != "" {
+	// 	req.Phone = ""
+	// }
+	// if user.Email != "" {
+	// 	req.Email = ""
+	// }
 	if req.Phone != "" {
-		if !w.VerifyCellphoneFormat(req.Phone) {
-			return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
-		}
-		exist, err = w.GetUserInfoByPhone(req.Phone)
+		// if !w.VerifyCellphoneFormat(req.Phone) {
+		// 	return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
+		// }
+		exist, err := w.GetUserInfoByPhone(req.Phone)
 		if err == nil && exist.Id != user.Id {
 			return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
 		}
@@ -697,15 +848,30 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 		if !w.VerifyEmailFormat(req.Email) {
 			return errors.New(w.Tr("IncorrectEmail"))
 		}
-		exist, err = w.GetUserInfoByEmail(req.Email)
+		exist, err := w.GetUserInfoByEmail(req.Email)
 		if err == nil && exist.Id != user.Id {
 			return errors.New(w.Tr("TheEmailHasBeenRegistered"))
 		}
 		user.Email = req.Email
 	}
-	user.UserName = req.UserName
-	user.RealName = req.RealName
-	user.Introduce = req.Introduce
+	if req.UserName != "" {
+		user.UserName = req.UserName
+	}
+	if req.RealName != "" {
+		user.RealName = req.RealName
+	}
+	if req.FirstName != "" {
+		user.FirstName = req.FirstName
+	}
+	if req.LastName != "" {
+		user.LastName = req.LastName
+	}
+	if req.FirstName != "" && req.LastName != "" && user.RealName == "" {
+		user.RealName = req.FirstName + " " + req.LastName
+	}
+	if req.Introduce != "" {
+		user.Introduce = req.Introduce
+	}
 	if user.GroupId == 0 {
 		user.GroupId = w.PluginUser.DefaultGroupId
 	}
@@ -725,10 +891,11 @@ func (w *Website) CleanUserVip() {
 		return
 	}
 	w.DB.Model(&model.User{}).Where("`status` = 1 and `group_id` != ? and `expire_time` < ?", group.Id, time.Now().Unix()).UpdateColumn("group_id", group.Id)
+	// todo
 }
 
 func (w *Website) GetUserDiscount(userId uint, user *model.User) int64 {
-	if user == nil {
+	if user == nil && userId > 0 {
 		user, _ = w.GetUserInfoById(userId)
 	}
 	if user != nil {
@@ -787,10 +954,11 @@ func (w *Website) DeleteUserField(fieldName string) error {
 	return err
 }
 
-func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
+func (w *Website) GetUserExtra(id uint) map[string]*config.CustomField {
 	//读取extra
 	result := map[string]interface{}{}
-	extraFields := map[string]model.CustomField{}
+	// 从数据库中取出来
+	extraFields := map[string]*config.CustomField{}
 	var fields []string
 	for _, v := range w.PluginUser.Fields {
 		fields = append(fields, "`"+v.FieldName+"`")
@@ -815,11 +983,15 @@ func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 						result[v.FieldName] = images
 					}
 				} else if v.Type == config.CustomFieldTypeTexts {
-					var texts []model.CustomFieldTexts
+					var texts []config.CustomFieldTexts
 					err := json.Unmarshal([]byte(value), &texts)
 					if err == nil {
 						result[v.FieldName] = texts
 					}
+				} else if v.Type == config.CustomFieldTypeTimeline {
+					var val config.TimelineField
+					_ = json.Unmarshal([]byte(value), &val)
+					result[v.FieldName] = val
 				} else if v.Type == config.CustomFieldTypeArchive {
 					var arcIds []int64
 					err := json.Unmarshal([]byte(value), &arcIds)
@@ -830,7 +1002,7 @@ func (w *Website) GetUserExtra(id uint) map[string]model.CustomField {
 					result[v.FieldName], _ = strconv.ParseInt(value, 10, 64)
 				}
 			}
-			extraFields[v.FieldName] = model.CustomField{
+			extraFields[v.FieldName] = &config.CustomField{
 				Name:        v.Name,
 				Value:       result[v.FieldName],
 				Default:     v.Content,
@@ -850,8 +1022,8 @@ func (w *Website) GetUserAuthToken(userId uint, remember bool) string {
 		t = t.AddDate(0, 0, 29)
 	}
 	jwtToken := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"userId": fmt.Sprintf("%d", userId),
-		"t":      fmt.Sprintf("%d", t.Unix()),
+		"userId": fmt.Sprint(userId),
+		"t":      fmt.Sprint(t.Unix()),
 	})
 	// 获取签名字符串
 	tokenString, err := jwtToken.SignedString([]byte(w.TokenSecret + "-user-token"))
@@ -885,7 +1057,7 @@ func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl 
 	newImg := library.ThumbnailCrop(256, 256, img, 2)
 	buf, _, _ := encodeImage(newImg, imgType, w.Content.Quality)
 	// 上传图片
-	_, err = w.UploadFile(fileName, buf)
+	_, err = w.UploadFile(fileName, bytes.NewReader(buf))
 	if err != nil {
 		return "", err
 	}
@@ -895,4 +1067,18 @@ func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl 
 
 	// 返回头像地址
 	return w.PluginStorage.StorageUrl + "/" + fileName, nil
+}
+
+// 处理新用户
+func (w *Website) ProcessNewUser(user *model.User) {
+	// 记录日志
+	_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionUser, Type: request.LogTypeUserCreate, Id: int64(user.Id)})
+
+	// 同步到brevo
+	client := w.BrevoClient("")
+	if client != nil {
+		_ = client.CreateContact(user)
+	}
+	// 新用户欢迎邮件
+	w.SendWelcomeEmail(user)
 }

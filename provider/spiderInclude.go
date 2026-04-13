@@ -3,13 +3,14 @@ package provider
 import (
 	"crypto/tls"
 	"fmt"
-	"github.com/parnurzeal/gorequest"
-	"kandaoni.com/anqicms/model"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/parnurzeal/gorequest"
+	"kandaoni.com/anqicms/model"
 )
 
 // QuerySpiderInclude 记录 网站的收录情况
@@ -18,7 +19,11 @@ func (w *Website) QuerySpiderInclude() {
 	if w.DB == nil {
 		return
 	}
-	link, _ := url.Parse(w.System.BaseUrl)
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	link, _ := url.Parse(frontUrl)
 	includeLog := model.SpiderInclude{
 		BaiduCount:  w.GetBaiduInclude(link.Host),
 		SogouCount:  w.GetSogouInclude(link.Host),

@@ -2,12 +2,13 @@ package middleware
 
 import (
 	"fmt"
+	"strconv"
+	"time"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
-	"time"
 )
 
 func ParseUserToken(ctx iris.Context) {
@@ -52,6 +53,7 @@ func ParseUserToken(ctx iris.Context) {
 						userGroup, _ := currentSite.GetUserGroupInfo(userInfo.GroupId)
 						ctx.Values().Set("userGroup", userGroup)
 						// set data to view
+						ctx.ViewData("userId", userInfo.Id)
 						ctx.ViewData("userGroup", userGroup)
 						ctx.ViewData("userInfo", userInfo)
 					}

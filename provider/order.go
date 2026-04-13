@@ -5,6 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"net/http"
+	"os"
+	"time"
+
+	"github.com/jinzhu/now"
+
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
@@ -16,11 +23,6 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"log"
-	"net/http"
-	"os"
-	"strconv"
-	"time"
 )
 
 func (w *Website) GetOrderList(userId uint, orderId, userName, status string, page, pageSize int) ([]*model.Order, int64) {
@@ -56,6 +58,9 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 		if status == "refunding" {
 			tx = tx.Where("`status` = 8")
 		}
+		if status == "closed" {
+			tx = tx.Where("`status` = -1")
+		}
 	}
 
 	tx.Count(&total).Order("id desc").Limit(pageSize).Offset(offset).Find(&orders)
@@ -71,16 +76,27 @@ func (w *Website) GetOrderList(userId uint, orderId, userName, status string, pa
 		w.DB.Where("`order_id` IN(?)", orderIds).Find(&details)
 		if len(details) > 0 {
 			var archiveIds = make([]int64, 0, len(details))
+			var skuIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
+				if details[i].GoodsSkuId > 0 {
+					skuIds = append(skuIds, details[i].GoodsSkuId)
+				}
 			}
 			archives, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				return tx.Where("`id` IN(?)", archiveIds)
 			}, "", 0, len(archiveIds))
+			var skus []*model.ArchiveSku
+			w.DB.Where("id IN(?)", skuIds).Find(&skus)
 			for i := range details {
 				for x := range archives {
 					if archives[x].Id == details[i].GoodsId {
 						details[i].Goods = archives[x]
+					}
+				}
+				for x := range skus {
+					if skus[x].Id == details[i].GoodsSkuId {
+						details[i].GoodsSku = skus[x]
 					}
 				}
 			}
@@ -126,10 +142,20 @@ func (w *Website) GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 			if err == nil {
 				details[0].Group = group
 			}
+		} else if order.Type == config.OrderTypeCommunication {
+			communicationOrder, err := w.GetCommunicationOrderById(details[0].GoodsId)
+			if err == nil {
+				communicationOrder.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+				details[0].Communication = communicationOrder
+			}
 		} else {
 			var archiveIds = make([]int64, 0, len(details))
+			var skuIds = make([]int64, 0, len(details))
 			for i := range details {
 				archiveIds = append(archiveIds, details[i].GoodsId)
+				if details[i].GoodsSkuId > 0 {
+					skuIds = append(skuIds, details[i].GoodsSkuId)
+				}
 			}
 			archives, _, _ := w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
 				return tx.Where("`id` IN(?)", archiveIds)
@@ -138,6 +164,18 @@ func (w *Website) GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 				for x := range archives {
 					if archives[x].Id == details[i].GoodsId {
 						details[i].Goods = archives[x]
+						details[i].OrderFields = archives[x].OrderFields
+					}
+				}
+			}
+			if len(skuIds) > 0 {
+				var skus []*model.ArchiveSku
+				w.DB.Where("id IN (?)", skuIds).Find(&skus)
+				for i := range details {
+					for x := range skus {
+						if skus[x].Id == details[i].GoodsSkuId {
+							details[i].GoodsSku = skus[x]
+						}
 					}
 				}
 			}
@@ -148,7 +186,8 @@ func (w *Website) GetOrderInfoByOrderId(orderId string) (*model.Order, error) {
 	if err == nil {
 		order.OrderAddress = orderAddress
 	}
-
+	// order services
+	order.Services, err = w.GetOrderServicesByOrderId(order.OrderId)
 	return &order, nil
 }
 
@@ -185,7 +224,7 @@ func (w *Website) GetPaymentInfoByOrderId(orderId string) (*model.Payment, error
 	return &payment, nil
 }
 
-func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Payment, error) {
+func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentRequest) (*model.Payment, error) {
 	payment, err := w.GetPaymentInfoByOrderId(order.OrderId)
 	if err == nil {
 		return payment, nil
@@ -197,7 +236,7 @@ func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Pay
 		Amount:  order.Amount,
 		Status:  0,
 		Remark:  order.Remark,
-		PayWay:  payWay,
+		PayWay:  req.PayWay,
 	}
 	err = w.DB.Save(payment).Error
 	if err != nil {
@@ -205,6 +244,23 @@ func (w *Website) GeneratePayment(order *model.Order, payWay string) (*model.Pay
 	}
 	order.PaymentId = payment.PaymentId
 	w.DB.Save(order)
+
+	_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypePayCreate, Id: int64(order.Id)})
+
+	// 自动生成 invoice
+	template, exist := w.GetEmailTemplateInfo("invoice")
+	if exist && template.Open && w.PluginSendmail.UseBrevo == false {
+		invoicePath, err := w.GenerateInvoice(order)
+		if err == nil {
+			// 成功生成发票
+			w.DB.Model(&order).Update("invoice_path", invoicePath)
+			user, err := w.GetUserInfoById(order.UserId)
+			// 发送邮件
+			if err == nil && user.Email != "" {
+				go w.SendInvoiceMail(user, order, invoicePath)
+			}
+		}
+	}
 
 	return payment, nil
 }
@@ -221,6 +277,17 @@ func (w *Website) SetOrderDeliver(req *request.OrderRequest) error {
 	order.TrackingNumber = req.TrackingNumber
 	order.EndTime = time.Now().AddDate(0, 0, w.PluginOrder.AutoFinishDay).Unix()
 	w.DB.Save(order)
+
+	user, err := w.GetUserInfoById(order.UserId)
+	if err == nil {
+		w.SendDeliveryOrderEmail(user, order)
+		// 推送事件
+		w.CreateEvent(EventOrderDelivered, map[string]interface{}{
+			"order_id": order.OrderId,
+			"amount":   float32(order.Amount) / 100,
+			"status":   "delivering",
+		}, user)
+	}
 
 	return nil
 }
@@ -360,6 +427,9 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 			if startTime < time.Now().Unix() {
 				startTime = time.Now().Unix()
 			}
+			var oldGroup model.UserGroup
+			w.DB.Where("id = ?", user.GroupId).First(&oldGroup)
+
 			var group model.UserGroup
 			err = tx.Model(model.UserGroup{}).Where("`id` = ?", orderDetail.GoodsId).Take(&group).Error
 			if err != nil {
@@ -370,9 +440,27 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 			user.ExpireTime = startTime
 			user.GroupId = group.Id
 			tx.Save(&user)
+
+			user.Group = &group
+			// 发送用户组变更邮件
+			w.SendUserGroupChangeEmail(&user, &oldGroup)
 		}
 	}
 	tx.Commit()
+
+	user, err := w.GetUserInfoById(order.UserId)
+	if err == nil {
+		w.SendCompletedOrderEmail(user, order)
+		// 推送事件
+		w.CreateEvent(EventOrderCompleted, map[string]interface{}{
+			"order_id": order.OrderId,
+			"amount":   float32(order.Amount) / 100,
+			"status":   "completed",
+		}, &model.User{Id: uint(order.UserId)})
+		// 发送评价邀请
+		w.SendReviewOrderPlan(user, order)
+		w.SendRecoverAbandonedOrderPlan(user, order)
+	}
 
 	return nil
 }
@@ -385,6 +473,19 @@ func (w *Website) SetOrderCanceled(order *model.Order) error {
 		"finished_time": order.FinishedTime,
 	})
 	w.DB.Model(&model.Payment{}).Where("order_id = ?", order.OrderId).Update("status", config.OrderStatusCanceled)
+	// 退还库存
+	if order.Type != config.OrderTypeVip {
+		var details []*model.OrderDetail
+		w.DB.Where("order_id = ?", order.OrderId).Find(&details)
+		for _, detail := range details {
+			if detail.GoodsSkuId > 0 {
+				w.DB.Model(&model.ArchiveSku{}).Where("id = ?", detail.GoodsSkuId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+			}
+			if detail.GoodsId > 0 {
+				w.DB.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+			}
+		}
+	}
 
 	return nil
 }
@@ -402,8 +503,12 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 		}
 		if payment.PayWay == config.PayWayWechat {
 			// 公众号支付
-			client := wechat.NewClient(w.PluginPay.WechatAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-			err := client.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
+			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
 			if err != nil {
 				log.Println("微信证书错误：", err.Error())
 				return err
@@ -437,8 +542,12 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 		} else if payment.PayWay == config.PayWayWeapp {
 			// 小程序支付
-			client := wechat.NewClient(w.PluginPay.WeappAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-			err := client.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
+			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
 			if err != nil {
 				log.Println("微信证书错误：", err.Error())
 				return err
@@ -472,7 +581,11 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 		} else if payment.PayWay == config.PayWayAlipay {
 			// 支付宝支付
-			client, err := alipay.NewClient(w.PluginPay.AlipayAppId, w.PluginPay.AlipayPrivateKey, true)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client, err := alipay.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 			if err != nil {
 				refund.Remark = err.Error()
 				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
@@ -484,9 +597,9 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 				SetNotifyUrl(w.System.BaseUrl + "/notify/alipay/pay")
 
 			// 自动同步验签（只支持证书模式）
-			certPath := w.DataPath + "cert/" + w.PluginPay.AlipayCertPath
-			rootCertPath := w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath
-			publicCertPath := w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath
+			certPath := w.DataPath + "cert/" + account.PayConfig.CertPath
+			rootCertPath := w.DataPath + "cert/" + account.PayConfig.RootCertPath
+			publicCertPath := w.DataPath + "cert/" + account.PayConfig.PublicCertPath
 			publicKey, err := os.ReadFile(publicCertPath)
 			if err != nil {
 				refund.Remark = err.Error()
@@ -529,7 +642,11 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 		} else if payment.PayWay == config.PayWayPaypal {
 			// paypal refund
-			client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, true)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 			if err != nil {
 				return err
 			}
@@ -554,7 +671,25 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 		} else if payment.PayWay == config.PayWayStripe {
 			// stripe refund
 			// todo stripe
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client := stripe.NewClient(account.PayConfig.AppId)
 
+			params := &stripe.RefundCreateParams{
+				//Amount: stripe.Int64(payment.Amount),
+				//Currency: stripe.String(string(stripe.CurrencyUSD)),
+				PaymentIntent: stripe.String(payment.TerraceId),
+			}
+			r, err := client.V1Refunds.Create(context.Background(), params)
+			if err != nil {
+				return fmt.Errorf("stripe create refund payment error: %v", err)
+			}
+			if r.Status == "failed" {
+				return errors.New("stripe create refund payment error")
+			}
+			// 更新id
 			// refund success
 		} else {
 			// 线下支付，的退款流程
@@ -574,6 +709,15 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 		refund.Status = config.OrderStatusCanceled
 		w.DB.Save(refund)
 	}
+
+	// 推送事件
+	w.CreateEvent(EventOrderRefund, map[string]interface{}{
+		"order_id":      order.OrderId,
+		"amount":        float32(order.Amount) / 100,
+		"refund_amount": float32(refund.Amount) / 100,
+		"refund_reason": refund.Remark,
+		"status":        "refunded",
+	}, &model.User{Id: uint(order.UserId)})
 
 	return nil
 }
@@ -599,6 +743,23 @@ func (w *Website) ApplyOrderRefund(order *model.Order) error {
 	order.RefundStatus = config.OrderStatusRefunding
 	w.DB.Save(order)
 
+	// 发送邮件
+	if order.UserId > 0 {
+		user, err := w.GetUserInfoById(order.UserId)
+		if err == nil {
+			// 推送事件
+			w.CreateEvent(EventOrderRefund, map[string]interface{}{
+				"order_id":      order.OrderId,
+				"amount":        float32(order.Amount) / 100,
+				"refund_amount": float32(refund.Amount) / 100,
+				"refund_reason": refund.Remark,
+				"status":        "request",
+			}, user)
+
+			w.SendRefundOrderEmail(user, order)
+		}
+	}
+
 	return nil
 }
 
@@ -611,7 +772,47 @@ func (w *Website) GetOrderRefundByOrderId(orderId string) (*model.OrderRefund, e
 	return &order, nil
 }
 
-func (w *Website) SuccessPaidOrder(order *model.Order) error {
+func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) error {
+	// 统计payment账号
+	if payment.PaymentAccountId > 0 {
+		go func() {
+			var statistic model.PaymentStatistic
+			err := w.DB.Where("account_id = ?", payment.PaymentAccountId).Last(&statistic).Error
+			if err != nil {
+				statistic = model.PaymentStatistic{
+					AccountId: payment.PaymentAccountId,
+				}
+			}
+			monthStamp := now.BeginningOfMonth().Unix()
+			todayStamp := now.BeginningOfDay().Unix()
+			if statistic.StatTime < monthStamp {
+				// 重新统计
+				statistic = model.PaymentStatistic{
+					AccountId: payment.PaymentAccountId,
+				}
+			}
+			if statistic.StatTime < todayStamp {
+				// 统计今天
+				statistic = model.PaymentStatistic{
+					AccountId:     payment.PaymentAccountId,
+					MonthlyAmount: statistic.MonthlyAmount,
+				}
+			}
+			statistic.AccountId = payment.PaymentAccountId
+			statistic.StatTime = todayStamp
+			statistic.DailyAmount += payment.Amount
+			statistic.MonthlyAmount += payment.Amount
+			statistic.DailyCount += 1
+			w.DB.Save(&statistic)
+			// 更新Account的统计信息
+			w.DB.Model(model.PaymentAccount{}).Where("id = ?", payment.PaymentAccountId).UpdateColumns(map[string]interface{}{
+				"last_used_time": time.Now().Unix(),
+				"used_count":     gorm.Expr("`used_count` + 1"),
+				"used_amount":    gorm.Expr("`used_amount` + ?", payment.Amount),
+			})
+		}()
+	}
+
 	if order.Status == config.OrderStatusPaid {
 		//支付成功
 		return nil
@@ -628,15 +829,55 @@ func (w *Website) SuccessPaidOrder(order *model.Order) error {
 	}
 
 	db.Commit()
-
+	// 更新用户字段
+	w.DB.Model(model.User{}).Where("id = ?", order.UserId).UpdateColumn("order_count", gorm.Expr("`order_count` + 1"))
 	// 支付成功
-	if w.SendTypeValid(SendTypePayOrder) {
-		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("OrderPaymentSuccessNotification")
-		content := w.Tr("OrderPaymentSuccessNotification:") + "\n" + w.Tr("OrderNumber:") + order.OrderId +
-			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
-			"\n" + w.Tr("PaymentTime:") + time.Unix(order.PaidTime, 0).Format("2006-01-02 15:04:05") +
-			"\n" + w.Tr("PayingMemberId:") + strconv.Itoa(int(order.UserId))
-		_ = w.sendMail(subject, content, nil, false, false)
+	_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypePayment, Id: int64(order.Id)})
+	// 复购率，新客，老客户
+	// 检查之前有没有付款成功的订单
+	var existPaidOrder int64
+	w.DB.Model(&model.Order{}).Where("user_id = ? and paid_time > 0 and order_id != ?", order.UserId, order.OrderId).Count(&existPaidOrder)
+	if existPaidOrder > 0 {
+		// 重复购买
+		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypePayment, Id: int64(order.Id)})
+	} else {
+		// 新客
+		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypePayment, Id: int64(order.Id)})
+	}
+	// end
+	user, err := w.GetUserInfoById(order.UserId)
+	if err == nil {
+		user = &model.User{Id: uint(order.UserId)}
+	}
+	w.SendPayOrderEmail(user, order)
+	w.CancelMailPlan("recover_abandoned_checkout_"+order.OrderId, true)
+
+	// 发送一张未付款的发票
+	template, exist := w.GetEmailTemplateInfo("invoice")
+	if exist && template.Open && w.PluginSendmail.UseBrevo == false {
+		invoicePath, err := w.GenerateInvoice(order)
+		if err == nil {
+			// 成功生成发票
+			w.DB.Model(&order).Update("invoice_path", invoicePath)
+			// 发送邮件
+			if user.Email != "" {
+				go w.SendInvoiceMail(user, order, invoicePath)
+			}
+		}
+	}
+	// 推送事件
+	w.CreateEvent(EventOrderPaid, map[string]interface{}{
+		"order_id": order.OrderId,
+		"amount":   float32(order.Amount) / 100,
+		"status":   "paid",
+	}, user)
+
+	// communication order
+	if order.Type == config.OrderTypeCommunication {
+		communicationOrder, err := w.GetCommunicationOrderByOrderId(order.OrderId)
+		if err == nil {
+			w.DB.Model(communicationOrder).UpdateColumn("status", config.CommunicationStatusFinished)
+		}
 	}
 
 	if w.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
@@ -721,25 +962,103 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 
 	tx.Commit()
 
+	// 发送邮件
+	if order.UserId > 0 {
+		user, err := w.GetUserInfoById(order.UserId)
+		if err == nil {
+			w.SendRefundOrderEmail(user, order)
+		}
+	}
+
 	return err
 }
 
 func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Order, error) {
 	user, err := w.GetUserInfoById(userId)
-	if err != nil {
+	if err != nil && w.PluginOrder.NoNeedLogin == false {
 		return nil, err
+	}
+	if user == nil {
+		// 匿名用户
+		user = &model.User{}
+		if req.Address != nil {
+			user.UserName = req.Address.Name + " " + req.Address.LastName
+			user.Email = req.Address.Email
+			user.Phone = req.Address.Phone
+			if user.Email != "" {
+				existUser, err := w.GetUserInfoByEmail(user.Email)
+				if err == nil {
+					user = existUser
+				}
+			}
+			if user.Phone != "" {
+				existUser, err := w.GetUserInfoByPhone(user.Phone)
+				if err == nil {
+					user = existUser
+				}
+			}
+		}
 	}
 	if len(req.Details) == 0 && req.GoodsId == 0 {
 		return nil, errors.New(w.Tr("PleaseSelectTheProduct"))
 	}
 	if len(req.Details) == 0 {
-		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, Quantity: req.Quantity}}
+		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, GoodsSkuId: req.GoodsSkuId, Quantity: req.Quantity}}
+	}
+	var couponCode *model.CouponCode
+	// 使用优惠券
+	if req.CouponCode != "" {
+		couponCode, err = w.GetCouponCodeByCode(req.CouponCode)
+		if err != nil {
+			return nil, err
+		}
+	} else if req.CouponCodeId > 0 {
+		couponCode, err = w.GetCouponCodeById(req.CouponCodeId)
+		if err != nil {
+			return nil, err
+		}
+	} else if req.CouponId > 0 {
+		// 优惠券
+		coupon, err := w.GetCouponById(req.CouponId)
+		if err != nil {
+			return nil, err
+		}
+		// 生成一个优惠券码
+		couponCode, err = w.MakeCouponCode(coupon.Id, int64(userId), 1)
+		if err != nil || couponCode == nil {
+			return nil, err
+		}
+		couponCode.Coupon = coupon
+	}
+	var activity *model.Activity
+	if req.ActivityId > 0 {
+		// 参加活动，只能购买单个商品
+		activity, err = w.GetActivityById(req.ActivityId)
+		if err != nil {
+			return nil, err
+		}
+		for _, detail := range req.Details {
+			if detail.GoodsId != activity.GoodsId {
+				return nil, errors.New(w.Tr("PleaseSelectTheProduct"))
+			}
+		}
+		if couponCode != nil && activity.CanUseCoupon == false {
+			return nil, errors.New(w.Tr("CouponCannotBeUsed"))
+		}
 	}
 	tx := w.DB.Begin()
 	var orderAddress *model.OrderAddress
 	if w.PluginOrder.NoProcess == false || req.Address != nil {
 		//保存订单地址
 		orderAddress, err = w.SaveOrderAddress(tx, userId, req.Address)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+	}
+	if req.Type == config.OrderTypeCommunication {
+		// 先接受报价
+		err = w.CommunicationAcceptQuote(req.Details[0].GoodsId)
 		if err != nil {
 			tx.Rollback()
 			return nil, err
@@ -757,6 +1076,13 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				return nil, err
 			}
 			remark += group.Title
+		} else if req.Type == config.OrderTypeCommunication {
+			communicationOrder, err := w.GetCommunicationOrderById(req.Details[0].GoodsId)
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			remark += communicationOrder.Title
 		} else {
 			for _, v := range req.Details {
 				archive, err := w.GetArchiveById(v.GoodsId)
@@ -774,7 +1100,11 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					}
 				}
 				if remark == "" {
-					remark += archive.Title + w.Tr("Wait")
+					remark += archive.Title
+					if len(req.Details) > 1 {
+						remark += "..."
+					}
+					break
 				}
 			}
 		}
@@ -795,6 +1125,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		tx.Rollback()
 		return nil, err
 	}
+	var details = []map[string]interface{}{}
 	// 计算商品总价
 	if req.Type == config.OrderTypeVip {
 		group, err := w.GetUserGroupInfo(uint(req.Details[0].GoodsId))
@@ -802,12 +1133,18 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			tx.Rollback()
 			return nil, err
 		}
+		if req.Details[0].Quantity == 0 {
+			req.Details[0].Quantity = 1
+		}
 		//计算价格
 		price := group.Price
 		originPrice := price
+		if activity != nil {
+			price = activity.Price
+		}
 		discount := w.GetUserDiscount(userId, user)
 		if discount > 0 {
-			price = originPrice * discount / 100
+			price = price * discount / 100
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
@@ -830,6 +1167,68 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			tx.Rollback()
 			return nil, err
 		}
+		details = append(details, map[string]interface{}{
+			"id":       orderDetail.GoodsId,
+			"title":    group.Title,
+			"sku_id":   orderDetail.GoodsSkuId,
+			"link":     "",
+			"logo":     "",
+			"price":    float32(price) / 100,
+			"amount":   detailAmount,
+			"quantity": orderDetail.Quantity,
+		})
+	} else if req.Type == config.OrderTypeCommunication {
+		communicationOrder, err := w.GetCommunicationOrderById(req.Details[0].GoodsId)
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		w.DB.Model(&model.CommunicationOrder{}).Where("id = ?", communicationOrder.Id).UpdateColumn("order_id", order.OrderId)
+		if req.Details[0].Quantity == 0 {
+			req.Details[0].Quantity = 1
+		}
+		//计算价格
+		price := communicationOrder.QuotePrice
+		originPrice := price
+		if activity != nil {
+			price = activity.Price
+		}
+		discount := w.GetUserDiscount(userId, user)
+		if discount > 0 {
+			price = price * discount / 100
+		}
+		detailAmount := price * int64(req.Details[0].Quantity)
+		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		amount += detailAmount
+		originAmount += originDetailAmount
+		//给每条子订单入库
+		orderDetail := model.OrderDetail{
+			OrderId:      order.OrderId,
+			UserId:       userId,
+			GoodsId:      req.Details[0].GoodsId,
+			Price:        price,
+			OriginPrice:  originPrice,
+			Amount:       detailAmount,
+			OriginAmount: originDetailAmount,
+			Quantity:     req.Details[0].Quantity,
+			SkuValues:    req.Details[0].SkuValues,
+			Status:       1,
+		}
+		err = tx.Save(&orderDetail).Error
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		details = append(details, map[string]interface{}{
+			"id":       orderDetail.GoodsId,
+			"title":    communicationOrder.Title,
+			"sku_id":   orderDetail.GoodsSkuId,
+			"link":     "",
+			"logo":     communicationOrder.Logo,
+			"price":    float32(price) / 100,
+			"amount":   detailAmount,
+			"quantity": orderDetail.Quantity,
+		})
 	} else {
 		for _, v := range req.Details {
 			archive, err := w.GetArchiveById(v.GoodsId)
@@ -837,15 +1236,113 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				tx.Rollback()
 				return nil, err
 			}
+			if v.Quantity == 0 {
+				v.Quantity = 1
+			}
+			if archive.MinQuantity > 0 && v.Quantity < archive.MinQuantity {
+				v.Quantity = archive.MinQuantity
+			}
+			if archive.MaxQuantity > 0 && v.Quantity > archive.MaxQuantity {
+				v.Quantity = archive.MaxQuantity
+			}
 			//计算价格
 			price := archive.Price
 			originPrice := price
+			if activity != nil {
+				price = activity.Price
+			}
+			// sku_id
+			var skuValues []model.ArchiveOptionValue
+			if v.GoodsSkuId > 0 {
+				archiveSku, err := w.GetArchiveSkuById(v.GoodsId, v.GoodsSkuId)
+				if err != nil {
+					tx.Rollback()
+					return nil, err
+				}
+				// 如果数量超了，则不允许下单
+				if archive.AllowOversold == false && int(archiveSku.Stock) < v.Quantity {
+					tx.Rollback()
+					return nil, errors.New("out of stock")
+				}
+				price = archiveSku.Price
+				originPrice = archiveSku.Price
+				if activity != nil {
+					activitySku, err := w.GetActivitySkuBySkuId(activity.Id, v.GoodsSkuId)
+					if err == nil {
+						price = activitySku.Price
+						// 减库存
+						tx.Model(&model.ActivitySku{}).Where("id = ?", activitySku.Id).UpdateColumns(map[string]interface{}{
+							"stock":      gorm.Expr("stock - ?", v.Quantity),
+							"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
+						})
+					}
+				}
+				// 减库存
+				tx.Model(&model.ArchiveSku{}).Where("id = ?", archiveSku.Id).UpdateColumns(map[string]interface{}{
+					"stock":      gorm.Expr("stock - ?", v.Quantity),
+					"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
+				})
+				skuValues = archiveSku.Values
+			} else {
+				// 如果数量超了,则不允许下单
+				if archive.AllowOversold == false && int(archive.Stock) < v.Quantity {
+					tx.Rollback()
+					return nil, errors.New("out of stock")
+				}
+			}
+			if len(v.SkuValues) > 0 {
+				if len(skuValues) == 0 {
+					skuValues = v.SkuValues
+				} else {
+					for _, sv := range v.SkuValues {
+						exist := false
+						for _, xv := range skuValues {
+							if sv.Id == xv.Id || sv.Title == xv.Title {
+								exist = true
+								break
+							}
+						}
+						if !exist {
+							skuValues = append(skuValues, sv)
+						}
+					}
+				}
+			}
+			// 减库存
+			tx.Model(&model.Archive{}).Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
+				"stock":      gorm.Expr("stock - ?", v.Quantity),
+				"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
+			})
+			if activity != nil {
+				tx.Model(&model.Activity{}).Where("id = ?", activity.Id).UpdateColumns(map[string]interface{}{
+					"stock":      gorm.Expr("stock - ?", v.Quantity),
+					"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
+				})
+			}
+			// 优惠
 			discount := w.GetUserDiscount(userId, user)
+			// 批发价格设置
+			if archive.IsWholesale {
+				wholesaleRules, _ := w.GetArchiveWholesaleRules(archive.Id)
+				var percentage int64 = 100 // 默认没折扣
+				for _, rule := range wholesaleRules {
+					if v.Quantity >= rule.MinQuantity {
+						percentage = int64(rule.DiscountRate)
+					}
+				}
+				if percentage > 0 {
+					if discount == 0 {
+						discount = percentage
+					} else {
+						discount = percentage * discount / 100
+					}
+				}
+			}
 			if discount > 0 {
-				price = originPrice * discount / 100
+				price = price * discount / 100
 			}
 			detailAmount := price * int64(v.Quantity)
-			originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+			originDetailAmount := originPrice * int64(v.Quantity)
 			amount += detailAmount
 			originAmount += originDetailAmount
 			//给每条子订单入库
@@ -853,22 +1350,70 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				OrderId:      order.OrderId,
 				UserId:       userId,
 				GoodsId:      v.GoodsId,
+				GoodsSkuId:   v.GoodsSkuId,
 				Price:        price,
 				OriginPrice:  originPrice,
 				Amount:       detailAmount,
 				OriginAmount: originDetailAmount,
 				Quantity:     v.Quantity,
 				Status:       1,
+				OrderExtra:   v.OrderExtra,
+				SkuValues:    skuValues,
 			}
 			err = tx.Save(&orderDetail).Error
 			if err != nil {
 				tx.Rollback()
 				return nil, err
 			}
+			details = append(details, map[string]interface{}{
+				"id":       orderDetail.GoodsId,
+				"title":    archive.Title,
+				"sku_id":   orderDetail.GoodsSkuId,
+				"link":     archive.Link,
+				"logo":     archive.Logo,
+				"price":    float32(price) / 100,
+				"amount":   detailAmount,
+				"quantity": orderDetail.Quantity,
+			})
 		}
 	}
 	order.Amount = amount
 	order.OriginAmount = originAmount
+	if couponCode != nil {
+		if couponCode.Status != 0 {
+			tx.Rollback()
+			return nil, err
+		}
+		couponMoney := couponCode.GetMoney(order.Amount)
+		order.CouponCodeId = couponCode.Code
+		order.Amount = order.Amount - couponMoney
+		// 使用coupon Code
+		couponCode.OrderId = order.OrderId
+		couponCode.UserId = int64(userId)
+		_ = w.UseCouponCode(couponCode)
+	}
+	order.DiscountAmount = originAmount - amount
+	// orderService
+	if len(req.ServiceIds) > 0 {
+		services, _ := w.GetOrderServices(func(tx *gorm.DB) *gorm.DB {
+			return tx.Where("id in (?)", req.ServiceIds)
+		}, 1, len(req.ServiceIds))
+		var serviceFee int64
+		for _, service := range services {
+			if service.FeeType == config.OrderServiceTypePercentage {
+				// 订单金额的百分比
+				tmpFee := int64(float64(order.Amount) * (float64(service.Fee) / 100))
+				if service.MaxFee > 0 && tmpFee > service.MaxFee {
+					tmpFee = service.MaxFee
+				}
+				serviceFee += tmpFee
+			} else {
+				serviceFee += service.Fee
+			}
+		}
+		order.ServiceFee = serviceFee
+		order.Amount += serviceFee
+	}
 
 	shareId := user.ParentId
 	if w.PluginRetailer.AllowSelf == 1 && (w.PluginRetailer.BecomeRetailer == 1 || user.IsRetailer == 1) {
@@ -905,19 +1450,36 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	tx.Save(&order)
 
 	tx.Commit()
-
-	// 下单
-	if w.SendTypeValid(SendTypeNewOrder) {
-		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("NewOrderNotification")
-		content := w.Tr("NewOrderNotification:") + "\n" + w.Tr("OrderNumber:") + order.OrderId +
-			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
-			"\n" + w.Tr("OrderTime:") + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
-			"\n" + w.Tr("OrderingMember:") + user.UserName +
-			"\n" + w.Tr("OrderingMemberId:") + strconv.Itoa(int(order.UserId))
-		_ = w.sendMail(subject, content, nil, false, false)
+	// 清空购物车
+	if userId > 0 {
+		w.DB.Where("user_id = ?", userId).Delete(&model.Cart{})
+		if err == nil {
+			// 推送事件
+			w.CreateEvent(EventOrderCreated, map[string]interface{}{
+				"order_id": order.OrderId,
+				"amount":   float32(order.Amount) / 100,
+				"status":   "pending",
+				"items":    details,
+			}, user)
+		}
 	}
+	_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeOrderCreate, Id: int64(order.Id)})
+
+	// 发送邮件
+	w.SendNewOrderEmail(user, &order)
+	// 发送 未支付订单召回
 
 	return &order, nil
+}
+
+func (w *Website) GetOrderAddressesByUserId(userId uint) ([]*model.OrderAddress, error) {
+	var orderAddress []*model.OrderAddress
+	err := w.DB.Where("`user_id` = ?", userId).Order("id desc").Find(&orderAddress).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return orderAddress, nil
 }
 
 func (w *Website) GetOrderAddressByUserId(userId uint) (*model.OrderAddress, error) {
@@ -960,11 +1522,15 @@ func (w *Website) SaveOrderAddress(tx *gorm.DB, userId uint, req *request.OrderA
 		}
 	}
 	orderAddress.Name = req.Name
+	orderAddress.LastName = req.LastName
 	orderAddress.Phone = req.Phone
+	orderAddress.Email = req.Email
 	orderAddress.Province = req.Province
 	orderAddress.City = req.City
+	orderAddress.Town = req.Town
 	orderAddress.Country = req.Country
 	orderAddress.AddressInfo = req.AddressInfo
+	orderAddress.Company = req.Company
 	orderAddress.Postcode = req.Postcode
 	orderAddress.Status = 1
 
@@ -1253,7 +1819,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 var checkOrderRunning = false
 
 func (w *Website) AutoCheckOrders() {
-	if w.DB == nil {
+	if w.DB == nil || w.PluginOrder == nil {
 		return
 	}
 	if checkOrderRunning {
@@ -1301,7 +1867,11 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		return nil
 	}
 	if payment.PayWay == config.PayWayAlipay {
-		client, err := alipay.NewClient(w.PluginPay.AlipayAppId, w.PluginPay.AlipayPrivateKey, true)
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		client, err := alipay.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 		if err != nil {
 			return err
 		}
@@ -1321,9 +1891,9 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		}
 
 		// 自动同步验签（只支持证书模式）
-		certPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
-		rootCertPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
-		publicCertPath := fmt.Sprintf(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
+		certPath := w.DataPath + "cert/" + account.PayConfig.CertPath
+		rootCertPath := w.DataPath + "cert/" + account.PayConfig.RootCertPath
+		publicCertPath := w.DataPath + "cert/" + account.PayConfig.PublicCertPath
 		publicKey, err := os.ReadFile(publicCertPath)
 		if err != nil {
 			return err
@@ -1367,14 +1937,18 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 			}
 			w.DB.Create(&finance)
 			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order)
+			_ = w.SuccessPaidOrder(order, payment)
 		}
 	} else if payment.PayWay == config.PayWayWechat {
 		// 微信就不管了
 	} else if payment.PayWay == config.PayWayWeapp {
 		// 微信就不管了
 	} else if payment.PayWay == config.PayWayPaypal {
-		client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, true)
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 		if err != nil {
 			log.Println("client err", err)
 			return err
@@ -1429,12 +2003,16 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 				}
 				w.DB.Create(&finance)
 				//支付成功逻辑处理
-				_ = w.SuccessPaidOrder(order)
+				_ = w.SuccessPaidOrder(order, payment)
 			}
 		}
 	} else if payment.PayWay == config.PayWayStripe {
 		// 从Stripe获取最新状态
-		client := stripe.NewClient(w.PluginPay.StripeApiKey)
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		client := stripe.NewClient(account.PayConfig.AppId)
 
 		pi, err := client.V1PaymentIntents.Retrieve(context.Background(), payment.TerraceId, nil)
 		if err != nil {
@@ -1478,11 +2056,140 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 			}
 			w.DB.Create(&finance)
 			//支付成功逻辑处理
-			_ = w.SuccessPaidOrder(order)
+			_ = w.SuccessPaidOrder(order, payment)
 		}
 	}
 
 	return nil
+}
+
+// 每小时执行一次
+func (w *Website) CheckCartAndOrders() {
+	if w.DB == nil || w.PluginOrder == nil {
+		return
+	}
+	if w.PluginSendmail.UseBrevo == true || w.PluginSendmail.Account == "" {
+		return
+	}
+
+	// 购物车
+	template, exist := w.GetEmailTemplateInfo("recover_abandoned_cart")
+	if exist && template.Open {
+		currentStamp := time.Now().Unix()
+		// 1小时间隔
+		closeStamp := currentStamp - template.Delay
+		// check the order that was paid or not
+		var userIds []int64
+		w.DB.Model(&model.Cart{}).Where("created_time >= ? and created_time < ?", config.OrderStatusWaiting, closeStamp-3600, closeStamp).Group("user_id").Pluck("user_id", &userIds)
+		for _, userId := range userIds {
+			if userId > 0 {
+				user, _ := w.GetUserInfoById(uint(userId))
+				if user.Email != "" {
+					continue
+				}
+				items, _ := w.GetCartList(userId, "", 1, 100)
+				var amount int64
+				for _, item := range items {
+					amount += item.Price * int64(item.Quantity)
+				}
+
+				data := map[string]interface{}{
+					"website": w,
+					"user":    user,
+					"cart": map[string]interface{}{
+						"Items":  items,
+						"Amount": amount,
+					},
+					"url": w.System.BaseUrl,
+				}
+				var err error
+				template2, err := w.RenderEmailTemplate(template, data)
+				if err != nil {
+					continue
+				}
+
+				// 发给用户
+				w.SendMail(template2.Subject, template2.Content, nil, user.Email)
+			}
+		}
+	}
+	// end 购物车
+
+	// 订单未支付提醒
+	// 已实现，不在这里处理
+	// end 订单
+
+	// 浏览未购提醒
+	// todo
+	// end 浏览未购提醒
+}
+
+func (w *Website) RecoverPurchase() {
+	// 首次购物后回购营销
+	if w.DB == nil || w.PluginOrder == nil {
+		return
+	}
+	if w.PluginSendmail.UseBrevo == true || w.PluginSendmail.Account == "" {
+		return
+	}
+	template, exist := w.GetEmailTemplateInfo("repurchase_promotion")
+	if exist && template.Open {
+		currentStamp := now.BeginningOfDay().Unix()
+		checkStamp := currentStamp - template.Delay
+		var userIds []int64
+		w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", checkStamp, checkStamp+86400).Group("user_id").Pluck("user_id", &userIds)
+		for _, userId := range userIds {
+			user, err := w.GetUserInfoById(uint(userId))
+			if err != nil {
+				continue
+			}
+			if user.Email != "" {
+				continue
+			}
+			data := map[string]interface{}{
+				"website": w,
+				"user":    user,
+				"url":     w.System.BaseUrl,
+			}
+			template2, err := w.RenderEmailTemplate(template, data)
+			if err != nil {
+				continue
+			}
+
+			// 发给用户
+			w.SendMail(template2.Subject, template2.Content, nil, user.Email)
+		}
+	}
+
+	// 流失用户召回
+	template, exist = w.GetEmailTemplateInfo("recover_old_user")
+	if exist && template.Open {
+		currentStamp := now.BeginningOfDay().Unix()
+		checkStamp := currentStamp - template.Delay
+		var userIds []int64
+		w.DB.Model(&model.User{}).Where("last_login >= ? and last_login < ?", checkStamp, checkStamp+86400).Pluck("id", &userIds)
+		for _, userId := range userIds {
+			user, err := w.GetUserInfoById(uint(userId))
+			if err != nil {
+				continue
+			}
+			if user.Email != "" {
+				continue
+			}
+			data := map[string]interface{}{
+				"website": w,
+				"user":    user,
+				"url":     w.System.BaseUrl,
+			}
+			template2, err := w.RenderEmailTemplate(template, data)
+			if err != nil {
+				continue
+			}
+
+			// 发给用户
+			w.SendMail(template2.Subject, template2.Content, nil, user.Email)
+		}
+	}
 }
 
 func (w *Website) getOrderStatus(status int) string {

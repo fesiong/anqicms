@@ -3,15 +3,17 @@ package model
 import (
 	"database/sql/driver"
 	"encoding/json"
-	"fmt"
+	"os"
+
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
-	"os"
 )
 
 type Module struct {
-	Model
+	Id             uint         `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime    int64        `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime    int64        `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	TableName      string       `json:"table_name" gorm:"column:table_name;type:varchar(50) not null;default:''"`
 	Name           string       `json:"name" gorm:"column:name;type:varchar(50) not null;default:''"`
 	UrlToken       string       `json:"url_token" gorm:"column:url_token;type:varchar(50) not null;default:''"` // 定义
@@ -55,7 +57,7 @@ func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 		}
 
 		if field.IsFilter {
-			idxName := fmt.Sprintf("idx_%s", field.FieldName)
+			idxName := "idx_" + field.FieldName
 			if !m.HasIndex(tx, idxName) {
 				tx.Exec("CREATE INDEX `?` ON `?` (`?`)", gorm.Expr(idxName), gorm.Expr(m.TableName), gorm.Expr(field.FieldName))
 			}
@@ -65,7 +67,7 @@ func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {
 	_, err := os.Stat(tplPath)
 	if err != nil && os.IsNotExist(err) {
 		// 还需要考虑扁平化的情况
-		dir2 := fmt.Sprintf("%s_detail.html", tplPath)
+		dir2 := tplPath + "_detail.html"
 		_, err = os.Stat(dir2)
 		if err != nil {
 			// 创建文件夹

@@ -2,10 +2,11 @@ package provider
 
 import (
 	"fmt"
-	"kandaoni.com/anqicms/config"
 	"regexp"
 	"strings"
 	"sync"
+
+	"kandaoni.com/anqicms/config"
 )
 
 // 支持的字段有：
@@ -151,7 +152,7 @@ func (w *Website) GetRewritePattern(focus bool) *RewritePattern {
 		w.parsedPattern.Patterns[PatternPeopleIndex] = "/peoples(/{page})"
 	}
 	if w.parsedPattern.Patterns[PatternSearch] == "" {
-		w.parsedPattern.Patterns[PatternSearch] = "/search(/{module})(/{page})"
+		w.parsedPattern.Patterns[PatternSearch] = "/search(/{module})"
 	}
 	// 强制加page
 	if !strings.Contains(w.parsedPattern.Patterns[PatternArchive], "{page}") {

@@ -1,12 +1,14 @@
 package model
 
 import (
-	"github.com/lib/pq"
-	"gorm.io/gorm"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/lib/pq"
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
 )
 
 type Archive struct {
@@ -30,6 +32,8 @@ type Archive struct {
 	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null;index"`        // 固化的链接
 	UserId       uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Price        int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
+	OriginPrice  int64          `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
+	CostPrice    int64          `json:"cost_price" gorm:"column:cost_price;type:bigint(20) not null;default:0"`
 	Stock        int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`
 	ReadLevel    int            `json:"read_level" gorm:"column:read_level;type:int(10) not null;default:0"`             // 阅读关联 group level
 	Password     string         `json:"password" gorm:"column:password;type:varchar(32) not null;default:''"`            // 明文密码，需要使用密码查看文档的时候填写
@@ -40,25 +44,59 @@ type Archive struct {
 	OriginUrl   string `json:"origin_url" gorm:"column:origin_url;type:varchar(190) not null;default:'';index:idx_origin_url"`
 	OriginTitle string `json:"origin_title" gorm:"column:origin_title;type:varchar(190) not null;default:'';index:idx_origin_title"`
 	OriginId    int    `json:"origin_id" gorm:"column:origin_id;type:tinyint(1) unsigned not null;default:0"` // 来源 0， 1 采集，2 AI生成
+	// 商城专用字段
+	Brand          string       `json:"brand" gorm:"column:brand;type:varchar(100) not null;default:''"`
+	VideoUrl       string       `json:"video_url" gorm:"column:video_url;type:varchar(250) not null;default:''"`                 // 视频主图
+	NeedLogistics  bool         `json:"need_logistics" gorm:"column:need_logistics;type:tinyint(1) not null;default:0"`          // 需要物流
+	IsFreeShipping bool         `json:"is_free_shipping" gorm:"column:is_free_shipping;type:tinyint(1) not null;default:0"`      // 免运费
+	SoldCount      int64        `json:"sold_count" gorm:"column:sold_count;type:bigint(20) unsigned not null;default:0"`         // 销量
+	ReviewCount    int64        `json:"review_count" gorm:"column:review_count;type:bigint(20) unsigned not null;default:0"`     // 评价数量
+	FavoriteCount  int64        `json:"favorite_count" gorm:"column:favorite_count;type:bigint(20) unsigned not null;default:0"` // 收藏数量
+	AverageScore   float32      `json:"average_score" gorm:"column:average_score;type:float(10,2) not null;default:0.00"`        // 平均评分
+	OptionType     int          `json:"option_type" gorm:"column:option_type;type:tinyint(1) not null;default:0"`                // sku模式，0 无SKU，1 组合SKU，2 加价SKU
+	Weight         float32      `json:"weight" gorm:"column:weight;type:float(10,2) not null;default:0.00"`                      // 重量
+	WeightUnit     string       `json:"weight_unit" gorm:"column:weight_unit;type:varchar(20);default:null"`
+	IsWholesale    bool         `json:"is_wholesale" gorm:"column:is_wholesale;type:tinyint(1) not null;default:0"`             // 支持批发
+	AllowOversold  bool         `json:"allow_oversold" gorm:"column:allow_oversold;type:tinyint(1) not null;default:0"`         // 允许超售
+	HasOrderFields bool         `json:"has_order_fields" gorm:"column:has_order_fields;type:tinyint(1) not null;default:0"`     // 是否有订单字段
+	OrderFields    moduleFields `json:"order_fields,omitempty" gorm:"column:order_fields;type:text default null"`               // 订单字段
+	MinQuantity    int          `json:"min_quantity,omitempty" gorm:"column:min_quantity;type:bigint(20) not null;default:0"`   // 最小购买数量
+	MaxQuantity    int          `json:"max_quantity,omitempty" gorm:"column:max_quantity;type:bigint(20) not null;default:0"`   // 最大购买数量
+	StepQuantity   int          `json:"step_quantity,omitempty" gorm:"column:step_quantity;type:bigint(20) not null;default:0"` // 购买数量步长
+
 	// 其他内容
-	Category       *Category              `json:"category" gorm:"-"`
-	ModuleName     string                 `json:"module_name" gorm:"-"`
-	ArchiveData    *ArchiveData           `json:"data" gorm:"-"`
-	Logo           string                 `json:"logo" gorm:"-"`
-	Thumb          string                 `json:"thumb" gorm:"-"`
-	Extra          map[string]CustomField `json:"extra" gorm:"-"`
-	Link           string                 `json:"link" gorm:"-"`
-	Tags           []string               `json:"tags,omitempty" gorm:"-"`
-	HasOrdered     bool                   `json:"has_ordered" gorm:"-"` // 是否订购了
-	FavorablePrice int64                  `json:"favorable_price" gorm:"-"`
-	HasPassword    bool                   `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
-	PasswordValid  bool                   `json:"password_valid,omitempty" gorm:"-"` // 验证密码正确
-	CategoryTitles []string               `json:"category_titles" gorm:"-"`
-	CategoryIds    []uint                 `json:"category_ids" gorm:"-"`
-	Flag           string                 `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
-	Type           string                 `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
-	Relations      []*Archive             `json:"relations" gorm:"-"`
-	Content        string                 `json:"content" gorm:"-"` // 列表获取Content的时候，使用这个字段
+	Category       *Category    `json:"category" gorm:"-"`
+	ModuleName     string       `json:"module_name" gorm:"-"`
+	ArchiveData    *ArchiveData `json:"data" gorm:"-"`
+	Logo           string       `json:"logo" gorm:"-"`
+	Thumb          string       `json:"thumb" gorm:"-"`
+	Link           string       `json:"link" gorm:"-"`
+	Tags           []*Tag       `json:"tags,omitempty" gorm:"-"`
+	HasOrdered     bool         `json:"has_ordered" gorm:"-"` // 是否订购了
+	FavorablePrice int64        `json:"favorable_price" gorm:"-"`
+	HasPassword    bool         `json:"has_password" gorm:"-"`             // 需要密码的时候，这个字段为true
+	PasswordValid  bool         `json:"password_valid,omitempty" gorm:"-"` // 验证密码正确
+	CategoryTitles []string     `json:"category_titles" gorm:"-"`
+	CategoryIds    []uint       `json:"category_ids" gorm:"-"`
+	Flag           string       `json:"flag" gorm:"-"` // 同 flags，只是这是用,分割的
+	Type           string       `json:"type" gorm:"-"` // 类型，default 是archive，其他值：category，tag
+	Relations      []*Archive   `json:"relations" gorm:"-"`
+	Content        string       `json:"content" gorm:"-"`     // 列表获取Content的时候，使用这个字段
+	IsFavorite     bool         `json:"is_favorite" gorm:"-"` // 是否收藏了
+	Quantity       int          `json:"quantity,omitempty" gorm:"-"`
+	CartId         int64        `json:"cart_id,omitempty" gorm:"-"`
+	Amount         int64        `json:"amount,omitempty" gorm:"-"`
+	OriginAmount   int64        `json:"origin_amount,omitempty" gorm:"-"`
+	// sku
+	Options        []*ArchiveOption    `json:"options,omitempty" gorm:"-"`
+	Skus           []*ArchiveSku       `json:"skus,omitempty" gorm:"-"`
+	Sku            *ArchiveSku         `json:"sku,omitempty" gorm:"-"`             // 单个，选择的一个sku，比如收藏夹，购物车，愿望清单等读取时用到
+	WholesaleRules []*WholesaleRule    `json:"wholesale_rules,omitempty" gorm:"-"` // 批发规则
+	WholesaleRule  *WholesaleRule      `json:"wholesale_rule,omitempty" gorm:"-"`  // 适用批发规则
+	OrderExtra     ExtraData           `json:"order_extra,omitempty" gorm:"-"`
+	SkuValues      ArchiveOptionValues `json:"sku_values,omitempty" gorm:"-"`
+
+	Extra map[string]config.CustomField `json:"extra" gorm:"-"`
 }
 
 type ArchiveData struct {
@@ -147,7 +185,8 @@ func (a *Archive) GetThumb(storageUrl, defaultThumb string) string {
 		if !strings.HasPrefix(a.Logo, "http") && !strings.HasPrefix(a.Logo, "//") {
 			a.Logo = storageUrl + "/" + strings.TrimPrefix(a.Logo, "/")
 		}
-		a.Thumb = a.Logo
+		paths, fileName := filepath.Split(a.Logo)
+		a.Thumb = paths + "thumb_" + fileName
 	}
 
 	return a.Thumb

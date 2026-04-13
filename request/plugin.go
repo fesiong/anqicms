@@ -25,6 +25,7 @@ type PluginComment struct {
 	ArchiveId int64  `json:"archive_id"`
 	UserId    uint   `json:"user_id"`
 	UserName  string `json:"user_name"`
+	Email     string `json:"email"`
 	Ip        string `json:"ip"`
 	VoteCount uint   `json:"vote_count"`
 	Content   string `json:"content"`
@@ -56,8 +57,9 @@ type PluginAnchorAddFromTitle struct {
 }
 
 type PluginGuestbookDelete struct {
-	Id  uint   `json:"id"`
-	Ids []uint `json:"ids"`
+	Id     uint   `json:"id"`
+	Ids    []uint `json:"ids"`
+	Status int    `json:"status"`
 }
 
 type PluginKeyword struct {
@@ -158,4 +160,25 @@ type PluginLimiterRemoveIPRequest struct {
 type PluginMultiLangCacheRemoveRequest struct {
 	Uris []string `json:"uris"`
 	All  bool     `json:"all"`
+}
+
+type SubscriberRequest struct {
+	Id         int64  `json:"id"`
+	Email      string `json:"email"`
+	Remark     string `json:"remark"`
+	CategoryId int64  `json:"category_id"`
+	Status     int    `json:"status"`
+}
+
+type SubscriberMailRequest struct {
+	Type       string   `json:"type"` // type=all|category|email
+	CategoryId int64    `json:"category_id"`
+	Emails     []string `json:"emails"`
+	Subject    string   `json:"subject"`
+	Content    string   `json:"content"`
+}
+
+type SubscriberCategoryRequest struct {
+	Id    int64  `json:"id"`
+	Title string `json:"title"`
 }

@@ -3,13 +3,13 @@ package storage
 import (
 	"bytes"
 	"context"
-	"fmt"
+	"io"
+
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	storage2 "github.com/qiniu/go-sdk/v7/storage"
 	"github.com/qiniu/go-sdk/v7/storagev2/downloader"
 	"github.com/qiniu/go-sdk/v7/storagev2/http_client"
 	"github.com/qiniu/go-sdk/v7/storagev2/objects"
-	"io"
 	"kandaoni.com/anqicms/config"
 )
 
@@ -30,7 +30,7 @@ func NewQiniuStorage(cfg *config.PluginStorageConfig) (*QiniuStorage, error) {
 
 func (s *QiniuStorage) Put(ctx context.Context, key string, r io.Reader) error {
 	putPolicy := storage2.PutPolicy{
-		Scope: fmt.Sprintf("%s:%s", s.cfg.QiniuBucket, key),
+		Scope: s.cfg.QiniuBucket + ":" + key,
 	}
 	upToken := putPolicy.UploadToken(s.client)
 

@@ -2,8 +2,8 @@ package tags
 
 import (
 	"fmt"
+
 	"github.com/flosch/pongo2/v6"
-	"gorm.io/gorm"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
@@ -29,16 +29,11 @@ func (node *tagNextArchiveNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 
 	if args["id"] != nil {
 		id = int64(args["id"].Integer())
-		archiveDetail, _ = currentSite.GetArchiveById(id)
+		archiveDetail = currentSite.GetArchiveByIdFromCache(id)
 	}
 
 	if archiveDetail != nil {
-		nextArchive, _ := currentSite.GetArchiveByFunc(func(tx *gorm.DB) *gorm.DB {
-			return tx.Where("`category_id` = ?", archiveDetail.CategoryId).Where("`id` > ?", archiveDetail.Id).Order("`id` ASC")
-		})
-		if nextArchive != nil && len(nextArchive.Password) > 0 {
-			nextArchive.HasPassword = true
-		}
+		nextArchive, _ := currentSite.GetNextArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
 		ctx.Private[node.name] = nextArchive
 	}
 	//execute

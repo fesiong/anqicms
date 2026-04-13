@@ -3,17 +3,17 @@ package provider
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider/fulltext"
-	"kandaoni.com/anqicms/request"
 	"net/url"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider/fulltext"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
@@ -21,6 +21,13 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 	if currentPage > 1 {
 		offset = (currentPage - 1) * pageSize
 	}
+	if order != "" {
+		order = ParseOrderBy(order, "")
+	} else {
+		// 默认排序规则
+		order = "id desc"
+	}
+
 	var total int64
 
 	builder := w.DB.WithContext(w.Ctx()).Model(&model.Tag{}).Order(order)
@@ -86,7 +93,7 @@ func (w *Website) GetTagByUrlToken(urlToken string) (*model.Tag, error) {
 	if err := w.DB.WithContext(w.Ctx()).Where("url_token = ?", urlToken).First(&tag).Error; err != nil {
 		return nil, err
 	}
-	tag.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	tag.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tag.Id)))
 	return &tag, nil
 }
 
@@ -181,7 +188,11 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		// 过滤外链
 		if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 			baseHost := ""
-			urls, err := url.Parse(w.System.BaseUrl)
+			frontUrl := w.System.BaseUrl
+			if w.System.FrontUrl != "" {
+				frontUrl = w.System.FrontUrl
+			}
+			urls, err := url.Parse(frontUrl)
 			if err == nil {
 				baseHost = urls.Host
 			}
@@ -251,6 +262,10 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 							req.Extra[field.FieldName] = val
 						}
 					} else if field.Type == config.CustomFieldTypeTexts && req.Extra[field.FieldName] != nil {
+						buf, _ := json.Marshal(req.Extra[field.FieldName])
+						req.Extra[field.FieldName] = string(buf)
+					} else if field.Type == config.CustomFieldTypeTimeline {
+						// 存 json
 						buf, _ := json.Marshal(req.Extra[field.FieldName])
 						req.Extra[field.FieldName] = string(buf)
 					}
@@ -342,8 +357,37 @@ func (w *Website) GetTagsByItemId(itemId int64) []*model.Tag {
 	if len(tagIds) > 0 {
 		w.DB.Where("id IN(?)", tagIds).Find(&tags)
 	}
+	for _, tag := range tags {
+		tag.Link = w.GetUrl(PatternTag, tag, 0)
+	}
 
 	return tags
+}
+
+func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
+	var tags []*model.Tag
+	var tagData []*model.TagData
+	w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` in(?)", itemIds).Find(&tagData)
+	var tagIds []uint
+	for _, datum := range tagData {
+		tagIds = append(tagIds, datum.TagId)
+	}
+	if len(tagIds) > 0 {
+		w.DB.Where("id IN(?)", tagIds).Find(&tags)
+	}
+	var result = make(map[int64][]*model.Tag)
+	for _, tag := range tags {
+		tag.Link = w.GetUrl(PatternTag, tag, 0)
+		for _, datum := range tagData {
+			if datum.TagId == tag.Id {
+				tag.ItemId = datum.ItemId
+				break
+			}
+		}
+		result[tag.ItemId] = append(result[tag.ItemId], tag)
+	}
+
+	return result
 }
 
 func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) string {
@@ -381,7 +425,7 @@ func (w *Website) VerifyTagUrlToken(urlToken string, title string, id uint) stri
 		for {
 			tmpToken := urlToken
 			if index > 0 {
-				tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+				tmpToken = urlToken + "-" + strconv.FormatInt(int64(index), 10)
 			}
 			// 判断分类
 			_, err := w.GetCategoryByUrlToken(tmpToken)

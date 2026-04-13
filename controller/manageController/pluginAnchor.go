@@ -1,12 +1,13 @@
 package manageController
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strings"
 )
 
 func PluginAnchorList(ctx iris.Context) {
@@ -67,7 +68,11 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	req.Link = strings.TrimPrefix(req.Link, currentSite.System.BaseUrl)
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
+	req.Link = strings.TrimPrefix(req.Link, frontUrl)
 
 	var anchor *model.Anchor
 	var err error

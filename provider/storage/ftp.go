@@ -9,6 +9,7 @@ import (
 	"log"
 	"math"
 	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -72,7 +73,7 @@ func (s *FtpStorage) init() error {
 	}
 
 	c, err = ftp.Dial(
-		fmt.Sprintf("%s:%d", s.cfg.FTPHost, s.cfg.FTPPort),
+		s.cfg.FTPHost+":"+strconv.Itoa(s.cfg.FTPPort),
 		ftp.DialWithTimeout(10*time.Second),
 		ftp.DialWithTLS(tlsConfig),
 	)
@@ -81,7 +82,7 @@ func (s *FtpStorage) init() error {
 	if err != nil {
 		log.Printf("TLS connection failed: %v, trying plain connection", err)
 		c, err = ftp.Dial(
-			fmt.Sprintf("%s:%d", s.cfg.FTPHost, s.cfg.FTPPort),
+			s.cfg.FTPHost+":"+strconv.Itoa(s.cfg.FTPPort),
 			ftp.DialWithTimeout(10*time.Second),
 		)
 		if err != nil {

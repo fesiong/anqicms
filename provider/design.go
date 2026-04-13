@@ -5,21 +5,22 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"gorm.io/gorm/clause"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 	"mime/multipart"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
+
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func (w *Website) GetDesignList() []response.DesignPackage {
@@ -305,11 +306,10 @@ func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader, 
 			// 新名称
 			i := 1
 			for {
-				packagePath = fmt.Sprintf("%stemplate/%s%d", w.RootPath, packageName, i)
+				packagePath = w.RootPath + "template/" + packageName + strconv.Itoa(i)
 				_, err = os.Stat(packagePath)
 				if err != nil {
-					packageName = fmt.Sprintf("%s%d", packageName, i)
-					break
+					packageName = packageName + strconv.Itoa(i)
 				}
 				i++
 			}
@@ -1242,6 +1242,7 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 				_ = json.Unmarshal([]byte(v.Value), &systemSetting)
 				systemSetting.TemplateName = w.System.TemplateName
 				systemSetting.BaseUrl = w.System.BaseUrl
+				systemSetting.FrontUrl = w.System.FrontUrl
 				systemSetting.MobileUrl = w.System.MobileUrl
 				systemSetting.AdminUrl = w.System.AdminUrl
 				buf, err := json.Marshal(systemSetting)
@@ -1264,7 +1265,7 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 			v.Database = w.Mysql.Database
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 			// 更新模型数据
-			tplPath := fmt.Sprintf("%s/%s", w.GetTemplateDir(), v.TableName)
+			tplPath := w.GetTemplateDir() + "/" + v.TableName
 			v.Migrate(w.DB, tplPath, true)
 		}
 		w.DeleteCacheModules()
@@ -1528,7 +1529,7 @@ func (w *Website) BackupDesignData(packageName string) error {
 		for i := range archives {
 			archiveIds = append(archiveIds, archives[i].Id)
 			extras := w.GetArchiveExtra(archives[i].ModuleId, archives[i].Id, false)
-			archives[i].Extra = make(map[string]model.CustomField, len(extras))
+			archives[i].Extra = make(map[string]config.CustomField, len(extras))
 			for j := range extras {
 				archives[i].Extra[j] = *extras[j]
 			}

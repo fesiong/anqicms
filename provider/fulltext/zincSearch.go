@@ -3,11 +3,12 @@ package fulltext
 import (
 	"context"
 	"errors"
+	"log"
+	"strconv"
+
 	client "github.com/zinclabs/sdk-go-zincsearch"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
-	"log"
-	"strconv"
 )
 
 type ZincSearchService struct {
@@ -220,7 +221,7 @@ func (s *ZincSearchService) Search(keyword string, moduleId uint, page int, page
 		trimQuery.SetValue(moduleIdStr)
 		subTrimQuery := *client.NewMetaQuery()
 		subTrimQuery.SetTerm(map[string]client.MetaTermQuery{
-			"type": trimQuery,
+			"module_id": trimQuery,
 		})
 
 		// {
@@ -267,6 +268,14 @@ func (s *ZincSearchService) Search(keyword string, moduleId uint, page int, page
 		return nil, 0, err
 	}
 
+	// 评分归一与过滤
+	var maxScore float32
+	for _, hit := range resp.Hits.Hits {
+		if hit.GetScore() > maxScore {
+			maxScore = hit.GetScore()
+		}
+	}
+
 	var docs = make([]TinyArchive, 0, pageSize)
 	for _, hit := range resp.Hits.Hits {
 		source := hit.GetSource()
@@ -274,9 +283,22 @@ func (s *ZincSearchService) Search(keyword string, moduleId uint, page int, page
 		doc := TinyArchive{}
 		_ = library.MapToStruct(source, &doc)
 		doc.Id, doc.Type = GetId(id)
+		// ContainLength 过滤：在 title/description/content 中需要包含关键字或其子串
+		if s.config.ContainLength > 0 {
+			if !containsByLength(keyword, s.config.ContainLength, doc.Title, doc.Description, doc.Content) {
+				continue
+			}
+		}
+		// RankingScore 过滤：按页内最大分值归一到 0-1
+		if s.config.RankingScore > 0 && maxScore > 0 {
+			norm := hit.GetScore() / maxScore
+			if norm < float32(s.config.RankingScore)/100.0 {
+				continue
+			}
+		}
 		docs = append(docs, doc)
 	}
-	total := int64(*resp.Hits.Total.Value)
+	total := int64(len(docs))
 
 	return docs, total, nil
 }

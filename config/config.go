@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/library"
 	"log"
 	"math/rand"
 	"os"
@@ -13,6 +12,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"kandaoni.com/anqicms/library"
 )
 
 type ServerJson struct {
@@ -39,7 +40,6 @@ type ConfigJson struct {
 	PluginSendmail    PluginSendmail        `json:"plugin_sendmail"`
 	PluginImportApi   PluginImportApiConfig `json:"plugin_import_api"`
 	PluginStorage     PluginStorageConfig   `json:"plugin_storage"`
-	PluginPay         PluginPayConfig       `json:"plugin_pay"`
 	PluginWeapp       PluginWeappConfig     `json:"plugin_weapp"`
 	PluginWechat      PluginWeappConfig     `json:"plugin_wechat"`
 	PluginRetailer    PluginRetailerConfig  `json:"plugin_retailer"`
@@ -56,7 +56,7 @@ func initPath() {
 	if strings.Contains(baseName, "go_build") || strings.Contains(ExecPath, "go-build") || strings.Contains(baseName, "Test") {
 		ExecPath, _ = os.Getwd()
 	}
-	if strings.Contains(baseName, "Test") {
+	if strings.Contains(baseName, "Test") || strings.Contains(ExecPath, "/test") || strings.Contains(ExecPath, "/provider") {
 		ExecPath = filepath.Dir(ExecPath)
 	}
 	length := utf8.RuneCountInString(ExecPath)

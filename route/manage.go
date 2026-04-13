@@ -5,7 +5,6 @@ import (
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
@@ -18,7 +17,7 @@ func manageRoute(app *iris.Application) {
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{
 		manage.Post("/login", manageController.AdminLogin)
-		manage.Get("/captcha", controller.GenerateCaptcha)
+		manage.Get("/captcha", manageController.GenerateCaptcha)
 		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
 
 		password := manage.Party("/password")
@@ -48,6 +47,10 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
+			anqi.Post("/ai/chat", manageController.AuthAiChat)
+			anqi.Post("/ai/image", manageController.AuthAiGenerateImage)
+			anqi.Post("/ai/image/confirm", manageController.AuthAiGenerateImageConfirm)
+			anqi.Get("/ai/image/histories", manageController.AuthAiGenerateImageHistories)
 			anqi.Post("/extract/keywords", manageController.AuthExtractKeywords)
 			anqi.Post("/extract/description", manageController.AuthExtractDescription)
 			anqi.Post("/restart", manageController.RestartAnqicms)
@@ -113,6 +116,8 @@ func manageRoute(app *iris.Application) {
 			setting.Post("/sensitive/check", manageController.SettingSensitiveWordsCheck)
 			setting.Post("/sensitive/sync", manageController.SettingSensitiveWordsSync)
 			setting.Post("/migratedb", manageController.SettingMigrateDB)
+			setting.Get("/currency", manageController.SettingCurrency)
+			setting.Post("/currency", manageController.SettingCurrencyForm)
 		}
 
 		collector := manage.Party("/collector", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -191,6 +196,14 @@ func manageRoute(app *iris.Application) {
 			statistic.Get("/include/detail", manageController.GetSpiderIncludeDetail)
 			statistic.Get("/summary", manageController.GetStatisticsSummary)
 			statistic.Get("/dashboard", manageController.GetStatisticsDashboard)
+			statistic.Get("/conversion", manageController.GetStatisticConversion)
+			statistic.Get("/coupon", manageController.GetStatisticCoupon)
+			statistic.Get("/customer", manageController.GetStatisticCustomer)
+			statistic.Get("/live", manageController.GetStatisticLive)
+			statistic.Get("/order", manageController.GetStatisticOrder)
+			statistic.Get("/product", manageController.GetStatisticProduct)
+			statistic.Get("/search", manageController.GetStatisticSearch)
+			statistic.Get("/search/detail", manageController.GetStatisticSearchDetail)
 		}
 
 		design := manage.Party("/design", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -273,6 +286,7 @@ func manageRoute(app *iris.Application) {
 			guestbook := plugin.Party("/guestbook")
 			{
 				guestbook.Get("/list", manageController.PluginGuestbookList)
+				guestbook.Post("/status", manageController.PluginGuestbookUpdateStatus)
 				guestbook.Post("/delete", manageController.PluginGuestbookDelete)
 				guestbook.Post("/export", manageController.PluginGuestbookExport)
 				guestbook.Get("/setting", manageController.PluginGuestbookSetting)
@@ -315,6 +329,10 @@ func manageRoute(app *iris.Application) {
 				sendmail.Get("/list", manageController.PluginSendmailList)
 				sendmail.Get("/setting", manageController.PluginSendmailSetting)
 				sendmail.Post("/setting", manageController.PluginSendmailSettingForm)
+				sendmail.Get("/templates", manageController.PluginGetEmailTemplates)
+				sendmail.Get("/template", manageController.PluginGetEmailTemplateDetail)
+				sendmail.Post("/template", manageController.PluginSendmailSaveTemplate)
+				sendmail.Post("/template/preview", manageController.PluginSendmailTemplatePreview)
 				sendmail.Post("/test", manageController.PluginSendmailTest)
 			}
 
@@ -359,6 +377,7 @@ func manageRoute(app *iris.Application) {
 				user.Get("/list", manageController.PluginUserList)
 				user.Get("/detail", manageController.PluginUserDetail)
 				user.Post("/detail", manageController.PluginUserDetailForm)
+				user.Post("/balance", manageController.PluginUserChangeBalance)
 				user.Post("/delete", manageController.PluginUserDelete)
 				user.Get("/group/list", manageController.PluginUserGroupList)
 				user.Get("/group/detail", manageController.PluginUserGroupDetail)
@@ -399,9 +418,12 @@ func manageRoute(app *iris.Application) {
 
 			pay := plugin.Party("/pay")
 			{
-				pay.Get("/config", manageController.PluginPayConfig)
-				pay.Post("/config", manageController.PluginPayConfigForm)
+				pay.Get("/accounts", manageController.PluginGetPaymentAccounts)
+				pay.Get("/detail", manageController.PluginGetPaymentAccountDetail)
+				pay.Post("/detail", manageController.PluginSavePaymentAccount)
+				pay.Post("/delete", manageController.PluginDeletePaymentAccount)
 				pay.Post("/upload", manageController.PluginPayUploadFile)
+				pay.Get("/statistic", manageController.PluginPayStatistic)
 			}
 
 			order := plugin.Party("/order")
@@ -417,6 +439,36 @@ func manageRoute(app *iris.Application) {
 				order.Post("/refund", manageController.PluginOrderSetRefund)
 				order.Post("/refund/apply", manageController.PluginOrderApplyRefund)
 				order.Post("/export", manageController.PluginOrderExport)
+				order.Get("/reviews", manageController.PluginGetOrderReviews)
+				order.Get("/review", manageController.PluginGetOrderReview)
+				order.Post("/review/save", manageController.PluginSaveOrderReview)
+				order.Post("/review/delete", manageController.PluginDeleteOrderReview)
+				// 附加服务
+				order.Get("/services", manageController.PluginGetOrderServices)
+				order.Get("/service", manageController.PluginGetOrderService)
+				order.Post("/service/save", manageController.PluginSaveOrderService)
+				order.Post("/service/delete", manageController.PluginDeleteOrderService)
+			}
+			communication := plugin.Party("/communication")
+			{
+				communication.Get("/setting", manageController.GetCommunicationSetting)
+				communication.Post("/setting", manageController.SaveCommunicationSetting)
+				communication.Get("/order/list", manageController.CommunicationOrderList)
+				communication.Get("/order/detail", manageController.CommunicationOrderDetail)
+				communication.Post("/order/images/save", manageController.CommunicationOrderSaveImages)
+				communication.Post("/order/close", manageController.CommunicationOrderClose)
+				communication.Post("/quote/send", manageController.CommunicationSendQuote)
+				communication.Post("/message/send", manageController.CommunicationMessageSend)
+				communication.Post("/message/delete", manageController.CommunicationMessageDelete)
+				communication.Get("/message/list", manageController.CommunicationMessageList)
+			}
+
+			activity := plugin.Party("/activity")
+			{
+				activity.Get("/list", manageController.PluginActivityList)
+				activity.Get("/detail", manageController.PluginActivityDetail)
+				activity.Post("/detail", manageController.PluginActivityDetailForm)
+				activity.Post("/delete", manageController.PluginActivityDelete)
 			}
 
 			withdraw := plugin.Party("/withdraw")
@@ -551,6 +603,9 @@ func manageRoute(app *iris.Application) {
 				translate.Get("/config", manageController.PluginGetTranslateConfig)
 				translate.Post("/config", manageController.PluginSaveTranslateConfig)
 				translate.Get("/logs", manageController.PluginTranslateLogList)
+				translate.Get("/log/texts", manageController.PluginGetTranslateTextLog)
+				translate.Post("/log/text/remove", manageController.PluginRemoveTranslateTextLog)
+				translate.Post("/log/text/save", manageController.PluginSaveTranslateTextLog)
 			}
 			jsonLd := plugin.Party("/jsonld")
 			{
@@ -566,6 +621,49 @@ func manageRoute(app *iris.Application) {
 			{
 				google.Get("/setting", manageController.PluginGetGoogleSetting)
 				google.Post("/setting", manageController.PluginSaveGoogleSetting)
+			}
+			subscriber := plugin.Party("/subscriber")
+			{
+				subscriber.Get("/list", manageController.PluginGetSubscribers)
+				subscriber.Post("/save", manageController.PluginSaveSubscriber)
+				subscriber.Post("/delete", manageController.PluginDeleteSubscriber)
+				subscriber.Post("/send", manageController.SendSubscriberMail)
+				subscriber.Get("/category/list", manageController.GetSubscriberCategories)
+				subscriber.Post("/category/save", manageController.SaveSubscriberCategory)
+				subscriber.Post("/category/delete", manageController.DeleteSubscriberCategory)
+			}
+
+			wishlist := plugin.Party("/wishlist")
+			{
+				wishlist.Get("/list", manageController.PluginGetWishlist)
+			}
+
+			coupon := plugin.Party("/coupon")
+			{
+				coupon.Get("/list", manageController.GetCouponList)
+				coupon.Get("/detail", manageController.CouponDetail)
+				coupon.Post("/detail", manageController.CouponDetailForm)
+				coupon.Post("/delete", manageController.DeleteCoupon)
+				coupon.Get("/code/list", manageController.GetCouponCodeList)
+				coupon.Post("/code/make", manageController.MakeCouponCode)
+				coupon.Post("/code/delete", manageController.DeleteCouponCode)
+				coupon.Post("/code/detail", manageController.SaveCouponCode)
+				coupon.Get("/archives", manageController.GetCouponArchives)
+				coupon.Post("/archives/add", manageController.AddCouponArchives)
+				coupon.Post("/archives/delete", manageController.DeleteCouponArchives)
+			}
+
+			googlemerchant := plugin.Party("/googlemerchant")
+			{
+				googlemerchant.Get("/config", manageController.PluginGoogleMerchantConfig)
+				googlemerchant.Post("/config", manageController.PluginGoogleMerchantConfigSave)
+				googlemerchant.Get("/auth/url", manageController.PluginGoogleMerchantAuthUrl)
+				googlemerchant.Post("/callback", manageController.PluginGoogleMerchantCallback)
+				googlemerchant.Post("account/select", manageController.PluginGoogleMerchantAccountSelect)
+				googlemerchant.Post("/sync", manageController.PluginGoogleMerchantSync)
+				googlemerchant.Post("/sync/delete", manageController.PluginGoogleMerchantSyncDelete)
+				googlemerchant.Get("/sync/statuses", manageController.PluginGoogleMerchantSyncStatusList)
+				googlemerchant.Get("/sync/logs", manageController.PluginGoogleMerchantSyncLogs)
 			}
 		}
 	}

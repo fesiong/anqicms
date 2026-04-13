@@ -8,12 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"golang.org/x/net/html"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
 	"log"
 	"net/http"
 	"net/url"
@@ -23,6 +18,12 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"golang.org/x/net/html"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) SelfAiTranslateResult(req *AnqiTranslateTextRequest) (*AnqiTranslateTextRequest, error) {
@@ -504,6 +505,21 @@ func (w *Website) TranslateTexts(texts []string, from, to string) ([]string, err
 		textIndices[text] = append(textIndices[text], i)
 	}
 
+	// 从缓存中批量获取已翻译的文本
+	var uncachedTexts = make([]string, 0, len(uniqueTexts))
+	for _, text := range uniqueTexts {
+		// 使用MD5哈希作为缓存键
+		textMd5 := library.Md5(from + "-" + to + "-" + text)
+		var textLog model.TranslateTextLog
+		if err := w.DB.Where("`md5` = ?", textMd5).First(&textLog).Error; err == nil {
+			textMap[text] = textLog.Translated
+		} else {
+			uncachedTexts = append(uncachedTexts, text)
+		}
+	}
+	//
+	uniqueTexts = uncachedTexts
+
 	// 处理未缓存的文本
 	if len(uniqueTexts) > 0 {
 		translatedBatch, err := w.translateBatch(uniqueTexts, from, to)
@@ -592,13 +608,6 @@ func (w *Website) translateBatch(texts []string, from, to string) (map[string]st
 }
 
 func (w *Website) TranslateText(text, from, to string) (string, error) {
-	// 检查数据库存储内容
-	textMd5 := library.Md5(from + "-" + to + "-" + text)
-	var textLog model.TranslateTextLog
-	if err := w.DB.Where("`md5` = ?", textMd5).First(&textLog).Error; err == nil {
-		return textLog.Translated, nil
-	}
-
 	var content string
 	var err error
 	// 使用AI翻译
@@ -641,7 +650,9 @@ func (w *Website) TranslateText(text, from, to string) (string, error) {
 		err = errors.New(w.Tr("NoAiGenerationSourceSelected"))
 	}
 	if content != "" {
-		textLog = model.TranslateTextLog{
+		// 数据库存储内容
+		textMd5 := library.Md5(from + "-" + to + "-" + text)
+		textLog := model.TranslateTextLog{
 			Md5:        textMd5,
 			Language:   from,
 			ToLanguage: to,
@@ -834,4 +845,27 @@ func localReplace(s string) (string, bool) {
 	}
 
 	return s, true
+}
+
+func (w *Website) ReplaceTranslateText(buf []byte, oldText, newText string) ([]byte, bool) {
+	if len(oldText) == 0 {
+		return buf, false
+	}
+	if bytes.Contains(buf, []byte(oldText)) {
+		// 只替换 >.*< 以及 alt=".*" 之间的内容
+		buf = regexp.MustCompile(`(>[^<]*?)`+regexp.QuoteMeta(oldText)+`([^<]*<)`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		buf = regexp.MustCompile(`(\balt\s*=\s*["\'][^"\']*?)`+regexp.QuoteMeta(oldText)+`([^"\']*?["\'])`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		buf = regexp.MustCompile(`(\btitle\s*=\s*["\'][^"\']*?)`+regexp.QuoteMeta(oldText)+`([^"\']*?["\'])`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		buf = regexp.MustCompile(`(\bcontent\s*=\s*["\'][^"\']*?)`+regexp.QuoteMeta(oldText)+`([^"\']*?["\'])`).ReplaceAllFunc(buf, func(match []byte) []byte {
+			return bytes.Replace(match, []byte(oldText), []byte(newText), 1)
+		})
+		return buf, true
+	}
+	return buf, false
 }

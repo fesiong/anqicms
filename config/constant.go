@@ -1,6 +1,6 @@
 package config
 
-const Version = "3.5.0"
+const Version = "1.0.0"
 const Trial = false
 const VersionType = ""
 
@@ -26,6 +26,11 @@ const (
 	CustomFieldTypeTexts    = "texts"
 	CustomFieldTypeArchive  = "archive"
 	CustomFieldTypeCategory = "category"
+	CustomFieldTypeDate     = "date"
+	CustomFieldTypeTime     = "time"
+	CustomFieldTypeDatetime = "datetime"
+	CustomFieldTypeColor    = "color"
+	CustomFieldTypeTimeline = "timeline"
 )
 
 const (
@@ -87,6 +92,7 @@ const (
 	PayWayWeapp   = "weapp"   // 微信小程序支付
 	PayWayAlipay  = "alipay"  // 支付宝支付
 	PayWayOffline = "offline" // 线下支付
+	PayWayBalance = "balance" // 余额支付
 	PayWayPaypal  = "paypal"  // paypal
 	PayWayStripe  = "stripe"  // stripe
 )
@@ -104,6 +110,17 @@ const (
 	FinanceActionSpread     = 6
 	FinanceActionCashBack   = 7
 	FinanceActionCommission = 8
+)
+
+const (
+	CommunicationStatusWaiting  = 0
+	CommunicationStatusDoing    = 1 // 沟通中
+	CommunicationStatusQuote    = 2
+	CommunicationStatusAccepted = 3
+	CommunicationStatusCancel   = -1
+	CommunicationStatusFinished = 4
+	CommunicationStatusRejected = 5
+	CommunicationStatusRefund   = 6
 )
 
 const (
@@ -148,8 +165,9 @@ const (
 )
 
 const (
-	OrderTypeGoods = "goods"
-	OrderTypeVip   = "vip"
+	OrderTypeGoods         = "goods"
+	OrderTypeVip           = "vip"
+	OrderTypeCommunication = "communication"
 )
 
 const (
@@ -194,4 +212,38 @@ const (
 
 	MultiLangSiteTypeMulti  = "multi"
 	MultiLangSiteTypeSingle = "single"
+)
+
+const (
+	CouponTypeRegister  = 1 // 注册送优惠券,每人一张
+	CouponTypeLimit     = 2 // 限量优惠券,每人可领一张
+	CouponTypeBuy       = 3 // 购买成功赠送,一次一张
+	CouponTypePromotion = 4 // 促销优惠券, 满额直减,不需领取
+	CouponTypeFree      = 5 // 自由规则, 请求接口即可获得
+	CouponTypeIntegral  = 6 // 积分兑换券, 可以使用对应的积分兑换
+	CouponTypeActivity  = 7 // 活动奖品(小游戏奖品)
+)
+
+const (
+	CouponMoneyTypeFixed    = 0 // 固定金额
+	CouponMoneyTypeRandom   = 1 // 随机金额
+	CouponMoneyTypeDiscount = 2 // 固定折扣
+
+	CouponRangeTypeAll        = 0 // 全部可用
+	CouponRangeTypeProduct    = 1 // 指定商品可用
+	CouponRangeTypeNotProduct = 2 // 指定商品不可用
+
+	CouponStatusUnused  = 0 // 未使用
+	CouponStatusUsing   = 1 // 使用中
+	CouponStatusUsed    = 2 // 已使用
+	CouponStatusExpired = 3 // 已过期
+
+	OrderServiceTypeFixed      = 0 // 固定金额
+	OrderServiceTypePercentage = 2 // 订单金额的百分比
+)
+
+const (
+	UserStatusActive  = 1  // 已激活
+	UserStatusPending = 0  // 待审核
+	UserStatusBlocked = -1 // 已封禁
 )

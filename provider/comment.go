@@ -24,6 +24,7 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 	comment.Status = req.Status
 	comment.UserName = req.UserName
 	comment.Content = req.Content
+	comment.Email = req.Email
 
 	err = comment.Save(w.DB)
 	return
@@ -42,6 +43,12 @@ func (w *Website) GetCommentList(archiveId int64, userId uint, order string, cur
 	}
 	if userId > 0 {
 		builder = builder.Where("user_id = ?", userId)
+	}
+	if order != "" {
+		order = ParseOrderBy(order, "")
+	} else {
+		// 默认排序规则
+		order = "id desc"
 	}
 	if order != "" {
 		builder = builder.Order(order)

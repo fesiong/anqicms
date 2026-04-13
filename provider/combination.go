@@ -4,11 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/PuerkitoBio/goquery"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"log"
 	"math/rand"
 	"net/url"
@@ -17,6 +12,12 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/PuerkitoBio/goquery"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type WebLink struct {
@@ -130,6 +131,8 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		log.Println("保存组合文章出错：", archive.Title, err.Error())
 		return 0, nil
 	}
+	//文章计数
+	w.UpdateTodayArticleCount(1, 0)
 	log.Println(res.Id, res.Title)
 	if w.CollectorConfig.AutoPseudo {
 		// AI 改写

@@ -1,13 +1,14 @@
 package controller
 
 import (
+	"net/url"
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"net/url"
-	"strings"
 )
 
 func WechatApi(ctx iris.Context) {
@@ -93,7 +94,7 @@ func WechatAuthApi(ctx iris.Context) {
 
 		return
 	}
-
+	// 需要修改吗
 	redirectUri := strings.TrimRight(currentSite.System.BaseUrl, "/") + "/api/wechat/auth"
 	ctx.Redirect("https://open.weixin.qq.com/connect/oauth2/authorize?appid=" + currentSite.PluginWechat.AppID + "&redirect_uri=" + url.PathEscape(redirectUri) + "&response_type=code&scope=snsapi_userinfo&state=" + state + "#wechat_redirect")
 }

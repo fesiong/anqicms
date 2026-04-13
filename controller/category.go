@@ -157,6 +157,10 @@ func SearchPage(ctx iris.Context) {
 			}
 		}
 	}
+	// 记录搜索
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	addr := ctx.RemoteAddr()
+	go currentSite.AddSearchLog(q, userId, addr)
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = currentSite.TplTr("Search%s", "")
@@ -165,7 +169,10 @@ func SearchPage(ctx iris.Context) {
 		}
 		webInfo.CurrentPage = currentPage
 		webInfo.PageName = "search"
-		webInfo.CanonicalUrl = currentSite.GetUrl(fmt.Sprintf("/search?q=%s(&page={page})", url.QueryEscape(q)), nil, currentPage)
+		webInfo.CanonicalUrl = currentSite.GetUrl(provider.PatternSearch, map[string]interface{}{
+			"q":      url.QueryEscape(q),
+			"module": moduleToken,
+		}, currentPage)
 		ctx.ViewData("webInfo", webInfo)
 	}
 

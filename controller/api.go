@@ -2,6 +2,10 @@ package controller
 
 import (
 	"encoding/json"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -10,9 +14,6 @@ import (
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func ApiImportArchive(ctx iris.Context) {
@@ -310,8 +311,23 @@ func ApiImportArchive(ctx iris.Context) {
 			} else {
 				value := ctx.PostValue(v.FieldName)
 				if value != "" {
-					req.Extra[v.FieldName] = map[string]interface{}{
-						"value": value,
+					if v.Type == config.CustomFieldTypeImages || v.Type == config.CustomFieldTypeTexts || v.Type == config.CustomFieldTypeArchive || v.Type == config.CustomFieldTypeTimeline {
+						// 提交的是JSON字符串
+						var extra any
+						err := json.Unmarshal([]byte(value), &extra)
+						if err == nil {
+							req.Extra[v.FieldName] = map[string]interface{}{
+								"value": extra,
+							}
+						} else {
+							req.Extra[v.FieldName] = map[string]interface{}{
+								"value": value,
+							}
+						}
+					} else {
+						req.Extra[v.FieldName] = map[string]interface{}{
+							"value": value,
+						}
 					}
 				}
 			}
@@ -480,7 +496,11 @@ func ApiImportMakeSitemap(ctx iris.Context) {
 				//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 				pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
 				// 写入Sitemap的url
-				pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+				frontUrl := currentSite.System.BaseUrl
+				if currentSite.System.FrontUrl != "" {
+					frontUrl = currentSite.System.FrontUrl
+				}
+				pluginSitemap.SitemapURL = frontUrl + "/sitemap." + pluginSitemap.Type
 
 				currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
 			}
@@ -507,7 +527,11 @@ func ApiImportMakeSitemap(ctx iris.Context) {
 	//由于sitemap的更新可能很频繁，因此sitemap的更新时间直接写入一个文件中
 	pluginSitemap.UpdatedTime = currentSite.GetSitemapTime()
 	// 写入Sitemap的url
-	pluginSitemap.SitemapURL = currentSite.System.BaseUrl + "/sitemap." + pluginSitemap.Type
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
+	pluginSitemap.SitemapURL = frontUrl + "/sitemap." + pluginSitemap.Type
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSitemapManually"))
 
@@ -651,6 +675,47 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	})
 }
 
+func ApiAddSubscriber(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.SubscriberRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Email == "" || !currentSite.VerifyEmailFormat(req.Email) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseFillInTheEmail"),
+		})
+		return
+	}
+	_, err := currentSite.GetSubscriberByEmail(req.Email)
+	if err == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("OperationSuccessful"),
+		})
+		return
+	}
+	req.Id = 0
+	err = currentSite.SaveSubscriber(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("OperationSuccessful"),
+	})
+}
+
 func ApiImportCheckFriendLink(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -700,4 +765,55 @@ func CheckApiOpen(ctx iris.Context) {
 	}
 
 	ctx.Next()
+}
+
+// 接收 post 请求
+func ApiLogStatistic(ctx iris.Context) {
+	var req request.LogStatisticRequest
+	err := ctx.ReadBody(&req)
+	ctx.ContentType("text/javascript")
+	if err != nil {
+		ctx.StatusCode(iris.StatusBadRequest)
+		return
+	}
+	currentSite := provider.CurrentSite(ctx)
+
+	if req.Action == request.LogActionViews {
+		LogAccess(ctx, &req)
+		// 记录archive的浏览量
+		if req.Type == request.LogTypeArchive {
+			archive := currentSite.GetArchiveByIdFromCache(req.Id)
+			if archive != nil {
+				_ = archive.AddViews(currentSite.DB)
+				if archive.ModuleId == 2 { // 产品
+					// 统计文章的阅读数
+					req.Type = request.LogTypeProductView
+					// 推送事件
+					userId := ctx.Values().GetUintDefault("userId", 0)
+					if userId > 0 {
+						userInfo, ok := ctx.Values().Get("userInfo").(*model.User)
+						if !ok {
+							userInfo = &model.User{
+								Id: userId,
+							}
+						}
+						// 推送事件
+						currentSite.CreateEvent(provider.EventProductViewd, map[string]interface{}{
+							"id":    archive.Id,
+							"title": archive.Title,
+							"link":  archive.Link,
+							"logo":  archive.Logo,
+							"price": archive.Price / 100,
+						}, userInfo)
+					}
+				} else {
+					// 其它
+					req.Type = request.LogTypeArticleView
+				}
+			}
+		}
+	}
+	_ = currentSite.ShopCountLog.Write(&req)
+
+	ctx.StatusCode(iris.StatusOK)
 }

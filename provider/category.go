@@ -3,7 +3,12 @@ package provider
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"time"
+
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -11,11 +16,6 @@ import (
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"net/url"
-	"regexp"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
@@ -25,7 +25,7 @@ func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, s
 		return nil, err
 	}
 	for i := range categories {
-		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categories[i].Id)))
 		categories[i].Link = w.GetUrl("category", categories[i], 0)
 	}
 	if showType == config.CategoryShowTypeList {
@@ -69,7 +69,7 @@ func (w *Website) GetCategoryByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Cate
 	if err != nil {
 		return nil, err
 	}
-	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	category.Link = w.GetUrl("category", &category, 0)
 
 	return &category, nil
@@ -174,12 +174,20 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 				} else if field.Type == config.CustomFieldTypeTexts && category.Extra[field.FieldName] != nil {
 					buf, _ := json.Marshal(category.Extra[field.FieldName])
 					category.Extra[field.FieldName] = string(buf)
+				} else if field.Type == config.CustomFieldTypeTimeline {
+					// 存 json
+					buf, _ := json.Marshal(category.Extra[field.FieldName])
+					category.Extra[field.FieldName] = string(buf)
 				}
 			}
 		}
 	}
 	baseHost := ""
-	urls, err := url.Parse(w.System.BaseUrl)
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	urls, err := url.Parse(frontUrl)
 	if err == nil {
 		baseHost = urls.Host
 	}
@@ -290,7 +298,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "")
+					attachment, err2 := w.DownloadRemoteImage(match[1], "", 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -311,7 +319,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if err2 == nil {
 				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[2], w.PluginStorage.StorageUrl) {
 					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[2], "")
+					attachment, err2 := w.DownloadRemoteImage(match[2], "", 0)
 					if err2 == nil {
 						// 下载完成
 						hasChangeImg = true
@@ -370,7 +378,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		})
 		w.FlushIndex()
 	}
-	category.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	category.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(category.Id)))
 	w.DeleteCacheCategories()
 	w.DeleteCacheIndex()
 
@@ -468,7 +476,7 @@ func (w *Website) GetCacheCategories() []*model.Category {
 		return nil
 	}
 	for i := range categories {
-		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		categories[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(categories[i].Id)))
 	}
 	categoryTree := NewCategoryTree(categories)
 	categories = categoryTree.GetTree(0, "")
@@ -562,7 +570,7 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int, 
 		if categories[i].Type != uint(pageType) {
 			continue
 		}
-		if moduleId > 0 && pageType != config.CategoryTypePage {
+		if parentId == 0 && moduleId > 0 && pageType != config.CategoryTypePage {
 			if categories[i].ModuleId != moduleId {
 				continue
 			}
@@ -585,7 +593,7 @@ func (w *Website) VerifyCategoryUrlToken(urlToken string, id uint) string {
 	for {
 		tmpToken := urlToken
 		if index > 0 {
-			tmpToken = fmt.Sprintf("%s-%d", urlToken, index)
+			tmpToken = urlToken + "-" + strconv.Itoa(index)
 		}
 		// 判断分类
 		tmpCat, err := w.GetCategoryByUrlToken(tmpToken)

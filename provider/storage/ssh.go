@@ -72,7 +72,7 @@ func (s *SSHStorage) init() error {
 
 	if s.cfg.SSHPrivateKey != "" {
 		//尝试使用私钥连接
-		filePath := fmt.Sprintf(s.dataPath + "cert/" + s.cfg.SSHPrivateKey)
+		filePath := s.dataPath + "cert/" + s.cfg.SSHPrivateKey
 		auth, err = goph.Key(filePath, s.cfg.SSHPassword)
 		if err != nil {
 			return err

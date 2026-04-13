@@ -38,6 +38,7 @@ func PluginSaveMultiLangConfig(ctx iris.Context) {
 	currentSite.MultiLanguage.Type = req.Type
 	currentSite.MultiLanguage.AutoTranslate = req.AutoTranslate
 	currentSite.MultiLanguage.SiteType = req.SiteType
+	currentSite.MultiLanguage.ShowMainDir = req.ShowMainDir
 	// language
 	currentSite.System.Language = req.DefaultLanguage
 	currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
@@ -194,6 +195,13 @@ func PluginSyncMultiLangSiteContent(ctx iris.Context) {
 		})
 		return
 	}
+	if req.Id == currentSite.Id {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("CannotSyncSiteContent"),
+		})
+		return
+	}
 	req.ParentId = currentSite.Id
 
 	status, err := currentSite.NewMultiLangSync()
@@ -251,8 +259,9 @@ func GetTranslateHtmlCaches(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	lang := ctx.URLParam("lang")
+	uri := ctx.URLParam("uri")
 
-	result, total := currentSite.GetTranslateHtmlCaches(lang, currentPage, pageSize)
+	result, total := currentSite.GetTranslateHtmlCaches(lang, uri, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

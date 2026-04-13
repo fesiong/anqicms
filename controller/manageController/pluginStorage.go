@@ -1,14 +1,14 @@
 package manageController
 
 import (
-	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 )
 
 func PluginStorageConfig(ctx iris.Context) {
@@ -110,7 +110,7 @@ func PluginStorageUploadFile(ctx iris.Context) {
 	}
 	defer file.Close()
 	fileName := "ssh_private_key.key"
-	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
+	filePath := currentSite.DataPath + "cert/" + fileName
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{

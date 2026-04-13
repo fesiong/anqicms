@@ -1,7 +1,9 @@
 package model
 
 type Finance struct {
-	Model
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"` // 用户
 	Direction   int    `json:"direction" gorm:"column:direction;type:tinyint(1) not null;default:0"`         // 方向
 	Amount      int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:'金额'"`

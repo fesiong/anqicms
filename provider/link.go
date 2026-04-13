@@ -2,11 +2,12 @@ package provider
 
 import (
 	"errors"
+	"strings"
+	"time"
+
 	"github.com/PuerkitoBio/goquery"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"strings"
-	"time"
 )
 
 func (w *Website) GetLinkList() ([]*model.Link, error) {
@@ -84,6 +85,9 @@ func (w *Website) PluginLinkCheck(link *model.Link) (*model.Link, error) {
 	myLink := link.MyLink
 	if myLink == "" {
 		myLink = w.System.BaseUrl
+		if w.System.FrontUrl != "" {
+			myLink = w.System.FrontUrl
+		}
 	}
 
 	linkStatus := model.LinkStatusNotMatch

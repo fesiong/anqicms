@@ -3,10 +3,11 @@ package provider
 import (
 	"fmt"
 	"io"
-	"kandaoni.com/anqicms/model"
 	"mime/multipart"
 	"net/url"
 	"strings"
+
+	"kandaoni.com/anqicms/model"
 )
 
 func (w *Website) GetRedirectList(keyword string, currentPage, pageSize int) ([]*model.Redirect, int64, error) {
@@ -119,8 +120,11 @@ func (w *Website) GetCacheRedirects() map[string]string {
 	if err == nil {
 		return redirects
 	}
-
-	baseUrl, err := url.Parse(w.System.BaseUrl)
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	baseUrl, err := url.Parse(frontUrl)
 	if err != nil {
 		baseUrl, _ = url.Parse("http://127.0.0.1:8001")
 	}

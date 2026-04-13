@@ -1,12 +1,13 @@
 package manageController
 
 import (
+	"os"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"time"
 )
 
 func GetTransferTask(ctx iris.Context) {

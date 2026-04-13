@@ -1,15 +1,16 @@
 package controller
 
 import (
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func ApiRegister(ctx iris.Context) {
@@ -23,6 +24,11 @@ func ApiRegister(ctx iris.Context) {
 		})
 		return
 	}
+	// 重新读取一遍
+	var extraFields map[string]interface{}
+	ctx.ReadJSON(&extraFields)
+	req.Extra = extraFields
+
 	tmpInvite := ctx.GetCookie("invite")
 	if tmpInvite != "" {
 		tmpId, _ := strconv.Atoi(tmpInvite)
@@ -32,6 +38,15 @@ func ApiRegister(ctx iris.Context) {
 	req.Phone = strings.TrimSpace(req.Phone)
 	req.Email = strings.TrimSpace(req.Email)
 	req.Password = strings.TrimSpace(req.Password)
+	if req.UserName == "" && req.FirstName == "" {
+		req.UserName = req.FirstName
+		if req.LastName != "" {
+			req.UserName += "_" + req.LastName
+		}
+	}
+	if req.UserName == "" && req.Email != "" {
+		req.UserName = strings.Split(req.Email, "@")[0]
+	}
 	user, err := currentSite.RegisterUser(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -41,14 +56,27 @@ func ApiRegister(ctx iris.Context) {
 		return
 	}
 
-	if currentSite.PluginSendmail.SignupVerify && user.EmailVerified == false {
-		// 提示正在验证, 并且不登录
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  ctx.Tr("PleaseVerifyEmail"),
-			"data": user,
-		})
-		return
+	if user.EmailVerified == false {
+		//提示验证
+		template, exist := currentSite.GetEmailTemplateInfo("register")
+		if exist && template.Open {
+			// 提示正在验证, 并且不登录
+			data := map[string]interface{}{
+				"website": currentSite,
+				"user":    user,
+			}
+			var err error
+			template, err = currentSite.RenderEmailTemplate(template, data)
+			if err == nil {
+				currentSite.SendMail(template.Subject, template.Content, nil)
+			}
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  ctx.Tr("PleaseVerifyEmail"),
+				"data": user,
+			})
+			return
+		}
 	}
 
 	// set token to cookie
@@ -142,6 +170,11 @@ func ApiLogin(ctx iris.Context) {
 				return
 			}
 		}
+		if req.Email != "" {
+			req.UserName = req.Email
+		} else if req.Phone != "" {
+			req.UserName = req.Phone
+		}
 		req.UserName = strings.TrimSpace(req.UserName)
 		req.Password = strings.TrimSpace(req.Password)
 
@@ -173,9 +206,56 @@ func ApiLogin(ctx iris.Context) {
 	}
 
 	if user == nil {
+		// 记录日志
+		loginLog := model.LoginLog{
+			UserId:   0,
+			Ip:       ctx.RemoteAddr(),
+			Status:   0,
+			UserName: req.UserName,
+			Password: req.Password,
+		}
+		currentSite.DB.Create(&loginLog)
+
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("LoginFailed"),
+		})
+		return
+	}
+	// 记录日志
+	loginLog := model.LoginLog{
+		UserId:   user.Id,
+		Ip:       ctx.RemoteAddr(),
+		Status:   1,
+		UserName: req.UserName,
+		Password: "",
+	}
+	currentSite.DB.Create(&loginLog)
+
+	_ = currentSite.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionUser, Type: request.LogTypeUserLogin, Id: int64(user.Id)})
+
+	// 审核和封禁中的用户不能登录
+	if user.Status != config.UserStatusActive {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserNotActive"),
+		})
+		return
+	}
+
+	// 已封禁的用户不能登录
+	if user.Status == config.UserStatusBlocked {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserBlocked"),
+		})
+		return
+	}
+
+	if user.Status == config.UserStatusPending {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserPending"),
 		})
 		return
 	}
@@ -220,8 +300,9 @@ func ApiSendVerifyEmail(ctx iris.Context) {
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("UserDoesNotExist"),
 		})
+		return
 	}
-	_ = currentSite.SendVerifyEmail(user, "reset")
+	_ = currentSite.SendVerifyEmail(user, req.State)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -229,6 +310,7 @@ func ApiSendVerifyEmail(ctx iris.Context) {
 	})
 }
 
+// ApiVerifyEmail 验证邮箱, state := verify = 邮件验证|reset = 重置密码|exist = 检查邮箱已存在
 func ApiVerifyEmail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	token := ctx.URLParam("token")
@@ -236,7 +318,7 @@ func ApiVerifyEmail(ctx iris.Context) {
 	email := ctx.URLParam("email")
 	state := ctx.URLParam("state")
 	returnType := ctx.URLParam("return")
-	if !currentSite.VerifyEmailFormat(email) || len(token) == 0 {
+	if !currentSite.VerifyEmailFormat(email) || (len(token) == 0 && state != "exist") {
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -249,7 +331,7 @@ func ApiVerifyEmail(ctx iris.Context) {
 	}
 	user, err := currentSite.GetUserInfoByEmail(email)
 	if err != nil {
-		if returnType == "json" {
+		if returnType == "json" || state == "exist" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  currentSite.TplTr("UserDoesNotExist"),
@@ -257,6 +339,19 @@ func ApiVerifyEmail(ctx iris.Context) {
 		} else {
 			ShowMessage(ctx, currentSite.TplTr("UserDoesNotExist"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
 		}
+		return
+	}
+	// 验证用户是否存在
+	if state == "exist" {
+		// 只能是JSON格式返回
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": iris.Map{
+				"id":    user.Id,
+				"email": user.Email,
+			},
+		})
 		return
 	}
 	// 验证Token
@@ -279,7 +374,11 @@ func ApiVerifyEmail(ctx iris.Context) {
 	if state == "reset" {
 		// 重置密码
 		// 跳到重置密码页面
-		ctx.Redirect(currentSite.System.BaseUrl + "/account/password/reset?token=" + token + "&code=" + code + "&email=" + user.Email)
+		frontUrl := currentSite.System.BaseUrl
+		if currentSite.System.FrontUrl != "" {
+			frontUrl = currentSite.System.FrontUrl
+		}
+		ctx.Redirect(frontUrl + "/account/password/reset?token=" + token + "&code=" + code + "&email=" + user.Email)
 		return
 	}
 	// 验证通过
@@ -334,6 +433,11 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 	}
 	req.UserName = strings.TrimSpace(req.UserName)
 	req.RealName = strings.TrimSpace(req.RealName)
+	req.FirstName = strings.TrimSpace(req.FirstName)
+	req.LastName = strings.TrimSpace(req.LastName)
+	if req.FirstName != "" {
+		req.RealName = req.FirstName + " " + req.LastName
+	}
 	req.Phone = strings.TrimSpace(req.Phone)
 	req.Email = strings.TrimSpace(req.Email)
 	req.Introduce = strings.TrimSpace(req.Introduce)

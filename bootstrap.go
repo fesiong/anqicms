@@ -3,6 +3,12 @@ package anqicms
 import (
 	stdContext "context"
 	"fmt"
+	"log"
+	"os"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"github.com/skratchdot/open-golang/open"
 	"kandaoni.com/anqicms/config"
@@ -13,10 +19,6 @@ import (
 	"kandaoni.com/anqicms/route"
 	"kandaoni.com/anqicms/tags"
 	"kandaoni.com/anqicms/view"
-	"log"
-	"os"
-	"strings"
-	"time"
 )
 
 type Bootstrap struct {
@@ -53,7 +55,7 @@ func (bootstrap *Bootstrap) Serve() {
 	go func() {
 		time.Sleep(1 * time.Second)
 		currentSite := provider.CurrentSite(nil)
-		link := fmt.Sprintf("http://127.0.0.1:%d", bootstrap.Port)
+		link := "http://127.0.0.1:" + strconv.Itoa(bootstrap.Port)
 		if currentSite != nil && currentSite.System.BaseUrl != "" {
 			if strings.Contains(currentSite.System.BaseUrl, "127.0.0.1") {
 				currentSite.System.BaseUrl = link
@@ -66,24 +68,20 @@ func (bootstrap *Bootstrap) Serve() {
 		}
 	}()
 	// 伪静态规则和模板更改变化
-	for {
-		select {
-		case restart := <-config.RestartChan:
-			if restart == 1 {
-				fmt.Println("监听到路由更改")
-				_ = bootstrap.Shutdown()
-				log.Println("进程结束，开始重启")
-				// 重启
-				_ = provider.Restart()
-			} else if restart == 2 {
-				fmt.Println("监听到退出信号")
-				_ = bootstrap.Shutdown()
-				os.Exit(0)
-			} else {
-				// reload template
-				fmt.Println("重载模板")
-				bootstrap.viewEngine.Load()
-			}
+	for restart := range config.RestartChan {
+		switch restart {
+		case 1:
+			fmt.Println("监听到路由更改")
+			_ = bootstrap.Shutdown()
+			log.Println("进程结束，开始重启")
+			_ = provider.Restart()
+		case 2:
+			fmt.Println("监听到退出信号")
+			//_ = bootstrap.Shutdown()
+			os.Exit(0)
+		default:
+			fmt.Println("重载模板")
+			bootstrap.viewEngine.Load()
 		}
 	}
 }
@@ -113,6 +111,9 @@ func (bootstrap *Bootstrap) Start() {
 	}
 
 	pugEngine.AddFunc("stampToDate", tags.TimestampToDate)
+	pugEngine.AddFunc("priceFormat", tags.PriceFormat)
+	pugEngine.AddFunc("range", tags.Range)
+	pugEngine.AddFunc("CustomFunc", tags.CustomFunc)
 
 	_ = pugEngine.RegisterTag("tr", tags.TagTrParser)
 	_ = pugEngine.RegisterTag("tdk", tags.TagTdkParser)
@@ -133,6 +134,7 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("linkList", tags.TagLinkListParser)
 	_ = pugEngine.RegisterTag("commentList", tags.TagCommentListParser)
 	_ = pugEngine.RegisterTag("guestbook", tags.TagGuestbookParser)
+	_ = pugEngine.RegisterTag("guestbookList", tags.TagGuestbookListParser)
 	_ = pugEngine.RegisterTag("archiveParams", tags.TagArchiveParamsParser)
 	_ = pugEngine.RegisterTag("tagList", tags.TagTagListParser)
 	_ = pugEngine.RegisterTag("tagDetail", tags.TagTagDetailParser)
@@ -144,17 +146,19 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("moduleDetail", tags.TagModuleDetailParser)
 	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
 	_ = pugEngine.RegisterTag("jsonLd", tags.TagJsonLdParser)
+	_ = pugEngine.RegisterTag("attachment", tags.TagAttachmentParser)
 	_ = pugEngine.ReplaceTag("set", tags.TagSetParser)
 	_ = pugEngine.RegisterTag("jump", tags.TagJumpParser)
+	_ = pugEngine.RegisterTag("reviewList", tags.TagReviewListParser)
+	_ = pugEngine.RegisterTag("archiveSku", tags.TagArchiveSkuParser)
 
 	bootstrap.viewEngine = pugEngine
 	// 模板在最后加载，避免因为模板而导致程序无法运行
 	bootstrap.Application.RegisterView(pugEngine)
 
 	err = bootstrap.Application.Run(
-		iris.Addr(fmt.Sprintf(":%d", bootstrap.Port)),
-		iris.WithRemoteAddrHeader("X-Real-IP"),
-		iris.WithRemoteAddrHeader("X-Forwarded-For"),
+		iris.Addr(":"+strconv.Itoa(bootstrap.Port)),
+		iris.WithRemoteAddrHeader("X-Real-IP", "X-Forwarded-For", "CF-Connecting-IP"),
 		iris.WithHostProxyHeader("X-Host"),
 		iris.WithoutServerError(iris.ErrServerClosed),
 		iris.WithoutBodyConsumptionOnUnmarshal,

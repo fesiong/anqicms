@@ -19,6 +19,15 @@ func ModuleList(ctx iris.Context) {
 		})
 		return
 	}
+	excludeId := ctx.URLParamIntDefault("exclude_id", 0)
+	if excludeId > 0 {
+		for i := range modules {
+			if modules[i].Id == uint(excludeId) {
+				modules = append(modules[:i], modules[i+1:]...)
+				break
+			}
+		}
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

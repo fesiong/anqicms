@@ -1,5 +1,5 @@
 # only for linux and macos
-BINARY_NAME := anqicms
+BINARY_NAME := anqishop
 BIN_SUFFIX :=
 GO := go
 GOOS ?= $(shell $(GO) env GOOS)
@@ -7,7 +7,6 @@ GOARCH ?= $(shell $(GO) env GOARCH)
 LDFLAGS := -ldflags '-w -s'
 ifeq ($(GOOS),windows)
 	BIN_SUFFIX := .exe
-	LDFLAGS := -ldflags '-w -s -H=windowsgui'
 endif
 ifeq ($(version),)
 	version := $(shell git describe --tags --always --dirty="-dev")

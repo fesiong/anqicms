@@ -1,9 +1,11 @@
 package provider
 
 import (
-	"bytes"
 	"context"
+	"io"
 	"log"
+	"mime/multipart"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -38,24 +40,39 @@ func (w *Website) GetBucket(cfg *config.PluginStorageConfig) (storage.Storage, e
 	}
 }
 
-func (w *Website) UploadFile(location string, buff []byte) (string, error) {
+func (w *Website) UploadFile(location string, r io.Reader) (string, error) {
 	//log.Println("存储到", w.PluginStorage.StorageType)
 	location = strings.TrimLeft(location, "/")
-	// 额外存储一份到本地
-	if w.PluginStorage.KeepLocal && w.PluginStorage.StorageType != config.StorageTypeLocal {
-		//将文件写入本地
-		localStorage, _ := storage.NewLocalStorage(w.PluginStorage, w.PublicPath)
-		err := localStorage.Put(context.Background(), location, bytes.NewReader(buff))
-		if err != nil {
-			log.Println(err.Error())
-			//无法创建
-			return "", err
-		}
-	}
-	err := w.Storage.Put(context.Background(), location, bytes.NewReader(buff))
+
+	err := w.Storage.Put(context.Background(), location, r)
 	log.Println("上传结果", err, location)
 	if err != nil {
 		return "", err
+	}
+	// todo
+	if w.PluginStorage.KeepLocal && w.PluginStorage.StorageType != config.StorageTypeLocal || 1 == 1 {
+		var uploadReader io.Reader
+		//将文件写入本地
+		if seeker, ok := r.(io.Seeker); ok {
+			log.Println("支持 io.Seeker")
+			// 如果已经是Seeker，重置到开头
+			seeker.Seek(0, io.SeekStart)
+			uploadReader = r
+		} else if file, ok := r.(*os.File); ok {
+			log.Println("支持 os.File， 重新打开")
+			file.Seek(0, io.SeekStart)
+			uploadReader = file
+		} else if file, ok := r.(multipart.File); ok {
+			log.Println("支持 multipart.File")
+			uploadReader = file
+		} else {
+			log.Println("无法识别的Reader")
+			uploadReader = nil
+		}
+		if uploadReader != nil {
+			localStorage, _ := storage.NewLocalStorage(w.PluginStorage, w.PublicPath)
+			err = localStorage.Put(context.Background(), location, uploadReader)
+		}
 	}
 	//
 	// 上传到静态服务器
