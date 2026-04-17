@@ -69,6 +69,7 @@ func ApiImportArchive(ctx iris.Context) {
 	stock := ctx.PostValueInt64Default("stock", 0)
 	readLevel := ctx.PostValueIntDefault("read_level", 0)
 	sort := uint(ctx.PostValueIntDefault("sort", 0))
+	views := uint(ctx.PostValueIntDefault("views", 0))
 	originUrl := ctx.PostValueTrim("origin_url")
 	tmpCategoryIds, _ := ctx.PostValues("category_ids[]")
 	var categoryIds []uint
@@ -178,6 +179,9 @@ func ApiImportArchive(ctx iris.Context) {
 		Sort:         sort,
 		OriginUrl:    originUrl,
 	}
+	if views > 0 {
+		req.Views = uint(views)
+	}
 
 	// 如果传了ID，则采用覆盖的形式
 	if id > 0 {
@@ -202,6 +206,9 @@ func ApiImportArchive(ctx iris.Context) {
 					Sort:        sort,
 					OriginUrl:   originUrl,
 				},
+			}
+			if views > 0 {
+				archiveDraft.Views = views
 			}
 			archiveDraft.Id = id
 			err = currentSite.DB.Create(&archiveDraft).Error
@@ -722,12 +729,15 @@ func CheckApiOpen(ctx iris.Context) {
 func ApiLogStatistic(ctx iris.Context) {
 	// no-index
 	// x-robots-tag: noindex
+	ctx.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	ctx.Header("Cache-Control", "post-check=0, pre-check=0") // 部分旧版浏览器需要
+	ctx.Header("Pragma", "no-cache")                         // HTTP 1.0 兼容
 	ctx.Header("X-Robots-Tag", "noindex, nofollow")
+	ctx.Header("Expires", "Thu, 01 Jan 1970 00:00:00 GMT") // 过期时间设为过去
 	var req request.LogStatisticRequest
 	err := ctx.ReadBody(&req)
-	ctx.ContentType("text/javascript")
 	if err != nil {
-		ctx.StatusCode(iris.StatusBadRequest)
+		ctx.StatusCode(iris.StatusNoContent)
 		return
 	}
 	currentSite := provider.CurrentSite(ctx)
@@ -744,6 +754,5 @@ func ApiLogStatistic(ctx iris.Context) {
 		}
 	}
 
-	ctx.StatusCode(iris.StatusGone)
-	return
+	ctx.StatusCode(iris.StatusNoContent)
 }

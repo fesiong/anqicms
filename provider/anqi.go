@@ -1224,8 +1224,6 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 			})
 			return "", errs[0]
 		}
-		log.Printf("req = %#v", req2)
-		log.Printf("res = %#v", res)
 		if res.Code != 0 {
 			msg := res.Msg
 			if utf8.RuneCountInString(msg) > 190 {

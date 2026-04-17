@@ -31,6 +31,7 @@ type Archive struct {
 	Sort         uint                   `json:"sort"`         // 数值越大，越靠前
 	Draft        bool                   `json:"draft"`        // 是否是存草稿
 	RelationIds  []int64                `json:"relation_ids"` // 相关文档的ID
+	Views        uint                   `json:"views"`        // 浏览量
 
 	// 是否强制保存
 	ForceSave  bool   `json:"force_save"`
