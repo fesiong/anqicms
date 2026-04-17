@@ -659,6 +659,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if req.UserId > 0 {
 		draft.UserId = req.UserId
 	}
+	if req.Views > 0 {
+		draft.Views = req.Views
+	}
 
 	if req.KeywordId > 0 {
 		draft.KeywordId = req.KeywordId
@@ -1700,7 +1703,7 @@ func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) err
 func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
 	var relationIds []int64
-	w.DB.WithContext(w.Ctx()).Debug().Model(&model.ArchiveRelation{}).Group("relation_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Group("relation_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
 		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {
@@ -2451,6 +2454,10 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		}
 		if colId, ok := existFields["origin_title"]; ok {
 			archive.OriginTitle = row[colId]
+		}
+		if colId, ok := existFields["views"]; ok {
+			tmpViews, _ := strconv.ParseInt(row[colId], 10, 64)
+			archive.Views = uint(tmpViews)
 		}
 		// 先对主表进行入库
 		tx := qia.w.DB.Begin()

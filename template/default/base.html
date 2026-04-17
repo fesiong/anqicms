@@ -43,7 +43,7 @@
                 {%- languages languages %}
                 <div class="languages">
                     {%- for item in languages %}
-                    <a href="{{item.Link}}" class="{% if item.IsCurrent %}active{% endif %}" data-pjax="false">
+                    <a href="{{item.Link}}" class="{% if item.IsCurrent %}active{% endif %}" ignore-translate="true" data-pjax="false">
                         <div class="language-item">
                             {%- if item.LanguageIcon %}
                             <img class="language-icon" src="{{item.LanguageIcon}}" />

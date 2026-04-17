@@ -40,9 +40,12 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 	if !ok {
 		return nil
 	}
-
+	currentLang := currentSite.GetLang()
+	if lang := ctx.Public["language"]; lang != nil {
+		currentLang = lang.(string)
+	}
 	for i := range languageSites {
-		languageSites[i].IsCurrent = languageSites[i].Language == currentSite.GetLang()
+		languageSites[i].IsCurrent = languageSites[i].Language == currentLang
 		var tmpSite *provider.Website
 		if mainSite.MultiLanguage.SiteType == config.MultiLangSiteTypeMulti {
 			tmpSite = provider.GetWebsite(languageSites[i].Id)
@@ -124,13 +127,16 @@ func TagLanguagesParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pong
 	}
 	wrapper, endtagargs, err := doc.WrapUntilTag("endLanguages")
 	if err != nil {
-		return nil, err
+		wrapper, endtagargs, err = doc.WrapUntilTag("endlanguages")
+		if err != nil {
+			return nil, err
+		}
 	}
 	if endtagargs.Remaining() > 0 {
 		endtagnameToken := endtagargs.MatchType(pongo2.TokenIdentifier)
 		if endtagnameToken != nil {
 			if endtagnameToken.Val != nameToken.Val {
-				return nil, endtagargs.Error(fmt.Sprintf("Name for 'endLanguages' must equal to 'languages'-tag's name ('%s' != '%s').",
+				return nil, endtagargs.Error(fmt.Sprintf("Name for 'endlanguages' must equal to 'languages'-tag's name ('%s' != '%s').",
 					nameToken.Val, endtagnameToken.Val), nil)
 			}
 		}

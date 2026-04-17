@@ -964,7 +964,7 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string, params map[str
 		}
 	}
 	// 如果不存在，则先获取原始内容，并进行翻译
-	buf, err := w.GetHtmlDataByLocal(uri, false)
+	buf, err := w.GetHtmlDataByLocal(uri, lang, false)
 	if err != nil {
 		return string(oldBuf), err
 	}
@@ -1026,16 +1026,47 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string, params map[str
 		} else if w.MultiLanguage.Type == config.MultiLangTypeDirectory {
 			// 替换目录
 			// rel="alternate" 和 class="languages" 部分不替换
-			// 查找所有的链接
-			re2, _ := regexp.Compile(w.System.BaseUrl + "[^\"]{1,10}")
-			result = re2.ReplaceAllStringFunc(result, func(s string) string {
-				if strings.HasPrefix(s, w.System.BaseUrl+"/"+w.System.Language) {
-					s = strings.Replace(s, w.System.BaseUrl+"/"+w.System.Language, w.System.BaseUrl+"/"+langSite.Language, 1)
-				} else {
-					s = strings.ReplaceAll(s, w.System.BaseUrl, w.System.BaseUrl+"/"+langSite.Language)
-				}
-				return s
-			})
+
+			// 优化：预先构建语言前缀映射，避免在内层循环中遍历 SubSites
+			langPrefixMap := make(map[string]bool)
+			for _, site := range w.MultiLanguage.SubSites {
+				langPrefixMap[w.System.BaseUrl+"/"+site.Language+"/"] = true
+			}
+
+			// 优化：预编译正则表达式
+			pattern := w.System.BaseUrl + "[^<>]*"
+			re2, err := regexp.Compile(pattern)
+			if err != nil {
+				// 如果正则编译失败，跳过替换，避免 panic
+				log.Println("compile url regex failed:", err)
+			} else {
+				result = re2.ReplaceAllStringFunc(result, func(s string) string {
+					if strings.Contains(s, "ignore-") {
+						return s
+					}
+
+					// 优化：直接检查是否以当前主语言开头
+					currentLangPrefix := w.System.BaseUrl + "/" + w.System.Language + "/"
+					if strings.HasPrefix(s, currentLangPrefix) {
+						targetPrefix := w.System.BaseUrl + "/" + langSite.Language + "/"
+						return strings.Replace(s, currentLangPrefix, targetPrefix, 1)
+					}
+
+					// 使用 Map 检查是否存在于其他子站点前缀中
+					exist := false
+					for prefix := range langPrefixMap {
+						if strings.HasPrefix(s, prefix) {
+							exist = true
+							break
+						}
+					}
+
+					if !exist {
+						return strings.Replace(s, w.System.BaseUrl, w.System.BaseUrl+"/"+langSite.Language, 1)
+					}
+					return s
+				})
+			}
 		}
 		// 最后替换回来
 		for k, v := range replacedMap {

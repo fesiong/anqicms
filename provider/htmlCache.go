@@ -589,12 +589,12 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 		return errors.New(w.Tr("StaticCacheFunctionIsNotEnabled"))
 	}
 
-	_, err := w.GetHtmlDataByLocal(urlPath, isMobile)
+	_, err := w.GetHtmlDataByLocal(urlPath, "", isMobile)
 
 	return err
 }
 
-func (w *Website) GetHtmlDataByLocal(urlPath string, isMobile bool) ([]byte, error) {
+func (w *Website) GetHtmlDataByLocal(urlPath string, lang string, isMobile bool) ([]byte, error) {
 	if strings.HasPrefix(urlPath, "http") {
 		parsed, err := url.Parse(urlPath)
 		if err == nil {
@@ -627,6 +627,9 @@ func (w *Website) GetHtmlDataByLocal(urlPath string, isMobile bool) ([]byte, err
 	req.Header.Set("X-Host", host)
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Cache", "true")
+	if lang != "" {
+		req.Header.Set("Language", lang)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err

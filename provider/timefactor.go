@@ -19,9 +19,9 @@ func (w *Website) TryToRunTimeFactor() {
 		return
 	}
 
-	go w.TimeRenewArchives(w.PluginTimeFactor)
+	w.TimeRenewArchives(w.PluginTimeFactor)
 
-	go w.TimeReleaseArchives(w.PluginTimeFactor)
+	w.TimeReleaseArchives(w.PluginTimeFactor)
 }
 
 func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
@@ -157,7 +157,26 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if setting.EndTime == 0 {
 		setting.EndTime = 23
 	}
-	diffSecond := int64(setting.EndTime+1-setting.StartTime) * 3600 * 1000 / int64(setting.DailyLimit)
+
+	// 修正数量，比如一天发布10000篇，平均每小时发布417篇，但现在时间已经是中午了，实际已发布可能为0，则接下来的每次发布量需要增加，才能保证当天发完
+	now := time.Now()
+
+	// 计算当天剩余的结束时间点（毫秒时间戳）
+	endTimeToday := time.Date(now.Year(), now.Month(), now.Day(), setting.EndTime+1, 0, 0, 0, now.Location()).UnixMilli()
+	// 计算剩余可用时间（毫秒）
+	remainingTimeMillis := endTimeToday - now.UnixMilli()
+	if remainingTimeMillis <= 0 {
+		return
+	}
+
+	// 计算剩余需要发布的数量
+	remainingCount := setting.DailyLimit - setting.TodayCount
+	if remainingCount <= 0 {
+		return
+	}
+
+	// 动态计算间隔：剩余时间 / 剩余数量
+	diffSecond := remainingTimeMillis / int64(remainingCount)
 	if diffSecond < 1 {
 		diffSecond = 1
 	}
@@ -217,7 +236,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if len(drafts) == 0 {
 		return
 	}
-	for _, draft := range drafts {
+	for i, draft := range drafts {
 		hookCtx := &HookContext{
 			Point: BeforeArchiveRelease,
 			Site:  w,
@@ -227,8 +246,9 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 			return
 		}
 		archive := &draft.Archive
-		archive.CreatedTime = nowStamp
-		archive.UpdatedTime = nowStamp
+		curStamp := (nowStamp + diffSecond*int64(i)) / 1000
+		archive.CreatedTime = curStamp
+		archive.UpdatedTime = curStamp
 		err = w.DB.Save(archive).Error
 		if err != nil {
 			// err
