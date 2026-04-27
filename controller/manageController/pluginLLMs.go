@@ -91,7 +91,7 @@ func PluginGetLLMsStatus(ctx iris.Context) {
 	if status == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  ctx.Tr("LLMsNotEnabled"),
+			"msg":  "Finished",
 		})
 		return
 	}
