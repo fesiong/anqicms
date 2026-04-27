@@ -1,26 +1,27 @@
 package provider
 
 import (
-	"gorm.io/gorm"
+	"context"
+	"math/rand"
+	"time"
+
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
-	"time"
 )
 
 func (w *Website) TryToRunTimeFactor() {
-	setting := w.GetTimeFactorSetting()
-	if !setting.Open && !setting.ReleaseOpen {
+	if w.PluginTimeFactor == nil || (!w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen) {
 		return
 	}
 
 	// 开始尝试执行更新任务
-	if len(setting.ModuleIds) == 0 {
+	if len(w.PluginTimeFactor.ModuleIds) == 0 {
 		return
 	}
 
-	go w.TimeRenewArchives(&setting)
+	w.TimeRenewArchives(w.PluginTimeFactor)
 
-	go w.TimeReleaseArchives(&setting)
+	w.TimeReleaseArchives(w.PluginTimeFactor)
 }
 
 func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
@@ -31,6 +32,37 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 		return
 	}
 	if setting.StartDay == 0 {
+		return
+	}
+	if setting.UpdateRunning {
+		return
+	}
+	setting.UpdateRunning = true
+	defer func() {
+		setting.UpdateRunning = false
+	}()
+	if setting.TodayUpdate > 0 && time.Unix(setting.LastUpdate, 0).Day() != time.Now().Day() {
+		setting.TodayUpdate = 0
+		// 更新数量
+		_ = w.SaveSettingValue(TimeFactorKey, setting)
+	}
+	// 计算每篇间隔
+	if setting.DailyUpdate > 0 && setting.TodayUpdate >= setting.DailyUpdate {
+		return
+	}
+	if setting.EndTime == 0 {
+		setting.EndTime = 23
+	}
+	var diffSecond = 1
+	if setting.DailyUpdate > 0 {
+		diffSecond = (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyUpdate
+	}
+	if diffSecond < 1 {
+		diffSecond = 1
+	}
+	nowStamp := time.Now().Unix()
+	if setting.DailyUpdate > 0 && setting.LastUpdate > nowStamp+int64(diffSecond) {
+		// 间隔未到
 		return
 	}
 
@@ -52,30 +84,53 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 			db = db.Where("`updated_time` < ?", startStamp)
 		}
 	}
-	addStamp := (setting.StartDay - setting.EndDay) * 86400
+	addStamp := time.Now()
+	if setting.EndDay > 0 {
+		addStamp = addStamp.AddDate(0, 0, -setting.EndDay)
+	}
 	updateFields := map[string]interface{}{}
 	for _, field := range setting.Types {
 		if field == "created_time" {
-			updateFields["created_time"] = gorm.Expr("`created_time` + ?", addStamp)
+			updateFields["created_time"] = addStamp.Unix()
 		}
 		if field == "updated_time" {
-			updateFields["updated_time"] = gorm.Expr("`updated_time` + ?", addStamp)
+			updateFields["updated_time"] = addStamp.Unix()
 		}
 	}
 	var archives []*model.Archive
-	if setting.DoPublish {
-		// 重新推送
-		db.Find(&archives)
-	}
-	db.UpdateColumns(updateFields)
-
-	if setting.DoPublish && len(archives) > 0 {
-		// 重新推送
+	db.Find(&archives)
+	spend := 0
+	if len(archives) > 0 {
 		for _, archive := range archives {
-			go w.PushArchive(archive.Link)
-			// 清除缓存
-			w.DeleteArchiveCache(archive.Id)
-			w.DeleteArchiveExtraCache(archive.Id)
+			// 更新时间
+			w.DB.Model(archive).UpdateColumns(updateFields)
+			if setting.DoPublish {
+				archive.Link = w.GetUrl("archive", archive, 0)
+				// 重新推送
+				go w.PushArchive(archive.Link)
+				// 清除缓存
+				w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
+				w.DeleteArchiveExtraCache(archive.Id)
+			}
+			// 如果有限制时间，则在这里进行等待，并且小于1分钟，才进行等待
+			if setting.DailyUpdate > 0 {
+				spend += diffSecond
+				if spend > 60 {
+					// 超过1分钟，就退出
+					return
+				}
+				if diffSecond < 60 {
+					time.Sleep(time.Second * time.Duration(diffSecond))
+				}
+			}
+			// 对下一次更新的文章增加 diffSecond
+			addStamp = addStamp.Add(time.Second * time.Duration(diffSecond))
+			if _, ok := updateFields["created_time"]; ok {
+				updateFields["created_time"] = addStamp.Unix()
+			}
+			if _, ok := updateFields["updated_time"]; ok {
+				updateFields["updated_time"] = addStamp.Unix()
+			}
 		}
 	}
 }
@@ -84,7 +139,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if !setting.ReleaseOpen {
 		return
 	}
-	if setting.TodayCount > 0 && time.Unix(setting.LastSent, 0).Day() != time.Now().Day() {
+	if setting.TodayCount > 0 && time.UnixMilli(setting.LastSent).Day() != time.Now().Day() {
 		setting.TodayCount = 0
 		// 更新数量
 		_ = w.SaveSettingValue(TimeFactorKey, setting)
@@ -102,43 +157,113 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if setting.EndTime == 0 {
 		setting.EndTime = 23
 	}
-	diffSecond := (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyLimit
+
+	// 修正数量，比如一天发布10000篇，平均每小时发布417篇，但现在时间已经是中午了，实际已发布可能为0，则接下来的每次发布量需要增加，才能保证当天发完
+	now := time.Now()
+
+	// 计算当天剩余的结束时间点（毫秒时间戳）
+	endTimeToday := time.Date(now.Year(), now.Month(), now.Day(), setting.EndTime+1, 0, 0, 0, now.Location()).UnixMilli()
+	// 计算剩余可用时间（毫秒）
+	remainingTimeMillis := endTimeToday - now.UnixMilli()
+	if remainingTimeMillis <= 0 {
+		return
+	}
+
+	// 计算剩余需要发布的数量
+	remainingCount := setting.DailyLimit - setting.TodayCount
+	if remainingCount <= 0 {
+		return
+	}
+
+	// 动态计算间隔：剩余时间 / 剩余数量
+	diffSecond := remainingTimeMillis / int64(remainingCount)
 	if diffSecond < 1 {
 		diffSecond = 1
 	}
-	nowStamp := time.Now().Unix()
+	nowStamp := time.Now().UnixMilli()
 	if setting.LastSent > nowStamp+int64(diffSecond) {
 		// 间隔未到
 		return
 	}
 
+	// 读取数量，按1分钟能发布的数量计算
+	limit := 65000 / int(diffSecond)
+	if limit < 1 {
+		limit = 1
+	} else if limit > 200 {
+		limit = 200
+	}
+
 	// 从草稿箱发布
 	db := w.DB.Model(&model.ArchiveDraft{}).Where("`status` = 0")
-	if len(setting.ModuleIds) == 1 {
-		db = db.Where("module_id = ?", setting.ModuleIds[0])
-	} else {
-		db = db.Where("module_id IN (?)", setting.ModuleIds)
-	}
+	db = db.Where("module_id IN (?)", setting.ModuleIds)
 	if len(setting.CategoryIds) > 0 {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
-	var draft *model.ArchiveDraft
-	// 一次最多读取1个
-	err := db.Order("id asc").Take(&draft).Error
-	if err != nil {
-		// 没文章
+	var err error
+	var drafts []model.ArchiveDraft
+	if setting.Random {
+		// 一次最多读取100个
+		var maxId struct {
+			MaxId int64 `json:"max_id"`
+		}
+		var minId struct {
+			MinId int64 `json:"min_id"`
+		}
+		db.WithContext(context.Background()).Select("max(id) as max_id").Take(&maxId)
+		db.WithContext(context.Background()).Select("min(id) as min_id").Take(&minId)
+		if maxId.MaxId <= 0 || minId.MinId <= 0 {
+			return
+		}
+		randId := minId.MinId
+		if maxId.MaxId > minId.MinId {
+			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+			randId = rd.Int63n(maxId.MaxId-minId.MinId) + minId.MinId
+		}
+		err = db.Where("id >= ?", randId).Order("id asc").Limit(limit).Find(&drafts).Error
+		if err != nil {
+			// 没文章
+			return
+		}
+	} else {
+		// 一次最多读取limit个
+		err = db.Order("id asc").Limit(limit).Find(&drafts).Error
+		if err != nil {
+			// 没文章
+			return
+		}
+	}
+	if len(drafts) == 0 {
 		return
 	}
-	archive := &draft.Archive
-	archive.CreatedTime = nowStamp
-	archive.UpdatedTime = nowStamp
-	w.DB.Save(archive)
-	_ = w.SuccessReleaseArchive(archive, true)
-	// 清除缓存
-	w.DeleteArchiveCache(archive.Id)
-	w.DeleteArchiveExtraCache(archive.Id)
+	for i, draft := range drafts {
+		hookCtx := &HookContext{
+			Point: BeforeArchiveRelease,
+			Site:  w,
+			Data:  &draft,
+		}
+		if err = TriggerHook(hookCtx); err != nil {
+			return
+		}
+		archive := &draft.Archive
+		curStamp := (nowStamp + diffSecond*int64(i)) / 1000
+		archive.CreatedTime = curStamp
+		archive.UpdatedTime = curStamp
+		err = w.DB.Save(archive).Error
+		if err != nil {
+			// err
+			continue
+		}
+		// 删除草稿
+		w.DB.Delete(draft)
+		archive.Link = w.GetUrl("archive", archive, 0)
+		_ = w.SuccessReleaseArchive(archive, true)
+		// 清除缓存
+		w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
+		w.DeleteArchiveExtraCache(archive.Id)
 
-	setting.TodayCount++
-	setting.LastSent = nowStamp
-	_ = w.SaveSettingValue(TimeFactorKey, setting)
+		setting.TodayCount++
+		setting.LastSent = nowStamp
+		_ = w.SaveSettingValue(TimeFactorKey, setting)
+	}
 }

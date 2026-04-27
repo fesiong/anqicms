@@ -11,7 +11,9 @@ const LinkStatusNotTitle = uint(3)
 const LinkStatusNotMatch = uint(4)
 
 type Link struct {
-	Model
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	Link        string `json:"link" gorm:"column:link;type:varchar(250) not null;default:''"`
 	BackLink    string `json:"back_link" gorm:"column:back_link;type:varchar(250) not null;default:''"`

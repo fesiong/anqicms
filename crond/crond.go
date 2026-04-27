@@ -1,15 +1,17 @@
 package crond
 
 import (
-	"github.com/robfig/cron/v3"
-	"gorm.io/gorm"
-	"kandaoni.com/anqicms/provider"
 	"math/rand"
 	"time"
+
+	"github.com/robfig/cron/v3"
+	"kandaoni.com/anqicms/provider"
 )
 
+var crontab *cron.Cron
+
 func Crond() {
-	crontab := cron.New(cron.WithSeconds())
+	crontab = cron.New(cron.WithSeconds())
 	//每天执行
 	crontab.AddFunc("@daily", dailyTask)
 	// 每天8点执行
@@ -23,6 +25,12 @@ func Crond() {
 	crontab.Start()
 }
 
+func Stop() {
+	if crontab != nil {
+		crontab.Stop()
+	}
+}
+
 func dailyTask() {
 	//每天执行一次，清理很久的statistic
 	cleanStatistics()
@@ -30,8 +38,8 @@ func dailyTask() {
 	CleanArchives()
 	// 每天检查VIP
 	CleanUserVip()
-	// 每天定期优化表
-	optimizeTable()
+	// 每天检查一次LLMs更新频率
+	CheckLLMsUpdateFrequency()
 }
 
 func daily8HourTask() {
@@ -49,8 +57,10 @@ func hourlyTask() {
 }
 
 func hourly10MinuteTask() {
-	// 每十分钟检查一次提现
+	// 每十分钟检查一次采集
 	CollectArticles()
+	// 每十分钟统计一次统计数据
+	calcStatistics()
 }
 
 func minutelyTask() {
@@ -64,24 +74,6 @@ func minutelyTask() {
 	UpdateTimeFactor()
 	// 每分钟检查一次 AI文章计划
 	AiArticlePlan()
-}
-
-func optimizeTable() {
-	// 需要优化的表
-	tables := []string{
-		"archives",
-		"archive_drafts",
-	}
-
-	websites := provider.GetWebsites()
-	for _, w := range websites {
-		if !w.Initialed {
-			continue
-		}
-		for _, t := range tables {
-			w.DB.Exec("OPTIMIZE TABLE `?`", gorm.Expr(t))
-		}
-	}
 }
 
 func startDigKeywords() {
@@ -104,13 +96,28 @@ func cleanStatistics() {
 	}
 }
 
+func calcStatistics() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed || w.StatisticLog == nil {
+			continue
+		}
+		w.StatisticLog.Calc(w.DB)
+	}
+}
+
 func PublishPlanContents() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.PublishPlanArchives()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.PublishPlanArchives()
+		}(w)
 	}
 }
 
@@ -126,11 +133,17 @@ func CleanArchives() {
 
 func CollectArticles() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.CollectArticles()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			go w2.AiGenerateArticles()
+			w2.CollectArticles()
+		}(w)
 	}
 }
 
@@ -174,30 +187,50 @@ func CleanUserVip() {
 	}
 }
 
+func CheckLLMsUpdateFrequency() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckLLMsUpdateFrequency()
+	}
+}
+
 func CheckAuthValid() {
-	rand.Seed(time.Now().UnixNano())
-	time.Sleep(time.Duration(rand.Intn(600)+1) * time.Second)
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+	time.Sleep(time.Duration(rd.Intn(600)+1) * time.Second)
 	defaultSite := provider.CurrentSite(nil)
 	defaultSite.AnqiCheckLogin(false)
 }
 
 func UpdateTimeFactor() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.TryToRunTimeFactor()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.TryToRunTimeFactor()
+		}(w)
 	}
 }
 
 func AiArticlePlan() {
 	websites := provider.GetWebsites()
+	var ch = make(chan bool, 5)
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		w.SyncAiArticlePlan()
+		ch <- true
+		go func(w2 *provider.Website) {
+			defer func() { <-ch }()
+			w2.SyncAiArticlePlan()
+		}(w)
 	}
 }
 

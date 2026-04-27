@@ -2,12 +2,13 @@ package tags
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"strconv"
-	"strings"
 )
 
 type tagTagListNode struct {
@@ -37,20 +38,44 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	limit := 10
 	offset := 0
 	currentPage := 1
-	itemId := uint(0)
+	itemId := int64(0)
 	listType := "list"
 	order := "id desc"
+	var categoryIds []uint
+	if args["categoryId"] != nil {
+		tmpIds := strings.Split(args["categoryId"].String(), ",")
+		for _, v := range tmpIds {
+			tmpId, _ := strconv.Atoi(v)
+			if tmpId > 0 {
+				categoryDetail := currentSite.GetCategoryFromCache(uint(tmpId))
+				if categoryDetail != nil {
+					categoryIds = append(categoryIds, categoryDetail.Id)
+				}
+			}
+		}
+	}
 
 	if args["order"] != nil {
-		order = args["order"].String()
+		tmpOrder := args["order"].String()
+		tmpOrder = provider.ParseOrderBy(tmpOrder, "")
+		if tmpOrder != "" {
+			order = tmpOrder
+		}
 	}
 
 	if args["type"] != nil {
 		listType = args["type"].String()
 	}
 
+	q := ""
+	argQ := ""
+	if args["q"] != nil {
+		q = strings.TrimSpace(args["q"].String())
+		argQ = q
+	}
+
 	if args["itemId"] != nil {
-		itemId = uint(args["itemId"].Integer())
+		itemId = int64(args["itemId"].Integer())
 	} else {
 		// 自动获取
 		archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
@@ -65,6 +90,7 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
 	if ok {
 		currentPage, _ = strconv.Atoi(urlParams["page"])
+		q = strings.TrimSpace(urlParams["q"])
 	}
 	requestParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
 	if ok {
@@ -81,8 +107,8 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
-		if limit > 100 {
-			limit = 100
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
 		}
 		if limit < 1 {
 			limit = 1
@@ -95,17 +121,21 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 		}
 	} else {
 		currentPage = 1
+		// list模式则始终使用 argQ
+		q = argQ
 	}
 
-	tagList, total, _ := currentSite.GetTagList(itemId, "", letter, currentPage, limit, offset, order)
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
+		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))
 	}
 
 	if listType == "page" {
 		// 分页
 		urlPatten := currentSite.GetUrl("tagIndex", nil, -1)
 		ctx.Public["pagination"] = makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
+		ctx.Private["totalItems"] = total
 	}
 
 	ctx.Private[node.name] = tagList

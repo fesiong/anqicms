@@ -1,15 +1,16 @@
 package controller
 
 import (
+	"net/url"
+	"regexp"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"net/url"
-	"regexp"
-	"strings"
-	"time"
 )
 
 func Install(ctx iris.Context) {
@@ -20,7 +21,7 @@ func Install(ctx iris.Context) {
 	defaultSite := provider.CurrentSite(ctx)
 
 	viewTpl := `<!DOCTYPE html>
-<html lang="zh-cn">
+<html lang="zh-CN">
 
 <head>
   <meta charset="UTF-8">
@@ -344,7 +345,11 @@ func InstallForm(ctx iris.Context) {
 	if req.BaseUrl == "" {
 		urlPath, err := url.Parse(ctx.FullRequestURI())
 		if err == nil {
-			req.BaseUrl = urlPath.Scheme + "://" + urlPath.Host
+			host := urlPath.Host
+			if strings.HasSuffix(host, ":80") || strings.HasSuffix(host, ":443") {
+				host = strings.Split(host, ":")[0]
+			}
+			req.BaseUrl = urlPath.Scheme + "://" + host
 		}
 	}
 
@@ -388,12 +393,13 @@ func InstallForm(ctx iris.Context) {
 
 	dbWebsite := model.Website{
 		// 首个站点ID为1
-		Model: model.Model{Id: 1},
+		Id: 1,
 		// 首个站点为安装目录
-		RootPath: config.ExecPath,
-		Name:     defaultSite.Tr("AnqiCMS(AnqiCMS)"),
-		Mysql:    config.Server.Mysql,
-		Status:   1,
+		RootPath:    config.ExecPath,
+		Name:        defaultSite.Tr("AnqiCMS(AnqiCMS)"),
+		Mysql:       config.Server.Mysql,
+		TokenSecret: config.GenerateRandString(32),
+		Status:      1,
 	}
 	db.Save(&dbWebsite)
 

@@ -1,12 +1,13 @@
 package manageController
 
 import (
+	"os"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"time"
 )
 
 func GetTransferTask(ctx iris.Context) {
@@ -57,8 +58,8 @@ func CreateTransferTask(ctx iris.Context) {
 		})
 		return
 	}
-
-	task, err := currentSite.CreateTransferTask(&req)
+	w2 := provider.GetWebsite(currentSite.Id)
+	task, err := w2.CreateTransferTask(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
