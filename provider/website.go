@@ -59,6 +59,7 @@ type Website struct {
 	quickImportStatus       *QuickImportArchive
 	AkismetClient           *AkismetClient
 	googleAuthConfig        *oauth2.Config
+	llmsBuildStatus         *LLMsBuildStatus
 
 	System  *config.SystemConfig
 	Content *config.ContentConfig
@@ -93,6 +94,7 @@ type Website struct {
 	MultiLanguage      *config.PluginMultiLangConfig
 	PluginTranslate    *config.PluginTranslateConfig
 	PluginJsonLd       *config.PluginJsonLdConfig
+	PluginLLMs         *config.PluginLLMsConfig
 
 	sensitiveAcMatcher *library.AhoCorasick
 	sensitiveRegexes   []*regexp.Regexp

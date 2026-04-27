@@ -504,6 +504,9 @@ func SaveSystemFavicon(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("FileUploadCompleted"),
+		"data": iris.Map{
+			"favicon": currentSite.System.BaseUrl + "/favicon.ico",
+		},
 	})
 }
 

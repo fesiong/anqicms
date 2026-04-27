@@ -30,6 +30,12 @@ class xunrui2anqi
     private $config = array();
     private $action;
     private $db;
+    private $dbPrefix;
+    private $currentTable;
+    private $currentWhere;
+    private $currentOrder;
+    private $currentLimit;
+    private $currentField;
     public function __construct()
     {
         @set_error_handler(array(&$this, 'error_handler'), E_ALL & ~E_NOTICE & ~E_WARNING);
@@ -730,9 +736,6 @@ class xunrui2anqi
                 if ($result && $result->attachment) {
                     $path = $result->attachment;
                     // add prefix
-                    if (strpos($path, 'http') !== 0) {
-                        $path = '/sashuiche/' . $path;
-                    }
                 } else {
                     $path = '';
                 }

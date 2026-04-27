@@ -1193,3 +1193,45 @@ func UpdateArchiveCategory(ctx iris.Context) {
 		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
+
+func UpdateArchiveTags(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.ArchivesUpdateRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.UpdateArchiveTags(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 如果开启了多语言，则自动同步文章,分类
+	if currentSite.MultiLanguage.Open {
+		for _, sub := range currentSite.MultiLanguage.SubSites {
+			if sub.Id == currentSite.Id || sub.Id == 0 {
+				continue
+			}
+			// 同步分类，先同步，再添加翻译计划
+			subSite := provider.GetWebsite(sub.Id)
+			if subSite != nil && subSite.Initialed {
+				// 同步更新
+				_ = subSite.UpdateArchiveTags(&req)
+			}
+		}
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentTagsLog", req.Ids, req.Tags))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ArticleUpdated"),
+	})
+}

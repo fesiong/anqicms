@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -403,7 +404,7 @@ func (t *TransferWebsite) transferCategories() error {
 			category.SeoTitle = string([]rune(category.SeoTitle)[:250])
 		}
 		if category.Description == "" {
-			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "))
+			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "), 250)
 		} else if utf8.RuneCountInString(category.Description) > 1000 {
 			// 字段最大支持1000
 			category.Description = string([]rune(category.Description)[:1000])
@@ -509,7 +510,7 @@ func (t *TransferWebsite) transferKeywords() error {
 	return nil
 }
 
-func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
+func (t *TransferWebsite) transferArchivesOld(moduleIds []uint) error {
 	t.Current = "archive"
 	t.LastId = 0
 	t.LastMod = ""
@@ -576,7 +577,7 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 				archive.SeoTitle = string([]rune(archive.SeoTitle)[:250])
 			}
 			if archive.Description == "" {
-				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "))
+				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "), 250)
 			} else if utf8.RuneCountInString(archive.Description) > 1000 {
 				// 字段最大支持1000
 				archive.Description = string([]rune(archive.Description)[:1000])
@@ -659,7 +660,7 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 	return nil
 }
 
-func (t *TransferWebsite) transferArchivesTmp(moduleIds []uint) error {
+func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 	t.Current = "archive"
 	t.LastId = 0
 	t.LastMod = ""
@@ -688,6 +689,7 @@ func (t *TransferWebsite) transferArchivesTmp(moduleIds []uint) error {
 		t.LastMod = result.LastMod
 		t.LastId = int64(result.Data[len(result.Data)-1].Id)
 
+		var module *model.Module
 		var extras = make([]map[string]interface{}, 0, len(result.Data))
 		var archives = make([]model.ArchiveDraft, 0, len(result.Data))
 		for i := range result.Data {
@@ -702,6 +704,24 @@ func (t *TransferWebsite) transferArchivesTmp(moduleIds []uint) error {
 				}
 				if !exist {
 					continue
+				}
+			}
+			if module == nil {
+				module = t.w.GetModuleFromCache(result.Data[i].ModuleId)
+			}
+			// 如果ID已存在，则删除
+			var id int64
+			t.w.DB.Model(&model.Archive{}).Where("id = ?", result.Data[i].Id).Pluck("id", &id)
+			if id == 0 {
+				t.w.DB.Model(&model.ArchiveDraft{}).Where("id = ?", result.Data[i].Id).Pluck("id", &id)
+			}
+			if id > 0 {
+				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.Archive{})
+				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.ArchiveData{})
+				// 删除分类关联
+				t.w.DB.Where("archive_id = ?", result.Data[i].Id).Delete(&model.ArchiveCategory{})
+				if module != nil {
+					t.w.DB.Exec("DELETE FROM ? WHERE `id` = ?", clause.Table{Name: module.TableName}, result.Data[i].Id)
 				}
 			}
 			// 迁移过来需要保持ID不变
@@ -729,7 +749,7 @@ func (t *TransferWebsite) transferArchivesTmp(moduleIds []uint) error {
 				archive.SeoTitle = string([]rune(archive.SeoTitle)[:250])
 			}
 			if archive.Description == "" {
-				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "))
+				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "), 250)
 			} else if utf8.RuneCountInString(archive.Description) > 1000 {
 				// 字段最大支持1000
 				archive.Description = string([]rune(archive.Description)[:1000])
@@ -849,7 +869,7 @@ func (t *TransferWebsite) transferSinglePages() error {
 			category.SeoTitle = string([]rune(category.SeoTitle)[:250])
 		}
 		if category.Description == "" {
-			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "))
+			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "), 250)
 		} else if utf8.RuneCountInString(category.Description) > 1000 {
 			// 字段最大支持1000
 			category.Description = string([]rune(category.Description)[:1000])

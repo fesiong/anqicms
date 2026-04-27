@@ -381,10 +381,73 @@ type PluginTranslateConfig struct {
 	DeeplAuthKey    string `json:"deepl_auth_key"`    // Deepl
 }
 
+type DataSchemaType struct {
+	Id         uint   `json:"id"`          // 模型/分类ID
+	ListType   string `json:"list_type"`   // 列表页类型： CollectionPage, DetailedItemList, ItemList
+	SchemaType string `json:"schema_type"` // 结构化数据类型： Article, Product, ScholarlyArticle, BlogPosting, NewsArticle, AnalysisNewsArticle, AskPublicNewsArticle, BackgroundNewsArticle, OpinionNewsArticle, ReportageNewsArticle, ReviewNewsArticle, WebPage, ItemPage, Recipe, Course, FAQPage, HowTo, Event, Person, Place
+}
+
 type PluginJsonLdConfig struct {
-	Open          bool   `json:"open"`
-	DefaultAuthor string `json:"author"`
-	DefaultBrand  string `json:"brand"`
+	Open                  bool             `json:"open"`                    // 是否开启数据结构化输出
+	AboutPageId           uint             `json:"about_page_id"`           // 关于页id，用于生成合适的结构化数据
+	ContactPageId         uint             `json:"contact_page_id"`         // 联系页id，用于生成合适的结构化数据
+	IncludeHomepage       bool             `json:"include_homepage"`        // 是否生成首页的结构化数据
+	IncludeSearch         bool             `json:"include_search"`          // 是否包含搜索链接
+	IncludeAuthor         bool             `json:"include_author"`          // 是否包含作者
+	Author                string           `json:"author"`                  // 作者
+	AuthorUrl             string           `json:"author_url"`              // 作者url
+	IncludeBreadcrumb     bool             `json:"include_breadcrumb"`      // 是否包含面包屑导航
+	IncludeComments       bool             `json:"include_comments"`        // 是否包含评论, 商品页面包含review
+	Module                []DataSchemaType `json:"module"`                  // 各个模型定义的结构化数据类型
+	Category              []DataSchemaType `json:"category"`                // 自定义分类的结构化数据类型，没定义的继承模型的结构化数据类型
+	DefaultBrand          string           `json:"default_brand"`           // 默认品牌
+	DefaultImage          string           `json:"default_image"`           // 默认图片
+	DataType              int              `json:"data_type"`               // 1 = Organization, 2 = Person
+	OrganizationType      string           `json:"organization_type"`       // LocalBusiness, Airline, Consortium, Corporation, EducationalOrganization, School, GovernmentOrganization, LibrarySystem, MedicalOrganization, NewsMediaOrganization, NGO, PerformingGroup, SportsOrganization, WorkersUnion
+	OrganizationName      string           `json:"organization_name"`       // 组织名称
+	OrganizationLegalName string           `json:"organization_legal_name"` // 组织法律名称
+	OrganizationUrl       string           `json:"organization_url"`        // 组织url, 默认为网站url
+	PersonName            string           `json:"person_name"`             // 个人名称
+	PersonJobTitle        string           `json:"person_job_title"`        // 个人职务
+	PersonImage           string           `json:"person_image"`            // 个人图片
+	ContactType           string           `json:"contact_type"`            // 联系类型: general, customer support, technical support, billing support, bill payment, sales, reservations, credit card support, emergency, baggage tracking, roadside assistance, package tracking
+	ContactNumber         string           `json:"contact_number"`          // 联系电话
+	ContactUrl            string           `json:"contact_url"`             // 联系url
+	LogoImage             string           `json:"logo_image"`              // logo图片
+	SocialProfiles        []string         `json:"social_profiles"`         // 社交账号列表
+	OpeningDayOfWeek      []string         `json:"opening_day_of_week"`     // 开业时间列表
+	OpeningStartTime      string           `json:"opening_start_time"`      // 开业时间
+	OpeningEndTime        string           `json:"opening_end_time"`        // 关闭时间
+	PriceRange            string           `json:"price_range"`             // 价格范围
+	GeoLatitude           string           `json:"geo_latitude"`            // 纬度
+	GeoLongitude          string           `json:"geo_longitude"`           // 经度
+	StreetAddress         string           `json:"street_address"`          // 街道地址
+	AddressLocality       string           `json:"address_locality"`        // 城市
+	AddressRegion         string           `json:"address_region"`          // 州/省
+	PostalCode            string           `json:"postal_code"`             // 邮政编码
+	AddressCountry        string           `json:"address_country"`         // 国家/地区
+}
+
+type PluginLLMsConfig struct {
+	Open                 bool   `json:"open"`
+	UpdateFrequency      int    `json:"update_frequency"`       // Update Frequency 0 = 立即更新，1 = 每天更新一次，2 = 每周更新一次，3 = 不自动更新
+	LastUpdate           int64  `json:"last_update"`            // 最后生成时间
+	FileUrl              string `json:"file_url"`               // 文件URL
+	FileStatus           bool   `json:"file_status"`            // true = 已生成， false = 未生成
+	MaxPostPerType       int    `json:"max_post_per_type"`      // 每个类型的最大文章数
+	MaxWords             int    `json:"max_words"`              // 每篇文章的最大字数
+	IncludeMetadata      bool   `json:"include_metadata"`       // 是否包含元数据
+	IncludeDescription   bool   `json:"include_description"`    // 是否包含描述
+	IncludeCategory      bool   `json:"include_category"`       // 是否包含分类
+	IncludeTag           bool   `json:"include_tag"`            // 是否包含标签
+	IncludeExtra         bool   `json:"include_extra"`          // 是否包含额外字段
+	ExcludeModuleIds     []uint `json:"exclude_module_ids"`     // 排除的模块id
+	ExcludeCategoryIds   []uint `json:"exclude_category_ids"`   // 排除的分类id
+	ExcludePageIds       []uint `json:"exclude_page_ids"`       // 排除的页面id
+	LLMSTitle            string `json:"llms_title"`             // LLMS.txt 标题, 为你的LLMs.txt文件设置一个自定义标题。该标题将出现在生成的文件顶部，位于所有列出的网址之前。
+	LLMSDescrption       string `json:"llms_description"`       // LLMs.txt 描述, 在URL列表之前添加了可选的介绍文本。使用此文本解释LLMs.txt文件的用途或结构。
+	LLMSAfterDescription string `json:"llms_after_description"` // 在链接或内容条目列表之前插入的可选文本。您可以在网址开始之前使用它来添加额外的注释、上下文或数据使用信息。
+	LLMSEndDescription   string `json:"llms_end_description"`   // 附加在LLMs.txt文件底部的结尾文本（例如页脚、联系方式或免责声明信息）。
 }
 
 func (g *CustomField) SplitContent() []string {

@@ -515,7 +515,7 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive, isDraft bool) erro
 			return err
 		}
 		archive.Title = req.Title
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "), 250)
 		archive.HasPseudo = 1
 		tx := w.DB
 		if isDraft {
@@ -743,7 +743,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			}
 			tx.Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
 				"title":       result.Data.Title,
-				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " ")),
+				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "), 250),
 			})
 			// 再保存内容
 			w.DB.Model(&model.ArchiveData{}).Where("`id` = ?", plan.ArticleId).UpdateColumn("content", result.Data.Content)
