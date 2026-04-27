@@ -38,6 +38,8 @@ func dailyTask() {
 	CleanArchives()
 	// 每天检查VIP
 	CleanUserVip()
+	// 每天检查一次LLMs更新频率
+	CheckLLMsUpdateFrequency()
 }
 
 func daily8HourTask() {
@@ -182,6 +184,16 @@ func CleanUserVip() {
 			continue
 		}
 		w.CleanUserVip()
+	}
+}
+
+func CheckLLMsUpdateFrequency() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckLLMsUpdateFrequency()
 	}
 }
 

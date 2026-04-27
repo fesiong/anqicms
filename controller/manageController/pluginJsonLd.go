@@ -8,7 +8,7 @@ import (
 
 func PluginGetJsonLdConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	setting := currentSite.PluginJsonLd
+	setting := currentSite.GetJsonLdSetting()
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

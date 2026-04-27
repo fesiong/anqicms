@@ -64,6 +64,7 @@ const (
 	GoogleAuthSettingKey    = "google_auth"
 	CurrencySettingKey      = "currency"
 	CommunicationSettingKey = "communication"
+	LLMsSettingKey          = "llms"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -125,6 +126,7 @@ func (w *Website) InitSetting() {
 	w.LoadMultiLangSetting(settingMap[MultiLangSettingKey])
 	w.LoadTranslateSetting(settingMap[TranslateSettingKey])
 	w.LoadJsonLdSetting(settingMap[JsonLdSettingKey])
+	w.LoadLLMsSetting(settingMap[LLMsSettingKey])
 	// 检查OpenAIAPI是否可用
 	go w.CheckOpenAIAPIValid()
 }
@@ -748,6 +750,19 @@ func (w *Website) LoadJsonLdSetting(value string) {
 	}
 
 	if err := json.Unmarshal([]byte(value), w.PluginJsonLd); err != nil {
+		return
+	}
+
+	return
+}
+
+func (w *Website) LoadLLMsSetting(value string) {
+	w.PluginLLMs = &config.PluginLLMsConfig{}
+	if value == "" {
+		return
+	}
+
+	if err := json.Unmarshal([]byte(value), w.PluginLLMs); err != nil {
 		return
 	}
 

@@ -26,6 +26,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -587,7 +588,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		if w.Content.Editor == "markdown" {
 			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-		req.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
+		req.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "), 250)
 	}
 	// 限制数量
 	descRunes := []rune(req.Description)
@@ -1067,6 +1068,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			Id:          archive.Id,
 			Type:        fulltext.ArchiveType,
 			ModuleId:    archive.ModuleId,
+			CategoryId:  archive.CategoryId,
 			Title:       archive.Title,
 			Keywords:    archive.Keywords,
 			Description: archive.Description,
@@ -1147,6 +1149,9 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 		}()
 	}
 
+	// 生成LLMs.txt
+	go w.ImmediateLLMsBuild()
+
 	return nil
 }
 
@@ -1164,7 +1169,7 @@ func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
 	go func() {
 		var doc fulltext.TinyArchive
-		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
+		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,archives.category_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
 		// 尝试添加全文索引
 		w.AddFulltextIndex(doc)
 	}()
@@ -1218,6 +1223,11 @@ func (w *Website) DeleteArchiveDraft(draft *model.ArchiveDraft) error {
 	w.DB.Unscoped().Where("`archive_id` = ?", draft.Id).Delete(&model.ArchiveFlag{})
 	// 删除 文档TagData
 	w.DB.Unscoped().Where("`item_id` = ?", draft.Id).Delete(&model.TagData{})
+	// 删除模型数据
+	module := w.GetModuleFromCache(draft.ModuleId)
+	if module != nil {
+		w.DB.Exec("DELETE FROM ? WHERE `id` = ?", clause.Table{Name: module.TableName}, draft.Id)
+	}
 
 	return nil
 }
@@ -1411,6 +1421,55 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	// end
+
+	return nil
+}
+
+func (w *Website) UpdateArchiveTags(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Tr("NoDocumentToOperate"))
+	}
+	if len(req.Tags) == 0 {
+		return errors.New(w.Tr("PleaseSelectATag"))
+	}
+	var tagIds = make([]uint, 0, len(req.Tags))
+	for _, tagName := range req.Tags {
+		if tagName == "" {
+			continue
+		}
+		tag, err := w.GetTagByTitle(tagName)
+		if err != nil {
+			newToken := w.VerifyTagUrlToken("", tagName, 0)
+			letter := "A"
+			if len(newToken) > 0 && newToken != "-" {
+				letter = string(newToken[0])
+			}
+			tag = &model.Tag{
+				Title:       tagName,
+				UrlToken:    newToken,
+				FirstLetter: strings.ToUpper(letter),
+				Status:      1,
+			}
+			w.DB.Where("`title` = ?", tag.Title).FirstOrCreate(tag)
+
+			link := w.GetUrl("tag", tag, 0)
+			go w.PushArchive(link)
+			if w.PluginSitemap.AutoBuild == 1 {
+				go w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
+			}
+		}
+		tagIds = append(tagIds, tag.Id)
+	}
+	// 更新TagData
+	for _, arcId := range req.Ids {
+		for _, tagId := range tagIds {
+			tagData := model.TagData{
+				TagId:  tagId,
+				ItemId: arcId,
+			}
+			w.DB.Where("`item_id` = ? and `tag_id` = ?", arcId, tagData.TagId).FirstOrCreate(&tagData)
+		}
+	}
 
 	return nil
 }
@@ -2086,7 +2145,7 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			}
 		}
 		// 解析description
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "), 250)
 		// 解析urlToken
 		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
 		archive.ArchiveData = &model.ArchiveData{
@@ -2104,6 +2163,8 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 		qia.SaveBatches(archives)
 	}
 	qia.IsFinished = true
+	// 生成LLMs.txt
+	go qia.w.ImmediateLLMsBuild()
 
 	return nil
 }
@@ -2359,7 +2420,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 			}
 		}
 		// 解析description
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "), 250)
 		// 解析urlToken
 		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
 		// 处理更多主表字段
@@ -2459,6 +2520,9 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 			tmpViews, _ := strconv.ParseInt(row[colId], 10, 64)
 			archive.Views = uint(tmpViews)
 		}
+		if colId, ok := existFields["fixed_link"]; ok {
+			archive.FixedLink = row[colId]
+		}
 		// 先对主表进行入库
 		tx := qia.w.DB.Begin()
 		// 需要写入表 archive_category, archive_data，archives, archive_drafts, tag_data, tag
@@ -2528,6 +2592,8 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 	}
 
 	qia.IsFinished = true
+	// 生成LLMs.txt
+	go qia.w.ImmediateLLMsBuild()
 
 	return nil
 }

@@ -179,6 +179,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			archive.Post("/plan", manageController.UpdateArchiveReleasePlan)
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 			archive.Post("/import", manageController.QuickImportArchive)
+			archive.Post("/tags", manageController.UpdateArchiveTags)
 			archive.Get("/import/status", manageController.GetQuickImportArchiveStatus)
 			archive.Post("/import/exceltemplate", manageController.GetQuickImportExcelTemplate)
 		}
@@ -573,6 +574,13 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			{
 				google.Get("/setting", manageController.PluginGetGoogleSetting)
 				google.Post("/setting", manageController.PluginSaveGoogleSetting)
+			}
+			llms := plugin.Party("/llms")
+			{
+				llms.Get("/status", manageController.PluginGetLLMsStatus)
+				llms.Post("/build", manageController.PluginLLMsBuild)
+				llms.Get("/setting", manageController.PluginGetLLMsSetting)
+				llms.Post("/setting", manageController.PluginSaveLLMsSetting)
 			}
 		}
 	}

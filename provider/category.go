@@ -194,7 +194,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		if w.Content.Editor == "markdown" {
 			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-		category.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
+		category.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "), 250)
 	}
 	//提取缩略图
 	if len(category.Logo) == 0 {

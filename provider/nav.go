@@ -42,6 +42,7 @@ func buildNavTree(navs []*model.Nav, showType string) []*model.Nav {
 			rootNodes = append(rootNodes, node)
 		} else if parentNode, ok := nodeMap[node.ParentId]; ok {
 			node.Level = parentNode.Level + 1
+			node.ParentTitles = append(parentNode.ParentTitles, parentNode.Title)
 			parentNode.NavList = append(parentNode.NavList, node)
 		}
 	}
@@ -56,7 +57,7 @@ func buildNavTree(navs []*model.Nav, showType string) []*model.Nav {
 		if level > 0 {
 			var spacer strings.Builder
 			for i := 0; i < level-1; i++ {
-				spacer.WriteString("└  ")
+				spacer.WriteString("└－")
 			}
 			node.Spacer = spacer.String()
 		}
