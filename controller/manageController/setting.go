@@ -331,7 +331,6 @@ func SettingContactForm(ctx iris.Context) {
 	currentSite.Contact.ShopLogo = req.ShopLogo
 	currentSite.Contact.ShopDescription = req.ShopDescription
 	currentSite.Contact.BusinessHours = req.BusinessHours
-	currentSite.Contact.DeliveryLocation = req.DeliveryLocation
 	currentSite.Contact.ShippingTime = req.ShippingTime
 	currentSite.Contact.ShippingTimeRemark = req.ShippingTimeRemark
 

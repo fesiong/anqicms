@@ -22,16 +22,17 @@ import (
 )
 
 const (
-	SystemSettingKey  = "system"
-	ContentSettingKey = "content"
-	IndexSettingKey   = "index"
-	ContactSettingKey = "contact"
-	SafeSettingKey    = "safe"
-	BannerSettingKey  = "banner"
-	SensitiveWordsKey = "sensitive_words"
-	InstallTimeKey    = "install_time"
-	CacheTypeKey      = "cache_type"
-	DiyFieldsKey      = "diy_fields"
+	SystemSettingKey   = "system"
+	ContentSettingKey  = "content"
+	IndexSettingKey    = "index"
+	ContactSettingKey  = "contact"
+	ShippingSettingKey = "shipping"
+	SafeSettingKey     = "safe"
+	BannerSettingKey   = "banner"
+	SensitiveWordsKey  = "sensitive_words"
+	InstallTimeKey     = "install_time"
+	CacheTypeKey       = "cache_type"
+	DiyFieldsKey       = "diy_fields"
 
 	PushSettingKey           = "push"
 	SitemapSettingKey        = "sitemap"
@@ -94,6 +95,7 @@ func (w *Website) InitSetting() {
 	w.LoadContentSetting(settingMap[ContentSettingKey])
 	w.LoadIndexSetting(settingMap[IndexSettingKey])
 	w.LoadContactSetting(settingMap[ContactSettingKey])
+	w.LoadShippingSetting(settingMap[ShippingSettingKey])
 	w.LoadSafeSetting(settingMap[SafeSettingKey])
 	w.LoadBannerSetting(settingMap[BannerSettingKey])
 	w.LoadSensitiveWords(settingMap[SensitiveWordsKey])
@@ -284,6 +286,55 @@ func (w *Website) LoadContactSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), w.Contact)
 	}
+}
+
+func (w *Website) LoadShippingSetting(value string) {
+	w.Shipping = &config.ShippingConfig{}
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), w.Shipping)
+	}
+	if w.Shipping.Units == nil {
+		// 默认支持的单位
+		w.Shipping.Units = []config.ShippingUnitItem{
+			{
+				Name:       "cm",
+				VolumeName: "cm³",
+				Ratio:      0.01,
+			},
+			{
+				Name:       "m",
+				VolumeName: "m³",
+				Ratio:      1,
+			},
+			{
+				Name:       "inch",
+				VolumeName: "in³",
+				Ratio:      0.0254,
+			},
+		}
+	}
+	if w.Shipping.WeightUnits == nil {
+		// 默认支持的单位
+		w.Shipping.WeightUnits = []config.ShippingUnitItem{
+			{
+				Name:  "kg",
+				Ratio: 1,
+			},
+			{
+				Name:  "g",
+				Ratio: 1000,
+			},
+			{
+				Name:  "lb",
+				Ratio: 0.453592,
+			},
+			{
+				Name:  "pc", // 计件
+				Ratio: 1,
+			},
+		}
+	}
+
 }
 
 func (w *Website) LoadSafeSetting(value string) {

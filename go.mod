@@ -33,6 +33,7 @@ require (
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/kataras/iris/v12 v12.2.11
 	github.com/lib/pq v1.10.9
+	github.com/matm/go-nowpayments v1.0.4
 	github.com/medivhzhan/weapp/v3 v3.8.4
 	github.com/meilisearch/meilisearch-go v0.36.1
 	github.com/melbahja/goph v1.4.0
@@ -168,6 +169,7 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/richardlehane/mscfb v1.0.4 // indirect
 	github.com/richardlehane/msoleps v1.0.4 // indirect
+	github.com/rotisserie/eris v0.5.4 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect

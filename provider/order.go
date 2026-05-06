@@ -16,6 +16,7 @@ import (
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
+	_ "github.com/matm/go-nowpayments/payments"
 	"github.com/stripe/stripe-go/v82"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
@@ -691,6 +692,9 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 			// 更新id
 			// refund success
+		} else if payment.PayWay == config.PayWayNowpayment {
+			// nowpayment refund
+			// todo nowpayment
 		} else {
 			// 线下支付，的退款流程
 			// 不用处理
@@ -1048,7 +1052,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	tx := w.DB.Begin()
 	var orderAddress *model.OrderAddress
-	if w.PluginOrder.NoProcess == false || req.Address != nil {
+	if w.PluginOrder.NoProcess == false && req.Address != nil {
 		//保存订单地址
 		orderAddress, err = w.SaveOrderAddress(tx, userId, req.Address)
 		if err != nil {
@@ -1119,6 +1123,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	if orderAddress != nil {
 		order.AddressId = orderAddress.Id
+	} else if req.AddressId > 0 {
+		orderAddress, _ = w.GetOrderAddressById(req.AddressId)
 	}
 	err = tx.Save(&order).Error
 	if err != nil {
@@ -1126,6 +1132,12 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		return nil, err
 	}
 	var details = []map[string]interface{}{}
+
+	// 如果商品标记了包邮，则不参与计算运费
+	var calcQuantity int = 0
+	var calcWeight float64 = 0
+	var calcVolume float64 = 0
+	userDiscount, shippingDiscount := w.GetUserDiscount(userId, user)
 	// 计算商品总价
 	if req.Type == config.OrderTypeVip {
 		group, err := w.GetUserGroupInfo(uint(req.Details[0].GoodsId))
@@ -1142,9 +1154,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		if activity != nil {
 			price = activity.Price
 		}
-		discount := w.GetUserDiscount(userId, user)
-		if discount > 0 {
-			price = price * discount / 100
+		if userDiscount > 0 {
+			price = price * userDiscount / 100
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
@@ -1193,9 +1204,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		if activity != nil {
 			price = activity.Price
 		}
-		discount := w.GetUserDiscount(userId, user)
-		if discount > 0 {
-			price = price * discount / 100
+		if userDiscount > 0 {
+			price = price * userDiscount / 100
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
@@ -1252,9 +1262,10 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				price = activity.Price
 			}
 			// sku_id
+			var archiveSku *model.ArchiveSku
 			var skuValues []model.ArchiveOptionValue
 			if v.GoodsSkuId > 0 {
-				archiveSku, err := w.GetArchiveSkuById(v.GoodsId, v.GoodsSkuId)
+				archiveSku, err = w.GetArchiveSkuById(v.GoodsId, v.GoodsSkuId)
 				if err != nil {
 					tx.Rollback()
 					return nil, err
@@ -1320,9 +1331,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				})
 			}
 			// 优惠
-			discount := w.GetUserDiscount(userId, user)
 			// 批发价格设置
-			if archive.IsWholesale {
+			if archive.ProductType == config.ProductTypeWholesale {
 				wholesaleRules, _ := w.GetArchiveWholesaleRules(archive.Id)
 				var percentage int64 = 100 // 默认没折扣
 				for _, rule := range wholesaleRules {
@@ -1331,18 +1341,40 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					}
 				}
 				if percentage > 0 {
-					if discount == 0 {
-						discount = percentage
+					if userDiscount == 0 {
+						userDiscount = percentage
 					} else {
-						discount = percentage * discount / 100
+						userDiscount = percentage * userDiscount / 100
 					}
 				}
 			}
-			if discount > 0 {
-				price = price * discount / 100
+			if userDiscount > 0 {
+				price = price * userDiscount / 100
 			}
 			detailAmount := price * int64(v.Quantity)
 			originDetailAmount := originPrice * int64(v.Quantity)
+
+			// 计算运费，非包邮商品才计算运费
+			weight, volume := 0.0, 0.0
+			if archive.NeedLogistics && !archive.IsFreeShipping {
+				// 计算重量和体积
+				tmpVolume, tmpWeight := w.CalculateShippingAttrs(archive, v.Quantity)
+				if archiveSku != nil {
+					tmpVolume2, tmpWeight2 := w.CalculateSkuShippingAttrs(archiveSku, v.Quantity)
+					if tmpVolume2 > 0 {
+						tmpVolume = tmpVolume2
+					}
+					if tmpWeight2 > 0 {
+						tmpWeight = tmpWeight2
+					}
+				}
+				weight = tmpWeight
+				volume = tmpVolume
+				calcWeight += weight
+				calcQuantity += v.Quantity
+				calcVolume += volume
+			}
+
 			amount += detailAmount
 			originAmount += originDetailAmount
 			//给每条子订单入库
@@ -1356,6 +1388,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				Amount:       detailAmount,
 				OriginAmount: originDetailAmount,
 				Quantity:     v.Quantity,
+				Weight:       weight,
+				Volume:       volume,
 				Status:       1,
 				OrderExtra:   v.OrderExtra,
 				SkuValues:    skuValues,
@@ -1374,6 +1408,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				"price":    float32(price) / 100,
 				"amount":   detailAmount,
 				"quantity": orderDetail.Quantity,
+				"weight":   weight,
+				"volume":   volume,
 			})
 		}
 	}
@@ -1393,6 +1429,35 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		_ = w.UseCouponCode(couponCode)
 	}
 	order.DiscountAmount = originAmount - amount
+
+	if calcQuantity > 0 {
+		order.ShippingQuantity = calcQuantity
+		order.ShippingWeight = calcWeight
+		order.ShippingVolume = calcVolume
+		// 计算运费
+		var orderAddress *model.OrderAddress
+		if req.Address != nil {
+			orderAddress = &model.OrderAddress{
+				CountryCode:  req.Address.CountryCode,
+				Country:      req.Address.Country,
+				ProvinceCode: req.Address.ProvinceCode,
+				Province:     req.Address.Province,
+				City:         req.Address.City,
+				Postcode:     req.Address.Postcode,
+			}
+		} else if req.AddressId > 0 {
+			orderAddress, _ = w.GetOrderAddressById(req.AddressId)
+		}
+		order.ShippingFee = w.CalculateShippingFee(orderAddress, order.Amount, calcQuantity, calcWeight, calcVolume)
+		if shippingDiscount > 0 {
+			originShippingFee := order.ShippingFee
+			order.ShippingFee = int64(float64(originShippingFee) * (float64(shippingDiscount) / 100))
+			order.ShippingDiscount = originShippingFee - order.ShippingFee
+		}
+		// 更新订单金额
+		order.Amount += order.ShippingFee
+	}
+
 	// orderService
 	if len(req.ServiceIds) > 0 {
 		services, _ := w.GetOrderServices(func(tx *gorm.DB) *gorm.DB {

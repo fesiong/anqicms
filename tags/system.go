@@ -90,6 +90,11 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		content = currentSite.System.SiteName
 	} else if fieldName == "SiteUrl" || fieldName == "BaseUrl" {
 		content = currentSite.System.BaseUrl
+	} else if fieldName == "Language" || fieldName == "CurrentLanguage" {
+		content = currentSite.System.Language
+		if lang := ctx.Public["language"]; lang != nil {
+			content = lang.(string)
+		}
 	}
 	if content == "" {
 		if currentSite.System.ExtraFields != nil {

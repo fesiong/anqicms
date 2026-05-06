@@ -241,10 +241,12 @@ func ApiArchiveList(ctx iris.Context) {
 	tagId := ctx.URLParamInt64Default("tagId", 0)
 	like := ctx.URLParam("like")
 	keywords := ctx.URLParam("keywords")
+	productType := ctx.URLParamIntDefault("productType", 0)
 
 	req := request.ApiArchiveListRequest{
 		Id:                 archiveId,
 		Render:             render,
+		ProductType:        productType,
 		ParentId:           int64(parentId),
 		CategoryIds:        categoryIds,
 		ExcludeCategoryIds: excludeCategoryIds,
@@ -271,7 +273,7 @@ func ApiArchiveList(ctx iris.Context) {
 		Page:               currentPage,
 		Limit:              limit,
 		Offset:             offset,
-		UserId:             userId,
+		UserId:             ctx.Values().GetUintDefault("userId", 0),
 		ExtraFields:        extraFields,
 	}
 
@@ -1350,8 +1352,13 @@ func ApiArchivePublish(ctx iris.Context) {
 func ApiReviewList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	archiveId := ctx.URLParamInt64Default("id", 0)
+	archiveId2 := ctx.URLParamInt64Default("archive_id", 0)
+	if archiveId2 > 0 {
+		archiveId = archiveId2
+	}
 	userId := uint(ctx.URLParamIntDefault("user_id", 0))
 	order := ctx.URLParamDefault("order", "id desc")
+	hasImage := ctx.URLParamBoolDefault("has_image", false)
 	limit := 10
 	offset := 0
 	currentPage := ctx.URLParamIntDefault("page", 1)
@@ -1389,6 +1396,9 @@ func ApiReviewList(ctx iris.Context) {
 		}
 		if archiveId > 0 {
 			tx = tx.Where("archive_id = ?", archiveId)
+		}
+		if hasImage {
+			tx = tx.Where("images is not null AND images != '{}'")
 		}
 		return tx.Where("status = ?", 1)
 	}, order, currentPage, limit, offset)

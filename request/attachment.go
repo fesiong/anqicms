@@ -15,3 +15,8 @@ type ChangeAttachmentCategory struct {
 	CategoryId uint   `json:"category_id"`
 	Ids        []uint `json:"ids"`
 }
+
+type AttachmentAddRemoteUrl struct {
+	CategoryId uint     `json:"category_id"`
+	Urls       []string `json:"urls"`
+}

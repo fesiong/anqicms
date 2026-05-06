@@ -346,6 +346,9 @@ func init() {
 			"values": &graphql.Field{
 				Type: graphql.NewList(archiveOptionValueType),
 			},
+			"status": &graphql.Field{
+				Type: graphql.Int,
+			},
 		},
 	})
 
@@ -591,13 +594,10 @@ func init() {
 			"weight_unit": &graphql.Field{
 				Type: graphql.String,
 			},
-			"is_wholesale": &graphql.Field{
-				Type: graphql.Boolean,
+			"product_type": &graphql.Field{
+				Type: graphql.Int,
 			},
 			"allow_oversold": &graphql.Field{
-				Type: graphql.Boolean,
-			},
-			"has_order_fields": &graphql.Field{
 				Type: graphql.Boolean,
 			},
 			// 关联对象和计算字段
@@ -1485,6 +1485,9 @@ func init() {
 					},
 					"render": &graphql.ArgumentConfig{
 						Type: graphql.Boolean,
+					},
+					"product_type": &graphql.ArgumentConfig{
+						Type: graphql.Int,
 					},
 					"parent_id": &graphql.ArgumentConfig{
 						Type: graphql.Int,

@@ -27,6 +27,7 @@ func ArchiveList(ctx iris.Context) {
 	status := ctx.URLParamDefault("status", "ok") // 支持 '':all，draft:0, ok:1, plan:2
 	sort := ctx.URLParamDefault("sort", "id")
 	flag := ctx.URLParam("flag")
+	productType := ctx.URLParamIntDefault("productType", 0)
 	exact := ctx.URLParamBoolDefault("exact", false)
 	order := strings.ToLower(ctx.URLParamDefault("order", "desc"))
 	if order != "asc" {
@@ -101,6 +102,9 @@ func ArchiveList(ctx iris.Context) {
 			}
 			if parentId > 0 {
 				tx = tx.Where("`parent_id` = ?", parentId)
+			}
+			if productType > 0 {
+				tx = tx.Where("`product_type` = ?", productType)
 			}
 			if status == "delete" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDelete)
@@ -503,6 +507,18 @@ func ArchiveDetail(ctx iris.Context) {
 	// 读取options
 	archiveDraft.Options, _ = currentSite.GetArchiveOptions(archiveDraft.Id)
 	archiveDraft.Skus, _ = currentSite.GetArchiveSkus(archiveDraft.Id)
+	for _, sku := range archiveDraft.Skus {
+		for i, value := range sku.Values {
+			if value.OptionTitle == "" {
+				for _, option := range archiveDraft.Options {
+					if option.Id == value.OptionId {
+						sku.Values[i].OptionTitle = option.Title
+						break
+					}
+				}
+			}
+		}
+	}
 	archiveDraft.WholesaleRules, _ = currentSite.GetArchiveWholesaleRules(archiveDraft.Id)
 
 	ctx.JSON(iris.Map{

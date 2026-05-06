@@ -42,3 +42,11 @@ func TestEncodeImage(t *testing.T) {
 		os.WriteFile("1.png", data, os.ModePerm)
 	}
 }
+
+func TestGetFfmpegPath(t *testing.T) {
+	path, err := getFfmpegPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Printf("ffmpeg path: %s", path)
+}

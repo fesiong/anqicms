@@ -88,13 +88,14 @@ const (
 	CommissionStatusPaid   = 1 //已提现
 	CommissionStatusCancel = -1
 
-	PayWayWechat  = "wechat"  // 微信网页支付
-	PayWayWeapp   = "weapp"   // 微信小程序支付
-	PayWayAlipay  = "alipay"  // 支付宝支付
-	PayWayOffline = "offline" // 线下支付
-	PayWayBalance = "balance" // 余额支付
-	PayWayPaypal  = "paypal"  // paypal
-	PayWayStripe  = "stripe"  // stripe
+	PayWayWechat     = "wechat"     // 微信网页支付
+	PayWayWeapp      = "weapp"      // 微信小程序支付
+	PayWayAlipay     = "alipay"     // 支付宝支付
+	PayWayOffline    = "offline"    // 线下支付
+	PayWayBalance    = "balance"    // 余额支付
+	PayWayPaypal     = "paypal"     // paypal
+	PayWayStripe     = "stripe"     // stripe
+	PayWayNowpayment = "nowpayment" // nowpayment
 )
 
 const (
@@ -168,6 +169,15 @@ const (
 	OrderTypeGoods         = "goods"
 	OrderTypeVip           = "vip"
 	OrderTypeCommunication = "communication"
+)
+
+const (
+	ProductTypeNormal       = 1 // 普通商品
+	ProductTypeWholesale    = 2 //批发商品
+	ProductTypeCustom       = 3 // 自定义商品
+	ProductTypeVirtual      = 4 // 虚拟商品
+	ProductTypeService      = 5 // 服务商品
+	ProductTypeSubscription = 6 // 订阅商品
 )
 
 const (
@@ -246,4 +256,11 @@ const (
 	UserStatusActive  = 1  // 已激活
 	UserStatusPending = 0  // 待审核
 	UserStatusBlocked = -1 // 已封禁
+)
+
+const (
+	ShippingTypeFixed  = 1 // 固定运费
+	ShippingTypeWeight = 2 // 按重量计费
+	ShippingTypeVolume = 3 // 按体积计费
+	ShippingTypeAmount = 4 // 按金额计费
 )

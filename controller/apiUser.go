@@ -275,6 +275,8 @@ func ApiLogin(ctx iris.Context) {
 	})
 }
 
+// ApiSendVerifyEmail 发送验证邮件, state := verify = 邮件验证|reset = 重置密码|exist = 检查邮箱已存在|login = 登录
+// 允许快速登录
 func ApiSendVerifyEmail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.ApiRegisterRequest
@@ -296,13 +298,29 @@ func ApiSendVerifyEmail(ctx iris.Context) {
 
 	user, err := currentSite.GetUserInfoByEmail(req.Email)
 	if err != nil {
+		if req.State == "login" {
+			// 快速登录, 用户尚未注册的，先完成注册
+			user = &model.User{
+				UserName: strings.Split(req.Email, "@")[0],
+				Email:    req.Email,
+				GroupId:  currentSite.PluginUser.DefaultGroupId,
+			}
+		} else {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("UserDoesNotExist"),
+			})
+			return
+		}
+	}
+	err = currentSite.SendVerifyEmail(user, req.State)
+	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  currentSite.TplTr("UserDoesNotExist"),
+			"msg":  err.Error(),
 		})
 		return
 	}
-	_ = currentSite.SendVerifyEmail(user, req.State)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -310,7 +328,8 @@ func ApiSendVerifyEmail(ctx iris.Context) {
 	})
 }
 
-// ApiVerifyEmail 验证邮箱, state := verify = 邮件验证|reset = 重置密码|exist = 检查邮箱已存在
+// ApiVerifyEmail 验证邮箱, state := verify = 邮件验证|reset = 重置密码|exist = 检查邮箱已存在|login = 登录
+// 允许快速登录
 func ApiVerifyEmail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	token := ctx.URLParam("token")
@@ -318,7 +337,10 @@ func ApiVerifyEmail(ctx iris.Context) {
 	email := ctx.URLParam("email")
 	state := ctx.URLParam("state")
 	returnType := ctx.URLParam("return")
-	if !currentSite.VerifyEmailFormat(email) || (len(token) == 0 && state != "exist") {
+	if state == "exist" || state == "login" {
+		returnType = "json"
+	}
+	if !currentSite.VerifyEmailFormat(email) {
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -330,8 +352,8 @@ func ApiVerifyEmail(ctx iris.Context) {
 		return
 	}
 	user, err := currentSite.GetUserInfoByEmail(email)
-	if err != nil {
-		if returnType == "json" || state == "exist" {
+	if err != nil && state != "login" {
+		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  currentSite.TplTr("UserDoesNotExist"),
@@ -355,12 +377,8 @@ func ApiVerifyEmail(ctx iris.Context) {
 		return
 	}
 	// 验证Token
-	verifyCode := library.CodeCache.Get(token, true)
+	verifyCode := library.CodeCache.Get(email, true)
 	if verifyCode != code {
-		// 暂时不做验证
-	}
-	verifyToken := library.Md5(user.Email + user.Password)
-	if verifyToken != token {
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -381,9 +399,29 @@ func ApiVerifyEmail(ctx iris.Context) {
 		ctx.Redirect(frontUrl + "/account/password/reset?token=" + token + "&code=" + code + "&email=" + user.Email)
 		return
 	}
+	if state == "login" && user == nil {
+		// 快速登录, 用户尚未注册的，先完成注册
+		user = &model.User{
+			UserName:      strings.Split(email, "@")[0],
+			Email:         email,
+			GroupId:       currentSite.PluginUser.DefaultGroupId,
+			Status:        currentSite.PluginUser.GetDefaultStatus(),
+			ResetPassword: true,
+		}
+		err = currentSite.DB.Save(user).Error
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
 	// 验证通过
-	user.EmailVerified = true
-	currentSite.DB.Model(user).UpdateColumn("email_verified", true)
+	if user.EmailVerified != true {
+		user.EmailVerified = true
+		currentSite.DB.Model(user).UpdateColumn("email_verified", true)
+	}
 	// 生成登录Token
 	user.Token = currentSite.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(currentSite.DB)
@@ -394,6 +432,7 @@ func ApiVerifyEmail(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  currentSite.TplTr("verificationSuccessful"),
+			"data": user,
 		})
 	} else {
 		ShowMessage(ctx, currentSite.TplTr("verificationSuccessful"), []Button{{Name: currentSite.TplTr("Home"), Link: "/"}})
@@ -495,7 +534,7 @@ func ApiGetUserGroups(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
 		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-		discount := currentSite.GetUserDiscount(userId, userInfo)
+		discount, _ := currentSite.GetUserDiscount(userId, userInfo)
 		for i := range groups {
 			if groups[i].Price > 0 {
 				if discount > 0 {
@@ -526,7 +565,7 @@ func ApiGetUserGroupDetail(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
 		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-		discount := currentSite.GetUserDiscount(userId, userInfo)
+		discount, _ := currentSite.GetUserDiscount(userId, userInfo)
 		if group.Price > 0 {
 			if discount > 0 {
 				group.FavorablePrice = group.Price * discount / 100

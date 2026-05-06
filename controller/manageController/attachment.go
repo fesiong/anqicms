@@ -1,14 +1,15 @@
 package manageController
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"path/filepath"
-	"strings"
 )
 
 func AttachmentUpload(ctx iris.Context) {
@@ -384,6 +385,38 @@ func AttachmentCategoryDelete(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("CategoryDeleted"),
+	})
+}
+
+func AttachmentAddRemoteUrl(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.AttachmentAddRemoteUrl
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if len(req.Urls) == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseEnterTheRemoteUrl"),
+		})
+		return
+	}
+
+	err := currentSite.AddRemoteUrls(req.Urls, req.CategoryId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("RemoteUrlAdded"),
 	})
 }
 

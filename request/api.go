@@ -19,6 +19,7 @@ type ApiArchiveListRequest struct {
 	Ids                []int64  `json:"ids"`
 	Render             bool     `json:"render"`
 	ParentId           int64    `json:"parent_id"`
+	ProductType        int      `json:"product_type"`
 	CategoryIds        []int    `json:"category_ids"`
 	ExcludeCategoryIds []int    `json:"exclude_category_ids"`
 	ExcludeFlags       []string `json:"exclude_flags"`

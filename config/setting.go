@@ -82,9 +82,83 @@ type ContactConfig struct {
 	ShopLogo           string `json:"shop_logo"`
 	ShopDescription    string `json:"shop_description"`
 	BusinessHours      string `json:"business_hours"`
-	DeliveryLocation   string `json:"delivery_location"`
 	ShippingTime       int    `json:"shipping_time"`
 	ShippingTimeRemark string `json:"shipping_time_remark"`
+}
+
+// ShippingUnitItem 计量单位项
+type ShippingUnitItem struct {
+	Name       string  `json:"name"`        // 长度单位名称，如 cm
+	VolumeName string  `json:"volume_name"` // 体积单位名，如 cm³
+	Ratio      float64 `json:"ratio"`       // 换算比例
+}
+
+type PlaceItem struct {
+	CountryCode  string `json:"country_code"`
+	ProvinceCode string `json:"province_code"`
+	Country      string `json:"country"`
+	Province     string `json:"province"`
+	City         string `json:"city"`
+	Address      string `json:"address"` // 详细地址
+	Latitude     string `json:"latitude"`
+	Longitude    string `json:"longitude"`
+}
+
+type FreeShippingRule struct {
+	Type      int     `json:"type"`      // 0=不启用，1=金额满n包邮，2=重量数满n包邮，3=体积数满n包邮， 4=按数量计费满n件包邮
+	Threshold float64 `json:"threshold"` // 满额阈值，为了兼容其它单位，这里满额的时候，保留元，不转换为分
+}
+
+type ShippingRule struct {
+	Id           int64       `json:"id,omitempty"`
+	FirstUnit    float64     `json:"first_unit"`
+	FirstFee     int64       `json:"first_fee"` // 首单位运费，单位为分
+	ContinueUnit float64     `json:"continue_unit"`
+	ContinueFee  int64       `json:"continue_fee"` // 续重费用，单位为分
+	Regions      []PlaceItem `json:"regions"`
+}
+
+// ShippingConfig 物流配置
+type ShippingConfig struct {
+	Units             []ShippingUnitItem `json:"units"`              // 计量单位列表
+	VolumetricDivisor int                `json:"volumetric_divisor"` // 体积单位换算比例，如 cm³/5000 = 1kg，5000 = 1kg
+	WeightUnits       []ShippingUnitItem `json:"weight_units"`       // 重量单位列表
+	Type              int                `json:"type"`               // 1 = 固定运费， 2 = 按重量计费， 3 = 按体积计费，4 = 按数量计费， 5 = 按金额计费
+	// 全局是否免运费
+	IsFreeShipping bool `json:"is_free_shipping"` // 是否免费配送 false=自定义运费 true=包邮, 如果设置了包邮，则下面的配置将被忽略。
+	// 发货地
+	DeliveryPlace PlaceItem `json:"delivery_place"` // 发货地址
+	// 满额免运费规则
+	FreeShippingRule FreeShippingRule `json:"free_shipping_rule"` // 满额免运费规则
+	// 默认运费规则，当不匹配任何地区时，使用默认运费规则
+	DefaultRule ShippingRule `json:"default_rule"` // 默认运费规则
+	// 自定义地区运费规则
+	RegionRules []ShippingRule `json:"region_rules"` // 自定义地区运费规则
+}
+
+func (s *ShippingConfig) GetLengthUnit(name string) ShippingUnitItem {
+	for _, item := range s.Units {
+		if item.Name == name {
+			return item
+		}
+	}
+	return ShippingUnitItem{
+		Name:       "m",
+		VolumeName: "m³",
+		Ratio:      1,
+	}
+}
+
+func (s *ShippingConfig) GetWeightUnit(name string) ShippingUnitItem {
+	for _, item := range s.WeightUnits {
+		if item.Name == name {
+			return item
+		}
+	}
+	return ShippingUnitItem{
+		Name:  "kg",
+		Ratio: 1,
+	}
 }
 
 type SafeConfig struct {

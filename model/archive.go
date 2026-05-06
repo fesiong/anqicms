@@ -46,23 +46,27 @@ type Archive struct {
 	OriginId    int    `json:"origin_id" gorm:"column:origin_id;type:tinyint(1) unsigned not null;default:0"` // 来源 0， 1 采集，2 AI生成
 	// 商城专用字段
 	Brand          string       `json:"brand" gorm:"column:brand;type:varchar(100) not null;default:''"`
-	VideoUrl       string       `json:"video_url" gorm:"column:video_url;type:varchar(250) not null;default:''"`                 // 视频主图
-	NeedLogistics  bool         `json:"need_logistics" gorm:"column:need_logistics;type:tinyint(1) not null;default:0"`          // 需要物流
-	IsFreeShipping bool         `json:"is_free_shipping" gorm:"column:is_free_shipping;type:tinyint(1) not null;default:0"`      // 免运费
-	SoldCount      int64        `json:"sold_count" gorm:"column:sold_count;type:bigint(20) unsigned not null;default:0"`         // 销量
-	ReviewCount    int64        `json:"review_count" gorm:"column:review_count;type:bigint(20) unsigned not null;default:0"`     // 评价数量
-	FavoriteCount  int64        `json:"favorite_count" gorm:"column:favorite_count;type:bigint(20) unsigned not null;default:0"` // 收藏数量
-	AverageScore   float32      `json:"average_score" gorm:"column:average_score;type:float(10,2) not null;default:0.00"`        // 平均评分
-	OptionType     int          `json:"option_type" gorm:"column:option_type;type:tinyint(1) not null;default:0"`                // sku模式，0 无SKU，1 组合SKU，2 加价SKU
-	Weight         float32      `json:"weight" gorm:"column:weight;type:float(10,2) not null;default:0.00"`                      // 重量
-	WeightUnit     string       `json:"weight_unit" gorm:"column:weight_unit;type:varchar(20);default:null"`
-	IsWholesale    bool         `json:"is_wholesale" gorm:"column:is_wholesale;type:tinyint(1) not null;default:0"`             // 支持批发
+	VideoUrl       string       `json:"video_url" gorm:"column:video_url;type:varchar(250) not null;default:''"`                        // 视频主图
+	NeedLogistics  bool         `json:"need_logistics" gorm:"column:need_logistics;type:tinyint(1) not null;default:0"`                 // 需要物流
+	IsFreeShipping bool         `json:"is_free_shipping" gorm:"column:is_free_shipping;type:tinyint(1) not null;default:0"`             // 免运费
+	SoldCount      int64        `json:"sold_count" gorm:"column:sold_count;type:bigint(20) unsigned not null;default:0"`                // 销量
+	ReviewCount    int64        `json:"review_count" gorm:"column:review_count;type:bigint(20) unsigned not null;default:0"`            // 评价数量
+	FavoriteCount  int64        `json:"favorite_count" gorm:"column:favorite_count;type:bigint(20) unsigned not null;default:0"`        // 收藏数量
+	AverageScore   float32      `json:"average_score" gorm:"column:average_score;type:decimal(10,2) not null;default:0.00"`             // 平均评分
+	OptionType     int          `json:"option_type" gorm:"column:option_type;type:tinyint(1) not null;default:0"`                       // sku模式，0 无SKU，1 组合SKU，2 加价SKU
+	Weight         float64      `json:"weight" gorm:"column:weight;type:decimal(12,6) not null;default:0.0000000;comment:重量 (kg/g/lb)"` // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit     string       `json:"weight_unit" gorm:"column:weight_unit;type:varchar(20);default:null;comment:重量单位 kg/g/lb"`       // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length         float64      `json:"length" gorm:"column:length;type:decimal(12,2) not null;default:0.00;comment:长 (用户单位)"`
+	Width          float64      `json:"width" gorm:"column:width;type:decimal(12,2) not null;default:0.00;comment:宽 (用户单位)"`
+	Height         float64      `json:"height" gorm:"column:height;type:decimal(12,2) not null;default:0.00;comment:高 (用户单位)"`
+	Volume         float64      `json:"volume" gorm:"column:volume;type:decimal(12,6) not null;default:0.000000;comment:体积 (m³)"` // 固定是 m³，自动换算
+	LengthUnit     string       `json:"length_unit" gorm:"column:length_unit;type:varchar(20);default:null;comment:长度单位 m/cm/inch"`
 	AllowOversold  bool         `json:"allow_oversold" gorm:"column:allow_oversold;type:tinyint(1) not null;default:0"`         // 允许超售
-	HasOrderFields bool         `json:"has_order_fields" gorm:"column:has_order_fields;type:tinyint(1) not null;default:0"`     // 是否有订单字段
 	OrderFields    moduleFields `json:"order_fields,omitempty" gorm:"column:order_fields;type:text default null"`               // 订单字段
 	MinQuantity    int          `json:"min_quantity,omitempty" gorm:"column:min_quantity;type:bigint(20) not null;default:0"`   // 最小购买数量
 	MaxQuantity    int          `json:"max_quantity,omitempty" gorm:"column:max_quantity;type:bigint(20) not null;default:0"`   // 最大购买数量
 	StepQuantity   int          `json:"step_quantity,omitempty" gorm:"column:step_quantity;type:bigint(20) not null;default:0"` // 购买数量步长
+	ProductType    int          `json:"product_type" gorm:"column:product_type;type:tinyint(1) not null;default:1"`             // 产品类型，1 普通商品，2 wholesale，3 custom, 4 vertual， 5 service， 6 subscription
 
 	// 其他内容
 	Category       *Category    `json:"category" gorm:"-"`

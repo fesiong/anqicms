@@ -40,14 +40,18 @@ type Archive struct {
 	SoldCount      int64                `json:"sold_count"`
 	ReviewCount    int64                `json:"review_count"`
 	OptionType     int                  `json:"option_type"`
-	Weight         float32              `json:"weight"`
-	WeightUnit     string               `json:"weight_unit"`
+	Weight         float64              `json:"weight"`      // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit     string               `json:"weight_unit"` // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length         float64              `json:"length"`
+	Width          float64              `json:"width"`
+	Height         float64              `json:"height"`
+	Volume         float64              `json:"volume"` // 固定是 m³，自动换算
+	LengthUnit     string               `json:"length_unit"`
 	Skus           []*ArchiveSku        `json:"skus"`
 	Options        []*ArchiveOption     `json:"options"`
-	IsWholesale    bool                 `json:"is_wholesale"`
+	ProductType    int                  `json:"product_type"`
 	AllowOversold  bool                 `json:"allow_oversold"`
 	WholesaleRules []*WholesaleRule     `json:"wholesale_rules"`
-	HasOrderFields bool                 `json:"has_order_fields"`
 	OrderFields    []config.CustomField `json:"order_fields,omitempty"`
 	MinQuantity    int                  `json:"min_quantity"`  // 最小购买数量
 	MaxQuantity    int                  `json:"max_quantity"`  // 最大购买数量
@@ -77,9 +81,15 @@ type ArchiveSku struct {
 	Price       int64                `json:"price"`
 	OriginPrice int64                `json:"origin_price"` // 原始价格
 	CostPrice   int64                `json:"cost_price"`   // 成本价
-	Weight      float32              `json:"weight"`       // 重量
-	WeightUnit  string               `json:"weight_unit"`
+	Weight      float64              `json:"weight"`       // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit  string               `json:"weight_unit"`  // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length      float64              `json:"length"`
+	Width       float64              `json:"width"`
+	Height      float64              `json:"height"`
+	Volume      float64              `json:"volume"` // 固定是 m³，自动换算
+	LengthUnit  string               `json:"length_unit"`
 	Values      []ArchiveOptionValue `json:"values"`
+	Status      int                  `json:"status"` // 状态,0:下架,1:上架
 }
 
 type ArchiveOptionValue struct {

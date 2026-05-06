@@ -88,8 +88,6 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 			content = currentSite.Contact.ShopDescription
 		case "BusinessHours":
 			content = currentSite.Contact.BusinessHours
-		case "DeliveryLocation":
-			content = currentSite.Contact.DeliveryLocation
 		case "ShippingTime":
 			content = strconv.Itoa(currentSite.Contact.ShippingTime)
 		case "ShippingTimeRemark":

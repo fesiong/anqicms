@@ -10,6 +10,7 @@ import (
 
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 )
 
 func init() {
@@ -180,6 +181,19 @@ func filterSplit(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.
 
 func filterThumb(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
 	loc := in.String()
+	if strings.HasSuffix(loc, ".svg") {
+		return in, nil
+	}
+	if strings.HasSuffix(loc, ".mp4") || strings.HasSuffix(loc, ".webm") {
+		if w, ok := param.Interface().(*provider.Website); ok {
+			tmpLoc := strings.TrimPrefix(loc, w.PublicPath)
+			attach, err := w.GetAttachmentByFileLocation(tmpLoc)
+			if err != nil || attach.Logo == "" {
+				return pongo2.AsValue(loc), nil
+			}
+			loc = attach.Logo
+		}
+	}
 	if !strings.Contains(loc, "thumb_") {
 		paths, fileName := filepath.Split(loc)
 		loc = paths + "thumb_" + fileName

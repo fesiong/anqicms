@@ -26,6 +26,8 @@ import (
 	"strings"
 	"time"
 
+	"golang.org/x/image/tiff"
+
 	"github.com/h2non/filetype"
 	"github.com/parnurzeal/gorequest"
 	"golang.org/x/image/webp"
@@ -40,6 +42,7 @@ import (
 var imageMagickPath string
 var webpPath string
 var pngquantPath string
+var ffmpegPath string
 
 func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId, userId uint) (*model.Attachment, error) {
 	db := w.DB
@@ -64,7 +67,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		fileExt = ""
 	}
 	isImage := 0
-	if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" {
+	if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" || fileExt == ".avif" || fileExt == ".tiff" {
 		isImage = 1
 	}
 
@@ -130,12 +133,143 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	filePath = strings.ReplaceAll(filePath, "\\", "/")
 
 	// 不是图片的时候的处理方法
-	if isImage != 1 {
+	// avif 暂时不支持处理，因此直接保存
+	if isImage != 1 || fileExt == ".avif" {
 		fileSize = info.Size
 		_, err = w.UploadFile(filePath+tmpName, file)
 		if err != nil {
 			return nil, err
 		}
+		// 处理视频，对视频进行提取缩略图处理，并保存到 logo 字段中
+		var logoPath string
+		// 检查是否为视频文件
+		videoExts := map[string]bool{
+			".mp4":  true,
+			".avi":  true,
+			".mov":  true,
+			".wmv":  true,
+			".flv":  true,
+			".mkv":  true,
+			".webm": true,
+		}
+		if videoExts[fileExt] {
+			isImage = 2
+			// 获取 ffmpeg 路径
+			ffmpegPath, err := getFfmpegPath()
+			if err == nil {
+				// 生成视频封面文件名
+				posterName := strings.TrimSuffix(tmpName, fileExt) + "_poster.jpg"
+				posterPath := filePath + posterName
+
+				// 处理不同存储类型的视频源
+				var videoInputPath string
+				var tmpVideoFile *os.File
+				var err error
+
+				if w.PluginStorage.StorageType != config.StorageTypeLocal && w.PluginStorage.KeepLocal == false {
+					// 存储不在本地且不保留本地副本，需要临时保存视频文件
+					tmpVideoFile, err = os.CreateTemp("", "video_*.tmp")
+					if err != nil {
+						fmt.Printf("Failed to create temp video file: %v\n", err)
+						// 继续执行，不影响视频上传
+					} else {
+						defer func() {
+							_ = tmpVideoFile.Close()
+							_ = os.Remove(tmpVideoFile.Name())
+						}()
+
+						// 重置文件指针到开头
+						if seeker, ok := file.(io.Seeker); ok {
+							_, _ = seeker.Seek(0, io.SeekStart)
+						}
+
+						// 复制文件内容到临时文件
+						_, err = io.Copy(tmpVideoFile, file)
+						if err != nil {
+							fmt.Printf("Failed to copy video to temp file: %v\n", err)
+							// 继续执行，不影响视频上传
+						} else {
+							// 重置临时文件指针到开头
+							_, _ = tmpVideoFile.Seek(0, io.SeekStart)
+							videoInputPath = tmpVideoFile.Name()
+						}
+					}
+				} else {
+					// 存储在本地或保留本地副本
+					videoInputPath = w.PublicPath + filePath + tmpName
+				}
+
+				if videoInputPath != "" {
+					// 构建 ffmpeg 命令：在第 1 秒提取一帧作为封面图
+					tmpPosterPath := w.PublicPath + posterPath
+					// 确保目录存在
+					_ = os.MkdirAll(filepath.Dir(tmpPosterPath), 0755)
+
+					cmd := exec.Command(ffmpegPath, "-i", videoInputPath, "-ss", "00:00:01", "-vframes", "1", "-y", tmpPosterPath)
+					var stderr bytes.Buffer
+					cmd.Stderr = &stderr
+					if err := cmd.Run(); err != nil {
+						// 提取封面图失败，记录错误但不影响视频上传
+						fmt.Printf("Failed to extract poster: %v, %s\n", err, stderr.String())
+					} else {
+						// 封面图提取成功
+						// 如果存储不在本地，需要上传封面图
+						if w.PluginStorage.StorageType != config.StorageTypeLocal {
+							posterFile, err := os.Open(tmpPosterPath)
+							if err == nil {
+								defer func() {
+									_ = posterFile.Close()
+								}()
+								_, err = w.UploadFile(posterPath, posterFile)
+								if err != nil {
+									fmt.Printf("Failed to upload poster: %v\n", err)
+									// 继续执行，不影响视频上传
+								} else {
+									logoPath = posterPath
+								}
+							} else {
+								fmt.Printf("Failed to open poster file: %v\n", err)
+							}
+						} else {
+							logoPath = posterPath
+						}
+
+						// 对封面图片生成缩略图
+						w.BuildThumb(posterPath)
+					}
+				}
+			}
+		} else if fileExt == ".avif" {
+			// 尝试使用 ImageMagick 处理 avif 文件
+			iMPath, _ := getImageMagickPath()
+			var buf []byte
+			_, _ = file.Seek(0, 0)
+			buf, _ = io.ReadAll(file)
+			if iMPath != "" {
+				args := []string{"-coalesce", "-resize"}
+				if w.Content.ThumbCrop == 0 {
+					// 等比缩放
+					args = append(args, strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight))
+				} else if w.Content.ThumbCrop == 1 {
+					// 补白
+					args = append(args, strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight), "-background", "white", "-extent", strconv.Itoa(w.Content.ThumbWidth)+"x"+strconv.Itoa(w.Content.ThumbHeight))
+				} else {
+					// 裁剪
+					args = append(args, fmt.Sprintf("%dx%d^", w.Content.ThumbWidth, w.Content.ThumbHeight), "-gravity", "center", "-extent", fmt.Sprintf("%dx%d", w.Content.ThumbWidth, w.Content.ThumbHeight))
+				}
+				buf2, err := processTempFileWithCmd(bytes.NewBuffer(buf), "avif", iMPath, args, nil)
+				if err == nil {
+					buf = buf2
+				}
+			}
+			// 保存为缩略图
+			thumbName := "thumb_" + tmpName
+			_, err = w.UploadFile(filePath+thumbName, bytes.NewReader(buf))
+			if err != nil {
+				return nil, err
+			}
+		}
+
 		//文件上传完成
 		attachment = &model.Attachment{
 			UserId:       userId,
@@ -144,8 +278,9 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 			FileSize:     fileSize,
 			FileMd5:      md5Str,
 			CategoryId:   categoryId,
-			IsImage:      0,
+			IsImage:      isImage,
 			Status:       1,
+			Logo:         logoPath,
 		}
 		attachment.Id = attachId
 		_ = attachment.Save(w.DB)
@@ -303,7 +438,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		Width:        width,
 		Height:       height,
 		CategoryId:   categoryId,
-		IsImage:      1,
+		IsImage:      isImage,
 		Watermark:    addWatermark,
 		Status:       1,
 	}
@@ -353,6 +488,47 @@ func (w *Website) DownloadRemoteImage(src string, fileName string, replaceId uin
 	}
 
 	return nil, errs[0]
+}
+
+func (w *Website) AddRemoteUrls(urls []string, categoryId uint) error {
+	var err error
+	for _, item := range urls {
+		if strings.HasPrefix(item, "http") || strings.HasPrefix(item, "//") {
+			// 直接入库
+			fileName := strings.Split(strings.Split(filepath.Base(item), "?")[0], ".")[0]
+			splits := strings.Split(item, "|")
+			if len(splits) > 1 {
+				item = strings.TrimSpace(splits[0])
+				fileName = strings.TrimSpace(splits[1])
+			}
+			md5Str := library.Md5(item)
+
+			attachment := model.Attachment{
+				FileName:     fileName,
+				FileLocation: item,
+				FileSize:     0,
+				FileMd5:      md5Str,
+				CategoryId:   categoryId,
+				IsRemote:     1,
+				IsImage:      1,
+				Status:       1,
+			}
+			// 判断是否重复
+			exists, _ := w.GetAttachmentByMd5(md5Str)
+			if exists != nil {
+				continue
+			}
+
+			err2 := attachment.Save(w.DB)
+			if err2 != nil {
+				return err2
+			}
+		} else {
+			continue
+		}
+	}
+
+	return err
 }
 
 func (w *Website) GetAttachmentByMd5(md5 string) (*model.Attachment, error) {
@@ -955,6 +1131,10 @@ func encodeImage(img image.Image, imgType string, quality int) ([]byte, string, 
 		if err := gif.Encode(&buf, img, nil); err != nil {
 			return nil, imgType, err
 		}
+	case "tiff":
+		if err := tiff.Encode(&buf, img, nil); err != nil {
+			return nil, imgType, err
+		}
 
 	default:
 		// 其它图片类型先尝试转换为 png
@@ -1198,4 +1378,24 @@ func getWebpPath() (string, error) {
 	}
 	webpPath = binPath
 	return webpPath, nil
+}
+
+func getFfmpegPath() (string, error) {
+	if ffmpegPath != "" {
+		return ffmpegPath, nil
+	}
+	// 尝试查找系统安装的 ffmpeg
+	binPath, err := exec.LookPath("ffmpeg")
+	if err != nil {
+		return "", fmt.Errorf("ffmpeg not found: %w", err)
+	}
+	// 验证 ffmpeg 是否可用
+	var stderr bytes.Buffer
+	cmd := exec.Command(binPath, "-version")
+	cmd.Stderr = &stderr
+	if err = cmd.Run(); err != nil {
+		return "", fmt.Errorf("ffmpeg not usable: %w, %s", err, stderr.String())
+	}
+	ffmpegPath = binPath
+	return ffmpegPath, nil
 }

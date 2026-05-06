@@ -894,25 +894,35 @@ func (w *Website) CleanUserVip() {
 	// todo
 }
 
-func (w *Website) GetUserDiscount(userId uint, user *model.User) int64 {
+// GetUserDiscount 获取用户优惠比例， 优先级：用户组优惠比例 > 通过分享链接下单优惠比例
+func (w *Website) GetUserDiscount(userId uint, user *model.User) (discount, shippingDiscount int64) {
 	if user == nil && userId > 0 {
 		user, _ = w.GetUserInfoById(userId)
 	}
 	if user != nil {
+		group, err := w.GetUserGroupInfo(user.GroupId)
+		if err == nil {
+			if group.Setting.Discount > 0 {
+				discount = group.Setting.Discount
+			}
+			if group.Setting.ShippingDiscount > 0 {
+				shippingDiscount = group.Setting.ShippingDiscount
+			}
+		}
 		if user.ParentId > 0 {
 			parent, err := w.GetUserInfoById(user.ParentId)
 			if err == nil {
 				group, err := w.GetUserGroupInfo(parent.GroupId)
 				if err == nil {
-					if group.Setting.Discount > 0 {
-						return group.Setting.Discount
+					if group.Setting.Discount > 0 && group.Setting.Discount > discount {
+						discount = group.Setting.Discount
 					}
 				}
 			}
 		}
 	}
 
-	return 0
+	return discount, shippingDiscount
 }
 
 func (w *Website) GetUserFields() []*config.CustomField {

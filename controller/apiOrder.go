@@ -330,6 +330,14 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		orderResp.ActivityId = req.ActivityId
 	}
 
+	// 如果商品标记了包邮，则不参与计算运费
+	var calcQuantity int = 0
+	var calcWeight float64 = 0
+	var calcVolume float64 = 0
+
+	// VIP优惠
+	userDiscount, shippingDiscount := currentSite.GetUserDiscount(userId, user)
+
 	if req.Type == config.OrderTypeVip {
 		group, err := currentSite.GetUserGroupInfo(uint(req.Details[0].GoodsId))
 		if err != nil {
@@ -345,10 +353,9 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		if activity != nil {
 			price = activity.Price
 		}
-		discount := currentSite.GetUserDiscount(userId, user)
-		if discount > 0 {
-			price = price * discount / 100
-			orderResp.DiscountAmount = discount
+		if userDiscount > 0 {
+			price = price * userDiscount / 100
+			orderResp.DiscountAmount = userDiscount
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
@@ -384,10 +391,9 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		if activity != nil {
 			price = activity.Price
 		}
-		discount := currentSite.GetUserDiscount(userId, user)
-		if discount > 0 {
-			price = price * discount / 100
-			orderResp.DiscountAmount = discount
+		if userDiscount > 0 {
+			price = price * userDiscount / 100
+			orderResp.DiscountAmount = userDiscount
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
@@ -434,8 +440,9 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 			}
 			skuTitle := ""
 			// sku_id
+			var archiveSku *model.ArchiveSku
 			if v.GoodsSkuId > 0 {
-				archiveSku, err := currentSite.GetArchiveSkuById(v.GoodsId, v.GoodsSkuId)
+				archiveSku, err = currentSite.GetArchiveSkuById(v.GoodsId, v.GoodsSkuId)
 				if err != nil {
 					ctx.JSON(iris.Map{
 						"code": config.StatusFailed,
@@ -466,10 +473,8 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 				// 跳过无库存的商品
 				continue
 			}
-			// VIP优惠
-			discount := currentSite.GetUserDiscount(userId, user)
 			// 批发价格设置
-			if archive.IsWholesale {
+			if archive.ProductType == config.ProductTypeWholesale {
 				wholesaleRules, _ := currentSite.GetArchiveWholesaleRules(archive.Id)
 				var percentage int64 = 100 // 默认没折扣
 				for _, rule := range wholesaleRules {
@@ -479,19 +484,41 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 					}
 				}
 				if percentage > 0 {
-					if discount == 0 {
-						discount = percentage
+					if userDiscount == 0 {
+						userDiscount = percentage
 					} else {
-						discount = percentage * discount / 100
+						userDiscount = percentage * userDiscount / 100
 					}
 				}
 			}
-			if discount > 0 {
-				price = price * discount / 100
+			if userDiscount > 0 {
+				price = price * userDiscount / 100
 			}
-			orderResp.DiscountAmount = discount
+			orderResp.DiscountAmount = userDiscount
 			detailAmount := price * int64(v.Quantity)
 			originDetailAmount := originPrice * int64(v.Quantity)
+
+			// 计算运费，非包邮商品才计算运费
+			weight, volume := 0.0, 0.0
+			if archive.NeedLogistics && !archive.IsFreeShipping {
+				// 计算重量和体积
+				tmpVolume, tmpWeight := currentSite.CalculateShippingAttrs(archive, v.Quantity)
+				if archiveSku != nil {
+					tmpVolume2, tmpWeight2 := currentSite.CalculateSkuShippingAttrs(archiveSku, v.Quantity)
+					if tmpVolume2 > 0 {
+						tmpVolume = tmpVolume2
+					}
+					if tmpWeight2 > 0 {
+						tmpWeight = tmpWeight2
+					}
+				}
+				weight = tmpWeight
+				volume = tmpVolume
+				calcWeight += weight
+				calcQuantity += v.Quantity
+				calcVolume += volume
+			}
+
 			amount += detailAmount
 			originAmount += originDetailAmount
 			orderResp.Details = append(orderResp.Details, response.OrderDetail{
@@ -502,6 +529,8 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 				Amount:        originDetailAmount,
 				RealAmount:    detailAmount,
 				Quantity:      v.Quantity,
+				Weight:        weight,
+				Volume:        volume,
 				Title:         archive.Title,
 				Logo:          archive.Logo,
 				Thumb:         archive.Thumb,
@@ -534,6 +563,34 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 			orderResp.CouponId = couponCode.CouponId
 			orderResp.Amount = orderResp.Amount - couponMoney
 		}
+	}
+
+	if calcQuantity > 0 {
+		orderResp.ShippingQuantity = calcQuantity
+		orderResp.ShippingWeight = calcWeight
+		orderResp.ShippingVolume = calcVolume
+		// 计算运费
+		var orderAddress *model.OrderAddress
+		if req.Address != nil {
+			orderAddress = &model.OrderAddress{
+				CountryCode:  req.Address.CountryCode,
+				Country:      req.Address.Country,
+				ProvinceCode: req.Address.ProvinceCode,
+				Province:     req.Address.Province,
+				City:         req.Address.City,
+				Postcode:     req.Address.Postcode,
+			}
+		} else if req.AddressId > 0 {
+			orderAddress, _ = currentSite.GetOrderAddressById(req.AddressId)
+		}
+		orderResp.ShippingFee = currentSite.CalculateShippingFee(orderAddress, orderResp.Amount, calcQuantity, calcWeight, calcVolume)
+		if shippingDiscount > 0 {
+			originShippingFee := orderResp.ShippingFee
+			orderResp.ShippingFee = int64(float64(originShippingFee) * (float64(shippingDiscount) / 100))
+			orderResp.ShippingDiscount = originShippingFee - orderResp.ShippingFee
+		}
+		// 更新订单金额
+		orderResp.Amount += orderResp.ShippingFee
 	}
 
 	// orderService
@@ -925,6 +982,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 
 	png, _ := qrcode.Encode(wxRsp.CodeUrl, qrcode.Medium, 256)
 
@@ -997,6 +1055,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 
 	// 微信小程序支付需要 paySign
 	timeStamp := strconv.FormatInt(time.Now().Unix(), 10)
@@ -1087,6 +1146,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -1163,6 +1223,7 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 	// 更新id
 	payment.TerraceId = ppRsp.Response.Id
 	currentSite.DB.Save(payment)
@@ -1208,6 +1269,7 @@ func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.
 		return
 	}
 	// 更新id
+	payment.PaymentAccountId = account.Id
 	payment.TerraceId = pi.ID
 	currentSite.DB.Save(payment)
 
@@ -1335,7 +1397,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 		return
 	}
 
-	for i := 0; i < 20; i++ {
+	for i := 0; i < 5; i++ {
 		order, _ = currentSite.GetOrderInfoByOrderId(orderId)
 		if order.Status != config.OrderStatusWaiting {
 			//支付成功
@@ -1346,6 +1408,18 @@ func ApiPaymentCheck(ctx iris.Context) {
 			return
 		}
 		time.Sleep(1 * time.Second)
+	}
+	// 5秒内未支付成功，并且订单已经下单1分钟以上，则尝试查询一次接口检查支付情况
+	if time.Now().Unix()-payment.CreatedTime > 60 {
+		_ = currentSite.TraceQuery(payment)
+		if payment.PaidTime > 0 {
+			//支付成功
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  currentSite.TplTr("PaymentSuccessful"),
+			})
+			return
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -1503,15 +1577,17 @@ func ApiReviewPublish(ctx iris.Context) {
 	}
 
 	review := request.OrderReviewRequest{
-		UserId:   userId,
-		OrderId:  req.OrderId,
-		Ip:       ctx.RemoteAddr(),
-		UserName: req.UserName,
-		Email:    req.Email,
-		Score:    req.Score,
-		Content:  req.Content,
-		Images:   req.Images,
-		Status:   0,
+		UserId:       userId,
+		OrderId:      req.OrderId,
+		ArchiveId:    req.ArchiveId,
+		ArchiveSkuId: req.ArchiveSkuId,
+		Ip:           ctx.RemoteAddr(),
+		UserName:     req.UserName,
+		Email:        req.Email,
+		Score:        req.Score,
+		Content:      req.Content,
+		Images:       req.Images,
+		Status:       0,
 	}
 	if userId > 0 {
 		review.Status = 1
@@ -1538,5 +1614,55 @@ func ApiReviewPublish(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "OK",
+	})
+}
+
+func ApiReviewPraise(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	userId := ctx.Values().GetIntDefault("userId", 0)
+	review, err := currentSite.GetOrderReview(uint(req.Id))
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 检查是否点赞过
+	_, err = currentSite.AddReviewPraise(uint(userId), int64(review.Id), review.ArchiveId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	review.VoteCount += 1
+	review.Active = true
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  currentSite.TplTr("LikeSuccessfully"),
+		"data": review,
+	})
+}
+
+func ApiGetShippingInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": currentSite.Shipping,
 	})
 }

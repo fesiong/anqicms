@@ -822,3 +822,5 @@
 "SenderName": "发送者"
 "Back": "返回"
 "Info": "提示信息"
+"CouponCodeCanNotUse": "优惠券不可用"
+"CouponCodeValid": "优惠券有效"

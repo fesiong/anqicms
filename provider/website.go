@@ -61,12 +61,13 @@ type Website struct {
 	googleAuthConfig        *oauth2.Config
 	googleMerchantConfig    *oauth2.Config
 
-	System  *config.SystemConfig
-	Content *config.ContentConfig
-	Index   *config.IndexConfig
-	Contact *config.ContactConfig
-	Safe    *config.SafeConfig
-	Banner  *config.BannerConfig
+	System   *config.SystemConfig
+	Content  *config.ContentConfig
+	Index    *config.IndexConfig
+	Contact  *config.ContactConfig
+	Shipping *config.ShippingConfig
+	Safe     *config.SafeConfig
+	Banner   *config.BannerConfig
 	//plugin
 	PluginPush         *config.PluginPushConfig
 	PluginSitemap      *config.PluginSitemapConfig

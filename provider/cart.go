@@ -3,6 +3,7 @@ package provider
 import (
 	"errors"
 
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 )
@@ -64,7 +65,7 @@ func (w *Website) GetCartList(userId int64, cartToken string, currentPage int, p
 		archive.OriginAmount = archive.Amount
 		archive.OrderExtra = v.OrderExtra
 		archive.SkuValues = v.SkuValues
-		if archive.IsWholesale {
+		if archive.ProductType == config.ProductTypeWholesale {
 			rules, err := w.GetArchiveWholesaleRules(archive.Id)
 			if err == nil {
 				for _, rule := range rules {

@@ -67,20 +67,22 @@ type OrderRefundRequest struct {
 }
 
 type OrderAddressRequest struct {
-	Id          uint   `json:"id"`
-	UserId      uint   `json:"user_id"`
-	Name        string `json:"name"`
-	LastName    string `json:"last_name"`
-	Phone       string `json:"phone"`
-	Email       string `json:"email"`
-	Province    string `json:"province"`
-	City        string `json:"city"`
-	Town        string `json:"town"`
-	Country     string `json:"country"`
-	AddressInfo string `json:"address_info"`
-	Company     string `json:"company"`
-	Postcode    string `json:"postcode"`
-	Status      int    `json:"status"`
+	Id           uint   `json:"id"`
+	UserId       uint   `json:"user_id"`
+	Name         string `json:"name"`
+	LastName     string `json:"last_name"`
+	Phone        string `json:"phone"`
+	Email        string `json:"email"`
+	Province     string `json:"province"`
+	ProvinceCode string `json:"province_code"`
+	City         string `json:"city"`
+	Town         string `json:"town"`
+	Country      string `json:"country"`
+	CountryCode  string `json:"country_code"`
+	AddressInfo  string `json:"address_info"`
+	Company      string `json:"company"`
+	Postcode     string `json:"postcode"`
+	Status       int    `json:"status"`
 }
 
 type OrderExportRequest struct {

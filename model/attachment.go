@@ -20,11 +20,13 @@ type Attachment struct {
 	Width        int    `json:"width" gorm:"column:width;type:int(10) unsigned not null;default:0"`
 	Height       int    `json:"height" gorm:"column:height;type:int(10) unsigned not null;default:0"`
 	CategoryId   uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_id"`
-	IsImage      int    `json:"is_image" gorm:"column:is_image;type:tinyint(1) not null;default:0"`
+	IsImage      int    `json:"is_image" gorm:"column:is_image;type:tinyint(1) not null;default:0"` // 1 = 图片， 2 = 视频 其它未定义
 	Status       uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	Watermark    uint   `json:"watermark" gorm:"column:watermark;type:tinyint(1) not null;default:0"`
-	Logo         string `json:"logo" gorm:"-"`
+	IsRemote     int    `json:"is_remote" gorm:"column:is_remote;type:tinyint(1) not null;default:0"`
+	Logo         string `json:"logo" gorm:"column:logo;type:varchar(250) not null;default:''"`
 	Thumb        string `json:"thumb" gorm:"-"`
+	FilePath     string `json:"file_path" gorm:"-"`
 }
 
 type AttachmentCategory struct {
@@ -53,8 +55,9 @@ func (attachment *Attachment) AfterFind(tx *gorm.DB) error {
 }
 
 func (attachment *Attachment) GetThumb(storageUrl string) {
+	attachment.FilePath = storageUrl + "/" + attachment.FileLocation
 	// 如果不是图片
-	if attachment.IsImage == 0 {
+	if attachment.IsImage == 0 && attachment.Logo == "" {
 		attachment.Logo = storageUrl + "/" + attachment.FileLocation
 		if strings.HasSuffix(attachment.FileLocation, ".svg") {
 			attachment.Thumb = attachment.Logo
@@ -62,7 +65,9 @@ func (attachment *Attachment) GetThumb(storageUrl string) {
 		return
 	}
 	//如果是一个远程地址，则缩略图和原图地址一致
-	attachment.Logo = attachment.FileLocation
+	if attachment.Logo == "" || attachment.IsRemote == 1 {
+		attachment.Logo = attachment.FileLocation
+	}
 	if !strings.HasPrefix(attachment.Logo, "http") && !strings.HasPrefix(attachment.Logo, "//") {
 		// 兼容旧数据
 		if strings.HasPrefix(attachment.FileLocation, "20") {

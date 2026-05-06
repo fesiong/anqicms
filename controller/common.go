@@ -235,6 +235,10 @@ func Common(ctx iris.Context) {
 		ctx.Header("Expires", "Thu, 01 Jan 1970 00:00:00 GMT")   // 过期时间设为过去
 		ctx.Redirect(ctx.Request().URL.String(), iris.StatusTemporaryRedirect)
 	}
+	headerLang := ctx.GetHeader("Language")
+	if headerLang != "" {
+		ctx.ViewData("language", headerLang)
+	}
 	currentSite := provider.CurrentSite(ctx)
 	//inject ctx
 	ctx.ViewData("requestParams", ctx.Params())

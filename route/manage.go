@@ -5,6 +5,7 @@ import (
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
@@ -137,6 +138,7 @@ func manageRoute(app *iris.Application) {
 		{
 			attachment.Get("/list", manageController.AttachmentList)
 			attachment.Post("/upload", manageController.AttachmentUpload)
+			attachment.Post("/addurl", manageController.AttachmentAddRemoteUrl)
 			attachment.Post("/delete", manageController.AttachmentDelete)
 			attachment.Post("/edit", manageController.AttachmentEdit)
 			attachment.Post("/scan", manageController.AttachmentScanUploads)
@@ -664,6 +666,19 @@ func manageRoute(app *iris.Application) {
 				googlemerchant.Post("/sync/delete", manageController.PluginGoogleMerchantSyncDelete)
 				googlemerchant.Get("/sync/statuses", manageController.PluginGoogleMerchantSyncStatusList)
 				googlemerchant.Get("/sync/logs", manageController.PluginGoogleMerchantSyncLogs)
+			}
+
+			place := plugin.Party("/place")
+			{
+				place.Get("/countries", controller.ApiPlaceCountries)
+				place.Get("/country/states", controller.ApiPlaceCountryStates)
+				place.Get("/country/cities", controller.ApiPlaceCountryCities)
+			}
+
+			shipping := plugin.Party("/shipping")
+			{
+				shipping.Get("/setting", manageController.PluginGetShippingSetting)
+				shipping.Post("/setting", manageController.PluginSaveShippingSetting)
 			}
 		}
 	}

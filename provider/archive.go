@@ -688,13 +688,17 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	draft.OptionType = req.OptionType
 	draft.Weight = req.Weight
 	draft.WeightUnit = req.WeightUnit
+	draft.Length = req.Length
+	draft.Width = req.Width
+	draft.Height = req.Height
+	draft.Volume = req.Volume
+	draft.LengthUnit = req.LengthUnit
 	draft.MinQuantity = req.MinQuantity
 	draft.MaxQuantity = req.MaxQuantity
 	draft.StepQuantity = req.StepQuantity
-	draft.IsWholesale = req.IsWholesale
+	draft.ProductType = req.ProductType
 	draft.AllowOversold = req.AllowOversold
-	draft.HasOrderFields = req.HasOrderFields
-	if draft.HasOrderFields {
+	if draft.ProductType == config.ProductTypeCustom {
 		draft.OrderFields = req.OrderFields
 	} else {
 		draft.OrderFields = nil
@@ -1746,7 +1750,7 @@ func (w *Website) SaveArchiveCategories(archiveId int64, categoryIds []uint) err
 func (w *Website) GetArchiveRelations(archiveId int64) []*model.Archive {
 	var relations []*model.Archive
 	var relationIds []int64
-	w.DB.WithContext(w.Ctx()).Debug().Model(&model.ArchiveRelation{}).Group("relation_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
+	w.DB.WithContext(w.Ctx()).Model(&model.ArchiveRelation{}).Group("relation_id").Where("`archive_id` = ?", archiveId).Pluck("relation_id", &relationIds)
 	if len(relationIds) > 0 {
 		w.DB.WithContext(w.Ctx()).Model(&model.Archive{}).Where("`id` IN (?)", relationIds).Find(&relations)
 		for i := range relations {
@@ -1796,7 +1800,7 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 			Sort:        uint(i + 1),
 		}
 		var existOption model.ArchiveOption
-		err := w.DB.Model(&model.ArchiveOption{}).Debug().Where("`archive_id` = ? and `title` = ?", archiveOption.ArchiveId, archiveOption.Title).Take(&existOption).Error
+		err := w.DB.Model(&model.ArchiveOption{}).Where("`archive_id` = ? and `title` = ?", archiveOption.ArchiveId, archiveOption.Title).Take(&existOption).Error
 		if err == nil {
 			existOption.IsMain = archiveOption.IsMain
 			existOption.Sort = archiveOption.Sort
@@ -1821,7 +1825,7 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 				Sort:      uint(j + 1),
 			}
 			var existValue model.ArchiveOptionValue
-			err = w.DB.Model(&model.ArchiveOptionValue{}).Debug().Where("archive_id = ? and option_id = ? and title = ?", archiveOptionValue.ArchiveId, archiveOptionValue.OptionId, value.Title).Take(&existValue).Error
+			err = w.DB.Model(&model.ArchiveOptionValue{}).Where("archive_id = ? and option_id = ? and title = ?", archiveOptionValue.ArchiveId, archiveOptionValue.OptionId, value.Title).Take(&existValue).Error
 			if err == nil {
 				existValue.Images = archiveOptionValue.Images
 				existValue.Color = archiveOptionValue.Color
@@ -1915,7 +1919,13 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 			CostPrice:   archiveSku.CostPrice,
 			Weight:      archiveSku.Weight,
 			WeightUnit:  archiveSku.WeightUnit,
+			Length:      archiveSku.Length,
+			Width:       archiveSku.Width,
+			Height:      archiveSku.Height,
+			Volume:      archiveSku.Volume,
+			LengthUnit:  archiveSku.LengthUnit,
 			Values:      skuValues,
+			Status:      archiveSku.Status,
 		}
 		if sku.Id > 0 {
 			var exist model.ArchiveSku
@@ -1933,7 +1943,13 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 				exist.OriginPrice = sku.OriginPrice
 				exist.Weight = sku.Weight
 				exist.WeightUnit = sku.WeightUnit
+				exist.Length = sku.Length
+				exist.Width = sku.Width
+				exist.Height = sku.Height
+				exist.Volume = sku.Volume
+				exist.LengthUnit = sku.LengthUnit
 				exist.Values = skuValues
+				exist.Status = sku.Status
 				w.DB.Model(&model.ArchiveSku{}).Where("id = ?", exist.Id).Save(&exist)
 			} else {
 				sku.Id = 0

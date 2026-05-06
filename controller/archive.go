@@ -186,7 +186,7 @@ func ArchiveDetail(ctx iris.Context) {
 	archive = currentSite.CheckArchiveHasOrder(userId, archive, userGroup)
 	if archive.Price > 0 {
 		userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
-		discount := currentSite.GetUserDiscount(userId, userInfo)
+		discount, _ := currentSite.GetUserDiscount(userId, userInfo)
 		if discount > 0 {
 			archive.FavorablePrice = archive.Price * discount / 100
 		}

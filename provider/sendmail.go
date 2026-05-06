@@ -1070,7 +1070,7 @@ func (w *Website) SendVerifyEmail(user *model.User, state string) error {
 	}
 
 	token := library.Md5(user.Email + user.Password)
-	verifyCode := library.CodeCache.Generate(token)
+	verifyCode := library.CodeCache.Generate(user.Email)
 	verifyUrl := w.System.BaseUrl + "/api/verify/email?token=" + token + "&code=" + verifyCode + "&state=" + state + "&email=" + user.Email
 	data := map[string]interface{}{
 		"website": w,

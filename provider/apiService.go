@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"net/url"
 	"regexp"
@@ -120,7 +119,7 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 	if req.UserId > 0 {
 		archive = w.CheckArchiveHasOrder(req.UserId, archive, req.UserGroup)
 		if archive.Price > 0 {
-			discount := w.GetUserDiscount(req.UserId, req.UserInfo)
+			discount, _ := w.GetUserDiscount(req.UserId, req.UserInfo)
 			if discount > 0 {
 				archive.FavorablePrice = archive.Price * discount / 100
 			}
@@ -143,7 +142,7 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 		}
 	}
 	// wholesaleRules
-	if archive.IsWholesale {
+	if archive.ProductType == config.ProductTypeWholesale {
 		archive.WholesaleRules, _ = w.GetArchiveWholesaleRules(archive.Id)
 	}
 	if archive.OptionType > 0 {
@@ -257,7 +256,6 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			req.ModuleId = int64(categoryDetail.ModuleId)
 		}
 	}
-	log.Printf("reqGetArchives: %+v", req)
 	module = w.GetModuleFromCache(uint(req.ModuleId))
 	if req.TagId > 0 {
 		req.TagIds = append(req.TagIds, req.TagId)
@@ -618,6 +616,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			if req.ModuleId > 0 {
 				tx = tx.Where("module_id = ?", req.ModuleId)
 			}
+			if req.ProductType > 0 {
+				tx = tx.Where("product_type = ?", req.ProductType)
+			}
 			if req.Flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", req.Flag)
 			} else if len(req.ExcludeFlags) > 0 {
@@ -686,8 +687,28 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					for k, v := range req.ExtraFields {
 						if strings.HasPrefix(k, "filter.option.") {
 							optionName := strings.TrimPrefix(k, "filter.option.")
-							optionFilters = append(optionFilters, "(archive_options.title = ? AND archive_option_values.title = ?)")
-							optionArgs = append(optionArgs, optionName, v)
+							optionValues := strings.Split(fmt.Sprint(v), ",")
+							var validValues []string
+							for _, val := range optionValues {
+								val = strings.TrimSpace(val)
+								if val != "" {
+									validValues = append(validValues, val)
+								}
+							}
+							if len(validValues) > 0 {
+								if len(validValues) == 1 {
+									optionFilters = append(optionFilters, "(archive_options.title = ? AND archive_option_values.title = ?)")
+									optionArgs = append(optionArgs, optionName, validValues[0])
+								} else {
+									placeholders := strings.Repeat("?,", len(validValues))
+									placeholders = placeholders[:len(placeholders)-1]
+									optionFilters = append(optionFilters, "(archive_options.title = ? AND archive_option_values.title IN ("+placeholders+"))")
+									optionArgs = append(optionArgs, optionName)
+									for _, val := range validValues {
+										optionArgs = append(optionArgs, val)
+									}
+								}
+							}
 						}
 					}
 					if len(optionFilters) > 0 {
@@ -755,7 +776,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					tx = tx.Where("`title` like ?", "%"+req.Q+"%")
 				}
 			}
-			return tx.Debug()
+			return tx
 		}
 		if req.Type != "page" {
 			// 如果不是分页，则不查询count
@@ -1237,7 +1258,7 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]config.
 	if req.UserId > 0 {
 		archive = w.CheckArchiveHasOrder(req.UserId, archive, req.UserGroup)
 		if archive.Price > 0 {
-			discount := w.GetUserDiscount(req.UserId, req.UserInfo)
+			discount, _ := w.GetUserDiscount(req.UserId, req.UserInfo)
 			if discount > 0 {
 				archive.FavorablePrice = archive.Price * discount / 100
 			}
@@ -1400,7 +1421,7 @@ func (w *Website) ApiGetSku(req *request.ApiArchiveRequest) (*SkuResponse, error
 		// 限购
 		// todo 暂时不处理
 	}
-	if archive.IsWholesale {
+	if archive.ProductType == config.ProductTypeWholesale {
 		wholesaleRules, _ := w.GetArchiveWholesaleRules(archive.Id)
 		skuResp.WholesaleRules = wholesaleRules
 	}

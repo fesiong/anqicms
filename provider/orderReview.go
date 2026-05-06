@@ -127,3 +127,29 @@ func (w *Website) DeleteOrderReview(id int64) error {
 
 	return w.DB.Where("`id` = ?", id).Delete(&model.OrderReview{}).Error
 }
+
+func (w *Website) GetReviewPraise(userId uint, reviewId int64) (*model.OrderReviewPraise, error) {
+	var praise model.OrderReviewPraise
+	if err := w.DB.WithContext(w.Ctx()).Where("user_id = ? and review_id = ?", userId, reviewId).Take(&praise).Error; err != nil {
+		return nil, err
+	}
+
+	return &praise, nil
+}
+
+func (w *Website) AddReviewPraise(userId uint, reviewId int64, archiveId int64) (praise *model.OrderReviewPraise, err error) {
+	praise, err = w.GetReviewPraise(userId, reviewId)
+	if err != nil {
+		praise = &model.OrderReviewPraise{
+			UserId:    userId,
+			ReviewId:  reviewId,
+			ArchiveId: archiveId,
+			Rate:      1,
+		}
+		if err = w.DB.Create(praise).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return praise, nil
+}

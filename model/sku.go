@@ -53,14 +53,20 @@ type ArchiveSku struct {
 	HsCode      string              `json:"hs_code" gorm:"column:hs_code;type:varchar(100) not null;default:''"` //  海关编码
 	Stock       int64               `json:"stock" gorm:"column:stock;type:bigint(20) unsigned not null;default:0"`
 	Price       int64               `json:"price" gorm:"column:price;type:bigint(20) unsigned not null;default:0"`
-	OriginPrice int64               `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"` // 原始价格
-	CostPrice   int64               `json:"cost_price" gorm:"column:cost_price;type:bigint(20) not null;default:0"`     // 成本价
-	Weight      float32             `json:"weight" gorm:"column:weight;type:float(10,2) not null;default:0.00"`         // 重量
-	WeightUnit  string              `json:"weight_unit" gorm:"column:weight_unit;type:varchar(20);default:null"`
+	OriginPrice int64               `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`                     // 原始价格
+	CostPrice   int64               `json:"cost_price" gorm:"column:cost_price;type:bigint(20) not null;default:0"`                         // 成本价
+	Weight      float64             `json:"weight" gorm:"column:weight;type:decimal(12,6) not null;default:0.0000000;comment:重量 (kg/g/lb)"` // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit  string              `json:"weight_unit" gorm:"column:weight_unit;type:varchar(20);default:null;comment:重量单位 kg/g/lb"`       // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length      float64             `json:"length" gorm:"column:length;type:decimal(12,2) not null;default:0.00;comment:长 (用户单位)"`
+	Width       float64             `json:"width" gorm:"column:width;type:decimal(12,2) not null;default:0.00;comment:宽 (用户单位)"`
+	Height      float64             `json:"height" gorm:"column:height;type:decimal(12,2) not null;default:0.00;comment:高 (用户单位)"`
+	Volume      float64             `json:"volume" gorm:"column:volume;type:decimal(12,6) not null;default:0.000000;comment:体积 (m³)"` // 固定是 m³，自动换算
+	LengthUnit  string              `json:"length_unit" gorm:"column:length_unit;type:varchar(20);default:null;comment:长度单位 m/cm/inch"`
 	SoldCount   int64               `json:"sold_count" gorm:"column:sold_count;type:bigint(20) unsigned not null;default:0"`
 	CreatedTime int64               `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
 	UpdatedTime int64               `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
-	Values      ArchiveOptionValues `json:"values" gorm:"column:values;type:text default null"` // SKU 组合字段
+	Values      ArchiveOptionValues `json:"values" gorm:"column:values;type:text default null"`                   // SKU 组合字段
+	Status      int                 `json:"status" gorm:"column:status;type:int(10) unsigned not null;default:1"` // 状态,0:下架,1:上架
 	Link        string              `json:"link" gorm:"-"`
 	Logo        string              `json:"logo" gorm:"-"`  //  logo
 	Thumb       string              `json:"thumb" gorm:"-"` // 这个缩略图在保存的时候就生成

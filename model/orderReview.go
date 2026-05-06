@@ -26,6 +26,7 @@ type OrderReview struct {
 	AvatarURL    string `json:"avatar_url" gorm:"-"`
 	ArchiveTitle string `json:"archive_title" gorm:"-"`
 	SkuTitle     string `json:"sku_title" gorm:"-"`
+	Active       bool   `json:"active" gorm:"-"`
 }
 
 type OrderReviewPraise struct {
@@ -53,9 +54,18 @@ func (o *OrderReview) AfterCreate(tx *gorm.DB) (err error) {
 		"review_count":  total,
 		"average_score": averageScore,
 	})
-	// 更新点赞数量
-	var praiseTotal int64
-	tx.Model(&OrderReviewPraise{}).Where("`review_id` = ?", o.Id).Count(&praiseTotal)
-	tx.Model(&OrderReview{}).Where("`id` = ?", o.Id).UpdateColumn("vote_count", praiseTotal)
+	// // 更新点赞数量
+	// var praiseTotal int64
+	// tx.Model(&OrderReviewPraise{}).Where("`review_id` = ?", o.Id).Count(&praiseTotal)
+	// tx.Model(&OrderReview{}).Where("`id` = ?", o.Id).UpdateColumn("vote_count", praiseTotal)
+	return
+}
+
+func (cp *OrderReviewPraise) AfterCreate(tx *gorm.DB) (err error) {
+	// 更新数量
+	var total int64
+	tx.Model(&OrderReviewPraise{}).Where("`review_id` = ?", cp.ReviewId).Count(&total)
+	tx.Model(&OrderReview{}).Where("`id` = ?", cp.ReviewId).UpdateColumn("vote_count", total)
+
 	return
 }

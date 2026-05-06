@@ -28,8 +28,9 @@ type ConfigJson struct {
 	System  SystemConfig  `json:"system"`
 	Content ContentConfig `json:"content"`
 	Index   IndexConfig   `json:"index"`
-	Contact ContactConfig `json:"contact"`
-	Safe    SafeConfig    `json:"safe"`
+	Contact    ContactConfig    `json:"contact"`
+	Shipping   ShippingConfig   `json:"shipping"`
+	Safe       SafeConfig       `json:"safe"`
 	//plugin
 	PluginPush        PluginPushConfig      `json:"plugin_push"`
 	PluginSitemap     PluginSitemapConfig   `json:"plugin_sitemap"`
