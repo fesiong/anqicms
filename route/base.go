@@ -118,6 +118,7 @@ func Register(app *iris.Application) {
 		api.Get("/coupon/valid", controller.ApiGetValidCoupons)
 		api.Get("/coupon/codes", middleware.UserAuth, controller.ApiGetCouponCodes)
 		api.Post("/coupon/code", middleware.UserAuth, controller.ApiGenerateCouponCode)
+		api.Post("/coupon/check", middleware.UserAuth, controller.ApiCheckCoupon)
 		api.Get("/shipping/info", controller.ApiGetShippingInfo)
 		api.Get("/favorite/list", middleware.UserAuth, controller.ApiGetFavorites)
 		api.Post("/favorite/check", middleware.UserAuth, controller.ApiCheckFavorites)
