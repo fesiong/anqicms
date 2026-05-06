@@ -9,7 +9,7 @@ import (
 )
 
 func PluginLinkList(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	linkList, err := currentSite.GetLinkList()
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -27,7 +27,7 @@ func PluginLinkList(ctx iris.Context) {
 }
 
 func PluginLinkDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLink
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -85,7 +85,7 @@ func PluginLinkDetailForm(ctx iris.Context) {
 }
 
 func PluginLinkDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLink
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -121,7 +121,7 @@ func PluginLinkDelete(ctx iris.Context) {
 }
 
 func PluginLinkCheck(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLink
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

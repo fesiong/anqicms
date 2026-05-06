@@ -2,13 +2,14 @@ package controller
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
-	"strings"
 )
 
 func CommentPublish(ctx iris.Context) {
@@ -29,40 +30,34 @@ func CommentPublish(ctx iris.Context) {
 	//登录状态的用户，发布不进审核，否则进审核
 	status := uint(0)
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	adminId := ctx.Values().GetIntDefault("adminId", 0)
-	if adminId > 0 {
+	// 是否需要审核
+	var contentVerify = true
+	userGroup := ctx.Values().Get("userGroup")
+	if userGroup != nil {
+		group, ok := userGroup.(*model.UserGroup)
+		if ok && group != nil && group.Setting.ContentNoVerify {
+			contentVerify = !group.Setting.ContentNoVerify
+		}
+	}
+	if contentVerify == false {
+		// 不需要审核
 		status = 1
-	} else {
-		// 是否需要审核
-		var contentVerify = true
-		userGroup := ctx.Values().Get("userGroup")
-		if userGroup != nil {
-			group, ok := userGroup.(*model.UserGroup)
-			if ok {
-				contentVerify = !group.Setting.ContentNoVerify
-			}
-		}
-		if contentVerify == false {
-			// 不需要审核
-			status = 1
-		}
 	}
 
 	var req request.PluginComment
 	// 采用post接收
-	req.ArchiveId = uint(ctx.PostValueIntDefault("archive_id", 0))
+	req.ArchiveId = ctx.PostValueInt64Default("archive_id", 0)
 	req.UserName = ctx.PostValueTrim("user_name")
+	req.Email = ctx.PostValueTrim("email")
 	req.Ip = ctx.PostValueTrim("ip")
 	req.Content = ctx.PostValueTrim("content")
 	req.ParentId = uint(ctx.PostValueIntDefault("parent_id", 0))
 	req.ToUid = uint(ctx.PostValueIntDefault("to_uid", 0))
-	if userId > 0 {
-		userInfo := ctx.Values().Get("userInfo")
-		if userInfo != nil {
-			user, ok := userInfo.(*model.User)
-			if ok {
-				req.UserName = user.UserName
-			}
+	userInfo := ctx.Values().Get("userInfo")
+	if userInfo != nil {
+		user, ok := userInfo.(*model.User)
+		if ok {
+			req.UserName = user.UserName
 		}
 	}
 
@@ -91,6 +86,13 @@ func CommentPublish(ctx iris.Context) {
 		}
 		return
 	}
+	// akismet 验证
+	go func() {
+		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeComment, comment)
+		if isChecked {
+			currentSite.DB.Model(comment).UpdateColumn("status", spamStatus)
+		}
+	}()
 
 	msg := currentSite.TplTr("PublishSuccessfully")
 	if returnType == "json" {
@@ -122,6 +124,7 @@ func CommentPraise(ctx iris.Context) {
 	}
 	var req request.PluginComment
 	req.Id = uint(ctx.PostValueIntDefault("id", 0))
+	userId := ctx.Values().GetIntDefault("userId", 0)
 
 	comment, err := currentSite.GetCommentById(req.Id)
 	if err != nil {
@@ -131,9 +134,8 @@ func CommentPraise(ctx iris.Context) {
 		})
 		return
 	}
-
-	comment.VoteCount += 1
-	err = comment.Save(currentSite.DB)
+	// 检查是否点赞过
+	_, err = currentSite.AddCommentPraise(uint(userId), int64(comment.Id), comment.ArchiveId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -142,6 +144,7 @@ func CommentPraise(ctx iris.Context) {
 		return
 	}
 
+	comment.VoteCount += 1
 	comment.Active = true
 
 	ctx.JSON(iris.Map{
@@ -161,20 +164,23 @@ func CommentList(ctx iris.Context) {
 		return
 	}
 
-	archiveId := uint(ctx.Params().GetIntDefault("id", 0))
+	archiveId := ctx.Params().GetInt64Default("id", 0)
 	archive, err := currentSite.GetArchiveById(archiveId)
 	if err != nil {
 		ShowMessage(ctx, "Not Found", nil)
 		return
 	}
+	currentPage := ctx.URLParamIntDefault("page", 1)
+	if currentPage > currentSite.Content.MaxPage {
+		// 最大1000页
+		NotFound(ctx)
+		return
+	}
 	archive.Link = currentSite.GetUrl("archive", archive, 0)
 	ctx.ViewData("archive", archive)
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-		currentPage := ctx.URLParamIntDefault("page", 1)
-		webInfo.Title = currentSite.TplTr("CommentShow", archive.Title)
-		if currentPage > 1 {
-			webInfo.Title += " - " + currentSite.TplTr("PageNum", currentPage)
-		}
+		webInfo.Title = currentSite.TplTr("CommentShow%s", archive.Title)
+		webInfo.CurrentPage = currentPage
 		webInfo.Keywords = archive.Keywords
 		webInfo.Description = archive.Description
 		webInfo.PageName = "comments"
@@ -183,9 +189,10 @@ func CommentList(ctx iris.Context) {
 	}
 
 	ctx.ViewData("archiveId", archiveId)
-	tplName := "comment/list.html"
-	if ViewExists(ctx, "comment_list.html") {
-		tplName = "comment_list.html"
+	tplName, ok := currentSite.TemplateExist("comment/list.html", "comment_list.html")
+	if !ok {
+		NotFound(ctx)
+		return
 	}
 	err = ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {

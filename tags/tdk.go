@@ -2,11 +2,14 @@ package tags
 
 import (
 	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/response"
-	"reflect"
 )
 
 type tagTdkNode struct {
@@ -40,38 +43,99 @@ func (node *tagTdkNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.Temp
 		return nil
 	}
 
-	v := reflect.ValueOf(*webInfo)
+	var content string
+	switch fieldName {
+	case "Title":
+		content = webInfo.Title
+	case "Keywords":
+		content = webInfo.Keywords
+	case "Description":
+		content = webInfo.Description
+	case "CanonicalUrl":
+		content = webInfo.CanonicalUrl
+	default:
+		// 备选方案：使用反射获取其他字段
+		v := reflect.ValueOf(*webInfo)
+		f := v.FieldByName(fieldName)
+		if f.IsValid() {
+			content = fmt.Sprint(f.Interface())
+		}
+	}
 
-	f := v.FieldByName(fieldName)
+	sep := " - "
+	if args["sep"] != nil {
+		sep = args["sep"].String()
+	} else if currentSite.Index.Sep != "" {
+		sep = currentSite.Index.Sep
+	}
+	webInfo.Sep = sep
 
-	content := fmt.Sprintf("%v", f)
 	if fieldName == "Title" {
-		var pateText string
+		var titleText = make([]string, 0, 10)
+		if len(content) > 0 {
+			titleText = append(titleText, content)
+		}
+		showParent := false
+		if args["showParent"] != nil {
+			showParent = args["showParent"].Bool()
+		}
 		// 增加分页
-		paginator, ok := ctx.Public["pagination"].(*pagination)
-		if ok {
+		if webInfo.CurrentPage > 1 && !strings.Contains(content, "{page}") {
 			// 从第二页开始，增加分页
-			if paginator.CurrentPage > 1 {
-				pateText = currentSite.TplTr("PageNum", paginator.CurrentPage)
-			}
-			return nil
+			titleText = append(titleText, currentSite.TplTr("Page%d", webInfo.CurrentPage))
 		}
-		if len(pateText) > 0 {
-			if content != "" {
-				content += " - "
+		// 增加上级标题
+		if showParent && !strings.Contains(content, "{multicatname}") {
+			parentId := uint(0)
+			if webInfo.PageName == "archiveDetail" {
+				archive, ok := ctx.Public["archive"].(*model.Archive)
+				if ok {
+					parentId = archive.CategoryId
+				}
+			} else if webInfo.PageName == "archiveList" {
+				categoryInfo, ok := ctx.Public["category"].(*model.Category)
+				if ok {
+					parentId = categoryInfo.ParentId
+				}
 			}
-			content += pateText
-		}
-		if siteName {
-			if content != "" {
-				content += " - "
+			if parentId > 0 {
+				categories := currentSite.GetParentCategories(parentId)
+				// 先翻转categories
+				for i, j := 0, len(categories)-1; i < j; i, j = i+1, j-1 {
+					categories[i], categories[j] = categories[j], categories[i]
+				}
+				for _, category := range categories {
+					titleText = append(titleText, category.Title)
+				}
 			}
-			content += currentSite.System.SiteName
 		}
+		if siteName && len(currentSite.System.SiteName) > 0 {
+			titleText = append(titleText, currentSite.System.SiteName)
+		}
+		content = strings.Join(titleText, sep)
 		if content == "" {
 			// 保持标题至少是网站名称
 			content = currentSite.System.SiteName
 		}
+	}
+
+	// 查找{param}并执行批量替换
+	if strings.Contains(content, "{") {
+		var currentItem interface{}
+		switch webInfo.PageName {
+		case "archiveDetail":
+			currentItem, _ = ctx.Public["archive"].(*model.Archive)
+		case "archiveIndex":
+			currentItem, _ = ctx.Public["module"].(*model.Module)
+		case "archiveList":
+			currentItem, _ = ctx.Public["category"].(*model.Category)
+		case "pageDetail":
+			currentItem, _ = ctx.Public["page"].(*model.Category)
+		case "tag":
+			currentItem, _ = ctx.Public["tag"].(*model.Tag)
+		}
+
+		content = parseTdkParams(content, currentSite, ctx, currentItem)
 	}
 
 	// output

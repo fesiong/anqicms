@@ -2,14 +2,11 @@ package tags
 
 import (
 	"fmt"
+
 	"github.com/flosch/pongo2/v6"
-	"github.com/kataras/iris/v12/context"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
-	"net/url"
-	"strings"
+	"kandaoni.com/anqicms/request"
 )
 
 type tagArchiveFiltersNode struct {
@@ -35,6 +32,33 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
+	showCategory := false
+	if args["showCategory"] != nil {
+		showCategory = args["showCategory"].Bool()
+	}
+	showPrice := false
+	if args["showPrice"] != nil {
+		showPrice = args["showPrice"].Bool()
+	}
+	showAll := false
+	if args["showAll"] != nil {
+		showAll = args["showAll"].Bool()
+	}
+	categoryDetail, _ := ctx.Public["category"].(*model.Category)
+	categoryId := uint(0)
+	parentId := uint(0)
+	if args["parentId"] != nil {
+		parentId = uint(args["parentId"].Integer())
+		parentText := args["parentId"].String()
+		if parentText == "parent" {
+			if categoryDetail != nil {
+				parentId = categoryDetail.ParentId
+			}
+		}
+	}
+	if categoryDetail != nil {
+		categoryId = categoryDetail.Id
+	}
 
 	if args["moduleId"] == nil {
 		return nil
@@ -59,97 +83,24 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 			}
 		}
 	}
+	if allText != "" {
+		showAll = true
+	}
+	urlParams, _ := ctx.Public["urlParams"].(map[string]string)
 
-	// 只有有多项选择的才能进行筛选，如 单选，多选，下拉，并且不是跟随阅读等级
-	var fields []config.CustomField
-	var filterGroups []response.FilterGroup
-	var newParams = make(url.Values)
-	urlParams, ok := ctx.Public["urlParams"].(map[string]string)
-	if ok && len(urlParams) > 0 {
-		for k, v := range urlParams {
-			if k == "page" {
-				continue
-			}
-			newParams.Set(k, v)
-		}
-	}
-	newQuery := newParams.Encode()
-	urlMatch := ""
-	matchParams, ok := ctx.Public["requestParams"].(*context.RequestParams)
-	if ok {
-		urlMatch = matchParams.Get("match")
-	}
-	var matchData interface{}
-	categoryDetail, ok := ctx.Public["category"].(*model.Category)
-	if ok && categoryDetail != nil {
-		matchData = categoryDetail
-		urlMatch = "category"
-	} else {
-		// 在 module 下
-		moduleDetail, ok := ctx.Public["module"].(*model.Module)
-		if ok && moduleDetail != nil {
-			matchData = moduleDetail
-			urlMatch = "archiveIndex"
-		}
-	}
-	urlPatten := currentSite.GetUrl(urlMatch, matchData, 1)
-	if strings.Contains(urlPatten, "?") {
-		urlPatten += "&"
-	} else {
-		urlPatten += "?"
+	req := request.ApiFilterRequest{
+		ModuleId:     int64(moduleId),
+		ShowAll:      showAll,
+		AllText:      allText,
+		ShowPrice:    showPrice,
+		ShowCategory: showCategory,
+		ParentId:     int64(parentId),
+		CategoryId:   int64(categoryId),
+		UrlParams:    urlParams,
 	}
 
-	if len(module.Fields) > 0 {
-		for _, v := range module.Fields {
-			if v.IsFilter {
-				fields = append(fields, v)
-			}
-		}
-
-		// 所有参数的url都附着到query中
-		for _, v := range fields {
-			values := v.SplitContent()
-			if len(values) == 0 {
-				continue
-			}
-
-			var filterItems []response.FilterItem
-			if allText != "" {
-				tmpParams, _ := url.ParseQuery(newQuery)
-				tmpParams.Set(v.FieldName, "")
-				isCurrent := false
-				if urlParams == nil || (urlParams != nil && urlParams[v.FieldName] == "") {
-					isCurrent = true
-				}
-				// 需要插入 全部 标签
-				filterItems = append(filterItems, response.FilterItem{
-					Label:     allText,
-					Link:      urlPatten + tmpParams.Encode(),
-					IsCurrent: isCurrent,
-				})
-			}
-			for _, val := range values {
-				tmpParams, _ := url.ParseQuery(newQuery)
-				tmpParams.Set(v.FieldName, val)
-				isCurrent := false
-				if urlParams != nil && urlParams[v.FieldName] == val {
-					isCurrent = true
-				}
-				filterItems = append(filterItems, response.FilterItem{
-					Label:     val,
-					Link:      urlPatten + tmpParams.Encode(),
-					IsCurrent: isCurrent,
-				})
-			}
-			filterGroups = append(filterGroups, response.FilterGroup{
-				Name:      v.Name,
-				FieldName: v.FieldName,
-				Items:     filterItems,
-			})
-		}
-	}
-
-	if len(filterGroups) == 0 {
+	filterGroups, err2 := currentSite.ApiGetFilters(&req)
+	if err2 != nil {
 		return nil
 	}
 

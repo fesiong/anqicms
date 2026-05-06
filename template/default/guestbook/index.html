@@ -7,7 +7,7 @@
         <div class="section page-item">
             <!-- content -->
             <div class="page-content">
-                <div class="single-content-title">给我留言</div>
+                <div class="single-content-title">{% tr 'guestbook' %}</div>
                 <div class="single-arc">
                     <form class="guestbook-form" action="/guestbook.html" method="post" enctype="multipart/form-data">
                         {% guestbook fields %}
@@ -72,8 +72,26 @@
                         {% endif %}
                         {% endfor %}
                         {% endguestbook %}
+                        <div style="display: flex; clear: both">
+            <input type="hidden" name="captcha_id" id="captcha_id">
+            <input type="text" name="captcha" required placeholder="请填写验证码" class="layui-input" style="flex: 1">
+            <img src="" id="get-captcha" style="width: 150px;height: 56px;cursor: pointer;" />
+            <script>
+              document.getElementById('get-captcha').addEventListener("click", function (e) {
+                fetch('/api/captcha')
+                        .then(response => {
+                          return response.json()
+                        })
+                        .then(res => {
+                          document.getElementById('captcha_id').setAttribute("value", res.data.captcha_id)
+                          document.getElementById('get-captcha').setAttribute("src", res.data.captcha)
+                        }).catch(err =>{console.log(err)})
+              });
+              document.getElementById('get-captcha').click();
+            </script>
+          </div>
                         <div class="form-control">
-                            <button class="form-btn">提交</button>
+                            <button class="form-btn">{% tr 'submit' %}</button>
                         </div>
                     </form>
                 </div>

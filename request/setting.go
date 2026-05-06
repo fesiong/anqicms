@@ -7,11 +7,13 @@ type NavConfig struct {
 	Description string `json:"description"`
 	ParentId    uint   `json:"parent_id"`
 	NavType     uint   `json:"nav_type"`
-	PageId      uint   `json:"page_id"`
+	PageId      int64  `json:"page_id"`
 	TypeId      uint   `json:"type_id"`
 	Link        string `json:"link"`
 	Sort        uint   `json:"sort"`
+	Style       string `json:"style"`
 	Status      uint   `json:"status"`
+	Logo        string `json:"logo"`
 }
 
 type NavTypeRequest struct {

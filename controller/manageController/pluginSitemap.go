@@ -7,7 +7,7 @@ import (
 )
 
 func PluginSitemap(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	pluginSitemap := currentSite.PluginSitemap
 	if pluginSitemap.ExcludeModuleIds == nil {
 		pluginSitemap.ExcludeModuleIds = []uint{}
@@ -31,7 +31,7 @@ func PluginSitemap(ctx iris.Context) {
 }
 
 func PluginSitemapForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -73,7 +73,7 @@ func PluginSitemapForm(ctx iris.Context) {
 }
 
 func PluginSitemapBuild(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

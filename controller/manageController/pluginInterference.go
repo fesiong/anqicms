@@ -7,7 +7,7 @@ import (
 )
 
 func PluginInterferenceConfig(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginInterference
 
 	ctx.JSON(iris.Map{
@@ -18,7 +18,7 @@ func PluginInterferenceConfig(ctx iris.Context) {
 }
 
 func PluginInterferenceConfigForm(ctx iris.Context) {
-	currentSite := provider.CurrentSite(ctx)
+	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginInterference
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

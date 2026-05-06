@@ -2,15 +2,12 @@ package provider
 
 import (
 	"bytes"
+	"compress/gzip"
+	"context"
 	"errors"
 	"fmt"
-	"github.com/kataras/iris/v12"
 	"io"
 	"io/fs"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"net/http"
 	"net/url"
@@ -19,6 +16,14 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"kandaoni.com/anqicms/provider/storage"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/response"
 )
 
 // SpecialCharsMap 查询参数中的特殊字符
@@ -150,7 +155,7 @@ func (w *Website) BuildModuleCache(ctx iris.Context) {
 		webInfo := &response.WebInfo{
 			Title:    module.Title,
 			PageName: "archiveIndex",
-			NavBar:   module.Id,
+			NavBar:   int64(module.Id),
 		}
 		newCtx.ViewData("webInfo", webInfo)
 		tplName := module.TableName + "/index.html"
@@ -253,7 +258,7 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	webInfo := &response.WebInfo{
 		Title:    category.Title,
 		PageName: "archiveList",
-		NavBar:   category.Id,
+		NavBar:   int64(category.Id),
 	}
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := module.TableName + "/list.html"
@@ -262,10 +267,11 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 		tplName = tplName2
 	}
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
+	tmpName := fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
 	if category.Template != "" {
 		tplName = category.Template
-	} else if ViewExists(newCtx, fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)) {
-		tplName = fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)
+	} else if ViewExists(newCtx, tmpName) {
+		tplName = tmpName
 	} else {
 		categoryTemplate := w.GetCategoryTemplate(category)
 		if categoryTemplate != nil && len(categoryTemplate.Template) > 0 {
@@ -345,7 +351,7 @@ func (w *Website) BuildArchiveCache() {
 	w.HtmlCacheStatus.FinishedTime = 0
 	w.HtmlCacheStatus.Current = w.Tr("StartGeneratingDocuments")
 	// 生成详情
-	lastId := uint(0)
+	lastId := int64(0)
 	for {
 		var archives []*model.Archive
 		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Limit(1000).Order("id asc").Find(&archives)
@@ -513,7 +519,7 @@ func (w *Website) BuildSingleTagCache(ctx iris.Context, tag *model.Tag) {
 	webInfo := &response.WebInfo{
 		Title:    tag.Title,
 		PageName: "tag",
-		NavBar:   tag.Id,
+		NavBar:   int64(tag.Id),
 	}
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := "tag/list.html"
@@ -582,6 +588,13 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if w.PluginHtmlCache.Open == false {
 		return errors.New(w.Tr("StaticCacheFunctionIsNotEnabled"))
 	}
+
+	_, err := w.GetHtmlDataByLocal(urlPath, "", isMobile)
+
+	return err
+}
+
+func (w *Website) GetHtmlDataByLocal(urlPath string, lang string, isMobile bool) ([]byte, error) {
 	if strings.HasPrefix(urlPath, "http") {
 		parsed, err := url.Parse(urlPath)
 		if err == nil {
@@ -595,31 +608,36 @@ func (w *Website) GetAndCacheHtmlData(urlPath string, isMobile bool) error {
 	if isMobile && w.System.TemplateType == config.TemplateTypeSeparate {
 		mobileUrl, err := url.Parse(w.System.MobileUrl)
 		if err != nil {
-			return errors.New(w.Tr("MobileDomainNameResolutionFailed"))
+			return nil, errors.New(w.Tr("MobileDomainNameResolutionFailed"))
 		}
 		host = mobileUrl.Hostname()
 	}
 	ua := library.GetUserAgent(isMobile)
 	baseUrl := fmt.Sprintf("http://127.0.0.1:%d", config.Server.Server.Port)
 
+	// 10秒超时
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
 	req, err := http.NewRequest("GET", baseUrl+urlPath, nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("User-Agent", ua)
 	req.Header.Set("X-Host", host)
 	req.Header.Set("Cache-Control", "no-cache")
 	req.Header.Set("Cache", "true")
+	if lang != "" {
+		req.Header.Set("Language", lang)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_ = resp.Body.Close()
+	defer resp.Body.Close()
+	content, _ := io.ReadAll(resp.Body)
 
-	return err
+	return content, nil
 }
 
 func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []byte) error {
@@ -629,8 +647,8 @@ func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []
 	} else {
 		cachePath += "pc"
 	}
-
-	cacheFile := cachePath + transToLocalPath(oriPath, oriQuery)
+	localPath := transToLocalPath(oriPath, oriQuery)
+	cacheFile := cachePath + localPath
 	if len(oriQuery) > 0 {
 		// 有查询，判断是否无效查询
 		tmpLocalPath := transToLocalPath(oriPath, "")
@@ -665,30 +683,31 @@ func (w *Website) CacheHtmlData(oriPath, oriQuery string, isMobile bool, body []
 	return os.WriteFile(cacheFile, body, os.ModePerm)
 }
 
-func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
+func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheData []byte, ok bool) {
 	if w.PluginHtmlCache.Open == false {
-		return "", false
+		return nil, false
 	}
+	// 获得路由
+	match := ctx.Params().Get("match")
+	// 首页不允许通过 no-cache 跳过缓存
 	if ctx.GetHeader("Cache-Control") == "no-cache" {
-		return "", false
+		return nil, false
 	}
 	// 用户登录后，也不缓存
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	if userId > 0 {
-		return "", false
+		return nil, false
 	}
-	// 获得路由
-	match := ctx.Params().Get("match")
 	if match == "index" {
 		if w.PluginHtmlCache.IndexCache == 0 {
-			return "", false
+			return nil, false
 		}
 	} else if match == "archive" {
 		if w.PluginHtmlCache.DetailCache == 0 {
-			return "", false
+			return nil, false
 		}
 	} else if w.PluginHtmlCache.ListCache == 0 {
-		return "", false
+		return nil, false
 	}
 
 	cachePath := w.CachePath
@@ -700,40 +719,78 @@ func (w *Website) LoadCachedHtml(ctx iris.Context) (cacheFile string, ok bool) {
 		cachePath += "pc"
 	}
 	localPath := transToLocalPath(ctx.RequestPath(false), ctx.Request().URL.RawQuery)
-	cacheFile = cachePath + localPath
+	cacheFile := cachePath + localPath
+	// 优先读取内存缓存
+	memCacheKey := fmt.Sprintf("html-%v-%s", mobileTemplate, localPath)
+	err := w.Cache.Get(memCacheKey, &cacheData)
+	if err == nil {
+		buf := bytes.NewBuffer(cacheData)
+		gzr, err := gzip.NewReader(buf)
+		if err == nil {
+			cacheData, _ = io.ReadAll(gzr)
+			_ = gzr.Close()
+		}
+		// 关于缓存的引用
+		if bytes.HasPrefix(cacheData, []byte{'/'}) && len(ctx.Request().URL.RawQuery) > 0 {
+			cacheFile = cachePath + string(cacheData)
+			memCacheKey = fmt.Sprintf("html-%v-%s", mobileTemplate, string(cacheData))
+			err = w.Cache.Get(memCacheKey, &cacheData)
+			if err == nil {
+				buf = bytes.NewBuffer(cacheData)
+				gzr, err = gzip.NewReader(buf)
+				if err == nil {
+					cacheData, _ = io.ReadAll(gzr)
+					_ = gzr.Close()
+				}
+				return cacheData, true
+			}
+		} else {
+			return cacheData, true
+		}
+	}
 
 	info, err := os.Stat(cacheFile)
 	if err != nil {
-		return "", false
+		return nil, false
 	}
 	// 部分缓存文件是引用别的文件，文件长度小于 500 的就做引用检查，只有有query的时候，才会有可能是引用文件，引用文件内容开头是 /
 	if len(ctx.Request().URL.RawQuery) > 0 && info.Size() < 500 {
 		tmpData, err := os.ReadFile(cacheFile)
 		if err != nil {
-			return "", false
+			return nil, false
 		}
 		if bytes.HasPrefix(tmpData, []byte{'/'}) {
 			cacheFile = cachePath + string(tmpData)
+			memCacheKey = fmt.Sprintf("html-%v-%s", mobileTemplate, string(tmpData))
 			info, err = os.Stat(cacheFile)
 			if err != nil {
-				return "", false
+				return nil, false
 			}
 		}
 	}
 	// 检查是否过期
 	if match == "index" {
 		if info.ModTime().Before(time.Now().Add(time.Duration(-w.PluginHtmlCache.IndexCache) * time.Second)) {
-			return "", false
+			return nil, false
 		}
 	} else if match == "archive" {
 		if info.ModTime().Before(time.Now().Add(time.Duration(-w.PluginHtmlCache.DetailCache) * time.Second)) {
-			return "", false
+			return nil, false
 		}
 	} else if info.ModTime().Before(time.Now().Add(time.Duration(-w.PluginHtmlCache.ListCache) * time.Second)) {
-		return "", false
+		return nil, false
+	}
+	// 重新缓存一份到内存,5分钟，详情页和tag不缓存到内存
+	body, _ := os.ReadFile(cacheFile)
+	if match != "archive" && match != "tag" {
+		buf := bytes.NewBuffer(nil)
+		gzw := gzip.NewWriter(buf)
+		_, _ = gzw.Write(body)
+		_ = gzw.Close()
+		_ = w.Cache.Set(memCacheKey, buf.Bytes(), 300)
 	}
 
-	return cacheFile, true
+	return body, true
 }
 
 func (w *Website) RemoveHtmlCache(oriPaths ...string) {
@@ -742,16 +799,21 @@ func (w *Website) RemoveHtmlCache(oriPaths ...string) {
 
 	if len(oriPaths) > 0 {
 		for _, oriPath := range oriPaths {
-			if strings.HasPrefix(oriPath, w.System.BaseUrl) {
-				oriPath = strings.TrimPrefix(oriPath, w.System.BaseUrl)
+			if after, ok := strings.CutPrefix(oriPath, w.System.BaseUrl); ok {
+				oriPath = after
 			}
 			oriPath = transToLocalPath(oriPath, "")
 			_ = os.Remove(cacheFilePc + oriPath)
 			_ = os.Remove(cacheFileMobile + oriPath)
+			memCacheKey := fmt.Sprintf("html-%v-%s", true, oriPath)
+			w.Cache.Delete(memCacheKey)
+			memCacheKey = fmt.Sprintf("html-%v-%s", false, oriPath)
+			w.Cache.Delete(memCacheKey)
 		}
 	} else {
 		_ = os.RemoveAll(cacheFilePc)
 		_ = os.RemoveAll(cacheFileMobile)
+		w.Cache.CleanAll("html-")
 	}
 }
 
@@ -958,23 +1020,18 @@ func (w *Website) ReplaceAndSendCacheFile(remotePath string, buf []byte) error {
 		})
 	}
 
-	_, err := w.CacheStorage.UploadFile(remotePath, buf)
+	err := w.CacheStorage.Put(context.Background(), remotePath, bytes.NewReader(buf))
 
 	return err
 }
 
-func (w *Website) GetCacheBucket() (bucket *BucketStorage, err error) {
-	bucket = &BucketStorage{
-		DataPath:            w.DataPath,
-		PublicPath:          w.PublicPath,
-		config:              &w.PluginHtmlCache.PluginStorageConfig,
-		tencentBucketClient: nil,
-		aliyunBucketClient:  nil,
-		qiniuBucketClient:   nil,
-		tryTimes:            0,
+func (w *Website) GetCacheBucket() (bucket storage.Storage, err error) {
+	bucket, err = w.GetBucket(&w.PluginHtmlCache.PluginStorageConfig)
+	if err != nil {
+		// 退回到local
+		log.Println(err.Error())
+		return nil, err
 	}
-
-	err = bucket.initBucket()
 
 	return
 }
@@ -1024,7 +1081,7 @@ func newResponseWriter() responseWriterJustWriter {
 
 func (responseWriterJustWriter) Header() http.Header {
 	log.Println("should not be called")
-	return nil
+	return http.Header{}
 }
 func (responseWriterJustWriter) WriteHeader(int) {
 	log.Println("should not be called")

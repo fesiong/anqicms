@@ -2,141 +2,185 @@
 
 <img height="180" src="docs/anqicms.svg" />
 
-[Changelog](./CHANGELOG.md) · English · [中文](./README.md)
+# AnQiCMS: An Enterprise Content Management System Based on Go
 
-# AnQiCMS
+<div align="center">
+<a href="https://github.com/fesiong/anqicms/releases"><img alt="GitHub release" src="https://img.shields.io/github/release/fesiong/anqicms.svg?style=flat-square&include_prereleases" /></a>
+<a href="https://hub.docker.com/r/anqicms/anqicms"><img alt="Docker pulls" src="https://img.shields.io/docker/pulls/anqicms/anqicms?style=flat-square" /></a>
+<a href="https://github.com/fesiong/anqicms/commits"><img alt="GitHub last commit" src="https://img.shields.io/github/last-commit/fesiong/anqicms.svg?style=flat-square" /></a>
+</div>
+
+[Official](https://www.anqicms.com) · [Docs](https://www.anqicms.com/help) · [Demo](https://demo.anqicms.com) · [GitCode](https://gitcode.com/anqicms/anqicms) · [Changelog](./CHANGELOG.md) · English · [中文](./README.md)
 
 </div>
 
-## Introduce
+## About AnQiCMS
 
-The predecessor of AnQi Content Management System (AnQiCMS) is GoBlog, a simple personal blog system based on the iris framework and developed using golang
+AnQiCMS is an enterprise-grade content management system developed in GoLang, evolved from the GoBlog project. It focuses on "security" and "enterprise applications" as its core advantages. Built with Go's high-performance architecture, it reduces memory usage by approximately 80% compared to PHP-based CMS solutions. It supports multi-site, multilingual management, and AI content creation, making it suitable for scenarios such as small and medium enterprise websites, marketing sites, government portals, and cross-border e-commerce platforms.
 
-> GoBlog is an open source personal blog system written in golang, with an elegant interface, compact, fast execution speed, and SEO-friendly, which can meet daily blog needs. It is very simple to use and deploy, and is adaptive to PC and mobile terminals. The page template uses a syntax similar to the blade template engine, which is very easy to use and suitable for personal blogs.
+**Core Technical Features:**
+- **Tech Stack**: GoLang + Iris Framework + GORM
+- **Performance**: Significantly faster page loading compared to traditional PHP CMS, capable of handling approximately 5 million PV on a single server
+- **Security**: Built-in JWT authentication, sensitive word filtering, and anti-crawling disruption codes to defend against SQL injection and XSS attacks
+- **SEO Support**: Pseudo-static URLs, 301 redirects, automatic sitemap generation, Baidu/Bing active push, and anchor text management
 
-Anqi Content Management System (AnQiCMS) is an enterprise content management system developed with GoLang based on the iris framework. It is easy to deploy, and the software is more secure than the traditional PHP-developed content management system. It has an elegant, compact interface and fast execution speed. Websites built with AnQiCMS can prevent many common security issues. AnQiCMS is designed to be SEO-friendly, and has a large number of common functions for enterprise sites built in, which is very helpful for website optimization. It improves the efficiency of enterprise management websites to a certain extent and improves the competitiveness of enterprises.
+## Why Choose a Go-Based CMS
 
-In addition to being suitable for enterprise sites, AnQiCMS is also suitable for marketing websites, corporate official websites, product display sites, government websites, portals, personal blogs and other types of websites.
+Traditional CMS systems face challenges with high server resource consumption and slow page loading in large-scale content management scenarios. PHP-based CMS solutions are prone to security vulnerabilities, with frequent incidents of website defacement and unauthorized access. AnQiCMS leverages Go's concurrency advantages and compiled nature to provide a more stable runtime environment with lower resource consumption, while reducing website attack risks through built-in security mechanisms.
 
-AnQiCMS supports Django template engine syntax, which is similar to blade syntax, and can be very easy to get started with template making. The website mode supports three modes: adaptive, code adaptation, and PC+mobile independent site. According to different needs, you can choose the combination that suits you to build a website.
-
-Our pursuit: Make the world a safe website.
-
-We have been moving towards website security. Let AnQiCMS protect your website security.
-
-Welcome to use AnQiCMS.
+**Vision: To make every website secure.**
 
 ## Quick Start
 
-[Download AnQiCMS](https://github.com/fesiong/goblog/releases)  
-[Installation Guide](https://www.AnQiCMS.com/help-basic/210.html)  
-[Template Documentation](https://www.AnQiCMS.com/manual)  
-[Usage Guide](https://www.AnQiCMS.com/help)  
-[API Documentation](https://www.AnQiCMS.com/anqiapi)
+### Quick Deployment
+
+- [One-Click Deployment with aaPanel](https://www.anqicms.com/help/3633.html)
+- [LNMP Command Deployment](https://www.anqicms.com/courses/3486.html)
+
+Quick Start with Docker
+
+```bash
+docker pull anqicms/anqicms:latest
+docker run -d --name anqicms -p 8001:8001 anqicms/anqicms:latest
+```
+
+### Demo Site
+
+Frontend: [https://demo.anqicms.com](https://demo.anqicms.com)  
+Backend: [https://demo.anqicms.com/system](https://demo.anqicms.com/system)  
+User: `admin`  
+Password: `123456`  
+
+### Help
+
+[Template Documentation](https://www.anqicms.com/manual)  
+[Usage Guide](https://www.anqicms.com/help)  
+[API Documentation](https://www.anqicms.com/anqiapi)
 
 > Warm reminder: Most documents are written in Chinese. If you are an English user, please use the browser's built-in translation function to translate them yourself.
 
-## AnQiCMS Features
+## Core Features
 
-- Customized document model
-- Customized page navigation
-- Rich text, Markdown editor support
-- Webp image support
-- Multiple template customization support
-- Multiple site support
-- Detailed data statistics record
-- Customized pseudo-static rules
-- Active push by multiple search engines
-- Sitemap management
-- Robots.txt management
-- Friendly link management
-- Content comment management
-- Automatic anchor text function
-- Website message management
-- Keyword library management
-- Content material management
-- Email reminder function
-- Article collection function
-- Article combination function
-- Article import function
-- Customized 301 jump function
-- Website content migration function
-- Static page function
-- Customized resource storage
-- User management
-- User group management
-- Mini program support
-- Full-text search support
-- Backup and recovery
-- Article automatic picture support
-- AI automatic writing function
-- Scheduled release/update function
-- Anti-collection interference function
-- Image watermark function
+### Multi-Site & Multilingual
+- **Multi-Site Management**: Supports managing multiple independent sites, ideal for multi-brand or multi-theme websites
+- **Multilingual Site Support**: Enables configuration and switching of multilingual sites with full-page HTML translation, suitable for internationalization
+
+### SEO Optimization Tools
+- **Pseudo-Static Rule Management**: Supports custom pseudo-static URLs to optimize search engine indexing
+- **Automatic Sitemap Generation**: Automatically generates a site sitemap to facilitate search engine crawling
+- **Link Push Management**: Pushes new content to search engines to speed up indexing (supports Baidu/Bing active push)
+- **301 Redirect Management**: Set up URL redirects to improve SEO and user experience
+- **Robots.txt Configuration**: Customize the Robots.txt file to control search engine crawling
+- **Anchor Text Management**: Configure automatic internal keyword linking for SEO
+- **Keyword Library Management**: Centralized management of SEO keywords
+
+### Content Management & Security
+- **Custom Content Models**: Define specific content models for flexible content structures
+- **Content Security Settings**: Sensitive word filtering and content review to ensure compliance
+- **Anti-Crawling Disruption Code**: Generates disruption codes to protect content from bulk scraping
+- **Document Recycle Bin**: Recover deleted documents to prevent accidental data loss
+- **Backup and Recovery**: Supports data backup and recovery to ensure data security
+
+### AI & Automation
+- **AI Writing**: AI-powered content creation assistance (since April 2023)
+- **LLMs.txt Support**: Automatically generates site LLMs.txt file for large language models to understand and index website content
+- **Structured Data**: Supports JSON-LD and other structured data output to enhance search engine understanding of page content
+- **Batch Document Import**: Supports batch importing documents via ZIP archives and Excel spreadsheets, suitable for large-scale content migration
+- **Scheduled Publishing**: Set up timed content publishing for automated operations
+- **Content Collection**: Automatic content collection from other websites
+- **Automatic Title Images**: Automatically assigns images based on title content
+
+### User & Business Features
+- **User Management and VIP Grouping**: Set access permissions for different user groups
+- **WeChat Official Account Integration**: Integrates with WeChat official accounts for content distribution
+- **Order Management**: Built-in order management for e-commerce and service payment sites
+- **Finance Management Module**: Records financial data and manages transaction details
+- **Distribution Management**: Configure distribution channels for referral-based growth
+
+### Other Tools
+- **Global Settings**: Centralized management of all system configurations
+- **Navigation Settings**: Manage navigation bars
+- **Single Page Management**: Tools for privacy policies, "About Us" pages, etc.
+- **Site-Wide Replacement Tool**: Batch replace keywords or links
+- **Email Notifications**: Send email alerts triggered by events such as registration or comments
+- **Watermark Management**: Add watermarks to images to protect copyrights
+- **Static Page Caching**: Improve page load speed and reduce server load
+- **Traffic and Spider Statistics**: Track website visits and search engine crawler activities
 
 ## AnQiCMS Development History
 
-- Latest
-  > We have been working hard, exploring, iterating and optimizing to provide users with a better user experience.
-- May 1, 2024, v3.3.5 released
-  > Support image watermark function
-- October 24, 2023, v3.2.5 released
-  > Support multi-language translation function, support Markdown editor
-- April 15, 2023, v3.1.1 released
-  > Access AI automatic writing function
-- December 5, 2022, v3.0.0 released
-  > Started to support multi-site mode, simplified and reduced the deployment difficulty of AnQiCMS, and added more common functions for enterprise sites
-- May 30, 2022, v2.1.0 released
-  > Officially renamed AnQiCMS, indicating that AnQiCMS has the necessary functions of common content management systems
-- February 16, 2021, v2.0.0-alpha released
-  > We started to gradually transition from a simple blog function to a more comprehensive content management system, and gradually developed and improved the enterprise site functions.
-- January 21, 2021, GoBlog v1.0.0 released
-  > The perfect blog version, based on the basic version, added background management, SEO functions, etc.
-- December 1, 2020, GoBlog v0.5 released
-  > The refactored version was rewritten using the iris framework, reducing the technology stack and using the template engine that comes with iris. The most basic blog functions were realized.
-- November 19, 2019, GoBlog v0.1 released
-  > The Gin version, with front-end and back-end separation, uses go, gin, gorm for the back-end, and Next.js for the front-end.
+AnQiCMS originated from the GoBlog project in 2019. After multiple refactoring and feature expansions, it was officially renamed AnQiCMS in May 2022, gradually evolving into an enterprise-grade content management system.
 
-## Packages Used
+- **Latest**
+  > Continuous iteration and optimization, exploring deep integration of AI content creation with CMS
+- **March 17, 2025, v3.4.7 Released**
+  > Multilingual enhancement, supporting full-page HTML translation
+- **November 11, 2024, v3.4.1 Released**
+  > Introduced multi-language site support, enhancing global service capabilities
+- **September 5, 2024, v3.3.12 Released**
+  > Optimized document query efficiency, reduced resource consumption, improved performance for large-scale article scenarios
+- **May 1, 2024, v3.3.5 Released**
+  > Added image watermark support
+- **October 24, 2023, v3.2.5 Released**
+  > Added multilingual translation and Markdown editor support
+- **April 15, 2023, v3.1.1 Released**
+  > Integrated AI automatic writing functionality
+- **December 5, 2022, v3.0.0 Released**
+  > Multi-site mode support, simplified deployment, added enterprise site features
+- **May 30, 2022, v2.1.0 Released**
+  > Officially renamed AnQiCMS, with standard CMS functionality
+- **February 16, 2021, v2.0.0-alpha Released**
+  > Transitioning from a blog system to a content management system
+- **January 21, 2021, GoBlog v1.0.0 Released**
+  > Enhanced blog version with admin panel and SEO features
+- **December 1, 2020, GoBlog v0.5 Released**
+  > Rewritten with Iris framework, basic blog functionality
+- **November 19, 2019, GoBlog v0.1 Released**
+  > Gin-based version with front-end and back-end separation
 
-- [gorm](https://github.com/go-gorm/gorm)
-- [iris](https://github.com/kataras/iris)
-- [jwt](https://github.com/golang-jwt/jwt)
-- [sego](https://github.com/huichen/sego)
-- [gorequest](https://github.com/parnurzeal/gorequest)
-- [goquery](https://github.com/PuerkitoBio/goquery)
-- [chromedp](https://github.com/chromedp/chromedp)
-- [markdown](https://github.com/gomarkdown/markdown)
-- [webp](https://github.com/chai2010/webp)
-- [cron](https://github.com/robfig/cron)
-- [open-golang](https://github.com/skratchdot/open-golang)
-- [go-qrcode](https://github.com/skip2/go-qrcode)
+## Technical Dependencies
+
+- [gorm](https://github.com/go-gorm/gorm) - ORM Framework
+- [iris](https://github.com/kataras/iris) - Web Framework
+- [jwt](https://github.com/golang-jwt/jwt) - JWT Authentication
+- [sego](https://github.com/huichen/sego) - Chinese Word Segmentation
+- [gorequest](https://github.com/parnurzeal/gorequest) - HTTP Request Library
+- [goquery](https://github.com/PuerkitoBio/goquery) - HTML Parsing
+- [chromedp](https://github.com/chromedp/chromedp) - Browser Automation
+- [markdown](https://github.com/gomarkdown/markdown) - Markdown Parsing
+- [webp](https://github.com/chai2010/webp) - WebP Image Processing
+- [cron](https://github.com/robfig/cron) - Task Scheduling
+- [open-golang](https://github.com/skratchdot/open-golang) - File Opening Utility
+- [go-qrcode](https://github.com/skip2/go-qrcode) - QR Code Generation
 
 ## Access The Admin Backend
-If you clone the downloaded code from GitHub and compile and run it yourself, you need to compile the backend management code first. The backend management code is at https://github.com/fesiong/AnQiCMS-admin.
-You can also download the latest release from the release of the backend management code and unzip system.zip to the system folder in the project root directory.
 
-The default backend address is http://127.0.0.1:8001/system
+If you clone the code from GitHub and compile it yourself, you need to compile the admin backend code first. The admin code is at https://github.com/fesiong/anqicms-admin.
 
-If you did not initialize through installation, you may not have set up an administrator account. If you do not set up an administrator account, the default administrator account password is:
+You can also download the latest release from the admin backend releases and unzip `system.zip` into the `system` folder in the project root directory.
 
-Account: admin
+The default backend URL is `http://127.0.0.1:8001/system`
 
-Password: 123456
+Default admin credentials (for non-initialized installations):
 
-## Sample Website & Development Documentation
-[demo - https://www.AnQiCMS.com/](https://www.AnQiCMS.com/manual)
+Account: `admin`
 
+Password: `123456`
 
-## 👥 Issue
-If you encounter any problems, please open an issue on Github.
-You can also add my WeChat: websafety
+## Documentation & Examples
 
-Scan the QR code to join the golang development learning group
+[Demo Website](https://www.anqicms.com/manual) · [Development Docs](https://www.anqicms.com/help)
 
-![Scan the QR Code](https://www.AnQiCMS.com/uploads/202211/09/1a55bfcde55aa2d6.webp)
+## Issue Feedback
+
+If you encounter any problems, please open an issue on GitHub.
+
+You can also add WeChat: `websafety` to join the Golang development learning group.
+
+![Scan the QR Code](https://www.anqicms.com/uploads/202211/09/1a55bfcde55aa2d6.webp)
 
 ## License
-AnQiCMS End User License Agreement
 
-Copyright (c) 2019-NOW  Fesion <tpyzlxy@gmail.com>
+AGPL-3.0 license
+
+Copyright (c) 2019-NOW  AnQiCMS <tpyzlxy@gmail.com>
