@@ -122,11 +122,10 @@ func (w *Website) CalculateShippingFee(address *model.OrderAddress, orderAmount 
 	if len(w.Shipping.RegionRules) > 0 {
 		var matched = false
 		for _, tmpRule := range w.Shipping.RegionRules {
-			for _, region := range rule.Regions {
+			for _, region := range tmpRule.Regions {
 				if (address.CountryCode != "" && region.CountryCode == address.CountryCode) || (address.Country != "" && region.Country == address.Country) {
 					// 匹配到了国家，接着匹配省份
 					if (address.ProvinceCode != "" && region.ProvinceCode == address.ProvinceCode) || (address.Province != "" && region.Province == address.Province) {
-						// 匹配到了省份，接着匹配城市
 						if region.City == address.City {
 							matched = true
 							rule = tmpRule

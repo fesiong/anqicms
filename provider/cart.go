@@ -8,7 +8,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
-func (w *Website) GetCartList(userId int64, cartToken string, currentPage int, pageSize int) ([]*model.Archive, int64) {
+func (w *Website) GetCartList(userId int64, cartToken string, currentPage int, pageSize int) ([]*model.Cart, int64) {
 	var cartItems []*model.Cart
 	var total int64
 	offset := (currentPage - 1) * pageSize
@@ -45,53 +45,72 @@ func (w *Website) GetCartList(userId int64, cartToken string, currentPage int, p
 	var skus []model.ArchiveSku
 	w.DB.Where("id IN(?)", archiveIds).Find(&archives)
 	w.DB.Where("id IN(?)", skuIds).Find(&skus)
-	var carts = make([]*model.Archive, 0, len(archives))
-	for _, v := range cartItems {
-		var archive *model.Archive
+	for i, v := range cartItems {
+		cartItems[i].Price = v.OriginPrice
 		for _, a := range archives {
 			if a.Id == v.ArchiveId {
 				a.Link = w.GetUrl(PatternArchive, a, 0)
 				a.Thumb = a.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
-				archive = &a
-				break
-			}
-		}
-		if archive == nil {
-			continue
-		}
-		archive.CartId = v.Id
-		archive.Quantity = v.Quantity
-		archive.Amount = int64(v.Quantity) * archive.Price
-		archive.OriginAmount = archive.Amount
-		archive.OrderExtra = v.OrderExtra
-		archive.SkuValues = v.SkuValues
-		if archive.ProductType == config.ProductTypeWholesale {
-			rules, err := w.GetArchiveWholesaleRules(archive.Id)
-			if err == nil {
-				for _, rule := range rules {
-					if v.Quantity >= rule.MinQuantity {
-						archive.Amount = int64(v.Quantity) * archive.Price * int64(rule.DiscountRate) / 100
-						archive.WholesaleRule = rule
+				cartItems[i].Price = a.Price
+				cartItems[i].Amount = int64(v.Quantity) * a.Price
+				if a.ProductType == config.ProductTypeWholesale {
+					rules, err := w.GetArchiveWholesaleRules(a.Id)
+					if err == nil {
+						for _, rule := range rules {
+							if v.Quantity >= rule.MinQuantity {
+								a.WholesaleRule = rule
+								cartItems[i].Amount = int64(v.Quantity) * a.Price * int64(rule.DiscountRate) / 100
+							}
+						}
 					}
 				}
+				if a.OptionType == config.OptionTypePrice && len(v.SkuValues) > 0 {
+					// 加价属性处理
+					var optionPrice int64 = 0
+					for _, sv := range v.SkuValues {
+						// 如果option是属性，不需要处理库存
+						option, err := w.GetArchiveOption(v.ArchiveId, sv.OptionId)
+						if err != nil {
+							continue
+						}
+						// 获取optionValue
+						optionValue, err := w.GetArchiveOptionValue(v.ArchiveId, sv.Id)
+						if err != nil {
+							continue
+						}
+						if !option.IsAttribute && a.AllowOversold == false {
+							// 需要处理库存
+							if int(optionValue.Stock) < v.Quantity {
+								// 处理？
+							}
+							optionPrice += optionValue.Price
+						}
+					}
+					// 更新价格
+					cartItems[i].Price += optionPrice
+				}
+				cartItems[i].Archive = &a
+				break
 			}
 		}
 		if v.SkuId > 0 {
 			for _, s := range skus {
 				if v.SkuId == int64(s.Id) {
 					skuThumb := s.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
-					if len(skuThumb) > 0 {
-						archive.Thumb = skuThumb
+					if cartItems[i].Archive != nil && len(skuThumb) > 0 {
+						cartItems[i].Archive.Thumb = skuThumb
 					}
-					archive.Sku = &s
+					cartItems[i].Price = s.Price
+					cartItems[i].Sku = &s
 					break
 				}
 			}
 		}
-		carts = append(carts, archive)
+		cartItems[i].Amount = int64(v.Quantity) * cartItems[i].Price
+		cartItems[i].OriginAmount = int64(v.Quantity) * cartItems[i].OriginPrice
 	}
 
-	return carts, total
+	return cartItems, total
 }
 
 func (w *Website) CartAdd(req *request.CartRequest) error {
@@ -100,7 +119,7 @@ func (w *Website) CartAdd(req *request.CartRequest) error {
 	if err != nil {
 		return err
 	}
-	if archive.OptionType > 0 && req.SkuId == 0 {
+	if archive.OptionType == config.OptionTypeCombine && req.SkuId == 0 {
 		// 多规格产品用户未选择规格，默认选择第一个
 		archiveSkus, err := w.GetArchiveSkus(archive.Id)
 		if err != nil {
@@ -166,6 +185,37 @@ func (w *Website) CartAdd(req *request.CartRequest) error {
 		if archive.AllowOversold == false && int64(cart.Quantity) > archive.Stock {
 			return errors.New("out of stock")
 		}
+	}
+	// 对 sku_values 进行处理
+	if len(cart.SkuValues) > 0 {
+		addonPrice := int64(0)
+		for i, sv := range cart.SkuValues {
+			// 如果option是属性，不需要处理库存
+			option, err := w.GetArchiveOption(archive.Id, sv.OptionId)
+			if err != nil {
+				// 不存在属性
+				return errors.New("option not found")
+			}
+			// 获取optionValue
+			optionValue, err := w.GetArchiveOptionValue(archive.Id, sv.Id)
+			if err != nil {
+				// 不存在属性值
+				return errors.New("option value not found")
+			}
+			cart.SkuValues[i].OptionTitle = option.Title
+			// 如果是加价商品，还需要检查optionValue的库存情况
+			if archive.OptionType == config.OptionTypePrice {
+				if !option.IsAttribute && archive.AllowOversold == false {
+					// 需要处理库存
+					if archive.AllowOversold == false && int(optionValue.Stock) < req.Quantity {
+						return errors.New("out of stock")
+					}
+					// 加价
+					addonPrice += optionValue.Price
+				}
+			}
+		}
+		cart.OriginPrice += addonPrice
 	}
 	// 入库
 	if exist.Id > 0 {

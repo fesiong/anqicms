@@ -12,6 +12,7 @@ import (
 	content "google.golang.org/api/content/v2.1"
 	"google.golang.org/api/option"
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 )
@@ -273,7 +274,7 @@ func (w *Website) convertToGoogleProduct(archive *model.Archive, variant *model.
 		Brand:                archive.Brand,
 		Condition:            "new",
 	}
-	if archive.OptionType > 0 {
+	if archive.OptionType == config.OptionTypeCombine {
 		// 多规格处理,标识这些变体属于同一个商品组
 		product.ItemGroupId = fmt.Sprintf("group_%d", archive.Id)
 	}

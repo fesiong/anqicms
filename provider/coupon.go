@@ -145,6 +145,8 @@ func (w *Website) GetCouponCodes(ops func(tx *gorm.DB) *gorm.DB, order string, p
 			if couponCodes[i].CouponId == coupons[c].Id {
 				couponCodes[i].Title = coupons[c].Title
 				couponCodes[i].Description = coupons[c].Description
+				couponCodes[i].Type = coupons[c].Type
+				couponCodes[i].Coupon = &coupons[c]
 				break
 			}
 		}
@@ -210,6 +212,10 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 			MaxMoney:  coupon.MaxMoney,
 		}
 		w.DB.Create(&couponCode)
+
+		couponCode.Description = coupon.Description
+		couponCode.Type = coupon.Type
+		couponCode.Coupon = coupon
 		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponGet, Id: couponCode.Id})
 		return &couponCode, nil
 	} else if coupon.Type == config.CouponTypeBuy || coupon.Type == config.CouponTypeFree || coupon.Type == config.CouponTypePromotion {
@@ -236,6 +242,10 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 		}
 		w.DB.Create(&couponCode)
 		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponGet, Id: couponCode.Id})
+
+		couponCode.Description = coupon.Description
+		couponCode.Type = coupon.Type
+		couponCode.Coupon = coupon
 		return &couponCode, nil
 	} else if coupon.Type == config.CouponTypeActivity {
 		// 活动
@@ -254,6 +264,10 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 		}
 		w.DB.Create(&couponCode)
 		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponGet, Id: couponCode.Id})
+
+		couponCode.Description = coupon.Description
+		couponCode.Type = coupon.Type
+		couponCode.Coupon = coupon
 		return &couponCode, nil
 	}
 

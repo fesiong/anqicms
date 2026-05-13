@@ -137,83 +137,81 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 		if explainCount <= 100000 {
 			exact = true
 		}
-		modules := w.GetCacheModules()
-		for _, v := range modules {
-			counter := response.ModuleCount{
-				Id:   v.Id,
-				Name: v.Title,
-			}
-			if exact {
-				w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
-			} else {
-				toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-					return tx.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).First(&model.Archive{})
-				})
-				counter.Total = w.GetExplainCount(toSql)
-				if counter.Total <= 100000 {
-					// 再次求取准确值
-					w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
-				}
-			}
-			result.ModuleCounts = append(result.ModuleCounts, counter)
-			result.ArchiveCount.Total += counter.Total
+		module := w.GetModuleFromCache(2)
+		counter := response.ModuleCount{
+			Id:   module.Id,
+			Name: module.Title,
 		}
+		if exact {
+			w.DB.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).Count(&counter.Total)
+		} else {
+			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).First(&model.Archive{})
+			})
+			counter.Total = w.GetExplainCount(toSql)
+			if counter.Total <= 100000 {
+				// 再次求取准确值
+				w.DB.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).Count(&counter.Total)
+			}
+		}
+		result.ModuleCounts = append(result.ModuleCounts, counter)
+		result.ArchiveCount.Total += counter.Total
 		lastWeek := now.BeginningOfWeek()
 		today := now.BeginningOfDay()
 		if exact {
-			w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
+			w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).First(&model.Archive{})
+				return tx.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).First(&model.Archive{})
 			})
 			result.ArchiveCount.LastWeek = w.GetExplainCount(toSql)
 			if result.ArchiveCount.LastWeek <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
+				w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
 			}
 		}
 		if exact {
-			w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
+			w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).First(&model.Archive{})
+				return tx.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).First(&model.Archive{})
 			})
 			result.ArchiveCount.Today = w.GetExplainCount(toSql)
 			if result.ArchiveCount.Today <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
+				w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
 			}
 		}
 		if exact {
-			w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+			w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).First(&model.ArchiveDraft{})
+				return tx.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).First(&model.ArchiveDraft{})
 			})
 			result.ArchiveCount.UnRelease = w.GetExplainCount(toSql)
 			if result.ArchiveCount.UnRelease <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+				w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
 			}
 		}
 		if exact {
-			w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
+			w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).Count(&result.ArchiveCount.Draft)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.ArchiveDraft{}).Where("status = 0").First(&model.ArchiveDraft{})
+				return tx.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).First(&model.ArchiveDraft{})
 			})
 			result.ArchiveCount.Draft = w.GetExplainCount(toSql)
 			if result.ArchiveCount.Draft <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
+				w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).Count(&result.ArchiveCount.Draft)
 			}
 		}
-		w.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&result.CategoryCount)
+		w.DB.Model(&model.Category{}).Where("module_id = ? and `type` != ?", module.Id, config.CategoryTypePage).Count(&result.CategoryCount)
 		w.DB.Model(&model.Link{}).Count(&result.LinkCount)
 		w.DB.Model(&model.Guestbook{}).Count(&result.GuestbookCount)
 		designList := w.GetDesignList()
 		result.TemplateCount = int64(len(designList))
-		w.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
+		w.DB.Model(&model.Category{}).Where("module_id = ? and `type` = ?", module.Id, config.CategoryTypePage).Count(&result.PageCount)
 		w.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
 
 		timeStamp := now.BeginningOfDay().AddDate(0, 0, -7).Unix()

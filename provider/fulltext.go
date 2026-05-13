@@ -77,9 +77,9 @@ func (w *Website) InitFulltext(focus bool) {
 		for {
 			var archives = make([]fulltext.TinyArchive, 0, InitSqlLimit)
 			if w.PluginFulltext.UseContent {
-				w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content,'archive' as `type`").Where("archives.`id` > ? and archives.`module_id` IN(?)", lastId, w.PluginFulltext.Modules).Order("archives.id asc").Limit(InitSqlLimit).Scan(&archives)
+				w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,archives.category_id,d.content,'archive' as `type`").Where("archives.`id` > ? and archives.`module_id` IN(?)", lastId, w.PluginFulltext.Modules).Order("archives.id asc").Limit(InitSqlLimit).Scan(&archives)
 			} else {
-				w.DB.Table("`archives` as archives").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,'archive' as `type`").Where("archives.`id` > ? and archives.`module_id` IN(?)", lastId, w.PluginFulltext.Modules).Order("archives.id asc").Limit(InitSqlLimit).Scan(&archives)
+				w.DB.Table("`archives` as archives").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,archives.category_id,'archive' as `type`").Where("archives.`id` > ? and archives.`module_id` IN(?)", lastId, w.PluginFulltext.Modules).Order("archives.id asc").Limit(InitSqlLimit).Scan(&archives)
 			}
 			if len(archives) == 0 {
 				break
@@ -167,9 +167,31 @@ func (w *Website) AddFulltextIndex(doc fulltext.TinyArchive) {
 	if w.searcher == nil {
 		return
 	}
+	if doc.Type == fulltext.CategoryType && w.PluginFulltext.UseCategory == false {
+		return
+	}
+	if doc.Type == fulltext.TagType && w.PluginFulltext.UseTag == false {
+		return
+	}
+	if doc.ModuleId > 0 {
+		// 跳过未勾选的模型
+		exist := false
+		for _, mid := range w.PluginFulltext.Modules {
+			if mid == doc.ModuleId {
+				exist = true
+				break
+			}
+		}
+		if !exist {
+			return
+		}
+	}
 	if w.PluginFulltext.UseContent && doc.Content != "" {
 		// 内容搜索的时候，需要去除html标签
 		doc.Content = library.StripTags(doc.Content)
+	} else if w.PluginFulltext.UseContent == false {
+		// 移除
+		doc.Content = ""
 	}
 	_ = w.searcher.Create(doc)
 }
@@ -181,6 +203,9 @@ func (w *Website) UpdateFulltextIndex(doc fulltext.TinyArchive) {
 	if w.PluginFulltext.UseContent && doc.Content != "" {
 		// 内容搜索的时候，需要去除html标签
 		doc.Content = library.StripTags(doc.Content)
+	} else if w.PluginFulltext.UseContent == false {
+		// 移除
+		doc.Content = ""
 	}
 	_ = w.searcher.Update(doc)
 }

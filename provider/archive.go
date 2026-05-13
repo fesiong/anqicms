@@ -26,6 +26,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -591,7 +592,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		if w.Content.Editor == "markdown" {
 			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-		req.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "))
+		req.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "), 250)
 	}
 	// 限制数量
 	descRunes := []rune(req.Description)
@@ -662,6 +663,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	draft.Sort = req.Sort
 	if req.UserId > 0 {
 		draft.UserId = req.UserId
+	}
+	if req.Views > 0 {
+		draft.Views = req.Views
 	}
 
 	if req.KeywordId > 0 {
@@ -1101,6 +1105,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 			Id:          archive.Id,
 			Type:        fulltext.ArchiveType,
 			ModuleId:    archive.ModuleId,
+			CategoryId:  archive.CategoryId,
 			Title:       archive.Title,
 			Keywords:    archive.Keywords,
 			Description: archive.Description,
@@ -1194,6 +1199,9 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 		}()
 	}
 
+	// 生成LLMs.txt
+	go w.ImmediateLLMsBuild()
+
 	return nil
 }
 
@@ -1211,7 +1219,7 @@ func (w *Website) RecoverArchive(draft *model.ArchiveDraft) error {
 	w.PublishPlanArchive(draft)
 	go func() {
 		var doc fulltext.TinyArchive
-		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
+		w.DB.Table("`archives` as archives").Joins("left join `archive_data` as d on archives.id=d.id").Select("archives.id,archives.title,archives.keywords,archives.description,archives.module_id,archives.category_id,d.content,'archive' as `type`").Where("archives.`id` > ?", draft.Id).Take(&doc)
 		// 尝试添加全文索引
 		w.AddFulltextIndex(doc)
 	}()
@@ -1265,6 +1273,11 @@ func (w *Website) DeleteArchiveDraft(draft *model.ArchiveDraft) error {
 	w.DB.Unscoped().Where("`archive_id` = ?", draft.Id).Delete(&model.ArchiveFlag{})
 	// 删除 文档TagData
 	w.DB.Unscoped().Where("`item_id` = ?", draft.Id).Delete(&model.TagData{})
+	// 删除模型数据
+	module := w.GetModuleFromCache(draft.ModuleId)
+	if module != nil {
+		w.DB.Exec("DELETE FROM ? WHERE `id` = ?", clause.Table{Name: module.TableName}, draft.Id)
+	}
 
 	return nil
 }
@@ -1458,6 +1471,55 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 	// 删除列表缓存
 	w.Cache.CleanAll("archive-list")
 	// end
+
+	return nil
+}
+
+func (w *Website) UpdateArchiveTags(req *request.ArchivesUpdateRequest) error {
+	if len(req.Ids) == 0 {
+		return errors.New(w.Tr("NoDocumentToOperate"))
+	}
+	if len(req.Tags) == 0 {
+		return errors.New(w.Tr("PleaseSelectATag"))
+	}
+	var tagIds = make([]uint, 0, len(req.Tags))
+	for _, tagName := range req.Tags {
+		if tagName == "" {
+			continue
+		}
+		tag, err := w.GetTagByTitle(tagName)
+		if err != nil {
+			newToken := w.VerifyTagUrlToken("", tagName, 0)
+			letter := "A"
+			if len(newToken) > 0 && newToken != "-" {
+				letter = string(newToken[0])
+			}
+			tag = &model.Tag{
+				Title:       tagName,
+				UrlToken:    newToken,
+				FirstLetter: strings.ToUpper(letter),
+				Status:      1,
+			}
+			w.DB.Where("`title` = ?", tag.Title).FirstOrCreate(tag)
+
+			link := w.GetUrl("tag", tag, 0)
+			go w.PushArchive(link)
+			if w.PluginSitemap.AutoBuild == 1 {
+				go w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
+			}
+		}
+		tagIds = append(tagIds, tag.Id)
+	}
+	// 更新TagData
+	for _, arcId := range req.Ids {
+		for _, tagId := range tagIds {
+			tagData := model.TagData{
+				TagId:  tagId,
+				ItemId: arcId,
+			}
+			w.DB.Where("`item_id` = ? and `tag_id` = ?", arcId, tagData.TagId).FirstOrCreate(&tagData)
+		}
+	}
 
 	return nil
 }
@@ -1783,14 +1845,17 @@ func (w *Website) SaveArchiveRelations(archiveId int64, relationIds []int64) err
 
 func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*request.ArchiveOption, archiveSkus []*request.ArchiveSku) error {
 	archiveId := archive.Id
-	if len(options) == 0 || archive.OptionType == 0 {
+	if len(options) == 0 || archive.OptionType == config.OptionTypeNone {
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveOption{})
 		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveOptionValue{})
-		w.DB.Where("archive_id = ?", archiveId).Delete(&model.ArchiveSku{})
 		return nil
+	}
+	if archive.OptionType == config.OptionTypePrice {
+		w.DB.Where("archive_id = ?", archiveId).Delete(&model.ArchiveSku{})
 	}
 	var valuesMap = map[string][]model.ArchiveOptionValue{}
 	var optionIds []int64
+	var optionStocks int64
 	for i, option := range options {
 		archiveOption := model.ArchiveOption{
 			ArchiveId:   archiveId,
@@ -1814,6 +1879,9 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 		optionIds = append(optionIds, archiveOption.Id)
 		var optionValueIds []int64
 		for j, value := range option.Values {
+			if value.Stock > optionStocks {
+				optionStocks = value.Stock
+			}
 			archiveOptionValue := model.ArchiveOptionValue{
 				ArchiveId: archiveId,
 				OptionId:  archiveOption.Id,
@@ -1821,6 +1889,7 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 				Images:    value.Images,
 				Color:     value.Color,
 				Price:     value.Price,
+				Stock:     value.Stock,
 				IsDefault: value.IsDefault,
 				Sort:      uint(j + 1),
 			}
@@ -1830,6 +1899,7 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 				existValue.Images = archiveOptionValue.Images
 				existValue.Color = archiveOptionValue.Color
 				existValue.Price = archiveOptionValue.Price
+				existValue.Stock = archiveOptionValue.Stock
 				existValue.Sort = archiveOptionValue.Sort
 				existValue.IsDefault = archiveOptionValue.IsDefault
 				w.DB.Model(&model.ArchiveOptionValue{}).Where("id = ?", existValue.Id).Save(&existValue)
@@ -1960,6 +2030,13 @@ func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*req
 		}
 		skuIds = append(skuIds, sku.Id)
 	}
+	if archive.OptionType == config.OptionTypePrice {
+		minPrice = archive.Price
+		totalStock = archive.Stock
+		if optionStocks > totalStock {
+			totalStock = optionStocks
+		}
+	}
 	w.DB.Model(&model.Archive{}).Where("id = ?", archiveId).UpdateColumns(map[string]interface{}{
 		"stock": totalStock,
 		"price": minPrice,
@@ -2016,6 +2093,22 @@ func (w *Website) GetArchiveOptions(archiveId int64) ([]*model.ArchiveOption, er
 	}
 
 	return options, nil
+}
+
+func (w *Website) GetArchiveOption(archiveId int64, optionId int64) (*model.ArchiveOption, error) {
+	var option model.ArchiveOption
+	if err := w.DB.Where("archive_id = ? AND id = ?", archiveId, optionId).First(&option).Error; err != nil {
+		return nil, err
+	}
+	return &option, nil
+}
+
+func (w *Website) GetArchiveOptionValue(archiveId int64, optionValueId int64) (*model.ArchiveOptionValue, error) {
+	var optionValue model.ArchiveOptionValue
+	if err := w.DB.Where("archive_id = ? AND id = ?", archiveId, optionValueId).First(&optionValue).Error; err != nil {
+		return nil, err
+	}
+	return &optionValue, nil
 }
 
 func (w *Website) GetArchiveSkus(archiveId int64) ([]*model.ArchiveSku, error) {
@@ -2395,7 +2488,7 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			}
 		}
 		// 解析description
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "), 250)
 		// 解析urlToken
 		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
 		archive.ArchiveData = &model.ArchiveData{
@@ -2413,6 +2506,8 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 		qia.SaveBatches(archives)
 	}
 	qia.IsFinished = true
+	// 生成LLMs.txt
+	go qia.w.ImmediateLLMsBuild()
 
 	return nil
 }
@@ -2673,7 +2768,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 			}
 		}
 		// 解析description
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "))
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "), 250)
 		// 解析urlToken
 		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
 		// 处理更多主表字段
@@ -2769,6 +2864,13 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		if colId, ok := existFields["origin_title"]; ok {
 			archive.OriginTitle = row[colId]
 		}
+		if colId, ok := existFields["views"]; ok {
+			tmpViews, _ := strconv.ParseInt(row[colId], 10, 64)
+			archive.Views = uint(tmpViews)
+		}
+		if colId, ok := existFields["fixed_link"]; ok {
+			archive.FixedLink = row[colId]
+		}
 		// 先对主表进行入库
 		tx := qia.w.DB.Begin()
 		// 需要写入表 archive_category, archive_data，archives, archive_drafts, tag_data, tag
@@ -2838,6 +2940,8 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 	}
 
 	qia.IsFinished = true
+	// 生成LLMs.txt
+	go qia.w.ImmediateLLMsBuild()
 
 	return nil
 }

@@ -55,6 +55,7 @@ type CouponCode struct {
 	Title       string  `json:"title" gorm:"-"`
 	Description string  `json:"description" gorm:"-"`
 	Coupon      *Coupon `json:"coupon" gorm:"-"`
+	Type        int     `json:"type" gorm:"-"` // 优惠券类型 1 = 注册送优惠券,2 = 限量优惠券,3 = 购买成功赠送,4 = 满减促销优惠券,5 = 自由规则,6 = 积分兑换券,7 = 活动奖品(小游戏奖品)
 }
 
 func (c *Coupon) GetMoney() int64 {

@@ -914,8 +914,8 @@ func (w *Website) GetUserDiscount(userId uint, user *model.User) (discount, ship
 			if err == nil {
 				group, err := w.GetUserGroupInfo(parent.GroupId)
 				if err == nil {
-					if group.Setting.Discount > 0 && group.Setting.Discount > discount {
-						discount = group.Setting.Discount
+					if group.Setting.ShareDiscount > 0 && group.Setting.ShareDiscount > discount {
+						discount = group.Setting.ShareDiscount
 					}
 				}
 			}

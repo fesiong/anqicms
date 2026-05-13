@@ -36,17 +36,29 @@
           <h4 class="fw-bold mb-4">Order summary</h4>
           <div class="d-flex justify-content-between mb-3">
             <span class="text-muted">Subtotal</span>
-            <span class="fw-bold cart-amount">$0.00</span>
+            <span class="fw-bold cart-sub-amount">$0.00</span>
           </div>
           <div class="d-flex justify-content-between mb-3">
             <span class="text-muted">Estimated shipping</span>
             <span class="text-muted">Calculated at checkout</span>
+          </div>
+          <div class="d-flex justify-content-between mb-3">
+            <span class="text-muted">Discount</span>
+            <span class="text-muted" id="cart-discount">$0.00</span>
           </div>
           <hr class="my-4">
           <div class="d-flex justify-content-between mb-4">
             <span class="h5 fw-bold">Total</span>
             <span class="h5 fw-bold cart-amount">$0.00</span>
           </div>
+
+          <hr class="my-4">
+
+          <div class="input-group mb-4">
+            <input type="text" class="form-control border-dark" name="coupon_code" placeholder="Discount code">
+            <button class="btn btn-outline-dark px-4" type="button" id="cart-apply-coupon">Apply</button>
+          </div>
+
           <p class="small text-muted mb-4">Taxes and shipping calculated at checkout.</p>
           <div class="d-grid gap-2">
             <a href="{% system with name='BaseUrl' %}/order/checkout" class="btn btn-dark py-3">Check out</a>

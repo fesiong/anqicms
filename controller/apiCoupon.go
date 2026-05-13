@@ -72,6 +72,8 @@ func ApiGetValidCoupons(ctx iris.Context) {
 			MaxMoney:    coupon.MaxMoney,
 			Title:       coupon.Title,
 			Description: coupon.Description,
+			Type:        coupon.Type,
+			Coupon:      coupon,
 		}
 		validCodes = append(validCodes, couponCode)
 	}
@@ -119,7 +121,7 @@ func ApiGenerateCouponCode(ctx iris.Context) {
 		return
 	}
 	userId := ctx.Values().GetUintDefault("userId", 0)
-	_, err = currentSite.MakeCouponCode(req.Id, int64(userId), 1)
+	couponCode, err := currentSite.MakeCouponCode(req.Id, int64(userId), 1)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -131,6 +133,7 @@ func ApiGenerateCouponCode(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "success",
+		"data": couponCode,
 	})
 }
 
@@ -230,6 +233,7 @@ func ApiCheckCoupon(ctx iris.Context) {
 	// 传了商品，则对商品进行验证
 	var amount int64
 	var originAmount int64
+	var userDiscountAmount int64 = 0
 	var orderResp response.OrderConfirmResponse
 	orderResp.CurrencyCode = currentSite.Currency.Currency
 	orderResp.CurrencySymbol = currentSite.Currency.Symbol
@@ -293,10 +297,10 @@ func ApiCheckCoupon(ctx iris.Context) {
 		}
 		if userDiscount > 0 {
 			price = price * userDiscount / 100
-			orderResp.DiscountAmount = userDiscount
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
 		amount += detailAmount
 		originAmount += originDetailAmount
 		orderResp.Details = append(orderResp.Details, response.OrderDetail{
@@ -331,10 +335,10 @@ func ApiCheckCoupon(ctx iris.Context) {
 		}
 		if userDiscount > 0 {
 			price = price * userDiscount / 100
-			orderResp.DiscountAmount = userDiscount
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
 		amount += detailAmount
 		originAmount += originDetailAmount
 		orderResp.Details = append(orderResp.Details, response.OrderDetail{
@@ -407,6 +411,38 @@ func ApiCheckCoupon(ctx iris.Context) {
 					v.Quantity = int(archive.Stock)
 				}
 			}
+			if archive.OptionType == config.OptionTypePrice && len(v.SkuValues) > 0 {
+				// 加价属性处理
+				var optionPrice int64 = 0
+				var originOptionPrice int64 = 0
+				for _, sv := range v.SkuValues {
+					// 如果option是属性，不需要处理库存
+					option, err := currentSite.GetArchiveOption(archive.Id, sv.OptionId)
+					if err != nil {
+						// 不存在属性
+						continue
+					}
+					// 获取optionValue
+					optionValue, err := currentSite.GetArchiveOptionValue(archive.Id, sv.Id)
+					if err != nil {
+						// 不存在属性值
+						continue
+					}
+					if !option.IsAttribute && archive.AllowOversold == false {
+						// 需要处理库存
+						if int(optionValue.Stock) < v.Quantity {
+							v.Quantity = int(optionValue.Stock)
+						}
+					}
+					if optionValue.Price > 0 {
+						optionPrice += optionValue.Price
+						originOptionPrice += optionValue.Price
+					}
+				}
+				// 更新价格
+				price += optionPrice
+				originPrice += originOptionPrice
+			}
 			if v.Quantity == 0 {
 				// 跳过无库存的商品
 				continue
@@ -432,9 +468,9 @@ func ApiCheckCoupon(ctx iris.Context) {
 			if userDiscount > 0 {
 				price = price * userDiscount / 100
 			}
-			orderResp.DiscountAmount = userDiscount
 			detailAmount := price * int64(v.Quantity)
 			originDetailAmount := originPrice * int64(v.Quantity)
+			userDiscountAmount += originDetailAmount - detailAmount
 
 			// 计算运费，非包邮商品才计算运费
 			weight, volume := 0.0, 0.0
@@ -485,13 +521,27 @@ func ApiCheckCoupon(ctx iris.Context) {
 	orderResp.OriginAmount = originAmount
 
 	couponMoney := couponCode.GetMoney(orderResp.Amount)
+	orderResp.CouponDiscount = couponMoney
+	orderResp.UserDiscount = userDiscountAmount
+	orderResp.DiscountAmount = orderResp.CouponDiscount + orderResp.UserDiscount
+	orderResp.CouponCode = couponCode.Code
+	orderResp.CouponCodeId = couponCode.Id
+	orderResp.CouponId = couponCode.CouponId
+	orderResp.Amount = orderResp.Amount - couponMoney
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("CouponCodeValid"),
 		"data": iris.Map{
-			"coupon":       couponCode,
-			"coupon_money": couponMoney,
+			"coupon":          couponCode,
+			"discount_amount": orderResp.DiscountAmount,
+			"coupon_discount": orderResp.CouponDiscount,
+			"user_discount":   orderResp.UserDiscount,
+			"coupon_code":     orderResp.CouponCode,
+			"coupon_code_id":  orderResp.CouponCodeId,
+			"coupon_id":       orderResp.CouponId,
+			"amount":          orderResp.Amount,
+			"origin_amount":   orderResp.OriginAmount,
 		},
 	})
 }

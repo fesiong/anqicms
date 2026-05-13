@@ -14,6 +14,8 @@ type OrderConfirmResponse struct {
 	Amount           int64         `json:"amount"`
 	ServiceFee       int64         `json:"service_fee"`
 	DiscountAmount   int64         `json:"discount_amount"`   // 可能一个订单支持多个优惠
+	UserDiscount     int64         `json:"user_discount"`     // 用户优惠金额,可能是用户组，也可能是分享优惠
+	CouponDiscount   int64         `json:"coupon_discount"`   // 优惠券优惠金额
 	ShippingFee      int64         `json:"shipping_fee"`      // 运费
 	ShippingDiscount int64         `json:"shipping_discount"` // 运费优惠金额
 	ShippingQuantity int           `json:"shipping_quantity"` // 结算时总数量

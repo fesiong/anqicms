@@ -35,6 +35,8 @@ type ArchiveOptionValue struct {
 	Sort        uint           `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:0;index:idx_sort"` // 排序
 	CreatedTime int64          `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
 	UpdatedTime int64          `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	Stock       int64          `json:"stock" gorm:"column:stock;type:bigint(20) unsigned not null;default:0"`
+	SoldCount   int64          `json:"sold_count" gorm:"column:sold_count;type:bigint(20) unsigned not null;default:0"`
 
 	OptionTitle string `json:"option_title" gorm:"-"`
 	Logo        string `json:"logo" gorm:"-"`  //  logo

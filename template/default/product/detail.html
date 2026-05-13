@@ -47,15 +47,20 @@
           </div>
 
           <hr class="my-4">
+          {%- archiveDetail optionType with name="OptionType" %}
           {%- archiveDetail variants with name="Options" %}
           <!-- Variants -->
            {%- for item in variants %}
-          <div class="mb-4 sku-option" data-option="{{item.Id}}">
+          <div class="mb-4 sku-option" data-option="{{item.Id}}" data-is-attribute="{{item.IsAttribute}}">
             <label class="form-label small fw-bold text-uppercase mb-3 text-muted">{{item.Title}}: <span class="selectedValue text-dark"></span></label>
             <div class="d-flex gap-2 flex-wrap">
               {%- for valItem in item.Values %}
-              <label class="btn btn-outline-dark rounded-pill px-3 py-2" data-value="{{valItem.Id}}" for="{{item.Title}}-{{forloop.Counter}}">
+              <label class="btn btn-outline-dark rounded-pill px-3 py-2" data-value="{{valItem.Id}}" for="{{item.Title}}-{{forloop.Counter}}" data-stock="{{valItem.Stock}}">
                 {{valItem.Title}}
+                {%- if optionType == 2 && valItem.Price > 0 %}
+                {# 加价模式下显示加价值 #}
+                +{{valItem.Price|priceFormat:2}}
+                {%- endif %}
               </label>
               {%- endfor %}
             </div>

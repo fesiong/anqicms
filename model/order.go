@@ -28,7 +28,9 @@ type Order struct {
 	FinishedTime      int64   `json:"finished_time" gorm:"column:finished_time;type:int(10) not null;default:0;comment:订单完成时间"`
 	ActivityId        int64   `json:"activity_id" gorm:"column:activity_id;type:bigint(20) not null;default:0"`                      // 活动ID
 	HasReview         int     `json:"has_review" gorm:"column:has_review;type:tinyint(1) not null;default:0"`                        // 是否已评价
-	DiscountAmount    int64   `json:"discount_amount" gorm:"column:discount_amount;type:bigint(20) not null;default:0;comment:优惠金额"` // 可能一个订单支持多个优惠
+	DiscountAmount    int64   `json:"discount_amount" gorm:"column:discount_amount;type:bigint(20) not null;default:0;comment:优惠金额"` // 可能一个订单支持多个优惠，优惠汇总
+	UserDiscount      int64   `json:"user_discount" gorm:"column:user_discount;type:bigint(20) not null;default:0;comment:用户优惠金额"`   // 用户优惠金额,可能是用户组，也可能是分享优惠
+	CouponDiscount    int64   `json:"coupon_discount" gorm:"column:coupon_discount;type:bigint(20) not null;default:0;comment:优惠券优惠金额"`
 	CouponCodeId      string  `json:"coupon_code_id" gorm:"column:coupon_code_id;type:varchar(36) not null;default:''"`
 	ShippingFee       int64   `json:"shipping_fee" gorm:"column:shipping_fee;type:bigint(20) not null;default:0;comment:运费"`
 	ShippingDiscount  int64   `json:"shipping_discount" gorm:"column:shipping_discount;type:bigint(20) not null;default:0;comment:运费优惠金额"`
@@ -90,6 +92,14 @@ type OrderDetail struct {
 	Group         *UserGroup           `json:"group" gorm:"-"`
 	Communication *CommunicationOrder  `json:"communication_order,omitempty" gorm:"-"`
 	OrderFields   []config.CustomField `json:"order_fields" gorm:"-"`
+}
+
+type OrderOptionStock struct {
+	Id            uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	OrderId       string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
+	OrderDetailId uint   `json:"order_detail_id" gorm:"column:order_detail_id;type:int(10) unsigned not null;default:0;index"`
+	OptionValueId int64  `json:"option_value_id" gorm:"column:option_value_id;type:int(10) unsigned not null;default:0;index"`
+	Quantity      int    `json:"quantity" gorm:"column:quantity;type:int(10) not null;default:0"`
 }
 
 type OrderAddress struct {

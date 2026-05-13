@@ -337,6 +337,7 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 
 	// VIP优惠
 	userDiscount, shippingDiscount := currentSite.GetUserDiscount(userId, user)
+	userDiscountAmount := int64(0)
 
 	if req.Type == config.OrderTypeVip {
 		group, err := currentSite.GetUserGroupInfo(uint(req.Details[0].GoodsId))
@@ -355,10 +356,10 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		}
 		if userDiscount > 0 {
 			price = price * userDiscount / 100
-			orderResp.DiscountAmount = userDiscount
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
 		amount += detailAmount
 		originAmount += originDetailAmount
 		orderResp.Details = append(orderResp.Details, response.OrderDetail{
@@ -393,10 +394,10 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 		}
 		if userDiscount > 0 {
 			price = price * userDiscount / 100
-			orderResp.DiscountAmount = userDiscount
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
 		amount += detailAmount
 		originAmount += originDetailAmount
 		orderResp.Details = append(orderResp.Details, response.OrderDetail{
@@ -469,6 +470,38 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 					v.Quantity = int(archive.Stock)
 				}
 			}
+			if archive.OptionType == config.OptionTypePrice && len(v.SkuValues) > 0 {
+				// 加价属性处理
+				var optionPrice int64 = 0
+				var originOptionPrice int64 = 0
+				for _, sv := range v.SkuValues {
+					// 如果option是属性，不需要处理库存
+					option, err := currentSite.GetArchiveOption(archive.Id, sv.OptionId)
+					if err != nil {
+						// 不存在属性
+						continue
+					}
+					// 获取optionValue
+					optionValue, err := currentSite.GetArchiveOptionValue(archive.Id, sv.Id)
+					if err != nil {
+						// 不存在属性值
+						continue
+					}
+					if !option.IsAttribute && archive.AllowOversold == false {
+						// 需要处理库存
+						if int(optionValue.Stock) < v.Quantity {
+							v.Quantity = int(optionValue.Stock)
+						}
+					}
+					if optionValue.Price > 0 {
+						optionPrice += optionValue.Price
+						originOptionPrice += optionValue.Price
+					}
+				}
+				// 更新价格
+				price += optionPrice
+				originPrice += originOptionPrice
+			}
 			if v.Quantity == 0 {
 				// 跳过无库存的商品
 				continue
@@ -494,9 +527,9 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 			if userDiscount > 0 {
 				price = price * userDiscount / 100
 			}
-			orderResp.DiscountAmount = userDiscount
 			detailAmount := price * int64(v.Quantity)
 			originDetailAmount := originPrice * int64(v.Quantity)
+			userDiscountAmount += originDetailAmount - detailAmount
 
 			// 计算运费，非包邮商品才计算运费
 			weight, volume := 0.0, 0.0
@@ -545,6 +578,8 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 	}
 	orderResp.Amount = amount
 	orderResp.OriginAmount = originAmount
+	// 用户优惠金额
+	orderResp.UserDiscount = userDiscountAmount
 	if couponCode != nil {
 		if couponCode.Status != 0 {
 			//ctx.JSON(iris.Map{
@@ -557,7 +592,7 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 			orderResp.CouponId = 0
 		} else {
 			couponMoney := couponCode.GetMoney(orderResp.Amount)
-			orderResp.DiscountAmount = orderResp.DiscountAmount + couponMoney
+			orderResp.CouponDiscount = couponMoney
 			orderResp.CouponCode = couponCode.Code
 			orderResp.CouponCodeId = couponCode.Id
 			orderResp.CouponId = couponCode.CouponId
@@ -589,6 +624,8 @@ func ApiGetOrderCheckout(ctx iris.Context) {
 			orderResp.ShippingFee = int64(float64(originShippingFee) * (float64(shippingDiscount) / 100))
 			orderResp.ShippingDiscount = originShippingFee - orderResp.ShippingFee
 		}
+		// 累计优惠金额
+		orderResp.DiscountAmount = orderResp.UserDiscount + orderResp.CouponDiscount + orderResp.ShippingDiscount
 		// 更新订单金额
 		orderResp.Amount += orderResp.ShippingFee
 	}
@@ -1308,7 +1345,7 @@ func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model
 	// this is a pay order
 	payment.PayWay = config.PayWayBalance
 	payment.PaidTime = time.Now().Unix()
-	payment.TerraceId = fmt.Sprintf("%d", payment.PaidTime)
+	payment.TerraceId = strconv.FormatInt(payment.PaidTime, 10)
 	tx.Save(payment)
 	order.PaymentId = payment.PaymentId
 	tx.Save(order)
@@ -1397,7 +1434,7 @@ func ApiPaymentCheck(ctx iris.Context) {
 		return
 	}
 
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 6; i++ {
 		order, _ = currentSite.GetOrderInfoByOrderId(orderId)
 		if order.Status != config.OrderStatusWaiting {
 			//支付成功

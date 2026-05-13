@@ -35,6 +35,7 @@ type SkuResponse struct {
 	QuotaUsed      int                    `json:"quota_used"`      // 用户曾经购买过多少个该商品，用户限购
 	OrderCount     int                    `json:"order_count"`     // 销量
 	Stock          int64                  `json:"stock"`           // 库存
+	OptionType     int                    `json:"option_type"`     // 规格类型
 	Options        []*model.ArchiveOption `json:"options"`         // 规格选项
 	Skus           []*model.ArchiveSku    `json:"skus"`            // 库存
 	WholesaleRules []*model.WholesaleRule `json:"wholesale_rules"` // 批发规则
@@ -148,7 +149,9 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 	if archive.OptionType > 0 {
 		skuInfo, _ := w.ApiGetSku(&request.ApiArchiveRequest{Id: archive.Id, UserId: req.UserId})
 		archive.Options = skuInfo.Options
-		archive.Skus = skuInfo.Skus
+		if archive.OptionType == config.OptionTypeCombine {
+			archive.Skus = skuInfo.Skus
+		}
 	}
 	// 读取flag
 	archive.Flag = w.GetArchiveFlags(archive.Id)
@@ -973,7 +976,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 				if archive.OptionType > 0 {
 					skuInfo, _ := w.ApiGetSku(&request.ApiArchiveRequest{Id: archive.Id, UserId: req.UserId})
 					archives[j].Options = skuInfo.Options
-					archives[j].Skus = skuInfo.Skus
+					if archive.OptionType == config.OptionTypeCombine {
+						archives[j].Skus = skuInfo.Skus
+					}
 				}
 			}
 		} else if req.ShowOptions {
@@ -1372,6 +1377,7 @@ func (w *Website) ApiGetSku(req *request.ApiArchiveRequest) (*SkuResponse, error
 		QuotaUsed:      0,
 		OrderCount:     0,
 		Stock:          archive.Stock,
+		OptionType:     archive.OptionType,
 		Options:        nil,
 		Skus:           nil,
 	}

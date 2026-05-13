@@ -19,9 +19,9 @@ func (w *Website) TryToRunTimeFactor() {
 		return
 	}
 
-	go w.TimeRenewArchives(w.PluginTimeFactor)
+	w.TimeRenewArchives(w.PluginTimeFactor)
 
-	go w.TimeReleaseArchives(w.PluginTimeFactor)
+	w.TimeReleaseArchives(w.PluginTimeFactor)
 }
 
 func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
@@ -139,7 +139,7 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if !setting.ReleaseOpen {
 		return
 	}
-	if setting.TodayCount > 0 && time.Unix(setting.LastSent, 0).Day() != time.Now().Day() {
+	if setting.TodayCount > 0 && time.UnixMilli(setting.LastSent).Day() != time.Now().Day() {
 		setting.TodayCount = 0
 		// 更新数量
 		_ = w.SaveSettingValue(TimeFactorKey, setting)
@@ -157,14 +157,41 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	if setting.EndTime == 0 {
 		setting.EndTime = 23
 	}
-	diffSecond := (setting.EndTime + 1 - setting.StartTime) * 3600 / setting.DailyLimit
+
+	// 修正数量，比如一天发布10000篇，平均每小时发布417篇，但现在时间已经是中午了，实际已发布可能为0，则接下来的每次发布量需要增加，才能保证当天发完
+	now := time.Now()
+
+	// 计算当天剩余的结束时间点（毫秒时间戳）
+	endTimeToday := time.Date(now.Year(), now.Month(), now.Day(), setting.EndTime+1, 0, 0, 0, now.Location()).UnixMilli()
+	// 计算剩余可用时间（毫秒）
+	remainingTimeMillis := endTimeToday - now.UnixMilli()
+	if remainingTimeMillis <= 0 {
+		return
+	}
+
+	// 计算剩余需要发布的数量
+	remainingCount := setting.DailyLimit - setting.TodayCount
+	if remainingCount <= 0 {
+		return
+	}
+
+	// 动态计算间隔：剩余时间 / 剩余数量
+	diffSecond := remainingTimeMillis / int64(remainingCount)
 	if diffSecond < 1 {
 		diffSecond = 1
 	}
-	nowStamp := time.Now().Unix()
+	nowStamp := time.Now().UnixMilli()
 	if setting.LastSent > nowStamp+int64(diffSecond) {
 		// 间隔未到
 		return
+	}
+
+	// 读取数量，按1分钟能发布的数量计算
+	limit := 65000 / int(diffSecond)
+	if limit < 1 {
+		limit = 1
+	} else if limit > 200 {
+		limit = 200
 	}
 
 	// 从草稿箱发布
@@ -174,9 +201,9 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 		db = db.Where("category_id NOT IN (?)", setting.CategoryIds)
 	}
 	var err error
-	var draft model.ArchiveDraft
+	var drafts []model.ArchiveDraft
 	if setting.Random {
-		// 一次最多读取1个
+		// 一次最多读取100个
 		var maxId struct {
 			MaxId int64 `json:"max_id"`
 		}
@@ -193,44 +220,50 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
 			randId = rd.Int63n(maxId.MaxId-minId.MinId) + minId.MinId
 		}
-		err = db.Where("id >= ?", randId).Order("id asc").Take(&draft).Error
+		err = db.Where("id >= ?", randId).Order("id asc").Limit(limit).Find(&drafts).Error
 		if err != nil {
 			// 没文章
 			return
 		}
 	} else {
-		// 一次最多读取1个
-		err = db.Order("id asc").Take(&draft).Error
+		// 一次最多读取limit个
+		err = db.Order("id asc").Limit(limit).Find(&drafts).Error
 		if err != nil {
 			// 没文章
 			return
 		}
 	}
-	hookCtx := &HookContext{
-		Point: BeforeArchiveRelease,
-		Site:  w,
-		Data:  &draft,
-	}
-	if err = TriggerHook(hookCtx); err != nil {
+	if len(drafts) == 0 {
 		return
 	}
-	archive := &draft.Archive
-	archive.CreatedTime = nowStamp
-	archive.UpdatedTime = nowStamp
-	err = w.DB.Save(archive).Error
-	if err != nil {
-		// err
-		return
-	}
-	// 删除草稿
-	w.DB.Delete(draft)
-	archive.Link = w.GetUrl("archive", archive, 0)
-	_ = w.SuccessReleaseArchive(archive, true)
-	// 清除缓存
-	w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
-	w.DeleteArchiveExtraCache(archive.Id)
+	for i, draft := range drafts {
+		hookCtx := &HookContext{
+			Point: BeforeArchiveRelease,
+			Site:  w,
+			Data:  &draft,
+		}
+		if err = TriggerHook(hookCtx); err != nil {
+			return
+		}
+		archive := &draft.Archive
+		curStamp := (nowStamp + diffSecond*int64(i)) / 1000
+		archive.CreatedTime = curStamp
+		archive.UpdatedTime = curStamp
+		err = w.DB.Save(archive).Error
+		if err != nil {
+			// err
+			continue
+		}
+		// 删除草稿
+		w.DB.Delete(draft)
+		archive.Link = w.GetUrl("archive", archive, 0)
+		_ = w.SuccessReleaseArchive(archive, true)
+		// 清除缓存
+		w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
+		w.DeleteArchiveExtraCache(archive.Id)
 
-	setting.TodayCount++
-	setting.LastSent = nowStamp
-	_ = w.SaveSettingValue(TimeFactorKey, setting)
+		setting.TodayCount++
+		setting.LastSent = nowStamp
+		_ = w.SaveSettingValue(TimeFactorKey, setting)
+	}
 }

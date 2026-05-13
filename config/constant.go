@@ -181,6 +181,12 @@ const (
 )
 
 const (
+	OptionTypeNone    = 0 // 无SKU
+	OptionTypeCombine = 1 // 组合SKU
+	OptionTypePrice   = 2 // 加价SKU
+)
+
+const (
 	PasswordFindWayFile = "file"
 	PasswordFindWayDNS  = "dns"
 )

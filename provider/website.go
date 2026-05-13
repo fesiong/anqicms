@@ -60,6 +60,7 @@ type Website struct {
 	AkismetClient           *AkismetClient
 	googleAuthConfig        *oauth2.Config
 	googleMerchantConfig    *oauth2.Config
+	llmsBuildStatus         *LLMsBuildStatus
 
 	System   *config.SystemConfig
 	Content  *config.ContentConfig
@@ -95,6 +96,7 @@ type Website struct {
 	PluginTranslate    *config.PluginTranslateConfig
 	PluginJsonLd       *config.PluginJsonLdConfig
 	Currency           *config.CurrencyConfig
+	PluginLLMs         *config.PluginLLMsConfig
 
 	sensitiveAcMatcher *library.AhoCorasick
 	sensitiveRegexes   []*regexp.Regexp

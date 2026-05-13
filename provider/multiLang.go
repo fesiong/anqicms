@@ -314,7 +314,7 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 			if w.System.FrontUrl != "" {
 				frontUrl = w.System.FrontUrl
 			}
-			baseUrl = frontUrl + "/" + req.Language + "/"
+			baseUrl = frontUrl + "/" + req.Language
 		} else if w.MultiLanguage.Type == config.MultiLangTypeSame {
 			baseUrl = w.System.BaseUrl
 		}

@@ -18,6 +18,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -407,7 +408,7 @@ func (t *TransferWebsite) transferCategories() error {
 			category.SeoTitle = string([]rune(category.SeoTitle)[:250])
 		}
 		if category.Description == "" {
-			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "))
+			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "), 250)
 		} else if utf8.RuneCountInString(category.Description) > 1000 {
 			// 字段最大支持1000
 			category.Description = string([]rune(category.Description)[:1000])
@@ -513,7 +514,7 @@ func (t *TransferWebsite) transferKeywords() error {
 	return nil
 }
 
-func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
+func (t *TransferWebsite) transferArchivesOld(moduleIds []uint) error {
 	t.Current = "archive"
 	t.LastId = 0
 	t.LastMod = ""
@@ -580,7 +581,7 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 				archive.SeoTitle = string([]rune(archive.SeoTitle)[:250])
 			}
 			if archive.Description == "" {
-				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "))
+				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "), 250)
 			} else if utf8.RuneCountInString(archive.Description) > 1000 {
 				// 字段最大支持1000
 				archive.Description = string([]rune(archive.Description)[:1000])
@@ -663,6 +664,171 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 	return nil
 }
 
+func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
+	t.Current = "archive"
+	t.LastId = 0
+	t.LastMod = ""
+	for {
+		resp, err := t.getWebData("archive", t.LastId, t.LastMod)
+		if err != nil {
+			t.ErrorMsg = err.Error()
+			t.Status = 2 // done
+			return err
+		}
+		var result TransferArchives
+		err = json.Unmarshal([]byte(resp.Body), &result)
+		if err != nil {
+			t.ErrorMsg = err.Error()
+			t.Status = 2 // done
+			return errors.New(resp.Body)
+		}
+		if result.Code != 0 {
+			t.ErrorMsg = result.Msg
+			t.Status = 2 // done
+			return errors.New(result.Msg)
+		}
+		if len(result.Data) == 0 {
+			break
+		}
+		t.LastMod = result.LastMod
+		t.LastId = int64(result.Data[len(result.Data)-1].Id)
+
+		var module *model.Module
+		var extras = make([]map[string]interface{}, 0, len(result.Data))
+		var archives = make([]model.ArchiveDraft, 0, len(result.Data))
+		for i := range result.Data {
+			// 如果选择了模块，则只导入对应模块
+			if len(moduleIds) > 0 {
+				exist := false
+				for _, tmpModId := range moduleIds {
+					if tmpModId == result.Data[i].ModuleId {
+						exist = true
+						break
+					}
+				}
+				if !exist {
+					continue
+				}
+			}
+			if module == nil {
+				module = t.w.GetModuleFromCache(result.Data[i].ModuleId)
+			}
+			// 如果ID已存在，则删除
+			var id int64
+			t.w.DB.Model(&model.Archive{}).Where("id = ?", result.Data[i].Id).Pluck("id", &id)
+			if id == 0 {
+				t.w.DB.Model(&model.ArchiveDraft{}).Where("id = ?", result.Data[i].Id).Pluck("id", &id)
+			}
+			if id > 0 {
+				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.Archive{})
+				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.ArchiveData{})
+				// 删除分类关联
+				t.w.DB.Where("archive_id = ?", result.Data[i].Id).Delete(&model.ArchiveCategory{})
+				if module != nil {
+					t.w.DB.Exec("DELETE FROM ? WHERE `id` = ?", clause.Table{Name: module.TableName}, result.Data[i].Id)
+				}
+			}
+			// 迁移过来需要保持ID不变
+			archive := model.ArchiveDraft{
+				Archive: model.Archive{
+					Title:       result.Data[i].Title,
+					SeoTitle:    result.Data[i].SeoTitle,
+					UrlToken:    result.Data[i].UrlToken,
+					Keywords:    result.Data[i].Keywords,
+					Description: result.Data[i].Description,
+					ModuleId:    result.Data[i].ModuleId,
+					CategoryId:  result.Data[i].CategoryId,
+					Views:       result.Data[i].Views,
+					Images:      result.Data[i].Images,
+				},
+				Status: result.Data[i].Status,
+			}
+			if utf8.RuneCountInString(archive.Title) > 190 {
+				archive.Title = string([]rune(archive.Title)[:190])
+			}
+			if utf8.RuneCountInString(archive.Keywords) > 250 {
+				archive.Keywords = string([]rune(archive.Keywords)[:250])
+			}
+			if utf8.RuneCountInString(archive.SeoTitle) > 250 {
+				archive.SeoTitle = string([]rune(archive.SeoTitle)[:250])
+			}
+			if archive.Description == "" {
+				archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data[i].Content), "\n", " "), 250)
+			} else if utf8.RuneCountInString(archive.Description) > 1000 {
+				// 字段最大支持1000
+				archive.Description = string([]rune(archive.Description)[:1000])
+			}
+			if result.Data[i].Logo != "" {
+				archive.Images = append(archive.Images, result.Data[i].Logo)
+			}
+			for x := range archive.Images {
+				archive.Images[x] = strings.Replace(archive.Images[x], t.BaseUrl, "", 1)
+			}
+			archive.CreatedTime = result.Data[i].CreatedTime
+			archive.UpdatedTime = result.Data[i].UpdatedTime
+			archive.UrlToken = strings.TrimSuffix(archive.UrlToken, ".html")
+			archive.Id = result.Data[i].Id
+			if archive.UrlToken == "" {
+				archive.UrlToken = library.GetPinyin(archive.Title, t.w.Content.UrlTokenType == config.UrlTokenTypeSort)
+			}
+			archive.ArchiveData = &model.ArchiveData{
+				Content: ParseContent(result.Data[i].Content),
+			}
+			archives = append(archives, archive)
+			if len(result.Data[i].Extra) > 0 {
+				result.Data[i].Extra["id"] = archive.Id
+				extras = append(extras, result.Data[i].Extra)
+			}
+		}
+		t.SaveBatches(archives, extras)
+	}
+
+	return nil
+}
+
+func (t *TransferWebsite) SaveBatches(archives []model.ArchiveDraft, extras []map[string]interface{}) error {
+	tx := t.w.DB.Begin()
+	defer tx.Commit()
+
+	var archiveCategories = make([]model.ArchiveCategory, 0, len(archives))
+	var archiveData = make([]model.ArchiveData, 0, len(archives))
+	var draftArchives = make([]model.ArchiveDraft, 0, len(archives))
+	var releaseArchives = make([]model.Archive, 0, len(archives))
+	var moduleId uint
+	for i := range archives {
+		if moduleId == 0 {
+			moduleId = archives[i].ModuleId
+		}
+		archiveCategories = append(archiveCategories, model.ArchiveCategory{
+			CategoryId: archives[i].CategoryId,
+			ArchiveId:  archives[i].Id,
+		})
+		archives[i].ArchiveData.Id = archives[i].Id
+		archiveData = append(archiveData, *archives[i].ArchiveData)
+		if archives[i].Status == config.ContentStatusOK {
+			releaseArchives = append(releaseArchives, archives[i].Archive)
+		} else {
+			draftArchives = append(draftArchives, archives[i])
+		}
+	}
+
+	if len(draftArchives) > 0 {
+		// 入库到 draft
+		tx.CreateInBatches(draftArchives, 1000)
+	} else {
+		// release mode
+		tx.CreateInBatches(releaseArchives, 1000)
+	}
+	tx.CreateInBatches(archiveData, 1000)
+	tx.CreateInBatches(archiveCategories, 1000)
+	if len(extras) > 0 {
+		module := t.w.GetModuleFromCache(moduleId)
+		tx.Table(module.TableName).CreateInBatches(extras, 1000)
+	}
+
+	return nil
+}
+
 func (t *TransferWebsite) transferSinglePages() error {
 	t.Current = "singlepage"
 	resp, err := t.getWebData("singlepage", 0, "")
@@ -707,7 +873,7 @@ func (t *TransferWebsite) transferSinglePages() error {
 			category.SeoTitle = string([]rune(category.SeoTitle)[:250])
 		}
 		if category.Description == "" {
-			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "))
+			category.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(category.Content), "\n", " "), 250)
 		} else if utf8.RuneCountInString(category.Description) > 1000 {
 			// 字段最大支持1000
 			category.Description = string([]rune(category.Description)[:1000])

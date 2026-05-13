@@ -3,10 +3,6 @@ package library
 import (
 	"bytes"
 	"fmt"
-	"github.com/gomarkdown/markdown"
-	"github.com/gomarkdown/markdown/html"
-	"github.com/gomarkdown/markdown/parser"
-	"github.com/kataras/iris/v12"
 	"net"
 	"net/url"
 	"reflect"
@@ -15,6 +11,12 @@ import (
 	"strings"
 	"unicode/utf8"
 	"unsafe"
+
+	htmltomarkdown "github.com/JohannesKaufmann/html-to-markdown/v2"
+	"github.com/gomarkdown/markdown"
+	"github.com/gomarkdown/markdown/html"
+	"github.com/gomarkdown/markdown/parser"
+	"github.com/kataras/iris/v12"
 )
 
 func StripTags(src string) string {
@@ -181,12 +183,12 @@ func GetHost(ctx iris.Context) string {
 }
 
 // ParseDescription 对于超过250字的描述，截取的时候，以标点符号为准
-func ParseDescription(content string) (description string) {
-	if utf8.RuneCountInString(content) > 200 {
-		content = string([]rune(content)[:200])
+func ParseDescription(content string, num int) (description string) {
+	if utf8.RuneCountInString(content) > num {
+		content = string([]rune(content)[:num])
 	}
 	lastIndex := strings.LastIndexAny(content, " !,.:;?~。？！，、；：…")
-	if lastIndex >= 150 {
+	if lastIndex >= num-50 {
 		description = content[:lastIndex]
 	} else {
 		description = content
@@ -262,6 +264,19 @@ func MarkdownToHTML(mdStr string, args ...interface{}) string {
 	}
 
 	return string(md)
+}
+
+func HtmlToMarkdown(htmlStr string) string {
+	// 如果本身就是Markdown，直接返回
+	if !strings.HasPrefix(strings.TrimSpace(htmlStr), "<") {
+		return htmlStr
+	}
+	markdown, err := htmltomarkdown.ConvertString(htmlStr)
+	if err != nil {
+		return htmlStr
+	}
+
+	return markdown
 }
 
 type ContentTitle struct {

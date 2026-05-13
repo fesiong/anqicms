@@ -515,7 +515,7 @@ func (w *Website) AnqiAiPseudoArticle(archive *model.Archive, isDraft bool) erro
 			return err
 		}
 		archive.Title = req.Title
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "))
+		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(req.Content), "\n", " "), 250)
 		archive.HasPseudo = 1
 		tx := w.DB
 		if isDraft {
@@ -743,7 +743,7 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 			}
 			tx.Where("`id` = ?", plan.ArticleId).UpdateColumns(map[string]interface{}{
 				"title":       result.Data.Title,
-				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " ")),
+				"description": library.ParseDescription(strings.ReplaceAll(library.StripTags(result.Data.Content), "\n", " "), 250),
 			})
 			// 再保存内容
 			w.DB.Model(&model.ArchiveData{}).Where("`id` = ?", plan.ArticleId).UpdateColumn("content", result.Data.Content)
@@ -1256,15 +1256,19 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 			if i < ln {
 				translated := res.Data.Text[i]
 				// 数据库存储内容
-				textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
-				textLog := model.TranslateTextLog{
-					Md5:        textMd5,
-					Language:   req.Language,
-					ToLanguage: req.ToLanguage,
-					Text:       text,
-					Translated: translated,
+				if translated != "" {
+					textMd5 := library.Md5(req.Language + "-" + req.ToLanguage + "-" + text)
+					textLog := model.TranslateTextLog{
+						Md5:        textMd5,
+						Language:   req.Language,
+						ToLanguage: req.ToLanguage,
+						Text:       text,
+						Translated: translated,
+					}
+					_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
+				} else {
+					log.Printf("no translate text, %+v", text)
 				}
-				_ = w.DB.Where("`md5` = ?", textMd5).FirstOrCreate(&textLog).Error
 
 				textMap[text] = translated
 			}

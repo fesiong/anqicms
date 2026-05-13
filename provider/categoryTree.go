@@ -19,7 +19,7 @@ func NewCategoryTree(categories []*model.Category) *CategoryTree {
 		tree:       []*model.Category{},
 		treeKey:    map[uint]bool{},
 		deep:       1,
-		icons:      []string{"└&nbsp;&nbsp;", "", "", ""},
+		icons:      []string{"└－", "", "", ""},
 		tmp:        map[uint][]*model.Category{},
 	}
 
@@ -27,6 +27,10 @@ func NewCategoryTree(categories []*model.Category) *CategoryTree {
 }
 
 func (ct *CategoryTree) GetTree(rootId uint, add string) []*model.Category {
+	return ct.getTreeRecursive(rootId, add, []string{})
+}
+
+func (ct *CategoryTree) getTreeRecursive(rootId uint, add string, fullTitles []string) []*model.Category {
 	isTop := 1
 	children := ct.getChildren(rootId)
 	space := ct.icons[3]
@@ -48,6 +52,11 @@ func (ct *CategoryTree) GetTree(rootId uint, add string) []*model.Category {
 
 			child.Spacer = add + space
 
+			childFullTitles := make([]string, len(fullTitles))
+			copy(childFullTitles, fullTitles)
+			childFullTitles = append(childFullTitles, child.Title)
+			child.ParentTitles = fullTitles
+
 			isTop++
 			ct.deep++
 			if !ct.treeKey[child.Id] {
@@ -56,7 +65,7 @@ func (ct *CategoryTree) GetTree(rootId uint, add string) []*model.Category {
 			}
 			if ct.getChildren(child.Id) != nil {
 				child.HasChildren = true
-				ct.GetTree(child.Id, add)
+				ct.getTreeRecursive(child.Id, add, childFullTitles)
 				ct.deep--
 			}
 		}
@@ -70,17 +79,23 @@ func (ct *CategoryTree) GetTree(rootId uint, add string) []*model.Category {
 }
 
 func (ct *CategoryTree) GetTreeNode(rootId uint, add string) []*model.Category {
+	return ct.getTreeNodeRecursive(rootId, add, []string{})
+}
+
+func (ct *CategoryTree) getTreeNodeRecursive(rootId uint, add string, fullTitles []string) []*model.Category {
 	var tree []*model.Category
 
-	// 遍历分类列表
 	for _, category := range ct.categories {
-		// 找到当前节点的子节点
 		if category.ParentId == rootId {
 			category.Spacer = add
-			// 递归构建子节点的子树
+
+			childFullTitles := make([]string, len(fullTitles))
+			copy(childFullTitles, fullTitles)
+			childFullTitles = append(childFullTitles, category.Title)
+			category.ParentTitles = fullTitles
+
 			space := add + ct.icons[0]
-			category.Children = ct.GetTreeNode(category.Id, space)
-			// 将当前节点加入到父节点的Children中
+			category.Children = ct.getTreeNodeRecursive(category.Id, space, childFullTitles)
 			tree = append(tree, category)
 		}
 	}

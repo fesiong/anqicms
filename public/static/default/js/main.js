@@ -477,12 +477,16 @@ $(function () {
       for (let i = 0; i < res.data?.length; i++) {
         totalPrice += res.data[i].price * res.data[i].quantity;
       }
+      let subTotal = totalPrice;
+      $('.cart-sub-amount').text(
+        "$" + (subTotal > 0 ? (subTotal / 100).toFixed(2) : 0),
+      );
       $(".cart-amount").text(
         "$" + (totalPrice > 0 ? (totalPrice / 100).toFixed(2) : 0),
       );
       // render - popup cart
       const goodsList = (res.data || []).map((item) => {
-        if (item.price == item.origin_price) {
+        if (item.archive?.price == item.origin_price) {
           item.origin_price = null;
         }
         if ((item.origin_amount = item.amount)) {
@@ -513,13 +517,13 @@ $(function () {
         goodsList.map(
           (
             item,
-          ) => `<a href="${item.link}" class="d-flex gap-3 mb-4 text-decoration-none text-dark">
+          ) => `<a href="${item.archive?.link || ''}" class="d-flex gap-3 mb-4 text-decoration-none text-dark">
             <div class="bg-light" style="width: 70px; height: 70px;">
-              <img src="${item.thumb}" class="w-100 h-100 object-fit-cover" alt="${item.title}">
+              <img src="${item.archive?.thumb || ''}" class="w-100 h-100 object-fit-cover" alt="${item.archive?.title || ''}">
             </div>
             <div>
-              <h6 class="small fw-bold mb-1">${item.title}</h6>
-              <p class="small text-muted mb-0">${item.sku?.title} x ${item.quantity}</p>
+              <h6 class="small fw-bold mb-1">${item.archive?.title || ''}</h6>
+              <p class="small text-muted mb-0">${item.sku?.title || ''} x ${item.quantity}</p>
             </div>
           </a>`,
         ),
@@ -530,23 +534,23 @@ $(function () {
             goodsList.map(
               (item) => `<tr>
                 <td class="ps-0 py-4">
-                  <a class="d-flex text-decoration-none text-dark" href="${item.link}">
+                  <a class="d-flex text-decoration-none text-dark" href="${item.archive?.link || ''}">
                     <div class="bg-light me-4" style="width: 120px; aspect-ratio: 1/1;">
-                      <img src="${item.thumb}" class="img-fluid object-fit-cover w-100 h-100" alt="${item.title}">
+                      <img src="${item.archive?.thumb || ''}" class="img-fluid object-fit-cover w-100 h-100" alt="${item.archive?.title || ''}">
                     </div>
                     <div>
-                      <h6 class="fw-bold mb-1">${item.title}</h6>
-                      <p class="small text-muted mb-2">${item.sku?.title} ${item.order_extras}</p>
-                      <p class="small fw-bold mb-0">$${(item.price / 100).toFixed(2)}</p>
+                      <h6 class="fw-bold mb-1">${item.archive?.title || ''}</h6>
+                      <p class="small text-muted mb-2">${item.sku_values?.map((val) => val.title).join(", ") || ''} ${item.order_extras || ''}</p>
+                      <p class="small fw-bold mb-0">${item.price < item.origin_price ? '<del class="text-muted">$' + (item.origin_price / 100).toFixed(2) + '</del>' + ' ' : ''} $${(item.price / 100).toFixed(2)}</p>
                     </div>
                   </a>
                 </td>
-                <td class="text-center py-4" data-id="${item.cart_id}">
+                <td class="text-center py-4" data-id="${item.id}">
                   <div class="input-group input-group-sm border border-dark mx-auto" style="width: 100px;">
                     <button class="btn btn-link text-dark p-0 border-0 text-decoration-none flex-grow-1 cart-quantity-reduce" type="button">
                       <i class="bi bi-dash"></i>
                     </button>
-                    <input type="number" class="form-control border-0 text-center p-0 flex-grow-1 bg-transparent cart-quantity-input" value="${item.quantity}" min="1" max="${item.sku?.stock || item.stock}" id="cart-quantity-${item.cart_id}" />
+                    <input type="number" class="form-control border-0 text-center p-0 flex-grow-1 bg-transparent cart-quantity-input" value="${item.quantity}" min="1" max="${item.sku?.stock || item.archive?.stock || 0}" id="cart-quantity-${item.id}" />
                     <button class="btn btn-link text-dark p-0 border-0 text-decoration-none flex-grow-1 cart-quantity-increase" type="button">
                       <i class="bi bi-plus"></i>
                     </button>
@@ -568,8 +572,72 @@ $(function () {
       if (show) {
         showCart();
       }
+      // apply coupon to cart
+      // 先看看sessionStorage是否有coupon_code
+      let coupon_code = sessionStorage.getItem("coupon_code");
+      if (coupon_code) {
+        // 验证优惠券是否有效
+        cartCheckCouponCode(coupon_code, goodsList, totalPrice);
+      }
+      $(document).on("click", "#cart-apply-coupon", function () {
+        console.log("click apply coupon");
+        let coupon_code = $('input[name="coupon_code"]').val();
+        if (!coupon_code) {
+          $(this).showToast({ message: "Please enter coupon code." });
+          return;
+        }
+        cartCheckCouponCode(coupon_code, goodsList, totalPrice);
+      });
     });
     return;
+  }
+  function cartCheckCouponCode(coupon_code, goodsList, totalPrice) {
+    // 构建请求参数，需要携带购物车内的完整商品信息，
+    let checkCouponData = {
+      coupon_code: coupon_code,
+      details: goodsList.map((item) => ({
+        goods_id: item.archive_id,
+        goods_sku_id: item.sku?.id || 0,
+        title: item.archive?.title || '',
+        sku_title: item.sku ? item.sku.title : "",
+        sku_values: item.sku_values || [],
+        price: item.price,
+        origin_price: item.origin_price,
+        quantity: item.quantity,
+        thumb: item.archive?.thumb || '',
+        amount: item.amount,
+        wholesale: item.archive?.wholesale,
+        origin_amount: item.origin_amount,
+        order_extra: item.order_extra,
+        order_extras: item.order_extras,
+      })),
+    }
+    $(this).jsonPost({
+      data: checkCouponData,
+      action: "/api/coupon/check",
+      callback: function (res) {
+        if (res.code === 0) {
+          // 有效
+          totalPrice = totalPrice - res.data.coupon_money;
+          $(".cart-amount").text(
+            "$" + (totalPrice > 0 ? (totalPrice / 100).toFixed(2) : 0),
+          );
+          $('#cart-discount').text(
+            "$" + (res.data.coupon_money / 100).toFixed(2),
+          );
+          $('input[name="coupon_code"]').val(coupon_code);
+          sessionStorage.setItem("coupon_code", coupon_code);
+        } else {
+          // 无效
+          $('#cart-discount').text(
+            "$0.00",
+          );
+          $('input[name="coupon_code"]').val('');
+          sessionStorage.removeItem("coupon_code");
+          $(this).showToast({ message: res.msg });
+        }
+      },
+    });
   }
   function showCart() {
     // Cart Notification Logic
@@ -659,6 +727,7 @@ $(function () {
     var sku = {};
     var selectedSkuId = Number(variantId) || 0; // 默认选中的sku id
     var selectedSku = {};
+    var selectedValueItems = [];
 
     function updateStockStatus(stock) {
       if (stock < 1) {
@@ -700,23 +769,21 @@ $(function () {
           selectedValues[optionId] = parseInt(selectedValue);
         }
       });
-
       // 遍历每个选项组，检查其中的值是否与其他已选值形成有库存的组合
-      $(".sku-option").each(function () {
+      $(".sku-option").each(function (index) {
         let currentOptionId = $(this).data("option");
-
+        let isAttribute = $(this).data("is-attribute");
         // 对当前选项组中的每个值，检查是否存在一个完整组合且有库存
         $(this)
           .find("label[data-value]")
           .each(function () {
             const currentValueId = parseInt($(this).data("value"));
-
             // 创建一个临时的选中值对象，包含当前测试的值
             let tempSelectedValues = Object.assign({}, selectedValues);
             tempSelectedValues[currentOptionId] = currentValueId;
-
             // 检查是否存在一个包含这些值的SKU且有库存
-            let hasAvailableSku = false;
+            let hasAvailableSku = isAttribute == 'True' ? true : false;
+            let hasShowSku = (index > 0 && isAttribute != 'True') ? false : true;
 
             for (let i = 0; i < sku.skus.length; i++) {
               const skuItem = sku.skus[i];
@@ -728,11 +795,16 @@ $(function () {
 
                 for (let optionId in tempSelectedValues) {
                   let found = false;
-
-                  for (let j = 0; j < skuItem.values.length; j++) {
-                    if (skuItem.values[j].id === tempSelectedValues[optionId]) {
-                      found = true;
-                      break;
+                  let option = sku.options.find(opt => opt.id == optionId) || {};
+                  // 属性值不在sku的values里，单独判断
+                  if (option.is_attribute) {
+                    found = true;
+                  } else {
+                    for (let j = 0; j < skuItem.values.length; j++) {
+                      if (skuItem.values[j].id === tempSelectedValues[optionId]) {
+                        found = true;
+                        break;
+                      }
                     }
                   }
 
@@ -748,8 +820,47 @@ $(function () {
                 }
               }
             }
+            // 检查此SKU是否有效（状态正常）
+            for (let i = 0; i < sku.skus.length; i++) {
+              const skuItem = sku.skus[i];
+              if (skuItem.status !== 0) {
+                // 检查此SKU是否包含了当前选中的所有值
+                let matchesAllSelected = true;
 
+                for (let optionId in tempSelectedValues) {
+                  let found = false;
+                  let option = sku.options.find(opt => opt.id == optionId) || {};
+                  if (option.is_attribute) {
+                    found = true;
+                  } else {
+                    for (let j = 0; j < skuItem.values.length; j++) {
+                      if (skuItem.values[j].id === tempSelectedValues[optionId]) {
+                        found = true;
+                        break;
+                      }
+                    }
+                  }
+
+                  if (!found) {
+                    matchesAllSelected = false;
+                    break;
+                  }
+                }
+
+                if (matchesAllSelected) {
+                  hasShowSku = true;
+                  break;
+                }
+              }
+            }
             // 如果没有找到任何包含此值且有库存的完整SKU组合，则禁用该选项
+            // 如果没有找到任何包含此值且有效（有库存且状态正常）的完整SKU组合，则隐藏该选项
+            if (!hasShowSku) {
+              $(this).addClass("d-none");
+            } else {
+              // 确保有效的选项是显示的
+              $(this).removeClass("d-none");
+            }
             if (!hasAvailableSku) {
               $(this).addClass("opacity-50 text-decoration-line-through");
             }
@@ -783,8 +894,113 @@ $(function () {
           }
           // stock
           updateStockStatus(sku.stock);
-          // sku items
-          if (sku.skus.length > 0) {
+          // 加价SKU模式 (option_type == 2)
+          if (sku.option_type == 2 && sku.options && sku.options.length > 0) {
+            // 设置默认选中的属性值（选择各属性的第一个默认值或第一个有库存的值）
+            for (let i = 0; i < sku.options.length; i++) {
+              let option = sku.options[i];
+              let selectedValue = null;
+              // 优先选择有库存的默认值
+              // 选择默认值
+              for (let j = 0; j < option.values.length; j++) {
+                let val = option.values[j];
+                if (val.is_default && (val.stock > 0 || val.is_attribute)) {
+                  selectedValue = val;
+                  break;
+                }
+              }
+              if (!selectedValue) {
+                // 选择默认值
+                for (let j = 0; j < option.values.length; j++) {
+                  let val = option.values[j];
+                  if (option.is_attribute || val.stock > 0) {
+                    selectedValue = val;
+                    break;
+                  }
+                }
+              }
+              // 设置选中项
+              if (selectedValue) {
+                selectedValue.option_title = option.title;
+                selectedValueItems.push(selectedValue);
+                let valEl = $(`label[data-value="${selectedValue.id}"]`);
+                valEl
+                  .addClass("active")
+                  .siblings()
+                  .removeClass("active")
+                  .find("input")
+                  .prop("checked", false);
+                valEl.find("input").prop("checked", true);
+                valEl
+                  .closest(".sku-option")
+                  .find(".selectedValue")
+                  .text(selectedValue.title);
+              }
+            }
+            updatePriceAndStockForAddonMode();
+            getSelectedValueItems();
+            // 加价模式下的属性选择事件
+            $(`label[data-value]`).click(function (e) {
+              // 检查是否有库存
+              if ($(this).hasClass("disabled-stock")) {
+                e.preventDefault();
+                return;
+              }
+
+              $(this)
+                .addClass("active")
+                .siblings()
+                .removeClass("active")
+                .find("input")
+                .prop("checked", false);
+              $(this).find("input").prop("checked", true);
+              $(this)
+                .closest(".sku-option")
+                .find(".selectedValue")
+                .text($(this).text());
+              // 更新价格和库存
+              updatePriceAndStockForAddonMode();
+              getSelectedValueItems();
+            });
+          } else if (sku.skus.length > 0) {
+            // 普通多规格模式
+            // 组合SKU模式 (option_type == 1)
+            // 设置属性的选项值
+            for (let i = 0; i < sku.options.length; i++) {
+              if (!sku.options[i].is_attribute) {
+                continue;
+              }
+              let option = sku.options[i];
+              let selectedValue = null;
+              // 选择默认值
+              for (let j = 0; j < option.values.length; j++) {
+                let val = option.values[j];
+                if (val.is_default) {
+                  selectedValue = val;
+                  break;
+                }
+              }
+              // 重复一遍
+              if(!selectedValue && option.values.length > 0) {
+                selectedValue = option.values[0];
+              }
+              if (selectedValue) {
+                // 设置选项值
+                let valEl = $(`label[data-value="${selectedValue.id}"]`);
+                valEl
+                  .addClass("active")
+                  .siblings()
+                  .removeClass("active")
+                  .find("input")
+                  .prop("checked", false);
+                valEl.find("input").prop("checked", true);
+                valEl
+                  .closest(".sku-option")
+                  .find(".selectedValue")
+                  .text(selectedValue.title);
+              }
+            }
+            // 设置sku的选项值
             for (var i = 0; i < sku.skus.length; i++) {
               if (selectedSkuId === 0 && sku.skus[i].stock > 0) {
                 selectedSku = sku.skus[0];
@@ -820,6 +1036,7 @@ $(function () {
             }
             // 更新SKU选项的禁用状态
             updateSkuOptionsAvailability();
+            getSelectedValueItems();
             // change sku options
             $(`label[data-value]`).click(function (e) {
               $(this)
@@ -833,11 +1050,12 @@ $(function () {
                 .closest(".sku-option")
                 .find(".selectedValue")
                 .text($(this).text());
-              let selectedValues = [];
+              let selectedValues = {};
               $(".sku-option").each(function () {
                 let selectedValue = $(this).find("label.active").data("value");
                 if (selectedValue) {
-                  selectedValues.push(parseInt(selectedValue));
+                  let optionId = parseInt($(this).data("option"));
+                  selectedValues[optionId] = parseInt(selectedValue);
                 }
               });
               // 根据选中的值查找匹配的SKU
@@ -847,23 +1065,28 @@ $(function () {
                 // 检查当前SKU是否与所选值匹配
                 if (
                   skuItem.values &&
-                  skuItem.values.length === selectedValues.length
+                  skuItem.values.length <= Object.values(selectedValues).length
                 ) {
                   let match = true;
-                  for (let j = 0; j < selectedValues.length; j++) {
+                  for (let optionId in selectedValues) {
                     let valueFound = false;
-                    for (let k = 0; k < skuItem.values.length; k++) {
-                      if (skuItem.values[k].id === selectedValues[j]) {
-                        valueFound = true;
-                        break;
+                    let option = sku.options.find(opt => opt.id == optionId) || {};
+                    if (option.is_attribute) {
+                      valueFound = true;
+                    } else {
+                      for (let j = 0; j < skuItem.values.length; j++) {
+                        if (skuItem.values[j].id === selectedValues[optionId]) {
+                          valueFound = true;
+                          break;
+                        }
                       }
                     }
+
                     if (!valueFound) {
                       match = false;
                       break;
                     }
                   }
-
                   if (match) {
                     matchedSku = skuItem;
                     break;
@@ -906,12 +1129,128 @@ $(function () {
               }
               // 更新SKU选项的禁用状态
               updateSkuOptionsAvailability();
+              getSelectedValueItems();
             });
           }
         }
       },
       "json",
     );
+
+    function getSelectedValueItems() {
+      // 更新选中的虚拟SKU信息（用于加入购物车）
+      let selectedValues = [];
+      $(".sku-option").each(function () {
+        let selectedValue = $(this).find("label.active");
+        if (selectedValue.length > 0) {
+          let valueId = parseInt(selectedValue.data("value"));
+          for (let i = 0; i < sku.options.length; i++) {
+            let option = sku.options[i];
+            for (let j = 0; j < option.values.length; j++) {
+              let val = option.values[j];
+              if (val.id === valueId) {
+                val.option_title = option.title;
+                selectedValues.push(val);
+                break;
+              }
+            }
+          }
+        }
+      });
+      
+      selectedValueItems = selectedValues;
+    }
+
+    // 更新加价模式下属性值的库存禁用状态
+    function updateAddonOptionStockStatus() {
+      if (!sku || sku.option_type != 2 || !sku.options) {
+        return;
+      }
+
+      // 先移除所有禁用状态
+      $("label[data-value]").removeClass("disabled-stock opacity-50 text-decoration-line-through");
+
+      // 遍历所有属性组的属性值
+      for (let i = 0; i < sku.options.length; i++) {
+        let option = sku.options[i];
+        if (option.is_attribute) {
+          continue;
+        }
+        for (let j = 0; j < option.values.length; j++) {
+          let val = option.values[j];
+          let valEl = $(`label[data-value="${val.id}"]`);
+
+          // 检查库存状态
+          if (val.stock <= 0) {
+            valEl.addClass("disabled-stock opacity-50 text-decoration-line-through");
+            valEl.find("input").prop("disabled", true);
+          } else {
+            valEl.find("input").prop("disabled", false);
+          }
+        }
+      }
+    }
+
+    // 加价模式下更新价格和库存
+    function updatePriceAndStockForAddonMode() {
+      if (!sku || sku.option_type != 2) {
+        return;
+      }
+
+      let totalPrice = sku.price; // 商品基础价格
+      let minStock = sku.stock; // 默认使用商品库存
+      let hasStockInfo = false;
+      let selectedValueIds = [];
+
+      // 遍历所有属性组
+      $(".sku-option").each(function () {
+        let isAttribute = $(this).data("is-attribute");
+        let selectedValue = $(this).find("label.active").data("value");
+        if (selectedValue) {
+          let valueId = parseInt(selectedValue);
+          selectedValueIds.push(valueId);
+
+          // 在options中查找对应的属性值
+          for (let i = 0; i < sku.options.length; i++) {
+            let option = sku.options[i];
+            for (let j = 0; j < option.values.length; j++) {
+              let val = option.values[j];
+              if (val.id === valueId) {
+                // 累加加价
+                if (val.price) {
+                  totalPrice += val.price;
+                }
+                // 更新最小库存
+                if (isAttribute != "True" && val.stock > 0) {
+                  hasStockInfo = true;
+                  if (val.stock < minStock) {
+                    minStock = val.stock;
+                  }
+                }
+                break;
+              }
+            }
+          }
+        }
+      });
+
+      // 更新价格显示
+      let priceText = sku.currency_symbol + (totalPrice / 100).toFixed(2);
+      $("#product-price").html(priceText);
+
+      // 更新库存状态（如果有属性库存信息）
+      if (hasStockInfo) {
+        updateStockStatus(minStock);
+      }
+
+      selectedSku = {
+        id: 0, // 加价模式没有实际SKU ID
+      //  title: skuTitle,
+        price: totalPrice,
+        stock: hasStockInfo ? minStock : sku.stock,
+        origin_price: sku.origin_price,
+      };
+    }
     // add to cart
     $(".btn-add-to-cart").click(function (e) {
       // quantity
@@ -932,8 +1271,9 @@ $(function () {
       const cartItem = {
         archive_id: sku.id,
         title: sku.title,
-        sku_title: selectedSku.title,
+        sku_title: selectedSku.title || selectedValueItems.map((val) => val.title).join(" / "),
         sku_id: selectedSku.id || 0,
+        sku_values: selectedValueItems || [],
         price: price,
         quantity: quantity,
         amount: quantity * price,
@@ -976,6 +1316,7 @@ $(function () {
         sku: selectedSku,
         sku_title: selectedSku.title,
         sku_id: selectedSku.id || 0,
+        sku_values: selectedValueItems || [],
         price: price,
         quantity: Number(quantity) || 1,
         amount: quantity * price,
@@ -1023,16 +1364,16 @@ $(function () {
         orderCheckoutInfo.details?.map(
           (
             item,
-          ) => `<a href="${item.link}" class="d-flex text-dark text-decoration-none align-items-center mb-3">
+          ) => `<a href="${item.link || ''}" class="d-flex text-dark text-decoration-none align-items-center mb-3">
               <div class="position-relative bg-white border rounded me-3" style="width: 64px; height: 64px;">
-                <img src="${item.thumb}" class="img-fluid rounded w-100 h-100 object-fit-cover" alt="${item.title}">
+                <img src="${item.thumb || ''}" class="img-fluid rounded w-100 h-100 object-fit-cover" alt="${item.title || ''}">
                 <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-secondary" style="font-size: 0.7rem;">${item.quantity}</span>
               </div>
               <div class="flex-grow-1">
-                <h6 class="small fw-bold mb-0">${item.title}</h6>
-                <p class="small text-muted mb-0">${item.sku_title || ''}</p>
+                <h6 class="small fw-bold mb-0">${item.title || ''}</h6>
+                <p class="small text-muted mb-0">${item.sku_values?.map((v) => v.title).join(' / ') || item.sku_title || ''}</p>
               </div>
-              <span class="small fw-bold">$${((item.price * item.quantity) / 100).toFixed(2)}</span>
+              <span class="small fw-bold">$${((item.origin_price * item.quantity) / 100).toFixed(2)}</span>
             </a>`,
         ),
       );
@@ -1045,9 +1386,21 @@ $(function () {
               <span class="text-muted">Discount</span>
               <span class="fw-bold">$${(orderCheckoutInfo.discount_amount / 100).toFixed(2)}</span>
             </div>
+            <div class="d-flex justify-content-between ms-2 mb-2 small">
+              <span class="text-muted">User Discount</span>
+              <span class="text-muted">$${(orderCheckoutInfo.user_discount / 100).toFixed(2)}</span>
+            </div>
+            <div class="d-flex justify-content-between ms-2 mb-2 small">
+              <span class="text-muted">Coupon Discount</span>
+              <span class="text-muted">$${(orderCheckoutInfo.coupon_discount / 100).toFixed(2)}</span>
+            </div>
+            <div class="d-flex justify-content-between ms-2 mb-2 small">
+              <span class="text-muted">Shipping Discount</span>
+              <span class="text-muted">$${(orderCheckoutInfo.shipping_discount / 100).toFixed(2)}</span>
+            </div>
             <div class="d-flex justify-content-between mb-2 small">
               <span class="text-muted">Shipping</span>
-              <span class="text-muted">Calculated at next step</span>
+              <span class="fw-bold">$${(orderCheckoutInfo.shipping_fee / 100).toFixed(2)}</span>
             </div>
             <div class="d-flex justify-content-between mt-3">
               <span class="h5 fw-bold mb-0">Total</span>
@@ -1093,9 +1446,10 @@ $(function () {
         orderCheckoutInfo.details.push({
           type: orderItem.type || "goods",
           goods_id: orderItem.id,
-          goods_sku_id: orderItem.sku.id,
+          goods_sku_id: orderItem.sku?.id || 0,
           title: orderItem.title,
           sku_title: orderItem.sku ? orderItem.sku.title : "",
+          sku_values: orderItem.sku_values || [],
           price: orderItem.price,
           quantity: orderItem.quantity,
           thumb: orderItem.thumb,
@@ -1106,6 +1460,12 @@ $(function () {
           order_extras: orderItem.order_extras,
         });
         loadCheckoutInfo();
+        // 先检查sessionStorage是否有优惠券
+        let coupon_code = sessionStorage.getItem("coupon_code");
+        if (coupon_code) {
+          // 验证优惠券是否有效
+          checkCouponCode(coupon_code);
+        }
       } else {
         $(this).showToast({ message: "No Goods Selected" }, function () {
           window.location.href = "/";
@@ -1128,15 +1488,17 @@ $(function () {
               orderItem.origin_amount = null;
             }
             orderCheckoutInfo.details.push({
-              goods_id: orderItem.id,
-              goods_sku_id: orderItem.sku.id,
-              title: orderItem.title,
+              goods_id: orderItem.archive_id,
+              goods_sku_id: orderItem.sku?.id || 0,
+              title: orderItem.archive?.title || '',
               sku_title: orderItem.sku ? orderItem.sku.title : "",
+              sku_values: orderItem.sku_values || [],
               price: orderItem.price,
+              origin_price: orderItem.origin_price,
               quantity: orderItem.quantity,
-              thumb: orderItem.thumb,
+              thumb: orderItem.archive?.thumb || '',
               amount: orderItem.amount,
-              wholesale: orderItem.wholesale,
+              wholesale: orderItem.archive?.wholesale,
               origin_amount: orderItem.origin_amount,
               order_extra: orderItem.order_extra,
               order_extras: orderItem.order_extras,
@@ -1144,6 +1506,12 @@ $(function () {
           }
 
           loadCheckoutInfo();
+          // 先检查sessionStorage是否有优惠券
+          let coupon_code = sessionStorage.getItem("coupon_code");
+          if (coupon_code) {
+            // 验证优惠券是否有效
+            checkCouponCode(coupon_code);
+          }
 
           renderSummary();
         }
@@ -1164,12 +1532,61 @@ $(function () {
               if (orderCheckoutInfo.address[name])
                 $(this).val(orderCheckoutInfo.address[name]);
             });
+            // 需要再次检查结算价格，因为地址可能会改变
+            // 从而影响到结算价格
+            if (orderCheckoutInfo.details.length > 0) {
+              loadCheckoutInfo();
+            }
           }
         },
         "json",
       );
     }
     getAddress();
+    // 处理地址加载
+    // 先加载国家，再加载省份
+    // 先检查localStorage是否有缓存
+    let countries = JSON.parse(localStorage.getItem("countries")) || [];
+    if (countries.length > 0) {
+      $("#country").html('<option value="">Select Country</option>' + countries.map((item) => `<option value="${item.name}" data-code="${item.iso2}">${item.name}</option>`).join(""));
+    } else {
+      $.get("/api/place/countries", function (res) {
+        if (res.code === 0) {
+          countries = res.data || [];
+          localStorage.setItem("countries", JSON.stringify(countries));
+          $("#country").html('<option value="">Select Country</option>' + countries.map((item) => `<option value="${item.name}" data-code="${item.iso2}">${item.name}</option>`).join(""));
+        }
+      });
+    }
+    $(document).on("change", "#country", function () {
+      let country = $(this).val();
+      let code = $(this).find("option:selected").data("code");
+      $('#country_code').val(code);
+      $.get("/api/place/country/states", { country_code: code, country: country }, function (res) {
+        if (res.code === 0) {
+          provinces = res.data || [];
+          $("#province").html('<option value="">State / Province</option>' + provinces.map((item) => `<option value="${item.name}" data-code="${item.iso2}">${item.name}</option>`).join(""));
+        }
+      });
+      // 需要再次检查结算价格，因为国家和省份可能会改变
+      // 从而影响到结算价格
+      orderCheckoutInfo.address.country_code = code;
+      orderCheckoutInfo.address.country = country;
+      orderCheckoutInfo.address.province_code = "";
+      orderCheckoutInfo.address.province = "";
+      loadCheckoutInfo();
+    });
+    $(document).on("change", "#province", function () {
+      let province = $(this).val();
+      let code = $(this).find("option:selected").data("code");
+      $("#province_code").val(code);
+      // 需要再次检查结算价格，因为省份可能会改变
+      // 从而影响到结算价格
+      orderCheckoutInfo.address.province_code = code;
+      orderCheckoutInfo.address.province = province;
+      loadCheckoutInfo();
+    });
+    // 地址处理完毕
     function loadCheckoutInfo() {
       // 拉取商品信息
       $.ajax({
@@ -1200,10 +1617,38 @@ $(function () {
       });
     }
     // 选择优惠券
+    // 和 cart的数据有一些差异，这里直接传orderCheckoutInfo
+    function checkCouponCode(coupon_code) {
+      // 构建请求参数，需要携带购物车内的完整商品信息，
+      let checkCouponData = {
+        ...orderCheckoutInfo,
+        coupon_code: coupon_code,
+      }
+      $(this).jsonPost({
+        data: checkCouponData,
+        action: "/api/coupon/check",
+        callback: function (res) {
+          if (res.code === 0) {
+            // 有效
+            orderCheckoutInfo.coupon_code = coupon_code;
+            // 更新价格
+            // 需要使用 loadCheckoutInfo(); 更新商品信息
+            loadCheckoutInfo();
+            $('input[name="coupon_code"]').val(coupon_code);
+            sessionStorage.setItem("coupon_code", coupon_code);
+          } else {
+            // 无效
+            orderCheckoutInfo.coupon_code = '';
+            $('input[name="coupon_code"]').val('');
+            sessionStorage.removeItem("coupon_code");
+            $(this).showToast({ message: res.msg });
+          }
+        },
+      });
+    }
     $(document).on("click", "#apply-coupon", function () {
       var coupon_code = $('input[name="coupon_code"]').val();
-      orderCheckoutInfo.coupon_code = coupon_code;
-      loadCheckoutInfo();
+      checkCouponCode(coupon_code);
     });
     // pay
     var payXhr = false;
@@ -1238,6 +1683,8 @@ $(function () {
           if (res.code === 0) {
             orderId = res.data.order_id;
             orderCheckoutInfo.order_id = orderId;
+            // 删除sessionStorage中的优惠券
+            sessionStorage.removeItem("coupon_code");
             // 创建订单完了，再继续创建支付信息
             resolve(res);
           } else {

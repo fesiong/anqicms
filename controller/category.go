@@ -88,6 +88,7 @@ func CategoryPage(ctx iris.Context) {
 		ctx.ViewData("webInfo", webInfo)
 	}
 
+	ctx.ViewData("module", module)
 	ctx.ViewData("category", category)
 
 	tmpTpl := fmt.Sprintf("%s/list-%d.html", module.TableName, category.Id)

@@ -179,6 +179,7 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.PaymentAccount{},
 			&model.PaymentStatistic{},
 			&model.MailPlan{},
+			&model.OrderOptionStock{},
 		}
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)

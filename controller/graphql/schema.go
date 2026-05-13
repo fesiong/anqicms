@@ -233,6 +233,9 @@ func init() {
 			"price": &graphql.Field{
 				Type: graphql.Int,
 			},
+			"stock": &graphql.Field{
+				Type: graphql.Int,
+			},
 			"is_default": &graphql.Field{
 				Type: graphql.Boolean,
 			},
@@ -423,6 +426,9 @@ func init() {
 				Type: graphql.Int,
 			},
 			"stock": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"option_type": &graphql.Field{
 				Type: graphql.Int,
 			},
 			"options": &graphql.Field{
@@ -793,6 +799,12 @@ func init() {
 				Type: graphql.Int,
 			},
 			"user_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"first_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"last_name": &graphql.Field{
 				Type: graphql.String,
 			},
 			"url_token": &graphql.Field{

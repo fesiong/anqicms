@@ -13,6 +13,7 @@ type TinyArchive struct {
 	Type        string `json:"type"` // archive, category, tag
 	Id          int64  `json:"-" gorm:"column:id"`
 	ModuleId    uint   `json:"module_id"`
+	CategoryId  uint   `json:"category_id"`
 	Title       string `json:"title"`
 	Keywords    string `json:"keywords"`
 	Description string `json:"description"`

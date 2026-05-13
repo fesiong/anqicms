@@ -31,6 +31,7 @@ type Archive struct {
 	Sort         uint                   `json:"sort"`         // 数值越大，越靠前
 	Draft        bool                   `json:"draft"`        // 是否是存草稿
 	RelationIds  []int64                `json:"relation_ids"` // 相关文档的ID
+	Views        uint                   `json:"views"`        // 浏览量
 	// 产品的字段
 	OriginPrice    int64                `json:"origin_price"`
 	CostPrice      int64                `json:"cost_price"`
@@ -100,6 +101,7 @@ type ArchiveOptionValue struct {
 	Color       string   `json:"color"`
 	Images      []string `json:"images"`
 	Price       int64    `json:"price"` // 加价，sku加价模式使用
+	Stock       int64    `json:"stock"` // sku加价模式使用
 	IsDefault   bool     `json:"is_default"`
 	OptionTitle string   `json:"option_title"`
 }
@@ -132,16 +134,17 @@ type ArchiveReplaceRequest struct {
 }
 
 type ArchivesUpdateRequest struct {
-	Ids         []int64 `json:"ids"`
-	ParentId    int64   `json:"parent_id"`
-	CategoryId  uint    `json:"category_id"`
-	CategoryIds []uint  `json:"category_ids"`
-	Status      uint    `json:"status"`
-	Flag        string  `json:"flag"`
-	Time        uint    `json:"time"`
-	DailyLimit  int     `json:"daily_limit"` //每日限额
-	StartHour   int     `json:"start_hour"`  //每天开始时间
-	EndHour     int     `json:"end_hour"`    //每天结束时间
+	Ids         []int64  `json:"ids"`
+	ParentId    int64    `json:"parent_id"`
+	CategoryId  uint     `json:"category_id"`
+	CategoryIds []uint   `json:"category_ids"`
+	Status      uint     `json:"status"`
+	Flag        string   `json:"flag"`
+	Time        uint     `json:"time"`
+	Tags        []string `json:"tags"`
+	DailyLimit  int      `json:"daily_limit"` //每日限额
+	StartHour   int      `json:"start_hour"`  //每天开始时间
+	EndHour     int      `json:"end_hour"`    //每天结束时间
 }
 
 type ArchivePasswordRequest struct {

@@ -485,6 +485,12 @@ func (w *Website) SetOrderCanceled(order *model.Order) error {
 			if detail.GoodsId > 0 {
 				w.DB.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
 			}
+			// 退回属性值扣减的库存
+			var records []*model.OrderOptionStock
+			w.DB.Where("order_detail_id = ?", detail.Id).Find(&records)
+			for _, record := range records {
+				w.DB.Model(&model.ArchiveOptionValue{}).Where("id = ?", record.OptionValueId).UpdateColumn("stock", gorm.Expr("stock + ?", record.Quantity))
+			}
 		}
 	}
 
@@ -963,6 +969,25 @@ func (w *Website) SuccessRefundOrder(refund *model.OrderRefund, order *model.Ord
 	if err != nil {
 		//
 	}
+	// 退还库存
+	if order.Type != config.OrderTypeVip {
+		var details []*model.OrderDetail
+		w.DB.Where("order_id = ?", order.OrderId).Find(&details)
+		for _, detail := range details {
+			if detail.GoodsSkuId > 0 {
+				w.DB.Model(&model.ArchiveSku{}).Where("id = ?", detail.GoodsSkuId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+			}
+			if detail.GoodsId > 0 {
+				w.DB.Model(&model.Archive{}).Where("id = ?", detail.GoodsId).UpdateColumn("stock", gorm.Expr("stock + ?", detail.Quantity))
+			}
+			// 退回属性值扣减的库存
+			var records []*model.OrderOptionStock
+			w.DB.Where("order_detail_id = ?", detail.Id).Find(&records)
+			for _, record := range records {
+				w.DB.Model(&model.ArchiveOptionValue{}).Where("id = ?", record.OptionValueId).UpdateColumn("stock", gorm.Expr("stock + ?", record.Quantity))
+			}
+		}
+	}
 
 	tx.Commit()
 
@@ -1070,6 +1095,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	var amount int64
 	var originAmount int64
+	var userDiscountAmount int64
 	var remark = req.Remark
 	var sellerId uint = 0
 	if remark == "" {
@@ -1159,6 +1185,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
 		amount += detailAmount
 		originAmount += originDetailAmount
 		//给每条子订单入库
@@ -1209,6 +1236,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		}
 		detailAmount := price * int64(req.Details[0].Quantity)
 		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
 		amount += detailAmount
 		originAmount += originDetailAmount
 		//给每条子订单入库
@@ -1319,6 +1347,90 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					}
 				}
 			}
+			// 计算运费，非包邮商品才计算运费
+			weight, volume := 0.0, 0.0
+			if archive.NeedLogistics && !archive.IsFreeShipping {
+				// 计算重量和体积
+				tmpVolume, tmpWeight := w.CalculateShippingAttrs(archive, v.Quantity)
+				if archiveSku != nil {
+					tmpVolume2, tmpWeight2 := w.CalculateSkuShippingAttrs(archiveSku, v.Quantity)
+					if tmpVolume2 > 0 {
+						tmpVolume = tmpVolume2
+					}
+					if tmpWeight2 > 0 {
+						tmpWeight = tmpWeight2
+					}
+				}
+				weight = tmpWeight
+				volume = tmpVolume
+				calcWeight += weight
+				calcQuantity += v.Quantity
+				calcVolume += volume
+			}
+			// 先将detail入库，得到id
+			orderDetail := model.OrderDetail{
+				OrderId:     order.OrderId,
+				UserId:      userId,
+				GoodsId:     v.GoodsId,
+				GoodsSkuId:  v.GoodsSkuId,
+				Price:       price,
+				OriginPrice: originPrice,
+				Quantity:    v.Quantity,
+				Weight:      weight,
+				Volume:      volume,
+				Status:      1,
+				OrderExtra:  v.OrderExtra,
+				SkuValues:   skuValues,
+			}
+			err = tx.Save(&orderDetail).Error
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			// end
+			// 处理 skuValues
+			if archive.OptionType == config.OptionTypePrice && len(skuValues) > 0 {
+				// 加价属性处理
+				var optionPrice int64 = 0
+				var originOptionPrice int64 = 0
+				for _, sv := range skuValues {
+					// 如果option是属性，不需要处理库存
+					option, err := w.GetArchiveOption(archive.Id, sv.OptionId)
+					if err != nil {
+						// 不存在属性
+						tx.Rollback()
+						return nil, errors.New("option not found")
+					}
+					// 获取optionValue
+					optionValue, err := w.GetArchiveOptionValue(archive.Id, sv.Id)
+					if err != nil {
+						// 不存在属性值
+						tx.Rollback()
+						return nil, errors.New("option value not found")
+					}
+					if !option.IsAttribute && archive.AllowOversold == false {
+						// 需要处理库存
+						if int(optionValue.Stock) < v.Quantity {
+							tx.Rollback()
+							return nil, errors.New("out of stock")
+						}
+					}
+					if optionValue.Price > 0 {
+						optionPrice += optionValue.Price
+						originOptionPrice += optionValue.Price
+					}
+					// 减库存
+					tx.Model(&model.ArchiveOptionValue{}).Where("id = ?", optionValue.Id).UpdateColumns(map[string]interface{}{
+						"stock":      gorm.Expr("stock - ?", v.Quantity),
+						"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
+					})
+					// 3. 记录扣减记录（用于退款恢复）
+					w.CreateOrderOptionStockRecords(order.OrderId, orderDetail.Id, optionValue.Id, v.Quantity)
+				}
+				// 更新价格
+				price += optionPrice
+				originPrice += originOptionPrice
+			}
 			// 减库存
 			tx.Model(&model.Archive{}).Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
 				"stock":      gorm.Expr("stock - ?", v.Quantity),
@@ -1353,47 +1465,13 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 			}
 			detailAmount := price * int64(v.Quantity)
 			originDetailAmount := originPrice * int64(v.Quantity)
-
-			// 计算运费，非包邮商品才计算运费
-			weight, volume := 0.0, 0.0
-			if archive.NeedLogistics && !archive.IsFreeShipping {
-				// 计算重量和体积
-				tmpVolume, tmpWeight := w.CalculateShippingAttrs(archive, v.Quantity)
-				if archiveSku != nil {
-					tmpVolume2, tmpWeight2 := w.CalculateSkuShippingAttrs(archiveSku, v.Quantity)
-					if tmpVolume2 > 0 {
-						tmpVolume = tmpVolume2
-					}
-					if tmpWeight2 > 0 {
-						tmpWeight = tmpWeight2
-					}
-				}
-				weight = tmpWeight
-				volume = tmpVolume
-				calcWeight += weight
-				calcQuantity += v.Quantity
-				calcVolume += volume
-			}
+			userDiscountAmount += originDetailAmount - detailAmount
 
 			amount += detailAmount
 			originAmount += originDetailAmount
-			//给每条子订单入库
-			orderDetail := model.OrderDetail{
-				OrderId:      order.OrderId,
-				UserId:       userId,
-				GoodsId:      v.GoodsId,
-				GoodsSkuId:   v.GoodsSkuId,
-				Price:        price,
-				OriginPrice:  originPrice,
-				Amount:       detailAmount,
-				OriginAmount: originDetailAmount,
-				Quantity:     v.Quantity,
-				Weight:       weight,
-				Volume:       volume,
-				Status:       1,
-				OrderExtra:   v.OrderExtra,
-				SkuValues:    skuValues,
-			}
+			//更新子订单
+			orderDetail.Amount = detailAmount
+			orderDetail.OriginAmount = originDetailAmount
 			err = tx.Save(&orderDetail).Error
 			if err != nil {
 				tx.Rollback()
@@ -1415,6 +1493,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	order.Amount = amount
 	order.OriginAmount = originAmount
+	order.UserDiscount = userDiscountAmount
 	if couponCode != nil {
 		if couponCode.Status != 0 {
 			tx.Rollback()
@@ -1422,13 +1501,13 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		}
 		couponMoney := couponCode.GetMoney(order.Amount)
 		order.CouponCodeId = couponCode.Code
+		order.CouponDiscount = couponMoney
 		order.Amount = order.Amount - couponMoney
 		// 使用coupon Code
 		couponCode.OrderId = order.OrderId
 		couponCode.UserId = int64(userId)
 		_ = w.UseCouponCode(couponCode)
 	}
-	order.DiscountAmount = originAmount - amount
 
 	if calcQuantity > 0 {
 		order.ShippingQuantity = calcQuantity
@@ -1457,6 +1536,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		// 更新订单金额
 		order.Amount += order.ShippingFee
 	}
+	order.DiscountAmount = order.UserDiscount + order.CouponDiscount + order.ShippingDiscount
 
 	// orderService
 	if len(req.ServiceIds) > 0 {
@@ -2155,7 +2235,10 @@ func (w *Website) CheckCartAndOrders() {
 				items, _ := w.GetCartList(userId, "", 1, 100)
 				var amount int64
 				for _, item := range items {
-					amount += item.Price * int64(item.Quantity)
+					if item.Archive == nil {
+						continue
+					}
+					amount += (item.Archive.Price) * int64(item.Quantity)
 				}
 
 				data := map[string]interface{}{
@@ -2284,4 +2367,20 @@ func (w *Website) getOrderStatus(status int) string {
 	}
 
 	return text
+}
+
+// CreateOrderOptionStockRecords 记录属性值库存扣减记录（用于退款恢复）
+func (w *Website) CreateOrderOptionStockRecords(orderId string, detailId uint, optionValueId int64, quantity int) error {
+	if orderId == "" || optionValueId == 0 || quantity <= 0 {
+		return nil
+	}
+
+	record := model.OrderOptionStock{
+		OrderId:       orderId,
+		OrderDetailId: detailId,
+		OptionValueId: optionValueId,
+		Quantity:      quantity,
+	}
+
+	return w.DB.Create(&record).Error
 }

@@ -2,12 +2,13 @@ package provider
 
 import (
 	"bytes"
-	"github.com/flosch/pongo2/v6"
-	"kandaoni.com/anqicms/library"
 	"os"
 	"regexp"
 	"strconv"
 	"sync"
+
+	"github.com/flosch/pongo2/v6"
+	"kandaoni.com/anqicms/library"
 )
 
 type StoreTemplates struct {
@@ -97,7 +98,7 @@ func (w *Website) RenderTemplateMacro(content string, ctx pongo2.Context) (strin
 				for _, item := range toc {
 					tocHtml.WriteString("<li class=\"toc-level-" + strconv.Itoa(item.Level) + "\">" +
 						"<a href=\"" + item.Anchor + "\"><span class=\"toc-prefix\">" + item.Prefix + "</span><span class=\"toc-name\">" + item.Title + "</span></a>" +
-						"<li>")
+						"</li>")
 				}
 				tocHtml.WriteString("</ul>")
 				s = tocHtml.String()
