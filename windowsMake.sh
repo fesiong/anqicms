@@ -17,5 +17,5 @@ cp -r ./dictionary.txt ./release/windows/
 cp -r ./source/cwebp_windows_amd64.exe ./release/windows/source/
 find ./release/windows -name '.DS_Store' | xargs rm -f
 go run ico/gen_syso.go
-go build -trimpath -ldflags '-w -s -H=windowsgui' -o ./release/windows/anqicms.exe kandaoni.com/anqicms/main
+go build -trimpath -ldflags '-w -s -H=windowsgui' -o ./release/windows/anqishop.exe kandaoni.com/anqicms/main
 rm -rf anqicms.syso

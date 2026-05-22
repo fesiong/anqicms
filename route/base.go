@@ -1,13 +1,15 @@
 package route
 
 import (
+	"embed"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/controller/graphql"
 	"kandaoni.com/anqicms/middleware"
 )
 
-func Register(app *iris.Application) {
+func Register(app *iris.Application, systemFiles embed.FS) {
 	//注册macros
 	//设置错误
 	app.Use(controller.Inspect)
@@ -194,5 +196,5 @@ func Register(app *iris.Application) {
 	}
 
 	//后台管理路由相关
-	manageRoute(app)
+	manageRoute(app, systemFiles)
 }

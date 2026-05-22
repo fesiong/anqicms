@@ -8,6 +8,6 @@ mshta vbscript:createobject("shell.application").shellexecute("%~s0","goto :runa
 :runas
 rem ¹Ø±Õ AnqiCMS
 
-taskkill /f /im anqicms.exe
+taskkill /f /im anqishop.exe
 rem ¹Ø±Õ AnqiCMS
 pause
