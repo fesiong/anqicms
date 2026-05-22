@@ -5,16 +5,7 @@ import (
 	"crypto/tls"
 	"encoding/json"
 	"fmt"
-	"github.com/kataras/iris/v12"
-	captcha "github.com/mojocn/base64Captcha"
-	"github.com/parnurzeal/gorequest"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/controller"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/response"
 	"log"
 	"os"
 	"path/filepath"
@@ -22,6 +13,16 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	captcha "github.com/mojocn/base64Captcha"
+	"github.com/parnurzeal/gorequest"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/controller"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/response"
 )
 
 func AdminFileServ(ctx iris.Context) {
@@ -118,7 +119,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查新版
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
+	link := "https://www.anqicms.com/downloads/shopversion.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
@@ -174,9 +175,9 @@ func VersionUpgrade(ctx iris.Context) {
 		version = lastVersion.TrialVersion
 	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
+	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqishop-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
 	if config.VersionType != "" {
-		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
+		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqishop-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
 	}
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(20 * time.Minute).Get(link).EndBytes()
@@ -240,7 +241,7 @@ func VersionUpgrade(ctx iris.Context) {
 			continue
 		}
 		realName := filepath.Join(config.ExecPath, f.Name)
-		if f.Name == "anqicms" || f.Name == "anqicms.exe" {
+		if f.Name == "anqishop" || f.Name == "anqishop.exe" {
 			// 先以临时文件存储
 			realName = tmpExecPath
 		}
@@ -261,8 +262,8 @@ func VersionUpgrade(ctx iris.Context) {
 
 		reader.Close()
 		_ = newFile.Close()
-		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqicms,cwebp
-		if f.Name == "anqicms" || f.Name == "anqicms.exe" || strings.HasPrefix(f.Name, "cwebp_") {
+		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqishop,cwebp
+		if f.Name == "anqishop" || f.Name == "anqishop.exe" || strings.HasPrefix(f.Name, "cwebp_") {
 			_ = os.Chmod(realName, os.ModePerm)
 		}
 	}
