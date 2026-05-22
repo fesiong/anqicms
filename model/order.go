@@ -48,13 +48,14 @@ type Order struct {
 	TrackingNumber    string  `json:"tracking_number" gorm:"column:tracking_number;type:varchar(100) not null;default:''"`                     // 快递单号
 	InvoicePath       string  `json:"invoice_path" gorm:"column:invoice_path;type:varchar(100) not null;default:''"`                           //
 
-	OrderAddress *OrderAddress        `json:"order_address,omitempty" gorm:"-"`
-	User         *User                `json:"user" gorm:"-"`
-	ShareUser    *User                `json:"share_user,omitempty" gorm:"-"`
-	ParentUser   *User                `json:"parent_user,omitempty" gorm:"-"`
-	IsUpdated    int                  `json:"is_updated" gorm:"-"`
-	Details      []*OrderDetail       `json:"details" gorm:"-"`
-	Services     []*OrderServiceAddon `json:"services" gorm:"-"`
+	OrderAddress  *OrderAddress        `json:"order_address,omitempty" gorm:"-"`
+	User          *User                `json:"user" gorm:"-"`
+	ShareUser     *User                `json:"share_user,omitempty" gorm:"-"`
+	ParentUser    *User                `json:"parent_user,omitempty" gorm:"-"`
+	IsUpdated     int                  `json:"is_updated" gorm:"-"`
+	Details       []*OrderDetail       `json:"details" gorm:"-"`
+	Services      []*OrderServiceAddon `json:"services" gorm:"-"`
+	CustomFormUrl string               `json:"url" gorm:"-"` // 需要填写表单的时候，返回这个字段
 }
 
 func (o *Order) AfterCreate(tx *gorm.DB) (err error) {

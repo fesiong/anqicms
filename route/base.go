@@ -90,6 +90,8 @@ func Register(app *iris.Application) {
 		api.Post("/order/refund", middleware.UserAuth, controller.ApiApplyRefundOrder)
 		api.Post("/order/finish", middleware.UserAuth, controller.ApiFinishedOrder)
 		api.Post("/order/payment", controller.ApiCreateOrderPayment)
+		api.Get("/order/custom_form", controller.ApiGetOrderCustomForm)
+		api.Post("/order/custom_form", controller.ApiSaveOrderCustomForm)
 		api.Post("/weapp/qrcode", middleware.UserAuth, controller.ApiCreateWeappQrcode)
 		// 地址补全
 		api.Get("/place/countries", controller.ApiPlaceCountries)

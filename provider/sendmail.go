@@ -168,6 +168,30 @@ Sincerely,
 The {% system with name="SiteName" %} Team`,
 	},
 	{
+		Key:         "order_custom_form",
+		Type:        "system",
+		Name:        "订单表单收集邮件",
+		Readonly:    false,
+		Description: "当客户支付订单后，如果订单需要填写自定义表单时，会通过邮件发送给客户的邮箱。",
+		Subject:     `[{% system with name="SiteName" %}]: Your order({{order.OrderId}}) has been paid`,
+		Content: `Hi {{user.UserName}}, 
+
+Thank you for completing your payment. Your order has been successfully paid. To proceed with your order, we need you to fill in some additional information via the form below.
+
+Please click the link below to fill in the required custom form:
+{{url|safe}}
+
+Order Details:
+Order ID: {{order.OrderId}}
+Payment Time: {{stampToDate(order.PaidTime, "15:04:05, Jan 02, 2006")}}
+Total Amount: {{priceFormat(order.Amount)}}
+
+Please complete the form as soon as possible so we can continue processing your order. If you have any questions regarding your order, please don't hesitate to contact us.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
 		Key:         "delivery_order",
 		Type:        "user",
 		Name:        "发货通知",
@@ -1299,6 +1323,59 @@ func (w *Website) SendPayOrderEmail(user *model.User, order *model.Order) error 
 		"website": w,
 		"order":   order,
 		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
+	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
+		// 发给用户
+		w.SendMail(template.Subject, template.Content, nil, user.Email)
+	}
+	// 发给网站管理员
+	_ = w.sendMail(template.Subject, template.Content, nil, nil, false, false)
+
+	return nil
+}
+
+func (w *Website) SendOrderCustomFormEmail(user *model.User, order *model.Order) error {
+	if user == nil {
+		user = &model.User{}
+	}
+	template, exist := w.GetEmailTemplateInfo("order_custom_form")
+	if !exist {
+		return errors.New("no template")
+	}
+	// 检查是否有需要填写的表单
+	var orderExtras [][]config.CustomField
+	var idMap = map[int64]bool{}
+	for _, v := range order.Details {
+		if _, ok := idMap[v.GoodsId]; ok {
+			continue
+		}
+		idMap[v.GoodsId] = true
+		if len(v.OrderFields) > 0 {
+			orderExtras = append(orderExtras, v.OrderFields)
+		}
+	}
+
+	if len(orderExtras) == 0 {
+		return errors.New("no custom form")
+	}
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	code := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+	jumpUrl := frontUrl + "/order/custom_form?order_id=" + order.OrderId + "&code=" + code
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+		"url":     jumpUrl,
 	}
 	var err error
 	template, err = w.RenderEmailTemplate(template, data)

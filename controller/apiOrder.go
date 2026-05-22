@@ -8,6 +8,7 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -136,6 +137,25 @@ func ApiGetOrderDetail(ctx iris.Context) {
 			"msg":  currentSite.TplTr("InsufficientPermissions"),
 		})
 		return
+	}
+
+	// 检查是否需要填写表单
+	if order.Status == config.OrderStatusPaid {
+		var hasOrderFields bool
+		for _, v := range order.Details {
+			if len(v.OrderFields) > 0 {
+				hasOrderFields = true
+			}
+		}
+		if hasOrderFields {
+			frontUrl := currentSite.System.BaseUrl
+			if currentSite.System.FrontUrl != "" {
+				frontUrl = currentSite.System.FrontUrl
+			}
+			code := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+			jumpUrl := frontUrl + "/order/custom_form?order_id=" + order.OrderId + "&code=" + code
+			order.CustomFormUrl = jumpUrl
+		}
 	}
 
 	ctx.JSON(iris.Map{
@@ -1701,5 +1721,190 @@ func ApiGetShippingInfo(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": currentSite.Shipping,
+	})
+}
+
+// ApiGetOrderCustomForm 获取订单自定义表单，表单已经在订单详情中，因此返回整个订单
+func ApiGetOrderCustomForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	orderId := ctx.URLParam("order_id")
+	code := ctx.URLParam("code")
+	if orderId == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderIdRequired"),
+		})
+		return
+	}
+
+	order, err := currentSite.GetOrderInfoByOrderId(orderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderDoesNotExist"),
+		})
+		return
+	}
+
+	// 订单支付了才可以提交
+	if order.Status != config.OrderStatusPaid {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderStatusError"),
+		})
+		return
+	}
+	// 验证code
+	verifyCode := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+	if code != verifyCode {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("InvalidCode"),
+		})
+		return
+	}
+
+	user, err := currentSite.GetUserInfoById(order.UserId)
+	if err != nil {
+		user = &model.User{}
+	}
+
+	type CustomFormItem struct {
+		Id          int64                `json:"id"`
+		Title       string               `json:"title"`
+		OrderFields []config.CustomField `json:"order_fields"`
+	}
+
+	type CustomForm struct {
+		Details       []CustomFormItem `json:"details"`
+		OrderId       string           `json:"order_id"`
+		User          *model.User      `json:"user"`
+		ResetPassword bool             `json:"reset_password"` // 要求用户重置密码
+	}
+
+	var customForm = CustomForm{
+		OrderId:       orderId,
+		User:          user,
+		ResetPassword: user.ResetPassword,
+	}
+	var idMap = map[int64]bool{}
+	for _, v := range order.Details {
+		if _, ok := idMap[v.GoodsId]; ok {
+			continue
+		}
+		idMap[v.GoodsId] = true
+		if len(v.OrderFields) > 0 {
+			detail := CustomFormItem{
+				Id:          int64(v.Id),
+				OrderFields: v.OrderFields,
+			}
+			if v.Goods != nil {
+				detail.Title = v.Goods.Title
+			}
+			customForm.Details = append(customForm.Details, detail)
+		}
+	}
+
+	if len(customForm.Details) == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderDoesNotHaveCustomForm"),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": customForm,
+	})
+}
+
+func ApiSaveOrderCustomForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 更新订单自定义表单
+	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderDoesNotExist"),
+		})
+		return
+	}
+	// 订单支付了才可以提交
+	if order.Status != config.OrderStatusPaid {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderStatusError"),
+		})
+		return
+	}
+
+	// 验证code
+	verifyCode := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+	if req.Code != verifyCode {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("InvalidCode"),
+		})
+		return
+	}
+
+	user, err := currentSite.GetUserInfoById(order.UserId)
+	if err != nil {
+		user = &model.User{}
+	}
+
+	if user.ResetPassword && req.Password != "" {
+		req.Password = strings.TrimSpace(req.Password)
+		if len(req.Password) < 6 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("PasswordTooShort"),
+			})
+			return
+		}
+		// 更新密码
+		_ = user.EncryptPassword(req.Password)
+		user.ResetPassword = false
+		currentSite.DB.Save(user)
+	}
+
+	for _, val := range req.Details {
+		if val.OrderExtra != nil {
+			var detail model.OrderDetail
+			err = currentSite.DB.Where("`order_id` = ? AND id = ?", order.OrderId, val.Id).Take(&detail).Error
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  currentSite.TplTr("OrderUpdateFailed"),
+				})
+				return
+			}
+			// 开始更新
+			detail.OrderExtra = val.OrderExtra
+			err = currentSite.DB.Model(&detail).Update("order_extra", detail.OrderExtra).Error
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  currentSite.TplTr("OrderUpdateFailed"),
+				})
+				return
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  currentSite.TplTr("UpdateSuccessfully"),
 	})
 }

@@ -1373,7 +1373,7 @@ $(function () {
                 <h6 class="small fw-bold mb-0">${item.title || ''}</h6>
                 <p class="small text-muted mb-0">${item.sku_values?.map((v) => v.title).join(' / ') || item.sku_title || ''}</p>
               </div>
-              <span class="small fw-bold">$${((item.origin_price * item.quantity) / 100).toFixed(2)}</span>
+              <span class="small fw-bold">$${(((item.origin_price || item.price) * item.quantity) / 100).toFixed(2)}</span>
             </a>`,
         ),
       );
@@ -1796,6 +1796,120 @@ $(function () {
         submitting = false;
       });
 
+      return false;
+    });
+  }
+  // custom form
+  if ($("#custom-form").length > 0) {
+    const params = new URLSearchParams(window.location.search);
+    let orderId = params.get("order_id");
+    let code = params.get("code");
+    let orderData = null;
+    $.get("/api/order/custom_form", { order_id: orderId, code: code }, function (res) {
+      if (res.code != 0) {
+        $(this).showToast({ message: res.msg, delay: 1500 }, function () {
+              window.location.href = "/";
+            });
+        return;
+      }
+      orderData = res.data || {};
+      $('#custom-fields').html(orderData.details?.map((detail) => {
+        if (!detail.order_fields) {
+          return '';
+        }
+        return `<div class="row g-3">
+              <h5 class="fw-bold mb-3 col-md-12">${detail.title || orderId + '-' + detail.id}</h5>
+              ${detail.order_fields.map(field => {
+                return `<div class="col-md-12">
+                <div class="form-floating">
+                ${field.type === 'textarea' ? 
+                  `<textarea class="form-control border-dark" rows="3" placeholder="${field.default || ''}" name="order_extra[${detail.id}][${field.field_name}]" ${field.required ? 'required' : ''}></textarea>`: 
+                  `<input type="text" class="form-control border-dark" name="order_extra[${detail.id}][${field.field_name}]" placeholder="${field.default || ''}" ${field.required ? 'required' : ''} />`}
+                  <label class="form-label">${field.name}</label>
+                  </div>
+              </div>`;
+              }).join('')}
+            </div>`
+      }).join(''));
+      // user form
+      if (orderData.reset_password) {
+        $('#user-form').html(`<h5 class="fw-bold mb-3">Your Account</h5>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="form-floating">
+                  <input type="email" name="email" class="form-control border-dark" value="${orderData.user?.email}" id="email" readonly>
+                  <label for="email">Email address</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-floating">
+                  <input type="tel" class="form-control border-dark" name="phone" value="${orderData.user?.phone}" id="phone" placeholder="Phone" readonly>
+                  <label for="phone">Phone</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-floating">
+                  <input type="tel" class="form-control border-dark" name="password" id="password" placeholder="Please fill in a new password" required>
+                  <label for="password">New Password</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-floating">
+                  <input type="tel" class="form-control border-dark" name="password_confirm" id="password_confirm" required>
+                  <label for="password_confirm">Confirm Password</label>
+                </div>
+              </div>
+            </div>`);
+      }
+    })
+    // submit
+    var submitting = false;
+    $("#custom-form").on("submit", function (e) {
+      e.preventDefault();
+      if (submitting) {
+        return;
+      }
+      // form-data 是 address
+      let data = $(this).parseForm();
+      let details = [];
+      for (key in data.order_extra) {
+        // 强制转换id
+        let detail = {
+          id: Number(key),
+          order_extra: data.order_extra[key],
+        }
+        details.push(detail)
+      }
+      if (orderData.reset_password) {
+        // 要求用户填写密码
+        if (data.password?.length < 6 || data.password != data.password_confirm) {
+          $(this).showToast({message: "the password is too short or not equal to the confirmation"});
+          return;
+        }
+      }
+
+      $(this).jsonPost({
+        data: {
+          order_id: orderId,
+          code: code,
+          details: details,
+          password: orderData.reset_password ? data.password : null,
+        },
+        action: "/api/order/custom_form",
+        callback: function (res) {
+          if (res.code === 0) {
+            $(this).showToast({ message: res.msg }, function () {
+              window.location.href = '/';
+            });
+          } else {
+            $(this).showToast({ message: res.msg });
+          }
+        },
+        fail: function (err) {
+          reject(err);
+        },
+      });
+      
       return false;
     });
   }

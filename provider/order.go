@@ -856,11 +856,18 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	}
 	// end
 	user, err := w.GetUserInfoById(order.UserId)
-	if err == nil {
+	if err != nil {
 		user = &model.User{Id: uint(order.UserId)}
+		orderAddress, err := w.GetOrderAddressById(order.AddressId)
+		if err == nil {
+			user.Email = orderAddress.Email
+			user.Phone = orderAddress.Phone
+			user.UserName = orderAddress.Name
+		}
 	}
 	w.SendPayOrderEmail(user, order)
 	w.CancelMailPlan("recover_abandoned_checkout_"+order.OrderId, true)
+	w.SendOrderCustomFormEmail(user, order)
 
 	// 发送一张未付款的发票
 	template, exist := w.GetEmailTemplateInfo("invoice")
@@ -1026,6 +1033,20 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					user = existUser
 				}
 			}
+			// 如果用户没有注册，则这里给它注册一下
+			if user.Id == 0 {
+				// 未注册
+				user.FirstName = req.Address.Name
+				user.LastName = req.Address.LastName
+				user.RealName = req.Address.Name + " " + req.Address.LastName
+				user.ResetPassword = true // 需要重置密码
+				if req.Address.Subscribed != "" && req.Address.Subscribed != "false" {
+					user.Subscribed = true
+				}
+
+				w.DB.Save(user)
+			}
+			userId = user.Id
 		}
 	}
 	if len(req.Details) == 0 && req.GoodsId == 0 {

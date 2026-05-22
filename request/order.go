@@ -37,6 +37,9 @@ type OrderRequest struct {
 	GoodsId    int64 `json:"goods_id"`
 	GoodsSkuId int64 `json:"goods_sku_id"`
 	Quantity   int   `json:"quantity"`
+	// 重置密码
+	Password string `json:"password"`
+	Code     string `json:"code"`
 }
 
 type PaymentRequest struct {
@@ -73,6 +76,7 @@ type OrderAddressRequest struct {
 	LastName     string `json:"last_name"`
 	Phone        string `json:"phone"`
 	Email        string `json:"email"`
+	Subscribed   string `json:"subscribed"`
 	Province     string `json:"province"`
 	ProvinceCode string `json:"province_code"`
 	City         string `json:"city"`
