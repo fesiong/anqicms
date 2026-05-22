@@ -1,6 +1,7 @@
 .idea
 .DS_Store
 .vscode
+.atomcode
 .trae
 vendor
 /config.json
