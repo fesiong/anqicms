@@ -421,6 +421,21 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 	}
+	if currentSite.PluginJsonLd.Open {
+		// 公开 faqs|list 数据，方便json-ld调用
+		if args["jsonld"] != nil {
+			ctxOri := currentSite.CtxOri()
+			if ctxOri != nil {
+				jsonLdType := args["jsonld"].String()
+				if jsonLdType == "faqs" {
+					ctxOri.ViewData("faqs", archives)
+				} else {
+					// 默认list
+					ctxOri.ViewData("listData", archives)
+				}
+			}
+		}
+	}
 
 	ctx.Private[node.name] = archives
 	ctx.Private["combine"] = combineArchive

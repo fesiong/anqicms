@@ -3,6 +3,8 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"math"
+	"strconv"
 	"strings"
 	"time"
 
@@ -81,9 +83,24 @@ func (w *Website) GetJsonLd(ctx iris.Context) string {
 	case "pageDetail":
 		jsonLdList = append(jsonLdList, w.buildPageDetailJsonLd(viewData, webInfo)...)
 	}
+	// faqs
+	if faqs, ok := viewData["faqs"].([]*model.Archive); ok && len(faqs) > 0 {
+		jsonLdList = append(jsonLdList, w.buildFaqJsonLd(faqs, webInfo))
+	}
 
 	if len(jsonLdList) > 0 {
-		buf, _ := json.MarshalIndent(jsonLdList, "", "\t")
+		var buf []byte
+		if len(jsonLdList) == 1 {
+			jsonLd := jsonLdList[0].(iris.Map)
+			jsonLd["@context"] = "https://schema.org"
+			buf, _ = json.MarshalIndent(jsonLd, "", "\t")
+		} else {
+			jsonLd := iris.Map{
+				"@context": "https://schema.org",
+				"@graph":   jsonLdList,
+			}
+			buf, _ = json.MarshalIndent(jsonLd, "", "\t")
+		}
 		return string(buf)
 	}
 
@@ -120,8 +137,8 @@ func (w *Website) buildOrganizationJsonLd() iris.Map {
 	}
 
 	jsonLd := iris.Map{
-		"@context": "https://schema.org",
-		"@type":    orgType,
+		//	"@context": "https://schema.org",
+		"@type": orgType,
 	}
 
 	if setting.OrganizationName != "" {
@@ -139,6 +156,7 @@ func (w *Website) buildOrganizationJsonLd() iris.Map {
 	} else {
 		jsonLd["url"] = w.System.BaseUrl
 	}
+	jsonLd["@id"] = jsonLd["url"]
 
 	if setting.LogoImage != "" {
 		jsonLd["logo"] = setting.LogoImage
@@ -154,16 +172,22 @@ func (w *Website) buildOrganizationJsonLd() iris.Map {
 		jsonLd["sameAs"] = setting.SocialProfiles
 	}
 
-	if setting.ContactNumber != "" {
-		jsonLd["telephone"] = setting.ContactNumber
-	}
+	if setting.ContactNumber != "" || setting.ContactUrl != "" || setting.ContactType != "" {
+		contactPoint := iris.Map{
+			"@type": "ContactPoint",
+		}
+		if setting.ContactNumber != "" {
+			contactPoint["telephone"] = setting.ContactNumber
+		}
+		if setting.ContactUrl != "" {
+			contactPoint["contactUrl"] = setting.ContactUrl
+		}
+		if setting.ContactType != "" {
+			contactPoint["contactType"] = setting.ContactType
+		}
+		contactPoint["url"] = jsonLd["url"]
 
-	if setting.ContactUrl != "" {
-		jsonLd["contactUrl"] = setting.ContactUrl
-	}
-
-	if setting.ContactType != "" {
-		jsonLd["contactType"] = setting.ContactType
+		jsonLd["contactPoint"] = contactPoint
 	}
 
 	if setting.GeoLatitude != "" && setting.GeoLongitude != "" {
@@ -223,8 +247,8 @@ func (w *Website) buildPersonJsonLd() iris.Map {
 	setting := w.GetJsonLdSetting()
 
 	jsonLd := iris.Map{
-		"@context": "https://schema.org",
-		"@type":    "Person",
+		//	"@context": "https://schema.org",
+		"@type": "Person",
 	}
 
 	if setting.PersonName != "" {
@@ -254,7 +278,7 @@ func (w *Website) buildPersonJsonLd() iris.Map {
 	return jsonLd
 }
 
-func (w *Website) buildBreadcrumbJsonLd(crumbs []iris.Map) iris.Map {
+func (w *Website) buildBreadcrumbJsonLd(webInfo *response.WebInfo, crumbs []iris.Map) iris.Map {
 	breadcrumbList := make([]iris.Map, 0, len(crumbs))
 	for i, crumb := range crumbs {
 		breadcrumbList = append(breadcrumbList, iris.Map{
@@ -266,7 +290,8 @@ func (w *Website) buildBreadcrumbJsonLd(crumbs []iris.Map) iris.Map {
 	}
 
 	return iris.Map{
-		"@context":        "https://schema.org",
+		// "@context":        "https://schema.org",
+		"@id":             webInfo.CanonicalUrl + "#breadcrumb",
 		"@type":           "BreadcrumbList",
 		"itemListElement": breadcrumbList,
 	}
@@ -311,9 +336,22 @@ func (w *Website) buildArchiveDetailJsonLd(viewData map[string]interface{}, webI
 		}
 	}
 
-	crumbs := w.buildCrumbs(viewData, webInfo)
-	if setting.IncludeBreadcrumb && len(crumbs) > 0 {
-		jsonLdList = append(jsonLdList, w.buildBreadcrumbJsonLd(crumbs))
+	webPage := iris.Map{
+		// "@context": "https://schema.org",
+		"@type":      "WebPage",
+		"@id":        webInfo.CanonicalUrl,
+		"url":        webInfo.CanonicalUrl,
+		"name":       archive.Title,
+		"inLanguage": w.System.Language,
+		"mainEntity": iris.Map{"@id": webInfo.CanonicalUrl + "#" + schemaType},
+	}
+
+	if setting.IncludeBreadcrumb {
+		crumbs := w.buildCrumbs(viewData, webInfo)
+		if len(crumbs) > 0 {
+			jsonLdList = append(jsonLdList, w.buildBreadcrumbJsonLd(webInfo, crumbs))
+			webPage["breadcrumb"] = iris.Map{"@id": webInfo.CanonicalUrl + "#breadcrumb"}
+		}
 	}
 
 	if setting.DataType == 2 && setting.PersonName != "" {
@@ -323,7 +361,7 @@ func (w *Website) buildArchiveDetailJsonLd(viewData map[string]interface{}, webI
 	}
 
 	detailLd := w.buildDetailJsonLd(schemaType, archive, webInfo, category, viewData)
-	jsonLdList = append(jsonLdList, detailLd)
+	jsonLdList = append(jsonLdList, detailLd, webPage)
 
 	return jsonLdList
 }
@@ -332,13 +370,15 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 	setting := w.GetJsonLdSetting()
 
 	jsonLd := iris.Map{
-		"@context": "https://schema.org",
-		"@type":    schemaType,
+		// "@context": "https://schema.org",
+		"@id":   webInfo.CanonicalUrl + "#" + schemaType,
+		"@type": schemaType,
 	}
 
 	switch schemaType {
 	case "Product":
 		jsonLd["name"] = archive.Title
+		jsonLd["sku"] = strconv.Itoa(int(archive.Id))
 
 		if setting.DefaultBrand != "" {
 			jsonLd["brand"] = iris.Map{
@@ -377,10 +417,11 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 			"priceCurrency": "USD",
 			"availability":  availability,
 			"itemCondition": itemCondition,
+			"category":      category.Title,
 			"url":           webInfo.CanonicalUrl,
 		}
 		if archive.Price > 0 {
-			offers["price"] = float32(archive.Price) / 100.00
+			offers["price"] = fmt.Sprintf("%.2f", float32(archive.Price)/100.00)
 			offers["priceValidUntil"] = time.Now().AddDate(1, 0, 0).Format("2006-01-02")
 		}
 		if archive.Stock > 0 {
@@ -391,13 +432,15 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 		}
 		jsonLd["offers"] = offers
 
-		rating := float32((archive.CommentCount+2)%5)*0.1 + 4.1
-		jsonLd["aggregateRating"] = iris.Map{
-			"@type":       "AggregateRating",
-			"ratingValue": fmt.Sprintf("%.1f", rating),
-			"reviewCount": archive.CommentCount,
-			"bestRating":  5,
-			"worstRating": 1,
+		if archive.CommentCount > 0 {
+			rating := float64((int(archive.CommentCount)+5+int(archive.Id%10))%5)*0.1 + 4.1
+			jsonLd["aggregateRating"] = iris.Map{
+				"@type":       "AggregateRating",
+				"ratingValue": math.Round(rating*10) / 10,
+				"reviewCount": archive.CommentCount,
+				"bestRating":  5,
+				"worstRating": 1,
+			}
 		}
 
 		if setting.OrganizationName != "" {
@@ -444,9 +487,13 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 	}
 
 	if category != nil {
-		jsonLd["articleSection"] = category.Title
-		if len(category.ParentTitles) > 0 {
-			jsonLd["genre"] = category.ParentTitles[len(category.ParentTitles)-1]
+		if schemaType == "Article" || strings.HasSuffix(schemaType, "Article") || schemaType == "BlogPosting" || schemaType == "NewsArticle" {
+			jsonLd["articleSection"] = category.Title
+		} else if schemaType != "Product" {
+			jsonLd["category"] = category.Title
+		}
+		if len(category.Parents) > 0 {
+			jsonLd["genre"] = category.Parents[len(category.Parents)-1].Title
 		}
 	}
 
@@ -469,15 +516,13 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 					},
 				}
 				if comment.VoteCount > 0 {
-					rating := float32(5)
-					if comment.VoteCount < 10 {
-						rating = 4.0
-					} else if comment.VoteCount < 50 {
-						rating = 4.5
+					rating := float64(5.0)
+					if comment.VoteCount < 50 {
+						rating = 4.0 + float64(comment.VoteCount*2/10)
 					}
 					review["reviewRating"] = iris.Map{
 						"@type":       "Rating",
-						"ratingValue": fmt.Sprintf("%.1f", rating),
+						"ratingValue": math.Round(rating*10) / 10,
 						"bestRating":  5,
 						"worstRating": 1,
 					}
@@ -493,11 +538,6 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 		}
 	}
 
-	jsonLd["mainEntityOfPage"] = iris.Map{
-		"@type": "WebPage",
-		"@id":   webInfo.CanonicalUrl,
-	}
-
 	return jsonLd
 }
 
@@ -505,8 +545,8 @@ func (w *Website) buildListPageJsonLd(viewData map[string]interface{}, webInfo *
 	var jsonLdList []interface{}
 	setting := w.GetJsonLdSetting()
 
-	listType := "CollectionPage‌"
-	schemaType := "ItemList"
+	listType := "CollectionPage"
+	schemaType := "Article"
 
 	module, _ := viewData["module"].(*model.Module)
 	if module != nil {
@@ -540,7 +580,7 @@ func (w *Website) buildListPageJsonLd(viewData map[string]interface{}, webInfo *
 
 	crumbs := w.buildCrumbs(viewData, webInfo)
 	if setting.IncludeBreadcrumb && len(crumbs) > 0 {
-		jsonLdList = append(jsonLdList, w.buildBreadcrumbJsonLd(crumbs))
+		jsonLdList = append(jsonLdList, w.buildBreadcrumbJsonLd(webInfo, crumbs))
 	}
 
 	if setting.DataType == 2 && setting.PersonName != "" {
@@ -550,10 +590,14 @@ func (w *Website) buildListPageJsonLd(viewData map[string]interface{}, webInfo *
 	}
 
 	listLd := iris.Map{
-		"@context": "https://schema.org",
-		"@type":    listType,
-		"name":     webInfo.Title,
-		"url":      webInfo.CanonicalUrl,
+		// "@context": "https://schema.org",
+		"@type": listType,
+		"name":  webInfo.Title,
+		"url":   webInfo.CanonicalUrl,
+		"@id":   webInfo.CanonicalUrl,
+	}
+	if listType == "DetailedItemList" {
+		listLd["@type"] = "CollectionPage"
 	}
 
 	if webInfo.Description != "" {
@@ -562,9 +606,15 @@ func (w *Website) buildListPageJsonLd(viewData map[string]interface{}, webInfo *
 
 	listData, ok := viewData["listData"].([]*model.Archive)
 	if ok && len(listData) > 0 {
-		itemList := w.buildItemList(listData, schemaType)
+		itemList := w.buildItemList(listData, listType, schemaType)
 		if itemList != nil {
-			listLd["mainEntityOfPage"] = itemList
+			if category != nil {
+				itemList["name"] = category.Title
+				if category.Description != "" {
+					itemList["description"] = category.Description
+				}
+			}
+			listLd["mainEntity"] = itemList
 		}
 	}
 
@@ -573,7 +623,7 @@ func (w *Website) buildListPageJsonLd(viewData map[string]interface{}, webInfo *
 	return jsonLdList
 }
 
-func (w *Website) buildItemList(archives []*model.Archive, schemaType string) iris.Map {
+func (w *Website) buildItemList(archives []*model.Archive, listType string, schemaType string) iris.Map {
 	if len(archives) == 0 {
 		return nil
 	}
@@ -583,25 +633,96 @@ func (w *Website) buildItemList(archives []*model.Archive, schemaType string) ir
 		item := iris.Map{
 			"@type":    "ListItem",
 			"position": i + 1,
-			"name":     archive.Title,
-			"url":      archive.Link,
 		}
-		if archive.Description != "" {
-			item["description"] = archive.Description
-		}
-		if archive.Logo != "" {
-			item["image"] = archive.Logo
+		if listType == "DetailedItemList" || listType == "CollectionPage" {
+			// 更丰富的结构
+			setting := w.GetJsonLdSetting()
+			subItem := iris.Map{}
+			if schemaType == "Product" {
+				subItem["@type"] = "Product"
+				subItem["sku"] = strconv.Itoa(int(archive.Id))
+
+				if setting.DefaultBrand != "" {
+					subItem["brand"] = iris.Map{
+						"@type": "Brand",
+						"name":  setting.DefaultBrand,
+					}
+				}
+
+				if setting.OrganizationName != "" {
+					subItem["manufacturer"] = iris.Map{
+						"@type": "Organization",
+						"name":  setting.OrganizationName,
+					}
+				}
+
+				availability := "https://schema.org/InStock"
+				itemCondition := "https://schema.org/NewCondition"
+				if archive.Stock <= 0 {
+					availability = "https://schema.org/OutOfStock"
+				} else if archive.Stock < 10 {
+					availability = "https://schema.org/LowStock"
+				}
+
+				offers := iris.Map{
+					"@type":         "Offer",
+					"priceCurrency": "USD",
+					"availability":  availability,
+					"itemCondition": itemCondition,
+					"url":           archive.Link,
+				}
+				if archive.Price > 0 {
+					offers["price"] = fmt.Sprintf("%.2f", float32(archive.Price)/100.00)
+					offers["priceValidUntil"] = time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+				}
+				if archive.Stock > 0 {
+					offers["inventoryLevel"] = iris.Map{
+						"@type": "QuantitativeValue",
+						"value": archive.Stock,
+					}
+				}
+				subItem["offers"] = offers
+				if setting.IncludeComments || archive.CommentCount > 0 {
+					rating := float64((int(archive.CommentCount)+5+int(archive.Id%10))%5)*0.1 + 4.1
+					subItem["aggregateRating"] = iris.Map{
+						"@type":       "AggregateRating",
+						"ratingValue": math.Round(rating*10) / 10,
+						"reviewCount": int(archive.CommentCount) + 5 + int(archive.Id%10),
+						"bestRating":  5,
+						"worstRating": 1,
+					}
+				}
+			} else {
+				subItem["@type"] = schemaType
+			}
+			subItem["name"] = archive.Title
+			subItem["url"] = archive.Link
+			if archive.Description != "" {
+				subItem["description"] = archive.Description
+			}
+			if len(archive.Logo) > 0 {
+				subItem["image"] = archive.Logo
+			} else if setting.DefaultImage != "" {
+				subItem["image"] = setting.DefaultImage
+			}
+			if archive.CreatedTime > 0 {
+				subItem["datePublished"] = time.Unix(archive.CreatedTime, 0).Format("2006-01-02T15:04:05+08:00")
+			}
+			if archive.UpdatedTime > 0 {
+				subItem["dateModified"] = time.Unix(archive.UpdatedTime, 0).Format("2006-01-02T15:04:05+08:00")
+			}
+
+			item["item"] = subItem
+		} else {
+			item["name"] = archive.Title
+			item["item"] = archive.Link
 		}
 		itemListElement = append(itemListElement, item)
 	}
 
-	listType := "ItemList"
-	if schemaType == "DetailedItemList" {
-		listType = "DetailedItemList"
-	}
-
 	return iris.Map{
-		"@type":           listType,
+		"@type":           "ItemList",
+		"numberOfItems":   len(archives),
 		"itemListElement": itemListElement,
 	}
 }
@@ -617,7 +738,7 @@ func (w *Website) buildPageDetailJsonLd(viewData map[string]interface{}, webInfo
 
 	crumbs := w.buildCrumbs(viewData, webInfo)
 	if setting.IncludeBreadcrumb && len(crumbs) > 0 {
-		jsonLdList = append(jsonLdList, w.buildBreadcrumbJsonLd(crumbs))
+		jsonLdList = append(jsonLdList, w.buildBreadcrumbJsonLd(webInfo, crumbs))
 	}
 
 	if setting.DataType == 2 && setting.PersonName != "" {
@@ -646,10 +767,10 @@ func (w *Website) buildPageDetailJsonLd(viewData map[string]interface{}, webInfo
 	}
 
 	pageLd := iris.Map{
-		"@context": "https://schema.org",
-		"@type":    schemaType,
-		"name":     page.Title,
-		"url":      webInfo.CanonicalUrl,
+		// "@context": "https://schema.org",
+		"@type": schemaType,
+		"name":  page.Title,
+		"url":   webInfo.CanonicalUrl,
 	}
 
 	if page.Description != "" {
@@ -740,8 +861,8 @@ func (w *Website) buildPageDetailJsonLd(viewData map[string]interface{}, webInfo
 		}
 	}
 
-	if len(page.ParentTitles) > 0 {
-		pageLd["genre"] = page.ParentTitles[len(page.ParentTitles)-1]
+	if len(page.Parents) > 0 {
+		pageLd["genre"] = page.Parents[len(page.Parents)-1].Title
 	}
 
 	pageLd["mainEntityOfPage"] = iris.Map{
@@ -759,7 +880,7 @@ func (w *Website) buildCrumbs(viewData map[string]interface{}, webInfo *response
 
 	crumbs = append(crumbs, iris.Map{
 		"name": w.TplTr("Home"),
-		"link": "/",
+		"link": w.GetUrl("index", nil, 0),
 	})
 
 	switch webInfo.PageName {
@@ -772,11 +893,12 @@ func (w *Website) buildCrumbs(viewData map[string]interface{}, webInfo *response
 		}
 	case "archiveList":
 		if category, ok := viewData["category"].(*model.Category); ok {
-			if category.ParentTitles != nil {
-				for _, parentTitle := range category.ParentTitles {
+			if category.Parents != nil {
+				for _, parent := range category.Parents {
+					parentCat := w.GetCategoryFromCache(parent.Id)
 					crumbs = append(crumbs, iris.Map{
-						"name": parentTitle,
-						"link": "",
+						"name": parentCat.Title,
+						"link": parentCat.Link,
 					})
 				}
 			}
@@ -796,7 +918,7 @@ func (w *Website) buildCrumbs(viewData map[string]interface{}, webInfo *response
 			}
 			crumbs = append(crumbs, iris.Map{
 				"name": archive.Title,
-				"link": "",
+				"link": w.GetUrl("archive", archive, 0),
 			})
 		}
 	case "pageDetail":
@@ -809,4 +931,31 @@ func (w *Website) buildCrumbs(viewData map[string]interface{}, webInfo *response
 	}
 
 	return crumbs
+}
+
+func (w *Website) buildFaqJsonLd(faqs []*model.Archive, webInfo *response.WebInfo) iris.Map {
+	if len(faqs) == 0 {
+		return nil
+	}
+
+	faqPage := iris.Map{
+		"@type":      "FAQPage",
+		"@id":        webInfo.CanonicalUrl + "#faq",
+		"mainEntity": make([]interface{}, 0, len(faqs)),
+	}
+
+	for _, faq := range faqs {
+		question := iris.Map{
+			"@type": "Question",
+			"name":  faq.Title,
+			"acceptedAnswer": iris.Map{
+				"@type": "Answer",
+				"text":  faq.Description,
+			},
+		}
+
+		faqPage["mainEntity"] = append(faqPage["mainEntity"].([]interface{}), question)
+	}
+
+	return faqPage
 }

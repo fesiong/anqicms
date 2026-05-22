@@ -42,7 +42,10 @@ func buildNavTree(navs []*model.Nav, showType string) []*model.Nav {
 			rootNodes = append(rootNodes, node)
 		} else if parentNode, ok := nodeMap[node.ParentId]; ok {
 			node.Level = parentNode.Level + 1
-			node.ParentTitles = append(parentNode.ParentTitles, parentNode.Title)
+			node.Parents = append(parentNode.Parents, model.ParentCategory{
+				Id:    parentNode.Id,
+				Title: parentNode.Title,
+			})
 			parentNode.NavList = append(parentNode.NavList, node)
 		}
 	}

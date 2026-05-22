@@ -548,6 +548,17 @@ func (w *Website) GetAttachmentByFileLocation(fileLocation string) (*model.Attac
 	db := w.DB
 	var attach model.Attachment
 
+	// 兼容外部数据
+	if strings.HasPrefix(fileLocation, "http") {
+		if err := db.Unscoped().Where("`file_location` = ?", fileLocation).First(&attach).Error; err == nil {
+			attach.GetThumb(w.PluginStorage.StorageUrl)
+			return nil, err
+		}
+	}
+
+	if strings.Index(fileLocation, "uploads/") > 0 {
+		fileLocation = fileLocation[strings.Index(fileLocation, "uploads/"):]
+	}
 	if err := db.Unscoped().Where("`file_location` = ?", fileLocation).First(&attach).Error; err != nil {
 		return nil, err
 	}

@@ -492,6 +492,9 @@ func (w *Website) GetCacheCategoriesByIds(ids []uint) []*model.Category {
 	categories := w.GetCacheCategories()
 	var tmpCategories = make([]*model.Category, 0, len(ids))
 	for _, category := range categories {
+		if category.Link == "" {
+			category.Link = w.GetUrl("category", category, 0)
+		}
 		for _, id := range ids {
 			if category.Id == id {
 				tmpCategories = append(tmpCategories, category)
@@ -529,6 +532,9 @@ func (w *Website) GetCategoryFromCache(categoryId uint) *model.Category {
 	categories := w.GetCacheCategories()
 	for i := range categories {
 		if categories[i].Id == categoryId {
+			if categories[i].Link == "" {
+				categories[i].Link = w.GetUrl("category", categories[i], 0)
+			}
 			return categories[i]
 		}
 	}
@@ -550,6 +556,9 @@ func (w *Website) GetCategoryFromCacheByToken(urlToken string, parents ...*model
 		}
 	} else {
 		for i := range categories {
+			if categories[i].Link == "" {
+				categories[i].Link = w.GetUrl("category", categories[i], 0)
+			}
 			if categories[i].UrlToken == urlToken {
 				return categories[i]
 			}
@@ -576,6 +585,9 @@ func (w *Website) GetCategoriesFromCache(moduleId, parentId uint, pageType int, 
 			}
 		}
 		if all || categories[i].ParentId == parentId {
+			if categories[i].Link == "" {
+				categories[i].Link = w.GetUrl("category", categories[i], 0)
+			}
 			tmpCategories = append(tmpCategories, categories[i])
 		}
 	}

@@ -27,10 +27,10 @@ func NewCategoryTree(categories []*model.Category) *CategoryTree {
 }
 
 func (ct *CategoryTree) GetTree(rootId uint, add string) []*model.Category {
-	return ct.getTreeRecursive(rootId, add, []string{})
+	return ct.getTreeRecursive(rootId, add, []model.ParentCategory{})
 }
 
-func (ct *CategoryTree) getTreeRecursive(rootId uint, add string, fullTitles []string) []*model.Category {
+func (ct *CategoryTree) getTreeRecursive(rootId uint, add string, fullParents []model.ParentCategory) []*model.Category {
 	isTop := 1
 	children := ct.getChildren(rootId)
 	space := ct.icons[3]
@@ -52,10 +52,13 @@ func (ct *CategoryTree) getTreeRecursive(rootId uint, add string, fullTitles []s
 
 			child.Spacer = add + space
 
-			childFullTitles := make([]string, len(fullTitles))
-			copy(childFullTitles, fullTitles)
-			childFullTitles = append(childFullTitles, child.Title)
-			child.ParentTitles = fullTitles
+			childFullParents := make([]model.ParentCategory, len(fullParents))
+			copy(childFullParents, fullParents)
+			childFullParents = append(childFullParents, model.ParentCategory{
+				Id:    child.Id,
+				Title: child.Title,
+			})
+			child.Parents = fullParents
 
 			isTop++
 			ct.deep++
@@ -65,7 +68,7 @@ func (ct *CategoryTree) getTreeRecursive(rootId uint, add string, fullTitles []s
 			}
 			if ct.getChildren(child.Id) != nil {
 				child.HasChildren = true
-				ct.getTreeRecursive(child.Id, add, childFullTitles)
+				ct.getTreeRecursive(child.Id, add, childFullParents)
 				ct.deep--
 			}
 		}
@@ -79,23 +82,26 @@ func (ct *CategoryTree) getTreeRecursive(rootId uint, add string, fullTitles []s
 }
 
 func (ct *CategoryTree) GetTreeNode(rootId uint, add string) []*model.Category {
-	return ct.getTreeNodeRecursive(rootId, add, []string{})
+	return ct.getTreeNodeRecursive(rootId, add, []model.ParentCategory{})
 }
 
-func (ct *CategoryTree) getTreeNodeRecursive(rootId uint, add string, fullTitles []string) []*model.Category {
+func (ct *CategoryTree) getTreeNodeRecursive(rootId uint, add string, fullParents []model.ParentCategory) []*model.Category {
 	var tree []*model.Category
 
 	for _, category := range ct.categories {
 		if category.ParentId == rootId {
 			category.Spacer = add
 
-			childFullTitles := make([]string, len(fullTitles))
-			copy(childFullTitles, fullTitles)
-			childFullTitles = append(childFullTitles, category.Title)
-			category.ParentTitles = fullTitles
+			childFullParents := make([]model.ParentCategory, len(fullParents))
+			copy(childFullParents, fullParents)
+			childFullParents = append(childFullParents, model.ParentCategory{
+				Id:    category.Id,
+				Title: category.Title,
+			})
+			category.Parents = fullParents
 
 			space := add + ct.icons[0]
-			category.Children = ct.getTreeNodeRecursive(category.Id, space, childFullTitles)
+			category.Children = ct.getTreeNodeRecursive(category.Id, space, childFullParents)
 			tree = append(tree, category)
 		}
 	}
