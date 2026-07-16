@@ -110,6 +110,7 @@ type PluginTag struct {
 	Template    string                 `json:"template"`
 	Status      uint                   `json:"status"`
 	Extra       map[string]interface{} `json:"extra"`
+	UpdateAll   bool                   `json:"update_all"`
 }
 
 type PluginRedirectRequest struct {

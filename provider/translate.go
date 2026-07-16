@@ -107,7 +107,7 @@ func (b *BaiduTranslate) Translate(content string, fromLanguage string, toLangua
 	// 为了qps，所以这里暂停1秒
 	time.Sleep(1 * time.Second)
 	// 将请求参数中的 APPID(appid)， 翻译 query(q，注意为UTF-8编码)，随机数(salt)，以及平台分配的密钥(可在管理控制台查看) 按照 appid+q+salt+密钥的顺序拼接得到字符串 1。
-	salt := library.GenerateRandString(5)
+	salt := config.GenerateRandString(5)
 	query := url.Values{}
 	query.Add("appid", b.AppId)
 	query.Add("q", content)
@@ -164,7 +164,7 @@ func NewYoudaoTranslate(appKey, appSecret string) *YoudaoTranslate {
 
 func (yt *YoudaoTranslate) Translate(content string, fromLanguage string, toLanguage string) (string, error) {
 	// 将请求参数中的 APPID(appid)， 翻译 query(q，注意为UTF-8编码)，随机数(salt)，以及平台分配的密钥(可在管理控制台查看) 按照 appid+q+salt+密钥的顺序拼接得到字符串 1。
-	salt := library.GenerateRandString(5)
+	salt := config.GenerateRandString(5)
 	if strings.ToLower(fromLanguage) == "zh-cn" {
 		fromLanguage = "zh-CHS"
 	} else if strings.ToLower(fromLanguage) == "zh-tw" {

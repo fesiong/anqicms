@@ -349,6 +349,75 @@ func (w *Website) BuildSingleCategoryCache(ctx iris.Context, category *model.Cat
 	}
 }
 
+func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
+	if w.HtmlCacheStatus != nil {
+		w.HtmlCacheStatus.Current = w.Tr("GeneratingPlacesLog", place.Title)
+	}
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	// 栏目只生成第一页
+	link := w.GetUrl("place", place, 0)
+	link = strings.TrimPrefix(link, frontUrl)
+	err := w.GetAndCacheHtmlData(link, false)
+	if err != nil {
+		if w.HtmlCacheStatus != nil {
+			w.HtmlCacheStatus.ErrorMsg = w.Tr("GeneratingPlaceFailed", place.Title, err.Error())
+		}
+		return
+	}
+	if w.HtmlCacheStatus != nil {
+		w.HtmlCacheStatus.FinishedCount += 1
+	}
+	newCtx := ctx.Clone()
+	writer := newResponseWriter()
+	respWriter := &responseWriter{ResponseWriter: writer}
+	newCtx.ResetResponseWriter(respWriter)
+	newCtx.ViewData("place", place)
+	newCtx.ViewData("pageName", "placeDetail")
+	webInfo := &response.WebInfo{
+		Title:    place.Title,
+		PageName: "placeDetail",
+		NavBar:   int64(place.Id),
+	}
+	newCtx.ViewData("webInfo", webInfo)
+	tplName := "place/detail.html"
+	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
+	tmpName := fmt.Sprintf("%s/detail-%d.html", place.Id)
+	if place.Template != "" {
+		tplName = place.Template
+	} else if ViewExists(newCtx, tmpName) {
+		tplName = tmpName
+	} else {
+		placeTemplate := w.GetPlaceTemplate(place)
+		if placeTemplate != "" {
+			tplName = placeTemplate
+		}
+	}
+	if !strings.HasSuffix(tplName, ".html") {
+		tplName += ".html"
+	}
+	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
+
+	// mobile
+	if w.System.TemplateType != config.TemplateTypeAuto {
+		if w.HtmlCacheStatus != nil {
+			w.HtmlCacheStatus.Total += 1
+		}
+		err = w.GetAndCacheHtmlData(link, true)
+		if err == nil {
+			if w.HtmlCacheStatus != nil {
+				w.HtmlCacheStatus.FinishedCount += 1
+			}
+		}
+		tplName = "mobile/" + tplName
+		webInfo.TotalPages = 0
+		err = newCtx.View(tplName)
+	}
+}
+
 func (w *Website) BuildArchiveCache() {
 	if w.PluginHtmlCache.Open == false {
 		return

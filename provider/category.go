@@ -20,7 +20,7 @@ import (
 
 func (w *Website) GetCategories(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Category, error) {
 	var categories []*model.Category
-	err := ops(w.DB).Omit("content", "extra_data").Find(&categories).Error
+	err := ops(w.DB).Omit("content", "extra").Find(&categories).Error
 	if err != nil {
 		return nil, err
 	}
@@ -93,20 +93,48 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}
 		newPost = true
 	}
-	category.Title = req.Title
-	category.SeoTitle = req.SeoTitle
-	category.Keywords = req.Keywords
-	category.Description = req.Description
-	category.Type = req.Type
-	category.ModuleId = req.ModuleId
-	category.ParentId = req.ParentId
-	category.Sort = req.Sort
-	category.Status = req.Status
-	category.Template = req.Template
-	category.DetailTemplate = req.DetailTemplate
-	category.IsInherit = req.IsInherit
-	category.Images = req.Images
-	category.Logo = req.Logo
+	if req.UpdateAll || req.Title != "" {
+		category.Title = req.Title
+	}
+	if req.UpdateAll || req.SeoTitle != "" {
+		category.SeoTitle = req.SeoTitle
+	}
+	if req.UpdateAll || req.Keywords != "" {
+		category.Keywords = req.Keywords
+	}
+	if req.UpdateAll || req.Description != "" {
+		category.Description = req.Description
+	}
+	if req.UpdateAll || req.Type > 0 {
+		category.Type = req.Type
+	}
+	if req.UpdateAll || req.ModuleId > 0 {
+		category.ModuleId = req.ModuleId
+	}
+	if req.UpdateAll || req.ParentId > 0 {
+		category.ParentId = req.ParentId
+	}
+	if req.UpdateAll || req.Sort > 0 {
+		category.Sort = req.Sort
+	}
+	if req.UpdateAll || req.Status > 0 {
+		category.Status = req.Status
+	}
+	if req.UpdateAll || req.Template != "" {
+		category.Template = req.Template
+	}
+	if req.UpdateAll || req.DetailTemplate != "" {
+		category.DetailTemplate = req.DetailTemplate
+	}
+	if req.UpdateAll || req.IsInherit > 0 {
+		category.IsInherit = req.IsInherit
+	}
+	if req.UpdateAll || len(req.Images) > 0 {
+		category.Images = req.Images
+	}
+	if req.UpdateAll || req.Logo != "" {
+		category.Logo = req.Logo
+	}
 	if req.Extra != nil {
 		category.Extra = req.Extra
 	}
@@ -125,21 +153,24 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}
 	}
 	// 判断重复
-	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if !req.Force && len(req.UrlToken) > 0 {
-		// 检查是否重复
-		tmpCat, err := w.GetCategoryByUrlToken(req.UrlToken)
-		if err == nil && tmpCat.Id != category.Id {
-			return nil, errors.New("token duplication")
+	if req.UpdateAll || req.UrlToken != "" {
+		req.UrlToken = library.ParseUrlToken(req.UrlToken)
+		if !req.Force && len(req.UrlToken) > 0 {
+			// 检查是否重复
+			tmpCat, err := w.GetCategoryByUrlToken(req.UrlToken)
+			if err == nil && tmpCat.Id != category.Id {
+				return nil, errors.New("token duplication")
+			}
 		}
+
+		if req.UrlToken == "" {
+			req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+		}
+		if !req.Force {
+			req.UrlToken = w.VerifyCategoryUrlToken(req.UrlToken, category.Id)
+		}
+		category.UrlToken = req.UrlToken
 	}
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
-	}
-	if !req.Force {
-		req.UrlToken = w.VerifyCategoryUrlToken(req.UrlToken, category.Id)
-	}
-	category.UrlToken = req.UrlToken
 	if category.ModuleId == 0 && category.Type == config.CategoryTypeArchive {
 		modules := w.GetCacheModules()
 		if len(modules) > 0 {
@@ -149,9 +180,12 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if category.Type == config.CategoryTypePage {
 		category.ModuleId = 0
 	}
-	// 将单个&nbsp;替换为空格
-	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = w.ReplaceContentUrl(req.Content, false)
+	if req.UpdateAll || req.Content != "" {
+		// 将单个&nbsp;替换为空格
+		req.Content = library.ReplaceSingleSpace(req.Content)
+		req.Content = w.ReplaceContentUrl(req.Content, false)
+		category.Content = req.Content
+	}
 	if category.Extra != nil {
 		module := w.GetModuleFromCache(category.ModuleId)
 		if module != nil && len(module.CategoryFields) > 0 {
@@ -194,7 +228,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	autoAddImage := false
 	//提取描述
 	if category.Description == "" {
-		tmpContent := req.Content
+		tmpContent := category.Content
 		if w.Content.Editor == "markdown" {
 			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
@@ -203,7 +237,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	//提取缩略图
 	if len(category.Logo) == 0 {
 		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-		match := re.FindStringSubmatch(req.Content)
+		match := re.FindStringSubmatch(category.Content)
 		if len(match) > 1 {
 			//提取缩略图
 			category.Logo = match[1]
@@ -211,7 +245,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		} else {
 			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-			match = re.FindStringSubmatch(req.Content)
+			match = re.FindStringSubmatch(category.Content)
 			if len(match) > 2 {
 				category.Logo = match[2]
 				autoAddImage = true
@@ -221,7 +255,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	// 过滤外链
 	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
-		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+		category.Content = re.ReplaceAllStringFunc(category.Content, func(s string) string {
 			match := re.FindStringSubmatch(s)
 			if len(match) < 3 {
 				return s
@@ -243,7 +277,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		// 匹配Markdown [link](url)
 		// 由于不支持零宽断言，因此匹配所有
 		re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
-		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+		category.Content = re.ReplaceAllStringFunc(category.Content, func(s string) string {
 			// 过滤掉 ! 开头的
 			if strings.HasPrefix(s, "!") {
 				return s
@@ -265,7 +299,6 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			return s
 		})
 	}
-	category.Content = req.Content
 
 	err = category.Save(w.DB)
 	if err != nil {
@@ -274,7 +307,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	//检查有多少个material
 	var materialIds []uint
 	re, _ := regexp.Compile(`(?i)<div.*?data-material="(\d+)".*?>`)
-	matches := re.FindAllStringSubmatch(req.Content, -1)
+	matches := re.FindAllStringSubmatch(category.Content, -1)
 	if len(matches) > 0 {
 		for _, match := range matches {
 			//记录material
@@ -335,13 +368,13 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 			if autoAddImage {
 				//提取缩略图
 				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-				match := re.FindStringSubmatch(req.Content)
+				match := re.FindStringSubmatch(category.Content)
 				if len(match) > 1 {
 					category.Logo = match[1]
 				} else {
 					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-					match = re.FindStringSubmatch(req.Content)
+					match = re.FindStringSubmatch(category.Content)
 					if len(match) > 2 {
 						category.Logo = match[2]
 					}
@@ -423,6 +456,9 @@ func (w *Website) GetParentCategories(parentId uint) []*model.Category {
 		category := w.GetCategoryFromCache(parentId)
 		if category == nil {
 			break
+		}
+		if category.Link == "" {
+			category.Link = w.GetUrl("category", category, 0)
 		}
 		categories = append(categories, category)
 		parentId = category.ParentId
@@ -532,9 +568,6 @@ func (w *Website) GetCategoryFromCache(categoryId uint) *model.Category {
 	categories := w.GetCacheCategories()
 	for i := range categories {
 		if categories[i].Id == categoryId {
-			if categories[i].Link == "" {
-				categories[i].Link = w.GetUrl("category", categories[i], 0)
-			}
 			return categories[i]
 		}
 	}

@@ -169,17 +169,39 @@ func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
 		}
 	}
 
-	nav.Title = req.Title
-	nav.SubTitle = req.SubTitle
-	nav.Description = req.Description
-	nav.ParentId = req.ParentId
-	nav.NavType = req.NavType
-	nav.PageId = req.PageId
-	nav.TypeId = req.TypeId
-	nav.Link = req.Link
-	nav.Sort = req.Sort
-	nav.Logo = req.Logo
-	nav.Style = req.Style
+	if req.UpdateAll || req.Title != "" {
+		nav.Title = req.Title
+	}
+	if req.UpdateAll || req.SubTitle != "" {
+		nav.SubTitle = req.SubTitle
+	}
+	if req.UpdateAll || req.Description != "" {
+		nav.Description = req.Description
+	}
+	if req.UpdateAll || req.ParentId > 0 {
+		nav.ParentId = req.ParentId
+	}
+	if req.UpdateAll || req.NavType > 0 {
+		nav.NavType = req.NavType
+	}
+	if req.UpdateAll || req.PageId > 0 {
+		nav.PageId = req.PageId
+	}
+	if req.UpdateAll || req.TypeId > 0 {
+		nav.TypeId = req.TypeId
+	}
+	if req.UpdateAll || req.Link != "" {
+		nav.Link = req.Link
+	}
+	if req.UpdateAll || req.Sort > 0 {
+		nav.Sort = req.Sort
+	}
+	if req.UpdateAll || req.Logo != "" {
+		nav.Logo = req.Logo
+	}
+	if req.UpdateAll || req.Style != "" {
+		nav.Style = req.Style
+	}
 	nav.Status = 1
 
 	err = nav.Save(w.DB)

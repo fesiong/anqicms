@@ -2,7 +2,6 @@ package provider
 
 import (
 	"bytes"
-	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -17,11 +16,8 @@ import (
 func (w *Website) GetWeappClient(focus bool) *weapp.Client {
 	if w.weappClient == nil || focus {
 		httpCli := &http.Client{
-			Timeout: 10 * time.Second,
-			Transport: &http.Transport{
-				// 跳过校验
-				TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
-			},
+			Timeout:   10 * time.Second,
+			Transport: &http.Transport{},
 		}
 
 		w.weappClient = weapp.NewClient(

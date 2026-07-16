@@ -73,6 +73,9 @@ func CategoryPage(ctx iris.Context) {
 		ShowMessage(ctx, currentSite.TplTr("UndefinedModel"), nil)
 		return
 	}
+	if category.Link == "" {
+		category.Link = currentSite.GetUrl("category", category, 0)
+	}
 
 	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
 		webInfo.Title = category.Title

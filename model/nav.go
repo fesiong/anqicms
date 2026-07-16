@@ -12,12 +12,13 @@ const (
 	NavTypeCategory = 1
 	NavTypeOutlink  = 2
 	NavTypeArchive  = 3
+	NavTypePlace    = 4
 )
 
 type Nav struct {
 	Id          uint             `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64            `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64            `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64            `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64            `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Title       string           `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	SubTitle    string           `json:"sub_title" gorm:"column:sub_title;type:varchar(250) not null;default:''"`
 	Description string           `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
@@ -40,8 +41,8 @@ type Nav struct {
 
 type NavType struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 }
 

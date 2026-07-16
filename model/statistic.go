@@ -8,7 +8,7 @@ import (
 // StatisticLog * 每天浏览量
 type StatisticLog struct {
 	Id          uint        `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64       `json:"created_time" gorm:"column:created_time;type:int(11);unique"`
+	CreatedTime int64       `json:"created_time" gorm:"column:created_time;type:bigint(20);unique"`
 	SpiderCount SpiderCount `json:"spider_count" gorm:"column:spider_count;type:varchar(250) default null"`
 	VisitCount  VisitCount  `json:"visit_count" gorm:"column:visit_count;type:varchar(250) default null"`
 	ShopCount   ShopCount   `json:"shop_count" gorm:"column:shop_count;type:varchar(1000) default null"`
@@ -19,7 +19,7 @@ type SearchLog struct {
 	Keyword     string `json:"keyword" gorm:"column:keyword;type:varchar(100) not null;default:''"`
 	UserId      int64  `json:"user_id" gorm:"column:user_id;type:int(11)"`
 	Ip          string `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 }
 
 type VisitCount struct {

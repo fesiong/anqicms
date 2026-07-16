@@ -45,6 +45,9 @@ func PagePage(ctx iris.Context) {
 		ctx.Redirect(currentSite.GetUrl("category", category, 0))
 		return
 	}
+	if category.Link == "" {
+		category.Link = currentSite.GetUrl("page", category, 0)
+	}
 
 	ctx.ViewData("page", category)
 
@@ -57,7 +60,7 @@ func PagePage(ctx iris.Context) {
 		webInfo.Description = category.Description
 		webInfo.NavBar = int64(category.Id)
 		webInfo.PageName = "pageDetail"
-		webInfo.CanonicalUrl = currentSite.GetUrl("page", category, 0)
+		webInfo.CanonicalUrl = category.Link
 		ctx.ViewData("webInfo", webInfo)
 	}
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板

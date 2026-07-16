@@ -81,7 +81,7 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 	if id > 0 {
 		cacheKey += fmt.Sprintf("id_%d", id)
 	} else if token != "" {
-		cacheKey += "token_" + token
+		cacheKey += "token_" + strings.ReplaceAll(token, "-", "_")
 	} else {
 		cacheKey += "default"
 	}
@@ -339,7 +339,11 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 								value, _ = strconv.ParseInt(fmt.Sprint(item.Default), 10, 64)
 							}
 							if value > 0 {
-								content = currentSite.GetCategoryFromCache(uint(value))
+								category := currentSite.GetCategoryFromCache(uint(value))
+								if category.Link == "" {
+									category.Link = currentSite.GetUrl("category", category, 0)
+								}
+								content = category
 							} else {
 								content = nil
 							}

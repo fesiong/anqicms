@@ -14,6 +14,7 @@ type NavConfig struct {
 	Style       string `json:"style"`
 	Status      uint   `json:"status"`
 	Logo        string `json:"logo"`
+	UpdateAll   bool   `json:"update_all"`
 }
 
 type NavTypeRequest struct {

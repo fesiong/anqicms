@@ -1,45 +1,55 @@
 package provider
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"google.golang.org/api/indexing/v3"
-	"google.golang.org/api/option"
+	"io"
+	"net/http"
+	"time"
+
+	"golang.org/x/oauth2/google"
 )
 
-func (w *Website) GetGoogleIndexingAccess() (*indexing.Service, error) {
+func (w *Website) GetGoogleIndexingAccess() (*http.Client, error) {
 	content := w.PluginPush.GoogleJson
-
 	if len(content) == 0 {
 		return nil, errors.New(w.Tr("AccountError"))
 	}
 
 	ctx := context.Background()
-
-	client, err := indexing.NewService(ctx, option.WithCredentialsJSON([]byte(content)))
-
+	conf, err := google.JWTConfigFromJSON([]byte(content), "https://www.googleapis.com/auth/indexing")
 	if err != nil {
 		return nil, err
 	}
-
-	return client, nil
+	return conf.Client(ctx), nil
 }
 
-func (w *Website) PushGoogleIndexing(client *indexing.Service, domain string) (int, error) {
-	notification := indexing.UrlNotification{
-		Type: "URL_UPDATED",
-		Url:  domain,
+func (w *Website) PushGoogleIndexing(client *http.Client, domain string) (int, error) {
+	body := map[string]string{
+		"url":  domain,
+		"type": "URL_UPDATED",
 	}
-	res, err := client.UrlNotifications.Publish(&notification).Do()
+	bodyBytes, _ := json.Marshal(body)
 
+	req, err := http.NewRequest("POST", "https://indexing.googleapis.com/v3/urlNotifications:publish", bytes.NewReader(bodyBytes))
 	if err != nil {
 		return -1, err
 	}
+	req.Header.Set("Content-Type", "application/json")
 
-	w.logPushResult("google", fmt.Sprintf("%v, %d", domain, res.HTTPStatusCode))
+	resp, err := client.Do(req)
+	if err != nil {
+		return -1, err
+	}
+	defer resp.Body.Close()
 
-	return res.HTTPStatusCode, nil
+	respBody, _ := io.ReadAll(resp.Body)
+	w.logPushResult("google", fmt.Sprintf("%s, %d: %s", domain, resp.StatusCode, string(respBody)))
+
+	return resp.StatusCode, nil
 }
 
 func (w *Website) PushGoogle(list []string) error {
@@ -52,6 +62,7 @@ func (w *Website) PushGoogle(list []string) error {
 		if err != nil {
 			return err
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return nil

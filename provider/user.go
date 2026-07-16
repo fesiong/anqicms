@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"io"
 	"log"
 	"mime/multipart"
 	"regexp"
@@ -14,11 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"google.golang.org/api/oauth2/v2"
-	"google.golang.org/api/option"
-
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/medivhzhan/weapp/v3"
+	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/image/webp"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -115,44 +114,76 @@ func (w *Website) GetUsersInfoByIds(userIds []uint) []*model.User {
 	return users
 }
 
-func (w *Website) SaveUserInfo(req *request.UserRequest) error {
+func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	var user *model.User
 	var err error
 	if req.Id > 0 {
 		user, err = w.GetUserInfoById(req.Id)
 		if err != nil {
 			// 用户不存在
-			return err
+			return nil, err
 		}
 	} else {
 		user = &model.User{}
 	}
-
 	oldGroupId := user.GroupId
 
-	user.UserName = req.UserName
-	user.RealName = req.RealName
-	user.FirstName = req.FirstName
-	user.LastName = req.LastName
-	user.Birthday = req.Birthday
-	user.AvatarURL = req.AvatarURL
-	user.Introduce = req.Introduce
-	user.Phone = req.Phone
-	user.Email = req.Email
-	user.IsRetailer = req.IsRetailer
-	user.ParentId = req.ParentId
-	user.InviteCode = req.InviteCode
-	user.GroupId = req.GroupId
-	user.ExpireTime = req.ExpireTime
-	user.Status = req.Status
+	if req.UpdateAll || req.UserName != "" {
+		user.UserName = req.UserName
+	}
+	if req.UpdateAll || req.RealName != "" {
+		user.RealName = req.RealName
+	}
+	if req.UpdateAll || req.FirstName != "" {
+		user.FirstName = req.FirstName
+	}
+	if req.UpdateAll || req.LastName != "" {
+		user.LastName = req.LastName
+	}
+	if req.UpdateAll || req.Birthday > 0 {
+		user.Birthday = req.Birthday
+	}
+	if req.UpdateAll || req.AvatarURL != "" {
+		user.AvatarURL = req.AvatarURL
+		user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
+	}
+	if req.UpdateAll || req.Introduce != "" {
+		user.Introduce = req.Introduce
+	}
+	if req.UpdateAll || req.Phone != "" {
+		user.Phone = req.Phone
+	}
+	if req.UpdateAll || req.Email != "" {
+		user.Email = req.Email
+	}
+	if req.UpdateAll || req.IsRetailer > 0 {
+		user.IsRetailer = req.IsRetailer
+	}
+	if req.UpdateAll || req.ParentId > 0 {
+		user.ParentId = req.ParentId
+	}
+	if req.UpdateAll || req.InviteCode != "" {
+		user.InviteCode = req.InviteCode
+	}
+	if req.UpdateAll || req.GroupId > 0 {
+		user.GroupId = req.GroupId
+		if user.GroupId == 0 {
+			user.GroupId = w.PluginUser.DefaultGroupId
+		}
+	}
+	if req.UpdateAll || req.ExpireTime > 0 {
+		user.ExpireTime = req.ExpireTime
+	}
+	if req.UpdateAll || req.Status > 0 {
+		user.Status = req.Status
+		if user.GroupId == 0 {
+			user.GroupId = w.PluginUser.DefaultGroupId
+		}
+	}
 
-	user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
 	req.Password = strings.TrimSpace(req.Password)
 	if req.Password != "" {
 		user.EncryptPassword(req.Password)
-	}
-	if user.GroupId == 0 {
-		user.GroupId = w.PluginUser.DefaultGroupId
 	}
 
 	err = w.DB.Save(user).Error
@@ -181,6 +212,10 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
+						} else if val, ok := extraValue["value"].([]string); ok {
+							extraFields[v.FieldName] = strings.Join(val, ",")
+						} else if extraValue["value"] != nil {
+							extraFields[v.FieldName] = extraValue["value"]
 						}
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
@@ -241,7 +276,7 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) error {
 		}
 	}
 
-	return err
+	return user, err
 }
 
 func (w *Website) DeleteUserInfo(userId uint) error {
@@ -472,6 +507,10 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
+						} else if val, ok := extraValue.([]string); ok {
+							extraFields[v.FieldName] = strings.Join(val, ",")
+						} else if extraValue != nil {
+							extraFields[v.FieldName] = extraValue
 						}
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
@@ -682,37 +721,52 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		log.Println(err)
 		return nil, err
 	}
+	// 用 REST API 获取用户信息，替代 google.golang.org/api/oauth2/v2
 	client := googleCfg.Client(ctx, tok)
-	oauth2Service, err := oauth2.NewService(context.Background(), option.WithHTTPClient(client))
-	userInfo, err := oauth2Service.Userinfo.Get().Do()
+	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
+	var googleUser GoogleUser
+	if err := json.Unmarshal(body, &googleUser); err != nil {
+		log.Println(err)
+		return nil, err
+	}
 	// 直接对接 users 表的 email
-	user, err := w.GetUserInfoByEmail(userInfo.Email)
+	user, err := w.GetUserInfoByEmail(googleUser.Email)
 	if err != nil {
 		// 用户不存在，新建
 		user = &model.User{
-			Email:         userInfo.Email,
-			EmailVerified: *userInfo.VerifiedEmail,
-			UserName:      userInfo.Name,
-			AvatarURL:     userInfo.Picture,
-			GoogleId:      userInfo.Id,
+			Email:         googleUser.Email,
+			EmailVerified: googleUser.EmailVerified,
+			UserName:      googleUser.Name,
+			AvatarURL:     googleUser.Picture,
+			GoogleId:      googleUser.Sub,
 			GroupId:       w.PluginUser.DefaultGroupId,
 			Password:      "",
 			ResetPassword: true,
 			Status:        w.PluginUser.GetDefaultStatus(),
 		}
-		if userInfo.GivenName != "" {
-			user.RealName = userInfo.GivenName + " " + userInfo.FamilyName
+		if googleUser.GivenName != "" {
+			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
 		}
 		w.DB.Save(user)
 		w.ProcessNewUser(user)
 	} else {
-		user.GoogleId = userInfo.Id
-		user.UserName = userInfo.Name
-		if userInfo.GivenName != "" {
-			user.RealName = userInfo.GivenName + " " + userInfo.FamilyName
+		user.GoogleId = googleUser.Sub
+		user.UserName = googleUser.Name
+		if googleUser.GivenName != "" {
+			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
 		}
 		if user.AvatarURL == "" {
-			user.AvatarURL = userInfo.Picture
+			user.AvatarURL = googleUser.Picture
 		}
 		w.DB.Save(user)
 	}
@@ -752,6 +806,13 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 	ok := user.CheckPassword(req.Password)
 	if !ok {
 		return nil, errors.New(w.Tr("WrongPassword"))
+	}
+
+	// 密码成本因子升级：旧密码使用低成本因子时自动升级
+	cost, _ := bcrypt.Cost([]byte(user.Password))
+	if cost < model.BcryptCost {
+		user.EncryptPassword(req.Password)
+		w.DB.Model(&user).UpdateColumn("password", user.Password)
 	}
 
 	user.Token = w.GetUserAuthToken(user.Id, true)

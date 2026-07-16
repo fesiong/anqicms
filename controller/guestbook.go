@@ -61,6 +61,10 @@ func GuestbookForm(ctx iris.Context) {
 		var val string
 		if item.Type == config.CustomFieldTypeCheckbox {
 			tmpVal, _ := ctx.PostValues(item.FieldName + "[]")
+			tmpVal2, _ := ctx.PostValues(item.FieldName)
+			if tmpVal2 != nil {
+				tmpVal = tmpVal2
+			}
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			file, info, err := ctx.FormFile(item.FieldName)
@@ -147,19 +151,7 @@ func GuestbookForm(ctx iris.Context) {
 		if isChecked {
 			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
-		if spamStatus == 1 {
-			// 1 是正常，可以发邮件
-			currentSite.SendGuestbookToMail(guestbook)
-			if currentSite.ParentId > 0 {
-				mainSite := currentSite.GetMainWebsite()
-				parentGuestbook := *guestbook
-				parentGuestbook.Id = 0
-				parentGuestbook.Status = spamStatus
-				parentGuestbook.SiteId = currentSite.Id
-				_ = mainSite.DB.Save(&parentGuestbook)
-				mainSite.SendGuestbookToMail(&parentGuestbook)
-			}
-		}
+		currentSite.ProcessGuestbook(guestbook, spamStatus)
 	}()
 
 	msg := currentSite.PluginGuestbook.ReturnMessage

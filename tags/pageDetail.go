@@ -60,7 +60,7 @@ func (node *tagPageDetailNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if id > 0 {
 		cacheKey += fmt.Sprintf("id_%d", id)
 	} else if token != "" {
-		cacheKey += "token_" + token
+		cacheKey += "token_" + strings.ReplaceAll(token, "-", "_")
 	} else {
 		cacheKey += "default"
 	}

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
@@ -147,7 +148,6 @@ func AdminLogin(ctx iris.Context) {
 			Ip:       ctx.RemoteAddr(),
 			Status:   0,
 			UserName: req.UserName,
-			Password: req.Password,
 		}
 		currentSite.DB.Create(&adminLog)
 
@@ -171,6 +171,17 @@ func AdminLogin(ctx iris.Context) {
 		loginError.LastTime = time.Now().Unix()
 		// 保存 store, 封禁10分钟
 		_ = currentSite.Cache.Set(storeKey, loginError, 600)
+
+		// 同时累加 IP 封禁计数，防止轮换用户名绕过
+		ipStoreKey := keyPrefix + ctx.RemoteAddr()
+		var ipLoginError response.LoginError
+		if err := currentSite.Cache.Get(ipStoreKey, &ipLoginError); err == nil {
+			ipLoginError.Times++
+		} else {
+			ipLoginError.Times = 1
+		}
+		ipLoginError.LastTime = time.Now().Unix()
+		_ = currentSite.Cache.Set(ipStoreKey, ipLoginError, 600)
 
 		// 记录日志
 		adminLog := model.AdminLoginLog{
@@ -197,6 +208,13 @@ func AdminLogin(ctx iris.Context) {
 	admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
 	// 记录用户登录时间
 	currentSite.DB.Model(admin).UpdateColumn("login_time", time.Now().Unix())
+
+	// 密码成本因子升级：旧密码使用低成本因子时自动升级
+	cost, _ := bcrypt.Cost([]byte(admin.Password))
+	if cost < model.BcryptCost {
+		admin.EncryptPassword(req.Password)
+		currentSite.DB.Model(admin).UpdateColumn("password", admin.Password)
+	}
 
 	// 记录日志
 	adminLog := model.AdminLoginLog{

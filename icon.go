@@ -4,7 +4,6 @@ package anqicms
 
 import (
 	"embed"
-	_ "embed"
 )
 
 //go:embed icon.png

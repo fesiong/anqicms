@@ -201,8 +201,9 @@ func PluginUserDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	req.UpdateAll = true
 
-	err := currentSite.SaveUserInfo(&req)
+	user, err := currentSite.SaveUserInfo(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -210,7 +211,7 @@ func PluginUserDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserLog", req.Id, req.UserName))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateUserLog", user.Id, user.UserName))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

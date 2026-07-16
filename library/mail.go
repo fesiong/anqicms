@@ -469,7 +469,7 @@ func putBuffer(buf *bytes.Buffer) {
 }
 
 func Dial(addr string) (*smtp.Client, error) {
-	conn, err := tls.Dial("tcp", addr, &tls.Config{InsecureSkipVerify: true})
+	conn, err := tls.Dial("tcp", addr, &tls.Config{})
 	if err != nil {
 		return nil, err
 	}

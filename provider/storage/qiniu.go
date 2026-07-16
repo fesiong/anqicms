@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"mime"
+	"path"
 
 	"github.com/qiniu/go-sdk/v7/auth/qbox"
 	storage2 "github.com/qiniu/go-sdk/v7/storage"
@@ -44,7 +46,9 @@ func (s *QiniuStorage) Put(ctx context.Context, key string, r io.Reader) error {
 
 	formUploader := storage2.NewFormUploader(&cfg)
 	ret := storage2.PutRet{}
-	putExtra := storage2.PutExtra{}
+	putExtra := storage2.PutExtra{
+		MimeType: mime.TypeByExtension(path.Ext(key)),
+	}
 	err := formUploader.Put(context.Background(), &ret, upToken, key, r, -1, &putExtra)
 	if err != nil {
 		return err

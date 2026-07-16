@@ -186,6 +186,7 @@ func CategoryDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	req.UpdateAll = true
 
 	category, err := currentSite.SaveCategory(&req)
 	if err != nil {

@@ -2,10 +2,11 @@ package tags
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
-	"strings"
 )
 
 type tagBannerListNode struct {
@@ -43,6 +44,7 @@ func (node *tagBannerListNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 				if !strings.HasPrefix(banner.Logo, "http") && !strings.HasPrefix(banner.Logo, "//") {
 					banner.Logo = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(banner.Logo, "/")
 				}
+				banner.Title = banner.Alt // 兼容
 				bannerList = append(bannerList, &banner)
 			}
 		}

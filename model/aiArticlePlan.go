@@ -2,8 +2,8 @@ package model
 
 type AiArticlePlan struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Type        int    `json:"type" gorm:"column:type;type:tinyint(1)  not null;default:0;index:idx_type"` // 0 预设无用，1 AI写作，2 AI翻译，3，AI改写，4 自媒体重写
 	ReqId       int64  `json:"req_id" gorm:"column:req_id;type:bigint(20) not null;default:0"`             // 服务端返回的可查询ID
 	Language    string `json:"language" gorm:"column:language;type:varchar(10) not null;default:''"`

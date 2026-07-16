@@ -1,10 +1,11 @@
 package library
 
 import (
-	"github.com/shirou/gopsutil/v4/mem"
 	"reflect"
 	"runtime"
 	"strings"
+
+	"github.com/shirou/gopsutil/v4/mem"
 )
 
 // StructToMap 将结构体转换为 map
@@ -66,4 +67,23 @@ func GetProcessMemory() uint64 {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 	return m.Alloc / 1024 / 1024 // 返回MB单位
+}
+
+func GetTopDomain(domain string) string {
+	//第二后缀部分，com,org,gov,net,和cn所有2个字母的部分，可以认为是双后缀
+	items := strings.Split(domain, ".")
+	if len(items) <= 2 {
+		//只有2个，就是顶级了
+		return domain
+	}
+	//先截取成三个
+	items = items[len(items)-3:]
+	//先判断是否是双后缀，
+	if items[1] == "com" || items[1] == "org" || items[1] == "gov" || items[1] == "net" || (len(items[1]) == 2 && items[2] == "cn") {
+		//认为是双后缀
+		return strings.Join(items, ".")
+	}
+	//一般的域名
+	items = items[1:]
+	return strings.Join(items, ".")
 }

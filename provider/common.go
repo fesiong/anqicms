@@ -121,7 +121,11 @@ func ProcessExtra(extraData model.ExtraData, fields []config.CustomField, curren
 				value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 			}
 			if value > 0 {
-				extra[field.FieldName] = currentSite.GetCategoryFromCache(uint(value))
+				category := currentSite.GetCategoryFromCache(uint(value))
+				if category.Link == "" {
+					category.Link = currentSite.GetUrl("category", category, 0)
+				}
+				extra[field.FieldName] = category
 			} else {
 				extra[field.FieldName] = nil
 			}

@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/kataras/iris/v12"
@@ -80,15 +81,36 @@ func AccountPasswordResetPage(ctx iris.Context) {
 }
 
 func AccountIndexPage(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
 	route := ctx.Params().Get("route")
 	if route == "" {
 		route = "index"
 	}
+	route = filepath.Clean(route)
 	if !strings.HasSuffix(route, ".html") {
 		route += ".html"
 	}
+	tpl := "account/" + route
+	tpl = filepath.Clean(tpl)
+	if !strings.HasPrefix(tpl, "account") {
+		ctx.StatusCode(iris.StatusNotFound)
+		return
+	}
+	tpl, ok := currentSite.TemplateExist(tpl)
+	if !ok {
+		ctx.StatusCode(iris.StatusNotFound)
+		return
+	}
+	if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
+		webInfo.Title = route
+		webInfo.PageName = "account"
+		ctx.ViewData("webInfo", webInfo)
+	}
 
-	err := ctx.View(GetViewPath(ctx, "account/"+route))
+	ctx.ViewData("currentRoute", route)
+
+	err := ctx.View(GetViewPath(ctx, tpl))
 	if err != nil {
 		ctx.StatusCode(404)
 		ctx.Values().Set("message", err.Error())

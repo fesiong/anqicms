@@ -204,7 +204,11 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 					value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 				}
 				if value > 0 {
-					param.Value = w.GetCategoryFromCache(uint(value))
+					category := w.GetCategoryFromCache(uint(value))
+					if category.Link == "" {
+						category.Link = w.GetUrl("category", category, 0)
+					}
+					param.Value = category
 				} else {
 					param.Value = nil
 				}
@@ -616,6 +620,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			if req.ParentId > 0 {
 				tx = tx.Where("parent_id = ?", req.ParentId)
 			}
+			if req.PlaceId > 0 {
+				tx = tx.Where("place_id = ?", req.PlaceId)
+			}
 			if req.ModuleId > 0 {
 				tx = tx.Where("module_id = ?", req.ModuleId)
 			}
@@ -960,7 +967,11 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 								value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 							}
 							if value > 0 {
-								param.Value = w.GetCategoryFromCache(uint(value))
+								category := w.GetCategoryFromCache(uint(value))
+								if category.Link == "" {
+									category.Link = w.GetUrl("category", category, 0)
+								}
+								param.Value = category
 							} else {
 								param.Value = nil
 							}
@@ -1311,7 +1322,11 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]config.
 					value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 				}
 				if value > 0 {
-					param.Value = w.GetCategoryFromCache(uint(value))
+					category := w.GetCategoryFromCache(uint(value))
+					if category.Link == "" {
+						category.Link = w.GetUrl("category", category, 0)
+					}
+					param.Value = category
 				} else {
 					param.Value = nil
 				}
@@ -1447,7 +1462,9 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 	if category == nil {
 		return nil, errors.New("no category found")
 	}
-
+	if category.Link == "" {
+		category.Link = w.GetUrl("category", category, 0)
+	}
 	frontUrl := w.System.BaseUrl
 	if w.System.FrontUrl != "" {
 		frontUrl = w.System.FrontUrl
@@ -1522,7 +1539,11 @@ func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Catego
 						value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 					}
 					if value > 0 {
-						categoryExtra[field.FieldName] = w.GetCategoryFromCache(uint(value))
+						category := w.GetCategoryFromCache(uint(value))
+						if category.Link == "" {
+							category.Link = w.GetUrl("category", category, 0)
+						}
+						categoryExtra[field.FieldName] = category
 					} else {
 						categoryExtra[field.FieldName] = nil
 					}
@@ -1645,7 +1666,11 @@ func (w *Website) ApiGetTag(req *request.ApiTagRequest) (*model.Tag, error) {
 							value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 						}
 						if value > 0 {
-							tagDetail.Extra[field.FieldName] = w.GetCategoryFromCache(uint(value))
+							category := w.GetCategoryFromCache(uint(value))
+							if category.Link == "" {
+								category.Link = w.GetUrl("category", category, 0)
+							}
+							tagDetail.Extra[field.FieldName] = category
 						} else {
 							tagDetail.Extra[field.FieldName] = nil
 						}
@@ -1676,6 +1701,67 @@ func (w *Website) ApiGetTags(req *request.ApiTagListRequest) ([]*model.Tag, int6
 	}
 
 	return tagList, total
+}
+
+func (w *Website) ApiGetPlace(req *request.ApiPlaceRequest) (*model.Place, error) {
+	var place *model.Place
+
+	if req.Id > 0 {
+		place = w.GetPlaceFromCache(uint(req.Id))
+	} else if req.UrlToken != "" {
+		// 处理特殊的 prev and next
+		place = w.GetPlaceFromCacheByToken(req.UrlToken)
+	}
+	if place == nil {
+		return nil, errors.New("no place found")
+	}
+
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	place.Thumb = place.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(place.Id)))
+	// convert markdown to html
+	if req.Render {
+		place.Content = library.MarkdownToHTML(place.Content, frontUrl, w.Content.FilterOutlink)
+	}
+	place.Content = w.ReplaceContentUrl(place.Content, true)
+	// extra replace
+	if place.Extra != nil {
+		placeFields := w.PluginPlace.Fields
+		if len(placeFields) > 0 {
+			extraData := ProcessExtra(place.Extra, placeFields, w, req.Render, "")
+			place.Extra = extraData
+		}
+	}
+
+	return place, nil
+}
+
+func (w *Website) ApiGetPlaces(req *request.ApiPlaceListRequest) ([]model.Place, int64) {
+
+	placeList := w.GetPlacesFromCache(uint(req.ParentId), req.All)
+	var total int64 = int64(len(placeList))
+	var resultList []model.Place
+	for i := range placeList {
+		if req.Offset > i {
+			continue
+		}
+		if req.Limit > 0 && i >= (req.Limit+req.Offset) {
+			break
+		}
+		tmpPlace := *placeList[i]
+		tmpPlace.Content = ""
+		tmpPlace.Extra = nil
+		tmpPlace.GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tmpPlace.Id)))
+		if tmpPlace.Link == "" {
+			tmpPlace.Link = w.GetUrl(PatternPlace, &tmpPlace, 0)
+		}
+		tmpPlace.IsCurrent = false
+		resultList = append(resultList, tmpPlace)
+	}
+
+	return resultList, total
 }
 
 var (
@@ -1935,7 +2021,11 @@ func (w *Website) ApiGetDiyFields(render bool) []config.CustomField {
 				value, _ = strconv.ParseInt(fmt.Sprint(field.Content), 10, 64)
 			}
 			if value > 0 {
-				field.Value = w.GetCategoryFromCache(uint(value))
+				category := w.GetCategoryFromCache(uint(value))
+				if category.Link == "" {
+					category.Link = w.GetUrl("category", category, 0)
+				}
+				field.Value = category
 			} else {
 				field.Value = nil
 			}

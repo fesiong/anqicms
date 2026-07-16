@@ -1007,13 +1007,13 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
-		Set("nonce_str", library.GenerateRandString(32)).
+		Set("nonce_str", config.GenerateRandString(32)).
 		Set("spbill_create_ip", ctx.RemoteAddr()).
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
 		Set("trade_type", wechat.TradeType_Native).
 		Set("notify_url", currentSite.System.BaseUrl+"/notify/wechat/pay").
-		Set("sign_type", wechat.SignType_MD5)
+		Set("sign_type", wechat.SignType_HMAC_SHA256)
 
 	wxRsp, err := client.UnifiedOrder(context.Background(), bm)
 	if err != nil {
@@ -1048,7 +1048,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		"msg":  "",
 		"data": iris.Map{
 			"pay_way":  config.PayWayWechat,
-			"code_url": fmt.Sprintf("data:image/png;base64,%s", base64.StdEncoding.EncodeToString(png)),
+			"code_url": "data:image/png;base64," + base64.StdEncoding.EncodeToString(png),
 		},
 	})
 	return
@@ -1079,13 +1079,13 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
-		Set("nonce_str", library.GenerateRandString(32)).
+		Set("nonce_str", config.GenerateRandString(32)).
 		Set("spbill_create_ip", ctx.RemoteAddr()).
 		Set("out_trade_no", payment.PaymentId). // 传的是paymentID，因此notify的时候，需要处理paymentID
 		Set("total_fee", payment.Amount).
 		Set("trade_type", wechat.TradeType_Mini).
 		Set("notify_url", currentSite.System.BaseUrl+"/notify/wechat/pay").
-		Set("sign_type", wechat.SignType_MD5).
+		Set("sign_type", wechat.SignType_HMAC_SHA256).
 		Set("openid", userWechat.Openid)
 
 	wxRsp, err := client.UnifiedOrder(context.Background(), bm)
@@ -1128,7 +1128,7 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 			"timeStamp": timeStamp,
 			"package":   packages,
 			"nonceStr":  wxRsp.NonceStr,
-			"signType":  wechat.SignType_MD5,
+			"signType":  wechat.SignType_HMAC_SHA256,
 		},
 	})
 	return
@@ -1191,7 +1191,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 
 	bm.Set("subject", payment.Remark)
 	bm.Set("out_trade_no", payment.PaymentId)
-	bm.Set("total_amount", fmt.Sprintf("%.2f", float32(payment.Amount)/100))
+	bm.Set("total_amount", fmt.Sprintf("%.2f", float64(payment.Amount)/100))
 
 	//创建订单
 	payUrl, err := client.TradePagePay(context.Background(), bm)

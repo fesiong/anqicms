@@ -2,7 +2,6 @@ package tags
 
 import (
 	"fmt"
-	"log"
 	"reflect"
 
 	"github.com/flosch/pongo2/v6"
@@ -33,7 +32,6 @@ func (node *tagUserGroupDetailNode) Execute(ctx *pongo2.ExecutionContext, writer
 	}
 	if args["level"] != nil {
 		level := args["level"].Integer()
-		log.Println("level", level)
 		queryDetail, _ = currentSite.GetUserGroupInfoByLevel(level)
 	}
 	fieldName := ""

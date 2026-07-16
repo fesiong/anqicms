@@ -9,8 +9,8 @@ import (
 
 type Tag struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	CategoryId  uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index"`
 	SeoTitle    string `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`

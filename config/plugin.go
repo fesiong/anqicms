@@ -1,6 +1,7 @@
 package config
 
 import (
+	"net/url"
 	"strings"
 	"sync"
 
@@ -26,6 +27,7 @@ type PluginSitemapConfig struct {
 	Type        string `json:"type"`
 	UpdatedTime int64  `json:"updated_time"`
 	SitemapURL  string `json:"sitemap_url"`
+	PageSize    int    `json:"page_size"`
 
 	ExcludeTag         bool   `json:"exclude_tag"`
 	ExcludeModuleIds   []uint `json:"exclude_module_ids"`
@@ -42,6 +44,12 @@ type PluginAnchorConfig struct {
 
 type PluginGuestbookConfig struct {
 	ReturnMessage string         `json:"return_message"`
+	PushWay       int            `json:"push_way"`   // 1=email|2=站点|3=API接口
+	SiteId        uint           `json:"site_id"`    // 站点ID
+	ApiMethod     string         `json:"api_method"` // json|formdata|query
+	ApiURL        string         `json:"api_url"`
+	HeaderKey     string         `json:"header_key"`
+	HeaderValue   string         `json:"header_value"`
 	Fields        []*CustomField `json:"fields"`
 }
 
@@ -354,7 +362,11 @@ func (pm *PluginMultiLangConfig) GetSite(lang string) *MultiLangSite {
 
 func (pm *PluginMultiLangConfig) GetSiteByBaseUrl(baseUrl string) *MultiLangSite {
 	for i := range pm.SubSites {
-		if strings.Contains(pm.SubSites[i].BaseUrl, baseUrl) {
+		subUrl, err := url.Parse(pm.SubSites[i].BaseUrl)
+		if err != nil {
+			continue
+		}
+		if subUrl.Host == baseUrl {
 			return &pm.SubSites[i]
 		}
 	}
@@ -469,6 +481,13 @@ type PluginLLMsConfig struct {
 	LLMSDescrption       string `json:"llms_description"`       // LLMs.txt 描述, 在URL列表之前添加了可选的介绍文本。使用此文本解释LLMs.txt文件的用途或结构。
 	LLMSAfterDescription string `json:"llms_after_description"` // 在链接或内容条目列表之前插入的可选文本。您可以在网址开始之前使用它来添加额外的注释、上下文或数据使用信息。
 	LLMSEndDescription   string `json:"llms_end_description"`   // 附加在LLMs.txt文件底部的结尾文本（例如页脚、联系方式或免责声明信息）。
+}
+
+type PluginPlaceConfig struct {
+	Open        bool          `json:"open"`
+	UrlType     string        `json:"url_type"`     // URL形式，subdomain|directory,默认：directory
+	ContentType string        `json:"content_type"` // 默认=内容需要绑定分站，full=全站复用
+	Fields      []CustomField `json:"fields"`       // 自定义字段
 }
 
 type PluginGoogleMerchantConfig struct {

@@ -4,10 +4,10 @@ import (
 	"context"
 	"io"
 	"log"
-	"mime/multipart"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider/storage"
@@ -44,37 +44,35 @@ func (w *Website) UploadFile(location string, r io.Reader) (string, error) {
 	//log.Println("存储到", w.PluginStorage.StorageType)
 	location = strings.TrimLeft(location, "/")
 
+	// 如果需要保留本地副本，先写入本地，再从本地重新读取用于远程上传
+	// 避免因文件过大导致内存被快速消耗
+	if w.PluginStorage.KeepLocal && w.PluginStorage.StorageType != config.StorageTypeLocal {
+		localPath := w.PublicPath + location
+		info, err := os.Stat(localPath)
+		// 文件不存在或文件过旧
+		if err != nil || info.ModTime().Before(time.Now().Add(-10*time.Second)) {
+			localStorage, _ := storage.NewLocalStorage(w.PluginStorage, w.PublicPath)
+			if err := localStorage.Put(context.Background(), location, r); err != nil {
+				log.Println("保存到本地失败", err)
+				return "", err
+			}
+		}
+		// 从本地重新打开文件用于远程上传
+		file, err := os.Open(localPath)
+		if err != nil {
+			log.Println("打开本地文件失败", err)
+			return "", err
+		}
+		defer file.Close()
+		r = file
+	}
+
 	err := w.Storage.Put(context.Background(), location, r)
-	log.Println("上传结果", err, location)
+	// log.Println("上传结果", err, location)
 	if err != nil {
 		return "", err
 	}
-	// todo
-	if w.PluginStorage.KeepLocal && w.PluginStorage.StorageType != config.StorageTypeLocal || 1 == 1 {
-		var uploadReader io.Reader
-		//将文件写入本地
-		if seeker, ok := r.(io.Seeker); ok {
-			log.Println("支持 io.Seeker")
-			// 如果已经是Seeker，重置到开头
-			seeker.Seek(0, io.SeekStart)
-			uploadReader = r
-		} else if file, ok := r.(*os.File); ok {
-			log.Println("支持 os.File， 重新打开")
-			file.Seek(0, io.SeekStart)
-			uploadReader = file
-		} else if file, ok := r.(multipart.File); ok {
-			log.Println("支持 multipart.File")
-			uploadReader = file
-		} else {
-			log.Println("无法识别的Reader")
-			uploadReader = nil
-		}
-		if uploadReader != nil {
-			localStorage, _ := storage.NewLocalStorage(w.PluginStorage, w.PublicPath)
-			err = localStorage.Put(context.Background(), location, uploadReader)
-		}
-	}
-	//
+
 	// 上传到静态服务器
 	_ = w.SyncHtmlCacheToStorage(w.PublicPath+location, location)
 
@@ -107,6 +105,12 @@ func (w *Website) MoveFile(src, dest string) error {
 	//log.Println("存储到", w.PluginStorage.StorageType)
 	src = strings.TrimLeft(src, "/")
 	dest = strings.TrimLeft(dest, "/")
+
+	paths, fileName := filepath.Split(src)
+	srcThumb := paths + "thumb_" + fileName
+	paths, fileName = filepath.Split(dest)
+	destThumb := paths + "thumb_" + fileName
+
 	// 额外存储一份到本地
 	if w.PluginStorage.KeepLocal && w.PluginStorage.StorageType != config.StorageTypeLocal {
 		//将文件写入本地
@@ -116,6 +120,8 @@ func (w *Website) MoveFile(src, dest string) error {
 			log.Println(err.Error())
 			return err
 		}
+		// 移动缩略图
+		_ = localStorage.Move(context.Background(), srcThumb, destThumb)
 	}
 
 	// 移动文件
@@ -125,11 +131,7 @@ func (w *Website) MoveFile(src, dest string) error {
 	}
 
 	// 移动 thumb
-	paths, fileName := filepath.Split(src)
-	srcThumb := paths + "thumb_" + fileName
-	paths, fileName = filepath.Split(dest)
-	destThumb := paths + "thumb_" + fileName
-	_ = w.Storage.Move(context.Background(), srcThumb, destThumb)
+	err = w.Storage.Move(context.Background(), srcThumb, destThumb)
 
 	return nil
 }

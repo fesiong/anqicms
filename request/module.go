@@ -15,6 +15,7 @@ type ModuleRequest struct {
 	IsSystem       int                  `json:"is_system"`
 	TitleName      string               `json:"title_name"`
 	Status         uint                 `json:"status"`
+	UpdateAll      bool                 `json:"update_all"`
 }
 
 type ModuleFieldRequest struct {

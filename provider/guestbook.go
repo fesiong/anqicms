@@ -1,6 +1,15 @@
 package provider
 
 import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -122,6 +131,107 @@ func (w *Website) GetGuestbookFields() []*config.CustomField {
 	}
 
 	return fields
+}
+
+func (w *Website) ProcessGuestbook(guestbook *model.Guestbook, spamStatus int) {
+	if w.PluginGuestbook.PushWay == config.GuestbookPushWaySite {
+		// 推送站点
+		if w.PluginGuestbook.SiteId > 0 {
+			pushSite := GetWebsite(w.PluginGuestbook.SiteId)
+			if pushSite != nil {
+				parentGuestbook := *guestbook
+				parentGuestbook.Id = 0
+				parentGuestbook.Status = spamStatus
+				parentGuestbook.SiteId = w.Id
+				_ = w.DB.Save(&parentGuestbook)
+			}
+		}
+	} else if w.PluginGuestbook.PushWay == config.GuestbookPushWayApi {
+		// 推送到API
+		if w.PluginGuestbook.ApiURL == "" {
+			return
+		}
+		// 构建请求参数
+		params := url.Values{}
+		params.Set("user_name", guestbook.UserName)
+		params.Set("contact", guestbook.Contact)
+		params.Set("content", guestbook.Content)
+		params.Set("ip", guestbook.Ip)
+		params.Set("refer", guestbook.Refer)
+		params.Set("created_time", time.Unix(guestbook.CreatedTime, 0).Format("2006-01-02 15:04:05"))
+		for key, value := range guestbook.ExtraData {
+			params.Set("extra["+key+"]", fmt.Sprint(value))
+		}
+
+		apiURL := w.PluginGuestbook.ApiURL
+		var req *http.Request
+		var err error
+
+		if w.PluginGuestbook.ApiMethod == "query" {
+			// GET 方式，参数拼在 URL 上
+			if strings.Contains(apiURL, "?") {
+				apiURL += "&" + params.Encode()
+			} else {
+				apiURL += "?" + params.Encode()
+			}
+			req, err = http.NewRequest(http.MethodGet, apiURL, nil)
+		} else if w.PluginGuestbook.ApiMethod == "formdata" {
+			// POST form-urlencoded
+			body := strings.NewReader(params.Encode())
+			req, err = http.NewRequest(http.MethodPost, apiURL, body)
+			if err == nil {
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			}
+		} else {
+			// 默认 json 方式 POST
+			jsonBody := make(map[string]interface{})
+			jsonBody["user_name"] = guestbook.UserName
+			jsonBody["contact"] = guestbook.Contact
+			jsonBody["content"] = guestbook.Content
+			jsonBody["ip"] = guestbook.Ip
+			jsonBody["refer"] = guestbook.Refer
+			jsonBody["created_time"] = time.Unix(guestbook.CreatedTime, 0).Format("2006-01-02 15:04:05")
+			if len(guestbook.ExtraData) > 0 {
+				jsonBody["extra"] = guestbook.ExtraData
+			}
+			buf, marshalErr := json.Marshal(jsonBody)
+			if marshalErr != nil {
+				return
+			}
+			req, err = http.NewRequest(http.MethodPost, apiURL, bytes.NewReader(buf))
+			if err == nil {
+				req.Header.Set("Content-Type", "application/json")
+			}
+		}
+		if err != nil {
+			return
+		}
+		// 设置自定义 Header
+		if w.PluginGuestbook.HeaderKey != "" {
+			req.Header.Set(w.PluginGuestbook.HeaderKey, w.PluginGuestbook.HeaderValue)
+		}
+		// 发送请求，非阻塞，忽略响应
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, respErr := client.Do(req)
+		if respErr == nil {
+			_, _ = io.Copy(io.Discard, resp.Body)
+			resp.Body.Close()
+		}
+	} else {
+		if spamStatus == 1 {
+			// 1 是正常，可以发邮件
+			w.SendGuestbookToMail(guestbook)
+			if w.ParentId > 0 {
+				mainSite := w.GetMainWebsite()
+				parentGuestbook := *guestbook
+				parentGuestbook.Id = 0
+				parentGuestbook.Status = spamStatus
+				parentGuestbook.SiteId = w.Id
+				_ = mainSite.DB.Save(&parentGuestbook)
+				mainSite.SendGuestbookToMail(&parentGuestbook)
+			}
+		}
+	}
 }
 
 func (w *Website) SendGuestbookToMail(guestbook *model.Guestbook) {

@@ -10,8 +10,8 @@ import (
 
 type Attachment struct {
 	Id           uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime  int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime  int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime  int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime  int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserId       uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	FileName     string `json:"file_name" gorm:"column:file_name;type:varchar(250) not null;default:''"`
 	FileLocation string `json:"file_location" gorm:"column:file_location;type:varchar(250) not null;default:''"`
@@ -31,8 +31,8 @@ type Attachment struct {
 
 type AttachmentCategory struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
 	AttachCount uint   `json:"attach_count" gorm:"column:attach_count;type:int(10) unsigned not null;default:0"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`

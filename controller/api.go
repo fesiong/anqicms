@@ -25,6 +25,7 @@ func ApiImportArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.PostValueInt64Default("id", 0)
 	parentId := ctx.PostValueInt64Default("parent_id", 0)
+	placeId := ctx.PostValueInt64Default("place_id", 0)
 	title := ctx.PostValueTrim("title")
 	seoTitle := ctx.PostValueTrim("seo_title")
 	content := ctx.PostValueTrim("content")
@@ -66,11 +67,82 @@ func ApiImportArchive(ctx iris.Context) {
 	fixedLink := ctx.PostValueTrim("fixed_link")
 	flag := ctx.PostValueTrim("flag")
 	price := ctx.PostValueInt64Default("price", 0)
+	originPrice := ctx.PostValueInt64Default("origin_price", 0)
 	stock := ctx.PostValueInt64Default("stock", 0)
 	readLevel := ctx.PostValueIntDefault("read_level", 0)
 	sort := uint(ctx.PostValueIntDefault("sort", 0))
 	views := uint(ctx.PostValueIntDefault("views", 0))
 	originUrl := ctx.PostValueTrim("origin_url")
+	// 新增字段
+	userId := uint(ctx.PostValueIntDefault("user_id", 0))
+	password := ctx.PostValueTrim("password")
+	costPrice := ctx.PostValueInt64Default("cost_price", 0)
+	videoUrl := ctx.PostValueTrim("video_url")
+	needLogistics, _ := ctx.PostValueBool("need_logistics")
+	isFreeShipping, _ := ctx.PostValueBool("is_free_shipping")
+	soldCount := ctx.PostValueInt64Default("sold_count", 0)
+	reviewCount := ctx.PostValueInt64Default("review_count", 0)
+	optionType := ctx.PostValueIntDefault("option_type", 0)
+	weight, _ := strconv.ParseFloat(ctx.PostValueTrim("weight"), 64)
+	weightUnit := ctx.PostValueTrim("weight_unit")
+	length, _ := strconv.ParseFloat(ctx.PostValueTrim("length"), 64)
+	width, _ := strconv.ParseFloat(ctx.PostValueTrim("width"), 64)
+	height, _ := strconv.ParseFloat(ctx.PostValueTrim("height"), 64)
+	volume, _ := strconv.ParseFloat(ctx.PostValueTrim("volume"), 64)
+	lengthUnit := ctx.PostValueTrim("length_unit")
+	allowOversold, _ := ctx.PostValueBool("allow_oversold")
+	minQuantity := ctx.PostValueIntDefault("min_quantity", 0)
+	maxQuantity := ctx.PostValueIntDefault("max_quantity", 0)
+	stepQuantity := ctx.PostValueIntDefault("step_quantity", 0)
+	productType := ctx.PostValueIntDefault("product_type", 1)
+	keywordId := uint(ctx.PostValueIntDefault("keyword_id", 0))
+	originTitle := ctx.PostValueTrim("origin_title")
+	brand := ctx.PostValueTrim("brand")
+	hasPseudo := ctx.PostValueIntDefault("has_pseudo", 0)
+	originId := ctx.PostValueIntDefault("origin_id", 0)
+	commentCount := uint(ctx.PostValueInt64Default("comment_count", 0))
+	favoriteCount := ctx.PostValueInt64Default("favorite_count", 0)
+	averageScore, _ := strconv.ParseFloat(ctx.PostValueTrim("average_score"), 32)
+	// 处理 JSON 数组字段
+	tmpFlags, _ := ctx.PostValues("flags[]")
+	var flags []string
+	if len(tmpFlags) == 1 && strings.HasPrefix(tmpFlags[0], "[") {
+		_ = json.Unmarshal([]byte(tmpFlags[0]), &flags)
+	} else {
+		flags = tmpFlags
+	}
+	tmpRelationIds, _ := ctx.PostValues("relation_ids[]")
+	var relationIds []int64
+	if len(tmpRelationIds) == 1 && strings.HasPrefix(tmpRelationIds[0], "[") {
+		_ = json.Unmarshal([]byte(tmpRelationIds[0]), &relationIds)
+	} else {
+		for _, v := range tmpRelationIds {
+			if id, err := strconv.ParseInt(v, 10, 64); err == nil {
+				relationIds = append(relationIds, id)
+			}
+		}
+	}
+	orderFieldsStr := ctx.PostValueTrim("order_fields")
+	skusStr := ctx.PostValueTrim("skus")
+	optionsStr := ctx.PostValueTrim("options")
+	wholesaleRulesStr := ctx.PostValueTrim("wholesale_rules")
+	// 解析JSON字段
+	var orderFields []config.CustomField
+	if orderFieldsStr != "" {
+		_ = json.Unmarshal([]byte(orderFieldsStr), &orderFields)
+	}
+	var importSkus []*request.ArchiveSku
+	if skusStr != "" {
+		_ = json.Unmarshal([]byte(skusStr), &importSkus)
+	}
+	var importOptions []*request.ArchiveOption
+	if optionsStr != "" {
+		_ = json.Unmarshal([]byte(optionsStr), &importOptions)
+	}
+	var wholesaleRules []*request.WholesaleRule
+	if wholesaleRulesStr != "" {
+		_ = json.Unmarshal([]byte(wholesaleRulesStr), &wholesaleRules)
+	}
 	tmpCategoryIds, _ := ctx.PostValues("category_ids[]")
 	var categoryIds []uint
 	if len(tmpCategoryIds) > 0 {
@@ -157,30 +229,65 @@ func ApiImportArchive(ctx iris.Context) {
 	}
 
 	var req = request.Archive{
-		ParentId:     parentId,
-		Title:        title,
-		SeoTitle:     seoTitle,
-		CategoryId:   categoryId,
-		CategoryIds:  categoryIds,
-		Keywords:     keywords,
-		Description:  description,
-		Content:      content,
-		Template:     template,
-		CanonicalUrl: canonicalUrl,
-		FixedLink:    fixedLink,
-		Flag:         flag,
-		Price:        price,
-		Stock:        stock,
-		ReadLevel:    readLevel,
-		Images:       images,
-		UrlToken:     urlToken,
-		Extra:        map[string]interface{}{},
-		Draft:        draft,
-		Sort:         sort,
-		OriginUrl:    originUrl,
-	}
-	if views > 0 {
-		req.Views = uint(views)
+		ParentId:       parentId,
+		PlaceId:        uint(placeId),
+		Title:          title,
+		SeoTitle:       seoTitle,
+		CategoryId:     categoryId,
+		CategoryIds:    categoryIds,
+		Keywords:       keywords,
+		Description:    description,
+		Content:        content,
+		Template:       template,
+		CanonicalUrl:   canonicalUrl,
+		FixedLink:      fixedLink,
+		Flag:           flag,
+		Flags:          flags,
+		UserId:         userId,
+		Price:          price,
+		OriginPrice:    originPrice,
+		CostPrice:      costPrice,
+		Stock:          stock,
+		ReadLevel:      readLevel,
+		Password:       password,
+		Sort:           sort,
+		Views:          views,
+		Images:         images,
+		UrlToken:       urlToken,
+		Extra:          map[string]interface{}{},
+		Draft:          draft,
+		OriginUrl:      originUrl,
+		OriginTitle:    originTitle,
+		KeywordId:      keywordId,
+		CommentCount:   commentCount,
+		FavoriteCount:  favoriteCount,
+		AverageScore:   float32(averageScore),
+		VideoUrl:       videoUrl,
+		NeedLogistics:  needLogistics,
+		IsFreeShipping: isFreeShipping,
+		SoldCount:      soldCount,
+		ReviewCount:    reviewCount,
+		OptionType:     optionType,
+		Weight:         weight,
+		WeightUnit:     weightUnit,
+		Length:         length,
+		Width:          width,
+		Height:         height,
+		Volume:         volume,
+		LengthUnit:     lengthUnit,
+		AllowOversold:  allowOversold,
+		MinQuantity:    minQuantity,
+		MaxQuantity:    maxQuantity,
+		StepQuantity:   stepQuantity,
+		ProductType:    productType,
+		Brand:          brand,
+		HasPseudo:      hasPseudo,
+		OriginId:       originId,
+		RelationIds:    relationIds,
+		OrderFields:    orderFields,
+		Skus:           importSkus,
+		Options:        importOptions,
+		WholesaleRules: wholesaleRules,
 	}
 
 	// 如果传了ID，则采用覆盖的形式
@@ -191,24 +298,53 @@ func ApiImportArchive(ctx iris.Context) {
 			// 不存在，创建一个
 			archiveDraft := model.ArchiveDraft{
 				Archive: model.Archive{
-					ParentId:    parentId,
-					Title:       title,
-					SeoTitle:    seoTitle,
-					UrlToken:    urlToken,
-					Keywords:    keywords,
-					Description: description,
-					ModuleId:    category.ModuleId,
-					CategoryId:  categoryId,
-					Logo:        logo,
-					Price:       price,
-					Stock:       stock,
-					ReadLevel:   readLevel,
-					Sort:        sort,
-					OriginUrl:   originUrl,
+					ParentId:       parentId,
+					PlaceId:        uint(placeId),
+					Title:          title,
+					SeoTitle:       seoTitle,
+					UrlToken:       urlToken,
+					Keywords:       keywords,
+					Description:    description,
+					ModuleId:       category.ModuleId,
+					CategoryId:     categoryId,
+					Logo:           logo,
+					UserId:         userId,
+					Price:          price,
+					OriginPrice:    originPrice,
+					CostPrice:      costPrice,
+					Stock:          stock,
+					ReadLevel:      readLevel,
+					Password:       password,
+					Sort:           sort,
+					Views:          views,
+					OriginUrl:      originUrl,
+					OriginTitle:    originTitle,
+					KeywordId:      keywordId,
+					CommentCount:   commentCount,
+					FavoriteCount:  favoriteCount,
+					AverageScore:   float32(averageScore),
+					Brand:          brand,
+					HasPseudo:      hasPseudo,
+					OriginId:       originId,
+					VideoUrl:       videoUrl,
+					NeedLogistics:  needLogistics,
+					IsFreeShipping: isFreeShipping,
+					SoldCount:      soldCount,
+					ReviewCount:    reviewCount,
+					OptionType:     optionType,
+					Weight:         weight,
+					WeightUnit:     weightUnit,
+					Length:         length,
+					Width:          width,
+					Height:         height,
+					Volume:         volume,
+					LengthUnit:     lengthUnit,
+					AllowOversold:  allowOversold,
+					MinQuantity:    minQuantity,
+					MaxQuantity:    maxQuantity,
+					StepQuantity:   stepQuantity,
+					ProductType:    productType,
 				},
-			}
-			if views > 0 {
-				archiveDraft.Views = views
 			}
 			archiveDraft.Id = id
 			err = currentSite.DB.Create(&archiveDraft).Error
@@ -340,7 +476,7 @@ func ApiImportArchive(ctx iris.Context) {
 			}
 		}
 	}
-
+	req.UpdateAll = true
 	archive, err := currentSite.SaveArchive(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -828,5 +964,85 @@ func ApiLogStatistic(ctx iris.Context) {
 	}
 	_ = currentSite.ShopCountLog.Write(&req)
 
-	ctx.StatusCode(iris.StatusOK)
+	ctx.StatusCode(iris.StatusNoContent)
+}
+
+func ApiImportReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	orderId := ctx.PostValueTrim("order_id")
+	archiveId := ctx.PostValueInt64Default("archive_id", 0)
+	archiveSkuId := ctx.PostValueInt64Default("archive_sku_id", 0)
+	userName := ctx.PostValueTrim("user_name")
+	email := ctx.PostValueTrim("email")
+	score := ctx.PostValueIntDefault("score", 5)
+	content := ctx.PostValueTrim("content")
+	images, _ := ctx.PostValues("images[]")
+	if len(images) == 1 && strings.HasPrefix(images[0], "[") {
+		err := json.Unmarshal([]byte(images[0]), &images)
+		if err != nil {
+			images = nil
+		}
+	}
+	userId := uint(ctx.PostValueIntDefault("user_id", 0))
+	var user *model.User
+	var err error
+	if userId > 0 {
+		user, err = currentSite.GetUserInfoById(userId)
+		if err == nil {
+			userName = user.RealName
+			email = user.Email
+		}
+	}
+	var order *model.Order
+	if orderId != "" {
+		order, err = currentSite.GetOrderInfoByOrderId(orderId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	}
+
+	if score == 0 {
+		score = 5
+	}
+
+	review := request.OrderReviewRequest{
+		UserId:       userId,
+		OrderId:      orderId,
+		ArchiveId:    archiveId,
+		ArchiveSkuId: archiveSkuId,
+		Ip:           ctx.RemoteAddr(),
+		UserName:     userName,
+		Email:        email,
+		Score:        score,
+		Content:      content,
+		Images:       images,
+		Status:       1,
+	}
+
+	if order != nil {
+		for _, v := range order.Details {
+			newItem := review
+			newItem.ArchiveId = v.GoodsId
+			newItem.ArchiveSkuId = v.GoodsSkuId
+			err = currentSite.SaveOrderReview(&newItem)
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  err.Error(),
+				})
+				return
+			}
+		}
+	} else {
+		err = currentSite.SaveOrderReview(&review)
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "OK",
+	})
 }

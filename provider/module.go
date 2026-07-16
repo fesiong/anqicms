@@ -67,71 +67,94 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 			Status: 1,
 		}
 	}
-	// 检查tableName
-	exists, err := w.GetModuleByTableName(req.TableName)
-	if err == nil && exists.Id != req.Id {
-		return nil, errors.New(w.Tr("ModelTableNameAlreadyExists"))
-	}
-
-	// 检查tableName
-	exists, err = w.GetModuleByUrlToken(req.UrlToken)
-	if err == nil && exists.Id != req.Id {
-		return nil, errors.New(w.Tr("ModelUrlAliasAlreadyExists"))
-	}
-
-	oldTableName := module.TableName
-	module.TableName = req.TableName
-
-	if oldTableName != module.TableName {
-		// 表示是新表
-		if w.DB.Migrator().HasTable(module.TableName) {
+	oldTableName := ""
+	if req.UpdateAll || req.TableName != "" {
+		// 检查tableName
+		exists, err := w.GetModuleByTableName(req.TableName)
+		if err == nil && exists.Id != req.Id {
 			return nil, errors.New(w.Tr("ModelTableNameAlreadyExists"))
 		}
-	}
-	// 检查fields
-	for i := range req.Fields {
-		// 不允许使用已存在的字段
-		archiveFields, err := getColumns(w.DB, &model.Archive{})
-		if err == nil {
-			for _, val := range archiveFields {
-				if val == req.Fields[i].FieldName {
-					return nil, errors.New(req.Fields[i].FieldName + w.Tr("FieldAlreadyExists"))
-				}
+
+		oldTableName = module.TableName
+		module.TableName = req.TableName
+
+		if oldTableName != module.TableName {
+			// 表示是新表
+			if w.DB.Migrator().HasTable(module.TableName) {
+				return nil, errors.New(w.Tr("ModelTableNameAlreadyExists"))
 			}
-		}
-		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.Fields[i].FieldName)
-		if err != nil || !match {
-			return nil, errors.New(req.Fields[i].FieldName + w.Tr("IncorrectNaming"))
-		}
-	}
-	// 检查 categoryFields
-	// 检查fields
-	for i := range req.CategoryFields {
-		// 不允许使用已存在的字段
-		categoryFields, err := getColumns(w.DB, &model.Category{})
-		if err == nil {
-			for _, val := range categoryFields {
-				if val == req.CategoryFields[i].FieldName {
-					return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("FieldAlreadyExists"))
-				}
-			}
-		}
-		match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.CategoryFields[i].FieldName)
-		if err != nil || !match {
-			return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("IncorrectNaming"))
 		}
 	}
 
-	module.Fields = req.Fields
-	module.Title = req.Title
-	module.Name = req.Name
-	module.Fields = req.Fields
-	module.CategoryFields = req.CategoryFields
-	module.TitleName = req.TitleName
-	module.UrlToken = req.UrlToken
-	module.Status = req.Status
-	module.Keywords = req.Keywords
-	module.Description = req.Description
+	if req.UpdateAll || req.UrlToken != "" {
+		// 检查tableName
+		exists, err := w.GetModuleByUrlToken(req.UrlToken)
+		if err == nil && exists.Id != req.Id {
+			return nil, errors.New(w.Tr("ModelUrlAliasAlreadyExists"))
+		}
+	}
+
+	if req.UpdateAll || req.Fields != nil {
+		// 检查fields
+		for i := range req.Fields {
+			// 不允许使用已存在的字段
+			archiveFields, err := getColumns(w.DB, &model.Archive{})
+			if err == nil {
+				for _, val := range archiveFields {
+					if val == req.Fields[i].FieldName {
+						return nil, errors.New(req.Fields[i].FieldName + w.Tr("FieldAlreadyExists"))
+					}
+				}
+			}
+			match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.Fields[i].FieldName)
+			if err != nil || !match {
+				return nil, errors.New(req.Fields[i].FieldName + w.Tr("IncorrectNaming"))
+			}
+		}
+		module.Fields = req.Fields
+	}
+	if req.UpdateAll || req.CategoryFields != nil {
+		// 检查 categoryFields
+		// 检查fields
+		for i := range req.CategoryFields {
+			// 不允许使用已存在的字段
+			categoryFields, err := getColumns(w.DB, &model.Category{})
+			if err == nil {
+				for _, val := range categoryFields {
+					if val == req.CategoryFields[i].FieldName {
+						return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("FieldAlreadyExists"))
+					}
+				}
+			}
+			match, err := regexp.MatchString(`^[a-z][0-9a-z_]+$`, req.CategoryFields[i].FieldName)
+			if err != nil || !match {
+				return nil, errors.New(req.CategoryFields[i].FieldName + w.Tr("IncorrectNaming"))
+			}
+		}
+		module.CategoryFields = req.CategoryFields
+	}
+
+	if req.UpdateAll || req.Title != "" {
+		module.Title = req.Title
+	}
+	if req.UpdateAll || req.Name != "" {
+		module.Name = req.Name
+	}
+	if req.UpdateAll || req.TitleName != "" {
+		module.TitleName = req.TitleName
+	}
+	if req.UpdateAll || req.UrlToken != "" {
+		module.UrlToken = req.UrlToken
+	}
+	if req.UpdateAll || req.Status > 0 {
+		module.Status = req.Status
+	}
+	if req.UpdateAll || req.TitleName != "" {
+		module.Keywords = req.Keywords
+	}
+	if req.UpdateAll || req.Description != "" {
+		module.Description = req.Description
+	}
 
 	err = w.DB.Save(module).Error
 	if err != nil {

@@ -2,14 +2,37 @@ package manageController
 
 import (
 	"fmt"
+	"os"
+	"strings"
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/context"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"os"
-	"time"
 )
+
+// sanitizePackageName 验证包名只包含安全字符
+func sanitizePackageName(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, c := range name {
+		if !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_') {
+			return false
+		}
+	}
+	return true
+}
+
+// sanitizeDesignFilePath 清理设计器文件路径，防止路径穿越
+func sanitizeDesignFilePath(filePath string) string {
+	if strings.Contains(filePath, "..") {
+		return ""
+	}
+	return filePath
+}
 
 func GetDesignList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
@@ -26,7 +49,16 @@ func GetDesignList(ctx iris.Context) {
 func GetDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
-
+	if packageName == "" {
+		packageName = currentSite.System.TemplateName
+	}
+	if !sanitizePackageName(packageName) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
 	designInfo, err := currentSite.GetDesignInfo(packageName, true)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -50,6 +82,14 @@ func SaveDesignInfo(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
 		})
 		return
 	}
@@ -94,6 +134,14 @@ func UseDesignInfo(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
 		})
 		return
 	}
@@ -220,6 +268,13 @@ func UploadDesignInfo(ctx iris.Context) {
 func CheckUploadDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
+	if !sanitizePackageName(packageName) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
 	packagePath := currentSite.RootPath + "template/" + packageName
 	_, err := os.Stat(packagePath)
 	if err == nil {
@@ -336,12 +391,30 @@ func UploadDesignFile(ctx iris.Context) {
 	defer file.Close()
 
 	packageName := ctx.PostValue("package")
+	if !sanitizePackageName(packageName) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
 	filePath := ctx.PostValue("path")
 	fileName := ctx.PostValue("name")
-	fileType := ctx.PostValue("type")
+	if filePath != "" {
+		filePath = sanitizeDesignFilePath(filePath)
+	}
 	if fileName != "" {
+		fileName = sanitizeDesignFilePath(fileName)
+		if fileName == "" {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("InvalidFileName"),
+			})
+			return
+		}
 		info.Filename = fileName
 	}
+	fileType := ctx.PostValue("type")
 
 	err = currentSite.UploadDesignFile(file, info, packageName, fileType, filePath)
 	if err != nil {
@@ -365,7 +438,17 @@ func UploadDesignFile(ctx iris.Context) {
 func GetDesignFileDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
+	if !sanitizePackageName(packageName) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
 	fileName := ctx.URLParam("path")
+	if fileName != "" {
+		fileName = sanitizeDesignFilePath(fileName)
+	}
 	fileType := ctx.URLParam("type")
 
 	fileInfo, err := currentSite.GetDesignFileDetail(packageName, fileName, fileType, true)
@@ -387,7 +470,17 @@ func GetDesignFileDetail(ctx iris.Context) {
 func GetDesignFileHistories(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
+	if !sanitizePackageName(packageName) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
 	fileName := ctx.URLParam("path")
+	if fileName != "" {
+		fileName = sanitizeDesignFilePath(fileName)
+	}
 	fileType := ctx.URLParam("type")
 
 	histories := currentSite.GetDesignFileHistories(packageName, fileName, fileType)
@@ -402,9 +495,22 @@ func GetDesignFileHistories(ctx iris.Context) {
 func GetDesignFileHistoryDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
+	if !sanitizePackageName(packageName) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
 	fileName := ctx.URLParam("path")
+	if fileName != "" {
+		fileName = sanitizeDesignFilePath(fileName)
+	}
 	fileType := ctx.URLParam("type")
 	historyHash := ctx.URLParam("hash")
+	if historyHash != "" {
+		historyHash = sanitizeDesignFilePath(historyHash)
+	}
 
 	fileInfo, err := currentSite.GetDesignFileHistoryInfo(packageName, fileName, historyHash, fileType)
 	if err != nil {
@@ -433,6 +539,16 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 		return
 	}
 
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
+	req.Filepath = sanitizeDesignFilePath(req.Filepath)
+	req.Hash = sanitizeDesignFilePath(req.Hash)
+
 	err := currentSite.DeleteDesignHistoryFile(req.Package, req.Filepath, req.Hash, req.Type)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -460,6 +576,16 @@ func RestoreDesignFile(ctx iris.Context) {
 		})
 		return
 	}
+
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
+	req.Filepath = sanitizeDesignFilePath(req.Filepath)
+	req.Hash = sanitizeDesignFilePath(req.Hash)
 
 	err := currentSite.RestoreDesignFile(req.Package, req.Filepath, req.Hash, req.Type)
 	if err != nil {
@@ -494,6 +620,15 @@ func SaveDesignFile(ctx iris.Context) {
 		return
 	}
 
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
+	req.Path = sanitizeDesignFilePath(req.Path)
+
 	err := currentSite.SaveDesignFile(req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -525,6 +660,15 @@ func CopyDesignFile(ctx iris.Context) {
 		return
 	}
 
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
+	req.Path = sanitizeDesignFilePath(req.Path)
+
 	err := currentSite.CopyDesignFile(req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -553,6 +697,15 @@ func DeleteDesignFile(ctx iris.Context) {
 		})
 		return
 	}
+
+	if !sanitizePackageName(req.Package) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InvalidPackageName"),
+		})
+		return
+	}
+	req.Path = sanitizeDesignFilePath(req.Path)
 
 	err := currentSite.DeleteDesignFile(req.Package, req.Path, req.Type)
 	if err != nil {

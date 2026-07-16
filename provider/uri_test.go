@@ -2,15 +2,15 @@ package provider
 
 import (
 	"log"
+	"regexp"
 	"testing"
 )
 
-func (w *Website) TestGetUrl(t *testing.T) {
-	archive, err := w.GetArchiveById(12)
-	if err != nil {
-		t.Fatal(err)
-	}
+func TestGetUrl(t *testing.T) {
+	link := "/article(/c-{combine})/{filename}(/{page}).html"
 
-	link := w.GetUrl("archive", archive, 0)
+	re := regexp.MustCompile(`\(([^{page}]*?)\)`)
+	link = re.ReplaceAllString(link, "")
+
 	log.Println(link)
 }

@@ -377,7 +377,7 @@
 "UnableToModifyTheImage": "Unable to modify the image"
 "TheImageResourceToBeReplacedDoesNotExist": "The image resource to be replaced does not exist"
 "UploadResourceAttachmentLog": "Upload resource attachment: %d => %s"
-"PleaseSelectAColumn": "Please select a column"
+"PleaseSelectAColumn": "Please select a category"
 "UndefinedModel": "Undefined model"
 "PleaseFillInTheArticleTitle": "Please fill in the article title"
 "PleaseFillInTheArticleContent": "Please fill in the article content"
@@ -837,3 +837,4 @@
 "PleaseSelectATag": "Please select a tag"
 "Module not found": "Module not found"
 "Key": "Key"
+"ThisAccountHasBeenDisabled": "This account has been disabled"

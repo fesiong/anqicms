@@ -45,6 +45,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	var defaultCategoryId uint
 	var authorId = uint(0)
 	var parentId = int64(0)
+	var placeId = uint(0)
 	var tagIds []int64
 	var tag string
 	var argIds []int64
@@ -64,6 +65,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["parentId"] != nil {
 		parentId = int64(args["parentId"].Integer())
+	}
+	if args["placeId"] != nil {
+		placeId = uint(args["placeId"].Integer())
 	}
 	if args["tagId"] != nil {
 		tmpIds := strings.Split(args["tagId"].String(), ",")
@@ -348,6 +352,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		Ids:                argIds,
 		Render:             render,
 		ParentId:           int64(parentId),
+		PlaceId:            int64(placeId),
 		CategoryIds:        categoryIds,
 		ExcludeCategoryIds: excludeCategoryIds,
 		ExcludeFlags:       excludeFlags,
@@ -409,7 +414,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 			}
 		}
 		pager := makePagination(currentSite, total, currentPage, limit, urlPatten, 5)
-		webInfo.TotalPages = pager.TotalPages
+		if webInfo != nil {
+			webInfo.TotalPages = pager.TotalPages
+		}
 		ctx.Public["pagination"] = pager
 		ctx.Private["totalItems"] = total
 

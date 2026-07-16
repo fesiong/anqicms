@@ -115,6 +115,7 @@ func PluginTagDetailForm(ctx iris.Context) {
 		})
 		return
 	}
+	req.UpdateAll = true
 
 	tag, err := currentSite.SaveTag(&req)
 	if err != nil {

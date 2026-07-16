@@ -18,7 +18,6 @@ import (
 )
 
 // SitemapLimit 单个sitemap文件可包含的连接数
-const SitemapLimit = 50000
 const PushLogFile = "push.log"
 
 type bingData struct {

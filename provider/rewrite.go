@@ -20,6 +20,8 @@ const (
 	PatternPeople       = "people"       // 用户
 	PatternPeopleIndex  = "peopleIndex"  // 用户列表
 	PatternSearch       = "search"       // 搜索
+	PatternPlace        = "place"        // 地点
+	PatternPlaceIndex   = "placeIndex"   // 地点列表
 	PatternCommon       = "common"
 )
 
@@ -92,6 +94,7 @@ var replaceParams = map[string]string{
 	"{id}":           "([\\d]+)",
 	"{filename}":     "([^\\/]+?)",
 	"{catname}":      "([^\\/]+?)",
+	"{place}":        "([^\\/]+?)",
 	"{multicatname}": "(.+?)",
 	"{module}":       "([^\\/]+?)",
 	"{catid}":        "([\\d]+)",
@@ -153,6 +156,12 @@ func (w *Website) GetRewritePattern(focus bool) *RewritePattern {
 	}
 	if w.parsedPattern.Patterns[PatternSearch] == "" {
 		w.parsedPattern.Patterns[PatternSearch] = "/search(/{module})"
+	}
+	if w.parsedPattern.Patterns[PatternPlaceIndex] == "" {
+		w.parsedPattern.Patterns[PatternPlaceIndex] = "/cities(/{page})"
+	}
+	if w.parsedPattern.Patterns[PatternPlace] == "" {
+		w.parsedPattern.Patterns[PatternPlace] = "/{filename}(/{page})"
 	}
 	// 强制加page
 	if !strings.Contains(w.parsedPattern.Patterns[PatternArchive], "{page}") {

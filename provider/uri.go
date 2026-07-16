@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -88,6 +89,14 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 					combineStr = "/c-" + strings.Join(combineIds, "-")
 				}
 			}
+			// place prefix
+			if item.PlaceId > 0 && mainSite.PluginPlace.Open && mainSite.PluginPlace.UrlType != "" {
+				// 子域名,子目录
+				place := w.GetPlaceFromCache(item.PlaceId)
+				if place != nil {
+					baseUrl = strings.TrimSuffix(place.Link, "/")
+				}
+			}
 
 			itemTime := time.Unix(item.CreatedTime, 0)
 			for _, v := range rewritePattern.Tags[patternName] {
@@ -169,6 +178,36 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				}
 			}
 		}
+	case PatternPlace:
+		uri = rewritePattern.Patterns[PatternPlace]
+		item, ok := data.(*model.Place)
+		if !ok {
+			item2, ok2 := data.(model.Place)
+			if ok2 {
+				item = &item2
+				ok = ok2
+			}
+		}
+		if ok && item != nil {
+			// 如果是subdomain，则拼接域名
+			if w.PluginPlace.UrlType == config.PlaceUrlTypeSubdomain {
+				//
+				topDomain := strings.SplitN(w.Host, ".", 2)[1]
+				if strings.Count(w.Host, ".") == 1 {
+					topDomain = w.Host
+				}
+				uri = w.Scheme + "://" + item.UrlToken + "." + topDomain + "/"
+			} else {
+				for _, v := range rewritePattern.Tags[PatternPlace] {
+					// place详情，只支持filename|place属性
+					if v == "place" || v == "filename" {
+						uri = strings.ReplaceAll(uri, fmt.Sprintf("{%s}", v), item.UrlToken)
+					}
+				}
+			}
+		}
+	case PatternPlaceIndex:
+		uri = rewritePattern.Patterns[PatternPlaceIndex]
 	case PatternCategory:
 		uri = rewritePattern.Patterns[PatternCategory]
 		item, ok := data.(*model.Category)
@@ -264,6 +303,11 @@ func (w *Website) GetUrl(match string, data interface{}, page int, args ...inter
 				archive, _ := w.GetArchiveById(item.PageId)
 				if archive != nil {
 					uri = w.GetUrl(PatternArchive, archive, 0)
+				}
+			} else if item.NavType == model.NavTypePlace {
+				place := w.GetPlaceFromCache(uint(item.PageId))
+				if place != nil {
+					uri = w.GetUrl(PatternPlace, place, 0)
 				}
 			} else if item.NavType == model.NavTypeOutlink {
 				//外链

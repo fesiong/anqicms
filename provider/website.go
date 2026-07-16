@@ -5,12 +5,14 @@ import (
 	"errors"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 
 	"golang.org/x/oauth2"
+	"kandaoni.com/anqicms/pkg/mcp/server"
 	"kandaoni.com/anqicms/provider/storage"
 
 	"github.com/esap/wechat"
@@ -36,6 +38,7 @@ type Website struct {
 	Mysql                   *config.MysqlConfig
 	Initialed               bool
 	ErrorMsg                string // 错误提示
+	Scheme                  string
 	Host                    string
 	BaseURI                 string
 	RootPath                string
@@ -97,10 +100,10 @@ type Website struct {
 	PluginJsonLd       *config.PluginJsonLdConfig
 	Currency           *config.CurrencyConfig
 	PluginLLMs         *config.PluginLLMsConfig
+	PluginPlace        *config.PluginPlaceConfig
 
 	sensitiveAcMatcher *library.AhoCorasick
 	sensitiveRegexes   []*regexp.Regexp
-	htmlTagRegex       *regexp.Regexp
 	anchorAcMatcher    *library.AhoCorasick
 
 	CollectorConfig *config.CollectorJson
@@ -117,6 +120,18 @@ type Website struct {
 	Template     *StoreTemplates
 	ShopCountLog *ShopCountLog
 	MailService  *MailService
+	// ai
+	AiSrv *AiChatService
+}
+
+var mcpServer *server.Server
+
+func SetMcpServer(mcpSrv *server.Server) {
+	mcpServer = mcpSrv
+}
+
+func GetMcpServer() *server.Server {
+	return mcpServer
 }
 
 func (w *Website) Ctx() context.Context {
@@ -307,10 +322,11 @@ func InitWebsite(mw *model.Website) {
 			mw.Mysql.Host = config.Server.Mysql.Host
 			mw.Mysql.Port = config.Server.Mysql.Port
 		}
+		mw.RootPath = filepath.Clean(mw.RootPath)
 		db, err = InitDB(&mw.Mysql)
 	}
-	if !strings.HasSuffix(mw.RootPath, "/") {
-		mw.RootPath = mw.RootPath + "/"
+	if !strings.HasSuffix(mw.RootPath, string(filepath.Separator)) {
+		mw.RootPath = mw.RootPath + string(filepath.Separator)
 	}
 	if mw.Id > 0 && mw.TokenSecret == "" {
 		mw.TokenSecret = config.GenerateRandString(32)
@@ -330,11 +346,12 @@ func InitWebsite(mw *model.Website) {
 		TokenSecret:  mw.TokenSecret,
 		Mysql:        &mw.Mysql,
 		DB:           db,
+		Scheme:       "http",
 		BaseURI:      "/",
 		RootPath:     mw.RootPath,
-		CachePath:    mw.RootPath + "cache/",
-		DataPath:     mw.RootPath + "data/",
-		PublicPath:   mw.RootPath + "public/",
+		CachePath:    mw.RootPath + "cache" + string(filepath.Separator),
+		DataPath:     mw.RootPath + "data" + string(filepath.Separator),
+		PublicPath:   mw.RootPath + "public" + string(filepath.Separator),
 		backLanguage: lang,
 		Template: &StoreTemplates{
 			Templates: make(map[string]int64),
@@ -379,6 +396,7 @@ func InitWebsite(mw *model.Website) {
 			if parsed.RequestURI() != "/" {
 				w.BaseURI = parsed.RequestURI()
 			}
+			w.Scheme = parsed.Scheme
 			w.Host = parsed.Host
 		}
 	}
@@ -391,9 +409,16 @@ func InitWebsite(mw *model.Website) {
 		w.InitCacheBucket()
 		w.InitCache()
 		w.InitAkismet()
+		// AI
+		w.NewAiChatService()
 		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
+		// ai chat setting
+		// 仅默认站点需要配置
+		if w.Id == 1 {
+			w.LoadAiSetting("")
+		}
 	}
 }
 
@@ -432,9 +457,9 @@ func createDefaultWebsite(ctx iris.Context) *Website {
 		Initialed:  false,
 		BaseURI:    "/",
 		RootPath:   config.ExecPath,
-		CachePath:  config.ExecPath + "cache/",
-		DataPath:   config.ExecPath + "data/",
-		PublicPath: config.ExecPath + "public/",
+		CachePath:  config.ExecPath + "cache" + string(filepath.Separator),
+		DataPath:   config.ExecPath + "data" + string(filepath.Separator),
+		PublicPath: config.ExecPath + "public" + string(filepath.Separator),
 		System: &config.SystemConfig{
 			SiteName:     "AnQiCMS",
 			TemplateName: "default",
@@ -546,9 +571,29 @@ func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Webs
 				return handleHostMatch(w, ctx)
 			}
 
-			//if isSubdomainMatch(parsed.Hostname(), host) {
-			//	return cloneWithContext(w, ctx)
-			//}
+			// 这里匹配子域名，模型、地点用到
+			if w.PluginPlace.Open && w.PluginPlace.UrlType == config.PlaceUrlTypeSubdomain {
+				var subdomain string
+				var topDomain string
+				subIndex := strings.Index(host, ".")
+				if subIndex > 0 {
+					// 获取子域名
+					subdomain = host[:subIndex]
+					topDomain = host[subIndex+1:]
+				}
+				hostName := parsed.Hostname()
+				if strings.HasSuffix(hostName, topDomain) {
+					// 同域名，继续处理
+					place := w.GetPlaceFromCacheByToken(subdomain)
+					if place != nil {
+						// 模型、地点的子域名
+						ctx.Values().Set("place", place)
+						ctx.ViewData("place", place)
+
+						return cloneWithContext(w, ctx)
+					}
+				}
+			}
 		}
 	}
 	return nil
@@ -621,7 +666,16 @@ func isHostMatch(parsed *url.URL, host string) bool {
 
 // 子域名匹配检查
 func isSubdomainMatch(parsedHost, currentHost string) bool {
-	return strings.HasSuffix(parsedHost, "."+currentHost)
+	// 先移除 the first subdomain
+	topDomain := strings.SplitN(parsedHost, ".", 2)[1]
+	if strings.Count(topDomain, ".") == 1 {
+		topDomain = parsedHost
+	}
+	if strings.HasSuffix(currentHost, "."+topDomain) {
+		return true
+	}
+
+	return false
 }
 
 // 处理匹配到的网站
@@ -662,225 +716,6 @@ func handleHostMatch(w *Website, ctx iris.Context) *Website {
 	}
 	ctx.Values().Set("siteId", w.Id)
 	return cloneWithContext(w, ctx)
-}
-
-func CurrentSite2(ctx iris.Context) *Website {
-	if websites.Len() == 0 {
-		cur := &Website{
-			Id:         0,
-			Initialed:  false,
-			BaseURI:    "/",
-			RootPath:   config.ExecPath,
-			CachePath:  config.ExecPath + "cache/",
-			DataPath:   config.ExecPath + "data/",
-			PublicPath: config.ExecPath + "public/",
-			System: &config.SystemConfig{
-				SiteName:     "AnQiCMS",
-				TemplateName: "default",
-			},
-			Template: &StoreTemplates{
-				Templates: make(map[string]int64),
-				mu:        sync.Mutex{},
-			},
-		}
-		if ctx != nil {
-			cur.backLanguage = ctx.GetLocale().Language()
-		}
-		cur.ctx = ctx
-		return cur
-	}
-	if ctx != nil {
-		var tmpSite Website
-		if siteId, err := ctx.Values().GetUint("siteId"); err == nil {
-			w, ok := websites.Get(siteId)
-			if ok {
-				tmpSite = *w
-				tmpSite.backLanguage = ctx.GetLocale().Language()
-				tmpSite.ctx = ctx
-				return &tmpSite
-			}
-		}
-		// 获取到当前website
-		uri := ctx.RequestPath(false)
-		host := library.GetHost(ctx)
-		// check exist uri first
-		values := websites.Values()
-		if uri != "/" {
-			for _, w := range values {
-				if !w.Initialed {
-					continue
-				}
-				parsed, err := url.Parse(w.System.BaseUrl)
-				if err != nil {
-					continue
-				}
-				// 多语言站点处理，先确定主域名
-				if parsed.Hostname() == host {
-					// 得到了siteId
-					mainSite := w.GetMainWebsite()
-					// 匹配并解析语言
-					if mainSite.MultiLanguage.Open {
-						// 采用目录形式
-						var lang string
-						if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
-							lang = strings.SplitN(strings.TrimPrefix(uri, "/"), "/", 2)[0]
-							if strings.Contains(lang, ".") {
-								// 忽略
-								lang = ""
-							}
-						} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
-							// url不变
-							lang = ctx.GetCookie("lang")
-							if lang == "" {
-								lang = ctx.URLParam("lang")
-							}
-						}
-						langSite := mainSite.MultiLanguage.GetSite(lang)
-						if langSite != nil {
-							ctx.SetLanguage(lang)
-							ctx.Values().Set("siteId", langSite.Id)
-							tmpSite1, _ := websites.Get(langSite.Id)
-							tmpSite = *tmpSite1
-							tmpSite.backLanguage = ctx.GetLocale().Language()
-							tmpSite.ctx = ctx
-							return &tmpSite
-						}
-					}
-					ctx.Values().Set("siteId", w.Id)
-					tmpSite = *w
-					tmpSite.backLanguage = ctx.GetLocale().Language()
-					tmpSite.ctx = ctx
-					return &tmpSite
-				}
-				// end
-				if parsed.RequestURI() != "/" {
-					if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
-						w.BaseURI = parsed.RequestURI()
-						ctx.Values().Set("siteId", w.Id)
-						tmpSite = *w
-						tmpSite.backLanguage = ctx.GetLocale().Language()
-						tmpSite.ctx = ctx
-						return &tmpSite
-					}
-				}
-				if w.System.MobileUrl != "" {
-					parsed, err = url.Parse(w.System.MobileUrl)
-					if err == nil {
-						if parsed.RequestURI() != "/" {
-							if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
-								w.BaseURI = parsed.RequestURI()
-								ctx.Values().Set("siteId", w.Id)
-								tmpSite = *w
-								tmpSite.backLanguage = ctx.GetLocale().Language()
-								tmpSite.ctx = ctx
-								return &tmpSite
-							}
-						}
-					}
-				}
-				if w.System.AdminUrl != "" {
-					parsed, err = url.Parse(w.System.AdminUrl)
-					if err == nil {
-						if parsed.Hostname() == host && strings.HasPrefix(uri, parsed.RequestURI()) {
-							w.BaseURI = parsed.RequestURI()
-							ctx.Values().Set("siteId", w.Id)
-							tmpSite = *w
-							tmpSite.backLanguage = ctx.GetLocale().Language()
-							tmpSite.ctx = ctx
-							return &tmpSite
-						}
-					}
-				}
-			}
-		}
-		for _, w := range values {
-			// 判断内容，base_url,mobile_url,admin_url
-			parsed, err := url.Parse(w.System.BaseUrl)
-			if err == nil {
-				if parsed.RequestURI() != "/" {
-					continue
-				}
-				if parsed.Hostname() == host {
-					mainSite := w.GetMainWebsite()
-					if mainSite.MultiLanguage.Open {
-						// 采用目录形式
-						var lang string
-						if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
-							// url不变
-							lang = ctx.GetCookie("lang")
-							if lang == "" {
-								lang = ctx.URLParam("lang")
-							}
-						}
-						langSite := mainSite.MultiLanguage.GetSite(lang)
-						if langSite != nil {
-							ctx.SetLanguage(lang)
-							ctx.Values().Set("siteId", langSite.Id)
-							tmpSite1, _ := websites.Get(langSite.Id)
-							tmpSite = *tmpSite1
-							tmpSite.backLanguage = ctx.GetLocale().Language()
-							tmpSite.ctx = ctx
-							return &tmpSite
-						}
-					}
-
-					ctx.Values().Set("siteId", w.Id)
-					tmpSite = *w
-					tmpSite.backLanguage = ctx.GetLocale().Language()
-					tmpSite.ctx = ctx
-					return &tmpSite
-				}
-				// 顶级域名
-				if strings.HasSuffix(parsed.Hostname(), "."+host) {
-					ctx.Values().Set("siteId", w.Id)
-					tmpSite = *w
-					tmpSite.backLanguage = ctx.GetLocale().Language()
-					tmpSite.ctx = ctx
-					return &tmpSite
-				}
-			}
-			if w.System.MobileUrl != "" {
-				parsed, err = url.Parse(w.System.MobileUrl)
-				if err == nil {
-					if parsed.RequestURI() != "/" {
-						continue
-					}
-					if parsed.Hostname() == host {
-						ctx.Values().Set("siteId", w.Id)
-						tmpSite = *w
-						tmpSite.backLanguage = ctx.GetLocale().Language()
-						tmpSite.ctx = ctx
-						return &tmpSite
-					}
-				}
-			}
-			if w.System.AdminUrl != "" {
-				parsed, err = url.Parse(w.System.AdminUrl)
-				if err == nil {
-					if parsed.RequestURI() != "/" {
-						continue
-					}
-					if parsed.Hostname() == host {
-						ctx.Values().Set("siteId", w.Id)
-						tmpSite = *w
-						tmpSite.backLanguage = ctx.GetLocale().Language()
-						tmpSite.ctx = ctx
-						return &tmpSite
-					}
-				}
-			}
-		}
-	}
-
-	// return default 1
-	defaultWebsite, _ := websites.Get(1)
-	if ctx != nil {
-		tmpSite := *defaultWebsite
-		tmpSite.backLanguage = ctx.GetLocale().Language()
-		tmpSite.ctx = ctx
-		return &tmpSite
-	}
-	return defaultWebsite
 }
 
 func CurrentSubSite(ctx iris.Context) *Website {
@@ -930,12 +765,12 @@ func RemoveWebsite(siteId uint, removeFile bool) {
 
 func (w *Website) GetTemplateDir() string {
 	if w == nil {
-		return config.ExecPath + "template/default"
+		return config.ExecPath + "template" + string(filepath.Separator) + "default"
 	}
 	if len(w.System.TemplateName) == 0 {
 		w.System.TemplateName = "default"
 	}
-	return w.RootPath + "template/" + w.System.TemplateName
+	return w.RootPath + "template" + string(filepath.Separator) + w.System.TemplateName
 }
 
 func GetDBWebsites(name, baseUrl string, page, pageSize int) ([]*model.Website, int64) {

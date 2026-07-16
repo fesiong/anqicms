@@ -2,8 +2,8 @@ package model
 
 type UserWechat struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Nickname    string `json:"nickname" gorm:"column:nickname;type:varchar(64) not null;default:''"`
 	AvatarURL   string `json:"avatar_url" gorm:"column:avatar_url;type:varchar(255) not null;default:''"`
@@ -16,8 +16,8 @@ type UserWechat struct {
 
 type WeappQrcode struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Path        string `json:"path" gorm:"column:path;type:varchar(190) not null;default:'';index:idx_path"`
 	CodeUrl     string `json:"code_url" gorm:"column:code_url;type:varchar(255) not null;default:''"`
@@ -25,8 +25,8 @@ type WeappQrcode struct {
 
 type SubscribedUser struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	Openid      string `json:"openid" gorm:"column:openid;type:varchar(128) not null;default:'';index:idx_openid_template_id"`
 	TemplateId  string `json:"template_id" gorm:"column:template_id;type:varchar(64) not null;default:'';index:idx_openid_template_id"`
@@ -34,18 +34,18 @@ type SubscribedUser struct {
 
 type WechatMessage struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Openid      string `json:"openid" gorm:"column:openid;type:varchar(128) not null;default:''"`
 	Content     string `json:"content" gorm:"column:content;type:varchar(255) not null;default:''"`
 	Reply       string `json:"reply" gorm:"column:reply;type:varchar(255) not null;default:''"`
-	ReplyTime   int64  `json:"reply_time" gorm:"column:reply_time;type:int(10) not null;default:0"`
+	ReplyTime   int64  `json:"reply_time" gorm:"column:reply_time;type:bigint(20) not null;default:0"`
 }
 
 type WechatReplyRule struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	Keyword     string `json:"keyword" gorm:"column:keyword;type:varchar(128) not null;default:'';index"`
 	Content     string `json:"content" gorm:"column:content;type:text default null;"`
 	IsDefault   int    `json:"is_default" gorm:"column:is_default;type:tinyint(1) not null;default:0"`
@@ -53,8 +53,8 @@ type WechatReplyRule struct {
 
 type WechatMenu struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	ParentId    uint   `json:"parent_id" gorm:"column:parent_id;type:int(10) not null;default:0"`
 	Name        string `json:"name" gorm:"column:name;type:varchar(20) not null;default:''"`
 	Type        string `json:"type" gorm:"column:type;type:varchar(20) not null;default:''"`

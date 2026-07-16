@@ -19,6 +19,7 @@ type ApiArchiveListRequest struct {
 	Ids                []int64  `json:"ids"`
 	Render             bool     `json:"render"`
 	ParentId           int64    `json:"parent_id"`
+	PlaceId            int64    `json:"place_id"`
 	ProductType        int      `json:"product_type"`
 	CategoryIds        []int    `json:"category_ids"`
 	ExcludeCategoryIds []int    `json:"exclude_category_ids"`
@@ -95,4 +96,17 @@ type ApiFilterRequest struct {
 	ParentId         int64             `json:"parent_id"`
 	CategoryId       int64             `json:"category_id"`
 	UrlParams        map[string]string `json:"url_params"`
+}
+
+type ApiPlaceRequest struct {
+	Id       int64  `json:"id"`
+	UrlToken string `json:"url_token"`
+	Render   bool   `json:"render"`
+}
+
+type ApiPlaceListRequest struct {
+	ParentId int64 `json:"parent_id"`
+	All      bool  `json:"all"`
+	Limit    int   `json:"limit"`
+	Offset   int   `json:"offset"`
 }

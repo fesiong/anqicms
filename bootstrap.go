@@ -4,6 +4,7 @@ import (
 	stdContext "context"
 	"fmt"
 	"log"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"kandaoni.com/anqicms/crond"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/middleware"
+	"kandaoni.com/anqicms/pkg/mcp/server"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/route"
 	"kandaoni.com/anqicms/tags"
@@ -32,6 +34,11 @@ func New(port int, loggerLevel string) *Bootstrap {
 	var bootstrap Bootstrap
 	bootstrap.Port = port
 	bootstrap.LoggerLevel = loggerLevel
+	if loggerLevel == "error" {
+		slog.SetLogLoggerLevel(slog.LevelError)
+	} else {
+		slog.SetLogLoggerLevel(slog.LevelDebug)
+	}
 
 	return &bootstrap
 }
@@ -39,10 +46,22 @@ func New(port int, loggerLevel string) *Bootstrap {
 func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 	bootstrap.Application.Use(middleware.NewRecover())
 	bootstrap.Application.Use(middleware.Cors)
+	bootstrap.Application.Use(middleware.SecurityHeaders)
 	bootstrap.Application.Options("{path:path}", middleware.Cors)
 }
 
 func (bootstrap *Bootstrap) Serve() {
+	// 启动mcp服务器
+	mcpCfg := server.DefaultConfig()
+	mcpCfg.Logger = slog.Default()
+	mcpSrv, err := server.New(mcpCfg)
+	if err != nil {
+		slog.Error("Failed to create MCP server", "error", err)
+	} else {
+		slog.Info("MCP Server initialized")
+	}
+	provider.SetMcpServer(mcpSrv)
+
 	//自动迁移表
 	if provider.GetDefaultDB() != nil {
 		provider.InitWebsites()
@@ -146,6 +165,8 @@ func (bootstrap *Bootstrap) Start() {
 	_ = pugEngine.RegisterTag("moduleDetail", tags.TagModuleDetailParser)
 	_ = pugEngine.RegisterTag("languages", tags.TagLanguagesParser)
 	_ = pugEngine.RegisterTag("jsonLd", tags.TagJsonLdParser)
+	_ = pugEngine.RegisterTag("placeList", tags.TagPlaceListParser)
+	_ = pugEngine.RegisterTag("placeDetail", tags.TagPlaceDetailParser)
 	_ = pugEngine.RegisterTag("attachment", tags.TagAttachmentParser)
 	_ = pugEngine.ReplaceTag("set", tags.TagSetParser)
 	_ = pugEngine.RegisterTag("jump", tags.TagJumpParser)

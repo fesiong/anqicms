@@ -58,21 +58,17 @@ func (node *tagLanguagesNode) Execute(ctx *pongo2.ExecutionContext, writer pongo
 		// archive
 		if item, ok := ctx.Public["archive"].(*model.Archive); ok {
 			link = tmpSite.GetUrl("archive", item, 0)
-		}
-		// category
-		if item, ok := ctx.Public["category"].(*model.Category); ok {
+		} else if item, ok := ctx.Public["category"].(*model.Category); ok {
+			// category
 			link = tmpSite.GetUrl("category", item, currentPage)
-		}
-		// tag
-		if item, ok := ctx.Public["tag"].(*model.Tag); ok {
+		} else if item, ok := ctx.Public["tag"].(*model.Tag); ok {
+			// tag
 			link = tmpSite.GetUrl("tag", item, currentPage)
-		}
-		// page
-		if item, ok := ctx.Public["page"].(*model.Category); ok {
+		} else if item, ok := ctx.Public["page"].(*model.Category); ok {
+			// page
 			link = tmpSite.GetUrl("page", item, 0)
-		}
-		// archiveIndex
-		if webInfo.PageName == "archiveIndex" {
+		} else if webInfo.PageName == "archiveIndex" {
+			// archiveIndex
 			if item, ok := ctx.Public["module"].(*model.Module); ok {
 				link = tmpSite.GetUrl("archiveIndex", item, currentPage)
 			}

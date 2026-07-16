@@ -51,6 +51,9 @@ func PluginSitemapForm(ctx iris.Context) {
 	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
 	currentSite.PluginSitemap.Type = req.Type
 	currentSite.PluginSitemap.ExcludeTag = req.ExcludeTag
+	if req.PageSize > 0 {
+		currentSite.PluginSitemap.PageSize = req.PageSize
+	}
 	currentSite.PluginSitemap.ExcludeCategoryIds = req.ExcludeCategoryIds
 	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
 	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds

@@ -3,8 +3,11 @@ package storage
 import (
 	"bytes"
 	"context"
-	"github.com/upyun/go-sdk/v3/upyun"
 	"io"
+	"mime"
+	"path"
+
+	"github.com/upyun/go-sdk/v3/upyun"
 	"kandaoni.com/anqicms/config"
 )
 
@@ -25,9 +28,15 @@ func NewUpyunStorage(cfg *config.PluginStorageConfig) (*UpyunStorage, error) {
 }
 
 func (s *UpyunStorage) Put(ctx context.Context, key string, r io.Reader) error {
+	contentType := mime.TypeByExtension(path.Ext(key))
+	headers := map[string]string{}
+	if contentType != "" {
+		headers["Content-Type"] = contentType
+	}
 	err := s.client.Put(&upyun.PutObjectConfig{
-		Path:   key,
-		Reader: r,
+		Path:    key,
+		Reader:  r,
+		Headers: headers,
 	})
 
 	if err != nil {

@@ -3,7 +3,6 @@ package provider
 import (
 	"bufio"
 	"bytes"
-	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1123,7 +1122,9 @@ func AddTranslateLog(result *AnqiTranslateTextRequest) {
 func AddTranslateHtmlLog(result *AnqiTranslateHtmlResult) {
 	// translate log 只记录到主站点的库里
 	db := GetDefaultDB()
-
+	if len(result.Uri) > 190 {
+		result.Uri = result.Uri[:190]
+	}
 	logData := model.TranslateHtmlLog{
 		Uri:        result.Uri,
 		Language:   result.Language,
@@ -1137,7 +1138,7 @@ func AddTranslateHtmlLog(result *AnqiTranslateHtmlResult) {
 	db.Model(&model.TranslateHtmlLog{}).Create(&logData)
 }
 
-// AnqiTranslateHtml 多语言html翻译，只能使用官方接口，从原站语言翻译成目标语言
+// AnqiTranslateHtml 多语言html翻译，从原站语言翻译成目标语言
 func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content string, err error) {
 	if req.Language == "" {
 		req.Language = w.System.Language
@@ -1335,7 +1336,6 @@ func (w *Website) AnqiGetImageAiResponse(req *AnqiImageAiRequest) (*AnqiAiImage,
 	if result.Code != 0 {
 		return nil, errors.New(result.Msg)
 	}
-	log.Printf("AnqiGetImageAiResponse: %#v", result)
 
 	return &result.Data, nil
 }
@@ -1356,7 +1356,6 @@ func (w *Website) AnqiGetAiGenerateImageHistories(page int, pageSize int) ([]Anq
 func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
 	req := gorequest.New().
 		SetDoNotClearSuperAgent(true).
-		TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
 		Timeout(300*time.Second).
 		Type(contentType).
 		Set("token", config.AnqiUser.Token).

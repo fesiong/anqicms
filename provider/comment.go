@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"html"
+
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 )
@@ -23,7 +25,8 @@ func (w *Website) SaveComment(req *request.PluginComment) (comment *model.Commen
 	}
 	comment.Status = req.Status
 	comment.UserName = req.UserName
-	comment.Content = req.Content
+	// 防止XSS: HTML转义评论内容
+	comment.Content = html.EscapeString(req.Content)
 	comment.Email = req.Email
 
 	err = comment.Save(w.DB)

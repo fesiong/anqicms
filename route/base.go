@@ -37,6 +37,7 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 	app.HandleMany("GET POST", "/api/import/archive /{base:string}/api/import/archive", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportArchive)
 	app.HandleMany("GET POST", "/api/import/categories /{base:string}/api/import/categories", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportGetCategories)
 	app.HandleMany(iris.MethodPost, "/api/import/sitemap /{base:string}/api/import/sitemap", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportMakeSitemap)
+	app.HandleMany(iris.MethodPost, "/api/import/review /{base:string}/api/import/review", middleware.ParseUserToken, controller.VerifyApiToken, controller.ApiImportReview)
 
 	// login and register
 	app.HandleMany(iris.MethodGet, "/login /login/{platform:string}", controller.LoginPage)
@@ -169,6 +170,8 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 		api.Get("/tag/data/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagDataList)
 		api.Get("/tag/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiTagList)
 		api.Get("/banner/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiBannerList)
+		api.Get("/place/detail", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiPlaceDetail)
+		api.Get("/place/list", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiPlaceList)
 		api.Get("/metadata", controller.CheckApiOpen, middleware.HandlerTimeout, controller.ApiMetadata)
 		api.Get("/review/list", controller.CheckApiOpen, controller.ApiReviewList)
 		api.Post("/review/publish", controller.CheckApiOpen, controller.ApiReviewPublish)

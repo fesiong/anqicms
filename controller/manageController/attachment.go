@@ -241,7 +241,7 @@ func AttachmentEdit(ctx iris.Context) {
 		}
 		// 防止跨目录，不能移动到超过 currentSite.PublicPath + "uploads"
 		realPath := filepath.Join(currentSite.PublicPath, filepath.Clean(req.FileLocation))
-		if !strings.HasPrefix(realPath, filepath.Join(currentSite.PublicPath, "uploads")) {
+		if !strings.HasPrefix(realPath, currentSite.PublicPath) {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  ctx.Tr("IncorrectFile"),
@@ -258,8 +258,27 @@ func AttachmentEdit(ctx iris.Context) {
 			})
 			return
 		}
-		attach.FileLocation = newLocation
 		_ = currentSite.DB.Save(&attach).Error
+		// 如果是视频，并且有缩略图
+		if attach.IsImage == 2 && attach.Logo != "" {
+			logo := strings.TrimPrefix(attach.Logo, currentSite.PluginStorage.StorageUrl)
+			logo = strings.TrimPrefix(logo, "/")
+			if logo != "" && logo != attach.FileLocation {
+				ext := filepath.Ext(attach.FileLocation)
+				newLogo := strings.Replace(logo, strings.TrimSuffix(attach.FileLocation, ext), strings.TrimSuffix(newLocation, ext), 1)
+				if logo != newLogo {
+					err = currentSite.MoveFile(logo, newLogo)
+					if err == nil {
+						attach.Logo = newLogo
+					}
+				}
+			}
+		} else if attach.Logo != "" {
+			// 只有视频有不同的缩略图，其它按同 FileLocation 处理
+			attach.Logo = ""
+		}
+		attach.FileLocation = newLocation
+		currentSite.DB.Save(attach)
 		attach.GetThumb(currentSite.PluginStorage.StorageUrl)
 	}
 

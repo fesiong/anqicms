@@ -433,10 +433,16 @@ func (w *Website) SetOrderFinished(order *model.Order) error {
 
 			var group model.UserGroup
 			err = tx.Model(model.UserGroup{}).Where("`id` = ?", orderDetail.GoodsId).Take(&group).Error
-			if err != nil {
+			if err != nil || group.Setting.ExpireDay == 0 {
 				group.Setting.ExpireDay = 365
 			}
-			startTime += int64(group.Setting.ExpireDay) * 86400
+			if group.Setting.ExpireDay == 365 {
+				startTime = time.Unix(startTime, 0).AddDate(1*orderDetail.Quantity, 0, 0).Unix()
+			} else if group.Setting.ExpireDay == 30 {
+				startTime = time.Unix(startTime, 0).AddDate(0, 1*orderDetail.Quantity, 0).Unix()
+			} else {
+				startTime += int64(group.Setting.ExpireDay*orderDetail.Quantity) * 86400
+			}
 
 			user.ExpireTime = startTime
 			user.GroupId = group.Id
@@ -522,12 +528,12 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 
 			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", library.GenerateRandString(32)).
+			bm.Set("nonce_str", config.GenerateRandString(32)).
 				Set("out_trade_no", order.PaymentId).
 				Set("out_refund_no", refund.RefundId).
 				Set("total_fee", order.Amount).
 				Set("refund_fee", refund.Amount).
-				Set("sign_type", wechat.SignType_MD5)
+				Set("sign_type", wechat.SignType_HMAC_SHA256)
 
 			wxRsp, _, err := client.Refund(context.Background(), bm)
 			if err != nil {
@@ -561,12 +567,12 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 
 			bm := make(gopay.BodyMap)
-			bm.Set("nonce_str", library.GenerateRandString(32)).
+			bm.Set("nonce_str", config.GenerateRandString(32)).
 				Set("out_trade_no", order.PaymentId).
 				Set("out_refund_no", refund.RefundId).
 				Set("total_fee", order.Amount).
 				Set("refund_fee", refund.Amount).
-				Set("sign_type", wechat.SignType_MD5)
+				Set("sign_type", wechat.SignType_HMAC_SHA256)
 
 			wxRsp, _, err := client.Refund(context.Background(), bm)
 			if err != nil {
@@ -626,7 +632,7 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			bm := make(gopay.BodyMap)
 			bm.Set("out_trade_no", order.PaymentId)
 			bm.Set("out_request_no", refund.RefundId)
-			bm.Set("refund_amount", fmt.Sprintf("%.2f", float32(refund.Amount)/100))
+			bm.Set("refund_amount", fmt.Sprintf("%.2f", float64(refund.Amount)/100))
 
 			//创建订单
 			resp, err := client.TradeRefund(context.Background(), bm)
@@ -723,8 +729,8 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 	// 推送事件
 	w.CreateEvent(EventOrderRefund, map[string]interface{}{
 		"order_id":      order.OrderId,
-		"amount":        float32(order.Amount) / 100,
-		"refund_amount": float32(refund.Amount) / 100,
+		"amount":        float64(order.Amount) / 100,
+		"refund_amount": float64(refund.Amount) / 100,
 		"refund_reason": refund.Remark,
 		"status":        "refunded",
 	}, &model.User{Id: uint(order.UserId)})
@@ -760,8 +766,8 @@ func (w *Website) ApplyOrderRefund(order *model.Order) error {
 			// 推送事件
 			w.CreateEvent(EventOrderRefund, map[string]interface{}{
 				"order_id":      order.OrderId,
-				"amount":        float32(order.Amount) / 100,
-				"refund_amount": float32(refund.Amount) / 100,
+				"amount":        float64(order.Amount) / 100,
+				"refund_amount": float64(refund.Amount) / 100,
 				"refund_reason": refund.Remark,
 				"status":        "request",
 			}, user)

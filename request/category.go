@@ -19,6 +19,7 @@ type Category struct {
 	Images         []string `json:"images"`
 	Logo           string   `json:"logo"`
 	IsInherit      uint     `json:"is_inherit"`
+	UpdateAll      bool     `json:"update_all"`
 
 	Extra map[string]interface{} `json:"extra"`
 }

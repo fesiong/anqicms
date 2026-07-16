@@ -67,9 +67,8 @@ func (s *FtpStorage) init() error {
 
 	// 优先尝试TLS连接
 	tlsConfig := &tls.Config{
-		ServerName:         s.cfg.FTPHost,
-		MinVersion:         tls.VersionTLS12,
-		InsecureSkipVerify: true,
+		ServerName: s.cfg.FTPHost,
+		MinVersion: tls.VersionTLS12,
 	}
 
 	c, err = ftp.Dial(

@@ -39,7 +39,7 @@ type ContentConfig struct {
 	Quality          int      `json:"quality"`
 	ResizeImage      int      `json:"resize_image"`
 	ResizeWidth      int      `json:"resize_width"`
-	ThumbCrop        int      `json:"thumb_crop"`
+	ThumbCrop        int      `json:"thumb_crop"` // 缩略图裁剪 0 = 按最长边等比缩放, 1 = 按最长边补白，2 = 按最短边裁剪
 	ThumbWidth       int      `json:"thumb_width"`
 	ThumbHeight      int      `json:"thumb_height"`
 	DefaultThumbType int      `json:"default_thumb_type"` // 0 = default, 3 = category id
@@ -194,6 +194,7 @@ type BannerItem struct {
 	Id          int    `json:"id"`
 	Link        string `json:"link"`
 	Alt         string `json:"alt"`
+	Title       string `json:"title"` // 兼容Alt
 	Description string `json:"description"`
 	Type        string `json:"type"` // 增加类型
 }

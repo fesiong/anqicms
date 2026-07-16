@@ -84,7 +84,7 @@ func ModuleDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-
+	req.UpdateAll = true
 	module, err := currentSite.SaveModule(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{

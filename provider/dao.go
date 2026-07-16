@@ -44,7 +44,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
 	db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
-		PrepareStmt:                              false,
+		PrepareStmt:                              true,
 	})
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {
@@ -52,6 +52,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 				cfg.User, cfg.Password, cfg.Host, cfg.Port)
 			db, err = gorm.Open(mysql.Open(url2), &gorm.Config{
 				DisableForeignKeyConstraintWhenMigrating: true,
+				PrepareStmt:                              true,
 			})
 			if err != nil {
 				return nil, err
@@ -63,6 +64,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 			//重新连接db
 			db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
 				DisableForeignKeyConstraintWhenMigrating: true,
+				PrepareStmt:                              true,
 			})
 			if err != nil {
 				return nil, err
@@ -75,10 +77,35 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 连接池设置
-	sqlDB.SetMaxIdleConns(500)
-	sqlDB.SetMaxOpenConns(20)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	// 连接池设置 — 优先通过数据库服务端系统变量自动配置
+	maxConns := 1000
+	maxIdle := 500
+	connMaxLifetime := 5 * time.Minute
+	connMaxIdleTime := 30 * time.Second
+
+	var maxConnections int
+	row := sqlDB.QueryRow("SHOW VARIABLES LIKE 'max_connections'")
+	if err := row.Scan(new(string), &maxConnections); err == nil && maxConnections > 0 {
+		maxConns = int(float64(maxConnections) * 0.8)
+		if maxConns < 20 {
+			maxConns = 20
+		}
+		maxIdle = maxConns / 2
+		if maxIdle < 20 {
+			maxIdle = 20
+		}
+	}
+
+	var waitTimeout int
+	row = sqlDB.QueryRow("SHOW VARIABLES LIKE 'wait_timeout'")
+	if err := row.Scan(new(string), &waitTimeout); err == nil && waitTimeout > 10 {
+		connMaxLifetime = time.Duration(waitTimeout*8/10) * time.Second
+	}
+
+	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetMaxOpenConns(maxConns)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
 	err = db.Use(&model.NextArchiveIdPlugin{})
 	if err != nil {
 		return nil, err
@@ -165,6 +192,10 @@ func AutoMigrateDB(db *gorm.DB, focus bool) error {
 			&model.OrderReview{},
 			&model.OrderReviewPraise{},
 			&model.ArchiveFavorite{},
+			&model.AiChatMessage{},
+			&model.AiAgent{},
+			&model.AiAgentLog{},
+			&model.Place{},
 			&model.Cart{},
 			&model.SearchLog{},
 			&model.WholesaleRule{},

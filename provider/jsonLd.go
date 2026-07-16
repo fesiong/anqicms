@@ -674,8 +674,12 @@ func (w *Website) buildItemList(archives []*model.Archive, listType string, sche
 				if archive.Price > 0 {
 					offers["price"] = fmt.Sprintf("%.2f", float32(archive.Price)/100.00)
 					offers["priceValidUntil"] = time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+				} else {
+					// AggregateOffer
+					offers["@type"] = "AggregateOffer"
+					offers["offerCount"] = 0
 				}
-				if archive.Stock > 0 {
+				if archive.Stock > 0 && archive.Stock < 1000 {
 					offers["inventoryLevel"] = iris.Map{
 						"@type": "QuantitativeValue",
 						"value": archive.Stock,
@@ -896,6 +900,9 @@ func (w *Website) buildCrumbs(viewData map[string]interface{}, webInfo *response
 			if category.Parents != nil {
 				for _, parent := range category.Parents {
 					parentCat := w.GetCategoryFromCache(parent.Id)
+					if parentCat.Link == "" {
+						parentCat.Link = w.GetUrl("category", parentCat, 0)
+					}
 					crumbs = append(crumbs, iris.Map{
 						"name": parentCat.Title,
 						"link": parentCat.Link,

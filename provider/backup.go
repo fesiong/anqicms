@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -238,11 +239,11 @@ func (bs *BackupStatus) RestoreData(fileName string) error {
 			}
 		})
 	}()
-	if fileName == "" {
-		bs.Message = bs.w.Tr("BackupFileDoesNotExist")
-		return errors.New(bs.w.Tr("BackupFileDoesNotExist"))
+	backupFile, err := bs.w.sanitizeBackupPath(fileName)
+	if err != nil {
+		bs.Message = err.Error()
+		return err
 	}
-	backupFile := bs.w.DataPath + "backup/" + fileName
 	outFile, err := os.Open(backupFile)
 	if err != nil {
 		bs.Message = err.Error()
@@ -327,15 +328,25 @@ func (w *Website) GetBackupList() []response.BackupInfo {
 	return fileList
 }
 
-func (w *Website) DeleteBackupData(fileName string) error {
+func (w *Website) sanitizeBackupPath(fileName string) (string, error) {
 	if fileName == "" {
-		return errors.New(w.Tr("BackupFileDoesNotExist"))
+		return "", errors.New(w.Tr("BackupFileDoesNotExist"))
 	}
-	fileName = strings.ReplaceAll(fileName, "..", "")
-	fileName = strings.ReplaceAll(fileName, "\\", "")
-	backupFile := w.DataPath + "backup/" + fileName
+	backupDir := filepath.Clean(w.DataPath+"backup/") + string(filepath.Separator)
+	cleanPath := filepath.Clean(w.DataPath + "backup/" + fileName)
+	if !strings.HasPrefix(cleanPath, backupDir) {
+		return "", errors.New(w.Tr("InvalidFilePath"))
+	}
+	return cleanPath, nil
+}
 
-	_, err := os.Stat(backupFile)
+func (w *Website) DeleteBackupData(fileName string) error {
+	backupFile, err := w.sanitizeBackupPath(fileName)
+	if err != nil {
+		return err
+	}
+
+	_, err = os.Stat(backupFile)
 	if err != nil {
 		return err
 	}
@@ -346,9 +357,10 @@ func (w *Website) DeleteBackupData(fileName string) error {
 }
 
 func (w *Website) ImportBackupFile(file io.Reader, fileName string) error {
-	fileName = strings.ReplaceAll(fileName, "..", "")
-	fileName = strings.ReplaceAll(fileName, "\\", "")
-	backupFile := w.DataPath + "backup/" + fileName
+	backupFile, err := w.sanitizeBackupPath(fileName)
+	if err != nil {
+		return err
+	}
 	// create dir
 	_ = os.MkdirAll(w.DataPath+"backup/", os.ModePerm)
 
@@ -365,19 +377,7 @@ func (w *Website) ImportBackupFile(file io.Reader, fileName string) error {
 }
 
 func (w *Website) GetBackupFilePath(fileName string) (string, error) {
-	if fileName == "" {
-		return "", errors.New(w.Tr("BackupFileDoesNotExist"))
-	}
-	fileName = strings.ReplaceAll(fileName, "..", "")
-	fileName = strings.ReplaceAll(fileName, "\\", "")
-	backupFile := w.DataPath + "backup/" + fileName
-
-	_, err := os.Stat(backupFile)
-	if err != nil {
-		return "", err
-	}
-
-	return backupFile, nil
+	return w.sanitizeBackupPath(fileName)
 }
 
 func (w *Website) CleanupWebsiteData(cleanUploads bool) {

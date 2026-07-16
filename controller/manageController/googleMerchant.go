@@ -2,12 +2,12 @@ package manageController
 
 import (
 	"context"
+
 	"github.com/kataras/iris/v12"
-	"google.golang.org/api/content/v2.1"
+	content "google.golang.org/api/content/v2.1"
 	"google.golang.org/api/oauth2/v2"
 	"google.golang.org/api/option"
 	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -69,7 +69,7 @@ func PluginGoogleMerchantAuthUrl(ctx iris.Context) {
 
 	state := ctx.URLParam("state")
 	if state == "" {
-		state = library.GenerateRandString(32)
+		state = config.GenerateRandString(32)
 	}
 	link := googleCfg.AuthCodeURL(state)
 

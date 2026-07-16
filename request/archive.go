@@ -5,6 +5,7 @@ import "kandaoni.com/anqicms/config"
 type Archive struct {
 	Id           int64                  `json:"id"`
 	ParentId     int64                  `json:"parent_id"`
+	PlaceId      uint                   `json:"place_id"`
 	Title        string                 `json:"title"`
 	SeoTitle     string                 `json:"seo_title"`
 	ModuleId     uint                   `json:"module_id"`
@@ -58,15 +59,28 @@ type Archive struct {
 	MaxQuantity    int                  `json:"max_quantity"`  // 最大购买数量
 	StepQuantity   int                  `json:"step_quantity"` // 购买数量步长
 
+	RemoveTag         bool `json:"-"` // 是否删除标签
+	RemoveImage       bool `json:"-"` // 是否删除图片
+	RemoveFlag        bool `json:"-"` // 是否删除flag
+	RemoveRelationIds bool `json:"-"` // 是否删除关联文档
+
 	// 是否强制保存
 	ForceSave  bool   `json:"force_save"`
 	ToLanguage string `json:"to_language"`
 	QuickSave  bool   `json:"quick_save"`
+	UpdateAll  bool   `json:"update_all"`
 
 	KeywordId   uint   `json:"keyword_id"`
 	OriginUrl   string `json:"origin_url"`
 	OriginTitle string `json:"origin_title"`
-	ContentText string `json:"-"`
+	  // 补充字段
+	  Brand         string  `json:"brand"`
+	  CommentCount  uint    `json:"comment_count"`
+	  FavoriteCount int64   `json:"favorite_count"`
+	  AverageScore  float32 `json:"average_score"`
+	  HasPseudo     int     `json:"has_pseudo"`
+	  OriginId      int     `json:"origin_id"`
+	  ContentText   string  `json:"-"`
 }
 
 type ArchiveSku struct {

@@ -136,6 +136,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	// avif 暂时不支持处理，因此直接保存
 	if isImage != 1 || fileExt == ".avif" {
 		fileSize = info.Size
+		_, _ = file.Seek(0, 0)
 		_, err = w.UploadFile(filePath+tmpName, file)
 		if err != nil {
 			return nil, err
@@ -291,6 +292,7 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 
 	// 是图片的时候的处理方法
 	//获取宽高
+	file.Seek(0, 0)
 	img, imgType, err := image.Decode(file)
 	file.Seek(0, 0)
 	if err != nil {
@@ -587,6 +589,16 @@ func (w *Website) DeleteAttachment(attach *model.Attachment) error {
 	// 删除thumb
 	if attach.IsImage == 1 {
 		paths, fileName := filepath.Split(attach.FileLocation)
+		thumb := paths + "thumb_" + fileName
+		_ = w.DeleteFile(thumb)
+	}
+	// 删除poster
+	logo := strings.TrimPrefix(attach.Logo, w.PluginStorage.StorageUrl)
+	logo = strings.TrimPrefix(logo, "/")
+	if logo != "" && logo != attach.FileLocation {
+		_ = w.DeleteFile(logo)
+		// 删除thumb
+		paths, fileName := filepath.Split(logo)
 		thumb := paths + "thumb_" + fileName
 		_ = w.DeleteFile(thumb)
 	}

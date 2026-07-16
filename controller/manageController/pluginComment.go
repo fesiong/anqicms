@@ -1,6 +1,8 @@
 package manageController
 
 import (
+	"html"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -83,7 +85,8 @@ func PluginCommentDetailForm(ctx iris.Context) {
 	// 将单个&nbsp;替换为空格
 	req.Content = library.ReplaceSingleSpace(req.Content)
 	comment.UserName = req.UserName
-	comment.Content = req.Content
+	// 防止XSS: HTML转义评论内容
+	comment.Content = html.EscapeString(req.Content)
 	comment.Status = 1
 	if req.Ip == "" {
 		req.Ip = ctx.RemoteAddr()

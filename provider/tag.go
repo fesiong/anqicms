@@ -151,20 +151,38 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 			newPost = true
 		}
 	}
-	tag.Title = req.Title
-	tag.SeoTitle = req.SeoTitle
-	tag.Keywords = req.Keywords
+	if req.UpdateAll || req.Title != "" {
+		tag.Title = req.Title
+	}
+	if req.UpdateAll || req.SeoTitle != "" {
+		tag.SeoTitle = req.SeoTitle
+	}
+	if req.UpdateAll || req.Keywords != "" {
+		tag.Keywords = req.Keywords
+	}
 	tag.Status = 1
-	tag.Description = req.Description
-	tag.FirstLetter = req.FirstLetter
-	tag.CategoryId = req.CategoryId
-	tag.Template = req.Template
-	tag.Logo = req.Logo
+	if req.UpdateAll || req.Description != "" {
+		tag.Description = req.Description
+	}
+	if req.UpdateAll || req.FirstLetter != "" {
+		tag.FirstLetter = req.FirstLetter
+	}
+	if req.UpdateAll || req.CategoryId > 0 {
+		tag.CategoryId = req.CategoryId
+	}
+	if req.UpdateAll || req.Template != "" {
+		tag.Template = req.Template
+	}
+	if req.UpdateAll || req.Logo != "" {
+		tag.Logo = req.Logo
+	}
 	if tag.Logo != "" {
 		tag.Logo = strings.TrimPrefix(tag.Logo, w.PluginStorage.StorageUrl)
 	}
 	// 判断重复
-	tag.UrlToken = w.VerifyTagUrlToken(req.UrlToken, tag.Title, tag.Id)
+	if req.UpdateAll || req.UrlToken != "" {
+		tag.UrlToken = w.VerifyTagUrlToken(req.UrlToken, tag.Title, tag.Id)
+	}
 
 	if tag.FirstLetter == "" {
 		letter := "A"
@@ -181,66 +199,68 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	}
 	// 保存 content
 	if len(req.Content) > 0 || len(req.Extra) > 0 {
-		// 将单个&nbsp;替换为空格
-		req.Content = library.ReplaceSingleSpace(req.Content)
-		// todo 应该只替换 src,href 中的 baseUrl
-		req.Content = w.ReplaceContentUrl(req.Content, false)
-		// 过滤外链
-		if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
-			baseHost := ""
-			frontUrl := w.System.BaseUrl
-			if w.System.FrontUrl != "" {
-				frontUrl = w.System.FrontUrl
-			}
-			urls, err := url.Parse(frontUrl)
-			if err == nil {
-				baseHost = urls.Host
-			}
+		if req.Content != "" {
+			// 将单个&nbsp;替换为空格
+			req.Content = library.ReplaceSingleSpace(req.Content)
+			// todo 应该只替换 src,href 中的 baseUrl
+			req.Content = w.ReplaceContentUrl(req.Content, false)
+			// 过滤外链
+			if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
+				baseHost := ""
+				frontUrl := w.System.BaseUrl
+				if w.System.FrontUrl != "" {
+					frontUrl = w.System.FrontUrl
+				}
+				urls, err := url.Parse(frontUrl)
+				if err == nil {
+					baseHost = urls.Host
+				}
 
-			re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
-			req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
-				match := re.FindStringSubmatch(s)
-				if len(match) < 3 {
-					return s
-				}
-				aUrl, err2 := url.Parse(match[1])
-				if err2 == nil {
-					if aUrl.Host != "" && aUrl.Host != baseHost {
-						//过滤外链
-						if w.Content.FilterOutlink == 1 {
-							return match[2]
-						} else if !strings.Contains(match[0], "nofollow") {
-							newUrl := match[1] + `" rel="nofollow`
-							s = strings.Replace(s, match[1], newUrl, 1)
+				re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+				req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+					match := re.FindStringSubmatch(s)
+					if len(match) < 3 {
+						return s
+					}
+					aUrl, err2 := url.Parse(match[1])
+					if err2 == nil {
+						if aUrl.Host != "" && aUrl.Host != baseHost {
+							//过滤外链
+							if w.Content.FilterOutlink == 1 {
+								return match[2]
+							} else if !strings.Contains(match[0], "nofollow") {
+								newUrl := match[1] + `" rel="nofollow`
+								s = strings.Replace(s, match[1], newUrl, 1)
+							}
 						}
 					}
-				}
-				return s
-			})
-			// 匹配Markdown [link](url)
-			// 由于不支持零宽断言，因此匹配所有
-			re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
-			req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
-				// 过滤掉 ! 开头的
-				if strings.HasPrefix(s, "!") {
 					return s
-				}
-				match := re.FindStringSubmatch(s)
-				if len(match) < 3 {
-					return s
-				}
-				aUrl, err2 := url.Parse(match[2])
-				if err2 == nil {
-					if aUrl.Host != "" && aUrl.Host != baseHost {
-						//过滤外链
-						if w.Content.FilterOutlink == 1 {
-							return match[1]
-						}
-						// 添加 nofollow 不在这里处理，因为md不支持
+				})
+				// 匹配Markdown [link](url)
+				// 由于不支持零宽断言，因此匹配所有
+				re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
+				req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+					// 过滤掉 ! 开头的
+					if strings.HasPrefix(s, "!") {
+						return s
 					}
-				}
-				return s
-			})
+					match := re.FindStringSubmatch(s)
+					if len(match) < 3 {
+						return s
+					}
+					aUrl, err2 := url.Parse(match[2])
+					if err2 == nil {
+						if aUrl.Host != "" && aUrl.Host != baseHost {
+							//过滤外链
+							if w.Content.FilterOutlink == 1 {
+								return match[1]
+							}
+							// 添加 nofollow 不在这里处理，因为md不支持
+						}
+					}
+					return s
+				})
+			}
 		}
 		if req.Extra != nil {
 			fields := w.GetTagFields()
@@ -381,10 +401,9 @@ func (w *Website) GetTagsByItemIds(itemIds []int64) map[int64][]*model.Tag {
 		for _, datum := range tagData {
 			if datum.TagId == tag.Id {
 				tag.ItemId = datum.ItemId
-				break
+				result[datum.ItemId] = append(result[datum.ItemId], tag)
 			}
 		}
-		result[tag.ItemId] = append(result[tag.ItemId], tag)
 	}
 
 	return result

@@ -166,9 +166,9 @@ func (w *Website) GetMultiLangSites(mainId uint, all bool) []config.MultiLangSit
 			if mainSite.MultiLanguage.Type == config.MultiLangTypeDomain {
 				link = subSite.BaseUrl + "/"
 			} else if mainSite.MultiLanguage.Type == config.MultiLangTypeDirectory {
-				frontUrl := w.System.BaseUrl
-				if w.System.FrontUrl != "" {
-					frontUrl = w.System.FrontUrl
+				frontUrl := mainSite.System.BaseUrl
+				if mainSite.System.FrontUrl != "" {
+					frontUrl = mainSite.System.FrontUrl
 				}
 				link = frontUrl + "/" + subSite.Language + "/"
 			} else if mainSite.MultiLanguage.Type == config.MultiLangTypeSame {
@@ -994,7 +994,12 @@ func (w *Website) GetOrSetMultiLangCache(uri string, lang string, params map[str
 		IgnoreClass: []string{"languages", "language"},
 		IgnoreId:    []string{"languages", "language"},
 	}
-	result, err := w.AnqiTranslateHtml(req)
+	var result string
+	if w.PluginTranslate.Engine == config.TranslateEngineDefault {
+		result, err = w.AnqiTranslateHtml(req)
+	} else {
+		result, err = w.TranslateHtml(string(buf), w.System.Language, lang)
+	}
 	if err != nil {
 		// 如果翻译失败，则回退到原始内容
 		log.Println("translate html failed:", err)

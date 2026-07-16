@@ -103,9 +103,15 @@ func PluginFileUploadUpload(ctx iris.Context) {
 	}
 	defer file.Close()
 
-	info.Filename = strings.ReplaceAll(info.Filename, "..", "")
-	info.Filename = strings.ReplaceAll(info.Filename, "/", "")
-	info.Filename = strings.ReplaceAll(info.Filename, "\\", "")
+	info.Filename = filepath.Clean(info.Filename)
+	// 不允许包含路径分隔符（即必须是单一文件名）
+	if strings.Contains(info.Filename, "/") || strings.Contains(info.Filename, "\\") || strings.HasPrefix(info.Filename, ".") {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("OnlyAllowUploadOfTxtHtmHtmlXml"),
+		})
+		return
+	}
 
 	ext := path.Ext(info.Filename)
 

@@ -2,9 +2,6 @@ package library
 
 import (
 	"context"
-	"crypto/tls"
-	"github.com/parnurzeal/gorequest"
-	"golang.org/x/net/html/charset"
 	"io"
 	"log"
 	"net"
@@ -13,6 +10,9 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/parnurzeal/gorequest"
+	"golang.org/x/net/html/charset"
 )
 
 // charsetPatternInDOMStr meta[http-equiv]元素, content属性中charset截取的正则模式.
@@ -68,7 +68,7 @@ func Request(urlPath string, options *Options) (*RequestData, error) {
 	}
 	options.Method = strings.ToUpper(options.Method)
 
-	req := gorequest.New().SetDoNotClearSuperAgent(true).TLSClientConfig(&tls.Config{InsecureSkipVerify: true}).Timeout(options.Timeout * time.Second)
+	req := gorequest.New().SetDoNotClearSuperAgent(true).Timeout(options.Timeout * time.Second)
 	if options.Debug {
 		req = req.SetDebug(true)
 	}

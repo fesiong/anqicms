@@ -245,6 +245,12 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 	}
 
 	currentSite.PluginGuestbook.ReturnMessage = req.ReturnMessage
+	currentSite.PluginGuestbook.PushWay = req.PushWay
+	currentSite.PluginGuestbook.SiteId = req.SiteId
+	currentSite.PluginGuestbook.ApiMethod = req.ApiMethod
+	currentSite.PluginGuestbook.ApiURL = req.ApiURL
+	currentSite.PluginGuestbook.HeaderKey = req.HeaderKey
+	currentSite.PluginGuestbook.HeaderValue = req.HeaderValue
 	currentSite.PluginGuestbook.Fields = fields
 
 	err := currentSite.SaveSettingValue(provider.GuestbookSettingKey, currentSite.PluginGuestbook)

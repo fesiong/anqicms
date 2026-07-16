@@ -2,8 +2,8 @@ package model
 
 type Commission struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`                // 收益的用户
 	OrderId     string `json:"order_id" gorm:"column:order_id;type:varchar(32) not null;default:'';index"`                  // 关联的OrderId
 	OrderAmount int64  `json:"order_amount" gorm:"column:order_amount;type:bigint(20) not null;default:0"`                  // 订单金额

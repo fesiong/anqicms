@@ -113,9 +113,9 @@ func (w *Website) BuildSitemap() error {
 	indexFile := NewSitemapIndexGenerator(w, w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), baseUrl, false)
 	defer indexFile.Save()
 
-	indexFile.AddIndex(fmt.Sprintf("%s/category.%s", baseUrl, w.PluginSitemap.Type))
+	indexFile.AddIndex(fmt.Sprintf("%s/sitemap-category.%s", baseUrl, w.PluginSitemap.Type))
 
-	categoryFile := NewSitemapGenerator(w, fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type), baseUrl, false)
+	categoryFile := NewSitemapGenerator(w, fmt.Sprintf("%ssitemap-category.%s", w.PublicPath, w.PluginSitemap.Type), baseUrl, false)
 	defer categoryFile.Save()
 	//写入首页
 	var alternates []AlternateLink
@@ -192,11 +192,11 @@ func (w *Website) BuildSitemap() error {
 		// 每次加1，累计将生成的页码
 		page++
 		//写入index
-		indexFile.AddIndex(fmt.Sprintf("%s/archive-%d.%s", baseUrl, page, w.PluginSitemap.Type))
+		indexFile.AddIndex(fmt.Sprintf("%s/sitemap-archive-%d.%s", baseUrl, page, w.PluginSitemap.Type))
 
 		//写入archive-sitemap
-		archiveFile := NewSitemapGenerator(w, fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, page, w.PluginSitemap.Type), baseUrl, false)
-		remainNum := SitemapLimit
+		archiveFile := NewSitemapGenerator(w, fmt.Sprintf("%ssitemap-archive-%d.%s", w.PublicPath, page, w.PluginSitemap.Type), baseUrl, false)
+		remainNum := w.PluginSitemap.PageSize
 		finished := false
 		for remainNum > 0 {
 			// 单次查询2000条
@@ -251,11 +251,11 @@ func (w *Website) BuildSitemap() error {
 		for {
 			page++
 			//写入index
-			indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", baseUrl, page, w.PluginSitemap.Type))
+			indexFile.AddIndex(fmt.Sprintf("%s/sitemap-tag-%d.%s", baseUrl, page, w.PluginSitemap.Type))
 
 			//写入tag-sitemap
-			tagFile := NewSitemapGenerator(w, fmt.Sprintf("%stag-%d.%s", w.PublicPath, page, w.PluginSitemap.Type), baseUrl, false)
-			remainNum := SitemapLimit
+			tagFile := NewSitemapGenerator(w, fmt.Sprintf("%ssitemap-tag-%d.%s", w.PublicPath, page, w.PluginSitemap.Type), baseUrl, false)
+			remainNum := w.PluginSitemap.PageSize
 			finished := false
 			for remainNum > 0 {
 				// 单次查询5000条
@@ -332,7 +332,7 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 	}
 	//index 和 category 存放在同一个文件，文章单独一个文件
 	if itemType == "category" {
-		categoryPath := fmt.Sprintf("%scategory.%s", w.PublicPath, w.PluginSitemap.Type)
+		categoryPath := fmt.Sprintf("%ssitemap-category.%s", w.PublicPath, w.PluginSitemap.Type)
 		_, err := os.Stat(categoryPath)
 		if err != nil {
 			if os.IsNotExist(err) {
@@ -381,18 +381,18 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		indexFile := NewSitemapIndexGenerator(w, w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), frontUrl, true)
 		var latestSitemap string
 		for _, v := range indexFile.Sitemaps {
-			if strings.Contains(v.Loc, "archive-") {
+			if strings.Contains(v.Loc, "sitemap-archive-") {
 				latestSitemap = v.Loc
 			}
 		}
-		re, _ := regexp.Compile(`archive-(\d+)`)
+		re, _ := regexp.Compile(`sitemap-archive-(\d+)`)
 		match := re.FindStringSubmatch(latestSitemap)
 		if len(match) < 2 {
 			// Sitemap不存在。生成一份
 			return w.BuildSitemap()
 		}
 		latestSitemapId, _ := strconv.Atoi(match[1])
-		archivePath := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
+		archivePath := fmt.Sprintf("%ssitemap-archive-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 		archiveFile := NewSitemapGenerator(w, archivePath, frontUrl, true)
 		var alternates []AlternateLink
 		if multiLang {
@@ -423,13 +423,13 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 				}
 			}
 		}
-		if len(archiveFile.Urls) >= SitemapLimit {
+		if len(archiveFile.Urls) >= w.PluginSitemap.PageSize {
 			// 生成新文件
 			latestSitemapId++
 			//写入index
-			indexFile.AddIndex(fmt.Sprintf("%s/archive-%d.%s", frontUrl, latestSitemapId, w.PluginSitemap.Type))
+			indexFile.AddIndex(fmt.Sprintf("%s/sitemap-archive-%d.%s", frontUrl, latestSitemapId, w.PluginSitemap.Type))
 			_ = indexFile.Save()
-			archivePathNew := fmt.Sprintf("%sarchive-%d.%s", w.PublicPath, latestSitemapId+1, w.PluginSitemap.Type)
+			archivePathNew := fmt.Sprintf("%ssitemap-archive-%d.%s", w.PublicPath, latestSitemapId+1, w.PluginSitemap.Type)
 			archiveFile2 := NewSitemapGenerator(w, archivePathNew, frontUrl, false)
 			archiveFile2.AddLoc(link, lastmod, alternates)
 			_ = archiveFile2.Save()
@@ -443,17 +443,17 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 		indexFile := NewSitemapIndexGenerator(w, w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), frontUrl, true)
 		var latestSitemap string
 		for _, v := range indexFile.Sitemaps {
-			if strings.Contains(v.Loc, "tag-") {
+			if strings.Contains(v.Loc, "sitemap-tag-") {
 				latestSitemap = v.Loc
 			}
 		}
-		re, _ := regexp.Compile(`tag-(\d+)`)
+		re, _ := regexp.Compile(`sitemap-tag-(\d+)`)
 		match := re.FindStringSubmatch(latestSitemap)
 		var latestSitemapId int
 		if len(match) == 2 {
 			latestSitemapId, _ = strconv.Atoi(match[1])
 		}
-		tagPath := fmt.Sprintf("%stag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
+		tagPath := fmt.Sprintf("%ssitemap-tag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 		tagFile := NewSitemapGenerator(w, tagPath, frontUrl, true)
 		var alternates []AlternateLink
 		if multiLang {
@@ -484,10 +484,10 @@ func (w *Website) AddonSitemap(itemType string, link string, lastmod string, dat
 				}
 			}
 		}
-		if len(tagFile.Urls) >= SitemapLimit {
+		if len(tagFile.Urls) >= w.PluginSitemap.PageSize {
 			latestSitemapId++
-			indexFile.AddIndex(fmt.Sprintf("%s/tag-%d.%s", frontUrl, latestSitemapId, w.PluginSitemap.Type))
-			tagPathNew := fmt.Sprintf("%stag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
+			indexFile.AddIndex(fmt.Sprintf("%s/sitemap-tag-%d.%s", frontUrl, latestSitemapId, w.PluginSitemap.Type))
+			tagPathNew := fmt.Sprintf("%ssitemap-tag-%d.%s", w.PublicPath, latestSitemapId, w.PluginSitemap.Type)
 			tagFile2 := NewSitemapGenerator(w, tagPathNew, frontUrl, false)
 			tagFile2.AddLoc(link, lastmod, alternates)
 			_ = tagFile2.Save()

@@ -7,8 +7,8 @@ import (
 
 type Guestbook struct {
 	Id          uint      `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64     `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64     `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64     `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64     `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserName    string    `json:"user_name" gorm:"column:user_name;type:varchar(250) not null;default:''"`
 	Contact     string    `json:"contact" gorm:"column:contact;type:varchar(250) not null;default:''"`
 	Content     string    `json:"content" gorm:"column:content;type:text default null"`

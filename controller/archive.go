@@ -121,6 +121,9 @@ func ArchiveDetail(ctx iris.Context) {
 	if category == nil {
 		category = currentSite.GetCategoryFromCache(archive.CategoryId)
 	}
+	if category.Link == "" {
+		category.Link = currentSite.GetUrl("category", category, 0)
+	}
 
 	createTime := time.Unix(archive.CreatedTime, 0)
 	year := ctx.Params().GetString("year")

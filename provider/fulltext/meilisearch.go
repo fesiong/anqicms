@@ -78,7 +78,8 @@ func (s *MeiliSearchService) Create(doc TinyArchive) error {
 	documents := []map[string]interface{}{
 		data,
 	}
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, nil)
+	primaryKey := "id"
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(documents, &meilisearch.DocumentOptions{PrimaryKey: &primaryKey})
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -100,7 +101,8 @@ func (s *MeiliSearchService) Update(doc TinyArchive) error {
 	documents := []map[string]interface{}{
 		data,
 	}
-	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, nil)
+	primaryKey := "id"
+	task, err := s.apiClient.Index(s.indexName).UpdateDocuments(documents, &meilisearch.DocumentOptions{PrimaryKey: &primaryKey})
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
@@ -130,20 +132,32 @@ func (s *MeiliSearchService) Bulk(docs []TinyArchive) error {
 		docId := v.GetId()
 		newTitle := strings.ReplaceAll(v.Title, "-", "")
 		newTitle = strings.ReplaceAll(newTitle, "/", "")
-		newTitle = strings.ReplaceAll(newTitle, " ", "")
-		v.Title = v.Title + " " + newTitle
+		//newTitle = strings.ReplaceAll(newTitle, " ", "")
+		if newTitle != v.Title {
+			v.Title = v.Title + " " + newTitle
+		}
 		item := library.StructToMap(v)
 		// docId
 		item["id"] = strconv.FormatInt(docId, 10)
 
 		data = append(data, item)
 	}
-	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, nil)
+	primaryKey := "id"
+	task, err := s.apiClient.Index(s.indexName).AddDocuments(data, &meilisearch.DocumentOptions{PrimaryKey: &primaryKey})
 	if err != nil {
 		log.Printf("Error when calling `Document.Index``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", task)
 		return err
 	}
+	// for {
+	// 	time.Sleep(1 * time.Second)
+	// 	task2, _ := s.apiClient.GetTask(task.TaskUID)
+	// 	log.Printf("task status %v", task2.Status)
+	// 	fmt.Printf("meilisearch indexing failed %v", task2.Error)
+	// 	if task2.Status == "succeeded" {
+	// 		break
+	// 	}
+	// }
 
 	return nil
 }
@@ -178,6 +192,8 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 	}
 
 	resp, err := s.apiClient.Index(s.indexName).Search(keyword, query)
+
+	log.Printf("meilisearch result, req = %+v, keyword = %+v: %+v\n, err = %v", query, keyword, resp, err)
 	if err != nil {
 		log.Printf("Error when calling `SearchApi.Search``: %v\n", err)
 		log.Printf("Full HTTP response: %v\n", resp)

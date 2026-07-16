@@ -6,8 +6,8 @@ import (
 
 type Comment struct {
 	Id          uint     `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64    `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64    `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time"`
+	CreatedTime int64    `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64    `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	ArchiveId   int64    `json:"archive_id" gorm:"column:archive_id;type:bigint(20) not null;default:0;index:idx_archive_id"`
 	UserId      uint     `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index:idx_user_id"`
 	UserName    string   `json:"user_name" gorm:"column:user_name;type:varchar(32) not null;default:''"`
@@ -25,7 +25,7 @@ type Comment struct {
 
 type CommentPraise struct {
 	Id          int64 `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64 `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time"`
+	CreatedTime int64 `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	ArchiveId   int64 `json:"archive_id" gorm:"column:archive_id;type:bigint(20) not null;default:0;index"`
 	CommentId   int64 `json:"comment_id" gorm:"column:comment_id;type:bigint(20) not null;default:0;index:idx_comment_id;index:idx_user_comment_id,priority:2"`
 	UserId      uint  `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index:idx_user_comment_id,priority:1"`

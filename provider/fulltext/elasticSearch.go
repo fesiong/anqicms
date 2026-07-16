@@ -4,20 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
-	es8 "github.com/elastic/go-elasticsearch/v8"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"kandaoni.com/anqicms/config"
 )
 
 type ElasticSearchService struct {
 	config    *config.PluginFulltextConfig
-	apiClient *es8.TypedClient
 	indexName string
+	baseUrl   string
+	username  string
+	password  string
+	client    *http.Client
 }
 
 type ElasticIndexProperty struct {
@@ -30,62 +34,89 @@ type ElasticIndexProperty struct {
 }
 
 func NewElasticSearchService(cfg *config.PluginFulltextConfig, indexName string) (Service, error) {
-	es8cfg := es8.Config{
-		Addresses: []string{
-			cfg.EngineUrl,
-		},
-		Username: cfg.EngineUser,
-		Password: cfg.EnginePass,
-	}
-	es, err := es8.NewTypedClient(es8cfg)
-	if err != nil {
-		return nil, err
-	}
-
+	baseUrl := strings.TrimRight(cfg.EngineUrl, "/")
 	s := &ElasticSearchService{
 		config:    cfg,
 		indexName: indexName,
-		apiClient: es,
+		baseUrl:   baseUrl,
+		username:  cfg.EngineUser,
+		password:  cfg.EnginePass,
+		client:    http.DefaultClient,
 	}
 
 	return s, nil
 }
 
-func (s *ElasticSearchService) Index(body interface{}) error {
-	mappings := types.TypeMapping{
-		Properties: map[string]types.Property{
-			"type": map[string]string{
-				"type": "keyword",
-			},
-			"module_id": map[string]string{
-				"type": "integer",
-			},
-			"title": map[string]string{
-				"type": "text",
-			},
-			"keywords": map[string]string{
-				"type": "text",
-			},
-			"description": map[string]string{
-				"type": "text",
-			},
-			"content": map[string]string{
-				"type": "text",
-			},
-		},
+// doRequest 发送 HTTP 请求到 ES，返回响应 body
+func (s *ElasticSearchService) doRequest(ctx context.Context, method, path string, body io.Reader) ([]byte, int, error) {
+	url := s.baseUrl + path
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	if err != nil {
+		return nil, 0, err
+	}
+	if s.username != "" || s.password != "" {
+		req.SetBasicAuth(s.username, s.password)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
 	}
 
-	ok, err := s.apiClient.Indices.Exists(s.indexName).Do(context.TODO())
+	return respBody, resp.StatusCode, nil
+}
+
+func (s *ElasticSearchService) Index(body interface{}) error {
+	ctx := context.Background()
+
+	// 检查索引是否存在
+	_, status, err := s.doRequest(ctx, "HEAD", "/"+s.indexName, nil)
 	if err != nil {
-		log.Printf("Error when calling `Index.Exists``: %v\n", err)
+		log.Printf("Error when calling Index.Exists: %v\n", err)
 		return err
 	}
-	if !ok {
-		res, err := s.apiClient.Indices.Create(s.indexName).Mappings(&mappings).Do(context.TODO())
+
+	if status == 404 {
+		// 创建索引
+		mapping := map[string]interface{}{
+			"mappings": map[string]interface{}{
+				"properties": map[string]interface{}{
+					"type": map[string]string{
+						"type": "keyword",
+					},
+					"module_id": map[string]string{
+						"type": "integer",
+					},
+					"title": map[string]string{
+						"type": "text",
+					},
+					"keywords": map[string]string{
+						"type": "text",
+					},
+					"description": map[string]string{
+						"type": "text",
+					},
+					"content": map[string]string{
+						"type": "text",
+					},
+				},
+			},
+		}
+		bodyBytes, _ := json.Marshal(mapping)
+		respBody, status, err := s.doRequest(ctx, "PUT", "/"+s.indexName, bytes.NewReader(bodyBytes))
 		if err != nil {
-			log.Printf("Error when calling `Index.Create``: %v\n", err)
-			log.Printf("Full HTTP response: %v\n", res)
+			log.Printf("Error when calling Index.Create: %v\n", err)
 			return err
+		}
+		if status >= 400 {
+			log.Printf("Error response from Index.Create (status=%d): %s\n", status, string(respBody))
 		}
 	}
 
@@ -96,11 +127,17 @@ func (s *ElasticSearchService) Create(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
 
-	r, err := s.apiClient.Index(s.indexName).Id(docId).Request(doc).Do(context.TODO())
+	bodyBytes, _ := json.Marshal(doc)
+	// PUT /{index}/_doc/{id}
+	respBody, status, err := s.doRequest(context.Background(), "PUT",
+		fmt.Sprintf("/%s/_doc/%s", s.indexName, docId),
+		bytes.NewReader(bodyBytes))
 	if err != nil {
-		log.Printf("Error when calling `Document.Index``: %v\n", err)
-		log.Printf("Full HTTP response: %v\n", r)
+		log.Printf("Error when calling Document.Index: %v\n", err)
 		return err
+	}
+	if status >= 400 {
+		log.Printf("Error response from Document.Index (status=%d): %s\n", status, string(respBody))
 	}
 
 	return nil
@@ -110,11 +147,20 @@ func (s *ElasticSearchService) Update(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
 
-	r, err := s.apiClient.Update(s.indexName, docId).Doc(doc).Do(context.TODO())
+	updateBody := map[string]interface{}{
+		"doc": doc,
+	}
+	bodyBytes, _ := json.Marshal(updateBody)
+	// POST /{index}/_update/{id}
+	respBody, status, err := s.doRequest(context.Background(), "POST",
+		fmt.Sprintf("/%s/_update/%s", s.indexName, docId),
+		bytes.NewReader(bodyBytes))
 	if err != nil {
-		log.Printf("Error when calling `Document.Index``: %v\n", err)
-		log.Printf("Full HTTP response: %v\n", r)
+		log.Printf("Error when calling Document.Update: %v\n", err)
 		return err
+	}
+	if status >= 400 {
+		log.Printf("Error response from Document.Update (status=%d): %s\n", status, string(respBody))
 	}
 
 	return nil
@@ -124,11 +170,15 @@ func (s *ElasticSearchService) Delete(doc TinyArchive) error {
 	id := doc.GetId()
 	docId := strconv.FormatInt(id, 10)
 
-	r, err := s.apiClient.Delete(s.indexName, docId).Do(context.TODO())
+	// DELETE /{index}/_doc/{id}
+	respBody, status, err := s.doRequest(context.Background(), "DELETE",
+		fmt.Sprintf("/%s/_doc/%s", s.indexName, docId), nil)
 	if err != nil {
-		log.Printf("Error when calling `Document.Index``: %v\n", err)
-		log.Printf("Full HTTP response: %v\n", r)
+		log.Printf("Error when calling Document.Delete: %v\n", err)
 		return err
+	}
+	if status >= 400 {
+		log.Printf("Error response from Document.Delete (status=%d): %s\n", status, string(respBody))
 	}
 
 	return nil
@@ -136,23 +186,49 @@ func (s *ElasticSearchService) Delete(doc TinyArchive) error {
 
 func (s *ElasticSearchService) Bulk(docs []TinyArchive) error {
 	buff := new(bytes.Buffer)
-	// { "index" : { "_index" : "test", "_id" : "1" } }
 	for _, v := range docs {
 		docId := v.GetId()
 		docIdStr := strconv.FormatInt(docId, 10)
-		buff.WriteString("{ \"index\" : { \"_index\" : \"" + s.indexName + "\", \"_id\" : \"" + docIdStr + "\" } }\n")
+		buff.WriteString(fmt.Sprintf(`{ "index" : { "_index" : "%s", "_id" : "%s" } }`+"\n", s.indexName, docIdStr))
 		buf, _ := json.Marshal(v)
 		buff.Write(buf)
 		buff.WriteString("\n")
 	}
-	r, err := s.apiClient.Bulk().Index(s.indexName).Raw(buff).Do(context.TODO())
+	// POST /{index}/_bulk
+	respBody, status, err := s.doRequest(context.Background(), "POST",
+		fmt.Sprintf("/%s/_bulk", s.indexName), buff)
 	if err != nil {
-		log.Printf("Error when calling `Document.Index``: %v\n", err)
-		log.Printf("Full HTTP response: %v\n", r)
+		log.Printf("Error when calling Document.Bulk: %v\n", err)
 		return err
+	}
+	if status >= 400 {
+		log.Printf("Error response from Document.Bulk (status=%d): %s\n", status, string(respBody))
 	}
 
 	return nil
+}
+
+// esSearchHit 解析 ES 搜索命中的字段
+type esSearchHit struct {
+	Index  string          `json:"_index"`
+	Id     string          `json:"_id"`
+	Score  *float64        `json:"_score"`
+	Source json.RawMessage `json:"_source"`
+}
+
+type esSearchHits struct {
+	Total    *esTotal      `json:"total"`
+	MaxScore *float64      `json:"max_score"`
+	Hits     []esSearchHit `json:"hits"`
+}
+
+type esTotal struct {
+	Value int64 `json:"value"`
+}
+
+type esSearchResult struct {
+	Took int          `json:"took"`
+	Hits esSearchHits `json:"hits"`
 }
 
 func (s *ElasticSearchService) Search(keyword string, moduleId uint, page int, pageSize int) ([]TinyArchive, int64, error) {
@@ -160,81 +236,100 @@ func (s *ElasticSearchService) Search(keyword string, moduleId uint, page int, p
 		page = 1
 	}
 
-	var query types.Query
+	// 构建 bool query
+	matchFields := []string{"title", "keywords", "description", "content"}
+	shouldClauses := make([]map[string]interface{}, 0, len(matchFields))
+	for _, field := range matchFields {
+		shouldClauses = append(shouldClauses, map[string]interface{}{
+			"match": map[string]interface{}{
+				field: map[string]interface{}{
+					"query": keyword,
+				},
+			},
+		})
+	}
 
+	var query map[string]interface{}
 	if moduleId > 0 {
-		query = types.Query{
-			Bool: &types.BoolQuery{
-				Must: []types.Query{
+		query = map[string]interface{}{
+			"bool": map[string]interface{}{
+				"must": []map[string]interface{}{
 					{
-						Bool: &types.BoolQuery{
-							Should: []types.Query{
-								{Match: map[string]types.MatchQuery{"title": {Query: keyword}}},
-								{Match: map[string]types.MatchQuery{"keywords": {Query: keyword}}},
-								{Match: map[string]types.MatchQuery{"description": {Query: keyword}}},
-								{Match: map[string]types.MatchQuery{"content": {Query: keyword}}},
-							},
-							MinimumShouldMatch: 1,
+						"bool": map[string]interface{}{
+							"should":               shouldClauses,
+							"minimum_should_match": 1,
 						},
 					},
 					{
-						Term: map[string]types.TermQuery{
-							"module_id": {Value: moduleId},
+						"term": map[string]interface{}{
+							"module_id": moduleId,
 						},
 					},
 				},
 			},
 		}
 	} else {
-		query = types.Query{
-			Bool: &types.BoolQuery{
-				Should: []types.Query{
-					{Match: map[string]types.MatchQuery{"title": {Query: keyword}}},
-					{Match: map[string]types.MatchQuery{"keywords": {Query: keyword}}},
-					{Match: map[string]types.MatchQuery{"description": {Query: keyword}}},
-					{Match: map[string]types.MatchQuery{"content": {Query: keyword}}},
-				},
-				MinimumShouldMatch: 1,
+		query = map[string]interface{}{
+			"bool": map[string]interface{}{
+				"should":               shouldClauses,
+				"minimum_should_match": 1,
 			},
 		}
 	}
 
+	searchBody := map[string]interface{}{
+		"query": query,
+	}
+	bodyBytes, _ := json.Marshal(searchBody)
+
 	from := pageSize * (page - 1)
-	resp, err := s.apiClient.Search().Index(s.indexName).Query(&query).From(from).Size(pageSize).Do(context.TODO())
+
+	// GET /{index}/_search
+	path := fmt.Sprintf("/%s/_search?from=%d&size=%d", s.indexName, from, pageSize)
+	respBody, status, err := s.doRequest(context.Background(), "GET", path, bytes.NewReader(bodyBytes))
 	if err != nil {
-		log.Printf("Error when calling `SearchApi.Search``: %v\n", err)
-		log.Printf("Full HTTP response: %v\n", resp)
+		log.Printf("Error when calling Search: %v\n", err)
+		return nil, 0, err
+	}
+	if status >= 400 {
+		log.Printf("Error response from Search (status=%d): %s\n", status, string(respBody))
+		return nil, 0, nil
+	}
+
+	var result esSearchResult
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		log.Printf("Error decoding search response: %v\n", err)
 		return nil, 0, err
 	}
 
 	// 归一化分值
-	var maxScore types.Float64
-	if resp.Hits.MaxScore != nil {
-		maxScore = *resp.Hits.MaxScore
+	var maxScore float64
+	if result.Hits.MaxScore != nil {
+		maxScore = *result.Hits.MaxScore
 	} else {
-		for _, hit := range resp.Hits.Hits {
-			if hit.Score_ != nil && *hit.Score_ > maxScore {
-				maxScore = *hit.Score_
+		for _, hit := range result.Hits.Hits {
+			if hit.Score != nil && *hit.Score > maxScore {
+				maxScore = *hit.Score
 			}
 		}
 	}
 
 	var docs = make([]TinyArchive, 0, pageSize)
-	for _, hit := range resp.Hits.Hits {
-		id, _ := strconv.ParseInt(*hit.Id_, 10, 64)
+	for _, hit := range result.Hits.Hits {
+		id, _ := strconv.ParseInt(hit.Id, 10, 64)
 		doc := TinyArchive{}
-		_ = json.Unmarshal(hit.Source_, &doc)
+		_ = json.Unmarshal(hit.Source, &doc)
 		doc.Id, doc.Type = GetId(id)
-		// ContainLength 过滤：title/description/content 至少包含
+		// ContainLength 过滤
 		if s.config.ContainLength > 0 {
 			if !containsByLength(keyword, s.config.ContainLength, doc.Title, doc.Description, doc.Content) {
 				continue
 			}
 		}
-		// RankingScore 过滤：按页内最大分值归一到 0-1
-		if s.config.RankingScore > 0 && maxScore > 0 && hit.Score_ != nil {
-			norm := *hit.Score_ / maxScore
-			if norm < types.Float64(s.config.RankingScore)/100.0 {
+		// RankingScore 过滤
+		if s.config.RankingScore > 0 && maxScore > 0 && hit.Score != nil {
+			norm := *hit.Score / maxScore
+			if norm < float64(s.config.RankingScore)/100.0 {
 				continue
 			}
 		}

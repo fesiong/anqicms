@@ -112,7 +112,11 @@ func (node *tagArchiveParamsNode) Execute(ctx *pongo2.ExecutionContext, writer p
 						value, _ = strconv.ParseInt(fmt.Sprint(param.Default), 10, 64)
 					}
 					if value > 0 {
-						param.Value = currentSite.GetCategoryFromCache(uint(value))
+						category := currentSite.GetCategoryFromCache(uint(value))
+						if category.Link == "" {
+							category.Link = currentSite.GetUrl("category", category, 0)
+						}
+						param.Value = category
 					} else {
 						param.Value = nil
 					}

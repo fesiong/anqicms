@@ -2,6 +2,8 @@ package controller
 
 import (
 	"net/url"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -13,8 +15,31 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
-func Install(ctx iris.Context) {
+// installLockFile 安装锁定文件路径
+var installLockFile string
+
+func init() {
+	installLockFile = filepath.Join(config.ExecPath, "data", "installed.lock")
+}
+
+// isInstallLocked 检查是否已安装（双重检查：DB + 文件锁）
+func isInstallLocked() bool {
+	// 检查锁定文件
+	if _, err := os.Stat(installLockFile); err == nil {
+		return true
+	}
+	// 检查数据库
 	if provider.GetDefaultDB() != nil {
+		// DB 已初始化但锁文件缺失，创建锁文件
+		_ = os.MkdirAll(filepath.Dir(installLockFile), os.ModePerm)
+		_ = os.WriteFile(installLockFile, []byte(time.Now().Format(time.RFC3339)), 0644)
+		return true
+	}
+	return false
+}
+
+func Install(ctx iris.Context) {
+	if isInstallLocked() {
 		ctx.Redirect("/")
 		return
 	}
@@ -304,7 +329,7 @@ var installRunning bool
 
 func InstallForm(ctx iris.Context) {
 	defaultSite := provider.CurrentSite(ctx)
-	if provider.GetDefaultDB() != nil {
+	if isInstallLocked() {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  defaultSite.Tr("InitializationCompleted"),
@@ -429,6 +454,11 @@ func InstallForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	// 创建安装锁定文件，防止重复安装
+	_ = os.MkdirAll(filepath.Dir(installLockFile), os.ModePerm)
+	_ = os.WriteFile(installLockFile, []byte(time.Now().Format(time.RFC3339)), 0644)
+
 	config.RestartChan <- 0
 
 	ctx.JSON(iris.Map{

@@ -30,7 +30,7 @@ func SettingNavForm(ctx iris.Context) {
 		})
 		return
 	}
-
+	req.UpdateAll = true
 	nav, err := currentSite.SaveNav(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{

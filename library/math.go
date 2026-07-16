@@ -55,24 +55,6 @@ func GenerateRandNumber(length uint) uint {
 	return uint(randomNumber)
 }
 
-// GenerateRandString 生成随机字符串
-func GenerateRandString(length int) string {
-	const charSet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	var output strings.Builder
-	output.Grow(length) // 提前分配足够的空间
-
-	// 初始化随机数生成器
-	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-
-	for i := 0; i < length; i++ {
-		// 随机选择一个字符
-		character := charSet[rd.Intn(len(charSet))]
-		output.WriteByte(character)
-	}
-
-	return output.String()
-}
-
 // IsMd5 验证给定的字符串是否是md5值，返回匹配的md5值或者空字符串
 func IsMd5(str string) bool {
 	if len(str) != 32 {

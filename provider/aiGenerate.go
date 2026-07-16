@@ -33,7 +33,7 @@ func (w *Website) SaveAiGenerateSetting(req config.AiGenerateConfig, focus bool)
 		setting = req
 		if req.AiEngine == config.AiEngineDeepSeek && setting.OpenAiApi == "" {
 			// DeepSeek 接口地址使用默认的接口地址
-			setting.OpenAiApi = "https://api.deepseek.com/v1"
+			setting.OpenAiApi = "https://api.deepseek.com"
 			setting.OpenAIModel = "deepseek-chat"
 		}
 	} else {
