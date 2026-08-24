@@ -166,6 +166,9 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	}
 	if req.UpdateAll || req.GroupId > 0 {
 		user.GroupId = req.GroupId
+		if user.GroupId == 0 {
+			user.GroupId = w.PluginUser.DefaultGroupId
+		}
 	}
 	if req.UpdateAll || req.ExpireTime > 0 {
 		user.ExpireTime = req.ExpireTime
@@ -199,6 +202,10 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
+						} else if val, ok := extraValue["value"].([]string); ok {
+							extraFields[v.FieldName] = strings.Join(val, ",")
+						} else if extraValue["value"] != nil {
+							extraFields[v.FieldName] = extraValue["value"]
 						}
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
@@ -478,6 +485,10 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 								val2 = append(val2, v2s)
 							}
 							extraFields[v.FieldName] = strings.Join(val2, ",")
+						} else if val, ok := extraValue.([]string); ok {
+							extraFields[v.FieldName] = strings.Join(val, ",")
+						} else if extraValue != nil {
+							extraFields[v.FieldName] = extraValue
 						}
 					} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 						//只有这个类型的数据是数字，转成数字
