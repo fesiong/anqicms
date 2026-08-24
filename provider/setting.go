@@ -280,9 +280,6 @@ func (w *Website) compileSensitiveWords() {
 		w.sensitiveAcMatcher = nil
 	}
 	w.sensitiveRegexes = regexes
-	if w.htmlTagRegex == nil {
-		w.htmlTagRegex = regexp.MustCompile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
-	}
 }
 
 func (w *Website) LoadContactSetting(value string) {
@@ -997,48 +994,79 @@ func (w *Website) ReplaceSensitiveWords(content []byte) []byte {
 		w.compileSensitiveWords()
 	}
 
-	type replaceType struct {
-		Key   []byte
-		Value []byte
+	// 单次遍历：只对 HTML 标签外的文本进行敏感词替换
+	// 避免旧方案（标签→占位符→多次 bytes.Replace 恢复）的 O(n²) 开销
+	result := make([]byte, 0, len(content))
+	i := 0
+	for i < len(content) {
+		// 查找下一个 < 标签起始
+		next := bytes.IndexByte(content[i:], '<')
+		if next < 0 {
+			// 没有更多标签，处理剩余纯文本
+			result = w.appendSensitiveReplaced(result, content[i:])
+			break
+		}
+		// < 之前的文本段
+		if next > 0 {
+			result = w.appendSensitiveReplaced(result, content[i:i+next])
+		}
+		i += next
+
+		// 查找标签结束 >，需处理属性值中的引号
+		tagStart := i
+		i++ // 跳过 '<'
+		inQuote := false
+		var quoteChar byte
+	TagLoop:
+		for i < len(content) {
+			c := content[i]
+			switch {
+			case inQuote:
+				if c == quoteChar {
+					inQuote = false
+				}
+			case c == '\'' || c == '"':
+				inQuote = true
+				quoteChar = c
+			case c == '>':
+				i++
+				break TagLoop
+			}
+			i++
+		}
+		if i >= len(content) && !inQuote {
+			// 遇到未闭合的标签，追加剩余内容
+			result = append(result, content[tagStart:]...)
+			break
+		}
+		// 整个标签原样保留（不对标签内做敏感词替换）
+		result = append(result, content[tagStart:i]...)
 	}
-	var replacedMatch []*replaceType
-	numCount := 0
-	// 过滤所有属性
-	if w.htmlTagRegex == nil {
-		w.htmlTagRegex = regexp.MustCompile("(?i)<!?/?[a-z0-9-]+(\\s+[^>]+)?>")
+
+	return result
+}
+
+// appendSensitiveReplaced 对纯文本段应用敏感词替换并追加到 buf
+func (w *Website) appendSensitiveReplaced(buf, text []byte) []byte {
+	if len(text) == 0 {
+		return buf
 	}
 
-	content = w.htmlTagRegex.ReplaceAllFunc(content, func(s []byte) []byte {
-		key := []byte(fmt.Sprintf("{$%d}", numCount))
-		replacedMatch = append(replacedMatch, &replaceType{
-			Key:   key,
-			Value: s,
-		})
-		numCount++
-
-		return key
-	})
-
-	// 替换固定字符串敏感词
+	// 固定字符串敏感词替换（AC 自动机，单次遍历）
 	if w.sensitiveAcMatcher != nil {
-		content = w.sensitiveAcMatcher.ReplaceAll(content, func(match library.ACMatch) []byte {
+		text = w.sensitiveAcMatcher.ReplaceAll(text, func(match library.ACMatch) []byte {
 			return bytes.Repeat([]byte("*"), utf8.RuneCount(match.Pattern))
 		})
 	}
 
-	// 替换正则表达式敏感词
+	// 正则表达式敏感词替换
 	for _, re := range w.sensitiveRegexes {
-		content = re.ReplaceAllFunc(content, func(s []byte) []byte {
+		text = re.ReplaceAllFunc(text, func(s []byte) []byte {
 			return bytes.Repeat([]byte("*"), utf8.RuneCount(s))
 		})
 	}
 
-	// 替换回来
-	for i := len(replacedMatch) - 1; i >= 0; i-- {
-		content = bytes.Replace(content, replacedMatch[i].Key, replacedMatch[i].Value, 1)
-	}
-
-	return content
+	return append(buf, text...)
 }
 
 func (w *Website) LoadInterferenceSetting(value string) {
