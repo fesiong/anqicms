@@ -504,9 +504,9 @@ func (g *CustomField) GetFieldColumn() string {
 	switch g.Type {
 	case CustomFieldTypeNumber, CustomFieldTypeCategory:
 		column += " int(10)"
-	case CustomFieldTypeTextarea, CustomFieldTypeEditor, CustomFieldTypeImages, CustomFieldTypeTexts, CustomFieldTypeArchive:
+	case CustomFieldTypeTextarea, CustomFieldTypeImages, CustomFieldTypeTexts, CustomFieldTypeArchive:
 		column += " text"
-	case CustomFieldTypeTimeline:
+	case CustomFieldTypeEditor, CustomFieldTypeTimeline:
 		column += " longtext"
 	case CustomFieldTypeCheckbox:
 		column += " varchar(500)"
