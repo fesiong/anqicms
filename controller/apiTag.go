@@ -1250,6 +1250,8 @@ func ApiGuestbookForm(ctx iris.Context) {
 			tmpVal, ok := req[item.FieldName].([]string)
 			if ok {
 				val = strings.Trim(strings.Join(tmpVal, ","), ",")
+			} else {
+				val, _ = req[item.FieldName].(string)
 			}
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			tmpVal, ok := req[item.FieldName].(string)

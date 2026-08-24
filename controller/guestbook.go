@@ -61,6 +61,10 @@ func GuestbookForm(ctx iris.Context) {
 		var val string
 		if item.Type == config.CustomFieldTypeCheckbox {
 			tmpVal, _ := ctx.PostValues(item.FieldName + "[]")
+			tmpVal2, _ := ctx.PostValues(item.FieldName)
+			if tmpVal2 != nil {
+				tmpVal = tmpVal2
+			}
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
 			file, info, err := ctx.FormFile(item.FieldName)
