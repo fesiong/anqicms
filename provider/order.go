@@ -525,7 +525,7 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			bm := make(gopay.BodyMap)
 			bm.Set("out_trade_no", order.PaymentId)
 			bm.Set("out_request_no", refund.RefundId)
-			bm.Set("refund_amount", fmt.Sprintf("%.2f", float32(refund.Amount)/100))
+			bm.Set("refund_amount", fmt.Sprintf("%.2f", float64(refund.Amount)/100))
 
 			//创建订单
 			resp, err := client.TradeRefund(context.Background(), bm)
@@ -783,7 +783,7 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 	}
 	tx := w.DB.Begin()
 	var orderAddress *model.OrderAddress
-	if w.PluginOrder.NoProcess == false || req.Address != nil {
+	if w.PluginOrder.NoProcess == false && req.Address != nil {
 		//保存订单地址
 		orderAddress, err = w.SaveOrderAddress(tx, userId, req.Address)
 		if err != nil {
