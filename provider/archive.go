@@ -391,7 +391,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 }
 
 type ExplainCount struct {
-	Rows int64
+	Rows string
 }
 
 func (w *Website) GetExplainCount(sql string) int64 {
@@ -412,9 +412,18 @@ func (w *Website) GetExplainCount(sql string) int64 {
 		strings.Contains(upperSql, "LOAD_FILE") {
 		return 0
 	}
-	w.DB.Raw("EXPLAIN " + sql).Scan(&result)
+	w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN " + sql).Scan(&result)
 
-	return result.Rows
+	// MySQL EXPLAIN rows may contain extras like "3 (0%)" for partitioned tables;
+	// extract the leading numeric value.
+	rowsStr := strings.TrimSpace(result.Rows)
+	if idx := strings.Index(rowsStr, " "); idx > 0 {
+		rowsStr = rowsStr[:idx]
+	}
+	if n, err := strconv.ParseInt(rowsStr, 10, 64); err == nil {
+		return n
+	}
+	return 0
 }
 
 func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*config.CustomField) {
@@ -817,6 +826,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 									val2 = append(val2, v2s)
 								}
 								extraFields[v.FieldName] = strings.Join(val2, ",")
+							} else if val, ok := extraValue["value"].([]string); ok {
+								extraFields[v.FieldName] = strings.Join(val, ",")
+							} else if extraValue["value"] != nil {
+								extraFields[v.FieldName] = extraValue["value"]
 							}
 						} else if v.Type == config.CustomFieldTypeNumber || v.Type == config.CustomFieldTypeCategory {
 							//只有这个类型的数据是数字，转成数字
