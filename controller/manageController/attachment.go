@@ -273,6 +273,9 @@ func AttachmentEdit(ctx iris.Context) {
 					}
 				}
 			}
+		} else if attach.Logo != "" {
+			// 只有视频有不同的缩略图，其它按同 FileLocation 处理
+			attach.Logo = ""
 		}
 		attach.FileLocation = newLocation
 		currentSite.DB.Save(attach)
