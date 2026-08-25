@@ -1,6 +1,9 @@
 package model
 
 import (
+	"path/filepath"
+	"strings"
+
 	"gorm.io/gorm"
 )
 
@@ -25,6 +28,25 @@ type Link struct {
 	Sort        uint   `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:99;index:idx_sort"`
 	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0;index:idx_status"`
 	CheckedTime int64  `json:"checked_time" gorm:"column:checked_time;type:bigint(20) not null;default:0"`
+	Logo        string `json:"logo" gorm:"column:title;type:varchar(logo) not null;default:''"`
+	Thumb       string `json:"thumb" gorm:"-"`
+}
+
+func (link *Link) GetThumb(storageUrl string) string {
+	if link.Logo != "" {
+		//如果是一个远程地址，则缩略图和原图地址一致
+		if !strings.HasPrefix(link.Logo, "http") && !strings.HasPrefix(link.Logo, "//") {
+			link.Logo = storageUrl + "/" + strings.TrimPrefix(link.Logo, "/")
+		}
+		if strings.HasPrefix(link.Logo, storageUrl) && !strings.HasSuffix(link.Logo, ".svg") {
+			paths, fileName := filepath.Split(link.Logo)
+			link.Thumb = paths + "thumb_" + fileName
+		} else {
+			link.Thumb = link.Logo
+		}
+	}
+
+	return link.Thumb
 }
 
 func (link *Link) Save(db *gorm.DB) error {

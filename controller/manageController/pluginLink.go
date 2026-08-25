@@ -63,6 +63,7 @@ func PluginLinkDetailForm(ctx iris.Context) {
 	link.Remark = req.Remark
 	link.Nofollow = req.Nofollow
 	link.Sort = req.Sort
+	link.Logo = req.Logo
 	link.Status = 0
 
 	err = link.Save(currentSite.DB)
