@@ -45,7 +45,7 @@ type OrderDetail struct {
 	OrderId     string `json:"order_id"`
 	UserId      uint   `json:"user_id"`
 	GoodsId     int64  `json:"goods_id"`
-	GoodsItemId int64  `json:"goods_item_id"`
+	GoodsSkuId  int64  `json:"goods_sku_id"`
 	Price       int64  `json:"price"`
 	OriginPrice int64  `json:"origin_price"`
 	Amount      int64  `json:"amount"`

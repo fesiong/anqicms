@@ -550,6 +550,8 @@ func ReRouteContext(ctx iris.Context) {
 		}
 		ctx.Header("Content-Language", currentSite.System.Language)
 	}
+	// 注入 getUrl
+	ctx.ViewData("getUrl", currentSite.GetUrl)
 
 	switch params["match"] {
 	case "notfound":
@@ -621,6 +623,15 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 	// index
 	if paramValue == "" {
 		matchMap["match"] = "index"
+		// 判断是否是城市分站
+		if currentSite.PluginPlace.Open && currentSite.PluginPlace.UrlType == config.PlaceUrlTypeSubdomain {
+			// 子域名
+			place, ok := ctx.Values().Get("place").(*model.Place)
+			if ok {
+				matchMap["match"] = provider.PatternPlace
+				matchMap["filename"] = place.UrlToken
+			}
+		}
 		return matchMap, true
 	}
 	// 静态资源直接返回

@@ -102,7 +102,6 @@ type Website struct {
 
 	sensitiveAcMatcher *library.AhoCorasick
 	sensitiveRegexes   []*regexp.Regexp
-	htmlTagRegex       *regexp.Regexp
 	anchorAcMatcher    *library.AhoCorasick
 
 	CollectorConfig *config.CollectorJson

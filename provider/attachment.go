@@ -48,10 +48,10 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	db := w.DB
 
 	file.Seek(0, 0)
-	kind, _ := filetype.MatchReader(file)
+	kind, err := filetype.MatchReader(file)
 	file.Seek(0, 0)
 	fileExt := "." + kind.Extension
-	if kind == filetype.Unknown {
+	if err != nil || kind == filetype.Unknown || kind.MIME.Type == "video" {
 		fileExt = strings.ToLower(filepath.Ext(info.Filename))
 	}
 	if fileExt == ".php" || fileExt == ".jsp" {
@@ -72,7 +72,6 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	var attachment *model.Attachment
-	var err error
 	if attachId > 0 {
 		attachment, err = w.GetAttachmentById(attachId)
 		if err != nil {

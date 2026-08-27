@@ -2,25 +2,23 @@ package tools
 
 import (
 	"testing"
-
-	"kandaoni.com/anqicms/pkg/mcp/tools"
 )
 
-// MockCategoryProvider implements tools.CategoryProvider for testing
+// MockCategoryProvider implements CategoryProvider for testing
 type MockCategoryProvider struct {
-	categories map[uint]*tools.CategoryRecord
+	categories map[uint]*CategoryRecord
 	nextID     uint
 	err        error
 }
 
 func newMockCategoryProvider() *MockCategoryProvider {
 	return &MockCategoryProvider{
-		categories: make(map[uint]*tools.CategoryRecord),
+		categories: make(map[uint]*CategoryRecord),
 		nextID:     1,
 	}
 }
 
-func (m *MockCategoryProvider) GetCategory(id uint) (*tools.CategoryRecord, error) {
+func (m *MockCategoryProvider) GetCategory(id uint) (*CategoryRecord, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -31,11 +29,11 @@ func (m *MockCategoryProvider) GetCategory(id uint) (*tools.CategoryRecord, erro
 	return cat, nil
 }
 
-func (m *MockCategoryProvider) ListCategories(req tools.CategoryListRequest) ([]tools.CategoryRecord, error) {
+func (m *MockCategoryProvider) ListCategories(req CategoryListRequest) ([]CategoryRecord, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	var result []tools.CategoryRecord
+	var result []CategoryRecord
 	for _, c := range m.categories {
 		if req.Pid > 0 && c.Pid != req.Pid {
 			continue
@@ -48,15 +46,15 @@ func (m *MockCategoryProvider) ListCategories(req tools.CategoryListRequest) ([]
 	return result, nil
 }
 
-func (m *MockCategoryProvider) CreateCategory(req tools.CategoryCreateRequest) (uint, error) {
+func (m *MockCategoryProvider) CreateCategory(req CategoryCreateRequest) (uint, error) {
 	if m.err != nil {
 		return 0, m.err
 	}
-	cat := &tools.CategoryRecord{
-		Id:    m.nextID,
-		Title: req.Title,
+	cat := &CategoryRecord{
+		Id:     m.nextID,
+		Title:  req.Title,
 		Status: req.Status,
-		Pid:   req.Pid,
+		Pid:    req.Pid,
 	}
 	m.categories[m.nextID] = cat
 	id := m.nextID
@@ -64,16 +62,16 @@ func (m *MockCategoryProvider) CreateCategory(req tools.CategoryCreateRequest) (
 	return id, nil
 }
 
-func (m *MockCategoryProvider) UpdateCategory(id uint, req tools.CategoryUpdateRequest) error {
+func (m *MockCategoryProvider) UpdateCategory(id uint, req CategoryUpdateRequest) error {
 	if m.err != nil {
 		return m.err
 	}
 	if cat, ok := m.categories[id]; ok {
-		if req.Title != nil {
-			cat.Title = *req.Title
+		if req.Title != "" {
+			cat.Title = req.Title
 		}
-		if req.Pid != nil {
-			cat.Pid = *req.Pid
+		if req.Pid != 0 {
+			cat.Pid = req.Pid
 		}
 	}
 	return nil
@@ -87,7 +85,7 @@ func (m *MockCategoryProvider) DeleteCategory(id uint) error {
 	return nil
 }
 
-func (m *MockCategoryProvider) GetCategoryTree() ([]tools.CategoryRecord, error) {
+func (m *MockCategoryProvider) GetCategoryTree() ([]CategoryRecord, error) {
 	return nil, nil
 }
 
@@ -109,22 +107,22 @@ func TestCategoryTools_GetAll(t *testing.T) {
 func TestValidateCategoryCreate(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     tools.CategoryCreateRequest
+		req     CategoryCreateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid request",
-			req:     tools.CategoryCreateRequest{Title: "Technology", Pid: 0, Status: 1},
+			req:     CategoryCreateRequest{Title: "Technology", Pid: 0, Status: 1},
 			wantErr: false,
 		},
 		{
 			name:    "empty title",
-			req:     tools.CategoryCreateRequest{Pid: 0},
+			req:     CategoryCreateRequest{Pid: 0},
 			wantErr: true,
 		},
 		{
 			name:    "long title",
-			req:     tools.CategoryCreateRequest{Title: string(make([]byte, 256))},
+			req:     CategoryCreateRequest{Title: string(make([]byte, 256))},
 			wantErr: true,
 		},
 	}
@@ -142,22 +140,22 @@ func TestValidateCategoryCreate(t *testing.T) {
 func TestValidateCategoryUpdate(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     tools.CategoryUpdateRequest
+		req     CategoryUpdateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid empty update",
-			req:     tools.CategoryUpdateRequest{},
+			req:     CategoryUpdateRequest{},
 			wantErr: false,
 		},
 		{
 			name:    "valid title update",
-			req:     tools.CategoryUpdateRequest{Title: strPtr("New Title")},
+			req:     CategoryUpdateRequest{Title: "New Title"},
 			wantErr: false,
 		},
 		{
 			name:    "long title",
-			req:     tools.CategoryUpdateRequest{Title: strPtr(string(make([]byte, 256)))},
+			req:     CategoryUpdateRequest{Title: string(make([]byte, 256))},
 			wantErr: true,
 		},
 	}
@@ -173,7 +171,7 @@ func TestValidateCategoryUpdate(t *testing.T) {
 }
 
 func TestBuildCategoryTree(t *testing.T) {
-	cats := []tools.CategoryRecord{
+	cats := []CategoryRecord{
 		{Id: 1, Title: "Parent 1", Pid: 0},
 		{Id: 2, Title: "Child 1", Pid: 1},
 		{Id: 3, Title: "Parent 2", Pid: 0},

@@ -10,12 +10,19 @@ import (
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 )
 
 var defaultDB *gorm.DB
+var defaultLogger = logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), logger.Config{
+	SlowThreshold:             500 * time.Millisecond,
+	LogLevel:                  logger.Warn,
+	IgnoreRecordNotFoundError: true,
+	Colorful:                  false,
+})
 
 func SetDefaultDB(db *gorm.DB) {
 	defaultDB = db
@@ -40,19 +47,21 @@ func GetDefaultDB() *gorm.DB {
 func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	var db *gorm.DB
 	var err error
-	cfgUrl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
-		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
-	db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
+	var gormCfg = &gorm.Config{
 		DisableForeignKeyConstraintWhenMigrating: true,
 		PrepareStmt:                              false,
-	})
+		PrepareStmtMaxSize:                       10000, // 默认设置1w
+		PrepareStmtTTL:                           15 * time.Minute,
+		Logger:                                   defaultLogger,
+	}
+	cfgUrl := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8mb4&parseTime=True&loc=Local",
+		cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.Database)
+	db, err = gorm.Open(mysql.Open(cfgUrl), gormCfg)
 	if err != nil {
 		if strings.Contains(err.Error(), "1049") {
 			url2 := fmt.Sprintf("%s:%s@tcp(%s:%d)/?charset=utf8mb4&parseTime=True&loc=Local",
 				cfg.User, cfg.Password, cfg.Host, cfg.Port)
-			db, err = gorm.Open(mysql.Open(url2), &gorm.Config{
-				DisableForeignKeyConstraintWhenMigrating: true,
-			})
+			db, err = gorm.Open(mysql.Open(url2), gormCfg)
 			if err != nil {
 				return nil, err
 			}
@@ -61,9 +70,7 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 				return nil, err
 			}
 			//重新连接db
-			db, err = gorm.Open(mysql.Open(cfgUrl), &gorm.Config{
-				DisableForeignKeyConstraintWhenMigrating: true,
-			})
+			db, err = gorm.Open(mysql.Open(cfgUrl), gormCfg)
 			if err != nil {
 				return nil, err
 			}
@@ -75,10 +82,35 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// 连接池设置
-	sqlDB.SetMaxIdleConns(500)
-	sqlDB.SetMaxOpenConns(20)
-	sqlDB.SetConnMaxLifetime(5 * time.Minute)
+	// 连接池设置 — 优先通过数据库服务端系统变量自动配置
+	maxConns := 1000
+	maxIdle := 500
+	connMaxLifetime := 5 * time.Minute
+	connMaxIdleTime := 30 * time.Second
+
+	var maxConnections int
+	row := sqlDB.QueryRow("SHOW VARIABLES LIKE 'max_connections'")
+	if err := row.Scan(new(string), &maxConnections); err == nil && maxConnections > 0 {
+		maxConns = int(float64(maxConnections) * 0.8)
+		if maxConns < 20 {
+			maxConns = 20
+		}
+		maxIdle = maxConns / 2
+		if maxIdle < 20 {
+			maxIdle = 20
+		}
+	}
+
+	var waitTimeout int
+	row = sqlDB.QueryRow("SHOW VARIABLES LIKE 'wait_timeout'")
+	if err := row.Scan(new(string), &waitTimeout); err == nil && waitTimeout > 10 {
+		connMaxLifetime = time.Duration(waitTimeout*8/10) * time.Second
+	}
+
+	sqlDB.SetMaxIdleConns(maxIdle)
+	sqlDB.SetMaxOpenConns(maxConns)
+	sqlDB.SetConnMaxLifetime(connMaxLifetime)
+	sqlDB.SetConnMaxIdleTime(connMaxIdleTime)
 	err = db.Use(&model.NextArchiveIdPlugin{})
 	if err != nil {
 		return nil, err
@@ -86,10 +118,15 @@ func InitDB(cfg *config.MysqlConfig) (*gorm.DB, error) {
 	return db, nil
 }
 
-func AutoMigrateDB(db *gorm.DB, focus bool) error {
-	var lastVersion string
-	db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
-	if focus || lastVersion != config.Version {
+func AutoMigrateDB(db *gorm.DB, force bool) error {
+	if !force {
+		var lastVersion string
+		db.Model(&model.Setting{}).Where("`key` = ?", LastRunVersionKey).Pluck("value", &lastVersion)
+		if lastVersion != config.Version {
+			force = true
+		}
+	}
+	if force {
 		// 强制转换archive表的title字段
 		forceChangeArchiveTitle(db)
 

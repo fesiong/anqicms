@@ -2,25 +2,23 @@ package tools
 
 import (
 	"testing"
-
-	"kandaoni.com/anqicms/pkg/mcp/tools"
 )
 
-// MockAttachmentProvider implements tools.AttachmentProvider for testing
+// MockAttachmentProvider implements AttachmentProvider for testing
 type MockAttachmentProvider struct {
-	attachments map[uint]*tools.AttachmentRecord
+	attachments map[uint]*AttachmentRecord
 	nextID      uint
 	err         error
 }
 
 func newMockAttachmentProvider() *MockAttachmentProvider {
 	return &MockAttachmentProvider{
-		attachments: make(map[uint]*tools.AttachmentRecord),
+		attachments: make(map[uint]*AttachmentRecord),
 		nextID:      1,
 	}
 }
 
-func (m *MockAttachmentProvider) GetAttachment(id uint) (*tools.AttachmentRecord, error) {
+func (m *MockAttachmentProvider) GetAttachment(id uint) (*AttachmentRecord, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -31,11 +29,11 @@ func (m *MockAttachmentProvider) GetAttachment(id uint) (*tools.AttachmentRecord
 	return att, nil
 }
 
-func (m *MockAttachmentProvider) ListAttachments(req tools.AttachmentListRequest) (*tools.AttachmentListResult, error) {
+func (m *MockAttachmentProvider) ListAttachments(req AttachmentListRequest) (*AttachmentListResult, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	var items []tools.AttachmentRecord
+	var items []AttachmentRecord
 	for _, a := range m.attachments {
 		if req.CategoryId > 0 && a.CategoryId != req.CategoryId {
 			continue
@@ -49,7 +47,7 @@ func (m *MockAttachmentProvider) ListAttachments(req tools.AttachmentListRequest
 		items = append(items, *a)
 	}
 	if len(items) == 0 {
-		return &tools.AttachmentListResult{Total: 0, Items: []tools.AttachmentRecord{}}, nil
+		return &AttachmentListResult{Total: 0, Items: []AttachmentRecord{}}, nil
 	}
 	page := req.Page
 	if page < 1 {
@@ -61,13 +59,13 @@ func (m *MockAttachmentProvider) ListAttachments(req tools.AttachmentListRequest
 	}
 	start := (page - 1) * pageSize
 	if start >= len(items) {
-		return &tools.AttachmentListResult{Total: len(items), Items: []tools.AttachmentRecord{}}, nil
+		return &AttachmentListResult{Total: len(items), Items: []AttachmentRecord{}}, nil
 	}
 	end := start + pageSize
 	if end > len(items) {
 		end = len(items)
 	}
-	return &tools.AttachmentListResult{
+	return &AttachmentListResult{
 		Total:    len(items),
 		Page:     page,
 		PageSize: pageSize,
@@ -110,24 +108,24 @@ func TestAttachmentTools_GetAll(t *testing.T) {
 
 func TestValidateAttachmentName(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		fileName string
-		wantErr bool
+		wantErr  bool
 	}{
 		{
-			name:    "valid name",
+			name:     "valid name",
 			fileName: "image.png",
-			wantErr: false,
+			wantErr:  false,
 		},
 		{
-			name:    "empty name",
+			name:     "empty name",
 			fileName: "",
-			wantErr: true,
+			wantErr:  true,
 		},
 		{
-			name:    "long name",
+			name:     "long name",
 			fileName: string(make([]byte, 251)),
-			wantErr: true,
+			wantErr:  true,
 		},
 	}
 

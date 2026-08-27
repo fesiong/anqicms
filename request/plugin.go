@@ -18,6 +18,7 @@ type PluginLink struct {
 	Nofollow uint   `json:"nofollow"`
 	Sort     uint   `json:"sort"`
 	Status   uint   `json:"status"`
+	Logo     string `json:"logo`
 }
 
 type PluginComment struct {

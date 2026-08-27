@@ -1323,8 +1323,9 @@ func CompactMessages(messages []*schema.Message, keepCount int) []*schema.Messag
 		}
 		role := string(msg.Role)
 		content := msg.Content
-		if len(content) > 150 {
-			content = string([]rune(content)[:150]) + "..."
+		runeContent := []rune(content)
+		if len(runeContent) > 150 {
+			content = string(runeContent[:150]) + "..."
 		}
 		summaryParts = append(summaryParts, role+": "+content)
 	}

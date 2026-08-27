@@ -6,6 +6,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -82,6 +84,12 @@ func main() {
 				err = website.RestoreDesignData(website.System.TemplateName)
 			}
 		}
+	}
+
+	if config.Server.Server.Env == "development" {
+		go func() {
+			log.Println(http.ListenAndServe("localhost:6060", nil))
+		}()
 	}
 
 	b := anqicms.New(config.Server.Server.Port, config.Server.Server.LogLevel)

@@ -17,6 +17,9 @@ func (w *Website) GetLinkList() ([]*model.Link, error) {
 	if err != nil {
 		return nil, err
 	}
+	for _, v := range links {
+		v.GetThumb(w.PluginStorage.StorageUrl)
+	}
 
 	return links, nil
 }

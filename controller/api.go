@@ -584,6 +584,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	if linkUrl := ctx.PostValueTrim("url"); linkUrl != "" {
 		link = linkUrl
 	}
+	logo := ctx.PostValueTrim("logo")
 	nofollow := uint(ctx.PostValueIntDefault("nofollow", 0))
 	backLink := ctx.PostValueTrim("back_link")
 	myTitle := ctx.PostValueTrim("my_title")
@@ -621,6 +622,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	if remark != "" {
 		friendLink.Remark = remark
 	}
+	friendLink.Logo = logo
 	friendLink.Nofollow = nofollow
 	friendLink.Status = 0
 

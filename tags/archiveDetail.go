@@ -93,7 +93,15 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 				archiveDetail = currentSite.GetArchiveByIdFromCache(id)
 			}
 		} else if token != "" {
-			archiveDetail, _ = currentSite.GetArchiveByUrlToken(token)
+			if (token == "prev" || token == "next") && archiveDetail != nil {
+				if token == "prev" {
+					archiveDetail, _ = currentSite.GetPreviousArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
+				} else {
+					archiveDetail, _ = currentSite.GetNextArchive(int64(archiveDetail.CategoryId), archiveDetail.Id)
+				}
+			} else {
+				archiveDetail, _ = currentSite.GetArchiveByUrlToken(token)
+			}
 		}
 
 		if archiveDetail != nil {
@@ -266,17 +274,25 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 			archiveParams := currentSite.GetArchiveExtra(archiveDetail.ModuleId, archiveDetail.Id, true)
 			if len(archiveParams) > 0 {
 				if fieldName == "Extra" {
-					var extras = make([]config.CustomField, 0, len(archiveParams))
-					for _, field := range archiveParams {
-						extras = append(extras, config.CustomField{
-							Name:      field.Name,
-							Value:     field.Value,
-							Default:   field.Content,
-							Type:      field.Type,
-							FieldName: field.FieldName,
-						})
+					sorted := true
+					if args["sorted"] != nil {
+						sorted = args["sorted"].Bool()
 					}
-					content = extras
+					if sorted {
+						var extras = make([]config.CustomField, 0, len(archiveParams))
+						for _, field := range archiveParams {
+							extras = append(extras, config.CustomField{
+								Name:      field.Name,
+								Value:     field.Value,
+								Default:   field.Content,
+								Type:      field.Type,
+								FieldName: field.FieldName,
+							})
+						}
+						content = extras
+					} else {
+						content = archiveParams
+					}
 				} else if item, ok := archiveParams[inputName]; ok {
 					if item.FollowLevel && !archiveDetail.HasOrdered {
 						content = ""

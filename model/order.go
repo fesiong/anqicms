@@ -65,7 +65,7 @@ type OrderDetail struct {
 	OrderId      string     `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
 	UserId       uint       `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
 	GoodsId      int64      `json:"goods_id" gorm:"column:goods_id;type:bigint(20) not null;index"`
-	GoodsItemId  int64      `json:"goods_item_id" gorm:"column:goods_item_id;type:bigint(20) not null;default:0;index"`
+	GoodsSkuId   int64      `json:"goods_sku_id" gorm:"column:goods_sku_id;type:bigint(20) not null;default:0;index"`
 	Price        int64      `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	OriginPrice  int64      `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
 	Amount       int64      `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"` // 实际支付的金额，用于退款的时候进行退款操作
