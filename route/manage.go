@@ -104,7 +104,9 @@ func manageRoute(app *iris.Application) {
 			setting.Get("/cache", manageController.SettingCache)
 			setting.Get("/safe", manageController.SettingSafe)
 			setting.Get("/diyfield", manageController.SettingDiyField)
+			setting.Get("/ai", manageController.SettingAi)
 
+			setting.Post("/ai", manageController.SettingAiForm)
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
 			setting.Post("/thumb/rebuild", manageController.SettingThumbRebuild)

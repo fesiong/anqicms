@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/pkg/ai/eino"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -695,5 +696,74 @@ func SettingMigrateDB(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("DatabaseTableUpdated"),
+	})
+}
+
+func SettingAi(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	defaultSite := provider.CurrentSite(nil)
+	// 返回 AiGenerate 的配置，以及 eino 的配置
+	aiConfig := currentSite.AiGenerateConfig
+	chatConfig := defaultSite.LoadAiSetting("")
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"write": aiConfig,
+			"chat":  chatConfig.Configs,
+		},
+	})
+}
+
+func SettingAiForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req struct {
+		Write *config.AiGenerateConfig
+		Chat  []*eino.Config
+	}
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 写到AI generate 的配置里
+	if req.Write != nil {
+		currentSite.AiGenerateConfig.AiEngine = req.Write.AiEngine
+		currentSite.AiGenerateConfig.OpenAIKeys = req.Write.OpenAIKeys
+		currentSite.AiGenerateConfig.OpenAiApi = req.Write.OpenAiApi
+		currentSite.AiGenerateConfig.OpenAIModel = req.Write.OpenAIModel
+		currentSite.AiGenerateConfig.Spark = req.Write.Spark
+		currentSite.SaveAiGenerateSetting(*currentSite.AiGenerateConfig, true)
+	}
+
+	defaultSite := provider.CurrentSite(nil)
+	chatSettings := defaultSite.LoadAiSetting("")
+	if len(req.Chat) > 0 {
+		chatSettings.Configs = req.Chat
+		if err := defaultSite.SaveSettingValue(provider.AiSettingKey, chatSettings); err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "save failed",
+			})
+			return
+		}
+
+		// cache new setting
+		defaultSite.Cache.Set("ai_setting", chatSettings, 86400)
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateAISettings"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+		"data": iris.Map{
+			"write": currentSite.AiGenerateConfig,
+			"chat":  chatSettings.Configs,
+		},
 	})
 }
