@@ -550,6 +550,8 @@ func ReRouteContext(ctx iris.Context) {
 		}
 		ctx.Header("Content-Language", currentSite.System.Language)
 	}
+	// 注入 getUrl
+	ctx.ViewData("getUrl", currentSite.GetUrl)
 
 	switch params["match"] {
 	case "notfound":
