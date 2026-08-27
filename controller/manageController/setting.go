@@ -91,10 +91,16 @@ func SettingSystemForm(ctx iris.Context) {
 	currentSite.System.SiteClose = req.SiteClose
 	currentSite.System.SiteCloseTips = req.SiteCloseTips
 	currentSite.System.BanSpider = req.BanSpider
-	// 如果本来storageUrl = baseUrl
-	if currentSite.PluginStorage.StorageUrl == currentSite.System.BaseUrl {
-		currentSite.PluginStorage.StorageUrl = req.BaseUrl
-		currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
+	if currentSite.System.BaseUrl != req.BaseUrl {
+		// 如果本来storageUrl = baseUrl
+		if currentSite.PluginStorage.StorageUrl == currentSite.System.BaseUrl {
+			currentSite.PluginStorage.StorageUrl = req.BaseUrl
+			currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
+		}
+		if currentSite.PluginJsonLd != nil && currentSite.PluginJsonLd.OrganizationUrl == currentSite.System.BaseUrl {
+			currentSite.PluginJsonLd.OrganizationUrl = req.BaseUrl
+			currentSite.SaveSettingValue(provider.JsonLdSettingKey, currentSite.PluginJsonLd)
+		}
 	}
 	currentSite.System.BaseUrl = req.BaseUrl
 	currentSite.System.FrontUrl = req.FrontUrl

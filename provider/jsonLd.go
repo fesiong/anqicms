@@ -20,6 +20,8 @@ func (w *Website) GetJsonLdSetting() *config.PluginJsonLdConfig {
 	}
 	if w.PluginJsonLd.OrganizationUrl == "" {
 		w.PluginJsonLd.OrganizationUrl = w.System.BaseUrl
+	} else if strings.Contains(w.PluginJsonLd.OrganizationUrl, "127.0.0.1") {
+		w.PluginJsonLd.OrganizationUrl = w.System.BaseUrl
 	}
 	if w.PluginJsonLd.ContactNumber == "" {
 		w.PluginJsonLd.ContactNumber = w.Contact.Cellphone
