@@ -477,9 +477,10 @@ func manageRoute(app *iris.Application) {
 				backup.Get("/status", manageController.PluginBackupStatus)
 				backup.Post("/restore", manageController.PluginBackupRestore)
 				backup.Post("/delete", manageController.PluginBackupDelete)
-				backup.Post("/export", manageController.PluginBackupExport)
+				backup.Get("/export", manageController.PluginBackupExport)
 				backup.Post("/import", manageController.PluginBackupImport)
 				backup.Post("/cleanup", manageController.PluginBackupCleanup)
+				backup.Post("/remark", manageController.PluginBackupRemark)
 			}
 
 			replace := plugin.Party("/replace")

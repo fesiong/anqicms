@@ -18,6 +18,11 @@ import (
 func ParseAdminToken(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	tokenString := ctx.GetHeader("admin")
+	// 当 header 中没有 token 时（如浏览器原生下载 window.open），
+	// fallback 到 query string 的 token 参数。
+	if tokenString == "" {
+		tokenString = ctx.URLParam("token")
+	}
 	token, tokenErr := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			// can not parse the token

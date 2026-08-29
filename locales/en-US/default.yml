@@ -251,6 +251,7 @@
 "RestoreDataFromBackup": "Restore data from backup"
 "DataRestored": "Data restored"
 "DeleteBackupData": "Delete backup data"
+"UpdateBackupRemark": "Update backup remark %s"
 "Processed": "Processed"
 "IncorrectImportedFileFormat": "Incorrect imported file format"
 "ImportBackupFileLog": "Import backup file: %s"
