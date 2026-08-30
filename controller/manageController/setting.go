@@ -180,6 +180,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.MultiCategory = req.MultiCategory
 	currentSite.Content.UseSort = req.UseSort
 	currentSite.Content.UseWebp = req.UseWebp
+	currentSite.Content.MatchTag = req.MatchTag
 	currentSite.Content.ConvertGif = req.ConvertGif
 	currentSite.Content.Quality = req.Quality
 	currentSite.Content.ResizeImage = req.ResizeImage
