@@ -361,6 +361,7 @@
 "SourcePage%s": "来源页面：%s"
 "SubmitTime%s": "提交时间：%s"
 "ThankYouForYourMessage!": "感谢您的留言！"
+"CaptchaVerificationFailed": "人机验证失败，请重试"
 "ItHasEnteredTheReview": "，已进入审核"
 "UndefinedModelName%s": "未定义模型: %d"
 "404NotFound": "404 Not Found"

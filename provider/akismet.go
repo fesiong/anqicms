@@ -3,6 +3,7 @@ package provider
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log"
@@ -47,8 +48,59 @@ type AkismetClient struct {
 	CheckType []int
 }
 
+// RecaptchaVerifyURL reCAPTCHA 服务端校验地址
+const RecaptchaVerifyURL = "https://www.google.com/recaptcha/api/siteverify"
+
+// RecaptchaResponse Google reCAPTCHA 校验返回结果
+type RecaptchaResponse struct {
+	Success     bool     `json:"success"`
+	Score       float64  `json:"score,omitempty"`
+	Action      string   `json:"action,omitempty"`
+	ChallengeTS string   `json:"challenge_ts,omitempty"`
+	Hostname    string   `json:"hostname,omitempty"`
+	ErrorCodes  []string `json:"error-codes,omitempty"`
+}
+
+// VerifyRecaptcha 校验 reCAPTCHA token
+// token 由前端 grecaptcha.execute 拿到后随请求一起提交
+// remoteIP 可选，传入后会一并发送给 Google 用于风控判断
+func VerifyRecaptcha(ctx context.Context, privateKey, token, remoteIP string) (*RecaptchaResponse, error) {
+	if token == "" {
+		return nil, fmt.Errorf("recaptcha: token is empty")
+	}
+	form := url.Values{}
+	form.Set("secret", privateKey)
+	form.Set("response", token)
+	if remoteIP != "" {
+		form.Set("remoteip", remoteIP)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, RecaptchaVerifyURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	// 给校验请求一个相对充裕的超时时间
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+	var result RecaptchaResponse
+	if err = json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("recaptcha: parse response failed: %s", string(body))
+	}
+	return &result, nil
+}
+
 func (w *Website) InitAkismet() {
-	setting := w.GetAkismetSetting()
+	setting := w.GetAkismetSetting(true)
 	if setting.Open == false {
 		w.AkismetClient = nil
 		return

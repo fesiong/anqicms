@@ -669,6 +669,12 @@ textarea:focus {
 	overflow: hidden;
 }
 
+.banner-item img {
+	width: 100%;
+	max-height: 600px;
+	object-fit: cover;
+}
+
 /* index-product */
 /* list-product */
 /* crumb */

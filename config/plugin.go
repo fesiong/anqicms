@@ -288,6 +288,10 @@ type PluginAkismetConfig struct {
 	Open      bool   `json:"open"`
 	ApiKey    string `json:"api_key"`
 	CheckType []int  `json:"check_type"`
+	// reCAPTCHA
+	RecaptchaOpen       bool   `json:"recaptcha_open"`
+	RecaptchaSiteKey    string `json:"recaptcha_site_key"`
+	RecaptchaPrivateKey string `json:"recaptcha_private_key"`
 }
 
 func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite *MultiLangSite) string {

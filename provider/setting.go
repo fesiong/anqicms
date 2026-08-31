@@ -1086,11 +1086,15 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 	return &limiter
 }
 
-func (w *Website) GetAkismetSetting() *config.PluginAkismetConfig {
+func (w *Website) GetAkismetSetting(focus bool) *config.PluginAkismetConfig {
 	var cfg config.PluginAkismetConfig
-	value := w.GetSettingValue(AkismetSettingKey)
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), &cfg)
+	err := w.Cache.Get(AkismetSettingKey, &cfg)
+	if err != nil || focus {
+		value := w.GetSettingValue(AkismetSettingKey)
+		if value != "" {
+			_ = json.Unmarshal([]byte(value), &cfg)
+		}
+		w.Cache.Set(AkismetSettingKey, cfg, 86400)
 	}
 
 	return &cfg
