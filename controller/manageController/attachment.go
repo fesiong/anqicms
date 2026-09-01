@@ -127,7 +127,7 @@ func AttachmentList(ctx iris.Context) {
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	q := ctx.URLParam("q")
 
-	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, currentPage, pageSize)
+	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, 0, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

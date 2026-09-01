@@ -605,7 +605,7 @@ func (w *Website) DeleteAttachment(attach *model.Attachment) error {
 	return w.DB.Unscoped().Delete(&attach).Error
 }
 
-func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
+func (w *Website) GetAttachmentList(categoryId uint, q string, isImage int, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
 	var attachments []*model.Attachment
 	offset := (currentPage - 1) * pageSize
 	var total int64
@@ -613,6 +613,9 @@ func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, 
 	builder := w.DB.Model(&model.Attachment{})
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	if isImage > 0 {
+		builder = builder.Where("`is_image` = ?", isImage)
 	}
 	if q != "" {
 		builder = builder.Where("`file_name` like ?", "%"+q+"%")
@@ -997,7 +1000,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 		return err
 	}
 	// 检查新生成的文件，并读取它
-	buf, err = os.ReadFile(newPath)
+	buf, err = os.ReadFile(newThumbPath)
 	if err != nil {
 		return err
 	}
@@ -1097,7 +1100,7 @@ func (w *Website) GetRandImageFromCategory(categoryId int, title string) string 
 		var queries []string
 		var args []interface{}
 		for _, word := range keywordSplit {
-			queries = append(queries, "name like ?")
+			queries = append(queries, "file_name like ?")
 			args = append(args, "%"+word+"%")
 		}
 		tx = tx.Where(strings.Join(queries, " OR "), args...)
