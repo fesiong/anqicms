@@ -46,6 +46,7 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
 			anqi.Post("/ai/chat", manageController.AiChat)
+			anqi.Post("/ai/chat/confirm", manageController.AiToolConfirm)
 			anqi.Post("/ai/upload", manageController.AiChatUpload)
 			anqi.Get("/ai/settings", manageController.GetAiSettings)
 			anqi.Post("/ai/settings", manageController.SaveAiSettings)

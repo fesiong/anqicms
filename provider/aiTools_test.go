@@ -55,10 +55,6 @@ var expectedTools = []string{
 	"archive_tag_update",
 	// Template tools
 	"template_get_info",
-	"template_get_file",
-	"template_modify_file",
-	"template_get_static",
-	"template_modify_static",
 	"template_reload",
 	// Built-in file/shell tools
 	"read_file",
