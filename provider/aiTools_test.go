@@ -15,7 +15,6 @@ func testService() *AiChatService {
 		mu:       sync.RWMutex{},
 		sessions: make(map[string]*ChatSession),
 		Logger:   slog.Default(),
-		mcpSrv:   nil,
 		db:       nil,
 		site:     nil,
 	}

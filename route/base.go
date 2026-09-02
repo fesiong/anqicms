@@ -156,4 +156,7 @@ func Register(app *iris.Application) {
 
 	//后台管理路由相关
 	manageRoute(app)
+
+	// MCP 对外端点：按域名解析站点 + Bearer token 鉴权
+	app.Any("/api/mcp", middleware.McpTokenAuth, controller.McpStreamableHTTP)
 }

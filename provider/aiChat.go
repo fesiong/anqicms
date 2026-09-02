@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"strings"
 	"sync"
@@ -19,7 +18,6 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
-	"kandaoni.com/anqicms/pkg/mcp/server"
 )
 
 // Turn represents a round of interaction: one user message + all following
@@ -32,13 +30,13 @@ type Turn struct {
 
 // ChatSession represents a user chat session
 type ChatSession struct {
-	ID                 string        `json:"id"`
-	Messages           []ChatMessage `json:"messages"`
-	Turns              []Turn        `json:"turns"`
-	CreatedAt          time.Time     `json:"created_at"`
-	CachedSystemPrompt string        `json:"-"` // 每会话缓存一次，保持 prefix cache 稳定
-	DeclaredPackages   []string      `json:"-"` // 模型声明的能力包列表
-	ToolsFinalized     bool          `json:"-"` // true 表示已从声明阶段切换到执行阶段
+	ID                 string           `json:"id"`
+	Messages           []ChatMessage    `json:"messages"`
+	Turns              []Turn           `json:"turns"`
+	CreatedAt          time.Time        `json:"created_at"`
+	CachedSystemPrompt string           `json:"-"` // 每会话缓存一次，保持 prefix cache 稳定
+	DeclaredPackages   []string         `json:"-"` // 模型声明的能力包列表
+	ToolsFinalized     bool             `json:"-"` // true 表示已从声明阶段切换到执行阶段
 	AllowOnce          *SessionAllowSet `json:"-"` // P0: 本会话已"本次允许"的工具集合
 }
 
@@ -65,7 +63,6 @@ type AiChatService struct {
 	sessions    map[string]*ChatSession
 	mu          sync.RWMutex
 	Logger      *slog.Logger
-	mcpSrv      *server.Server
 	db          *gorm.DB
 	site        *Website
 	projectRoot string
@@ -105,15 +102,10 @@ type AiChatService struct {
 
 // NewAiChatService creates a new AI chat service
 func (w *Website) NewAiChatService() *AiChatService {
-	if mcpServer == nil {
-		log.Println("mcp Server is nil")
-		return nil
-	}
 	svc := &AiChatService{
 		mu:               sync.RWMutex{},
 		sessions:         make(map[string]*ChatSession),
 		Logger:           slog.Default(),
-		mcpSrv:           mcpServer,
 		db:               w.DB,
 		site:             w,
 		pendingApprovals: make(map[string]chan string),
@@ -920,7 +912,7 @@ func CompactMessagesFromChat(sess *ChatSession, systemPrompt string, keepTurns i
 		//           和所有 tool 消息的 tool_call_id (existingToolIDs)
 		//   第二遍: 按顺序构建 messages, 跳过孤立的 tool 消息和孤立的 assistant(tool_calls)
 		// 这能正确处理 DB 中 tool 消息 created_time 早于 assistant 消息的乱序情况
-		declaredIDs := make(map[string]bool)    // assistant 声明的 tool_call_id
+		declaredIDs := make(map[string]bool)     // assistant 声明的 tool_call_id
 		existingToolIDs := make(map[string]bool) // 实际存在的 tool 消息的 tool_call_id
 		for _, msg := range sess.Messages {
 			if msg.Role == "assistant" && msg.ToolCalls != "" {

@@ -719,6 +719,7 @@ func SettingAi(ctx iris.Context) {
 		"data": iris.Map{
 			"write": aiConfig,
 			"chat":  chatConfig.Configs,
+			"mcp":   chatConfig.Mcp,
 		},
 	})
 }
@@ -728,6 +729,7 @@ func SettingAiForm(ctx iris.Context) {
 	var req struct {
 		Write *config.AiGenerateConfig
 		Chat  []*eino.Config
+		Mcp   *eino.McpConfig
 	}
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
@@ -749,8 +751,17 @@ func SettingAiForm(ctx iris.Context) {
 
 	defaultSite := provider.CurrentSite(nil)
 	chatSettings := defaultSite.LoadAiSetting("")
+	needSave := false
 	if len(req.Chat) > 0 {
 		chatSettings.Configs = req.Chat
+		needSave = true
+	}
+	// 保存 MCP 配置
+	if req.Mcp != nil {
+		chatSettings.Mcp = *req.Mcp
+		needSave = true
+	}
+	if needSave {
 		if err := defaultSite.SaveSettingValue(provider.AiSettingKey, chatSettings); err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -771,6 +782,7 @@ func SettingAiForm(ctx iris.Context) {
 		"data": iris.Map{
 			"write": currentSite.AiGenerateConfig,
 			"chat":  chatSettings.Configs,
+			"mcp":   chatSettings.Mcp,
 		},
 	})
 }

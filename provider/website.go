@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -118,16 +119,54 @@ type Website struct {
 	Template     *StoreTemplates
 	// ai
 	AiSrv *AiChatService
+	// mcp server (per-site, 同 AiSrv 模式)
+	McpSrv *server.Server
 }
 
-var mcpServer *server.Server
+// NewMcpServer 为当前站点创建 mcp.Server 实例，并从 AiSrv 注册全部工具。
+// 在 NewAiChatService() 之后调用（需要 AiSrv 提供工具定义）。
+func (w *Website) NewMcpServer() *server.Server {
+	mcpCfg := server.DefaultConfig()
+	mcpSrv, err := server.New(mcpCfg)
+	if err != nil {
+		slog.Error("Failed to create MCP server for site", "siteId", w.Id, "error", err)
+		return nil
+	}
 
-func SetMcpServer(mcpSrv *server.Server) {
-	mcpServer = mcpSrv
+	// 从 AiSrv 获取全部工具并注册到 mcp.Server
+	if w.AiSrv != nil {
+		mcpServer := mcpSrv.GetServer()
+		for _, ti := range w.AiSrv.Tools {
+			tool, err := server.EinoToolInfoToMCPTool(ti)
+			if err != nil {
+				slog.Warn("failed to convert tool, skipping", "name", ti.Name, "error", err)
+				continue
+			}
+			h, ok := w.AiSrv.Handlers[ti.Name]
+			if !ok {
+				slog.Warn("handler not found for tool, skipping", "name", ti.Name)
+				continue
+			}
+			mcpServer.AddTool(tool, server.AdaptHandler(h))
+		}
+		slog.Info("MCP tools registered", "siteId", w.Id, "count", len(w.AiSrv.Tools))
+	}
+
+	w.McpSrv = mcpSrv
+	return mcpSrv
 }
 
-func GetMcpServer() *server.Server {
-	return mcpServer
+// mcpPool 是全局 SiteMcpPool 实例，由 bootstrap 初始化。
+var mcpPool *server.SiteMcpPool
+
+// SetMcpPool 注入全局 SiteMcpPool（bootstrap 阶段调用）。
+func SetMcpPool(pool *server.SiteMcpPool) {
+	mcpPool = pool
+}
+
+// GetMcpPool 返回全局 SiteMcpPool。
+func GetMcpPool() *server.SiteMcpPool {
+	return mcpPool
 }
 
 func (w *Website) Ctx() context.Context {
@@ -405,8 +444,9 @@ func InitWebsite(mw *model.Website) {
 		w.InitCacheBucket()
 		w.InitCache()
 		w.InitAkismet()
-		// AI
+		// AI: 先创建 ai chat service（初始化工具），再创建 mcp server（注册工具）
 		w.NewAiChatService()
+		w.NewMcpServer()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
 		// ai chat setting

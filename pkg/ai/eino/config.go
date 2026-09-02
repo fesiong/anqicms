@@ -13,6 +13,16 @@ import (
 type Configs struct {
 	Configs   []*Config `json:"configs"`
 	LastModel string    `json:"last_model"`
+	Mcp       McpConfig `json:"mcp"`
+}
+
+// McpConfig 控制本站点 MCP 端点的启用与鉴权。
+// 存储于 ai_setting (provider.AiSettingKey)，通过 SettingAiForm 配置。
+type McpConfig struct {
+	Enabled      bool     `json:"enabled"`       // 是否启用 MCP 对外端点
+	Token        string   `json:"token"`         // 鉴权 Bearer token，空则禁用
+	ExposedTools []string `json:"exposed_tools"` // 空则暴露全部工具
+	RateLimit    int      `json:"rate_limit"`    // 每分钟调用上限，0 不限
 }
 
 // Config holds the configuration for Eino AI integration.

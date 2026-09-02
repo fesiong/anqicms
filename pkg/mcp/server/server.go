@@ -8,7 +8,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
-// Server represents the MCP server for AnQiCMS
+// Server represents the MCP server for AnQiCMS.
+// 每个 Server 实例对应一个站点，包含该站点的全部工具注册。
 type Server struct {
 	mcpServer *mcp.Server
 	logger    *slog.Logger
@@ -20,8 +21,6 @@ type ServerConfig struct {
 	ServerName    string
 	ServerVersion string
 	Instructions  string
-	Port          int
-	Host          string
 	Logger        *slog.Logger
 }
 
@@ -31,8 +30,6 @@ func DefaultConfig() *ServerConfig {
 		ServerName:    "AnQiCMS",
 		ServerVersion: "1.0.0",
 		Instructions:  "AnQiCMS MCP Server - AI-powered CMS management",
-		Port:          8081,
-		Host:          "0.0.0.0",
 		Logger:        slog.Default(),
 	}
 }
@@ -77,39 +74,9 @@ func (s *Server) AddTools(tools []ToolDef) error {
 	return nil
 }
 
-// Start starts the MCP server HTTP endpoint
-func (s *Server) Start() *http.ServeMux {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/mcp", s.handleMCP)
-	mux.HandleFunc("/health", s.handleHealth)
-	return mux
-}
-
-// handleMCP handles MCP protocol requests
-func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	// MCP uses JSON-RPC over HTTP
-	w.Header().Set("Content-Type", "application/json")
-	// In production, this would parse and route JSON-RPC requests
-	// For now, return a basic response
-	w.WriteHeader(http.StatusOK)
-}
-
-// handleHealth returns health check response
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{"status":"ok","service":"anqicms-mcp"}`))
-}
-
 // Stop gracefully shuts down the server
 func (s *Server) Stop(ctx context.Context) error {
 	s.logger.Info("shutting down MCP server")
-	// TODO: clean up sessions
 	return nil
 }
 
@@ -127,4 +94,12 @@ func (s *Server) GetServer() *mcp.Server {
 // GetContext returns the server's context
 func (s *Server) GetContext() context.Context {
 	return s.ctx
+}
+
+// StreamableHTTPHandler 暴露本 Server 的 Streamable HTTP 端点。
+// 使用 mcp-go v1.4.0 的 NewStreamableHTTPHandler。
+func (s *Server) StreamableHTTPHandler() http.Handler {
+	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
+		return s.mcpServer
+	}, nil)
 }

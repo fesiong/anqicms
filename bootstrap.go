@@ -51,16 +51,9 @@ func (bootstrap *Bootstrap) loadGlobalMiddleware() {
 }
 
 func (bootstrap *Bootstrap) Serve() {
-	// 启动mcp服务器
-	mcpCfg := server.DefaultConfig()
-	mcpCfg.Logger = slog.Default()
-	mcpSrv, err := server.New(mcpCfg)
-	if err != nil {
-		slog.Error("Failed to create MCP server", "error", err)
-	} else {
-		slog.Info("MCP Server initialized")
-	}
-	provider.SetMcpServer(mcpSrv)
+	// 初始化 SiteMcpPool（缓存每站点的 StreamableHTTPHandler）
+	mcpPool := server.NewSiteMcpPool(slog.Default())
+	provider.SetMcpPool(mcpPool)
 
 	//自动迁移表
 	if provider.GetDefaultDB() != nil {

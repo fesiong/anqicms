@@ -1,6 +1,6 @@
 ---
 name: anqicms-ask
-description: AnQiCMS 离线文档问答技能：通过内置文档索引回答"AnQiCMS 怎么做 X"类问题。对标 atomcode-skills 的 ask 技能。
+description: AnQiCMS 离线文档问答技能：通过内置文档索引回答"AnQiCMS 怎么做 X"类问题。
 category: Documentation
 version: 1.0
 author: AnQiCMS
