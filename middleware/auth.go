@@ -2,16 +2,17 @@ package middleware
 
 import (
 	"fmt"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/provider"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/golang-jwt/jwt/v5"
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 )
 
 // ParseAdminToken 解析token
@@ -74,6 +75,39 @@ func ParseAdminToken(ctx iris.Context) {
 	}
 
 	ctx.Next()
+}
+
+func ValidateToken(currentSite *provider.Website, tokenString string) (string, error) {
+	if currentSite == nil || len(tokenString) == 0 {
+		return "", fmt.Errorf("invalid token")
+	}
+	token, tokenErr := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			// can not parse the token
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(currentSite.TokenSecret + "-admin-token"), nil
+	})
+
+	if tokenErr == nil {
+		if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+			userID, ok := claims["adminId"].(string)
+			timeStamp, ok2 := claims["t"].(string)
+			if !ok || !ok2 {
+				return "", fmt.Errorf("invalid token")
+			}
+			sec, _ := strconv.ParseInt(timeStamp, 10, 64)
+			if sec < time.Now().Unix() {
+				return "", fmt.Errorf("invalid token")
+			}
+
+			return userID, nil
+		} else {
+			return "", fmt.Errorf("invalid token")
+		}
+	}
+
+	return "", fmt.Errorf("invalid token")
 }
 
 func ParseAdminUrl(ctx iris.Context) {

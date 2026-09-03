@@ -26,10 +26,12 @@ import (
 
 // ChatRequest represents an AI chat request
 type ChatRequest struct {
-	SessionID string        `json:"session_id"`
-	Message   string        `json:"message"`
-	Model     string        `json:"model"`
-	Files     []ChatFileRef `json:"files,omitempty"`
+	SessionID   string        `json:"session_id"`
+	Message     string        `json:"message"`
+	Model       string        `json:"model"`
+	Files       []ChatFileRef `json:"files,omitempty"`
+	IframeURL   string        `json:"iframe_url,omitempty"`   // 前端 AI 编辑器：当前 iframe 页面 URL
+	SelectedDOM string        `json:"selected_dom,omitempty"` // 前端 AI 编辑器：管理员选中的 DOM 片段
 }
 
 // ChatFileRef represents a reference to an uploaded file
@@ -248,6 +250,33 @@ func AiChat(ctx iris.Context) {
 			})
 		}
 	}
+
+	// 前端 AI 编辑器上下文构建
+	var editorContext string
+	tplName, resolveErr := currentSite.ResolveTemplateFromURL(req.IframeURL, ctx.GetHeader("Admin"))
+	if resolveErr != nil {
+		slog.Warn("Failed to resolve template from URL", "error", resolveErr)
+	}
+	editorContext = fmt.Sprintf("[前端AI编辑器上下文]\n模板文件夹: %s", currentSite.GetTemplateDir())
+	if req.IframeURL != "" {
+		editorContext += fmt.Sprintf("\n当前页面URL: %s", req.IframeURL)
+	}
+	if tplName != "" {
+		editorContext += fmt.Sprintf("\n当前模板: %s", tplName)
+	}
+	if req.SelectedDOM != "" {
+		editorContext += fmt.Sprintf("\n用户选中的页面DOM片段:\n%s", req.SelectedDOM)
+	}
+	// // 读取主模板内容并注入，方便 AI 直接修改
+	// if tplName != "" {
+	// 	if tplContent, ok := currentSite.GetTemplate(tplName); ok {
+	// 		if len([]rune(tplContent)) > 8000 {
+	// 			tplContent = string([]rune(tplContent)[:8000]) + "\n... [模板过长，仅显示前8000字符]"
+	// 		}
+	// 		editorContext += fmt.Sprintf("\n主模板 %s 的内容:\n%s", tplName, tplContent)
+	// 	}
+	// }
+
 	currentSite.AiSrv.AddMessage(sessionID, provider.ChatMessage{
 		Role:    "user",
 		Content: message,
@@ -259,7 +288,7 @@ func AiChat(ctx iris.Context) {
 	defer cancel()
 
 	// Generate AI response — try DeepSeek first, fall back to keyword matching
-	response, err := generateAIResponse(aiCtx, ctx, sessionID, message, writer)
+	response, err := generateAIResponse(aiCtx, ctx, sessionID, message, writer, editorContext)
 	if err != nil {
 		slog.Error("AI response generation failed", "error", err)
 		if strings.Contains(err.Error(), "401") {
@@ -295,7 +324,7 @@ func AiChat(ctx iris.Context) {
 // Implements a 7-step verification workflow inspired by atomcode:
 // Step 1: 接收与诊断 | Step 2: 上下文构建 | Step 3: 模型推理 | Step 4: 工具执行
 // Step 5: 错误恢复 | Step 6: 验证 | Step 7: 压缩与闭环
-func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID string, userMessage string, writer io.Writer) (string, error) {
+func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID string, userMessage string, writer io.Writer, editorContext string) (string, error) {
 	// Try to get the Eino client
 	client, err := eino.GetClient()
 	if err != nil {
@@ -322,6 +351,10 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 	if currentSite != nil {
 		// 将站点动态信息放在 user message 前，不污染 system prompt 缓存
 		userMsg = fmt.Sprintf("[当前站点：%s]\n%s", currentSite.System.SiteName, userMessage)
+	}
+	// 注入前端 AI 编辑器上下文（iframe URL + 模板名 + 选中 DOM + 模板内容）
+	if editorContext != "" {
+		userMsg = editorContext + "\n\n" + userMsg
 	}
 	messages = append(messages, schema.UserMessage(userMsg))
 
@@ -762,6 +795,16 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 				fmt.Fprintf(writer, "event: tool_result\ndata: %s\n\n", string(toolResultData))
 				if f, ok := writer.(interface{ Flush() error }); ok {
 					f.Flush()
+				}
+			}
+
+			// 前端 AI 编辑器：重载模板后，通知前端刷新 iframe
+			if !res.denied && toolName == "template_reload" {
+				if writer != nil {
+					fmt.Fprintf(writer, "event: iframe-reload\ndata: {\"tool\":\"%s\"}\n\n", toolName)
+					if f, ok := writer.(interface{ Flush() error }); ok {
+						f.Flush()
+					}
 				}
 			}
 
@@ -1301,7 +1344,7 @@ func AiAgentChat(ctx iris.Context) {
 	defer cancel()
 
 	// 复用主对话的生成逻辑，使用 agent 的 session
-	_, err = generateAIResponse(aiCtx, ctx, agent.SessionId, req.Message, writer)
+	_, err = generateAIResponse(aiCtx, ctx, agent.SessionId, req.Message, writer, "")
 	if err != nil {
 		slog.Error("Agent chat failed", "agent_id", agentId, "error", err)
 	}

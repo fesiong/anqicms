@@ -86,6 +86,11 @@ type AiChatService struct {
 	agentsMu      sync.RWMutex
 	schedulerQuit chan struct{}
 
+	// runningAgents 防止同一 agent 被并发重复执行
+	// key = agent.Id, value = true 表示正在执行
+	runningAgents   map[uint]bool
+	runningAgentsMu sync.Mutex
+
 	// P8: 遥测与成本归因记录器
 	telemetryRecorder *TelemetryRecorder
 
@@ -110,6 +115,7 @@ func (w *Website) NewAiChatService() *AiChatService {
 		site:             w,
 		pendingApprovals: make(map[string]chan string),
 		agents:           make(map[uint]*model.AiAgent),
+		runningAgents:    make(map[uint]bool),
 		projectRoot:      w.RootPath,
 	}
 
@@ -501,8 +507,26 @@ func (svc *AiChatService) checkDueAgents() {
 	svc.agentsMu.RUnlock()
 
 	for _, agent := range dueList {
+		// 防止同一 agent 被并发重复执行：
+		// ExecuteAgent 异步执行，期间 NextRunAt 未更新，
+		// 下一个 ticker tick 会再次把该 agent 加入 dueList。
+		// 用 runningAgents 标记确保同一 agent 同时只有一个执行。
+		svc.runningAgentsMu.Lock()
+		if svc.runningAgents[agent.Id] {
+			svc.runningAgentsMu.Unlock()
+			svc.Logger.Info("Agent already running, skip", "id", agent.Id, "name", agent.Name)
+			continue
+		}
+		svc.runningAgents[agent.Id] = true
+		svc.runningAgentsMu.Unlock()
+
 		svc.Logger.Info("Agent due, executing", "id", agent.Id, "name", agent.Name)
 		go func(a *model.AiAgent) {
+			defer func() {
+				svc.runningAgentsMu.Lock()
+				delete(svc.runningAgents, a.Id)
+				svc.runningAgentsMu.Unlock()
+			}()
 			if _, err := svc.ExecuteAgent(a); err != nil {
 				svc.Logger.Error("Agent execution failed", "id", a.Id, "error", err)
 			}
@@ -512,6 +536,21 @@ func (svc *AiChatService) checkDueAgents() {
 
 // ExecuteAgent 执行 Agent 的任务（非流式 LLM 调用 + 工具循环）
 func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (string, error) {
+	// 防重入：如果该 agent 已在执行中，直接返回，避免并发重复执行。
+	// 这覆盖了调度器 tick 与手动 agent_run 并发的场景。
+	svc.runningAgentsMu.Lock()
+	if svc.runningAgents[agent.Id] {
+		svc.runningAgentsMu.Unlock()
+		return "", fmt.Errorf("agent #%d is already running", agent.Id)
+	}
+	svc.runningAgents[agent.Id] = true
+	svc.runningAgentsMu.Unlock()
+	defer func() {
+		svc.runningAgentsMu.Lock()
+		delete(svc.runningAgents, agent.Id)
+		svc.runningAgentsMu.Unlock()
+	}()
+
 	// 创建执行日志
 	logEntry := &model.AiAgentLog{
 		AgentId:   agent.Id,
