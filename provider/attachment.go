@@ -310,6 +310,16 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		}
 	}
 	imgType = strings.ToLower(imgType)
+	// 部分设备(如手机)拍摄的图片带有 EXIF 方向信息,
+	// 直接重新压缩会丢失该信息,导致图片在页面上显示方向错误(如旋转90度)
+	if imgType == "jpeg" {
+		_, _ = file.Seek(0, 0)
+		orientation := library.ReadJpegOrientation(file)
+		_, _ = file.Seek(0, 0)
+		if orientation > 1 {
+			img = library.FixImageOrientation(img, orientation)
+		}
+	}
 	width := img.Bounds().Dx()
 	height := img.Bounds().Dy()
 	if imgType == "jpeg" {

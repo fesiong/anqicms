@@ -2,6 +2,7 @@ package library
 
 import (
 	"bytes"
+	"encoding/binary"
 	"encoding/hex"
 	"errors"
 	"github.com/disintegration/imaging"
@@ -46,6 +47,149 @@ func ResizeFill(img image.Image, width, height int) image.Image {
 	rgba := image.NewRGBA(image.Rect(0, 0, width, height))
 	draw.Draw(rgba, rgba.Bounds(), image.White, image.Point{}, draw.Src)
 	return imaging.PasteCenter(rgba, img)
+}
+
+// ReadJpegOrientation 尝试从 JPEG 图片数据中读取 EXIF 方向信息。
+// 返回 0 表示没有方向信息或读取失败,返回 1-8 表示 EXIF Orientation 标签值。
+func ReadJpegOrientation(r io.Reader) int {
+	const (
+		markerSOI      = 0xffd8
+		markerAPP1     = 0xffe1
+		exifHeader     = 0x45786966
+		byteOrderBE    = 0x4d4d
+		byteOrderLE    = 0x4949
+		orientationTag = 0x0112
+	)
+
+	// 检查 JPEG SOI 标记
+	var soi uint16
+	if err := binary.Read(r, binary.BigEndian, &soi); err != nil {
+		return 0
+	}
+	if soi != markerSOI {
+		return 0
+	}
+
+	// 查找 APP1 段
+	for {
+		var marker, size uint16
+		if err := binary.Read(r, binary.BigEndian, &marker); err != nil {
+			return 0
+		}
+		if err := binary.Read(r, binary.BigEndian, &size); err != nil {
+			return 0
+		}
+		if marker>>8 != 0xff {
+			return 0
+		}
+		if marker == markerAPP1 {
+			break
+		}
+		if size < 2 {
+			return 0
+		}
+		if _, err := io.CopyN(io.Discard, r, int64(size-2)); err != nil {
+			return 0
+		}
+	}
+
+	// 检查 Exif 头
+	var header uint32
+	if err := binary.Read(r, binary.BigEndian, &header); err != nil {
+		return 0
+	}
+	if header != exifHeader {
+		return 0
+	}
+	if _, err := io.CopyN(io.Discard, r, 2); err != nil {
+		return 0
+	}
+
+	// 读取字节序
+	var (
+		byteOrderTag uint16
+		byteOrder    binary.ByteOrder
+	)
+	if err := binary.Read(r, binary.BigEndian, &byteOrderTag); err != nil {
+		return 0
+	}
+	switch byteOrderTag {
+	case byteOrderBE:
+		byteOrder = binary.BigEndian
+	case byteOrderLE:
+		byteOrder = binary.LittleEndian
+	default:
+		return 0
+	}
+	if _, err := io.CopyN(io.Discard, r, 2); err != nil {
+		return 0
+	}
+
+	// 跳过 IFD 偏移
+	var offset uint32
+	if err := binary.Read(r, byteOrder, &offset); err != nil {
+		return 0
+	}
+	if offset < 8 {
+		return 0
+	}
+	if _, err := io.CopyN(io.Discard, r, int64(offset-8)); err != nil {
+		return 0
+	}
+
+	// 读取标签数量
+	var numTags uint16
+	if err := binary.Read(r, byteOrder, &numTags); err != nil {
+		return 0
+	}
+
+	// 查找方向标签
+	for i := 0; i < int(numTags); i++ {
+		var tag uint16
+		if err := binary.Read(r, byteOrder, &tag); err != nil {
+			return 0
+		}
+		if tag != orientationTag {
+			if _, err := io.CopyN(io.Discard, r, 10); err != nil {
+				return 0
+			}
+			continue
+		}
+		if _, err := io.CopyN(io.Discard, r, 6); err != nil {
+			return 0
+		}
+		var val uint16
+		if err := binary.Read(r, byteOrder, &val); err != nil {
+			return 0
+		}
+		if val < 1 || val > 8 {
+			return 0
+		}
+		return int(val)
+	}
+	return 0
+}
+
+// FixImageOrientation 根据 EXIF 方向信息自动旋转图片,使图片按正确方向显示。
+// 没有方向信息或方向正常时返回原图。
+func FixImageOrientation(img image.Image, orientation int) image.Image {
+	switch orientation {
+	case 2:
+		return imaging.FlipH(img)
+	case 3:
+		return imaging.Rotate180(img)
+	case 4:
+		return imaging.FlipV(img)
+	case 5:
+		return imaging.Transpose(img)
+	case 6:
+		return imaging.Rotate270(img)
+	case 7:
+		return imaging.Transverse(img)
+	case 8:
+		return imaging.Rotate90(img)
+	}
+	return img
 }
 
 func HEXToRGB(h string) color.Color {
