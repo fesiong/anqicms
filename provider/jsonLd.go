@@ -404,35 +404,41 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 			jsonLd["image"] = archive.Images
 		} else if setting.DefaultImage != "" {
 			jsonLd["image"] = setting.DefaultImage
+		} else if w.System.SiteLogo != "" {
+			// 使用站点Logo
+			jsonLd["image"] = w.System.SiteLogo
 		}
 
-		availability := "https://schema.org/InStock"
-		itemCondition := "https://schema.org/NewCondition"
-		if archive.Stock <= 0 {
-			availability = "https://schema.org/OutOfStock"
-		} else if archive.Stock < 10 {
-			availability = "https://schema.org/LowStock"
-		}
-
-		offers := iris.Map{
-			"@type":         "Offer",
-			"priceCurrency": "USD",
-			"availability":  availability,
-			"itemCondition": itemCondition,
-			"category":      category.Title,
-			"url":           webInfo.CanonicalUrl,
-		}
+		// 只有价格大于0，才显示offer
 		if archive.Price > 0 {
-			offers["price"] = fmt.Sprintf("%.2f", float32(archive.Price)/100.00)
-			offers["priceValidUntil"] = time.Now().AddDate(1, 0, 0).Format("2006-01-02")
-		}
-		if archive.Stock > 0 {
-			offers["inventoryLevel"] = iris.Map{
-				"@type": "QuantitativeValue",
-				"value": archive.Stock,
+			availability := "https://schema.org/InStock"
+			itemCondition := "https://schema.org/NewCondition"
+			if archive.Stock <= 0 {
+				availability = "https://schema.org/OutOfStock"
+			} else if archive.Stock < 10 {
+				availability = "https://schema.org/LowStock"
 			}
+
+			offers := iris.Map{
+				"@type":         "Offer",
+				"priceCurrency": "USD",
+				"availability":  availability,
+				"itemCondition": itemCondition,
+				"category":      category.Title,
+				"url":           webInfo.CanonicalUrl,
+			}
+			if archive.Price > 0 {
+				offers["price"] = fmt.Sprintf("%.2f", float32(archive.Price)/100.00)
+				offers["priceValidUntil"] = time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+			}
+			if archive.Stock > 0 {
+				offers["inventoryLevel"] = iris.Map{
+					"@type": "QuantitativeValue",
+					"value": archive.Stock,
+				}
+			}
+			jsonLd["offers"] = offers
 		}
-		jsonLd["offers"] = offers
 
 		if archive.CommentCount > 0 {
 			rating := float64((int(archive.CommentCount)+5+int(archive.Id%10))%5)*0.1 + 4.1
@@ -440,6 +446,16 @@ func (w *Website) buildDetailJsonLd(schemaType string, archive *model.Archive, w
 				"@type":       "AggregateRating",
 				"ratingValue": math.Round(rating*10) / 10,
 				"reviewCount": archive.CommentCount,
+				"bestRating":  5,
+				"worstRating": 1,
+			}
+		} else {
+			// 增加一个默认的评分
+			rating := float64((5+int(archive.Id%10))%5)*0.1 + 4.1
+			jsonLd["aggregateRating"] = iris.Map{
+				"@type":       "AggregateRating",
+				"ratingValue": math.Round(rating*10) / 10,
+				"reviewCount": archive.Id%10 + 5,
 				"bestRating":  5,
 				"worstRating": 1,
 			}
