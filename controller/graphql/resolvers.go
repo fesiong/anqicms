@@ -29,10 +29,14 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 	rootValue := p.Info.RootValue.(map[string]interface{})
 	currentSite := rootValue["site"].(*provider.Website)
 	ctx := rootValue["ctx"].(iris.Context)
-	searchParams := p.Args["params"].(map[string]interface{})
+	// params 参数可选，缺失或类型不对时按空参数处理，避免类型断言 panic
+	searchParams, _ := p.Args["params"].(map[string]interface{})
 	path, _ := p.Args["path"].(string)
 	ctx.Params().Set("path", path)
 	params, _ := controller.ParseRoute(ctx)
+	if params == nil {
+		params = map[string]string{}
+	}
 	for i, v := range params {
 		if len(i) == 0 {
 			continue
