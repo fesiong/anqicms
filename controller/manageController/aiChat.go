@@ -67,6 +67,24 @@ func AiChat(ctx iris.Context) {
 		return
 	}
 
+	// ── 兼容旧 AuthAiChat 接口的纯 prompt 请求 ──
+	// 旧接口请求格式为 AnqiAiRequest{Prompt: "..."}，无 Message/SessionID 字段。
+	// 当 ChatRequest.Message 为空时，回退尝试解析为 AnqiAiRequest，
+	// 用 Prompt 填充 Message，并进入 purePromptMode:
+	//   - 跳过工具绑定 (无 Tools/Handlers)
+	//   - 跳过 session 管理 (不写入会话历史)
+	//   - 跳过文件附件/编辑器上下文处理
+	//   - 直接流式返回 AI 响应
+	purePromptMode := false
+	if req.Message == "" {
+		// 重新读取原始请求体 (ctx.ReadJSON 已消费 body，但 iris 缓存了它)
+		var oldReq provider.AnqiAiRequest
+		if err2 := ctx.ReadJSON(&oldReq); err2 == nil && oldReq.Prompt != "" {
+			req.Message = oldReq.Prompt
+			purePromptMode = true
+		}
+	}
+
 	if req.Message == "" {
 		ctx.JSON(iris.Map{
 			"code": -1,
@@ -150,6 +168,28 @@ func AiChat(ctx iris.Context) {
 	// ── Step 1: 接收与诊断 ──
 	// 负面反馈检测: 如果用户消息较短且包含负面关键词，标记为不满
 	message := req.Message
+
+	// ── purePromptMode: 旧 AuthAiChat 兼容路径 ──
+	// 跳过工具绑定 / 文件附件 / 编辑器上下文 / 会话历史，
+	// 直接流式返回 AI 对 prompt 的响应。
+	if purePromptMode {
+		// 解耦 context
+		aiCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+		defer cancel()
+
+		_, pErr := generatePurePromptResponse(aiCtx, message, writer)
+		if pErr != nil {
+			slog.Error("Pure prompt response failed", "error", pErr)
+		}
+
+		slog.Debug("event: end", "data:", "[DONE]")
+		if writer != nil {
+			fmt.Fprintf(writer, "event: end\ndata: [DONE]\n\n")
+			writer.Flush()
+		}
+		return
+	}
+
 	negativeKeywords := []string{"不对", "错了", "不行", "还是不行", "没用", "不是这样", "搞错",
 		"又错", "白做", "越改越差", "恢复", "回滚", "撤销",
 		"wrong", "not right", "still broken", "doesn't work", "undo", "revert", "go back"}
@@ -318,6 +358,61 @@ func AiChat(ctx iris.Context) {
 		fmt.Fprintf(writer, "event: end\ndata: [DONE]\n\n")
 		writer.Flush()
 	}
+}
+
+// generatePurePromptResponse 处理旧 AuthAiChat 兼容的纯 prompt 单次对话。
+// 不绑定工具、不写会话历史、不处理文件附件/编辑器上下文。
+// 直接用 Eino client 流式生成响应，通过 SSE event:message 返回。
+//
+// 优化：丢弃思考内容 (OnReasoning 设为空操作)，避免 reasoning 延迟导致前端卡顿；
+// 加系统提示要求不思考直接返回结果，缩短响应时间。
+func generatePurePromptResponse(ctx context.Context, prompt string, writer io.Writer) (string, error) {
+	client, err := eino.GetClient()
+	if err != nil {
+		return "", fmt.Errorf("AI client not available: %w", err)
+	}
+
+	// 纯 prompt 模式：系统提示要求直接返回结果 + 不绑定任何工具
+	messages := []*schema.Message{
+		schema.SystemMessage(
+			"直接回答用户问题，不要进行思考推理。" +
+				"如果用户要求返回 JSON，请只返回 JSON 内容，不要包裹在 markdown 代码块中。"),
+		schema.UserMessage(prompt),
+	}
+
+	streamResult, streamErr := provider.StreamWithRetry(
+		ctx,
+		func(ctx context.Context, msgs []*schema.Message) (*schema.StreamReader[*schema.Message], error) {
+			return client.Stream(ctx, msgs)
+		},
+		messages,
+		&provider.StreamCallbacks{
+			OnChunk: func(chunk string) {
+				chunkData, _ := json.Marshal(iris.Map{
+					"v":         chunk,
+					"timestamp": time.Now().Unix(),
+				})
+				slog.Debug("event: message", "data:", string(chunkData))
+				if writer != nil {
+					fmt.Fprintf(writer, "event: message\ndata: %s\n\n", string(chunkData))
+					if f, ok := writer.(interface{ Flush() error }); ok {
+						f.Flush()
+					}
+				}
+			},
+			// 丢弃思考内容：不发送 reasoning SSE，避免前端误解析
+			OnReasoning: func(content string) {},
+			OnWarning: func(msg string) {
+				sendSSEWarning(writer, msg)
+			},
+		},
+	)
+
+	if streamErr != nil {
+		return "", streamErr
+	}
+
+	return streamResult.Response, nil
 }
 
 // generateAIResponse calls the DeepSeek API via Eino with tool support and streams the response back via SSE.
