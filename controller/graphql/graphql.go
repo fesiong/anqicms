@@ -170,7 +170,8 @@ func GraphQLPlaygroundHandler(ctx iris.Context) {
 		ctx.StatusCode(404)
 		return
 	}
-	ctx.HTML(`
+	// 使用 WriteString 输出，避免 HTML 中的 % (如 width: 100%) 被 fmt.Fprintf 当作格式符处理
+	htmlContent := `
 <!DOCTYPE html>
 <html>
 <head>
@@ -222,5 +223,7 @@ func GraphQLPlaygroundHandler(ctx iris.Context) {
     })</script>
 </body>
 </html>
-`)
+`
+	ctx.ContentType("text/html; charset=utf-8")
+	_, _ = ctx.WriteString(htmlContent)
 }
