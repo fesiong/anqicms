@@ -1088,6 +1088,9 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 
 func (w *Website) GetAkismetSetting(focus bool) *config.PluginAkismetConfig {
 	var cfg config.PluginAkismetConfig
+	if w.Cache == nil {
+		return &cfg
+	}
 	err := w.Cache.Get(AkismetSettingKey, &cfg)
 	if err != nil || focus {
 		value := w.GetSettingValue(AkismetSettingKey)

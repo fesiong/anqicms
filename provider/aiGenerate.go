@@ -104,8 +104,9 @@ func (w *Website) AiGenerateArticles() {
 	var maxId int64
 	var minId int64
 	db := w.DB.Model(model.Keyword{}).Where("last_time = 0")
-	db.WithContext(context.Background()).Select("max(id)").Pluck("max", &maxId)
-	db.WithContext(context.Background()).Select("min(id)").Pluck("min", &minId)
+	// 使用 COALESCE 处理无记录时 max(id)/min(id) 返回 NULL 导致的扫描错误
+	db.WithContext(context.Background()).Select("COALESCE(MAX(id), 0)").Pluck("COALESCE(MAX(id), 0)", &maxId)
+	db.WithContext(context.Background()).Select("COALESCE(MIN(id), 0)").Pluck("COALESCE(MIN(id), 0)", &minId)
 	if maxId <= 0 || minId <= 0 {
 		return
 	}
@@ -146,7 +147,7 @@ func (w *Website) AiGenerateArticles() {
 		total, err := w.AiGenerateArticlesByKeyword(keyword, false)
 		log.Printf("关键词：%s 生成了 %d 篇文章, %v", keyword.Title, total, err)
 		// 达到数量了，退出
-		if w.AiGenerateConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
+		if w.AiGenerateConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromAi) >= int64(w.AiGenerateConfig.DailyLimit) {
 			return
 		}
 		time.Sleep(time.Second)

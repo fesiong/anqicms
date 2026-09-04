@@ -2,6 +2,7 @@ package crond
 
 import (
 	"math/rand"
+	"sync"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -11,7 +12,8 @@ import (
 var crontab *cron.Cron
 
 func Crond() {
-	crontab = cron.New(cron.WithSeconds())
+	// 使用 WithChain + Recover 防止 panic 导致整个调度器崩溃
+	crontab = cron.New(cron.WithSeconds(), cron.WithChain(cron.Recover(cron.DefaultLogger)))
 	//每天执行
 	crontab.AddFunc("@daily", dailyTask)
 	// 每天8点执行
@@ -133,18 +135,29 @@ func CleanArchives() {
 
 func CollectArticles() {
 	websites := provider.GetWebsites()
-	var ch = make(chan bool, 5)
+	var ch = make(chan struct{}, 5)
+	var wg sync.WaitGroup
+
 	for _, w := range websites {
 		if !w.Initialed {
 			continue
 		}
-		ch <- true
+		wg.Add(2)
 		go func(w2 *provider.Website) {
+			defer wg.Done()
 			defer func() { <-ch }()
-			go w2.AiGenerateArticles()
+			ch <- struct{}{}
+			w2.AiGenerateArticles()
+		}(w)
+		go func(w2 *provider.Website) {
+			defer wg.Done()
+			defer func() { <-ch }()
+			ch <- struct{}{}
 			w2.CollectArticles()
 		}(w)
 	}
+	wg.Wait()
+	close(ch)
 }
 
 func QuerySpiderInclude() {

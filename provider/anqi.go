@@ -636,6 +636,7 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			Content:    strings.Join(content, "\n"),
 			KeywordId:  keyword.Id,
 			OriginUrl:  keyword.Title,
+			OriginId:   config.ArchiveFromAi,
 			ForceSave:  true,
 		}
 		if w.AiGenerateConfig.SaveType == 0 {

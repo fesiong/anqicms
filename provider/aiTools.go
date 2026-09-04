@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/cloudwego/eino/schema"
-	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -3672,7 +3671,7 @@ API发布: %d
 
 		// 如果有 cron 表达式，计算首次执行时间
 		if agent.CronExpr != "" {
-			scheduler, err := cron.ParseStandard(agent.CronExpr)
+			scheduler, err := cronParser.Parse(agent.CronExpr)
 			if err == nil {
 				agent.NextRunAt = scheduler.Next(time.Now()).Unix()
 				w.DB.Model(agent).Update("next_run_at", agent.NextRunAt)
@@ -3784,10 +3783,25 @@ API发布: %d
 		if args.Enabled == 1 {
 			enabled = 1
 		}
+		// 重新启用时，重新计算 NextRunAt，防止 NextRunAt=0 导致永不执行
+		if enabled == 1 && agent.CronExpr != "" {
+			scheduler, err := cronParser.Parse(agent.CronExpr)
+			if err == nil {
+				agent.NextRunAt = scheduler.Next(time.Now()).Unix()
+				w.DB.Model(&agent).Update("next_run_at", agent.NextRunAt)
+			}
+		}
 		w.DB.Model(&agent).Update("enabled", enabled)
 		svc.agentsMu.Lock()
 		if existing, ok := svc.agents[uint(args.Id)]; ok {
 			existing.Enabled = enabled
+			if enabled == 1 {
+				existing.NextRunAt = agent.NextRunAt
+			}
+		} else if enabled == 1 {
+			// 如果内存中没有该 agent，加入内存
+			agent.Enabled = enabled
+			svc.agents[uint(args.Id)] = &agent
 		}
 		svc.agentsMu.Unlock()
 		status := "已暂停"
@@ -3958,7 +3972,7 @@ API发布: %d
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"tasks": {
 				Type: schema.Array, Required: true,
-				Desc:  "子任务列表",
+				Desc: "子任务列表",
 				ElemInfo: &schema.ParameterInfo{
 					Type: schema.Object,
 					SubParams: map[string]*schema.ParameterInfo{
@@ -4035,7 +4049,7 @@ API发布: %d
 			"description": {Type: schema.String, Required: true, Desc: "团队任务描述"},
 			"tasks": {
 				Type: schema.Array, Required: true,
-				Desc:  "子任务列表",
+				Desc: "子任务列表",
 				ElemInfo: &schema.ParameterInfo{
 					Type: schema.Object,
 					SubParams: map[string]*schema.ParameterInfo{

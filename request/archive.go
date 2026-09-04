@@ -48,6 +48,7 @@ type Archive struct {
 	KeywordId   uint   `json:"keyword_id"`
 	OriginUrl   string `json:"origin_url"`
 	OriginTitle string `json:"origin_title"`
+	OriginId    int    `json:"origin_id"`
 	ContentText string `json:"-"`
 }
 

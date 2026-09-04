@@ -799,6 +799,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 		draft.OriginTitle = req.OriginTitle
 	}
+	if req.OriginId > 0 {
+		draft.OriginId = req.OriginId
+	}
 
 	module = w.GetModuleFromCache(draft.ModuleId)
 	if module == nil {
