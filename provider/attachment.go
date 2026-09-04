@@ -310,6 +310,16 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		}
 	}
 	imgType = strings.ToLower(imgType)
+	// 部分设备(如手机)拍摄的图片带有 EXIF 方向信息,
+	// 直接重新压缩会丢失该信息,导致图片在页面上显示方向错误(如旋转90度)
+	if imgType == "jpeg" {
+		_, _ = file.Seek(0, 0)
+		orientation := library.ReadJpegOrientation(file)
+		_, _ = file.Seek(0, 0)
+		if orientation > 1 {
+			img = library.FixImageOrientation(img, orientation)
+		}
+	}
 	width := img.Bounds().Dx()
 	height := img.Bounds().Dy()
 	if imgType == "jpeg" {
@@ -605,7 +615,7 @@ func (w *Website) DeleteAttachment(attach *model.Attachment) error {
 	return w.DB.Unscoped().Delete(&attach).Error
 }
 
-func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
+func (w *Website) GetAttachmentList(categoryId uint, q string, isImage int, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
 	var attachments []*model.Attachment
 	offset := (currentPage - 1) * pageSize
 	var total int64
@@ -613,6 +623,9 @@ func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, 
 	builder := w.DB.Model(&model.Attachment{})
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	if isImage > 0 {
+		builder = builder.Where("`is_image` = ?", isImage)
 	}
 	if q != "" {
 		builder = builder.Where("`file_name` like ?", "%"+q+"%")
@@ -997,7 +1010,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 		return err
 	}
 	// 检查新生成的文件，并读取它
-	buf, err = os.ReadFile(newPath)
+	buf, err = os.ReadFile(newThumbPath)
 	if err != nil {
 		return err
 	}
@@ -1097,7 +1110,7 @@ func (w *Website) GetRandImageFromCategory(categoryId int, title string) string 
 		var queries []string
 		var args []interface{}
 		for _, word := range keywordSplit {
-			queries = append(queries, "name like ?")
+			queries = append(queries, "file_name like ?")
 			args = append(args, "%"+word+"%")
 		}
 		tx = tx.Where(strings.Join(queries, " OR "), args...)

@@ -97,7 +97,7 @@ func (w *Website) AiGenerateArticles() {
 	}
 
 	// 如果采集的文章数量达到了设置的限制，则当天停止采集
-	if w.AiGenerateConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromAi) > int64(w.AiGenerateConfig.DailyLimit) {
+	if w.AiGenerateConfig.DailyLimit > 0 && w.GetTodayArticleCount(config.ArchiveFromAi) >= int64(w.AiGenerateConfig.DailyLimit) {
 		return
 	}
 

@@ -1146,6 +1146,8 @@ func (w *Website) SaveDesignTplFile(req request.SaveDesignFileRequest) error {
 	if err != nil {
 		return err
 	}
+	// 清理 HTML 缓存，避免 iframe 刷新命中旧缓存
+	w.RemoveHtmlCache()
 
 	return nil
 }
@@ -1196,6 +1198,8 @@ func (w *Website) SaveDesignStaticFile(req request.SaveDesignFileRequest) error 
 		// 上传到静态服务器
 		_ = w.SyncHtmlCacheToStorage(fullPath, remotePath)
 	}
+	// 清理 HTML 缓存，避免 iframe 刷新命中旧缓存（静态文件改动同样会影响缓存）
+	w.RemoveHtmlCache()
 	return nil
 }
 

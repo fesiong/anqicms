@@ -38,6 +38,7 @@ type fileWriteArgs struct {
 	Path     string `json:"path"`
 	FilePath string `json:"file_path"`
 	Content  string `json:"content"`
+	Confirm  bool   `json:"confirm"`
 }
 
 type fileEditArgs struct {
@@ -259,10 +260,11 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 	add(&schema.ToolInfo{
 		Name: "write_file",
-		Desc: "写入或创建文件。如果文件已存在则覆盖。会自动创建父目录。注意：只能操作项目目录内的文件。临时脚本（py/sh等）请写入 cache/ 目录（" + svc.projectRoot + "cache/" + "）。",
+		Desc: "写入或创建文件。如果文件已存在则覆盖。会自动创建父目录。注意：只能操作项目目录内的文件。临时脚本（py/sh等）请写入 cache/ 目录（" + svc.projectRoot + "cache/" + "）。修改模板需要通过 template_reload 工具重载模板才能生效。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {Type: schema.String, Desc: "文件路径，相对项目根目录或绝对路径", Required: true},
 			"content":   {Type: schema.String, Desc: "文件内容", Required: true},
+			"confirm":   {Type: schema.Boolean, Desc: "发生警告仍需写入时，需确认写入", Required: false},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args fileWriteArgs
@@ -283,7 +285,7 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			return friendlyPathError(err), nil
 		}
 		// Check if overwriting an existing file
-		if info, err := os.Stat(fullPath); err == nil {
+		if info, err := os.Stat(fullPath); err == nil && args.Confirm == false {
 			oldSize := info.Size()
 			newSize := len(args.Content)
 			relPath, _ := filepath.Rel(svc.projectRoot, fullPath)
@@ -307,7 +309,7 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 	add(&schema.ToolInfo{
 		Name: "edit_file",
-		Desc: "编辑文件内容。支持两种模式：\n1. 文本模式：指定 search/old_string 和 replace/new_string 进行精确文本替换\n2. 行模式：指定 start_line、end_line 和 new_string 替换整段行\n如果 search 或 old_string 参数为空，则自动切换到行模式。",
+		Desc: "编辑文件内容。支持两种模式：\n1. 文本模式：指定 search/old_string 和 replace/new_string 进行精确文本替换\n2. 行模式：指定 start_line、end_line 和 new_string 替换整段行\n如果 search 或 old_string 参数为空，则自动切换到行模式。修改模板需要通过 template_reload 工具重载模板才能生效。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path":  {Type: schema.String, Desc: "文件路径", Required: true},
 			"search":     {Type: schema.String, Desc: "（文本模式）要搜索的旧文本"},

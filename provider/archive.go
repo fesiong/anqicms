@@ -702,6 +702,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			_ = w.SaveTagData(draft.Id, req.Tags)
 		} else if req.RemoveTag {
 			_ = w.SaveTagData(draft.Id, nil)
+		} else if w.Content.MatchTag == 1 {
+			// 自动匹配标签
+			_ = w.AutoMatchTag(&draft.Archive)
 		}
 
 		// 清除缓存
@@ -1164,8 +1167,14 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	}
 
 	if req.UpdateAll || len(req.Tags) > 0 {
-		// tags
-		_ = w.SaveTagData(draft.Id, req.Tags)
+		if len(req.Tags) > 0 {
+			_ = w.SaveTagData(draft.Id, req.Tags)
+		} else if req.RemoveTag {
+			_ = w.SaveTagData(draft.Id, nil)
+		} else if w.Content.MatchTag == 1 {
+			// 自动匹配标签
+			_ = w.AutoMatchTag(&draft.Archive)
+		}
 	}
 
 	// 缓存清理

@@ -47,6 +47,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
 			anqi.Get("/ai/stream/data", manageController.AuthAiGenerateStreamData)
 			anqi.Post("/ai/chat", manageController.AiChat)
+			anqi.Post("/ai/chat/confirm", manageController.AiToolConfirm)
 			anqi.Post("/ai/upload", manageController.AiChatUpload)
 			anqi.Get("/ai/settings", manageController.GetAiSettings)
 			anqi.Post("/ai/settings", manageController.SaveAiSettings)
@@ -105,7 +106,9 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			setting.Get("/cache", manageController.SettingCache)
 			setting.Get("/safe", manageController.SettingSafe)
 			setting.Get("/diyfield", manageController.SettingDiyField)
+			setting.Get("/ai", manageController.SettingAi)
 
+			setting.Post("/ai", manageController.SettingAiForm)
 			setting.Post("/system", manageController.SettingSystemForm)
 			setting.Post("/content", manageController.SettingContentForm)
 			setting.Post("/thumb/rebuild", manageController.SettingThumbRebuild)
@@ -476,9 +479,10 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				backup.Get("/status", manageController.PluginBackupStatus)
 				backup.Post("/restore", manageController.PluginBackupRestore)
 				backup.Post("/delete", manageController.PluginBackupDelete)
-				backup.Post("/export", manageController.PluginBackupExport)
+				backup.Get("/export", manageController.PluginBackupExport)
 				backup.Post("/import", manageController.PluginBackupImport)
 				backup.Post("/cleanup", manageController.PluginBackupCleanup)
+				backup.Post("/remark", manageController.PluginBackupRemark)
 			}
 
 			replace := plugin.Party("/replace")

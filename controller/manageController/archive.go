@@ -573,7 +573,13 @@ func ArchiveDetailForm(ctx iris.Context) {
 		req.RemoveImage = true
 	}
 	if len(req.Tags) == 0 {
-		req.RemoveTag = true
+		if req.Id > 0 {
+			var existCount int64
+			currentSite.DB.Model(&model.TagData{}).Where("`item_id` = ?", req.Id).Count(&existCount)
+			if existCount > 0 {
+				req.RemoveTag = true
+			}
+		}
 	}
 	if len(req.Flags) == 0 {
 		req.RemoveFlag = true

@@ -8,7 +8,7 @@ import (
 
 func PluginGetAkismetSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	setting := currentSite.GetAkismetSetting()
+	setting := currentSite.GetAkismetSetting(true)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -36,6 +36,8 @@ func PluginSaveAkismetSetting(ctx iris.Context) {
 		})
 		return
 	}
+	// clean cache
+	currentSite.Cache.Delete(provider.AkismetSettingKey)
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateAkismetConfiguration"))
 	// 更新Akismet

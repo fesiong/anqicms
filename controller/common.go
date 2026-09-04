@@ -285,6 +285,12 @@ func Common(ctx iris.Context) {
 		ctx.ViewData("pluginJsCode", jsCodes)
 	}
 
+	// 全局提供recaptcha site key
+	setting := currentSite.GetAkismetSetting(false)
+	if setting.RecaptchaOpen && setting.RecaptchaSiteKey != "" {
+		ctx.ViewData("recaptcha_key", setting.RecaptchaSiteKey)
+	}
+
 	// 设置分页
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	paramPage := ctx.Params().GetIntDefault("page", 0)

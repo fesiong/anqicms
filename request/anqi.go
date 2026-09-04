@@ -9,6 +9,7 @@ type AnqiTemplateRequest struct {
 	TemplateId    uint     `json:"template_id"`
 	OnlyTemplate  bool     `json:"only_template"`
 	AutoBackup    bool     `json:"auto_backup"`
+	CategoryId    uint     `json:"category_id"`
 	Name          string   `json:"name"`
 	Price         int64    `json:"price"`
 	Author        string   `json:"author"`

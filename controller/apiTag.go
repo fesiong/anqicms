@@ -555,10 +555,18 @@ func ApiGuestbook(ctx iris.Context) {
 
 	fields := currentSite.ApiGetGuestbookFields()
 
+	// 提供recaptcha site key
+	recaptchaSiteKey := ""
+	setting := currentSite.GetAkismetSetting(false)
+	if setting.RecaptchaOpen && setting.RecaptchaSiteKey != "" {
+		recaptchaSiteKey = setting.RecaptchaSiteKey
+	}
+
 	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"data": fields,
+		"code":          config.StatusOK,
+		"msg":           "",
+		"data":          fields,
+		"recaptcha_key": recaptchaSiteKey,
 	})
 }
 
@@ -1319,6 +1327,21 @@ func ApiGuestbookForm(ctx iris.Context) {
 		})
 		return
 	}
+
+	// reCAPTCHA 校验
+	setting := currentSite.GetAkismetSetting(false)
+	if setting.RecaptchaOpen && setting.RecaptchaSiteKey != "" && setting.RecaptchaPrivateKey != "" {
+		recaptchaToken, _ := req["recaptcha_token"].(string)
+		resp, err := provider.VerifyRecaptcha(ctx.Request().Context(), setting.RecaptchaPrivateKey, recaptchaToken, ctx.RemoteAddr())
+		if err != nil || resp == nil || !resp.Success {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("CaptchaVerificationFailed"),
+			})
+			return
+		}
+	}
+
 	if ok := SafeVerify(ctx, result, "json", "guestbook"); !ok {
 		return
 	}

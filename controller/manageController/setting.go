@@ -9,6 +9,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/pkg/ai/eino"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -90,10 +91,16 @@ func SettingSystemForm(ctx iris.Context) {
 	currentSite.System.SiteClose = req.SiteClose
 	currentSite.System.SiteCloseTips = req.SiteCloseTips
 	currentSite.System.BanSpider = req.BanSpider
-	// 如果本来storageUrl = baseUrl
-	if currentSite.PluginStorage.StorageUrl == currentSite.System.BaseUrl {
-		currentSite.PluginStorage.StorageUrl = req.BaseUrl
-		currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
+	if currentSite.System.BaseUrl != req.BaseUrl {
+		// 如果本来storageUrl = baseUrl
+		if currentSite.PluginStorage.StorageUrl == currentSite.System.BaseUrl {
+			currentSite.PluginStorage.StorageUrl = req.BaseUrl
+			currentSite.SaveSettingValue(provider.StorageSettingKey, currentSite.PluginStorage)
+		}
+		if currentSite.PluginJsonLd != nil && currentSite.PluginJsonLd.OrganizationUrl == currentSite.System.BaseUrl {
+			currentSite.PluginJsonLd.OrganizationUrl = req.BaseUrl
+			currentSite.SaveSettingValue(provider.JsonLdSettingKey, currentSite.PluginJsonLd)
+		}
 	}
 	currentSite.System.BaseUrl = req.BaseUrl
 	currentSite.System.FrontUrl = req.FrontUrl
@@ -173,6 +180,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.MultiCategory = req.MultiCategory
 	currentSite.Content.UseSort = req.UseSort
 	currentSite.Content.UseWebp = req.UseWebp
+	currentSite.Content.MatchTag = req.MatchTag
 	currentSite.Content.ConvertGif = req.ConvertGif
 	currentSite.Content.Quality = req.Quality
 	currentSite.Content.ResizeImage = req.ResizeImage
@@ -695,5 +703,86 @@ func SettingMigrateDB(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("DatabaseTableUpdated"),
+	})
+}
+
+func SettingAi(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	defaultSite := provider.CurrentSite(nil)
+	// 返回 AiGenerate 的配置，以及 eino 的配置
+	aiConfig := currentSite.AiGenerateConfig
+	chatConfig := defaultSite.LoadAiSetting("")
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"write": aiConfig,
+			"chat":  chatConfig.Configs,
+			"mcp":   chatConfig.Mcp,
+		},
+	})
+}
+
+func SettingAiForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req struct {
+		Write *config.AiGenerateConfig
+		Chat  []*eino.Config
+		Mcp   *eino.McpConfig
+	}
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	// 写到AI generate 的配置里
+	if req.Write != nil {
+		currentSite.AiGenerateConfig.AiEngine = req.Write.AiEngine
+		currentSite.AiGenerateConfig.OpenAIKeys = req.Write.OpenAIKeys
+		currentSite.AiGenerateConfig.OpenAiApi = req.Write.OpenAiApi
+		currentSite.AiGenerateConfig.OpenAIModel = req.Write.OpenAIModel
+		currentSite.AiGenerateConfig.Spark = req.Write.Spark
+		currentSite.SaveAiGenerateSetting(*currentSite.AiGenerateConfig, true)
+	}
+
+	defaultSite := provider.CurrentSite(nil)
+	chatSettings := defaultSite.LoadAiSetting("")
+	needSave := false
+	if len(req.Chat) > 0 {
+		chatSettings.Configs = req.Chat
+		needSave = true
+	}
+	// 保存 MCP 配置
+	if req.Mcp != nil {
+		chatSettings.Mcp = *req.Mcp
+		needSave = true
+	}
+	if needSave {
+		if err := defaultSite.SaveSettingValue(provider.AiSettingKey, chatSettings); err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "save failed",
+			})
+			return
+		}
+
+		// cache new setting
+		defaultSite.Cache.Set("ai_setting", chatSettings, 86400)
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateAISettings"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+		"data": iris.Map{
+			"write": currentSite.AiGenerateConfig,
+			"chat":  chatSettings.Configs,
+			"mcp":   chatSettings.Mcp,
+		},
 	})
 }

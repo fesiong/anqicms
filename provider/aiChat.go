@@ -4,10 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cloudwego/eino/schema"
@@ -18,7 +18,6 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
-	"kandaoni.com/anqicms/pkg/mcp/server"
 )
 
 // Turn represents a round of interaction: one user message + all following
@@ -31,13 +30,14 @@ type Turn struct {
 
 // ChatSession represents a user chat session
 type ChatSession struct {
-	ID                 string        `json:"id"`
-	Messages           []ChatMessage `json:"messages"`
-	Turns              []Turn        `json:"turns"`
-	CreatedAt          time.Time     `json:"created_at"`
-	CachedSystemPrompt string        `json:"-"` // 每会话缓存一次，保持 prefix cache 稳定
-	DeclaredPackages   []string      `json:"-"` // 模型声明的能力包列表
-	ToolsFinalized     bool          `json:"-"` // true 表示已从声明阶段切换到执行阶段
+	ID                 string           `json:"id"`
+	Messages           []ChatMessage    `json:"messages"`
+	Turns              []Turn           `json:"turns"`
+	CreatedAt          time.Time        `json:"created_at"`
+	CachedSystemPrompt string           `json:"-"` // 每会话缓存一次，保持 prefix cache 稳定
+	DeclaredPackages   []string         `json:"-"` // 模型声明的能力包列表
+	ToolsFinalized     bool             `json:"-"` // true 表示已从声明阶段切换到执行阶段
+	AllowOnce          *SessionAllowSet `json:"-"` // P0: 本会话已"本次允许"的工具集合
 }
 
 // ChatMessage represents a message in a conversation
@@ -63,7 +63,6 @@ type AiChatService struct {
 	sessions    map[string]*ChatSession
 	mu          sync.RWMutex
 	Logger      *slog.Logger
-	mcpSrv      *server.Server
 	db          *gorm.DB
 	site        *Website
 	projectRoot string
@@ -72,27 +71,57 @@ type AiChatService struct {
 	Tools    []*schema.ToolInfo
 	Handlers map[string]toolHandler
 
+	// P0: 待审批工具调用注册表
+	// key = toolCallID, value = decision channel
+	// 主会话 write_gate 挂起时写入，前端 POST /ai/chat/confirm 唤醒
+	pendingApprovals   map[string]chan string
+	pendingApprovalsMu sync.Mutex
+
+	// msgSeq: 全局单调递增序号，保证同一 session 内 DB 消息写入顺序
+	// 解决异步并发写入导致 DB 乱序的问题
+	msgSeq int64
+
 	// Agent 调度器
 	agents        map[uint]*model.AiAgent
 	agentsMu      sync.RWMutex
 	schedulerQuit chan struct{}
+
+	// runningAgents 防止同一 agent 被并发重复执行
+	// key = agent.Id, value = true 表示正在执行
+	runningAgents   map[uint]bool
+	runningAgentsMu sync.Mutex
+
+	// P8: 遥测与成本归因记录器
+	telemetryRecorder *TelemetryRecorder
+
+	// P8: 当前使用的模型名 (用于遥测记录)
+	ModelName string
+
+	// P4a: 技能 allowed-tools 约束
+	// activeSkillTools: 当前激活的技能允许使用的工具集合
+	// 为 nil 表示无技能激活，所有工具可用
+	// 为非 nil (即使空 map) 表示只能使用该集合内的工具
+	activeSkillTools map[string]bool
+	activeSkillMu    sync.RWMutex
 }
 
 // NewAiChatService creates a new AI chat service
 func (w *Website) NewAiChatService() *AiChatService {
-	if mcpServer == nil {
-		log.Println("mcp Server is nil")
-		return nil
-	}
 	svc := &AiChatService{
-		mu:          sync.RWMutex{},
-		sessions:    make(map[string]*ChatSession),
-		Logger:      slog.Default(),
-		mcpSrv:      mcpServer,
-		db:          w.DB,
-		site:        w,
-		projectRoot: w.RootPath,
-		agents:      make(map[uint]*model.AiAgent),
+		mu:               sync.RWMutex{},
+		sessions:         make(map[string]*ChatSession),
+		Logger:           slog.Default(),
+		db:               w.DB,
+		site:             w,
+		pendingApprovals: make(map[string]chan string),
+		agents:           make(map[uint]*model.AiAgent),
+		runningAgents:    make(map[uint]bool),
+		projectRoot:      w.RootPath,
+	}
+
+	// P8: 初始化遥测与成本归因记录器
+	if w.DB != nil {
+		svc.telemetryRecorder = NewTelemetryRecorder(w.DB)
 	}
 
 	// Initialize tools
@@ -142,7 +171,7 @@ func (svc *AiChatService) loadSessionsFromDB() {
 		var dbMessages []model.AiChatMessage
 		svc.db.Model(&model.AiChatMessage{}).
 			Where("session_id = ?", row.SessionId).
-			Order("created_time ASC").
+			Order("seq ASC").
 			Find(&dbMessages)
 		for _, dbm := range dbMessages {
 			sess.Messages = append(sess.Messages, dbMessageToChatMessage(dbm))
@@ -167,7 +196,7 @@ func (svc *AiChatService) GetOrCreateSession(sessionID string) *ChatSession {
 		var dbMessages []model.AiChatMessage
 		svc.db.Model(&model.AiChatMessage{}).
 			Where("session_id = ?", sessionID).
-			Order("created_time ASC").
+			Order("seq ASC").
 			Find(&dbMessages)
 		if len(dbMessages) > 0 {
 			sess := &ChatSession{
@@ -235,24 +264,26 @@ func (svc *AiChatService) AddMessage(sessionID string, msg ChatMessage) {
 
 	svc.mu.Unlock()
 
-	// Persist to database asynchronously
+	// Persist to database synchronously with monotonic seq
+	// 同步写入 + 单调递增 seq 保证 DB 消息顺序，解决异步并发写入乱序问题
 	if svc.db != nil {
-		go func() {
-			filesJSON, _ := json.Marshal(msg.Files)
-			dbMsg := &model.AiChatMessage{
-				SessionId:  sessionID,
-				Role:       msg.Role,
-				Content:    msg.Content,
-				ToolCallID: msg.ToolCallID,
-				ToolName:   msg.ToolName,
-				TurnID:     msg.TurnID,
-				ToolCalls:  msg.ToolCalls,
-				Files:      string(filesJSON),
-			}
-			if err := svc.db.Create(dbMsg).Error; err != nil {
-				svc.Logger.Error("Failed to persist chat message", "error", err)
-			}
-		}()
+		// 原子递增 seq，保证全局顺序
+		seq := atomic.AddInt64(&svc.msgSeq, 1)
+		filesJSON, _ := json.Marshal(msg.Files)
+		dbMsg := &model.AiChatMessage{
+			SessionId:  sessionID,
+			Role:       msg.Role,
+			Content:    msg.Content,
+			ToolCallID: msg.ToolCallID,
+			ToolName:   msg.ToolName,
+			TurnID:     msg.TurnID,
+			ToolCalls:  msg.ToolCalls,
+			Files:      string(filesJSON),
+			Seq:        int(seq),
+		}
+		if err := svc.db.Create(dbMsg).Error; err != nil {
+			svc.Logger.Error("Failed to persist chat message", "error", err)
+		}
 	}
 }
 
@@ -307,7 +338,7 @@ func (svc *AiChatService) GetMessages(sessionID string) []ChatMessage {
 			var dbMessages []model.AiChatMessage
 			svc.db.Model(&model.AiChatMessage{}).
 				Where("session_id = ?", sessionID).
-				Order("created_time ASC").
+				Order("seq ASC").
 				Find(&dbMessages)
 			if len(dbMessages) > 0 {
 				sess = &ChatSession{
@@ -476,8 +507,26 @@ func (svc *AiChatService) checkDueAgents() {
 	svc.agentsMu.RUnlock()
 
 	for _, agent := range dueList {
+		// 防止同一 agent 被并发重复执行：
+		// ExecuteAgent 异步执行，期间 NextRunAt 未更新，
+		// 下一个 ticker tick 会再次把该 agent 加入 dueList。
+		// 用 runningAgents 标记确保同一 agent 同时只有一个执行。
+		svc.runningAgentsMu.Lock()
+		if svc.runningAgents[agent.Id] {
+			svc.runningAgentsMu.Unlock()
+			svc.Logger.Info("Agent already running, skip", "id", agent.Id, "name", agent.Name)
+			continue
+		}
+		svc.runningAgents[agent.Id] = true
+		svc.runningAgentsMu.Unlock()
+
 		svc.Logger.Info("Agent due, executing", "id", agent.Id, "name", agent.Name)
 		go func(a *model.AiAgent) {
+			defer func() {
+				svc.runningAgentsMu.Lock()
+				delete(svc.runningAgents, a.Id)
+				svc.runningAgentsMu.Unlock()
+			}()
 			if _, err := svc.ExecuteAgent(a); err != nil {
 				svc.Logger.Error("Agent execution failed", "id", a.Id, "error", err)
 			}
@@ -487,6 +536,21 @@ func (svc *AiChatService) checkDueAgents() {
 
 // ExecuteAgent 执行 Agent 的任务（非流式 LLM 调用 + 工具循环）
 func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (string, error) {
+	// 防重入：如果该 agent 已在执行中，直接返回，避免并发重复执行。
+	// 这覆盖了调度器 tick 与手动 agent_run 并发的场景。
+	svc.runningAgentsMu.Lock()
+	if svc.runningAgents[agent.Id] {
+		svc.runningAgentsMu.Unlock()
+		return "", fmt.Errorf("agent #%d is already running", agent.Id)
+	}
+	svc.runningAgents[agent.Id] = true
+	svc.runningAgentsMu.Unlock()
+	defer func() {
+		svc.runningAgentsMu.Lock()
+		delete(svc.runningAgents, agent.Id)
+		svc.runningAgentsMu.Unlock()
+	}()
+
 	// 创建执行日志
 	logEntry := &model.AiAgentLog{
 		AgentId:   agent.Id,
@@ -666,6 +730,62 @@ func (svc *AiChatService) GetAgentBySessionID(sessionID string) *model.AiAgent {
 	return nil
 }
 
+// GetEinoTools returns all Eino tool definitions and their handlers, including
+// built-in tools. This exposes the full tool set so callers (e.g. the chat
+// controller) can bind every available tool to the model up-front.
+func (svc *AiChatService) GetEinoTools() ([]*schema.ToolInfo, map[string]toolHandler) {
+	tools, handlers := svc.getEinoTools()
+	builtinTools, builtinHandlers := svc.getBuiltinEinoTools()
+	tools = append(tools, builtinTools...)
+	for name, handler := range builtinHandlers {
+		handlers[name] = handler
+	}
+	return tools, handlers
+}
+
+// ── P4a: 技能 allowed-tools 约束 ──
+
+// SetSkillToolScope 激活技能的工具约束。
+// allowedTools 为空切片时清空约束 (所有工具可用)。
+// allowedTools 非空时，只能使用该集合内的工具 + 始终允许的元工具。
+func (svc *AiChatService) SetSkillToolScope(allowedTools []string) {
+	svc.activeSkillMu.Lock()
+	defer svc.activeSkillMu.Unlock()
+
+	if len(allowedTools) == 0 {
+		svc.activeSkillTools = nil
+		return
+	}
+
+	svc.activeSkillTools = make(map[string]bool, len(allowedTools)+4)
+	// 始终允许的元工具 (技能管理本身不应被锁)
+	metaTools := []string{"skill_list", "skill_get", "skill_reload", "skill_save"}
+	for _, t := range metaTools {
+		svc.activeSkillTools[t] = true
+	}
+	for _, t := range allowedTools {
+		svc.activeSkillTools[t] = true
+	}
+}
+
+// IsToolAllowed 检查工具是否在当前技能的 allowed-tools 范围内。
+// 无激活技能时始终返回 true。
+func (svc *AiChatService) IsToolAllowed(toolName string) bool {
+	svc.activeSkillMu.RLock()
+	defer svc.activeSkillMu.RUnlock()
+	if svc.activeSkillTools == nil {
+		return true
+	}
+	return svc.activeSkillTools[toolName]
+}
+
+// ClearSkillToolScope 清除技能工具约束 (技能执行结束后调用)。
+func (svc *AiChatService) ClearSkillToolScope() {
+	svc.activeSkillMu.Lock()
+	defer svc.activeSkillMu.Unlock()
+	svc.activeSkillTools = nil
+}
+
 // GetAllTools returns all available MCP tools, built from the Eino tool definitions.
 func (svc *AiChatService) GetAllTools() []*mcp.Tool {
 	toolInfos, _ := svc.getEinoTools()
@@ -826,8 +946,58 @@ func CompactMessagesFromChat(sess *ChatSession, systemPrompt string, keepTurns i
 	var keepStartIdx int
 	if len(turns) <= keepTurns {
 		// No compression needed — keep all messages
+		// 两遍扫描确保 assistant(tool_calls) ↔ tool 消息正确配对:
+		//   第一遍: 收集所有 assistant 声明的 tool_call_id (declaredIDs)
+		//           和所有 tool 消息的 tool_call_id (existingToolIDs)
+		//   第二遍: 按顺序构建 messages, 跳过孤立的 tool 消息和孤立的 assistant(tool_calls)
+		// 这能正确处理 DB 中 tool 消息 created_time 早于 assistant 消息的乱序情况
+		declaredIDs := make(map[string]bool)     // assistant 声明的 tool_call_id
+		existingToolIDs := make(map[string]bool) // 实际存在的 tool 消息的 tool_call_id
 		for _, msg := range sess.Messages {
-			messages = append(messages, chatMessageToSchema(msg))
+			if msg.Role == "assistant" && msg.ToolCalls != "" {
+				var tcs []schema.ToolCall
+				if json.Unmarshal([]byte(msg.ToolCalls), &tcs) == nil {
+					for _, tc := range tcs {
+						declaredIDs[tc.ID] = true
+					}
+				}
+			}
+			if msg.Role == "tool" {
+				existingToolIDs[msg.ToolCallID] = true
+			}
+		}
+		for _, msg := range sess.Messages {
+			if msg.Role == "tool" {
+				// 孤立的 tool 消息（无对应 assistant tool_calls）会导致 400 Bad Request
+				if !declaredIDs[msg.ToolCallID] {
+					continue
+				}
+				messages = append(messages, schema.ToolMessage(condenseToolResult(msg), msg.ToolCallID))
+			} else if msg.Role == "assistant" && msg.ToolCalls != "" {
+				// assistant 带 tool_calls: 只保留有对应 tool 消息的 tool_call_id
+				var tcs []schema.ToolCall
+				if json.Unmarshal([]byte(msg.ToolCalls), &tcs) != nil {
+					messages = append(messages, chatMessageToSchema(msg))
+					continue
+				}
+				var kept []schema.ToolCall
+				for _, tc := range tcs {
+					if existingToolIDs[tc.ID] {
+						kept = append(kept, tc)
+					}
+				}
+				if len(kept) == 0 && len(tcs) > 0 {
+					// 所有 tool_call 都没有对应 tool 消息 → 丢弃 tool_calls，只保留 content
+					messages = append(messages, schema.AssistantMessage(msg.Content, nil))
+				} else if len(kept) < len(tcs) {
+					// 部分 tool_call 没有对应 tool 消息 → 只保留有配对的
+					messages = append(messages, schema.AssistantMessage(msg.Content, kept))
+				} else {
+					messages = append(messages, schema.AssistantMessage(msg.Content, tcs))
+				}
+			} else {
+				messages = append(messages, chatMessageToSchema(msg))
+			}
 		}
 		return messages
 	}
@@ -852,12 +1022,51 @@ func CompactMessagesFromChat(sess *ChatSession, systemPrompt string, keepTurns i
 	messages = append(messages, schema.SystemMessage(summary))
 
 	// ── Phase 2: Keep the last keepTurns turns in full, with condensed tool results ──
+	// 两遍扫描 (同 "no compression" 分支): 先收集 declaredIDs / existingToolIDs,
+	// 再按顺序构建 messages, 确保每个 assistant(tool_calls) 都有对应的 tool 消息
+	declaredIDs := make(map[string]bool)
+	existingToolIDs := make(map[string]bool)
+	for i := keepStartIdx; i < len(sess.Messages); i++ {
+		msg := sess.Messages[i]
+		if msg.Role == "assistant" && msg.ToolCalls != "" {
+			var tcs []schema.ToolCall
+			if json.Unmarshal([]byte(msg.ToolCalls), &tcs) == nil {
+				for _, tc := range tcs {
+					declaredIDs[tc.ID] = true
+				}
+			}
+		}
+		if msg.Role == "tool" {
+			existingToolIDs[msg.ToolCallID] = true
+		}
+	}
 	for i := keepStartIdx; i < len(sess.Messages); i++ {
 		msg := sess.Messages[i]
 		if msg.Role == "tool" {
-			// Condense tool result based on tool name
-			condensed := condenseToolResult(msg)
-			messages = append(messages, schema.ToolMessage(condensed, msg.ToolCallID))
+			// 孤立的 tool 消息（无对应 assistant tool_calls）会导致 400 Bad Request
+			if !declaredIDs[msg.ToolCallID] {
+				continue
+			}
+			messages = append(messages, schema.ToolMessage(condenseToolResult(msg), msg.ToolCallID))
+		} else if msg.Role == "assistant" && msg.ToolCalls != "" {
+			var tcs []schema.ToolCall
+			if json.Unmarshal([]byte(msg.ToolCalls), &tcs) != nil {
+				messages = append(messages, chatMessageToSchema(msg))
+				continue
+			}
+			var kept []schema.ToolCall
+			for _, tc := range tcs {
+				if existingToolIDs[tc.ID] {
+					kept = append(kept, tc)
+				}
+			}
+			if len(kept) == 0 && len(tcs) > 0 {
+				messages = append(messages, schema.AssistantMessage(msg.Content, nil))
+			} else if len(kept) < len(tcs) {
+				messages = append(messages, schema.AssistantMessage(msg.Content, kept))
+			} else {
+				messages = append(messages, schema.AssistantMessage(msg.Content, tcs))
+			}
 		} else {
 			messages = append(messages, chatMessageToSchema(msg))
 		}

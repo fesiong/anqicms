@@ -3,6 +3,8 @@ package provider
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -12,13 +14,12 @@ import (
 )
 
 func (w *Website) ReplaceValues(req *request.PluginReplaceRequest) (updateCount int64) {
-	// 可以替换的地方： setting|archive|category|tag|anchor|keyword|comment|attachment
+	// 可以替换的地方： setting|archive|category|tag|anchor|keyword|comment|attachment|nav|link|redirect|place|guestbook|template
 	for _, key := range req.Places {
 		switch key {
 		case "setting":
 			total := w.replaceSettingValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "archive":
 			// 正式表
 			total := w.replaceArchiveValues(req.Keywords, req.ReplaceTag)
@@ -26,33 +27,42 @@ func (w *Website) ReplaceValues(req *request.PluginReplaceRequest) (updateCount 
 			// 草稿
 			total = w.replaceArchiveDraftValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "category":
 			total := w.replaceCategoryValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "tag":
 			total := w.replaceTagValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "anchor":
 			total := w.replaceAnchorValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "keyword":
 			total := w.replaceKeywordValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "comment":
 			total := w.replaceCommentValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
 		case "attachment":
 			total := w.replaceAttachmentValues(req.Keywords, req.ReplaceTag)
 			updateCount += total
-			break
-		default:
-			break
+		case "nav":
+			total := w.replaceNavValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
+		case "link":
+			total := w.replaceLinkValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
+		case "redirect":
+			total := w.replaceRedirectValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
+		case "place":
+			total := w.replacePlaceValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
+		case "guestbook":
+			total := w.replaceGuestbookValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
+		case "template":
+			total := w.replaceTemplateValues(req.Keywords, req.ReplaceTag)
+			updateCount += total
 		}
 	}
 
@@ -60,7 +70,6 @@ func (w *Website) ReplaceValues(req *request.PluginReplaceRequest) (updateCount 
 }
 
 func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
-	// 需要reflect
 	var settings []*model.Setting
 	w.DB.Find(&settings)
 	for _, item := range settings {
@@ -69,33 +78,11 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 		if err == nil {
 			needUpdate := false
 			for k, v := range values {
-				if k == "extra_fields" {
-					val, ok := v.([]config.CustomField)
-					if ok {
-						innerUpdate := false
-						for i := range val {
-							val2, ok := val[i].Value.(string)
-							if ok {
-								val2 = w.replaceContentText(val2, replacer)
-							}
-							if val2 != val[i].Value {
-								updateCount++
-								innerUpdate = true
-								val[i].Value = val2
-							}
-						}
-						if innerUpdate {
-							needUpdate = true
-							values[k] = val
-						}
-					}
-				} else if val, ok := v.(string); ok {
-					val2 := w.replaceContentText(val, replacer)
-					if val2 != val {
-						updateCount++
-						needUpdate = true
-						values[k] = val2
-					}
+				changed, newV := w.replaceSettingValue(v, replacer)
+				if changed > 0 {
+					updateCount += changed
+					needUpdate = true
+					values[k] = newV
 				}
 			}
 			if needUpdate {
@@ -104,12 +91,70 @@ func (w *Website) replaceSettingValues(replacer []config.ReplaceKeyword, replace
 					w.DB.Model(&model.Setting{}).Where("`key` = ?", item.Key).UpdateColumn("value", string(itemValue))
 				}
 			}
+		} else {
+			// 非 JSON 对象（纯字符串或数组），尝试直接替换
+			var val interface{}
+			if err := json.Unmarshal([]byte(item.Value), &val); err == nil {
+				changed, newVal := w.replaceSettingValue(val, replacer)
+				if changed > 0 {
+					updateCount += changed
+					itemValue, err := json.Marshal(newVal)
+					if err == nil {
+						w.DB.Model(&model.Setting{}).Where("`key` = ?", item.Key).UpdateColumn("value", string(itemValue))
+					}
+				}
+			}
 		}
 	}
 	if updateCount > 0 {
 		w.InitSetting()
 	}
 	return updateCount
+}
+
+// replaceSettingValue 递归替换任意层级的值（map / slice / string），
+// 返回被替换的字符串数量以及替换后的新值。
+func (w *Website) replaceSettingValue(v interface{}, replacer []config.ReplaceKeyword) (int64, interface{}) {
+	switch val := v.(type) {
+	case string:
+		newStr := w.replaceContentText(val, replacer)
+		if newStr != val {
+			return 1, newStr
+		}
+		return 0, val
+	case map[string]interface{}:
+		changed := int64(0)
+		needUpdate := false
+		for k, sub := range val {
+			c, newSub := w.replaceSettingValue(sub, replacer)
+			if c > 0 {
+				changed += c
+				val[k] = newSub
+				needUpdate = true
+			}
+		}
+		if !needUpdate {
+			return 0, val
+		}
+		return changed, val
+	case []interface{}:
+		changed := int64(0)
+		needUpdate := false
+		for i, sub := range val {
+			c, newSub := w.replaceSettingValue(sub, replacer)
+			if c > 0 {
+				changed += c
+				val[i] = newSub
+				needUpdate = true
+			}
+		}
+		if !needUpdate {
+			return 0, val
+		}
+		return changed, val
+	default:
+		return 0, val
+	}
 }
 
 func (w *Website) replaceArchiveValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
@@ -173,37 +218,10 @@ func (w *Website) replaceArchiveValues(replacer []config.ReplaceKeyword, replace
 				archiveData.Content = content
 				w.DB.Model(&archiveData).UpdateColumns(archiveData)
 			}
-			// extra
-			result := map[string]interface{}{}
-			module := w.GetModuleFromCache(archive.ModuleId)
-			if module != nil {
-				var fields []string
-				for _, v := range module.Fields {
-					fields = append(fields, "`"+v.FieldName+"`")
-				}
-				//从数据库中取出来
-				if len(fields) > 0 {
-					w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Select(strings.Join(fields, ",")).Scan(&result)
-					//extra的CheckBox的值
-					innerUpdate := false
-					for k, v := range result {
-						val, ok := v.(string)
-						if ok {
-							val2 := w.replaceContentText(val, replacer)
-							if val2 != val {
-								result[k] = val2
-								updateCount++
-								innerUpdate = true
-							}
-						}
-					}
-					if innerUpdate {
-						w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Updates(result)
-					}
-				}
-			}
 		}
 	}
+	// 批量处理所有模型的 extra 字段（多模型）
+	updateCount += w.replaceArchiveModuleValues(replacer)
 
 	return updateCount
 }
@@ -269,39 +287,147 @@ func (w *Website) replaceArchiveDraftValues(replacer []config.ReplaceKeyword, re
 				archiveData.Content = content
 				w.DB.Model(&archiveData).UpdateColumns(archiveData)
 			}
-			// extra
-			result := map[string]interface{}{}
-			module := w.GetModuleFromCache(archive.ModuleId)
-			if module != nil {
-				var fields []string
-				for _, v := range module.Fields {
-					fields = append(fields, "`"+v.FieldName+"`")
+		}
+	}
+	// 批量处理所有模型的 extra 字段（多模型）
+	updateCount += w.replaceArchiveModuleValues(replacer)
+
+	return updateCount
+}
+
+// replaceArchiveModuleValues 批量替换所有模型表（module.TableName）中的自定义字段值。
+// 由于文档分属不同的 module（多模型），这里按 module 分组批量处理，
+// 避免在 replaceArchiveValues / replaceArchiveDraftValues 中逐条查询模型表。
+// archive 表和 archive_draft 表共用同一批模型表，因此一次调用即可覆盖两者。
+func (w *Website) replaceArchiveModuleValues(replacer []config.ReplaceKeyword) (updateCount int64) {
+	modules := w.GetCacheModules()
+	for i := range modules {
+		module := &modules[i]
+		if module.TableName == "" || len(module.Fields) == 0 {
+			continue
+		}
+		// 只读取自定义字段，避免读到 id 等系统字段时被错误覆盖
+		var fieldNames []string
+		for _, v := range module.Fields {
+			fieldNames = append(fieldNames, "`"+v.FieldName+"`")
+		}
+		startId := int64(0)
+		for {
+			var rows []map[string]interface{}
+			err := w.DB.Table(module.TableName).
+				Select("id, " + strings.Join(fieldNames, ",")).
+				Where("`id` > ?", startId).
+				Order("id asc").
+				Limit(1000).
+				Scan(&rows).Error
+			if err != nil || len(rows) == 0 {
+				break
+			}
+			// 记录本批次最大 id 用于翻页
+			var lastId int64
+			for _, row := range rows {
+				id := row["id"]
+				if id != nil {
+					switch v := id.(type) {
+					case int64:
+						lastId = v
+					case int:
+						lastId = int64(v)
+					case int32:
+						lastId = int64(v)
+					}
 				}
-				//从数据库中取出来
-				if len(fields) > 0 {
-					w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Select(strings.Join(fields, ",")).Scan(&result)
-					//extra的CheckBox的值
-					innerUpdate := false
-					for k, v := range result {
-						val, ok := v.(string)
-						if ok {
-							val2 := w.replaceContentText(val, replacer)
-							if val2 != val {
-								result[k] = val2
-								updateCount++
-								innerUpdate = true
-							}
-						}
+				innerUpdate := false
+				for k, v := range row {
+					if k == "id" {
+						continue
 					}
-					if innerUpdate {
-						w.DB.Table(module.TableName).Where("`id` = ?", archive.Id).Updates(result)
+					changed, newV := w.replaceModuleExtraValue(v, replacer)
+					if changed > 0 {
+						row[k] = newV
+						updateCount += changed
+						innerUpdate = true
 					}
+				}
+				if innerUpdate {
+					// 去掉 id 字段，只更新自定义字段
+					delete(row, "id")
+					w.DB.Table(module.TableName).Where("`id` = ?", id).Updates(row)
 				}
 			}
+			if lastId == 0 {
+				break
+			}
+			startId = lastId
 		}
 	}
 
 	return updateCount
+}
+// 自定义字段可能存储为纯字符串、[]byte（JSON 列）、JSON 字符串（texts/images/timeline 等）、
+// map / slice / number / bool，这里统一处理，对任意层级的字符串叶子执行替换。
+// 返回被替换的字符串数量以及替换后的新值。
+func (w *Website) replaceModuleExtraValue(v interface{}, replacer []config.ReplaceKeyword) (int64, interface{}) {
+	switch val := v.(type) {
+	case string:
+		newStr := w.replaceContentText(val, replacer)
+		if newStr != val {
+			return 1, newStr
+		}
+		return 0, val
+	case []byte:
+		// JSON 列可能返回 []byte，先尝试当作 JSON 解析递归处理；
+		// 若不是 JSON（纯文本），则直接替换字符串。
+		str := string(val)
+		var parsed interface{}
+		if json.Unmarshal(val, &parsed) == nil {
+			changed, newParsed := w.replaceModuleExtraValue(parsed, replacer)
+			if changed > 0 {
+				buf, err := json.Marshal(newParsed)
+				if err == nil {
+					return changed, buf
+				}
+			}
+			return 0, val
+		}
+		newStr := w.replaceContentText(str, replacer)
+		if newStr != str {
+			return 1, newStr
+		}
+		return 0, val
+	case map[string]interface{}:
+		changed := int64(0)
+		needUpdate := false
+		for k, sub := range val {
+			c, newSub := w.replaceModuleExtraValue(sub, replacer)
+			if c > 0 {
+				changed += c
+				val[k] = newSub
+				needUpdate = true
+			}
+		}
+		if !needUpdate {
+			return 0, val
+		}
+		return changed, val
+	case []interface{}:
+		changed := int64(0)
+		needUpdate := false
+		for i, sub := range val {
+			c, newSub := w.replaceModuleExtraValue(sub, replacer)
+			if c > 0 {
+				changed += c
+				val[i] = newSub
+				needUpdate = true
+			}
+		}
+		if !needUpdate {
+			return 0, val
+		}
+		return changed, val
+	default:
+		return 0, val
+	}
 }
 
 func (w *Website) replaceCategoryValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
@@ -357,6 +483,21 @@ func (w *Website) replaceCategoryValues(replacer []config.ReplaceKeyword, replac
 			updateCount++
 			category.Content = content
 			needUpdate = true
+		}
+		// 替换分类自定义字段（multi-model CategoryFields 存放在 Extra 中）
+		if len(category.Extra) > 0 {
+			extraUpdate := false
+			for k, v := range category.Extra {
+				changed, newV := w.replaceModuleExtraValue(v, replacer)
+				if changed > 0 {
+					updateCount += changed
+					category.Extra[k] = newV
+					extraUpdate = true
+				}
+			}
+			if extraUpdate {
+				needUpdate = true
+			}
 		}
 		//替换完了
 		if needUpdate {
@@ -527,6 +668,20 @@ func (w *Website) replaceAttachmentValues(replacer []config.ReplaceKeyword, repl
 				updateCount++
 				needUpdate = true
 			}
+			if replaceTag {
+				fileLocation := w.replaceContentText(item.FileLocation, replacer)
+				if item.FileLocation != fileLocation {
+					item.FileLocation = fileLocation
+					updateCount++
+					needUpdate = true
+				}
+				fileLogo := w.replaceContentText(item.Logo, replacer)
+				if item.Logo != fileLogo {
+					item.Logo = fileLogo
+					updateCount++
+					needUpdate = true
+				}
+			}
 			if needUpdate {
 				w.DB.Model(item).Updates(item)
 			}
@@ -536,23 +691,313 @@ func (w *Website) replaceAttachmentValues(replacer []config.ReplaceKeyword, repl
 	return updateCount
 }
 
+// replaceTemplateValues 遍历当前站点模板目录下的所有模板文件，对文件内容进行替换。
+// 模板是磁盘文件而非数据库记录，因此这里直接读写文件。
 func (w *Website) replaceTemplateValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
+	tplDir := w.GetTemplateDir()
+	if tplDir == "" {
+		return 0
+	}
+	// filepath.Walk 会递归遍历模板目录
+	_ = filepath.Walk(tplDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		// 仅处理模板文件，跳过非文本文件
+		ext := strings.ToLower(filepath.Ext(path))
+		switch ext {
+		case ".html", ".htm", ".tpl", ".txt", ".js", ".css", ".json", ".yml", ".yaml", ".xml", ".svg":
+		default:
+			return nil
+		}
+		buf, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil
+		}
+		content := string(buf)
+		var newContent string
+		if replaceTag {
+			newContent = w.replaceContentText(content, replacer)
+		} else {
+			newContent = w.ReplaceContentFromConfig(content, replacer)
+		}
+		if newContent == content {
+			return nil
+		}
+		updateCount++
+		_ = os.WriteFile(path, []byte(newContent), info.Mode())
+		return nil
+	})
+
+	return updateCount
+}
+
+// replaceNavValues 替换导航菜单内容
+func (w *Website) replaceNavValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
+	var navs []*model.Nav
+	w.DB.Find(&navs)
+	for _, nav := range navs {
+		needUpdate := false
+		title := w.replaceContentText(nav.Title, replacer)
+		if nav.Title != title {
+			nav.Title = title
+			updateCount++
+			needUpdate = true
+		}
+		subTitle := w.replaceContentText(nav.SubTitle, replacer)
+		if nav.SubTitle != subTitle {
+			nav.SubTitle = subTitle
+			updateCount++
+			needUpdate = true
+		}
+		description := w.replaceContentText(nav.Description, replacer)
+		if nav.Description != description {
+			nav.Description = description
+			updateCount++
+			needUpdate = true
+		}
+		link := w.replaceContentText(nav.Link, replacer)
+		if nav.Link != link {
+			nav.Link = link
+			updateCount++
+			needUpdate = true
+		}
+		logo := w.replaceContentText(nav.Logo, replacer)
+		if nav.Logo != logo {
+			nav.Logo = logo
+			updateCount++
+			needUpdate = true
+		}
+		if needUpdate {
+			w.DB.Model(nav).Updates(nav)
+		}
+	}
+
+	return updateCount
+}
+
+// replaceLinkValues 替换友情链接内容
+func (w *Website) replaceLinkValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
 	startId := uint(0)
-	var attachments []*model.Attachment
+	var links []*model.Link
 	for {
-		tx := w.DB.Model(&model.Attachment{})
-		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&attachments)
-		if len(attachments) == 0 {
+		tx := w.DB.Model(&model.Link{})
+		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&links)
+		if len(links) == 0 {
 			break
 		}
-		startId = attachments[len(attachments)-1].Id
-		for _, item := range attachments {
+		startId = links[len(links)-1].Id
+		for _, item := range links {
 			needUpdate := false
-			filename := w.replaceContentText(item.FileName, replacer)
-			if item.FileName != filename {
-				item.FileName = filename
+			title := w.replaceContentText(item.Title, replacer)
+			if item.Title != title {
+				item.Title = title
 				updateCount++
 				needUpdate = true
+			}
+			link := w.replaceContentText(item.Link, replacer)
+			if item.Link != link {
+				item.Link = link
+				updateCount++
+				needUpdate = true
+			}
+			backLink := w.replaceContentText(item.BackLink, replacer)
+			if item.BackLink != backLink {
+				item.BackLink = backLink
+				updateCount++
+				needUpdate = true
+			}
+			myTitle := w.replaceContentText(item.MyTitle, replacer)
+			if item.MyTitle != myTitle {
+				item.MyTitle = myTitle
+				updateCount++
+				needUpdate = true
+			}
+			myLink := w.replaceContentText(item.MyLink, replacer)
+			if item.MyLink != myLink {
+				item.MyLink = myLink
+				updateCount++
+				needUpdate = true
+			}
+			contact := w.replaceContentText(item.Contact, replacer)
+			if item.Contact != contact {
+				item.Contact = contact
+				updateCount++
+				needUpdate = true
+			}
+			remark := w.replaceContentText(item.Remark, replacer)
+			if item.Remark != remark {
+				item.Remark = remark
+				updateCount++
+				needUpdate = true
+			}
+			logo := w.replaceContentText(item.Logo, replacer)
+			if item.Logo != logo {
+				item.Logo = logo
+				updateCount++
+				needUpdate = true
+			}
+			if needUpdate {
+				w.DB.Model(item).Updates(item)
+			}
+		}
+	}
+
+	return updateCount
+}
+
+// replaceRedirectValues 替换跳转链接内容
+func (w *Website) replaceRedirectValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
+	var redirects []*model.Redirect
+	w.DB.Find(&redirects)
+	for _, item := range redirects {
+		needUpdate := false
+		fromUrl := w.replaceContentText(item.FromUrl, replacer)
+		if item.FromUrl != fromUrl {
+			item.FromUrl = fromUrl
+			updateCount++
+			needUpdate = true
+		}
+		toUrl := w.replaceContentText(item.ToUrl, replacer)
+		if item.ToUrl != toUrl {
+			item.ToUrl = toUrl
+			updateCount++
+			needUpdate = true
+		}
+		if needUpdate {
+			w.DB.Model(item).Updates(item)
+		}
+	}
+
+	return updateCount
+}
+
+// replacePlaceValues 替换地区/位置内容
+func (w *Website) replacePlaceValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
+	var places []*model.Place
+	w.DB.Find(&places)
+	for _, item := range places {
+		needUpdate := false
+		title := w.replaceContentText(item.Title, replacer)
+		if item.Title != title {
+			item.Title = title
+			updateCount++
+			needUpdate = true
+		}
+		seoTitle := w.replaceContentText(item.SeoTitle, replacer)
+		if item.SeoTitle != seoTitle {
+			item.SeoTitle = seoTitle
+			updateCount++
+			needUpdate = true
+		}
+		keywords := w.replaceContentText(item.Keywords, replacer)
+		if item.Keywords != keywords {
+			item.Keywords = keywords
+			updateCount++
+			needUpdate = true
+		}
+		description := w.replaceContentText(item.Description, replacer)
+		if item.Description != description {
+			item.Description = description
+			updateCount++
+			needUpdate = true
+		}
+		var content string
+		if replaceTag {
+			content = w.replaceContentText(item.Content, replacer)
+		} else {
+			content = w.ReplaceContentFromConfig(item.Content, replacer)
+		}
+		if content != item.Content {
+			updateCount++
+			item.Content = content
+			needUpdate = true
+		}
+		for i, img := range item.Images {
+			img2 := w.replaceContentText(img, replacer)
+			if img != img2 {
+				item.Images[i] = img2
+				updateCount++
+				needUpdate = true
+			}
+		}
+		logo := w.replaceContentText(item.Logo, replacer)
+		if item.Logo != logo {
+			item.Logo = logo
+			updateCount++
+			needUpdate = true
+		}
+		if needUpdate {
+			w.DB.Model(item).Updates(item)
+		}
+	}
+
+	return updateCount
+}
+
+// replaceGuestbookValues 替换留言板内容
+func (w *Website) replaceGuestbookValues(replacer []config.ReplaceKeyword, replaceTag bool) (updateCount int64) {
+	startId := uint(0)
+	var guestbooks []*model.Guestbook
+	for {
+		tx := w.DB.Model(&model.Guestbook{})
+		tx.Where("id > ?", startId).Order("id asc").Limit(1000).Find(&guestbooks)
+		if len(guestbooks) == 0 {
+			break
+		}
+		startId = guestbooks[len(guestbooks)-1].Id
+		for _, item := range guestbooks {
+			needUpdate := false
+			userName := w.replaceContentText(item.UserName, replacer)
+			if item.UserName != userName {
+				item.UserName = userName
+				updateCount++
+				needUpdate = true
+			}
+			contact := w.replaceContentText(item.Contact, replacer)
+			if item.Contact != contact {
+				item.Contact = contact
+				updateCount++
+				needUpdate = true
+			}
+			var content string
+			if replaceTag {
+				content = w.replaceContentText(item.Content, replacer)
+			} else {
+				content = w.ReplaceContentFromConfig(item.Content, replacer)
+			}
+			if content != item.Content {
+				updateCount++
+				item.Content = content
+				needUpdate = true
+			}
+			refer := w.replaceContentText(item.Refer, replacer)
+			if item.Refer != refer {
+				item.Refer = refer
+				updateCount++
+				needUpdate = true
+			}
+			// 替换 ExtraData 中的字符串值
+			if len(item.ExtraData) > 0 {
+				innerUpdate := false
+				for k, v := range item.ExtraData {
+					val, ok := v.(string)
+					if !ok {
+						continue
+					}
+					val2 := w.replaceContentText(val, replacer)
+					if val2 != val {
+						item.ExtraData[k] = val2
+						updateCount++
+						innerUpdate = true
+					}
+				}
+				if innerUpdate {
+					needUpdate = true
+				}
 			}
 			if needUpdate {
 				w.DB.Model(item).Updates(item)
