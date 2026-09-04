@@ -63,7 +63,7 @@ func (p *SiteMcpPool) GetOrCreate(ctx context.Context, siteID uint, srv *mcp.Ser
 
 	handler := mcp.NewStreamableHTTPHandler(
 		func(*http.Request) *mcp.Server { return srv },
-		&mcp.StreamableHTTPOptions{Stateless: true},
+		&mcp.StreamableHTTPOptions{Stateless: true, DisableLocalhostProtection: true},
 	)
 
 	p.entries[siteID] = &siteEntry{handler: handler}
