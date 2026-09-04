@@ -101,5 +101,5 @@ func (s *Server) GetContext() context.Context {
 func (s *Server) StreamableHTTPHandler() http.Handler {
 	return mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server {
 		return s.mcpServer
-	}, nil)
+	}, &mcp.StreamableHTTPOptions{DisableLocalhostProtection: true})
 }
