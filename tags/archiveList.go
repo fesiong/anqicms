@@ -107,7 +107,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
 				if categoryDetail != nil {
 					categoryIds = append(categoryIds, int(categoryDetail.Id))
-					moduleId = categoryDetail.ModuleId
+					if moduleId == 0 {
+						moduleId = categoryDetail.ModuleId
+					}
 				}
 			}
 		}
@@ -129,7 +131,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		if len(categoryIds) == 0 && defaultCategoryId > 0 {
 			categoryIds = append(categoryIds, int(defaultCategoryId))
 		}
-		if defaultModuleId > 0 {
+		if defaultModuleId > 0 && moduleId == 0 {
 			moduleId = defaultModuleId
 		}
 	}
@@ -326,7 +328,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 					categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
 					if categoryDetail != nil {
 						categoryIds = append(categoryIds, int(categoryDetail.Id))
-						moduleId = categoryDetail.ModuleId
+						// moduleId = categoryDetail.ModuleId
 					}
 				}
 			}
@@ -375,8 +377,12 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		var urlPatten string
 		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
 		if categoryDetail != nil {
+			category := *categoryDetail
 			urlMatch := "category"
-			urlPatten = currentSite.GetUrl(urlMatch, categoryDetail, -1)
+			if moduleId > 0 {
+				category.ModuleId = moduleId
+			}
+			urlPatten = currentSite.GetUrl(urlMatch, &category, -1)
 		} else {
 			if ok2 && webInfo.PageName == "archiveIndex" {
 				urlMatch := "archiveIndex"

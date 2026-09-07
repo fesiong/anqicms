@@ -208,6 +208,7 @@ func ArchiveDetail(ctx iris.Context) {
 		ShowMessage(ctx, currentSite.TplTr("UndefinedModelName%s", archive.ModuleId), nil)
 		return
 	}
+	ctx.ViewData("module", module)
 	// 默认模板规则：表名 / index,list, detail .html
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板
 	var tplName string

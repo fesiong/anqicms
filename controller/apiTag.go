@@ -150,7 +150,9 @@ func ApiArchiveList(ctx iris.Context) {
 				categoryDetail = currentSite.GetCategoryFromCache(uint(tmpId))
 				if categoryDetail != nil {
 					categoryIds = append(categoryIds, int(categoryDetail.Id))
-					moduleId = categoryDetail.ModuleId
+					if moduleId == 0 {
+						moduleId = categoryDetail.ModuleId
+					}
 				}
 			}
 		}
