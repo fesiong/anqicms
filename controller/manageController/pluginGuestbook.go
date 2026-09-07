@@ -209,13 +209,12 @@ func PluginGuestbookExport(ctx iris.Context) {
 
 func PluginGuestbookSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
+	setting := currentSite.PluginGuestbook
+	setting.Fields = currentSite.GetGuestbookFields()
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": iris.Map{
-			"return_message": currentSite.PluginGuestbook.ReturnMessage,
-			"fields":         currentSite.GetGuestbookFields(),
-		},
+		"data": setting,
 	})
 }
 
