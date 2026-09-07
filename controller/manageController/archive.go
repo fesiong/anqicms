@@ -360,7 +360,7 @@ func QuickImportArchive(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
-		"msg":  ctx.Tr("ArchiveFileImportCompleted"),
+		"msg":  ctx.Tr("FileUploadCompleted"),
 		"data": iris.Map{
 			"status": "success",
 			"file":   req.FileName,

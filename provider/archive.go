@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"log/slog"
 	"math"
 	"math/rand"
 	"mime/multipart"
@@ -25,6 +26,7 @@ import (
 	"github.com/jinzhu/now"
 	"github.com/xuri/excelize/v2"
 	"golang.org/x/text/encoding/simplifiedchinese"
+	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
@@ -2119,10 +2121,61 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 	if qia.w.System.FrontUrl != "" {
 		frontUrl = qia.w.System.FrontUrl
 	}
+	// zip里可能有图片，支持图片引用
+	// 先遍历收集图片
+	var zipImages = make(map[string]string)
+	for _, f := range zipReader.File {
+		if f.FileInfo().IsDir() {
+			continue
+		}
+		fname := f.FileInfo().Name()
+		// . 开头的文件忽略
+		if strings.HasPrefix(fname, ".") {
+			continue
+		}
+		fileExt := strings.ToLower(filepath.Ext(fname))
+		if fileExt == ".jpeg" {
+			fileExt = ".jpg"
+		}
+		if fileExt == ".ico" || fileExt == ".bmp" {
+			fileExt = ".png"
+		}
+		isImage := false
+		if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" || fileExt == ".avif" || fileExt == ".tiff" {
+			isImage = true
+		}
+		if isImage {
+			reader, err := f.Open()
+			if err != nil {
+				qia.Message = err.Error()
+				continue
+			}
+			qia.Message = "Collecting image: " + fname
+			content, err := io.ReadAll(reader)
+			_ = reader.Close()
+			attachment, err := qia.w.SaveAttachmentFromBytes(content, fname, 0)
+			if err != nil {
+				slog.Warn("Save attachment error: " + err.Error() + " file: " + f.Name)
+				qia.Message = f.Name + " -> error:" + err.Error()
+				continue
+			} else {
+				slog.Info("Save attachment success: " + attachment.FileLocation + " file: " + f.Name)
+
+				qia.Message = "Saved: " + attachment.FileLocation
+				qia.Succeed++
+			}
+			// 获取到图片地址
+			zipImages[f.Name] = attachment.Logo
+		}
+	}
 	var archives = make([]model.ArchiveDraft, 0, 2000)
 	for _, f := range zipReader.File {
 		qia.Finished++
 		if f.FileInfo().IsDir() {
+			continue
+		}
+		// . 开头的文件忽略
+		if strings.HasPrefix(f.FileInfo().Name(), ".") {
 			continue
 		}
 		reader, err := f.Open()
@@ -2143,14 +2196,9 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 				f.Name = gbkName
 			}
 		}
-		// 检查content是否是utf8
-		if !utf8.Valid(content) {
-			tmpContent, err := simplifiedchinese.GBK.NewDecoder().Bytes(content)
-			if err == nil {
-				content = tmpContent
-			}
-		}
+		qia.Message = "Collecting: " + f.Name
 		fileExt := filepath.Ext(f.Name)
+		slog.Info("Collecting", "file", f.Name, "ext", fileExt)
 		// 支持 txt/html/md
 		status := config.ContentStatusOK
 		if qia.PlanType == 2 {
@@ -2170,6 +2218,13 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 		}
 		var articleContent string
 		if fileExt == ".html" {
+			// 检查content是否是utf8
+			if !utf8.Valid(content) {
+				tmpContent, err := simplifiedchinese.GBK.NewDecoder().Bytes(content)
+				if err == nil {
+					content = tmpContent
+				}
+			}
 			re, _ := regexp.Compile(`<title.*?>(.+?)</title>`)
 			match := re.Match(content)
 			if match {
@@ -2199,9 +2254,32 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 				articleContent = string(content)
 			}
 		} else if fileExt == ".md" || fileExt == ".txt" {
+			// 检查content是否是utf8
+			if !utf8.Valid(content) {
+				tmpContent, err := simplifiedchinese.GBK.NewDecoder().Bytes(content)
+				if err == nil {
+					content = tmpContent
+				}
+			}
 			if len(content) == 0 {
 				continue
 			}
+			// 支持 frontmatter（YAML），格式：
+			// ---
+			// title: 标题
+			// keywords: 关键词
+			// ...
+			// ---
+			// 正文内容
+			fmBody := content
+			if hasArchiveFrontmatter(content) {
+				fm, body, ok := parseArchiveFrontmatter(content)
+				if ok {
+					fmBody = body
+					qia.w.applyArchiveFrontmatter(&archive, fm)
+				}
+			}
+			content = fmBody
 			if bytes.HasPrefix(content, []byte("#")) || qia.TitleType == 1 {
 				// 第一行是标题
 				contents := bytes.Split(content, []byte{'\n'})
@@ -2215,6 +2293,15 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			if (fileExt == ".md" || content[0] != '<') && qia.w.Content.Editor != "markdown" {
 				articleContent = library.MarkdownToHTML(articleContent, frontUrl, qia.w.Content.FilterOutlink)
 			}
+		} else if fileExt == ".xlsx" {
+			// reader 已经关闭，因此需要重新开启一个
+			xlsReader := bytes.NewReader(content)
+			err = qia.startExcel(xlsReader)
+			slog.Info("Start excel: "+f.Name, "error", err)
+			if err != nil {
+				qia.Message = err.Error()
+			}
+			continue
 		} else {
 			// 不支持的文件类型，也跳过
 			continue
@@ -2259,6 +2346,11 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			qia.current = qia.current.Add(qia.between)
 		}
 		// e
+		// 处理 articleContent，如果存在 zipImages， 并且 articleContent 有对 zipImages 的图片引用，则替换成服务端地址
+		if len(zipImages) > 0 {
+			articleContent = qia.replaceZipImages(articleContent, f.Name, zipImages)
+		}
+
 		// 插入图片
 		if len(qia.images) > 0 {
 			var img string
@@ -2315,9 +2407,13 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 			}
 		}
 		// 解析description
-		archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "), 250)
+		if archive.Description == "" {
+			archive.Description = library.ParseDescription(strings.ReplaceAll(library.StripTags(articleContent), "\n", " "), 250)
+		}
 		// 解析urlToken
-		archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
+		if archive.UrlToken == "" {
+			archive.UrlToken = library.GetPinyin(archive.Title, true) + strconv.Itoa(int(archive.Id))
+		}
 		archive.ArchiveData = &model.ArchiveData{
 			Content: articleContent,
 		}
@@ -2339,7 +2435,113 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 	return nil
 }
 
-func (qia *QuickImportArchive) startExcel(file multipart.File) error {
+// replaceZipImages 将 articleContent 中对 zip 内图片的引用替换为服务端地址。
+// zipImages 的 key 是图片在 zip 内相对根目录的路径（如 images/foo.jpg），
+// value 是已上传附件的服务端地址。articlePath 是当前文章在 zip 内的路径
+// （如 articles/article.md），用作解析正文里图片相对引用的基准。
+// 例如正文里 ![foo](../images/foo.jpg) 会归一化成 images/foo.jpg，再匹配 zipImages。
+func (qia *QuickImportArchive) replaceZipImages(content, articlePath string, zipImages map[string]string) string {
+	if len(zipImages) == 0 || content == "" {
+		return content
+	}
+	// 文章在 zip 内所在目录，用作解析相对图片引用的基准
+	// 例如 articlePath = "articles/article.md" -> baseDir = "articles"
+	baseDir := filepath.Dir(articlePath)
+	baseDir = strings.Trim(baseDir, "/")
+	if baseDir == "." {
+		baseDir = ""
+	}
+
+	// resolveImg 把一个图片引用地址归一化成 zip 根相对路径
+	// 仅处理相对引用（不以 http://、https://、//、data: 开头），其余原样返回空
+	resolveImg := func(src string) string {
+		src = strings.TrimSpace(src)
+		if src == "" {
+			return ""
+		}
+		// 跳过绝对 URL 和协议引用
+		lower := strings.ToLower(src)
+		if strings.HasPrefix(lower, "http://") || strings.HasPrefix(lower, "https://") ||
+			strings.HasPrefix(lower, "//") || strings.HasPrefix(lower, "data:") {
+			return ""
+		}
+		// 去掉前后引号、空白
+		src = strings.Trim(src, "\"' \t\r\n")
+		// 以 / 开头的视为 zip 根绝对路径
+		var resolved string
+		if strings.HasPrefix(src, "/") {
+			resolved = strings.TrimPrefix(src, "/")
+		} else {
+			// 以文章所在目录为基准拼接并清理 .. 和 .
+			joined := src
+			if baseDir != "" {
+				joined = baseDir + "/" + src
+			}
+			resolved = cleanZipPath(joined)
+		}
+		return resolved
+	}
+
+	// 1) 处理 HTML <img src="..."> 引用
+	imgRe := regexp.MustCompile(`(?i)<img[^>]*\bsrc\s*=\s*["']([^"']+)["']`)
+	content = imgRe.ReplaceAllStringFunc(content, func(match string) string {
+		sub := imgRe.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		resolved := resolveImg(sub[1])
+		if resolved == "" {
+			return match
+		}
+		if logo, ok := zipImages[resolved]; ok {
+			return strings.Replace(match, sub[1], logo, 1)
+		}
+		return match
+	})
+
+	// 2) 处理 Markdown ![alt](src) 引用
+	mdRe := regexp.MustCompile(`!\[[^\]]*\]\(([^)]+)\)`)
+	content = mdRe.ReplaceAllStringFunc(content, func(match string) string {
+		sub := mdRe.FindStringSubmatch(match)
+		if len(sub) < 2 {
+			return match
+		}
+		resolved := resolveImg(sub[1])
+		if resolved == "" {
+			return match
+		}
+		if logo, ok := zipImages[resolved]; ok {
+			return strings.Replace(match, sub[1], logo, 1)
+		}
+		return match
+	})
+
+	return content
+}
+
+// cleanZipPath 清理 zip 内相对路径中的 ./ 和 ../ 段，返回 zip 根相对路径。
+// 例如 "articles/../images/foo.jpg" -> "images/foo.jpg"
+func cleanZipPath(p string) string {
+	p = strings.ReplaceAll(p, "\\", "/")
+	parts := strings.Split(p, "/")
+	stack := make([]string, 0, len(parts))
+	for _, seg := range parts {
+		seg = strings.TrimSpace(seg)
+		if seg == "" || seg == "." {
+			continue
+		}
+		if seg == ".." {
+			if len(stack) > 0 {
+				stack = stack[:len(stack)-1]
+			}
+			continue
+		}
+		stack = append(stack, seg)
+	}
+	return strings.Join(stack, "/")
+}
+
+func (qia *QuickImportArchive) startExcel(file io.Reader) error {
 	category, err := qia.w.GetCategoryById(qia.CategoryId)
 	if err != nil {
 		qia.Message = err.Error()
@@ -2350,7 +2552,8 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		qia.Message = err.Error()
 		return err
 	}
-
+	qia.Message = "Starting excel import..."
+	slog.Info("Starting excel import...")
 	// 读取图片
 	if qia.InsertImage == config.CollectImageCategory {
 		qia.images = qia.w.GetCategoryImages(qia.ImageCategoryId)
@@ -2365,6 +2568,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 	}
 	if len(rows) < 2 {
 		qia.Message = "Excel is empty"
+		slog.Info(qia.Message)
 		return errors.New(qia.Message)
 	}
 	// 确认字段，第一行为字段
@@ -2372,6 +2576,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 	module := qia.w.GetModuleFromCache(category.ModuleId)
 	if module == nil {
 		qia.Message = "Module is empty"
+		slog.Info(qia.Message)
 		return errors.New(qia.Message)
 	}
 	var extraFields = make(map[string]int)
@@ -2396,9 +2601,11 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 	// 如果没有标题，则不允许插入
 	if _, ok := existFields["title"]; !ok {
 		qia.Message = "Title is empty"
+		slog.Info(qia.Message)
 		return errors.New(qia.Message)
 	}
-
+	qia.Message = fmt.Sprintf("Importing %v", existFields["title"])
+	slog.Info(qia.Message)
 	qia.Total = len(rows) - 1
 	qia.between = 0
 	qia.current = time.Now()
@@ -2655,7 +2862,7 @@ func (qia *QuickImportArchive) startExcel(file multipart.File) error {
 		if colId, ok := existFields["keywords"]; ok {
 			archive.Keywords = row[colId]
 		}
-		if colId, ok := existFields["description"]; ok {
+		if colId, ok := existFields["description"]; ok && row[colId] != "" {
 			archive.Description = row[colId]
 		}
 		if colId, ok := existFields["user_id"]; ok {
@@ -2813,4 +3020,171 @@ func (qia *QuickImportArchive) SaveBatches(archives []model.ArchiveDraft) {
 	log.Println("in id ", lastId)
 	qia.Message = qia.w.Tr("currentInsertId%d", lastId)
 	qia.Succeed += len(archives)
+}
+
+// hasArchiveFrontmatter 判断内容是否以 YAML frontmatter 开头。
+// frontmatter 必须以单独一行 `---` 开始，并在后续某行以 `---` 结束。
+func hasArchiveFrontmatter(content []byte) bool {
+	if !bytes.HasPrefix(content, []byte("---")) {
+		return false
+	}
+	rest := content[3:]
+	// 第一个字符必须是换行（`---\n`），否则可能是 `---xxx` 这种正文
+	if len(rest) == 0 || (rest[0] != '\n' && rest[0] != '\r') {
+		return false
+	}
+	return bytes.Contains(rest, []byte("\n---"))
+}
+
+// parseArchiveFrontmatter 解析 YAML frontmatter，返回 frontmatter 与正文。
+// 解析失败时返回 ok=false，调用方应按原始内容处理。
+func parseArchiveFrontmatter(content []byte) (map[string]any, []byte, bool) {
+	var fm = map[string]any{}
+	rest := content[3:]
+	// 统一换行便于定位
+	normalized := bytes.ReplaceAll(rest, []byte("\r\n"), []byte{'\n'})
+	end := bytes.Index(normalized, []byte("\n---"))
+	if end < 0 {
+		return fm, content, false
+	}
+	yamlBlock := normalized[:end]
+	yamlBlock = bytes.ReplaceAll(yamlBlock, []byte{'\t'}, []byte("  "))
+	// 正文从结束标记 `---` 之后开始
+	bodyStart := end + 4 // `\n---` 长度为 4
+	body := normalized[bodyStart:]
+	if err := yaml.Unmarshal(yamlBlock, &fm); err != nil {
+		return fm, content, false
+	}
+	return fm, body, true
+}
+
+// applyArchiveFrontmatter 将 frontmatter 字段映射到 archive，仅覆盖非空字段。
+// 处理顺序：基本字段 -> 时间 -> 图片 -> 分类。
+func (w *Website) applyArchiveFrontmatter(archive *model.ArchiveDraft, fm map[string]any) {
+	if fm["title"] != nil {
+		if data, ok := fm["title"].(string); ok {
+			archive.Title = data
+		}
+	}
+	if fm["seo_title"] != nil {
+		if data, ok := fm["seo_title"].(string); ok {
+			archive.SeoTitle = data
+		}
+	}
+	if fm["description"] != nil {
+		if data, ok := fm["description"].(string); ok {
+			archive.Description = library.ParseDescription(data, 1000)
+		}
+	}
+	if fm["keywords"] != nil {
+		if data, ok := fm["keywords"].(string); ok {
+			archive.Keywords = data
+		} else if data, ok := fm["keywords"].([]string); ok {
+			archive.Keywords = strings.Join(data, ",")
+		}
+	}
+	if fm["tags"] != nil {
+		if data, ok := fm["tags"].([]string); ok {
+			archive.Keywords = strings.Join(data, ",")
+		} else if data, ok := fm["tags"].(string); ok {
+			archive.Keywords = data
+		}
+	}
+	if fm["utl_token"] != nil {
+		if data, ok := fm["utl_token"].(string); ok {
+			archive.UrlToken = data
+		}
+	} else if fm["slug"] != nil {
+		if data, ok := fm["slug"].(string); ok {
+			archive.UrlToken = data
+		}
+	}
+	if fm["canonical_url"] != nil {
+		if data, ok := fm["canonical_url"].(string); ok {
+			archive.CanonicalUrl = data
+		}
+	}
+	// 创建时间：支持 date / created_time，格式兼容日期与时间戳
+	if fm["date"] != nil {
+		if data, ok := fm["date"].(string); ok {
+			if t, err := now.Parse(data); err == nil {
+				archive.CreatedTime = t.Unix()
+			}
+		}
+	} else if fm["created_time"] != nil {
+		timeStamp, err := strconv.ParseInt(fmt.Sprintf("%v", fm["created_time"]), 10, 64)
+		if err == nil {
+			archive.CreatedTime = timeStamp
+		}
+	}
+	// 图片：单张 image/thumbnail 或多张 images
+	var images []string
+	if fm["logo"] != nil {
+		if data, ok := fm["logo"].(string); ok {
+			images = append(images, data)
+		}
+	}
+	if fm["image"] != nil {
+		if data, ok := fm["image"].(string); ok {
+			images = append(images, data)
+		}
+	}
+	if fm["images"] != nil {
+		if data, ok := fm["images"].([]string); ok {
+			images = append(images, data...)
+		}
+	}
+	if len(images) > 0 {
+		archive.Images = images
+	}
+	if fm["id"] != nil {
+		tmpData, err := strconv.ParseInt(fmt.Sprintf("%v", fm["id"]), 10, 64)
+		if err == nil {
+			archive.Id = tmpData
+		}
+	}
+	if fm["category_id"] != nil {
+		tmpData, err := strconv.ParseInt(fmt.Sprintf("%v", fm["category_id"]), 10, 64)
+		if err == nil {
+			archive.CategoryId = uint(tmpData)
+		}
+	}
+	if fm["module_id"] != nil {
+		tmpData, err := strconv.ParseInt(fmt.Sprintf("%v", fm["module_id"]), 10, 64)
+		if err == nil {
+			archive.ModuleId = uint(tmpData)
+		}
+	}
+	categoryTitle := ""
+	if fm["category_title"] != nil {
+		if data, ok := fm["category_title"].(string); ok {
+			categoryTitle = data
+		}
+	}
+	if fm["category"] != nil {
+		if data, ok := fm["category"].(string); ok && data != "" {
+			categoryTitle = data
+		}
+	}
+	if categoryTitle != "" {
+		category, err := w.GetCategoryByTitle(categoryTitle)
+		if err == nil {
+			archive.CategoryId = category.Id
+		} else {
+			// 分类不存在，动态创建
+			if archive.ModuleId == 0 {
+				archive.ModuleId = 1
+			}
+			tmpCategory, _ := w.SaveCategory(&request.Category{
+				Title:    categoryTitle,
+				ModuleId: archive.ModuleId,
+				Status:   1,
+				Type:     config.CategoryTypeArchive,
+			})
+			if tmpCategory != nil {
+				archive.CategoryId = tmpCategory.Id
+			}
+		}
+	}
+	// 不支持 extra
 }
