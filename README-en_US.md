@@ -112,7 +112,13 @@ Password: `123456`
 AnQiCMS originated from the GoBlog project in 2019. After multiple refactoring and feature expansions, it was officially renamed AnQiCMS in May 2022, gradually evolving into an enterprise-grade content management system.
 
 - **Latest**
-  > Continuous iteration and optimization, exploring deep integration of AI content creation with CMS
+  > Continuous iteration and optimization, with AI deeply integrated into content creation and site management, supporting AI Agent, MCP protocol, and multilingual global operations
+- **June 16, 2026, v3.6.0 Released**
+  > Major AI leap: AI Chat with 80+ built-in AI tools, MCP protocol support, AI Skill system, and city sub-site features
+- **January 5, 2026, v3.5.5 Released**
+  > Comprehensive AI upgrade: AI editor and AI image generation launched, enhanced writing and translation experience
+- **July 6, 2025, v3.5.0 Released**
+  > Introduced system Hook extension mechanism, Akismet anti-spam integration, and enhanced template tag capabilities
 - **March 17, 2025, v3.4.7 Released**
   > Multilingual enhancement, supporting full-page HTML translation
 - **November 11, 2024, v3.4.1 Released**
