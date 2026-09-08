@@ -26,6 +26,10 @@ import (
 
 func AdminFileServ(ctx iris.Context) {
 	tmpSiteId := ctx.GetHeader("Site-Id")
+	paramSiteId := ctx.URLParam("Site-Id")
+	if tmpSiteId == "" && paramSiteId != "" {
+		tmpSiteId = paramSiteId
+	}
 	if len(tmpSiteId) > 0 {
 		siteId, _ := strconv.Atoi(tmpSiteId)
 		if siteId > 0 {

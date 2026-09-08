@@ -26,12 +26,13 @@ import (
 
 // ChatRequest represents an AI chat request
 type ChatRequest struct {
-	SessionID   string        `json:"session_id"`
-	Message     string        `json:"message"`
-	Model       string        `json:"model"`
-	Files       []ChatFileRef `json:"files,omitempty"`
-	IframeURL   string        `json:"iframe_url,omitempty"`   // 前端 AI 编辑器：当前 iframe 页面 URL
-	SelectedDOM string        `json:"selected_dom,omitempty"` // 前端 AI 编辑器：管理员选中的 DOM 片段
+	SessionID    string        `json:"session_id"`
+	Instructions string        `json:"instructions"`
+	Message      string        `json:"message"`
+	Model        string        `json:"model"`
+	Files        []ChatFileRef `json:"files,omitempty"`
+	IframeURL    string        `json:"iframe_url,omitempty"`   // 前端 AI 编辑器：当前 iframe 页面 URL
+	SelectedDOM  string        `json:"selected_dom,omitempty"` // 前端 AI 编辑器：管理员选中的 DOM 片段
 }
 
 // ChatFileRef represents a reference to an uploaded file
@@ -177,7 +178,7 @@ func AiChat(ctx iris.Context) {
 		aiCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 
-		_, pErr := generatePurePromptResponse(aiCtx, message, writer)
+		_, pErr := generatePurePromptResponse(aiCtx, req.Instructions, message, writer)
 		if pErr != nil {
 			slog.Error("Pure prompt response failed", "error", pErr)
 		}
@@ -366,17 +367,18 @@ func AiChat(ctx iris.Context) {
 //
 // 优化：丢弃思考内容 (OnReasoning 设为空操作)，避免 reasoning 延迟导致前端卡顿；
 // 加系统提示要求不思考直接返回结果，缩短响应时间。
-func generatePurePromptResponse(ctx context.Context, prompt string, writer io.Writer) (string, error) {
+func generatePurePromptResponse(ctx context.Context, instructions, prompt string, writer io.Writer) (string, error) {
 	client, err := eino.GetClient()
 	if err != nil {
 		return "", fmt.Errorf("AI client not available: %w", err)
 	}
 
+	if instructions == "" {
+		instructions = "直接回答用户问题，不要进行思考推理。如果用户要求返回 JSON，请只返回 JSON 内容，不要包裹在 markdown 代码块中。"
+	}
 	// 纯 prompt 模式：系统提示要求直接返回结果 + 不绑定任何工具
 	messages := []*schema.Message{
-		schema.SystemMessage(
-			"直接回答用户问题，不要进行思考推理。" +
-				"如果用户要求返回 JSON，请只返回 JSON 内容，不要包裹在 markdown 代码块中。"),
+		schema.SystemMessage(instructions),
 		schema.UserMessage(prompt),
 	}
 
