@@ -79,12 +79,16 @@ func ProcessExtra(extraData model.ExtraData, fields []config.CustomField, curren
 			}
 		} else if field.Type == config.CustomFieldTypeTexts && extra[field.FieldName] != nil {
 			var texts []config.CustomFieldTexts
-			_ = json.Unmarshal([]byte(fmt.Sprint(extra[field.FieldName])), &texts)
-			extra[field.FieldName] = texts
+			err := json.Unmarshal([]byte(fmt.Sprint(extra[field.FieldName])), &texts)
+			if err == nil {
+				extra[field.FieldName] = texts
+			}
 		} else if field.Type == config.CustomFieldTypeTimeline && extra[field.FieldName] != nil {
 			var val config.TimelineField
-			_ = json.Unmarshal([]byte(fmt.Sprint(extra[field.FieldName])), &val)
-			extra[field.FieldName] = val
+			err := json.Unmarshal([]byte(fmt.Sprint(extra[field.FieldName])), &val)
+			if err == nil {
+				extra[field.FieldName] = val
+			}
 		} else if field.Type == config.CustomFieldTypeNumber {
 			if value, ok := extra[field.FieldName].(string); ok {
 				extra[field.FieldName], _ = strconv.ParseInt(value, 10, 64)
