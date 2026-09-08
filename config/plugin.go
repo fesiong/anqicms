@@ -41,7 +41,7 @@ type PluginAnchorConfig struct {
 
 type PluginGuestbookConfig struct {
 	ReturnMessage string         `json:"return_message"`
-	PushWay       int            `json:"push_way"`   // 1=email|2=站点|3=API接口
+	PushWay       int            `json:"push_way"`   // 0=email|1=站点|2=API接口
 	SiteId        uint           `json:"site_id"`    // 站点ID
 	ApiMethod     string         `json:"api_method"` // json|formdata|query
 	ApiURL        string         `json:"api_url"`

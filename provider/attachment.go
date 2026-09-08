@@ -476,29 +476,33 @@ func (w *Website) DownloadRemoteImage(src string, fileName string, replaceId uin
 			}
 			fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "." + strings.Split(contentType, "/")[1]
 			//获取宽高
-			tmpfile, err := os.CreateTemp("", "download")
-			if err != nil {
-				return nil, err
-			}
-			defer os.Remove(tmpfile.Name()) // clean up
-			defer tmpfile.Close()
-			if _, err := tmpfile.Write(body); err != nil {
-				return nil, err
-			}
-			tmpfile.Seek(0, 0)
-			fileHeader := &multipart.FileHeader{
-				Filename: filepath.Base(fileName),
-				Header:   nil,
-				Size:     int64(len(body)),
-			}
-
-			return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
+			return w.SaveAttachmentFromBytes(body, fileName, replaceId)
 		} else {
 			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}
 	}
 
 	return nil, errs[0]
+}
+
+func (w *Website) SaveAttachmentFromBytes(body []byte, fileName string, replaceId uint) (*model.Attachment, error) {
+	tmpfile, err := os.CreateTemp("", "download")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
+	defer tmpfile.Close()
+	if _, err := tmpfile.Write(body); err != nil {
+		return nil, err
+	}
+	tmpfile.Seek(0, 0)
+	fileHeader := &multipart.FileHeader{
+		Filename: filepath.Base(fileName),
+		Header:   nil,
+		Size:     int64(len(body)),
+	}
+
+	return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
 }
 
 func (w *Website) AddRemoteUrls(urls []string, categoryId uint) error {

@@ -208,9 +208,9 @@ const (
 )
 
 const (
-	GuestbookPushWayEmail = 1
-	GuestbookPushWaySite  = 2
-	GuestbookPushWayApi   = 3
+	GuestbookPushWayEmail = 0
+	GuestbookPushWaySite  = 1
+	GuestbookPushWayApi   = 2
 )
 
 const (

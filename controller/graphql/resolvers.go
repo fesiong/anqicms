@@ -142,7 +142,7 @@ func resolveArchives(p graphql.ResolveParams) (interface{}, error) {
 	if len(categoryIds) > 0 {
 		categoryId = categoryIds[0]
 		categoryDetail := currentSite.GetCategoryFromCache(uint(categoryId))
-		if categoryDetail != nil {
+		if categoryDetail != nil && moduleId == 0 {
 			moduleId = int(categoryDetail.ModuleId)
 		}
 	}
