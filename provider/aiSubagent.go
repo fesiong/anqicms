@@ -421,47 +421,5 @@ func statusText(r *SubagentResult) string {
 }
 
 // ================================================================
-// `team` 工具: 异步团队调度
+// `team` 工具已移除：不需要支持团队调度。
 // ================================================================
-
-// TeamSpec 团队任务规格
-type TeamSpec struct {
-	Name        string   `json:"name" desc:"团队任务名称"`
-	Description string   `json:"description" desc:"团队任务描述"`
-	Roles       []string `json:"roles" desc:"需要的角色列表 (如 architect, rust, tester)"`
-	Tasks       []SubagentTaskSpec `json:"tasks" desc:"子任务列表"`
-}
-
-// DispatchTeam 派发一个团队任务 (异步执行，立即返回任务 ID)。
-// 主循环可通过 PollTeamResults 轮询结果。
-func (svc *AiChatService) DispatchTeam(ctx context.Context, spec *TeamSpec) (string, error) {
-	teamID := fmt.Sprintf("team_%d", time.Now().UnixNano())
-
-	// 构建 SubagentTask 列表
-	tasks := make([]*SubagentTask, 0, len(spec.Tasks))
-	for i, ts := range spec.Tasks {
-		taskID := fmt.Sprintf("%s_task_%d", teamID, i+1)
-		subType := SubagentExplore
-		if ts.Type == "worker" {
-			subType = SubagentWorker
-		}
-		tasks = append(tasks, &SubagentTask{
-			ID:          taskID,
-			Description: ts.Description,
-			Prompt:      ts.Prompt,
-			Type:        subType,
-			Scope:       ts.Scope,
-			MaxRounds:   10,
-			Timeout:     5 * time.Minute,
-		})
-	}
-
-	// 异步执行
-	go func() {
-		teamCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-		svc.DispatchTasks(teamCtx, tasks)
-	}()
-
-	return teamID, nil
-}
