@@ -4068,44 +4068,6 @@ API发布: %d
 		return FormatSubagentResults(results), nil
 	})
 
-	add(&schema.ToolInfo{
-		Name: "team",
-		Desc: "派发一个异步团队任务 (仿 atomcode `team` 工具)。" +
-			"立即返回团队任务 ID，主对话可通过 poll_team 轮询结果。" +
-			"适用于需要并行多角色协作的复杂任务。",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"name":        {Type: schema.String, Required: true, Desc: "团队任务名称"},
-			"description": {Type: schema.String, Required: true, Desc: "团队任务描述"},
-			"tasks": {
-				Type: schema.Array, Required: true,
-				Desc: "子任务列表",
-				ElemInfo: &schema.ParameterInfo{
-					Type: schema.Object,
-					SubParams: map[string]*schema.ParameterInfo{
-						"description": {Type: schema.String, Required: true, Desc: "3-5 词任务标签"},
-						"prompt":      {Type: schema.String, Required: true, Desc: "子任务完整指令"},
-						"type":        {Type: schema.String, Required: true, Desc: "explore 或 worker"},
-						"scope":       {Type: schema.Array, Desc: "worker 允许写的文件 scope (globs)"},
-					},
-				},
-			},
-		}),
-	}, func(ctx context.Context, argsJSON string) (string, error) {
-		var spec TeamSpec
-		if err := json.Unmarshal([]byte(argsJSON), &spec); err != nil {
-			return "", fmt.Errorf("无法解析参数: %w", err)
-		}
-		if len(spec.Tasks) == 0 {
-			return "错误：至少需要一个子任务", nil
-		}
-
-		teamID, err := svc.DispatchTeam(ctx, &spec)
-		if err != nil {
-			return fmt.Sprintf("团队任务派发失败: %s", err.Error()), nil
-		}
-		return fmt.Sprintf("团队任务已派发！\n团队任务 ID: %s\n子任务数: %d\n\n请稍后用 poll_team 工具查询结果。", teamID, len(spec.Tasks)), nil
-	})
-
 	return tools, handlers
 }
 
