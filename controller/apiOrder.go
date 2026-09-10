@@ -27,10 +27,20 @@ func ApiGetOrders(ctx iris.Context) {
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	status := ctx.URLParam("status")
+	orderType := ctx.URLParam("type")
 
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	orders, total := currentSite.GetOrderList(userId, "", "", status, currentPage, pageSize)
+	orders, total := currentSite.GetOrderList(func(tx *gorm.DB) *gorm.DB {
+		if userId > 0 {
+			tx = tx.Where("`user_id` = ?", userId)
+		}
+		if orderType != "" {
+			tx = tx.Where("`type` = ?", orderType)
+		}
+
+		return tx
+	}, status, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -18,8 +19,22 @@ func PluginOrderList(ctx iris.Context) {
 	orderId := ctx.URLParam("order_id")
 	userName := ctx.URLParam("user_name")
 	status := ctx.URLParam("status")
+	orderType := ctx.URLParam("type")
 
-	orders, total := currentSite.GetOrderList(0, orderId, userName, status, currentPage, pageSize)
+	orders, total := currentSite.GetOrderList(func(tx *gorm.DB) *gorm.DB {
+		if orderType != "" {
+			tx = tx.Where("`type` = ?", orderType)
+		}
+		if orderId != "" {
+			tx = tx.Where("`order_id` = ?", orderId)
+		}
+		if userName != "" {
+			var userIds []uint
+			currentSite.DB.Model(&model.User{}).Where("`user_name` LIKE ?", "%"+userName+"%").Pluck("id", &userIds)
+			tx = tx.Where("`user_id` IN (?)", userIds)
+		}
+		return tx
+	}, status, currentPage, pageSize)
 
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
