@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -1570,25 +1571,36 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 
 	add(&schema.ToolInfo{
 		Name: "attachment_upload",
-		Desc: "通过远程URL或本地文件路径上传附件（图片）到站点。本地文件路径通常是AI聊天上传按钮上传的临时文件路径（file_path）。",
+		Desc: "上传附件（图片）到站点，支持三种方式（三选一）：1. base64参数，传入图片的base64编码内容或data URI（推荐，客户端本地文件或AI生成的图片先编码为base64再上传）；2. url参数传远程URL；3. url参数传服务器本地文件路径（仅当文件已在CMS服务器上时有效，通常是AI聊天上传按钮上传的临时文件路径file_path）。注意：MCP客户端本地路径在服务器上不存在，请使用base64方式。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"url":       {Type: schema.String, Desc: "图片的远程URL地址，或本地文件路径（绝对路径或基于站点项目目录的相对路径）", Required: true},
+			"base64":    {Type: schema.String, Desc: "图片的base64编码内容，支持裸base64字符串或data URI格式（data:image/png;base64,xxx），与url二选一"},
+			"url":       {Type: schema.String, Desc: "图片的远程URL地址，或本地文件路径（绝对路径或基于站点项目目录的相对路径），与base64二选一"},
 			"file_name": {Type: schema.String, Desc: "保存的文件名（不含扩展名），可选"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args struct {
+			Base64   string `json:"base64"`
 			URL      string `json:"url"`
 			FileName string `json:"file_name"`
 		}
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 			return "", fmt.Errorf("无法解析参数: %w", err)
 		}
-		if args.URL == "" {
-			return "错误：URL不能为空", nil
+		if args.Base64 == "" && args.URL == "" {
+			return "错误：base64 和 url 至少提供一个", nil
 		}
 		w := svc.site
 		if w == nil || w.DB == nil {
 			return "错误：站点未初始化", nil
+		}
+		// base64 内容优先
+		if args.Base64 != "" {
+			attachment, err := svc.uploadAttachmentFromBase64(args.Base64, args.FileName)
+			if err != nil {
+				return "", fmt.Errorf("上传附件失败: %w", err)
+			}
+			attachment.GetThumb(w.PluginStorage.StorageUrl)
+			return fmt.Sprintf("附件上传成功！ID: %d\n文件名: %s\nURL: %s", attachment.Id, attachment.FileName, attachment.Logo), nil
 		}
 		var attachment *model.Attachment
 		// 判断是否为本地文件路径
@@ -4317,4 +4329,83 @@ func BuildDeclareTool() *schema.ToolInfo {
 			},
 		}),
 	}
+}
+
+// uploadAttachmentFromBase64 将 base64 编码的图片内容（裸 base64 或 data URI）保存为站点附件。
+// 写入临时文件后复用 AttachmentUpload，从而继承水印、压缩、缩略图、md5 去重等处理逻辑。
+func (svc *AiChatService) uploadAttachmentFromBase64(base64Str string, fileName string) (*model.Attachment, error) {
+	w := svc.site
+	if w == nil || w.DB == nil {
+		return nil, fmt.Errorf("站点未初始化")
+	}
+	base64Str = strings.TrimSpace(base64Str)
+	// 解析 data URI：data:image/png;base64,xxxx
+	ext := ""
+	if strings.HasPrefix(base64Str, "data:") {
+		idx := strings.Index(base64Str, ",")
+		if idx <= 0 {
+			return nil, fmt.Errorf("无效的 data URI 格式")
+		}
+		meta := base64Str[5:idx] // 如 image/png;base64
+		base64Str = strings.TrimSpace(base64Str[idx+1:])
+		if parts := strings.SplitN(meta, "/", 2); len(parts) == 2 {
+			ext = strings.ToLower(strings.Split(parts[1], ";")[0])
+			ext = strings.ReplaceAll(ext, "+xml", "")
+		}
+	}
+	// 只保留字母数字，避免 svg+xml 之类的异常扩展名
+	var extBuf strings.Builder
+	for _, c := range ext {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			extBuf.WriteRune(c)
+		}
+	}
+	ext = extBuf.String()
+
+	data, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		// 兼容无填充与 URL-safe 变体
+		if d, err2 := base64.RawStdEncoding.DecodeString(base64Str); err2 == nil {
+			data, err = d, nil
+		} else if d, err2 := base64.URLEncoding.DecodeString(base64Str); err2 == nil {
+			data, err = d, nil
+		} else if d, err2 := base64.RawURLEncoding.DecodeString(base64Str); err2 == nil {
+			data, err = d, nil
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("base64解码失败: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("解码后的文件内容为空")
+	}
+	if len(data) > 30*1024*1024 {
+		return nil, fmt.Errorf("文件过大，base64 上传最大支持 30MB")
+	}
+
+	if fileName == "" {
+		fileName = "base64-image"
+	}
+	tmpFile, err := os.CreateTemp("", "anqi-upload-*")
+	if err != nil {
+		return nil, fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		return nil, fmt.Errorf("写入临时文件失败: %w", err)
+	}
+	tmpFile.Close()
+
+	f, err := os.Open(tmpName)
+	if err != nil {
+		return nil, fmt.Errorf("打开临时文件失败: %w", err)
+	}
+	defer f.Close()
+	fileHeader := &multipart.FileHeader{
+		Filename: fileName + ext,
+		Size:     int64(len(data)),
+	}
+	return w.AttachmentUpload(f, fileHeader, 0, 0, 0)
 }
