@@ -3593,6 +3593,7 @@ API发布: %d
 			Status   string `json:"status"`
 			Page     int    `json:"page"`
 			PageSize int    `json:"page_size"`
+			Type     string `json:"type"`
 		}
 		_ = json.Unmarshal([]byte(argsJSON), &args)
 		if args.Page < 1 {
@@ -3601,7 +3602,23 @@ API发布: %d
 		if args.PageSize < 1 || args.PageSize > 100 {
 			args.PageSize = 20
 		}
-		orders, total := w.GetOrderList(args.UserId, args.OrderId, args.UserName, args.Status, args.Page, args.PageSize)
+		orders, total := w.GetOrderList(func(tx *gorm.DB) *gorm.DB {
+			if args.Type != "" {
+				tx = tx.Where("`type` = ?", args.Type)
+			}
+			if args.UserId > 0 {
+				tx = tx.Where("`user_id` = ?", args.UserId)
+			}
+			if args.OrderId != "" {
+				tx = tx.Where("`order_id` = ?", args.OrderId)
+			}
+			if args.UserName != "" {
+				var userIds []uint
+				w.DB.Model(&model.User{}).Where("`user_name` LIKE ?", "%"+args.UserName+"%").Pluck("id", &userIds)
+				tx = tx.Where("`user_id` IN (?)", userIds)
+			}
+			return tx
+		}, args.Status, args.Page, args.PageSize)
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("共 %d 个订单（当前页 %d 个）：\n\n", total, len(orders)))
 		for _, o := range orders {
