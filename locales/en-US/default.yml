@@ -110,6 +110,7 @@
 "DataBackupSuccessful": "Data backup successful"
 "BackupData": "Backup data"
 "BackingUp%s": "Backing up: %s"
+"BackingUpStaticFiles": "Backing up template static files"
 "RestoringData%s": "Restoring: %s"
 "BackupIsStarted": "Backup task has started"
 "RestoreIsStarted": "Restore task has started"

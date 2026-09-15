@@ -110,6 +110,7 @@
 "DataBackupSuccessful": "資料備份成功"
 "BackupData": "備份資料"
 "BackingUp%s": "正在備份：%s"
+"BackingUpStaticFiles": "正在備份模板靜態文件"
 "RestoringData%s": "正在恢復：%s"
 "BackupIsStarted": "備份任務已開始"
 "RestoreIsStarted": "恢復任務已開始"
