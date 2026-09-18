@@ -43,6 +43,9 @@ type User struct {
 	InviteCode    string `json:"invite_code" gorm:"column:invite_code;type:varchar(100) not null;default:'';index:idx_invite_code"`
 	LastLogin     int64  `json:"last_login" gorm:"column:last_login;type:bigint(20);default:0"`
 	ExpireTime    int64  `json:"expire_time" gorm:"column:expire_time;type:bigint(20);default:0"`
+	// 是否订阅
+	Subscribed bool  `json:"subscribed" gorm:"column:subscribed;type:tinyint(1) not null;default:0"`
+	OrderCount int64 `json:"order_count" gorm:"column:order_count;type:bigint(20) not null;default:0"`
 
 	Extra         map[string]*config.CustomField `json:"extra" gorm:"-"`
 	Token         string                         `json:"token" gorm:"-"`

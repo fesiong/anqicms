@@ -687,6 +687,47 @@ func ApiImportDeleteFriendLink(ctx iris.Context) {
 	})
 }
 
+func ApiAddSubscriber(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.SubscriberRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Email == "" || !currentSite.VerifyEmailFormat(req.Email) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseFillInTheEmail"),
+		})
+		return
+	}
+	_, err := currentSite.GetSubscriberByEmail(req.Email)
+	if err == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  ctx.Tr("OperationSuccessful"),
+		})
+		return
+	}
+	req.Id = 0
+	err = currentSite.SaveSubscriber(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("OperationSuccessful"),
+	})
+}
+
 func ApiImportCheckFriendLink(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -119,6 +119,7 @@ func PluginUserList(ctx iris.Context) {
 	phone := ctx.URLParam("phone")
 	q := ctx.URLParam("q")
 	status := ctx.URLParam("status")
+	userType := ctx.URLParam("user_type") // all, subscribed, ordered,repurchase
 
 	ops := func(tx *gorm.DB) *gorm.DB {
 		if userId > 0 {
@@ -148,6 +149,14 @@ func PluginUserList(ctx iris.Context) {
 			} else if status == "pending" {
 				tx = tx.Where("`status` = ?", 0)
 			}
+		}
+		// 订阅
+		if userType == "subscribed" {
+			tx = tx.Where("`subscribed` = ?", true)
+		} else if userType == "ordered" {
+			tx = tx.Where("order_count > 0")
+		} else if userType == "repurchase" {
+			tx = tx.Where("order_count > 1")
 		}
 		tx = tx.Order("users.id desc")
 		return tx

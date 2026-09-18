@@ -223,6 +223,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Backend:  "/plugin/sendmail",
 			},
 			{
+				Path:     "/plugin/subscription",
+				GroupKey: "plugin",
+				Name:     "邮件订阅",
+				Backend:  "/plugin/subscription",
+			},
+			{
 				Path:     "/plugin/collector",
 				GroupKey: "plugin",
 				Name:     "内容采集管理",
