@@ -2735,6 +2735,73 @@ API发布: %d
 		return b.String(), nil
 	})
 	add(&schema.ToolInfo{
+		Name: "guestbook_list",
+		Desc: "查看留言（表单提交）列表，支持按关键词和状态筛选。",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"keyword":   {Type: schema.String, Desc: "关键词（可选），按用户名、联系方式或内容模糊搜索"},
+			"status":    {Type: schema.String, Desc: "状态筛选（可选）：default=未处理, ok=正常, spam=垃圾"},
+			"page":      {Type: schema.Integer, Desc: "页码，从1开始，默认1"},
+			"page_size": {Type: schema.Integer, Desc: "每页条数，默认20"},
+		}),
+	}, func(ctx context.Context, argsJSON string) (string, error) {
+		w := svc.site
+		if w == nil {
+			return "错误：站点未初始化", nil
+		}
+		var args struct {
+			Keyword  string `json:"keyword"`
+			Status   string `json:"status"`
+			Page     int    `json:"page"`
+			PageSize int    `json:"page_size"`
+		}
+		_ = json.Unmarshal([]byte(argsJSON), &args)
+		if args.Page < 1 {
+			args.Page = 1
+		}
+		if args.PageSize < 1 || args.PageSize > 100 {
+			args.PageSize = 20
+		}
+		keyword := args.Keyword
+		tmpStatus := args.Status
+		status := -1
+		switch tmpStatus {
+		case "default":
+			status = 0
+		case "ok":
+			status = 1
+		case "spam":
+			status = 2
+		}
+		guestbooks, total, err := w.GetGuestbookList(func(tx *gorm.DB) *gorm.DB {
+			if keyword != "" {
+				tx = tx.Where("user_name like ? or contact like ? or content like ?", "%"+keyword+"%", "%"+keyword+"%", "%"+keyword+"%")
+			}
+			if status != -1 {
+				tx = tx.Where("`status` = ?", status)
+			}
+			return tx
+		}, args.Page, args.PageSize)
+		if err != nil {
+			return fmt.Sprintf("获取留言失败: %s", err.Error()), nil
+		}
+		var b strings.Builder
+		b.WriteString(fmt.Sprintf("共 %d 条留言（当前页 %d 条）：\n\n", total, len(guestbooks)))
+		for _, g := range guestbooks {
+			statusName := "未处理"
+			if g.Status == 1 {
+				statusName = "正常"
+			} else if g.Status == 2 {
+				statusName = "垃圾"
+			}
+			b.WriteString(fmt.Sprintf("#%d | %s | %s | %s\n", g.Id, g.UserName, g.Contact, statusName))
+			if g.Content != "" {
+				b.WriteString(fmt.Sprintf("  内容: %s\n", g.Content))
+			}
+			b.WriteString("\n")
+		}
+		return b.String(), nil
+	})
+	add(&schema.ToolInfo{
 		Name: "comment_approve",
 		Desc: "审核通过评论或回复评论。设置 status=1 为审核通过。也可以回复指定评论。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
