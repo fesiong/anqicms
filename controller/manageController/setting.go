@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -120,7 +121,14 @@ func SettingSystemForm(ctx iris.Context) {
 		currentSite.MultiLanguage.DefaultLanguage = currentSite.System.Language
 	}
 
-	currentSite.UpdatePaypalWebhook()
+	accounts := currentSite.GetPaymentAccounts(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("pay_way = ? and status = 1", config.PayWayPaypal)
+	})
+	if len(accounts) > 0 {
+		for _, account := range accounts {
+			currentSite.UpdatePaypalWebhook(account)
+		}
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
 

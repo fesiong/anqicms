@@ -1,29 +1,79 @@
 package manageController
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 )
 
-func PluginPayConfig(ctx iris.Context) {
+func PluginGetPaymentAccounts(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	pluginRewrite := currentSite.PluginPay
+
+	accounts := currentSite.GetPaymentAccounts(func(tx *gorm.DB) *gorm.DB {
+		return tx
+	})
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": pluginRewrite,
+		"data": accounts,
 	})
 }
 
-func PluginPayConfigForm(ctx iris.Context) {
+func PluginPayStatistic(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	accountId := ctx.URLParamInt64Default("account_id", 0)
+	result, total := currentSite.GetPaymentAccountStatistic(accountId, currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  result,
+	})
+}
+
+func PluginGetPaymentAccountDetail(ctx iris.Context) {
+	id := ctx.URLParamInt64Default("id", 0)
+	if id == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Invalid ID",
+		})
+		return
+	}
 	currentSite := provider.CurrentSite(ctx)
-	var req config.PluginPayConfig
+	account, err := currentSite.GetPaymentAccountById(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": account,
+	})
+}
+
+func PluginSavePaymentAccount(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req model.PaymentAccount
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -32,41 +82,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.PluginPay.AlipayOpen = req.AlipayOpen
-	currentSite.PluginPay.AlipayAppId = req.AlipayAppId
-	currentSite.PluginPay.AlipayPrivateKey = req.AlipayPrivateKey
-	if req.AlipayCertPath != "" {
-		currentSite.PluginPay.AlipayCertPath = req.AlipayCertPath
-	}
-	if req.AlipayRootCertPath != "" {
-		currentSite.PluginPay.AlipayRootCertPath = req.AlipayRootCertPath
-	}
-	if req.AlipayPublicCertPath != "" {
-		currentSite.PluginPay.AlipayPublicCertPath = req.AlipayPublicCertPath
-	}
-
-	currentSite.PluginPay.WechatOpen = req.WechatOpen
-	currentSite.PluginPay.WechatAppId = req.WechatAppId
-	currentSite.PluginPay.WechatAppSecret = req.WechatAppSecret
-	currentSite.PluginPay.WeappAppId = req.WeappAppId
-	currentSite.PluginPay.WeappAppSecret = req.WeappAppSecret
-
-	currentSite.PluginPay.WechatMchId = req.WechatMchId
-	currentSite.PluginPay.WechatApiKey = req.WechatApiKey
-	if req.WechatCertPath != "" {
-		currentSite.PluginPay.WechatCertPath = req.WechatCertPath
-	}
-	if req.WechatKeyPath != "" {
-		currentSite.PluginPay.WechatKeyPath = req.WechatKeyPath
-	}
-
-	// paypal
-	currentSite.PluginPay.PaypalOpen = req.PaypalOpen
-	currentSite.PluginPay.PaypalClientId = req.PaypalClientId
-	currentSite.PluginPay.PaypalClientSecret = req.PaypalClientSecret
-	currentSite.PluginPay.PaypalSandbox = req.PaypalSandbox
-
-	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
+	err := currentSite.SavePaymentAccount(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -74,13 +90,34 @@ func PluginPayConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.DeleteCacheIndex()
 
-	// 处理 paypal webhook
-	if req.PaypalClientId != "" && req.PaypalClientSecret != "" {
-		currentSite.UpdatePaypalWebhook()
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
+func PluginDeletePaymentAccount(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req model.PaymentAccount
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
 	}
 
+	err := currentSite.DeletePaymentAccount(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
 
 	ctx.JSON(iris.Map{
@@ -92,7 +129,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 func PluginPayUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	name := ctx.PostValue("name")
-	if name != "wechat_cert_path" && name != "wechat_key_path" && name != "alipay_cert_path" && name != "alipay_root_cert_path" && name != "alipay_public_cert_path" {
+	if !strings.HasSuffix(name, ".pem") && !strings.HasSuffix(name, ".crt") && !strings.HasSuffix(name, ".key") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("FileNameInvalid"),
@@ -109,8 +146,6 @@ func PluginPayUploadFile(ctx iris.Context) {
 		return
 	}
 	defer file.Close()
-	fileName := name + ".pem"
-	filePath := currentSite.DataPath + "cert/" + fileName
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -119,6 +154,10 @@ func PluginPayUploadFile(ctx iris.Context) {
 		})
 		return
 	}
+
+	newName := library.Md5Bytes(buff)
+	fileName := newName + ".pem"
+	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
 
 	err = os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
 	if err != nil {
@@ -133,27 +172,6 @@ func PluginPayUploadFile(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("FileSaveFailed"),
-		})
-		return
-	}
-
-	if name == "wechat_cert_path" {
-		currentSite.PluginPay.WechatCertPath = fileName
-	} else if name == "wechat_key_path" {
-		currentSite.PluginPay.WechatKeyPath = fileName
-	} else if name == "alipay_cert_path" {
-		currentSite.PluginPay.AlipayCertPath = fileName
-	} else if name == "alipay_root_cert_path" {
-		currentSite.PluginPay.AlipayRootCertPath = fileName
-	} else if name == "alipay_public_cert_path" {
-		currentSite.PluginPay.AlipayPublicCertPath = fileName
-	}
-
-	err = currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
 		})
 		return
 	}

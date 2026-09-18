@@ -8,13 +8,13 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strconv"
 	"time"
 
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
+	"github.com/jinzhu/now"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -413,8 +413,12 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 		}
 		if payment.PayWay == config.PayWayWechat {
 			// 公众号支付
-			client := wechat.NewClient(w.PluginPay.WechatAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-			err := client.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
+			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
 			if err != nil {
 				log.Println("微信证书错误：", err.Error())
 				return err
@@ -448,8 +452,12 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 		} else if payment.PayWay == config.PayWayWeapp {
 			// 小程序支付
-			client := wechat.NewClient(w.PluginPay.WeappAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-			err := client.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
+			err = client.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
 			if err != nil {
 				log.Println("微信证书错误：", err.Error())
 				return err
@@ -483,7 +491,11 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 		} else if payment.PayWay == config.PayWayAlipay {
 			// 支付宝支付
-			client, err := alipay.NewClient(w.PluginPay.AlipayAppId, w.PluginPay.AlipayPrivateKey, true)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client, err := alipay.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 			if err != nil {
 				refund.Remark = err.Error()
 				w.DB.Model(refund).UpdateColumn("remark", refund.Remark)
@@ -495,9 +507,9 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 				SetNotifyUrl(w.System.BaseUrl + "/notify/alipay/pay")
 
 			// 自动同步验签（只支持证书模式）
-			certPath := w.DataPath + "cert/" + w.PluginPay.AlipayCertPath
-			rootCertPath := w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath
-			publicCertPath := w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath
+			certPath := w.DataPath + "cert/" + account.PayConfig.CertPath
+			rootCertPath := w.DataPath + "cert/" + account.PayConfig.RootCertPath
+			publicCertPath := w.DataPath + "cert/" + account.PayConfig.PublicCertPath
 			publicKey, err := os.ReadFile(publicCertPath)
 			if err != nil {
 				refund.Remark = err.Error()
@@ -540,7 +552,11 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 		} else if payment.PayWay == config.PayWayPaypal {
 			// paypal refund
-			client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, w.PluginPay.PaypalSandbox == false)
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 			if err != nil {
 				return err
 			}
@@ -618,6 +634,46 @@ func (w *Website) GetOrderRefundByOrderId(orderId string) (*model.OrderRefund, e
 }
 
 func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) error {
+	// 统计payment账号
+	if payment.PaymentAccountId > 0 {
+		go func() {
+			var statistic model.PaymentStatistic
+			err := w.DB.Where("account_id = ?", payment.PaymentAccountId).Last(&statistic).Error
+			if err != nil {
+				statistic = model.PaymentStatistic{
+					AccountId: payment.PaymentAccountId,
+				}
+			}
+			monthStamp := now.BeginningOfMonth().Unix()
+			todayStamp := now.BeginningOfDay().Unix()
+			if statistic.StatTime < monthStamp {
+				// 重新统计
+				statistic = model.PaymentStatistic{
+					AccountId: payment.PaymentAccountId,
+				}
+			}
+			if statistic.StatTime < todayStamp {
+				// 统计今天
+				statistic = model.PaymentStatistic{
+					AccountId:     payment.PaymentAccountId,
+					MonthlyAmount: statistic.MonthlyAmount,
+				}
+			}
+			statistic.AccountId = payment.PaymentAccountId
+			statistic.StatTime = todayStamp
+			statistic.DailyAmount += payment.Amount
+			statistic.MonthlyAmount += payment.Amount
+			statistic.DailyCount += 1
+			w.DB.Save(&statistic)
+			// 更新Account的统计信息
+			w.DB.Model(model.PaymentAccount{}).Where("id = ?", payment.PaymentAccountId).UpdateColumns(map[string]interface{}{
+				"last_used_time": time.Now().Unix(),
+				"used_count":     gorm.Expr("`used_count` + 1"),
+				"used_amount":    gorm.Expr("`used_amount` + ?", payment.Amount),
+			})
+		}()
+	}
+
 	if order.Status == config.OrderStatusPaid {
 		//支付成功
 		return nil
@@ -637,14 +693,17 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	// 更新用户字段
 	w.DB.Model(model.User{}).Where("id = ?", order.UserId).UpdateColumn("order_count", gorm.Expr("`order_count` + 1"))
 	// 支付成功
-	if w.SendTypeValid(SendTypePayOrder) {
-		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("OrderPaymentSuccessNotification")
-		content := w.Tr("OrderPaymentSuccessNotification:") + "\n" + w.Tr("OrderNumber:") + order.OrderId +
-			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
-			"\n" + w.Tr("PaymentTime:") + time.Unix(order.PaidTime, 0).Format("2006-01-02 15:04:05") +
-			"\n" + w.Tr("PayingMemberId:") + strconv.Itoa(int(order.UserId))
-		go w.sendMail(subject, content, nil, nil, false, false)
+	user, err := w.GetUserInfoById(order.UserId)
+	if err != nil {
+		user = &model.User{Id: uint(order.UserId)}
+		orderAddress, err := w.GetOrderAddressById(order.AddressId)
+		if err == nil {
+			user.Email = orderAddress.Email
+			user.Phone = orderAddress.Phone
+			user.UserName = orderAddress.Name
+		}
 	}
+	w.SendPayOrderEmail(user, order)
 
 	if w.PluginOrder.NoProcess || order.Type == config.OrderTypeVip {
 		// 如果订单自动完成，则在这里处理
@@ -765,6 +824,20 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 					user = existUser
 				}
 			}
+			// 如果用户没有注册，则这里给它注册一下
+			if user.Id == 0 {
+				// 未注册
+				user.FirstName = req.Address.Name
+				user.LastName = req.Address.LastName
+				user.RealName = req.Address.Name + " " + req.Address.LastName
+				user.ResetPassword = true // 需要重置密码
+				if req.Address.Subscribed != "" && req.Address.Subscribed != "false" {
+					user.Subscribed = true
+				}
+
+				w.DB.Save(user)
+			}
+			userId = user.Id
 		}
 	}
 	if len(req.Details) == 0 && req.GoodsId == 0 {
@@ -956,16 +1029,8 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 
 	tx.Commit()
 
-	// 下单
-	if w.SendTypeValid(SendTypeNewOrder) {
-		subject := w.System.SiteName + "(" + w.System.BaseUrl + ")" + w.Tr("NewOrderNotification")
-		content := w.Tr("NewOrderNotification:") + "\n" + w.Tr("OrderNumber:") + order.OrderId +
-			"\n" + w.Tr("Amount:") + strconv.FormatFloat(float64(order.Amount)/100, 'f', 2, 64) +
-			"\n" + w.Tr("OrderTime:") + time.Unix(order.CreatedTime, 0).Format("2006-01-02 15:04:05") +
-			"\n" + w.Tr("OrderingMember:") + user.UserName +
-			"\n" + w.Tr("OrderingMemberId:") + strconv.Itoa(int(order.UserId))
-		_ = w.sendMail(subject, content, nil, nil, false, false)
-	}
+	// 发送邮件
+	w.SendNewOrderEmail(user, &order)
 
 	return &order, nil
 }
@@ -1365,7 +1430,11 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		return nil
 	}
 	if payment.PayWay == config.PayWayAlipay {
-		client, err := alipay.NewClient(w.PluginPay.AlipayAppId, w.PluginPay.AlipayPrivateKey, true)
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		client, err := alipay.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 		if err != nil {
 			return err
 		}
@@ -1385,9 +1454,9 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 		}
 
 		// 自动同步验签（只支持证书模式）
-		certPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayCertPath)
-		rootCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayRootCertPath)
-		publicCertPath := fmt.Sprint(w.DataPath + "cert/" + w.PluginPay.AlipayPublicCertPath)
+		certPath := w.DataPath + "cert/" + account.PayConfig.CertPath
+		rootCertPath := w.DataPath + "cert/" + account.PayConfig.RootCertPath
+		publicCertPath := w.DataPath + "cert/" + account.PayConfig.PublicCertPath
 		publicKey, err := os.ReadFile(publicCertPath)
 		if err != nil {
 			return err
@@ -1438,7 +1507,11 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 	} else if payment.PayWay == config.PayWayWeapp {
 		// 微信就不管了
 	} else if payment.PayWay == config.PayWayPaypal {
-		client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, w.PluginPay.PaypalSandbox == false)
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 		if err != nil {
 			log.Println("client err", err)
 			return err

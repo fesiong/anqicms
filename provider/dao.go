@@ -186,12 +186,17 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
 			&model.TagContent{},
+			&model.Subscriber{},
+			&model.SubscriberCategory{},
 			&model.ArchiveFavorite{},
 			&model.AiChatMessage{},
 			&model.AiAgent{},
 			&model.AiAgentLog{},
 			&model.AiUsageLog{},
 			&model.Place{},
+			&model.PaymentAccount{},
+			&model.PaymentStatistic{},
+			&model.MailPlan{},
 		}
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)

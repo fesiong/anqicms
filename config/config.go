@@ -41,7 +41,6 @@ type ConfigJson struct {
 	PluginSendmail    PluginSendmail        `json:"plugin_sendmail"`
 	PluginImportApi   PluginImportApiConfig `json:"plugin_import_api"`
 	PluginStorage     PluginStorageConfig   `json:"plugin_storage"`
-	PluginPay         PluginPayConfig       `json:"plugin_pay"`
 	PluginWeapp       PluginWeappConfig     `json:"plugin_weapp"`
 	PluginWechat      PluginWeappConfig     `json:"plugin_wechat"`
 	PluginRetailer    PluginRetailerConfig  `json:"plugin_retailer"`

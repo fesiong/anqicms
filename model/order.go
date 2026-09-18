@@ -127,20 +127,21 @@ func (o *OrderRefund) AfterCreate(tx *gorm.DB) (err error) {
 }
 
 type Payment struct {
-	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	PaymentId   string `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;unique"`
-	TerraceId   string `json:"terrace_id" gorm:"column:terrace_id;type:varchar(64) not null;index"` //交易id，服务商返回
-	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	OrderId     string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;index"` //订单id
-	Amount      int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:'支付总价'"`
-	Status      int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`                    //支付状态
-	PayWay      string `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`          // 支付方式
-	PaidTime    int64  `json:"paid_time" gorm:"column:paid_time;type:bigint(20) not null;default:0;comment:支付时间"` //该订单支付时间
-	Remark      string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`                        //备注
-	BuyerId     string `json:"buyer_id" gorm:"column:buyer_id;type:varchar(64) not null;default:''"`              //用户标识
-	BuyerInfo   string `json:"buyer_info" gorm:"column:buyer_info;type:varchar(255) not null;default:''"`         //买家信息，PayPal有返回
+	Id               uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime      int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime      int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	PaymentId        string `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;unique"`
+	TerraceId        string `json:"terrace_id" gorm:"column:terrace_id;type:varchar(64) not null;index"` //交易id，服务商返回
+	UserId           uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
+	OrderId          string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;index"` //订单id
+	Amount           int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:'支付总价'"`
+	Status           int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`                      //支付状态
+	PaymentAccountId int64  `json:"payment_account_id" gorm:"column:payment_account_id;type:int(10) not null;default:0"` // 支付账号id
+	PayWay           string `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`            // 支付方式
+	PaidTime         int64  `json:"paid_time" gorm:"column:paid_time;type:bigint(20) not null;default:0;comment:支付时间"`   //该订单支付时间
+	Remark           string `json:"remark" gorm:"column:remark;type:varchar(255) default null"`                          //备注
+	BuyerId          string `json:"buyer_id" gorm:"column:buyer_id;type:varchar(64) not null;default:''"`                //用户标识
+	BuyerInfo        string `json:"buyer_info" gorm:"column:buyer_info;type:varchar(255) not null;default:''"`           //买家信息，PayPal有返回
 }
 
 func (p *Payment) AfterCreate(tx *gorm.DB) (err error) {
