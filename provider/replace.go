@@ -315,7 +315,7 @@ func (w *Website) replaceArchiveModuleValues(replacer []config.ReplaceKeyword) (
 		for {
 			var rows []map[string]interface{}
 			err := w.DB.Table(module.TableName).
-				Select("id, " + strings.Join(fieldNames, ",")).
+				Select("id, "+strings.Join(fieldNames, ",")).
 				Where("`id` > ?", startId).
 				Order("id asc").
 				Limit(1000).
@@ -364,6 +364,7 @@ func (w *Website) replaceArchiveModuleValues(replacer []config.ReplaceKeyword) (
 
 	return updateCount
 }
+
 // 自定义字段可能存储为纯字符串、[]byte（JSON 列）、JSON 字符串（texts/images/timeline 等）、
 // map / slice / number / bool，这里统一处理，对任意层级的字符串叶子执行替换。
 // 返回被替换的字符串数量以及替换后的新值。

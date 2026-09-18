@@ -186,6 +186,15 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	}
 
 	err = w.DB.Save(user).Error
+	if req.Id == 0 {
+		w.ProcessNewUser(user)
+	}
+	// 判断订阅
+	subscriber, err2 := w.GetSubscriberByEmail(req.Email)
+	if err2 == nil {
+		// 添加订阅
+		w.DB.Model(&model.Subscriber{}).Where("id = ?", subscriber.Id).UpdateColumn("user_id", int64(user.Id))
+	}
 	//extra
 	extraFields := map[string]interface{}{}
 	if len(w.PluginUser.Fields) > 0 {
@@ -414,10 +423,11 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 	if len(req.Password) < 6 {
 		return nil, errors.New(w.Tr("PleaseEnterAPasswordOfMoreThan6Digits"))
 	}
+	template, tplExist := w.GetEmailTemplateInfo("register")
 	exist, err := w.GetUserInfoByUserName(req.UserName)
 	if err == nil {
 		// 邮箱已存在，如果还没验证，则发送验证邮件
-		if !exist.EmailVerified && w.PluginSendmail.SignupVerify {
+		if !exist.EmailVerified && tplExist && template.Open {
 			_ = w.SendVerifyEmail(exist, "verify")
 			return exist, nil
 		}
@@ -439,7 +449,7 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		exist, err := w.GetUserInfoByEmail(req.Email)
 		if err == nil {
 			// 邮箱已存在，如果还没验证，则发送验证邮件
-			if !exist.EmailVerified && w.PluginSendmail.SignupVerify {
+			if !exist.EmailVerified && tplExist && template.Open {
 				_ = w.SendVerifyEmail(exist, "verify")
 				return exist, nil
 			}
@@ -539,7 +549,9 @@ func (w *Website) RegisterUser(req *request.ApiRegisterRequest) (*model.User, er
 		w.DB.Model(model.User{}).Where("`id` = ?", user.Id).Updates(extraFields)
 	}
 
-	if w.PluginSendmail.SignupVerify {
+	w.ProcessNewUser(&user)
+
+	if tplExist && template.Open && user.Email != "" {
 		_ = w.SendVerifyEmail(&user, "verify")
 		return &user, nil
 	}
@@ -611,6 +623,8 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 			return nil, err
 		}
 
+		w.ProcessNewUser(user)
+
 		go w.DownloadAvatar(userWechat.AvatarURL, user)
 	} else {
 		user, err = w.GetUserInfoById(userWechat.UserId)
@@ -664,6 +678,8 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 		w.DB.Save(user)
 		userWechat.UserId = user.Id
 		w.DB.Save(userWechat)
+
+		w.ProcessNewUser(user)
 	} else {
 		user, err = w.GetUserInfoById(userWechat.UserId)
 		if err != nil {
@@ -730,6 +746,7 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
 		}
 		w.DB.Save(user)
+		w.ProcessNewUser(user)
 	} else {
 		user.GoogleId = googleUser.Sub
 		user.UserName = googleUser.Name
@@ -789,7 +806,8 @@ func (w *Website) LoginViaPassword(req *request.ApiLoginRequest) (*model.User, e
 	user.Token = w.GetUserAuthToken(user.Id, true)
 	_ = user.LogLogin(w.DB)
 	// 如果要验证邮箱，并且没完成验证，则发送验证邮件
-	if w.PluginSendmail.SignupVerify && !user.EmailVerified {
+	template, tplExist := w.GetEmailTemplateInfo("register")
+	if user.Email != "" && !user.EmailVerified && tplExist && template.Open {
 		_ = w.SendVerifyEmail(&user, "verify")
 	}
 	return &user, nil
@@ -922,6 +940,7 @@ func (w *Website) CleanUserVip() {
 		return
 	}
 	w.DB.Model(&model.User{}).Where("`status` = 1 and `group_id` != ? and `expire_time` < ?", group.Id, time.Now().Unix()).UpdateColumn("group_id", group.Id)
+	// todo
 }
 
 // GetUserDiscount 获取用户优惠比例， 优先级：用户组优惠比例 > 通过分享链接下单优惠比例
@@ -1107,4 +1126,11 @@ func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl 
 
 	// 返回头像地址
 	return w.PluginStorage.StorageUrl + "/" + fileName, nil
+}
+
+// 处理新用户
+func (w *Website) ProcessNewUser(user *model.User) {
+	// 记录日志
+	// 新用户欢迎邮件
+	w.SendWelcomeEmail(user)
 }

@@ -81,7 +81,6 @@ type Website struct {
 	PluginSendmail     *config.PluginSendmail
 	PluginImportApi    *config.PluginImportApiConfig
 	PluginStorage      *config.PluginStorageConfig
-	PluginPay          *config.PluginPayConfig
 	PluginWeapp        *config.PluginWeappConfig
 	PluginWechat       *config.PluginWeappConfig
 	PluginRetailer     *config.PluginRetailerConfig
@@ -118,6 +117,7 @@ type Website struct {
 	backLanguage string
 	ctx          iris.Context // 这个类型是指针，因此只能在拷贝后赋值
 	Template     *StoreTemplates
+	MailService  *MailService
 	// ai
 	AiSrv *AiChatService
 	// mcp server (per-site, 同 AiSrv 模式)
@@ -448,6 +448,7 @@ func InitWebsite(mw *model.Website) {
 		// AI: 先创建 ai chat service（初始化工具），再创建 mcp server（注册工具）
 		w.NewAiChatService()
 		w.NewMcpServer()
+		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
 		// ai chat setting

@@ -154,6 +154,7 @@ func manageRoute(app *iris.Application) {
 			attachment.Post("/delete", manageController.AttachmentDelete)
 			attachment.Post("/edit", manageController.AttachmentEdit)
 			attachment.Post("/scan", manageController.AttachmentScanUploads)
+			attachment.Post("/category", manageController.AttachmentChangeCategory)
 		}
 
 		module := manage.Party("/module", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -331,6 +332,10 @@ func manageRoute(app *iris.Application) {
 				sendmail.Get("/list", manageController.PluginSendmailList)
 				sendmail.Get("/setting", manageController.PluginSendmailSetting)
 				sendmail.Post("/setting", manageController.PluginSendmailSettingForm)
+				sendmail.Get("/templates", manageController.PluginGetEmailTemplates)
+				sendmail.Get("/template", manageController.PluginGetEmailTemplateDetail)
+				sendmail.Post("/template", manageController.PluginSendmailSaveTemplate)
+				sendmail.Post("/template/preview", manageController.PluginSendmailTemplatePreview)
 				sendmail.Post("/test", manageController.PluginSendmailTest)
 			}
 
@@ -416,9 +421,12 @@ func manageRoute(app *iris.Application) {
 
 			pay := plugin.Party("/pay")
 			{
-				pay.Get("/config", manageController.PluginPayConfig)
-				pay.Post("/config", manageController.PluginPayConfigForm)
+				pay.Get("/accounts", manageController.PluginGetPaymentAccounts)
+				pay.Get("/detail", manageController.PluginGetPaymentAccountDetail)
+				pay.Post("/detail", manageController.PluginSavePaymentAccount)
+				pay.Post("/delete", manageController.PluginDeletePaymentAccount)
 				pay.Post("/upload", manageController.PluginPayUploadFile)
+				pay.Get("/statistic", manageController.PluginPayStatistic)
 			}
 
 			order := plugin.Party("/order")
@@ -594,6 +602,16 @@ func manageRoute(app *iris.Application) {
 				llms.Post("/build", manageController.PluginLLMsBuild)
 				llms.Get("/setting", manageController.PluginGetLLMsSetting)
 				llms.Post("/setting", manageController.PluginSaveLLMsSetting)
+			}
+			subscriber := plugin.Party("/subscriber")
+			{
+				subscriber.Get("/list", manageController.PluginGetSubscribers)
+				subscriber.Post("/save", manageController.PluginSaveSubscriber)
+				subscriber.Post("/delete", manageController.PluginDeleteSubscriber)
+				subscriber.Post("/send", manageController.SendSubscriberMail)
+				subscriber.Get("/category/list", manageController.GetSubscriberCategories)
+				subscriber.Post("/category/save", manageController.SaveSubscriberCategory)
+				subscriber.Post("/category/delete", manageController.DeleteSubscriberCategory)
 			}
 			place := plugin.Party("/place")
 			{

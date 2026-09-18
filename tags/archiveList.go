@@ -376,6 +376,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if listType == "page" {
 		var urlPatten string
 		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
+		// 当前分类
+		categoryDetail, _ = ctx.Public["category"].(*model.Category)
 		if categoryDetail != nil {
 			category := *categoryDetail
 			urlMatch := "category"

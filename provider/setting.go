@@ -111,7 +111,6 @@ func (w *Website) InitSetting() {
 	w.LoadSendmailSetting(settingMap[SendmailSettingKey])
 	w.LoadImportApiSetting(settingMap[ImportApiSettingKey])
 	w.LoadStorageSetting(settingMap[StorageSettingKey])
-	w.LoadPaySetting(settingMap[PaySettingKey])
 	w.LoadWeappSetting(settingMap[WeappSettingKey])
 	w.LoadWechatSetting(settingMap[WechatSettingKey])
 	w.LoadRetailerSetting(settingMap[RetailerSettingKey])
@@ -380,9 +379,6 @@ func (w *Website) LoadSendmailSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), w.PluginSendmail)
 	}
-	if len(w.PluginSendmail.SendType) == 0 {
-		w.PluginSendmail.SendType = []int{SendTypeGuestbook}
-	}
 }
 
 func (w *Website) LoadImportApiSetting(value string) {
@@ -417,13 +413,6 @@ func (w *Website) LoadStorageSetting(value string) {
 	// 配置默认的storageUrl
 	if w.PluginStorage.StorageUrl == "" || w.PluginStorage.StorageType == config.StorageTypeLocal {
 		w.PluginStorage.StorageUrl = w.System.BaseUrl
-	}
-}
-
-func (w *Website) LoadPaySetting(value string) {
-	w.PluginPay = &config.PluginPayConfig{}
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), w.PluginPay)
 	}
 }
 

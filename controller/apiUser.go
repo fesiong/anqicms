@@ -56,14 +56,27 @@ func ApiRegister(ctx iris.Context) {
 		return
 	}
 
-	if currentSite.PluginSendmail.SignupVerify && user.EmailVerified == false {
-		// 提示正在验证, 并且不登录
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  ctx.Tr("PleaseVerifyEmail"),
-			"data": user,
-		})
-		return
+	if user.EmailVerified == false {
+		//提示验证
+		template, exist := currentSite.GetEmailTemplateInfo("register")
+		if exist && template.Open {
+			// 提示正在验证, 并且不登录
+			data := map[string]interface{}{
+				"website": currentSite,
+				"user":    user,
+			}
+			var err error
+			template, err = currentSite.RenderEmailTemplate(template, data)
+			if err == nil {
+				currentSite.SendMail(template.Subject, template.Content, nil)
+			}
+			ctx.JSON(iris.Map{
+				"code": config.StatusOK,
+				"msg":  ctx.Tr("PleaseVerifyEmail"),
+				"data": user,
+			})
+			return
+		}
 	}
 
 	// set token to cookie

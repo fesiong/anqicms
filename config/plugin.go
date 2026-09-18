@@ -95,14 +95,7 @@ type PluginSendmail struct {
 	Password  string `json:"password"`
 	Recipient string `json:"recipient"`
 
-	AutoReply    bool   `json:"auto_reply"`
-	ReplySubject string `json:"reply_subject"`
-	ReplyMessage string `json:"reply_message"` // 自动回复内容
-	SendType     []int  `json:"send_type"`
-
-	SignupVerify  bool   `json:"signup_verify"` // 注册邮件验证
-	VerifySubject string `json:"verify_subject"`
-	VerifyMessage string `json:"verify_message"`
+	Templates []EmailTemplate `json:"templates"` // 启用的模板
 }
 
 type PluginImportApiConfig struct {
@@ -292,6 +285,29 @@ type PluginAkismetConfig struct {
 	RecaptchaOpen       bool   `json:"recaptcha_open"`
 	RecaptchaSiteKey    string `json:"recaptcha_site_key"`
 	RecaptchaPrivateKey string `json:"recaptcha_private_key"`
+}
+
+const EmailTypeSystem = "system"
+const EmailTypeUser = "user"
+
+type EmailTemplate struct {
+	Open        bool   `json:"open"`
+	Type        string `json:"type"`
+	Key         string `json:"key"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Readonly    bool   `json:"readonly"`
+
+	Delay   int64  `json:"delay"`   // 延迟多少秒发送
+	Subject string `json:"subject"` // 邮件标题
+	Content string `json:"content"` // 邮件内容
+}
+
+type CommunicationConfig struct {
+	SummitedTemplate EmailTemplate  `json:"summited_template"` // 提交成功模板
+	QuoteTemplate    EmailTemplate  `json:"quote_template"`    // 报价模板
+	ReplyTemplate    EmailTemplate  `json:"reply_template"`    // 消息回复模板
+	OrderFields      []*CustomField `json:"order_fields"`      // 需要哪些自定义字段
 }
 
 func (pm *PluginMultiLangConfig) GetUrl(oriUrl string, baseUrl string, langSite *MultiLangSite) string {

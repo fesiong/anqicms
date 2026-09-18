@@ -138,6 +138,7 @@ func Register(app *iris.Application) {
 		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
 		api.Post("/comment/praise", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
+		api.Post("/subscription", controller.CheckApiOpen, controller.ApiAddSubscriber)
 	}
 
 	notify := app.Party("/notify")
