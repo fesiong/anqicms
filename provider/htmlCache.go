@@ -385,7 +385,7 @@ func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := "place/detail.html"
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
-	tmpName := fmt.Sprintf("%s/detail-%d.html", place.Id)
+	tmpName := fmt.Sprintf("place/detail-%d.html", place.Id)
 	if place.Template != "" {
 		tplName = place.Template
 	} else if ViewExists(newCtx, tmpName) {
