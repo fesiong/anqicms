@@ -157,7 +157,7 @@ func PluginPayUploadFile(ctx iris.Context) {
 
 	newName := library.Md5Bytes(buff)
 	fileName := newName + ".pem"
-	filePath := fmt.Sprintf(currentSite.DataPath + "cert/" + fileName)
+	filePath := fmt.Sprint(currentSite.DataPath + "cert/" + fileName)
 
 	err = os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
 	if err != nil {

@@ -164,7 +164,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			ctx.ViewData("closeTips", closeTips)
 			tplName := "errors/close.html"
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-				webInfo.Title = currentSite.TplTr(closeTips)
+				webInfo.Title = closeTips
 				ctx.ViewData("webInfo", webInfo)
 			}
 
