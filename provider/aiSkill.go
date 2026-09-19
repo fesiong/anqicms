@@ -540,6 +540,41 @@ func GetSkillBackend() *FilesystemSkillBackend {
 	return globalSkillBackend
 }
 
+// ── P4a: 技能 allowed-tools 约束 ──
+//
+// skill_get 需要访问当前 AiChatService 来激活 allowed-tools 约束。
+// 由于 aiSkill.go 中的工具 handler 在 AiChatService 上下文之外执行，
+// 我们使用一个全局回调来桥接。
+// 主循环 (aiChat.go) 在调用 skill_get 前设置 SetSkillScopeHook。
+
+// SkillScopeHook 由主循环注入，skill_get 调用以激活 allowed-tools。
+type SkillScopeHook func(allowedTools []string)
+
+var globalSkillScopeHook SkillScopeHook
+var globalSkillScopeMu sync.RWMutex
+
+// SetSkillScopeHook 设置全局技能 scope hook (主循环调用)。
+func SetSkillScopeHook(hook SkillScopeHook) {
+	globalSkillScopeMu.Lock()
+	defer globalSkillScopeMu.Unlock()
+	globalSkillScopeHook = hook
+}
+
+// ClearSkillScopeHook 清除全局技能 scope hook (主循环结束时调用)。
+func ClearSkillScopeHook() {
+	globalSkillScopeMu.Lock()
+	defer globalSkillScopeMu.Unlock()
+	globalSkillScopeHook = nil
+}
+
+// GetAiServiceForSkill 返回当前激活的技能 scope hook。
+// 返回 nil 表示无 hook 设置。
+func GetAiServiceForSkill() SkillScopeHook {
+	globalSkillScopeMu.RLock()
+	defer globalSkillScopeMu.RUnlock()
+	return globalSkillScopeHook
+}
+
 // GetSkillBackendForSite 返回站点特定的技能后端（含项目级技能）
 func GetSkillBackendForSite(projectRoot string) *FilesystemSkillBackend {
 	projectDir := filepath.Join(projectRoot, "data", "skills")
@@ -629,6 +664,16 @@ func skillGetTool() (*schema.ToolInfo, toolHandler) {
 
 			// 展开变量
 			expanded := skill.Expand(args.Arguments, "")
+
+			// ── P4a: 激活 allowed-tools 约束 ──
+			// 技能 frontmatter 声明了 allowed_tools 时，临时缩小可用工具集合。
+			// 调用方 (主循环) 通过 IsToolAllowed 检查每个工具调用。
+			// 技能执行结束后由 ClearSkillToolScope 恢复。
+			if len(skill.AllowedTools) > 0 {
+				if hook := GetAiServiceForSkill(); hook != nil {
+					hook(skill.AllowedTools)
+				}
+			}
 
 			result := fmt.Sprintf("# %s\n\n**描述**: %s\n**来源**: %s\n\n---\n\n%s",
 				skill.FullName(), skill.Description, skill.Source, expanded)

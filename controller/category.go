@@ -66,8 +66,14 @@ func CategoryPage(ctx iris.Context) {
 		ctx.Redirect(currentSite.GetUrl("page", category, 0))
 		return
 	}
-
-	module := currentSite.GetModuleFromCache(category.ModuleId)
+	var module *model.Module
+	moduleToken := ctx.Params().GetString("module")
+	if moduleToken != "" {
+		module = currentSite.GetModuleFromCacheByToken(moduleToken)
+	}
+	if module == nil {
+		module = currentSite.GetModuleFromCache(category.ModuleId)
+	}
 	if module == nil {
 		ctx.StatusCode(404)
 		ShowMessage(ctx, currentSite.TplTr("UndefinedModel"), nil)

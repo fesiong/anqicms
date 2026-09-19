@@ -224,6 +224,7 @@ func (w *Website) CollectArticlesByKeyword(keyword model.Keyword, focus bool) (t
 func (w *Website) SaveCollectArticle(archive *request.Archive, keyword *model.Keyword) error {
 	//原始标题
 	archive.OriginTitle = archive.Title
+	archive.OriginId = config.ArchiveFromCollect
 
 	if w.checkArticleExists(archive.OriginUrl, archive.OriginTitle, archive.Title) {
 		//log.Println("已存在于数据库", archive.OriginTitle)
@@ -1281,7 +1282,13 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 }
 
 func (w *Website) UpdateTodayArticleCount(collectCount, aiCount int) {
-	w.cachedTodayArticleCount.Day = now.BeginningOfDay().Day()
+	today := now.BeginningOfDay()
+	if w.cachedTodayArticleCount.Day != today.Day() {
+		// 跨天：重置缓存，避免累加上一天的残留计数
+		w.cachedTodayArticleCount.Day = today.Day()
+		w.cachedTodayArticleCount.CollectCount = 0
+		w.cachedTodayArticleCount.AiGenerateCount = 0
+	}
 	if collectCount > 0 {
 		w.cachedTodayArticleCount.CollectCount += int64(collectCount)
 	}

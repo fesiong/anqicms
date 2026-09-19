@@ -215,6 +215,18 @@ func (w *Website) LLMsBuild() error {
 			if category.ModuleId != module.Id {
 				continue
 			}
+			// 排除分类
+			excludeCategory := false
+			for _, excludeCatId := range w.PluginLLMs.ExcludeCategoryIds {
+				if excludeCatId == category.Id {
+					excludeCategory = true
+					break
+				}
+			}
+			if excludeCategory {
+				continue
+			}
+
 			w.llmsBuildStatus.Current++
 			w.llmsBuildStatus.Percent = int(float64(w.llmsBuildStatus.Current) / float64(w.llmsBuildStatus.Total) * 100)
 			// 写入分类链接

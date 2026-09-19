@@ -34,6 +34,7 @@
 "SourcePage%s": "Halaman sumber: %s"
 "SubmitTime%s": "Waktu pengiriman: %s"
 "ThankYouForYourMessage!": "Terima kasih untuk pesan Anda!"
+"CaptchaVerificationFailed": "Verifikasi captcha gagal, silakan coba lagi"
 "ItHasEnteredTheReview": ", telah memasuki ulasan"
 "UndefinedModelName%s": "Model tidak ditentukan: %d"
 "404NotFound": "404 tidak ditemukan"

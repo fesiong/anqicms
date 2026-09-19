@@ -34,6 +34,7 @@
 "SourcePage%s": "Página de origem: %s"
 "SubmitTime%s": "Tempo de envio: %s"
 "ThankYouForYourMessage!": "Obrigado pela sua mensagem!"
+"CaptchaVerificationFailed": "Falha na verificação do captcha, tente novamente"
 "ItHasEnteredTheReview": ", entrou em revisão"
 "UndefinedModelName%s": "Modelo indefinido: %d"
 "404NotFound": "404 não encontrado"

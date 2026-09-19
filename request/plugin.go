@@ -18,6 +18,7 @@ type PluginLink struct {
 	Nofollow uint   `json:"nofollow"`
 	Sort     uint   `json:"sort"`
 	Status   uint   `json:"status"`
+	Logo     string `json:"logo"`
 }
 
 type PluginComment struct {
@@ -126,6 +127,7 @@ type PluginRedirectsRequest struct {
 type PluginBackupRequest struct {
 	Name         string `json:"name"`
 	CleanUploads bool   `json:"clean_uploads"`
+	Remark       string `json:"remark"`
 }
 
 type PluginReplaceRequest struct {

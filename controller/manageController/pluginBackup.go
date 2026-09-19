@@ -1,14 +1,15 @@
 package manageController
 
 import (
-	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/provider"
-	"kandaoni.com/anqicms/request"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/kataras/iris/v12"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
 func PluginBackupList(ctx iris.Context) {
@@ -236,17 +237,20 @@ func PluginBackupImport(ctx iris.Context) {
 	})
 }
 
+// PluginBackupExport，但通过 query 读取 name 和 token，
+// 这样前端可以用 <a href> / window.open 触发浏览器原生下载（流式落盘，不占内存）。
+// 浏览器原生下载无法自定义 header，因此这里允许通过 query 传递 admin token。
 func PluginBackupExport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginBackupRequest
-	if err := ctx.ReadJSON(&req); err != nil {
+	name := ctx.URLParam("name")
+	if name == "" {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  err.Error(),
+			"msg":  ctx.Tr("BackupFileDoesNotExist"),
 		})
 		return
 	}
-	filePath, err := currentSite.GetBackupFilePath(req.Name)
+	filePath, err := currentSite.GetBackupFilePath(name)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -275,5 +279,38 @@ func PluginBackupCleanup(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("CleanUpCompleted"),
+	})
+}
+
+func PluginBackupRemark(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.PluginBackupRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if req.Name == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("BackupFileDoesNotExist"),
+		})
+		return
+	}
+	err := currentSite.SetBackupRemark(req.Name, req.Remark)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateBackupRemark", req.Name))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("Processed"),
 	})
 }

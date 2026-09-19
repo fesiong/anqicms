@@ -76,8 +76,8 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
 		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)
-		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
-		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
+		api.Get("/user/groups", controller.ApiGetUserGroups)
+		api.Get("/user/group/detail", controller.ApiGetUserGroupDetail)
 		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
 		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
 		api.Get("/orders/statistics", middleware.UserAuth, controller.ApiGetOrdersStatistics)
@@ -200,4 +200,7 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 
 	//后台管理路由相关
 	manageRoute(app, systemFiles)
+
+	// MCP 对外端点：按域名解析站点 + Bearer token 鉴权
+	app.Any("/api/mcp", middleware.McpTokenAuth, controller.McpStreamableHTTP)
 }

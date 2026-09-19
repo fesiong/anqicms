@@ -116,6 +116,7 @@ func (w *Website) GenerateCombination(keyword *model.Keyword) (int, error) {
 		Content:    strings.Join(content, "\n"),
 		KeywordId:  keyword.Id,
 		OriginUrl:  keyword.Title,
+		OriginId:   config.ArchiveFromCollect,
 	}
 	isDraft := false
 	if w.CollectorConfig.SaveType == 0 {

@@ -510,20 +510,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 			}
 		}
 	}
-	// 同步图片资源
-	startId = 0
-	if !req.Focus {
-		targetSite.DB.Model(&model.AttachmentCategory{}).Order("id DESC").Pluck("id", &startId)
-	}
-	var attachCategories []model.AttachmentCategory
-	mainSite.DB.Model(&model.AttachmentCategory{}).Where("id > ?", startId).Order("id ASC").Find(&attachCategories)
-	for _, attachCat := range attachCategories {
-		log.Println("sync navtype", attachCat.Id)
-		ms.FinishCount++
-		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-		ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment Category", attachCat.Title)
-		targetSite.DB.Save(&attachCat)
-	}
+	// 同步图片资源x
 	// attachment 的复制处理
 	isCopied := false
 	if targetSite.PluginStorage.StorageType == config.StorageTypeLocal && req.Focus {

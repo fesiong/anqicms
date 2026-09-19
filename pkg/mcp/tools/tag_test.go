@@ -2,25 +2,23 @@ package tools
 
 import (
 	"testing"
-
-	"kandaoni.com/anqicms/pkg/mcp/tools"
 )
 
-// MockTagProvider implements tools.TagProvider for testing
+// MockTagProvider implements TagProvider for testing
 type MockTagProvider struct {
-	tags   map[uint]*tools.TagRecord
+	tags   map[uint]*TagRecord
 	nextID uint
 	err    error
 }
 
 func newMockTagProvider() *MockTagProvider {
 	return &MockTagProvider{
-		tags: make(map[uint]*tools.TagRecord),
+		tags:   make(map[uint]*TagRecord),
 		nextID: 1,
 	}
 }
 
-func (m *MockTagProvider) GetTag(id uint) (*tools.TagRecord, error) {
+func (m *MockTagProvider) GetTag(id uint) (*TagRecord, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
@@ -31,11 +29,11 @@ func (m *MockTagProvider) GetTag(id uint) (*tools.TagRecord, error) {
 	return tag, nil
 }
 
-func (m *MockTagProvider) ListTags(req tools.TagListRequest) ([]tools.TagRecord, error) {
+func (m *MockTagProvider) ListTags(req TagListRequest) ([]TagRecord, error) {
 	if m.err != nil {
 		return nil, m.err
 	}
-	var result []tools.TagRecord
+	var result []TagRecord
 	for _, t := range m.tags {
 		if req.CategoryId > 0 && t.CategoryId != req.CategoryId {
 			continue
@@ -48,14 +46,14 @@ func (m *MockTagProvider) ListTags(req tools.TagListRequest) ([]tools.TagRecord,
 	return result, nil
 }
 
-func (m *MockTagProvider) CreateTag(req tools.TagCreateRequest) (uint, error) {
+func (m *MockTagProvider) CreateTag(req TagCreateRequest) (uint, error) {
 	if m.err != nil {
 		return 0, m.err
 	}
-	tag := &tools.TagRecord{
-		Id:       m.nextID,
-		Title:    req.Title,
-		Status:   req.Status,
+	tag := &TagRecord{
+		Id:         m.nextID,
+		Title:      req.Title,
+		Status:     req.Status,
 		CategoryId: req.CategoryId,
 	}
 	m.tags[m.nextID] = tag
@@ -64,13 +62,13 @@ func (m *MockTagProvider) CreateTag(req tools.TagCreateRequest) (uint, error) {
 	return id, nil
 }
 
-func (m *MockTagProvider) UpdateTag(id uint, req tools.TagUpdateRequest) error {
+func (m *MockTagProvider) UpdateTag(id uint, req TagUpdateRequest) error {
 	if m.err != nil {
 		return m.err
 	}
 	if tag, ok := m.tags[id]; ok {
-		if req.Title != nil {
-			tag.Title = *req.Title
+		if req.Title != "" {
+			tag.Title = req.Title
 		}
 	}
 	return nil
@@ -102,22 +100,22 @@ func TestTagTools_GetAll(t *testing.T) {
 func TestValidateTagCreate(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     tools.TagCreateRequest
+		req     TagCreateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid request",
-			req:     tools.TagCreateRequest{Title: "Golang"},
+			req:     TagCreateRequest{Title: "Golang"},
 			wantErr: false,
 		},
 		{
 			name:    "empty title",
-			req:     tools.TagCreateRequest{},
+			req:     TagCreateRequest{},
 			wantErr: true,
 		},
 		{
 			name:    "long title",
-			req:     tools.TagCreateRequest{Title: string(make([]byte, 256))},
+			req:     TagCreateRequest{Title: string(make([]byte, 256))},
 			wantErr: true,
 		},
 	}
@@ -135,17 +133,17 @@ func TestValidateTagCreate(t *testing.T) {
 func TestValidateTagUpdate(t *testing.T) {
 	tests := []struct {
 		name    string
-		req     tools.TagUpdateRequest
+		req     TagUpdateRequest
 		wantErr bool
 	}{
 		{
 			name:    "valid empty update",
-			req:     tools.TagUpdateRequest{},
+			req:     TagUpdateRequest{},
 			wantErr: false,
 		},
 		{
 			name:    "valid title update",
-			req:     tools.TagUpdateRequest{Title: strPtr("New Tag")},
+			req:     TagUpdateRequest{Title: "New Tag"},
 			wantErr: false,
 		},
 	}

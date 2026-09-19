@@ -34,6 +34,7 @@
 "SourcePage%s": "ソースページ: %s"
 "SubmitTime%s": "送信時間: %s"
 "ThankYouForYourMessage!": "メッセージありがとうございます！"
+"CaptchaVerificationFailed": "ロボット認証に失敗しました。もう一度お試しください"
 "ItHasEnteredTheReview": "、レビューが入力されました"
 "UndefinedModelName%s": "未定義のモデル: %d"
 "404NotFound": "404お探しのページが見つかりませんでした"

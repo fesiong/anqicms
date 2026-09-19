@@ -26,7 +26,6 @@ func testServiceWithSite(t *testing.T, w *Website) *AiChatService {
 		mu:       sync.RWMutex{},
 		sessions: make(map[string]*ChatSession),
 		Logger:   slog.Default(),
-		mcpSrv:   nil,
 		db:       w.DB,
 		site:     w,
 	}

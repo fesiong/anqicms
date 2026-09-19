@@ -34,7 +34,6 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 )
 
@@ -48,10 +47,10 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	db := w.DB
 
 	file.Seek(0, 0)
-	kind, _ := filetype.MatchReader(file)
+	kind, err := filetype.MatchReader(file)
 	file.Seek(0, 0)
 	fileExt := "." + kind.Extension
-	if kind == filetype.Unknown {
+	if err != nil || kind == filetype.Unknown || kind.MIME.Type == "video" {
 		fileExt = strings.ToLower(filepath.Ext(info.Filename))
 	}
 	if fileExt == ".php" || fileExt == ".jsp" {
@@ -72,7 +71,6 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	}
 
 	var attachment *model.Attachment
-	var err error
 	if attachId > 0 {
 		attachment, err = w.GetAttachmentById(attachId)
 		if err != nil {
@@ -311,6 +309,16 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 		}
 	}
 	imgType = strings.ToLower(imgType)
+	// 部分设备(如手机)拍摄的图片带有 EXIF 方向信息,
+	// 直接重新压缩会丢失该信息,导致图片在页面上显示方向错误(如旋转90度)
+	if imgType == "jpeg" {
+		_, _ = file.Seek(0, 0)
+		orientation := library.ReadJpegOrientation(file)
+		_, _ = file.Seek(0, 0)
+		if orientation > 1 {
+			img = library.FixImageOrientation(img, orientation)
+		}
+	}
 	width := img.Bounds().Dx()
 	height := img.Bounds().Dy()
 	if imgType == "jpeg" {
@@ -467,29 +475,33 @@ func (w *Website) DownloadRemoteImage(src string, fileName string, replaceId uin
 			}
 			fileName = strings.TrimSuffix(fileName, filepath.Ext(fileName)) + "." + strings.Split(contentType, "/")[1]
 			//获取宽高
-			tmpfile, err := os.CreateTemp("", "download")
-			if err != nil {
-				return nil, err
-			}
-			defer os.Remove(tmpfile.Name()) // clean up
-			defer tmpfile.Close()
-			if _, err := tmpfile.Write(body); err != nil {
-				return nil, err
-			}
-			tmpfile.Seek(0, 0)
-			fileHeader := &multipart.FileHeader{
-				Filename: filepath.Base(fileName),
-				Header:   nil,
-				Size:     int64(len(body)),
-			}
-
-			return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
+			return w.SaveAttachmentFromBytes(body, fileName, replaceId)
 		} else {
 			return nil, errors.New(w.Tr("UnsupportedImageFormat"))
 		}
 	}
 
 	return nil, errs[0]
+}
+
+func (w *Website) SaveAttachmentFromBytes(body []byte, fileName string, replaceId uint) (*model.Attachment, error) {
+	tmpfile, err := os.CreateTemp("", "download")
+	if err != nil {
+		return nil, err
+	}
+	defer os.Remove(tmpfile.Name()) // clean up
+	defer tmpfile.Close()
+	if _, err := tmpfile.Write(body); err != nil {
+		return nil, err
+	}
+	tmpfile.Seek(0, 0)
+	fileHeader := &multipart.FileHeader{
+		Filename: filepath.Base(fileName),
+		Header:   nil,
+		Size:     int64(len(body)),
+	}
+
+	return w.AttachmentUpload(tmpfile, fileHeader, 0, replaceId, 0)
 }
 
 func (w *Website) AddRemoteUrls(urls []string, categoryId uint) error {
@@ -606,7 +618,7 @@ func (w *Website) DeleteAttachment(attach *model.Attachment) error {
 	return w.DB.Unscoped().Delete(&attach).Error
 }
 
-func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
+func (w *Website) GetAttachmentList(categoryId uint, q string, isImage int, currentPage int, pageSize int) ([]*model.Attachment, int64, error) {
 	var attachments []*model.Attachment
 	offset := (currentPage - 1) * pageSize
 	var total int64
@@ -614,6 +626,9 @@ func (w *Website) GetAttachmentList(categoryId uint, q string, currentPage int, 
 	builder := w.DB.Model(&model.Attachment{})
 	if categoryId > 0 {
 		builder = builder.Where("`category_id` = ?", categoryId)
+	}
+	if isImage > 0 {
+		builder = builder.Where("`is_image` = ?", isImage)
 	}
 	if q != "" {
 		builder = builder.Where("`file_name` like ?", "%"+q+"%")
@@ -693,27 +708,6 @@ func (w *Website) BuildThumb(fileLocation string) error {
 	return nil
 }
 
-// GetAttachmentCategories 获取所有分类
-func (w *Website) GetAttachmentCategories() ([]*model.AttachmentCategory, error) {
-	var categories []*model.AttachmentCategory
-
-	err := w.DB.Where("`status` = 1").Order("id desc").Find(&categories).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return categories, nil
-}
-
-func (w *Website) GetAttachmentCategoryById(id uint) (*model.AttachmentCategory, error) {
-	var category model.AttachmentCategory
-	if err := w.DB.Where("id = ?", id).First(&category).Error; err != nil {
-		return nil, err
-	}
-
-	return &category, nil
-}
-
 func (w *Website) ChangeAttachmentCategory(categoryId uint, ids []uint) error {
 	if len(ids) == 0 {
 		return nil
@@ -722,47 +716,6 @@ func (w *Website) ChangeAttachmentCategory(categoryId uint, ids []uint) error {
 	w.DB.Model(&model.Attachment{}).Where("`id` IN(?)", ids).UpdateColumn("category_id", categoryId)
 
 	return nil
-}
-
-func (w *Website) DeleteAttachmentCategory(id uint) error {
-	category, err := w.GetAttachmentCategoryById(id)
-	if err != nil {
-		return err
-	}
-
-	//如果存在内容，则不能删除
-	var attachCount int64
-	w.DB.Model(&model.Attachment{}).Where("`category_id` = ?", category.Id).Count(&attachCount)
-	if attachCount > 0 {
-		return errors.New(w.Tr("PleaseDeleteTheImagesUnderTheCategoryBeforeDeletingTheCategory"))
-	}
-
-	//执行删除操作
-	err = w.DB.Delete(category).Error
-
-	return err
-}
-
-func (w *Website) SaveAttachmentCategory(req *request.AttachmentCategory) (category *model.AttachmentCategory, err error) {
-	if req.Id > 0 {
-		category, err = w.GetAttachmentCategoryById(req.Id)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		category = &model.AttachmentCategory{
-			Status: 1,
-		}
-	}
-	category.Title = req.Title
-	category.Status = 1
-
-	err = w.DB.Save(category).Error
-
-	if err != nil {
-		return
-	}
-	return
 }
 
 func (w *Website) StartConvertImageToWebp() {
@@ -998,7 +951,7 @@ func (w *Website) convertToWebp(attachment *model.Attachment) error {
 		return err
 	}
 	// 检查新生成的文件，并读取它
-	buf, err = os.ReadFile(newPath)
+	buf, err = os.ReadFile(newThumbPath)
 	if err != nil {
 		return err
 	}
@@ -1098,7 +1051,7 @@ func (w *Website) GetRandImageFromCategory(categoryId int, title string) string 
 		var queries []string
 		var args []interface{}
 		for _, word := range keywordSplit {
-			queries = append(queries, "name like ?")
+			queries = append(queries, "file_name like ?")
 			args = append(args, "%"+word+"%")
 		}
 		tx = tx.Where(strings.Join(queries, " OR "), args...)

@@ -260,20 +260,39 @@ func (w *Website) compileSensitiveWords() {
 	}
 
 	var fixedPatterns []string
+	var replacements = make(map[string]string)
 	var regexes []*regexp.Regexp
 
+	// 词格式：关键词 或 关键词|替换词，如 "第一|很好"，将"第一"替换为"很好"
+	// 带 { } 的按正则处理
 	for _, word := range w.SensitiveWords {
 		if len(word) == 0 {
 			continue
 		}
-		if strings.HasPrefix(word, "{") && strings.HasSuffix(word, "}") && len(word) > 2 {
-			newWord := word[1 : len(word)-1]
+		pattern := word
+		replacement := ""
+		if idx := strings.Index(word, "|"); idx >= 0 {
+			pattern = word[:idx]
+			replacement = word[idx+1:]
+		}
+		slog.Info("敏感词", "pattern", pattern, "replacement", replacement)
+		if len(pattern) == 0 {
+			continue
+		}
+		if strings.HasPrefix(pattern, "{") && strings.HasSuffix(pattern, "}") && len(pattern) > 2 {
+			newWord := pattern[1 : len(pattern)-1]
 			re, err := regexp.Compile(newWord)
 			if err == nil {
 				regexes = append(regexes, re)
+				if replacement != "" {
+					replacements[newWord] = replacement
+				}
 			}
 		} else {
-			fixedPatterns = append(fixedPatterns, word)
+			fixedPatterns = append(fixedPatterns, pattern)
+			if replacement != "" {
+				replacements[pattern] = replacement
+			}
 		}
 	}
 
@@ -283,6 +302,7 @@ func (w *Website) compileSensitiveWords() {
 		w.sensitiveAcMatcher = nil
 	}
 	w.sensitiveRegexes = regexes
+	w.sensitiveRegexReplacements = replacements
 }
 
 func (w *Website) LoadContactSetting(value string) {
@@ -1140,6 +1160,9 @@ func (w *Website) appendSensitiveReplaced(buf, text []byte) []byte {
 	// 固定字符串敏感词替换（AC 自动机，单次遍历）
 	if w.sensitiveAcMatcher != nil {
 		text = w.sensitiveAcMatcher.ReplaceAll(text, func(match library.ACMatch) []byte {
+			if rep, ok := w.sensitiveRegexReplacements[string(match.Pattern)]; ok && rep != "" {
+				return []byte(rep)
+			}
 			return bytes.Repeat([]byte("*"), utf8.RuneCount(match.Pattern))
 		})
 	}
@@ -1147,6 +1170,9 @@ func (w *Website) appendSensitiveReplaced(buf, text []byte) []byte {
 	// 正则表达式敏感词替换
 	for _, re := range w.sensitiveRegexes {
 		text = re.ReplaceAllFunc(text, func(s []byte) []byte {
+			if rep, ok := w.sensitiveRegexReplacements[string(re.String())]; ok && rep != "" {
+				return []byte(rep)
+			}
 			return bytes.Repeat([]byte("*"), utf8.RuneCount(s))
 		})
 	}
@@ -1171,11 +1197,18 @@ func (w *Website) GetLimiterSetting() *config.PluginLimiter {
 	return &limiter
 }
 
-func (w *Website) GetAkismetSetting() *config.PluginAkismetConfig {
+func (w *Website) GetAkismetSetting(focus bool) *config.PluginAkismetConfig {
 	var cfg config.PluginAkismetConfig
-	value := w.GetSettingValue(AkismetSettingKey)
-	if value != "" {
-		_ = json.Unmarshal([]byte(value), &cfg)
+	if w.Cache == nil {
+		return &cfg
+	}
+	err := w.Cache.Get(AkismetSettingKey, &cfg)
+	if err != nil || focus {
+		value := w.GetSettingValue(AkismetSettingKey)
+		if value != "" {
+			_ = json.Unmarshal([]byte(value), &cfg)
+		}
+		w.Cache.Set(AkismetSettingKey, cfg, 86400)
 	}
 
 	return &cfg

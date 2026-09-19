@@ -127,7 +127,7 @@ func AttachmentList(ctx iris.Context) {
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	q := ctx.URLParam("q")
 
-	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, currentPage, pageSize)
+	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, 0, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -328,82 +328,6 @@ func AttachmentChangeCategory(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("CategoryUpdated"),
-	})
-}
-
-func AttachmentCategoryList(ctx iris.Context) {
-	currentSite := provider.CurrentSubSite(ctx)
-
-	categories, err := currentSite.GetAttachmentCategories()
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "",
-		})
-		return
-	}
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"data": categories,
-	})
-}
-
-func AttachmentCategoryDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSubSite(ctx)
-	var req request.AttachmentCategory
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	category, err := currentSite.SaveAttachmentCategory(&req)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	currentSite.AddAdminLog(ctx, ctx.Tr("SaveImageCategoryLog", category.Id, category.Title))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  ctx.Tr("CategoryUpdated"),
-		"data": category,
-	})
-}
-
-func AttachmentCategoryDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSubSite(ctx)
-	var req request.AttachmentCategory
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	err := currentSite.DeleteAttachmentCategory(req.Id)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteImageCategoryLog", req.Id, req.Title))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  ctx.Tr("CategoryDeleted"),
 	})
 }
 

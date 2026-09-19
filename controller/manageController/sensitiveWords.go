@@ -41,6 +41,8 @@ func SettingSensitiveWordsForm(ctx iris.Context) {
 		})
 		return
 	}
+	// reload
+	w2.LoadSensitiveWords("")
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSensitiveWordConfiguration"))
 

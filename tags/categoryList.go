@@ -43,8 +43,10 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 	limit := 0
 	offset := 0
 	moduleId := uint(0)
+	argModuleId := moduleId
 	if args["moduleId"] != nil {
 		moduleId = uint(args["moduleId"].Integer())
+		argModuleId = moduleId
 	}
 
 	categoryDetail, _ := ctx.Public["category"].(*model.Category)
@@ -104,6 +106,11 @@ func (node *tagCategoryListNode) Execute(ctx *pongo2.ExecutionContext, writer po
 			break
 		}
 		categoryList[i].Link = currentSite.GetUrl("category", categoryList[i], 0)
+		if argModuleId > 0 {
+			curCategory := *categoryList[i]
+			curCategory.ModuleId = argModuleId
+			categoryList[i].Link = currentSite.GetUrl("category", &curCategory, 0)
+		}
 		categoryList[i].Thumb = categoryList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(categoryList[i].Id)))
 		categoryList[i].IsCurrent = false
 		if webOk {

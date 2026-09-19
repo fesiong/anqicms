@@ -20,6 +20,7 @@ import (
 	"golang.org/x/net/html"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/middleware"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -398,6 +399,14 @@ func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bin
 		if err := ctx.Request().Context().Err(); err != nil {
 			return err
 		}
+
+		tokenString := ctx.GetHeader("Admin")
+		_, err2 := middleware.ValidateToken(currentSite, tokenString)
+		if err2 == nil {
+			// 验证通过，通过 header 设置 template name
+			ctx.Header("X-Template-Name", filename)
+		}
+
 		hookCtx := &provider.HookContext{
 			Point: provider.BeforeViewRender,
 			Site:  currentSite,

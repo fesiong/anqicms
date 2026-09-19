@@ -34,6 +34,7 @@
 "SourcePage%s": "Исходная страница: %s"
 "SubmitTime%s": "Время отправки: %s"
 "ThankYouForYourMessage!": "Спасибо за ваше сообщение!"
+"CaptchaVerificationFailed": "Проверка капчи не пройдена, попробуйте снова"
 "ItHasEnteredTheReview": ", поступил на проверку"
 "UndefinedModelName%s": "Неопределенная модель: %d"
 "404NotFound": "404 Не Найдено"

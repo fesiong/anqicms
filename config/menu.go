@@ -71,6 +71,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "自定义字段",
 				Backend:  "/setting/diyfield",
 			},
+			{
+				Path:     "/setting/ai",
+				GroupKey: "setting",
+				Name:     "AI统一配置",
+				Backend:  "/setting/ai",
+			},
 		},
 	},
 	{

@@ -101,7 +101,7 @@ func ApiImportArchive(ctx iris.Context) {
 	hasPseudo := ctx.PostValueIntDefault("has_pseudo", 0)
 	originId := ctx.PostValueIntDefault("origin_id", 0)
 	commentCount := uint(ctx.PostValueInt64Default("comment_count", 0))
-	favoriteCount := ctx.PostValueInt64Default("favorite_count", 0)
+	favoriteCount := uint(ctx.PostValueInt64Default("favorite_count", 0))
 	averageScore, _ := strconv.ParseFloat(ctx.PostValueTrim("average_score"), 32)
 	// 处理 JSON 数组字段
 	tmpFlags, _ := ctx.PostValues("flags[]")
@@ -250,12 +250,12 @@ func ApiImportArchive(ctx iris.Context) {
 		Stock:          stock,
 		ReadLevel:      readLevel,
 		Password:       password,
-		Sort:           sort,
 		Views:          views,
 		Images:         images,
 		UrlToken:       urlToken,
 		Extra:          map[string]interface{}{},
 		Draft:          draft,
+		Sort:           sort,
 		OriginUrl:      originUrl,
 		OriginTitle:    originTitle,
 		KeywordId:      keywordId,
@@ -288,6 +288,9 @@ func ApiImportArchive(ctx iris.Context) {
 		Skus:           importSkus,
 		Options:        importOptions,
 		WholesaleRules: wholesaleRules,
+	}
+	if views > 0 {
+		req.Views = uint(views)
 	}
 
 	// 如果传了ID，则采用覆盖的形式
@@ -717,6 +720,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	if linkUrl := ctx.PostValueTrim("url"); linkUrl != "" {
 		link = linkUrl
 	}
+	logo := ctx.PostValueTrim("logo")
 	nofollow := uint(ctx.PostValueIntDefault("nofollow", 0))
 	backLink := ctx.PostValueTrim("back_link")
 	myTitle := ctx.PostValueTrim("my_title")
@@ -754,6 +758,7 @@ func ApiImportCreateFriendLink(ctx iris.Context) {
 	if remark != "" {
 		friendLink.Remark = remark
 	}
+	friendLink.Logo = logo
 	friendLink.Nofollow = nofollow
 	friendLink.Status = 0
 

@@ -197,6 +197,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	if err != nil {
 		return
 	}
+	w.CleanCachedTags()
 	// 保存 content
 	if len(req.Content) > 0 || len(req.Extra) > 0 {
 		if req.Content != "" {
@@ -363,6 +364,112 @@ func (w *Website) SaveTagData(itemId int64, tagNames []string) error {
 		w.DB.Where("`item_id` = ? and `tag_id` = ?", itemId, tagData.TagId).FirstOrCreate(&tagData)
 	}
 	w.DB.Where("`item_id` = ? and `tag_id` not in(?)", itemId, tagIds).Delete(&model.TagData{})
+
+	return nil
+}
+
+type CacheTag struct {
+	Id    uint   `json:"id"`
+	Title string `json:"title"`
+}
+
+func (w *Website) CleanCachedTags() {
+	w.Cache.Delete("cached_tags")
+}
+
+func (w *Website) GetCachedTags() []*CacheTag {
+	var tags []*CacheTag
+	err := w.Cache.Get("cached_tags", &tags)
+	if err != nil {
+		// 最多获取10万
+		w.DB.Model(&model.Tag{}).Where("status = 1").Select("id", "title").Order("id desc").Limit(100000).Scan(&tags)
+		// 每次缓存 10分钟
+		w.Cache.Set("cached_tags", tags, 600)
+	}
+
+	return tags
+}
+
+// AutoMatchTag 实现 tag 匹配，并添加到 model.TagData
+// 匹配 title，keywords，description
+// 使用 AC 自动机高效匹配，最多匹配 5 个 tag
+func (w *Website) AutoMatchTag(archive *model.Archive) error {
+	if w.Content.MatchTag != 1 {
+		return nil
+	}
+	if archive == nil {
+		return nil
+	}
+	// 如果已经存在标签了，则不再匹配
+	var existCount int64
+	w.DB.Model(&model.TagData{}).Where("`item_id` = ?", archive.Id).Count(&existCount)
+	if existCount > 0 {
+		return nil
+	}
+	// 获取所有 tags
+	tags := w.GetCachedTags()
+	if len(tags) == 0 {
+		return nil
+	}
+
+	// 将 title、keywords、description 拼接成一个待匹配的文本
+	keywords := strings.ReplaceAll(archive.Keywords, ",", " ")
+	keywords = strings.ReplaceAll(keywords, "，", " ")
+	content := archive.Title + " " + keywords + " " + archive.Description
+	content = strings.ToLower(content)
+
+	// 构建 AC 自动机
+	ac := NewACAutomaton()
+	for _, tag := range tags {
+		if tag.Title == "" {
+			continue
+		}
+		ac.AddPattern(strings.ToLower(tag.Title), tag.Id)
+	}
+	ac.Build()
+
+	// 使用 AC 自动机匹配，最多 5 个
+	matches := ac.Search(content, 5)
+	matchedTagIds := make(map[uint]bool, len(matches))
+	for _, m := range matches {
+		matchedTagIds[m.TagId] = true
+	}
+
+	// 获取当前文档已有的 tagIds
+	// var existingTagIds []uint
+	// w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).
+	// 	Where("`item_id` = ?", archive.Id).
+	// 	Pluck("tag_id", &existingTagIds)
+
+	// existingSet := make(map[uint]bool, len(existingTagIds))
+	// for _, id := range existingTagIds {
+	// 	existingSet[id] = true
+	// }
+
+	// 添加新匹配的 tag
+	for tagId := range matchedTagIds {
+		// if existingSet[tagId] {
+		// 	continue
+		// }
+		tagData := model.TagData{
+			TagId:  tagId,
+			ItemId: archive.Id,
+		}
+		w.DB.Where("`item_id` = ? and `tag_id` = ?", archive.Id, tagId).
+			FirstOrCreate(&tagData)
+	}
+
+	// 删除不再匹配的 tag
+	// var toDelete []uint
+	// for _, id := range existingTagIds {
+	// 	if !matchedTagIds[id] {
+	// 		toDelete = append(toDelete, id)
+	// 	}
+	// }
+	// if len(toDelete) > 0 {
+	// 	w.DB.Where("`item_id` = ? and `tag_id` in(?)", archive.Id, toDelete).
+	// 		Delete(&model.TagData{})
+	// }
 
 	return nil
 }

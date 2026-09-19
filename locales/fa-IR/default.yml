@@ -34,6 +34,7 @@
 "SourcePage%s": "صفحه منبع: %s"
 "SubmitTime%s": "زمان ارسال: %s"
 "ThankYouForYourMessage!": "از پیام شما متشکرم!"
+"CaptchaVerificationFailed": "تأیید کپچا ناموفق بود، دوباره تلاش کنید"
 "ItHasEnteredTheReview": "، وارد بررسی شده است"
 "UndefinedModelName%s": "مدل تعریف نشده: %d"
 "404NotFound": "404 پیدا نشد"

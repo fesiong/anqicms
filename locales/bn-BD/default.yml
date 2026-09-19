@@ -34,6 +34,7 @@
 "SourcePage%s": "উত্স পৃষ্ঠা: %s"
 "SubmitTime%s": "জমা দেওয়ার সময়: %s"
 "ThankYouForYourMessage!": "আপনার বার্তার জন্য আপনাকে ধন্যবাদ!"
+"CaptchaVerificationFailed": "ক্যাপচা যাচাই ব্যর্থ হয়েছে, আবার চেষ্টা করুন"
 "ItHasEnteredTheReview": ", পর্যালোচনা প্রবেশ করেছে"
 "UndefinedModelName%s": "অনির্ধারিত মডেল: %d"
 "404NotFound": "404 পাওয়া যায়নি"

@@ -29,15 +29,6 @@ type Attachment struct {
 	FilePath     string `json:"file_path" gorm:"-"`
 }
 
-type AttachmentCategory struct {
-	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
-	AttachCount uint   `json:"attach_count" gorm:"column:attach_count;type:int(10) unsigned not null;default:0"`
-	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
-}
-
 func (attachment *Attachment) BeforeSave(tx *gorm.DB) error {
 	if utf8.RuneCountInString(attachment.FileName) > 250 {
 		attachment.FileName = string([]rune(attachment.FileName)[:250])
@@ -94,13 +85,6 @@ func (attachment *Attachment) Save(db *gorm.DB) error {
 		if err = db.Save(attachment).Error; err != nil {
 			return err
 		}
-	}
-
-	// 统计数量
-	if attachment.CategoryId > 0 {
-		var attachCount int64
-		db.Model(&Attachment{}).Where("`category_id` = ?", attachment.CategoryId).Count(&attachCount)
-		db.Model(&AttachmentCategory{}).Where("`id` = ?", attachment.CategoryId).UpdateColumn("attach_count", attachCount)
 	}
 
 	return nil

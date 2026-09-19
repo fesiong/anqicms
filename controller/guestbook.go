@@ -114,6 +114,21 @@ func GuestbookForm(ctx iris.Context) {
 		}
 		return
 	}
+
+	// reCAPTCHA 校验
+	setting := currentSite.GetAkismetSetting(false)
+	if setting.RecaptchaOpen && setting.RecaptchaSiteKey != "" && setting.RecaptchaPrivateKey != "" {
+		recaptchaToken := ctx.PostValueTrim("recaptcha_token")
+		resp, err := provider.VerifyRecaptcha(ctx.Request().Context(), setting.RecaptchaPrivateKey, recaptchaToken, ctx.RemoteAddr())
+		if err != nil || resp == nil || !resp.Success {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("CaptchaVerificationFailed"),
+			})
+			return
+		}
+	}
+
 	if ok := SafeVerify(ctx, req, returnType, "guestbook"); !ok {
 		return
 	}

@@ -1,0 +1,27 @@
+version: "3.8"
+services:
+  anqicms:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: anqicms
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${ANQICMS_PORT:-8001}:8001"
+    volumes:
+      - ./config.json:/app/config.json
+      - ./data:/app/data
+      - ./cache:/app/cache
+      - ./template:/app/template
+      - ./public/uploads:/app/public/uploads
+      - /etc/localtime:/etc/localtime:ro
+    networks:
+      - anqicms_net
+    environment:
+      - TZ=Asia/Shanghai
+
+networks:
+  anqicms_net:
+    name: anqicms_net

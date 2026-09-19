@@ -35,6 +35,7 @@ type ContentConfig struct {
 	FilterOutlink    int      `json:"filter_outlink"`
 	UrlTokenType     int      `json:"url_token_type"`
 	UseWebp          int      `json:"use_webp"`
+	MatchTag         int      `json:"match_tag"`
 	ConvertGif       int      `json:"convert_gif"` // 在转换成webp的时候，是否转换gif，1=true
 	Quality          int      `json:"quality"`
 	ResizeImage      int      `json:"resize_image"`

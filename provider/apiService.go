@@ -255,14 +255,14 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 }
 
 func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.Archive, int64) {
-	var categoryDetail *model.Category
 	var module *model.Module
-	if len(req.CategoryIds) > 0 {
-		categoryDetail = w.GetCategoryFromCache(uint(req.CategoryIds[0]))
-		if categoryDetail != nil {
-			req.ModuleId = int64(categoryDetail.ModuleId)
-		}
-	}
+	// var categoryDetail *model.Category
+	// if len(req.CategoryIds) > 0 {
+	// 	categoryDetail = w.GetCategoryFromCache(uint(req.CategoryIds[0]))
+	// 	if categoryDetail != nil && req.ModuleId == 0 {
+	// 		req.ModuleId = int64(categoryDetail.ModuleId)
+	// 	}
+	// }
 	module = w.GetModuleFromCache(uint(req.ModuleId))
 	if req.TagId > 0 {
 		req.TagIds = append(req.TagIds, req.TagId)
@@ -304,7 +304,8 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
-				} else if req.ModuleId > 0 {
+				}
+				if req.ModuleId > 0 {
 					tx = tx.Where("`module_id` = ?", req.ModuleId)
 				}
 				if len(req.ExcludeCategoryIds) > 0 {
@@ -331,7 +332,8 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 						} else {
 							tx = tx.Where("archives.`category_id` = ?", categoryId)
 						}
-					} else if req.ModuleId > 0 {
+					}
+					if req.ModuleId > 0 {
 						tx = tx.Where("archives.`module_id` = ?", req.ModuleId)
 					}
 					if len(req.ExcludeCategoryIds) > 0 {
@@ -364,7 +366,8 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 						} else {
 							tx = tx.Where("archives.`category_id` = ?", categoryId)
 						}
-					} else if req.ModuleId > 0 {
+					}
+					if req.ModuleId > 0 {
 						tx = tx.Where("archives.`module_id` = ?", req.ModuleId)
 					}
 					if len(req.ExcludeCategoryIds) > 0 {
@@ -387,6 +390,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
 				}
+				if req.ModuleId > 0 {
+					tx = tx.Where("archives.`module_id` = ?", req.ModuleId)
+				}
 				if len(req.ExcludeCategoryIds) > 0 {
 					if w.Content.MultiCategory == 1 {
 						tx = tx.Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
@@ -403,6 +409,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 				} else {
 					tx = tx.Where("`category_id` = ?", categoryId)
+				}
+				if req.ModuleId > 0 {
+					tx = tx.Where("archives.`module_id` = ?", req.ModuleId)
 				}
 				if len(req.ExcludeCategoryIds) > 0 {
 					if w.Content.MultiCategory == 1 {
@@ -441,6 +450,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
 					}
+					if req.ModuleId > 0 {
+						tx = tx.Where("archives.`module_id` = ?", req.ModuleId)
+					}
 					if len(req.ExcludeCategoryIds) > 0 {
 						if w.Content.MultiCategory == 1 {
 							tx = tx.Group("archives.id").Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
@@ -457,6 +469,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 						tx = tx.Group("archives.id").Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id and archive_categories.category_id = ?", categoryId)
 					} else {
 						tx = tx.Where("`category_id` = ?", categoryId)
+					}
+					if req.ModuleId > 0 {
+						tx = tx.Where("archives.`module_id` = ?", req.ModuleId)
 					}
 					if len(req.ExcludeCategoryIds) > 0 {
 						if w.Content.MultiCategory == 1 {
@@ -759,8 +774,6 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 						tx = tx.Where("`category_id` IN(?)", req.CategoryIds)
 					}
 				}
-			} else if req.ModuleId > 0 {
-				tx = tx.Where("`module_id` = ?", req.ModuleId)
 			}
 			if len(req.ExcludeCategoryIds) > 0 {
 				if w.Content.MultiCategory == 1 {

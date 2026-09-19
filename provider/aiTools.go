@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"mime/multipart"
@@ -12,14 +13,12 @@ import (
 	"time"
 
 	"github.com/cloudwego/eino/schema"
-	"github.com/robfig/cron/v3"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
 	"kandaoni.com/anqicms/provider/fulltext"
 	"kandaoni.com/anqicms/request"
-	"kandaoni.com/anqicms/response"
 )
 
 type ArgId struct {
@@ -187,12 +186,14 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 		if w == nil || w.DB == nil {
 			return "错误：站点未初始化", nil
 		}
+		isDraft := false
 		archive, err := w.GetArchiveById(args.Id)
 		if err != nil {
 			archiveDraft, err := w.GetArchiveDraftById(args.Id)
 			if err != nil {
 				return "", fmt.Errorf("获取文档失败: %w", err)
 			}
+			isDraft = true
 			archive = &archiveDraft.Archive
 		}
 		data, _ := w.GetArchiveDataById(args.Id)
@@ -203,6 +204,7 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("标题: %s\n", archive.Title))
 		b.WriteString(fmt.Sprintf("ID: %d\n", archive.Id))
+		b.WriteString(fmt.Sprintf("Draft: %v\n", isDraft))
 		b.WriteString(fmt.Sprintf("模型ID: %d\n", archive.ModuleId))
 		b.WriteString(fmt.Sprintf("分类ID: %d\n", archive.CategoryId))
 		b.WriteString(fmt.Sprintf("关键词: %s\n", archive.Keywords))
@@ -422,8 +424,8 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 
 	// ---- Module tools ----
 	add(&schema.ToolInfo{
-		Name:        "module_list",
-		Desc:        "获取自定义模型列表，返回所有模型的ID、名称、表名和URL别名等信息。",
+		Name: "module_list",
+		Desc: "获取自定义模型列表，返回所有模型的ID、名称、表名和URL别名等信息。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -945,8 +947,8 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 
 	// ---- Page Tools ----
 	add(&schema.ToolInfo{
-		Name:        "page_list",
-		Desc:        "获取页面列表，返回所有页面的ID和标题。",
+		Name: "page_list",
+		Desc: "获取页面列表，返回所有页面的ID和标题。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -1340,181 +1342,6 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 	})
 
 	add(&schema.ToolInfo{
-		Name: "template_get_file",
-		Desc: "获取模板文件的具体内容和路径。需要传入模板包名和文件相对路径。例如：package='default' path='index.html'",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"package": {Type: schema.String, Desc: "模板包名，如 default", Required: true},
-			"path":    {Type: schema.String, Desc: "模板文件相对路径，如 index.html 或 category/list.html", Required: true},
-		}),
-	}, func(ctx context.Context, argsJSON string) (string, error) {
-		var args struct {
-			Package string `json:"package"`
-			Path    string `json:"path"`
-		}
-		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-			return "", fmt.Errorf("无法解析参数: %w", err)
-		}
-		if args.Package == "" || args.Path == "" {
-			return "错误：package 和 path 不能为空", nil
-		}
-		w := svc.site
-		if w == nil || w.DB == nil {
-			return "错误：站点未初始化", nil
-		}
-		// Use the design file detail method to get file content
-		designFile, err := w.GetDesignTplFileDetail(args.Package, response.DesignFile{Path: args.Path})
-		if err != nil {
-			return "", fmt.Errorf("获取模板文件失败: %w", err)
-		}
-		if designFile == nil || designFile.Content == "" {
-			return fmt.Sprintf("模板文件 template/%s/%s 不存在或内容为空", args.Package, args.Path), nil
-		}
-		result := fmt.Sprintf("文件路径：template/%s/%s\n文件大小：%d bytes\n最后修改：%d\n\n内容：\n%s",
-			args.Package, args.Path, designFile.Size, designFile.LastMod, designFile.Content)
-		return result, nil
-	})
-
-	add(&schema.ToolInfo{
-		Name: "template_modify_file",
-		Desc: "修改/添加模板文件的内容。修改后需要通过 template_reload 工具重载模板才能生效。需要传入模板包名、文件相对路径和新的文件内容。",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"package": {Type: schema.String, Desc: "模板包名，如 default", Required: true},
-			"path":    {Type: schema.String, Desc: "模板文件相对路径，如 index.html 或 category/list.html", Required: true},
-			"content": {Type: schema.String, Desc: "文件的新内容", Required: true},
-		}),
-	}, func(ctx context.Context, argsJSON string) (string, error) {
-		var args struct {
-			Package string `json:"package"`
-			Path    string `json:"path"`
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-			return "", fmt.Errorf("无法解析参数: %w", err)
-		}
-		if args.Package == "" || args.Path == "" {
-			return "错误：package 和 path 不能为空", nil
-		}
-		w := svc.site
-		if w == nil || w.DB == nil {
-			return "错误：站点未初始化", nil
-		}
-		// Check template exists
-		_, err := w.GetDesignInfo(args.Package, false)
-		if err != nil {
-			return "", fmt.Errorf("模板包 '%s' 不存在: %w", args.Package, err)
-		}
-		// Save the template file
-		err = w.SaveDesignTplFile(request.SaveDesignFileRequest{
-			Package: args.Package,
-			Path:    args.Path,
-			Content: args.Content,
-		})
-		if err != nil {
-			return "", fmt.Errorf("保存模板文件失败: %w", err)
-		}
-		return fmt.Sprintf("模板文件 template/%s/%s 已成功修改。请使用 template_reload 工具重载模板以生效。", args.Package, args.Path), nil
-	})
-
-	add(&schema.ToolInfo{
-		Name: "template_get_static",
-		Desc: "获取静态资源文件（CSS/JS/字体等）的内容和路径。需要传入模板包名和文件相对路径。例如：package='default' path='css/style.css'",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"package": {Type: schema.String, Desc: "模板包名，如 default", Required: true},
-			"path":    {Type: schema.String, Desc: "静态文件相对路径，如 css/style.css 或 js/app.js", Required: true},
-		}),
-	}, func(ctx context.Context, argsJSON string) (string, error) {
-		var args struct {
-			Package string `json:"package"`
-			Path    string `json:"path"`
-		}
-		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-			return "", fmt.Errorf("无法解析参数: %w", err)
-		}
-		if args.Package == "" || args.Path == "" {
-			return "错误：package 和 path 不能为空", nil
-		}
-		w := svc.site
-		if w == nil || w.DB == nil {
-			return "错误：站点未初始化", nil
-		}
-		designFile, err := w.GetDesignStaticFileDetail(args.Package, response.DesignFile{Path: args.Path})
-		if err != nil {
-			return "", fmt.Errorf("获取静态文件失败: %w", err)
-		}
-		if designFile == nil || (designFile.Content == "" && designFile.Size == 0) {
-			return fmt.Sprintf("静态文件 static/%s/%s 不存在", args.Package, args.Path), nil
-		}
-		// 对于二进制文件（图片等），仅返回元信息，不返回内容
-		isBinary := strings.HasSuffix(args.Path, ".png") || strings.HasSuffix(args.Path, ".jpg") ||
-			strings.HasSuffix(args.Path, ".jpeg") || strings.HasSuffix(args.Path, ".gif") ||
-			strings.HasSuffix(args.Path, ".svg") || strings.HasSuffix(args.Path, ".ico") ||
-			strings.HasSuffix(args.Path, ".webp") || strings.HasSuffix(args.Path, ".bmp") ||
-			strings.HasSuffix(args.Path, ".ttf") || strings.HasSuffix(args.Path, ".woff") ||
-			strings.HasSuffix(args.Path, ".woff2") || strings.HasSuffix(args.Path, ".eot") ||
-			strings.HasSuffix(args.Path, ".zip") || strings.HasSuffix(args.Path, ".pdf")
-		if isBinary {
-			result := fmt.Sprintf("文件路径：static/%s/%s\n文件大小：%d bytes\n最后修改：%d\n\n此文件为二进制文件，内容未显示。如需修改请上传新文件。",
-				args.Package, args.Path, designFile.Size, designFile.LastMod)
-			return result, nil
-		}
-		result := fmt.Sprintf("文件路径：static/%s/%s\n文件大小：%d bytes\n最后修改：%d\n\n内容：\n%s",
-			args.Package, args.Path, designFile.Size, designFile.LastMod, designFile.Content)
-		return result, nil
-	})
-
-	add(&schema.ToolInfo{
-		Name: "template_modify_static",
-		Desc: "修改/添加静态资源文件（CSS/JS/字体等）的内容。修改后立即生效，无需重载。支持 CSS、JS 等文本文件。需要传入模板包名、文件相对路径和新的文件内容。",
-		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"package": {Type: schema.String, Desc: "模板包名，如 default", Required: true},
-			"path":    {Type: schema.String, Desc: "静态文件相对路径，如 css/style.css 或 js/app.js", Required: true},
-			"content": {Type: schema.String, Desc: "文件的新内容", Required: true},
-		}),
-	}, func(ctx context.Context, argsJSON string) (string, error) {
-		var args struct {
-			Package string `json:"package"`
-			Path    string `json:"path"`
-			Content string `json:"content"`
-		}
-		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
-			return "", fmt.Errorf("无法解析参数: %w", err)
-		}
-		if args.Package == "" || args.Path == "" {
-			return "错误：package 和 path 不能为空", nil
-		}
-		if args.Content == "" {
-			return "错误：content 不能为空", nil
-		}
-		// 检查是否为文本文件（禁止修改图片等二进制文件）
-		binaryExts := []string{".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".webp", ".bmp",
-			".ttf", ".woff", ".woff2", ".eot", ".zip", ".pdf"}
-		for _, ext := range binaryExts {
-			if strings.HasSuffix(strings.ToLower(args.Path), ext) {
-				return fmt.Sprintf("错误：不支持修改二进制文件 %s，请通过后台界面上传", args.Path), nil
-			}
-		}
-		w := svc.site
-		if w == nil || w.DB == nil {
-			return "错误：站点未初始化", nil
-		}
-		// Check template exists
-		_, err := w.GetDesignInfo(args.Package, false)
-		if err != nil {
-			return "", fmt.Errorf("模板包 '%s' 不存在: %w", args.Package, err)
-		}
-		// Save the static file
-		err = w.SaveDesignStaticFile(request.SaveDesignFileRequest{
-			Package: args.Package,
-			Path:    args.Path,
-			Content: args.Content,
-		})
-		if err != nil {
-			return "", fmt.Errorf("保存静态文件失败: %w", err)
-		}
-		return fmt.Sprintf("静态文件 static/%s/%s 已成功修改，修改已立即生效。", args.Package, args.Path), nil
-	})
-
-	add(&schema.ToolInfo{
 		Name:        "template_reload",
 		Desc:        "重新加载模板。在修改了模板文件内容或切换模板后，需要调用此工具使更改生效。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{}),
@@ -1674,6 +1501,7 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 			"page_size":   {Type: schema.Integer, Desc: "每页数量，最大100，默认10"},
 			"category_id": {Type: schema.Integer, Desc: "附件分类ID，筛选指定分类"},
 			"keyword":     {Type: schema.String, Desc: "搜索关键词，匹配文件名"},
+			"is_image":    {Type: schema.String, Desc: "附件类型：0-所有，1-图片，2-视频，默认0"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args struct {
@@ -1681,6 +1509,7 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 			PageSize   int    `json:"page_size"`
 			CategoryID uint   `json:"category_id"`
 			Keyword    string `json:"keyword"`
+			IsImage    int    `json:"is_image"`
 		}
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 			return "", fmt.Errorf("无法解析参数: %w", err)
@@ -1695,7 +1524,7 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 		if w == nil || w.DB == nil {
 			return "错误：站点未初始化", nil
 		}
-		attachments, total, err := w.GetAttachmentList(args.CategoryID, args.Keyword, args.Page, args.PageSize)
+		attachments, total, err := w.GetAttachmentList(args.CategoryID, args.Keyword, args.IsImage, args.Page, args.PageSize)
 		if err != nil {
 			return "", fmt.Errorf("获取附件列表失败: %w", err)
 		}
@@ -1742,25 +1571,36 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 
 	add(&schema.ToolInfo{
 		Name: "attachment_upload",
-		Desc: "通过远程URL或本地文件路径上传附件（图片）到站点。本地文件路径通常是AI聊天上传按钮上传的临时文件路径（file_path）。",
+		Desc: "上传附件（图片）到站点，支持三种方式（三选一）：1. base64参数，传入图片的base64编码内容或data URI（推荐，客户端本地文件或AI生成的图片先编码为base64再上传）；2. url参数传远程URL；3. url参数传服务器本地文件路径（仅当文件已在CMS服务器上时有效，通常是AI聊天上传按钮上传的临时文件路径file_path）。注意：MCP客户端本地路径在服务器上不存在，请使用base64方式。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"url":       {Type: schema.String, Desc: "图片的远程URL地址，或本地文件路径（绝对路径或基于站点项目目录的相对路径）", Required: true},
+			"base64":    {Type: schema.String, Desc: "图片的base64编码内容，支持裸base64字符串或data URI格式（data:image/png;base64,xxx），与url二选一"},
+			"url":       {Type: schema.String, Desc: "图片的远程URL地址，或本地文件路径（绝对路径或基于站点项目目录的相对路径），与base64二选一"},
 			"file_name": {Type: schema.String, Desc: "保存的文件名（不含扩展名），可选"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args struct {
+			Base64   string `json:"base64"`
 			URL      string `json:"url"`
 			FileName string `json:"file_name"`
 		}
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
 			return "", fmt.Errorf("无法解析参数: %w", err)
 		}
-		if args.URL == "" {
-			return "错误：URL不能为空", nil
+		if args.Base64 == "" && args.URL == "" {
+			return "错误：base64 和 url 至少提供一个", nil
 		}
 		w := svc.site
 		if w == nil || w.DB == nil {
 			return "错误：站点未初始化", nil
+		}
+		// base64 内容优先
+		if args.Base64 != "" {
+			attachment, err := svc.uploadAttachmentFromBase64(args.Base64, args.FileName)
+			if err != nil {
+				return "", fmt.Errorf("上传附件失败: %w", err)
+			}
+			attachment.GetThumb(w.PluginStorage.StorageUrl)
+			return fmt.Sprintf("附件上传成功！ID: %d\n文件名: %s\nURL: %s", attachment.Id, attachment.FileName, attachment.Logo), nil
 		}
 		var attachment *model.Attachment
 		// 判断是否为本地文件路径
@@ -2227,8 +2067,8 @@ SEO信息：
 
 	// ---- System info & Setting tools ----
 	add(&schema.ToolInfo{
-		Name:        "version",
-		Desc:        "查看当前系统版本号和试用状态。",
+		Name: "version",
+		Desc: "查看当前系统版本号和试用状态。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		trial := "否"
@@ -2238,8 +2078,8 @@ SEO信息：
 		return fmt.Sprintf("版本信息：\n版本号: %s\n试用版: %s", config.Version, trial), nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "anqi_info",
-		Desc:        "查看安企CMS授权登录信息，包括是否已登录、会员到期时间等。",
+		Name: "anqi_info",
+		Desc: "查看安企CMS授权登录信息，包括是否已登录、会员到期时间等。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2273,8 +2113,8 @@ SEO信息：
 		return b.String(), nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_system",
-		Desc:        "查看系统设置，包括站点名称、Logo、备案号、网址、语言等基础配置。",
+		Name: "setting_system",
+		Desc: "查看系统设置，包括站点名称、Logo、备案号、网址、语言等基础配置。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2386,8 +2226,8 @@ ICP备案: %s
 		return "系统设置已更新", nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_contact",
-		Desc:        "查看联系方式设置，包括联系人、电话、地址、邮箱、微信、QQ等。",
+		Name: "setting_contact",
+		Desc: "查看联系方式设置，包括联系人、电话、地址、邮箱、微信、QQ等。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2498,8 +2338,8 @@ Youtube: %s
 		return "联系方式已更新", nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_diy_field",
-		Desc:        "查看自定义字段设置，返回所有自定义字段的配置信息。",
+		Name: "setting_diy_field",
+		Desc: "查看自定义字段设置，返回所有自定义字段的配置信息。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2564,8 +2404,8 @@ Youtube: %s
 		return fmt.Sprintf("自定义字段已更新，共 %d 个字段", len(args.Fields)), nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_index",
-		Desc:        "查看首页TDK设置（SEO标题、关键词、描述）。",
+		Name: "setting_index",
+		Desc: "查看首页TDK设置（SEO标题、关键词、描述）。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2618,8 +2458,8 @@ SEO描述: %s
 		return "首页TDK已更新", nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_content",
-		Desc:        "查看内容设置，包括远程下载、过滤外链、URL模式、缩略图、编辑器等。",
+		Name: "setting_content",
+		Desc: "查看内容设置，包括远程下载、过滤外链、URL模式、缩略图、编辑器等。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2719,8 +2559,8 @@ SEO描述: %s
 		return "内容设置已更新", nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_safe",
-		Desc:        "查看内容安全设置，包括验证码、频率限制、内容过滤、IP黑名单等。",
+		Name: "setting_safe",
+		Desc: "查看内容安全设置，包括验证码、频率限制、内容过滤、IP黑名单等。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		w := svc.site
@@ -2791,8 +2631,8 @@ API发布: %d
 		return "安全设置已更新", nil
 	})
 	add(&schema.ToolInfo{
-		Name:        "setting_migrate_db",
-		Desc:        "更新数据库表结构，自动同步模型字段变更到数据库。",
+		Name: "setting_migrate_db",
+		Desc: "更新数据库表结构，自动同步模型字段变更到数据库。",
 		// ParamsOneOf left nil intentionally: no parameters needed
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		if svc.site == nil {
@@ -3006,7 +2846,7 @@ API发布: %d
 		Name: "keyword_create",
 		Desc: "添加关键词到词库。如果关键词已存在则更新其分类。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"title":       {Type: schema.String, Desc: "关键词", Required: true},
+			"title":       {Type: schema.String, Desc: "关键词，支持多个，英文逗号隔开", Required: true},
 			"category_id": {Type: schema.Integer, Desc: "分类ID（可选）"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
@@ -3021,20 +2861,31 @@ API发布: %d
 		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil || args.Title == "" {
 			return "参数错误：必须提供 title", nil
 		}
-		keyword, err := w.GetKeywordByTitle(args.Title)
-		if err != nil {
-			keyword = &model.Keyword{
-				Title:      args.Title,
-				Status:     1,
-				CategoryId: args.CategoryId,
+		titles := strings.Split(strings.ReplaceAll(strings.ReplaceAll(args.Title, "，", ","), "\n", ","), ",")
+		count := 0
+		duplicate := 0
+		for _, title := range titles {
+			title = strings.TrimSpace(title)
+			if title == "" {
+				continue
 			}
-		} else if args.CategoryId > 0 {
-			keyword.CategoryId = args.CategoryId
+			_, err := w.GetKeywordByTitle(title)
+			if err != nil {
+				// 添加
+				keyword := &model.Keyword{
+					Title:      args.Title,
+					Status:     1,
+					CategoryId: args.CategoryId,
+				}
+				if err = keyword.Save(w.DB); err == nil {
+					count++
+				}
+			} else {
+				duplicate++
+			}
 		}
-		if err := keyword.Save(w.DB); err != nil {
-			return fmt.Sprintf("保存关键词失败: %s", err.Error()), nil
-		}
-		return fmt.Sprintf("关键词「%s」已保存（ID: %d）", keyword.Title, keyword.Id), nil
+
+		return fmt.Sprintf("成功保存 %d 个关键词，重复 %d 个", count, duplicate), nil
 	})
 	add(&schema.ToolInfo{
 		Name: "keyword_delete",
@@ -3754,6 +3605,7 @@ API发布: %d
 			Status   string `json:"status"`
 			Page     int    `json:"page"`
 			PageSize int    `json:"page_size"`
+			Type     string `json:"type"`
 		}
 		_ = json.Unmarshal([]byte(argsJSON), &args)
 		if args.Page < 1 {
@@ -3762,7 +3614,23 @@ API发布: %d
 		if args.PageSize < 1 || args.PageSize > 100 {
 			args.PageSize = 20
 		}
-		orders, total := w.GetOrderList(args.UserId, args.OrderId, args.UserName, args.Status, args.Page, args.PageSize)
+		orders, total := w.GetOrderList(func(tx *gorm.DB) *gorm.DB {
+			if args.Type != "" {
+				tx = tx.Where("`type` = ?", args.Type)
+			}
+			if args.UserId > 0 {
+				tx = tx.Where("`user_id` = ?", args.UserId)
+			}
+			if args.OrderId != "" {
+				tx = tx.Where("`order_id` = ?", args.OrderId)
+			}
+			if args.UserName != "" {
+				var userIds []uint
+				w.DB.Model(&model.User{}).Where("`user_name` LIKE ?", "%"+args.UserName+"%").Pluck("id", &userIds)
+				tx = tx.Where("`user_id` IN (?)", userIds)
+			}
+			return tx
+		}, args.Status, args.Page, args.PageSize)
 		var b strings.Builder
 		b.WriteString(fmt.Sprintf("共 %d 个订单（当前页 %d 个）：\n\n", total, len(orders)))
 		for _, o := range orders {
@@ -3832,7 +3700,7 @@ API发布: %d
 
 		// 如果有 cron 表达式，计算首次执行时间
 		if agent.CronExpr != "" {
-			scheduler, err := cron.ParseStandard(agent.CronExpr)
+			scheduler, err := cronParser.Parse(agent.CronExpr)
 			if err == nil {
 				agent.NextRunAt = scheduler.Next(time.Now()).Unix()
 				w.DB.Model(agent).Update("next_run_at", agent.NextRunAt)
@@ -3944,10 +3812,25 @@ API发布: %d
 		if args.Enabled == 1 {
 			enabled = 1
 		}
+		// 重新启用时，重新计算 NextRunAt，防止 NextRunAt=0 导致永不执行
+		if enabled == 1 && agent.CronExpr != "" {
+			scheduler, err := cronParser.Parse(agent.CronExpr)
+			if err == nil {
+				agent.NextRunAt = scheduler.Next(time.Now()).Unix()
+				w.DB.Model(&agent).Update("next_run_at", agent.NextRunAt)
+			}
+		}
 		w.DB.Model(&agent).Update("enabled", enabled)
 		svc.agentsMu.Lock()
 		if existing, ok := svc.agents[uint(args.Id)]; ok {
 			existing.Enabled = enabled
+			if enabled == 1 {
+				existing.NextRunAt = agent.NextRunAt
+			}
+		} else if enabled == 1 {
+			// 如果内存中没有该 agent，加入内存
+			agent.Enabled = enabled
+			svc.agents[uint(args.Id)] = &agent
 		}
 		svc.agentsMu.Unlock()
 		status := "已暂停"
@@ -4063,6 +3946,128 @@ API发布: %d
 	add(skillReloadTool())
 	add(skillSaveTool())
 
+	// ── SkillHub 技能仓库工具 ──
+	add(&schema.ToolInfo{
+		Name: "skill_search",
+		Desc: "在 SkillHub 技能仓库 (https://skillhub.cn) 搜索技能。" +
+			"当本地没有合适的技能时，使用此工具在线搜索。" +
+			"找到后用 skill_install 安装。",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"query": {Type: schema.String, Required: true, Desc: "搜索关键词 (如 pdf, code review)"},
+			"limit": {Type: schema.Integer, Desc: "返回结果上限 (1-50, 默认 10)"},
+		}),
+	}, func(ctx context.Context, argsJSON string) (string, error) {
+		var args struct {
+			Query string `json:"query"`
+			Limit int    `json:"limit"`
+		}
+		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+			return "", fmt.Errorf("无法解析参数: %w", err)
+		}
+		resp, err := SearchSkillHub(ctx, args.Query, args.Limit)
+		if err != nil {
+			return fmt.Sprintf("搜索失败: %s", err.Error()), nil
+		}
+		return FormatSkillHubSearchResults(resp, args.Query), nil
+	})
+
+	add(&schema.ToolInfo{
+		Name: "skill_install",
+		Desc: "从 SkillHub 技能仓库下载并安装技能。" +
+			"下载 SKILL.md zip 包并解压到全局技能目录，安装后可用 skill_get 加载。" +
+			"force=true 覆盖已安装的同名技能。",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"slug":  {Type: schema.String, Required: true, Desc: "SkillHub 技能 slug (如 find-skills)"},
+			"force": {Type: schema.Boolean, Desc: "覆盖已安装技能 (默认 false)"},
+		}),
+	}, func(ctx context.Context, argsJSON string) (string, error) {
+		var args struct {
+			Slug  string `json:"slug"`
+			Force bool   `json:"force"`
+		}
+		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+			return "", fmt.Errorf("无法解析参数: %w", err)
+		}
+		info, err := InstallSkillFromSkillHub(ctx, args.Slug, args.Force)
+		return FormatSkillHubInstallResult(info, err), nil
+	})
+
+	// ── P7: Subagent/Team 工具 ──
+	add(&schema.ToolInfo{
+		Name: "task",
+		Desc: "派发并行子任务 (仿 atomcode `task` 工具)。" +
+			"每个子任务在独立上下文中执行，结果汇总到主对话。" +
+			"explore 子任务只读 (调查/搜索)，worker 子任务可写但需声明 scope (允许写的文件范围)，scope 非重叠。",
+		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
+			"tasks": {
+				Type: schema.Array, Required: true,
+				Desc: "子任务列表",
+				ElemInfo: &schema.ParameterInfo{
+					Type: schema.Object,
+					SubParams: map[string]*schema.ParameterInfo{
+						"description": {Type: schema.String, Required: true, Desc: "3-5 词任务标签"},
+						"prompt":      {Type: schema.String, Required: true, Desc: "子任务完整指令"},
+						"type":        {Type: schema.String, Required: true, Desc: "explore (只读) 或 worker (可写)"},
+						"scope":       {Type: schema.Array, Desc: "worker 允许写的文件 scope (globs)"},
+					},
+				},
+			},
+		}),
+	}, func(ctx context.Context, argsJSON string) (string, error) {
+		var args struct {
+			Tasks []struct {
+				Description string   `json:"description"`
+				Prompt      string   `json:"prompt"`
+				Type        string   `json:"type"`
+				Scope       []string `json:"scope"`
+			} `json:"tasks"`
+		}
+		if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+			return "", fmt.Errorf("无法解析参数: %w", err)
+		}
+		if len(args.Tasks) == 0 {
+			return "错误：至少需要一个子任务", nil
+		}
+		if len(args.Tasks) > 10 {
+			return "错误：一次最多派发 10 个子任务", nil
+		}
+
+		// 构建 SubagentTask 列表
+		tasks := make([]*SubagentTask, 0, len(args.Tasks))
+		for i, ts := range args.Tasks {
+			taskID := fmt.Sprintf("task_%d_%d", time.Now().UnixNano(), i+1)
+			subType := SubagentExplore
+			if ts.Type == "worker" {
+				subType = SubagentWorker
+			} else if ts.Type != "explore" {
+				return fmt.Sprintf("错误：子任务 %d 的 type 必须是 explore 或 worker", i+1), nil
+			}
+
+			// worker 必须声明 scope
+			if subType == SubagentWorker && len(ts.Scope) == 0 {
+				return fmt.Sprintf("错误：worker 子任务 %d 必须声明 scope", i+1), nil
+			}
+
+			tasks = append(tasks, &SubagentTask{
+				ID:          taskID,
+				Description: ts.Description,
+				Prompt:      ts.Prompt,
+				Type:        subType,
+				Scope:       ts.Scope,
+				MaxRounds:   10,
+				Timeout:     5 * time.Minute,
+			})
+		}
+
+		// 并行执行所有子任务
+		taskCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+		defer cancel()
+		results := svc.DispatchTasks(taskCtx, tasks)
+
+		// 格式化汇总结果
+		return FormatSubagentResults(results), nil
+	})
+
 	return tools, handlers
 }
 
@@ -4082,100 +4087,96 @@ const (
 // 一个工具可属于多个包（如 category_list 同时用于内容管理和结构管理）
 var toolCapabilityMapping = map[string][]string{
 	// === content ===
-	"archive_list":      {CapabilityContent},
-	"archive_get":       {CapabilityContent},
-	"archive_create":    {CapabilityContent},
-	"archive_delete":    {CapabilityContent},
-	"archive_publish":   {CapabilityContent},
-	"archive_update":    {CapabilityContent},
+	"archive_list":       {CapabilityContent},
+	"archive_get":        {CapabilityContent},
+	"archive_create":     {CapabilityContent},
+	"archive_delete":     {CapabilityContent},
+	"archive_publish":    {CapabilityContent},
+	"archive_update":     {CapabilityContent},
 	"archive_tag_update": {CapabilityContent},
-	"category_list":     {CapabilityContent, CapabilityStructure},
-	"category_get":      {CapabilityContent, CapabilityStructure},
-	"category_create":   {CapabilityContent},
-	"category_delete":   {CapabilityContent},
-	"category_update":   {CapabilityContent},
-	"tag_list":          {CapabilityContent},
-	"tag_get":           {CapabilityContent},
-	"tag_create":        {CapabilityContent},
-	"tag_delete":        {CapabilityContent},
-	"tag_update":        {CapabilityContent},
-	"attachment_list":   {CapabilityContent},
-	"attachment_get":    {CapabilityContent},
-	"attachment_upload": {CapabilityContent},
-	"attachment_delete": {CapabilityContent},
-	"comment_list":      {CapabilityContent},
-	"comment_approve":   {CapabilityContent},
-	"comment_delete":    {CapabilityContent},
+	"category_list":      {CapabilityContent, CapabilityStructure},
+	"category_get":       {CapabilityContent, CapabilityStructure},
+	"category_create":    {CapabilityContent},
+	"category_delete":    {CapabilityContent},
+	"category_update":    {CapabilityContent},
+	"tag_list":           {CapabilityContent},
+	"tag_get":            {CapabilityContent},
+	"tag_create":         {CapabilityContent},
+	"tag_delete":         {CapabilityContent},
+	"tag_update":         {CapabilityContent},
+	"attachment_list":    {CapabilityContent},
+	"attachment_get":     {CapabilityContent},
+	"attachment_upload":  {CapabilityContent},
+	"attachment_delete":  {CapabilityContent},
+	"comment_list":       {CapabilityContent},
+	"comment_approve":    {CapabilityContent},
+	"comment_delete":     {CapabilityContent},
 
 	// === structure ===
-	"page_list":    {CapabilityStructure},
-	"page_get":     {CapabilityStructure},
-	"page_create":  {CapabilityStructure},
-	"page_delete":  {CapabilityStructure},
-	"page_update":  {CapabilityStructure},
-	"module_list":  {CapabilityStructure},
-	"module_get":   {CapabilityStructure},
-	"module_create": {CapabilityStructure},
-	"module_delete": {CapabilityStructure},
-	"module_update": {CapabilityStructure},
-	"nav_list":     {CapabilityStructure},
-	"nav_create":   {CapabilityStructure},
-	"nav_delete":   {CapabilityStructure},
-	"nav_update":   {CapabilityStructure},
-	"friendlink_list":  {CapabilityStructure},
+	"page_list":         {CapabilityStructure},
+	"page_get":          {CapabilityStructure},
+	"page_create":       {CapabilityStructure},
+	"page_delete":       {CapabilityStructure},
+	"page_update":       {CapabilityStructure},
+	"module_list":       {CapabilityStructure},
+	"module_get":        {CapabilityStructure},
+	"module_create":     {CapabilityStructure},
+	"module_delete":     {CapabilityStructure},
+	"module_update":     {CapabilityStructure},
+	"nav_list":          {CapabilityStructure},
+	"nav_create":        {CapabilityStructure},
+	"nav_delete":        {CapabilityStructure},
+	"nav_update":        {CapabilityStructure},
+	"friendlink_list":   {CapabilityStructure},
 	"friendlink_create": {CapabilityStructure},
 	"friendlink_delete": {CapabilityStructure},
-	"redirect_list":  {CapabilityStructure},
-	"redirect_create": {CapabilityStructure},
+	"redirect_list":     {CapabilityStructure},
+	"redirect_create":   {CapabilityStructure},
 
 	// === design ===
-	"template_get_info":     {CapabilityDesign},
-	"template_get_file":     {CapabilityDesign},
-	"template_modify_file":  {CapabilityDesign},
-	"template_get_static":   {CapabilityDesign},
-	"template_modify_static": {CapabilityDesign},
-	"template_reload":       {CapabilityDesign},
-	"anchor_list":   {CapabilityDesign},
-	"anchor_create": {CapabilityDesign},
-	"anchor_delete": {CapabilityDesign},
+	"template_get_info": {CapabilityDesign},
+	"template_reload":   {CapabilityDesign},
+	"anchor_list":       {CapabilityDesign},
+	"anchor_create":     {CapabilityDesign},
+	"anchor_delete":     {CapabilityDesign},
 
 	// === seo ===
-	"keyword_list":   {CapabilitySEO},
-	"keyword_create": {CapabilitySEO},
-	"keyword_delete": {CapabilitySEO},
-	"sitemap_rebuild": {CapabilitySEO},
-	"url_push":       {CapabilitySEO},
+	"keyword_list":        {CapabilitySEO},
+	"keyword_create":      {CapabilitySEO},
+	"keyword_delete":      {CapabilitySEO},
+	"sitemap_rebuild":     {CapabilitySEO},
+	"url_push":            {CapabilitySEO},
 	"statistic_dashboard": {CapabilitySEO},
 	"statistic_spider":    {CapabilitySEO},
 	"statistic_traffic":   {CapabilitySEO},
 
 	// === admin ===
-	"setting_system":      {CapabilityAdmin},
-	"setting_system_form": {CapabilityAdmin},
-	"setting_contact":      {CapabilityAdmin},
-	"setting_contact_form": {CapabilityAdmin},
-	"setting_diy_field":    {CapabilityAdmin},
-	"setting_diy_field_form": {CapabilityAdmin},
-	"setting_index":        {CapabilityAdmin},
-	"setting_index_form":   {CapabilityAdmin},
-	"setting_content":      {CapabilityAdmin},
-	"setting_content_form": {CapabilityAdmin},
-	"setting_safe":         {CapabilityAdmin},
-	"setting_safe_form":    {CapabilityAdmin},
-	"setting_migrate_db":   {CapabilityAdmin},
-	"plugin_robots_get":    {CapabilityAdmin},
-	"plugin_robots_set":    {CapabilityAdmin},
-	"rewrite_get":          {CapabilityAdmin},
-	"rewrite_form":         {CapabilityAdmin},
+	"setting_system":          {CapabilityAdmin},
+	"setting_system_form":     {CapabilityAdmin},
+	"setting_contact":         {CapabilityAdmin},
+	"setting_contact_form":    {CapabilityAdmin},
+	"setting_diy_field":       {CapabilityAdmin},
+	"setting_diy_field_form":  {CapabilityAdmin},
+	"setting_index":           {CapabilityAdmin},
+	"setting_index_form":      {CapabilityAdmin},
+	"setting_content":         {CapabilityAdmin},
+	"setting_content_form":    {CapabilityAdmin},
+	"setting_safe":            {CapabilityAdmin},
+	"setting_safe_form":       {CapabilityAdmin},
+	"setting_migrate_db":      {CapabilityAdmin},
+	"plugin_robots_get":       {CapabilityAdmin},
+	"plugin_robots_set":       {CapabilityAdmin},
+	"rewrite_get":             {CapabilityAdmin},
+	"rewrite_form":            {CapabilityAdmin},
 	"plugin_htmlcache_build":  {CapabilityAdmin},
 	"plugin_fulltext_rebuild": {CapabilityAdmin},
 	"plugin_backup_dump":      {CapabilityAdmin},
-	"user_list":   {CapabilityAdmin},
-	"user_get":    {CapabilityAdmin},
-	"user_create": {CapabilityAdmin},
-	"user_update": {CapabilityAdmin},
-	"user_delete": {CapabilityAdmin},
-	"order_list":  {CapabilityAdmin},
+	"user_list":               {CapabilityAdmin},
+	"user_get":                {CapabilityAdmin},
+	"user_create":             {CapabilityAdmin},
+	"user_update":             {CapabilityAdmin},
+	"user_delete":             {CapabilityAdmin},
+	"order_list":              {CapabilityAdmin},
 
 	// === agent ===
 	"agent_create": {CapabilityAgent},
@@ -4197,16 +4198,16 @@ var toolCapabilityMapping = map[string][]string{
 	"skill_save":   {CapabilityAdmin},
 
 	// === 内置工具（文件、shell、web 等）=== universal
-	"read_file":       {CapabilityUniversal},
-	"write_file":      {CapabilityUniversal},
-	"edit_file":       {CapabilityUniversal},
-	"search_replace":  {CapabilityUniversal},
-	"bash":            {CapabilityUniversal},
-	"grep":            {CapabilityUniversal},
-	"glob":            {CapabilityUniversal},
-	"list_directory":  {CapabilityUniversal},
-	"web_fetch":       {CapabilityUniversal},
-	"web_search":      {CapabilityUniversal},
+	"read_file":      {CapabilityUniversal},
+	"write_file":     {CapabilityUniversal},
+	"edit_file":      {CapabilityUniversal},
+	"search_replace": {CapabilityUniversal},
+	"bash":           {CapabilityUniversal},
+	"grep":           {CapabilityUniversal},
+	"glob":           {CapabilityUniversal},
+	"list_directory": {CapabilityUniversal},
+	"web_fetch":      {CapabilityUniversal},
+	"web_search":     {CapabilityUniversal},
 }
 
 // getToolPackages returns the capability packages a tool belongs to.
@@ -4290,4 +4291,83 @@ func BuildDeclareTool() *schema.ToolInfo {
 			},
 		}),
 	}
+}
+
+// uploadAttachmentFromBase64 将 base64 编码的图片内容（裸 base64 或 data URI）保存为站点附件。
+// 写入临时文件后复用 AttachmentUpload，从而继承水印、压缩、缩略图、md5 去重等处理逻辑。
+func (svc *AiChatService) uploadAttachmentFromBase64(base64Str string, fileName string) (*model.Attachment, error) {
+	w := svc.site
+	if w == nil || w.DB == nil {
+		return nil, fmt.Errorf("站点未初始化")
+	}
+	base64Str = strings.TrimSpace(base64Str)
+	// 解析 data URI：data:image/png;base64,xxxx
+	ext := ""
+	if strings.HasPrefix(base64Str, "data:") {
+		idx := strings.Index(base64Str, ",")
+		if idx <= 0 {
+			return nil, fmt.Errorf("无效的 data URI 格式")
+		}
+		meta := base64Str[5:idx] // 如 image/png;base64
+		base64Str = strings.TrimSpace(base64Str[idx+1:])
+		if parts := strings.SplitN(meta, "/", 2); len(parts) == 2 {
+			ext = strings.ToLower(strings.Split(parts[1], ";")[0])
+			ext = strings.ReplaceAll(ext, "+xml", "")
+		}
+	}
+	// 只保留字母数字，避免 svg+xml 之类的异常扩展名
+	var extBuf strings.Builder
+	for _, c := range ext {
+		if (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') {
+			extBuf.WriteRune(c)
+		}
+	}
+	ext = extBuf.String()
+
+	data, err := base64.StdEncoding.DecodeString(base64Str)
+	if err != nil {
+		// 兼容无填充与 URL-safe 变体
+		if d, err2 := base64.RawStdEncoding.DecodeString(base64Str); err2 == nil {
+			data, err = d, nil
+		} else if d, err2 := base64.URLEncoding.DecodeString(base64Str); err2 == nil {
+			data, err = d, nil
+		} else if d, err2 := base64.RawURLEncoding.DecodeString(base64Str); err2 == nil {
+			data, err = d, nil
+		}
+	}
+	if err != nil {
+		return nil, fmt.Errorf("base64解码失败: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, fmt.Errorf("解码后的文件内容为空")
+	}
+	if len(data) > 30*1024*1024 {
+		return nil, fmt.Errorf("文件过大，base64 上传最大支持 30MB")
+	}
+
+	if fileName == "" {
+		fileName = "base64-image"
+	}
+	tmpFile, err := os.CreateTemp("", "anqi-upload-*")
+	if err != nil {
+		return nil, fmt.Errorf("创建临时文件失败: %w", err)
+	}
+	tmpName := tmpFile.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmpFile.Write(data); err != nil {
+		tmpFile.Close()
+		return nil, fmt.Errorf("写入临时文件失败: %w", err)
+	}
+	tmpFile.Close()
+
+	f, err := os.Open(tmpName)
+	if err != nil {
+		return nil, fmt.Errorf("打开临时文件失败: %w", err)
+	}
+	defer f.Close()
+	fileHeader := &multipart.FileHeader{
+		Filename: fileName + ext,
+		Size:     int64(len(data)),
+	}
+	return w.AttachmentUpload(f, fileHeader, 0, 0, 0)
 }

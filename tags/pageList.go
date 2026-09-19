@@ -5,6 +5,7 @@ import (
 
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -31,8 +32,21 @@ func (node *tagPageListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2
 		siteId := args["siteId"].Integer()
 		currentSite = provider.GetWebsite(uint(siteId))
 	}
+	pageDetail, _ := ctx.Public["page"].(*model.Category)
+	parentId := uint(0)
+	all := true
+	if args["parentId"] != nil {
+		all = false
+		if args["parentId"].String() == "parent" {
+			if pageDetail != nil {
+				parentId = pageDetail.ParentId
+			}
+		} else {
+			parentId = uint(args["parentId"].Integer())
+		}
+	}
 
-	pageList := currentSite.GetCategoriesFromCache(0, 0, config.CategoryTypePage, true)
+	pageList := currentSite.GetCategoriesFromCache(0, parentId, config.CategoryTypePage, all)
 	for i := range pageList {
 		pageList[i].Link = currentSite.GetUrl("page", pageList[i], 0)
 		pageList[i].Thumb = pageList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(pageList[i].Id)))

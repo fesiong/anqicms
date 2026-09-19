@@ -44,6 +44,10 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if args["render"] != nil {
 		render = args["render"].Bool()
 	}
+	argModuleId := uint(0)
+	if args["moduleId"] != nil {
+		argModuleId = uint(args["moduleId"].Integer())
+	}
 
 	fieldName := ""
 	inputName := ""
@@ -110,8 +114,13 @@ func (node *tagCategoryDetailNode) Execute(ctx *pongo2.ExecutionContext, writer 
 		case "Content":
 			content = parseContent(categoryDetail.Content, render, currentSite, ctx)
 		case "Link":
-			categoryDetail.Link = currentSite.GetUrl("category", categoryDetail, 0)
-			content = categoryDetail.Link
+			link := currentSite.GetUrl("category", categoryDetail, 0)
+			if argModuleId > 0 {
+				curCategory := *categoryDetail
+				curCategory.ModuleId = argModuleId
+				link = currentSite.GetUrl("category", &curCategory, 0)
+			}
+			content = link
 		case "Thumb":
 			content = categoryDetail.Thumb
 		case "Logo":

@@ -6,11 +6,6 @@ type Attachment struct {
 	FileLocation string `json:"file_location"`
 }
 
-type AttachmentCategory struct {
-	Id    uint   `json:"id"`
-	Title string `json:"title"`
-}
-
 type ChangeAttachmentCategory struct {
 	CategoryId uint   `json:"category_id"`
 	Ids        []uint `json:"ids"`

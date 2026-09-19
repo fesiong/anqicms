@@ -84,10 +84,10 @@ func PluginGetTranslateTextLog(ctx iris.Context) {
 	var logs []*model.TranslateTextLog
 	tx := currentSite.DB.Model(&model.TranslateTextLog{})
 	if text != "" {
-		tx = tx.Where("text = ?", text)
+		tx = tx.Where("text like ?", text+"%")
 	}
 	if translated != "" {
-		tx = tx.Where("translated = ?", translated)
+		tx = tx.Where("translated like ?", translated+"%")
 	}
 	offset := 0
 	if currentPage > 0 {

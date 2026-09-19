@@ -73,14 +73,14 @@ type Archive struct {
 	KeywordId   uint   `json:"keyword_id"`
 	OriginUrl   string `json:"origin_url"`
 	OriginTitle string `json:"origin_title"`
-	  // 补充字段
-	  Brand         string  `json:"brand"`
-	  CommentCount  uint    `json:"comment_count"`
-	  FavoriteCount int64   `json:"favorite_count"`
-	  AverageScore  float32 `json:"average_score"`
-	  HasPseudo     int     `json:"has_pseudo"`
-	  OriginId      int     `json:"origin_id"`
-	  ContentText   string  `json:"-"`
+	// 补充字段
+	Brand         string  `json:"brand"`
+	CommentCount  uint    `json:"comment_count"`
+	FavoriteCount uint    `json:"favorite_count"`
+	AverageScore  float32 `json:"average_score"`
+	HasPseudo     int     `json:"has_pseudo"`
+	OriginId      int     `json:"origin_id"`
+	ContentText   string  `json:"-"`
 }
 
 type ArchiveSku struct {
