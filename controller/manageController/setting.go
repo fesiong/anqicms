@@ -134,7 +134,7 @@ func SettingSystemForm(ctx iris.Context) {
 
 	// 如果切换了模板，则需要重启
 	if changed {
-		config.RestartChan <- 0
+		config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 		time.Sleep(1 * time.Second)
 	}
 	currentSite.RemoveHtmlCache()
@@ -781,6 +781,11 @@ func SettingAiForm(ctx iris.Context) {
 
 		// cache new setting
 		defaultSite.Cache.Set("ai_setting", chatSettings, 86400)
+	}
+
+	// MCP 配置变更后热重建所有站点的 mcp.Server（使 ExposedTools 白名单即时生效）
+	if req.Mcp != nil {
+		provider.RebuildMcpServers()
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateAISettings"))

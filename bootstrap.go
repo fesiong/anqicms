@@ -81,7 +81,7 @@ func (bootstrap *Bootstrap) Serve() {
 	}()
 	// 伪静态规则和模板更改变化
 	for restart := range config.RestartChan {
-		switch restart {
+		switch restart.Code {
 		case 1:
 			fmt.Println("监听到路由更改")
 			_ = bootstrap.Shutdown()
@@ -93,7 +93,7 @@ func (bootstrap *Bootstrap) Serve() {
 			os.Exit(0)
 		default:
 			fmt.Println("重载模板")
-			bootstrap.viewEngine.Load()
+			bootstrap.viewEngine.LoadTemplates(restart.SiteId, nil)
 		}
 	}
 }

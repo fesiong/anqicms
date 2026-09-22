@@ -2,6 +2,7 @@ package view
 
 import (
 	"bytes"
+	"errors"
 	"hash/crc32"
 	"io"
 	"io/fs"
@@ -242,75 +243,83 @@ func (s *DjangoEngine) LoadStart(throw bool) error {
 	for _, site := range websites {
 		if !throw {
 			s.Set[site.Id] = nil
-			s.templateCache[site.Id] = nil
 		}
 		if !site.Initialed {
 			continue
 		}
-		// 检查模板是否有多语言
-		var mapLocales = map[string]struct{}{}
-		sfs := getFS(site.GetTemplateDir())
-		rootDirName := getRootDirName(sfs)
-		var tplFiles = make(map[string]int64, 100)
-		err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
-			if err != nil {
-				if throw {
-					return err
-				}
-				return nil
-			}
-
-			if info == nil || info.IsDir() {
-				return nil
-			}
-			// 判断是否有多语言
-			if strings.HasPrefix(path, "locales") {
-				pathSplit := strings.Split(path, "/")
-				if len(pathSplit) > 2 {
-					mapLocales[pathSplit[1]] = struct{}{}
-				}
-			}
-
-			if s.extension != "" {
-				if !strings.HasSuffix(path, s.extension) {
-					return nil
-				}
-			}
-
-			if site.RootPath == rootDirName {
-				path = strings.TrimPrefix(path, rootDirName)
-				path = strings.TrimPrefix(path, "/")
-			}
-
-			contents, err := asset(sfs, path)
-			if err != nil {
-				if throw {
-					return err
-				}
-				return nil
-			}
-			tplFiles[path] = info.Size()
-			err = s.ParseTemplate(site, path, contents)
-			if err != nil && throw {
-				return err
-			}
-			return nil
-		})
-		site.SetTemplates(tplFiles)
-		if len(mapLocales) > 0 {
-			var locales = make([]string, 0, len(mapLocales))
-			for k := range mapLocales {
-				locales = append(locales, k)
-			}
-			tplI18n := i18n.New()
-			err = tplI18n.LoadFS(sfs, "./locales/*/*.yml", locales...)
-			if err == nil {
-				site.TplI18n = tplI18n
-			}
+		err = s.LoadTemplates(site.Id, site)
+		if err != nil && throw {
+			return err
 		}
 	}
 
 	return err
+}
+
+func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error {
+	if site == nil {
+		site = provider.GetWebsite(siteId)
+	}
+	if site == nil {
+		return errors.New("Website not found")
+	}
+	s.initSet(site)
+	s.Set[siteId].CleanCache()
+
+	var err error
+	// 检查模板是否有多语言
+	var mapLocales = map[string]struct{}{}
+	sfs := getFS(site.GetTemplateDir())
+	rootDirName := getRootDirName(sfs)
+	var tplFiles = make(map[string]int64, 100)
+	err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info == nil || info.IsDir() {
+			return nil
+		}
+		// 判断是否有多语言
+		if strings.HasPrefix(path, "locales") {
+			pathSplit := strings.Split(path, "/")
+			if len(pathSplit) > 2 {
+				mapLocales[pathSplit[1]] = struct{}{}
+			}
+		}
+
+		if s.extension != "" {
+			if !strings.HasSuffix(path, s.extension) {
+				return nil
+			}
+		}
+
+		if site.RootPath == rootDirName {
+			path = strings.TrimPrefix(path, rootDirName)
+			path = strings.TrimPrefix(path, "/")
+		}
+
+		contents, err := asset(sfs, path)
+		if err != nil {
+			return err
+		}
+		tplFiles[path] = info.Size()
+		err = s.ParseTemplate(site, path, contents)
+		return err
+	})
+	site.SetTemplates(tplFiles)
+	if len(mapLocales) > 0 {
+		var locales = make([]string, 0, len(mapLocales))
+		for k := range mapLocales {
+			locales = append(locales, k)
+		}
+		tplI18n := i18n.New()
+		err = tplI18n.LoadFS(sfs, "./locales/*/*.yml", locales...)
+		if err == nil {
+			site.TplI18n = tplI18n
+		}
+	}
+	return nil
 }
 
 // ParseTemplate adds a custom template from text.
@@ -319,26 +328,17 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 	s.rmu.Lock()
 	defer s.rmu.Unlock()
 
-	s.initSet(site)
-
 	name = strings.TrimPrefix(name, "/")
-	tmpl, err := s.Set[site.Id].FromBytes(contents)
-	if s.templateCache[site.Id] == nil {
-		s.templateCache[site.Id] = make(map[string]*pongo2.Template)
-	}
-	if err == nil {
-		s.templateCache[site.Id][name] = tmpl
-	} else {
-		s.templateCache[site.Id][name], _ = s.Set[site.Id].FromBytes([]byte(err.Error() + "<br/> on file " + name))
-	}
+	_, err := s.Set[site.Id].FromBytes(contents)
 
-	return nil
+	return err
 }
 
 func (s *DjangoEngine) initSet(site *provider.Website) { // protected by the caller.
 	if s.Set[site.Id] == nil {
 		s.Set[site.Id] = pongo2.NewSet("", &tDjangoAssetLoader{fs: getFS(site.GetTemplateDir()), rootDir: "./"})
 		s.Set[site.Id].Globals = getPongoContext(s.globals)
+		s.Set[site.Id].Debug = s.reload
 	}
 }
 
@@ -367,9 +367,15 @@ func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Templ
 	if s.reload {
 		s.rmu.RLock()
 		defer s.rmu.RUnlock()
+		// reload the template from disk
+		res, err := s.Set[siteId].FromFile(relativeName)
+		if err != nil {
+			return nil
+		}
+		return res
 	}
 
-	if tmpl, ok := s.templateCache[siteId][relativeName]; ok {
+	if tmpl, err := s.Set[siteId].FromCache(relativeName); err == nil {
 		return tmpl
 	}
 	return nil
@@ -382,12 +388,6 @@ type RenderData struct {
 // ExecuteWriter executes a templates and write its results to the w writer
 // layout here is useless.
 func (s *DjangoEngine) ExecuteWriter(w io.Writer, filename string, _ string, bindingData interface{}) error {
-	// reparse the templates if reload is enabled.
-	if s.reload {
-		if err := s.LoadStart(true); err != nil {
-			return err
-		}
-	}
 	ctx := w.(iris.Context)
 	// 检查是否已经超时
 	if err := ctx.Request().Context().Err(); err != nil {

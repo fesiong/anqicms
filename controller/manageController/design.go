@@ -118,7 +118,7 @@ func SaveDesignInfo(ctx iris.Context) {
 		}
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyTemplateLog", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -169,7 +169,7 @@ func UseDesignInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("EnableNewTemplateLog", req.Package))
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	time.Sleep(1 * time.Second)
 
 	ctx.JSON(iris.Map{
@@ -198,7 +198,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateLog", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -254,7 +254,7 @@ func UploadDesignInfo(ctx iris.Context) {
 		return
 	}
 	// 需要重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateLog", info.Filename))
 
@@ -425,7 +425,7 @@ func UploadDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.RemoveHtmlCache()
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateFileLog", info.Filename))
 
@@ -598,7 +598,7 @@ func RestoreDesignFile(ctx iris.Context) {
 
 	fileInfo, _ := currentSite.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.DeleteCacheIndex()
 	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreTemplateFileFromHistory", req.Package, req.Filepath))
 
@@ -638,7 +638,7 @@ func SaveDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.DeleteCacheIndex()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyTemplateFile", req.Package, req.Path))
@@ -678,7 +678,7 @@ func CopyDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("CopyTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
@@ -716,7 +716,7 @@ func DeleteDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{

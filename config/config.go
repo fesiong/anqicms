@@ -95,8 +95,13 @@ var AnqiUser AnqiUserConfig
 
 var GoogleValid bool // can visit google or not
 
+type RestartConfig struct {
+	Code   int
+	SiteId uint
+}
+
 // RestartChan 1 to restart app, 0 to reload template, 2 to exit app
-var RestartChan = make(chan int)
+var RestartChan = make(chan RestartConfig)
 
 func init() {
 	initPath()

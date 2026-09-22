@@ -89,7 +89,7 @@ func PluginBackupRestore(ctx iris.Context) {
 			currentSite.AddAdminLog(ctx, ctx.Tr("RestoreDataFromBackup"))
 			go func() {
 				// 如果切换了模板，需要重启
-				config.RestartChan <- 0
+				config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 
 				time.Sleep(1 * time.Second)
 				// 删除索引

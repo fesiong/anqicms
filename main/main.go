@@ -36,14 +36,15 @@ func main() {
 
 	checkProcesses()
 
-	c := make(chan os.Signal)
+	// 带缓冲，避免信号在 goroutine 启动前到达时丢失
+	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		for s := range c {
 			switch s {
 			case syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT:
 				fmt.Println("退出", s)
-				config.RestartChan <- 2
+				config.RestartChan <- config.RestartConfig{Code: 2, SiteId: 0}
 			default:
 				fmt.Println("other", s)
 			}
@@ -104,7 +105,8 @@ func checkProcesses() {
 	output, err := cmd.Output()
 	if err == nil {
 		// 有启动
-		tmpIds := strings.Split(strings.TrimSpace(string(output)), " ")
+		// pgrep 输出按行分隔 PID，用 Fields 兼容空格/换行
+		tmpIds := strings.Fields(string(output))
 		for i := range tmpIds {
 			pid, _ := strconv.Atoi(tmpIds[i])
 			if pid > 0 && pid != selfPid {

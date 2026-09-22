@@ -539,7 +539,7 @@ func AuthAiGenerateImageHistories(ctx iris.Context) {
 
 func RestartAnqicms(ctx iris.Context) {
 	// first need to stop iris
-	config.RestartChan <- 1
+	config.RestartChan <- config.RestartConfig{Code: 1, SiteId: 0}
 
 	time.Sleep(3 * time.Second)
 

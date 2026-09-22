@@ -379,7 +379,7 @@ func SaveWebsiteInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMultiSiteLog", dbSite.Id, dbSite.Name))
 	// 重启
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: dbSite.Id}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -424,7 +424,7 @@ func DeleteWebsite(ctx iris.Context) {
 	provider.GetDefaultDB().Delete(dbSite)
 	provider.RemoveWebsite(dbSite.Id, req.RemoveFile)
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: dbSite.Id}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("DeleteSuccessful"),

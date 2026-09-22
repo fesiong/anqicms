@@ -271,7 +271,7 @@ func (w *Website) compileSensitiveWords() {
 			pattern = word[:idx]
 			replacement = word[idx+1:]
 		}
-		slog.Info("敏感词", "pattern", pattern, "replacement", replacement)
+		// slog.Info("敏感词", "pattern", pattern, "replacement", replacement)
 		if len(pattern) == 0 {
 			continue
 		}
