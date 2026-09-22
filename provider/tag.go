@@ -186,7 +186,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 
 	if tag.FirstLetter == "" {
 		letter := "A"
-		if tag.UrlToken != "-" {
+		if tag.UrlToken != "" && tag.UrlToken != "-" {
 			letter = string(tag.UrlToken[0])
 		}
 		tag.FirstLetter = strings.ToUpper(letter)
