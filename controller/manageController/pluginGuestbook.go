@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"strings"
+	"time"
 
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
@@ -169,6 +170,8 @@ func PluginGuestbookExport(ctx iris.Context) {
 	for _, v := range fields {
 		header = append(header, v.Name)
 	}
+	// append createdTime, IP
+	header = append(header, "Created Time", "IP", "Refer", "Site Id")
 	header = append(header, "Spam")
 
 	var content [][]interface{}
@@ -190,6 +193,8 @@ func PluginGuestbookExport(ctx iris.Context) {
 				item = append(item, v.ExtraData[f.Name])
 			}
 		}
+		itemTime := time.Unix(v.CreatedTime, 0).Format(time.DateTime)
+		item = append(item, itemTime, v.Ip, v.Refer, v.SiteId)
 		item = append(item, v.Status == 2)
 
 		content = append(content, item)
