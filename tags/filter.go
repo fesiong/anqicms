@@ -59,7 +59,7 @@ func filterTrimRight(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pon
 }
 
 func filterReplace(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
-	sep := strings.Split(param.String(), ",")
+	sep := strings.SplitN(param.String(), ",", 2)
 	from := sep[0]
 	to := ""
 	if len(sep) > 1 {
@@ -210,9 +210,16 @@ func filterRender(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2
 	return pongo2.AsValue(s), nil
 }
 
+// param 支持 encode|decode，默认 encode
 func filterJson(in *pongo2.Value, param *pongo2.Value) (*pongo2.Value, *pongo2.Error) {
-	s := in.Interface()
-	buf, _ := json.Marshal(s)
+	jsonType := strings.ToLower(param.String())
+	if jsonType == "decode" {
+		var result any
+		json.Unmarshal([]byte(in.String()), &result)
+		return pongo2.AsValue(result), nil
+	}
+
+	buf, _ := json.Marshal(in.Interface())
 	return pongo2.AsValue(string(buf)), nil
 }
 
