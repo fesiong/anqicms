@@ -3,7 +3,7 @@ package model
 type Subscriber struct {
 	Id          int64  `json:"id" gorm:"column:id;type:int(11) not null;primary_key;AUTO_INCREMENT"`
 	UserId      int64  `json:"user_id" gorm:"column:user_id;type:int(11);index"`
-	Email       string `json:"email" gorm:"column:email;type:varchar(255);not null;index"`
+	Email       string `json:"email" gorm:"column:email;type:varchar(100);not null;index"`
 	CategoryId  int64  `json:"category_id" gorm:"column:category_id;type:int(11);index"`
 	Remark      string `json:"remark" gorm:"column:remark;type:varchar(255)"`
 	Status      int    `json:"status" gorm:"column:status;type:tinyint(2)"`        // 1=有效，0=无效
