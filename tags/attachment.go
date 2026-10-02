@@ -1,7 +1,7 @@
 package tags
 
 import (
-	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/flosch/pongo2/v6"
@@ -31,21 +31,32 @@ func (node *tagAttachmentNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if args["id"] != nil {
 		id = int64(args["id"].Integer())
 		attachment, _ = currentSite.GetAttachmentById(uint(id))
-	}
-	if args["name"] != nil {
+	} else if args["name"] != nil {
 		name := args["name"].String()
 		if after, ok := strings.CutPrefix(name, currentSite.PluginStorage.StorageUrl); ok {
 			name = after
+			name = strings.TrimPrefix(name, "/")
+			attachment, _ = currentSite.GetAttachmentByFileLocation(name)
+		} else {
+			// 可能是远程，也可能不是
+			parsed, err := url.Parse(name)
+			if err == nil && len(parsed.Path) > 1 {
+				path := strings.TrimPrefix(parsed.Path, "/")
+				attachment, err = currentSite.GetAttachmentByFileLocation(path)
+				if err != nil {
+					// 可能是远程的
+					attachment, _ = currentSite.GetAttachmentByFileLocation(name)
+				}
+			}
 		}
-		name = strings.TrimPrefix(name, "/")
-		attachment, _ = currentSite.GetAttachmentByFileLocation(name)
 	}
 
 	ctx.Private[node.name] = attachment
 
 	//execute
-	node.wrapper.Execute(ctx, writer)
-
+	if node.wrapper != nil {
+		node.wrapper.Execute(ctx, writer)
+	}
 	return nil
 }
 
@@ -69,24 +80,6 @@ func TagAttachmentParser(doc *pongo2.Parser, start *pongo2.Token, arguments *pon
 	for arguments.Remaining() > 0 {
 		return nil, arguments.Error("Malformed attachment-tag arguments.", nil)
 	}
-	wrapper, endtagargs, err := doc.WrapUntilTag("endattachment")
-	if err != nil {
-		return nil, err
-	}
-	if endtagargs.Remaining() > 0 {
-		endtagnameToken := endtagargs.MatchType(pongo2.TokenIdentifier)
-		if endtagnameToken != nil {
-			if endtagnameToken.Val != nameToken.Val {
-				return nil, endtagargs.Error(fmt.Sprintf("Name for 'endattachment' must equal to 'attachment'-tag's name ('%s' != '%s').",
-					nameToken.Val, endtagnameToken.Val), nil)
-			}
-		}
-
-		if endtagnameToken == nil || endtagargs.Remaining() > 0 {
-			return nil, endtagargs.Error("Either no or only one argument (identifier) allowed for 'endattachment'.", nil)
-		}
-	}
-	tagNode.wrapper = wrapper
 
 	return tagNode, nil
 }

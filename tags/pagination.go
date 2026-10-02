@@ -320,7 +320,7 @@ func (p *pagination) getPageUrl(page int) string {
 		link = strings.ReplaceAll(link, "(", "")
 		link = strings.ReplaceAll(link, ")", "")
 	} else {
-		reg := regexp.MustCompile("\\(.*\\)")
+		reg := regexp.MustCompile(`\([^)]*\)`)
 		link = reg.ReplaceAllString(link, "")
 		reg = regexp.MustCompile(`page=\{page\}&?`)
 		link = reg.ReplaceAllString(link, "")

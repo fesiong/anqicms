@@ -83,7 +83,7 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		return nil
 	}
 
-	var content interface{}
+	var content any
 	// 消除反射，改用直接字段访问
 	switch fieldName {
 	case "Id":
@@ -114,8 +114,8 @@ func (node *tagModuleDetailNode) Execute(ctx *pongo2.ExecutionContext, writer po
 		if strings.Contains(content.(string), "{") {
 			content = parseTdkParams(content.(string), currentSite, ctx, module)
 		}
-	case "TitleName":
-		content = module.TitleName
+	// case "TitleName":
+	// 	content = module.TitleName
 	case "Link":
 		content = module.Link
 	case "CreatedTime":
