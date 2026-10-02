@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginReplaceValues 执行全站替换操作，支持替换选择的类型和html标签内容替换
 func PluginReplaceValues(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginReplaceRequest

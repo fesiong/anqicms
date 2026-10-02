@@ -16,6 +16,24 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// ArchiveList 分页查询文档列表，支持按分类、模型、状态、标签等条件筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "category_id": 按分类 ID 筛选，0 表示不限。
+//   - 查询参数 "module_id": 按模型 ID 筛选，0 表示不限。
+//   - 查询参数 "place_id": 按城市站 ID 筛选，0 表示不限。
+//   - 查询参数 "parent_id": 按父文档 ID 筛选，0 表示不限。
+//   - 查询参数 "id": 按文档 ID 筛选，支持多个ID，用英文,隔开。
+//   - 查询参数 "title": 按文档标题模糊筛选。
+//   - 查询参数 "sort": 排序字段，默认为 id，可选 created_time/updated_time/views。
+//   - 查询参数 "order": 排序方向，desc 或 asc，默认为 desc。
+//   - 查询参数 "exact": 是否精确统计文档数量，默认为 false。
+//   - 查询参数 "recycle": 是否查询回收站中的文档，默认为 false。
+//   - 查询参数 "collect": 是否只查询采集的文档，默认为 false。
+//   - 查询参数 "status": 文档状态：ok=正式文档，draft=草稿，plan=待发布文档；默认: ok。
+//   - 查询参数 "flag": 按文档标记筛选，默认无：h=头条、c=推荐、f=幻灯、a=特荐、s=滚动、h=加粗、p=图片、j=跳转
 func ArchiveList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -24,7 +42,7 @@ func ArchiveList(ctx iris.Context) {
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
 	parentId := ctx.URLParamInt64Default("parent_id", 0)
 	placeId := uint(ctx.URLParamIntDefault("place_id", 0))
-	status := ctx.URLParamDefault("status", "ok") // 支持 '':all，draft:0, ok:1, plan:2
+	status := ctx.URLParamDefault("status", "ok") // 支持 draft:草稿, ok:正式文档, plan:待发布文档
 	sort := ctx.URLParamDefault("sort", "id")
 	flag := ctx.URLParam("flag")
 	exact := ctx.URLParamBoolDefault("exact", false)
@@ -229,8 +247,10 @@ func ArchiveList(ctx iris.Context) {
 	})
 }
 
+// QuickImportArchive 通过上传的 zip/xlsx 文件批量导入文档。
 func QuickImportArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
+	// 需要导入的文件，zip/xlsx 文件
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -337,6 +357,7 @@ func QuickImportArchive(ctx iris.Context) {
 	})
 }
 
+// GetQuickImportArchiveStatus 查询批量导入文档任务的进度状态。
 func GetQuickImportArchiveStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	w2 := provider.GetWebsite(currentSite.Id)
@@ -349,12 +370,11 @@ func GetQuickImportArchiveStatus(ctx iris.Context) {
 	})
 }
 
+// GetQuickImportExcelTemplate 生成批量导入文档时使用的 Excel 模板。
 func GetQuickImportExcelTemplate(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var excelTemplateRequest struct {
-		CategoryId uint `json:"category_id"`
-	}
-	err := ctx.ReadJSON(&excelTemplateRequest)
+	var req request.ImportExcelTemplateRequest
+	err := ctx.ReadJSON(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -362,7 +382,7 @@ func GetQuickImportExcelTemplate(ctx iris.Context) {
 		})
 		return
 	}
-	category := currentSite.GetCategoryFromCache(excelTemplateRequest.CategoryId)
+	category := currentSite.GetCategoryFromCache(req.CategoryId)
 	if category == nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -429,6 +449,10 @@ func GetQuickImportExcelTemplate(ctx iris.Context) {
 	_, _ = ctx.Write(buf.Bytes())
 }
 
+// ArchiveDetail 查询单个文档的详情，含正文、自定义字段、关联文档与标签。
+//
+// 参数说明：
+//   - 查询参数 "id": 文档 ID，必填。
 func ArchiveDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)
@@ -481,6 +505,7 @@ func ArchiveDetail(ctx iris.Context) {
 	})
 }
 
+// ArchiveDetailForm 新建或更新文档，含标题、正文与自定义字段。
 func ArchiveDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Archive
@@ -496,6 +521,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 	if !req.ForceSave {
 		exists, err := currentSite.GetArchiveByTitle(req.Title)
 		if err == nil && exists.Id != req.Id {
+			exists.Link = currentSite.GetUrl("archive", exists, 0)
 			// 做提示
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -507,6 +533,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 		// 再检查草稿
 		exists2, err := currentSite.GetArchiveDraftByTitle(req.Title)
 		if err == nil && exists2.Id != req.Id {
+			exists.Link = currentSite.GetUrl("archive", exists, 0)
 			// 做提示
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -549,6 +576,9 @@ func ArchiveDetailForm(ctx iris.Context) {
 				req.RemoveTag = true
 			}
 		}
+	}
+	if len(req.Flag) > 0 {
+		req.Flags = strings.Split(req.Flag, ",")
 	}
 	if len(req.Flags) == 0 {
 		req.RemoveFlag = true
@@ -639,11 +669,10 @@ func ArchiveDetailForm(ctx iris.Context) {
 	})
 }
 
-// ArchiveRecover
-// 从回收站恢复
+// ArchiveRecover 从回收站恢复文档。
 func ArchiveRecover(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Archive
+	var req request.ArchiveRecoverRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -694,9 +723,10 @@ func ArchiveRecover(ctx iris.Context) {
 	})
 }
 
+// ArchiveRelease 发布指定的草稿文档。
 func ArchiveRelease(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Archive
+	var req request.ArchiveRecoverRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -741,11 +771,10 @@ func ArchiveRelease(ctx iris.Context) {
 	})
 }
 
-// ArchiveDelete
-// 删除文档，从正式表删除，或从草稿箱删除
+// ArchiveDelete 删除文档，从正式表删除（移到回收站），或从草稿箱（回收站）删除（永久删除）
 func ArchiveDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Archive
+	var req request.ArchiveRecoverRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -817,6 +846,7 @@ func ArchiveDelete(ctx iris.Context) {
 	})
 }
 
+// ArchiveDeleteImage 删除文档相册中的指定图片。
 func ArchiveDeleteImage(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchiveImageDeleteRequest
@@ -887,9 +917,10 @@ func ArchiveDeleteImage(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveRecommend 批量修改文档的推荐标记属性。
 func UpdateArchiveRecommend(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchiveFlagsRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -929,9 +960,10 @@ func UpdateArchiveRecommend(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveStatus 批量修改文档的状态。
 func UpdateArchiveStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchiveStatusRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -971,9 +1003,10 @@ func UpdateArchiveStatus(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveTime 批量修改文档的时间。
 func UpdateArchiveTime(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchivesTimeRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1013,9 +1046,10 @@ func UpdateArchiveTime(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveReleasePlan 批量设置文档的定时发布计划。
 func UpdateArchiveReleasePlan(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchivesPlanRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1055,9 +1089,10 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveSort 修改文档的排序值。
 func UpdateArchiveSort(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Archive
+	var req request.ArchiveSortRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1101,9 +1136,10 @@ func UpdateArchiveSort(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveParent 批量修改文档的父级，用于多级文档结构。
 func UpdateArchiveParent(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchivesParentRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1135,7 +1171,7 @@ func UpdateArchiveParent(ctx iris.Context) {
 		}
 	}
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentParentLog", req.Ids, req.CategoryIds))
+	currentSite.AddAdminLog(ctx, ctx.Tr("BatchUpdateDocumentParentLog", req.Ids, req.ParentId))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -1143,9 +1179,10 @@ func UpdateArchiveParent(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveCategory 批量修改文档所属的分类。
 func UpdateArchiveCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchiveCategoryRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -1185,9 +1222,10 @@ func UpdateArchiveCategory(ctx iris.Context) {
 	})
 }
 
+// UpdateArchiveTags 批量修改文档的标签。
 func UpdateArchiveTags(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ArchivesUpdateRequest
+	var req request.ArchivesTagRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

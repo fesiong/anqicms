@@ -7,12 +7,12 @@ import (
 )
 
 type MysqlConfig struct {
-	Database   string `json:"database"`
-	User       string `json:"user"`
-	Password   string `json:"password"`
-	Host       string `json:"host"`
-	Port       int    `json:"port"`
-	UseDefault bool   `json:"use_default"` // 使用 default 的账号密码
+	Database   string `json:"database"`    // 数据库名称
+	User       string `json:"user"`        // 数据库用户名
+	Password   string `json:"password"`    // 数据库密码
+	Host       string `json:"host"`        // 数据库地址， 如：127.0.0.1
+	Port       int    `json:"port"`        // 数据库端口，默认：3306
+	UseDefault bool   `json:"use_default"` // 复用 默认站点(ID：1) 的数据库账号密码
 }
 
 // Value implements the driver.Valuer interface.

@@ -91,13 +91,6 @@ type AnqiAiRequest struct {
 	ReqId int64 `json:"req_id"`
 }
 
-type AnqiImageAiRequest struct {
-	Image  string `json:"image"` // 图生图的时候提供，格式：仅支持其中一种方式：- 通过图片 URL 传入远程图像（字符串，格式为 URI）- 通过base64传输图像，格式为 base64 编码的字符串
-	Prompt string `json:"prompt"`
-	Size   string `json:"size"`
-	Type   int    `json:"type"` // 0 = 文生图，2 = 图生图
-}
-
 type AnqiTranslateTextRequest struct {
 	Language   string   `json:"language"`
 	ToLanguage string   `json:"to_language"`
@@ -411,7 +404,7 @@ func (w *Website) AnqiUploadAttachment(data []byte, name string) (*AnqiAttachmen
 	return &result.Data, nil
 }
 
-func (w *Website) AnqiDownloadTemplate(req *request.AnqiTemplateRequest) error {
+func (w *Website) AnqiDownloadTemplate(req *request.AnqiDownloadTemplateRequest) error {
 	var result AnqiDownloadTemplateResult
 
 	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/template/download").Send(req).EndStruct(&result)
@@ -1328,7 +1321,7 @@ func (w *Website) AnqiTranslateHtml(req *AnqiTranslateHtmlRequest) (content stri
 	return output.String(), nil
 }
 
-func (w *Website) AnqiGetImageAiResponse(req *AnqiImageAiRequest) (*AnqiAiImage, error) {
+func (w *Website) AnqiGetImageAiResponse(req *request.AnqiImageAiRequest) (*AnqiAiImage, error) {
 	var result AnqiImageAiResult
 	_, _, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/ai/image").Send(req).EndStruct(&result)
 	if len(errs) > 0 {

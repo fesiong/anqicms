@@ -18,10 +18,72 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
+	"kandaoni.com/anqicms/pkg/mcp/intent"
 )
 
 // cronParser 支持 5 字段（标准）和 6 字段（带秒）的 cron 表达式
 var cronParser = cron.NewParser(cron.SecondOptional | cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow | cron.Descriptor)
+
+// ================================================================
+// P4: 近期 AI 执行错误环形缓冲 (供 autoDiagnoseErrors 诊断使用)
+//
+// aiChat 主循环在用户消息命中错误关键词时，会调用 autoDiagnoseErrors()
+// 把"近期错误上下文"回灌给模型。原先该函数恒返回空，诊断分支形同虚设。
+// 这里维护一个进程级、有界、并发安全的环形缓冲，由 AI 执行链路在出现
+// 错误时写入 (RecordAIError)，控制器侧读取 (GetRecentAIErrors) 做格式化。
+// 不依赖全局 slog handler，也不读写日志文件，零外部依赖、重启即清空。
+// ================================================================
+
+// RecentAIError 一条近期 AI 执行错误记录
+type RecentAIError struct {
+	TS  time.Time `json:"ts"`
+	Msg string    `json:"msg"`
+}
+
+const recentAIErrorCap = 64
+
+var (
+	recentAIErrorsMu   sync.Mutex
+	recentAIErrorsBuf  []RecentAIError
+	recentAIErrorsHead int
+	recentAIErrorsSize int
+)
+
+// RecordAIError 写入一条 AI 执行链路错误到近期错误缓冲。
+// 线程安全；缓冲满时覆盖最旧记录。
+func RecordAIError(format string, args ...any) {
+	msg := fmt.Sprintf(format, args...)
+	recentAIErrorsMu.Lock()
+	defer recentAIErrorsMu.Unlock()
+	if recentAIErrorsBuf == nil {
+		recentAIErrorsBuf = make([]RecentAIError, recentAIErrorCap)
+	}
+	recentAIErrorsBuf[recentAIErrorsHead] = RecentAIError{TS: time.Now(), Msg: msg}
+	recentAIErrorsHead = (recentAIErrorsHead + 1) % recentAIErrorCap
+	if recentAIErrorsSize < recentAIErrorCap {
+		recentAIErrorsSize++
+	}
+}
+
+// GetRecentAIErrors 返回近期错误记录，按时间从旧到新排列。
+// 若缓冲为空，返回零长度切片。
+func GetRecentAIErrors() []RecentAIError {
+	recentAIErrorsMu.Lock()
+	defer recentAIErrorsMu.Unlock()
+	out := make([]RecentAIError, 0, recentAIErrorsSize)
+	if recentAIErrorsSize == 0 {
+		return out
+	}
+	start := 0
+	if recentAIErrorsSize == recentAIErrorCap {
+		// 满时 head 指向最旧记录
+		start = recentAIErrorsHead
+	}
+	for i := 0; i < recentAIErrorsSize; i++ {
+		out = append(out, recentAIErrorsBuf[(start+i)%recentAIErrorCap])
+	}
+	return out
+}
 
 // Turn represents a round of interaction: one user message + all following
 // AI responses and tool calls/results.
@@ -70,9 +132,23 @@ type AiChatService struct {
 	site        *Website
 	projectRoot string
 
+	// Tuning P1-6: 主对话循环的可调阈值。零值 = 用默认值（见 aiTuning.go），
+	// 因此未做任何配置时行为与改造前完全一致。
+	Tuning ChatTuning
+
 	// Cached tool definitions and handlers (initialized once)
 	Tools    []*schema.ToolInfo
 	Handlers map[string]toolHandler
+
+	// 意图层工具（E 阶段：AIChat 改用意图内核，与 MCP 共用 IntentCatalog）
+	// 端点 handler 仅保留作意图委托的底层能力（caps），不再作为独立工具暴露给模型。
+	intentTools    []*schema.ToolInfo
+	intentHandlers map[string]toolHandler
+
+	// capHandlers：纯底层能力表（端点 + 内置 handler），供意图委托调用。
+	// 与 Handlers 分离，确保同名意图（web_fetch/web_search）委托到的是底层 cap 而非意图 handler 自身，
+	// 从而避免无限递归。Handlers = capHandlers + intentHandlers（统一 dispatch 表）。
+	capHandlers map[string]toolHandler
 
 	// P0: 待审批工具调用注册表
 	// key = toolCallID, value = decision channel
@@ -97,6 +173,9 @@ type AiChatService struct {
 	// P8: 遥测与成本归因记录器
 	telemetryRecorder *TelemetryRecorder
 
+	// P2-7: 结构化 Tracing 记录器（进程内环形缓冲，默认开启）
+	trace *TraceRecorder
+
 	// P8: 当前使用的模型名 (用于遥测记录)
 	ModelName string
 
@@ -120,6 +199,7 @@ func (w *Website) NewAiChatService() *AiChatService {
 		agents:           make(map[uint]*model.AiAgent),
 		runningAgents:    make(map[uint]bool),
 		projectRoot:      w.RootPath,
+		trace:            NewTraceRecorder(500),
 	}
 
 	// P8: 初始化遥测与成本归因记录器
@@ -127,15 +207,86 @@ func (w *Website) NewAiChatService() *AiChatService {
 		svc.telemetryRecorder = NewTelemetryRecorder(w.DB)
 	}
 
-	// Initialize tools
-	svc.Tools, svc.Handlers = svc.getEinoTools()
-	// Load built-in tools (file, shell, web, code intelligence)
+	// E 阶段：AIChat 改用意图内核（与 MCP 共用 IntentCatalog）。
+	// 端点 + 内置 handler 仅作为意图委托的底层能力（caps），不再作为独立工具暴露给模型。
+	endpointTools, endpointHandlers := svc.getEinoTools()
 	builtinTools, builtinHandlers := svc.getBuiltinEinoTools()
-	svc.Tools = append(svc.Tools, builtinTools...)
-	for name, handler := range builtinHandlers {
-		svc.Handlers[name] = handler
+
+	// capHandlers：纯底层能力表（端点 + 内置），供意图委托调用，不含意图 handler，
+	// 以避免同名意图（web_fetch/web_search）经委托再次命中意图 handler 造成递归。
+	capHandlers := make(map[string]toolHandler, len(endpointHandlers)+len(builtinHandlers))
+	for n, h := range endpointHandlers {
+		capHandlers[n] = h
 	}
-	svc.Logger.Info("AI tools initialized", "count", len(svc.Tools))
+	for n, h := range builtinHandlers {
+		capHandlers[n] = h
+	}
+	svc.capHandlers = capHandlers
+
+	// G3：通用 REST 调用元能力。仅作为底层 cap 注册（不进模型可见的 Tools），
+	// 由 api_list / api_schema / api_invoke 三个意图委托使用。
+	capHandlers[capAPIList] = svc.capAPIList
+	capHandlers[capAPISchema] = svc.capAPISchema
+	capHandlers[capAPIInvoke] = svc.capAPIInvoke
+
+	// 意图工具：模型面可见的工具集合（意图导向工作流）。
+	intentTools, intentHandlers := svc.GetIntentTools()
+
+	// 模型面工具 = 意图工具 + 未与意图同名的内置工具。
+	// web_fetch/web_search 由意图提供，内置同名工具不再重复绑定（避免 BindTools 重复工具名）。
+	intentNames := make(map[string]bool, len(intentTools))
+	for _, t := range intentTools {
+		intentNames[t.Name] = true
+	}
+	svc.Tools = make([]*schema.ToolInfo, 0, len(intentTools)+len(builtinTools))
+	svc.Tools = append(svc.Tools, intentTools...)
+	for _, bt := range builtinTools {
+		if intentNames[bt.Name] {
+			continue
+		}
+		svc.Tools = append(svc.Tools, bt)
+	}
+
+	// 统一 dispatch 表 = 底层能力 + 意图 handler。
+	// 意图 handler 覆盖同名 cap：dispatch 命中意图 handler 后，由 capInvoker 经 capHandlers 调用真正的 cap。
+	svc.Handlers = make(map[string]toolHandler, len(capHandlers)+len(intentHandlers))
+	for n, h := range capHandlers {
+		svc.Handlers[n] = h
+	}
+	for n, h := range intentHandlers {
+		svc.Handlers[n] = h
+	}
+
+	_ = endpointTools // 端点工具信息不再暴露给模型，仅保留底层能力 handler
+	svc.Logger.Info("AI tools initialized (intent mode)", "tools", len(svc.Tools), "caps", len(capHandlers))
+
+	// P4a: 激活技能 allowed-tools 约束。skill_get 在加载带 allowed_tools 的技能时，
+	// 通过本 hook 把约束注入服务；generateAIResponse 每轮开头会 ClearSkillToolScope，
+	// 把约束限制在当前对话轮内，避免跨会话/跨轮泄漏。此前 hook 从未注册，
+	// 导致技能声明的 allowed_tools 完全不生效（见 aiSkill.go 注释）。
+	SetSkillScopeHook(svc.SetSkillToolScope)
+
+	// 启动自检：REST 端点（route/manage.go）× 意图层声明的可达性审计。
+	// 仅记录结论、不阻断启动——generic 缺口是预期状态，靠补齐意图逐步收敛。
+	//
+	// 口径说明：覆盖率 = (direct+gated)/端点总数，衡量"AI 有多少语义化入口"。
+	// 早期口径拿 getEinoTools() 当能力真相源，H 阶段删掉 84 个平行实现后掉到 0.8%，
+	// 那是"删得越干净指标越难看"的反向指标，已废弃。
+	if rep, cerr := svc.AuditCapabilityCoverage(""); cerr == nil {
+		svc.Logger.Info("AI 能力覆盖审计",
+			"端点", rep.TotalEndpint, "声明可达", rep.TotalDeclared,
+			"意图", rep.TotalIntent, "无端点能力", rep.TotalCap, "本地能力", rep.TotalBuiltin,
+			"direct", rep.Direct, "gated", rep.Gated,
+			"generic", rep.Generic, "blocked", rep.Blocked,
+			"覆盖率", fmt.Sprintf("%.1f%%", float64(rep.Direct+rep.Gated)/float64(maxInt(rep.TotalEndpint, 1))*100),
+			"悬空声明", len(rep.OrphanTargets))
+		if len(rep.OrphanTargets) > 0 {
+			svc.Logger.Warn("意图层声明了不存在的端点，调用必然 404",
+				"数量", len(rep.OrphanTargets), "样例", strings.Join(rep.OrphanTargets, ", "))
+		}
+	} else {
+		svc.Logger.Debug("跳过 AI 能力覆盖审计", "reason", cerr.Error())
+	}
 	// Load sessions from database on startup
 	svc.loadSessionsFromDB()
 	// Load agents and start scheduler
@@ -562,6 +713,22 @@ func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (finalResponse stri
 		svc.runningAgentsMu.Unlock()
 	}()
 
+	// ── 断点续跑检查 (P1-4) ──
+	// 进程崩溃/重启后再被调度触发时，runningAgents 守卫已随进程消失，
+	// 但 DB 里若残留 status=Running 的 checkpoint，说明上一次执行没正常收尾，
+	// 从 checkpoint.Round 继续（会话历史已持久化此前所有轮次的消息）。
+	startRound := 0
+	resumed := false
+	if svc.db != nil {
+		var cp model.AiAgentCheckpoint
+		if err := svc.db.Where("agent_id = ? AND status = ?", agent.Id, model.AgentCheckpointRunning).
+			Order("id DESC").First(&cp).Error; err == nil {
+			resumed = true
+			startRound = resumeRoundFromCheckpoint(&cp)
+			slog.Info("resuming agent from checkpoint", "agentId", agent.Id, "round", startRound)
+		}
+	}
+
 	// 创建执行日志
 	logEntry := &model.AiAgentLog{
 		AgentId:   agent.Id,
@@ -578,6 +745,10 @@ func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (finalResponse stri
 		logEntry.Summary = summary
 		logEntry.Error = errMsg
 		logEntry.FinishedAt = time.Now().Unix()
+		// P4: 把执行失败的诊断信息记入近期错误缓冲，供 autoDiagnoseErrors 回灌模型
+		if status == 2 && errMsg != "" {
+			RecordAIError("agent[%s] 执行失败: %s", agent.Name, errMsg)
+		}
 		if svc.db != nil {
 			svc.db.Save(logEntry)
 		}
@@ -647,17 +818,72 @@ func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (finalResponse stri
 	triggerMsg := "现在开始执行任务。执行完毕后用中文总结。"
 	messages = append(messages, schema.UserMessage(triggerMsg))
 
-	maxRounds := 20
+	maxRounds := agent.MaxRounds
+	if maxRounds <= 0 {
+		maxRounds = 20 // 未配置时默认 20 轮
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	for round := 0; round < maxRounds; round++ {
+	// 断点续跑：每完成一轮就落盘 round，进程被杀后下次触发可从此续跑。
+	saveCheckpoint := func(round int, status int) {
+		if svc.db == nil {
+			return
+		}
+		rec := model.AiAgentCheckpoint{
+			AgentId:   agent.Id,
+			SessionId: agent.SessionId,
+			Round:     round,
+			MaxRounds: maxRounds,
+			Status:    status,
+		}
+		var existing model.AiAgentCheckpoint
+		if err := svc.db.Where("agent_id = ? AND status = ?", agent.Id, model.AgentCheckpointRunning).
+			First(&existing).Error; err == nil {
+			svc.db.Model(&existing).Updates(map[string]interface{}{
+				"round":      round,
+				"max_rounds": maxRounds,
+				"status":     status,
+			})
+		} else {
+			svc.db.Create(&rec)
+		}
+	}
+	if !resumed {
+		// 全新执行：先清掉任何历史终态残留，写入初始 Running 记录
+		saveCheckpoint(0, model.AgentCheckpointRunning)
+	}
+
+	// 函数退出（正常结束或出错）时把 Running 的 checkpoint 置为终态，
+	// 避免下次调度误判为「需要续跑」。
+	defer func() {
+		if svc.db == nil {
+			return
+		}
+		var cp model.AiAgentCheckpoint
+		if err := svc.db.Where("agent_id = ? AND status = ?", agent.Id, model.AgentCheckpointRunning).
+			First(&cp).Error; err == nil {
+			status := model.AgentCheckpointDone
+			if errResult != nil {
+				status = model.AgentCheckpointFailed
+			}
+			svc.db.Model(&cp).Update("status", status)
+		}
+	}()
+
+	for round := startRound; round < maxRounds; round++ {
 		// 检查超时
 		select {
 		case <-ctx.Done():
 			updateLog(2, "", ctx.Err().Error())
 			return "", ctx.Err()
 		default:
+		}
+
+		// P2-7: 结构化 tracing —— 记录 Agent 每轮 LLM 调用
+		if svc.trace != nil {
+			svc.trace.RecordPhase(TraceAgent, "agent_round",
+				fmt.Sprintf("agent #%d, round %d (resumed=%v)", agent.Id, round, resumed))
 		}
 
 		// 调用 LLM
@@ -699,7 +925,9 @@ func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (finalResponse stri
 			} else {
 				result, err = handler(ctx, argsJSON)
 				if err != nil {
+					// P4: 工具执行失败也记入近期错误缓冲
 					result = fmt.Sprintf("工具执行错误: %s", err.Error())
+					RecordAIError("agent[%s] 工具 %s 执行失败: %s", agent.Name, toolName, err.Error())
 				}
 			}
 
@@ -720,11 +948,14 @@ func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (finalResponse stri
 		if len(messages) > 12 && round%3 == 2 {
 			messages = CompactMessages(messages, 5)
 		}
+
+		// 断点续跑：本轮回合已完成，记录已完成轮数
+		saveCheckpoint(round+1, model.AgentCheckpointRunning)
 	}
 
 	// 达到最大轮次时，LLM 仍在调用工具，设置默认响应
 	if finalResponse == "" {
-		finalResponse = "已达到最大执行轮次（20轮），任务可能未完全完成。"
+		finalResponse = fmt.Sprintf("已达到最大执行轮次（%d轮），任务可能未完全完成。", maxRounds)
 	}
 
 	updateLog(1, finalResponse, "")
@@ -736,6 +967,23 @@ func (svc *AiChatService) GetAgent(id uint) *model.AiAgent {
 	svc.agentsMu.RLock()
 	defer svc.agentsMu.RUnlock()
 	return svc.agents[id]
+}
+
+// Trace 返回结构化追踪记录器 (P2-7)。可能为 nil（极早期构造分支）。
+func (svc *AiChatService) Trace() *TraceRecorder {
+	return svc.trace
+}
+
+// resumeRoundFromCheckpoint 把 DB 里记录的「已完成轮数」转换为本次循环起始轮。
+// 负数或异常值回落到 0（fail-safe，避免越界导致跳过 system prompt 或访问越界）。
+func resumeRoundFromCheckpoint(cp *model.AiAgentCheckpoint) int {
+	if cp == nil {
+		return 0
+	}
+	if cp.Round < 0 {
+		return 0
+	}
+	return cp.Round
 }
 
 // GetAgentBySessionID 根据 SessionID 查找 Agent
@@ -761,6 +1009,65 @@ func (svc *AiChatService) GetEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 		handlers[name] = handler
 	}
 	return tools, handlers
+}
+
+// ResolveCap 取出可供意图委托调用的底层能力 handler。
+//
+// 必须优先查 capHandlers：它只含端点与内置 caps，不含意图 handler。
+// 直接查 Handlers 存在真实风险 —— Handlers 里同名意图会覆盖同名 cap（web_fetch/web_search），
+// 委托时会再次命中意图 handler 自身而形成无限递归。MCP 通道的 capInvoker 同样依赖本方法。
+func (svc *AiChatService) ResolveCap(name string) (toolHandler, bool) {
+	if svc == nil {
+		return nil, false
+	}
+	if svc.capHandlers != nil {
+		if h, ok := svc.capHandlers[name]; ok {
+			return h, true
+		}
+	}
+	h, ok := svc.Handlers[name]
+	return h, ok
+}
+
+// GetIntentTools 返回意图导向工作流工具（与 MCP 共用 IntentCatalog），仅构建一次并缓存。
+// 意图内核通过 CapInvoker 委托给本服务的端点 handler（底层能力 caps）；意图 handler 单独成表，
+// 与端点 handler 分离，避免同名意图（如 web_fetch）委托到同名 cap 时产生递归。
+func (svc *AiChatService) GetIntentTools() ([]*schema.ToolInfo, map[string]toolHandler) {
+	if svc.intentTools != nil {
+		return svc.intentTools, svc.intentHandlers
+	}
+	iconf := intent.Config{
+		ExposedIntents: GetMcpConfig().ExposedIntents,
+		ExposedTools:   GetMcpConfig().ExposedTools,
+		ToolListMode:   GetMcpConfig().ToolListMode,
+	}
+	// CapInvoker：把意图参数序列化后调用对应底层能力 handler（端点/内置 caps）。读取 svc.capHandlers
+	// 当前值（纯底层能力表，不含意图 handler），以支持运行期热重建且避免同名意图递归。
+	capInvoker := func(ctx context.Context, name string, args map[string]any) (string, error) {
+		h, ok := svc.ResolveCap(name)
+		if !ok {
+			return "", fmt.Errorf("底层能力 %s 不存在或未接入", name)
+		}
+		raw, err := json.Marshal(args)
+		if err != nil {
+			return "", fmt.Errorf("参数序列化失败: %w", err)
+		}
+		return h(ctx, string(raw))
+	}
+	auditFn := func(ctx context.Context, name, risk, argsJSON string, callErr error, start time.Time) {
+		if svc.site != nil {
+			svc.site.recordMcpAudit(ctx, name, risk, argsJSON, callErr, start)
+		}
+	}
+	kernel := intent.NewKernel(iconf, capInvoker, auditFn)
+	tools, handlers, _ := kernel.BuildEinoTools(iconf)
+	out := make(map[string]toolHandler, len(handlers))
+	for n, h := range handlers {
+		out[n] = toolHandler(h)
+	}
+	svc.intentTools = tools
+	svc.intentHandlers = out
+	return svc.intentTools, svc.intentHandlers
 }
 
 // ── P4a: 技能 allowed-tools 约束 ──
@@ -829,93 +1136,18 @@ func (svc *AiChatService) BuildAIResponse(message string, toolNames []string) st
 	// 简单的基于关键词的路由规则
 	// 生产环境中会使用大语言模型（LLM）
 
-	if containsAny(msg, []string{"list", "list_", "get_", "search"}) {
-		if containsAny(msg, []string{"article", "archive", "post"}) {
-			return "要查看文章列表，请使用 `archive_list` 工具。该工具支持分页、分类筛选和关键词搜索。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-		if containsAny(msg, []string{"category", "categor"}) {
-			return "要查看分类列表，请使用 `category_list` 工具。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-		if containsAny(msg, []string{"page"}) {
-			return "要查看单页面列表，请使用 `page_list` 工具。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-		if containsAny(msg, []string{"tag", "tags"}) {
-			return "要查看标签列表，请使用 `tag_list` 工具。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-	}
-
-	if containsAny(msg, []string{"create", "new", "add"}) {
-		if containsAny(msg, []string{"article", "archive", "post"}) {
-			return "要创建文章，请使用 `archive_create` 工具。必填字段：title（标题）、content（内容）、category_id（分类ID）。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-		if containsAny(msg, []string{"category", "categor"}) {
-			return "要创建分类，请使用 `category_create` 工具。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-		if containsAny(msg, []string{"tag", "tags"}) {
-			return "要创建标签，请使用 `tag_create` 工具。必填字段：title（标题）。\n\n可用工具：\n" + formatTools(toolNames)
-		}
-	}
-
-	if containsAny(msg, []string{"update", "edit", "modify"}) {
-		return "要更新资源，请使用对应的 `*_update` 工具（archive_update、category_update、tag_update）。每个工具都需要传入资源的 ID。\n\n可用工具：\n" + formatTools(toolNames)
-	}
-
-	if containsAny(msg, []string{"delete", "remove"}) {
-		return "要删除资源，请使用对应的 `*_delete` 工具（archive_delete、category_delete、tag_delete）。每个工具都需要传入资源的 ID。\n\n可用工具：\n" + formatTools(toolNames)
-	}
-
-	if containsAny(msg, []string{"publish"}) {
-		return "要发布文章，请使用 `archive_publish` 工具，传入 archive_id 和 status（1=发布，2=取消发布）。\n\n可用工具：\n" + formatTools(toolNames)
-	}
-
-	if containsAny(msg, []string{"attachment", "upload", "file"}) {
-		return "要管理附件，请使用 `attachment_*` 系列工具（attachment_list、attachment_upload、attachment_delete）。\n\n可用工具：\n" + formatTools(toolNames)
-	}
-
 	if containsAny(msg, []string{"help", "tool", "capability"}) {
-		response := "可用的 AnqiCMS MCP 工具：\n\n"
-		if len(toolNames) > 0 {
-			response += formatTools(toolNames)
-		} else {
-			response += "- archive_list: 查看文章列表（支持分页和筛选）\n"
-			response += "- archive_get: 获取文章详情\n"
-			response += "- archive_create: 创建新文章\n"
-			response += "- archive_update: 更新文章\n"
-			response += "- archive_delete: 删除文章\n"
-			response += "- archive_publish: 发布或取消发布文章\n"
-			response += "- archive_tag_update: 更新文章标签\n"
-			response += "- category_list: 查看分类列表\n"
-			response += "- category_get: 获取分类详情\n"
-			response += "- category_create: 创建分类\n"
-			response += "- category_update: 更新分类\n"
-			response += "- category_delete: 删除分类\n"
-			response += "- page_list: 查看单页面列表\n"
-			response += "- page_get: 获取单页面详情\n"
-			response += "- page_create: 创建单页面\n"
-			response += "- page_update: 更新单页面\n"
-			response += "- page_delete: 删除单页面\n"
-			response += "- moduel_list: 查看模块列表\n"
-			response += "- module_get: 获取模块详情\n"
-			response += "- module_create: 创建模块\n"
-			response += "- module_update: 更新模块\n"
-			response += "- module_delete: 删除模块\n"
-			response += "- tag_list: 查看标签列表\n"
-			response += "- tag_get: 获取标签详情\n"
-			response += "- tag_create: 创建标签\n"
-			response += "- tag_update: 更新标签\n"
-			response += "- tag_delete: 删除标签\n"
-			response += "- attachment_list: 查看附件列表\n"
-			response += "- attachment_upload: 上传附件\n"
-		}
+		response := "可用的 AnQiCMS MCP 工具：\n\n"
+		response += formatTools(toolNames)
 		return response
 	}
 
 	// 默认回复
-	response := "你好！我是您的 AnqiCMS AI 助手，可以帮助您管理文章、分类、标签和附件。\n\n"
+	response := "你好！我是您的 AnQiCMS AI 助手，可以帮助您管理文章、分类、标签和附件。\n\n"
 	if svc.site != nil {
-		response += fmt.Sprintf("当前站点：%s\n", svc.site.System.SiteName)
+		response += fmt.Sprintf("当前站点：%s\n\n", svc.site.System.SiteName)
 	}
-	response += "输入 'help' 查看可用的工具和命令。\n\n可用工具：\n" + formatTools(toolNames)
+	response += "输入 'help' 查看可用的工具和命令。\n"
 	return response
 }
 
@@ -1374,39 +1606,34 @@ func IsContextOverflowError(err error) bool {
 }
 
 // HasWriteOperation checks if any of the tool names is a write operation.
+//
+// 注意这是**工具名粒度**的粗判定（拿不到 arguments 的调用点才用它）。
+// 名单不再在本文件硬编码：风险统一由意图层按
+// 「声明的路由 → 底层端点方法 → 动词约定 → 意图声明」推导（见 pkg/mcp/intent/risk.go），
+// 需要审批的集合是 {write, destructive, system}。
+// 早先这里只认 spec.Risk==write，导致 RiskSystem 的 shell/文件写意图（shell_exec、
+// fs_write、fs_edit、fs_replace）完全绕过审批门。
 func HasWriteOperation(toolNames []string) bool {
-	writeOps := map[string]bool{
-		"archive_create":     true,
-		"archive_update":     true,
-		"archive_delete":     true,
-		"category_create":    true,
-		"category_update":    true,
-		"category_delete":    true,
-		"page_create":        true,
-		"page_update":        true,
-		"page_delete":        true,
-		"module_create":      true,
-		"module_update":      true,
-		"module_delete":      true,
-		"tag_create":         true,
-		"tag_update":         true,
-		"tag_delete":         true,
-		"archive_publish":    true,
-		"archive_tag_update": true,
-		"attachment_upload":  true,
-		"attachment_delete":  true,
-		"write_file":         true,
-		"edit_file":          true,
-		"create_file":        true,
-		"search_replace":     true,
-		"bash":               true,
-	}
 	for _, name := range toolNames {
-		if writeOps[name] {
+		if intent.NeedsApproval(intent.ActionRisk(strings.TrimSpace(name), nil)) {
 			return true
 		}
 	}
 	return false
+}
+
+// CallNeedsApproval 判断这一次**具体调用**要不要人工确认。
+//
+// 合并意图（如 content_article 的 list/get/save/delete）整体标 Risk=write，
+// 按工具名判定会让纯查询也弹窗（用户反馈的问题 2）。这里下钻到 action 粒度：
+// content_article action=list → 只读，不问；action=delete → 问。
+func CallNeedsApproval(toolName, argsJSON string) bool {
+	return intent.ActionNeedsApproval(toolName, argsJSON)
+}
+
+// CallRisk 返回一次调用的推导风险，供审批事件向用户展示"为什么问"。
+func CallRisk(toolName, argsJSON string) string {
+	return string(intent.ActionRiskFromArgsJSON(toolName, argsJSON))
 }
 
 // ContainsErrorKeywords checks if the string contains common error keywords.
@@ -1443,90 +1670,70 @@ func ContainsErrorKeywords(s string) bool {
 // Uses safe boundary detection: never splits tool_call ↔ tool_result pairs.
 // Anti-nesting: skips results with already-compressed summaries (does NOT
 // re-summarize a [系统压缩] summary, instead replaces it in place).
-func CompactMessages(messages []*schema.Message, keepCount int) []*schema.Message {
+// compactCut 计算压缩区间，返回 (可压缩区起始下标, 安全切点)：
+// [compressedPrefix, safeCut) 之间的消息会被压缩，safeCut 之后原样保留。
+//
+// 两处要点：
+//   - Anti-nesting：若已存在压缩摘要（messages[1] 带 [系统压缩] 标记），
+//     起始下标后移到 2，避免摘要套摘要层层膨胀。
+//   - Safe cut：切点不能落在 tool_call / tool_result 配对中间，
+//     否则会产生「有 tool_call 却没有结果」的非法消息序列，模型 API 会直接报错。
+func compactCut(messages []*schema.Message, keepCount int) (int, int) {
 	if len(messages) <= keepCount+1 {
-		return messages
+		return 1, 1
 	}
 
-	// First message is the system prompt — always keep it
-	systemMsg := messages[0]
-
-	// ── Anti-nesting: detect existing compressed summary ──
-	// If messages[1] is a system message with a compression marker, this
-	// conversation was already compressed. In that case, remove it and
-	// shift the index space so we compress fresh messages.
-	compressedPrefix := 1 // default: compressible region starts at index 1
+	compressedPrefix := 1 // 默认：可压缩区从下标 1 开始（0 是 system prompt）
 	if len(messages) > 2 && messages[1].Role == schema.System &&
 		(strings.Contains(messages[1].Content, "[系统压缩]") ||
 			strings.Contains(messages[1].Content, "[历史对话摘要]")) {
-		compressedPrefix = 2 // skip the old summary, keep messages from index 2
+		compressedPrefix = 2 // 跳过旧摘要
 	}
 
-	// ── Find a safe cut point ──
-	// Scan backwards from the end to find a boundary that doesn't split
-	// tool_call/tool_result pairs.
 	targetCut := len(messages) - keepCount
-	// Ensure targetCut is within the compressible region
 	if targetCut < compressedPrefix {
 		targetCut = compressedPrefix
 	}
 	safeCut := targetCut
 
-	// Backward scan from targetCut to find a safe boundary
+	isSafe := func(m *schema.Message) bool {
+		return m.Role == schema.User || (m.Role == schema.Assistant && len(m.ToolCalls) == 0)
+	}
+
+	// 从 targetCut 向前扫，找一个安全边界
 	for i := targetCut; i >= compressedPrefix; i-- {
-		msg := messages[i]
-		if msg.Role == schema.User {
-			safeCut = i
-			break
-		}
-		if msg.Role == schema.Assistant && len(msg.ToolCalls) == 0 {
-			// Assistant without tool calls — safe, all tool results before this are complete
+		if isSafe(messages[i]) {
 			safeCut = i
 			break
 		}
 	}
-
-	// If backward scan found no safe boundary, scan forward from targetCut
+	// 向前没找到就向后扫
 	if safeCut == targetCut {
 		for i := targetCut + 1; i < len(messages); i++ {
-			msg := messages[i]
-			if msg.Role == schema.User {
-				safeCut = i
-				break
-			}
-			if msg.Role == schema.Assistant && len(msg.ToolCalls) == 0 {
+			if isSafe(messages[i]) {
 				safeCut = i
 				break
 			}
 		}
 	}
 
-	// ── Final API compliance validation ──
-	// Ensure the first message in the kept block is not an orphan Tool result
-	// or Assistant-with-tool-calls (which would have its paired messages in the
-	// compressed region). If it is, advance to the next safe boundary.
+	// ── API 合规性校验 ──
+	// 保留区的第一条不能是孤儿 Tool 结果，也不能是带 tool_calls 的 assistant
+	// （它们的配对消息留在了压缩区里）。是的话就继续推进到下一个安全边界。
 	for safeCut < len(messages) {
 		msg := messages[safeCut]
 		if msg.Role == schema.Tool {
-			// Orphan tool result — find next safe boundary
 			safeCut++
 			for safeCut < len(messages) {
-				m := messages[safeCut]
-				if m.Role == schema.User {
-					break
-				}
-				if m.Role == schema.Assistant && len(m.ToolCalls) == 0 {
+				if isSafe(messages[safeCut]) {
 					break
 				}
 				safeCut++
 			}
 		} else if msg.Role == schema.Assistant && len(msg.ToolCalls) > 0 {
-			// Assistant with tool calls at the boundary — its results might be in
-			// the compressed region. Advance past this and its tool results.
 			safeCut++
 			for safeCut < len(messages) {
-				m := messages[safeCut]
-				if m.Role != schema.Tool {
+				if messages[safeCut].Role != schema.Tool {
 					break
 				}
 				safeCut++
@@ -1535,6 +1742,123 @@ func CompactMessages(messages []*schema.Message, keepCount int) []*schema.Messag
 			break
 		}
 	}
+
+	return compressedPrefix, safeCut
+}
+
+// messagesContentLen 统计消息列表的总字符数，用于净损失守卫。
+func messagesContentLen(msgs []*schema.Message) int {
+	n := 0
+	for _, m := range msgs {
+		n += len(m.Content)
+	}
+	return n
+}
+
+// Summarizer 语义压缩时用于生成摘要的 LLM 调用抽象。
+// 由 controller 注入真实模型客户端；为 nil 或调用失败时回落到截断式压缩，
+// 保证压缩能力不会因为模型不可用而整体失效。
+type Summarizer interface {
+	Summarize(ctx context.Context, prompt string) (string, error)
+}
+
+// SummarizerFunc 让普通函数直接实现 Summarizer（省去为一次性适配写结构体）。
+type SummarizerFunc func(ctx context.Context, prompt string) (string, error)
+
+func (f SummarizerFunc) Summarize(ctx context.Context, prompt string) (string, error) {
+	return f(ctx, prompt)
+}
+
+// CompactMessagesWithSummary 语义压缩 (P1-5)。
+//
+// 原 CompactMessages 把中间每条消息暴力截断到 150 rune —— 严格说那是**丢信息**
+// 而不是压缩：长任务跑到后段，模型会忘记自己改过哪些文件、为什么那么改，
+// 于是重复劳动甚至改错地方。
+//
+// 这里改为让模型生成一段语义摘要，并加两道保护：
+//   - 回落：Summarizer 为 nil / 调用出错 / 返回空 → 退回 CompactMessages 的截断行为
+//   - 净损失守卫：摘要后若总长度没有明显变短（模型把原文照抄回来了），
+//     判定本次压缩无效并退回截断方案 —— 仿 atomcode CompactReport.committed==false
+//     的「拒绝提交」语义，避免"压了个寂寞"还白花一次调用。
+func CompactMessagesWithSummary(ctx context.Context, messages []*schema.Message, keepCount int, sum Summarizer) []*schema.Message {
+	fallback := func() []*schema.Message { return CompactMessages(messages, keepCount) }
+	if sum == nil || len(messages) == 0 {
+		return fallback()
+	}
+
+	compressedPrefix, safeCut := compactCut(messages, keepCount)
+	if safeCut <= compressedPrefix {
+		// 没有可压缩区间
+		return fallback()
+	}
+
+	// 把待压缩区间渲染成待摘要文本（每条先做一次硬截断，防止单条超大）
+	var sb strings.Builder
+	for i := compressedPrefix; i < safeCut && i < len(messages); i++ {
+		m := messages[i]
+		content := m.Content
+		if runes := []rune(content); len(runes) > 800 {
+			content = string(runes[:800]) + "…"
+		}
+		sb.WriteString(string(m.Role) + ": " + content + "\n")
+	}
+
+	prompt := "请把下面这段 AI 与工具的对话历史压缩成一段简洁的中文摘要。" +
+		"必须保留：用户最初的目标、已经完成的实际操作（尤其是创建/修改/删除了哪些文件或数据）、" +
+		"关键结论与约束、尚未完成的事项、以及任何报错与处理方式。" +
+		"不要保留逐字的工具输出原文，不要加入摘要之外的评论。控制在 400 字以内。\n\n" +
+		sb.String()
+
+	summaryText, err := sum.Summarize(ctx, prompt)
+	if err != nil || strings.TrimSpace(summaryText) == "" {
+		return fallback()
+	}
+
+	// 组装：system prompt + 语义摘要 + 保留区
+	compacted := make([]*schema.Message, 0, 2+len(messages)-safeCut)
+	compacted = append(compacted, messages[0])
+	compacted = append(compacted, schema.SystemMessage(
+		"[系统压缩] 以下为历史对话摘要（语义压缩）:\n"+strings.TrimSpace(summaryText)))
+	if safeCut < len(messages) {
+		compacted = append(compacted, messages[safeCut:]...)
+	}
+
+	// ── 净损失守卫 ──
+	//
+	// 在「原文 / 截断方案 / 语义方案」三者里选最短的那个，并且：
+	//   - 两个压缩方案都没能比原文更短 → 干脆不压缩。
+	//     消息很短时，"role: " 前缀与 "---" 分隔符会让截断结果**反而变长**，
+	//     这时压缩只是往上下文里塞噪声（这是截断方案一直存在的老问题）。
+	//   - 语义方案若没有比截断方案更短，说明模型没在摘要（把原文照抄回来了），
+	//     采用截断方案 —— 仿 atomcode CompactReport.committed==false 的拒绝提交语义。
+	//
+	// 注意次序：必须先比出三者中最短的再决定，
+	// 不能先拿截断方案和原文比 —— 否则真正更短的语义摘要会永远轮不到。
+	truncated := CompactMessages(messages, keepCount)
+
+	best := compacted
+	bestLen := messagesContentLen(compacted)
+	if tl := messagesContentLen(truncated); tl < bestLen {
+		best, bestLen = truncated, tl
+	}
+	if messagesContentLen(messages) <= bestLen {
+		return messages
+	}
+	return best
+}
+
+func CompactMessages(messages []*schema.Message, keepCount int) []*schema.Message {
+	if len(messages) <= keepCount+1 {
+		return messages
+	}
+
+	// First message is the system prompt — always keep it
+	systemMsg := messages[0]
+
+	// 压缩区间由 compactCut 统一计算（ truncation 与语义摘要两条路径共用）：
+	//   - Anti-nesting：跳过已有的压缩摘要，避免摘要套摘要
+	//   - Safe cut：切点不能落在 tool_call / tool_result 配对中间
+	compressedPrefix, safeCut := compactCut(messages, keepCount)
 
 	// ── Compress messages between compressedPrefix and safeCut ──
 	var summaryParts []string

@@ -9,6 +9,10 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// ModuleList 查询全部内容模型列表。
+//
+// 参数说明：
+//   - 查询参数 "exclude_id": 需要排除的模型 ID，默认不排除。
 func ModuleList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	modules, err := currentSite.GetModules()
@@ -36,6 +40,10 @@ func ModuleList(ctx iris.Context) {
 	})
 }
 
+// ModuleDetail 查询单个内容模型的详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 模型 ID，必填。
 func ModuleDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -56,6 +64,7 @@ func ModuleDetail(ctx iris.Context) {
 	})
 }
 
+// ModuleDetailForm 新建或更新内容模型。
 func ModuleDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ModuleRequest
@@ -133,7 +142,7 @@ func ModuleDetailForm(ctx iris.Context) {
 					tmpModule, err := subSite.GetModuleById(req.Id)
 					if err == nil {
 						req.Title = tmpModule.Title
-						req.TitleName = tmpModule.TitleName
+						//	req.TitleName = tmpModule.TitleName
 					}
 					_, _ = subSite.SaveModule(&req)
 				}
@@ -157,6 +166,7 @@ func ModuleDetailForm(ctx iris.Context) {
 	})
 }
 
+// ModuleFieldsDelete 删除内容模型中的指定自定义字段。
 func ModuleFieldsDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ModuleFieldRequest
@@ -200,9 +210,10 @@ func ModuleFieldsDelete(ctx iris.Context) {
 	})
 }
 
+// ModuleDelete 删除指定内容模型。
 func ModuleDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ModuleRequest
+	var req request.DeleteModuleRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginGetGoogleSetting 获取Google认证插件的配置信息。
 func PluginGetGoogleSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetGoogleAuthSetting()
@@ -17,6 +18,7 @@ func PluginGetGoogleSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSaveGoogleSetting 保存Google认证插件的配置信息。
 func PluginSaveGoogleSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginGoogleAuthConfig

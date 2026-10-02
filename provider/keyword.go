@@ -130,9 +130,6 @@ func (w *Website) ImportKeywords(file multipart.File, info *multipart.FileHeader
 			continue
 		}
 		values := strings.Split(line, ",")
-		if len(values) < 2 {
-			continue
-		}
 		title := strings.TrimSpace(values[0])
 		if title == "" {
 			continue
@@ -146,13 +143,24 @@ func (w *Website) ImportKeywords(file multipart.File, info *multipart.FileHeader
 			}
 			total++
 		}
-		categoryId, _ := strconv.Atoi(values[1])
-		keyword.CategoryId = uint(categoryId)
+		if len(values) > 1 {
+			categoryId, _ := strconv.Atoi(values[1])
+			keyword.CategoryId = uint(categoryId)
+		}
 
-		keyword.Save(w.DB)
+		_ = w.SaveKeyword(keyword)
 	}
 
 	return w.Tr("SuccessfullyImportedKeywords", total), nil
+}
+
+func (w *Website) SaveKeyword(keyword *model.Keyword) error {
+	err := w.DB.Save(keyword).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (w *Website) DeleteKeyword(keyword *model.Keyword) error {

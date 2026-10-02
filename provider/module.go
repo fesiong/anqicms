@@ -140,9 +140,6 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if req.UpdateAll || req.Name != "" {
 		module.Name = req.Name
 	}
-	if req.UpdateAll || req.TitleName != "" {
-		module.TitleName = req.TitleName
-	}
 	if req.UpdateAll || req.UrlToken != "" {
 		module.UrlToken = req.UrlToken
 	}

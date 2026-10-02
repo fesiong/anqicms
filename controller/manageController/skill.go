@@ -85,6 +85,9 @@ func SkillList(ctx iris.Context) {
 }
 
 // SkillDetail returns the full content of a skill
+//
+// 参数说明：
+//   - 查询参数 "name": 技能名称（必填），用于定位要查看的技能。
 func SkillDetail(ctx iris.Context) {
 	name := ctx.URLParam("name")
 	if name == "" {
@@ -233,7 +236,7 @@ func SkillEdit(ctx iris.Context) {
 // SkillDelete deletes a skill directory
 func SkillDelete(ctx iris.Context) {
 	var req struct {
-		Name string `json:"name"`
+		Name string `json:"name"` // 要删除的智能体技能名称
 	}
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

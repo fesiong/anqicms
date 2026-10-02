@@ -69,12 +69,12 @@ type UserGroup struct {
 
 type UserGroupSetting struct {
 	//setting
-	ShareReward      int64 `json:"share_reward"`
-	ParentReward     int64 `json:"parent_reward"`
-	ShareDiscount    int64 `json:"share_discount"`    // 通过分享链接下单优惠比例
-	Discount         int64 `json:"discount"`          // 用户组购买优惠比例
-	ShippingDiscount int64 `json:"shipping_discount"` // 用户组运费优惠比例
-	ExpireDay        int   `json:"expire_day"`
+	ShareReward      int64 `json:"share_reward"`      // 用户分享佣金比例（一级）：建议设置1-20
+	ParentReward     int64 `json:"parent_reward"`     // 邀请奖励比例（二级）：建议设置1-5
+	ShareDiscount    int64 `json:"share_discount"`    // 通过分享链接下单优惠折扣：建议设置90-100
+	Discount         int64 `json:"discount"`          // 用户组购买优惠折扣：建议设置90-100
+	ShippingDiscount int64 `json:"shipping_discount"` // 用户组运费优惠折扣：建议设置90-100
+	ExpireDay        int   `json:"expire_day"`        // 用户组有效天数，365=1年，30=一个月
 
 	ContentNoVerify  bool `json:"content_no_verify"`  // 评论/内容发布是否不需要审核
 	ContentNoCaptcha bool `json:"content_no_captcha"` // 评论/内容发布是否不需要验证码

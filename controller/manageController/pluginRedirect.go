@@ -1,14 +1,21 @@
 package manageController
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strings"
 )
 
+// PluginRedirectList 获取 301 跳转列表，支持分页和来源链接搜索。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "from_url": 来源链接筛选条件。
 func PluginRedirectList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
@@ -33,6 +40,7 @@ func PluginRedirectList(ctx iris.Context) {
 	})
 }
 
+// PluginRedirectDetailForm 新增或更新 301 跳转链接。
 func PluginRedirectDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginRedirectRequest
@@ -109,12 +117,14 @@ func PluginRedirectDetailForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("LinkUpdated"),
+		"data": redirect,
 	})
 }
 
+// PluginRedirectDelete 根据 ID 删除指定的 301 跳转链接。
 func PluginRedirectDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginRedirectRequest
+	var req request.PluginRedirectDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -151,6 +161,10 @@ func PluginRedirectDelete(ctx iris.Context) {
 	})
 }
 
+// PluginRedirectImport 批量导入 301 跳转地址配置。
+//
+// 参数说明：
+//   - 表单参数 "file": 导入链接文件。文件内容格式一行一条，用逗号隔开，如：from_url, to_url
 func PluginRedirectImport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")

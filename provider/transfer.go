@@ -335,7 +335,6 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 			Fields:         result.Data[i].Fields,
 			CategoryFields: result.Data[i].CategoryFields,
 			IsSystem:       result.Data[i].IsSystem,
-			TitleName:      result.Data[i].TitleName,
 			Status:         result.Data[i].Status,
 		}
 		module.Id = result.Data[i].Id

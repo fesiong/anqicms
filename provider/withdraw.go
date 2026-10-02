@@ -45,7 +45,7 @@ func (w *Website) GetWithdrawById(id uint) (*model.UserWithdraw, error) {
 	return &withdraw, nil
 }
 
-func (w *Website) SetUserWithdrawApproval(req *request.UserWithdrawRequest) error {
+func (w *Website) SetUserWithdrawApproval(req *request.UserWithdrawApprovalRequest) error {
 	withdraw, err := w.GetWithdrawById(req.Id)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func (w *Website) SetUserWithdrawApproval(req *request.UserWithdrawRequest) erro
 	return nil
 }
 
-func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawRequest) error {
+func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawApprovalRequest) error {
 	withdraw, err := w.GetWithdrawById(req.Id)
 	if err != nil {
 		return err

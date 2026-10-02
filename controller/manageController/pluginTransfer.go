@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// GetTransferTask 获取当前站点的数据迁移任务。
 func GetTransferTask(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	task := currentSite.GetTransferTask()
@@ -23,6 +24,7 @@ func GetTransferTask(ctx iris.Context) {
 	})
 }
 
+// DownloadClientFile 根据建站系统类型下载对应的客户端转移接口文件。
 func DownloadClientFile(ctx iris.Context) {
 	var req request.TransferWebsite
 	if err := ctx.ReadJSON(&req); err != nil {
@@ -77,6 +79,7 @@ func DownloadClientFile(ctx iris.Context) {
 	ctx.ServeFile(clientFile)
 }
 
+// CreateTransferTask 创建网站数据转移任务。
 func CreateTransferTask(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.TransferWebsite
@@ -104,6 +107,7 @@ func CreateTransferTask(ctx iris.Context) {
 	})
 }
 
+// GetTransferModules 获取网站数据转移任务支持的模型及可执行的操作类型。
 func GetTransferModules(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	task := currentSite.GetTransferTask()
@@ -150,6 +154,7 @@ func GetTransferModules(ctx iris.Context) {
 	})
 }
 
+// TransferWebData 开始执行网站数据转移任务，前置条件：获取网站数据转移任务支持的模型及可执行的操作类型
 func TransferWebData(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	task := currentSite.GetTransferTask()

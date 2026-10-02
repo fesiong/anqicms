@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginGetLimiterSetting 获取当前站点的防刷（限流）设置。
 func PluginGetLimiterSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetLimiterSetting()
@@ -18,6 +19,7 @@ func PluginGetLimiterSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSaveLimiterSetting 保存防刷（限流）设置并重新初始化限流器。
 func PluginSaveLimiterSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginLimiter
@@ -49,6 +51,7 @@ func PluginSaveLimiterSetting(ctx iris.Context) {
 	})
 }
 
+// PluginGetBlockedIPs 获取当前站点限流器中被屏蔽的 IP 列表。
 func PluginGetBlockedIPs(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -64,6 +67,7 @@ func PluginGetBlockedIPs(ctx iris.Context) {
 	})
 }
 
+// PluginRemoveBlockedIP 删除当前站点限流器中临时屏蔽的 IP。
 func PluginRemoveBlockedIP(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLimiterRemoveIPRequest

@@ -12,6 +12,15 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginOrderList 获取订单列表，支持订单号、用户名、类型、状态过滤和分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "order_id": 订单号过滤。
+//   - 查询参数 "user_name": 用户名模糊过滤。
+//   - 查询参数 "status": 订单状态过滤：waiting,paid,delivery,finished,refunding,closed。
+//   - 查询参数 "type": 订单类型过滤：archive|vip。
 func PluginOrderList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -44,6 +53,10 @@ func PluginOrderList(ctx iris.Context) {
 	})
 }
 
+// PluginOrderDetail 根据订单号获取订单详情，附带买家、分享用户和上级分享用户信息。
+//
+// 参数说明：
+//   - 查询参数 "order_id": 订单号。
 func PluginOrderDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	orderId := ctx.URLParam("order_id")
@@ -72,6 +85,7 @@ func PluginOrderDetail(ctx iris.Context) {
 	})
 }
 
+// PluginOrderSetPay 手动标记订单为已支付：必要时生成支付单，记录消费流水并处理支付成功逻辑。
 func PluginOrderSetPay(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PaymentRequest
@@ -176,9 +190,10 @@ func PluginOrderSetPay(ctx iris.Context) {
 	})
 }
 
+// PluginOrderSetDeliver 设置订单发货。
 func PluginOrderSetDeliver(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.OrderRequest
+	var req request.OrderDeliveryRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -202,9 +217,10 @@ func PluginOrderSetDeliver(ctx iris.Context) {
 	})
 }
 
+// PluginOrderSetFinished 将订单标记为已完成。
 func PluginOrderSetFinished(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.OrderRequest
+	var req request.OrderFinishedRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -236,9 +252,10 @@ func PluginOrderSetFinished(ctx iris.Context) {
 	})
 }
 
+// PluginOrderSetCanceled 将订单标记为已取消。
 func PluginOrderSetCanceled(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.OrderRequest
+	var req request.OrderFinishedRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -271,6 +288,7 @@ func PluginOrderSetCanceled(ctx iris.Context) {
 	})
 }
 
+// PluginOrderSetRefund 处理订单退款。
 func PluginOrderSetRefund(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderRefundRequest
@@ -306,9 +324,10 @@ func PluginOrderSetRefund(ctx iris.Context) {
 	})
 }
 
+// PluginOrderApplyRefund 为订单发起退款申请，并将退款状态置为申请中。
 func PluginOrderApplyRefund(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.OrderRefundRequest
+	var req request.OrderFinishedRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -350,6 +369,7 @@ func PluginOrderApplyRefund(ctx iris.Context) {
 	})
 }
 
+// PluginOrderConfig 获取当前站点的订单插件配置。
 func PluginOrderConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginOrder
@@ -361,6 +381,7 @@ func PluginOrderConfig(ctx iris.Context) {
 	})
 }
 
+// PluginOrderConfigForm 保存订单插件的配置，并清理缓存索引。
 func PluginOrderConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginOrderConfig
@@ -396,6 +417,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginOrderExport 根据选中的时间范围和订单状态，导出订单。
 func PluginOrderExport(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderExportRequest

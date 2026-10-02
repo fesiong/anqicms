@@ -479,6 +479,7 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 func ApiUpdateUserAvatar(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	userId := ctx.Values().GetUintDefault("userId", 0)
+	// Receive user avatar file
 	file, _, err := ctx.FormFile("file")
 	if err != nil {
 		ctx.JSON(iris.Map{

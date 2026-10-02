@@ -15,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginFileUploadList 获取已上传的验证文件列表，并补全文件访问链接。
 func PluginFileUploadList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	uploadFiles := currentSite.PluginUploadFiles
@@ -30,6 +31,7 @@ func PluginFileUploadList(ctx iris.Context) {
 	})
 }
 
+// PluginFileUploadDelete 删除指定已上传的验证文件
 func PluginFileUploadDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginFileUploadDelete
@@ -89,8 +91,10 @@ func PluginFileUploadDelete(ctx iris.Context) {
 	})
 }
 
-// PluginFileUploadUpload
-// 上传，只允许上传txt,htm,html
+// PluginFileUploadUpload 上传验证文件，只允许上传txt,htm,html,xml
+//
+// 参数说明：
+//   - 表单参数 "file": 验证文件。
 func PluginFileUploadUpload(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")

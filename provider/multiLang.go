@@ -242,12 +242,11 @@ func (w *Website) RemoveMultiLangSite(siteId uint, lang string) error {
 
 			targetSite.ParentId = 0
 		}
-	} else {
-		// 移除语言
-		w.MultiLanguage.RemoveSite(siteId, lang)
-		// 更新setting
-		_ = w.SaveSettingValue(MultiLangSettingKey, w.MultiLanguage)
 	}
+	// 移除语言
+	w.MultiLanguage.RemoveSite(siteId, lang)
+	// 更新setting
+	_ = w.SaveSettingValue(MultiLangSettingKey, w.MultiLanguage)
 	// todo
 
 	return nil
@@ -355,7 +354,7 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 
 // SyncMultiLangSiteContent 同步的内容有：modules categories tags archives
 // 同步的时候，不同步进行翻译，如果启用了自动翻译，则添加到翻译的计划任务中
-func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMultiLangSiteRequest) error {
+func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMultiLangSiteSyncRequest) error {
 	ms.Percent = 0
 	defer func() {
 		ms.FinishCount = ms.TotalCount

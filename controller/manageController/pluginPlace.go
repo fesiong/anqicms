@@ -9,8 +9,10 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
+// PluginGetPlaceSetting 查询城市站功能的配置。
 func PluginGetPlaceSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginPlace
@@ -22,6 +24,7 @@ func PluginGetPlaceSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSavePlaceSetting 保存城市站功能的配置。
 func PluginSavePlaceSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginPlaceConfig
@@ -52,6 +55,12 @@ func PluginSavePlaceSetting(ctx iris.Context) {
 	})
 }
 
+// PluginPlaceList 查询城市站（分站）列表，支持按父级ID与名称筛选。
+//
+// 参数说明：
+//   - 查询参数 "parent_id": 按父级城市站 ID 筛选，0 表示不限。
+//   - 查询参数 "show_type": 0=tree，1=Node节点，2=列表
+//   - 查询参数 "title": 按城市站名称模糊搜索。
 func PluginPlaceList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	showType := ctx.URLParamIntDefault("show_type", 0)
@@ -103,6 +112,10 @@ func PluginPlaceList(ctx iris.Context) {
 	})
 }
 
+// PlaceDetail 查询单个城市站的详情及其自定义字段。
+//
+// 参数说明：
+//   - 查询参数 "id": 城市站 ID，必填。
 func PlaceDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -153,9 +166,10 @@ func PlaceDetail(ctx iris.Context) {
 	})
 }
 
+// PlaceDetailForm 新建或更新城市站。
 func PlaceDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req model.Place
+	var req request.PlaceRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -242,9 +256,10 @@ func PlaceDetailForm(ctx iris.Context) {
 	})
 }
 
+// PlaceDelete 删除指定城市站。
 func PlaceDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req model.Place
+	var req request.PlaceDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

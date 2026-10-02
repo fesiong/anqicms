@@ -2,6 +2,7 @@ package provider
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 )
 
 // ================================================================
@@ -286,10 +288,12 @@ type readCacheEntry struct {
 	output string
 }
 
-var readFileCache sync.Map // key: "path|offset|limit" → *readCacheEntry
+var readFileCache sync.Map // key: "path|offset|limit|budget" → *readCacheEntry
 
-func getReadCache(path string, offset, limit int, mtime time.Time) (string, bool) {
-	key := fmt.Sprintf("%s|%d|%d", path, offset, limit)
+// 缓存键必须含 budget：同一 (path, offset, limit) 在不同预算下渲染结果不同，
+// 漏掉就会让换了配置的服务实例读到上一份被切得更短（或更长）的窗口。
+func getReadCache(path string, offset, limit, budget int, mtime time.Time) (string, bool) {
+	key := readCacheKey(path, offset, limit, budget)
 	if val, ok := readFileCache.Load(key); ok {
 		entry := val.(*readCacheEntry)
 		if entry.mtime.Equal(mtime) {
@@ -299,9 +303,12 @@ func getReadCache(path string, offset, limit int, mtime time.Time) (string, bool
 	return "", false
 }
 
-func setReadCache(path string, offset, limit int, mtime time.Time, output string) {
-	key := fmt.Sprintf("%s|%d|%d", path, offset, limit)
-	readFileCache.Store(key, &readCacheEntry{mtime: mtime, output: output})
+func setReadCache(path string, offset, limit, budget int, mtime time.Time, output string) {
+	readFileCache.Store(readCacheKey(path, offset, limit, budget), &readCacheEntry{mtime: mtime, output: output})
+}
+
+func readCacheKey(path string, offset, limit, budget int) string {
+	return fmt.Sprintf("%s|%d|%d|%d", path, offset, limit, budget)
 }
 
 func invalidateReadCache(path string) {
@@ -313,6 +320,199 @@ func invalidateReadCache(path string) {
 		}
 		return true
 	})
+}
+
+// ================================================================
+//  Result Window —— 分页工具自持字节预算
+//
+//  分页工具必须自己决定「这一次返回多少」，并在结尾如实说明返回了第几项到
+//  第几项、共几项、以及怎么续读。否则中间件会在工具承诺之后按字节盲切，
+//  模型拿到的是一段被腰斩、看起来却完整的输出——公开产品不能这样。
+//  切点恒在条目边界（行 / 匹配 / 文件），预算与 ResultTruncatorMiddleware 同源。
+// ================================================================
+
+// windowTrailerReserve 是给结尾说明预留的字节数：header + body + trailer
+// 必须整体落在预算内，中间件那道盲切才不会被触发。按最长的
+// 「窗口说明 + 采集上限补充说明」留足余量。
+const windowTrailerReserve = 512
+
+// errScanDone 用于提前终止 filepath.Walk：收集够了就停，不必遍历剩余目录。
+var errScanDone = errors.New("scan done")
+
+// scanCollectCap 是收集类工具（grep/glob）一次遍历最多收集的条目数。
+// 达到上限后不再继续遍历，但会在结果里写明「已达采集上限」——
+// 静默丢掉后半段才是问题，明确的上限不是：真正的收敛手段是收窄 pattern/glob。
+const scanCollectCap = 2000
+
+// resultBudget 返回工具结果的字节预算（按 ChatTuning 补齐默认值）。
+func (svc *AiChatService) resultBudget() int {
+	return svc.Tuning.Normalized().MaxToolResultBytes
+}
+
+// fitWindow 从 items 开头逐条渲染并累加，直到加入下一条会超出 budget。
+// 恒至少渲染一条：若一条都放不下就返回空，续读游标会原地打转。
+func fitWindow[T any](items []T, budget int, render func(i int, item T) string) (body string, delivered int) {
+	var b strings.Builder
+	used := 0
+	for i, item := range items {
+		s := render(i, item)
+		if delivered > 0 && used+len(s) > budget {
+			break
+		}
+		b.WriteString(s)
+		used += len(s)
+		delivered++
+	}
+	return b.String(), delivered
+}
+
+// windowTrailer 如实说明本次真实交付的区间：读到哪了、还剩多少、怎么续读。
+// budgetCut 表示这一刀是字节预算切的（而不是请求区间或全集的自然末尾）——
+// 两种情况都必须区分开，否则模型会把「按自己要求取的小窗口」误当成读完了，
+// 或更糟：把「被预算腰斩的窗口」当成完整结果。
+func windowTrailer(unit string, first, last, total, budget int, budgetCut bool) string {
+	if last >= total {
+		return fmt.Sprintf("\n\n[已返回第 %d–%d %s（共 %d %s，已全部返回）]", first, last, unit, total, unit)
+	}
+	reason := "已到本次请求区间末尾"
+	if budgetCut {
+		reason = fmt.Sprintf("本次上限 %d 字节", budget)
+	}
+	return fmt.Sprintf("\n\n[已返回第 %d–%d %s（共 %d %s，%s）。续读：offset=%d]",
+		first, last, unit, total, unit, reason, last+1)
+}
+
+// capNonPagingResult 给「没有 offset 参数」的工具输出（命令输出、网页正文、搜索结果）
+// 按同一份预算做裁剪。这类结果一旦被裁，尾部默认找不回来，所以标记必须写明原始规模：
+// 模型知道丢了多少，才会去收窄命令或改用带 offset 的工具，而不是以为自己看完了。
+// archiveRelPath 非空时（网络类工具），全文另存到了项目内的临时文件，标记改为给出
+// 续读路径；为空时（bash）如实说明「不可续读」。
+func capNonPagingResult(content string, budget int, archiveRelPath string) string {
+	if len(content) <= budget {
+		return content
+	}
+	keep := budget - windowTrailerReserve
+	if keep < 0 {
+		keep = 0
+	}
+	cut := keep
+	for cut > 0 && !utf8.RuneStart(content[cut]) {
+		cut--
+	}
+	// 尽量落在行边界：半行内容比少一行更难被误读成完整记录
+	if nl := strings.LastIndexByte(content[:cut], '\n'); nl > keep/2 {
+		cut = nl + 1
+	}
+	delivered := strings.Count(content[:cut], "\n") // 已完整交付的行数
+	totalLines := countedLines(content)
+	if archiveRelPath != "" {
+		return content[:cut] + fmt.Sprintf(
+			"\n\n[输出共 %d 字节 / %d 行，本次仅返回前 %d 字节（已完整覆盖前 %d 行）。"+
+				"完整内容已存档为项目文件：%s —— 续读用 read_file path=%s offset=%d，"+
+				"或先 grep path=%s pattern=<关键词> 定位再取区间]",
+			len(content), totalLines, cut, delivered,
+			archiveRelPath, archiveRelPath, delivered+1, archiveRelPath)
+	}
+	return content[:cut] + fmt.Sprintf(
+		"\n\n[输出共 %d 字节 / %d 行，超出单次上限，仅保留前 %d 字节（已完整覆盖前 %d 行）；"+
+			"尾部已丢弃且无法续读。请在命令里用 head/tail/grep/wc 自行收窄范围后重试]",
+		len(content), totalLines, cut, delivered)
+}
+
+// countedLines 按 read_file 同一套行模型数行数：以换行结尾的文件不会有额外的空尾行。
+// 两处口径不一致的话，标记里给的续读行号就会错位。
+func countedLines(s string) int {
+	if s == "" {
+		return 0
+	}
+	n := strings.Count(s, "\n")
+	if !strings.HasSuffix(s, "\n") {
+		n++
+	}
+	return n
+}
+
+// 网络类工具（web_fetch / web_search）没有 offset 参数，被裁掉的尾部默认永久丢失。
+// 存档把全文落到项目内的临时文件，让 read_file/grep 能把「已丢弃」变成「可再取」。
+// cache/ 目录已被 cache/.gitignore 全量忽略，不会污染用户仓库。
+const (
+	archivedResultDir      = "cache/ai-results"
+	archivedResultTTL      = 6 * time.Hour
+	archivedResultMaxFiles = 40
+	// 存档本身也要有上限：网页响应已限 2MB，这里再兜一层，避免个别站点巨型裸文本把磁盘写满。
+	archivedResultMaxBytes = 8 << 20
+)
+
+// capWebResult 是网络类工具的收尾：预算内返回前段 + 全文存档 + 给出续读坐标。
+// 预算内直接原样返回，不落任何文件——存档只为「确实丢了东西」的情况存在。
+func (svc *AiChatService) capWebResult(toolName string, content string) string {
+	budget := svc.resultBudget()
+	if len(content) <= budget {
+		return content
+	}
+	return capNonPagingResult(content, budget, svc.archiveToolOutput(toolName, content))
+}
+
+// archiveToolOutput 把全文写进 cache/ai-results 并返回相对项目根的路径；任何失败都返回
+// 空串，调用方据此退回「不可续读」的措辞——宁可承认丢了，也不能谎报能续读。
+func (svc *AiChatService) archiveToolOutput(toolName, content string) string {
+	if svc.projectRoot == "" || len(content) > archivedResultMaxBytes {
+		return ""
+	}
+	dir := filepath.Join(svc.projectRoot, archivedResultDir)
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return ""
+	}
+	svc.pruneArchivedResults(dir)
+	// 存档同样要脱敏：网页与接口响应里可能带着密钥，落盘等于把它写进用户的磁盘。
+	body := redactSecrets(content)
+	name := fmt.Sprintf("%s-%d.txt", toolName, time.Now().UnixNano())
+	full := filepath.Join(dir, name)
+	if err := os.WriteFile(full, []byte(body), 0600); err != nil {
+		return ""
+	}
+	rel, err := filepath.Rel(svc.projectRoot, full)
+	if err != nil {
+		return filepath.ToSlash(full)
+	}
+	return filepath.ToSlash(rel)
+}
+
+// pruneArchivedResults 在每次写入前顺手清理过期与超量的旧存档。
+// 不引入后台协程：这些文件的唯一读者是模型自己，写入时清一次就够。
+func (svc *AiChatService) pruneArchivedResults(dir string) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return
+	}
+	type archived struct {
+		path string
+		mod  time.Time
+	}
+	var alive []archived
+	now := time.Now()
+	for _, e := range entries {
+		if e.IsDir() || !strings.HasSuffix(e.Name(), ".txt") {
+			continue
+		}
+		info, err := e.Info()
+		if err != nil {
+			continue
+		}
+		path := filepath.Join(dir, e.Name())
+		if now.Sub(info.ModTime()) > archivedResultTTL {
+			_ = os.Remove(path)
+			continue
+		}
+		alive = append(alive, archived{path, info.ModTime()})
+	}
+	if len(alive) <= archivedResultMaxFiles {
+		return
+	}
+	sort.Slice(alive, func(i, j int) bool { return alive[i].mod.Before(alive[j].mod) })
+	for _, a := range alive[:len(alive)-archivedResultMaxFiles] {
+		_ = os.Remove(a.path)
+	}
 }
 
 // ================================================================
@@ -331,8 +531,8 @@ type FileSymbol struct {
 }
 
 // buildSkeleton generates a compact symbol-based overview for large files.
-// Returns (skeleton text, "SHOW FULL" hint).
-func buildSkeleton(data []byte, path, relPath string, totalLines int) string {
+// 返回空串表示该文件不适用骨架视图（非 Go 文件或没解析出符号）。
+func buildSkeleton(data []byte, path, relPath string, totalLines, budget int) string {
 	// Only show skeleton for Go files
 	if !strings.HasSuffix(path, ".go") {
 		return ""
@@ -458,14 +658,25 @@ func buildSkeleton(data []byte, path, relPath string, totalLines int) string {
 
 	var b strings.Builder
 	b.WriteString(fmt.Sprintf("📄 %s (%d 行，%d 个符号)\n\n", relPath, totalLines, len(symbols)))
-	for _, sym := range symbols {
-		lineRange := fmt.Sprintf("%d-%d", sym.StartLine, sym.EndLine)
-		if sym.StartLine == sym.EndLine {
-			lineRange = fmt.Sprintf("%d", sym.StartLine)
-		}
-		b.WriteString(fmt.Sprintf("  %4s  %s  (%s)\n", lineRange, sym.Name, sym.Kind))
+	header := b.String()
+	body, delivered := fitWindow(symbols, budget-len(header)-windowTrailerReserve,
+		func(_ int, sym FileSymbol) string {
+			lineRange := fmt.Sprintf("%d-%d", sym.StartLine, sym.EndLine)
+			if sym.StartLine == sym.EndLine {
+				lineRange = fmt.Sprintf("%d", sym.StartLine)
+			}
+			return fmt.Sprintf("  %4s  %s  (%s)\n", lineRange, sym.Name, sym.Kind)
+		})
+	b.WriteString(body)
+	if delivered < len(symbols) {
+		next := symbols[delivered].StartLine
+		fmt.Fprintf(&b, "\n[文件超过 %d 行，改为显示骨架结构。以上只列出第 %d 行之前的符号；"+
+			"续读：read_file offset=%d 取该行起的原文，或用更小的 limit 只取感兴趣的区间]\n",
+			SkeletonThreshold, next, next)
+	} else {
+		fmt.Fprintf(&b, "\n[文件超过 %d 行，改为显示骨架结构。用 read_file 的 offset/limit 参数读取特定部分]\n",
+			SkeletonThreshold)
 	}
-	b.WriteString("\n[文件超过 %d 行，显示骨架结构。使用 read_file 的 offset/limit 参数读取特定部分]\n")
 	return b.String()
 }
 

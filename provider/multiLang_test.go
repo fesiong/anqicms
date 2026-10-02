@@ -1,10 +1,11 @@
 package provider
 
 import (
-	"kandaoni.com/anqicms/request"
 	"log"
 	"testing"
 	"time"
+
+	"kandaoni.com/anqicms/request"
 )
 
 func TestSyncMultiLangSiteContent(t *testing.T) {
@@ -15,7 +16,7 @@ func TestSyncMultiLangSiteContent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	go status.SyncMultiLangSiteContent(&request.PluginMultiLangSiteRequest{Id: 3, ParentId: 1, Focus: false})
+	go status.SyncMultiLangSiteContent(&request.PluginMultiLangSiteSyncRequest{Id: 3, ParentId: 1, Focus: false})
 
 	for {
 		time.Sleep(1 * time.Second)

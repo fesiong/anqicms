@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginImportApi 获取API导入插件的Token配置和站点地址。
 func PluginImportApi(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	importApi := currentSite.PluginImportApi
@@ -21,6 +22,7 @@ func PluginImportApi(ctx iris.Context) {
 	})
 }
 
+// PluginUpdateApiToken 更新API导入插件的Token配置。
 func PluginUpdateApiToken(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginImportApiConfig

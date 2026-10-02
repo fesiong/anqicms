@@ -4,8 +4,10 @@ import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
+// PluginPush 获取当前站点的搜索引擎推送插件配置。
 func PluginPush(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	pluginPush := currentSite.PluginPush
@@ -17,6 +19,7 @@ func PluginPush(ctx iris.Context) {
 	})
 }
 
+// PluginPushLogList 获取最近 20 条推送记录列表。
 func PluginPushLogList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//不需要分页，只显示最后20条
@@ -36,6 +39,7 @@ func PluginPushLogList(ctx iris.Context) {
 	})
 }
 
+// PluginPushForm 保存搜索引擎推送插件配置。
 func PluginPushForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginPushConfig
@@ -67,5 +71,31 @@ func PluginPushForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ConfigurationUpdated"),
+	})
+}
+
+// PluginPushUrls 将一组URL地址通过已配置的推送地址进行推送
+func PluginPushUrls(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req request.PluginPushUrlsRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.PushArchives(req.Urls)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("PushUrlsSuccess"),
 	})
 }

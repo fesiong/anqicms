@@ -8,6 +8,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginGetSubscribers 分页获取订阅用户列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "email": 按邮箱筛选订阅用户。
+//   - 查询参数 "category_id": 按订阅分类 ID 筛选，默认为 0（全部分类）。
 func PluginGetSubscribers(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -25,6 +32,33 @@ func PluginGetSubscribers(ctx iris.Context) {
 	})
 }
 
+// PluginGetSubscriber 根据ID获取订阅用户详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 订阅用户ID，必填。
+func PluginGetSubscriber(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	id := ctx.URLParamInt64Default("id", 0)
+	subscriber, err := currentSite.GetSubscriber(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": subscriber,
+	})
+}
+
+// PluginSaveSubscriber 保存（新增或更新）订阅用户。
+//
+// 参数说明：
+//   - 请求体 "email": 订阅用户邮箱，必填。
+//   - 请求体 "id": 订阅用户ID，大于 0 时为更新。
 func PluginSaveSubscriber(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SubscriberRequest
@@ -43,7 +77,7 @@ func PluginSaveSubscriber(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.SaveSubscriber(&req)
+	subscriber, err := currentSite.SaveSubscriber(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -57,12 +91,17 @@ func PluginSaveSubscriber(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("OperationSuccessful"),
+		"data": subscriber,
 	})
 }
 
+// PluginDeleteSubscriber 根据ID删除订阅用户。
+//
+// 参数说明：
+//   - 请求体 "id": 订阅用户ID。
 func PluginDeleteSubscriber(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.SubscriberRequest
+	var req request.SubscriberDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -82,7 +121,7 @@ func PluginDeleteSubscriber(ctx iris.Context) {
 	// 后台，根据ID删除
 	currentSite.DeleteSubscriber(subscriber)
 
-	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteSubscriber%s", req.Email))
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteSubscriber%s", subscriber.Email))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -90,6 +129,7 @@ func PluginDeleteSubscriber(ctx iris.Context) {
 	})
 }
 
+// SendSubscriberMail 向订阅用户异步发送邮件。
 func SendSubscriberMail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SubscriberMailRequest
@@ -111,6 +151,7 @@ func SendSubscriberMail(ctx iris.Context) {
 	})
 }
 
+// GetSubscriberCategories 获取全部订阅分类列表。
 func GetSubscriberCategories(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -124,6 +165,11 @@ func GetSubscriberCategories(ctx iris.Context) {
 	})
 }
 
+// SaveSubscriberCategory 保存（新增或更新）订阅分类。
+//
+// 参数说明：
+//   - 请求体 "id": 订阅分类ID，大于 0 时为更新。
+//   - 请求体 "title": 分类名称，必填且不能与其他分类重名。
 func SaveSubscriberCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SubscriberCategoryRequest
@@ -163,9 +209,11 @@ func SaveSubscriberCategory(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("OperationSuccessful"),
+		"data": category,
 	})
 }
 
+// DeleteSubscriberCategory 根据 ID 删除指定订阅分类
 func DeleteSubscriberCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SubscriberCategoryRequest

@@ -10,6 +10,11 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginSendmailList 获取邮件发送记录列表，支持分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func PluginSendmailList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -25,6 +30,7 @@ func PluginSendmailList(ctx iris.Context) {
 	})
 }
 
+// PluginSendmailTest 发送测试邮件，验证邮件发送配置是否可用。
 func PluginSendmailTest(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginSendmail
@@ -85,6 +91,7 @@ func PluginSendmailTest(ctx iris.Context) {
 	})
 }
 
+// PluginSendmailSetting 获取当前站点的邮件发送配置。
 func PluginSendmailSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginSendmail
@@ -96,6 +103,7 @@ func PluginSendmailSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSendmailSettingForm 保存邮件发送配置。
 func PluginSendmailSettingForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSendmail
@@ -131,6 +139,7 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 	})
 }
 
+// PluginGetEmailTemplates 获取邮件模板列表。
 func PluginGetEmailTemplates(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -143,6 +152,10 @@ func PluginGetEmailTemplates(ctx iris.Context) {
 	})
 }
 
+// PluginGetEmailTemplateDetail 根据模板标识获取邮件模板详情。
+//
+// 参数说明：
+//   - 查询参数 "key": 邮件模板标识。
 func PluginGetEmailTemplateDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	key := ctx.URLParam("key")
@@ -170,6 +183,7 @@ func PluginGetEmailTemplateDetail(ctx iris.Context) {
 	})
 }
 
+// PluginSendmailSaveTemplate 新增或更新邮件模板。
 func PluginSendmailSaveTemplate(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.EmailTemplate
@@ -181,7 +195,7 @@ func PluginSendmailSaveTemplate(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.SaveEmailTemplateInfo(&req)
+	template, err := currentSite.SaveEmailTemplateInfo(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -195,9 +209,11 @@ func PluginSendmailSaveTemplate(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
+		"data": template,
 	})
 }
 
+// PluginSendmailTemplatePreview 根据提供的模板内容渲染预览邮件内容
 func PluginSendmailTemplatePreview(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.EmailTemplate

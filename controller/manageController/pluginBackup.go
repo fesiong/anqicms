@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginBackupList 获取网站备份文件列表。
 func PluginBackupList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	list := currentSite.GetBackupList()
@@ -23,6 +24,7 @@ func PluginBackupList(ctx iris.Context) {
 	})
 }
 
+// PluginBackupDump 创建网站数据备份，异步执行备份任务。
 func PluginBackupDump(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status, err := currentSite.NewBackup()
@@ -43,6 +45,7 @@ func PluginBackupDump(ctx iris.Context) {
 	})
 }
 
+// PluginBackupStatus 获取当前备份/恢复任务的执行状态。
 func PluginBackupStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetBackupStatus()
@@ -62,9 +65,13 @@ func PluginBackupStatus(ctx iris.Context) {
 	})
 }
 
+// PluginBackupRestore 从指定备份文件恢复网站数据，异步执行，恢复后重载配置并清理缓存。
+//
+// 参数说明：
+//   - 请求体 "name": 备份文件名称。
 func PluginBackupRestore(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginBackupRequest
+	var req request.PluginRestoreRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -114,9 +121,13 @@ func PluginBackupRestore(ctx iris.Context) {
 	})
 }
 
+// PluginBackupDelete 删除指定的网站备份文件。
+//
+// 参数说明：
+//   - 请求体 "name": 备份文件名称。
 func PluginBackupDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginBackupRequest
+	var req request.PluginRestoreRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -140,6 +151,14 @@ func PluginBackupDelete(ctx iris.Context) {
 	})
 }
 
+// PluginBackupImport 导入网站备份文件。
+//
+// 参数说明：
+//   - 表单参数 "file": 导入的备份文件。
+//   - 表单参数 "chunks": 分片总数，分片上传的时候需要使用。
+//   - 表单参数 "chunk": 当前分片序号，分片上传的时候需要使用。
+//   - 表单参数 "file_name": 导入的备份文件名，分片上传的时候需要使用。
+//   - 表单参数 "md5": 备份文件的 md5 值，分片上传的时候需要使用。
 func PluginBackupImport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
@@ -192,7 +211,7 @@ func PluginBackupImport(ctx iris.Context) {
 		info.Size = stat.Size()
 		tmpFile.Seek(0, 0)
 
-		if !strings.HasSuffix(info.Filename, ".sql") {
+		if !strings.HasSuffix(info.Filename, ".sql") && !strings.HasSuffix(info.Filename, ".zip") {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  ctx.Tr("IncorrectImportedFileFormat"),
@@ -208,7 +227,7 @@ func PluginBackupImport(ctx iris.Context) {
 			return
 		}
 	} else {
-		if !strings.HasSuffix(info.Filename, ".sql") {
+		if !strings.HasSuffix(info.Filename, ".sql") && !strings.HasSuffix(info.Filename, ".zip") {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
 				"msg":  ctx.Tr("IncorrectImportedFileFormat"),
@@ -240,6 +259,9 @@ func PluginBackupImport(ctx iris.Context) {
 // PluginBackupExport，但通过 query 读取 name 和 token，
 // 这样前端可以用 <a href> / window.open 触发浏览器原生下载（流式落盘，不占内存）。
 // 浏览器原生下载无法自定义 header，因此这里允许通过 query 传递 admin token。
+//
+// 参数说明：
+//   - 查询参数 "name": 备份文件名称。
 func PluginBackupExport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	name := ctx.URLParam("name")
@@ -262,9 +284,10 @@ func PluginBackupExport(ctx iris.Context) {
 	ctx.SendFile(filePath, currentSite.Host+"-"+filepath.Base(filePath))
 }
 
+// PluginBackupCleanup 一键清空网站数据，可选择同时清空上传文件。
 func PluginBackupCleanup(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginBackupRequest
+	var req request.PluginCleanupRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -282,6 +305,7 @@ func PluginBackupCleanup(ctx iris.Context) {
 	})
 }
 
+// PluginBackupRemark 修改网站备份文件的备注。
 func PluginBackupRemark(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginBackupRequest

@@ -447,7 +447,6 @@ func ApiImportGetArchive(ctx iris.Context) {
 		"code": config.StatusFailed,
 		"msg":  ctx.Tr("DocumentDoesNotExist"),
 	})
-	return
 }
 
 func ApiImportGetCategories(ctx iris.Context) {
@@ -713,7 +712,7 @@ func ApiAddSubscriber(ctx iris.Context) {
 		return
 	}
 	req.Id = 0
-	err = currentSite.SaveSubscriber(&req)
+	_, err = currentSite.SaveSubscriber(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

@@ -79,6 +79,16 @@ func (p *SiteMcpPool) Remove(siteID uint) {
 	p.logger.Info("mcp handler removed for site", "siteId", siteID)
 }
 
+// Reset 清空全部站点的 handler 缓存。
+// 配置热重建（如 ExposedTools 变更）后调用，迫使下次请求重新创建 handler，
+// 从而加载最新的工具白名单。
+func (p *SiteMcpPool) Reset() {
+	p.mu.Lock()
+	p.entries = make(map[uint]*siteEntry)
+	p.mu.Unlock()
+	p.logger.Info("all mcp handlers reset")
+}
+
 // Close 清理所有站点的 handler（服务停止时调用）。
 func (p *SiteMcpPool) Close() {
 	p.mu.Lock()

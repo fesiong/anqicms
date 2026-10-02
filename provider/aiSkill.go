@@ -38,6 +38,17 @@ type SkillFrontMatter struct {
 	AllowedTools           []string `yaml:"allowed_tools" json:"allowed_tools"`
 }
 
+// SkillShellInjectionEnabled 控制技能内容里的 `!`command“ 模板是否真实执行 shell。
+//
+// 默认 false：技能内容里的 `!`command“ 原样保留为文本，不执行。理由：技能可从
+// SkillHub 远程仓库安装（agent_skill / skill_install），若默认执行即构成任意命令执行
+// （RCE）入口——任何能发布技能的源都能在用户服务端跑命令。需要该能力时由管理员显式开启
+// （例如完全信任的本地/内部技能源）。
+//
+// 注意：此开关是进程级（包级）全局变量，不随站点变化。当前种子技能均未使用 shell 注入，
+// 关闭对既有能力无影响。
+var SkillShellInjectionEnabled = false
+
 // Skill 是一个已加载的完整技能
 type Skill struct {
 	SkillFrontMatter
@@ -87,8 +98,10 @@ func (s *Skill) Expand(arguments string, sessionID string) string {
 	// 5. ${CLAUDE_SKILL_DIR}
 	result = strings.ReplaceAll(result, "${CLAUDE_SKILL_DIR}", s.BaseDirectory)
 
-	// 6. !`command` shell 注入
-	result = expandShellInjections(result)
+	// 6. !`command` shell 注入（默认关闭，见 SkillShellInjectionEnabled 注释）
+	if SkillShellInjectionEnabled {
+		result = expandShellInjections(result)
+	}
 
 	return result
 }

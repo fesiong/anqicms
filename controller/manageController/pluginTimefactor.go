@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginTimeFactorSetting 获取当前站点的定时发布（时间因子）设置。
 func PluginTimeFactorSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginTimeFactor
@@ -17,6 +18,7 @@ func PluginTimeFactorSetting(ctx iris.Context) {
 	})
 }
 
+// PluginTimeFactorSettingSave 保存当前站点的定时发布（时间因子）设置。
 func PluginTimeFactorSettingSave(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginTimeFactor

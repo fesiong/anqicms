@@ -12,6 +12,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// CategoryList 查询分类/单页面列表（树状结构），可按模型与类型筛选。
+//
+// 参数说明：
+//   - 查询参数 "module_id": 按模型 ID 筛选，0 表示不限。
+//   - 查询参数 "type": 按分类类型筛选，0 表示不限：1 表示文档分类，3 表示单页面。
+//   - 参数查询 "show_type": 显示模式，0 显示树状结构，1 显示列表结构。
+//   - 查询参数 "title": 按分类名称模糊搜索。
 func CategoryList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
@@ -126,6 +133,10 @@ func CategoryList(ctx iris.Context) {
 	})
 }
 
+// CategoryDetail 查询单个分类的详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 分类 ID，必填。
 func CategoryDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -176,6 +187,7 @@ func CategoryDetail(ctx iris.Context) {
 	})
 }
 
+// CategoryDetailForm 新建或更新分类。
 func CategoryDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
@@ -266,9 +278,10 @@ func CategoryDetailForm(ctx iris.Context) {
 	})
 }
 
+// CategoryDelete 删除指定分类。
 func CategoryDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Category
+	var req request.CategoryDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -319,6 +332,7 @@ func CategoryDelete(ctx iris.Context) {
 	})
 }
 
+// CategoryUpdateArchiveCount 重新统计各分类下的文档数量。
 func CategoryUpdateArchiveCount(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

@@ -23,8 +23,8 @@ type Module struct {
 	Fields         moduleFields `json:"fields" gorm:"column:fields;type:longtext default null"`
 	CategoryFields moduleFields `json:"category_fields" gorm:"column:category_fields;type:longtext default null"`
 	IsSystem       int          `json:"is_system" gorm:"column:is_system;type:tinyint(1) unsigned not null;default:0"`
-	TitleName      string       `json:"title_name" gorm:"column:title_name;type:varchar(50) not null;default:''"`
-	Status         uint         `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
+	//	TitleName      string       `json:"title_name" gorm:"column:title_name;type:varchar(50) not null;default:''"` // 已废弃
+	Status uint `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"`
 
 	Database string `json:"-" gorm:"-"`
 	Link     string `json:"link" gorm:"-"`

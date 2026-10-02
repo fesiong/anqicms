@@ -17,14 +17,6 @@ type Keyword struct {
 	LastTime     int64  `json:"last_time" gorm:"column:last_time;type:bigint(20);default:0;index"` //上次采集文章执行时间
 }
 
-func (keyword *Keyword) Save(db *gorm.DB) error {
-	if err := db.Save(keyword).Error; err != nil {
-		return err
-	}
-
-	return nil
-}
-
 func (keyword *Keyword) Delete(db *gorm.DB) error {
 	if err := db.Delete(keyword).Error; err != nil {
 		return err

@@ -14,5 +14,6 @@ type AiAgent struct {
 	NextRunAt   int64  `json:"next_run_at" gorm:"column:next_run_at;type:bigint(20) not null;default:0;index:idx_next_run_at;comment:下次执行时间"`
 	RunCount    int    `json:"run_count" gorm:"column:run_count;type:int(10) not null;default:0;comment:已执行次数"`
 	MaxRuns     int    `json:"max_runs" gorm:"column:max_runs;type:int(10) not null;default:0;comment:最大执行次数(0=不限)"`
+	MaxRounds   int    `json:"max_rounds" gorm:"column:max_rounds;type:int(10) not null;default:20;comment:单次执行最大轮数(0=用默认20)"`
 	LastSummary string `json:"last_summary" gorm:"column:last_summary;type:text;comment:上次执行摘要"`
 }

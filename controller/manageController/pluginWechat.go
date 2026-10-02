@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginWechatConfig 获取微信公众号插件配置，并附带服务端回调地址 ServerUrl。
 func PluginWechatConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginWechat
@@ -20,6 +21,7 @@ func PluginWechatConfig(ctx iris.Context) {
 	})
 }
 
+// PluginWechatConfigForm 保存微信公众号插件配置。
 func PluginWechatConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginWeappConfig
@@ -57,6 +59,11 @@ func PluginWechatConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginWechatMessages 分页获取微信公众号消息列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func PluginWechatMessages(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -72,9 +79,13 @@ func PluginWechatMessages(ctx iris.Context) {
 	})
 }
 
+// PluginWechatMessageDelete 删除微信公众号消息。
+//
+// 参数说明：
+//   - 请求体 "id": 要删除的消息ID。
 func PluginWechatMessageDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.WechatMessageRequest
+	var req request.WechatMessageDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -83,7 +94,7 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.DeleteWechatMessage(req.Id)
+	message, err := currentSite.GetWechatMessage(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -91,7 +102,15 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteWechatMessageLog", req.Id, req.Content))
+	err = currentSite.DeleteWechatMessage(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteWechatMessageLog", req.Id, message.Content))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -99,9 +118,14 @@ func PluginWechatMessageDelete(ctx iris.Context) {
 	})
 }
 
+// PluginWechatMessageReply 回复微信公众号消息。
+//
+// 参数说明：
+//   - 请求体 "id": 要回复的消息ID。
+//   - 请求体 "reply": 回复内容。
 func PluginWechatMessageReply(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.WechatMessageRequest
+	var req request.WechatMessageReplyRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -126,6 +150,11 @@ func PluginWechatMessageReply(ctx iris.Context) {
 	})
 }
 
+// PluginWechatReplyRules 分页获取微信公众号自动回复规则列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func PluginWechatReplyRules(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -141,9 +170,13 @@ func PluginWechatReplyRules(ctx iris.Context) {
 	})
 }
 
+// PluginWechatReplyRuleDelete 删除微信公众号自动回复规则。
+//
+// 参数说明：
+//   - 请求体 "id": 要删除的规则ID。
 func PluginWechatReplyRuleDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.WechatReplyRuleRequest
+	var req request.WechatReplyRuleDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -152,7 +185,7 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.DeleteWechatReplyRule(req.Id)
+	rule, err := currentSite.GetWechatReplyRuleById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -160,7 +193,15 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteWechatReplyRuleLog", req.Id, req.Keyword))
+	err = currentSite.DeleteWechatReplyRule(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteWechatReplyRuleLog", req.Id, rule.Keyword))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -168,6 +209,7 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 	})
 }
 
+// PluginWechatReplyRuleForm 保存（新增或更新）微信公众号自动回复规则。
 func PluginWechatReplyRuleForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatReplyRuleRequest
@@ -179,7 +221,7 @@ func PluginWechatReplyRuleForm(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.SaveWechatReplyRule(&req)
+	rule, err := currentSite.SaveWechatReplyRule(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -187,14 +229,16 @@ func PluginWechatReplyRuleForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateWechatReplyRuleLog", req.Id, req.Keyword))
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateWechatReplyRuleLog", rule.Id, rule.Keyword))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("OperationSuccessful"),
+		"data": rule,
 	})
 }
 
+// PluginWechatMenus 获取微信公众号菜单列表。
 func PluginWechatMenus(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	menus := currentSite.GetWechatMenus()
@@ -206,9 +250,10 @@ func PluginWechatMenus(ctx iris.Context) {
 	})
 }
 
+// PluginWechatMenuDelete 删除微信公众号菜单。
 func PluginWechatMenuDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.WechatMenuRequest
+	var req request.WechatMenuDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -217,7 +262,7 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 		return
 	}
 
-	err := currentSite.DeleteWechatMenu(req.Id)
+	menu, err := currentSite.GetWechatMenuById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -225,7 +270,15 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteWechatMenuLog", req.Id, req.Name))
+	err = currentSite.DeleteWechatMenu(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteWechatMenuLog", req.Id, menu.Name))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -233,6 +286,7 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 	})
 }
 
+// PluginWechatMenuSave 保存（新增或更新）微信公众号菜单。
 func PluginWechatMenuSave(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatMenuRequest
@@ -260,6 +314,7 @@ func PluginWechatMenuSave(ctx iris.Context) {
 	})
 }
 
+// PluginWechatMenuSync 推送配置的公众号菜单到微信服务器
 func PluginWechatMenuSync(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	err := currentSite.SyncWechatMenu()

@@ -13,7 +13,7 @@ require (
 	github.com/fatih/structs v1.1.0
 	github.com/fesiong/wukong v0.0.0-20260106081515-d04b7d137f9b
 	github.com/flopp/go-findfont v0.1.0
-	github.com/flosch/pongo2/v6 v6.0.0
+	github.com/flosch/pongo2/v6 v6.1.0
 	github.com/getlantern/systray v1.2.2
 	github.com/go-pay/gopay v1.5.115
 	github.com/go-pay/xlog v0.0.3

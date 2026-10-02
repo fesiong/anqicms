@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginWeappConfig 获取小程序插件配置，并附带服务端回调地址 ServerUrl。
 func PluginWeappConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginWeapp
@@ -19,6 +20,7 @@ func PluginWeappConfig(ctx iris.Context) {
 	})
 }
 
+// PluginWeappConfigForm 保存小程序插件配置
 func PluginWeappConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginWeappConfig

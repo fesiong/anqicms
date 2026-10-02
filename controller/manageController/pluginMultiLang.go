@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginGetMultiLangConfig 获取多语言站点插件配置。
 func PluginGetMultiLangConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.MultiLanguage
@@ -20,6 +21,7 @@ func PluginGetMultiLangConfig(ctx iris.Context) {
 	})
 }
 
+// PluginSaveMultiLangConfig 保存多语言站点插件配置，并根据站点类型更新子站点和缓存。
 func PluginSaveMultiLangConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginMultiLangConfig
@@ -95,6 +97,10 @@ func PluginSaveMultiLangConfig(ctx iris.Context) {
 	})
 }
 
+// PluginGetMultiLangSites 获取当前站点的多语言子站点列表。
+//
+// 参数说明：
+//   - 查询参数 "type": 站点数据类型，仅 type=multi 且配置项中 site_type=multi 时返回。
 func PluginGetMultiLangSites(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	siteType := ctx.URLParam("type")
@@ -118,6 +124,7 @@ func PluginGetMultiLangSites(ctx iris.Context) {
 	})
 }
 
+// GetValidWebsiteList 获取当前站点可用的多语言站点列表。
 func GetValidWebsiteList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	sites := currentSite.GetMultiLangValidSites(currentSite.Id)
@@ -129,9 +136,14 @@ func GetValidWebsiteList(ctx iris.Context) {
 	})
 }
 
+// PluginRemoveMultiLangSite 移除多语言子站点。
+//
+// 参数说明：
+//   - 请求体 "id": 要移除的站点ID。
+//   - 请求体 "language": 要移除的站点语言。
 func PluginRemoveMultiLangSite(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.PluginMultiLangSiteRequest
+	var req request.PluginMultiLangSiteDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -157,6 +169,7 @@ func PluginRemoveMultiLangSite(ctx iris.Context) {
 	})
 }
 
+// PluginSaveMultiLangSite 保存（新增或更新）多语言子站点。
 func PluginSaveMultiLangSite(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMultiLangSiteRequest
@@ -185,9 +198,13 @@ func PluginSaveMultiLangSite(ctx iris.Context) {
 	})
 }
 
+// PluginSyncMultiLangSiteContent 在后台异步同步多语言子站点内容，仅站点数据类型是 multi 的时候可用。
+//
+// 参数说明：
+//   - 请求体 "id": 站点ID。
 func PluginSyncMultiLangSiteContent(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req request.PluginMultiLangSiteRequest
+	var req request.PluginMultiLangSiteSyncRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -220,6 +237,7 @@ func PluginSyncMultiLangSiteContent(ctx iris.Context) {
 	})
 }
 
+// PluginMultiSiteSyncStatus 获取多语言站点内容同步任务的状态。
 func PluginMultiSiteSyncStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	status := currentSite.GetMultiLangSyncStatus()
@@ -239,6 +257,11 @@ func PluginMultiSiteSyncStatus(ctx iris.Context) {
 	})
 }
 
+// GetTranslateHtmlLogs 分页获取多语言站点页面翻译日志列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func GetTranslateHtmlLogs(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -254,6 +277,13 @@ func GetTranslateHtmlLogs(ctx iris.Context) {
 	})
 }
 
+// GetTranslateHtmlCaches 分页获取页面翻译缓存列表，支持按语言和 URI 筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "lang": 按目标语言筛选。
+//   - 查询参数 "uri": 按页面 URI 筛选。
 func GetTranslateHtmlCaches(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -271,6 +301,7 @@ func GetTranslateHtmlCaches(ctx iris.Context) {
 	})
 }
 
+// PluginRemoveTranslateHtmlCache 删除多语言站点页面翻译缓存。
 func PluginRemoveTranslateHtmlCache(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMultiLangCacheRemoveRequest

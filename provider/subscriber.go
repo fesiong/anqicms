@@ -59,24 +59,24 @@ func (w *Website) DeleteSubscriber(subscriber *model.Subscriber) error {
 	return nil
 }
 
-func (w *Website) SaveSubscriber(req *request.SubscriberRequest) error {
+func (w *Website) SaveSubscriber(req *request.SubscriberRequest) (*model.Subscriber, error) {
 	var err error
 	var subscriber = &model.Subscriber{}
 	if req.Id > 0 {
 		subscriber, err = w.GetSubscriber(req.Id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		// 判断是否有重名
 		exist, err := w.GetSubscriberByEmail(req.Email)
 		if err == nil && exist.Id != req.Id {
-			return errors.New(w.Tr("EmailAlreadyExists"))
+			return nil, errors.New(w.Tr("EmailAlreadyExists"))
 		}
 	} else {
 		// 判断 email 是否已经存在
 		_, err = w.GetSubscriberByEmail(req.Email)
 		if err == nil {
-			return errors.New(w.Tr("EmailAlreadyExists"))
+			return nil, errors.New(w.Tr("EmailAlreadyExists"))
 		}
 	}
 	oldCategoryId := subscriber.CategoryId
@@ -94,7 +94,7 @@ func (w *Website) SaveSubscriber(req *request.SubscriberRequest) error {
 
 	err = w.DB.Save(subscriber).Error
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// 更新分类订阅者数量
 	if subscriber.CategoryId > 0 {
@@ -106,7 +106,7 @@ func (w *Website) SaveSubscriber(req *request.SubscriberRequest) error {
 	// 发送订阅通知
 	w.SendNewSubscriberEmail(subscriber)
 
-	return nil
+	return subscriber, nil
 }
 
 func (w *Website) SendSubscriberMail(req *request.SubscriberMailRequest) {

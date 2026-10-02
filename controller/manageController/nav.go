@@ -8,6 +8,10 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// SettingNav 查询指定导航分组下的导航项。
+//
+// 参数说明：
+//   - 查询参数 "type_id": 导航分组 ID，默认为 1。
 func SettingNav(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	typeId := uint(ctx.URLParamIntDefault("type_id", 1))
@@ -20,6 +24,7 @@ func SettingNav(ctx iris.Context) {
 	})
 }
 
+// SettingNavForm 保存导航配置项，会同步更新多语言子站。
 func SettingNavForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavConfig
@@ -97,12 +102,14 @@ func SettingNavForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ConfigurationUpdated"),
+		"data": nav,
 	})
 }
 
+// SettingNavDelete 删除指定导航项。
 func SettingNavDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.NavConfig
+	var req request.DeleteNavRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -153,6 +160,7 @@ func SettingNavDelete(ctx iris.Context) {
 	})
 }
 
+// SettingNavType 查询导航分组列表。
 func SettingNavType(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	navTypes, _ := currentSite.GetNavTypeList()
@@ -164,6 +172,7 @@ func SettingNavType(ctx iris.Context) {
 	})
 }
 
+// SettingNavTypeForm 新建或更新导航分组。
 func SettingNavTypeForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest
@@ -218,6 +227,7 @@ func SettingNavTypeForm(ctx iris.Context) {
 	})
 }
 
+// SettingNavTypeDelete 删除指定导航分组，默认分组不允许删除。
 func SettingNavTypeDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest

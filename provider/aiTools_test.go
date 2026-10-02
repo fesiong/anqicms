@@ -3,10 +3,22 @@ package provider
 import (
 	"context"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 )
+
+// repoRootForTest 返回仓库根的绝对路径（单测 CWD 在 provider/，仓库根是其上一级）。
+// 供 testService 设置 projectRoot：内置文件工具的路径校验只认绝对路径。
+func repoRootForTest() string {
+	cwd, err := os.Getwd()
+	if err != nil {
+		return ".."
+	}
+	return filepath.Dir(cwd)
+}
 
 // testService creates an AiChatService without a database (site=nil) for unit testing.
 // All handlers will return "错误：站点未初始化" for DB-dependent operations.
@@ -17,6 +29,10 @@ func testService() *AiChatService {
 		Logger:   slog.Default(),
 		db:       nil,
 		site:     nil,
+		// 内置文件工具（read_file/grep/glob 等）一律以 projectRoot 为根目录做路径校验，
+		// 未配置时它们会直接返回「projectRoot 未配置」，文件类用例就全成了空转。
+		// 且校验用的是绝对路径，必须给绝对仓库根（单测 CWD 在 provider/，仓库根是其上一级）。
+		projectRoot: repoRootForTest(),
 	}
 	svc.Tools, svc.Handlers = svc.getEinoTools()
 	// Also load built-in tools
@@ -28,34 +44,27 @@ func testService() *AiChatService {
 	return svc
 }
 
-// expectedTools defines the expected set of AI tool names.
+// expectedTools 是 getEinoTools 必须提供的工具名。
+//
+// 只含"没有 REST 等价端点、必须保留为能力"的那批：端点型工具已改由意图层
+// 经 cap_routes.go 直连后台端点，不再有工具定义。
+//
+// 断言方式是**成员校验**而非数量相等：工具增删是常态，写死总数会让每次
+// 正常调整都把测试打红（这个坑在端点目录那边已经踩过）。
 var expectedTools = []string{
-	"archive_list",
-	"archive_get",
-	"archive_create",
-	"archive_delete",
-	"archive_publish",
-	"module_list",
-	"module_get",
-	"module_create",
-	"module_delete",
-	"category_list",
-	"category_get",
-	"category_create",
-	"category_delete",
-	"page_list",
-	"page_get",
-	"page_create",
-	"page_delete",
-	"tag_list",
-	"tag_get",
-	"tag_create",
-	"tag_delete",
-	"archive_tag_update",
-	// Template tools
-	"template_get_info",
-	"template_reload",
-	// Built-in file/shell tools
+	// 无 REST 等价端点的能力
+	"attachment_upload", // 端点要 multipart 文件，AI 侧是 base64/URL/本地路径
+	"template_reload",   // RestartChan 重载信号
+	"agent_create",
+	"agent_list",
+	"agent_delete",
+	"agent_toggle",
+	"agent_run",
+	"agent_chat",
+	"skill_search",
+	"skill_install",
+	"task",
+	// 内置文件/shell 工具
 	"read_file",
 	"write_file",
 	"edit_file",
@@ -64,7 +73,7 @@ var expectedTools = []string{
 	"grep",
 	"glob",
 	"list_directory",
-	// Web tools
+	// Web 工具
 	"web_fetch",
 	"web_search",
 }
@@ -72,8 +81,13 @@ var expectedTools = []string{
 func TestGetEinoTools_AllDefined(t *testing.T) {
 	svc := testService()
 
-	if len(svc.Tools) != len(expectedTools) {
-		t.Errorf("expected %d tools, got %d", len(expectedTools), len(svc.Tools))
+	// 已删除的端点型工具不应再出现在工具清单里（防止回退）。
+	for _, gone := range []string{"archive_list", "category_create", "module_update", "setting_system"} {
+		for _, ti := range svc.Tools {
+			if ti.Name == gone {
+				t.Errorf("端点型工具 %q 应已改为直连端点，不应再有工具定义", gone)
+			}
+		}
 	}
 
 	// Check that all expected tools exist
@@ -107,10 +121,6 @@ func Test_GetAllTools_ReturnsAll(t *testing.T) {
 	svc := testService()
 	mcpTools := svc.GetAllTools()
 
-	if len(mcpTools) != len(expectedTools) {
-		t.Errorf("expected %d MCP tools, got %d", len(expectedTools), len(mcpTools))
-	}
-
 	nameSet := make(map[string]bool)
 	for _, mt := range mcpTools {
 		nameSet[mt.Name] = true
@@ -122,469 +132,16 @@ func Test_GetAllTools_ReturnsAll(t *testing.T) {
 	}
 }
 
-// --- Argument parsing tests ---
-
-func Test_ArchiveList_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["archive_list"]
-
-	// Valid JSON with all optional params
-	result, err := handler(context.Background(), `{"page":2,"page_size":5,"category_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Empty JSON (all defaults)
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `not-json`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_ArchiveGet_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["archive_get"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"archive_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing archive_id — handler will still try GetArchiveById(0) which needs DB
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `invalid`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_ArchiveCreate_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["archive_create"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"title":"Test","content":"Content","category_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing title → returns error message (not error)
-	result, err = handler(context.Background(), `{"content":"Content","category_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：文档标题不能为空" {
-		t.Fatalf("expected '文档标题不能为空', got %q", result)
-	}
-
-	// Missing content
-	result, err = handler(context.Background(), `{"title":"Test","category_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：文档内容不能为空" {
-		t.Fatalf("expected '文档内容不能为空', got %q", result)
-	}
-
-	// Missing category_id
-	result, err = handler(context.Background(), `{"title":"Test","content":"Content"}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：请指定分类ID" {
-		t.Fatalf("expected '请指定分类ID', got %q", result)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `not-json`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_ArchiveDelete_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["archive_delete"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"archive_id":5}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing archive_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_ArchivePublish_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["archive_publish"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"archive_id":1,"status":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing status
-	result, err = handler(context.Background(), `{"archive_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_CategoryList_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["category_list"]
-
-	// Even empty args should work (no params required)
-	result, err := handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-}
-
-func Test_CategoryGet_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["category_get"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"category_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing category_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_CategoryCreate_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["category_create"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"title":"Test Category","parent_id":0}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing title
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：分类名称不能为空" {
-		t.Fatalf("expected '分类名称不能为空', got %q", result)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_CategoryDelete_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["category_delete"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"category_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing category_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_TagList_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["tag_list"]
-
-	// Even empty args should work
-	result, err := handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-}
-
-func Test_TagGet_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["tag_get"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"tag_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing tag_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_TagCreate_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["tag_create"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"title":"Test Tag"}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing title
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：标签名称不能为空" {
-		t.Fatalf("expected '标签名称不能为空', got %q", result)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_TagDelete_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["tag_delete"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"tag_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing tag_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
+// Test_UnknownTool 未注册的工具名必须查不到 handler。
 func Test_UnknownTool(t *testing.T) {
 	svc := testService()
-	// Verify that unknown tool names return an appropriate error via the handler map
 	_, exists := svc.Handlers["nonexistent_tool"]
 	if exists {
-		t.Fatal("handler for nonexistent tool should not exist")
+		t.Error("nonexistent_tool 不应存在 handler")
 	}
 }
 
-func Test_ModuleList_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["module_list"]
-
-	// Even empty args should work (no params required)
-	result, err := handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-}
-
-func Test_ModuleGet_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["module_get"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"module_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing module_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_ModuleCreate_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["module_create"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"title":"News","table_name":"news"}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing title
-	result, err = handler(context.Background(), `{"table_name":"news"}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：模型名称不能为空" {
-		t.Fatalf("expected '模型名称不能为空', got %q", result)
-	}
-
-	// Missing table_name
-	result, err = handler(context.Background(), `{"title":"News"}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：表名不能为空" {
-		t.Fatalf("expected '表名不能为空', got %q", result)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
-
-func Test_ModuleDelete_ParseArgs(t *testing.T) {
-	svc := testService()
-	handler := svc.Handlers["module_delete"]
-
-	// Valid args
-	result, err := handler(context.Background(), `{"module_id":1}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	if result != "错误：站点未初始化" {
-		t.Fatalf("expected '站点未初始化', got %q", result)
-	}
-
-	// Missing module_id
-	result, err = handler(context.Background(), `{}`)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-	// Invalid JSON
-	_, err = handler(context.Background(), `bad`)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON")
-	}
-}
+// --- Argument parsing tests ---
 
 // --- Built-in tool tests ---
 

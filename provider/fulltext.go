@@ -16,10 +16,10 @@ const (
 )
 
 type FulltextStatus struct {
-	Status  int    `json:"status"` // 0 未启用，1初始化中，2 初始化完成，-1 错误
-	Total   int64  `json:"total"`
-	Current int64  `json:"current"`
-	Msg     string `json:"msg"`
+	Status  int    `json:"status"`  // 0 未启用，1初始化中，2 初始化完成，-1 错误
+	Total   int64  `json:"total"`   // 索引总数
+	Current int64  `json:"current"` // 当前进度
+	Msg     string `json:"msg"`     // 进度消息
 }
 
 func (w *Website) GetFullTextStatus() *FulltextStatus {

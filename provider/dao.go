@@ -192,7 +192,9 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.AiChatMessage{},
 			&model.AiAgent{},
 			&model.AiAgentLog{},
+			&model.AiAgentCheckpoint{},
 			&model.AiUsageLog{},
+			&model.AiMcpAuditLog{},
 			&model.Place{},
 			&model.PaymentAccount{},
 			&model.PaymentStatistic{},
@@ -284,7 +286,6 @@ func (w *Website) InitModelData() {
 			Title:     w.Tr("ArticleCenter"),
 			Fields:    nil,
 			IsSystem:  1,
-			TitleName: w.Tr("Title"),
 			Status:    1,
 		},
 		{
@@ -295,7 +296,6 @@ func (w *Website) InitModelData() {
 			Title:     w.Tr("ProductCenter"),
 			Fields:    nil,
 			IsSystem:  1,
-			TitleName: w.Tr("ProductName"),
 			Status:    1,
 		},
 	}

@@ -16,6 +16,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type PaypalWebhookResource struct {
@@ -166,12 +167,12 @@ func (w *Website) DeletePaymentAccount(id int64) error {
 	return nil
 }
 
-func (w *Website) SavePaymentAccount(req *model.PaymentAccount) error {
+func (w *Website) SavePaymentAccount(req *request.PaymentAccountRequest) (*model.PaymentAccount, error) {
 	var account model.PaymentAccount
 	if req.Id > 0 {
 		err := w.DB.Where("id = ?", req.Id).First(&account).Error
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	account.PayWay = req.PayWay
@@ -189,7 +190,7 @@ func (w *Website) SavePaymentAccount(req *model.PaymentAccount) error {
 
 	err := w.DB.Save(&account).Error
 	if err != nil {
-		return err
+		return nil, err
 	}
 	// 处理 webhook
 	if req.PayWay == config.PayWayPaypal {
@@ -199,7 +200,7 @@ func (w *Website) SavePaymentAccount(req *model.PaymentAccount) error {
 		}
 	}
 
-	return nil
+	return &account, nil
 }
 
 func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) {

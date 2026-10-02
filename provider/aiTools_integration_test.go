@@ -3,11 +3,16 @@ package provider
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"sync"
 	"testing"
 )
 
+// initTestSite 初始化真实站点（库内 id=1）。
+//
+// ⚠️ 不要删：本函数是目前 provider 测试包里唯一的站点初始化入口，
+// 且它所在的测试会先于 api_catalog_gen_test.go 等文件执行。移走它之后
+// TestAPIMetaToolsWorkWithoutSource 会在 GetMcpConfig → CurrentSite(nil) 上
+// nil 指针 panic（那些用例需要一个已初始化的站点）。
 func initTestSite(t *testing.T) *Website {
 	dbSite, err := GetDBWebsiteInfo(1)
 	if err != nil {
@@ -33,161 +38,42 @@ func testServiceWithSite(t *testing.T, w *Website) *AiChatService {
 	return svc
 }
 
-func TestIntegration_ArchiveCRUD(t *testing.T) {
+// TestIntegration_NoAPI capsRemain 在真实站点上确认：端点型工具已全部退场，
+// 只剩那批没有 REST 等价端点、必须保留为能力实现工具的工具仍有 handler。
+//
+// 这是对「方案 B」的收口断言 —— 如果哪天有人把 archive_list 之类加回 aiTools.go，
+// 这里会立刻报错，避免两处实现再次并行漂移。
+func TestIntegration_NoAPICapsRemain(t *testing.T) {
 	w := initTestSite(t)
 	svc := testServiceWithSite(t, w)
-	ctx := context.Background()
 
-	result, err := svc.Handlers["category_list"](ctx, `{}`)
-	if err != nil {
-		t.Fatalf("category_list failed: %v", err)
+	kept := []string{
+		"attachment_upload", "template_reload",
+		"skill_search", "skill_install",
+		"agent_create", "agent_list", "agent_delete", "agent_toggle", "agent_run", "agent_chat",
+		"task",
 	}
-	t.Logf("category_list result: %s", result)
-
-	// todo
-	catID := 12
-
-	// 1. Create archive
-	result, err = svc.Handlers["archive_create"](ctx, `{"title":"Integration Test Article","content":"This is test content for integration testing.","category_id":`+strconv.Itoa(int(catID))+`}`)
-	if err != nil {
-		t.Fatalf("archive_create failed: %v", err)
+	for _, name := range kept {
+		if _, ok := svc.Handlers[name]; !ok {
+			t.Errorf("无端点能力 %s 必须保留 handler", name)
+		}
 	}
-	t.Logf("archive_create result: %s", result)
 
-	// 2. List archives
-	result, err = svc.Handlers["archive_list"](ctx, `{}`)
-	if err != nil {
-		t.Fatalf("archive_list failed: %v", err)
+	gone := []string{
+		"archive_list", "archive_get", "archive_create", "archive_update", "archive_delete",
+		"category_list", "category_create", "tag_list", "module_update",
+		"setting_system", "statistic_dashboard", "website_info", "template_get_info",
 	}
-	t.Logf("archive_list result: %s", result)
-
-	// 3. Get archive detail (archive_id=1)
-	result, err = svc.Handlers["archive_get"](ctx, `{"id":1}`)
-	if err != nil {
-		t.Fatalf("archive_get failed: %v", err)
+	for _, name := range gone {
+		if _, ok := svc.Handlers[name]; ok {
+			t.Errorf("端点型工具 %s 应已删除（改由意图层直连端点）", name)
+		}
 	}
-	t.Logf("archive_get result: %s", result)
 
-	// 4. Publish archive
-	result, err = svc.Handlers["archive_publish"](ctx, `{"id":1,"status":1}`)
-	if err != nil {
-		t.Fatalf("archive_publish failed: %v", err)
+	// 保留下来的工具仍可被调用（不因站点已初始化而崩溃）。
+	if h, ok := svc.Handlers["agent_list"]; ok {
+		if _, err := h(context.Background(), `{}`); err != nil {
+			t.Errorf("agent_list 调用失败: %v", err)
+		}
 	}
-	t.Logf("archive_publish result: %s", result)
-
-	// Update Tag
-	result, err = svc.Handlers["archive_tag_update"](ctx, `{"ids":[19,20],"tags": ["Golang", "Web"]}`)
-	if err != nil {
-		t.Fatalf("archive_publish failed: %v", err)
-	}
-	t.Logf("archive_publish result: %s", result)
-
-	// 5. Delete archive
-	result, err = svc.Handlers["archive_delete"](ctx, `{"id":1}`)
-	if err != nil {
-		t.Fatalf("archive_delete failed: %v", err)
-	}
-	t.Logf("archive_delete result: %s", result)
-}
-
-func TestIntegration_CategoryCRUD(t *testing.T) {
-	w := initTestSite(t)
-	svc := testServiceWithSite(t, w)
-	ctx := context.Background()
-
-	// 1. Create category
-	result, err := svc.Handlers["category_create"](ctx, `{"title":"Technology","description":"Tech news and articles"}`)
-	if err != nil {
-		t.Fatalf("category_create failed: %v", err)
-	}
-	t.Logf("category_create result: %s", result)
-
-	// 2. List categories
-	result, err = svc.Handlers["category_list"](ctx, `{}`)
-	if err != nil {
-		t.Fatalf("category_list failed: %v", err)
-	}
-	t.Logf("category_list result: %s", result)
-
-	// 3. Get category detail
-	result, err = svc.Handlers["category_get"](ctx, `{"id":19}`)
-	if err != nil {
-		t.Fatalf("category_get failed: %v", err)
-	}
-	t.Logf("category_get result: %s", result)
-
-	// 4. Delete category
-	result, err = svc.Handlers["category_delete"](ctx, `{"id":19}`)
-	if err != nil {
-		t.Fatalf("category_delete failed: %v", err)
-	}
-	t.Logf("category_delete result: %s", result)
-}
-
-func TestIntegration_ModuleCRUD(t *testing.T) {
-	w := initTestSite(t)
-	svc := testServiceWithSite(t, w)
-	ctx := context.Background()
-
-	// 1. Create module
-	result, err := svc.Handlers["module_create"](ctx, `{"title":"Technology","table_name":"tech"}`)
-	if err != nil {
-		t.Fatalf("module_create failed: %v", err)
-	}
-	t.Logf("module_create result: %s", result)
-
-	// 2. List modules
-	result, err = svc.Handlers["module_list"](ctx, `{}`)
-	if err != nil {
-		t.Fatalf("module_list failed: %v", err)
-	}
-	t.Logf("module_list result: %s", result)
-
-	// 3. Get module detail
-	result, err = svc.Handlers["module_get"](ctx, `{"id":4}`)
-	if err != nil {
-		t.Fatalf("module_get failed: %v", err)
-	}
-	t.Logf("module_get result: %s", result)
-
-	// 4. Delete module
-	result, err = svc.Handlers["module_delete"](ctx, `{"id":4}`)
-	if err != nil {
-		t.Fatalf("module_delete failed: %v", err)
-	}
-	t.Logf("module_delete result: %s", result)
-}
-
-func TestIntegration_TagCRUD(t *testing.T) {
-	w := initTestSite(t)
-	svc := testServiceWithSite(t, w)
-	ctx := context.Background()
-
-	// 1. Create tag
-	result, err := svc.Handlers["tag_create"](ctx, `{"title":"golang","description":"Go programming language"}`)
-	if err != nil {
-		t.Fatalf("tag_create failed: %v", err)
-	}
-	t.Logf("tag_create result: %s", result)
-
-	// 2. List tags
-	result, err = svc.Handlers["tag_list"](ctx, `{}`)
-	if err != nil {
-		t.Fatalf("tag_list failed: %v", err)
-	}
-	t.Logf("tag_list result: %s", result)
-
-	// 3. Get tag detail
-	result, err = svc.Handlers["tag_get"](ctx, `{"id":6}`)
-	if err != nil {
-		t.Fatalf("tag_get failed: %v", err)
-	}
-	t.Logf("tag_get result: %s", result)
-
-	// 4. Delete tag
-	result, err = svc.Handlers["tag_delete"](ctx, `{"id":6}`)
-	if err != nil {
-		t.Fatalf("tag_delete failed: %v", err)
-	}
-	t.Logf("tag_delete result: %s", result)
 }

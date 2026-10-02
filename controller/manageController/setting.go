@@ -11,9 +11,11 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
+	"kandaoni.com/anqicms/pkg/mcp/intent"
 	"kandaoni.com/anqicms/provider"
 )
 
+// SettingSystem 获取站点系统配置，包括站点 Logo、Favicon 及可用的语言列表。
 func SettingSystem(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.System
@@ -49,6 +51,7 @@ func SettingSystem(ctx iris.Context) {
 	})
 }
 
+// SettingSystemForm 保存站点系统配置，涉及域名变更时同步相关配置并重载模板。
 func SettingSystemForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SystemConfig
@@ -145,6 +148,7 @@ func SettingSystemForm(ctx iris.Context) {
 	})
 }
 
+// SettingContent 获取内容设置，包括默认缩略图、缩略图、编辑器等配置。
 func SettingContent(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Content
@@ -162,6 +166,7 @@ func SettingContent(ctx iris.Context) {
 	})
 }
 
+// SettingContentForm 保存内容设置，包括默认缩略图、缩略图、编辑器等配置。
 func SettingContentForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContentConfig
@@ -225,7 +230,7 @@ func SettingContentForm(ctx iris.Context) {
 	})
 }
 
-// 重建所有的thumb
+// SettingThumbRebuild 执行重建所有的缩略图，会根据设置的缩略图样式、尺寸等参数生成新的缩略图。
 func SettingThumbRebuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go currentSite.ThumbRebuild()
@@ -238,6 +243,7 @@ func SettingThumbRebuild(ctx iris.Context) {
 	})
 }
 
+// SettingIndex 获取首页 SEO 设置，包括标题、关键词、描述及分隔符。
 func SettingIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Index
@@ -249,6 +255,13 @@ func SettingIndex(ctx iris.Context) {
 	})
 }
 
+// SettingIndexForm 保存首页 SEO 设置并清理缓存索引。
+//
+// 参数说明：
+//   - 请求体 "seo_title": 首页 SEO 标题。
+//   - 请求体 "seo_keywords": 首页 SEO 关键词。
+//   - 请求体 "seo_description": 首页 SEO 描述。
+//   - 请求体 "sep": 标题分隔符。
 func SettingIndexForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.IndexConfig
@@ -283,6 +296,7 @@ func SettingIndexForm(ctx iris.Context) {
 	})
 }
 
+// SettingContact 获取联系方式设置，包括联系人、电话、邮箱、社交账号及二维码。
 func SettingContact(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Contact
@@ -297,6 +311,7 @@ func SettingContact(ctx iris.Context) {
 	})
 }
 
+// SettingContactForm 保存联系方式设置并清理缓存索引。
 func SettingContactForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContactConfig
@@ -351,6 +366,7 @@ func SettingContactForm(ctx iris.Context) {
 	})
 }
 
+// SettingCache 获取缓存设置，包括最近一次清理缓存的时间和缓存类型。
 func SettingCache(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	filePath := currentSite.CachePath + "cache_clear.log"
@@ -370,6 +386,7 @@ func SettingCache(ctx iris.Context) {
 	})
 }
 
+// SettingCacheForm 更新缓存设置，可选择更换缓存类型或手动清理缓存。
 func SettingCacheForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.CacheConfig
@@ -407,6 +424,7 @@ func SettingCacheForm(ctx iris.Context) {
 	}
 }
 
+// SettingSafe 获取安全设置，包括验证码、内容/频率限制、封禁规则及 API 开关。
 func SettingSafe(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	system := currentSite.Safe
@@ -418,6 +436,7 @@ func SettingSafe(ctx iris.Context) {
 	})
 }
 
+// SettingSafeForm 保存安全设置并清理缓存索引。
 func SettingSafeForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SafeConfig
@@ -458,6 +477,7 @@ func SettingSafeForm(ctx iris.Context) {
 	})
 }
 
+// SettingDiyField 获取模板自定义字段设置。
 func SettingDiyField(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	fields := currentSite.GetDiyFieldSetting()
@@ -469,6 +489,10 @@ func SettingDiyField(ctx iris.Context) {
 	})
 }
 
+// SettingDiyFieldForm 保存模板自定义字段设置并清理相关缓存。
+//
+// 参数说明：
+//   - 请求体: 模板自定义字段列表（config.CustomField 数组）。
 func SettingDiyFieldForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req []config.CustomField
@@ -499,6 +523,10 @@ func SettingDiyFieldForm(ctx iris.Context) {
 	})
 }
 
+// SaveSystemFavicon 上传并保存网站 Favicon 图标。
+//
+// 参数说明：
+//   - 表单文件 "file": Favicon 图标文件。
 func SaveSystemFavicon(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -531,6 +559,7 @@ func SaveSystemFavicon(ctx iris.Context) {
 	})
 }
 
+// DeleteSystemFavicon 删除网站 Favicon 图标文件。
 func DeleteSystemFavicon(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -554,6 +583,7 @@ func DeleteSystemFavicon(ctx iris.Context) {
 	})
 }
 
+// SettingBanner 获取网站的 Banner 配置列表。
 func SettingBanner(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -564,9 +594,10 @@ func SettingBanner(ctx iris.Context) {
 	})
 }
 
+// DeleteSettingBanner 从 Banner 列表中删除指定 Banner 项并保存设置。
 func DeleteSettingBanner(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req config.BannerItem
+	var req config.BannerItemDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -618,6 +649,10 @@ func DeleteSettingBanner(ctx iris.Context) {
 	})
 }
 
+// SettingBannerForm 新增或更新 Banner 项并保存设置。
+//
+// 参数说明：
+//   - 请求体 "id": Banner ID，为 0 时新增，否则更新对应项。
 func SettingBannerForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.BannerItem
@@ -696,6 +731,7 @@ func SettingBannerForm(ctx iris.Context) {
 	})
 }
 
+// SettingMigrateDB 对当前站点数据库执行自动迁移，更新数据表结构。
 func SettingMigrateDB(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -715,6 +751,7 @@ func SettingMigrateDB(ctx iris.Context) {
 	})
 }
 
+// SettingAi 获取 AI 设置，包括 AI 写作配置、AI 对话模型配置及 MCP 配置。
 func SettingAi(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	defaultSite := provider.CurrentSite(nil)
@@ -722,23 +759,59 @@ func SettingAi(ctx iris.Context) {
 	aiConfig := currentSite.AiGenerateConfig
 	chatConfig := defaultSite.LoadAiSetting("")
 
+	// 意图工具清单：供后台设置页展示"暴露的工具列表"可选值。
+	// 直接读 IntentCatalog 声明，避免与内核注册状态漂移。
+	type mcpToolItem struct {
+		Name       string `json:"name"`
+		Title      string `json:"title"`
+		Domain     string `json:"domain"`
+		Risk       string `json:"risk"`
+		Desc       string `json:"desc"`
+		DefaultOff bool   `json:"default_off"`
+	}
+	tools := make([]mcpToolItem, 0, len(intent.IntentCatalog)+2)
+	for _, spec := range intent.IntentCatalog {
+		if spec == nil {
+			continue
+		}
+		tools = append(tools, mcpToolItem{
+			Name:       spec.Name,
+			Title:      spec.Title,
+			Domain:     string(spec.Domain),
+			Risk:       string(spec.Risk),
+			Desc:       spec.Desc,
+			DefaultOff: spec.DefaultOff,
+		})
+	}
+	tools = append(tools,
+		mcpToolItem{Name: "mcp_list_intents", Title: "列出全部意图", Domain: "meta", Risk: "read", Desc: "返回当前站点所有意图工具的摘要"},
+		mcpToolItem{Name: "mcp_set_scope", Title: "设置能力域范围", Domain: "meta", Risk: "read", Desc: "两阶段 tools/list，按能力域裁剪返回的 schema"},
+	)
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": iris.Map{
-			"write": aiConfig,
-			"chat":  chatConfig.Configs,
-			"mcp":   chatConfig.Mcp,
+			"write":     aiConfig,
+			"chat":      chatConfig.Configs,
+			"mcp":       chatConfig.Mcp,
+			"mcp_tools": tools,
 		},
 	})
 }
 
+// SettingAiForm 更新 AI 设置，包括 AI 写作配置、AI 对话模型配置及 MCP 配置。
+//
+// 参数说明：
+//   - 请求体 "write": AI 写作配置。
+//   - 请求体 "chat": AI 对话模型配置。
+//   - 请求体 "mcp": MCP 配置。
 func SettingAiForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req struct {
-		Write *config.AiGenerateConfig
-		Chat  []*eino.Config
-		Mcp   *eino.McpConfig
+		Write *config.AiGenerateConfig `json:"write"`
+		Chat  []*eino.Config           `json:"chat"`
+		Mcp   *eino.McpConfig          `json:"mcp"`
 	}
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{

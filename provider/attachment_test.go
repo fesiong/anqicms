@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"kandaoni.com/anqicms/config"
 )
 
 func (w *Website) TestDownloadRemoteImage(t *testing.T) {
@@ -40,7 +42,7 @@ func TestEncodeImage(t *testing.T) {
 		fmt.Println("err", err)
 	} else {
 		log.Println(imgType)
-		os.WriteFile("1.png", data, os.ModePerm)
+		os.WriteFile(config.ExecPath+"cache/1.png", data, os.ModePerm)
 	}
 }
 

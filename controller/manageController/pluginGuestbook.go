@@ -12,6 +12,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginGuestbookList 分页获取留言列表，支持关键词和状态筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "keyword": 搜索关键词，模糊匹配用户名、联系方式或内容。
+//   - 查询参数 "status": 状态筛选，可选 default、ok、spam。
 func PluginGuestbookList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
@@ -53,9 +60,41 @@ func PluginGuestbookList(ctx iris.Context) {
 	})
 }
 
+// PluginGuestbookDetail 根据ID获取留言详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 留言ID。
+func PluginGuestbookDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	//需要支持分页，还要支持搜索
+	id := ctx.URLParamIntDefault("id", 0)
+
+	guestbook, err := currentSite.GetGuestbookById(uint(id))
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "",
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": guestbook,
+	})
+}
+
+// PluginGuestbookUpdateStatus 更新留言状态，支持单个或批量操作。
+//
+// 参数说明：
+//   - 请求体 "id": 单个留言ID，大于0时更新该条。
+//   - 请求体 "ids": 留言ID列表，批量更新时使用。
+//   - 请求体 "status": 目标状态：0=待审，1=正常，2=垃圾。
 func PluginGuestbookUpdateStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginGuestbookDelete
+	var req request.PluginGuestbookStatus
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -103,6 +142,9 @@ func PluginGuestbookUpdateStatus(ctx iris.Context) {
 	})
 }
 
+// PluginGuestbookDelete 删除留言，支持单个或批量操作。\n//\n// 参数说明：
+//   - 请求体 "id": 单个留言ID，大于0时删除该条。
+//   - 请求体 "ids": 留言ID列表，批量删除时使用。
 func PluginGuestbookDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginGuestbookDelete
@@ -153,6 +195,7 @@ func PluginGuestbookDelete(ctx iris.Context) {
 	})
 }
 
+// PluginGuestbookExport 导出全部留言数据，包含自定义字段、时间、IP等信息。
 func PluginGuestbookExport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	guestbooks, err := currentSite.GetAllGuestbooks()
@@ -212,6 +255,7 @@ func PluginGuestbookExport(ctx iris.Context) {
 	})
 }
 
+// PluginGuestbookSetting 获取留言插件配置及自定义字段列表。
 func PluginGuestbookSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginGuestbook
@@ -223,6 +267,7 @@ func PluginGuestbookSetting(ctx iris.Context) {
 	})
 }
 
+// PluginGuestbookSettingForm 更新留言插件配置及自定义字段列表。
 func PluginGuestbookSettingForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginGuestbookConfig

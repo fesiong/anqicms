@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginInterferenceConfig 获取防采集干扰码插件的配置信息。
 func PluginInterferenceConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginInterference
@@ -17,6 +18,7 @@ func PluginInterferenceConfig(ctx iris.Context) {
 	})
 }
 
+// PluginInterferenceConfigForm 保存防采集干扰码插件的配置信息。
 func PluginInterferenceConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginInterference

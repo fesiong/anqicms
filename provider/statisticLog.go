@@ -247,7 +247,7 @@ func (s *StatisticLog) Read(fileName string, searchType string, offset, limit in
 
 // Calc 每10分钟进行一次统计，只统计 200 状态的日志
 func (s *StatisticLog) Calc(db *gorm.DB) {
-	if s.initial == false {
+	if s == nil || s.initial == false {
 		return
 	}
 	// 读取数据库最后一条记录，如果最后一条记录不是当天的，则重新统计

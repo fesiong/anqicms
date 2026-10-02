@@ -15,6 +15,7 @@ import (
 	"sync"
 	"time"
 
+	einomodel "github.com/cloudwego/eino/components/model"
 	"github.com/cloudwego/eino/schema"
 	"github.com/kataras/iris/v12"
 
@@ -23,6 +24,11 @@ import (
 	"kandaoni.com/anqicms/pkg/ai/eino"
 	"kandaoni.com/anqicms/provider"
 )
+
+// defaultChatMaxRounds 是主对话 / 智能体对话单次执行的最大轮数（一轮 = 一次 LLM 调用 + 工具执行）。
+// 集中在此便于不改动逻辑即可统一调整；复杂多步任务（如长文 GEO 优化）可酌情调高。
+// 定时 agent 与子 agent 各有独立的 MaxRounds 控制（见 model.AiAgent.MaxRounds / SubagentTask.MaxRounds）。
+const defaultChatMaxRounds = 20
 
 // ChatRequest represents an AI chat request
 type ChatRequest struct {
@@ -262,8 +268,17 @@ func AiChat(ctx iris.Context) {
 					continue
 				}
 				content := string(data)
-				if len([]rune(content)) > 8000 {
-					content = string([]rune(content)[:8000]) + "\n... [文件过长，仅显示前8000字符]"
+				// 附件正文按与工具结果同一份预算切，并把续读坐标写进标记：
+				// 文件本地路径就在同一行，模型可以自己对齐到 read_file 的行号，
+				// 而不是拿到半句就被当成完整内容。
+				contentCap := currentSite.AiSrv.Tuning.Normalized().MaxToolResultBytes
+				if runes := []rune(content); len(runes) > contentCap {
+					kept := string(runes[:contentCap])
+					nextLine := 1 + strings.Count(kept, "\n")
+					content = kept + fmt.Sprintf(
+						"\n... [附件正文超过 %d 字符上限，仅显示前 %d 字符（到第 %d 行）；"+
+							"剩余部分请用 read_file 传 offset=%d 续读]",
+						contentCap, contentCap, nextLine, nextLine+1)
 				}
 				if f.FileType == "template" {
 					fileParts = append(fileParts, fmt.Sprintf("[模板文件: %s](本地路径: %s)\n---\n%s\n---", f.FileName, f.FilePath, content))
@@ -308,15 +323,6 @@ func AiChat(ctx iris.Context) {
 	if req.SelectedDOM != "" {
 		editorContext += fmt.Sprintf("\n用户选中的页面DOM片段:\n%s", req.SelectedDOM)
 	}
-	// // 读取主模板内容并注入，方便 AI 直接修改
-	// if tplName != "" {
-	// 	if tplContent, ok := currentSite.GetTemplate(tplName); ok {
-	// 		if len([]rune(tplContent)) > 8000 {
-	// 			tplContent = string([]rune(tplContent)[:8000]) + "\n... [模板过长，仅显示前8000字符]"
-	// 		}
-	// 		editorContext += fmt.Sprintf("\n主模板 %s 的内容:\n%s", tplName, tplContent)
-	// 	}
-	// }
 
 	currentSite.AiSrv.AddMessage(sessionID, provider.ChatMessage{
 		Role:    "user",
@@ -432,6 +438,11 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 	// 参考 AtomCode 的做法：system prompt 只构建一次，后续复用
 	currentSite := provider.CurrentSite(irisCtx)
 
+	// P4a: 每轮对话开始先清空技能 allowed-tools 约束。
+	// 约束由 skill_get 在本轮内通过 SetSkillScopeHook 注入，仅对当前轮生效，
+	// 避免上一轮加载的技能约束泄漏到后续无关对话（svc 级状态是会话间共享的）。
+	currentSite.AiSrv.ClearSkillToolScope()
+
 	// 从 session 获取缓存的 system prompt，仅在首次构建
 	sess := currentSite.AiSrv.GetOrCreateSession(sessionID)
 	systemPrompt := sess.CachedSystemPrompt
@@ -455,14 +466,26 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 	}
 	messages = append(messages, schema.UserMessage(userMsg))
 
-	// ── 一次性绑定全部可用工具 ──
-	// 直接将所有工具定义提供给模型，避免按需声明导致模型无法获得正确工具的问题
-	allTools, allHandlers := currentSite.AiSrv.GetEinoTools()
-	currentSite.AiSrv.Handlers = allHandlers
-	if err := client.BindTools(allTools); err != nil {
-		return "", fmt.Errorf("failed to bind all tools: %w", err)
+	// ── 绑定意图层工具（E 阶段意图模式，与 MCP / Agent 通道一致）──
+	//
+	// 此前这里调用 GetEinoTools() 把 95 个端点工具全量绑给模型，并用返回的
+	// handler 表**覆盖**了 AiSrv.Handlers —— 后者会抹掉 NewAiChatService 装配好的
+	// capHandlers + intentHandlers，使意图 handler 无法被 dispatch 命中。
+	// 结果是主对话成为唯一仍在跑旧端点工具的通道：AI 拿到的是会与后端漂移的
+	// bespoke 实现（含已废弃的 archive_list 全文检索分支）与中文文本输出。
+	//
+	// 现在改为绑定 svc.Tools（意图工具 + 未被意图覆盖的内置工具），dispatch 仍走
+	// AiSrv.Handlers —— 它在服务初始化时已包含意图 handler，此处不可覆盖。
+	allTools := currentSite.AiSrv.Tools
+	if len(allTools) == 0 {
+		// 兜底：意图层未初始化（ExposedIntents 为空且意图均未注册，不应发生）时
+		// 退回端点+内置工具，保证对话不至于零工具可用。
+		allTools, _ = currentSite.AiSrv.GetEinoTools()
 	}
-	slog.Info("Bound all available tools",
+	if err := client.BindTools(allTools); err != nil {
+		return "", fmt.Errorf("failed to bind tools: %w", err)
+	}
+	slog.Info("Bound intent tools",
 		"session", sessionID, "tools", len(allTools))
 
 	// ── P0: 工具执行中间件链 ──
@@ -490,27 +513,47 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 		}
 	}
 	approvalFn := buildApprovalFn(currentSite.AiSrv, writer, flushFn, sessionID, allowSet, isAgentSession)
+	// ── P1-6: 主循环阈值 ──
+	// 全部取自 ChatTuning；未配置时用默认值，行为与改造前完全一致。
+	tuning := currentSite.AiSrv.Tuning.Normalized()
+
 	// P1: circuit_breaker 放在最前，先于 write_gate
 	// 这样重复调用在审批前就被熔断，避免无意义审批弹窗
 	circuitBreaker := provider.NewCircuitBreakerMiddleware()
+	// P0-1: path_gate 必须排在 write_gate **之前** —— 站内非敏感的写操作要先被
+	// path_gate 短路放行，否则 write_gate 会先弹审批，站内自动放行永远轮不到。
 	mwChain := provider.NewMiddlewareChain(
 		circuitBreaker,
+		&provider.PathGateMiddleware{},
 		&provider.WriteGateMiddleware{},
-		&provider.SensitivePathGateMiddleware{},
-		&provider.ResultTruncatorMiddleware{},
+		&provider.ResultTruncatorMiddleware{MaxBytes: tuning.MaxToolResultBytes},
 		&provider.RedactionMiddleware{},
 	)
 
+	// ── P1-5: 语义压缩用的摘要器 ──
+	// 复用同一个模型客户端做一次**非流式**调用生成历史摘要。
+	// 限死 max_tokens：摘要不该长，也能避免模型把它当成新任务发挥。
+	// 任何失败都会让 CompactMessagesWithSummary 自动回落到截断式压缩。
+	summarizer := provider.SummarizerFunc(func(ctx context.Context, prompt string) (string, error) {
+		msg, err := client.Generate(ctx,
+			[]*schema.Message{schema.UserMessage(prompt)},
+			einomodel.WithMaxTokens(600))
+		if err != nil {
+			return "", err
+		}
+		if msg == nil {
+			return "", fmt.Errorf("摘要返回为空")
+		}
+		return msg.Content, nil
+	})
+
 	// ── 7步验证工作流主循环 ──
-	maxRounds := 15
-	// P2: 截断恢复 — 仿 atomcode MAX_TRUNCATION_CONTINUATIONS=4
-	const maxTruncationContinuations = 4
-	truncationContinuations := 0
+	maxRounds := tuning.MaxRounds
 	// P2: AI 响应被 max_tokens 截断 (finish_reason=length) 时的续接次数
-	const maxResponseTruncationContinuations = 4
+	maxResponseTruncationContinuations := tuning.MaxResponseTruncationContinuations
 	responseTruncationContinuations := 0
 	// P2: 空响应恢复 — 仿 atomcode EMPTY_RESPONSE_MAX_RETRIES=5
-	const emptyResponseMaxRetries = 5
+	emptyResponseMaxRetries := tuning.EmptyResponseMaxRetries
 	emptyResponseRetries := 0
 	var finalResponse string
 	var round int
@@ -523,6 +566,10 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 
 	for round = 0; round < maxRounds; round++ {
 		roundStart := time.Now()
+		// P2-7: 结构化 tracing —— 记录每轮 LLM 调用的开始
+		if tr := currentSite.AiSrv.Trace(); tr != nil {
+			tr.RecordPhase(provider.TraceRound, "llm_call", fmt.Sprintf("round %d", round))
+		}
 		// 设置当前模型名 (供 P8 遥测记录使用)
 		if currentSite.AiSrv.ModelName == "" {
 			currentSite.AiSrv.ModelName = "default"
@@ -722,7 +769,28 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 		}
 		results := make([]toolExecResult, len(roundToolCalls))
 
-		// 分类：读工具 (parallel_safe) vs 写工具
+		// ── 回合级审批：先扫整轮，再一次问完 ──
+		// 旧做法是每个写调用各自 BeforeAsk，一轮 N 个调用就串出 N 个确认弹窗（问题 1）；
+		// 判定还停留在工具粒度，合并意图里的 list/get 这类纯查询也被拖着确认（问题 2）。
+		// 现在用 action 粒度预判出真正需要确认的批次，合并成一次 tool_confirm_batch，
+		// 结论预先写进 PreApproved/PreDenied，门禁只消费不再弹。
+		previews := make([]provider.ApprovalPreview, len(roundToolCalls))
+		var pendingApprovals []provider.ApprovalPreview
+		for i, tc := range roundToolCalls {
+			previews[i] = provider.PreviewCallApproval(
+				tc.ID, tc.Function.Name, tc.Function.Arguments, currentSite.RootPath, allowSet)
+			if previews[i].Needs {
+				pendingApprovals = append(pendingApprovals, previews[i])
+			}
+		}
+		preApproved := map[string]bool{}
+		preDenied := map[string]string{}
+		if len(pendingApprovals) > 0 && approvalFn != nil {
+			preApproved, preDenied = requestBatchApproval(ctx, currentSite.AiSrv, writer, flushFn,
+				sessionID, round, allowSet, pendingApprovals)
+		}
+
+		// 分类：只读工具并行执行，变更类（写/删/主机级）串行独占
 		type toolTask struct {
 			index   int
 			tc      schema.ToolCall
@@ -730,8 +798,7 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 		}
 		var readTasks, writeTasks []toolTask
 		for i, tc := range roundToolCalls {
-			toolName := tc.Function.Name
-			isWrite := provider.HasWriteOperation([]string{toolName})
+			isWrite := previews[i].Mutates()
 			if isWrite {
 				writeTasks = append(writeTasks, toolTask{i, tc, true})
 			} else {
@@ -790,11 +857,14 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 
 				handler := currentSite.AiSrv.Handlers[toolName]
 				execCtx := &provider.ToolExecContext{
-					SessionID:  sessionID,
-					IsAgent:    isAgentSession,
-					ToolName:   toolName,
-					AllowOnce:  allowSet,
-					ApprovalFn: approvalFn,
+					SessionID:   sessionID,
+					IsAgent:     isAgentSession,
+					ToolName:    toolName,
+					AllowOnce:   allowSet,
+					RootPath:    currentSite.RootPath,
+					ApprovalFn:  approvalFn,
+					PreApproved: preApproved,
+					PreDenied:   preDenied,
 				}
 				execResult, denied, reason := mwChain.ExecuteTool(ctx, &tc, handler, execCtx)
 
@@ -849,11 +919,15 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 
 			handler := currentSite.AiSrv.Handlers[toolName]
 			execCtx := &provider.ToolExecContext{
-				SessionID:  sessionID,
-				IsAgent:    isAgentSession,
-				ToolName:   toolName,
-				AllowOnce:  allowSet,
-				ApprovalFn: approvalFn,
+				SessionID:   sessionID,
+				IsAgent:     isAgentSession,
+				ToolName:    toolName,
+				AllowOnce:   allowSet,
+				RootPath:    currentSite.RootPath,
+				ApprovalFn:  approvalFn,
+				Trace:       currentSite.AiSrv.Trace(),
+				PreApproved: preApproved,
+				PreDenied:   preDenied,
 			}
 			execResult, denied, reason := mwChain.ExecuteTool(ctx, &tc, handler, execCtx)
 
@@ -879,6 +953,11 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 
 			currentSite.AiSrv.Logger.Info("Tool result",
 				"name", toolName, "result", result)
+
+			// P2-7: 结构化 tracing —— 记录每次工具执行（含是否被拒/拦截）
+			if tr := currentSite.AiSrv.Trace(); tr != nil {
+				tr.RecordTool(toolName, time.Since(roundStart), res.denied, res.reason)
+			}
 
 			// Send tool_result event to client
 			toolResultData, _ := json.Marshal(iris.Map{
@@ -909,24 +988,11 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 			toolMsg := schema.ToolMessage(result, tc.ID)
 			messages = append(messages, toolMsg)
 
-			// P2: 截断恢复 — tool_result 被截断时，注入提示让 AI 用 offset 续读
+			// 兜底截断：分页类工具（read_file/grep/glob/api list）已自持预算，会在
+			// 结果里给出续读坐标；走到这里的是 bash 输出、网页正文这类没有坐标的结果，
+			// 截断标记已随正文交给模型，这里只把人该知道的那一份说出来。
 			if res.result.Truncated {
-				truncationContinuations++
-				if truncationContinuations <= maxTruncationContinuations {
-					recoveryMsg := schema.UserMessage(
-						fmt.Sprintf("[系统提示] 上一个工具 (%s) 的结果被截断了，你只看到了前半部分。"+
-							"如果需要完整内容，请用 offset 参数从截断处继续读取，而不是重复调用。"+
-							"如果前半部分已足够回答问题，请直接基于已有内容给出结论。", toolName))
-					messages = append(messages, recoveryMsg)
-					sendSSEWarning(writer, "结果已截断，提示 AI 续读剩余内容...")
-				} else {
-					forceSummaryMsg := schema.UserMessage(
-						fmt.Sprintf("[系统提示] 工具结果已被截断 %d 次，不再续读。"+
-							"请基于已获取的内容直接给出结论或换一种方式获取信息。", truncationContinuations))
-					messages = append(messages, forceSummaryMsg)
-					truncationContinuations = 0
-					sendSSEWarning(writer, "截断次数已达上限，提示 AI 总结已有内容")
-				}
+				sendSSEWarning(writer, "工具结果超出单次上限，尾部已丢弃（见结果内标记）")
 			}
 
 			// Save tool result to session history
@@ -938,9 +1004,9 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 				ToolName:   toolName,
 			})
 
-			// 跟踪工具类型
+			// 跟踪工具类型（被拒绝的调用没有产生任何变更，不算写操作）
 			currentRoundExecutedTools = append(currentRoundExecutedTools, toolName)
-			if provider.HasWriteOperation([]string{toolName}) {
+			if !res.denied && previews[res.index].Mutates() {
 				currentRoundHadWrite = true
 				hadWriteOperation = true
 			}
@@ -952,23 +1018,12 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 		if currentRoundHadWrite {
 			consecutiveReads = 0
 		} else {
-			// 检查是否全是读取操作
-			allReadOnly := true
-			for _, name := range currentRoundExecutedTools {
-				if provider.HasWriteOperation([]string{name}) {
-					allReadOnly = false
-					break
-				}
-			}
-			if allReadOnly {
-				consecutiveReads++
-			} else {
-				consecutiveReads = 0
-			}
+			// 本轮没有任何变更类调用（判定时已看过整轮的工具与参数）
+			consecutiveReads++
 		}
 
 		// 如果连续多轮只有读取操作，注入空转警告
-		if consecutiveReads >= 4 {
+		if consecutiveReads >= tuning.StagnationReadRounds {
 			sendSSEWarning(writer, "检测到连续读取操作，提示模型聚焦实际任务")
 			slog.Warn("Stagnation detected", "consecutiveReads", consecutiveReads)
 			warningMsg := schema.SystemMessage(
@@ -993,11 +1048,18 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 			continue
 		}
 
-		// ── Step 7: 上下文压缩（每 3 轮或消息过多时） ──
-		if len(messages) > 12 && (round%3 == 2 || len(messages) > 20) {
+		// ── Step 7: 上下文压缩（每 N 轮或消息过多时） ──
+		// P1-6: 阈值取自 tuning（默认 12 / 3 / 20，与改造前一致）
+		if len(messages) > tuning.CompactMinMessages &&
+			(round%tuning.CompactEveryNRounds == tuning.CompactEveryNRounds-1 ||
+				len(messages) > tuning.CompactForceMessages) {
 			slog.Info("Compressing context", "messageCount", len(messages), "round", round)
-			messages = provider.CompactMessages(messages, 5)
+			messages = provider.CompactMessagesWithSummary(ctx, messages, tuning.CompactKeepCount, summarizer)
 			contextCompactCalls++
+			// P2-7: 结构化 tracing —— 记录压缩事件
+			if tr := currentSite.AiSrv.Trace(); tr != nil {
+				tr.RecordPhase(provider.TraceCompact, "compact", fmt.Sprintf("round %d, messages=%d", round, len(messages)))
+			}
 		}
 	}
 
@@ -1089,22 +1151,30 @@ func condenseToolContent(result string, toolName string) string {
 //
 // Agent 会话 (isAgent=true): 返回 nil，write_gate middleware 会跳过审批
 // 直接放行 (Agent 自动执行不需要人工审批)。
-func buildApprovalFn(aiSrv *provider.AiChatService, writer io.Writer, flushFn func(), sessionID string, allowSet *provider.SessionAllowSet, isAgent bool) func(ctx context.Context, call *schema.ToolCall, toolName string) (string, string) {
+func buildApprovalFn(aiSrv *provider.AiChatService, writer io.Writer, flushFn func(), sessionID string, allowSet *provider.SessionAllowSet, isAgent bool) func(ctx context.Context, call *schema.ToolCall, exec *provider.ToolExecContext) (string, string) {
 	if isAgent {
 		// Agent 会话: 不需要审批
 		return nil
 	}
-	return func(ctx context.Context, call *schema.ToolCall, toolName string) (string, string) {
+	return func(ctx context.Context, call *schema.ToolCall, exec *provider.ToolExecContext) (string, string) {
 		toolCallID := call.ID
+		toolName := exec.ToolName
 		// 注册 pending approval，等待前端唤醒
 		ch := aiSrv.RegisterPendingApproval(toolCallID)
 
-		// 向前端发送 tool_confirm SSE 事件
+		// 向前端发送 tool_confirm SSE 事件。
+		// P0-1/P0-2: 附带路径分类信息，前端据此展示"为什么需要审批"，
+		// 并决定是否提供「完全控制」选项（敏感路径下不应提供，因为它也覆盖不了）。
 		confirmData, _ := json.Marshal(iris.Map{
 			"session_id":   sessionID,
 			"tool_call_id": toolCallID,
 			"name":         toolName,
 			"arguments":    call.Function.Arguments,
+			"path_class":   exec.PathClass.String(),
+			"path_targets": exec.PathTargets,
+			"reason":       exec.DeniedReason,
+			// 敏感路径下完全控制也无效，前端据此隐藏该选项
+			"allow_full_control": exec.PathClass != provider.PathSensitive,
 		})
 		slog.Debug("event: tool_confirm", "data:", string(confirmData))
 		if writer != nil {
@@ -1132,8 +1202,98 @@ func buildApprovalFn(aiSrv *provider.AiChatService, writer io.Writer, flushFn fu
 	}
 }
 
+// requestBatchApproval 把一整轮里需要确认的调用合并成**一次**确认事件。
+//
+// 返回 (preApproved, preDenied)，控制器把它们塞进 ToolExecContext：门禁只消费结论，
+// 不再逐个 BeforeAsk。这就是"一轮只弹一次"的实现方式。
+// 四个决策一次作用于整批：
+//
+//	allow        仅放行这批调用（不记授权）
+//	once_allow   放行，并按「工具+目标/action」记住授权（敏感目标不记）
+//	full_control 放行，并开启本会话完全控制
+//	deny         拒绝整批 —— 被拒项不会执行
+//
+// 超时 10 分钟与请求取消都按拒绝处理，与单次审批一样 fail closed。
+func requestBatchApproval(ctx context.Context, aiSrv *provider.AiChatService, writer io.Writer, flushFn func(),
+	sessionID string, round int, allowSet *provider.SessionAllowSet,
+	pending []provider.ApprovalPreview) (map[string]bool, map[string]string) {
+
+	approved := make(map[string]bool, len(pending))
+	denied := make(map[string]string, len(pending))
+	denyAll := func(reason string) (map[string]bool, map[string]string) {
+		for _, p := range pending {
+			denied[p.ID] = reason
+		}
+		return approved, denied
+	}
+
+	items := make([]iris.Map, 0, len(pending))
+	allowFull := true
+	for _, p := range pending {
+		if !p.AllowFullControl {
+			allowFull = false
+		}
+		items = append(items, iris.Map{
+			"tool_call_id": p.ID,
+			"name":         p.ToolName,
+			"title":        p.Title,
+			"arguments":    p.Arguments,
+			"risk":         p.Risk,
+			"path_class":   p.PathClass.String(),
+			"path_targets": p.PathTargets,
+			"reason":       p.Reason,
+		})
+	}
+
+	// 合成 ID 走同一张 pending 表和同一个 confirm 接口，前端不需要新端点。
+	batchID := fmt.Sprintf("batch_%s_r%d_%d", sessionID, round, time.Now().UnixNano())
+	ch := aiSrv.RegisterPendingApproval(batchID)
+
+	confirmData, _ := json.Marshal(iris.Map{
+		"session_id":         sessionID,
+		"tool_call_id":       batchID,
+		"batch":              true,
+		"items":              items,
+		"allow_full_control": allowFull,
+	})
+	slog.Debug("event: tool_confirm_batch", "data:", string(confirmData))
+	if writer != nil {
+		fmt.Fprintf(writer, "event: tool_confirm_batch\ndata: %s\n\n", string(confirmData))
+		if flushFn != nil {
+			flushFn()
+		}
+	}
+
+	var decision string
+	select {
+	case decision = <-ch:
+	case <-time.After(10 * time.Minute):
+		aiSrv.CancelPendingApproval(batchID)
+		return denyAll("审批超时，已拒绝")
+	case <-ctx.Done():
+		aiSrv.CancelPendingApproval(batchID)
+		return denyAll("请求已取消")
+	}
+
+	switch decision {
+	case "allow", "once_allow", "full_control":
+		for _, p := range pending {
+			approved[p.ID] = true
+			if decision == "once_allow" && !p.Sensitive && p.GrantKey != "" && allowSet != nil {
+				allowSet.GrantTarget(p.GrantKey)
+			}
+		}
+		if decision == "full_control" && allowSet != nil {
+			allowSet.GrantFullControl()
+		}
+	default:
+		return denyAll("用户拒绝了此操作")
+	}
+	return approved, denied
+}
+
 // AiToolConfirm 处理前端审批决策 (POST /ai/chat/confirm)。
-// 请求体: { "tool_call_id": "xxx", "decision": "allow"|"deny"|"once_allow" }
+// 请求体: { "tool_call_id": "xxx", "decision": "allow"|"deny"|"once_allow"|"full_control" }
 // 唤醒主会话 generateAIResponse 中挂起的 buildApprovalFn。
 func AiToolConfirm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
@@ -1143,8 +1303,10 @@ func AiToolConfirm(ctx iris.Context) {
 	}
 
 	var req struct {
-		ToolCallID string `json:"tool_call_id"`
-		Decision   string `json:"decision"`
+		ToolCallID string `json:"tool_call_id"` // 待确认的工具调用 ID
+		// 审批决策：allow=仅放行这一次 / deny=拒绝 / once_allow=本会话放行「该工具+该目标」 / full_control=本会话放行所有非敏感操作
+		// P0-2 起 once_allow 按「工具+目标」键控（不再是整工具）；full_control 下敏感路径仍需逐次确认。
+		Decision string `json:"decision"`
 	}
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{"code": -1, "msg": "invalid request"})
@@ -1157,10 +1319,10 @@ func AiToolConfirm(ctx iris.Context) {
 
 	// 校验决策值
 	switch req.Decision {
-	case "allow", "deny", "once_allow":
+	case "allow", "deny", "once_allow", "full_control":
 		// 合法决策
 	default:
-		ctx.JSON(iris.Map{"code": -1, "msg": "decision must be allow/deny/once_allow"})
+		ctx.JSON(iris.Map{"code": -1, "msg": "decision must be allow/deny/once_allow/full_control"})
 		return
 	}
 
@@ -1173,14 +1335,32 @@ func AiToolConfirm(ctx iris.Context) {
 	ctx.JSON(iris.Map{"code": 0, "msg": "success"})
 }
 
-// autoDiagnoseErrors scans recent log output and returns formatted error context.
+// autoDiagnoseErrors 读取近期 AI 执行链路记录的错误 (来自 provider 的环形缓冲)，
+// 格式化为诊断上下文回灌给模型。仅当用户消息命中错误关键词时调用
+// (见 generateAIResponse 中的 ContainsErrorKeywords 分支)，避免无谓注入。
 func autoDiagnoseErrors() string {
-	// 这里可以扩展为读取日志文件并提取最新错误
-	// 目前返回空字符串，表示没有额外的诊断信息
-	return ""
+	entries := provider.GetRecentAIErrors()
+	if len(entries) == 0 {
+		return ""
+	}
+	const maxEntries = 10
+	if len(entries) > maxEntries {
+		entries = entries[len(entries)-maxEntries:]
+	}
+	var sb strings.Builder
+	sb.WriteString("以下是近期 AI 执行链路中记录的错误（最新在前）：\n\n")
+	for i := len(entries) - 1; i >= 0; i-- {
+		e := entries[i]
+		sb.WriteString(fmt.Sprintf("- [%s] %s\n", e.TS.Format("15:04:05"), e.Msg))
+	}
+	return sb.String()
 }
 
 // GetHistory returns chat history
+// GetAiHistory 获取指定会话的历史消息记录。
+//
+// 参数说明：
+//   - 查询参数 "session_id": 会话 ID（必填），用于定位要读取的对话历史。
 func GetAiHistory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	if currentSite.AiSrv == nil {
@@ -1226,7 +1406,33 @@ func GetAiSessions(ctx iris.Context) {
 	})
 }
 
-// Health returns health status
+// AiChatTrace 返回最近的结构化追踪事件 (P2-7)，用于排障与透明化 agent 行为。
+//
+// 参数说明：
+//   - 查询参数 "limit": 返回的最大事件条数，默认为 200，非正数时按默认值处理。
+func AiChatTrace(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	if currentSite.AiSrv == nil {
+		ctx.JSON(iris.Map{"code": -1, "msg": "ai service not available"})
+		return
+	}
+	limit := 200
+	if v := ctx.URLParamIntDefault("limit", 200); v > 0 {
+		limit = v
+	}
+	events := currentSite.AiSrv.Trace().Snapshot(limit)
+	ctx.JSON(iris.Map{
+		"code": 0,
+		"msg":  "ok",
+		"data": iris.Map{
+			"count":  len(events),
+			"events": events,
+		},
+	})
+}
+
+// AiHealth 返回 AI 对话服务的健康状态，用于探活。
+// 服务未初始化时返回 code -1；正常时返回 service 名称与 running 状态。
 func AiHealth(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	if currentSite.AiSrv == nil {
@@ -1247,6 +1453,11 @@ func AiHealth(ctx iris.Context) {
 }
 
 // AiChatUpload 上传临时文件供AI对话使用
+// AiChatUpload 上传 AI 对话附件（文件/图片），保存到会话临时目录。
+//
+// 参数说明：
+//   - 表单字段 "file": 上传的文件（必填）。
+//   - 表单字段 "session_id": 所属会话 ID，缺省为 "common"。
 func AiChatUpload(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -1372,6 +1583,12 @@ func AiAgentList(ctx iris.Context) {
 }
 
 // AiAgentLog 返回指定 Agent 的执行日志
+// AiAgentLog 查询指定智能体的执行日志（分页）。
+//
+// 参数说明：
+//   - 路径参数 "id": 智能体 ID（必填）。
+//   - 查询参数 "current": 当前页码，默认 1。
+//   - 查询参数 "pageSize": 每页条数，默认 20。
 func AiAgentLog(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -1407,7 +1624,7 @@ func AiAgentChat(ctx iris.Context) {
 	}
 
 	var req struct {
-		Message string `json:"message"`
+		Message string `json:"message"` // 发送给智能体的对话消息内容
 	}
 	if err := ctx.ReadJSON(&req); err != nil || req.Message == "" {
 		ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": "消息不能为空"})

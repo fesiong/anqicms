@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginGetAkismetSetting 获取 Akismet 垃圾评论过滤和 reCAPTCHA 插件的配置信息。
 func PluginGetAkismetSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetAkismetSetting(true)
@@ -17,6 +18,7 @@ func PluginGetAkismetSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSaveAkismetSetting 保存 Akismet 垃圾评论过滤和 reCAPTCHA 插件的配置信息。
 func PluginSaveAkismetSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginAkismetConfig

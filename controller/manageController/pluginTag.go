@@ -11,6 +11,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginTagList 分页查询标签列表，支持按名称与分类筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "title": 按标签名称模糊搜索。
+//   - 查询参数 "category_id": 按分类 ID 筛选，0 表示不限。
 func PluginTagList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	title := ctx.URLParam("title")
@@ -51,6 +58,10 @@ func PluginTagList(ctx iris.Context) {
 	})
 }
 
+// PluginTagDetail 查询单个标签的详情、标签内容与自定义字段。
+//
+// 参数说明：
+//   - 查询参数 "id": 标签 ID，必填。
 func PluginTagDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := ctx.URLParamIntDefault("id", 0)
@@ -105,6 +116,7 @@ func PluginTagDetail(ctx iris.Context) {
 	})
 }
 
+// PluginTagDetailForm 新建或更新标签。
 func PluginTagDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginTag
@@ -202,9 +214,10 @@ func PluginTagDetailForm(ctx iris.Context) {
 	})
 }
 
+// PluginTagDelete 根据 ID 删除指定标签。
 func PluginTagDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginTag
+	var req request.PluginTagDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -252,6 +265,7 @@ func PluginTagDelete(ctx iris.Context) {
 	})
 }
 
+// PluginTagFields 查询标签的自定义字段定义。
 func PluginTagFields(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -264,6 +278,7 @@ func PluginTagFields(ctx iris.Context) {
 	})
 }
 
+// PluginTagFieldsForm 保存标签的自定义字段定义。
 func PluginTagFieldsForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req []config.CustomField

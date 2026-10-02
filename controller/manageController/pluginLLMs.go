@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginGetLLMsSetting 获取 llms.txt 插件设置，并检查 llms.txt 文件的存在状态、更新时间和访问地址。
 func PluginGetLLMsSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginLLMs
@@ -29,6 +30,7 @@ func PluginGetLLMsSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSaveLLMsSetting 保存 llms.txt 插件设置。
 func PluginSaveLLMsSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginLLMsConfig
@@ -59,6 +61,7 @@ func PluginSaveLLMsSetting(ctx iris.Context) {
 	})
 }
 
+// PluginLLMsBuild 触发生成站点的 llms.txt 文件，需先开启 llms.txt 插件。
 func PluginLLMsBuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginLLMs
@@ -85,6 +88,7 @@ func PluginLLMsBuild(ctx iris.Context) {
 	})
 }
 
+// PluginGetLLMsStatus 获取 llms.txt 文件的生成状态。
 func PluginGetLLMsStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetLLMsBuildStatus()

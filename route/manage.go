@@ -56,6 +56,7 @@ func manageRoute(app *iris.Application) {
 			anqi.Get("/ai/agents/{id}/logs", manageController.AiAgentLog)
 			anqi.Post("/ai/agents/{id}/chat", manageController.AiAgentChat)
 			anqi.Get("/ai/health", manageController.AiHealth)
+			anqi.Get("/ai/chat/trace", manageController.AiChatTrace)
 			anqi.Post("/ai/image", manageController.AuthAiGenerateImage)
 			anqi.Post("/ai/image/confirm", manageController.AuthAiGenerateImageConfirm)
 			anqi.Get("/ai/image/histories", manageController.AuthAiGenerateImageHistories)
@@ -149,6 +150,7 @@ func manageRoute(app *iris.Application) {
 		attachment := manage.Party("/attachment", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			attachment.Get("/list", manageController.AttachmentList)
+			attachment.Get("/detail", manageController.AttachmentDetail)
 			attachment.Post("/upload", manageController.AttachmentUpload)
 			attachment.Post("/addurl", manageController.AttachmentAddRemoteUrl)
 			attachment.Post("/delete", manageController.AttachmentDelete)
@@ -239,6 +241,7 @@ func manageRoute(app *iris.Application) {
 		{
 			plugin.Get("/push", manageController.PluginPush)
 			plugin.Post("/push", manageController.PluginPushForm)
+			plugin.Post("/push/push", manageController.PluginPushUrls)
 			plugin.Get("/push/logs", manageController.PluginPushLogList)
 
 			plugin.Get("/robots", manageController.PluginRobots)
@@ -289,6 +292,7 @@ func manageRoute(app *iris.Application) {
 			guestbook := plugin.Party("/guestbook")
 			{
 				guestbook.Get("/list", manageController.PluginGuestbookList)
+				guestbook.Get("/detail", manageController.PluginGuestbookDetail)
 				guestbook.Post("/status", manageController.PluginGuestbookUpdateStatus)
 				guestbook.Post("/delete", manageController.PluginGuestbookDelete)
 				guestbook.Post("/export", manageController.PluginGuestbookExport)
@@ -318,6 +322,7 @@ func manageRoute(app *iris.Application) {
 			{
 				material.Post("/convert/file", manageController.ConvertFileToUtf8)
 				material.Get("/list", manageController.PluginMaterialList)
+				material.Get("/detail", manageController.PluginMaterialDetail)
 				material.Post("/detail", manageController.PluginMaterialDetailForm)
 				material.Post("/import", manageController.PluginMaterialImport)
 				material.Post("/delete", manageController.PluginMaterialDelete)
@@ -413,6 +418,7 @@ func manageRoute(app *iris.Application) {
 			retailer := plugin.Party("/retailer")
 			{
 				retailer.Get("/list", manageController.PluginGetRetailers)
+				retailer.Get("/detail", manageController.PluginUserDetail)
 				retailer.Get("/config", manageController.PluginRetailerConfig)
 				retailer.Post("/config", manageController.PluginRetailerConfigForm)
 				retailer.Post("/realname", manageController.PluginRetailerSetRealName)
@@ -606,6 +612,7 @@ func manageRoute(app *iris.Application) {
 			subscriber := plugin.Party("/subscriber")
 			{
 				subscriber.Get("/list", manageController.PluginGetSubscribers)
+				subscriber.Get("/detail", manageController.PluginGetSubscriber)
 				subscriber.Post("/save", manageController.PluginSaveSubscriber)
 				subscriber.Post("/delete", manageController.PluginDeleteSubscriber)
 				subscriber.Post("/send", manageController.SendSubscriberMail)

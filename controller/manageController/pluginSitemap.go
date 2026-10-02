@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginSitemap 获取当前站点的 Sitemap 配置，附带最新生成时间和访问地址。
 func PluginSitemap(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	pluginSitemap := currentSite.PluginSitemap
@@ -34,6 +35,7 @@ func PluginSitemap(ctx iris.Context) {
 	})
 }
 
+// PluginSitemapForm 保存 Sitemap 配置，并在类型变化时清理旧的 Sitemap。
 func PluginSitemapForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSitemapConfig
@@ -79,6 +81,7 @@ func PluginSitemapForm(ctx iris.Context) {
 	})
 }
 
+// PluginSitemapBuild 执行 Sitemap 生成（重建）操作，并字段保存 Sitemap 配置
 func PluginSitemapBuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSitemapConfig

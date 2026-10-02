@@ -13,6 +13,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 func (w *Website) GetPlaces(ops func(tx *gorm.DB) *gorm.DB, parentId uint, showType int) ([]*model.Place, error) {
@@ -72,7 +73,7 @@ func (w *Website) GetPlaceByFunc(ops func(tx *gorm.DB) *gorm.DB) (*model.Place, 
 	return &place, nil
 }
 
-func (w *Website) SavePlace(req *model.Place) (place *model.Place, err error) {
+func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err error) {
 	newPost := false
 	if req.Id > 0 {
 		place, err = w.GetPlaceById(req.Id)
@@ -318,7 +319,7 @@ func (w *Website) SavePlace(req *model.Place) (place *model.Place, err error) {
 	if newPost && place.Status == config.ContentStatusOK {
 		link := w.GetUrl("place", place, 0)
 		go func() {
-			w.PushArchive(link)
+			w.PushArchives([]string{link})
 			if w.PluginSitemap.AutoBuild == 1 {
 				_ = w.AddonSitemap("category", link, time.Unix(place.UpdatedTime, 0).Format("2006-01-02"), place)
 			}

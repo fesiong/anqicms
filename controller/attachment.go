@@ -1,11 +1,12 @@
 package controller
 
 import (
+	"os"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
-	"os"
 )
 
 func AttachmentUpload(ctx iris.Context) {
@@ -14,6 +15,7 @@ func AttachmentUpload(ctx iris.Context) {
 	// 增加分类
 	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
 	attachId := uint(ctx.PostValueIntDefault("id", 0))
+	// Receive attachment, image/video/file
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		file, info, err = ctx.FormFile("file1")

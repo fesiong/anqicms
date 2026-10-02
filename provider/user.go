@@ -350,7 +350,7 @@ func (w *Website) GetUserGroupInfoByLevel(level int) (*model.UserGroup, error) {
 	return &group, nil
 }
 
-func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) error {
+func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) (*model.UserGroup, error) {
 	var group = model.UserGroup{
 		Title:       req.Title,
 		Description: req.Description,
@@ -363,13 +363,15 @@ func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) error {
 		_, err := w.GetUserGroupInfo(req.Id)
 		if err != nil {
 			// 不存在
-			return err
+			return nil, err
 		}
 		group.Id = req.Id
 	}
-	err := w.DB.Save(&group).Error
+	if err := w.DB.Save(&group).Error; err != nil {
+		return nil, err
+	}
 
-	return err
+	return &group, nil
 }
 
 func (w *Website) GetUserWechatByOpenid(openid string) (*model.UserWechat, error) {

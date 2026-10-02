@@ -32,7 +32,7 @@ func (w *Website) GetOrderList(ops func(tx *gorm.DB) *gorm.DB, status string, pa
 		tx = ops(tx)
 	}
 	if status != "" {
-		// status 可能会传 waiting,delivery,finished
+		// status 可能会传 waiting,paid,delivery,finished,refunding,closed
 		if status == "waiting" {
 			tx = tx.Where("`status` = 0")
 		}
@@ -204,7 +204,7 @@ func (w *Website) GeneratePayment(order *model.Order, req *request.PaymentReques
 	return payment, nil
 }
 
-func (w *Website) SetOrderDeliver(req *request.OrderRequest) error {
+func (w *Website) SetOrderDeliver(req *request.OrderDeliveryRequest) error {
 	order, err := w.GetOrderInfoByOrderId(req.OrderId)
 	if err != nil {
 		return err
@@ -1182,7 +1182,7 @@ func (w *Website) GetRetailerCommissions(retailerId uint, page, pageSize int) ([
 	return commissions, total
 }
 
-func (w *Website) RetailerApplyWithdraw(retailerId uint) error {
+func (w *Website) RetailerApplyWithdraw(retailerId uint) (*model.UserWithdraw, error) {
 	// 查询可提现金额
 	var commissions []model.Commission
 	var total int64
@@ -1192,13 +1192,13 @@ func (w *Website) RetailerApplyWithdraw(retailerId uint) error {
 	}
 
 	if total <= 0 {
-		return errors.New(w.Tr("NoAmountAvailableForWithdrawal"))
+		return nil, errors.New(w.Tr("NoAmountAvailableForWithdrawal"))
 	}
 
 	// todo执行提现操作
 	// 低于2元不可提现到微信
 	if total < 200 {
-		return errors.New(w.Tr("WithdrawalsBelow2YuanCannotBeMadeToWechatChange"))
+		return nil, errors.New(w.Tr("WithdrawalsBelow2YuanCannotBeMadeToWechatChange"))
 	}
 	tx := w.DB.Begin()
 	var err error
@@ -1213,7 +1213,7 @@ func (w *Website) RetailerApplyWithdraw(retailerId uint) error {
 	err = tx.Save(&withdraw).Error
 	if err != nil {
 		tx.Rollback()
-		return err
+		return nil, err
 	}
 	for _, val := range commissions {
 		val.WithdrawId = withdraw.Id
@@ -1221,13 +1221,13 @@ func (w *Website) RetailerApplyWithdraw(retailerId uint) error {
 		err = tx.Where("id = ? and status = ?", val.Id, config.CommissionStatusWait).Updates(&val).Error
 		if err != nil {
 			tx.Rollback()
-			return err
+			return nil, err
 		}
 	}
 
 	tx.Commit()
 	// 等待计划任务去处理
-	return nil
+	return &withdraw, nil
 }
 
 func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string, content [][]interface{}) {
@@ -1235,7 +1235,7 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 	tx := w.DB.Model(&model.Order{}).Order("id asc")
 
 	if req.Status != "" {
-		// status 可能会传 waiting,delivery,finished
+		// status 可能会传 waiting,paid,delivery,finished,refunding,closed
 		if req.Status == "waiting" {
 			tx = tx.Where("`status` = 0")
 		}
@@ -1250,6 +1250,9 @@ func (w *Website) ExportOrders(req *request.OrderExportRequest) (header []string
 		}
 		if req.Status == "refunding" {
 			tx = tx.Where("`status` = 8")
+		}
+		if req.Status == "closed" {
+			tx = tx.Where("`status` = -1")
 		}
 	}
 	if req.StartTime > 0 {

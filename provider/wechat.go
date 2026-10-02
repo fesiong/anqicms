@@ -3,13 +3,14 @@ package provider
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"time"
+
 	"github.com/esap/wechat"
 	"github.com/esap/wechat/util"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"strings"
-	"time"
 )
 
 func (w *Website) GetWechatServer(focus bool) *wechat.Server {
@@ -153,7 +154,7 @@ func (w *Website) DeleteWechatMessage(id uint) error {
 	return err
 }
 
-func (w *Website) ReplyWechatMessage(req *request.WechatMessageRequest) error {
+func (w *Website) ReplyWechatMessage(req *request.WechatMessageReplyRequest) error {
 	message, err := w.GetWechatMessage(req.Id)
 	if err != nil {
 		return err
@@ -184,6 +185,16 @@ func (w *Website) GetWechatReplyRules(page, pageSize int) ([]*model.WechatReplyR
 	return rules, total
 }
 
+func (w *Website) GetWechatReplyRuleById(id uint) (*model.WechatReplyRule, error) {
+	var rule model.WechatReplyRule
+	err := w.DB.Where("`id` = ?", id).Take(&rule).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &rule, nil
+}
+
 func (w *Website) GetWechatReplyRuleByKeyword(keyword string) (*model.WechatReplyRule, error) {
 	var rule model.WechatReplyRule
 	err := w.DB.Where("`keyword` = ?", keyword).Take(&rule).Error
@@ -210,12 +221,12 @@ func (w *Website) DeleteWechatReplyRule(id uint) error {
 	return err
 }
 
-func (w *Website) SaveWechatReplyRule(req *request.WechatReplyRuleRequest) error {
+func (w *Website) SaveWechatReplyRule(req *request.WechatReplyRuleRequest) (*model.WechatReplyRule, error) {
 	var rule model.WechatReplyRule
 	if req.Id > 0 {
 		err := w.DB.Where("`id` = ?", req.Id).Take(&rule).Error
 		if err != nil {
-			return err
+			return nil, err
 		}
 	}
 	rule.Keyword = req.Keyword
@@ -223,12 +234,12 @@ func (w *Website) SaveWechatReplyRule(req *request.WechatReplyRuleRequest) error
 	rule.IsDefault = req.IsDefault
 	err := w.DB.Save(&rule).Error
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if rule.IsDefault == 1 {
 		w.DB.Model(&model.WechatReplyRule{}).Where("`id` != ?", rule.Id).UpdateColumn("is_default", 0)
 	}
-	return nil
+	return &rule, nil
 }
 
 func (w *Website) GetWechatMenus() []*model.WechatMenu {
@@ -247,6 +258,16 @@ func (w *Website) GetWechatMenus() []*model.WechatMenu {
 	}
 
 	return menus
+}
+
+func (w *Website) GetWechatMenuById(id uint) (*model.WechatMenu, error) {
+	var menu model.WechatMenu
+	err := w.DB.Where("`id` = ?", id).Take(&menu).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return &menu, nil
 }
 
 func (w *Website) DeleteWechatMenu(id uint) error {

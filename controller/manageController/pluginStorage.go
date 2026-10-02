@@ -11,6 +11,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginStorageConfig 获取当前站点的存储插件配置。
 func PluginStorageConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginStorage
@@ -22,6 +23,7 @@ func PluginStorageConfig(ctx iris.Context) {
 	})
 }
 
+// PluginStorageConfigForm 保存存储插件配置并重新初始化存储桶。
 func PluginStorageConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginStorageConfig
@@ -97,6 +99,10 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginStorageUploadFile SSH 私钥上传接口，上传 SSH 私钥
+//
+// 参数说明：
+//   - 表单参数 "file": SSH 私钥文件。
 func PluginStorageUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

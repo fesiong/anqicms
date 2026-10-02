@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"html"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
@@ -10,6 +11,11 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginCommentList 分页获取评论列表，并附上评论所属文档标题。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func PluginCommentList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -42,6 +48,10 @@ func PluginCommentList(ctx iris.Context) {
 	})
 }
 
+// PluginCommentDetail 根据ID获取评论详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 评论 ID。
 func PluginCommentDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -61,9 +71,10 @@ func PluginCommentDetail(ctx iris.Context) {
 	})
 }
 
+// PluginCommentDetailForm 修改指定评论的内容、用户名和IP。
 func PluginCommentDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginComment
+	var req request.PluginCommentUpdateRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -109,9 +120,10 @@ func PluginCommentDetailForm(ctx iris.Context) {
 	})
 }
 
+// PluginCommentDelete 删除指定评论。
 func PluginCommentDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginComment
+	var req request.PluginCommentDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -145,10 +157,10 @@ func PluginCommentDelete(ctx iris.Context) {
 	})
 }
 
-// 处理审核状态
+// PluginCommentCheck 处理评论的审核状态
 func PluginCommentCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginComment
+	var req request.PluginCommentApprovalRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

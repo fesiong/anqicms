@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -144,6 +146,7 @@ func (svc *AiChatService) ExecuteSubagent(ctx context.Context, task *SubagentTas
 	if err != nil {
 		result.Error = fmt.Sprintf("AI client not available: %v", err)
 		result.Duration = time.Since(start)
+		RecordAIError("subagent[%s] AI client 不可用: %v", task.ID, err)
 		return result
 	}
 
@@ -153,6 +156,7 @@ func (svc *AiChatService) ExecuteSubagent(ctx context.Context, task *SubagentTas
 		if err := client.BindTools(subTools); err != nil {
 			result.Error = fmt.Sprintf("failed to bind tools: %v", err)
 			result.Duration = time.Since(start)
+			RecordAIError("subagent[%s] 绑定工具失败: %v", task.ID, err)
 			return result
 		}
 	}
@@ -178,6 +182,7 @@ func (svc *AiChatService) ExecuteSubagent(ctx context.Context, task *SubagentTas
 		case <-ctx.Done():
 			result.Error = "子任务超时或被取消"
 			result.Duration = time.Since(start)
+			RecordAIError("subagent[%s] 超时或被取消", task.ID)
 			return result
 		default:
 		}
@@ -191,6 +196,7 @@ func (svc *AiChatService) ExecuteSubagent(ctx context.Context, task *SubagentTas
 			}
 			result.Error = fmt.Sprintf("AI generate failed: %v", err)
 			result.Duration = time.Since(start)
+			RecordAIError("subagent[%s] AI 生成失败: %v", task.ID, err)
 			return result
 		}
 
@@ -275,24 +281,187 @@ func (svc *AiChatService) buildSubagentTools(subType SubagentType, scope []strin
 	return filteredTools, filteredHandlers
 }
 
-// isWithinScope 检查工具调用的参数是否在声明的 scope 范围内。
-// scope 是一组 glob 模式，参数中的 file_path 必须匹配至少一个模式。
+// isWithinScope 检查工具调用的参数是否落在声明的 scope (一组 glob 模式) 内。
+//
+// 相对旧版纯子串匹配的安全改进:
+//  1. 解析 JSON 参数，优先从 file_path / path / file / target / dir / directory
+//     等字段抽取路径候选，避免把无关文本里的子串误判为命中；
+//  2. 对候选路径做目录边界感知的 glob 匹配 (支持 * 与 **)，杜绝
+//     scope="/a/b/" 命中 "/a/bc/x" 这类越界；
+//  3. 未声明 scope 的写工具一律拒绝 (fail-closed)。
+//
+// 若解析不出任何路径字段，则回退到"对原始参数做子串匹配"作为兜底，
+// 以免误伤那些把路径放在非标准字段的工具 (保持旧行为)。
 func isWithinScope(argsJSON string, scope []string) bool {
-	// 简单实现: 检查 argsJSON 中是否包含 scope 中的任意路径片段
-	// 如果 scope 包含 "*", 做简单的通配匹配
+	// 未声明 scope 的写操作 → 拒绝
+	if len(scope) == 0 {
+		return false
+	}
+
+	// 1) 解析已知路径字段
+	candidates := extractPathCandidates(argsJSON)
+
+	// 2) 有候选路径时，要求至少一个候选命中任一 scope (命中即放行，否则拒绝)
+	if len(candidates) > 0 {
+		for _, cand := range candidates {
+			for _, s := range scope {
+				if matchScopeGlob(s, cand) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+
+	// 3) 兜底：解析不出明确路径字段时，回退到原始参数子串匹配
 	argsLower := strings.ToLower(argsJSON)
 	for _, s := range scope {
 		sLower := strings.ToLower(s)
 		if strings.Contains(argsLower, sLower) {
 			return true
 		}
-		// 通配符 scope (如 "src/**"): 检查路径前缀
 		if strings.Contains(sLower, "*") {
 			prefix := strings.Split(sLower, "*")[0]
 			if prefix != "" && strings.Contains(argsLower, prefix) {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// extractPathCandidates 从工具参数 JSON 中抽取可能的文件路径候选。
+// 优先读取常见路径字段；若没有，则扫描所有字符串值，收集绝对路径 (以 / 开头)。
+// 解析失败时返回 nil (交由调用方兜底)。
+func extractPathCandidates(argsJSON string) []string {
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(argsJSON), &raw); err != nil {
+		// 不是合法 JSON：返回 nil，调用方按原始文本兜底
+		return nil
+	}
+
+	knownKeys := []string{"file_path", "path", "file", "target", "dir", "directory", "src", "dest", "destination", "url"}
+	var candidates []string
+	seen := make(map[string]bool)
+
+	add := func(v any) {
+		s, ok := v.(string)
+		if !ok || s == "" {
+			return
+		}
+		s = strings.TrimSpace(s)
+		cleaned := path.Clean(s)
+		key := strings.ToLower(cleaned)
+		if seen[key] {
+			return
+		}
+		seen[key] = true
+		candidates = append(candidates, cleaned)
+	}
+
+	for _, k := range knownKeys {
+		if v, ok := raw[k]; ok {
+			add(v)
+		}
+	}
+
+	// 扫描所有字符串值，收集绝对路径 (兜底，避免漏掉非标准字段里的路径)
+	for _, v := range raw {
+		if s, ok := v.(string); ok && strings.HasPrefix(s, "/") {
+			add(s)
+		}
+	}
+
+	return candidates
+}
+
+// matchScopeGlob 判断候选路径 cand 是否匹配 scope glob 模式。
+// 支持 * (单层) 与 ** (跨层)。匹配在路径规范化并小写化后进行，
+// 且对前缀/后缀做目录边界约束，防止 "/a/b/" 误中 "/a/bc/x"。
+func matchScopeGlob(pattern, cand string) bool {
+	pattern = strings.ToLower(strings.TrimSpace(pattern))
+	cand = strings.ToLower(path.Clean(cand))
+	if pattern == "" {
+		return false
+	}
+	if pattern == "**" || pattern == "*" {
+		return true
+	}
+	if strings.Contains(pattern, "**") {
+		return matchDoubleStar(pattern, cand)
+	}
+
+	// 无 ** 的普通通配：先整体匹配
+	if ok, err := path.Match(pattern, cand); err == nil && ok {
+		return true
+	}
+	// 再尝试基准名匹配 (如 *.go 匹配任意目录下的 .go 文件)
+	if ok, err := path.Match(pattern, path.Base(cand)); err == nil && ok {
+		return true
+	}
+	// 最后兜底：pattern 不含 * 时，视为路径片段出现
+	if !strings.Contains(pattern, "*") {
+		return containsPathSegment(cand, pattern)
+	}
+	return false
+}
+
+// matchDoubleStar 处理含 ** 的模式：prefix**suffix 形式。
+func matchDoubleStar(pattern, cand string) bool {
+	parts := strings.Split(pattern, "**")
+	prefix := parts[0]
+	suffix := parts[len(parts)-1]
+	if prefix != "" && !containsPathSegment(cand, prefix) {
+		return false
+	}
+	if suffix != "" && !endsWithPathSegment(cand, suffix) {
+		return false
+	}
+	return true
+}
+
+// containsPathSegment 判断 frag 是否作为完整路径片段出现在 haystack 中
+// (边界为 / 或字符串两端)，避免子串误中。frag 可带尾斜杠 (表示目录)，
+// 此时其子内容也视为命中。
+func containsPathSegment(haystack, frag string) bool {
+	if frag == "" {
+		return true
+	}
+	dirFrag := strings.HasSuffix(frag, "/")
+	searchFrom := 0
+	for {
+		idx := strings.Index(haystack[searchFrom:], frag)
+		if idx < 0 {
+			return false
+		}
+		abs := searchFrom + idx
+		before := abs == 0 || haystack[abs-1] == '/'
+		// 片段后必须是 / 或字符串结尾；若片段以 / 结尾 (目录)，其子内容自然合法
+		after := abs+len(frag) == len(haystack) || haystack[abs+len(frag)] == '/' || dirFrag
+		if before && after {
+			return true
+		}
+		searchFrom = abs + 1
+	}
+}
+
+// endsWithPathSegment 判断 haystack 是否以 frag 结尾 (frag 可为通配，如 /*.go)。
+// 采用 basename 通配匹配：把 suffix 最后一段作为 basename 模式与 haystack 的
+// basename 做 path.Match，从而正确处理 "/*.go" 命中 "c.go" 这类场景。
+func endsWithPathSegment(haystack, suffix string) bool {
+	suffix = strings.TrimSuffix(suffix, "/")
+	if suffix == "" {
+		return true
+	}
+	base := path.Base(haystack)
+	suffixBase := path.Base(suffix)
+	if ok, err := path.Match(suffixBase, base); err == nil && ok {
+		return true
+	}
+	// 退化：haystack 以 suffix 整体结尾且前界为 /
+	if strings.HasSuffix(haystack, suffix) {
+		idx := len(haystack) - len(suffix)
+		return idx <= 0 || haystack[idx-1] == '/'
 	}
 	return false
 }
@@ -385,8 +554,42 @@ func (svc *AiChatService) DispatchTasks(ctx context.Context, tasks []*SubagentTa
 	return results
 }
 
+// DistillSubagentOutput 在子代理结果回传主上下文前做蒸馏 (P2-8)。
+//
+// 目的：子代理拥有独立上下文，其原始轨迹（多轮工具输入输出）若原样回灌主上下文，
+// 会稀释主 agent 的注意力并迅速撑爆上下文窗口。仿 Anthropic「子代理仅回传相关摘要」。
+//
+// 做法（确定性、零额外 LLM 调用，避免成本与延迟）：
+//  1. 超过 distillMaxRunes 的回传一律按 UTF-8 边界安全截断，并标注已被蒸馏。
+//  2. 前端补一句结构化提示，引导主 agent 把这段当成「结论 + 关键依据」而非逐字原文。
+//
+// maxRunes <= 0 时退回默认上限，保证调用方不传也不会panic或无限增长。
+func DistillSubagentOutput(output string, maxRunes int) string {
+	if maxRunes <= 0 {
+		maxRunes = DefaultSubagentDistillMaxRunes
+	}
+	runes := []rune(output)
+	if len(runes) <= maxRunes {
+		return output
+	}
+	cut := maxRunes
+	// 尽量在句子边界（换行/句号）截断，避免半句话
+	for cut > maxRunes-200 && cut > 0 {
+		c := runes[cut-1]
+		if c == '\n' || c == '.' || c == '。' || c == '；' || c == ';' {
+			break
+		}
+		cut--
+	}
+	if cut <= 0 {
+		cut = maxRunes
+	}
+	return string(runes[:cut]) + "\n…（子任务输出已蒸馏，仅保留结论与关键依据）"
+}
+
 // FormatSubagentResults 将子任务结果格式化为汇总文本，供注入主对话。
-func FormatSubagentResults(results []*SubagentResult) string {
+// distillMaxRunes 控制单个子任务回传的最大字符数（见 DistillSubagentOutput）。
+func FormatSubagentResults(results []*SubagentResult, distillMaxRunes int) string {
 	if len(results) == 0 {
 		return "无子任务结果。"
 	}
@@ -402,7 +605,7 @@ func FormatSubagentResults(results []*SubagentResult) string {
 			sb.WriteString(fmt.Sprintf("- 错误: %s\n", r.Error))
 		}
 		if r.Output != "" {
-			sb.WriteString(fmt.Sprintf("- 输出:\n%s\n", r.Output))
+			sb.WriteString(fmt.Sprintf("- 输出:\n%s\n", DistillSubagentOutput(r.Output, distillMaxRunes)))
 		}
 		sb.WriteString("\n")
 	}

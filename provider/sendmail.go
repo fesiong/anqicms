@@ -248,7 +248,7 @@ func (w *Website) GetEmailTemplateInfo(key string) (*config.EmailTemplate, bool)
 	return &template, exist
 }
 
-func (w *Website) SaveEmailTemplateInfo(req *config.EmailTemplate) error {
+func (w *Website) SaveEmailTemplateInfo(req *config.EmailTemplate) (*config.EmailTemplate, error) {
 	template := config.EmailTemplate{
 		Open:    req.Open,
 		Key:     req.Key,
@@ -269,7 +269,11 @@ func (w *Website) SaveEmailTemplateInfo(req *config.EmailTemplate) error {
 	}
 
 	// 保存到数据库
-	return w.SaveSettingValue(SendmailSettingKey, w.PluginSendmail)
+	if err := w.SaveSettingValue(SendmailSettingKey, w.PluginSendmail); err != nil {
+		return nil, err
+	}
+
+	return &template, nil
 }
 
 func (w *Website) RenderEmailTemplate(template *config.EmailTemplate, data map[string]interface{}) (*config.EmailTemplate, error) {

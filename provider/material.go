@@ -25,7 +25,7 @@ func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, 
 		builder = builder.Where("(`title` like ?)", "%"+keyword+"%")
 	}
 	if categoryId != 0 {
-		//模糊搜索
+		// 查询指定分类的素材
 		builder = builder.Where("`category_id` = ?", categoryId)
 	}
 

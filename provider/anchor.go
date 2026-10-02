@@ -695,15 +695,22 @@ func (w *Website) InsertTitleToAnchor(req *request.PluginAnchorAddFromTitle) err
 		var categories []*model.Category
 		w.DB.Where("`id` IN (?)", req.Ids).Find(&categories)
 		for _, category := range categories {
-			category.Link = w.GetUrl("category", category, 0)
+			category.Link = w.GetUrl(PatternCategory, category, 0)
 			w.AutoInsertAnchor(0, category.Title, category.Link)
 		}
 	} else if req.Type == "archive" {
 		var archives []*model.Archive
 		w.DB.Where("`id` IN (?)", req.Ids).Find(&archives)
 		for _, archive := range archives {
-			archive.Link = w.GetUrl("archive", archive, 0)
+			archive.Link = w.GetUrl(PatternArchive, archive, 0)
 			w.AutoInsertAnchor(archive.Id, archive.Title, archive.Link)
+		}
+	} else if req.Type == "tag" {
+		var tags []*model.Tag
+		w.DB.Where("`id` IN (?)", req.Ids).Find(&tags)
+		for _, tag := range tags {
+			tag.Link = w.GetUrl(PatternTag, tag, 0)
+			w.AutoInsertAnchor(int64(tag.Id), tag.Title, tag.Link)
 		}
 	}
 	w.Cache.Delete(AnchorCacheKey)

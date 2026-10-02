@@ -6,6 +6,11 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginCommissionList 获取分销佣金记录列表，支持分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
 func PluginCommissionList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -21,6 +26,10 @@ func PluginCommissionList(ctx iris.Context) {
 	})
 }
 
+// PluginCommissionDetail 获取分销佣金记录详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 佣金记录ID，必填。
 func PluginCommissionDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))

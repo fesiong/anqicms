@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginLinkList 查询友情链接列表。
 func PluginLinkList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	linkList, err := currentSite.GetLinkList()
@@ -26,6 +27,7 @@ func PluginLinkList(ctx iris.Context) {
 	})
 }
 
+// PluginLinkDetailForm 新建或更新友情链接。
 func PluginLinkDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLink
@@ -82,12 +84,14 @@ func PluginLinkDetailForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("LinkUpdated"),
+		"data": link,
 	})
 }
 
+// PluginLinkDelete 删除指定友情链接。
 func PluginLinkDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginLink
+	var req request.PluginLinkDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -121,9 +125,10 @@ func PluginLinkDelete(ctx iris.Context) {
 	})
 }
 
+// PluginLinkCheck 检查指定友情链接：抓取对方页面确认是否仍包含本站链接（回链检查）。
 func PluginLinkCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginLink
+	var req request.PluginLinkDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
