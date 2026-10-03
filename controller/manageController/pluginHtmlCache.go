@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -135,8 +136,15 @@ func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			// GetWebsite 在站点未登记/已注销时返回 nil（见 provider.RemoveWebsite 的 nil 判断）。
+			// 直接 w2.BuildIndexCache() 会 nil panic 打挂整个进程 —— 后台异步任务崩溃
+			// 不只是这次构建失败，进程退出后所有 MCP 调用都断。
+			slog.Error("PluginHtmlCacheBuildIndex 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildIndexCache()
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		_ = w2.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
 	}()
@@ -153,9 +161,13 @@ func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			slog.Error("PluginHtmlCacheBuildCategory 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildModuleCache(ctx)
 		w2.BuildCategoryCache(ctx)
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		// 更新的html
 		_ = w2.ReadAndSendLocalFiles(cachePath)
@@ -173,8 +185,12 @@ func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			slog.Error("PluginHtmlCacheBuildArchive 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildArchiveCache()
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		// 更新的html
 		_ = w2.ReadAndSendLocalFiles(cachePath)
@@ -192,9 +208,13 @@ func PluginHtmlCacheBuildTag(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			slog.Error("PluginHtmlCacheBuildTag 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildTagIndexCache(ctx)
 		w2.BuildTagCache(ctx)
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		// 更新的html
 		_ = w2.ReadAndSendLocalFiles(cachePath)
