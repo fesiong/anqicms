@@ -201,9 +201,12 @@ func GetSubscriberSendStatus(ctx iris.Context) {
 		jobID = ctx.FormValue("job_id")
 	}
 	if jobID == "" {
+		// 必须说清 job_id 从哪来：调用方（尤其是 AI）拿到「缺少 job_id」无从下手，
+		// 不知道要先调 send 拿 id。错误信息要写成可执行的下一步。
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
-			"msg":  "缺少 job_id 参数",
+			"msg": "缺少 job_id 参数。请先调用 POST /plugin/subscriber/send 发起群发，" +
+				"从返回结果里取 job_id，再带上它来查进度（如 ?job_id=xxx）。",
 		})
 		return
 	}

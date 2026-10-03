@@ -224,7 +224,8 @@ func invokeRoutes(intentName string, routes map[string]string, renames ...map[st
 		res := &Result{Text: out}
 		var envelope map[string]any
 		if err := json.Unmarshal([]byte(out), &envelope); err == nil {
-			if data, ok := envelope["data"]; ok && data != nil {
+			data, hasData := envelope["data"]
+			if hasData && data != nil {
 				// 端点自己回了 total 就说明它是分页列表，把分页信息一起带上。
 				//
 				// 背景（2026-10-03）：后台 34 个分页端点把 total 放在信封顶层，
@@ -234,6 +235,13 @@ func invokeRoutes(intentName string, routes map[string]string, renames ...map[st
 				// 分页词用 args 里的原始意图参数（page/page_size），
 				// endpointParams 之后才被换算成端点的 current/pageSize。
 				res.Data = listWithTotal(data, envelope, args)
+			} else if hasData && isListAction(action) {
+				// 列表端点命中 0 条时回的是 data:null（实测 content_place/list 就是）。
+				// 直接透传 null 会让调用方分不清「没有数据」与「调用出错」，
+				// 形状也不稳定（有时数组、有时 null、有时对象）——同一个工具的
+				// list 动作一会儿给数组一会儿给 null，调用方只能到处试。
+				// 归一成空数组：语义明确（「查过了，没有」），形状也稳定。
+				res.Data = []any{}
 			}
 		}
 		return res, nil
@@ -414,7 +422,9 @@ var domainIntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "contentops_transfer", Title: "数据迁移", Domain: DomainContentOps, Risk: RiskSystem,
-		Desc:       "跨站点数据迁移。**破坏性操作，默认关闭**，仅在人工确认后开启。action: task/modules/create/download/start。",
+		Desc: "跨站点数据迁移。**破坏性操作，默认关闭**，仅在人工确认后开启。action: task/modules/create/download/start。" +
+			"正确顺序是 task（看有无任务）→ modules（选模块）→ create（建任务）→ download（下载）→ start（启动）；" +
+			"对未 create 过任务的站点调 modules 会报「没有可执行的任务」，这是正常的，需先 create。",
 		DefaultOff: true,
 		Params: map[string]ParamSpec{
 			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"task", "modules", "create", "download", "start"}},

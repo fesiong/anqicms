@@ -35,7 +35,7 @@ func newWireProbeKernel(t *testing.T, text string) *mcp.CallToolResult {
 			Arguments: json.RawMessage(`{"action":"x"}`),
 		},
 	}
-	handler := k.makeHandler("wire_probe", spec)
+	handler := k.makeHandler("wire_probe", spec, mcp.NewServer(&mcp.Implementation{Name: "t", Version: "v"}, nil))
 	res, err := handler(context.Background(), req)
 	if err != nil {
 		t.Fatalf("handler 不应返回 Go error（失败应以 isError 表达）：%v", err)
@@ -85,7 +85,7 @@ func TestHandlerWiringMarksGoErrorAsIsError(t *testing.T) {
 	req := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Name: "wire_probe_err", Arguments: json.RawMessage(`{"action":"x"}`)},
 	}
-	res, _ := k.makeHandler("wire_probe_err", spec)(context.Background(), req)
+	res, _ := k.makeHandler("wire_probe_err", spec, mcp.NewServer(&mcp.Implementation{Name: "t", Version: "v"}, nil))(context.Background(), req)
 	if !res.IsError {
 		t.Errorf("Compose 返回 Go error 时 isError 应为 true，实际=%+v", res)
 	}

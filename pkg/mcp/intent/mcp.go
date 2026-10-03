@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"time"
 
@@ -97,12 +98,27 @@ func (k *Kernel) registerDomainIntents(server *mcp.Server) {
 			continue
 		}
 		full := k.cfg.ToolListMode != "summary"
-		server.AddTool(k.buildTool(spec, full), k.makeHandler(name, spec))
+		server.AddTool(k.buildTool(spec, full), k.makeHandler(name, spec, server))
 		k.track(name)
 	}
 }
 
 // Reregister 两阶段：移除当前注册的工具后按新 scope 重注册（供 mcp_set_scope 调用）。
+//
+// ⚠️ scope 是**进程级全局**的，不是会话级——Reregister 摘除/重注册的是
+// 共享 mcp.Server 的全局工具表。实测（2026-10-03）：一个客户端调 set_scope 后，
+// **所有并发客户端**的 tools/list 都被收窄，且新会话也恢复不了（须重启服务）。
+// MCP 服务端是 HTTP 无状态的，SDK 的 listTools 是私有方法、不支持按连接过滤，
+// 在本层做不到会话隔离。
+//
+// 之所以可以接受：scope 只影响 tools/list 的**视图裁剪**（省 token），
+// 不影响可调用性——被裁掉的工具仍可按名字直接调用（tools/call 走 makeHandler，
+// 不校验 scope）。安全性由 allowed()（风险 + 暴露门禁）负责，与 scope 无关。
+// 但视图被全局收窄仍是实质危害：其他客户端会发现自己的工具「凭空消失」。
+//
+// 缓解措施：记录最近一次 set_scope 的时间（scopeTouched），
+// 供 RestoreScopeIfStale 做自动恢复——长期无人再设置时自动还原为全部工具，
+// 避免一次临时设置永久影响所有人。恢复时机见 RestoreScopeIfStale 的说明。
 func (k *Kernel) Reregister(server *mcp.Server) {
 	names := append([]string{}, k.reg...)
 	if len(names) > 0 {
@@ -110,13 +126,21 @@ func (k *Kernel) Reregister(server *mcp.Server) {
 	}
 	k.mu.Lock()
 	k.reg = nil
+	k.scopeTouched = time.Now()
 	k.mu.Unlock()
 	k.registerDomainIntents(server)
 	k.registerMeta(server)
 }
 
-func (k *Kernel) makeHandler(name string, spec *IntentSpec) mcp.ToolHandler {
+func (k *Kernel) makeHandler(name string, spec *IntentSpec, server *mcp.Server) mcp.ToolHandler {
 	return func(ctx context.Context, req *mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+		// 每次工具调用前检查 scope 是否已空闲超时，过期则自动恢复全部工具。
+		// scope 是全局的（一次设置影响所有客户端且需重启才能恢复，见 Reregister），
+		// 长期滞留会让他人的工具「凭空消失」。放在请求路径上恢复，
+		// 既不需要后台定时器，恢复时机也天然对齐「有人在用」。
+		if k.RestoreScopeIfStale() {
+			k.Reregister(server)
+		}
 		start := time.Now()
 		argsJSON := marshalArgs(req)
 		res, cerr := k.Execute(ctx, name, argsJSON)
@@ -240,6 +264,13 @@ func (k *Kernel) registerMeta(server *mcp.Server) {
 		msg := "已应用能力域范围: 全部"
 		if len(domains) > 0 {
 			msg = "已应用能力域范围: " + strings.Join(domains, ", ")
+			// 必须说清作用域是全局的：它会影响**所有**客户端的 tools/list
+			// （共享同一个 server 实例），且不限于当前会话。调用方（尤其是 AI）
+			// 若不知道这点，会误以为「我设了范围就只影响我」——
+			// 实测踩过：设窄之后新会话也恢复不了，必须重启服务。
+			msg += "。注意：此设置对**所有** MCP 客户端生效（进程级），" +
+				"被隐藏的工具仍可按名字直接调用；" +
+				strconv.Itoa(int(ScopeStaleAfter/time.Minute)) + " 分钟无新设置后会自动恢复全部。"
 		}
 		if k.audit != nil {
 			k.audit(ctx, "mcp_set_scope", "system", argsJSON, nil, start)

@@ -36,6 +36,9 @@ type Kernel struct {
 	order   []string
 	scope   map[Domain]bool // 两阶段：非 nil 时仅暴露这些域
 	reg     []string        // 当前已注册的意图名（含 meta），供通道适配器重注册
+	// scopeTouched 是最近一次 set_scope 的时间，用于自动恢复（见 RestoreScopeIfStale）。
+	// 零值表示从未设置过。
+	scopeTouched time.Time
 }
 
 // NewKernel 构建内核并做启动自检（重名 / 漏标 Risk / 既无 Compose 也无 Caps 直接 panic，把漂移消灭在启动期）。
@@ -83,9 +86,12 @@ func (k *Kernel) Execute(ctx context.Context, name, argsJSON string) (*Result, e
 
 // SetScope 两阶段 tools/list：设置后仅暴露指定能力域；传空恢复全部。
 // 具体在 server 上移除 / 重注册工具由通道适配器负责（见 mcp.go 的 Reregister）。
+//
+// ⚠️ scope 是进程级全局的（原因见 Reregister 的注释），不是会话级。
 func (k *Kernel) SetScope(domains []string) {
 	k.mu.Lock()
 	defer k.mu.Unlock()
+	k.scopeTouched = time.Now()
 	if len(domains) == 0 {
 		k.scope = nil
 		return
@@ -95,6 +101,48 @@ func (k *Kernel) SetScope(domains []string) {
 		m[Domain(d)] = true
 	}
 	k.scope = m
+}
+
+// ScopeStaleAfter 是 scope 自动恢复的空闲阈值。
+//
+// 为什么需要自动恢复：scope 是全局的，一次临时设置会永久影响所有客户端
+// （实测：设窄之后新会话也恢复不了，必须重启服务）。而它的用途只是
+// 「省 token 的视图裁剪」，没有任何需要长期保持的理由——所以一旦
+// 超过这个时长没人再动它，就自动还原为全部工具。
+//
+// 取 30 分钟：足够覆盖一次连续的 AI 会话（会话中间不会空闲半小时），
+// 又不至于让一次误设永久生效。
+const ScopeStaleAfter = 30 * time.Minute
+
+// ScopeExpired 判断当前 scope 是否已空闲超时（该恢复为全部了）。
+// 从未设置过 scope 时返回 false（无需恢复）。
+func (k *Kernel) ScopeExpired(now time.Time) bool {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.scope == nil {
+		return false // 本来就是全部
+	}
+	return k.scopeTouched.IsZero() || now.Sub(k.scopeTouched) > ScopeStaleAfter
+}
+
+// RestoreScopeIfStale 若 scope 已空闲超时则把它清为 nil（恢复为全部工具），
+// 返回是否发生了恢复。**重注册由调用方负责**（内核不依赖通道 SDK，见 Kernel 的说明）。
+//
+// 由通道适配器在每次请求之前调用：先拿到 true 就调 Reregister（mcp.go）。
+// 放在请求路径上而非定时器上，是因为：
+//   - 不引入后台 goroutine 与其生命周期管理；
+//   - 恢复时机天然对齐「有人真的在用」，避免无人访问时反复重注册。
+func (k *Kernel) RestoreScopeIfStale() bool {
+	if !k.ScopeExpired(time.Now()) {
+		return false
+	}
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	if k.scope == nil {
+		return false // 已被其它路径恢复
+	}
+	k.scope = nil
+	return true
 }
 
 // track 记录已注册意图名（供适配器重注册时使用）。
