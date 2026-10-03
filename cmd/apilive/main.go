@@ -16,6 +16,7 @@
 //	# 本工具新增：开放全部 API 端点并进行 MCP 测试
 //	go run ./cmd/apilive -mode all -ns "" -expose "*"            # 全开（G4+意图层）真实环境测试，跑完自动还原
 //	go run ./cmd/apilive -mode all -ns "" -expose "*" -open      # 把「全部开放」配置写入站点并保持打开（真正开放线上 MCP）
+//	go run ./cmd/apilive -expose none                            # 站点未配置白名单时的默认可见面（常用意图开箱可用）
 //	go run ./cmd/apilive -wire                                # 对本地已运行的 MCP 端点做真实 JSON-RPC 冒烟测试
 //
 // 默认通过写入站点配置（或从库读取）注入策略，**不修改线上配置**（除非 -open）。
@@ -50,7 +51,7 @@ func main() {
 	ns := flag.String("ns", "", "命名空间白名单，逗号分隔；留空使用推荐配置")
 	deny := flag.String("deny", "", "额外端点黑名单，逗号分隔，如 \"POST /archive/delete\"")
 	invoke := flag.String("invoke", "/system/api/category/list", "要真实调用的只读端点（完整后台路径）")
-	expose := flag.String("expose", "recommended", "意图暴露范围: recommended(默认推荐清单) / * (全部意图) / 逗号分隔的意图名或 domain:*")
+	expose := flag.String("expose", "recommended", "意图暴露范围: recommended(默认推荐清单) / none(留空=代码默认可见面) / * (全部意图) / 逗号分隔的意图名或 domain:*")
 	open := flag.Bool("open", false, "把「全部开放」配置写入站点并保持打开（真正开放线上 MCP）；默认仅测试并自动还原")
 	wire := flag.Bool("wire", false, "对本地已运行的 MCP 端点(127.0.0.1:<port>/api/mcp)做真实 JSON-RPC 冒烟测试")
 	flag.Parse()
@@ -411,6 +412,10 @@ func exposeList(spec string) []string {
 	switch strings.TrimSpace(spec) {
 	case "", "recommended":
 		return intent.RecommendedExposed()
+	case "none", "default":
+		// 留空白名单 = 走代码默认可见面。用于验证"常用意图默认开放"这条策略本身，
+		// 而不是验证某个白名单生效后的结果。
+		return nil
 	case "*", "all":
 		return []string{"*"}
 	default:

@@ -1197,6 +1197,8 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if isReleased {
 		draft.ArchiveData = &archiveData
 		err = w.SuccessReleaseArchive(&draft.Archive, newPost)
+	} else {
+		draft.Link += "?preview=true"
 	}
 
 	return &draft.Archive, nil

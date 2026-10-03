@@ -220,8 +220,19 @@ func buildAPICatalogFromSource() (*APICatalog, error) {
 	// 切片类型（[]config.CustomField）剥掉 "[]" 前缀后查表。
 	want := map[string]bool{}
 	for _, b := range bindings {
-		if b.structType != "" {
-			want[strings.TrimPrefix(b.structType, "[]")] = true
+		if b.structType == "" {
+			continue
+		}
+		name := strings.TrimPrefix(b.structType, "[]")
+		want[name] = true
+		// 同包定义的结构体在 handler 里写作裸标识符（var req SkillEditRequest），
+		// namedType 拿不到包名，而 collectStructSchemas 的键是 "包名.类型名"。
+		// 不补这一份就会查不到，mergeParams 只能返回空字段表，
+		// 端点于是顶着 struct 标签却给出空 schema（api_schema 无从展示、
+		// 意图层参数门禁还会误报幽灵参数）。
+		// 2026-10-03 实测：/anqi/skill/edit 的 7 个字段就是这么丢的。
+		if !strings.Contains(name, ".") {
+			want["manageController."+name] = true
 		}
 	}
 	schemas, arrayTypes, touched, err := collectStructSchemas(root, want)
@@ -778,12 +789,24 @@ func namedTypeOfExpr(e ast.Expr) string {
 // 切片要支持：`var req []config.CustomField` 是真实存在的写法（SettingDiyFieldForm），
 // 返回值带 "[]" 前缀，消费方（want 集合 / schemas 查找）需先剥掉前缀再查表，
 // 但 StructType 输出保留前缀——它同时承担"告诉模型请求体是数组"的职责。
+//
+// 同包裸标识符（var req SkillEditRequest）也要认：请求结构体定义在
+// controller/manageController 里时，handler 内引用不写包名。这类返回值
+// 不带包前缀，查表侧（want 集合 / mergeParams）会补 "manageController." 前缀。
+// 不认它会让整个端点退化成 param_source=none——2026-10-03 实测
+// /anqi/skill/edit 的 7 个字段就是这么丢的，且意图层参数门禁误报幽灵参数。
 func namedType(e ast.Expr) string {
 	switch v := e.(type) {
 	case *ast.SelectorExpr:
 		if pkg, ok := v.X.(*ast.Ident); ok {
 			return pkg.Name + "." + v.Sel.Name
 		}
+	case *ast.Ident:
+		// 排除内置类型与基础类型名（string/int/…），它们不是结构体。
+		if isBuiltinTypeName(v.Name) {
+			return ""
+		}
+		return v.Name
 	case *ast.StarExpr:
 		return namedType(v.X)
 	case *ast.ArrayType:
@@ -793,6 +816,19 @@ func namedType(e ast.Expr) string {
 		}
 	}
 	return ""
+}
+
+// isBuiltinTypeName 判断标识符是否是 Go 内置类型/基础类型名。
+// 这些名字即使出现在 var 声明里也不是结构体定义，不能当 schema 查。
+func isBuiltinTypeName(name string) bool {
+	switch name {
+	case "string", "int", "int8", "int16", "int32", "int64",
+		"uint", "uint8", "uint16", "uint32", "uint64", "uintptr",
+		"float32", "float64", "bool", "byte", "rune", "error",
+		"any", "interface{}", "map", "chan", "func":
+		return true
+	}
+	return false
 }
 
 func stringLitArg(call *ast.CallExpr) string {
@@ -834,6 +870,12 @@ func collectStructSchemas(root string, want map[string]bool) (map[string][]Param
 	for _, dir := range []string{
 		filepath.Join(root, "request"),
 		filepath.Join(root, "config"),
+		// controller/manageController 也定义了不少请求结构体，且不带包名前缀
+		//（如 SkillEditRequest）。漏掉它会让这些端点顶着 struct 标签却给不出字段，
+		// api_schema 返回空 params，意图层参数门禁也会把它们误判成幽灵参数
+		//（2026-10-03 实测：skill 意图的 content/description/category/tags/author
+		//  五个参数全被报「未被端点认识」，而 /anqi/skill/edit 其实一个都不缺）。
+		filepath.Join(root, "controller", "manageController"),
 	} {
 		if _, err := os.Stat(dir); err != nil {
 			continue
@@ -1357,8 +1399,14 @@ func mergeParams(b handlerBinding, schemas map[string][]ParamMeta) []ParamMeta {
 		}
 	} else if b.structType != "" {
 		// 切片类型（[]config.CustomField）查表要去掉前缀；前缀本身保留在
-		// structType 输出里，用于告知消费方"请求体是元素数组"
-		for _, p := range schemas[strings.TrimPrefix(b.structType, "[]")] {
+		// structType 输出里，用于告知消费方"请求体是元素数组"。
+		// 同包定义的结构体查表要补包名前缀（见 buildAPICatalogFromSource 里的说明）。
+		key := strings.TrimPrefix(b.structType, "[]")
+		fields, ok := schemas[key]
+		if !ok && !strings.Contains(key, ".") {
+			fields, ok = schemas["manageController."+key]
+		}
+		for _, p := range fields {
 			if seen[p.Name] {
 				continue
 			}

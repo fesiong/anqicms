@@ -11,6 +11,16 @@ func TestReplaceContentText(t *testing.T) {
 	dbSite, _ := GetDBWebsiteInfo(1)
 	InitWebsite(dbSite)
 	w := GetWebsite(1)
+	// InitWebsite 只填站点结构，不建 Cache。缺了它，本测试留给全局的
+	// 半初始化站点会让后续测试 panic：
+	//   - w.Cache 为 nil 时，LoadAiSetting 里 w.Cache.Get 解引用（setting.go:799）；
+	//   - 用 &MemoryCache{} 零值也不够，其内部 list/pending map 为 nil，
+	//     写入时 panic "assignment to entry in nil map"（setting.go:837）。
+	// 必须走 InitMemoryCache —— 它会建好内部 map。
+	// 全局站点跨测试共享，谁把它设成半初始化，谁就得负责补全。
+	if w.Cache == nil {
+		w.Cache = library.InitMemoryCache()
+	}
 	w.PluginAnchor.NoStrongTag = 0
 	w.PluginAnchor.AnchorDensity = 100
 

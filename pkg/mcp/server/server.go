@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+	"kandaoni.com/anqicms/config"
 )
 
 // Server represents the MCP server for AnQiCMS.
@@ -28,7 +29,7 @@ type ServerConfig struct {
 func DefaultConfig() *ServerConfig {
 	return &ServerConfig{
 		ServerName:    "AnQiCMS",
-		ServerVersion: "1.0.0",
+		ServerVersion: config.Version,
 		Instructions:  "AnQiCMS MCP Server - AI-powered CMS management",
 		Logger:        slog.Default(),
 	}
