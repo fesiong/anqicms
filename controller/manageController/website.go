@@ -73,12 +73,14 @@ func GetWebsiteInfo(ctx iris.Context) {
 	} else {
 		adminInfo = &model.Admin{}
 	}
-	result := request.WebsiteRequest{
+	// 用只读结构体而不是 WebsiteRequest：后者带 AdminPassword，
+	// json tag 无 omitempty，空值也会出现在响应里（见 WebsiteDetailResponse 的注释）。
+	result := request.WebsiteDetailResponse{
 		Id:        dbSite.Id,
 		RootPath:  dbSite.RootPath,
 		Name:      dbSite.Name,
 		Status:    dbSite.Status,
-		Mysql:     dbSite.Mysql,
+		Mysql:     request.SafeMysql(dbSite.Mysql),
 		AdminUser: adminInfo.UserName,
 	}
 	if website != nil {
@@ -87,7 +89,7 @@ func GetWebsiteInfo(ctx iris.Context) {
 		result.Initialed = website.Initialed
 	}
 	if dbSite.Id == 1 {
-		result.Mysql = config.Server.Mysql
+		result.Mysql = request.SafeMysql(config.Server.Mysql)
 	}
 
 	ctx.JSON(iris.Map{
@@ -307,6 +309,12 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			req.Mysql.Password = config.Server.Mysql.Password
 			req.Mysql.Host = config.Server.Mysql.Host
 			req.Mysql.Port = config.Server.Mysql.Port
+		} else if req.Mysql.Password == request.MysqlPasswordMask {
+			// 回写保护：读接口的密码是掩码（见 request.SafeMysql）。
+			// 调用方若把读到的详情原样保存，掩码会被写进库——
+			// 数据库密码变成 "********"，站点直接连不上库且不报错。
+			// 这里沿用库里的真值。
+			req.Mysql.Password = dbSite.Mysql.Password
 		}
 		_, err = provider.InitDB(&req.Mysql)
 		if err != nil {
