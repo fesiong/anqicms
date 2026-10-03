@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
@@ -140,6 +141,22 @@ func PluginRemoveTranslateTextLog(ctx iris.Context) {
 	} else if req.Id > 0 {
 		// 必须按模型删除：此前误传请求 DTO &req，GORM 据此推导出
 		// translate_text_log_delete_requests 这张不存在的表，单条删除恒报 1146。
+		//
+		// 先确认记录存在：GORM 的 Delete 对不存在的 id 是**0 行受影响但不报错**，
+		// 于是 id=999999 会「删除成功」地返回——调用方以为记录已删，实际什么都没发生。
+		var exist int64
+		if err := currentSite.DB.Model(&model.TranslateTextLog{}).
+			Where("`id` = ?", req.Id).Count(&exist).Error; err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
+		if exist == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "翻译记录 id=" + strconv.FormatUint(uint64(req.Id), 10) + " 不存在，未做任何修改",
+			})
+			return
+		}
 		err := currentSite.DB.Where("`id` = ?", req.Id).Delete(model.TranslateTextLog{}).Error
 		if err != nil {
 			ctx.JSON(iris.Map{
@@ -148,6 +165,13 @@ func PluginRemoveTranslateTextLog(ctx iris.Context) {
 			})
 			return
 		}
+	} else {
+		// 既没给 all 也没给 id：什么都不删却回「已删除」，是最容易骗过调用人的形态。
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请提供要删除的 id，或设置 all=true 删除全部翻译记录（当前未做任何修改）",
+		})
+		return
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTranslateLog"))
 
