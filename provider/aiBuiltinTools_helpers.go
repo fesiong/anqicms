@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -338,6 +339,102 @@ const windowTrailerReserve = 512
 
 // errScanDone 用于提前终止 filepath.Walk：收集够了就停，不必遍历剩余目录。
 var errScanDone = errors.New("scan done")
+
+// ================================================================
+// glob 路径匹配
+//
+// 背景：glob 工具原来的实现有两处缺陷，导致 desc 宣称的语法大半不成立
+//（2026-10-03 实测：'**/*.go'、'pkg/mcp/intent/*.go'、'template/**' 全部返回「未找到」）：
+//
+//  1. 非 `**` 分支只拿 basename 匹配（filepath.Match(pattern, fi.Name())），
+//     所以任何带目录前缀的 pattern 永远匹配不到；
+//  2. `**` 分支被拆成 prefix/suffix 后用 strings.HasPrefix/HasSuffix 判断 ——
+//     那两个函数不做通配，`**/*.go` 的 suffix `*.go` 永远匹配不上；
+//     且只有恰好一个 `**` 时才处理，`a/**/b/**/c` 直接失效。
+//
+// filepath.Match 本身语法是对的（支持 * ? [...]），只是每段匹配、
+// 不跨分隔符，所以需要按 / 分段后再递归组合。
+// ================================================================
+
+// matchGlobPattern 判断项目内相对路径 rel 是否匹配 pattern。
+//
+// 语义（刻意区分两类 pattern，兼顾正确性与向后兼容）：
+//   - pattern 不含 '/'：视为「文件名模式」，匹配任意层级的文件名。
+//     沿用旧行为，否则 '*.go' 会从「全项目 501 个」塌缩成「仅顶层 20 个」，
+//     那是对现有调用方的破坏性变更。
+//   - pattern 含 '/'：视为「路径模式」，按 / 分段匹配，'**' 可跨任意层级；
+//     段内仍支持 * ? [...]（委托 filepath.Match）。
+func matchGlobPattern(pattern, rel string) bool {
+	pattern = normalizeGlobPath(pattern)
+	rel = normalizeGlobPath(rel)
+	if !strings.Contains(pattern, "/") {
+		if rel == "" {
+			return false
+		}
+		ok, err := filepath.Match(pattern, path.Base(rel))
+		return err == nil && ok
+	}
+	return matchGlobSegments(splitGlobSegments(pattern), splitGlobSegments(rel))
+}
+
+// normalizeGlobPath 把反斜杠统一成 /。
+//
+// 不能用 filepath.ToSlash：它在非 Windows 平台是 no-op（#os 语义），
+// 本项目跑在 macOS/Linux 上，ToSlash(`a\b`) 原样返回 `a\b`，
+// 于是 Windows 风格的 pattern 会被当成单段文件名而永不匹配。
+func normalizeGlobPath(p string) string {
+	return strings.ReplaceAll(p, "\\", "/")
+}
+
+// splitGlobSegments 按 / 切分并丢弃空段。
+//
+// 丢弃空段是必要的，不是洁癖：'**/catalog_*.go' 以 ** 开头，若保留首段空串，
+// ** 吃掉零层后会剩下「空段 + catalog_*.go」去匹配单段的 'catalog.go' 而失配
+//（这是第一版实现被测试抓到的真 bug）。标准 glob 语义里 'a//b' 等价于 'a/b'，
+// 所以丢弃是正确的。
+func splitGlobSegments(p string) []string {
+	parts := strings.Split(p, "/")
+	out := parts[:0]
+	for _, s := range parts {
+		if s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// matchGlobSegments 逐段匹配。pat 对应 seg 的当前位置。
+//
+// '**' 匹配 0..n 个路径段（标准 glob 语义），实现上枚举它可能吃掉多少段后递归。
+// 递归而非迭代：'a/**/b/**/c' 这类多个 '**' 只有递归才表达得了
+//（旧实现要求恰好一个 **，多个直接不进分支）。
+//
+// 末尾的 '**' 直接吞掉剩余全部段，因此 seg 是否还有元素都算匹配 —— 这正是
+// 'template/**' 能匹配 'template' 本身（零层）的原因。
+func matchGlobSegments(pat, seg []string) bool {
+	if len(pat) == 0 {
+		return len(seg) == 0
+	}
+	if pat[0] == "**" {
+		if len(pat) == 1 {
+			return true
+		}
+		for i := 0; i <= len(seg); i++ {
+			if matchGlobSegments(pat[1:], seg[i:]) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(seg) == 0 {
+		return false
+	}
+	ok, err := filepath.Match(pat[0], seg[0])
+	if err != nil || !ok {
+		return false
+	}
+	return matchGlobSegments(pat[1:], seg[1:])
+}
 
 // scanCollectCap 是收集类工具（grep/glob）一次遍历最多收集的条目数。
 // 达到上限后不再继续遍历，但会在结果里写明「已达采集上限」——

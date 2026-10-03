@@ -831,11 +831,14 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 	add(&schema.ToolInfo{
 		Name: "glob",
-		Desc: "按文件名模式查找文件。支持通配符：* 匹配任意字符，** 匹配任意目录层级。" +
+		Desc: "按模式查找文件与目录，两种 pattern 写法：\n" +
+			"· **不含 '/'**（如 '*.go'、'catalog_*.go'）= 文件名模式，递归匹配任意层级的文件名\n" +
+			"· **含 '/'**（如 'pkg/mcp/intent/*.go'、'**/*.go'、'template/**'、'a/**/b/**/c'）= 路径模式，按 / 分段匹配，" +
+			"'**' 可跨任意层级（含零层），段内支持 * ? [...]\n" +
 			"结果按路径排序；单次返回会按大小上限切窗，尾部说明实际返回的序号区间，" +
 			"若提示还有后续，按 offset 续读而不是换个写法重查。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"pattern": {Type: schema.String, Desc: "文件匹配模式，如 '**/*.go'、'template/**'、'*.html'", Required: true},
+			"pattern": {Type: schema.String, Desc: "匹配模式。不含 / 时按文件名匹配任意层级（'*.go'）；含 / 时按路径分段匹配（'pkg/**/*.go'、'template/**'）", Required: true},
 			"offset":  {Type: schema.Integer, Desc: "从第几个匹配项开始返回（从1开始），可选"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
@@ -865,32 +868,17 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 				if strings.HasPrefix(base, ".") || base == "vendor" || base == "node_modules" {
 					return filepath.SkipDir
 				}
-				matched, err := filepath.Match(args.Pattern, rel)
-				if err == nil && matched {
+				if matchGlobPattern(args.Pattern, rel) {
 					results = append(results, rel+"/")
 				}
 				return nil
 			}
 
-			if strings.Contains(args.Pattern, "**") {
-				parts := strings.Split(args.Pattern, "**")
-				if len(parts) == 2 {
-					prefix := strings.TrimRight(parts[0], "/")
-					suffix := strings.TrimLeft(parts[1], "/")
-					if (prefix == "" || strings.HasPrefix(rel, prefix)) &&
-						(strings.HasSuffix(rel, suffix) || suffix == "") {
-						results = append(results, rel)
-					}
-				}
-			} else {
-				matched, err := filepath.Match(args.Pattern, fi.Name())
-				if err == nil && matched {
-					results = append(results, rel)
-				}
+			if matchGlobPattern(args.Pattern, rel) {
+				results = append(results, rel)
 			}
 			return nil
 		})
-
 		if len(results) == 0 {
 			return "未找到匹配的文件", nil
 		}
