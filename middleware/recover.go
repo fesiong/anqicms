@@ -45,18 +45,22 @@ func NewRecover() context.Handler {
 				// 「成功码 + 失败标志」的矛盾响应，调用方（尤其 AI）无从判读出了什么事。
 				// 实测有 6 个 action 返回的都是这个形状。
 				//
-				// 已知触发场景：POST 请求体为空时 ctx.ReadJSON(&req) 会 panic
-				//（iris 内部对 nil Body 做 io.ReadAll），如 contentops_translate/text_delete
-				// 不传任何参数、interaction/guestbook_status 等。
-				//
-				// 这里写标准信封，让调用方至少能判读失败并知道下一步。
-				// 真实错误细节（栈、内部路径）只进 error.log，不回给调用方，避免泄漏实现细节。
-				_, _ = ctx.WriteString(fmt.Sprintf(
-					`{"code":%d,"msg":%s,"ok":false,"status":500,"hint":%s}`,
-					config.StatusFailed,
-					jsonStr("服务器内部错误：处理请求时发生异常，详情见服务端 cache/error.log"),
-					jsonStr("该错误由异常恢复机制捕获，通常不是参数问题；若参数确认无误，请联系管理员查 error.log"),
-				))
+			// 已知触发场景：POST 请求体为空时 ctx.ReadJSON(&req) 会 panic
+			//（iris 内部对 nil Body 做 io.ReadAll），如 contentops_translate/text_delete
+			// 不传任何参数、interaction/guestbook_status 等。
+			//
+			// 源头已在 provider/api_invoker.go 的 buildRequestBody 修掉
+			//（POST 无参数时发 `{}`），所以这条兜底不该再被日常触发。
+			// 万一还有端点中招，hint 必须**如实**指向最常见的原因（缺参数），
+			// 不能写成「通常不是参数问题」—— 那是把排查方向带偏。
+			// 2026-10-04 实测：hint 曾写「通常不是参数问题」，而实际原因正是
+			// 没传参数，AI 被误导去查端点状态，绕了一圈才回到「该传参」。
+			_, _ = ctx.WriteString(fmt.Sprintf(
+				`{"code":%d,"msg":%s,"ok":false,"status":500,"hint":%s}`,
+				config.StatusFailed,
+				jsonStr("服务器内部错误：处理请求时发生异常，详情见服务端 cache/error.log"),
+				jsonStr("最常见原因是本次调用没传任何参数：请用 api_schema 核对该端点必填字段后重试；若是端点自身问题，请查 error.log"),
+			))
 				ctx.StopExecution()
 			}
 		}()

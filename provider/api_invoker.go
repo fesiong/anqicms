@@ -316,7 +316,21 @@ func buildRequestBody(method string, files []filePart, fields map[string]any) (i
 		return buf, ct, nil
 	}
 	if len(fields) == 0 {
-		return nil, "", nil
+		// POST/PUT 即使一个字段都没有，也必须发一个**合法的空 JSON 对象**。
+		//
+		// 原因（2026-10-04 实测）：返回 nil body 时 http.NewRequest 会把
+		// req.Body 置为 nil，iris 在 ctx.ReadJSON 里对 nil Body 做 io.ReadAll
+		// 直接 panic（runtime error: invalid memory address or nil pointer
+		// dereference），最后被 recover 兜成 500「服务器内部错误」。
+		//
+		// 那个提示是误导的：真实原因就是「没传参数」，而 recover 的文案写着
+		// 「通常不是参数问题」，AI 会被带偏去查别的地方。实测所有 POST 端点
+		// 空 body 调用都这样（anqi/template/download、anqi/skill/edit、
+		// website/save …），并非个别端点的问题。
+		//
+		// 发 `{}` 后，端点走正常的 ReadJSON 成功 → 参数校验分支，
+		// 返回「XX 不能为空」这类**可读**的 400 语义错误。
+		return bytes.NewReader([]byte("{}")), "application/json", nil
 	}
 	raw, err := json.Marshal(fields)
 	if err != nil {
