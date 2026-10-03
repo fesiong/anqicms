@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 )
 
 // IntentCatalog 是"能力表达清单"的声明式载体：每个意图对外是一个工作流工具，
@@ -21,9 +22,11 @@ var IntentCatalog = []*IntentSpec{
 		Name: "seo_keyword", Title: "管理关键词", Domain: DomainSeo, Risk: RiskWrite,
 		Desc: "SEO 关键词的增删查。action: list/create/delete。",
 		Params: map[string]ParamSpec{
-			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "create", "delete"}},
-			"id":     {Type: "integer", Desc: "关键词 ID"},
-			"title":  {Type: "string", Desc: "关键词"},
+			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "create", "delete"}},
+			"id":        {Type: "integer", Desc: "关键词 ID"},
+			"title":     {Type: "string", Desc: "关键词"},
+			"page":      {Type: "integer", Desc: "页码，从 1 开始（list）", Default: 1},
+			"page_size": {Type: "integer", Desc: "每页条数（list）", Default: 20},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"keyword_list", "keyword_create", "keyword_delete"},
@@ -33,10 +36,12 @@ var IntentCatalog = []*IntentSpec{
 		Name: "seo_anchor", Title: "管理锚文本", Domain: DomainSeo, Risk: RiskWrite,
 		Desc: "SEO 锚文本的增删查。action: list/create/delete。",
 		Params: map[string]ParamSpec{
-			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "create", "delete"}},
-			"id":     {Type: "integer", Desc: "锚文本 ID"},
-			"title":  {Type: "string", Desc: "锚文本"},
-			"link":   {Type: "string", Desc: "链接"},
+			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "create", "delete"}},
+			"id":        {Type: "integer", Desc: "锚文本 ID"},
+			"title":     {Type: "string", Desc: "锚文本"},
+			"link":      {Type: "string", Desc: "链接"},
+			"page":      {Type: "integer", Desc: "页码，从 1 开始（list）", Default: 1},
+			"page_size": {Type: "integer", Desc: "每页条数（list）", Default: 20},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"anchor_list", "anchor_create", "anchor_delete"},
@@ -71,13 +76,22 @@ var IntentCatalog = []*IntentSpec{
 		}),
 	},
 
-	// ───────────────────────── 内置域（按 C 决策维持暴露）─────────────────────────
+	// ───────────────────────── 内置域（主机级能力）─────────────────────────
+	//
+	// 这 9 个意图是 read_file / write_file / edit_file / search_replace / grep / glob /
+	// list_directory / bash / web_fetch / web_search 这些内置 cap 的**唯一模型面出口**：
+	// aiChat 与 MCP 都只绑定意图，cap 名不再作为工具出现在模型面。
+	// 因此这里必须把 cap 的入参契约完整搬过来（含分段读取、批量续扫这类操作规则），
+	// 否则"收掉重复工具名"就变成了"能力缩水"。
+	// provider 侧 TestBuiltinIntentCarriesCapContract 用反射逐字段核对参数名，
+	// 并校验每个内置 cap 都有对应意图。
 	{
 		Name: "shell_exec", Title: "执行 Shell 命令", Domain: DomainBuiltin, Risk: RiskSystem,
-		Desc: "在服务器执行 shell 命令（主机级能力，谨慎使用）。",
+		Desc: "在项目根目录执行 shell 命令，用于运行构建、测试、代码生成等开发命令。" +
+			"不能使用交互式命令；临时生成的脚本与输出文件写到 cache/ 目录。",
 		Params: map[string]ParamSpec{
-			"command": {Type: "string", Desc: "要执行的命令", Required: true},
-			"timeout": {Type: "integer", Desc: "超时秒数，默认 60"},
+			"command": {Type: "string", Desc: "要执行的 shell 命令", Required: true},
+			"timeout": {Type: "integer", Desc: "超时时间（秒），默认 30，最大 120"},
 		},
 		Required: []string{"command"},
 		Caps:     []string{"bash"},
@@ -85,9 +99,13 @@ var IntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "fs_read", Title: "读取文件", Domain: DomainBuiltin, Risk: RiskRead,
-		Desc: "读取服务器上的文本文件。",
+		Desc: "读取项目内文本文件的内容。offset（起始行号，从 1 开始）与 limit（最大行数）可分段读取大文件；" +
+			"超过 300 行的 Go 文件会先返回骨架结构。结果末尾会写明本次实际返回的行区间，" +
+			"若仍有剩余就按提示传 offset 续读，不要重复同一次调用。只能读项目目录内的文件。",
 		Params: map[string]ParamSpec{
-			"path": {Type: "string", Desc: "文件路径", Required: true},
+			"path":   {Type: "string", Desc: "文件路径，相对项目根目录或绝对路径", Required: true},
+			"offset": {Type: "integer", Desc: "起始行号（从 1 开始），可选"},
+			"limit":  {Type: "integer", Desc: "最大读取行数，可选；实际返回还受单次结果大小限制，以尾部说明为准"},
 		},
 		Required: []string{"path"},
 		Caps:     []string{"read_file"},
@@ -95,10 +113,13 @@ var IntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "fs_write", Title: "写入文件", Domain: DomainBuiltin, Risk: RiskSystem,
-		Desc: "把内容写入服务器文件（覆盖）。",
+		Desc: "写入或创建文件，已存在则整体覆盖，自动创建父目录。只能操作项目目录内的文件；" +
+			"临时脚本（py/sh 等）请写入 cache/ 目录。修改模板后需再用 system_config 的 template_reload " +
+			"重载才会生效。",
 		Params: map[string]ParamSpec{
-			"path":    {Type: "string", Desc: "文件路径", Required: true},
+			"path":    {Type: "string", Desc: "文件路径，相对项目根目录或绝对路径", Required: true},
 			"content": {Type: "string", Desc: "文件内容", Required: true},
+			"confirm": {Type: "boolean", Desc: "目标带警告（如覆盖非空文件）时，须传 true 确认写入"},
 		},
 		Required: []string{"path", "content"},
 		Caps:     []string{"write_file"},
@@ -106,22 +127,31 @@ var IntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "fs_edit", Title: "编辑文件", Domain: DomainBuiltin, Risk: RiskSystem,
-		Desc: "以旧文本替换为新文本的方式编辑文件。",
+		Desc: "编辑文件内容，两种模式：文本模式传 old_string/new_string 做精确替换；" +
+			"行模式只给 start_line/end_line 和 new_string，整段替换这些行。" +
+			"old_string 留空即按行模式处理。修改模板后需再用 system_config 的 template_reload 重载才会生效。",
 		Params: map[string]ParamSpec{
 			"path":       {Type: "string", Desc: "文件路径", Required: true},
-			"old_string": {Type: "string", Desc: "待替换文本", Required: true},
-			"new_string": {Type: "string", Desc: "新文本", Required: true},
+			"old_string": {Type: "string", Desc: "（文本模式）要替换的旧文本"},
+			"new_string": {Type: "string", Desc: "替换后的新文本"},
+			"start_line": {Type: "integer", Desc: "（行模式）起始行号（从 1 开始）"},
+			"end_line":   {Type: "integer", Desc: "（行模式）结束行号（从 1 开始），默认等于 start_line"},
 		},
-		Required: []string{"path", "old_string", "new_string"},
+		Required: []string{"path", "new_string"},
 		Caps:     []string{"edit_file"},
 		Compose:  Delegate("edit_file"),
 	},
 	{
 		Name: "fs_search", Title: "搜索文件内容", Domain: DomainBuiltin, Risk: RiskRead,
-		Desc: "在文件中按正则/关键字搜索。",
+		Desc: "在项目文件中搜索文本或正则表达式。可用 path 限定单个文件或子目录——" +
+			"读回 web 抓取超长页面时留下的存档就传 path，指定单个文件时不受大文件跳过限制。" +
+			"匹配过多时用 offset 续取，不要重复同一次调用。",
 		Params: map[string]ParamSpec{
-			"pattern": {Type: "string", Desc: "搜索模式", Required: true},
-			"path":    {Type: "string", Desc: "搜索路径"},
+			"pattern": {Type: "string", Desc: "搜索模式文本", Required: true},
+			"path":    {Type: "string", Desc: "只搜索该路径（相对项目根的文件或目录），可选"},
+			"glob":    {Type: "string", Desc: "文件匹配模式，如 '*.go'、'*.html'，默认所有文件"},
+			"context": {Type: "integer", Desc: "上下文行数（匹配行前后各 N 行），默认 0"},
+			"offset":  {Type: "integer", Desc: "从第几处匹配开始返回（从 1 开始），可选"},
 		},
 		Required: []string{"pattern"},
 		Caps:     []string{"grep"},
@@ -129,20 +159,30 @@ var IntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "fs_replace", Title: "批量替换", Domain: DomainBuiltin, Risk: RiskSystem,
-		Desc: "按模式批量替换文件内容。",
+		Desc: "在多个文件中搜索并替换文本。glob 限定文件范围（默认 '**/*'）；" +
+			"regex 为 true 时 search 按正则解释。单次只处理一批文件，结果会说明未扫描的尾部，" +
+			"须带 offset 续跑直到扫完，不要凭印象认为已全部生效。",
 		Params: map[string]ParamSpec{
-			"pattern":     {Type: "string", Desc: "匹配模式", Required: true},
-			"replacement": {Type: "string", Desc: "替换文本", Required: true},
-			"path":        {Type: "string", Desc: "目标路径"},
+			"search":  {Type: "string", Desc: "要搜索的文本（或正则表达式）", Required: true},
+			"replace": {Type: "string", Desc: "替换后的文本", Required: true},
+			"glob":    {Type: "string", Desc: "文件匹配模式，如 '**/*.go'、'*.html'，默认 '**/*'"},
+			"regex":   {Type: "boolean", Desc: "是否把 search 视为正则表达式，默认 false"},
+			"offset":  {Type: "integer", Desc: "从第几个匹配文件开始扫描（从 1 开始），用于续接上一批"},
 		},
-		Required: []string{"pattern", "replacement"},
+		Required: []string{"search", "replace"},
 		Caps:     []string{"search_replace"},
 		Compose:  Delegate("search_replace"),
 	},
 	{
 		Name: "fs_glob", Title: "匹配文件路径", Domain: DomainBuiltin, Risk: RiskRead,
+		Desc: "按模式查找文件与目录，递归遍历整个项目。两种 pattern 写法：" +
+			"① 不含 '/'（'*.go'、'catalog_*.go'）= 文件名模式，匹配任意层级的文件名；" +
+			"② 含 '/'（'pkg/mcp/intent/*.go'、'**/*.go'、'template/**'、'a/**/b/**/c'）= 路径模式，" +
+			"按 / 分段匹配，'**' 可跨任意层级（含零层），段内支持 * ? [...]。" +
+			"匹配项过多时用 offset 续取。",
 		Params: map[string]ParamSpec{
-			"pattern": {Type: "string", Desc: "glob 模式", Required: true},
+			"pattern": {Type: "string", Desc: "匹配模式。不含 / 时按文件名匹配任意层级（'*.go'）；含 / 时按路径分段匹配（'pkg/**/*.go'、'template/**'）", Required: true},
+			"offset":  {Type: "integer", Desc: "从第几个匹配项开始返回（从 1 开始），可选"},
 		},
 		Required: []string{"pattern"},
 		Caps:     []string{"glob"},
@@ -150,12 +190,13 @@ var IntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "fs_list_dir", Title: "列出目录", Domain: DomainBuiltin, Risk: RiskRead,
+		Desc: "列出目录结构和文件，隐藏目录自动跳过。",
 		Params: map[string]ParamSpec{
-			"path": {Type: "string", Desc: "目录路径", Required: true},
+			"path":  {Type: "string", Desc: "目录路径，相对项目根目录或绝对路径，默认项目根目录"},
+			"depth": {Type: "integer", Desc: "递归深度，默认 2，最大 5"},
 		},
-		Required: []string{"path"},
-		Caps:     []string{"list_directory"},
-		Compose:  Delegate("list_directory"),
+		Caps:    []string{"list_directory"},
+		Compose: Delegate("list_directory"),
 	},
 }
 
@@ -183,6 +224,14 @@ func switchCompose(routes map[string]string) Compose {
 			}
 			sub[k] = v
 		}
+		// 更新类动作无需在此补齐字段：capEndpoints 给所有 update 类 cap 注入了
+		// partial=true（见 partialUpdate），端点据此走 PATCH 语义——
+		// 只覆盖显式传入的字段，未传的一律保持库中原值。
+		//
+		// 这里曾有一套「回查旧值再补齐」的机制（preserveOnUpdate），已随根因修复删除。
+		// 它不仅多余，还有害：读端点会覆写字段（GetNavList 用 GetUrl 覆盖 link），
+		// 拿派生值写回去等于用假数据覆盖真值。
+		//
 		// 优先走真实后台端点（见 cap_routes.go）；无端点映射的能力才回落 handler。
 		out, err := callCap(ctx, cap, capName, sub)
 		if err != nil {
@@ -193,11 +242,62 @@ func switchCompose(routes map[string]string) Compose {
 		var envelope map[string]any
 		if err := json.Unmarshal([]byte(out), &envelope); err == nil {
 			if data, ok := envelope["data"]; ok && data != nil {
-				res.Data = data
+				// 列表类动作要连分页信息一起保留。
+				//
+				// 背景（2026-10-03）：后台 34 个分页端点把 total 放在**信封顶层**
+				// （如 ArchiveList / TagList / AttachmentList），
+				// 只取 data 会让 total 被静默丢弃——调用方拿到一个裸数组，
+				// 既不知道命中总数，也无法判断还有没有下一页。
+				// 实测 content_manage 的 category_list/tag_list/module_list/page_list、
+				// media list、structure nav_list 全部中招。
+				//
+				// 端点没给 total 时 listWithTotal 原样返回，不硬造假数字。
+				if isListAction(action) {
+					res.Data = listWithTotal(data, envelope, sub)
+				} else {
+					res.Data = data
+				}
 			}
 		}
 		return res, nil
 	}
+}
+
+// preserveOnUpdate 在「更新已有对象」前，把调用方没传的受保护字段用库里的现值补齐。
+//
+// 背景（2026-10-03 实测）：后台多个 form handler 无条件 req.UpdateAll = true
+// （category.go:201 / pluginTag.go:130 / module.go:96 …），provider 的 Save*
+// 据此把请求里的零值直接写回。于是「只传 id+title 改个名」会把 description、
+// keywords、module_id、status 一并清零，而端点回 ok=true —— 调用方无从察觉。
+//
+// 实测受害数据：分类 id=16「Technology」只改标题后 description 变空、
+// module_id 与 status 归 0。分类是全站结构，module_id 归 0 会影响前台路由与模板渲染。
+//
+// 与 archive 的 fillMissingOnUpdate 同一思路，抽成表是为了覆盖更多 cap。
+// 查旧值失败时原样返回：让端点照旧报错，不在这里猜值——凭空填一个
+// module_id 反而可能把数据写坏到别处。
+
+
+
+
+
+
+
+// isListAction 判断 action 是否为列表类动作（需要连分页信息一起回填）。
+//
+// 命名以 List 结尾，或属于 attachment/media 这类固定叫 list 的动作。
+// 刻意保守：判错方向是"漏掉分页信息"（退回裸数组）而非"给非列表套上分页对象"，
+// 后者会让 detail/save 的返回形状变得莫名其妙。
+//
+// 判定只认两种形态：精确的 "list"，或 "<资源>_list" 下划线分词形式。
+// 不用裸 HasSuffix("list")——blacklist/listing 这类单词也以 list 结尾，
+// 会被误判成列表动作，把单个对象包成 {list:[...], total:N}。
+func isListAction(action string) bool {
+	if action == "" {
+		return false
+	}
+	lower := strings.ToLower(action)
+	return lower == "list" || strings.HasSuffix(lower, "_list")
 }
 
 // withoutAction 返回去掉 action 字段的副本，供自定义 Compose 调用底层能力时避免透传分派键。
@@ -331,20 +431,28 @@ func jsonID(j map[string]any) int64 {
 	return 0
 }
 
-// parseArticle 从 api_invoke 的 JSON 包络里取出实体对象（标准双层信封下在 data.data）。
-// 仅用于在 content_save_article 回执里回填标题/链接/状态等结构化字段，与 ArticleOut 对齐。
+
 func parseArticle(text string) map[string]any {
 	var j map[string]any
 	if err := json.Unmarshal([]byte(text), &j); err != nil {
 		return nil
 	}
-	if d, ok := j["data"].(map[string]any); ok {
-		if dd, ok := d["data"].(map[string]any); ok {
-			return dd
-		}
+	d, ok := j["data"].(map[string]any)
+	if !ok {
+		return nil
+	}
+	// 外层已像文档实体（有 link 或 title），直接用。
+	if _, hasLink := d["link"]; hasLink {
 		return d
 	}
-	return nil
+	if t, hasTitle := d["title"].(string); hasTitle && t != "" {
+		return d
+	}
+	// 否则才尝试内层。
+	if dd, ok := d["data"].(map[string]any); ok {
+		return dd
+	}
+	return d
 }
 
 func keysOf(m map[string]string) []string {
@@ -354,4 +462,92 @@ func keysOf(m map[string]string) []string {
 	}
 	sortStrings(out)
 	return out
+}
+
+// endpointFailure 从 api_invoke 的 JSON 包络里取出端点的失败原因。
+//
+// 为什么需要它：capEndpoints 里的写端点（archive_update、archive_create 等）在
+// 业务失败时返回的是 {"ok":false,"msg":"未定义模型","data":null}——**不是** Go error，
+// 所以 callCap 不会报错，Compose 若无条件构造回执就会把失败报成成功。
+//
+// 实测踩过：content_article action=save 更新一篇 module_id 为空的文章，端点返回
+// 「未定义模型」且什么都没改，但 StructuredContent 给的是 {"ok":true,"data":{"id":1847}}，
+// AI 会据此认为保存成功。
+func endpointFailure(text string) string {
+	if text == "" {
+		return ""
+	}
+	var j map[string]any
+	if err := json.Unmarshal([]byte(text), &j); err != nil {
+		return ""
+	}
+	// HTTP 层错误：api_invoke 会把 5xx 表达成 ok=true + status>=500 + 空 msg
+	// （因为控制器压根没写响应体，iris 返回默认 500）。
+	// 实测：seo action=sitemap 不传参数时端点 500，却回 {"ok":true,"status":500,"msg":""}。
+	if st, present := j["status"]; present {
+		if f, isNum := st.(float64); isNum && f >= 500 {
+			// msg 为空时不要用通用文案盖掉状态码 —— 调用方更需要知道是 5xx。
+			if m, ok := j["msg"].(string); ok && strings.TrimSpace(m) != "" {
+				return m
+			}
+			return "端点返回 HTTP " + strconv.FormatInt(int64(f), 10)
+		}
+	}
+	// ok 缺省不代表失败（不少成功响应不带 ok），只有显式 false 才算失败。
+	if ok, present := j["ok"].(bool); present && !ok {
+		return responseMsg(j)
+	}
+	// 双层信封：控制器层的 code 非 0 也是失败。
+	if d, ok := j["data"].(map[string]any); ok {
+		if code, present := d["code"]; present {
+			if f, isNum := code.(float64); isNum && f != 0 {
+				return responseMsg(d)
+			}
+		}
+	}
+	return ""
+}
+
+// responseMsg 从一层响应里取可读的错误文案，逐级回退。
+func responseMsg(m map[string]any) string {
+	for _, k := range []string{"msg", "message", "errmsg", "err"} {
+		if s, ok := m[k].(string); ok && strings.TrimSpace(s) != "" {
+			return s
+		}
+	}
+	return "端点返回失败但未给出原因"
+}
+
+// articleStatusCode 把文档状态的各种写法归一成端点要的 uint。
+//
+// 端点是 ArchiveStatusRequest.Status uint（0=草稿，1=正式文档），而意图层对外
+// 声明 status 是枚举字符串（ok/draft/plan）—— 直接透传会让 ReadJSON 报
+// 「cannot unmarshal string into ... of type uint」，publish 动作完全不可用。
+// 列表过滤用的 status 字符串不受影响（那只在 archive_list 里用，不经这里）。
+func articleStatusCode(v any) any {
+	switch s := v.(type) {
+	case nil:
+		return v
+	case bool:
+		// 顺手兼容 draft=true/false 的写法。统一返回 int64：
+		// 断言与下游 JSON 序列化都按 int64 处理，混用 int 会让测试看不出类型漂移。
+		if s {
+			return int64(0)
+		}
+		return int64(1)
+	case float64:
+		return int64(s)
+	case int:
+		return int64(s)
+	case int64:
+		return s
+	case string:
+		switch strings.ToLower(strings.TrimSpace(s)) {
+		case "ok", "1", "publish", "published", "release":
+			return int64(1)
+		default: // draft / plan / 未知值都落到草稿
+			return int64(0)
+		}
+	}
+	return v
 }
