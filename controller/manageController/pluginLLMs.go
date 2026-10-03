@@ -93,9 +93,16 @@ func PluginGetLLMsStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetLLMsBuildStatus()
 	if status == nil {
+		// status 为 nil 表示「当前没有进行中的构建任务」，也就是已构建完毕（或从未构建过）。
+		// 原实现返回 StatusFailed + msg "Finished" —— 语义正好反了：
+		// api_invoke 会据 code 判失败，于是「llms.txt 已生成完成」被报成错误。
+		// 实测 2026-10-03：seo_llms action=status 恒返回 code=-1 / msg=Finished。
+		// 这里改为成功，并把 Finished 保留在 msg 里（前端文案不变），
+		// 同时用 data 显式给出 finished/building，避免调用方只能靠 msg 猜。
 		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
+			"code": config.StatusOK,
 			"msg":  "Finished",
+			"data": iris.Map{"finished": true, "building": false},
 		})
 		return
 	}

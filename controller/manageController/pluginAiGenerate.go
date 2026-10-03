@@ -132,6 +132,7 @@ func HandleAiGenerateCheckApi(ctx iris.Context) {
 //   - 获取参数 "pageSize": 每页显示的记录数，默认为20。
 //   - 获取参数 "type": AI文章生成计划类型:1=AI写作，2=AI翻译，3=AI改写
 //   - 获取参数 "status": AI文章生成计划状态:1=已推送进行中，2=已完成，4=写作出错
+//   - 获取参数 "keyword": 按计划关键词前缀匹配过滤（like 'keyword%'，前缀匹配而非模糊匹配）
 func HandleAiGenerateGetPlans(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
