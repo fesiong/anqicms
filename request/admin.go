@@ -53,6 +53,8 @@ type FindPasswordChooseRequest struct {
 }
 
 type FindPasswordReset struct {
+	// UserName 管理员账号
 	UserName string `json:"user_name"`
+	// Password 新密码，服务端要求至少 6 位
 	Password string `json:"password"`
 }
