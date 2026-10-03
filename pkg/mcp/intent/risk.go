@@ -88,7 +88,8 @@ var builtinCapRisk = map[string]Risk{
 	"skill_search":      RiskRead,
 	"skill_save":        RiskWrite,
 	"skill_reload":      RiskWrite,
-	"skill_install":     RiskSystem, // 从市场装代码，主机级
+	"skill_delete":      RiskDestructive, // rm -rf 技能目录，不可恢复
+	"skill_install":     RiskSystem,      // 从市场装代码，主机级
 	"task":              RiskWrite,
 
 	// 智能体管理

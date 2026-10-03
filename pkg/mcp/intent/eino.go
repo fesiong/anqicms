@@ -44,6 +44,11 @@ func (k *Kernel) buildEinoToolInfo(spec *IntentSpec) *schema.ToolInfo {
 	}
 	for n, p := range spec.Params {
 		pi := &schema.ParameterInfo{Type: dataTypeOf(p.Type), Desc: p.Desc}
+		// Eino 的 ParameterInfo 没有 default 字段，而 MCP 侧的 InputSchema 会输出它。
+		// 不补这一句，同一个工具在后台对话里就丢了"缺省值"这层契约。
+		if p.Default != nil {
+			pi.Desc = fmt.Sprintf("%s（默认 %v）", p.Desc, p.Default)
+		}
 		if p.Required || reqSet[n] {
 			pi.Required = true
 		}

@@ -74,10 +74,10 @@ func TestArchiveListRename(t *testing.T) {
 
 // TestCallCapKeepsUnmappedCap 未映射的能力必须回落真实 handler，不能被吞掉。
 func TestCallCapKeepsUnmappedCap(t *testing.T) {
-	// 这 11 个是确认没有 REST 等价物的能力，必须保持回落。
+	// 这些是确认没有 REST 等价物的能力，必须保持回落。
 	kept := []string{
 		"attachment_upload", "template_reload", "skill_search", "skill_install",
-		"agent_create", "agent_list", "agent_delete", "agent_toggle", "agent_run", "agent_chat",
+		"agent_create", "agent_list", "agent_edit", "agent_delete", "agent_toggle", "agent_run", "agent_chat",
 		"task",
 	}
 	for _, name := range kept {
@@ -143,5 +143,39 @@ func TestCallCapAppliesFixedDefaultsAndArrays(t *testing.T) {
 	p5, _ := inv5.args["params"].(map[string]any)
 	if got, ok := p5["ids"].([]any); !ok || len(got) != 2 {
 		t.Errorf("已是切片的 ids 不应重复包裹，实际 %#v", p5["ids"])
+	}
+}
+
+// TestSkillCapsRouteToEndpoints 五个 skill_* 能力都必须走真实 REST 端点
+// （route/manage.go 的 /anqi/skill/*），而不是回落到内存 handler。
+//
+// 背景：2026-10-02 曾一度只声明 skill_list/get/reload/save 四个 cap，delete 漏在外面，
+// 导致 MCP 侧看不到删除能力。端点侧（controller/manageController/skill.go）一直都有。
+func TestSkillCapsRouteToEndpoints(t *testing.T) {
+	cases := []struct {
+		cap    string
+		method string
+		path   string
+	}{
+		{"skill_list", "GET", "/system/api/anqi/skill/list"},
+		{"skill_get", "GET", "/system/api/anqi/skill/detail"},
+		{"skill_save", "POST", "/system/api/anqi/skill/edit"},
+		{"skill_reload", "POST", "/system/api/anqi/skill/reload"},
+		{"skill_delete", "POST", "/system/api/anqi/skill/delete"},
+	}
+	for _, c := range cases {
+		inv := &recInvoker{}
+		if _, err := callCap(context.Background(), inv.invoke, c.cap, map[string]any{"name": "x"}); err != nil {
+			t.Fatalf("%s 调用失败: %v", c.cap, err)
+		}
+		if inv.name != "api_invoke" {
+			t.Errorf("%s 应路由到 api_invoke，实际 %q", c.cap, inv.name)
+			continue
+		}
+		method, _ := inv.args["method"].(string)
+		path, _ := inv.args["path"].(string)
+		if method != c.method || path != c.path {
+			t.Errorf("%s 端点 = %s %s，期望 %s %s", c.cap, method, path, c.method, c.path)
+		}
 	}
 }

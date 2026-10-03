@@ -84,9 +84,17 @@ func TestContentSaveArticleCreate(t *testing.T) {
 	if !strings.Contains(textOf(got), `"id":42`) {
 		t.Fatalf("unexpected text: %s", textOf(got))
 	}
-	data, ok := got.StructuredContent.(map[string]any)
+	env, ok := got.StructuredContent.(map[string]any)
 	if !ok {
 		t.Fatalf("expected structured content, got %#v", got.StructuredContent)
+	}
+	// 2026-10-03 起统一信封 {code,msg,ok,status,data}，业务载荷一律在 data 里。
+	if env["ok"] != true {
+		t.Fatalf("信封 ok 应为 true，实际=%v", env)
+	}
+	data, ok := env["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("信封 data 应为对象，实际=%#v", env["data"])
 	}
 	if data["id"] != int64(42) {
 		t.Fatalf("expected id 42, got %v", data["id"])
@@ -123,7 +131,11 @@ func TestContentSaveArticleUpdate(t *testing.T) {
 	if id := toInt64(params["id"]); id != 5 {
 		t.Fatalf("端点参数应带上 id=5，实际 %v", params["id"])
 	}
-	data := got.StructuredContent.(map[string]any)
+	env := got.StructuredContent.(map[string]any)
+	data, ok := env["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("信封 data 应为对象，实际=%#v", env["data"])
+	}
 	if data["id"] != int64(5) {
 		t.Fatalf("expected id 5, got %v", data["id"])
 	}
@@ -157,7 +169,7 @@ func TestExtractID(t *testing.T) {
 }
 
 // TestIntentParamConsistency 验证意图参数与真实端点对齐：删除端点不支持的幽灵参数，
-// 且列表筛选的 status 语义必须与端点（ok/draft/plan）一致。
+// 且列表筛选的 status 语义必须与端点（ok/draft/plan/delete）一致。
 func TestIntentParamConsistency(t *testing.T) {
 	// structure 不应声明端点不支持的 status 参数
 	if spec, ok := SpecByName("structure"); ok {
@@ -168,11 +180,20 @@ func TestIntentParamConsistency(t *testing.T) {
 			t.Errorf("structure 声明了端点不支持的 type 参数（AnQiCMS 重定向无 type 字段），应移除")
 		}
 	}
-	// content_article 的 status 语义必须与端点一致：ok/draft/plan
+	// content_article 的 status 语义必须与端点一致：ok/draft/plan/delete。
+	// delete 是回收站（DeleteArchive 把正式文档移到 archive_drafts status=99），
+	// 端点 ArchiveList 认这个值；少了它，AI 删完就再也找不到这篇文档、也无法确认。
 	spec, _ := SpecByName("content_article")
 	st := spec.Params["status"]
-	if len(st.Enum) != 3 || st.Enum[0] != "ok" || st.Enum[1] != "draft" || st.Enum[2] != "plan" {
-		t.Errorf("content_article.status 枚举应为 ok/draft/plan，实际 %v", st.Enum)
+	wantEnum := []string{"ok", "draft", "plan", "delete"}
+	if len(st.Enum) != len(wantEnum) {
+		t.Fatalf("content_article.status 枚举应为 %v，实际 %v", wantEnum, st.Enum)
+	}
+	for i, w := range wantEnum {
+		if st.Enum[i] != w {
+			t.Errorf("content_article.status 枚举第 %d 项应为 %q，实际 %q（完整枚举 %v）",
+				i, w, st.Enum[i], st.Enum)
+		}
 	}
 	if _, has := spec.Params["order_by"]; !has {
 		t.Errorf("content_article 应保留 order_by 参数（由 cap 层重命名为 sort）")

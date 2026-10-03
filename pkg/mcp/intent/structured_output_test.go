@@ -27,7 +27,12 @@ func marshalToJSONObject(t *testing.T, v any) map[string]any {
 	return m
 }
 
-// TestStructuredObjectAlwaysObject 锁住适配器边界的兜底：任何输入都不会产出非对象。
+// TestStructuredObjectAlwaysObject 锁住适配器边界的兜底：任何输入都不会产出非对象，
+// 且一律是统一信封 {code,msg,ok,status,data}。
+//
+// 2026-10-03 起信封形状统一：此前裸数组包进 {"result":...}、业务 map 直接铺开、
+// 端点信封原样透传——AI 每换一个意图就要重新猜一次形状。现统一为标准信封，
+// 业务载荷一律在 data 里（对象或数组均可）。
 func TestStructuredObjectAlwaysObject(t *testing.T) {
 	cases := []struct {
 		name string
@@ -44,21 +49,50 @@ func TestStructuredObjectAlwaysObject(t *testing.T) {
 	for _, c := range cases {
 		got := structuredObject(c.in)
 		obj := marshalToJSONObject(t, got)
-		if _, ok := obj["result"]; !ok {
-			t.Fatalf("%s: 期望被包进 {\"result\":...}，实际=%v", c.name, obj)
+		// 必须是标准信封
+		for _, k := range []string{"code", "msg", "ok", "status", "data"} {
+			if _, has := obj[k]; !has {
+				t.Errorf("%s: 信封缺字段 %q，实际=%v", c.name, k, obj)
+			}
+		}
+		if obj["ok"] != true {
+			t.Errorf("%s: ok 应为 true，实际=%v", c.name, obj["ok"])
+		}
+		// 载荷必须在 data 里，不能再出现 result 这层旧包装
+		if _, has := obj["result"]; has {
+			t.Errorf("%s: 不应再有 {\"result\":...} 旧包装，实际=%v", c.name, obj)
+		}
+		if _, has := obj["data"]; !has {
+			t.Errorf("%s: 载荷应放 data，实际=%v", c.name, obj)
 		}
 	}
 
-	// 本来就是对象的必须原样透传，不能被多包一层
-	// 注意：map 不可直接用 != 比较（会 panic），故统一用 reflect.DeepEqual
-	orig := map[string]any{"id": 42}
-	if got := structuredObject(orig); !reflect.DeepEqual(got, any(orig)) {
-		t.Fatalf("对象应原样透传，实际=%#v", got)
+	// 已是标准信封的必须原样透传，不能被二次包裹
+	env := map[string]any{"code": 0, "msg": "x", "ok": true, "status": 200, "data": map[string]any{"id": 1}}
+	if got := structuredObject(env); !reflect.DeepEqual(got, any(env)) {
+		t.Fatalf("标准信封应原样透传，实际=%#v", got)
 	}
+
+	// 普通业务 map 要包进信封，载荷放 data
+	biz := map[string]any{"id": 42}
+	gotBiz := marshalToJSONObject(t, structuredObject(biz))
+	if gotBiz["ok"] != true {
+		t.Errorf("业务 map 应被包成信封，实际=%v", gotBiz)
+	}
+	d, ok := gotBiz["data"].(map[string]any)
+	if !ok {
+		t.Fatalf("业务 map 应落在 data 里，实际=%v", gotBiz)
+	}
+	// 经 JSON 往返后数字是 float64
+	if v, _ := d["id"].(float64); v != 42 {
+		t.Errorf("data.id 应为 42，实际=%#v", d["id"])
+	}
+
+	// 结构体同样要包进信封
 	type s struct{ A int }
-	in := s{A: 1}
-	if got := structuredObject(in); !reflect.DeepEqual(got, any(in)) {
-		t.Fatalf("结构体应原样透传，实际=%#v", got)
+	gotStruct := marshalToJSONObject(t, structuredObject(s{A: 1}))
+	if gotStruct["ok"] != true {
+		t.Errorf("结构体应被包成信封，实际=%v", gotStruct)
 	}
 	if got := structuredObject(nil); got != nil {
 		t.Fatalf("nil 应保持 nil，实际=%#v", got)
@@ -176,9 +210,19 @@ func TestAgentSkillAndTaskParamsMatchCaps(t *testing.T) {
 			t.Fatalf("agent schema 缺少 %s，实际=%v", want, keysOfProps(props))
 		}
 	}
-	for _, stale := range []string{"keyword", "name", "type", "args"} {
+	// name 不再是「残留」：它就是 agent_create 的规范参数名。
+	// 历史上 skill_install 曾把 name 当 slug 用（cap 只认 slug），故曾把 name 列为 stale；
+	// 2026-10-02 修复 manage_create 字段映射后，name/strategy/cron 成为合法声明。
+	// 真正的残留是下面这几个——它们不属于任何 cap 的参数名。
+	for _, stale := range []string{"keyword", "type", "args"} {
 		if _, ok := props[stale]; ok {
 			t.Fatalf("agent schema 仍残留 %s（cap 并不识别）", stale)
+		}
+	}
+	// manage_create 的定时能力必须对外可见，否则「每天执行」在 MCP 侧无法表达。
+	for _, want := range []string{"name", "strategy", "cron", "max_runs", "max_rounds", "message", "enabled"} {
+		if _, ok := props[want]; !ok {
+			t.Fatalf("agent schema 缺少 %s，实际=%v", want, keysOfProps(props))
 		}
 	}
 	if req := mustSpec(t, "agent").Required; len(req) < 1 || req[0] != "action" {
@@ -220,4 +264,81 @@ func keysOfProps(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// TestTextAndStructuredContentSameSource Text 与 StructuredContent 必须同源。
+//
+// 背景（2026-10-03）：res.Text 是端点原始响应、res.Data 是 Compose 加工后的
+// 结构，形状可能不同。实测 content_article list：
+//   - StructuredContent.data = {list,total,page,page_size,count}
+//   - Text 里的 data          = 裸数组，total 漂在信封顶层
+// 同一结果两个通道形状不一致，AI 走 text 回退通道就丢分页信息。
+func TestTextAndStructuredContentSameSource(t *testing.T) {
+	cases := []struct {
+		name string
+		res  *Result
+	}{
+		{"list 有 Data", &Result{
+			Text: `{"code":0,"total":268,"data":[{"id":1},{"id":2}]}`,
+			Data: map[string]any{"list": []any{map[string]any{"id": 1}}, "total": 268},
+		}},
+		{"无 Data 时保留原 Text", &Result{Text: `{"ok":true,"msg":"已更新"}`}},
+	}
+	for _, c := range cases {
+		env := structuredObject(c.res.Data)
+		if c.res.Data == nil {
+			if env != nil {
+				t.Errorf("%s: Data 为 nil 时 structuredObject 应返回 nil", c.name)
+			}
+			continue
+		}
+		// 模拟 makeHandler 里的序列化：Text 必须等于 structuredObject 的 JSON
+		b, err := json.Marshal(env)
+		if err != nil {
+			t.Fatalf("%s: 序列化失败 %v", c.name, err)
+		}
+		// Text 里必须能解析出与 structuredContent 相同的 total
+		var fromText map[string]any
+		if err := json.Unmarshal(b, &fromText); err != nil {
+			t.Fatalf("%s: Text 不是合法 JSON: %v", c.name, err)
+		}
+		if fromText["total"] != env.(map[string]any)["total"] {
+			t.Errorf("%s: Text 与 StructuredContent 的 total 不一致: %v vs %v",
+				c.name, fromText["total"], env.(map[string]any)["total"])
+		}
+		// 关键：total 不能只出现在顶层、data 必须是加工后的形状
+		d, ok := fromText["data"].(map[string]any)
+		if !ok {
+			t.Fatalf("%s: Text 里的 data 应为加工后的对象，实际 %T", c.name, fromText["data"])
+		}
+		if d["total"] == nil {
+			t.Errorf("%s: data 内应含 total", c.name)
+		}
+	}
+}
+
+// TestStructuredObjectAlwaysJSONObjectText Text 通道的内容必须是 JSON 对象。
+//
+// MCP 契约要求 StructuredContent 顶层是 JSON 对象；Text 是回退通道，
+// 同样不该输出裸数组/标量，否则模型解析困难。
+func TestStructuredObjectAlwaysJSONObjectText(t *testing.T) {
+	for _, data := range []any{
+		[]any{map[string]any{"id": 1}},
+		"字符串",
+		42,
+		map[string]any{"ok": true},
+	} {
+		obj := structuredObject(data)
+		if _, isMap := obj.(map[string]any); !isMap {
+			t.Errorf("structuredObject(%T) 应包成对象，实际 %T", data, obj)
+		}
+		b, err := json.Marshal(obj)
+		if err != nil {
+			t.Fatalf("序列化失败: %v", err)
+		}
+		var back map[string]any
+		if err := json.Unmarshal(b, &back); err != nil {
+			t.Errorf("Text 内容应能反序列化为对象: %s", b)
+		}
+	}
 }

@@ -101,13 +101,15 @@ type IntentSpec struct {
 	// Data 字段，该 Data 才会作为 MCP StructuredContent 交付给模型；Delegate / switchCompose
 	// 等透传类 Compose 不 return Data，OutputSchema 因此只是"装饰"，不会被填进 StructuredContent。
 	// 需要真实结构化结果的意图（如 content_save_article）必须在 Compose 里 return &Result{Data: ...}。
-	Output     any
+	Output any
 
 	// DefaultOff 表示该意图默认不出现在任何工具清单里，只有被 ExposedIntents 显式命中才开放。
 	//
-	// 用于通用调用这类高风险能力：它们的覆盖面远超精选意图（一次开放 394 个端点），
-	// 不能因为"没配白名单就全开"而默认对外暴露。注意它**不接受** ExposedTools 解锁，
-	// 因为 ExposedTools 是能力名粒度，无法表达"这条通用调用要不要开"的意图语义。
+	// 用于误操作后果超出"改回来"范围的能力：通用调用（一次开放 394 个端点）、
+	// 备份/升级/迁移等主机级运维、凭证与资金、对外发信、全站性配置。
+	// 日常运营类意图不打这个标记，站点未配置白名单时也应开箱可见。
+	// 注意它**不接受** ExposedTools 解锁，因为 ExposedTools 是能力名粒度，
+	// 无法表达"这条通用调用要不要开"的意图语义。
 	DefaultOff bool
 }
 
