@@ -2,7 +2,7 @@
 name: content-planner
 description: 内容规划技能：制定内容发布计划、栏目内容策略、确定选题方向和发布频率。适用于内容运营和编辑。
 category: Content
-version: 1.0
+version: 1.1
 tags: [content, planning, strategy, editorial]
 ---
 
@@ -11,12 +11,14 @@ tags: [content, planning, strategy, editorial]
 ## 概述
 本技能帮助你制定系统化的内容策略，包括栏目规划、选题确定、发布节奏编排，以及内容效果的复盘优化。
 
+> 工具说明：内容数据通过精选意图（intent）访问。文档用 `content_article`（action=list/save），分类用 `content_manage`（action=category_list）。不要写成后台能力（cap）名。
+
 ## 使用步骤
 
 ### 第一步：内容现状审计
-1. 使用 `archive_list` 查看已有内容，统计各分类的文章数量分布
-2. 使用 `category_list` 查看分类结构，评估信息架构是否合理
-3. 分析各分类的内容更新时间，发现内容陈旧需要更新的栏目
+1. 使用 `content_article(action=list)` 查看已有内容，`data.total` 是命中总数，可配合 `category_id` 统计各分类的文章数量分布
+2. 使用 `content_manage(action=category_list)` 查看分类结构，评估信息架构是否合理
+3. 使用 `content_article(action=list, order_by=updated_time, order_dir=asc)` 分析各分类的内容更新时间，发现内容陈旧需要更新的栏目
 
 ### 第二步：确定内容目标
 明确以下维度：
@@ -31,7 +33,7 @@ tags: [content, planning, strategy, editorial]
 3. **品牌型栏目**：企业新闻、客户案例，更新频率可降低（每月 1-2 篇）
 
 ### 第四步：创建选题日历
-使用 `archive_create`（或建议管理员手动创建）按以下格式规划：
+使用 `content_article(action=save, title=..., content=..., category_id=..., draft=true)` 建为草稿（或建议管理员手动创建）按以下格式规划：
 
 ```
 | 日期       | 栏目     | 标题                  | 关键词           | 负责人 |
@@ -47,7 +49,7 @@ tags: [content, planning, strategy, editorial]
 - **大型站点**：每天 1-2 篇，稳定输出
 
 ### 第六步：效果跟踪
-定期（每周/每月）使用 `archive_list` 按 views 排序检查：
+定期（每周/每月）使用 `content_article(action=list, order_by=views, order_dir=desc)` 按浏览量排序检查：
 - 哪些内容表现最好？→ 分析成功模式
 - 哪些内容无人问津？→ 是否需要更新或删除
 - 分类之间是否有内容重叠？→ 合并或重定向

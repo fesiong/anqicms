@@ -2,7 +2,7 @@
 name: seo-analyzer
 description: SEO 分析技能：分析页面标题、关键词密度、内链外链结构、内容质量，并给出优化建议。适用于推广专员和网站管理员。
 category: SEO
-version: 1.0
+version: 1.1
 tags: [seo, analysis, optimization, keyword]
 ---
 
@@ -11,11 +11,13 @@ tags: [seo, analysis, optimization, keyword]
 ## 概述
 本技能指导你如何全面分析站点的 SEO 表现，包括标题优化、关键词布局、内容质量、内链结构等维度，并给出可执行的优化建议。
 
+> 工具说明：内容数据通过精选意图（intent）访问。文档用 `content_article`（action=list/get/save），分类结构用 `content_manage`（action=category_list）；robots/sitemap/链接推送用 `seo` 意图。下面提到的都是意图名，不要写成后台能力（cap）名。
+
 ## 使用步骤
 
 ### 第一步：获取站点概览
-1. 使用 `archive_list` 获取已发布文章列表，了解内容概况
-2. 使用 `category_list` 获取分类结构，了解站点信息架构
+1. 使用 `content_article(action=list)` 获取已发布文章列表，了解内容概况
+2. 使用 `content_manage(action=category_list)` 获取分类结构，了解站点信息架构
 
 ### 第二步：检查页面标题（Title）
 每条内容需要检查：
@@ -23,7 +25,7 @@ tags: [seo, analysis, optimization, keyword]
 - **关键词包含**：核心关键词应出现在标题中，且尽量靠前
 - **唯一性**：检查是否有重复或高度相似的标题
 
-对每条待检查的文章，调用 `archive_get` 获取详情。
+对每条待检查的文章，调用 `content_article(action=get, id=...)` 获取详情。
 
 ### 第三步：分析关键词密度
 1. 统计目标关键词在内容中的出现频率
@@ -39,11 +41,16 @@ tags: [seo, analysis, optimization, keyword]
 - **原创性**：避免重复或采集内容
 
 ### 第五步：检查内链结构
-1. 使用 `archive_list` 检查文章之间的相互链接
+1. 使用 `content_article(action=list)` 检查文章之间的相互链接
 2. **理想状态**：每篇文章至少有 2-3 个内链指向站内其他相关内容
 3. 检查是否有孤立的页面（没有任何页面链接到它）
 
-### 第六步：生成优化报告
+### 第六步：检查收录配置
+1. 使用 `seo(action=robots_get)` 查看 robots.txt，确认没有误屏蔽重要目录
+2. 使用 `seo(action=sitemap)` 重建站点地图并推送；配置有误时再修正
+3. 使用 `seo(action=push_logs)` 查看链接推送记录，确认新内容已提交收录
+
+### 第七步：生成优化报告
 总结发现的问题，按优先级排序：
 - **P0（紧急）**：标题缺失/重复、关键词堆砌
 - **P1（重要）**：内容过短、缺少内链、无图片ALT
@@ -53,3 +60,4 @@ tags: [seo, analysis, optimization, keyword]
 - 先做全局扫描，再深入分析重点页面
 - 优化建议要具体可执行，例如"将标题从'XX公司'改为'XX公司 - 专业XXX服务'"
 - 优先修复首页和核心栏目的 SEO 问题
+- 内容修正可直接落地：用 `content_article(action=save, id=..., seo_title=..., keywords=..., description=...)` 更新 TDK（save 只覆盖传入字段，未传字段沿用原值）
