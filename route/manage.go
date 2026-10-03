@@ -616,6 +616,7 @@ func manageRoute(app *iris.Application) {
 				subscriber.Post("/save", manageController.PluginSaveSubscriber)
 				subscriber.Post("/delete", manageController.PluginDeleteSubscriber)
 				subscriber.Post("/send", manageController.SendSubscriberMail)
+				subscriber.Get("/send/status", manageController.GetSubscriberSendStatus)
 				subscriber.Get("/category/list", manageController.GetSubscriberCategories)
 				subscriber.Post("/category/save", manageController.SaveSubscriberCategory)
 				subscriber.Post("/category/delete", manageController.DeleteSubscriberCategory)

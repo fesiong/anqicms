@@ -1,6 +1,8 @@
 package manageController
 
 import (
+	"time"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -129,7 +131,7 @@ func PluginDeleteSubscriber(ctx iris.Context) {
 	})
 }
 
-// SendSubscriberMail 向订阅用户异步发送邮件。
+// SendSubscriberMail 向订阅用户异步发送邮件，返回 job_id 供查询进度。
 func SendSubscriberMail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SubscriberMailRequest
@@ -141,13 +143,82 @@ func SendSubscriberMail(ctx iris.Context) {
 		return
 	}
 
-	go currentSite.SendSubscriberMail(&req)
+	// 先校验参数再异步：原先不管参数对不对都 go 出去然后报「操作成功」，
+	// 参数写错时 goroutine 静默什么都不做，调用方无从察觉（2026-10-03 修）。
+	if req.Type != "all" && req.Type != "category" && req.Type != "email" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "type 必须是 all / category / email 之一",
+		})
+		return
+	}
+	if req.Type == "email" && len(req.Emails) == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "type=email 时必须提供非空的 emails 列表",
+		})
+		return
+	}
+
+	// 群发是长任务（SendMail 是同步 SMTP 调用、单封数秒），必须异步，
+	// 否则收件人一多 API 必然超时。立即返回 job_id，调用方用 send_status 轮询。
+	jobIDCh := make(chan string, 1)
+	go func() { jobIDCh <- currentSite.SendSubscriberMail(&req) }()
+
+	// 函数一进来就建 job，通常毫秒级即可拿到 job_id；3 秒是兜底。
+	var jobID string
+	select {
+	case jobID = <-jobIDCh:
+	case <-time.After(3 * time.Second):
+	}
+	if jobID == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "群发任务创建失败：缺少 recommendation 邮件模板，请先在邮件模板中补齐",
+		})
+		return
+	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("SendSubscriberMail%s"))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("OperationSuccessful"),
+		"data": map[string]any{
+			"job_id": jobID,
+			"hint":   "群发已受理，异步执行中。用 send_status 传 job_id 轮询进度（total/sent/failed/processed/running）。",
+		},
+	})
+}
+
+// GetSubscriberSendStatus 查询群发进度。
+//
+// 群发是异步长任务、send 立即返回，调用方除了本端点没有别的手段判断成败。
+func GetSubscriberSendStatus(ctx iris.Context) {
+	jobID := ctx.URLParam("job_id")
+	if jobID == "" {
+		// iris 的 FormValue 对 GET 请求读的是 query string
+		jobID = ctx.FormValue("job_id")
+	}
+	if jobID == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "缺少 job_id 参数",
+		})
+		return
+	}
+	r, ok := provider.GetSendMailResult(jobID)
+	if !ok {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "未找到该 job_id（可能已过期：仅保留最近 20 次群发，或服务已重启）",
+		})
+		return
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": r,
 	})
 }
 
