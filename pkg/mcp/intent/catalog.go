@@ -464,7 +464,8 @@ func keysOf(m map[string]string) []string {
 	return out
 }
 
-// endpointFailure 从 api_invoke 的 JSON 包络里取出端点的失败原因。
+// endpointFailure 从一次工具调用的输出里取出失败原因，两条通道都认：
+// JSON 包络（api_invoke 系端点）与纯文本（fs_* 文件工具）。
 //
 // 为什么需要它：capEndpoints 里的写端点（archive_update、archive_create 等）在
 // 业务失败时返回的是 {"ok":false,"msg":"未定义模型","data":null}——**不是** Go error，
@@ -473,9 +474,15 @@ func keysOf(m map[string]string) []string {
 // 实测踩过：content_article action=save 更新一篇 module_id 为空的文章，端点返回
 // 「未定义模型」且什么都没改，但 StructuredContent 给的是 {"ok":true,"data":{"id":1847}}，
 // AI 会据此认为保存成功。
+//
+// 纯文本通道见 textFailureMarkers 的说明（2026-10-04 补，fs_* 系列漏判 isError）。
 func endpointFailure(text string) string {
 	if text == "" {
 		return ""
+	}
+	// 先试纯文本通道：文件工具等根本不返回 JSON，用 Unmarshal 判会直接漏掉。
+	if msg := textFailure(text); msg != "" {
+		return msg
 	}
 	var j map[string]any
 	if err := json.Unmarshal([]byte(text), &j); err != nil {
@@ -503,6 +510,45 @@ func endpointFailure(text string) string {
 			if f, isNum := code.(float64); isNum && f != 0 {
 				return responseMsg(d)
 			}
+		}
+	}
+	return ""
+}
+
+// textFailureMarkers 是「纯文本通道」里的失败标记。
+//
+// 为什么需要它：endpointFailure 只能解析 JSON 信封，但有一整类 cap 根本不返回
+// JSON —— fs_read / fs_write / fs_edit / fs_replace / fs_glob 等文件工具失败时
+// 直接返回一段人话文本（provider/aiBuiltinTools.go 里 `return "错误：…", nil`）。
+// 这些不是 Go error，于是 cerr 为 nil、IsError 保持 false，
+// 而 MCP 规范要求工具执行失败必须置 isError=true —— 严格依赖该字段的客户端
+// 会把「禁止访问系统敏感路径」「文件不存在」当成**成功**。
+//
+// 2026-10-04 实测：`fs_read` 传 `../../../../etc/passwd` 返回
+// `{"result":{"content":[{"type":"text","text":"错误：禁止访问系统敏感路径"}]}}`，
+// isError 字段整个缺失。
+//
+// 判定必须用**前缀**而非包含：这些工具的成功文案（如「文件 xxx 已更新，共替换
+// 1 处」「读取成功」）不含下列任何前缀；已核对 provider/aiBuiltinTools.go 的
+// 全部 return 文案，前缀无冲突。新增文件工具时沿用同一批前缀。
+//
+// ⚠️ 「未找到匹配」不能整段作为失败标记：fs_search（grep）无命中返回
+// 「未找到匹配的内容」+ 跳过说明，那是**搜索成功但结果为空**的正常回执，
+// 标成失败会让 AI 反复重搜同一个不存在的关键词。只有 fs_replace 的
+// 「未找到匹配的文件」才是真失败（要改的东西一个都没改）。故精确到「的文件」。
+var textFailureMarkers = []string{
+	"错误：",           // 参数非法、路径穿越、文件不存在、超过大小限制
+	"未找到匹配的文件",     // fs_replace 无命中：一个文件都没改
+	"精确匹配失败",       // fs_edit 文本模式没匹配上
+	"⚠ 警告：",        // fs_write 覆盖风险，等待 confirm 二次确认
+}
+
+// textFailure 判定纯文本通道的失败，返回可读原因；不是失败则返回 ""。
+func textFailure(text string) string {
+	trimmed := strings.TrimSpace(text)
+	for _, m := range textFailureMarkers {
+		if strings.HasPrefix(trimmed, m) {
+			return trimmed
 		}
 	}
 	return ""

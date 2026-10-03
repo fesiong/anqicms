@@ -219,7 +219,10 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		totalLines := len(lines)
 
 		if offset > totalLines {
-			return fmt.Sprintf("文件: %s (%d 行)\n\n起始行号 %d 超出文件总行数 %d", relPath, totalLines, offset, totalLines), nil
+			// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+			// textFailureMarkers）。原文案以「文件: …」开头，看着像成功回执，
+			// 但实际是「你要的行不存在」，AI 会误以为已读完整个文件。
+			return "错误：" + fmt.Sprintf("文件: %s (%d 行)\n\n起始行号 %d 超出文件总行数 %d", relPath, totalLines, offset, totalLines), nil
 		}
 
 		// Skeleton mode for large files (>300 lines)。只在整读请求时启用：
@@ -479,9 +482,12 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			return "", fmt.Errorf("遍历文件失败: %w", err)
 		}
 
-		if len(allFiles) > 200 {
-			return fmt.Sprintf("匹配文件过多 (%d)，请缩小 glob 范围", len(allFiles)), nil
-		}
+	if len(allFiles) > 200 {
+		// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+		// textFailureMarkers）——这里是**拒绝执行**、一个文件都没改，
+		// 不能让 AI 当成正常回执。改文案时务必保留前缀。
+		return "错误：" + fmt.Sprintf("匹配文件过多 (%d)，请缩小 glob 范围", len(allFiles)), nil
+	}
 		if len(allFiles) == 0 {
 			return "未找到匹配的文件", nil
 		}
@@ -495,7 +501,9 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			start = 1
 		}
 		if start > len(allFiles) {
-			return fmt.Sprintf("匹配文件共 %d 个，起始序号 %d 超出范围", len(allFiles), start), nil
+			// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+			// textFailureMarkers）。分页越界是请求无法执行，不是正常回执。
+			return "错误：" + fmt.Sprintf("匹配文件共 %d 个，起始序号 %d 超出范围", len(allFiles), start), nil
 		}
 
 		var searchBytes []byte
@@ -693,7 +701,9 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			}
 			fi, serr := os.Stat(p)
 			if serr != nil {
-				return fmt.Sprintf("路径不存在或无法访问: %s", args.Path), nil
+				// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+				// textFailureMarkers）。传了 path 却不存在，AI 必须知道它看错了地方。
+				return "错误：" + fmt.Sprintf("路径不存在或无法访问: %s", args.Path), nil
 			}
 			explicitFile = !fi.IsDir()
 			root = p
@@ -801,7 +811,10 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			start = 1
 		}
 		if start > total {
-			return fmt.Sprintf("共匹配 %d 处，起始序号 %d 超出范围", total, start) + skipNote, nil
+			// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+			// textFailureMarkers）。注意与下面「未找到匹配的内容」区分：
+			// 那是搜索成功但结果为空（正常回执），这里是分页越界（请求无效）。
+			return "错误：" + fmt.Sprintf("共匹配 %d 处，起始序号 %d 超出范围", total, start) + skipNote, nil
 		}
 		seg := matches[start-1:]
 		budget := svc.resultBudget()
