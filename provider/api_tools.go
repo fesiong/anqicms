@@ -317,6 +317,14 @@ func (svc *AiChatService) capAPIInvoke(ctx context.Context, argsJSON string) (st
 		"msg":    res.Msg,
 		"data":   res.Data,
 	}
+	// 透传信封其余顶层字段（total/exact/pages…）。list 端点的分页信息都在这里，
+	// 丢了调用方就只能拿到一个裸数组，无法翻页。放在 data 之外与端点原样对齐。
+	for k, v := range res.Extra {
+		if _, taken := out[k]; taken {
+			continue
+		}
+		out[k] = v
+	}
 	if !res.OK {
 		out["hint"] = "调用失败：请核对参数后用 api_schema 确认字段定义再重试"
 	}

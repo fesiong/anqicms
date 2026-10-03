@@ -44,6 +44,13 @@ type InvokeResult struct {
 	Data   any    `json:"data"`          // 成功时的数据部分；解析失败则为 nil
 	Raw    string `json:"raw,omitempty"` // 原始响应体，仅在 Data 无法解析时用于排查
 	OK     bool   `json:"ok"`            // Status==200 且 Code==StatusOK
+	// Extra 保留业务信封里除 code/msg/data 之外的全部顶层字段。
+	//
+	// 为什么必须有：后台大量 list 端点把分页信息放在信封顶层而不是 data 里，
+	// 例如 ArchiveList 返回 {"code","msg","total","exact","data"}。
+	// 只解 code/msg/data 会让 total 被静默丢弃，调用方拿到一个裸数组，
+	// 既不知道总数也无法翻页——实测 content_article list 就是如此。
+	Extra map[string]any `json:"extra,omitempty"`
 }
 
 // InvokeError 携带调用失败的原因分类，便于上层区分处理。
@@ -257,6 +264,7 @@ func (w *Website) InvokeAdminAPI(adminId uint, method, path string, params map[s
 					res.Data = decoded
 				}
 			}
+			res.Extra = envelopeExtras(rawBody)
 		} else {
 			// 非 JSON 响应（如文件下载、HTML 错误页）不强行解释，保留原文便于排查
 			res.Raw = truncateForLog(rawBody, 512)
@@ -264,6 +272,30 @@ func (w *Website) InvokeAdminAPI(adminId uint, method, path string, params map[s
 	}
 	res.OK = res.Status == http.StatusOK && res.Code == config.StatusOK
 	return res, nil
+}
+
+// envelopeExtras 取出业务信封里除 code/msg/data 之外的全部顶层字段。
+//
+// 背景见 InvokeResult.Extra：ArchiveList 等 list 端点把 total/exact 放在信封顶层，
+// 只解 code/msg/data 会让分页信息凭空消失。这里做一次全量解码再剔除已知键，
+// 而不是逐个字段硬编码——端点很多，写死必然漏。
+func envelopeExtras(rawBody string) map[string]any {
+	var all map[string]any
+	if err := json.Unmarshal([]byte(rawBody), &all); err != nil {
+		return nil
+	}
+	extra := map[string]any{}
+	for k, v := range all {
+		switch k {
+		case "code", "msg", "data":
+			continue
+		}
+		extra[k] = v
+	}
+	if len(extra) == 0 {
+		return nil
+	}
+	return extra
 }
 
 // buildRequestBody 按场景构造请求体：

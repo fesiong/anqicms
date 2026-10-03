@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"testing"
 
@@ -174,6 +175,10 @@ func TestCapAPIInvokeBlocksCredentialEndpoints(t *testing.T) {
 
 // TestResolveInvokeAdminIDNeverImplicitSuperAdmin 守住最关键的安全边界：
 // 未配置身份时不得隐式使用 adminId==1（AdminPermission 对该账号直接放行）。
+//
+// "未配置"这一分支必须直接判定配置值本身：resolveInvokeAdminID 读的是主站点配置，
+// 而同包内先跑的集成用例会加载真实站点（本机库里 invoke_admin_id=1），
+// 把断言建立在那之上会随执行顺序时而通过时而失败——那不是安全测试，是天气测试。
 func TestResolveInvokeAdminIDNeverImplicitSuperAdmin(t *testing.T) {
 	id, err := resolveInvokeAdminID(nil)
 	if err == nil {
@@ -182,8 +187,20 @@ func TestResolveInvokeAdminIDNeverImplicitSuperAdmin(t *testing.T) {
 	if id != 0 {
 		t.Fatalf("未配置身份时不得返回非零 adminId，实际 %d", id)
 	}
-	if _, err := resolveInvokeAdminID(&Website{}); err == nil {
-		t.Fatal("未配置 InvokeAdminId 时应拒绝，避免隐式使用超级管理员")
+	if id, err := explicitInvokeAdminID(0); err == nil || id != 0 {
+		t.Fatalf("未配置 InvokeAdminId 时应拒绝，避免隐式使用超级管理员（实际 id=%d err=%v）", id, err)
+	}
+	if id, err := explicitInvokeAdminID(7); err != nil || id != 7 {
+		t.Fatalf("配置了专用管理员时应原样使用该账号，实际 id=%d err=%v", id, err)
+	}
+	// 站点就绪时按当前配置走：有配置就必须用配置值，无配置就必须拒绝。
+	configured := GetMcpConfig().InvokeAdminId
+	got, err := resolveInvokeAdminID(&Website{})
+	if configured == 0 && err == nil {
+		t.Fatalf("主站点未配置身份却返回了 adminId=%d", got)
+	}
+	if configured > 0 && (err != nil || got != configured) {
+		t.Fatalf("应使用配置身份 %d，实际 id=%d err=%v", configured, got, err)
 	}
 }
 
@@ -218,5 +235,48 @@ func TestNormalizeAPIPath(t *testing.T) {
 		if got := normalizeAPIPath(in); got != want {
 			t.Fatalf("normalizeAPIPath(%q)=%q want %q", in, got, want)
 		}
+	}
+}
+
+// TestAPICatalogDomainsCoverIntentEnum 保证 api 意图暴露的 domain 枚举与
+// api_catalog.json 里实际出现的域完全一致。
+//
+// 为什么要锁：domain 是 api_list 最有效的收敛维度（ns 是路由结构，
+// /plugin/* 一个 ns 就装了 200+ 端点，按 ns 过滤等于没过滤）。
+// 若目录里新增了域而枚举没跟上，AI 就无法按语义过滤，只能退回瞎猜或翻全量。
+// 反向也要成立：枚举里写了目录中不存在的域，会让 AI 传入恒定 matched=0 的条件。
+func TestAPICatalogDomainsCoverIntentEnum(t *testing.T) {
+	cat, err := BuildAPICatalog()
+	if err != nil {
+		t.Fatalf("构建 API 目录失败: %v", err)
+	}
+	inCatalog := map[string]bool{}
+	for _, ep := range cat.Endpoints {
+		if ep.Domain != "" {
+			inCatalog[ep.Domain] = true
+		}
+	}
+	if len(inCatalog) == 0 {
+		t.Fatal("目录里没有任何 domain，测试前提不成立")
+	}
+
+	// 枚举值来自 pkg/mcp/intent/catalog_api.go 的 domain ParamSpec。
+	declared := []string{
+		"siteops", "system", "contentops", "commerce", "content", "seo", "channel",
+		"design", "account", "interaction", "structure", "traffic", "media",
+	}
+	for _, d := range declared {
+		if !inCatalog[d] {
+			t.Errorf("api 意图声明了 domain=%q，但目录里不存在该域（枚举与目录漂移）", d)
+		}
+		delete(inCatalog, d)
+	}
+	if len(inCatalog) > 0 {
+		missing := make([]string, 0, len(inCatalog))
+		for d := range inCatalog {
+			missing = append(missing, d)
+		}
+		sort.Strings(missing)
+		t.Errorf("目录里新增了域 %v，但 api 意图的 domain 枚举没跟上", missing)
 	}
 }

@@ -115,6 +115,21 @@ func mockAdminAPIApp(t *testing.T, site *Website) *iris.Application {
 		})
 	})
 
+	// GET paginated：同构于真实的 ArchiveList —— total/exact 放在信封顶层而非 data 里。
+	// 这是 InvokeResult.Extra 存在的理由，也是回归测试的落点。
+	manage.Get("/paginated", func(ctx iris.Context) {
+		ctx.JSON(iris.Map{
+			"code":  config.StatusOK,
+			"msg":   "",
+			"total": 268,
+			"exact": true,
+			"data": iris.Map{
+				"id":    ctx.URLParam("id"),
+				"items": []string{"a", "b"},
+			},
+		})
+	})
+
 	if err := app.Build(); err != nil {
 		t.Fatalf("Build 失败: %v", err)
 	}
