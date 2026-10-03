@@ -149,6 +149,9 @@ type PluginTag struct {
 	Status      uint                   `json:"status" ast:"-"` // 状态：1=正常，0=隐藏
 	Extra       map[string]interface{} `json:"extra"`          // 标签的自定义字段内容
 	UpdateAll   bool                   `json:"update_all" ast:"-"`
+	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
+	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
+	Partial bool `json:"partial" ast:"-"`
 }
 
 type PluginTagDeleteRequest struct {

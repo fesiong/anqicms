@@ -15,6 +15,9 @@ type NavConfig struct {
 	Status      uint   `json:"status" ast:"-"`
 	Logo        string `json:"logo"` // 图标 URL
 	UpdateAll   bool   `json:"update_all" ast:"-"`
+	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
+	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
+	Partial bool `json:"partial" ast:"-"`
 }
 
 type NavTypeRequest struct {

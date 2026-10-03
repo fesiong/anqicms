@@ -40,8 +40,13 @@ const defaultListLimit = 30
 
 // apiListArgs 是 api_list 的入参。
 type apiListArgs struct {
-	Keyword string `json:"keyword"` // 路径/处理器关键词
-	NS      string `json:"ns"`      // 命名空间过滤，如 archive / plugin/keyword
+	Keyword string `json:"keyword"` // 路径/处理器/资源名关键词
+	// NS 按命名空间前缀过滤，只填一级：archive / plugin / seo …
+	//
+	// 不要写 "plugin/keyword" 这种 ns/resource 组合——ns 与 resource 是两个独立
+	// 字段（实测 plugin/keyword/* 的端点 ns=plugin、resource=keyword），
+	// 组合写法匹配不到任何端点，matched 会是 0。要定位细分资源用 Keyword。
+	NS string `json:"ns"`
 	// Domain 按能力域过滤，如 content / contentops / siteops。
 	// 推荐优先用它而非 ns：ns 是路由结构（/plugin/* 一个 ns 装了 229 个端点，过滤了等于没过滤），
 	// domain 才是语义分组，能一次收敛到"备份缓存"或"内容生产"这类可决策的范围。
@@ -64,6 +69,13 @@ type apiInvokeArgs struct {
 }
 
 // capAPIList 列出可用的后台 REST 端点，支持按命名空间/风险/方法/关键词过滤。
+//
+// 返回里三个计数语义不同，别混用：
+//   - total   = 端点目录总数（恒定，与筛选无关）
+//   - matched = 本次筛选命中的端点数
+//   - returned= 本页实际返回条数（受 limit 约束）
+//
+// matched=0 说明筛选条件太严，最常见是 ns 写成了 "ns/resource" 组合（见 apiListArgs.NS）。
 func (svc *AiChatService) capAPIList(_ context.Context, argsJSON string) (string, error) {
 	var a apiListArgs
 	if strings.TrimSpace(argsJSON) != "" {
@@ -293,7 +305,8 @@ func (svc *AiChatService) capAPIInvoke(ctx context.Context, argsJSON string) (st
 		return "", err
 	}
 
-	res, err := site.InvokeAdminAPI(adminID, method, path, a.Params)
+	params := injectPartialUpdate(method, path, a.Params)
+	res, err := site.InvokeAdminAPI(adminID, method, path, params)
 	if err != nil {
 		return "", err
 	}
@@ -360,12 +373,22 @@ func matchEndpoint(ep EndpointMeta, a apiListArgs) bool {
 //
 // 这是有意设计得"不方便"：宁可调用失败，也不允许隐式取得超级管理员权限。
 // 未配置专用管理员时，api_invoke 直接不可用。
+//
+// 身份只来自主站点配置（MCP 的 token 与管理员均只在主站点配一份，见 GetMcpConfig），
+// 参数 site 只用于确认"服务已绑定站点"，不是身份来源。
 func resolveInvokeAdminID(site *Website) (uint, error) {
 	if site == nil {
 		return 0, fmt.Errorf("站点未就绪")
 	}
-	if id := GetMcpConfig().InvokeAdminId; id > 0 {
-		return id, nil
+	return explicitInvokeAdminID(GetMcpConfig().InvokeAdminId)
+}
+
+// explicitInvokeAdminID 只接受显式配置的身份：0 一律拒绝。
+// 单独成函数是为了让这条安全边界能在无数据库、无站点初始化状态下验证——
+// 依赖当前站点配置的断言会随同包用例的执行顺序变绿或变红，等于没有断言。
+func explicitInvokeAdminID(configured uint) (uint, error) {
+	if configured > 0 {
+		return configured, nil
 	}
 	return 0, fmt.Errorf("未配置通用调用的管理员身份：请先在 MCP 设置中指定 api_invoke 使用的管理员账号；" +
 		"为避免越权，系统不会隐式使用超级管理员")
@@ -386,4 +409,57 @@ func marshalJSON(v any) (string, error) {
 		return "", fmt.Errorf("结果序列化失败: %w", err)
 	}
 	return string(raw), nil
+}
+
+// partialUpdateEndpoints 登记「支持 PATCH 语义」的 POST 端点。
+//
+// 背景（2026-10-03）：这些端点的控制器曾无条件 `req.UpdateAll = true`，
+// 于是「只传一个字段」会把其余字段按零值写回——正文清空、标签清空、
+// 导航链接被清、会员 status 归 0（账号被禁用）。实测三类都中过。
+//
+// 那个 true 是为**表单提交**准备的（前端提交整个表单，字段没出现 = 用户清空了它）。
+// AI/程序化调用的语义正相反：没传 = 别碰。端点侧已改成
+// `if !req.Partial { req.UpdateAll = true }`，这里负责把 partial 送进去。
+//
+// 为什么不放在 pkg/mcp/intent 侧统一注入：
+// `api` 意图（通用端点调用通道）能调到本清单里的**任何**端点，
+// 而它不走 capEndpoints、也不走 invokeRoutes，只经过本函数。
+// 放这里是唯一能覆盖全部调用方（含未来新增的通道）的位置。
+//
+// ⚠️ 这里是**端点路径**白名单，不是意图参数白名单：
+// 只有确认 provider 用 `if req.UpdateAll || …`（有开关）的端点才能加。
+// 逐字段无条件赋值的端点（material/place/group）加了也没用——它们没有这个开关，
+// 仍需意图层补齐，见 pkg/mcp/intent 的 invokeRouteOverwriteFields。
+var partialUpdateEndpoints = map[string]bool{
+	normalizeAPIPath("/archive/detail"):         true, // request.Archive
+	normalizeAPIPath("/category/detail"):        true, // request.Category
+	normalizeAPIPath("/module/detail"):          true, // request.ModuleRequest
+	normalizeAPIPath("/setting/nav"):            true, // request.NavConfig
+	normalizeAPIPath("/plugin/tag/detail"):      true, // request.PluginTag
+	normalizeAPIPath("/plugin/user/detail"):     true, // request.UserRequest
+	// ⚠️ /plugin/redirect/detail **不在**这里：PluginRedirectRequest 没有 UpdateAll
+	// 字段，控制器也没有 `req.UpdateAll = true`（provider 是逐字段无条件赋值）。
+	// 加了也没用——那种端点仍需意图层补齐，见 invokeRouteOverwriteFields。
+}
+
+// injectPartialUpdate 对支持 PATCH 的 POST 端点补上 partial=true。
+//
+// 无条件覆盖（不尊重调用方传的 partial）：这是最后一道闸门，
+// 漏了就退回全量覆盖、静默清空数据，而回执仍是 ok=true。
+// 想要全量覆盖的调用方应走显式动作，不该靠关掉这个开关。
+//
+// 非 POST、路径不在清单、params 为空时原样返回。
+func injectPartialUpdate(method, path string, params map[string]any) map[string]any {
+	if !strings.EqualFold(method, "POST") || len(params) == 0 {
+		return params
+	}
+	if !partialUpdateEndpoints[normalizeAPIPath(path)] {
+		return params
+	}
+	out := make(map[string]any, len(params)+1)
+	for k, v := range params {
+		out[k] = v
+	}
+	out["partial"] = true
+	return out
 }

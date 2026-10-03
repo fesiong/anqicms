@@ -24,6 +24,9 @@ type UserRequest struct {
 	InviteCode string `json:"invite_code"` // 邀请码
 	ExpireTime int64  `json:"expire_time"` // 用户组过期时间（一般用于VIP过期）
 	UpdateAll  bool   `json:"update_all" ast:"-"`
+	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
+	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
+	Partial bool `json:"partial" ast:"-"`
 
 	Extra map[string]interface{} `json:"extra"` // 用户的扩展字段内容
 }

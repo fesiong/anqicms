@@ -16,6 +16,9 @@ type ModuleRequest struct {
 	TitleName      string               `json:"-" ast:"-"`       // 已废弃
 	Status         uint                 `json:"status"`          // 模型的启用状态：0 禁用，1 启用
 	UpdateAll      bool                 `json:"update_all" ast:"-"`
+	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
+	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
+	Partial bool `json:"partial" ast:"-"`
 }
 
 type ModuleFieldRequest struct {
