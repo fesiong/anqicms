@@ -232,20 +232,18 @@ func (w *Website) NewAiChatService() *AiChatService {
 	// 意图工具：模型面可见的工具集合（意图导向工作流）。
 	intentTools, intentHandlers := svc.GetIntentTools()
 
-	// 模型面工具 = 意图工具 + 未与意图同名的内置工具。
-	// web_fetch/web_search 由意图提供，内置同名工具不再重复绑定（避免 BindTools 重复工具名）。
-	intentNames := make(map[string]bool, len(intentTools))
-	for _, t := range intentTools {
-		intentNames[t.Name] = true
-	}
-	svc.Tools = make([]*schema.ToolInfo, 0, len(intentTools)+len(builtinTools))
-	svc.Tools = append(svc.Tools, intentTools...)
-	for _, bt := range builtinTools {
-		if intentNames[bt.Name] {
-			continue
-		}
-		svc.Tools = append(svc.Tools, bt)
-	}
+	// 模型面 = 意图工具，仅此而已。
+	//
+	// 内置工具（read_file/write_file/bash/web_fetch/...）此前也被绑给模型，于是同一件事
+	// 存在两个工具名：模型面同时看到 fs_read 与 read_file、shell_exec 与 bash、web 与
+	// web_fetch/web_search；更糟的是这批内置工具**不走 ExposedIntents 白名单**，
+	// 后台对话因此比 MCP 多出一层无人管理的主机级能力（读文件、写文件、执行命令）。
+	// 现在内置能力只作为 cap 存在（capHandlers，供意图委托），意图成为唯一模型面，
+	// 两条通道共用同一份可见性策略与同一个开关。
+	// 前提是每个内置域意图都带齐对应 cap 的参数契约，否则会在这里造成能力缩水——
+	// 该前提由 TestBuiltinIntentCarriesCapContract 守着。
+	svc.Tools = intentTools
+	_ = builtinTools // 内置工具信息仅用于装配 capHandlers，不再绑定给模型
 
 	// 统一 dispatch 表 = 底层能力 + 意图 handler。
 	// 意图 handler 覆盖同名 cap：dispatch 命中意图 handler 后，由 capInvoker 经 capHandlers 调用真正的 cap。
@@ -575,20 +573,52 @@ func (svc *AiChatService) loadAgentsFromDB() {
 	}
 	var agents []model.AiAgent
 	svc.db.Where("enabled = 1").Find(&agents)
+	now := time.Now().Unix()
 	svc.agentsMu.Lock()
+	var missed []*model.AiAgent
 	for i := range agents {
-		// 修复：如果 NextRunAt=0 或已过期（重启场景），重新计算下次执行时间
-		if agents[i].CronExpr != "" && (agents[i].NextRunAt == 0 || agents[i].NextRunAt <= time.Now().Unix()) {
+		// 先入内存缓存，再做排期判断。
+		// 顺序很关键：早前把注册放在判断之后，过期分支的 continue 会跳过它，
+		// Agent 压根没进 svc.agents —— 而调度器 tick 扫的正是这个 map，
+		// 于是「补跑一次」的日志打了却永远不会被执行（2026-10-03 踩过）。
+		svc.agents[agents[i].Id] = &agents[i]
+
+		// 重启场景：NextRunAt=0（从未排期）或已过期（宕机/重启跨过了触发点）。
+		//
+		// 过期时**只补跑一次**，而不是直接跳到下个周期：
+		//   - 直接跳过 = 一次重启就让「每天出 3-5 篇」的内容 Agent 静默丢一天；
+		//   - 无限补跑 = 服务停一周后启动会连补 7 次，LLM 成本与内容都失控。
+		// 一次补跑既能兜住「短暂重启」，又不会形成补跑风暴。
+		// 补跑标记就是「保持过期」—— 下一个 tick checkDueAgents 会自然捡起来。
+		if agents[i].CronExpr != "" && agents[i].NextRunAt > 0 && agents[i].NextRunAt <= now {
 			scheduler, err := cronParser.Parse(agents[i].CronExpr)
 			if err == nil {
+				next := scheduler.Next(time.Now()).Unix()
+				missed = append(missed, &agents[i])
+				svc.Logger.Info("agent overdue on startup, will run once now",
+					"id", agents[i].Id, "name", agents[i].Name, "cron", agents[i].CronExpr,
+					"overdueBySec", now-agents[i].NextRunAt, "nextAfterRun", next)
+				// 不改 NextRunAt，让它保持过期以便本次补跑；跑完后由 ExecuteAgent 推进。
+			} else if svc.Logger != nil {
+				svc.Logger.Error("agent cron parse failed", "id", agents[i].Id,
+					"cron", agents[i].CronExpr, "error", err)
+			}
+			continue
+		}
+		if agents[i].CronExpr != "" && agents[i].NextRunAt == 0 {
+			if scheduler, err := cronParser.Parse(agents[i].CronExpr); err == nil {
 				agents[i].NextRunAt = scheduler.Next(time.Now()).Unix()
 				svc.db.Model(&agents[i]).Update("next_run_at", agents[i].NextRunAt)
+			} else if svc.Logger != nil {
+				svc.Logger.Error("agent cron parse failed", "id", agents[i].Id,
+					"cron", agents[i].CronExpr, "error", err)
 			}
 		}
-		svc.agents[agents[i].Id] = &agents[i]
 	}
 	svc.agentsMu.Unlock()
-	svc.Logger.Info("Loaded AI agents from DB", "count", len(agents))
+	svc.Logger.Info("Loaded AI agents from DB", "count", len(agents), "overdueToRunOnce", len(missed))
+	// 补跑在调度器启动后由 tick 接手，这里只登记，不直接执行：
+	// 避免与刚启动的其他初始化（AI 客户端、工具注册）抢资源。
 }
 
 // StartAgentScheduler 启动后台调度器 goroutine，每 30 秒检查一次到期 Agent
@@ -600,7 +630,7 @@ func (svc *AiChatService) StartAgentScheduler() {
 		for {
 			select {
 			case <-ticker.C:
-				svc.checkDueAgents()
+				svc.checkDueAgents(context.Background())
 			case <-svc.schedulerQuit:
 				return
 			}
@@ -618,7 +648,7 @@ func (svc *AiChatService) StopAgentScheduler() {
 }
 
 // checkDueAgents 检查并执行到期的 Agent
-func (svc *AiChatService) checkDueAgents() {
+func (svc *AiChatService) checkDueAgents(ctx context.Context) {
 	// 先检查是否配置了ai
 	oldCfg := eino.GlobalConfig()
 	if oldCfg == nil {
@@ -666,29 +696,28 @@ func (svc *AiChatService) checkDueAgents() {
 			dueList = append(dueList, agent)
 		}
 	}
+	// 诊断：调度器静默不执行时，唯一能定位的线索就是「内存里的 NextRunAt 到底是什么」。
+	// 曾出现过 cron 到点没执行、且无任何日志的情况（2026-10-03 GEO Agent 漏跑），
+	// 根因排查只能靠猜。DEBUG 级别平时不输出，不产生噪音。
+	if svc.Logger != nil && svc.Logger.Enabled(ctx, slog.LevelDebug) {
+		for id, a := range svc.agents {
+			svc.Logger.Debug("agent tick state", "id", id, "name", a.Name,
+				"enabled", a.Enabled, "nextRunAt", a.NextRunAt, "delta", a.NextRunAt-now, "now", now)
+		}
+	}
 	svc.agentsMu.RUnlock()
 
 	for _, agent := range dueList {
-		// 防止同一 agent 被并发重复执行：
-		// ExecuteAgent 异步执行，期间 NextRunAt 未更新，
-		// 下一个 ticker tick 会再次把该 agent 加入 dueList。
-		// 用 runningAgents 标记确保同一 agent 同时只有一个执行。
-		svc.runningAgentsMu.Lock()
-		if svc.runningAgents[agent.Id] {
-			svc.runningAgentsMu.Unlock()
-			svc.Logger.Info("Agent already running, skip", "id", agent.Id, "name", agent.Name)
-			continue
-		}
-		svc.runningAgents[agent.Id] = true
-		svc.runningAgentsMu.Unlock()
-
+		// 防重入的唯一责任在 ExecuteAgent 内部（它对 runningAgents 做
+		// Lock→检查→置位 的原子操作，见 ExecuteAgent 开头）。
+		//
+		// 这里**绝不能**预置 runningAgents 再调它：ExecuteAgent 会立刻
+		// 看到「已在运行」而返回 "agent #N is already running"，
+		// 于是调度器这条路径 100% 失败，且它自己的 defer 会把标记删掉，
+		// 下一个 tick 又进来再失败一次——无限循环且从不真正执行。
+		// 这个 bug 让 2026-10-03 08:00 的定时任务静默漏跑（run_count 停在 1）。
 		svc.Logger.Info("Agent due, executing", "id", agent.Id, "name", agent.Name)
 		go func(a *model.AiAgent) {
-			defer func() {
-				svc.runningAgentsMu.Lock()
-				delete(svc.runningAgents, a.Id)
-				svc.runningAgentsMu.Unlock()
-			}()
 			if _, err := svc.ExecuteAgent(a); err != nil {
 				svc.Logger.Error("Agent execution failed", "id", a.Id, "error", err)
 			}
@@ -1072,6 +1101,28 @@ func (svc *AiChatService) GetIntentTools() ([]*schema.ToolInfo, map[string]toolH
 
 // ── P4a: 技能 allowed-tools 约束 ──
 
+// skillToolAliases 把技能 frontmatter 里的历史内置工具名映射到当前的模型面名字。
+//
+// 内置工具已退场为纯 cap，模型面只剩意图，而存量技能（provider/seeds/skills/*）声明的
+// allowed_tools 仍写着 read_file / bash。不做映射的话，这些技能激活后第一个工具调用
+// 就会被 allowed-tools 挡在门外 —— 约束生效了，能力却没了。
+// 两个名字都放行：技能正文可能按任一名指代工具，而 dispatch 表里 cap 名同样可执行。
+//
+// web_fetch / web_search 合并成单一 web 意图，按 action 分派，因此声明其中之一
+// 等于放行整个 web —— 这是意图合并的既有语义，不是本次引入的放宽。
+var skillToolAliases = map[string]string{
+	"read_file":      "fs_read",
+	"write_file":     "fs_write",
+	"edit_file":      "fs_edit",
+	"search_replace": "fs_replace",
+	"grep":           "fs_search",
+	"glob":           "fs_glob",
+	"list_directory": "fs_list_dir",
+	"bash":           "shell_exec",
+	"web_fetch":      "web",
+	"web_search":     "web",
+}
+
 // SetSkillToolScope 激活技能的工具约束。
 // allowedTools 为空切片时清空约束 (所有工具可用)。
 // allowedTools 非空时，只能使用该集合内的工具 + 始终允许的元工具。
@@ -1084,14 +1135,21 @@ func (svc *AiChatService) SetSkillToolScope(allowedTools []string) {
 		return
 	}
 
-	svc.activeSkillTools = make(map[string]bool, len(allowedTools)+4)
+	svc.activeSkillTools = make(map[string]bool, len(allowedTools)*2+4)
 	// 始终允许的元工具 (技能管理本身不应被锁)
 	metaTools := []string{"skill_list", "skill_get", "skill_reload", "skill_save"}
 	for _, t := range metaTools {
 		svc.activeSkillTools[t] = true
 	}
 	for _, t := range allowedTools {
+		t = strings.TrimSpace(t)
+		if t == "" {
+			continue
+		}
 		svc.activeSkillTools[t] = true
+		if alias, ok := skillToolAliases[t]; ok {
+			svc.activeSkillTools[alias] = true
+		}
 	}
 }
 

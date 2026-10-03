@@ -798,6 +798,7 @@ func BuildSkillSystemPrompt() string {
 - skill_list: 列出所有可用技能
 - skill_get: 加载指定技能的完整内容，支持 $ARGUMENTS 变量替换
 - skill_reload: 管理员编辑技能后重新加载
+- skill_save: 创建或更新技能
 
 使用 skill_get 加载技能后，技能内容可能引用本系统的其他工具，按需调用即可。`
 }

@@ -135,13 +135,20 @@ func SkillDetail(ctx iris.Context) {
 
 // SkillEditRequest is the request for editing a skill
 type SkillEditRequest struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
-	Category    string   `json:"category"`
-	Version     string   `json:"version"`
-	Author      string   `json:"author"`
-	Tags        []string `json:"tags"`
-	Content     string   `json:"content"`
+	// Name 技能名，同时用作目录名与 frontmatter 的 name。只允许字母、数字、中划线和下划线
+	Name string `json:"name"`
+	// Description 一句话描述，写入 frontmatter 的 description
+	Description string `json:"description"`
+	// Category 分类，如 SEO、写作、运维，写入 frontmatter 的 category
+	Category string `json:"category"`
+	// Version 版本号，写入 frontmatter 的 version
+	Version string `json:"version"`
+	// Author 作者，写入 frontmatter 的 author
+	Author string `json:"author"`
+	// Tags 标签数组，写入 frontmatter 的 tags。必须是数组，传逗号分隔字符串会解析失败
+	Tags []string `json:"tags"`
+	// Content 技能正文 Markdown，即 SKILL.md 中 frontmatter 之后的部分
+	Content string `json:"content"`
 }
 
 // SkillEdit creates or updates a skill

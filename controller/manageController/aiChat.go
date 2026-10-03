@@ -474,13 +474,15 @@ func generateAIResponse(ctx context.Context, irisCtx iris.Context, sessionID str
 	// 结果是主对话成为唯一仍在跑旧端点工具的通道：AI 拿到的是会与后端漂移的
 	// bespoke 实现（含已废弃的 archive_list 全文检索分支）与中文文本输出。
 	//
-	// 现在改为绑定 svc.Tools（意图工具 + 未被意图覆盖的内置工具），dispatch 仍走
+	// 现在只绑定 svc.Tools（= 意图工具，与 MCP 同一份可见性策略），dispatch 仍走
 	// AiSrv.Handlers —— 它在服务初始化时已包含意图 handler，此处不可覆盖。
 	allTools := currentSite.AiSrv.Tools
 	if len(allTools) == 0 {
-		// 兜底：意图层未初始化（ExposedIntents 为空且意图均未注册，不应发生）时
-		// 退回端点+内置工具，保证对话不至于零工具可用。
-		allTools, _ = currentSite.AiSrv.GetEinoTools()
+		// 白名单里没有一个意图被命中（多半是填错了名字）。此时**不能**退回端点+内置工具：
+		// 那等于把"收窄暴露面"这个操作反向变成"全量开放"，比空面危险得多。
+		// 让本轮对话以无工具方式回答，并记一条 warning 指回配置。
+		slog.Warn("意图层未命中任何工具，本轮对话不绑定任何工具：请检查 MCP 暴露列表是否填写正确",
+			"session", sessionID)
 	}
 	if err := client.BindTools(allTools); err != nil {
 		return "", fmt.Errorf("failed to bind tools: %w", err)
