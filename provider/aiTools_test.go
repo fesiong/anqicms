@@ -188,7 +188,7 @@ func Test_WriteFile_ParseArgs(t *testing.T) {
 	}
 
 	// Missing content — will still try because struct defaults to empty
-	result, err = handler(context.Background(), `{"path":"test.txt"}`)
+	result, err = handler(context.Background(), `{"path":"cache/test.txt"}`)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
