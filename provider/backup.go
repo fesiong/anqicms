@@ -250,42 +250,57 @@ func (bs *BackupStatus) BackupData() error {
 	bs.Message = bs.w.Tr("BackingUpTemplate")
 	tplDir := bs.w.GetTemplateDir()
 	if tplDir != "" {
-		_ = filepath.Walk(tplDir, func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				return nil
-			}
-			if info.IsDir() {
-				return nil
-			}
-			// 计算相对 zip 内部的路径：template/<相对模板根的路径>
-			relPath, err := filepath.Rel(tplDir, path)
-			if err != nil {
-				return nil
-			}
-			zipName := "template/" + filepath.ToSlash(relPath)
-			header, err := zip.FileInfoHeader(info)
-			if err != nil {
-				return nil
-			}
-			header.Name = zipName
-			header.Method = zip.Deflate
-			writer, err := zipWriter.CreateHeader(header)
-			if err != nil {
-				return nil
-			}
-			f, err := os.Open(path)
-			if err != nil {
-				return nil
-			}
-			defer f.Close()
-			_, _ = io.Copy(writer, f)
-			return nil
-		})
+		zipDirToZip(zipWriter, tplDir, "template/")
+
+		// 备份模板静态文件 public/static/{模板名称}
+		bs.Message = bs.w.Tr("BackingUpStaticFiles")
+		staticDir := filepath.Join(bs.w.PublicPath, "static", filepath.Base(tplDir))
+		zipDirToZip(zipWriter, staticDir, "static/")
 	}
 
 	log.Printf("dumping.all.done.cost[%s], elapsed", time.Since(t).String())
 
 	return nil
+}
+
+// zipDirToZip 将 srcDir 目录下的所有文件写入 zipWriter，zip 内部路径前缀为 zipPrefix（如 "template/"）
+func zipDirToZip(zipWriter *zip.Writer, srcDir, zipPrefix string) {
+	if srcDir == "" {
+		return
+	}
+	if _, err := os.Stat(srcDir); err != nil {
+		return
+	}
+	_ = filepath.Walk(srcDir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if info.IsDir() {
+			return nil
+		}
+		// 计算相对 zip 内部的路径：<zipPrefix><相对srcDir的路径>
+		relPath, err := filepath.Rel(srcDir, path)
+		if err != nil {
+			return nil
+		}
+		header, err := zip.FileInfoHeader(info)
+		if err != nil {
+			return nil
+		}
+		header.Name = zipPrefix + filepath.ToSlash(relPath)
+		header.Method = zip.Deflate
+		writer, err := zipWriter.CreateHeader(header)
+		if err != nil {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return nil
+		}
+		defer f.Close()
+		_, _ = io.Copy(writer, f)
+		return nil
+	})
 }
 
 func (bs *BackupStatus) RestoreData(fileName string) error {
@@ -396,6 +411,44 @@ func (bs *BackupStatus) restoreFromZip(backupFile string) error {
 			continue
 		}
 		targetPath := filepath.Join(tplDir, relPath)
+		// 创建父目录
+		if mkErr := os.MkdirAll(filepath.Dir(targetPath), os.ModePerm); mkErr != nil {
+			log.Println(mkErr)
+			continue
+		}
+		rc, openErr := f.Open()
+		if openErr != nil {
+			log.Println(openErr)
+			continue
+		}
+		out, createErr := os.Create(targetPath)
+		if createErr != nil {
+			log.Println(createErr)
+			rc.Close()
+			continue
+		}
+		_, _ = io.Copy(out, rc)
+		_ = out.Close()
+		_ = rc.Close()
+	}
+
+	// 还原模板静态文件 public/static/{模板名称}
+	staticDir := filepath.Join(bs.w.PublicPath, "static", filepath.Base(tplDir))
+	for _, f := range zipReader.File {
+		if !strings.HasPrefix(f.Name, "static/") {
+			continue
+		}
+		// 计算还原到磁盘的目标路径
+		relPath := strings.TrimPrefix(f.Name, "static/")
+		// 跳过目录条目
+		if strings.HasSuffix(f.Name, "/") {
+			continue
+		}
+		targetPath := filepath.Join(staticDir, relPath)
+		// 防止路径穿越，确保目标路径在 staticDir 内
+		if !strings.HasPrefix(filepath.Clean(targetPath), filepath.Clean(staticDir)+string(filepath.Separator)) {
+			continue
+		}
 		// 创建父目录
 		if mkErr := os.MkdirAll(filepath.Dir(targetPath), os.ModePerm); mkErr != nil {
 			log.Println(mkErr)

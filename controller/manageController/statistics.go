@@ -11,7 +11,7 @@ import (
 	"kandaoni.com/anqicms/response"
 )
 
-// StatisticSpider 蜘蛛爬行情况
+// StatisticSpider 获取蜘蛛爬行情况统计图表数据。
 func StatisticSpider(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	result := currentSite.StatisticSpider()
@@ -23,6 +23,7 @@ func StatisticSpider(ctx iris.Context) {
 	})
 }
 
+// StatisticTraffic 获取当前站点的流量统计概览图表数据。
 func StatisticTraffic(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -35,6 +36,7 @@ func StatisticTraffic(ctx iris.Context) {
 	})
 }
 
+// StatisticDates 获取当前站点可用的流量统计日期列表。
 func StatisticDates(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -47,6 +49,13 @@ func StatisticDates(ctx iris.Context) {
 	})
 }
 
+// StatisticDetail 获取指定日期和类型的流量统计明细列表，支持分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "date": 统计日期。
+//   - 查询参数 "type": 统计类型：spider=蜘蛛爬行情况，traffic=流量统计。
 func StatisticDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -64,6 +73,11 @@ func StatisticDetail(ctx iris.Context) {
 	})
 }
 
+// GetSpiderIncludeDetail 获取搜索引擎蜘蛛收录明细列表，支持分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
 func GetSpiderIncludeDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -88,6 +102,7 @@ func GetSpiderIncludeDetail(ctx iris.Context) {
 	})
 }
 
+// GetSpiderInclude 获取搜索引擎蜘蛛收录统计图表数据。
 func GetSpiderInclude(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var result = make([]response.ChartData, 0, 30*5)

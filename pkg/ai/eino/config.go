@@ -19,10 +19,61 @@ type Configs struct {
 // McpConfig 控制本站点 MCP 端点的启用与鉴权。
 // 存储于 ai_setting (provider.AiSettingKey)，通过 SettingAiForm 配置。
 type McpConfig struct {
-	Enabled      bool     `json:"enabled"`       // 是否启用 MCP 对外端点
-	Token        string   `json:"token"`         // 鉴权 Bearer token，空则禁用
-	ExposedTools []string `json:"exposed_tools"` // 空则暴露全部工具
-	RateLimit    int      `json:"rate_limit"`    // 每分钟调用上限，0 不限
+	Enabled        bool     `json:"enabled"`         // 是否启用 MCP 对外端点
+	Token          string   `json:"token"`           // 鉴权 Bearer token，空则禁用
+	ExposedTools   []string `json:"exposed_tools"`   // 旧版能力名白名单（C 阶段），按意图底层能力命中过滤；空则暴露全部
+	ExposedIntents []string `json:"exposed_intents"` // 意图级白名单：意图名 / 能力域名(content 等) / "*"；非空时未知意图默认拒绝
+	ToolListMode   string   `json:"tool_list_mode"`  // ""=完整 schema；"summary"=tools/list 仅返回轻量 schema，降低 token
+	// EnableSetScope 是否开放 mcp_set_scope（两阶段能力域裁剪）。**默认 false。**
+	//
+	// 2026-10-07 新增，默认关闭：mcp_set_scope 的 scope 是**进程级全局**的，
+	// 一个客户端调用会让所有并发客户端的 tools/list 一起收窄，且新会话恢复不了
+	// （须重启服务）。在改成会话级之前不对外暴露。
+	// 详见 pkg/mcp/intent/mcp.go 的 registerMeta 注释。
+	EnableSetScope bool `json:"enable_set_scope"`
+	RateLimit      int  `json:"rate_limit"` // 每分钟调用上限，0 不限
+
+	// InvokeAdminId 是「通用 REST 调用」（api_invoke 意图）使用的管理员身份。
+	// 为 0 时该能力不可用 —— 这是有意的安全设计：MCP/AI 通道无法从请求里推导出操作者，
+	// 若隐式回落到超级管理员（AdminPermission 对 adminId==1 直接放行）等于发放万能钥匙。
+	// 请显式指定一个权限受控的专用管理员账号。
+	InvokeAdminId uint `json:"invoke_admin_id"`
+
+	// ApiExposure 控制「通用 REST 调用」能触达哪些后台端点（G4 白名单）。
+	// 这是意图白名单之下的第二道闸门：即使 api_* 意图被显式开放，
+	// 具体端点仍需通过这里的策略才能被调用。零值配置 = 全部拒绝（fail closed）。
+	ApiExposure ApiExposureConfig `json:"api_exposure"`
+}
+
+// ApiExposureConfig 是通用 REST 调用的开放范围策略。
+//
+// 为什么需要它：api_invoke 能力等价 shell —— 能列出并执行任意后台端点。
+// 意图级开关（ExposedIntents）只决定"要不要开放这类能力"，
+// 而这里决定"开放到什么程度"，两者是不同粒度。
+//
+// 判定顺序（全部 fail closed，任一不通过即拒绝）：
+//  1. 内置硬规则（凭证类端点、未修复鉴权缺陷的模块、管理员变更的写操作）—— 不可配置；
+//  2. DenyNS / DenyEndpoints —— 显式黑名单；
+//  3. AllowNS —— 非空则为白名单，不在其内即拒绝；
+//  4. Mode 与端点风险等级匹配。
+type ApiExposureConfig struct {
+	// Mode 决定允许的风险等级：
+	//   ""|"off"        —— 关闭（默认，零值即关闭）
+	//   "read"          —— 仅只读端点（推荐的起步配置）
+	//   "read_write"    —— 读 + 写，仍拒绝 destructive
+	//   "all"           —— 含 destructive（删除类），仅在明确需要时开启
+	Mode string `json:"mode"`
+
+	// AllowNS 命名空间白名单，前缀匹配：填 "archive" 命中 archive/...，
+	// 填 "plugin/keyword" 只命中该插件。留空表示不按命名空间限制（仍受 Mode 约束）。
+	AllowNS []string `json:"allow_ns"`
+
+	// DenyNS 命名空间黑名单，前缀匹配，优先级高于 AllowNS。
+	DenyNS []string `json:"deny_ns"`
+
+	// DenyEndpoints 端点黑名单，格式 "METHOD /path"（METHOD 可省略表示所有方法），
+	// 路径允许省略 /system/api 前缀。优先级最高（硬规则之外）。
+	DenyEndpoints []string `json:"deny_endpoints"`
 }
 
 // Config holds the configuration for Eino AI integration.

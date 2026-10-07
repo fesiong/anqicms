@@ -4,14 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"log"
+	"math/rand"
 	"strings"
 	"time"
 
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/xlog"
+	"github.com/jinzhu/now"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/model"
+	"kandaoni.com/anqicms/request"
 )
 
 type PaypalWebhookResource struct {
@@ -28,6 +33,174 @@ type PaypalWebhookResource struct {
 	} `json:"amount"`
 	ParentPayment string `json:"parent_payment"`
 	ValidUntil    string `json:"valid_until"`
+}
+
+func (w *Website) GetPaymentWays() []string {
+	var payWays []string
+	w.DB.Model(&model.PaymentAccount{}).Where("`status` = 1").Group("pay_way").Pluck("pay_way", &payWays)
+
+	return payWays
+}
+
+func (w *Website) GetPaymentAccounts(ops func(tx *gorm.DB) *gorm.DB) []*model.PaymentAccount {
+	var accounts []*model.PaymentAccount
+	tx := w.DB.Model(model.PaymentAccount{}).Order("id desc")
+	if ops != nil {
+		tx = ops(tx)
+	}
+	tx.Find(&accounts)
+
+	return accounts
+}
+
+func (w *Website) GetPaymentAccountStatistic(accountId int64, currentPage int, pageSize int) ([]*model.PaymentStatistic, int64) {
+	var result []*model.PaymentStatistic
+	var total int64
+	offset := 0
+	if currentPage > 1 {
+		offset = (currentPage - 1) * pageSize
+	}
+	tx := w.DB.Model(model.PaymentStatistic{}).Order("id desc")
+	if accountId > 0 {
+		tx = tx.Where("account_id = ?", accountId)
+	}
+	tx.Count(&total).Limit(pageSize).Offset(offset).Find(&result)
+
+	return result, total
+}
+
+// GetSingleValidPaymentAccount 获取单个可用的支付账号，根据组合规则选出可用的支付账号
+func (w *Website) GetSingleValidPaymentAccount(payWay string, amount int64) *model.PaymentAccount {
+	// 先获取指定类型可用的账户
+	accounts := w.GetPaymentAccounts(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("pay_way = ? and status = 1", payWay)
+	})
+	if len(accounts) == 0 {
+		return nil
+	}
+	// 如果只有一个，直接返回
+	if len(accounts) == 1 {
+		return accounts[0]
+	}
+	todayStamp := now.BeginningOfDay().Unix()
+	monthStamp := now.BeginningOfMonth().Unix()
+	// 如果有多个，则需要判断是否达到限额了
+	var validAccounts []*model.PaymentAccount
+	for _, account := range accounts {
+		// 跳过金额范围不符合的账号
+		if account.MinAmount > 0 && amount < account.MinAmount {
+			continue
+		}
+		if account.MaxAmount > 0 && amount > account.MaxAmount {
+			continue
+		}
+		// 不限额的有效
+		if account.DailyAmountLimit == 0 && account.MonthlyAmountLimit == 0 && account.DailyCountLimit == 0 {
+			validAccounts = append(validAccounts, account)
+			continue
+		}
+		var statistic model.PaymentStatistic
+		err := w.DB.Where("account_id = ?", account.Id).Last(&statistic).Error
+		if err != nil {
+			continue
+		}
+		// 当月没有成交，有效
+		if statistic.StatTime < monthStamp {
+			validAccounts = append(validAccounts, account)
+			continue
+		}
+		// 先判断月额度是否达标，跳过当月已达标的账号
+		if statistic.MonthlyAmount >= account.MonthlyAmountLimit {
+			continue
+		}
+		// 当天没有成交，有效
+		if statistic.StatTime < todayStamp {
+			validAccounts = append(validAccounts, account)
+			continue
+		}
+		// 跳过当日已达标的账号
+		if statistic.DailyCount >= account.DailyCountLimit || statistic.DailyAmount >= account.DailyAmountLimit {
+			continue
+		}
+		// 满足条件
+		validAccounts = append(validAccounts, account)
+	}
+	if len(validAccounts) == 1 {
+		return validAccounts[0]
+	}
+	// 如果没有有效账号，则返回 isDefault
+	if len(validAccounts) == 0 {
+		for _, account := range accounts {
+			if account.IsDefault {
+				return account
+			}
+		}
+		// 否则，返回第一个
+		return validAccounts[0]
+	}
+	// 随机返回其中一个
+	rd := rand.New(rand.NewSource(time.Now().UnixNano()))
+
+	return validAccounts[rd.Intn(len(validAccounts))]
+}
+
+func (w *Website) GetPaymentAccountById(id int64) (*model.PaymentAccount, error) {
+	var account model.PaymentAccount
+	err := w.DB.Where("id = ?", id).First(&account).Error
+	if err != nil {
+		return nil, err
+	}
+	return &account, nil
+}
+
+func (w *Website) DeletePaymentAccount(id int64) error {
+	var account model.PaymentAccount
+	err := w.DB.Where("id = ?", id).First(&account).Error
+	if err != nil {
+		return err
+	}
+	err = w.DB.Delete(&account).Error
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (w *Website) SavePaymentAccount(req *request.PaymentAccountRequest) (*model.PaymentAccount, error) {
+	var account model.PaymentAccount
+	if req.Id > 0 {
+		err := w.DB.Where("id = ?", req.Id).First(&account).Error
+		if err != nil {
+			return nil, err
+		}
+	}
+	account.PayWay = req.PayWay
+	account.AccountName = req.AccountName
+	account.Status = req.Status
+	account.HealthScore = req.HealthScore
+	account.PayConfig = req.PayConfig
+	account.MinAmount = req.MinAmount
+	account.MaxAmount = req.MaxAmount
+	account.DailyCountLimit = req.DailyCountLimit
+	account.DailyAmountLimit = req.DailyAmountLimit
+	account.MonthlyAmountLimit = req.MonthlyAmountLimit
+	account.Weight = req.Weight
+	account.IsDefault = req.IsDefault
+
+	err := w.DB.Save(&account).Error
+	if err != nil {
+		return nil, err
+	}
+	// 处理 webhook
+	if req.PayWay == config.PayWayPaypal {
+		// 处理 paypal webhook
+		if req.Status == 1 && req.PayConfig.AppId != "" && req.PayConfig.AppSecret != "" {
+			w.UpdatePaypalWebhook(&account)
+		}
+	}
+
+	return &account, nil
 }
 
 func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) {
@@ -53,9 +226,15 @@ func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) {
 		return
 	}
 
-	client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, w.PluginPay.PaypalSandbox == false)
+	account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
 	if err != nil {
-		// 处理token获取失败
+		xlog.Errorf("Failed to get account info: %v", err)
+		return
+	}
+	var client *paypal.Client
+	client, err = paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, account.PayConfig.Sandbox == false)
+	if err != nil {
+		// 处理token获取失败，换另一个账号
 		return
 	}
 	library.DebugLog(w.CachePath, "paypal_webhook", string(event.Resource))
@@ -109,8 +288,8 @@ func (w *Website) isDuplicateEvent(ctx context.Context, eventId string) bool {
 	return false
 }
 
-func (w *Website) UpdatePaypalWebhook() {
-	if w.PluginPay.PaypalOpen == false || w.PluginPay.PaypalClientId == "" || w.PluginPay.PaypalClientSecret == "" {
+func (w *Website) UpdatePaypalWebhook(account *model.PaymentAccount) {
+	if account.PayConfig.AppId == "" || account.PayConfig.AppSecret == "" {
 		return
 	}
 	if strings.Contains(w.System.BaseUrl, "127.0.0.1") {
@@ -120,7 +299,7 @@ func (w *Website) UpdatePaypalWebhook() {
 	if strings.HasPrefix(w.System.BaseUrl, "http://") {
 		return
 	}
-	client, err := paypal.NewClient(w.PluginPay.PaypalClientId, w.PluginPay.PaypalClientSecret, w.PluginPay.PaypalSandbox == false)
+	client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, account.PayConfig.Sandbox == false)
 	if err != nil {
 		// 处理token获取失败
 		return
@@ -145,7 +324,7 @@ func (w *Website) UpdatePaypalWebhook() {
 		{Name: "CHECKOUT.ORDER.COMPLETED"},
 	}
 	// anqicms 的 webhook url 是 /notify/paypal/pay
-	var webhookId = w.PluginPay.PaypalWebhookId
+	var webhookId = account.PayConfig.WebhookId
 	var webhookUrl = w.System.BaseUrl + "/notify/paypal/pay"
 	var findUrl string
 	if len(resp.Response.Webhooks) > 0 {
@@ -178,7 +357,7 @@ func (w *Website) UpdatePaypalWebhook() {
 				log.Println("paypal webhook create error", createRsp.ErrorResponse.Message)
 				return
 			}
-			w.PluginPay.PaypalWebhookId = createRsp.Response.Id
+			account.PayConfig.WebhookId = createRsp.Response.Id
 			log.Println("paypal webhook create success", createRsp.Response.Id)
 		} else {
 			// 更新
@@ -203,14 +382,10 @@ func (w *Website) UpdatePaypalWebhook() {
 				xlog.Debugf("paypal webhook update error: %+v", ppRsp.Error)
 				return
 			}
-			w.PluginPay.PaypalWebhookId = webhookId
+			account.PayConfig.WebhookId = webhookId
 			log.Println("paypal webhook update success", ppRsp.Response.Id)
 		}
 		// 保存
-		err = w.SaveSettingValue(PaySettingKey, w.PluginPay)
-		if err != nil {
-			log.Println("paypal webhook update error", err)
-			return
-		}
+		w.DB.Model(account).Where("id = ?", account.Id).Save(account)
 	}
 }

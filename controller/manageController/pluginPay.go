@@ -1,29 +1,91 @@
 package manageController
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/request"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
 )
 
-func PluginPayConfig(ctx iris.Context) {
+// PluginGetPaymentAccounts 获取当前站点的全部支付账户列表。
+func PluginGetPaymentAccounts(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	pluginRewrite := currentSite.PluginPay
+
+	accounts := currentSite.GetPaymentAccounts(func(tx *gorm.DB) *gorm.DB {
+		return tx
+	})
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": pluginRewrite,
+		"data": accounts,
 	})
 }
 
-func PluginPayConfigForm(ctx iris.Context) {
+// PluginPayStatistic 获取支付账户的收款统计列表，支持按账户筛选和分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "account_id": 支付账户 ID，默认为 0 表示全部账户。
+func PluginPayStatistic(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	accountId := ctx.URLParamInt64Default("account_id", 0)
+	result, total := currentSite.GetPaymentAccountStatistic(accountId, currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  result,
+	})
+}
+
+// PluginGetPaymentAccountDetail 获取指定 ID 的支付账户详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 支付账户 ID，必填。
+func PluginGetPaymentAccountDetail(ctx iris.Context) {
+	id := ctx.URLParamInt64Default("id", 0)
+	if id == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "Invalid ID",
+		})
+		return
+	}
 	currentSite := provider.CurrentSite(ctx)
-	var req config.PluginPayConfig
+	account, err := currentSite.GetPaymentAccountById(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": account,
+	})
+}
+
+// PluginSavePaymentAccount 保存（新增或更新）支付账户配置。
+func PluginSavePaymentAccount(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PaymentAccountRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -32,41 +94,7 @@ func PluginPayConfigForm(ctx iris.Context) {
 		return
 	}
 
-	currentSite.PluginPay.AlipayOpen = req.AlipayOpen
-	currentSite.PluginPay.AlipayAppId = req.AlipayAppId
-	currentSite.PluginPay.AlipayPrivateKey = req.AlipayPrivateKey
-	if req.AlipayCertPath != "" {
-		currentSite.PluginPay.AlipayCertPath = req.AlipayCertPath
-	}
-	if req.AlipayRootCertPath != "" {
-		currentSite.PluginPay.AlipayRootCertPath = req.AlipayRootCertPath
-	}
-	if req.AlipayPublicCertPath != "" {
-		currentSite.PluginPay.AlipayPublicCertPath = req.AlipayPublicCertPath
-	}
-
-	currentSite.PluginPay.WechatOpen = req.WechatOpen
-	currentSite.PluginPay.WechatAppId = req.WechatAppId
-	currentSite.PluginPay.WechatAppSecret = req.WechatAppSecret
-	currentSite.PluginPay.WeappAppId = req.WeappAppId
-	currentSite.PluginPay.WeappAppSecret = req.WeappAppSecret
-
-	currentSite.PluginPay.WechatMchId = req.WechatMchId
-	currentSite.PluginPay.WechatApiKey = req.WechatApiKey
-	if req.WechatCertPath != "" {
-		currentSite.PluginPay.WechatCertPath = req.WechatCertPath
-	}
-	if req.WechatKeyPath != "" {
-		currentSite.PluginPay.WechatKeyPath = req.WechatKeyPath
-	}
-
-	// paypal
-	currentSite.PluginPay.PaypalOpen = req.PaypalOpen
-	currentSite.PluginPay.PaypalClientId = req.PaypalClientId
-	currentSite.PluginPay.PaypalClientSecret = req.PaypalClientSecret
-	currentSite.PluginPay.PaypalSandbox = req.PaypalSandbox
-
-	err := currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
+	account, err := currentSite.SavePaymentAccount(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -74,13 +102,36 @@ func PluginPayConfigForm(ctx iris.Context) {
 		})
 		return
 	}
-	currentSite.DeleteCacheIndex()
 
-	// 处理 paypal webhook
-	if req.PaypalClientId != "" && req.PaypalClientSecret != "" {
-		currentSite.UpdatePaypalWebhook()
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
+		"data": account,
+	})
+}
+
+// PluginDeletePaymentAccount 删除指定 ID 的支付账户。
+func PluginDeletePaymentAccount(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.PaymentAccountRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
 	}
 
+	err := currentSite.DeletePaymentAccount(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdatePaymentConfiguration"))
 
 	ctx.JSON(iris.Map{
@@ -89,10 +140,15 @@ func PluginPayConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginPayUploadFile 上传支付账户所需的证书
+//
+// 参数说明：
+//   - 表单参数 "name"：证书文件名，支持 .pem|.crt|.key 后缀。
+//   - 表单参数 "file"：证书文件
 func PluginPayUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	name := ctx.PostValue("name")
-	if name != "wechat_cert_path" && name != "wechat_key_path" && name != "alipay_cert_path" && name != "alipay_root_cert_path" && name != "alipay_public_cert_path" {
+	if !strings.HasSuffix(name, ".pem") && !strings.HasSuffix(name, ".crt") && !strings.HasSuffix(name, ".key") {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("FileNameInvalid"),
@@ -109,8 +165,6 @@ func PluginPayUploadFile(ctx iris.Context) {
 		return
 	}
 	defer file.Close()
-	fileName := name + ".pem"
-	filePath := currentSite.DataPath + "cert/" + fileName
 	buff, err := io.ReadAll(file)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -119,6 +173,10 @@ func PluginPayUploadFile(ctx iris.Context) {
 		})
 		return
 	}
+
+	newName := library.Md5Bytes(buff)
+	fileName := newName + ".pem"
+	filePath := fmt.Sprint(currentSite.DataPath + "cert/" + fileName)
 
 	err = os.MkdirAll(filepath.Dir(filePath), os.ModePerm)
 	if err != nil {
@@ -133,27 +191,6 @@ func PluginPayUploadFile(ctx iris.Context) {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  ctx.Tr("FileSaveFailed"),
-		})
-		return
-	}
-
-	if name == "wechat_cert_path" {
-		currentSite.PluginPay.WechatCertPath = fileName
-	} else if name == "wechat_key_path" {
-		currentSite.PluginPay.WechatKeyPath = fileName
-	} else if name == "alipay_cert_path" {
-		currentSite.PluginPay.AlipayCertPath = fileName
-	} else if name == "alipay_root_cert_path" {
-		currentSite.PluginPay.AlipayRootCertPath = fileName
-	} else if name == "alipay_public_cert_path" {
-		currentSite.PluginPay.AlipayPublicCertPath = fileName
-	}
-
-	err = currentSite.SaveSettingValue(provider.PaySettingKey, currentSite.PluginPay)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
 		})
 		return
 	}

@@ -59,6 +59,24 @@ func (w *Website) GetHtmlCachePushStatus() *HtmlCacheStatus {
 	return w.HtmlCachePushStatus
 }
 
+// MarkHtmlCacheFinished 记录一次缓存构建的完成时间，nil 安全。
+//
+// 为什么要它：Build*Cache 系列在 PluginHtmlCache.Open == false 时**直接 return**，
+// 不会分配 HtmlCacheStatus。而四个手动构建入口在调用 Build 之后都无条件写
+// `w2.HtmlCacheStatus.FinishedTime` —— 静态缓存未开启时该指针字段是 nil，
+// 于是 nil pointer dereference 打挂整个进程（实测 2026-10-03，SIGSEGV @ pluginHtmlCache.go:147）。
+//
+// 异步任务里的 panic 会带走整个进程（不只是这次构建失败），所以必须在这里兜住。
+func (w *Website) MarkHtmlCacheFinished() {
+	if w == nil {
+		return
+	}
+	if w.HtmlCacheStatus == nil {
+		w.HtmlCacheStatus = &HtmlCacheStatus{StartTime: time.Now().Unix()}
+	}
+	w.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+}
+
 func (w *Website) BuildHtmlCache(ctx iris.Context) {
 	if w.PluginHtmlCache.Open == false {
 		return
@@ -385,7 +403,7 @@ func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
 	newCtx.ViewData("webInfo", webInfo)
 	tplName := "place/detail.html"
 	//模板优先级：1、设置的template；2、存在分类id为名称的模板；3、继承的上级模板；4、默认模板，如果发现上一级不继承，则不需要处理
-	tmpName := fmt.Sprintf("%s/detail-%d.html", place.Id)
+	tmpName := fmt.Sprintf("place/detail-%d.html", place.Id)
 	if place.Template != "" {
 		tplName = place.Template
 	} else if ViewExists(newCtx, tmpName) {

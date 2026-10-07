@@ -186,7 +186,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 
 	if tag.FirstLetter == "" {
 		letter := "A"
-		if tag.UrlToken != "-" {
+		if tag.UrlToken != "" && tag.UrlToken != "-" {
 			letter = string(tag.UrlToken[0])
 		}
 		tag.FirstLetter = strings.ToUpper(letter)
@@ -306,7 +306,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 
 	if newPost && tag.Status == config.ContentStatusOK {
 		link := w.GetUrl("tag", tag, 0)
-		go w.PushArchive(link)
+		go w.PushArchives([]string{link})
 		if w.PluginSitemap.AutoBuild == 1 {
 			_ = w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
 		}
@@ -351,7 +351,7 @@ func (w *Website) SaveTagData(itemId int64, tagNames []string) error {
 			w.DB.Where("`title` = ?", tag.Title).FirstOrCreate(tag)
 
 			link := w.GetUrl("tag", tag, 0)
-			go w.PushArchive(link)
+			go w.PushArchives([]string{link})
 			if w.PluginSitemap.AutoBuild == 1 {
 				go w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
 			}

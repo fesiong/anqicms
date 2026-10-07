@@ -2,14 +2,17 @@ package manageController
 
 import (
 	"os"
+	"strconv"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 )
 
+// PluginGetTranslateConfig 获取翻译插件配置。
 func PluginGetTranslateConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginTranslate
@@ -21,6 +24,7 @@ func PluginGetTranslateConfig(ctx iris.Context) {
 	})
 }
 
+// PluginSaveTranslateConfig 保存翻译插件配置。
 func PluginSaveTranslateConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginTranslateConfig
@@ -51,6 +55,11 @@ func PluginSaveTranslateConfig(ctx iris.Context) {
 	})
 }
 
+// PluginTranslateLogList 分页获取翻译日志列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func PluginTranslateLogList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -73,6 +82,13 @@ func PluginTranslateLogList(ctx iris.Context) {
 	})
 }
 
+// PluginGetTranslateTextLog 分页获取文本翻译日志列表，支持按原文和译文前缀筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "text": 按原文前缀筛选。
+//   - 查询参数 "translated": 按译文前缀筛选。
 func PluginGetTranslateTextLog(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -103,9 +119,14 @@ func PluginGetTranslateTextLog(ctx iris.Context) {
 	})
 }
 
+// PluginRemoveTranslateTextLog 删除文本翻译日志，支持删除单条或全部。
+//
+// 参数说明：
+//   - 请求体 "id": 要删除的日志ID，大于 0 时删除该条。
+//   - 请求体 "all": 是否删除全部文本翻译日志。
 func PluginRemoveTranslateTextLog(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req model.TranslateTextLog
+	var req request.TranslateTextLogDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -118,7 +139,25 @@ func PluginRemoveTranslateTextLog(ctx iris.Context) {
 		// 删除所有
 		currentSite.DB.Where("`id` > 0").Delete(model.TranslateTextLog{})
 	} else if req.Id > 0 {
-		err := currentSite.DB.Delete(&req).Error
+		// 必须按模型删除：此前误传请求 DTO &req，GORM 据此推导出
+		// translate_text_log_delete_requests 这张不存在的表，单条删除恒报 1146。
+		//
+		// 先确认记录存在：GORM 的 Delete 对不存在的 id 是**0 行受影响但不报错**，
+		// 于是 id=999999 会「删除成功」地返回——调用方以为记录已删，实际什么都没发生。
+		var exist int64
+		if err := currentSite.DB.Model(&model.TranslateTextLog{}).
+			Where("`id` = ?", req.Id).Count(&exist).Error; err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
+		if exist == 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "翻译记录 id=" + strconv.FormatUint(uint64(req.Id), 10) + " 不存在，未做任何修改",
+			})
+			return
+		}
+		err := currentSite.DB.Where("`id` = ?", req.Id).Delete(model.TranslateTextLog{}).Error
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -126,6 +165,13 @@ func PluginRemoveTranslateTextLog(ctx iris.Context) {
 			})
 			return
 		}
+	} else {
+		// 既没给 all 也没给 id：什么都不删却回「已删除」，是最容易骗过调用人的形态。
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  "请提供要删除的 id，或设置 all=true 删除全部翻译记录（当前未做任何修改）",
+		})
+		return
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTranslateLog"))
 
@@ -135,9 +181,10 @@ func PluginRemoveTranslateTextLog(ctx iris.Context) {
 	})
 }
 
+// PluginSaveTranslateTextLog 添加/更新文本翻译，用于修正自动翻译错误的问题。
 func PluginSaveTranslateTextLog(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var req model.TranslateTextLog
+	var req request.TranslateTextLog
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -220,5 +267,6 @@ func PluginSaveTranslateTextLog(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("Saved"),
+		"data": textLog,
 	})
 }

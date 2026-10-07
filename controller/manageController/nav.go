@@ -8,6 +8,10 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// SettingNav 查询指定导航分组下的导航项。
+//
+// 参数说明：
+//   - 查询参数 "type_id": 导航分组 ID，默认为 1。
 func SettingNav(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	typeId := uint(ctx.URLParamIntDefault("type_id", 1))
@@ -20,6 +24,7 @@ func SettingNav(ctx iris.Context) {
 	})
 }
 
+// SettingNavForm 保存导航配置项，会同步更新多语言子站。
 func SettingNavForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavConfig
@@ -30,7 +35,18 @@ func SettingNavForm(ctx iris.Context) {
 		})
 		return
 	}
-	req.UpdateAll = true
+	// UpdateAll 决定「未传的字段」怎么处理：
+	//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
+	//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
+	//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
+	//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
+	//
+	// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
+	// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
+	// Partial 优先于调用方传的 update_all。
+	if !req.Partial {
+		req.UpdateAll = true
+	}
 	nav, err := currentSite.SaveNav(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -97,12 +113,14 @@ func SettingNavForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("ConfigurationUpdated"),
+		"data": nav,
 	})
 }
 
+// SettingNavDelete 删除指定导航项。
 func SettingNavDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.NavConfig
+	var req request.DeleteNavRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -153,6 +171,7 @@ func SettingNavDelete(ctx iris.Context) {
 	})
 }
 
+// SettingNavType 查询导航分组列表。
 func SettingNavType(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	navTypes, _ := currentSite.GetNavTypeList()
@@ -164,6 +183,7 @@ func SettingNavType(ctx iris.Context) {
 	})
 }
 
+// SettingNavTypeForm 新建或更新导航分组。
 func SettingNavTypeForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest
@@ -218,6 +238,7 @@ func SettingNavTypeForm(ctx iris.Context) {
 	})
 }
 
+// SettingNavTypeDelete 删除指定导航分组，默认分组不允许删除。
 func SettingNavTypeDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest

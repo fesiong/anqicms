@@ -225,12 +225,29 @@ func (w *Website) GetMultiLangValidSites(mainId uint) []config.MultiLangSite {
 	return sites
 }
 
+// RemoveMultiLangSite 移除一个多语言子站点。
+//
+// 为什么要显式判存在：`db.Model(&Website{}).Where("id = ?", id).Update(...)`
+// 对不存在的 id 是**0 行受影响但不报错**（GORM 只在 SQL 出错时返回 error），
+// 而 `MultiLanguage.RemoveSite` 是内存切片操作、找不到也什么都不做。
+// 于是 `siteId=999999` 会「删除成功」地返回 nil，控制器照样回「删除成功」——
+// 调用方以为子站已移除，实际什么都没发生（实测 MCP 侧就撞到这个）。
+//
+// 查不到就明确报错：一次失败的删除只是没生效（可重试），
+// 假成功则会让调用方以为配置已改而继续往下走。
 func (w *Website) RemoveMultiLangSite(siteId uint, lang string) error {
 	if siteId > 0 {
-		// 先移除parentId
 		db := GetDefaultDB()
-		err := db.Model(&model.Website{}).Where("id = ?", siteId).Update("parent_id", 0).Error
-		if err != nil {
+		// 先确认子站真实存在，再动 parent_id。
+		var exist int64
+		if err := db.Model(&model.Website{}).Where("id = ?", siteId).Count(&exist).Error; err != nil {
+			return err
+		}
+		if exist == 0 {
+			return fmt.Errorf("多语言子站 id=%d 不存在，未做任何修改", siteId)
+		}
+		// 先移除parentId
+		if err := db.Model(&model.Website{}).Where("id = ?", siteId).Update("parent_id", 0).Error; err != nil {
 			return err
 		}
 		// 修改运行中的状态
@@ -242,12 +259,11 @@ func (w *Website) RemoveMultiLangSite(siteId uint, lang string) error {
 
 			targetSite.ParentId = 0
 		}
-	} else {
-		// 移除语言
-		w.MultiLanguage.RemoveSite(siteId, lang)
-		// 更新setting
-		_ = w.SaveSettingValue(MultiLangSettingKey, w.MultiLanguage)
 	}
+	// 移除语言
+	w.MultiLanguage.RemoveSite(siteId, lang)
+	// 更新setting
+	_ = w.SaveSettingValue(MultiLangSettingKey, w.MultiLanguage)
 	// todo
 
 	return nil
@@ -355,7 +371,7 @@ func (w *Website) SaveMultiLangSite(req *request.PluginMultiLangSiteRequest) err
 
 // SyncMultiLangSiteContent 同步的内容有：modules categories tags archives
 // 同步的时候，不同步进行翻译，如果启用了自动翻译，则添加到翻译的计划任务中
-func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMultiLangSiteRequest) error {
+func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMultiLangSiteSyncRequest) error {
 	ms.Percent = 0
 	defer func() {
 		ms.FinishCount = ms.TotalCount
@@ -510,20 +526,7 @@ func (ms *MultiLangSyncStatus) SyncMultiLangSiteContent(req *request.PluginMulti
 			}
 		}
 	}
-	// 同步图片资源
-	startId = 0
-	if !req.Focus {
-		targetSite.DB.Model(&model.AttachmentCategory{}).Order("id DESC").Pluck("id", &startId)
-	}
-	var attachCategories []model.AttachmentCategory
-	mainSite.DB.Model(&model.AttachmentCategory{}).Where("id > ?", startId).Order("id ASC").Find(&attachCategories)
-	for _, attachCat := range attachCategories {
-		log.Println("sync navtype", attachCat.Id)
-		ms.FinishCount++
-		ms.Percent = ms.FinishCount * 100 / ms.TotalCount
-		ms.Message = ms.w.Tr("Syncing%s:%s", "Attachment Category", attachCat.Title)
-		targetSite.DB.Save(&attachCat)
-	}
+	// 同步图片资源x
 	// attachment 的复制处理
 	isCopied := false
 	if targetSite.PluginStorage.StorageType == config.StorageTypeLocal && req.Focus {

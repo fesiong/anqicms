@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginFulltextConfig 获取全文索引插件的配置信息。
 func PluginFulltextConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginFulltext
@@ -17,6 +18,7 @@ func PluginFulltextConfig(ctx iris.Context) {
 	})
 }
 
+// PluginFulltextConfigForm 保存全文索引插件配置，切换开启时异步重建全文索引。
 func PluginFulltextConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginFulltextConfig
@@ -65,6 +67,7 @@ func PluginFulltextConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginFulltextRebuild 重建全文索引，异步执行。
 func PluginFulltextRebuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	if !currentSite.PluginFulltext.Open {
@@ -84,6 +87,7 @@ func PluginFulltextRebuild(ctx iris.Context) {
 	})
 }
 
+// PluginFulltextStatus 获取全文索引插件的运行状态。
 func PluginFulltextStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetFullTextStatus()

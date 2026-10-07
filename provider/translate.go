@@ -99,6 +99,11 @@ func NewBaiduTranslate(appId, appSecret string) *BaiduTranslate {
 var baiduChan = make(chan struct{}, 1)
 
 func (b *BaiduTranslate) Translate(content string, fromLanguage string, toLanguage string) (string, error) {
+	// 空内容直接拒掉：否则会白跑一次网络往返（还占住 baiduChan 并 sleep 1s），
+	// 而服务端对空 q 只会回一个无意义的错误。
+	if strings.TrimSpace(content) == "" {
+		return "", errors.New("翻译内容不能为空")
+	}
 	// 百度翻译的QPS = 1
 	baiduChan <- struct{}{}
 	defer func() {
@@ -163,7 +168,11 @@ func NewYoudaoTranslate(appKey, appSecret string) *YoudaoTranslate {
 }
 
 func (yt *YoudaoTranslate) Translate(content string, fromLanguage string, toLanguage string) (string, error) {
-	// 将请求参数中的 APPID(appid)， 翻译 query(q，注意为UTF-8编码)，随机数(salt)，以及平台分配的密钥(可在管理控制台查看) 按照 appid+q+salt+密钥的顺序拼接得到字符串 1。
+	// 同百度：空内容直接拒掉，不白跑网络往返。
+	if strings.TrimSpace(content) == "" {
+		return "", errors.New("翻译内容不能为空")
+	}
+	// 将请求参数中的 APPID(appid)， 翻译 query(q，注意为UTF-8编码)，随机数(salt)，以及平台分配的密钥(可在管理后台查看) 按照 appid+q+salt+密钥的顺序拼接得到字符串 1。
 	salt := config.GenerateRandString(5)
 	if strings.ToLower(fromLanguage) == "zh-cn" {
 		fromLanguage = "zh-CHS"

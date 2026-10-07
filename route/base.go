@@ -75,8 +75,8 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)
 		api.Post("/user/avatar", middleware.UserAuth, controller.ApiUpdateUserAvatar)
-		api.Get("/user/groups", middleware.UserAuth, controller.ApiGetUserGroups)
-		api.Get("/user/group/detail", middleware.UserAuth, controller.ApiGetUserGroupDetail)
+		api.Get("/user/groups", controller.ApiGetUserGroups)
+		api.Get("/user/group/detail", controller.ApiGetUserGroupDetail)
 		api.Post("/user/password", middleware.UserAuth, controller.ApiUpdateUserPassword)
 		api.Get("/orders", middleware.UserAuth, controller.ApiGetOrders)
 		api.Post("/order/create", controller.ApiCreateOrder)
@@ -140,6 +140,7 @@ func Register(app *iris.Application, systemFiles embed.FS) {
 		api.Post("/comment/publish", controller.CheckApiOpen, controller.ApiCommentPublish)
 		api.Post("/comment/praise", controller.CheckApiOpen, middleware.UserAuth, controller.ApiCommentPraise)
 		api.Post("/guestbook.html", controller.CheckApiOpen, controller.ApiGuestbookForm)
+		api.Post("/subscription", controller.CheckApiOpen, controller.ApiAddSubscriber)
 	}
 
 	notify := app.Party("/notify")

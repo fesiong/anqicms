@@ -301,7 +301,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 	if ok {
 		archiveId = archiveDetail.Id
-		keywords = strings.Split(strings.ReplaceAll(archiveDetail.Keywords, "，", ","), ",")[0]
+		keywords = strings.Split(archiveDetail.Keywords, ",")[0]
 	}
 	// 允许通过keywords调用
 	like := ""
@@ -376,6 +376,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if listType == "page" {
 		var urlPatten string
 		webInfo, ok2 := ctx.Public["webInfo"].(*response.WebInfo)
+		// 当前分类
+		categoryDetail, _ = ctx.Public["category"].(*model.Category)
 		if categoryDetail != nil {
 			category := *categoryDetail
 			urlMatch := "category"

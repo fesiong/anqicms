@@ -41,7 +41,6 @@ type ConfigJson struct {
 	PluginSendmail    PluginSendmail        `json:"plugin_sendmail"`
 	PluginImportApi   PluginImportApiConfig `json:"plugin_import_api"`
 	PluginStorage     PluginStorageConfig   `json:"plugin_storage"`
-	PluginPay         PluginPayConfig       `json:"plugin_pay"`
 	PluginWeapp       PluginWeappConfig     `json:"plugin_weapp"`
 	PluginWechat      PluginWeappConfig     `json:"plugin_wechat"`
 	PluginRetailer    PluginRetailerConfig  `json:"plugin_retailer"`
@@ -96,8 +95,13 @@ var AnqiUser AnqiUserConfig
 
 var GoogleValid bool // can visit google or not
 
+type RestartConfig struct {
+	Code   int
+	SiteId uint
+}
+
 // RestartChan 1 to restart app, 0 to reload template, 2 to exit app
-var RestartChan = make(chan int)
+var RestartChan = make(chan RestartConfig)
 
 func init() {
 	initPath()

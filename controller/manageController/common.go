@@ -21,9 +21,11 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 )
 
+// AdminFileServ 后台系统文件服务，根据请求路径输出 system 目录下的静态文件（支持目录默认 index.html）；同时根据 Site-Id 请求头或 site_id 参数为二级目录站点切换站点上下文。
 func AdminFileServ(ctx iris.Context) {
 	tmpSiteId := ctx.GetHeader("Site-Id")
 	paramSiteId := ctx.URLParam("site_id")
@@ -70,6 +72,7 @@ func AdminFileServ(ctx iris.Context) {
 	ctx.Next()
 }
 
+// Version 获取当前系统版本号及是否为试用版。
 func Version(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -81,6 +84,10 @@ func Version(ctx iris.Context) {
 	})
 }
 
+// GetStatisticsSummary 获取统计摘要数据，exact 为 true 时进行精确统计。
+//
+// 参数说明：
+//   - 查询参数 "exact": 是否精确统计，默认为 false。
 func GetStatisticsSummary(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	exact := ctx.URLParamBoolDefault("exact", false)
@@ -93,6 +100,7 @@ func GetStatisticsSummary(ctx iris.Context) {
 	})
 }
 
+// GetStatisticsDashboard 获取统计面板数据。
 func GetStatisticsDashboard(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var result = iris.Map{}
@@ -127,7 +135,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 	})
 }
 
-// CheckVersion 检查新版
+// CheckVersion 检查当前版本是否为最新版。
 func CheckVersion(ctx iris.Context) {
 	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
 	var lastVersion response.LastVersion
@@ -170,9 +178,15 @@ func CheckVersion(ctx iris.Context) {
 	})
 }
 
+// VersionUpgrade 执行系统版本升级：下载指定版本的程序压缩包，解压覆盖程序文件（跳过模板等文件）并替换主程序可执行文件。
+//
+// 参数说明：
+//   - 请求体 "version": 目标版本号。
+//   - 请求体 "trial": 是否升级为试用版本。
+//   - 请求体 "trial_version": 试用版本号，trial 为 true 时使用。
 func VersionUpgrade(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
-	var lastVersion response.LastVersion
+	var lastVersion request.VersionData
 	if err := ctx.ReadJSON(&lastVersion); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -311,6 +325,7 @@ func VersionUpgrade(ctx iris.Context) {
 	})
 }
 
+// GenerateCaptcha 生成验证码
 func GenerateCaptcha(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	safeSetting := currentSite.Safe

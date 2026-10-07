@@ -88,12 +88,14 @@ const (
 	CommissionStatusPaid   = 1 //已提现
 	CommissionStatusCancel = -1
 
-	PayWayWechat  = "wechat"  // 微信网页支付
-	PayWayWeapp   = "weapp"   // 微信小程序支付
-	PayWayAlipay  = "alipay"  // 支付宝支付
-	PayWayOffline = "offline" // 线下支付
-	PayWayBalance = "balance" // 余额支付
-	PayWayPaypal  = "paypal"  // paypal
+	PayWayWechat     = "wechat"     // 微信网页支付
+	PayWayWeapp      = "weapp"      // 微信小程序支付
+	PayWayAlipay     = "alipay"     // 支付宝支付
+	PayWayOffline    = "offline"    // 线下支付
+	PayWayBalance    = "balance"    // 余额支付
+	PayWayPaypal     = "paypal"     // paypal
+	PayWayStripe     = "stripe"     // stripe
+	PayWayNowpayment = "nowpayment" // nowpayment
 )
 
 const (

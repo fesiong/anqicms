@@ -246,30 +246,27 @@ func (w *Website) SendGuestbookToMail(guestbook *model.Guestbook) {
 			}
 		}
 	}
+	data := map[string]interface{}{
+		"website":   w,
+		"guestbook": guestbook,
+	}
 	//发送邮件
-	subject := w.TplTr("%sHasNewMessageFrom%s", w.System.SiteName, guestbook.UserName)
-	var contents = []string{
-		w.TplTr("%s: %s", "UserName", guestbook.UserName) + "\n",
-		w.TplTr("%s: %s", "Contact", guestbook.Contact) + "\n",
-		w.TplTr("%s: %s", "Content", guestbook.Content) + "\n",
+	template, exist := w.GetEmailTemplateInfo("guestbook")
+	if exist && template.Open {
+		var err error
+		template, err = w.RenderEmailTemplate(template, data)
+		if err == nil {
+			w.SendMail(template.Subject, template.Content, nil)
+		}
 	}
 
-	for key, value := range guestbook.ExtraData {
-		content := w.TplTr("%s: %s", key, fmt.Sprint(value)) + "\n"
-
-		contents = append(contents, content)
-	}
-	// 增加来路和IP返回
-	contents = append(contents, fmt.Sprintf("%s: %s\n", w.TplTr("SubmitIp"), guestbook.Ip))
-	contents = append(contents, fmt.Sprintf("%s: %s\n", w.TplTr("SourcePage"), guestbook.Refer))
-	contents = append(contents, fmt.Sprintf("%s: %s\n", w.TplTr("SubmitTime"), time.Now().Format("2006-01-02 15:04:05")))
-
-	if w.SendTypeValid(SendTypeGuestbook) {
-		// 后台发信
-		w.SendMail(subject, strings.Join(contents, ""))
-		// 回复客户
-		if recipient != "" {
-			w.ReplyMail(recipient)
+	// 回复邮件
+	template, exist = w.GetEmailTemplateInfo("auto_reply")
+	if exist && template.Open {
+		var err error
+		template, err = w.RenderEmailTemplate(template, data)
+		if err == nil {
+			w.SendMail(template.Subject, template.Content, nil, recipient)
 		}
 	}
 }

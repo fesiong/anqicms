@@ -2,7 +2,7 @@
 name: template-dev
 description: AnQiCMS 模板开发技能：基于 pongo2（Django 语法）的自定义模板引擎，标签闭合规则完整速查
 category: Development
-version: 1.1
+version: 1.2
 tags: [anqicms, template, pongo2, django, tag]
 ---
 
@@ -38,7 +38,8 @@ AnQiCMS 使用基于 `github.com/flosch/pongo2`（Django-like syntax）的模板
 | `tagList` | `endtagList` | 标签列表 |
 | `bannerList` | `endbannerList` | 横幅 |
 | `commentList` | `endcommentList` | 评论列表 |
-| `reviewList` | `endreviewList` | 评价列表 |
+| `guestbookList` | `endguestbookList` | 留言列表 |
+| `placeList` | `endplaceList` | 推荐位列表 |
 | `if` | `endif` | 条件判断 |
 | `for` | `endfor` | 循环 |
 | `block` | `endblock` | 模板块 |
@@ -59,17 +60,16 @@ AnQiCMS 使用基于 `github.com/flosch/pongo2`（Django-like syntax）的模板
 | `archiveParams` | `endarchiveParams` | 文档参数 |
 | `tagDataList` | `endtagDataList` | 标签文档列表 |
 | `archiveFilters` | `endarchiveFilters` | 筛选器 |
-| `languages` | `endLanguages` | 多语言切换 |
+| `languages` | `endLanguages`（或 `endlanguages`） | 多语言切换 |
 | `jsonLd` | `endjsonLd` | 结构化数据 |
 | `comment` | `endcomment` | 多行注释 |
-| `archiveSku` | `endarchiveSku` | 产品SKU |
 
 ### 自闭合标签（SINGLE_TAGS）
 这些标签**不需要**闭合，单行使用即可：
 
 `archiveDetail` · `categoryDetail` · `tagDetail` · `pageDetail` · `moduleDetail` ·
-`userDetail` · `userGroupDetail` · `tdk` · `system` · `contact` · `diy` ·
-`pluginJsCode` · `tr` · `lorem` · `now` · `set` · `include` · `extends` · `import` ·
+`placeDetail` · `userDetail` · `userGroupDetail` · `tdk` · `system` · `contact` · `diy` ·
+`tr` · `lorem` · `now` · `set` · `include` · `extends` · `import` ·
 `ssi` · `templatetag` · `widthratio` · `attachment` · `cycle` · `firstof` · `jump`
 
 ```twig
@@ -155,11 +155,18 @@ AnQiCMS 使用基于 `github.com/flosch/pongo2`（Django-like syntax）的模板
 
 ## 过滤器与函数
 
-**时间**：`{{ stampToDate(timestamp, "2006-01-02") }}` · `{{ timestamp|dateFormat:"2006-01-02" }}`
+**全局函数**（`AddFunc` 注册，用 `{{ fn(args) }}` 调用）：`stampToDate` · `priceFormat` · `range` · `CustomFunc`
+- 时间：`{{ stampToDate(timestamp, "2006-01-02") }}`
+- 价格：`{{ priceFormat(price) }}`
 
-**价格**：`{{ priceFormat(price) }}` · `{{ price|priceFormat }}`
+**AnQiCMS 自定义过滤器**（`tags/filter.go`，用 `{{ var|filter }}`）：
+`thumb`（缩略图）· `render`（渲染模板片段）· `json`（转 JSON）· `lazy`（懒加载占位）· `dump` · `contain` · `fields` · `index` · `repeat` · `list` · `count` · `trim` · `trimLeft` · `trimRight` · `replace` · `dateFormat` · `priceFormat`；另替换了内置的 `split`、`wordwrap`。
+- 时间过滤器：`{{ timestamp|dateFormat:"2006-01-02" }}`
+- 价格过滤器：`{{ price|priceFormat }}`
 
-**标准过滤器**：`default` · `length` · `upper` · `lower` · `title` · `trim` · `urlencode` · `addslashes` · `slugify` · `split(",")` · `first` · `last` · `cut` · `replace` · `center` · `wordcount` · `random`
+**pongo2 内置过滤器**：`default` · `length` · `upper` · `lower` · `title` · `urlencode` · `addslashes` · `slugify` · `first` · `last` · `cut` · `center` · `wordcount` · `random` 等。
+
+> 注意：`stampToDate` 是**全局函数**不是过滤器，写成 `{{ stampToDate(x, "2006-01-02") }}`；对应的时间**过滤器**是 `dateFormat`。
 
 ## 验证清单
 
@@ -169,4 +176,4 @@ AnQiCMS 使用基于 `github.com/flosch/pongo2`（Django-like syntax）的模板
 - [ ] `elif` 不是 `elseif`
 - [ ] 时间用 `stampToDate` 函数或 `dateFormat` 过滤器
 - [ ] 模板目录结构遵循标准布局（`base.html` + 模型目录）
-- [ ] 修改后运行 `template_reload` 生效
+- [ ] 修改后调用 `system_config`（action=`template_reload`）生效

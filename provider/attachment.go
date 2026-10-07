@@ -34,7 +34,6 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
-	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 )
 
@@ -709,27 +708,6 @@ func (w *Website) BuildThumb(fileLocation string) error {
 	return nil
 }
 
-// GetAttachmentCategories 获取所有分类
-func (w *Website) GetAttachmentCategories() ([]*model.AttachmentCategory, error) {
-	var categories []*model.AttachmentCategory
-
-	err := w.DB.Where("`status` = 1").Order("id desc").Find(&categories).Error
-	if err != nil {
-		return nil, err
-	}
-
-	return categories, nil
-}
-
-func (w *Website) GetAttachmentCategoryById(id uint) (*model.AttachmentCategory, error) {
-	var category model.AttachmentCategory
-	if err := w.DB.Where("id = ?", id).First(&category).Error; err != nil {
-		return nil, err
-	}
-
-	return &category, nil
-}
-
 func (w *Website) ChangeAttachmentCategory(categoryId uint, ids []uint) error {
 	if len(ids) == 0 {
 		return nil
@@ -738,47 +716,6 @@ func (w *Website) ChangeAttachmentCategory(categoryId uint, ids []uint) error {
 	w.DB.Model(&model.Attachment{}).Where("`id` IN(?)", ids).UpdateColumn("category_id", categoryId)
 
 	return nil
-}
-
-func (w *Website) DeleteAttachmentCategory(id uint) error {
-	category, err := w.GetAttachmentCategoryById(id)
-	if err != nil {
-		return err
-	}
-
-	//如果存在内容，则不能删除
-	var attachCount int64
-	w.DB.Model(&model.Attachment{}).Where("`category_id` = ?", category.Id).Count(&attachCount)
-	if attachCount > 0 {
-		return errors.New(w.Tr("PleaseDeleteTheImagesUnderTheCategoryBeforeDeletingTheCategory"))
-	}
-
-	//执行删除操作
-	err = w.DB.Delete(category).Error
-
-	return err
-}
-
-func (w *Website) SaveAttachmentCategory(req *request.AttachmentCategory) (category *model.AttachmentCategory, err error) {
-	if req.Id > 0 {
-		category, err = w.GetAttachmentCategoryById(req.Id)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		category = &model.AttachmentCategory{
-			Status: 1,
-		}
-	}
-	category.Title = req.Title
-	category.Status = 1
-
-	err = w.DB.Save(category).Error
-
-	if err != nil {
-		return
-	}
-	return
 }
 
 func (w *Website) StartConvertImageToWebp() {

@@ -40,9 +40,9 @@ const (
 	MaxPartialStreamRecoveries = 1
 
 	// rate limit 精细化
-	rateLimitSilentDelay     = 1 * time.Second // 首 429 静默 1s
-	RateLimitAutoWaitSecs    = 120             // 无 Retry-After 头时等待秒数
-	MaxRateLimitWaits        = 5              // 最多等待次数
+	rateLimitSilentDelay  = 1 * time.Second // 首 429 静默 1s
+	RateLimitAutoWaitSecs = 120             // 无 Retry-After 头时等待秒数
+	MaxRateLimitWaits     = 5               // 最多等待次数
 )
 
 // PARTIAL_STREAM_RESUME_NUDGE 注入到 messages 末尾，让模型从断点继续。
@@ -159,21 +159,21 @@ type StreamFn func(ctx context.Context, messages []*schema.Message) (*schema.Str
 
 // StreamResult 保存流式接收的结果。
 type StreamResult struct {
-	Response        string
-	Reasoning       string
-	ToolCalls       []schema.ToolCall
-	PromptTokens    int
+	Response         string
+	Reasoning        string
+	ToolCalls        []schema.ToolCall
+	PromptTokens     int
 	CompletionTokens int
 	// FinishReason: 流结束原因 ("stop"/"length"/"tool_calls"/...)
 	// "length" 表示 AI 响应被 max_tokens 截断，需注入 TRUNCATION_RESUME_NUDGE
-	FinishReason    string
+	FinishReason string
 }
 
 // StreamCallbacks 是 StreamWithRetry 的回调集合。
 type StreamCallbacks struct {
-	OnChunk    func(chunk string)
+	OnChunk     func(chunk string)
 	OnReasoning func(content string)
-	OnWarning  func(msg string)
+	OnWarning   func(msg string)
 }
 
 // StreamWithRetry 带四层重试的流式接收 (仿 atomcode)。

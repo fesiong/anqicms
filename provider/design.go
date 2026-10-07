@@ -1244,29 +1244,32 @@ func (w *Website) RestoreDesignData(packageName string) error {
 
 // restoreSingleData
 //
-//	    	anchors              []model.Anchor
-//			anchorData           []model.AnchorData
-//			archives             []model.Archive
-//			archiveData          []model.ArchiveData
-//			attachments          []model.Attachment
-//			attachmentCategories []model.AttachmentCategory
-//			categories           []model.Category
-//			archiveCategories    []model.ArchiveCategory
-//			comments             []model.Comment
-//			guestbooks           []model.Guestbook
-//			keywords             []model.Keyword
-//			links                []model.Link
-//			materials            []model.Material
-//			materialCategories   []model.MaterialCategory
-//			materialData         []model.MaterialData
-//			modules              []model.Module
-//			navs                 []model.Nav
-//			navTypes             []model.NavType
-//			redirects            []model.Redirect
-//			settings             []model.Setting
-//			tags                 []model.Tag
-//			tagData              []model.TagData
-//			userGroups           []model.UserGroup
+//	anchors              []model.Anchor
+//	anchorData           []model.AnchorData
+//	archives             []model.Archive
+//	archiveData          []model.ArchiveData
+//	attachments          []model.Attachment
+//	categories           []model.Category
+//	archiveCategories    []model.ArchiveCategory
+//	archiveRelations     []model.ArchiveRelation
+//	archiveFlags         []model.ArchiveFlag
+//	comments             []model.Comment
+//	guestbooks           []model.Guestbook
+//	keywords             []model.Keyword
+//	links                []model.Link
+//	materials            []model.Material
+//	materialCategories   []model.MaterialCategory
+//	materialData         []model.MaterialData
+//	modules              []model.Module
+//	navs                 []model.Nav
+//	navTypes             []model.NavType
+//	redirects            []model.Redirect
+//	settings             []model.Setting
+//	tags                 []model.Tag
+//	tagData              []model.TagData
+//	tagContents          []model.TagContent
+//	userGroups           []model.UserGroup
+//	places               []model.Place
 func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 	data, err := io.ReadAll(reader)
 	if err != nil {
@@ -1373,6 +1376,24 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 		for _, v := range archiveCategories {
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 		}
+	} else if name == "archiveRelations" {
+		var archiveRelations []model.ArchiveRelation
+		err = json.Unmarshal(data, &archiveRelations)
+		if err != nil {
+			return
+		}
+		for _, v := range archiveRelations {
+			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "archiveFlags" {
+		var archiveFlags []model.ArchiveFlag
+		err = json.Unmarshal(data, &archiveFlags)
+		if err != nil {
+			return
+		}
+		for _, v := range archiveFlags {
+			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
 	} else if name == "tags" {
 		var tags []model.Tag
 		err = json.Unmarshal(data, &tags)
@@ -1389,6 +1410,15 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 			return
 		}
 		for _, v := range tagData {
+			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
+	} else if name == "tagContents" {
+		var tagContents []model.TagContent
+		err = json.Unmarshal(data, &tagContents)
+		if err != nil {
+			return
+		}
+		for _, v := range tagContents {
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 		}
 	} else if name == "anchors" {
@@ -1416,15 +1446,6 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 			return
 		}
 		for _, v := range attachments {
-			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
-		}
-	} else if name == "attachmentCategories" {
-		var attachmentCategories []model.AttachmentCategory
-		err = json.Unmarshal(data, &attachmentCategories)
-		if err != nil {
-			return
-		}
-		for _, v := range attachmentCategories {
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 		}
 	} else if name == "comments" {
@@ -1528,6 +1549,15 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 		for _, v := range userGroups {
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 		}
+	} else if name == "places" {
+		var places []model.Place
+		err = json.Unmarshal(data, &places)
+		if err != nil {
+			return
+		}
+		for _, v := range places {
+			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
+		}
 	} else {
 		name = strings.ReplaceAll(name, "\\", "/")
 		realFile := w.PublicPath + name
@@ -1589,6 +1619,16 @@ func (w *Website) BackupDesignData(packageName string) error {
 		if len(archiveCategories) > 0 {
 			_ = w.writeDataToZip("archiveCategories", archiveCategories, zw)
 		}
+		var archiveRelations []model.ArchiveRelation
+		w.DB.Where("`archive_id` IN(?)", archiveIds).Find(&archiveRelations)
+		if len(archiveRelations) > 0 {
+			_ = w.writeDataToZip("archiveRelations", archiveRelations, zw)
+		}
+		var archiveFlags []model.ArchiveFlag
+		w.DB.Where("`archive_id` IN(?)", archiveIds).Find(&archiveFlags)
+		if len(archiveFlags) > 0 {
+			_ = w.writeDataToZip("archiveFlags", archiveFlags, zw)
+		}
 	}
 	var attachments []model.Attachment
 	w.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&attachments)
@@ -1603,11 +1643,6 @@ func (w *Website) BackupDesignData(packageName string) error {
 			thumbPath := w.PublicPath + thumbName
 			_ = w.writeFileToZip(thumbName, thumbPath, zw)
 		}
-	}
-	var attachmentCategories []model.AttachmentCategory
-	w.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&attachmentCategories)
-	if len(attachmentCategories) > 0 {
-		_ = w.writeDataToZip("attachmentCategories", attachmentCategories, zw)
 	}
 	var categories []model.Category
 	w.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&categories)
@@ -1674,7 +1709,7 @@ func (w *Website) BackupDesignData(packageName string) error {
 		_ = w.writeDataToZip("redirects", redirects, zw)
 	}
 	var settings []model.Setting
-	w.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey, AnqiSettingKey}).Find(&settings)
+	w.DB.Where("`key` NOT IN(?)", []string{SendmailSettingKey, ImportApiSettingKey, StorageSettingKey, PaySettingKey, WeappSettingKey, WechatSettingKey, AnqiSettingKey, CacheTypeKey, LastRunVersionKey, GoogleAuthSettingKey, AkismetSettingKey, TranslateSettingKey, AiGenerateSettingKey, HtmlCacheSettingKey, FulltextSettingKey, PushSettingKey}).Find(&settings)
 	if len(settings) > 0 {
 		_ = w.writeDataToZip("settings", settings, zw)
 	}
@@ -1691,11 +1726,21 @@ func (w *Website) BackupDesignData(packageName string) error {
 		if len(tagData) > 0 {
 			_ = w.writeDataToZip("tagData", tagData, zw)
 		}
+		var tagContents []model.TagContent
+		w.DB.Where("`id` IN(?)", tagIds).Find(&tagContents)
+		if len(tagContents) > 0 {
+			_ = w.writeDataToZip("tagContents", tagContents, zw)
+		}
 	}
 	var userGroups []model.UserGroup
 	w.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&userGroups)
 	if len(userGroups) > 0 {
 		_ = w.writeDataToZip("userGroups", userGroups, zw)
+	}
+	var places []model.Place
+	w.DB.Where("`status` = 1").Order("`id` desc").Limit(maxLimit).Find(&places)
+	if len(places) > 0 {
+		_ = w.writeDataToZip("places", places, zw)
 	}
 	return nil
 }

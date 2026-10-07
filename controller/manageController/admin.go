@@ -22,6 +22,7 @@ import (
 	"kandaoni.com/anqicms/response"
 )
 
+// AdminLogin 管理员登录，验证账号密码（支持验证码和签名登录），成功后返回带 token 的管理员信息。
 func AdminLogin(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.AdminInfoRequest
@@ -233,6 +234,7 @@ func AdminLogin(ctx iris.Context) {
 	})
 }
 
+// AdminLogout 管理员退出登录，直接返回退出成功。
 func AdminLogout(ctx iris.Context) {
 	// todo
 	ctx.JSON(iris.Map{
@@ -241,6 +243,14 @@ func AdminLogout(ctx iris.Context) {
 	})
 }
 
+// AdminList 分页获取管理员列表，支持按 ID、用户组、用户名筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "id": 管理员 ID，精确匹配。
+//   - 查询参数 "group_id": 用户组 ID。
+//   - 查询参数 "user_name": 用户名，模糊匹配。
 func AdminList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -272,9 +282,14 @@ func AdminList(ctx iris.Context) {
 	})
 }
 
+// AdminDetail 获取指定管理员的详细信息，未指定 ID 时返回当前登录管理员的信息。
+//
+// 参数说明：
+//   - 查询参数 "id": 管理员 ID，默认为 0 表示当前登录管理员。
 func AdminDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	adminId := ctx.Values().GetUintDefault("adminId", 0)
+	// Admin ID, empty means current admin
 	queryId := uint(ctx.URLParamIntDefault("id", 0))
 	if queryId == 0 {
 		queryId = adminId
@@ -298,6 +313,7 @@ func AdminDetail(ctx iris.Context) {
 	})
 }
 
+// AdminDetailForm 新增或更新管理员信息，包括用户名、密码、状态和所属用户组。
 func AdminDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.AdminInfoRequest
@@ -374,6 +390,7 @@ func AdminDetailForm(ctx iris.Context) {
 	})
 }
 
+// AdminDetailDelete 删除指定管理员，不能删除超级管理员和自己。
 func AdminDetailDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.AdminInfoRequest
@@ -410,6 +427,11 @@ func AdminDetailDelete(ctx iris.Context) {
 	})
 }
 
+// GetAdminLoginLog 分页获取管理员登录日志列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func GetAdminLoginLog(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -431,6 +453,11 @@ func GetAdminLoginLog(ctx iris.Context) {
 	})
 }
 
+// GetAdminLog 分页获取管理员操作日志列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
 func GetAdminLog(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -452,6 +479,7 @@ func GetAdminLog(ctx iris.Context) {
 	})
 }
 
+// AdminGroupList 获取全部管理员分组列表。
 func AdminGroupList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	groups := currentSite.GetAdminGroups()
@@ -463,6 +491,10 @@ func AdminGroupList(ctx iris.Context) {
 	})
 }
 
+// AdminGroupDetail 根据指定 ID 获取管理员分组详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 分组 ID。
 func AdminGroupDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -483,6 +515,7 @@ func AdminGroupDetail(ctx iris.Context) {
 	})
 }
 
+// AdminGroupDetailForm 新增或更新管理员分组，包括名称、描述、权限和配置。
 func AdminGroupDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.GroupRequest
@@ -517,6 +550,7 @@ func AdminGroupDetailForm(ctx iris.Context) {
 	})
 }
 
+// AdminGroupDelete 删除指定管理员分组。
 func AdminGroupDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.GroupRequest
@@ -544,7 +578,7 @@ func AdminGroupDelete(ctx iris.Context) {
 	})
 }
 
-// AdminMenus 后台操作按钮
+// AdminMenus 获取后台操作按钮列表
 func AdminMenus(ctx iris.Context) {
 
 	ctx.JSON(iris.Map{
@@ -554,6 +588,10 @@ func AdminMenus(ctx iris.Context) {
 	})
 }
 
+// FindPasswordChooseWay 选择管理员找回密码的验证方式（文件上传验证或 DNS 解析验证），生成限时验证令牌。
+//
+// 参数说明：
+//   - 请求体 "way": 验证方式，"file" 为文件验证，"dns" 为域名解析验证。
 func FindPasswordChooseWay(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.FindPasswordChooseRequest
@@ -610,6 +648,7 @@ func FindPasswordChooseWay(ctx iris.Context) {
 	})
 }
 
+// FindPasswordVerify 校验找回密码的验证结果：文件方式检查站点根目录下令牌文件内容，DNS 方式检查 TXT 解析记录是否与令牌一致。
 func FindPasswordVerify(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite.FindPasswordInfo == nil {
@@ -650,6 +689,7 @@ func FindPasswordVerify(ctx iris.Context) {
 	})
 }
 
+// FindPasswordReset 找回密码验证通过后，重置超级管理员的账号和密码。
 func FindPasswordReset(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	if currentSite.FindPasswordInfo == nil {

@@ -57,6 +57,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			anqi.Get("/ai/agents/{id}/logs", manageController.AiAgentLog)
 			anqi.Post("/ai/agents/{id}/chat", manageController.AiAgentChat)
 			anqi.Get("/ai/health", manageController.AiHealth)
+			anqi.Get("/ai/chat/trace", manageController.AiChatTrace)
 			anqi.Post("/ai/image", manageController.AuthAiGenerateImage)
 			anqi.Post("/ai/image/confirm", manageController.AuthAiGenerateImageConfirm)
 			anqi.Get("/ai/image/histories", manageController.AuthAiGenerateImageHistories)
@@ -150,16 +151,13 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 		attachment := manage.Party("/attachment", middleware.ParseAdminToken, middleware.AdminPermission)
 		{
 			attachment.Get("/list", manageController.AttachmentList)
+			attachment.Get("/detail", manageController.AttachmentDetail)
 			attachment.Post("/upload", manageController.AttachmentUpload)
 			attachment.Post("/addurl", manageController.AttachmentAddRemoteUrl)
 			attachment.Post("/delete", manageController.AttachmentDelete)
 			attachment.Post("/edit", manageController.AttachmentEdit)
 			attachment.Post("/scan", manageController.AttachmentScanUploads)
-
 			attachment.Post("/category", manageController.AttachmentChangeCategory)
-			attachment.Get("/category/list", manageController.AttachmentCategoryList)
-			attachment.Post("/category/detail", manageController.AttachmentCategoryDetailForm)
-			attachment.Post("/category/delete", manageController.AttachmentCategoryDelete)
 		}
 
 		module := manage.Party("/module", middleware.ParseAdminToken, middleware.AdminPermission)
@@ -244,6 +242,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 		{
 			plugin.Get("/push", manageController.PluginPush)
 			plugin.Post("/push", manageController.PluginPushForm)
+			plugin.Post("/push/push", manageController.PluginPushUrls)
 			plugin.Get("/push/logs", manageController.PluginPushLogList)
 
 			plugin.Get("/robots", manageController.PluginRobots)
@@ -294,6 +293,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			guestbook := plugin.Party("/guestbook")
 			{
 				guestbook.Get("/list", manageController.PluginGuestbookList)
+				guestbook.Get("/detail", manageController.PluginGuestbookDetail)
 				guestbook.Post("/status", manageController.PluginGuestbookUpdateStatus)
 				guestbook.Post("/delete", manageController.PluginGuestbookDelete)
 				guestbook.Post("/export", manageController.PluginGuestbookExport)
@@ -323,6 +323,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			{
 				material.Post("/convert/file", manageController.ConvertFileToUtf8)
 				material.Get("/list", manageController.PluginMaterialList)
+				material.Get("/detail", manageController.PluginMaterialDetail)
 				material.Post("/detail", manageController.PluginMaterialDetailForm)
 				material.Post("/import", manageController.PluginMaterialImport)
 				material.Post("/delete", manageController.PluginMaterialDelete)
@@ -337,6 +338,10 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				sendmail.Get("/list", manageController.PluginSendmailList)
 				sendmail.Get("/setting", manageController.PluginSendmailSetting)
 				sendmail.Post("/setting", manageController.PluginSendmailSettingForm)
+				sendmail.Get("/templates", manageController.PluginGetEmailTemplates)
+				sendmail.Get("/template", manageController.PluginGetEmailTemplateDetail)
+				sendmail.Post("/template", manageController.PluginSendmailSaveTemplate)
+				sendmail.Post("/template/preview", manageController.PluginSendmailTemplatePreview)
 				sendmail.Post("/test", manageController.PluginSendmailTest)
 			}
 
@@ -414,6 +419,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			retailer := plugin.Party("/retailer")
 			{
 				retailer.Get("/list", manageController.PluginGetRetailers)
+				retailer.Get("/detail", manageController.PluginUserDetail)
 				retailer.Get("/config", manageController.PluginRetailerConfig)
 				retailer.Post("/config", manageController.PluginRetailerConfigForm)
 				retailer.Post("/realname", manageController.PluginRetailerSetRealName)
@@ -422,9 +428,12 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 
 			pay := plugin.Party("/pay")
 			{
-				pay.Get("/config", manageController.PluginPayConfig)
-				pay.Post("/config", manageController.PluginPayConfigForm)
+				pay.Get("/accounts", manageController.PluginGetPaymentAccounts)
+				pay.Get("/detail", manageController.PluginGetPaymentAccountDetail)
+				pay.Post("/detail", manageController.PluginSavePaymentAccount)
+				pay.Post("/delete", manageController.PluginDeletePaymentAccount)
 				pay.Post("/upload", manageController.PluginPayUploadFile)
+				pay.Get("/statistic", manageController.PluginPayStatistic)
 			}
 
 			order := plugin.Party("/order")
@@ -600,6 +609,18 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				llms.Post("/build", manageController.PluginLLMsBuild)
 				llms.Get("/setting", manageController.PluginGetLLMsSetting)
 				llms.Post("/setting", manageController.PluginSaveLLMsSetting)
+			}
+			subscriber := plugin.Party("/subscriber")
+			{
+				subscriber.Get("/list", manageController.PluginGetSubscribers)
+				subscriber.Get("/detail", manageController.PluginGetSubscriber)
+				subscriber.Post("/save", manageController.PluginSaveSubscriber)
+				subscriber.Post("/delete", manageController.PluginDeleteSubscriber)
+				subscriber.Post("/send", manageController.SendSubscriberMail)
+				subscriber.Get("/send/status", manageController.GetSubscriberSendStatus)
+				subscriber.Get("/category/list", manageController.GetSubscriberCategories)
+				subscriber.Post("/category/save", manageController.SaveSubscriberCategory)
+				subscriber.Post("/category/delete", manageController.DeleteSubscriberCategory)
 			}
 			place := plugin.Party("/place")
 			{

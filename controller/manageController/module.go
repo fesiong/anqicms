@@ -9,6 +9,10 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// ModuleList 查询全部内容模型列表。
+//
+// 参数说明：
+//   - 查询参数 "exclude_id": 需要排除的模型 ID，默认不排除。
 func ModuleList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	modules, err := currentSite.GetModules()
@@ -36,6 +40,10 @@ func ModuleList(ctx iris.Context) {
 	})
 }
 
+// ModuleDetail 查询单个内容模型的详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 模型 ID，必填。
 func ModuleDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -56,6 +64,7 @@ func ModuleDetail(ctx iris.Context) {
 	})
 }
 
+// ModuleDetailForm 新建或更新内容模型。
 func ModuleDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ModuleRequest
@@ -84,7 +93,18 @@ func ModuleDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	req.UpdateAll = true
+	// UpdateAll 决定「未传的字段」怎么处理：
+	//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
+	//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
+	//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
+	//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
+	//
+	// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
+	// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
+	// Partial 优先于调用方传的 update_all。
+	if !req.Partial {
+		req.UpdateAll = true
+	}
 	module, err := currentSite.SaveModule(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -133,7 +153,7 @@ func ModuleDetailForm(ctx iris.Context) {
 					tmpModule, err := subSite.GetModuleById(req.Id)
 					if err == nil {
 						req.Title = tmpModule.Title
-						req.TitleName = tmpModule.TitleName
+						//	req.TitleName = tmpModule.TitleName
 					}
 					_, _ = subSite.SaveModule(&req)
 				}
@@ -157,6 +177,7 @@ func ModuleDetailForm(ctx iris.Context) {
 	})
 }
 
+// ModuleFieldsDelete 删除内容模型中的指定自定义字段。
 func ModuleFieldsDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ModuleFieldRequest
@@ -200,9 +221,10 @@ func ModuleFieldsDelete(ctx iris.Context) {
 	})
 }
 
+// ModuleDelete 删除指定内容模型。
 func ModuleDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.ModuleRequest
+	var req request.DeleteModuleRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

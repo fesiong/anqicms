@@ -1,9 +1,9 @@
 package config
 
 type PluginUserConfig struct {
-	Fields         []*CustomField `json:"fields"`
-	DefaultGroupId uint           `json:"default_group_id"`
-	DefaultStatus  string         `json:"default_status"` // 默认正常，pending 待审核，blocked 禁止
+	Fields         []*CustomField `json:"fields"`           // 用户扩展字段列表。
+	DefaultGroupId uint           `json:"default_group_id"` // 默认用户组 ID。
+	DefaultStatus  string         `json:"default_status"`   // 默认正常，pending=待审核，blocked=禁止
 }
 
 func (p *PluginUserConfig) GetDefaultStatus() int {
@@ -18,8 +18,7 @@ func (p *PluginUserConfig) GetDefaultStatus() int {
 }
 
 type PluginGoogleAuthConfig struct {
-	RedirectUrl  string `json:"redirect_url"`
-	ClientId     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	PlacesApiKey string `json:"places_api_key"`
+	RedirectUrl  string `json:"redirect_url"`  // 登录成功后跳转的URL
+	ClientId     string `json:"client_id"`     // 谷歌应用
+	ClientSecret string `json:"client_secret"` // 谷歌应用密钥
 }

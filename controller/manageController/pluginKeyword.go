@@ -1,15 +1,16 @@
 package manageController
 
 import (
+	"strings"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
-	"strings"
 )
 
-// PluginKeywordSetting 全局配置
+// PluginKeywordSetting 获取关键词插件的配置信息
 func PluginKeywordSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.GetUserKeywordSetting()
@@ -21,7 +22,7 @@ func PluginKeywordSetting(ctx iris.Context) {
 	})
 }
 
-// PluginSaveKeywordSetting 全局配置保存
+// PluginSaveKeywordSetting 保存关键词插件的配置信息。
 func PluginSaveKeywordSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.KeywordJson
@@ -51,6 +52,12 @@ func PluginSaveKeywordSetting(ctx iris.Context) {
 	})
 }
 
+// PluginKeywordList 获取关键词列表，支持搜索和分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "title": 关键词搜索词。
 func PluginKeywordList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	//需要支持分页，还要支持搜索
@@ -75,6 +82,12 @@ func PluginKeywordList(ctx iris.Context) {
 	})
 }
 
+// PluginKeywordDetailForm 新增或更新关键词：id 大于 0 时更新指定关键词，否则按标题批量新增（换行分隔，自动去重）。
+//
+// 参数说明：
+//   - 请求体 "id": 关键词 ID，大于 0 表示更新。
+//   - 请求体 "title": 关键词标题，新增时支持多行批量添加。
+//   - 请求体 "category_id": 关键词分类 ID。
 func PluginKeywordDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginKeyword
@@ -88,6 +101,8 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 
 	var keyword *model.Keyword
 	var err error
+	// 新增分支支持批量，逐条收集保存成功的关键词；更新分支只有一条
+	var saved []*model.Keyword
 
 	if req.Id > 0 {
 		keyword, err = currentSite.GetKeywordById(req.Id)
@@ -110,7 +125,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 		keyword.Title = req.Title
 		keyword.CategoryId = req.CategoryId
 
-		err = keyword.Save(currentSite.DB)
+		err = currentSite.SaveKeyword(keyword)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
@@ -118,6 +133,7 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 			})
 			return
 		}
+		saved = append(saved, keyword)
 	} else {
 		//新增支持批量插入
 		keywords := strings.Split(req.Title, "\n")
@@ -134,7 +150,9 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 					CategoryId: req.CategoryId,
 					Status:     1,
 				}
-				keyword.Save(currentSite.DB)
+				if err := currentSite.SaveKeyword(keyword); err == nil {
+					saved = append(saved, keyword)
+				}
 			}
 		}
 	}
@@ -144,9 +162,16 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("KeywordUpdated"),
+		"data": saved,
 	})
 }
 
+// PluginKeywordDelete 删除关键词，支持单个、批量或全部删除。
+//
+// 参数说明：
+//   - 请求体 "id": 要删除的关键词 ID，大于 0 时删除单条。
+//   - 请求体 "ids": 要删除的关键词 ID 列表。
+//   - 请求体 "all": 是否删除全部关键词。
 func PluginKeywordDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginKeywordDelete
@@ -200,6 +225,7 @@ func PluginKeywordDelete(ctx iris.Context) {
 	})
 }
 
+// PluginKeywordExport 导出全部关键词，返回表头与数据内容。
 func PluginKeywordExport(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	keywords, err := currentSite.GetAllKeywords()
@@ -231,6 +257,10 @@ func PluginKeywordExport(ctx iris.Context) {
 	})
 }
 
+// PluginKeywordImport 批量导入关键词。文件内容一行一个关键词，也支持指定分类如：title, category_id
+//
+// 参数说明：
+//   - 请求体 "file": 导入的关键词文件。
 func PluginKeywordImport(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	file, info, err := ctx.FormFile("file")

@@ -332,6 +332,18 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 	}
 	//注入userID
 	req.UserId = userId
+	if req.PayWay == "" {
+		payWays := currentSite.GetPaymentWays()
+		if len(payWays) > 0 {
+			req.PayWay = payWays[0]
+		} else {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+			})
+			return
+		}
+	}
 
 	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
 	if err != nil {
@@ -349,9 +361,6 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
-	}
-	if req.PayWay == "" {
-		req.PayWay = payment.PayWay
 	}
 
 	if req.PayWay == config.PayWayWechat {
@@ -375,8 +384,16 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 	currentSite := provider.CurrentSite(ctx)
 	//根据订单生成支付信息
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayWechat, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
 	//生成支付信息
-	client := wechat.NewClient(currentSite.PluginPay.WechatAppId, currentSite.PluginPay.WechatMchId, currentSite.PluginPay.WechatApiKey, true)
+	client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
 
 	bm := make(gopay.BodyMap)
 	bm.Set("body", payment.Remark).
@@ -412,6 +429,7 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 
 	png, _ := qrcode.Encode(wxRsp.CodeUrl, qrcode.Medium, 256)
 
@@ -429,8 +447,16 @@ func createWechatPayment(ctx iris.Context, payment *model.Payment) {
 func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 	currentSite := provider.CurrentSite(ctx)
 	//根据订单生成支付信息
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayWeapp, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
 	//生成支付信息
-	client := wechat.NewClient(currentSite.PluginPay.WeappAppId, currentSite.PluginPay.WechatMchId, currentSite.PluginPay.WechatApiKey, true)
+	client := wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, !account.PayConfig.Sandbox)
 
 	userWechat, err := currentSite.GetUserWechatByUserId(payment.UserId)
 	if err != nil {
@@ -476,11 +502,12 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 
 	// 微信小程序支付需要 paySign
 	timeStamp := strconv.FormatInt(time.Now().Unix(), 10)
 	packages := "prepay_id=" + wxRsp.PrepayId
-	paySign := wechat.GetMiniPaySign(currentSite.PluginPay.WeappAppId, wxRsp.NonceStr, packages, wechat.SignType_HMAC_SHA256, timeStamp, currentSite.PluginPay.WechatApiKey)
+	paySign := wechat.GetMiniPaySign(account.PayConfig.AppId, wxRsp.NonceStr, packages, wechat.SignType_MD5, timeStamp, account.PayConfig.ApiKey)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -499,7 +526,15 @@ func createWeappPayment(ctx iris.Context, payment *model.Payment) {
 
 func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 	currentSite := provider.CurrentSite(ctx)
-	client, err := alipay.NewClient(currentSite.PluginPay.AlipayAppId, currentSite.PluginPay.AlipayPrivateKey, true)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayAlipay, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	client, err := alipay.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -507,17 +542,20 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
-
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
 	//配置公共参数
 	client.SetCharset("utf-8").
 		SetSignType(alipay.RSA2).
 		SetNotifyUrl(currentSite.System.BaseUrl + "/notify/alipay/pay").
-		SetReturnUrl(currentSite.System.BaseUrl + "/")
+		SetReturnUrl(frontUrl + "/")
 
 	// 自动同步验签（只支持证书模式）
-	certPath := currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayCertPath
-	rootCertPath := currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayRootCertPath
-	publicCertPath := currentSite.DataPath + "cert/" + currentSite.PluginPay.AlipayPublicCertPath
+	certPath := currentSite.DataPath + "cert/" + account.PayConfig.CertPath
+	rootCertPath := currentSite.DataPath + "cert/" + account.PayConfig.RootCertPath
+	publicCertPath := currentSite.DataPath + "cert/" + account.PayConfig.PublicCertPath
 	publicKey, err := os.ReadFile(publicCertPath)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -555,6 +593,7 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -569,7 +608,15 @@ func createAlipayPayment(ctx iris.Context, payment *model.Payment) {
 
 func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
 	currentSite := provider.CurrentSite(ctx)
-	client, err := paypal.NewClient(currentSite.PluginPay.PaypalClientId, currentSite.PluginPay.PaypalClientSecret, currentSite.PluginPay.PaypalSandbox == false)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayPaypal, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	client, err := paypal.NewClient(account.PayConfig.AppId, account.PayConfig.AppSecret, !account.PayConfig.Sandbox)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -623,6 +670,7 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 		})
 		return
 	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
 	// 更新id
 	payment.TerraceId = ppRsp.Response.Id
 	currentSite.DB.Save(payment)

@@ -2,7 +2,7 @@
 name: anqicms-dev
 description: AnQiCMS 开发核心技能：模板语法规则、引擎说明（pongo2）、标签闭合规则、API 规范、数据模型
 category: Development
-version: 1.1
+version: 1.2
 tags: [anqicms, development, template, api, pongo2]
 ---
 
@@ -25,44 +25,50 @@ AnQiCMS 使用基于 `github.com/flosch/pongo2` 的 Django-like 模板引擎，�
 
 ## 标签闭合规则速查
 
-### 需闭合（BLOCK_TAGS，32 个）
+### 需闭合（BLOCK_TAGS，32 个 = 20 自定义 + 12 pongo2 内置）
 
-`archiveList` · `categoryList` · `navList` · `pagination` · `tagList` · `bannerList` · `commentList` · `reviewList` · `if` · `for` · `block` · `with` · `autoescape` · `filter` · `ifchanged` · `ifequal` · `ifnotequal` · `macro` · `spaceless` · `pageList` · `prevArchive` · `nextArchive` · `breadcrumb` · `linkList` · `guestbook` · `archiveParams` · `tagDataList` · `archiveFilters` · `languages` · `jsonLd` · `comment` · `archiveSku`
+`archiveList` · `categoryList` · `navList` · `pagination` · `tagList` · `bannerList` · `commentList` · `guestbookList` · `placeList` · `if` · `for` · `block` · `with` · `autoescape` · `filter` · `ifchanged` · `ifequal` · `ifnotequal` · `macro` · `spaceless` · `pageList` · `prevArchive` · `nextArchive` · `breadcrumb` · `linkList` · `guestbook` · `archiveParams` · `tagDataList` · `archiveFilters` · `languages`（闭合 `endLanguages`）· `jsonLd` · `comment`
 
-### 自闭合（SINGLE_TAGS，22 个，不需要 end 前缀）
+### 自闭合（SINGLE_TAGS，26 个 = 15 自定义 + 11 pongo2 内置，不需要 end 前缀）
 
-`archiveDetail` · `categoryDetail` · `tagDetail` · `pageDetail` · `moduleDetail` · `userDetail` · `userGroupDetail` · `tdk` · `system` · `contact` · `diy` · `pluginJsCode` · `tr` · `lorem` · `now` · `set` · `include` · `extends` · `import` · `ssi` · `templatetag` · `widthratio` · `attachment` · `cycle` · `firstof` · `jump`
+`archiveDetail` · `categoryDetail` · `tagDetail` · `pageDetail` · `moduleDetail` · `placeDetail` · `userDetail` · `userGroupDetail` · `tdk` · `system` · `contact` · `diy` · `tr` · `lorem` · `now` · `set` · `include` · `extends` · `import` · `ssi` · `templatetag` · `widthratio` · `attachment` · `cycle` · `firstof` · `jump`
 
 完整说明请加载 `template-dev` 技能。
 
 ## API 核心规范
 
-- **基础路径**：`/api`（如 `https://domain.com/api/archive/list`）
-- **数据格式**：JSON（文件上传除外）
-- **认证**：前端用 Header `Token: <token>`，管理端用 Header `Admin: <token>`
-- **分页参数**：`page`、`limit`（默认10）、`order`（如 `id desc`）
+AnQiCMS 有两套 API：
+- **前端公共 API**：前缀 `/api`（如 `https://domain.com/api/archive/list`），Header `token: <jwt>`，滑动轮换的新 token 在响应头 `update-token`。详见 `api-dev` 技能。
+- **后台管理 API**：前缀 `/system/api`，Header `Admin: <token>`。AI/MCP 意图工具走的就是这一套。
+
+- **数据格式**：JSON（文件上传为 multipart）
+- **分页**：内容列表用 `page` + `limit`；用户/订单/分销列表用 `current` + `pageSize`（默认 20）。后台管理列表统一 `current` + `pageSize`。
 
 ### 响应格式
 
 ```typescript
 interface ApiResponse<T> {
-  code: number;      // 0=成功，非0=错误
+  code: number;      // 0=成功；-1=失败；1001=未登录/token失效；1002=无权限
   msg: string;       // 错误消息
   data: T;           // 数据
-  total?: number;    // 分页总数
+  total?: number;    // 分页总数（仅列表接口）
 }
 ```
 
-**关键规则**：检查 `code === 0`，HTTP 200 不代表成功。`code === 1001` 表示 token 过期需重新登录。
+**关键规则**：检查 `code === 0`，HTTP 200 不代表成功。`code === 1001` 表示 token 过期需重新登录（码值定义见 `config/constant.go`）。
 
 ### 核心数据模型
 
-| 模型 | 关键字段 |
+JSON 字段名（API 输出用）；模板里访问则用**首字母大写的 Go 字段名**（如 `{{ item.Title }}`）。
+
+| 模型 | 关键字段（json） |
 |---|---|
-| **Archive**（文章/产品） | `id`, `title`, `cover`, `description`, `created_time`(timestamp), `views`, `category_id`, `tags`, `price`, `stock`, `url_token`, `seo_title` |
-| **Category**（分类） | `id`, `title`, `parent_id`, `cover`, `url_token`, `type`（1=分类，3=单页） |
-| **Order**（订单） | `id`, `order_no`, `amount`, `status`（0=未支付,1=已支付,2=发货中,3=已完成,-1=已取消,9=已过期,4=已退款） |
-| **User**（用户） | `id`, `user_name`, `avatar_url`, `balance`, `phone`, `email` |
+| **Archive**（文章/产品） | `id`, `title`, `seo_title`, `description`, `keywords`, `created_time`/`updated_time`(timestamp), `views`, `comment_count`, `favorite_count`, `category_id`, `module_id`, `place_id`, `url_token`, `images`, `logo`, `thumb`, `link`, `tags`, `price`, `stock`, `read_level`, `sort`, `template`, `canonical_url`, `fixed_link`；正文在 `data`(ArchiveData) 里。**没有 `cover` 字段**，封面用 `logo`/`images`。 |
+| **Category**（分类） | `id`, `title`, `parent_id`, `logo`, `images`, `link`, `thumb`, `type`（1=文档分类，3=单页，默认 0）, `children`, `archive_count`, `status` |
+| **Order**（订单） | `id`, `order_id`(字符串单号), `amount`/`origin_amount`(int64，分为单位), `user_id`, `payment_id`, `status`, `refund_status`, `details` |
+| **User**（用户） | `id`, `user_name`, `avatar_url`, `balance`, `phone`, `email`, `group_id`, `status`（1 正常/0 待审/-1 封禁）；`password` 不输出 |
+
+**Order.status 取值**（`config/constant.go`）：`-1` 取消/关闭 · `0` 待付款 · `1` 已付款 · `2` 发货中 · `3` 已完成 · `8` 退款中 · `9` 已退款。
 
 ## 模板目录结构
 
@@ -117,8 +123,10 @@ CSS/JS/图片放在 `/public/static/{your_template_name}/` 目录下，模板中
 
 ## 操作流程
 
-1. 修改模板文件 → 修改完执行 `template_reload` 生效
+> AI 工具面是**意图工具**：调用时传意图名 + `action`。模板重载、技能加载分别属于 `system_config` 与 `skill` 意图。
+
+1. 修改模板文件 → 调用 `system_config`（action=`template_reload`）生效
 2. 修改 CSS → 清除浏览器缓存后刷新
 3. 新增模板 → 创建对应目录和文件，确保目录结构正确
-4. 使用 `skill_get` 加载 `template-dev` 获取模板标签完整参考
-5. 使用 `skill_get` 加载 `api-dev` 获取完整的 API 端点列表
+4. 调用 `skill`（action=`get`, name=`template-dev`）获取模板标签完整参考
+5. 调用 `skill`（action=`get`, name=`api-dev`）获取完整的前端 API 端点列表

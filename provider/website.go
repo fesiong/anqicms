@@ -2,7 +2,9 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/url"
 	"os"
@@ -11,8 +13,10 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"golang.org/x/oauth2"
+	"kandaoni.com/anqicms/pkg/mcp/intent"
 	"kandaoni.com/anqicms/pkg/mcp/server"
 	"kandaoni.com/anqicms/provider/storage"
 
@@ -81,7 +85,6 @@ type Website struct {
 	PluginSendmail     *config.PluginSendmail
 	PluginImportApi    *config.PluginImportApiConfig
 	PluginStorage      *config.PluginStorageConfig
-	PluginPay          *config.PluginPayConfig
 	PluginWeapp        *config.PluginWeappConfig
 	PluginWechat       *config.PluginWeappConfig
 	PluginRetailer     *config.PluginRetailerConfig
@@ -101,9 +104,10 @@ type Website struct {
 	PluginLLMs         *config.PluginLLMsConfig
 	PluginPlace        *config.PluginPlaceConfig
 
-	sensitiveAcMatcher *library.AhoCorasick
-	sensitiveRegexes   []*regexp.Regexp
-	anchorAcMatcher    *library.AhoCorasick
+	sensitiveAcMatcher         *library.AhoCorasick
+	sensitiveRegexes           []*regexp.Regexp
+	sensitiveRegexReplacements map[string]string
+	anchorAcMatcher            *library.AhoCorasick
 
 	CollectorConfig *config.CollectorJson
 	KeywordConfig   *config.KeywordJson
@@ -117,14 +121,20 @@ type Website struct {
 	backLanguage string
 	ctx          iris.Context // 这个类型是指针，因此只能在拷贝后赋值
 	Template     *StoreTemplates
+	MailService  *MailService
 	// ai
 	AiSrv *AiChatService
 	// mcp server (per-site, 同 AiSrv 模式)
 	McpSrv *server.Server
 }
 
-// NewMcpServer 为当前站点创建 mcp.Server 实例，并从 AiSrv 注册全部工具。
-// 在 NewAiChatService() 之后调用（需要 AiSrv 提供工具定义）。
+// NewMcpServer 为当前站点创建 mcp.Server 实例，并注册"意图导向工作流工具"。
+//
+// 重构 ABD（2026-09-18）：不再把 105 个 endpoint 镜像工具直接暴露，而是下沉到
+// intent.Kernel —— 以"意图"作为工具边界，由策略层（能力域）与声明式能力清单
+// （IntentCatalog）驱动。底层能力（原 endpoint 工具）通过 CapInvoker 回调注入，
+// 内核负责注册、路由、两阶段 tools/list 与结构化输出。site_id 切换由调用方路由
+// 到目标站点的 McpSrv，其内核 CapInvoker 绑定目标站点 AiSrv，天然按目标站点操作。
 func (w *Website) NewMcpServer() *server.Server {
 	mcpCfg := server.DefaultConfig()
 	mcpSrv, err := server.New(mcpCfg)
@@ -132,25 +142,42 @@ func (w *Website) NewMcpServer() *server.Server {
 		slog.Error("Failed to create MCP server for site", "siteId", w.Id, "error", err)
 		return nil
 	}
+	mcpServer := mcpSrv.GetServer()
 
-	// 从 AiSrv 获取全部工具并注册到 mcp.Server
-	if w.AiSrv != nil {
-		mcpServer := mcpSrv.GetServer()
-		for _, ti := range w.AiSrv.Tools {
-			tool, err := server.EinoToolInfoToMCPTool(ti)
-			if err != nil {
-				slog.Warn("failed to convert tool, skipping", "name", ti.Name, "error", err)
-				continue
-			}
-			h, ok := w.AiSrv.Handlers[ti.Name]
-			if !ok {
-				slog.Warn("handler not found for tool, skipping", "name", ti.Name)
-				continue
-			}
-			mcpServer.AddTool(tool, server.AdaptHandler(h))
+	// 底层能力注入：把意图参数序列化后调用对应 endpoint 工具 handler。
+	// 延迟到调用时解析 w.AiSrv（构建期可能尚未初始化），保证 NewMcpServer 可独立调用。
+	capInvoker := func(ctx context.Context, name string, args map[string]any) (string, error) {
+		if w.AiSrv == nil {
+			return "", fmt.Errorf("站点 AI 服务未初始化")
 		}
-		slog.Info("MCP tools registered", "siteId", w.Id, "count", len(w.AiSrv.Tools))
+		// 必须走 ResolveCap 而非直接读 Handlers：Handlers 中同名意图会覆盖同名 cap，
+		// 委托时会命中意图 handler 自身，形成无限递归。
+		h, ok := w.AiSrv.ResolveCap(name)
+		if !ok {
+			return "", fmt.Errorf("底层能力 %s 不存在或未接入 MCP", name)
+		}
+		raw, err := json.Marshal(args)
+		if err != nil {
+			return "", fmt.Errorf("参数序列化失败: %w", err)
+		}
+		return h(ctx, string(raw))
 	}
+	// 审计回调：内核每次意图执行后调用，风险等级由 spec.Risk 精确给出。
+	auditFn := func(ctx context.Context, name, risk, argsJSON string, callErr error, start time.Time) {
+		w.recordMcpAudit(ctx, name, risk, argsJSON, callErr, start)
+	}
+
+	mcpConf := GetMcpConfig()
+	iconf := intent.Config{
+		ExposedIntents: mcpConf.ExposedIntents,
+		ExposedTools:   mcpConf.ExposedTools,
+		ToolListMode:   mcpConf.ToolListMode,
+		EnableSetScope: mcpConf.EnableSetScope,
+	}
+	kernel := intent.NewKernel(iconf, capInvoker, auditFn)
+	kernel.RegisterAll(mcpServer)
+
+	slog.Info("MCP intent kernel registered", "siteId", w.Id, "intents", kernel.RegisteredCount())
 
 	w.McpSrv = mcpSrv
 	return mcpSrv
@@ -447,6 +474,7 @@ func InitWebsite(mw *model.Website) {
 		// AI: 先创建 ai chat service（初始化工具），再创建 mcp server（注册工具）
 		w.NewAiChatService()
 		w.NewMcpServer()
+		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
 		// ai chat setting

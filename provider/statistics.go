@@ -245,11 +245,6 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 }
 
 func (w *Website) SendStatisticsMail() {
-	setting := w.PluginSendmail
-	if setting == nil || setting.Account == "" {
-		//成功配置，则跳过
-		return
-	}
 	// 开始统计数据
 	// 需要发送以下数据
 	// 各个搜索引擎收录数据
@@ -279,6 +274,16 @@ func (w *Website) SendStatisticsMail() {
 		}
 	}
 
+	setting := w.PluginSendmail
+	if setting == nil || setting.Account == "" {
+		//成功配置，则跳过
+		return
+	}
+	template, exist := w.GetEmailTemplateInfo("report")
+	if !exist || template.Open == false {
+		return
+	}
+
 	// 访问量
 	var totalVisit = statisticResult.VisitCount.PVCount
 	// 文档等数据
@@ -304,10 +309,13 @@ func (w *Website) SendStatisticsMail() {
 	var adminLogCount int64
 	w.DB.Model(&model.AdminLog{}).Where("`created_time` >= ? and `created_time` < ?", todayStamp-86400, todayStamp).Count(&adminLogCount)
 
-	if w.SendTypeValid(SendTypeDaily) {
-		// 开始写邮件内容
-		subject := time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.Tr("s(s)SiteData", w.System.SiteName, w.System.BaseUrl)
-		content := `<html>
+	// 开始写邮件内容
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	subject := time.Now().Add(-86400*time.Second).Format("2006-01-02 ") + w.Tr("s(s)SiteData", w.System.SiteName, frontUrl)
+	content := `<html>
 <head>
   <style>
     body {
@@ -351,101 +359,100 @@ func (w *Website) SendStatisticsMail() {
   </style>
 </head>
 <body>`
-		content += "<h1>" + subject + "</h1>\n"
-		content += "<h2>" + w.Tr("Inclusion") + "</h2>\n"
-		content += `<table>
+	content += "<h1>" + subject + "</h1>\n"
+	content += "<h2>" + w.Tr("Inclusion") + "</h2>\n"
+	content += `<table>
     <thead>
       <tr>`
-		content += "<th>" + w.Tr("Baidu") + "</th>\n"
-		content += "<th>" + w.Tr("Sogou") + "</th>\n"
-		content += "<th>" + w.Tr("360") + "</th>\n"
-		content += "<th>" + w.Tr("Bing") + "</th>\n"
-		content += "<th>" + w.Tr("Google") + "</th>\n"
-		content += `</tr>
+	content += "<th>" + w.Tr("Baidu") + "</th>\n"
+	content += "<th>" + w.Tr("Sogou") + "</th>\n"
+	content += "<th>" + w.Tr("360") + "</th>\n"
+	content += "<th>" + w.Tr("Bing") + "</th>\n"
+	content += "<th>" + w.Tr("Google") + "</th>\n"
+	content += `</tr>
     </thead>
     <tbody>
       <tr>`
-		content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
-			"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
-		content += `</tr>
+	content += "<td>" + strconv.Itoa(engineIndex.BaiduCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.SogouCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.SoCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.BingCount) + "</td>\n" +
+		"<td>" + strconv.Itoa(engineIndex.GoogleCount) + "</td>\n"
+	content += `</tr>
     </tbody>
   </table>`
-		content += "<h2>" + w.Tr("SpiderCrawling") + "</h2>\n"
-		content += `<table>
+	content += "<h2>" + w.Tr("SpiderCrawling") + "</h2>\n"
+	content += `<table>
     <thead>
       <tr>`
-		for _, v := range spiderResult {
-			content += "<th>" + v.Spider + "</th>"
-		}
-		content += `
+	for _, v := range spiderResult {
+		content += "<th>" + v.Spider + "</th>"
+	}
+	content += `
       </tr>
     </thead>
     <tfoot>
       <tr>`
-		content += "<td>" + w.Tr("Total") + "</td>\n"
-		content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
-		content += `</tr>
+	content += "<td>" + w.Tr("Total") + "</td>\n"
+	content += "<td colspan='" + strconv.Itoa(len(spiderResult)-1) + "'>" + strconv.Itoa(int(totalSpider)) + "</td>"
+	content += `</tr>
     </tfoot>
     <tbody>
       <tr>`
-		for _, v := range spiderResult {
-			content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
-		}
-		content += `
+	for _, v := range spiderResult {
+		content += "<td>" + strconv.Itoa(int(v.Total)) + "</td>"
+	}
+	content += `
       </tr>
     </tbody>
   </table>`
-		content += "<h2>" + w.Tr("Visits") + "</h2>"
-		content += `<table>
+	content += "<h2>" + w.Tr("Visits") + "</h2>"
+	content += `<table>
     <thead>
       <tr>`
-		content += "<th>" + w.Tr("Time") + "</th>"
-		content += "<th>" + w.Tr("Visit") + "</th>"
-		content += `</tr>
+	content += "<th>" + w.Tr("Time") + "</th>"
+	content += "<th>" + w.Tr("Visit") + "</th>"
+	content += `</tr>
     </thead>
     <tfoot>
       <tr>`
-		content += "<td>" + w.Tr("Total") + "</td>"
-		content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
-		content += `
+	content += "<td>" + w.Tr("Total") + "</td>"
+	content += "<td>" + strconv.Itoa(int(totalVisit)) + "</td>"
+	content += `
       </tr>
     </tfoot>
     <tbody>`
-		content += `
+	content += `
     </tbody>
   </table>`
-		content += "<h2>" + w.Tr("SiteClickData") + "</h2>"
-		content += `<table>
+	content += "<h2>" + w.Tr("SiteClickData") + "</h2>"
+	content += `<table>
     <thead>
       <tr>`
-		content += "<th>" + w.Tr("Entry") + "</th>"
-		content += "<th>" + w.Tr("Quantity") + "</th>"
-		content += `</tr>
+	content += "<th>" + w.Tr("Entry") + "</th>"
+	content += "<th>" + w.Tr("Quantity") + "</th>"
+	content += `</tr>
     </thead>
     <tbody>`
-		content += "<tr>\n        <td>" + w.Tr("Document") + "</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddDocument") + "</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("Category") + "</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("SinglePage") + "</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("FriendlyLink") + "</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddMessage") + "</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddComment") + "</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("AddUser") + "</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("BackstageLogin") + "</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
-		content += "<tr>\n        <td>" + w.Tr("BackstageOperation") + "</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
-		content += `
+	content += "<tr>\n        <td>" + w.Tr("Document") + "</td>\n        <td>" + strconv.Itoa(int(allArchiveCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddDocument") + "</td>\n        <td>" + strconv.Itoa(int(archiveCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("Category") + "</td>\n        <td>" + strconv.Itoa(int(categoryCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("SinglePage") + "</td>\n        <td>" + strconv.Itoa(int(pageCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("FriendlyLink") + "</td>\n        <td>" + strconv.Itoa(int(linkCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddMessage") + "</td>\n        <td>" + strconv.Itoa(int(guestbookCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddComment") + "</td>\n        <td>" + strconv.Itoa(int(commentCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("AddUser") + "</td>\n        <td>" + strconv.Itoa(int(userCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("BackstageLogin") + "</td>\n        <td>" + strconv.Itoa(int(loginCount)) + "</td>\n      </tr>"
+	content += "<tr>\n        <td>" + w.Tr("BackstageOperation") + "</td>\n        <td>" + strconv.Itoa(int(adminLogCount)) + "</td>\n      </tr>"
+	content += `
     </tbody>
   </table>
 </body>
 
 </html>`
 
-		// 不记录错误
-		_ = w.sendMail(subject, content, nil, nil, true, false)
-	}
+	// 不记录错误
+	_ = w.SendMail(subject, content, nil)
 }
 
 func calcSpider(data map[string]int) int64 {

@@ -11,7 +11,15 @@ goblog
 /data
 /system
 /release
+/scripts
 collector.json
 keyword.json
 *.log
 .atomcode
+.workbuddy
+
+# graphify 知识图谱产物：图本体与缓存是生成物，不入库（报告/使用说明/graph.html/权限审计 JSON 仍然跟踪）
+/graphify-out
+
+# 本地预编译后端二进制：ExecPath 必须落在仓库内，切勿编译到 /tmp（否则会误读 /tmp/config.json 连错库）
+/anqicms-bin

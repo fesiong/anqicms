@@ -57,6 +57,7 @@ type searchReplaceArgs struct {
 	Replace string `json:"replace"`
 	Glob    string `json:"glob"`
 	Regex   bool   `json:"regex"`
+	Offset  int    `json:"offset"`
 }
 
 type bashArgs struct {
@@ -67,11 +68,14 @@ type bashArgs struct {
 type grepArgs struct {
 	Pattern string `json:"pattern"`
 	Glob    string `json:"glob"`
+	Path    string `json:"path"`
 	Context int    `json:"context"`
+	Offset  int    `json:"offset"`
 }
 
 type globArgs struct {
 	Pattern string `json:"pattern"`
+	Offset  int    `json:"offset"`
 }
 
 type listDirArgs struct {
@@ -135,11 +139,13 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 	add(&schema.ToolInfo{
 		Name: "read_file",
-		Desc: "读取项目内文件的内容。支持 offset（起始行号，从1开始）和 limit（最大行数）参数分段读取大文件。大文件（超过300行）会显示骨架结构。",
+		Desc: "读取项目内文件的内容。支持 offset（起始行号，从1开始）和 limit（最大行数）参数分段读取大文件。" +
+			"大文件（超过300行的 Go 文件）会先返回骨架结构。结果尾部会标明本次实际返回的行区间；" +
+			"若还有剩余，按提示传 offset 续读，不要重复同一次调用。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {Type: schema.String, Desc: "文件路径，相对项目根目录或绝对路径", Required: true},
 			"offset":    {Type: schema.Integer, Desc: "起始行号（从1开始），可选"},
-			"limit":     {Type: schema.Integer, Desc: "最大读取行数，可选"},
+			"limit":     {Type: schema.Integer, Desc: "最大读取行数，可选；实际返回还会受单次结果大小限制，以尾部说明为准"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args fileReadArgs
@@ -191,8 +197,9 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		mtime := info.ModTime()
 		offset := args.Offset
 		limit := args.Limit
+		budget := svc.resultBudget()
 		if offset == 0 && limit == 0 {
-			if cached, ok := getReadCache(fullPath, 0, 0, mtime); ok {
+			if cached, ok := getReadCache(fullPath, 0, 0, budget, mtime); ok {
 				return cached, nil
 			}
 		}
@@ -204,57 +211,46 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 		relPath, _ := filepath.Rel(svc.projectRoot, fullPath)
 		lines := strings.Split(string(data), "\n")
+		// 以换行结尾的文件会被 Split 多切出一个空尾项。它不是一行真实内容，
+		// 留着会让「共 N 行」和窗口区间凭空多出一行空白。
+		if n := len(lines); n > 1 && lines[n-1] == "" {
+			lines = lines[:n-1]
+		}
 		totalLines := len(lines)
 
-		// Header
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("文件: %s (%d 行, %d 字节)\n\n", relPath, totalLines, info.Size()))
-
 		if offset > totalLines {
-			return fmt.Sprintf("文件: %s (%d 行)\n\n起始行号 %d 超出文件总行数 %d", relPath, totalLines, offset, totalLines), nil
+			// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+			// textFailureMarkers）。原文案以「文件: …」开头，看着像成功回执，
+			// 但实际是「你要的行不存在」，AI 会误以为已读完整个文件。
+			return "错误：" + fmt.Sprintf("文件: %s (%d 行)\n\n起始行号 %d 超出文件总行数 %d", relPath, totalLines, offset, totalLines), nil
 		}
 
-		// Handle offset/limit
-		if offset > 0 || limit > 0 {
-			startLine := offset
-			if startLine <= 0 {
-				startLine = 1
-			}
-			endLine := len(lines)
-			if limit > 0 {
-				endLine = startLine + limit - 1
-				if endLine > len(lines) {
-					endLine = len(lines)
-				}
-			}
-			for i := startLine - 1; i < endLine; i++ {
-				b.WriteString(fmt.Sprintf("%6d| %s\n", i+1, lines[i]))
-			}
-			result := b.String()
-			setReadCache(fullPath, offset, limit, mtime, result)
-			return result, nil
-		}
-
-		// Skeleton mode for large files (>300 lines)
-		if totalLines > SkeletonThreshold {
-			skeleton := buildSkeleton(data, fullPath, relPath, totalLines)
-			result := skeleton
-			if result != "" {
-				setReadCache(fullPath, 0, 0, mtime, result)
-				return result, nil
+		// Skeleton mode for large files (>300 lines)。只在整读请求时启用：
+		// 模型显式给了 offset/limit，说明它已经知道要哪一段，不该再被换成目录。
+		if offset <= 0 && limit <= 0 && totalLines > SkeletonThreshold {
+			if skeleton := buildSkeleton(data, fullPath, relPath, totalLines, budget); skeleton != "" {
+				setReadCache(fullPath, 0, 0, budget, mtime, skeleton)
+				return skeleton, nil
 			}
 		}
 
-		// Full content for smaller files
-		maxLines := 10000
-		for i := 0; i < totalLines && i < maxLines; i++ {
-			b.WriteString(fmt.Sprintf("%6d| %s\n", i+1, lines[i]))
+		// 按预算在行边界切窗：请求区间 ∩ 预算区间，剩下的用 offset 续读。
+		start := offset
+		if start <= 0 {
+			start = 1
 		}
-		if totalLines > maxLines {
-			b.WriteString(fmt.Sprintf("\n... (文件较大，仅显示前 %d 行)", maxLines))
+		end := totalLines
+		if limit > 0 && start+limit-1 < end {
+			end = start + limit - 1
 		}
-		result := b.String()
-		setReadCache(fullPath, 0, 0, mtime, result)
+		header := fmt.Sprintf("文件: %s (%d 行, %d 字节)\n\n", relPath, totalLines, info.Size())
+		body, delivered := fitWindow(lines[start-1:end], budget-len(header)-windowTrailerReserve,
+			func(i int, l string) string {
+				return fmt.Sprintf("%6d| %s\n", start+i, l)
+			})
+		last := start + delivered - 1
+		result := header + body + windowTrailer("行", start, last, totalLines, budget, delivered < end-start+1)
+		setReadCache(fullPath, offset, limit, budget, mtime, result)
 		return result, nil
 	})
 
@@ -400,12 +396,15 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 	add(&schema.ToolInfo{
 		Name: "search_replace",
-		Desc: "在多个文件中搜索并替换文本。支持 glob 模式匹配文件和正则表达式搜索。",
+		Desc: "在多个文件中搜索并替换文本。支持 glob 模式匹配文件和正则表达式搜索。" +
+			"单次调用最多改写 20 个匹配文件；未检视完的文件会在结果里给出序号区间，" +
+			"传 offset 继续下一批，不要重复同一次调用。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"search":  {Type: schema.String, Desc: "要搜索的文本（或正则表达式）", Required: true},
 			"replace": {Type: schema.String, Desc: "替换后的文本", Required: true},
 			"glob":    {Type: schema.String, Desc: "文件匹配模式，如 '**/*.go'、'*.html'，默认 '**/*'"},
 			"regex":   {Type: schema.Boolean, Desc: "是否将 search 视为正则表达式，默认 false"},
+			"offset":  {Type: schema.Integer, Desc: "从第几个匹配文件开始扫描（从1开始），用于续接上一批"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args searchReplaceArgs
@@ -483,16 +482,29 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			return "", fmt.Errorf("遍历文件失败: %w", err)
 		}
 
-		if len(allFiles) > 200 {
-			return fmt.Sprintf("匹配文件过多 (%d)，请缩小 glob 范围", len(allFiles)), nil
-		}
+	if len(allFiles) > 200 {
+		// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+		// textFailureMarkers）——这里是**拒绝执行**、一个文件都没改，
+		// 不能让 AI 当成正常回执。改文案时务必保留前缀。
+		return "错误：" + fmt.Sprintf("匹配文件过多 (%d)，请缩小 glob 范围", len(allFiles)), nil
+	}
 		if len(allFiles) == 0 {
 			return "未找到匹配的文件", nil
 		}
 
-		var matchedFiles []string
-		totalReplacements := 0
-		limit := 20 // max files to modify
+		// 改写是有副作用的批量操作：一次铺开上百个文件既难回滚也难审。
+		// 保留上限没问题，问题是过去超出部分默默不做——现在改为显式报告未检视区间。
+		const maxFilesPerCall = 20
+
+		start := args.Offset
+		if start <= 0 {
+			start = 1
+		}
+		if start > len(allFiles) {
+			// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+			// textFailureMarkers）。分页越界是请求无法执行，不是正常回执。
+			return "错误：" + fmt.Sprintf("匹配文件共 %d 个，起始序号 %d 超出范围", len(allFiles), start), nil
+		}
 
 		var searchBytes []byte
 		var re *regexp.Regexp
@@ -505,19 +517,33 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			searchBytes = []byte(args.Search)
 		}
 
-		for _, fp := range allFiles {
-			if len(matchedFiles) >= limit {
+		var changedFiles []string
+		var failedFiles []string
+		totalReplacements := 0
+		scanned := start - 1 // 本次真正检视过的匹配文件序号右界（含未命中的文件）
+		relOf := func(p string) string {
+			r, err := filepath.Rel(svc.projectRoot, p)
+			if err != nil {
+				return p
+			}
+			return r
+		}
+
+		for idx := start - 1; idx < len(allFiles); idx++ {
+			if len(changedFiles) >= maxFilesPerCall {
 				break
 			}
-			data, err := os.ReadFile(fp)
-			if err != nil {
+			scanned = idx + 1
+			fp := allFiles[idx]
+			data, rerr := os.ReadFile(fp)
+			if rerr != nil {
+				failedFiles = append(failedFiles, fmt.Sprintf("  - %s（读取失败：%v）", relOf(fp), rerr))
 				continue
 			}
 			var newData []byte
 			var count int
 			if args.Regex {
-				matches := re.FindAll(data, -1)
-				count = len(matches)
+				count = len(re.FindAll(data, -1))
 				if count > 0 {
 					newData = re.ReplaceAll(data, []byte(args.Replace))
 				}
@@ -527,25 +553,35 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 					newData = bytes.ReplaceAll(data, searchBytes, []byte(args.Replace))
 				}
 			}
-			if count > 0 {
-				if err := os.WriteFile(fp, newData, 0644); err != nil {
-					continue
-				}
-				relPath, _ := filepath.Rel(svc.projectRoot, fp)
-				matchedFiles = append(matchedFiles, fmt.Sprintf("  - %s (%d 处)", relPath, count))
-				totalReplacements += count
+			if count == 0 {
+				continue
 			}
+			if werr := os.WriteFile(fp, newData, 0644); werr != nil {
+				failedFiles = append(failedFiles, fmt.Sprintf("  - %s（写入失败：%v）", relOf(fp), werr))
+				continue
+			}
+			invalidateReadCache(fp)
+			changedFiles = append(changedFiles, fmt.Sprintf("  - %s (%d 处)", relOf(fp), count))
+			totalReplacements += count
 		}
 
-		if len(matchedFiles) == 0 {
-			return "未找到匹配的内容", nil
+		var b strings.Builder
+		fmt.Fprintf(&b, "搜索替换：扫描第 %d–%d 个匹配文件（共 %d 个），改写 %d 个文件、替换 %d 处",
+			start, scanned, len(allFiles), len(changedFiles), totalReplacements)
+		if len(changedFiles) > 0 {
+			b.WriteString("：\n\n")
+			b.WriteString(strings.Join(changedFiles, "\n"))
 		}
-		result := fmt.Sprintf("搜索替换完成，共修改 %d 个文件，替换 %d 处：\n\n", len(matchedFiles), totalReplacements)
-		result += strings.Join(matchedFiles, "\n")
-		if len(allFiles) > limit {
-			result += fmt.Sprintf("\n\n(还有 %d 个文件未处理，请缩小搜索范围)", len(allFiles)-limit)
+		if len(failedFiles) > 0 {
+			fmt.Fprintf(&b, "\n\n以下 %d 个文件命中但未能改写：\n", len(failedFiles))
+			b.WriteString(strings.Join(failedFiles, "\n"))
 		}
-		return result, nil
+		if scanned < len(allFiles) {
+			fmt.Fprintf(&b, "\n\n[第 %d–%d 个匹配文件本次未检视，其中的匹配内容仍在原地。"+
+				"单次调用最多改写 %d 个文件；继续执行请传 offset=%d，不要重复同一次调用]",
+				scanned+1, len(allFiles), maxFilesPerCall, scanned+1)
+		}
+		return b.String(), nil
 	})
 
 	add(&schema.ToolInfo{
@@ -589,41 +625,39 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		cmd.Stderr = &stderr
 
 		err := cmd.Run()
+		if ctx.Err() == context.DeadlineExceeded {
+			return "", fmt.Errorf("命令执行超时（%d秒）", args.Timeout)
+		}
+
 		var b strings.Builder
-		b.WriteString(fmt.Sprintf("$ %s\n", args.Command))
+		// 退出码写在开头：输出过长时尾部会被预算裁掉，写在末尾的话模型最先丢掉的
+		// 恰恰是「命令到底成功没有」这条最需要的信息。
+		if err != nil {
+			b.WriteString(fmt.Sprintf("$ %s\n[退出码/错误: %v]\n", args.Command, err))
+		} else {
+			b.WriteString(fmt.Sprintf("$ %s\n", args.Command))
+		}
 		if stdout.Len() > 0 {
-			out := stdout.String()
-			if len(out) > 50000 {
-				out = out[:50000] + "\n... (输出截断，超过 50000 字符)"
-			}
-			b.WriteString(out)
+			b.WriteString(stdout.String())
 		}
 		if stderr.Len() > 0 {
-			errStr := stderr.String()
-			if len(errStr) > 10000 {
-				errStr = errStr[:10000] + "\n... (错误输出截断)"
-			}
-			if b.Len() > 0 {
-				b.WriteString("\n")
-			}
-			b.WriteString("STDERR:\n" + errStr)
+			b.WriteString("\nSTDERR:\n" + stderr.String())
 		}
-		if err != nil {
-			if ctx.Err() == context.DeadlineExceeded {
-				return "", fmt.Errorf("命令执行超时（%d秒）", args.Timeout)
-			}
-			b.WriteString(fmt.Sprintf("\n退出码: %v", err))
-		}
-		return b.String(), nil
+		return capNonPagingResult(b.String(), svc.resultBudget(), ""), nil
 	})
 
 	add(&schema.ToolInfo{
 		Name: "grep",
-		Desc: "在项目文件中搜索文本或正则表达式。支持指定文件匹配模式和上下文行数。",
+		Desc: "在项目文件中搜索文本或正则表达式。可用 path 限定单个文件或子目录（读回 web_fetch/web_search 的存档就用 path），" +
+			"或用 glob 限定文件模式、context 指定上下文行数。" +
+			"结果按单次大小上限在匹配条目边界切窗，尾部会说明实际返回的序号区间；" +
+			"若提示还有后续，按 offset 续读而不是重复同一查询。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"pattern": {Type: schema.String, Desc: "搜索模式文本", Required: true},
+			"path":    {Type: schema.String, Desc: "只搜索该路径（相对项目根的文件或目录），可选；指定单个文件时不受大文件跳过限制"},
 			"glob":    {Type: schema.String, Desc: "文件匹配模式，如 '*.go'、'*.html'，默认所有文件"},
 			"context": {Type: schema.Integer, Desc: "上下文行数（包含匹配行前后各 N 行），默认 0"},
+			"offset":  {Type: schema.Integer, Desc: "从第几处匹配开始返回（从1开始），可选"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args grepArgs
@@ -655,10 +689,38 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			After   []string
 		}
 
-		var matches []match
-		maxResults := 100
+		// path 把搜索限定在单个文件或子目录。点名单个文件时不再套用"超大文件跳过"保护：
+		// 模型要读的就是它（例如 web_fetch 的全文存档动辄几千行），默默跳过等于宣称
+		// "未找到匹配"而其实一眼都没看。
+		root := svc.projectRoot
+		explicitFile := false
+		if args.Path != "" {
+			p, perr := svc.safePath(args.Path)
+			if perr != nil {
+				return "", perr
+			}
+			fi, serr := os.Stat(p)
+			if serr != nil {
+				// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+				// textFailureMarkers）。传了 path 却不存在，AI 必须知道它看错了地方。
+				return "错误：" + fmt.Sprintf("路径不存在或无法访问: %s", args.Path), nil
+			}
+			explicitFile = !fi.IsDir()
+			root = p
+		}
 
-		filepath.Walk(svc.projectRoot, func(path string, fi os.FileInfo, err error) error {
+		var matches []match
+		capped := false
+		var skippedNames []string
+		skippedTotal := 0
+		noteSkip := func(rel, why string) {
+			skippedTotal++
+			if len(skippedNames) < 5 {
+				skippedNames = append(skippedNames, fmt.Sprintf("%s（%s）", rel, why))
+			}
+		}
+
+		filepath.Walk(root, func(path string, fi os.FileInfo, err error) error {
 			if err != nil || fi.IsDir() {
 				if fi != nil && fi.IsDir() {
 					base := fi.Name()
@@ -668,17 +730,20 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 				}
 				return nil
 			}
+			relPath, _ := filepath.Rel(svc.projectRoot, path)
 			// Check glob
 			if args.Glob != "" {
-				rel, _ := filepath.Rel(svc.projectRoot, path)
 				matched, _ := filepath.Match(args.Glob, fi.Name())
-				matchedRel, _ := filepath.Match(args.Glob, rel)
+				matchedRel, _ := filepath.Match(args.Glob, relPath)
 				if !matched && !matchedRel {
 					return nil
 				}
 			}
-			// Skip binary files
+			// Skip oversized files（跳过要在结果里说明，否则"没搜到"是假话）
 			if fi.Size() > 1024*1024 {
+				if !explicitFile {
+					noteSkip(relPath, "超过 1MB")
+				}
 				return nil
 			}
 			f, err := os.Open(path)
@@ -693,67 +758,101 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			for scanner.Scan() {
 				lines = append(lines, scanner.Text())
 			}
-			if len(lines) > 5000 {
-				return nil // skip large files
+			if len(lines) > 5000 && !explicitFile {
+				noteSkip(relPath, "超过 5000 行")
+				return nil
 			}
 
-			relPath, _ := filepath.Rel(svc.projectRoot, path)
 			for i, line := range lines {
-				if re.MatchString(line) {
-					if len(matches) >= maxResults {
-						return fmt.Errorf("reached max results")
-					}
-					m := match{File: relPath, Line: i + 1, Content: line}
-					// Before context
-					start := i - args.Context
-					if start < 0 {
-						start = 0
-					}
-					for j := start; j < i; j++ {
-						m.Before = append(m.Before, fmt.Sprintf("  %d| %s", j+1, lines[j]))
-					}
-					// After context
-					end := i + args.Context + 1
-					if end > len(lines) {
-						end = len(lines)
-					}
-					for j := i + 1; j < end; j++ {
-						m.After = append(m.After, fmt.Sprintf("  %d| %s", j+1, lines[j]))
-					}
-					matches = append(matches, m)
+				if !re.MatchString(line) {
+					continue
 				}
+				if len(matches) >= scanCollectCap {
+					capped = true
+					return errScanDone
+				}
+				m := match{File: relPath, Line: i + 1, Content: line}
+				// Before context
+				before := i - args.Context
+				if before < 0 {
+					before = 0
+				}
+				for j := before; j < i; j++ {
+					m.Before = append(m.Before, fmt.Sprintf("  %d| %s", j+1, lines[j]))
+				}
+				// After context
+				after := i + args.Context + 1
+				if after > len(lines) {
+					after = len(lines)
+				}
+				for j := i + 1; j < after; j++ {
+					m.After = append(m.After, fmt.Sprintf("  %d| %s", j+1, lines[j]))
+				}
+				matches = append(matches, m)
 			}
 			return nil
 		})
 
-		if len(matches) == 0 {
-			return "未找到匹配的内容", nil
+		// 被跳过的超大文件必须说出来："没搜到"和"没看"是两件事，前者会诱导模型下结论。
+		skipNote := ""
+		if skippedTotal > 0 {
+			skipNote = fmt.Sprintf("\n\n[本次扫描跳过 %d 个超大文件（>1MB 或 >5000 行）：%s"+
+				"，匹配可能正在其中。要搜它们请传 path=<单个文件路径>，或用 read_file 分段读取]",
+				skippedTotal, strings.Join(skippedNames, "、"))
 		}
 
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("共找到 %d 处匹配：\n\n", len(matches)))
-		for _, m := range matches {
-			b.WriteString(fmt.Sprintf("%s:%d\n", m.File, m.Line))
-			for _, before := range m.Before {
-				b.WriteString(before + "\n")
-			}
-			b.WriteString(fmt.Sprintf("  → %s\n", strings.TrimSpace(m.Content)))
-			for _, after := range m.After {
-				b.WriteString(after + "\n")
-			}
-			b.WriteString("\n")
+		if len(matches) == 0 {
+			return "未找到匹配的内容" + skipNote, nil
 		}
-		if len(matches) >= maxResults {
-			b.WriteString("... (结果过多，仅显示前 100 条)")
+
+		total := len(matches)
+		start := args.Offset
+		if start <= 0 {
+			start = 1
 		}
-		return b.String(), nil
+		if start > total {
+			// 前缀「错误：」是协议层 isError 的判定依据（见 pkg/mcp/intent
+			// textFailureMarkers）。注意与下面「未找到匹配的内容」区分：
+			// 那是搜索成功但结果为空（正常回执），这里是分页越界（请求无效）。
+			return "错误：" + fmt.Sprintf("共匹配 %d 处，起始序号 %d 超出范围", total, start) + skipNote, nil
+		}
+		seg := matches[start-1:]
+		budget := svc.resultBudget()
+		header := fmt.Sprintf("模式 %q 命中 %d 处（从第 %d 处开始）：\n\n", args.Pattern, total, start)
+		body, delivered := fitWindow(seg, budget-len(header)-len(skipNote)-windowTrailerReserve,
+			func(_ int, m match) string {
+				var sb strings.Builder
+				fmt.Fprintf(&sb, "%s:%d\n", m.File, m.Line)
+				for _, before := range m.Before {
+					sb.WriteString(before + "\n")
+				}
+				fmt.Fprintf(&sb, "  → %s\n", strings.TrimSpace(m.Content))
+				for _, after := range m.After {
+					sb.WriteString(after + "\n")
+				}
+				sb.WriteString("\n")
+				return sb.String()
+			})
+		last := start + delivered - 1
+		result := header + body + windowTrailer("处", start, last, total, budget, capped || delivered < len(seg)) + skipNote
+		if capped {
+			result += fmt.Sprintf("\n[命中数已达采集上限 %d，之后仍有未统计的匹配。"+
+				"请收窄 pattern 或用 glob 限定文件范围]", scanCollectCap)
+		}
+		return result, nil
 	})
 
 	add(&schema.ToolInfo{
 		Name: "glob",
-		Desc: "按文件名模式查找文件。支持通配符：* 匹配任意字符，** 匹配任意目录层级。",
+		Desc: "按模式查找文件与目录，两种 pattern 写法：\n" +
+			"· **不含 '/'**（如 '*.go'、'catalog_*.go'）= 文件名模式，递归匹配任意层级的文件名\n" +
+			"· **含 '/'**（如 'pkg/mcp/intent/*.go'、'**/*.go'、'template/**'、'a/**/b/**/c'）= 路径模式，按 / 分段匹配，" +
+			"'**' 可跨任意层级（含零层），段内支持 * ? [...]\n" +
+			"结果按路径排序；单次返回会按大小上限切窗，尾部说明实际返回的序号区间，" +
+			"若提示还有后续，按 offset 续读而不是换个写法重查。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
-			"pattern": {Type: schema.String, Desc: "文件匹配模式，如 '**/*.go'、'template/**'、'*.html'", Required: true},
+			"pattern": {Type: schema.String, Desc: "匹配模式。不含 / 时按文件名匹配任意层级（'*.go'）；含 / 时按路径分段匹配（'pkg/**/*.go'、'template/**'）", Required: true},
+			"offset":  {Type: schema.Integer, Desc: "从第几个匹配项开始返回（从1开始），可选"},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args globArgs
@@ -765,11 +864,15 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		}
 
 		var results []string
-		maxResults := 200
+		capped := false
 
 		_ = filepath.Walk(svc.projectRoot, func(path string, fi os.FileInfo, err error) error {
 			if err != nil {
 				return nil
+			}
+			if len(results) >= scanCollectCap {
+				capped = true
+				return errScanDone
 			}
 			rel, _ := filepath.Rel(svc.projectRoot, path)
 			// Skip hidden dirs
@@ -778,49 +881,42 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 				if strings.HasPrefix(base, ".") || base == "vendor" || base == "node_modules" {
 					return filepath.SkipDir
 				}
-				matched, err := filepath.Match(args.Pattern, rel)
-				if err == nil && matched {
+				if matchGlobPattern(args.Pattern, rel) {
 					results = append(results, rel+"/")
 				}
 				return nil
 			}
 
-			if strings.Contains(args.Pattern, "**") {
-				parts := strings.Split(args.Pattern, "**")
-				if len(parts) == 2 {
-					prefix := strings.TrimRight(parts[0], "/")
-					suffix := strings.TrimLeft(parts[1], "/")
-					if (prefix == "" || strings.HasPrefix(rel, prefix)) &&
-						(strings.HasSuffix(rel, suffix) || suffix == "") {
-						results = append(results, rel)
-					}
-				}
-			} else {
-				matched, err := filepath.Match(args.Pattern, fi.Name())
-				if err == nil && matched {
-					results = append(results, rel)
-				}
-			}
-			if len(results) > maxResults {
-				return fmt.Errorf("too many results")
+			if matchGlobPattern(args.Pattern, rel) {
+				results = append(results, rel)
 			}
 			return nil
 		})
-
 		if len(results) == 0 {
 			return "未找到匹配的文件", nil
 		}
 
+		// 先排序再切窗：offset 只有在稳定顺序上才有意义，否则续读会漏项或重复。
 		sort.Strings(results)
-		var b strings.Builder
-		b.WriteString(fmt.Sprintf("共找到 %d 个文件/目录：\n\n", len(results)))
-		for _, r := range results {
-			b.WriteString(r + "\n")
+		total := len(results)
+		start := args.Offset
+		if start <= 0 {
+			start = 1
 		}
-		if len(results) > maxResults {
-			b.WriteString("... (结果过多，仅显示前 200 条)")
+		if start > total {
+			return fmt.Sprintf("共匹配 %d 个文件/目录，起始序号 %d 超出范围", total, start), nil
 		}
-		return b.String(), nil
+		seg := results[start-1:]
+		budget := svc.resultBudget()
+		header := fmt.Sprintf("模式 %q 匹配 %d 个文件/目录（从第 %d 个开始）：\n\n", args.Pattern, total, start)
+		body, delivered := fitWindow(seg, budget-len(header)-windowTrailerReserve,
+			func(_ int, r string) string { return r + "\n" })
+		last := start + delivered - 1
+		result := header + body + windowTrailer("个", start, last, total, budget, capped || delivered < len(seg))
+		if capped {
+			result += fmt.Sprintf("\n[匹配数已达采集上限 %d，之后仍有未统计的项。请收窄 pattern]", scanCollectCap)
+		}
+		return result, nil
 	})
 
 	add(&schema.ToolInfo{
@@ -922,7 +1018,8 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 	add(&schema.ToolInfo{
 		Name: "web_fetch",
-		Desc: "获取指定URL的网页内容并返回纯文本。用于查看网页信息、API文档等。",
+		Desc: "获取指定URL的网页内容并返回纯文本。用于查看网页信息、API文档等。" +
+			"内容超长时只返回前一段，并把全文存档为项目文件——按结果末尾标记里的路径，用 read_file 的 offset 或 grep 续读。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"url": {Type: schema.String, Desc: "要获取的网页URL", Required: true},
 		}),
@@ -970,8 +1067,8 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		doc, err := goquery.NewDocumentFromReader(bytes.NewReader(body))
 		if err != nil {
 			// Not HTML, return raw text
-			return fmt.Sprintf("URL: %s\n状态码: %d\n大小: %d 字节\n\n%s",
-				args.URL, resp.StatusCode, len(body), string(body)), nil
+			return svc.capWebResult("web_fetch", fmt.Sprintf("URL: %s\n状态码: %d\n大小: %d 字节\n\n%s",
+				args.URL, resp.StatusCode, len(body), string(body))), nil
 		}
 
 		// Remove script, style, nav, footer, header
@@ -991,17 +1088,15 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 
 		title := doc.Find("title").Text()
 		joined := strings.Join(textParts, "\n\n")
-		if len(joined) > 30000 {
-			joined = joined[:30000] + "\n\n... (内容截断，超过 30000 字符)"
-		}
 
-		return fmt.Sprintf("URL: %s\n状态码: %d\n标题: %s\n\n%s",
-			args.URL, resp.StatusCode, title, joined), nil
+		return svc.capWebResult("web_fetch", fmt.Sprintf("URL: %s\n状态码: %d\n标题: %s\n\n%s",
+			args.URL, resp.StatusCode, title, joined)), nil
 	})
 
 	add(&schema.ToolInfo{
 		Name: "web_search",
-		Desc: "搜索互联网获取最新信息。可访问外网时使用 DuckDuckGo，否则回退使用 Bing 搜索。",
+		Desc: "搜索互联网获取最新信息。可访问外网时使用 DuckDuckGo，否则回退使用 Bing 搜索。" +
+			"结果超长时只返回前一段，并把全文存档为项目文件——按结果末尾标记里的路径用 grep 或 read_file 续读。",
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"query": {Type: schema.String, Desc: "搜索关键词", Required: true},
 		}),
@@ -1014,10 +1109,17 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 			return "错误：搜索关键词不能为空", nil
 		}
 
+		var out string
+		var serr error
 		if config.GoogleValid {
-			return searchDuckDuckGo(ctx, args.Query)
+			out, serr = searchDuckDuckGo(ctx, args.Query)
+		} else {
+			out, serr = searchBing(ctx, args.Query)
 		}
-		return searchBing(ctx, args.Query)
+		if serr != nil {
+			return "", serr
+		}
+		return svc.capWebResult("web_search", out), nil
 	})
 
 	return tools, handlers

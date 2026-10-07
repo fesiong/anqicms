@@ -10,6 +10,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginAnchorList 分页获取锚文本列表，支持关键词搜索。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页数量，默认为 20。
+//   - 查询参数 "keyword": 搜索关键词。
+//   - 查询参数 "title": 兼容参数，非空时作为关键词使用。
 func PluginAnchorList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
@@ -38,6 +45,10 @@ func PluginAnchorList(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorDetail 根据ID获取锚文本详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 锚文本ID。
 func PluginAnchorDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -58,6 +69,7 @@ func PluginAnchorDetail(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorDetailForm 保存锚文本，支持新增和修改，标题或链接变更时异步更新已有内容中的锚文本。
 func PluginAnchorDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchor
@@ -139,12 +151,17 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("LinkUpdated"),
+		"data": anchor,
 	})
 }
 
+// PluginAnchorReplace 执行锚文本批量替换任务，指定ID时替换单个锚文本，否则替换全部。
+//
+// 参数说明：
+//   - 请求体 "id": 锚文本ID，为0时替换全部锚文本。
 func PluginAnchorReplace(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginAnchor
+	var req request.PluginAnchorReplaceRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -177,6 +194,11 @@ func PluginAnchorReplace(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorDelete 删除锚文本，支持按单个ID或批量ID列表删除。
+//
+// 参数说明：
+//   - 请求体 "id": 单个锚文本ID，大于0时删除该条。
+//   - 请求体 "ids": 锚文本ID列表，批量删除时使用。
 func PluginAnchorDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchorDelete
@@ -227,6 +249,7 @@ func PluginAnchorDelete(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorExport 导出全部锚文本数据（标题、链接、权重）。
 func PluginAnchorExport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	anchors, err := currentSite.GetAllAnchors()
@@ -258,6 +281,10 @@ func PluginAnchorExport(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorImport 通过上传文件导入锚文本数据。
+//
+// 参数说明：
+//   - 请求体 "file": 上传的锚文本文件。
 func PluginAnchorImport(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
@@ -288,6 +315,7 @@ func PluginAnchorImport(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorSetting 获取锚文本插件的配置信息。
 func PluginAnchorSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	pluginAnchor := currentSite.PluginAnchor
@@ -299,6 +327,7 @@ func PluginAnchorSetting(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorSettingForm 保存锚文本插件配置，包括锚文本密度、替换方式等。
 func PluginAnchorSettingForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginAnchorConfig
@@ -336,6 +365,7 @@ func PluginAnchorSettingForm(ctx iris.Context) {
 	})
 }
 
+// PluginAnchorAddFromTitle 批量将标题导入锚文本数据。支持文档/分类/标签。
 func PluginAnchorAddFromTitle(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchorAddFromTitle

@@ -42,11 +42,11 @@ type FilterItem struct {
 }
 
 type LastVersion struct {
-	Version          string `json:"version"`
-	Description      string `json:"description"`
-	TrialVersion     string `json:"trial_version"`
-	TrialDescription string `json:"trial_description"`
-	Trial            bool   `json:"trial"`
+	Version          string `json:"version"`           // 版本号
+	Description      string `json:"description"`       // 版本描述
+	TrialVersion     string `json:"trial_version"`     // 试用版本号
+	TrialDescription string `json:"trial_description"` // 试用版本描述
+	Trial            bool   `json:"trial"`             // 是否试用版本。
 }
 
 type ChartData struct {

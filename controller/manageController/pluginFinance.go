@@ -6,6 +6,11 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginFinanceList 获取财务流水列表，支持分页。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
 func PluginFinanceList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -21,11 +26,15 @@ func PluginFinanceList(ctx iris.Context) {
 	})
 }
 
+// PluginFinanceDetail 查询单个财务记录详情，按 id 返回对应的财务明细。
+//
+// 参数说明：
+//   - 查询参数 "id": 财务记录 ID，默认为 0（未命中任何记录）。
 func PluginFinanceDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
-	withdraw, err := currentSite.GetFinanceById(id)
+	finance, err := currentSite.GetFinanceById(id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -37,6 +46,6 @@ func PluginFinanceDetail(ctx iris.Context) {
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
-		"data": withdraw,
+		"data": finance,
 	})
 }

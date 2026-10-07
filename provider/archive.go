@@ -1197,6 +1197,8 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if isReleased {
 		draft.ArchiveData = &archiveData
 		err = w.SuccessReleaseArchive(&draft.Archive, newPost)
+	} else {
+		draft.Link += "?preview=true"
 	}
 
 	return &draft.Archive, nil
@@ -1250,7 +1252,7 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 	//新发布的文章，执行推送
 	if newPost {
 		go func() {
-			w.PushArchive(archive.Link)
+			w.PushArchives([]string{archive.Link})
 		}()
 		if w.PluginSitemap.AutoBuild == 1 {
 			go w.AddonSitemap("archive", archive.Link, time.Unix(archive.UpdatedTime, 0).Format("2006-01-02"), archive)
@@ -1400,7 +1402,7 @@ func (w *Website) DeleteArchiveDraft(draft *model.ArchiveDraft) error {
 	return nil
 }
 
-func (w *Website) UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) error {
+func (w *Website) UpdateArchiveRecommend(req *request.ArchiveFlagsRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
@@ -1413,7 +1415,7 @@ func (w *Website) UpdateArchiveRecommend(req *request.ArchivesUpdateRequest) err
 	return nil
 }
 
-func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error {
+func (w *Website) UpdateArchiveStatus(req *request.ArchiveStatusRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
@@ -1463,8 +1465,8 @@ func (w *Website) UpdateArchiveStatus(req *request.ArchivesUpdateRequest) error 
 	return nil
 }
 
-func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
-	if len(req.Ids) == 0 {
+func (w *Website) UpdateArchiveTime(req *request.ArchivesTimeRequest) error {
+	if len(req.Ids) == 0 && req.Time < 3 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
 	var err error
@@ -1487,7 +1489,7 @@ func (w *Website) UpdateArchiveTime(req *request.ArchivesUpdateRequest) error {
 	return err
 }
 
-func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) error {
+func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesPlanRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
@@ -1537,7 +1539,7 @@ func (w *Website) UpdateArchiveReleasePlan(req *request.ArchivesUpdateRequest) e
 	return nil
 }
 
-func (w *Website) UpdateArchiveParent(req *request.ArchivesUpdateRequest) error {
+func (w *Website) UpdateArchiveParent(req *request.ArchivesParentRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
@@ -1552,7 +1554,7 @@ func (w *Website) UpdateArchiveParent(req *request.ArchivesUpdateRequest) error 
 	return nil
 }
 
-func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) error {
+func (w *Website) UpdateArchiveCategory(req *request.ArchiveCategoryRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
@@ -1593,7 +1595,7 @@ func (w *Website) UpdateArchiveCategory(req *request.ArchivesUpdateRequest) erro
 	return nil
 }
 
-func (w *Website) UpdateArchiveTags(req *request.ArchivesUpdateRequest) error {
+func (w *Website) UpdateArchiveTags(req *request.ArchivesTagRequest) error {
 	if len(req.Ids) == 0 {
 		return errors.New(w.Tr("NoDocumentToOperate"))
 	}
@@ -1621,7 +1623,7 @@ func (w *Website) UpdateArchiveTags(req *request.ArchivesUpdateRequest) error {
 			w.DB.Where("`title` = ?", tag.Title).FirstOrCreate(tag)
 
 			link := w.GetUrl("tag", tag, 0)
-			go w.PushArchive(link)
+			go w.PushArchives([]string{link})
 			if w.PluginSitemap.AutoBuild == 1 {
 				go w.AddonSitemap("tag", link, time.Unix(tag.CreatedTime, 0).Format("2006-01-02"), tag)
 			}

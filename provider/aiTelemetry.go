@@ -32,31 +32,31 @@ type modelPricing struct {
 // 如未命中，按保守默认 (input 0.0015, output 0.006) 计算。
 var defaultPricings = map[string]modelPricing{
 	// OpenAI
-	"gpt-4":            {0.03, 0.06},
-	"gpt-4-turbo":      {0.01, 0.03},
-	"gpt-4o":           {0.0025, 0.01},
-	"gpt-4o-mini":      {0.00015, 0.0006},
-	"gpt-3.5-turbo":    {0.0005, 0.0015},
-	"o1":               {0.015, 0.06},
-	"o1-mini":          {0.003, 0.012},
-	"o3-mini":          {0.0011, 0.0044},
+	"gpt-4":         {0.03, 0.06},
+	"gpt-4-turbo":   {0.01, 0.03},
+	"gpt-4o":        {0.0025, 0.01},
+	"gpt-4o-mini":   {0.00015, 0.0006},
+	"gpt-3.5-turbo": {0.0005, 0.0015},
+	"o1":            {0.015, 0.06},
+	"o1-mini":       {0.003, 0.012},
+	"o3-mini":       {0.0011, 0.0044},
 	// Anthropic
-	"claude-3-opus":    {0.015, 0.075},
-	"claude-3-sonnet":  {0.003, 0.015},
-	"claude-3-haiku":   {0.00025, 0.00125},
+	"claude-3-opus":     {0.015, 0.075},
+	"claude-3-sonnet":   {0.003, 0.015},
+	"claude-3-haiku":    {0.00025, 0.00125},
 	"claude-3.5-sonnet": {0.003, 0.015},
 	// Google
 	"gemini-1.5-pro":   {0.00125, 0.005},
 	"gemini-1.5-flash": {0.000075, 0.0003},
 	// DeepSeek
-	"deepseek-chat":    {0.00014, 0.00028},
+	"deepseek-chat":     {0.00014, 0.00028},
 	"deepseek-reasoner": {0.00055, 0.00219},
 	// 通义千问
-	"qwen-max":         {0.0024, 0.0096},
-	"qwen-plus":        {0.0004, 0.0012},
-	"qwen-turbo":       {0.00005, 0.0002},
+	"qwen-max":   {0.0024, 0.0096},
+	"qwen-plus":  {0.0004, 0.0012},
+	"qwen-turbo": {0.00005, 0.0002},
 	// 默认 fallback
-	"default":          {0.0015, 0.006},
+	"default": {0.0015, 0.006},
 }
 
 // CalculateCost 根据模型名和 token 用量计算成本 (USD)。

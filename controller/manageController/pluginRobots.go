@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginRobots 获取当前站点的 robots.txt 内容。
 func PluginRobots(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	robots := currentSite.GetRobots()
@@ -20,6 +21,7 @@ func PluginRobots(ctx iris.Context) {
 	})
 }
 
+// PluginRobotsForm 保存当前站点的 robots.txt 内容。
 func PluginRobotsForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginRobotsConfig

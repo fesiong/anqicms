@@ -2,6 +2,7 @@ package tags
 
 import (
 	"fmt"
+
 	"github.com/flosch/pongo2/v6"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
@@ -71,7 +72,6 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 					Link: currentSite.GetUrl("archiveIndex", module, 0),
 				})
 			}
-			break
 		case "archiveList":
 			categoryInfo, ok := ctx.Public["category"].(*model.Category)
 			if ok {
@@ -81,7 +81,6 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 					Link: currentSite.GetUrl("category", categoryInfo, 0),
 				})
 			}
-			break
 		case "archiveDetail":
 			archive, ok := ctx.Public["archive"].(*model.Archive)
 			if ok {
@@ -99,7 +98,6 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 					})
 				}
 			}
-			break
 		case "comments":
 			itemData, ok := ctx.Public["itemData"].(*model.Archive)
 			if ok {
@@ -112,13 +110,11 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 				Name: currentSite.TplTr("Comment"),
 				Link: "",
 			})
-			break
 		case "guestbook":
 			crumbs = append(crumbs, &crumb{
 				Name: currentSite.TplTr("MessageBoard"),
 				Link: currentSite.GetUrl("/guestbook.html", nil, 0),
 			})
-			break
 		case "pageDetail":
 			pageInfo, ok := ctx.Public["page"].(*model.Category)
 			if ok {
@@ -127,7 +123,6 @@ func (node *tagBreadcrumbNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 					Link: currentSite.GetUrl("page", pageInfo, 0),
 				})
 			}
-			break
 		default:
 			crumbs = append(crumbs, &crumb{
 				Name: webInfo.Title,

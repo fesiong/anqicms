@@ -8,7 +8,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
-// HandleCollectSetting 全局配置
+// HandleCollectSetting 获取采集配置。
 func HandleCollectSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	collector := currentSite.GetUserCollectorSetting()
@@ -20,7 +20,7 @@ func HandleCollectSetting(ctx iris.Context) {
 	})
 }
 
-// HandleSaveCollectSetting 全局配置保存
+// HandleSaveCollectSetting 保存采集配置
 func HandleSaveCollectSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.CollectorJson
@@ -51,6 +51,7 @@ func HandleSaveCollectSetting(ctx iris.Context) {
 	})
 }
 
+// HandleReplaceArticles 保存内容替换关键词配置；当 replace 为 true 时触发批量替换文章内容的异步任务。
 func HandleReplaceArticles(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.ArchiveReplaceRequest
@@ -103,6 +104,7 @@ func HandleReplaceArticles(ctx iris.Context) {
 	})
 }
 
+// HandleDigKeywords 立即执行关键词挖掘任务。后台异步执行，接口立即返回。
 func HandleDigKeywords(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	go currentSite.StartDigKeywords(true)
@@ -115,7 +117,7 @@ func HandleDigKeywords(ctx iris.Context) {
 	})
 }
 
-// HandleArticleCollect 手动采集不受时间限制，并且需要指定关键词
+// HandleArticleCollect 根据指定关键词立即执行采集操作，不受时间限制。后台异步执行，接口立即返回。
 func HandleArticleCollect(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.KeywordRequest
@@ -126,7 +128,19 @@ func HandleArticleCollect(ctx iris.Context) {
 		})
 		return
 	}
-
+	if req.Title != "" {
+		// 保存关键词
+		keyword, err := currentSite.GetKeywordByTitle(req.Title)
+		if err != nil {
+			// 不存在，则创建
+			keyword = &model.Keyword{
+				Title:  req.Title,
+				Status: 1,
+			}
+			currentSite.SaveKeyword(keyword)
+		}
+		req.Id = keyword.Id
+	}
 	keyword, err := currentSite.GetKeywordById(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -144,6 +158,7 @@ func HandleArticleCollect(ctx iris.Context) {
 	})
 }
 
+// HandleStartArticleCollect 立即执行采集任务，后台异步执行，接口立即返回。
 func HandleStartArticleCollect(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	go currentSite.CollectArticles()
@@ -154,7 +169,7 @@ func HandleStartArticleCollect(ctx iris.Context) {
 	})
 }
 
-// HandleArticleCombinationGet 获取问答组合文章
+// HandleArticleCombinationGet 根据指定关键词立即执行获取问答组合文章
 func HandleArticleCombinationGet(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.KeywordRequest

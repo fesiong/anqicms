@@ -393,7 +393,7 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if newPost && category.Status == config.ContentStatusOK {
 		link := w.GetUrl("category", category, 0)
 		go func() {
-			w.PushArchive(link)
+			w.PushArchives([]string{link})
 			if w.PluginSitemap.AutoBuild == 1 {
 				_ = w.AddonSitemap("category", link, time.Unix(category.UpdatedTime, 0).Format("2006-01-02"), category)
 			}

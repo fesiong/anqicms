@@ -205,7 +205,7 @@ func ArchiveDetail(ctx iris.Context) {
 	module := currentSite.GetModuleFromCache(archive.ModuleId)
 	if module == nil {
 		ctx.StatusCode(404)
-		ShowMessage(ctx, currentSite.TplTr("UndefinedModelName%s", archive.ModuleId), nil)
+		ShowMessage(ctx, currentSite.TplTr("UndefinedModelName%d", archive.ModuleId), nil)
 		return
 	}
 	ctx.ViewData("module", module)

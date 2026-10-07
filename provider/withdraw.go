@@ -45,7 +45,7 @@ func (w *Website) GetWithdrawById(id uint) (*model.UserWithdraw, error) {
 	return &withdraw, nil
 }
 
-func (w *Website) SetUserWithdrawApproval(req *request.UserWithdrawRequest) error {
+func (w *Website) SetUserWithdrawApproval(req *request.UserWithdrawApprovalRequest) error {
 	withdraw, err := w.GetWithdrawById(req.Id)
 	if err != nil {
 		return err
@@ -76,7 +76,7 @@ func (w *Website) SetUserWithdrawApproval(req *request.UserWithdrawRequest) erro
 	return nil
 }
 
-func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawRequest) error {
+func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawApprovalRequest) error {
 	withdraw, err := w.GetWithdrawById(req.Id)
 	if err != nil {
 		return err
@@ -111,7 +111,7 @@ func (w *Website) SetUserWithdrawFinished(req *request.UserWithdrawRequest) erro
 var withdrawRunning = false
 
 func (w *Website) CheckWithdrawToWechat() {
-	if w.DB == nil || w.PluginPay == nil || !w.PluginPay.WechatOpen {
+	if w.DB == nil {
 		return
 	}
 	if withdrawRunning {
@@ -121,7 +121,8 @@ func (w *Website) CheckWithdrawToWechat() {
 	defer func() {
 		withdrawRunning = false
 	}()
-	if w.PluginPay.WechatKeyPath == "" || (w.PluginPay.WechatAppId == "" && w.PluginPay.WeappAppId == "") {
+	account := w.GetSingleValidPaymentAccount(config.PayWayWechat, 0)
+	if account == nil {
 		return
 	}
 	var withdraws []model.UserWithdraw
@@ -135,17 +136,9 @@ func (w *Website) CheckWithdrawToWechat() {
 	var wechatClient *wechat.Client
 	var weapp2Client *wechat.Client
 	var err error
-	if w.PluginPay.WechatAppId != "" {
-		wechatClient = wechat.NewClient(w.PluginPay.WechatAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-		err = wechatClient.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
-		if err != nil {
-			log.Println("微信证书错误：", err.Error())
-			return
-		}
-	}
-	if w.PluginPay.WeappAppId != "" {
-		weapp2Client = wechat.NewClient(w.PluginPay.WeappAppId, w.PluginPay.WechatMchId, w.PluginPay.WechatApiKey, true)
-		err = weapp2Client.AddCertPemFilePath(w.DataPath+"cert/"+w.PluginPay.WechatCertPath, w.DataPath+"cert/"+w.PluginPay.WechatKeyPath)
+	if account.PayConfig.AppId != "" {
+		wechatClient = wechat.NewClient(account.PayConfig.AppId, account.PayConfig.Account, account.PayConfig.ApiKey, true)
+		err = wechatClient.AddCertPemFilePath(w.DataPath+"cert/"+account.PayConfig.CertPath, w.DataPath+"cert/"+account.PayConfig.PublicCertPath)
 		if err != nil {
 			log.Println("微信证书错误：", err.Error())
 			return

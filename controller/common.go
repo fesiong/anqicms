@@ -164,7 +164,7 @@ func CheckCloseSite(ctx iris.Context) bool {
 			ctx.ViewData("closeTips", closeTips)
 			tplName := "errors/close.html"
 			if webInfo, ok := ctx.Value("webInfo").(*response.WebInfo); ok {
-				webInfo.Title = currentSite.TplTr(closeTips)
+				webInfo.Title = closeTips
 				ctx.ViewData("webInfo", webInfo)
 			}
 
@@ -433,7 +433,13 @@ func FileServe(ctx iris.Context) bool {
 		//	_ = currentSite.SaveRobots(robots)
 		ctx.Values().Set("robots", true)
 		//return FileServe(ctx)
-		ctx.Text(robots)
+		// 必须用 WriteString 而不是 Text：Text(format, args...) 内部走
+		// fmt.Fprintf，即使不传 args 也会对 format 做 Sprintf 解析。
+		// 本串是运行时拼的（后面还会接站点 URL），一旦其中含 % 就会被
+		// 当格式符吞掉或输出 %!x(NOVERB) 之类的噪声。
+		// iris 的 Writef 注释也明确要求：format 可能含 % 时改用 WriteString。
+		ctx.ContentType(context.ContentTextHeaderValue)
+		ctx.WriteString(robots)
 		return true
 	}
 

@@ -137,7 +137,6 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.AdminLoginLog{},
 			&model.AdminLog{},
 			&model.Attachment{},
-			&model.AttachmentCategory{},
 			&model.Category{},
 			&model.Nav{},
 			&model.NavType{},
@@ -187,12 +186,19 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.WechatMessage{},
 			&model.WechatReplyRule{},
 			&model.TagContent{},
+			&model.Subscriber{},
+			&model.SubscriberCategory{},
 			&model.ArchiveFavorite{},
 			&model.AiChatMessage{},
 			&model.AiAgent{},
 			&model.AiAgentLog{},
+			&model.AiAgentCheckpoint{},
 			&model.AiUsageLog{},
+			&model.AiMcpAuditLog{},
 			&model.Place{},
+			&model.PaymentAccount{},
+			&model.PaymentStatistic{},
+			&model.MailPlan{},
 		}
 		//自动迁移数据库
 		err := db.Set("gorm:table_options", "DEFAULT CHARSET=utf8mb4").AutoMigrate(models...)
@@ -280,7 +286,6 @@ func (w *Website) InitModelData() {
 			Title:     w.Tr("ArticleCenter"),
 			Fields:    nil,
 			IsSystem:  1,
-			TitleName: w.Tr("Title"),
 			Status:    1,
 		},
 		{
@@ -291,7 +296,6 @@ func (w *Website) InitModelData() {
 			Title:     w.Tr("ProductCenter"),
 			Fields:    nil,
 			IsSystem:  1,
-			TitleName: w.Tr("ProductName"),
 			Status:    1,
 		},
 	}

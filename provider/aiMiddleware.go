@@ -2,12 +2,15 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"sort"
 	"strings"
 	"sync"
 	"unicode/utf8"
+
+	"kandaoni.com/anqicms/pkg/mcp/intent"
 
 	"github.com/cloudwego/eino/schema"
 )
@@ -28,6 +31,10 @@ const (
 	BeforeAllow                        // 短路剩余 before，直接放行
 	BeforeDeny                         // 阻止执行，返回 reason 作为 tool_result
 	BeforeAsk                          // 挂起等待人工审批 (仅主会话)
+	// BeforeDenyTurn P0-3: 终止**整轮**（不仅是这一个调用），对应 atomcode
+	// BeforeOutcome::DenyTurn。用于「再继续下去只会更糟」的硬边界，
+	// 例如熔断判定为死循环、或连续越权被拒。
+	BeforeDenyTurn
 )
 
 // AfterOutcome 是 After 的后续决策，对应 atomcode AfterOutcome。
@@ -36,6 +43,11 @@ type AfterOutcome int
 const (
 	AfterProceed AfterOutcome = iota // 继续下一个 after middleware
 	AfterStop                        // 终止本轮剩余工具 (已发生严重问题)
+	// AfterBlock P0-3: 阻断并把**原因回灌给模型**，对应 atomcode
+	// AfterOutcome::Block{reason}。与 AfterStop 的区别：Stop 只是不再跑后续
+	// middleware，Block 会把 reason 作为 tool_result 交给模型，让它自我修正
+	// （而不是拿到一个空结果或原始输出后继续猜）。
+	AfterBlock
 )
 
 // ToolMiddleware 是围绕工具执行的 composable wrapper。
@@ -55,37 +67,146 @@ type ToolExecContext struct {
 	IsAgent bool
 	// ToolName 工具名称 (便于 middleware 不必解析 call)
 	ToolName string
-	// AllowOnce 本会话已"本次允许"的工具集合 (主会话审批用)
+	// RootPath P0-1: 当前站点根目录 (各站点独立，见 provider/website.go)。
+	// 路径安全门以它为锚判定「站内 / 站外」；为空则无法判定 → fail closed。
+	RootPath string
+	// PathClass / PathTargets 由 path_gate 写入的分类结果与解析出的目标路径，
+	// 供后续 middleware 与链本身消费（例如决定授权键、是否可记住授权）。
+	PathClass   PathClass
+	PathTargets []string
+	// AllowOnce 本会话授权存储 (主会话审批用)
+	// P0-2: 由「整工具放行」改为「按目标键控」+ 可选「完全控制」
 	AllowOnce *SessionAllowSet
-	// ApprovalFn 审批回调，返回 ("allow"|"deny"|"once_allow", reason)
-	// 主会话由 controller 注入 SSE 同步审批；Agent 会话为 nil
-	ApprovalFn func(ctx context.Context, call *schema.ToolCall, toolName string) (decision string, reason string)
+	// ApprovalFn 审批回调，返回 ("allow"|"deny"|"once_allow"|"full_control", reason)
+	// 主会话由 controller 注入 SSE 同步审批；Agent 会话为 nil。
+	// P0-1: 传入 exec 本身，让前端能拿到路径分类/目标/原因（用于展示"为什么需要审批"
+	// 以及是否该提供"完全控制"选项）。
+	ApprovalFn func(ctx context.Context, call *schema.ToolCall, exec *ToolExecContext) (decision string, reason string)
 	// DeniedReason 由 BeforeDeny 设置，After 可读取用于日志
 	DeniedReason string
+	// P2-7: 结构化追踪记录器（可为 nil，nil 时中间件不记录）
+	Trace *TraceRecorder
+	// PreApproved / PreDenied 回合级合并审批的结论（按 tool_call_id 索引）。
+	//
+	// 模型一轮里并发发起多个写调用时，逐个 Ask 会让确认弹窗串联刷屏（用户反馈的
+	// 问题 1）。控制器改为「先扫整轮批次 → 一次 tool_confirm_batch 问完」，
+	// 结论预先写进这两个 map，门禁只消费、不再各自弹窗。
+	// nil 时行为与旧版一致（逐次 Ask）。
+	PreApproved map[string]bool
+	PreDenied   map[string]string
 }
 
-// SessionAllowSet 记录一个会话内已"本次允许"的工具，本会话允许后续相同工具不再拦截。
+// IsPreApproved 该 tool_call 是否已被回合级审批放行。
+func (e *ToolExecContext) IsPreApproved(callID string) bool {
+	if e == nil || callID == "" {
+		return false
+	}
+	return e.PreApproved[callID]
+}
+
+// PreDenyReason 该 tool_call 是否被回合级审批拒绝，以及拒绝原因。
+func (e *ToolExecContext) PreDenyReason(callID string) (string, bool) {
+	if e == nil || callID == "" || e.PreDenied == nil {
+		return "", false
+	}
+	reason, ok := e.PreDenied[callID]
+	return reason, ok
+}
+
+// ================================================================
+// SessionAllowSet —— 会话级授权存储 (P0-2)
+//
+// 原实现是 map[toolName]bool：一旦"允许 edit_file"，该工具对**任意文件**的
+// 后续调用全部放行 —— 用户只想改 A 文件，却放行了 B/C。仿 atomcode 改为：
+//   - 按目标键控：key = 工具 + 解析出的目标路径（同一文件不同读取窗口共享授权，
+//     不同文件/不同密钥各有各的授权）
+//   - 完全控制 (full control)：本会话放行所有**非敏感**操作，是用户显式升级的逃生舱
+//   - 敏感目标永不记住：即使开了完全控制也不覆盖敏感路径（fail closed）
+//
+// ================================================================
 type SessionAllowSet struct {
-	mu   sync.RWMutex
-	sets map[string]bool // key = toolName (本会话允许该工具的所有后续调用)
+	mu sync.RWMutex
+	// grants key = GrantKey(toolName, targets, args)
+	grants map[string]bool
+	// fullControl 本会话「完全控制」：放行所有非敏感操作
+	fullControl bool
 }
 
 func NewSessionAllowSet() *SessionAllowSet {
-	return &SessionAllowSet{sets: make(map[string]bool)}
+	return &SessionAllowSet{grants: make(map[string]bool)}
 }
 
-// Allow 标记某工具在本会话内已允许。
-func (s *SessionAllowSet) Allow(toolName string) {
+// GrantKey 计算「工具 + 目标」的授权键。
+// 无目标时回落到原始参数（仿 atomcode grant_scope：不因缺少目标就放宽到整个工具，
+// 那样等于把 once_allow 放大成整工具放行，正是要修掉的缺陷）。
+func GrantKey(toolName string, targets []string, args string) string {
+	if len(targets) == 0 {
+		return toolName + "::" + args
+	}
+	return toolName + "::" + strings.Join(targets, "\x1f")
+}
+
+// ApprovalGrantKey 计算一次审批对应的会话级授权键，粒度按可靠性递减：
+//  1. 路径目标 —— 文件类工具按「工具+文件」记住，改 A 文件不会放行 B 文件；
+//  2. action —— 合并意图按「工具+动作」记住。整工具记会一次放行 save/delete，
+//     整参数 JSON 记则同样内容的第二次保存又要问一遍（问题 1 的放大器）。
+//     action 粒度既不放大权限也不重复打扰；
+//  3. 原始参数 —— 两者都没有时回落（宁严勿松）。
+func ApprovalGrantKey(toolName string, exec *ToolExecContext, argsJSON string) string {
+	if exec != nil && len(exec.PathTargets) > 0 {
+		return GrantKey(toolName, exec.PathTargets, argsJSON)
+	}
+	if action := actionOfArgsJSON(argsJSON); action != "" {
+		return toolName + "::" + action
+	}
+	return GrantKey(toolName, nil, argsJSON)
+}
+
+// actionOfArgsJSON 取出参数里的 action 分派键（合并意图用它区分读/写动作）。
+func actionOfArgsJSON(argsJSON string) string {
+	s := strings.TrimSpace(argsJSON)
+	if s == "" {
+		return ""
+	}
+	var args map[string]any
+	if err := json.Unmarshal([]byte(s), &args); err != nil {
+		return ""
+	}
+	return intent.ActionGrantSuffix(args)
+}
+
+// GrantTarget 记录「工具 + 目标」的本会话授权。
+func (s *SessionAllowSet) GrantTarget(key string) {
+	if key == "" {
+		return
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	s.sets[toolName] = true
+	s.grants[key] = true
 }
 
-// IsAllowed 判断某工具是否已在本会话被允许。
-func (s *SessionAllowSet) IsAllowed(toolName string) bool {
+// IsTargetGranted 判断「工具 + 目标」是否已授权。
+func (s *SessionAllowSet) IsTargetGranted(key string) bool {
+	if key == "" {
+		return false
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return s.sets[toolName]
+	return s.grants[key]
+}
+
+// GrantFullControl 授予本会话「完全控制」（放行所有非敏感操作）。
+func (s *SessionAllowSet) GrantFullControl() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fullControl = true
+}
+
+// HasFullControl 是否已授予本会话完全控制。
+func (s *SessionAllowSet) HasFullControl() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.fullControl
 }
 
 // ToolExecResult 是 After middleware 处理的结果对象。
@@ -95,6 +216,12 @@ type ToolExecResult struct {
 	Content   string
 	IsError   bool
 	Truncated bool // P2: result_truncator 标记结果被截断
+	// TurnTerminated P0-3: 命中 BeforeDenyTurn —— 本轮应整体终止，
+	// 调用方需跳出本轮剩余工具并把原因注入给模型。
+	TurnTerminated bool
+	// Blocked P0-3: 命中 AfterBlock —— Content 已被替换为阻断原因，
+	// 该原因会作为 tool_result 回灌给模型让它自我修正。
+	Blocked bool
 }
 
 // MiddlewareChain 是有序 middleware 链，提供 Execute 方法。
@@ -125,26 +252,51 @@ func (c *MiddlewareChain) ExecuteTool(
 		switch outcome {
 		case BeforeAllow:
 			// 短路剩余 before，直接执行
+			if exec.Trace != nil {
+				exec.Trace.RecordGuardrail(mw.Name(), "allow", exec.DeniedReason)
+			}
 			goto execute
 		case BeforeDeny:
+			if exec.Trace != nil {
+				exec.Trace.RecordGuardrail(mw.Name(), "deny", exec.DeniedReason)
+			}
 			return &ToolExecResult{
 				CallID:   call.ID,
 				ToolName: toolName,
 				Content:  exec.DeniedReason,
 				IsError:  true,
 			}, true, exec.DeniedReason
+		case BeforeDenyTurn:
+			// P0-3: 终止整轮（atomcode DenyTurn）。调用方据此跳出本轮剩余工具。
+			reason := exec.DeniedReason
+			if reason == "" {
+				reason = "操作已终止本轮执行"
+			}
+			if exec.Trace != nil {
+				exec.Trace.RecordGuardrail(mw.Name(), "deny_turn", reason)
+			}
+			return &ToolExecResult{
+				CallID:         call.ID,
+				ToolName:       toolName,
+				Content:        reason,
+				IsError:        true,
+				TurnTerminated: true,
+			}, true, reason
 		case BeforeAsk:
 			// 审批门挂起：调用 ApprovalFn
 			if exec.ApprovalFn == nil {
 				// Agent 会话或无审批回调 → 默认放行 (Agent 不需要审批)
 				continue
 			}
-			decision, reason := exec.ApprovalFn(ctx, call, toolName)
+			decision, reason := exec.ApprovalFn(ctx, call, exec)
 			switch decision {
 			case "deny":
 				msg := "用户拒绝了此操作"
 				if reason != "" {
 					msg += ": " + reason
+				}
+				if exec.Trace != nil {
+					exec.Trace.RecordGuardrail(mw.Name(), "deny", msg)
 				}
 				return &ToolExecResult{
 					CallID:   call.ID,
@@ -154,11 +306,29 @@ func (c *MiddlewareChain) ExecuteTool(
 				}, true, msg
 			case "allow":
 				// 本次允许 (仅此一次)，继续走 before 链
+				if exec.Trace != nil {
+					exec.Trace.RecordGuardrail(mw.Name(), "allow", "用户单次允许")
+				}
 				continue
-			case "once_allow":
-				// 本会话允许，记录并短路
+			case "full_control":
+				// P0-2 新增：本会话「完全控制」—— 放行所有非敏感操作。
+				// 敏感目标不在此列：path_gate 对 PathSensitive 始终返回 Ask，
+				// 所以完全控制也无法预授权密钥读取（fail closed）。
+				if exec.Trace != nil {
+					exec.Trace.RecordGuardrail(mw.Name(), "full_control", "本会话完全控制")
+				}
 				if exec.AllowOnce != nil {
-					exec.AllowOnce.Allow(toolName)
+					exec.AllowOnce.GrantFullControl()
+				}
+				goto execute
+			case "once_allow":
+				// P0-2: 由「整工具放行」改为按「工具 + 目标」记住授权。
+				// 敏感目标永不记住 → 自动退化为单次放行。
+				if exec.Trace != nil {
+					exec.Trace.RecordGuardrail(mw.Name(), "once_allow", "按目标键控授权")
+				}
+				if exec.AllowOnce != nil && exec.PathClass != PathSensitive {
+					exec.AllowOnce.GrantTarget(ApprovalGrantKey(toolName, exec, call.Function.Arguments))
 				}
 				goto execute
 			default:
@@ -199,8 +369,22 @@ execute:
 	}
 	for _, mw := range c.middlewares {
 		outcome := mw.After(ctx, execResult, exec)
-		if outcome == AfterStop {
-			break
+		switch outcome {
+		case AfterBlock:
+			// P0-3: 阻断并把原因回灌给模型（atomcode AfterOutcome::Block）。
+			// 区别于 AfterStop：Stop 只是不再跑后续 middleware，模型拿到的还是
+			// 原始输出；Block 会把 reason 变成 tool_result，让模型知道「为什么被拦」。
+			if exec.Trace != nil {
+				exec.Trace.RecordGuardrail(mw.Name(), "block", exec.DeniedReason)
+			}
+			if exec.DeniedReason != "" {
+				execResult.Content = exec.DeniedReason
+			}
+			execResult.Blocked = true
+			execResult.IsError = true
+			return execResult, false, ""
+		case AfterStop:
+			return execResult, false, ""
 		}
 	}
 
@@ -209,11 +393,11 @@ execute:
 
 // ================================================================
 // 1. WriteGateMiddleware (write-gate 审批门)
-// 主会话: HasWriteOperation 工具需要审批
-//   - 若本会话已 allow 该工具 → BeforeAllow 短路
+// 主会话: 需要审批的调用（write/destructive/system）在这里挂起
+//   - 回合级合并审批已给出结论 → 直接放行 / 拒绝，不再弹窗
+//   - 本会话已按「工具+目标+action」授权 → BeforeAllow 短路
 //   - 否则 → BeforeAsk 挂起等审批
 // Agent 会话: ApprovalFn 为 nil → BeforeProceed 直接放行
-// 对话中明确要求允许的工具 (由 ApprovalFn 返回 "allow") → 不拦截
 // ================================================================
 
 type WriteGateMiddleware struct{}
@@ -223,8 +407,9 @@ func (m *WriteGateMiddleware) Name() string { return "write_gate" }
 func (m *WriteGateMiddleware) Before(ctx context.Context, call *schema.ToolCall, exec *ToolExecContext) BeforeOutcome {
 	toolName := exec.ToolName
 
-	// 只对写操作工具做审批
-	if !HasWriteOperation([]string{toolName}) {
+	// action 粒度判定：合并意图（content_article 的 list/get/save/delete）里
+	// 只读的动作不再打扰用户。
+	if !CallNeedsApproval(toolName, call.Function.Arguments) {
 		return BeforeProceed
 	}
 
@@ -233,12 +418,33 @@ func (m *WriteGateMiddleware) Before(ctx context.Context, call *schema.ToolCall,
 		return BeforeProceed
 	}
 
-	// 本会话已允许该工具 → 短路
-	if exec.AllowOnce != nil && exec.AllowOnce.IsAllowed(toolName) {
+	// 回合级合并审批的结论优先：控制器已就这一批统一问过用户。
+	if exec.IsPreApproved(call.ID) {
+		return BeforeAllow
+	}
+	if reason, denied := exec.PreDenyReason(call.ID); denied {
+		if reason == "" {
+			reason = "用户拒绝了此操作"
+		}
+		exec.DeniedReason = reason
+		return BeforeDeny
+	}
+
+	if exec.AllowOnce == nil {
+		return BeforeAsk
+	}
+	// 「完全控制」对无路径的站点写操作同样生效（此前只有路径门认它，
+	// 于是选了完全控制后 CMS 写操作仍会逐个弹窗）。敏感目标除外——
+	// 敏感路径由 path_gate 恒定返回 Ask，full_control 无法覆盖。
+	if exec.AllowOnce.HasFullControl() && exec.PathClass != PathSensitive {
+		return BeforeAllow
+	}
+	// 本会话已授权（工具+目标/action 粒度）→ 短路
+	if exec.AllowOnce.IsTargetGranted(ApprovalGrantKey(toolName, exec, call.Function.Arguments)) {
 		return BeforeAllow
 	}
 
-	// 主会话 + 写操作 → 挂起审批
+	// 主会话 + 需要审批 → 挂起审批
 	return BeforeAsk
 }
 
@@ -247,150 +453,213 @@ func (m *WriteGateMiddleware) After(ctx context.Context, result *ToolExecResult,
 }
 
 // ================================================================
-// 1b. SensitivePathGateMiddleware (敏感路径审批门)
-// 仿 atomcode sensitive path gate:
-//   - edit_file/write_file/read_file 命中 config.toml/*.env/.git/ 时返回 BeforeAsk
-//   - bash 命令命中敏感路径时返回 BeforeAsk
-//   - Agent 会话跳过 (IsAgent=true)
+// 1b. PathGateMiddleware (路径安全门)
+// P0-1/P0-2: 取代原 SensitivePathGateMiddleware。
+//
+// 原实现只做「原始 JSON 子串匹配」，两个致命问题：
+//   1. 无路径规范化 —— `a/../../etc/passwd`、符号链接都能绕过；
+//   2. 授权是整工具级 —— 允许一次 edit_file 就放行了它对任意文件的写。
+//
+// 新实现（判定逻辑见 aiPathGate.go）：
+//   - 先 filepath.Abs/Clean + EvalSymlinks 解析，再判定，堵住 `..` 与符号链接逃逸
+//   - 锚定**当前站点 RootPath**（各站点独立）判定站内 / 站外
+//   - 站内 + 非敏感 + 文件类工具 → 自动放行（作用域 = 目标路径，且底层
+//     safePathResolve 已把所有文件操作硬约束在 projectRoot 内）
+//   - 敏感 / 站外 / 无法判定 → 需审批；敏感目标的授权永不记住
+//   - 命令执行类 (bash) 永不自动放行 —— 它的作用域不等于它提到的某个路径
 // ================================================================
 
-// gateSensitivePathPatterns 敏感路径匹配模式 (小写匹配)
-// 与 aiBuiltinTools_helpers.go 的 sensitivePathPatterns (系统路径) 不同，
-// 这里关注的是配置文件、密钥等敏感文件
-var gateSensitivePathPatterns = []string{
-	"config.toml",
-	"config.yaml",
-	"config.json",
-	".env",
-	".git/",
-	".git\\",
-	"secrets",
-	"credentials",
-	"private.key",
-	"id_rsa",
-	"wp-config.php",
-	"database.yml",
-}
+// PathGateMiddleware 路径安全门：解析目标路径 → 分类 → 决定放行 / 审批。
+type PathGateMiddleware struct{}
 
-// gateSensitiveTools 需要做敏感路径检查的工具
-var gateSensitiveTools = map[string]bool{
-	"edit_file":      true,
-	"write_file":     true,
-	"read_file":      true,
-	"bash":           true,
-	"search_replace": true,
-}
+func (m *PathGateMiddleware) Name() string { return "path_gate" }
 
-// extractPathFromArgs 从工具参数 JSON 中提取路径相关字段。
-// edit_file/write_file/read_file/search_replace: file_path
-// bash: command (从中提取路径)
-func extractPathFromArgs(toolName, args string) string {
-	// 简单 JSON 字段提取，避免引入 encoding/json 的开销
-	argsLower := strings.ToLower(args)
-
-	if toolName == "bash" {
-		// 从 command 字段提取
-		idx := strings.Index(argsLower, "command")
-		if idx < 0 {
-			return ""
-		}
-		// 找到 command 后的值
-		rest := args[idx:]
-		// 提取引号内的内容
-		start := strings.IndexAny(rest, "\"'")
-		if start < 0 {
-			return ""
-		}
-		quote := rest[start]
-		end := strings.IndexByte(rest[start+1:], quote)
-		if end < 0 {
-			return ""
-		}
-		return rest[start+1 : start+1+end]
-	}
-
-	// file_path / path / old_string / new_string 中提取路径
-	for _, field := range []string{"file_path", "path", "search", "glob"} {
-		idx := strings.Index(argsLower, "\""+field+"\"")
-		if idx < 0 {
-			continue
-		}
-		rest := args[idx:]
-		// 找到值
-		colon := strings.IndexByte(rest, ':')
-		if colon < 0 {
-			continue
-		}
-		afterColon := rest[colon+1:]
-		// 跳过空白
-		trimmed := strings.TrimLeft(afterColon, " \t\n\r")
-		if len(trimmed) == 0 {
-			continue
-		}
-		// 提取引号内的内容
-		if trimmed[0] == '"' || trimmed[0] == '\'' {
-			quote := trimmed[0]
-			end := strings.IndexByte(trimmed[1:], quote)
-			if end < 0 {
-				continue
-			}
-			return trimmed[1 : 1+end]
-		}
-	}
-
-	return ""
-}
-
-// isSensitivePath 判断路径是否命中敏感模式。
-func isSensitivePath(path string) bool {
-	if path == "" {
-		return false
-	}
-	pathLower := strings.ToLower(path)
-	for _, pattern := range gateSensitivePathPatterns {
-		if strings.Contains(pathLower, pattern) {
-			return true
-		}
-	}
-	return false
-}
-
-type SensitivePathGateMiddleware struct{}
-
-func (m *SensitivePathGateMiddleware) Name() string { return "sensitive_path_gate" }
-
-func (m *SensitivePathGateMiddleware) Before(ctx context.Context, call *schema.ToolCall, exec *ToolExecContext) BeforeOutcome {
-	toolName := exec.ToolName
-
-	// 只对敏感工具做检查
-	if !gateSensitiveTools[toolName] {
+func (m *PathGateMiddleware) Before(ctx context.Context, call *schema.ToolCall, exec *ToolExecContext) BeforeOutcome {
+	// 意图模式下模型调用的是 fs_write / fs_edit / shell_exec 这类意图名，
+	// 而路径分类的字段与规则按能力名（write_file / bash）定义。不解析这层委托关系，
+	// 意图化的文件工具会整体跳过路径门——站外/敏感路径不再被识别，站内也拿不到
+	// 「自动放行」，只能退化成逐个弹窗。
+	toolName := pathGateCapName(exec.ToolName)
+	if toolName == "" {
 		return BeforeProceed
 	}
 
-	// Agent 会话不需要审批
+	// Agent 会话不审批（保持既有行为）
 	if exec.IsAgent {
 		return BeforeProceed
 	}
 
-	// 本会话已允许该工具 → 短路
-	if exec.AllowOnce != nil && exec.AllowOnce.IsAllowed(toolName) {
+	root := exec.RootPath
+	class, targets := ClassifyToolTargets(toolName, call.Function.Arguments, root)
+	// 写回 exec 供链本身使用（授权键、是否可记住授权）
+	exec.PathClass = class
+	exec.PathTargets = targets
+
+	// ── 已有授权 → 放行 ──
+	// 注意：敏感目标**永不**因既有授权而放行（即使开了完全控制），
+	// 这是 atomcode 的 fail-closed 语义：一次密钥授权不能覆盖另一个密钥。
+	// 授权键用 exec.ToolName（模型看到的那个名字）而不是解析出的能力名，
+	// 否则 write_gate 记的 `fs_write::…` 与这里查的 `write_file::…` 对不上。
+	if exec.AllowOnce != nil && class != PathSensitive {
+		if exec.AllowOnce.HasFullControl() {
+			return BeforeAllow
+		}
+		if exec.AllowOnce.IsTargetGranted(ApprovalGrantKey(exec.ToolName, exec, call.Function.Arguments)) {
+			return BeforeAllow
+		}
+	}
+
+	// 回合级合并审批的结论同样要在这里消费：路径门常在写门之前返回 Ask，
+	// 只让 write_gate 认批等于没批。敏感路径例外——它必须逐次确认。
+	if class != PathSensitive && exec.IsPreApproved(call.ID) {
 		return BeforeAllow
 	}
-
-	// 从参数中提取路径
-	path := extractPathFromArgs(toolName, call.Function.Arguments)
-
-	// 命中敏感路径 → 挂起审批
-	if isSensitivePath(path) {
-		exec.DeniedReason = fmt.Sprintf("敏感路径: %s", path)
-		return BeforeAsk
+	if reason, denied := exec.PreDenyReason(call.ID); denied {
+		if reason == "" {
+			reason = "用户拒绝了此操作"
+		}
+		exec.DeniedReason = reason
+		return BeforeDeny
 	}
 
-	return BeforeProceed
+	joined := strings.Join(targets, ", ")
+	switch class {
+	case PathInRoot:
+		// 站内 + 非敏感。仅文件类工具自动放行；命令执行类交回 write_gate 继续审批。
+		if ToolCanAutoApproveInRoot(toolName) {
+			return BeforeAllow
+		}
+		return BeforeProceed
+
+	case PathSensitive:
+		exec.DeniedReason = fmt.Sprintf("敏感路径（需逐次确认，授权不会被记住）: %s", joined)
+		return BeforeAsk
+
+	case PathOutOfRoot:
+		exec.DeniedReason = fmt.Sprintf("目标路径在站点目录（%s）之外: %s", root, joined)
+		return BeforeAsk
+
+	default: // PathUndeterminable
+		// 无法判定归属 → fail closed。
+		// 文件类工具必须问；命令执行类交回 write_gate（它本来就会问）。
+		exec.DeniedReason = fmt.Sprintf("无法判定目标路径归属（按需要审批处理）: %s", joined)
+		if ToolCanAutoApproveInRoot(toolName) {
+			return BeforeAsk
+		}
+		return BeforeProceed
+	}
 }
 
-func (m *SensitivePathGateMiddleware) After(ctx context.Context, result *ToolExecResult, exec *ToolExecContext) AfterOutcome {
+func (m *PathGateMiddleware) After(ctx context.Context, result *ToolExecResult, exec *ToolExecContext) AfterOutcome {
 	return AfterProceed
+}
+
+// ================================================================
+// 审批预判 (ApprovalPreview) —— 回合级合并审批的地基
+//
+// 一轮里多个写调用各自 Ask，用户就会看到串联弹窗（问题 1）。控制器改为：
+// 执行整轮之前先扫一遍批次，把要问的统一成一次 tool_confirm_batch。
+//
+// 这里的判定必须与 PathGateMiddleware / WriteGateMiddleware 的 Before 逐条对应
+// （共用 CallNeedsApproval / ClassifyToolTargets / ApprovalGrantKey 同一套谓词），
+// 否则预判漏掉的调用会在执行时再弹一次，合并就白做了。
+// ================================================================
+
+// ApprovalPreview 一次调用在执行前的审批预判结果。
+type ApprovalPreview struct {
+	ID        string // tool_call_id
+	ToolName  string
+	Title     string // 意图展示名（没有则为空，前端回落工具名）
+	Arguments string
+	Risk      string // read/write/destructive/system
+	Needs     bool   // 会不会被门禁拦下
+	Reason    string // 拦下的原因（展示用）
+
+	PathClass        PathClass
+	PathTargets      []string
+	Sensitive        bool // 敏感目标：批了「完全控制」也不该记住授权
+	GrantKey         string
+	AllowFullControl bool
+}
+
+// Mutates 该调用是否会改变站点数据（写/删除/主机级）。
+// 供调度使用：只读调用可并行，变更类调用串行执行。
+func (p ApprovalPreview) Mutates() bool {
+	return p.Risk != string(intent.RiskRead)
+}
+
+// PreviewCallApproval 预判一次调用是否需要人工审批。
+// rootPath 为空时路径归属无法判定，按门禁的 fail-closed 语义处理。
+func PreviewCallApproval(id, toolName, argsJSON, rootPath string, allow *SessionAllowSet) ApprovalPreview {
+	p := ApprovalPreview{
+		ID: id, ToolName: toolName, Arguments: argsJSON,
+		Risk:             CallRisk(toolName, argsJSON),
+		PathClass:        PathUndeterminable,
+		AllowFullControl: true,
+	}
+	if spec, ok := intent.SpecByName(strings.TrimSpace(toolName)); ok {
+		p.Title = spec.Title
+	}
+
+	gated := pathGateCapName(toolName)
+	if gated == "" {
+		// ── 无路径语义：只由 write_gate 决定 ──
+		p.Needs = CallNeedsApproval(toolName, argsJSON)
+		p.GrantKey = ApprovalGrantKey(toolName, nil, argsJSON)
+		if p.Needs && alreadyGranted(allow, p.GrantKey) {
+			p.Needs = false
+		}
+		return p
+	}
+
+	// ── 有路径语义：path_gate 先判，命中放行条件就整条链都放行 ──
+	class, targets := ClassifyToolTargets(gated, argsJSON, rootPath)
+	p.PathClass = class
+	p.PathTargets = targets
+	p.GrantKey = ApprovalGrantKey(toolName, &ToolExecContext{PathTargets: targets}, argsJSON)
+	joined := strings.Join(targets, ", ")
+
+	switch class {
+	case PathInRoot:
+		if ToolCanAutoApproveInRoot(gated) {
+			return p // BeforeAllow 短路：门禁整体放行
+		}
+		p.Needs = CallNeedsApproval(toolName, argsJSON)
+	case PathSensitive:
+		p.Sensitive = true
+		p.AllowFullControl = false
+		p.Needs = true
+		p.Reason = fmt.Sprintf("敏感路径（需逐次确认，授权不会被记住）: %s", joined)
+		return p
+	case PathOutOfRoot:
+		p.Needs = true
+		p.Reason = fmt.Sprintf("目标路径在站点目录（%s）之外: %s", rootPath, joined)
+	default: // PathUndeterminable
+		if ToolCanAutoApproveInRoot(gated) {
+			p.Needs = true
+			p.Reason = fmt.Sprintf("无法判定目标路径归属（按需要审批处理）: %s", joined)
+		} else {
+			p.Needs = CallNeedsApproval(toolName, argsJSON)
+			p.Reason = "命令执行类工具：授权范围无法收敛到单个路径，需逐次确认"
+		}
+	}
+
+	if p.Needs && alreadyGranted(allow, p.GrantKey) {
+		p.Needs = false
+	}
+	return p
+}
+
+// alreadyGranted 会话级授权是否已覆盖这次调用。
+// 敏感目标在上游已单独返回，不会走到这里 —— 它们永不记住授权。
+func alreadyGranted(allow *SessionAllowSet, key string) bool {
+	if allow == nil {
+		return false
+	}
+	if allow.HasFullControl() {
+		return true
+	}
+	return key != "" && allow.IsTargetGranted(key)
 }
 
 // ================================================================
@@ -399,9 +668,19 @@ func (m *SensitivePathGateMiddleware) After(ctx context.Context, result *ToolExe
 // 阈值 10000 字符 (与 aiChat.go 原有 SSE 截断一致)。
 // ================================================================
 
-const maxToolResultBytes = 10000
+type ResultTruncatorMiddleware struct {
+	// MaxBytes 截断上限（字符数）。<=0 时回落 DefaultMaxToolResultBytes。
+	// P1-6: 由调用方按 ChatTuning 注入，不再写死。
+	MaxBytes int
+}
 
-type ResultTruncatorMiddleware struct{}
+// limit 返回生效的截断上限。
+func (m *ResultTruncatorMiddleware) limit() int {
+	if m.MaxBytes > 0 {
+		return m.MaxBytes
+	}
+	return DefaultMaxToolResultBytes
+}
 
 func (m *ResultTruncatorMiddleware) Name() string { return "result_truncator" }
 
@@ -410,13 +689,20 @@ func (m *ResultTruncatorMiddleware) Before(ctx context.Context, call *schema.Too
 }
 
 func (m *ResultTruncatorMiddleware) After(ctx context.Context, result *ToolExecResult, exec *ToolExecContext) AfterOutcome {
-	if len(result.Content) > maxToolResultBytes {
+	limit := m.limit()
+	if len(result.Content) > limit {
 		// 回退到 UTF-8 字符边界，避免把多字节字符（如中文）切成半个
-		cut := maxToolResultBytes
+		cut := limit
 		for cut > 0 && !utf8.RuneStart(result.Content[cut]) {
 			cut--
 		}
-		result.Content = result.Content[:cut] + "\n... [结果已截断]"
+		// 这是兜底，不是常规路径：分页类工具（read_file/grep/glob/api list）已按同一
+		// 预算自行切窗并在结果里给出续读坐标，落到这里的都是没有坐标可给的结果
+		// （bash 输出、网页正文、外部 API 响应）。标记必须写清原始规模与上限，模型
+		// 才知道自己看到的只是前段、并去收窄查询。
+		result.Content = result.Content[:cut] +
+			fmt.Sprintf("\n\n[结果共 %d 字节，超出 %d 字节上限，尾部已丢弃且无法续读；"+
+				"请缩小查询范围，或改用支持 offset 的工具]", len(result.Content), limit)
 		result.Truncated = true
 	}
 	return AfterProceed

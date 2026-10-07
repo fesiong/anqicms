@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginGetJsonLdConfig 获取结构化数据插件的配置信息。
 func PluginGetJsonLdConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetJsonLdSetting()
@@ -17,6 +18,7 @@ func PluginGetJsonLdConfig(ctx iris.Context) {
 	})
 }
 
+// PluginSaveJsonLdConfig 保存结构化数据插件的配置信息。
 func PluginSaveJsonLdConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginJsonLdConfig

@@ -1,18 +1,21 @@
 package manageController
 
 import (
-	"github.com/kataras/iris/v12"
-	"golang.org/x/image/webp"
 	"image"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
-	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kataras/iris/v12"
+	"golang.org/x/image/webp"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
+	"kandaoni.com/anqicms/provider"
 )
 
+// PluginTitleImageConfig 获取标题生成图片插件配置。
+// 如果文档没有图片，则根据标题自动生成一张图片
 func PluginTitleImageConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.PluginTitleImage
@@ -24,6 +27,7 @@ func PluginTitleImageConfig(ctx iris.Context) {
 	})
 }
 
+// PluginTitleImageConfigForm 保存标题生成图片插件配置。
 func PluginTitleImageConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginTitleImageConfig
@@ -73,6 +77,10 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginTitleImagePreview 文档标题生成图片预览。
+//
+// 参数说明：
+//   - 查询参数 "text": 预览文字，默认为“欢迎使用安企CMS”。
 func PluginTitleImagePreview(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	text := ctx.URLParamDefault("text", ctx.Tr("WelcomeToAnqiCMS"))
@@ -84,6 +92,11 @@ func PluginTitleImagePreview(ctx iris.Context) {
 	})
 }
 
+// PluginTitleImageUploadFile 上传标题图片插件资源文件（字体或背景图片）。
+//
+// 参数说明：
+//   - 表单参数 "name": 资源类型，只能为 "font_path"（字体，仅支持 .ttf）或 "bg_image"（背景图片）。
+//   - 表单参数 "file": 上传的文件。
 func PluginTitleImageUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	name := ctx.PostValue("name")
@@ -182,6 +195,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 	})
 }
 
+// PluginTitleImageGenerate 执行文档标题生成图片操作，该操作会为所有没有图片的文档都生成一个图片
 func PluginTitleImageGenerate(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

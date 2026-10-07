@@ -2,6 +2,7 @@ package manageController
 
 import (
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginHtmlCacheConfig 获取静态缓存插件的配置信息。
 func PluginHtmlCacheConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	pluginHtmlCache := currentSite.PluginHtmlCache
@@ -25,6 +27,7 @@ func PluginHtmlCacheConfig(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheConfigForm 保存静态缓存插件配置，包括缓存范围和各类存储引擎参数。
 func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
@@ -105,6 +108,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheBuild 手动触发全站静态缓存生成任务，异步执行。
 func PluginHtmlCacheBuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
@@ -127,12 +131,20 @@ func PluginHtmlCacheBuild(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheBuildIndex 手动触发首页静态缓存生成任务，异步执行。
 func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			// GetWebsite 在站点未登记/已注销时返回 nil（见 provider.RemoveWebsite 的 nil 判断）。
+			// 直接 w2.BuildIndexCache() 会 nil panic 打挂整个进程 —— 后台异步任务崩溃
+			// 不只是这次构建失败，进程退出后所有 MCP 调用都断。
+			slog.Error("PluginHtmlCacheBuildIndex 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildIndexCache()
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		_ = w2.SyncHtmlCacheToStorage(cachePath+"/index.html", "index.html")
 	}()
@@ -144,13 +156,18 @@ func PluginHtmlCacheBuildIndex(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheBuildCategory 手动触发栏目（分类）页静态缓存生成任务，异步执行。
 func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			slog.Error("PluginHtmlCacheBuildCategory 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildModuleCache(ctx)
 		w2.BuildCategoryCache(ctx)
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		// 更新的html
 		_ = w2.ReadAndSendLocalFiles(cachePath)
@@ -163,12 +180,17 @@ func PluginHtmlCacheBuildCategory(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheBuildArchive 手动触发文档详情页静态缓存生成任务，异步执行。
 func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			slog.Error("PluginHtmlCacheBuildArchive 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildArchiveCache()
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		// 更新的html
 		_ = w2.ReadAndSendLocalFiles(cachePath)
@@ -181,13 +203,18 @@ func PluginHtmlCacheBuildArchive(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheBuildTag 手动触发tag（标签）页静态缓存生成任务，异步执行。
 func PluginHtmlCacheBuildTag(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go func() {
 		w2 := provider.GetWebsite(currentSite.Id)
+		if w2 == nil {
+			slog.Error("PluginHtmlCacheBuildTag 站点未加载，跳过构建", "siteId", currentSite.Id)
+			return
+		}
 		w2.BuildTagIndexCache(ctx)
 		w2.BuildTagCache(ctx)
-		w2.HtmlCacheStatus.FinishedTime = time.Now().Unix()
+		w2.MarkHtmlCacheFinished()
 		cachePath := w2.CachePath + "pc"
 		// 更新的html
 		_ = w2.ReadAndSendLocalFiles(cachePath)
@@ -200,6 +227,7 @@ func PluginHtmlCacheBuildTag(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheBuildStatus 获取静态缓存生成任务的执行状态。
 func PluginHtmlCacheBuildStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetHtmlCacheStatus()
@@ -219,6 +247,7 @@ func PluginHtmlCacheBuildStatus(ctx iris.Context) {
 	})
 }
 
+// PluginCleanHtmlCache 清空网站的全部静态缓存文件。
 func PluginCleanHtmlCache(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentSite.RemoveHtmlCache()
@@ -229,6 +258,10 @@ func PluginCleanHtmlCache(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCacheUploadFile 上传SSH私钥证书文件，用于SSH方式推送静态缓存。
+//
+// 参数说明：
+//   - 请求体 "file": 上传的SSH私钥文件。
 func PluginHtmlCacheUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -288,6 +321,11 @@ func PluginHtmlCacheUploadFile(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCachePush 手动推送静态缓存文件到远程存储，支持按路径推送或全量推送。全量推送时为异步执行
+//
+// 参数说明：
+//   - 请求体 "paths": 要推送的文件路径列表，为空时执行整体推送。
+//   - 请求体 "all": 是否全量推送并重置推送记录。
 func PluginHtmlCachePush(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginHtmlCachePushRequest
@@ -333,6 +371,7 @@ func PluginHtmlCachePush(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCachePushStatus 获取静态缓存推送任务的执行状态。
 func PluginHtmlCachePushStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	status := currentSite.GetHtmlCachePushStatus()
@@ -352,6 +391,12 @@ func PluginHtmlCachePushStatus(ctx iris.Context) {
 	})
 }
 
+// PluginHtmlCachePushLogs 分页查询静态化推送（HTML 缓存推送）日志，支持按状态筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "status": 状态筛选；传 "error" 时仅返回推送失败的记录。
 func PluginHtmlCachePushLogs(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索

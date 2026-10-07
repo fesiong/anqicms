@@ -16,7 +16,7 @@ import (
 func (w *Website) GetWeappClient(focus bool) *weapp.Client {
 	if w.weappClient == nil || focus {
 		httpCli := &http.Client{
-			Timeout: 10 * time.Second,
+			Timeout:   10 * time.Second,
 			Transport: &http.Transport{},
 		}
 

@@ -11,6 +11,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginTagList 分页查询标签列表，支持按名称与分类筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "title": 按标签名称模糊搜索。
+//   - 查询参数 "category_id": 按分类 ID 筛选，0 表示不限。
 func PluginTagList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	title := ctx.URLParam("title")
@@ -51,6 +58,10 @@ func PluginTagList(ctx iris.Context) {
 	})
 }
 
+// PluginTagDetail 查询单个标签的详情、标签内容与自定义字段。
+//
+// 参数说明：
+//   - 查询参数 "id": 标签 ID，必填。
 func PluginTagDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := ctx.URLParamIntDefault("id", 0)
@@ -105,6 +116,7 @@ func PluginTagDetail(ctx iris.Context) {
 	})
 }
 
+// PluginTagDetailForm 新建或更新标签。
 func PluginTagDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginTag
@@ -115,7 +127,18 @@ func PluginTagDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	req.UpdateAll = true
+		// UpdateAll 决定「未传的字段」怎么处理：
+		//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
+		//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
+		//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
+		//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
+		//
+		// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
+		// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
+		// Partial 优先于调用方传的 update_all。
+		if !req.Partial {
+			req.UpdateAll = true
+		}
 
 	tag, err := currentSite.SaveTag(&req)
 	if err != nil {
@@ -202,9 +225,10 @@ func PluginTagDetailForm(ctx iris.Context) {
 	})
 }
 
+// PluginTagDelete 根据 ID 删除指定标签。
 func PluginTagDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.PluginTag
+	var req request.PluginTagDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -252,6 +276,7 @@ func PluginTagDelete(ctx iris.Context) {
 	})
 }
 
+// PluginTagFields 查询标签的自定义字段定义。
 func PluginTagFields(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -264,6 +289,7 @@ func PluginTagFields(ctx iris.Context) {
 	})
 }
 
+// PluginTagFieldsForm 保存标签的自定义字段定义。
 func PluginTagFieldsForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req []config.CustomField

@@ -34,6 +34,7 @@ func sanitizeDesignFilePath(filePath string) string {
 	return filePath
 }
 
+// GetDesignList 获取当前站点的模板设计列表。
 func GetDesignList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	// 读取 设计列表
@@ -46,6 +47,10 @@ func GetDesignList(ctx iris.Context) {
 	})
 }
 
+// GetDesignInfo 获取指定模板的详细信息，未指定时返回当前使用的模板。
+//
+// 参数说明：
+//   - 查询参数 "package": 模板包名，为空时使用当前站点模板名。
 func GetDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
@@ -75,6 +80,7 @@ func GetDesignInfo(ctx iris.Context) {
 	})
 }
 
+// SaveDesignInfo 保存模板信息，若为当前使用模板则同步模板类型并重载模板。
 func SaveDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignInfoRequest
@@ -118,7 +124,7 @@ func SaveDesignInfo(ctx iris.Context) {
 		}
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyTemplateLog", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -127,9 +133,10 @@ func SaveDesignInfo(ctx iris.Context) {
 	})
 }
 
+// UseDesignInfo 启用指定模板，将其设置为站点当前模板并重载模板。
 func UseDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.DesignInfoRequest
+	var req request.UseDesignRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -146,7 +153,7 @@ func UseDesignInfo(ctx iris.Context) {
 		return
 	}
 
-	_, err := currentSite.GetDesignInfo(req.Package, false)
+	info, err := currentSite.GetDesignInfo(req.Package, false)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -156,8 +163,8 @@ func UseDesignInfo(ctx iris.Context) {
 	}
 
 	if currentSite.System.TemplateName != req.Package {
-		currentSite.System.TemplateName = req.Package
-		currentSite.System.TemplateType = req.TemplateType
+		currentSite.System.TemplateName = info.Package
+		currentSite.System.TemplateType = info.TemplateType
 		err = currentSite.SaveSettingValue(provider.SystemSettingKey, currentSite.System)
 		if err != nil {
 			ctx.JSON(iris.Map{
@@ -169,7 +176,7 @@ func UseDesignInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("EnableNewTemplateLog", req.Package))
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	time.Sleep(1 * time.Second)
 
 	ctx.JSON(iris.Map{
@@ -178,9 +185,10 @@ func UseDesignInfo(ctx iris.Context) {
 	})
 }
 
+// DeleteDesignInfo 删除指定模板并重载模板。
 func DeleteDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.DesignInfoRequest
+	var req request.UseDesignRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -198,7 +206,7 @@ func DeleteDesignInfo(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateLog", req.Package))
 
 	ctx.JSON(iris.Map{
@@ -207,9 +215,10 @@ func DeleteDesignInfo(ctx iris.Context) {
 	})
 }
 
+// DownloadDesignInfo 将指定模板打包为 zip 文件并下载。
 func DownloadDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.DesignInfoRequest
+	var req request.UseDesignRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -232,6 +241,11 @@ func DownloadDesignInfo(ctx iris.Context) {
 	ctx.Binary(data.Bytes())
 }
 
+// UploadDesignInfo 上传模板并解压。
+//
+// 参数说明：
+//   - 表单字段 "file": 模板压缩包文件（必填）。
+//   - 表单字段 "cover": 模板封面图地址（可选）。
 func UploadDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	cover := ctx.FormValue("cover")
@@ -254,7 +268,7 @@ func UploadDesignInfo(ctx iris.Context) {
 		return
 	}
 	// 需要重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateLog", info.Filename))
 
@@ -264,7 +278,10 @@ func UploadDesignInfo(ctx iris.Context) {
 	})
 }
 
-// CheckUploadDesignInfo 如果文件名重复，则需要确认是否覆盖
+// CheckUploadDesignInfo 验证上传的模板文件名（模板包名）和现有模板包名重复，用于提醒是否覆盖
+//
+// 参数说明：
+//   - 模板包名 "package": 模板包名。
 func CheckUploadDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
@@ -292,9 +309,13 @@ func CheckUploadDesignInfo(ctx iris.Context) {
 	})
 }
 
+// BackupDesignData 备份指定模板的演示数据（最多备份前500条文档等）。
+//
+// 参数说明：
+//   - 请求体 "package": 模板包名。
 func BackupDesignData(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.DesignDataRequest
+	var req request.UseDesignRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -320,6 +341,12 @@ func BackupDesignData(ctx iris.Context) {
 	})
 }
 
+// RestoreDesignData 恢复（初始化）指定模板的演示数据，可按需先备份网站数据或清空网站数据。
+//
+// 参数说明：
+//   - 请求体 "package": 模板包名。
+//   - 请求体 "auto_backup": 是否自动备份网站数据。
+//   - 请求体 "auto_cleanup": 是否一键清空网站数据（为 true 时会先执行备份）。
 func RestoreDesignData(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.DesignDataRequest
@@ -378,6 +405,14 @@ func RestoreDesignData(ctx iris.Context) {
 	})
 }
 
+// UploadDesignFile 上传模板文件到指定模板目录，并重载模板、清理缓存。
+//
+// 参数说明：
+//   - 表单文件 "file": 上传的模板文件。
+//   - 表单参数 "package": 模板包名。
+//   - 表单参数 "path": 文件保存路径。
+//   - 表单参数 "name": 保存的文件名，为空时使用原文件名。
+//   - 表单参数 "type": 文件类型：static|template。
 func UploadDesignFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	file, info, err := ctx.FormFile("file")
@@ -425,7 +460,7 @@ func UploadDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.RemoveHtmlCache()
 	currentSite.AddAdminLog(ctx, ctx.Tr("UploadTemplateFileLog", info.Filename))
 
@@ -435,6 +470,12 @@ func UploadDesignFile(ctx iris.Context) {
 	})
 }
 
+// GetDesignFileDetail 获取模板中指定文件的详情。
+//
+// 参数说明：
+//   - 查询参数 "package": 模板包名。
+//   - 查询参数 "path": 文件路径。
+//   - 查询参数 "type": 文件类型：static|template。
 func GetDesignFileDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
@@ -467,6 +508,12 @@ func GetDesignFileDetail(ctx iris.Context) {
 	})
 }
 
+// GetDesignFileHistories 获取模板中指定文件的历史版本列表。
+//
+// 参数说明：
+//   - 查询参数 "package": 模板包名。
+//   - 查询参数 "path": 文件路径。
+//   - 查询参数 "type": 文件类型：static|template。
 func GetDesignFileHistories(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
@@ -492,6 +539,13 @@ func GetDesignFileHistories(ctx iris.Context) {
 	})
 }
 
+// GetDesignFileHistoryDetail 获取模板文件某个历史版本的详情。
+//
+// 参数说明：
+//   - 查询参数 "package": 模板包名。
+//   - 查询参数 "path": 文件路径。
+//   - 查询参数 "type": 文件类型：static|template。
+//   - 查询参数 "hash": 历史版本哈希。
 func GetDesignFileHistoryDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := ctx.URLParam("package")
@@ -528,6 +582,7 @@ func GetDesignFileHistoryDetail(ctx iris.Context) {
 	})
 }
 
+// DeleteDesignFileHistories 删除模板文件的历史版本。
 func DeleteDesignFileHistories(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.RestoreDesignFileRequest
@@ -566,6 +621,7 @@ func DeleteDesignFileHistories(ctx iris.Context) {
 	})
 }
 
+// RestoreDesignFile 将模板文件恢复到指定历史版本，并重载模板、清理缓存。
 func RestoreDesignFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.RestoreDesignFileRequest
@@ -598,7 +654,7 @@ func RestoreDesignFile(ctx iris.Context) {
 
 	fileInfo, _ := currentSite.GetDesignFileDetail(req.Package, req.Filepath, req.Type, true)
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.DeleteCacheIndex()
 	currentSite.AddAdminLog(ctx, ctx.Tr("RestoreTemplateFileFromHistory", req.Package, req.Filepath))
 
@@ -609,6 +665,7 @@ func RestoreDesignFile(ctx iris.Context) {
 	})
 }
 
+// SaveDesignFile 保存模板文件内容，并重载模板、清理缓存索引。
 func SaveDesignFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SaveDesignFileRequest
@@ -638,7 +695,7 @@ func SaveDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.DeleteCacheIndex()
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyTemplateFile", req.Package, req.Path))
@@ -649,6 +706,7 @@ func SaveDesignFile(ctx iris.Context) {
 	})
 }
 
+// CopyDesignFile 复制模板文件为新文件，并重载模板。
 func CopyDesignFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CopyDesignFileRequest
@@ -678,7 +736,7 @@ func CopyDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("CopyTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
@@ -687,9 +745,10 @@ func CopyDesignFile(ctx iris.Context) {
 	})
 }
 
+// DeleteDesignFile 删除指定模板文件，并重载模板。
 func DeleteDesignFile(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.SaveDesignFileRequest
+	var req request.DeleteDesignFileRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -716,7 +775,7 @@ func DeleteDesignFile(ctx iris.Context) {
 		return
 	}
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteTemplateFile", req.Package, req.Path))
 
 	ctx.JSON(iris.Map{
@@ -725,6 +784,7 @@ func DeleteDesignFile(ctx iris.Context) {
 	})
 }
 
+// GetDesignTemplateFiles 获取当前使用模板的模板文件列表。
 func GetDesignTemplateFiles(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	packageName := currentSite.System.TemplateName
@@ -744,6 +804,7 @@ func GetDesignTemplateFiles(ctx iris.Context) {
 	})
 }
 
+// GetDesignDocs 获取模板开发文档列表。
 func GetDesignDocs(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	docs := currentSite.GetDesignDocs()
@@ -755,6 +816,7 @@ func GetDesignDocs(ctx iris.Context) {
 	})
 }
 
+// GetDesignTplHelpers 获取模板开发文档助手内容。
 func GetDesignTplHelpers(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	docs := currentSite.GetDesignTplHelpers()

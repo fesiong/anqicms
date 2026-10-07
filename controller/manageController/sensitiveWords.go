@@ -7,6 +7,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// SettingSensitiveWords 获取敏感词设置。
 func SettingSensitiveWords(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	sensitiveWords := currentSite.SensitiveWords
@@ -18,9 +19,18 @@ func SettingSensitiveWords(ctx iris.Context) {
 	})
 }
 
+// SettingSensitiveWordsForm 保存敏感词设置并重新加载敏感词。
+// 前端展示时，敏感词将会被替换成*。
+// 参数为敏感词数组，敏感词支持三种模式：
+//   - 纯敏感词，如：第一
+//   - 带替换词的词使用竖线分隔，如：第一|很好
+//   - 用花括号包裹的正则表达式，如：{\d{6,12}}
+//
+// 参数说明：
+//   - 请求体: 敏感词字符串数组。
 func SettingSensitiveWordsForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req []string
+	var req request.SensitiveWordsRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -41,6 +51,8 @@ func SettingSensitiveWordsForm(ctx iris.Context) {
 		})
 		return
 	}
+	// reload
+	w2.LoadSensitiveWords("")
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSensitiveWordConfiguration"))
 
@@ -50,9 +62,14 @@ func SettingSensitiveWordsForm(ctx iris.Context) {
 	})
 }
 
+// SettingSensitiveWordsCheck 检查指定内容中命中的敏感词。
+//
+// 参数说明：
+//   - 请求体 "content": 待检查的内容。
+//   - 请求体 "title": 待检查的标题。
 func SettingSensitiveWordsCheck(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Archive
+	var req request.SensitiveWordsCheckRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -73,6 +90,7 @@ func SettingSensitiveWordsCheck(ctx iris.Context) {
 	})
 }
 
+// SettingSensitiveWordsSync 从安企云服务同步敏感词列表
 func SettingSensitiveWordsSync(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

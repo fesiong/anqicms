@@ -136,7 +136,7 @@ func ApiRetailerWithdraw(ctx iris.Context) {
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	// 执行提现操作
-	err := currentSite.RetailerApplyWithdraw(userId)
+	_, err := currentSite.RetailerApplyWithdraw(userId)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

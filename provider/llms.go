@@ -11,11 +11,11 @@ import (
 )
 
 type LLMsBuildStatus struct {
-	Status     int         `json:"status"` // 0 = 未开始，1 = 进行中，2 = 已完成
-	Percent    int         `json:"percent"`
-	Current    int64       `json:"current"`
-	Total      int64       `json:"total"`
-	DelayTimer *time.Timer `json:"-"` // 延时计时器
+	Status     int         `json:"status"`  // 0 = 未开始，1 = 进行中，2 = 已完成
+	Percent    int         `json:"percent"` // 进度百分比
+	Current    int64       `json:"current"` // 当前进度数量
+	Total      int64       `json:"total"`   // 总进度数量
+	DelayTimer *time.Timer `json:"-"`       // 延时计时器
 }
 
 func (w *Website) GetLLMsBuildStatus() *LLMsBuildStatus {
@@ -215,6 +215,18 @@ func (w *Website) LLMsBuild() error {
 			if category.ModuleId != module.Id {
 				continue
 			}
+			// 排除分类
+			excludeCategory := false
+			for _, excludeCatId := range w.PluginLLMs.ExcludeCategoryIds {
+				if excludeCatId == category.Id {
+					excludeCategory = true
+					break
+				}
+			}
+			if excludeCategory {
+				continue
+			}
+
 			w.llmsBuildStatus.Current++
 			w.llmsBuildStatus.Percent = int(float64(w.llmsBuildStatus.Current) / float64(w.llmsBuildStatus.Total) * 100)
 			// 写入分类链接

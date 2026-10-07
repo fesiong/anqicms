@@ -32,15 +32,58 @@ type bingData2 struct {
 	UrlList     []string `json:"urlList"`
 }
 
-func (w *Website) PushArchive(link string) {
-	if len(link) == 0 {
-		return
+func (w *Website) PushArchives(links []string) error {
+	if len(links) == 0 {
+		return nil
 	}
-	_ = w.PushBaidu([]string{link})
-	_ = w.PushBing([]string{link})
-	if config.GoogleValid {
-		_ = w.PushGoogle([]string{link})
+	// 一次推送10个链接
+	var baiduErrs []error
+	var bingErrs []error
+	var googleErrs []error
+	for i := 0; i < len(links); i += 10 {
+		end := i + 10
+		if end > len(links) {
+			end = len(links)
+		}
+		link := links[i:end]
+		err1 := w.PushBaidu(link)
+		if err1 != nil {
+			baiduErrs = append(baiduErrs, err1)
+		}
+		err1 = w.PushBing(link)
+		if err1 != nil {
+			bingErrs = append(bingErrs, err1)
+		}
+		if config.GoogleValid {
+			err1 = w.PushGoogle(link)
+			if err1 != nil {
+				googleErrs = append(googleErrs, err1)
+			}
+		}
 	}
+
+	if len(baiduErrs) > 0 || len(bingErrs) > 0 || len(googleErrs) > 0 {
+		errMsg := ""
+		if len(baiduErrs) > 1 {
+			errMsg += fmt.Sprintf("Baidu: %d errors, last error: %s\n", len(baiduErrs), baiduErrs[len(baiduErrs)-1].Error())
+		} else if len(baiduErrs) == 1 {
+			errMsg += fmt.Sprintf("Baidu: %d Error, %s\n", len(baiduErrs), baiduErrs[0].Error())
+		}
+		if len(bingErrs) > 1 {
+			errMsg += fmt.Sprintf("Bing: %d errors, last error: %s\n", len(bingErrs), bingErrs[len(bingErrs)-1].Error())
+		} else if len(bingErrs) == 1 {
+			errMsg += fmt.Sprintf("Bing: %d Error, %s\n", len(bingErrs), bingErrs[0].Error())
+		}
+		if len(googleErrs) > 1 {
+			errMsg += fmt.Sprintf("Google: %d errors, last error: %s\n", len(googleErrs), googleErrs[len(googleErrs)-1].Error())
+		} else if len(googleErrs) == 1 {
+			errMsg += fmt.Sprintf("Google: %d Error, %s\n", len(googleErrs), googleErrs[0].Error())
+		}
+
+		return errors.New(errMsg)
+	}
+
+	return nil
 }
 
 func (w *Website) PushBaidu(list []string) error {

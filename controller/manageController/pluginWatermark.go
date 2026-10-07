@@ -1,17 +1,19 @@
 package manageController
 
 import (
-	"github.com/kataras/iris/v12"
-	"golang.org/x/image/webp"
 	"image"
 	"io"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/provider"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/kataras/iris/v12"
+	"golang.org/x/image/webp"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/provider"
 )
 
+// PluginWatermarkConfig 获取图片水印插件配置。
 func PluginWatermarkConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.PluginWatermark
@@ -23,6 +25,7 @@ func PluginWatermarkConfig(ctx iris.Context) {
 	})
 }
 
+// PluginWatermarkConfigForm 保存图片水印插件配置。
 func PluginWatermarkConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginWatermark
@@ -77,6 +80,7 @@ func PluginWatermarkConfigForm(ctx iris.Context) {
 	})
 }
 
+// PluginWatermarkPreview 根据当前水印配置生成水印效果预览。
 func PluginWatermarkPreview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 
@@ -98,6 +102,11 @@ func PluginWatermarkPreview(ctx iris.Context) {
 	})
 }
 
+// PluginWatermarkUploadFile 上传水印插件资源文件（字体或水印图片）。
+//
+// 参数说明：
+//   - 表单参数 "name": 资源类型，只能为 "font_path"（字体，仅支持 .ttf）或 "image_path"（水印图片）。
+//   - 表单参数 "file": 上传的文件。
 func PluginWatermarkUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	name := ctx.PostValue("name")
@@ -198,6 +207,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 	})
 }
 
+// PluginWatermarkGenerate 执行对图片资源库里的图片添加水印。该操作会对图片库中所有未加水印图片批量添加水印。
 func PluginWatermarkGenerate(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 

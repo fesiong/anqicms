@@ -29,3 +29,10 @@ type LogStatisticRequest struct {
 	Code   int    `json:"code" form:"code"`     // status code
 	Path   string `json:"path" form:"path"`
 }
+
+type VersionData struct {
+	Version      string `json:"version"`       // 版本号
+	Description  string `json:"description"`   // 版本描述
+	TrialVersion string `json:"trial_version"` // 试用版本号
+	Trial        bool   `json:"trial"`         // 是否试用版本。
+}

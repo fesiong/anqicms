@@ -13,30 +13,31 @@ import (
 
 type Archive struct {
 	//默认字段
-	Id           int64          `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey"`
-	ParentId     int64          `json:"parent_id" gorm:"column:parent_id;type:bigint(20) not null;default:0;index"`
-	CreatedTime  int64          `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time;index:idx_category_created_time,priority:2;index:idx_module_created_time,priority:2"`
-	UpdatedTime  int64          `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	Title        string         `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';index"`
-	SeoTitle     string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
-	UrlToken     string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
-	Keywords     string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
-	Description  string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
-	ModuleId     uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_created_time,priority:1"`
-	CategoryId   uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_created_time,priority:1"`
-	PlaceId      uint           `json:"place_id" gorm:"column:place_id;type:int(10) not null;default:0;index"` // 绑定的地区ID
-	Views        uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
-	CommentCount uint           `json:"comment_count" gorm:"column:comment_count;type:int(10) unsigned not null;default:0"`
-	Images       pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
-	Template     string         `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
-	CanonicalUrl string         `json:"canonical_url" gorm:"column:canonical_url;type:varchar(250) not null;default:''"` // 规范链接
-	FixedLink    string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null;index"`        // 固化的链接
-	UserId       uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	Price        int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
-	Stock        int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`
-	ReadLevel    int            `json:"read_level" gorm:"column:read_level;type:int(10) not null;default:0"`             // 阅读关联 group level
-	Password     string         `json:"password" gorm:"column:password;type:varchar(32) not null;default:''"`            // 明文密码，需要使用密码查看文档的时候填写
-	Sort         uint           `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:0;index:idx_sort"` // 数值越大，越靠前
+	Id            int64          `json:"id" gorm:"column:id;type:bigint(20) not null AUTO_INCREMENT;primaryKey"`
+	ParentId      int64          `json:"parent_id" gorm:"column:parent_id;type:bigint(20) not null;default:0;index"`
+	CreatedTime   int64          `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time;index:idx_category_created_time,priority:2;index:idx_module_created_time,priority:2"`
+	UpdatedTime   int64          `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	Title         string         `json:"title" gorm:"column:title;type:varchar(190) not null;default:'';index"`
+	SeoTitle      string         `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
+	UrlToken      string         `json:"url_token" gorm:"column:url_token;type:varchar(190) not null;default:'';index"`
+	Keywords      string         `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
+	Description   string         `json:"description" gorm:"column:description;type:varchar(1000) not null;default:''"`
+	ModuleId      uint           `json:"module_id" gorm:"column:module_id;type:int(10) unsigned not null;default:1;index:idx_module_created_time,priority:1"`
+	CategoryId    uint           `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index:idx_category_created_time,priority:1"`
+	PlaceId       uint           `json:"place_id" gorm:"column:place_id;type:int(10) not null;default:0;index"` // 绑定的地区ID
+	Views         uint           `json:"views" gorm:"column:views;type:int(10) unsigned not null;default:0;index:idx_views"`
+	CommentCount  uint           `json:"comment_count" gorm:"column:comment_count;type:int(10) unsigned not null;default:0"`
+	FavoriteCount uint           `json:"favorite_count" gorm:"column:favorite_count;type:int(10) unsigned not null;default:0"`
+	Images        pq.StringArray `json:"images" gorm:"column:images;type:text default null"`
+	Template      string         `json:"template" gorm:"column:template;type:varchar(250) not null;default:''"`
+	CanonicalUrl  string         `json:"canonical_url" gorm:"column:canonical_url;type:varchar(250) not null;default:''"` // 规范链接
+	FixedLink     string         `json:"fixed_link" gorm:"column:fixed_link;type:varchar(190) default null;index"`        // 固化的链接
+	UserId        uint           `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
+	Price         int64          `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
+	Stock         int64          `json:"stock" gorm:"column:stock;type:bigint(20) not null;default:9999999"`
+	ReadLevel     int            `json:"read_level" gorm:"column:read_level;type:int(10) not null;default:0"`             // 阅读关联 group level
+	Password      string         `json:"password" gorm:"column:password;type:varchar(32) not null;default:''"`            // 明文密码，需要使用密码查看文档的时候填写
+	Sort          uint           `json:"sort" gorm:"column:sort;type:int(10) unsigned not null;default:0;index:idx_sort"` // 数值越大，越靠前
 	//采集专用
 	HasPseudo   int    `json:"has_pseudo" gorm:"column:has_pseudo;type:tinyint(1) not null;default:0"`
 	KeywordId   uint   `json:"keyword_id" gorm:"column:keyword_id;type:bigint(20) not null;default:0"`

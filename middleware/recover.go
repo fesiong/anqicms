@@ -1,13 +1,15 @@
 package middleware
 
 import (
+	"encoding/json"
 	"fmt"
-	"github.com/kataras/iris/v12/context"
-	"kandaoni.com/anqicms/config"
-	"kandaoni.com/anqicms/library"
 	"runtime"
 	"strconv"
 	"time"
+
+	"github.com/kataras/iris/v12/context"
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 )
 
 func NewRecover() context.Handler {
@@ -37,12 +39,44 @@ func NewRecover() context.Handler {
 				ctx.Application().Logger().Warn(logMessage)
 				ctx.Values().Set("message", err)
 				ctx.StatusCode(500)
+				// 必须写响应体：只设状态码不写 body 的话 iris 会输出默认的
+				// "500 Internal Server Error" 纯文本，经过 api_invoke 包装后变成
+				// {"code":0,"msg":"","ok":false,"status":500} ——
+				// 「成功码 + 失败标志」的矛盾响应，调用方（尤其 AI）无从判读出了什么事。
+				// 实测有 6 个 action 返回的都是这个形状。
+				//
+			// 已知触发场景：POST 请求体为空时 ctx.ReadJSON(&req) 会 panic
+			//（iris 内部对 nil Body 做 io.ReadAll），如 contentops_translate/text_delete
+			// 不传任何参数、interaction/guestbook_status 等。
+			//
+			// 源头已在 provider/api_invoker.go 的 buildRequestBody 修掉
+			//（POST 无参数时发 `{}`），所以这条兜底不该再被日常触发。
+			// 万一还有端点中招，hint 必须**如实**指向最常见的原因（缺参数），
+			// 不能写成「通常不是参数问题」—— 那是把排查方向带偏。
+			// 2026-10-04 实测：hint 曾写「通常不是参数问题」，而实际原因正是
+			// 没传参数，AI 被误导去查端点状态，绕了一圈才回到「该传参」。
+			_, _ = ctx.WriteString(fmt.Sprintf(
+				`{"code":%d,"msg":%s,"ok":false,"status":500,"hint":%s}`,
+				config.StatusFailed,
+				jsonStr("服务器内部错误：处理请求时发生异常，详情见服务端 cache/error.log"),
+				jsonStr("最常见原因是本次调用没传任何参数：请用 api_schema 核对该端点必填字段后重试；若是端点自身问题，请查 error.log"),
+			))
 				ctx.StopExecution()
 			}
 		}()
 
 		ctx.Next()
 	}
+}
+
+// jsonStr 把字符串编码成 JSON 字面量（含引号转义）。
+// 用 encoding/json 而不是手写拼接：提示语里有中文标点与斜杠，手写极易漏转义。
+func jsonStr(s string) string {
+	b, err := json.Marshal(s)
+	if err != nil {
+		return `""`
+	}
+	return string(b)
 }
 
 func getRequestLogs(ctx *context.Context) string {

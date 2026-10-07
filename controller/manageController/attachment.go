@@ -12,11 +12,14 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// AttachmentUpload 上传附件。
 func AttachmentUpload(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	// 增加分类
+	// 附件的分类 ID
 	categoryId := uint(ctx.PostValueIntDefault("category_id", 0))
+	// 附件的 ID，用于替换附件
 	attachId := uint(ctx.PostValueIntDefault("id", 0))
+	// Receive attachment, image/video/file
 	file, info, err := ctx.FormFile("file")
 	if err != nil {
 		file, info, err = ctx.FormFile("file1")
@@ -50,11 +53,14 @@ func AttachmentUpload(ctx iris.Context) {
 	}
 
 	var attachment *model.Attachment
-	// 增加支持分片上传
+	// 分片上传分片数量
 	chunks := ctx.PostValueIntDefault("chunks", 0)
 	if chunks > 0 {
+		// 分片上传的当前分片索引
 		chunk := ctx.PostValueIntDefault("chunk", 0)
+		// 使用了分片上传的附件文件名
 		fileName := ctx.PostValue("file_name")
+		// 使用了分片上传的附件 MD5
 		fileMd5 := ctx.PostValue("md5")
 		// 使用了分片上传
 		tmpFile, err := currentSite.UploadByChunks(file, fileMd5, chunk, chunks)
@@ -120,14 +126,23 @@ func AttachmentUpload(ctx iris.Context) {
 	})
 }
 
+// AttachmentList 分页查询附件列表，支持按分类与关键词筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "category_id": 按附件分类 ID 筛选，0 表示不限。
+//   - 查询参数 "q": 按文件名关键词模糊搜索。
+//   - 查询参数 "type": 附件类型，0-所有，1-图片，2-视频，默认0。
 func AttachmentList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	q := ctx.URLParam("q")
+	imageType := ctx.URLParamIntDefault("type", 0)
 
-	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, 0, currentPage, pageSize)
+	attachments, total, err := currentSite.GetAttachmentList(categoryId, q, imageType, currentPage, pageSize)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -145,9 +160,43 @@ func AttachmentList(ctx iris.Context) {
 	})
 }
 
+// AttachmentDetail 获取单个附件的详细信息，包括访问 URL 与缩略图。
+//
+// 参数说明：
+//   - 查询参数 "id": 附件 ID，必填。
+func AttachmentDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	id := ctx.URLParamIntDefault("id", 0)
+	if id <= 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("TheImageResourceToBeReplacedDoesNotExist"),
+		})
+		return
+	}
+
+	attach, err := currentSite.GetAttachmentById(uint(id))
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	attach.GetThumb(currentSite.PluginStorage.StorageUrl)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": attach,
+	})
+}
+
+// AttachmentDelete 删除指定附件。
 func AttachmentDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Attachment
+	var req request.AttachmentDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -181,6 +230,7 @@ func AttachmentDelete(ctx iris.Context) {
 	})
 }
 
+// AttachmentEdit 修改附件的基本信息，如文件路径与附件名称。
 func AttachmentEdit(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Attachment
@@ -291,6 +341,7 @@ func AttachmentEdit(ctx iris.Context) {
 	})
 }
 
+// AttachmentScanUploads 扫描 uploads 目录，把未登记的文件补录进附件库；后台异步执行，接口立即返回。
 func AttachmentScanUploads(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 
@@ -303,6 +354,7 @@ func AttachmentScanUploads(ctx iris.Context) {
 	})
 }
 
+// AttachmentChangeCategory 批量修改附件所属的分类。
 func AttachmentChangeCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ChangeAttachmentCategory
@@ -331,82 +383,7 @@ func AttachmentChangeCategory(ctx iris.Context) {
 	})
 }
 
-func AttachmentCategoryList(ctx iris.Context) {
-	currentSite := provider.CurrentSubSite(ctx)
-
-	categories, err := currentSite.GetAttachmentCategories()
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "",
-		})
-		return
-	}
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  "",
-		"data": categories,
-	})
-}
-
-func AttachmentCategoryDetailForm(ctx iris.Context) {
-	currentSite := provider.CurrentSubSite(ctx)
-	var req request.AttachmentCategory
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	category, err := currentSite.SaveAttachmentCategory(&req)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	currentSite.AddAdminLog(ctx, ctx.Tr("SaveImageCategoryLog", category.Id, category.Title))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  ctx.Tr("CategoryUpdated"),
-		"data": category,
-	})
-}
-
-func AttachmentCategoryDelete(ctx iris.Context) {
-	currentSite := provider.CurrentSubSite(ctx)
-	var req request.AttachmentCategory
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	err := currentSite.DeleteAttachmentCategory(req.Id)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteImageCategoryLog", req.Id, req.Title))
-
-	ctx.JSON(iris.Map{
-		"code": config.StatusOK,
-		"msg":  ctx.Tr("CategoryDeleted"),
-	})
-}
-
+// AttachmentAddRemoteUrl 按远程 URL 批量添加附件记录。
 func AttachmentAddRemoteUrl(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.AttachmentAddRemoteUrl
@@ -439,6 +416,7 @@ func AttachmentAddRemoteUrl(ctx iris.Context) {
 	})
 }
 
+// ConvertImageToWebp 批量转换图片为 WebP 格式。后台异步执行，接口立即返回。
 func ConvertImageToWebp(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	go currentSite.StartConvertImageToWebp()

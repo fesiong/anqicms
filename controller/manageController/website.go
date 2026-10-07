@@ -19,10 +19,21 @@ import (
 	"kandaoni.com/anqicms/response"
 )
 
+// GetWebsiteList 获取多站点的站点列表，支持分页和名称搜索。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "name": 站点名称模糊搜索。
+//   - 查询参数 "base_url": 站点网址全匹配搜索。
 func GetWebsiteList(ctx iris.Context) {
+	// 当前页码
 	currentPage := ctx.URLParamIntDefault("current", 1)
+	// 每页条数
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	// 搜索站点名称
 	name := ctx.URLParam("name")
+	// 站点网址(全匹配)
 	baseUrl := ctx.URLParam("base_url")
 	dbSites, total := provider.GetDBWebsites(name, baseUrl, currentPage, pageSize)
 
@@ -34,7 +45,12 @@ func GetWebsiteList(ctx iris.Context) {
 	})
 }
 
+// GetWebsiteInfo 获取指定站点的详细信息，包括站点配置、域名、初始化状态和管理员账号。
+//
+// 参数说明：
+//   - 查询参数 "id": 站点 ID，默认为 0。
 func GetWebsiteInfo(ctx iris.Context) {
+	// 站点 ID
 	id := uint(ctx.URLParamIntDefault("id", 0))
 
 	dbSite, err := provider.GetDBWebsiteInfo(id)
@@ -57,12 +73,14 @@ func GetWebsiteInfo(ctx iris.Context) {
 	} else {
 		adminInfo = &model.Admin{}
 	}
-	result := request.WebsiteRequest{
+	// 用只读结构体而不是 WebsiteRequest：后者带 AdminPassword，
+	// json tag 无 omitempty，空值也会出现在响应里（见 WebsiteDetailResponse 的注释）。
+	result := request.WebsiteDetailResponse{
 		Id:        dbSite.Id,
 		RootPath:  dbSite.RootPath,
 		Name:      dbSite.Name,
 		Status:    dbSite.Status,
-		Mysql:     dbSite.Mysql,
+		Mysql:     request.SafeMysql(dbSite.Mysql),
 		AdminUser: adminInfo.UserName,
 	}
 	if website != nil {
@@ -71,7 +89,7 @@ func GetWebsiteInfo(ctx iris.Context) {
 		result.Initialed = website.Initialed
 	}
 	if dbSite.Id == 1 {
-		result.Mysql = config.Server.Mysql
+		result.Mysql = request.SafeMysql(config.Server.Mysql)
 	}
 
 	ctx.JSON(iris.Map{
@@ -81,6 +99,10 @@ func GetWebsiteInfo(ctx iris.Context) {
 	})
 }
 
+// SaveWebsiteInfo 保存或创建多站点信息，仅默认站点（ID 为 1）可操作，保存后会重启对应站点。
+//
+// 参数说明：
+//   - 请求体 "id": 站点 ID，大于 0 表示修改，否则为新建站点。
 func SaveWebsiteInfo(ctx iris.Context) {
 	var req request.WebsiteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
@@ -287,6 +309,12 @@ func SaveWebsiteInfo(ctx iris.Context) {
 			req.Mysql.Password = config.Server.Mysql.Password
 			req.Mysql.Host = config.Server.Mysql.Host
 			req.Mysql.Port = config.Server.Mysql.Port
+		} else if req.Mysql.Password == request.MysqlPasswordMask {
+			// 回写保护：读接口的密码是掩码（见 request.SafeMysql）。
+			// 调用方若把读到的详情原样保存，掩码会被写进库——
+			// 数据库密码变成 "********"，站点直接连不上库且不报错。
+			// 这里沿用库里的真值。
+			req.Mysql.Password = dbSite.Mysql.Password
 		}
 		_, err = provider.InitDB(&req.Mysql)
 		if err != nil {
@@ -379,16 +407,30 @@ func SaveWebsiteInfo(ctx iris.Context) {
 	}
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateMultiSiteLog", dbSite.Id, dbSite.Name))
 	// 重启
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: dbSite.Id}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("SiteHasBeenSaved"),
+		// 只回安全字段：dbSite 含 Mysql 密码与 TokenSecret，
+		// 而本响应会经 MCP 进入模型上下文，不能整对象序列化出去。
+		"data": iris.Map{
+			"id":        dbSite.Id,
+			"name":      dbSite.Name,
+			"root_path": dbSite.RootPath,
+			"status":    dbSite.Status,
+			"parent_id": dbSite.ParentId,
+		},
 	})
 }
 
+// DeleteWebsite 删除多站点的数据库记录，仅默认站点（ID 为 1）可操作，默认站点不可删除。
+//
+// 参数说明：
+//   - 请求体 "id": 待删除的站点 ID。
+//   - 请求体 "remove_file": 是否同时删除站点文件。
 func DeleteWebsite(ctx iris.Context) {
-	var req request.WebsiteRequest
+	var req request.WebsiteDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -424,13 +466,14 @@ func DeleteWebsite(ctx iris.Context) {
 	provider.GetDefaultDB().Delete(dbSite)
 	provider.RemoveWebsite(dbSite.Id, req.RemoveFile)
 	// 重载模板
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: dbSite.Id}
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  ctx.Tr("DeleteSuccessful"),
 	})
 }
 
+// GetCurrentSiteInfo 获取当前登录站点的 ID、域名和名称信息。
 func GetCurrentSiteInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	website, err := provider.GetDBWebsiteInfo(currentSite.Id)
@@ -452,6 +495,7 @@ func GetCurrentSiteInfo(ctx iris.Context) {
 	})
 }
 
+// LoginSubWebsite 以子站点身份登录后台，用于从默认站点或多语言主站点切换到指定子站点进行管理。
 func LoginSubWebsite(ctx iris.Context) {
 	var req request.WebsiteLoginRequest
 	if err := ctx.ReadJSON(&req); err != nil {

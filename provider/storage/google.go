@@ -15,9 +15,9 @@ import (
 )
 
 type GoogleStorage struct {
-	cfg      *config.PluginStorageConfig
-	httpCli  *http.Client
-	bucket   string
+	cfg     *config.PluginStorageConfig
+	httpCli *http.Client
+	bucket  string
 }
 
 func NewGoogleStorage(cfg *config.PluginStorageConfig) (*GoogleStorage, error) {

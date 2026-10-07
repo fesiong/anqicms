@@ -107,7 +107,7 @@ func (w *Website) TimeRenewArchives(setting *config.PluginTimeFactor) {
 			if setting.DoPublish {
 				archive.Link = w.GetUrl("archive", archive, 0)
 				// 重新推送
-				go w.PushArchive(archive.Link)
+				go w.PushArchives([]string{archive.Link})
 				// 清除缓存
 				w.DeleteArchiveCache(archive.Id, archive.UrlToken, archive.Link)
 				w.DeleteArchiveExtraCache(archive.Id)

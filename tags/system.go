@@ -75,11 +75,11 @@ func (node *tagSystemNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.T
 		} else {
 			content = strconv.FormatInt(nowTime.Unix(), 10)
 		}
-	} else if fieldName == "SeoTitle" {
+	} else if fieldName == "SeoTitle" || fieldName == "SiteTitle" {
 		content = currentSite.Index.SeoTitle
-	} else if fieldName == "SeoKeywords" {
+	} else if fieldName == "SeoKeywords" || fieldName == "SiteKeywords" {
 		content = currentSite.Index.SeoKeywords
-	} else if fieldName == "SeoDescription" {
+	} else if fieldName == "SeoDescription" || fieldName == "SiteDescription" {
 		content = currentSite.Index.SeoDescription
 	} else if fieldName == "Sep" {
 		content = currentSite.Index.Sep

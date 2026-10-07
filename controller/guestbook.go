@@ -67,6 +67,7 @@ func GuestbookForm(ctx iris.Context) {
 			}
 			val = strings.Trim(strings.Join(tmpVal, ","), ",")
 		} else if item.Type == config.CustomFieldTypeImage || item.Type == config.CustomFieldTypeFile {
+			// 留言表单的附件上传
 			file, info, err := ctx.FormFile(item.FieldName)
 			if err == nil {
 				attach, err := currentSite.AttachmentUpload(file, info, 0, 0, userId)

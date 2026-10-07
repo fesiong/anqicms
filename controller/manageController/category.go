@@ -12,6 +12,13 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// CategoryList 查询分类/单页面列表（树状结构），可按模型与类型筛选。
+//
+// 参数说明：
+//   - 查询参数 "module_id": 按模型 ID 筛选，0 表示不限。
+//   - 查询参数 "type": 按分类类型筛选，0 表示不限：1 表示文档分类，3 表示单页面。
+//   - 参数查询 "show_type": 显示模式，0 显示树状结构，1 显示列表结构。
+//   - 查询参数 "title": 按分类名称模糊搜索。
 func CategoryList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	moduleId := uint(ctx.URLParamIntDefault("module_id", 0))
@@ -126,6 +133,10 @@ func CategoryList(ctx iris.Context) {
 	})
 }
 
+// CategoryDetail 查询单个分类的详情。
+//
+// 参数说明：
+//   - 查询参数 "id": 分类 ID，必填。
 func CategoryDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := uint(ctx.URLParamIntDefault("id", 0))
@@ -176,6 +187,7 @@ func CategoryDetail(ctx iris.Context) {
 	})
 }
 
+// CategoryDetailForm 新建或更新分类。
 func CategoryDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
@@ -186,7 +198,18 @@ func CategoryDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-	req.UpdateAll = true
+	// UpdateAll 决定「未传的字段」怎么处理：
+	//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
+	//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
+	//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
+	//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
+	//
+	// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
+	// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
+	// Partial 优先于调用方传的 update_all。
+	if !req.Partial {
+		req.UpdateAll = true
+	}
 
 	category, err := currentSite.SaveCategory(&req)
 	if err != nil {
@@ -266,9 +289,10 @@ func CategoryDetailForm(ctx iris.Context) {
 	})
 }
 
+// CategoryDelete 删除指定分类。
 func CategoryDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req request.Category
+	var req request.CategoryDeleteRequest
 	if err := ctx.ReadJSON(&req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -319,6 +343,7 @@ func CategoryDelete(ctx iris.Context) {
 	})
 }
 
+// CategoryUpdateArchiveCount 重新统计各分类下的文档数量。
 func CategoryUpdateArchiveCount(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

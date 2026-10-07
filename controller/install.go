@@ -459,7 +459,7 @@ func InstallForm(ctx iris.Context) {
 	_ = os.MkdirAll(filepath.Dir(installLockFile), os.ModePerm)
 	_ = os.WriteFile(installLockFile, []byte(time.Now().Format(time.RFC3339)), 0644)
 
-	config.RestartChan <- 0
+	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: website.Id}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
