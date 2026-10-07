@@ -226,8 +226,28 @@ func (k *Kernel) buildTool(spec *IntentSpec, full bool) *mcp.Tool {
 	return t
 }
 
-// registerMeta 注册两个 meta 意图（不在 catalog 中，始终可用）。
+// registerMeta 注册 meta 意图（不在 catalog 中）。
+//
+// 2026-10-07：mcp_set_scope 改为**默认不注册**，需显式开启
+//（见 Config.EnableSetScope）。原因是它的 scope 是**进程级全局**的——
+// Reregister 摘除/重注册的是共享 mcp.Server 的全局工具表，一个客户端设窄会
+// 让**所有并发客户端**的 tools/list 一起变窄，且新会话恢复不了（须重启）。
+// ScopeStaleAfter 的空闲自动恢复只是缓解，不是修复。
+//
+// 在改成会话级（scope 挂 session、每轮按 session 重算工具面）之前，
+// 把它留在默认暴露面上等于给了一个「一键影响所有人」的开关。
+// mcp_list_intents 不受影响——它只读注册表，无副作用。
 func (k *Kernel) registerMeta(server *mcp.Server) {
+	if k.cfg.EnableSetScope {
+		k.registerSetScope(server)
+	}
+	k.registerListIntents(server)
+}
+
+// registerSetScope 注册 mcp_set_scope（两阶段能力域选择）。
+//
+// ⚠️ 进程级全局的破坏性见 registerMeta 的说明，修复前默认不注册。
+func (k *Kernel) registerSetScope(server *mcp.Server) {
 	// mcp_set_scope：两阶段能力域选择
 	scopeTool := &mcp.Tool{
 		Name:        "mcp_set_scope",
@@ -278,10 +298,14 @@ func (k *Kernel) registerMeta(server *mcp.Server) {
 		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: msg}}}, nil
 	})
 	k.track("mcp_set_scope")
+}
 
-	// mcp_list_intents：发现全部意图（不受 scope 限制）
-	//
-	// 注意：返回体必须是 JSON 对象（StructuredContent 契约），
+// registerListIntents 注册 mcp_list_intents：发现全部意图（不受 scope 限制）。
+//
+// 只读注册表、无副作用，因此不像 mcp_set_scope 那样被开关关掉——
+// 客户端在不知道有哪些能力时仍需要一条安全的发现路径。
+func (k *Kernel) registerListIntents(server *mcp.Server) {
+	// 返回体必须是 JSON 对象（StructuredContent 契约），
 	// 因此把意图数组包在 {"total":N,"intents":[...]} 里，并声明匹配的 outputSchema。
 	listTool := &mcp.Tool{
 		Name:        "mcp_list_intents",

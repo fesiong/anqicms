@@ -172,6 +172,7 @@ func (w *Website) NewMcpServer() *server.Server {
 		ExposedIntents: mcpConf.ExposedIntents,
 		ExposedTools:   mcpConf.ExposedTools,
 		ToolListMode:   mcpConf.ToolListMode,
+		EnableSetScope: mcpConf.EnableSetScope,
 	}
 	kernel := intent.NewKernel(iconf, capInvoker, auditFn)
 	kernel.RegisterAll(mcpServer)

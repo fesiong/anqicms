@@ -1069,6 +1069,7 @@ func (svc *AiChatService) GetIntentTools() ([]*schema.ToolInfo, map[string]toolH
 		ExposedIntents: GetMcpConfig().ExposedIntents,
 		ExposedTools:   GetMcpConfig().ExposedTools,
 		ToolListMode:   GetMcpConfig().ToolListMode,
+		EnableSetScope: GetMcpConfig().EnableSetScope,
 	}
 	// CapInvoker：把意图参数序列化后调用对应底层能力 handler（端点/内置 caps）。读取 svc.capHandlers
 	// 当前值（纯底层能力表，不含意图 handler），以支持运行期热重建且避免同名意图递归。

@@ -67,13 +67,84 @@ func TestListRejectsUnknownOrderBy(t *testing.T) {
 }
 
 // TestListAcceptsRealOrderColumns 真实列名不能被误伤——白名单的第一道防线是别拦错。
+//
+// 2026-10-05：order_by 的 enum 从「白名单全量」收窄为「5 个推荐列」后，
+// 这个用例从只抽查 title 扩成**遍历白名单每一列**，因为收窄 enum 最容易犯的错
+// 是顺手把校验也收窄成推荐集——那样 AI 一填 title/comment_count 就会被拒，
+// 而这些列在 archives 里真实存在，属于「能力凭空消失且无报错」。
+// 只有推荐集之外的列仍然全通，才能证明 enum 只是展示层的收窄。
 func TestListAcceptsRealOrderColumns(t *testing.T) {
-	for _, col := range []string{"created_time", "id", "views", "title"} {
+	// 遍历白名单全量（含 5 个推荐列与 10 个非推荐列），而非抽查。
+	for col := range archiveOrderColumns {
 		inv := articleInvoker(t, `{"ok":true,"data":{"total":1,"data":[{"id":1}]}}`, ``, nil)
 		spec := mustSpec(t, "content_article")
 		if _, err := spec.Compose(context.Background(),
 			map[string]any{"action": "list", "order_by": col}, inv); err != nil {
-			t.Errorf("合法排序列 %q 被误拦：%v", col, err)
+			t.Errorf("合法排序列 %q 被误拦：%v（enum 收窄不应连带放松成「只允许推荐列」）", col, err)
+		}
+	}
+}
+
+// TestOrderByEnumIsRecommendedSubset enum 必须是白名单的**真子集**，且恰为 5 个推荐列。
+//
+// 这条锁住 2026-10-05 的推荐集本身。**注意它不是锁token**：实测 enum
+// 从 14 列缩到 5 列只省约 28 token，而 desc 为说清「推荐而非仅限」多用
+// 71 字符，净收益仅 3 token。这里真正要挡的是「候选集退回去」——
+// 铺开 14 列会让 AI 在 0 值常量列之间反复权衡（见 archiveOrderColumnList
+// 的注释）。三个断言各挡一种回退：
+//   - 精确等于推荐集 → 挡住「又加回几个列」；
+//   - 真子集（非全量） → 挡住「干脆退回铺开白名单」；
+//   - ⊆ 白名单 → 挡住「推荐了白名单里没有的列」，那会让 AI 照着 schema 填值却被闸门拒。
+func TestOrderByEnumIsRecommendedSubset(t *testing.T) {
+	spec := mustSpec(t, "content_article")
+	got := spec.Params["order_by"].Enum
+	want := []string{"created_time", "id", "sort", "updated_time", "views"} // 字典序
+	if len(got) != len(want) {
+		t.Fatalf("order_by enum 应为 %d 个推荐列 %v，实际 %d 个 %v", len(want), want, len(got), got)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("order_by enum 第 %d 项应为 %q，实际 %q（完整 %v）", i, want[i], got[i], got)
+		}
+	}
+	if len(got) == len(archiveOrderColumns) {
+		t.Errorf("order_by enum 已等于白名单全量（%d 列），候选集收窄失效", len(got))
+	}
+	for _, c := range got {
+		if !archiveOrderColumns[c] {
+			t.Errorf("order_by enum 含白名单外的列 %q —— AI 照 schema 填值会被 normalizeListOrder 拒绝", c)
+		}
+	}
+}
+
+// TestOrderByEnumIsSorted enum 必须字典序稳定，否则每次 tools/list 响应顺序都不同。
+func TestOrderByEnumIsSorted(t *testing.T) {
+	for i := 1; i < len(archiveOrderColumnList()); i++ {
+		if archiveOrderColumnList()[i-1] > archiveOrderColumnList()[i] {
+			t.Fatalf("archiveOrderColumnList 未按字典序：%v", archiveOrderColumnList())
+		}
+	}
+}
+
+// TestOrderByErrorListsAllColumns 报错文案必须列**白名单全量**，不能只列推荐集。
+//
+// 这是 enum 收窄最容易漏掉的另一半：报错是调用方撞墙后唯一的纠错线索，
+// 只列推荐值会让 AI 误以为推荐值即全部，撞到 title 这类真实但不推荐的列时
+// 无从修正，只能反复试错或直接放弃排序。
+func TestOrderByErrorListsAllColumns(t *testing.T) {
+	inv := articleInvoker(t, `{"ok":true,"data":null}`, ``, nil)
+	spec := mustSpec(t, "content_article")
+	_, err := spec.Compose(context.Background(),
+		map[string]any{"action": "list", "order_by": "nonexistent_col"}, inv)
+	if err == nil {
+		t.Fatal("非法 order_by 应返回 error")
+	}
+	msg := err.Error()
+	// 全量白名单每一列都必须出现在报错里。
+	for col := range archiveOrderColumns {
+		if !strings.Contains(msg, col) {
+			t.Errorf("order_by 报错文案漏列 %q（应列白名单全量 %d 列），实际=%v",
+				col, len(archiveOrderColumns), msg)
 		}
 	}
 }
@@ -293,29 +364,152 @@ func TestListStillRejectsUnknownStatus(t *testing.T) {
 
 // TestArticleDescDocumentsNewGuarantees desc 必须写清新语义，
 // 否则后续「优化描述」时无声丢失，调用方又会踩回静默错数据。
+//
+// ⚠️ 这条测试同时是 2026-10-05 desc 压缩的**护栏**。压缩只允许删
+// 「工具 desc 与参数 desc 之间的重复陈述」，不允许删任何独有语义——
+// 因为丢语义不会报错，只会让 AI 悄悄退回到踩坑行为，而测试全绿。
+// 下面的清单是压缩前逐条盘出来的，压缩后仍须全部命中。
 func TestArticleDescDocumentsNewGuarantees(t *testing.T) {
 	spec := mustSpec(t, "content_article")
+	// 「不会静默返回空列表」这条承诺在压缩后**移到了 order_by 参数 desc**
+	// （它只约束 order_by 一个参数，放在工具 desc 里属于越位陈述）。
+	// 承诺必须仍在场，只是换了位置——所以这里查工具与参数的合集，
+	// 而具体归属由 TestOrderByDescCarriesSilentDataGuard 单独钉住。
+	combined := spec.Desc
+	props := schemaPropsOf(spec)
+	for name, p := range spec.Params {
+		combined += "\n" + name + ":" + p.Desc
+	}
 	for _, want := range []string{
 		"标签/标记",         // 未传的关联字段保真
 		"不会静默返回空列表",   // order_by 白名单
 		"不会假成功",         // publish/delete 存在性校验
 		"moved_to_trash",   // 删除是入回收站而非物理删除
 	} {
-		if !strings.Contains(spec.Desc, want) {
-			t.Errorf("desc 缺少关键承诺 %q，实际=%s", want, spec.Desc)
+		if !strings.Contains(combined, want) {
+			t.Errorf("工具+参数 desc 合起来缺少关键承诺 %q", want)
 		}
 	}
-	props := schemaPropsOf(spec)
 	ob, _ := props["order_by"].(map[string]any)
 	if ob == nil {
 		t.Fatal("order_by 参数定义缺失")
 	}
-	if d, _ := ob["description"].(string); !strings.Contains(d, "不会静默返回空列表") {
-		t.Errorf("order_by 的 desc 应说明非法值会报错，实际=%q", d)
+	// enum 收窄成「推荐集」后，desc 措辞必须同步为「推荐」而非「只能是」，
+	// 否则会把推荐集说成硬约束：AI 看到 title 不在 enum 里就不再用，
+	// 而它其实是合法且有用的排序列（见 TestListAcceptsRealOrderColumns）。
+	if d, _ := ob["description"].(string); !strings.Contains(d, "推荐") {
+		t.Errorf("order_by 的 desc 应说明这是推荐值而非唯一合法值，实际=%q", d)
 	}
 	od, _ := props["order_dir"].(map[string]any)
 	enum, _ := od["enum"].([]string)
 	if len(enum) != 2 {
 		t.Errorf("order_dir 应用 enum 约束 asc/desc，实际=%#v", od)
+	}
+}
+
+// TestOrderByDescCarriesSilentDataGuard 钉住「不会静默返回空列表」这条承诺的归属。
+//
+// 它只约束 order_by 一个参数。压缩时若把它留在工具 desc，是越位陈述
+// （模型会以为 list 整体都有这个保证）；若连它一起删掉，则 order_by 的
+// 非法值行为就无人告知——而端点在这点上的行为是「MySQL 报 Unknown column、
+// 控制器丢弃 Find 的 error、于是回 ok=true + 空列表」（2026-10-03 实测），
+// AI 会据此误判「筛选条件太窄所以没数据」。这类静默错数据比报错危险得多。
+func TestOrderByDescCarriesSilentDataGuard(t *testing.T) {
+	spec := mustSpec(t, "content_article")
+	p, ok := spec.Params["order_by"]
+	if !ok {
+		t.Fatal("order_by 参数缺失")
+	}
+	if !strings.Contains(p.Desc, "不会静默返回空列表") {
+		t.Errorf("「不会静默返回空列表」这条承诺应在order_by 参数 desc 里，实际=%q", p.Desc)
+	}
+}
+
+// TestArticleParamsKeepUniqueSemantics 锁住 6 个参数的**独有**语义。
+//
+// 为什么单独一条：2026-10-05 压缩 desc 时，最大的风险不是删少了（那是显眼的
+// 信息缺失），而是删多了——把「status 在 list 与 publish 下语义不同」这类
+// 只此一处存在的说明当成冗余删掉。它不会让任何测试变红，只会让 AI 在
+// publish 时传错 status（实测 status="1" 会静默返回全部草稿）。
+//
+// 判定标准是「这句话是否只在本参数出现过一次」：跨层重复的（工具 desc
+// 已说过「未传字段沿用原值」）不在此列，由 TestArticleDescNoCrossLayerDup
+// 反向保证不重复。
+func TestArticleParamsKeepUniqueSemantics(t *testing.T) {
+	spec := mustSpec(t, "content_article")
+
+	// 每项：参数名 → 必须出现在该参数 desc 里的语义锚点。
+	// 选这些锚点是因为它们各自承载一个「删掉就会误用」的事实。
+	required := map[string][]string{
+		// status 是最危险的一个：同一字段在 list 是查哪张表、在 publish 是上/下架，
+		// 且意图层会把 ok/draft 自动转成端点的 1/0。丢了这段 AI 必然传错。
+		"status": {"过滤", "变更动作", "1/0"},
+		// flag 的 8 个标记值直接决定前台展示位，模型得知道有哪些可选。
+		"flag": {"h=头条", "j=跳转"},
+		// 「传空数组则清空」与「不传则沿用」是两种相反语义，必须同时在场，
+		// 否则 AI 会把「清空标签」写成「不传 tags」。
+		"tags": {"清空", "沿用"},
+		// draft 与publish 的关系：draft=false 即发布，省一次调用。
+		"draft": {"false=发布", "preview=true"},
+		// 排序参数的非法值行为：报错而非静默返回空列表。
+		"order_by": {"推荐"},
+		"order_dir": {"asc", "desc"},
+	}
+
+	for name, anchors := range required {
+		p, ok := spec.Params[name]
+		if !ok {
+			t.Errorf("参数 %s 不应被压缩掉", name)
+			continue
+		}
+		for _, a := range anchors {
+			if !strings.Contains(p.Desc, a) {
+				t.Errorf("参数 %s 的 desc 丢了独有语义 %q，实际=%q", name, a, p.Desc)
+			}
+		}
+	}
+}
+
+// TestArticleDescNoCrossLayerDup 防止「省 token 改出重复劳动」。
+//
+// desc 压缩的目标之一就是去掉工具 desc 与参数 desc 的重复陈述，
+// 但压缩很容易走过头：把工具 desc 里的语义整体复制到每个参数，
+// 或者反过来在工具 desc 里堆参数级细节。两种都会让体积反弹，
+// 且不会有任何测试报警——所以这里显式钉住「不重复」。
+//
+// 判据用「更新时不传则沿用原X」这类不变式的出现次数：
+// 它只需要在**工具 desc** 说一次，各参数不必再说。
+func TestArticleDescNoCrossLayerDup(t *testing.T) {
+	spec := mustSpec(t, "content_article")
+
+	// 「沿用原值」这条不变式：工具 desc 说一次即可。
+	if n := strings.Count(spec.Desc, "沿用原值"); n != 1 {
+		t.Errorf("工具 desc 里「沿用原值」应只出现 1 次（作为全局不变式），实际 %d 次", n)
+	}
+	// 各参数里不应再复述这条不变式。
+	for _, name := range []string{"tags", "flag", "logo", "relation_ids", "content"} {
+		p := spec.Params[name]
+		if strings.Contains(p.Desc, "更新时不传则沿用") {
+			t.Errorf("参数 %s 的 desc 仍在复述「更新时不传则沿用」这条全局不变式（工具 desc 已说过），参数=%q",
+				name, p.Desc)
+		}
+	}
+}
+
+// TestArticleDescHasNoStaleWording 抓 desc 之间的措辞漂移。
+//
+// 2026-10-05 踩过：order_by 参数 desc 已改成「推荐用…也可填」（因为 enum 收窄成
+// 推荐集），但工具 desc 里同一件事还写着「只能填 archives 表的真实列名」。
+// 两处一矛盾，AI 到底该信哪个无从判断——而这种不一致不会触发任何测试。
+//
+// 所以凡是参数 desc 已经改用「推荐」口径的地方，工具 desc 必须同步。
+func TestArticleDescHasNoStaleWording(t *testing.T) {
+	spec := mustSpec(t, "content_article")
+	p := spec.Params["order_by"]
+	if !strings.Contains(p.Desc, "推荐") {
+		t.Skip("order_by 参数 desc 尚未改为推荐口径，本用例暂不适用")
+	}
+	if strings.Contains(spec.Desc, "order_by 只能填") {
+		t.Errorf("order_by 参数 desc 已改为「推荐用」口径，工具 desc 仍写「只能填」，两处矛盾会误导调用方。\n工具 desc=%s", spec.Desc)
 	}
 }

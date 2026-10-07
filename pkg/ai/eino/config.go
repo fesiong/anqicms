@@ -19,12 +19,19 @@ type Configs struct {
 // McpConfig 控制本站点 MCP 端点的启用与鉴权。
 // 存储于 ai_setting (provider.AiSettingKey)，通过 SettingAiForm 配置。
 type McpConfig struct {
-	Enabled      bool     `json:"enabled"`       // 是否启用 MCP 对外端点
-	Token        string   `json:"token"`         // 鉴权 Bearer token，空则禁用
-	ExposedTools []string `json:"exposed_tools"` // 旧版能力名白名单（C 阶段），按意图底层能力命中过滤；空则暴露全部
+	Enabled        bool     `json:"enabled"`         // 是否启用 MCP 对外端点
+	Token          string   `json:"token"`           // 鉴权 Bearer token，空则禁用
+	ExposedTools   []string `json:"exposed_tools"`   // 旧版能力名白名单（C 阶段），按意图底层能力命中过滤；空则暴露全部
 	ExposedIntents []string `json:"exposed_intents"` // 意图级白名单：意图名 / 能力域名(content 等) / "*"；非空时未知意图默认拒绝
-	ToolListMode string   `json:"tool_list_mode"` // ""=完整 schema；"summary"=tools/list 仅返回轻量 schema，降低 token
-	RateLimit    int      `json:"rate_limit"`    // 每分钟调用上限，0 不限
+	ToolListMode   string   `json:"tool_list_mode"`  // ""=完整 schema；"summary"=tools/list 仅返回轻量 schema，降低 token
+	// EnableSetScope 是否开放 mcp_set_scope（两阶段能力域裁剪）。**默认 false。**
+	//
+	// 2026-10-07 新增，默认关闭：mcp_set_scope 的 scope 是**进程级全局**的，
+	// 一个客户端调用会让所有并发客户端的 tools/list 一起收窄，且新会话恢复不了
+	// （须重启服务）。在改成会话级之前不对外暴露。
+	// 详见 pkg/mcp/intent/mcp.go 的 registerMeta 注释。
+	EnableSetScope bool `json:"enable_set_scope"`
+	RateLimit      int  `json:"rate_limit"` // 每分钟调用上限，0 不限
 
 	// InvokeAdminId 是「通用 REST 调用」（api_invoke 意图）使用的管理员身份。
 	// 为 0 时该能力不可用 —— 这是有意的安全设计：MCP/AI 通道无法从请求里推导出操作者，

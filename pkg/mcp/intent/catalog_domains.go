@@ -61,15 +61,15 @@ import (
 //
 // 全量覆盖有两种成因，修法不同（2026-10-03 踩过这个坑）：
 //
-//  ① provider 写 `if req.UpdateAll || req.X != ""` —— 有开关，
-//     已在 request.* 加 `Partial` 修好（控制器 `if !req.Partial { req.UpdateAll = true }`，
-//     意图层给 update 类 cap 注入 partial=true）。这类端点**不需要**本表补齐：
-//     补齐反而多余且有害——它要回查旧值，而读端点可能返回派生值
-//     （GetNavList 用 GetUrl 覆盖 link 就是先例）。
+//	① provider 写 `if req.UpdateAll || req.X != ""` —— 有开关，
+//	   已在 request.* 加 `Partial` 修好（控制器 `if !req.Partial { req.UpdateAll = true }`，
+//	   意图层给 update 类 cap 注入 partial=true）。这类端点**不需要**本表补齐：
+//	   补齐反而多余且有害——它要回查旧值，而读端点可能返回派生值
+//	   （GetNavList 用 GetUrl 覆盖 link 就是先例）。
 //
-//  ② provider 直接 `material.Title = req.Title` —— **没有开关**，
-//     partial 完全无效。这是本表要解决的：意图层回查旧值补齐，让「只传
-//     要改的字段」真正成立。
+//	② provider 直接 `material.Title = req.Title` —— **没有开关**，
+//	   partial 完全无效。这是本表要解决的：意图层回查旧值补齐，让「只传
+//	   要改的字段」真正成立。
 //
 // 判定方法（不要只搜 `req.UpdateAll = true`，那只是 ①）：
 //
@@ -285,7 +285,7 @@ var domainIntentCatalog = []*IntentSpec{
 			"values": {Type: "object", Desc: "按 action 传：\n" +
 				"· push_save（**全量覆盖**）: baidu_api(百度推送地址)、bing_api、google_json、js_codes —— 改任一项都要四项传全\n" +
 				"· sitemap: type（xml 或 txt，默认 xml）、auto_build（**整数 0/1，不是布尔值**，传 true/false 会报 json 解析失败）"},
-			"urls":    {Type: "array", Items: "string", Desc: "要推送的 URL 列表（push_push 与 sitemap 的推送环节用）"},
+			"urls": {Type: "array", Items: "string", Desc: "要推送的 URL 列表（push_push 与 sitemap 的推送环节用）"},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"api_invoke"},
@@ -330,7 +330,7 @@ var domainIntentCatalog = []*IntentSpec{
 		Name: "interaction", Title: "评论与留言", Domain: DomainInteraction, Risk: RiskWrite,
 		Desc: "评论/留言的审核与清理。action: comment_list/comment_approve/comment_delete/guestbook_list/guestbook_detail/guestbook_setting_get/guestbook_setting_save/guestbook_status/guestbook_delete/guestbook_export。",
 		Params: map[string]ParamSpec{
-			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"comment_list", "comment_approve", "comment_delete", "guestbook_list", "guestbook_detail", "guestbook_setting_get", "guestbook_setting_save", "guestbook_status", "guestbook_delete", "guestbook_export"}},
+			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"comment_list", "comment_approve", "comment_delete", "guestbook_list", "guestbook_detail", "guestbook_setting_get", "guestbook_setting_save", "guestbook_status", "guestbook_delete", "guestbook_export"}},
 			"id":     {Type: "integer", Desc: "评论/留言 ID（comment_approve/guestbook_detail/guestbook_delete 必填）"},
 			"page":   {Type: "integer", Desc: "页码", Default: 1},
 			"ids":    {Type: "array", Items: "integer", Desc: "ID 列表（批量删除/批量更新状态时传，替代单个 id）"},
@@ -349,7 +349,11 @@ var domainIntentCatalog = []*IntentSpec{
 	// ───────────────────────── 内容生产域 ─────────────────────────
 	{
 		Name: "contentops_material", Title: "管理素材库", Domain: DomainContentOps, Risk: RiskWrite,
-		Desc: "素材（待发布内容池）与其分类的管理、导入。action: list/detail/save/delete/import/category_list/category_save/category_delete。",
+		// 2026-10-07：默认关闭。素材库是「待发布内容池」，与正式文档（archives）
+		// 是两套数据，AI 默认不写它——误导入/误删的素材不会立刻暴露，
+		// 等到有人从素材池取稿才发现内容缺失时已难追溯。
+		Desc:       "素材（待发布内容池）与其分类的管理、导入。**默认关闭**，需 ExposedIntents 显式开启。action: list/detail/save/delete/import/category_list/category_save/category_delete。",
+		DefaultOff: true,
 		Params: map[string]ParamSpec{
 			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "detail", "save", "delete", "import", "category_list", "category_save", "category_delete"}},
 			"id":        {Type: "integer", Desc: "素材 ID"},
@@ -442,7 +446,10 @@ var domainIntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "contentops_translate", Title: "多语言翻译", Domain: DomainContentOps, Risk: RiskWrite,
-		Desc: "翻译配置与翻译记录管理。action: get/save/logs/texts/text_save/text_delete。",
+		// 2026-10-07：默认关闭。翻译会改写站点多语言副本，AI 在没有译文审校的情况下
+		//批量写译文，错误要等切换语言后用户看到才发现，且修复时已分不清是原文还是译文错了。
+		Desc:       "翻译配置与翻译记录管理。**默认关闭**，需 ExposedIntents 显式开启。action: get/save/logs/texts/text_save/text_delete。",
+		DefaultOff: true,
 		Params: map[string]ParamSpec{
 			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"get", "save", "logs", "texts", "text_save", "text_delete"}},
 			"id":        {Type: "integer", Desc: "记录 ID"},
@@ -493,10 +500,16 @@ var domainIntentCatalog = []*IntentSpec{
 	// 合并 commerce_user(原 catalog.go) + commerce_group + commerce_retailer 为单一 commerce 工具。
 	{
 		Name: "commerce", Title: "会员/分组/分销商", Domain: DomainCommerce, Risk: RiskWrite,
-		Desc: "会员的增删改查与订单列表，会员分组的增删改查，分销商配置与审核。action: user_list/user_get/user_create/user_update/user_delete/user_orders/group_list/group_detail/group_save/group_delete/retailer_list/retailer_detail/retailer_setting_get/retailer_setting_save/retailer_apply/retailer_realname。" +
-			"user_update 是**部分更新**：只传要改的字段即可，email/phone/group_id/status 等未传的会自动沿用原值" +
-			"（意图层会先回查再补齐，2026-10-03 起不再需要手工 get 全量再整体写回）。" +
-			"注意 group_save 与 retailer_setting_save 仍是全量覆盖语义，未登记的字段会被清成零值。",
+		Desc: "会员的增删改查与订单列表，会员分组的增删改查，分销商配置与审核。**默认关闭**，需 ExposedIntents 显式开启。" +
+			"action: user_list/user_get/user_create/user_update/user_delete/user_orders/group_list/group_detail/group_save/group_delete/retailer_list/retailer_detail/retailer_setting_get/retailer_setting_save/retailer_apply/retailer_realname。" +
+			"user_update 是**部分更新**，只传要改的字段即可，未传的字段自动沿用原值。" +
+			"group_save 与 retailer_setting_save 是全量覆盖语义，未登记的字段会被清成零值。",
+		// 2026-10-07：默认关闭（交易域未随站点发行）。
+		// desc 里原先那段「意图层会先回查再补齐」的括号注释已移除：它描述的是
+		// preserveOnUpdate 机制，而该机制已于 2026-10-03 随根因修复删除
+		// （回查旧值再写回不仅多余还有害，读端点会覆写字段）。
+		// 留着等于在 desc 里陈述一个不存在的机制。面向调用方只需讲可观察的契约。
+		DefaultOff: true,
 		Params: map[string]ParamSpec{
 			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"user_list", "user_get", "user_create", "user_update", "user_delete", "user_orders", "group_list", "group_detail", "group_save", "group_delete", "retailer_list", "retailer_detail", "retailer_setting_get", "retailer_setting_save", "retailer_apply", "retailer_realname"}},
 			"id":        {Type: "integer", Desc: "会员/分组/分销商 ID（retailer_apply / retailer_realname 也用会员的 id）"},
@@ -538,7 +551,10 @@ var domainIntentCatalog = []*IntentSpec{
 	},
 	{
 		Name: "commerce_order", Title: "管理订单", Domain: DomainCommerce, Risk: RiskWrite,
-		Desc: "订单的查询与状态流转（发货/取消/完成/退款/支付）。action: list/detail/setting_get/setting_save/deliver/canceled/finished/refund/refund_apply/pay/export。",
+		// 2026-10-07：默认关闭。订单状态流转（发货/取消/退款/支付）直接动资金与履约，
+		// 且 refund/canceled 不可回滚——误操作的代价是真金白银，不是「改回来」能解决的。
+		Desc:       "订单的查询与状态流转（发货/取消/完成/退款/支付）。**默认关闭**，需 ExposedIntents 显式开启。action: list/detail/setting_get/setting_save/deliver/canceled/finished/refund/refund_apply/pay/export。",
+		DefaultOff: true,
 		Params: map[string]ParamSpec{
 			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{
 				"list", "detail", "setting_get", "setting_save", "deliver", "canceled", "finished",
@@ -845,16 +861,22 @@ var domainIntentCatalog = []*IntentSpec{
 			"cleanup": "POST /plugin/backup/cleanup",
 		}),
 	},
-	// 合并 siteops_cache + siteops_fulltext + siteops_replace 为单一 siteops_maintain 工具。
+	// 合并 siteops_cache + siteops_fulltext + siteops_replace 为单一 siteops_maintain 工具，
+	// 并于 2026-10-07 接收从 system_plugin 迁入的 robots（robots.txt 读写）。
 	{
-		Name: "siteops_maintain", Title: "缓存/全文/替换", Domain: DomainSiteOps, Risk: RiskWrite,
-		Desc: "站点运维维护类操作。action: cache_get/cache_save/cache_build/cache_build_status/cache_build_index/cache_build_archive/cache_build_category/cache_build_tag/cache_clean/cache_push/cache_push_status/cache_push_logs/cache_upload/fulltext_get/fulltext_save/fulltext_status/fulltext_rebuild/replace。",
+		Name: "siteops_maintain", Title: "缓存/全文/替换/robots", Domain: DomainSiteOps, Risk: RiskWrite,
+		Desc: "站点运维维护类操作。action: robots_get/robots_set(读写 robots.txt)/cache_get/cache_save/cache_build/cache_build_status/cache_build_index/cache_build_archive/cache_build_category/cache_build_tag/cache_clean/cache_push/cache_push_status/cache_push_logs/cache_upload/fulltext_get/fulltext_save/fulltext_status/fulltext_rebuild/replace。",
 		Params: map[string]ParamSpec{
 			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{
+				"robots_get", "robots_set",
 				"cache_get", "cache_save", "cache_build", "cache_build_status", "cache_build_index", "cache_build_archive", "cache_build_category", "cache_build_tag",
 				"cache_clean", "cache_push", "cache_push_status", "cache_push_logs", "cache_upload",
 				"fulltext_get", "fulltext_save", "fulltext_status", "fulltext_rebuild", "replace"}},
-			"values":    {Type: "object", Desc: "缓存配置/索引配置/替换规则（*_save/replace 时传入）"},
+			"values": {Type: "object", Desc: "缓存配置/索引配置/替换规则（*_save/replace 时传入）"},
+			// robots.txt 正文。端点是 POST /plugin/robots，请求结构体字段名为
+			// robots（request.PluginRobotsConfig.Robots），故必须 rename 到 robots，
+			// 否则端点 ReadJSON 收不到值——而这正是「看得见却调不动」。
+			"content":   {Type: "string", Desc: "robots.txt 内容（robots_set 用）"},
 			"file":      {Type: "string", Desc: "上传证书文件：data URI 或裸 base64（cache_upload）"},
 			"file_name": {Type: "string", Desc: "文件名（配合 file）"},
 			"page":      {Type: "integer", Desc: "页码，从 1 开始（列表类 action）", Default: 1},
@@ -863,6 +885,8 @@ var domainIntentCatalog = []*IntentSpec{
 		Required: []string{"action"},
 		Caps:     []string{"api_invoke"},
 		Compose: invokeRoutes("siteops_maintain", map[string]string{
+			"robots_get":           "GET /plugin/robots",
+			"robots_set":           "POST /plugin/robots",
 			"cache_get":            "GET /plugin/htmlcache/config",
 			"cache_save":           "POST /plugin/htmlcache/config",
 			"cache_build":          "POST /plugin/htmlcache/build",
@@ -881,7 +905,9 @@ var domainIntentCatalog = []*IntentSpec{
 			"fulltext_status":      "GET /plugin/fulltext/status",
 			"fulltext_rebuild":     "POST /plugin/fulltext/rebuild",
 			"replace":              "POST /plugin/replace/values",
-		}),
+			// content → robots：端点 POST /plugin/robots 的请求结构体字段名是
+			// robots（request.PluginRobotsConfig），不重命名则 ReadJSON 收不到值。
+		}, map[string]string{"content": "robots"}),
 	},
 	{
 		Name: "siteops_upgrade", Title: "版本检查与升级", Domain: DomainSiteOps, Risk: RiskSystem,
@@ -981,22 +1007,25 @@ var domainIntentCatalog = []*IntentSpec{
 // 既不允许"默认开着却没登记"，也不允许"登记了却忘了标 DefaultOff"，
 // 新增意图必须显式二选一，避免靠"记得加一行"来守住高危面。
 var gatedDomainIntents = map[string]string{
+	"contentops_material":  "素材池（待发布内容）的写入与删除，出错要等取稿时才发现内容缺失",
+	"contentops_translate": "批量改写多语言副本，译文未经审校，错误要切语言后用户看到才暴露",
+	"commerce":             "会员/分组/分销商写操作：账号与分销配置误改影响真实用户，交易域未随站点发行",
+	"commerce_order":       "订单状态流转（发货/取消/退款/支付）直接动资金与履约，退款/取消不可回滚",
 	"contentops_collector": "批量采集：按配置持续写库并改采集策略，误配会批量产出垃圾内容",
 	"contentops_import":    "批量导入 + 远程导入 Token 配置，一次失误影响整批文章",
 	"contentops_transfer":  "跨站点数据迁移（主机级），覆盖目标站数据不可回滚",
 	"contentops_imagedeco": "配图/水印：上传字体图片文件并批量改写附件",
 	"commerce_pay":         "收款账户与支付证书，涉及资金凭证",
-	"commerce_finance":     "财务流水与提现审批，直接涉及资金",
-	"channel_wechat":       "公众号菜单与消息回复会同步到微信侧，对外可见",
-	"channel_thirdparty":   "读写公众号/小程序/Google 授权配置（AppID、Secret）",
-	"channel_sendmail":     "SMTP 配置与测试发信，会真实投递邮件给收件人",
-	"channel_subscriber":   "订阅用户群发（send），对外触达真实邮箱",
-	"system_security":      "访问限制/封禁/Akismet 等风控配置，误设可把站点或管理员挡在门外",
-	"system_multilang":     "多语言子站的保存、删除与同步，影响其他站点",
-	"system_rewrite":       "伪静态规则决定全站 URL 结构，写错即全站 404",
-	"siteops_backup":       "数据库备份/导入/恢复/清理（主机级，破坏性）",
-	"siteops_upgrade":      "版本检查与升级（主机级，破坏性）",
-	"siteops_website":      "多站点增删（主机级）",
+	"commerce_finance":     "财务流水与提现审批，直接涉及资金", "channel_wechat": "公众号菜单与消息回复会同步到微信侧，对外可见",
+	"channel_thirdparty": "读写公众号/小程序/Google 授权配置（AppID、Secret）",
+	"channel_sendmail":   "SMTP 配置与测试发信，会真实投递邮件给收件人",
+	"channel_subscriber": "订阅用户群发（send），对外触达真实邮箱",
+	"system_security":    "访问限制/封禁/Akismet 等风控配置，误设可把站点或管理员挡在门外",
+	"system_multilang":   "多语言子站的保存、删除与同步，影响其他站点",
+	"system_rewrite":     "伪静态规则决定全站 URL 结构，写错即全站 404",
+	"siteops_backup":     "数据库备份/导入/恢复/清理（主机级，破坏性）",
+	"siteops_upgrade":    "版本检查与升级（主机级，破坏性）",
+	"siteops_website":    "多站点增删（主机级）",
 }
 
 // RecommendedExposed 返回推荐的起步暴露清单：站点日常运营用到的意图。
@@ -1020,11 +1049,17 @@ func RecommendedExposed() []string {
 		"seo_keyword", "seo_anchor", "seo", "seo_jsonld", "seo_llms", "traffic_statistics",
 		// 互动
 		"interaction",
-		// 内容生产（读多写少）
-		"contentops_material", "contentops_translate",
-		// 交易（会员与订单）
-		"commerce", "commerce_order",
-		// 站点配置与运维（保守：仅缓存/全文维护，不含备份/升级/迁移/多站点）
+		// 内容生产（读多写少）——2026-10-07 起 contentops_material 与
+		// contentops_translate 已 DefaultOff（见 gatedDomainIntents），
+		// 故不再列入本清单：清单里写 DefaultOff 的意图会让
+		// TestRecommendedExposedDoesNotNarrowDefaults 失败，且语义上自相矛盾
+		//（一份「推荐起步配置」不该包含需要显式开启才生效的意图）。
+		//
+		// 站点确实要管素材池或跑多语言翻译时，在 ExposedIntents 里显式加
+		// contentops_material / contentops_translate 即可。
+		//
+		// 交易（会员与订单）：2026-10-07 起 commerce / commerce_order 亦 DefaultOff。
+		// 站点配置与运维（保守：仅缓存/全文/robots 维护，不含备份/升级/迁移/多站点）
 		"system_config", "siteops_maintain",
 		// 只读查看
 		"account", "design_manage",

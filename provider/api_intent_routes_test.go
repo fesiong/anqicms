@@ -475,7 +475,17 @@ func TestDomainIntentDefaultExposure(t *testing.T) {
 		"siteops_upgrade":      "版本升级",
 		"siteops_website":      "多站点增删",
 		"api":                  "通用调用等价 shell",
-		"skill":                "涉及文件系统",
+		// 2026-10-07：system_plugin 转入（它只剩主机级/不可逆动作，robots 已迁往siteops_maintain）。
+		"system_plugin": "主机级不可逆动作：建缓存索引/重建全文索引/导出整站备份/迁移数据库",
+		// 2026-10-07：以下四个转入默认关闭——站点未发行交易域，且素材池/译文的
+		// 误操作要到「取稿时」「切语言后」才暴露，事后难追溯。
+		"contentops_material":  "素材池写入与删除，出错要等取稿时才发现",
+		"contentops_translate": "批量改写多语言副本，译文未经审校",
+		"commerce":             "会员/分组/分销商写操作影响真实用户",
+		"commerce_order":       "订单状态流转直接动资金，退款/取消不可回滚",
+		// 注：skill 曾以「涉及文件系统」列在此处，2026-10-07 移出并改为默认开放——
+		// 该理由不成立，它的 delete 已被审批门 + 端点字符白名单 + 只删 skills/<name> 覆盖。
+		// 改默认策略时必须同时改intent 包的 openNonDomainIntents 与这里。
 	}
 	byName := map[string]*intent.IntentSpec{}
 	for _, s := range intent.IntentCatalog {
@@ -493,12 +503,13 @@ func TestDomainIntentDefaultExposure(t *testing.T) {
 	}
 
 	// 日常运营意图不得被整体关回去：留空白名单时它们必须出现在模型面。
+	// 2026-10-07：contentops_material / contentops_translate / commerce / commerce_order
+	// 移入 mustStayGated；skill 原本就在 mustStayGated（理由不成立），现改列入本名单。
 	dailyOpen := []string{
 		"content_article", "content_manage", "content_place", "media", "structure",
 		"seo", "seo_keyword", "seo_anchor", "seo_jsonld", "seo_llms", "traffic_statistics",
-		"interaction", "contentops_material", "contentops_translate",
-		"commerce", "commerce_order", "system_config", "siteops_maintain",
-		"account", "design_manage", "agent", "web",
+		"interaction", "system_config", "siteops_maintain",
+		"account", "design_manage", "agent", "web", "skill",
 	}
 	for _, name := range dailyOpen {
 		s, ok := byName[name]

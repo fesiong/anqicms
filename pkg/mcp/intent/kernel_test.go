@@ -17,11 +17,60 @@ func TestRegisterAll(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create server: %v", err)
 	}
-	// 不应 panic，且应注册全部领域意图 + 2 个 meta 意图。
+	// 不应 panic，且应注册全部领域意图 + meta 意图。
 	// 注意 DefaultOff 意图不计入：它们默认不暴露，故需从 IntentCatalog 中扣除。
+	//
+	// 2026-10-07：meta 工具只有mcp_list_intents 默认注册（+1）——
+	// mcp_set_scope 受 Config.EnableSetScope 门控且默认关闭，
+	// 理由见 mcp.go 的 registerMeta（scope 是进程级全局，会影响所有客户端）。
+	metaCount := 1
+	if k.cfg.EnableSetScope {
+		metaCount = 2
+	}
 	k.RegisterAll(srv.GetServer())
-	if got := k.RegisteredCount(); got != countExposedByDefault()+2 {
-		t.Fatalf("expected %d registered, got %d", countExposedByDefault()+2, got)
+	if got := k.RegisteredCount(); got != countExposedByDefault()+metaCount {
+		t.Fatalf("expected %d registered, got %d", countExposedByDefault()+metaCount, got)
+	}
+}
+
+// TestSetScopeNotRegisteredByDefault 钉住「mcp_set_scope 默认不出现」这条修复期策略。
+//
+// 它必须被单独锁住：mcp_set_scope 的 SetScope 是**进程级全局**的，
+// 一个客户端设窄会让所有并发客户端的 tools/list 一起变窄且新会话恢复不了。
+// 改成会话级之前，这条工具不能回到默认暴露面。
+//
+// 同时验证 mcp_list_intents 仍在——它是只读发现，无副作用，
+// 客户端不知道有哪些能力时仍需要这条安全路径（见 mcp.go 的 registerListIntents）。
+func TestSetScopeNotRegisteredByDefault(t *testing.T) {
+	f := &fakeCap{}
+	k := NewKernel(Config{}, f.invoker(), nil)
+	srv, err := server.New(server.DefaultConfig())
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	k.RegisterAll(srv.GetServer())
+
+	if k.IsRegistered("mcp_set_scope") {
+		t.Error("mcp_set_scope 不应默认注册：它的 scope 是进程级全局的，" +
+			"一个客户端调用会影响所有并发客户端（修复前默认关闭）")
+	}
+	if !k.IsRegistered("mcp_list_intents") {
+		t.Error("mcp_list_intents 必须始终注册：只读发现无副作用，是客户端唯一安全的探测路径")
+	}
+}
+
+// TestSetScopeRegistersWhenEnabled 反向对照：开关打开时它必须真的能被注册，
+// 否则「默认关闭」会退化成「永久关闭」——即修复后没人能重新开启它。
+func TestSetScopeRegistersWhenEnabled(t *testing.T) {
+	f := &fakeCap{}
+	k := NewKernel(Config{EnableSetScope: true}, f.invoker(), nil)
+	srv, err := server.New(server.DefaultConfig())
+	if err != nil {
+		t.Fatalf("create server: %v", err)
+	}
+	k.RegisterAll(srv.GetServer())
+	if !k.IsRegistered("mcp_set_scope") {
+		t.Error("EnableSetScope=true 时 mcp_set_scope 应被注册，否则它将永久不可用")
 	}
 }
 

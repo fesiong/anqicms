@@ -22,7 +22,7 @@ var mergedIntentCatalog = []*IntentSpec{
 	// ───────────────────────── 内容域：文档 ─────────────────────────
 	{
 		Name: "content_article", Title: "文档全生命周期", Domain: DomainContent, Risk: RiskWrite,
-		Desc: "文档的列出/获取/保存(创建或更新)/发布下架/删除。action: list/get/save/publish/delete。save 时 id 为空则新建，否则按 id 更新（只覆盖传入字段，未传的正文/封面/模型/分类/标签/标记/相关文档自动沿用原值，不会被清空）。save 传 draft=false 即直接发布（无需再调 publish），返回 id、link 与 status；草稿的 link 末尾带 ?preview=true。publish/delete 对不存在的 id 会直接报错，不会假成功。delete 正式文档是移入回收站（回执 moved_to_trash=true，可恢复）而非物理删除，只有删草稿才是真删。list 的 order_by 只能填 archives 表的真实列名，非法值会报错而不会静默返回空列表。list 的 data 为 {list,total,page,page_size,count}，total 是命中总数，可据此翻页。",
+		Desc: "文档的列出/获取/保存(创建或更新)/发布下架/删除。action: list/get/save/publish/delete。save 时 id 为空则新建，否则按 id 更新（只覆盖传入字段，未传的正文/封面/模型/分类/标签/标记/相关文档自动沿用原值，不会被清空）。save 传 draft=false 即直接发布（无需再调 publish），返回 id、link 与 status，草稿的 link 末尾带 ?preview=true。publish/delete 对不存在的 id 会直接报错，不会假成功。delete 正式文档是移入回收站（回执 moved_to_trash=true，可恢复）而非物理删除，只有删草稿才是真删。list 的 data 为 {list,total,page,page_size,count}，total 是命中总数，可据此翻页。",
 		Params: map[string]ParamSpec{
 			"action":       {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "get", "save", "publish", "delete"}},
 			"page":         {Type: "integer", Desc: "页码，从 1 开始", Default: 1},
@@ -30,18 +30,18 @@ var mergedIntentCatalog = []*IntentSpec{
 			"category_id":  {Type: "integer", Desc: "分类 ID 过滤"},
 			"module_id":    {Type: "integer", Desc: "模型 ID 过滤"},
 			"parent_id":    {Type: "integer", Desc: "父级 ID 过滤"},
-			"flag":         {Type: "string", Desc: "文档标记，逗号分隔（h=头条，c=推荐，f=幻灯，a=特荐，s=滚动，b=加粗，p=图片，j=跳转）。list 时作为过滤条件；save 时写入该标记，更新时不传则沿用原标记"},
-			"relation_ids": {Type: "array", Items: "integer", Desc: "相关文档 ID 列表（save 写入）。更新时不传则沿用原有关联文档"},
+			"flag":         {Type: "string", Desc: "文档标记，逗号分隔（h=头条，c=推荐，f=幻灯，a=特荐，s=滚动，b=加粗，p=图片，j=跳转）。list 时作为过滤条件；save 时写入该标记"},
+			"relation_ids": {Type: "array", Items: "integer", Desc: "相关文档 ID 列表（save 写入）"},
 			"keyword":      {Type: "string", Desc: "标题/关键词模糊搜索"},
 			"status":       {Type: "string", Desc: "状态。list 时为过滤条件：ok=正式文档、draft=草稿、plan=待发布、delete=回收站（已删除可恢复）；publish 时为变更动作：ok=上架、draft=下架（意图层自动转成端点的 1/0）。传其它值会直接报错，不会静默返回错数据", Enum: []string{"ok", "draft", "plan", "delete"}},
-			"order_by":     {Type: "string", Desc: "排序字段，只能是 archives 表的列名。填不存在的列会直接报错，不会静默返回空列表", Enum: archiveOrderColumnList()},
-			"order_dir":    {Type: "string", Desc: "排序方向 asc/desc，非法值会报错", Enum: []string{"asc", "desc"}},
+			"order_by":     {Type: "string", Desc: "排序字段，推荐用 id/created_time/updated_time/views/sort。也可填 archives 表的其他真实列名（如 title、comment_count）；填不存在的列会直接报错，不会静默返回空列表", Enum: archiveOrderColumnList()},
+			"order_dir":    {Type: "string", Desc: "排序方向 asc/desc。非法值会报错", Enum: []string{"asc", "desc"}},
 			"id":           {Type: "integer", Desc: "文档 ID（get/save 更新/publish/delete 必填）"},
 			"title":        {Type: "string", Desc: "标题（save 必填）"},
-			"content":      {Type: "string", Desc: "正文（Markdown）。新建时必填；更新时不传则沿用原正文"},
-			"logo":         {Type: "string", Desc: "封面图 URL。更新时不传则沿用原封面"},
-			"draft":        {Type: "boolean", Desc: "true=草稿，false=发布。草稿返回的 link 会带 ?preview=true"},
-			"tags":         {Type: "array", Items: "string", Desc: "标签列表。更新时不传则沿用原标签，传空数组则清空"},
+			"content":      {Type: "string", Desc: "正文（Markdown）。新建时必填"},
+			"logo":         {Type: "string", Desc: "封面图 URL"},
+			"draft":        {Type: "boolean", Desc: "true=草稿，false=发布。草稿的 link 带 ?preview=true"},
+			"tags":         {Type: "array", Items: "string", Desc: "标签列表。不传则沿用原标签，传空数组则清空"},
 			"created_time": {Type: "integer", Desc: "创建时间 Unix 时间戳"},
 		},
 		Required: []string{"action"},
@@ -125,10 +125,20 @@ var mergedIntentCatalog = []*IntentSpec{
 			"redirect_update": "redirect_update", "redirect_delete": "redirect_delete",
 		}),
 	},
-	// ───────────────────────── 智能体域：技能（本地，DefaultOff）─────────────────────────
+	// ───────────────────────── 智能体域：技能（本地）─────────────────────────
+	//
+	// 2026-10-07：去掉 DefaultOff，默认开放。
+	// 判断依据是**误操作后果**而非「是否碰文件系统」——skill 的五个动作里
+	// 四个（list/get/reload/save）是日常写作链路的一部分，AI 看不见技能就
+	// 没法按站点约定的方式产出内容；真正不可逆的只有 delete，而它：
+	//   - 走审批门（Risk=write → NeedsApproval）；
+	//   - 端点侧有字符白名单挡路径穿越（controller/manageController/skill.go），
+	//     name 只接受不含路径分隔符的技能名；
+	//   - 只删 skills/<name> 目录，不碰站点其它路径。
+	// 也就是说 delete 的风险已被三道闸门覆盖，不构成「默认不该可见」的理由。
 	{
 		Name: "skill", Title: "管理本地技能", Domain: DomainAgent, Risk: RiskWrite,
-		Desc: "本地技能（SKILL）的列出/加载/重载/保存/删除。action: list/get/reload/save/delete。delete 不可恢复，且只接受不含路径分隔符的技能名。涉及文件系统，默认关闭，需 ExposedIntents 显式开启。",
+		Desc: "本地技能（SKILL）的列出/加载/重载/保存/删除。action: list/get/reload/save/delete。delete 不可恢复且需确认，只接受不含路径分隔符的技能名（不会波及技能目录以外的文件）。",
 		Params: map[string]ParamSpec{
 			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "get", "reload", "save", "delete"}},
 			// name 不写进 Required：list/reload 不需要它，而两条通道对
@@ -140,36 +150,35 @@ var mergedIntentCatalog = []*IntentSpec{
 			"category":    {Type: "string", Desc: "分类，如 SEO、写作、运维"},
 			// tags 必须是数组：端点 SkillEditRequest.Tags 是 []string，
 			// 传逗号分隔字符串会让 ReadJSON 直接失败（invalid request）。
-			"tags": {Type: "array", Items: "string", Desc: "标签数组，如 [\"seo\",\"analysis\"]（save 可选）"},
+			"tags":   {Type: "array", Items: "string", Desc: "标签数组，如 [\"seo\",\"analysis\"]（save 可选）"},
 			"author": {Type: "string", Desc: "作者（save 可选）"},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"skill_list", "skill_get", "skill_reload", "skill_save", "skill_delete"},
 		Compose:  switchCompose(map[string]string{"list": "skill_list", "get": "skill_get", "reload": "skill_reload", "save": "skill_save", "delete": "skill_delete"}),
-		DefaultOff: true,
 	},
 	// ───────────────────────── 智能体域：Agent 调度 ─────────────────────────
 	{
 		Name: "agent", Title: "管理 AI Agent", Domain: DomainAgent, Risk: RiskWrite,
 		Desc: "Agent 与子任务的增删查改/运行，及远程技能检索安装。action: manage_create/manage_list/manage_edit/manage_delete/manage_toggle/manage_run/manage_chat/skill_search/skill_install/task。manage_create 需配 cron 才会定时执行。",
 		Params: map[string]ParamSpec{
-			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"manage_create", "manage_list", "manage_edit", "manage_delete", "manage_toggle", "manage_run", "manage_chat", "skill_search", "skill_install", "task"}},
-			"id":     {Type: "integer", Desc: "Agent ID（除 create 外均必填）"},
-			"name":   {Type: "string", Desc: "Agent 名称，如 'GEO 热点关键词日报'（create 必填；edit 传了才改）"},
-			"title":  {Type: "string", Desc: "名称，manage_create 时等价于 name"},
-			"prompt": {Type: "string", Desc: "提示词/对话内容"},
-			"strategy": {Type: "string", Desc: "执行策略（create 必填；edit 传了才改）。描述每次执行要做什么：步骤、标准、输出要求。传了 strategy 则优先于 prompt"},
-			"cron":      {Type: "string", Desc: "Cron 表达式，如 '0 8 * * *' 每天8点。留空表示仅手动触发（create）；edit 传空字符串可清空"},
+			"action":     {Type: "string", Desc: "操作", Required: true, Enum: []string{"manage_create", "manage_list", "manage_edit", "manage_delete", "manage_toggle", "manage_run", "manage_chat", "skill_search", "skill_install", "task"}},
+			"id":         {Type: "integer", Desc: "Agent ID（除 create 外均必填）"},
+			"name":       {Type: "string", Desc: "Agent 名称，如 'GEO 热点关键词日报'（create 必填；edit 传了才改）"},
+			"title":      {Type: "string", Desc: "名称，manage_create 时等价于 name"},
+			"prompt":     {Type: "string", Desc: "提示词/对话内容"},
+			"strategy":   {Type: "string", Desc: "执行策略（create 必填；edit 传了才改）。描述每次执行要做什么：步骤、标准、输出要求。传了 strategy 则优先于 prompt"},
+			"cron":       {Type: "string", Desc: "Cron 表达式，如 '0 8 * * *' 每天8点。留空表示仅手动触发（create）；edit 传空字符串可清空"},
 			"max_runs":   {Type: "integer", Desc: "最大执行次数，0=不限（create/edit）"},
 			"max_rounds": {Type: "integer", Desc: "单次执行最大轮数，0=用默认20（create/edit）"},
 			"message":    {Type: "string", Desc: "发送给 Agent 的消息（manage_chat），等价于 prompt"},
 			"enabled":    {Type: "integer", Desc: "1=启用(定时执行) 0=暂停（manage_toggle），等价于 status"},
 			"status":     {Type: "integer", Desc: "状态 1/0（toggle），等价于 enabled"},
-			"query":  {Type: "string", Desc: "技能搜索关键词（skill_search）"},
-			"limit":  {Type: "integer", Desc: "搜索结果上限 1-50，默认 10（skill_search）"},
-			"slug":   {Type: "string", Desc: "SkillHub 技能 slug，如 find-skills（skill_install）"},
-			"force":  {Type: "boolean", Desc: "是否覆盖已安装同名技能（skill_install）"},
-			"tasks":  {Type: "array", Items: "object", Desc: "子任务列表（task）。每项字段：description(必填,3-5词标签)、prompt(必填,完整指令)、type(必填,explore只读/worker可写)、scope(可选,worker允许写的文件glob数组)"},
+			"query":      {Type: "string", Desc: "技能搜索关键词（skill_search）"},
+			"limit":      {Type: "integer", Desc: "搜索结果上限 1-50，默认 10（skill_search）"},
+			"slug":       {Type: "string", Desc: "SkillHub 技能 slug，如 find-skills（skill_install）"},
+			"force":      {Type: "boolean", Desc: "是否覆盖已安装同名技能（skill_install）"},
+			"tasks":      {Type: "array", Items: "object", Desc: "子任务列表（task）。每项字段：description(必填,3-5词标签)、prompt(必填,完整指令)、type(必填,explore只读/worker可写)、scope(可选,worker允许写的文件glob数组)"},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"agent_create", "agent_list", "agent_edit", "agent_delete", "agent_toggle", "agent_run", "agent_chat", "skill_search", "skill_install", "task"},
@@ -647,15 +656,61 @@ var archiveOrderColumns = map[string]bool{
 	"price": true, "read_level": true,
 }
 
-// archiveOrderColumnList 把白名单按字典序展开成 slice，供 ParamSpec.Enum 使用。
+// archiveOrderColumnList 返回 order_by 在 schema 里**推荐**的常用排序列，供 ParamSpec.Enum 使用。
 //
-// 必须**排序**：map 迭代顺序随机，直接转成 slice 会让 tools/list 的每次响应里
-// enum 顺序都不一样，依赖它的客户端（包括 provider 的穷举门禁测试
+// 与 archiveOrderColumns 白名单的关系是「推荐 ⊂ 允许」，不是相等：
+// enum 只给 AI 看，列出日常排序真正用得上的几列（按时间/热度/权重/主键）；
+// normalizeListOrder 仍按全量白名单校验，因此 enum 之外的真实列（如 title、
+// comment_count）照常可用，只是 schema 不再逐条铺开。
+//
+// 为什么 enum 只列推荐集而不是白名单全量（2026-10-05）：
+//
+// ⚠️ **省 token 是次要理由，不要拿它当主要论据**。实测 enum 从 14 列缩到
+// 5 列省约 28 token，但为了让 desc 说清「这是推荐而非仅限」（措辞由
+// 「只能是」改为「推荐用…也可填…」多 71 字符），净收益仅 **3 token**。
+// enum 值的 token 成本本就远低于直觉——它是纯 ASCII 列名，1 token 能装
+// 3~4 个字符，14 个列名加起来才百来字符。
+//
+// 真正的收益是**选择质量**：enum 是 AI 排列表时的候选集，铺开 14 列会让
+// 它在 user_id/stock/price/read_level 这些 0 值常量列之间反复权衡——
+// 按这些列排序出来的顺序对调用方是无意义噪声，而 module_id/category_id
+// 的正确用法是当过滤条件而非排序键。收窄后它面对的是 5 个真正可用的键。
+//
+// 注意「不推荐」不等于「禁用」：白名单里那 9 列（title、comment_count、
+// favorite_count、stock、user_id、module_id、category_id、price、
+// read_level）在 normalizeListOrder 里全部合法，填了照常工作。
+// TestListAcceptsRealOrderColumns 遍历白名单全量来钉住这一点——
+// 收窄 enum 最容易犯的错是顺手把校验也收窄成推荐集，那会让 9 个真实
+// 列凭空不可用且无任何报错。
+//
+// 必须**排序**：map 迭代顺序随机，直接展开会让每次 tools/list 响应里
+// enum 顺序都不一样，依赖它的客户端（含 provider 的穷举门禁
 // TestIntentParamsRecognizedByEndpoints）会拿到不稳定的值。
-//
-// 暴露成 enum 有双重收益：AI 能从 schema 直接看到可排序字段（不必靠报错信息
-// 里的清单反推），而带 enum 的参数在穷举门禁里走合法值分支，不会被白名单误伤。
 func archiveOrderColumnList() []string {
+	out := make([]string, 0, len(archiveOrderRecommended))
+	for c := range archiveOrderRecommended {
+		out = append(out, c)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// archiveOrderRecommended 是 order_by 愿意在 schema 里推荐给 AI 的排序列。
+//
+// 独立于 archiveOrderColumns 声明，是为了让「推荐什么」与「允许什么」
+// 分属两处、可以各自独立调整：收紧推荐不该顺手放松安全校验，
+// 放宽白名单也不该逼着 schema 铺开一堆用不上的列。
+var archiveOrderRecommended = map[string]bool{
+	"id": true, "created_time": true, "updated_time": true,
+	"views": true, "sort": true,
+}
+
+// archiveOrderColumnNames 返回白名单**全量**列名（字典序），用于报错文案。
+//
+// 报错必须列全量而非只列推荐值：AI 拿到"非法值"提示时需要知道
+// 到底哪些值能用，否则会误以为推荐值就是全部，撞了白名单里
+// 真实存在却不推荐的列（如 title）时无从修正。
+func archiveOrderColumnNames() []string {
 	out := make([]string, 0, len(archiveOrderColumns))
 	for c := range archiveOrderColumns {
 		out = append(out, c)
@@ -673,9 +728,12 @@ func normalizeListOrder(sub map[string]any) error {
 	if raw, ok := sub["order_by"]; ok && raw != nil {
 		key := strings.ToLower(strings.TrimSpace(fmt.Sprintf("%v", raw)))
 		if key != "" && !archiveOrderColumns[key] {
+			// 这里列**全量白名单**而不是 archiveOrderColumnList() 的推荐子集：
+			// 调用方撞墙时要看到全部合法值，否则会误以为推荐值即全部，
+			// 碰到真实存在却不推荐的列（如 title）时不知道该怎么改。
 			return fmt.Errorf(
 				"order_by 取值非法：%q。可用字段：%s（端点按 archives 表的列名排序，不存在的列会让查询报错并返回空列表）",
-				key, strings.Join(archiveOrderColumnList(), "、"))
+				key, strings.Join(archiveOrderColumnNames(), "、"))
 		}
 	}
 	if raw, ok := sub["order_dir"]; ok && raw != nil {
@@ -688,7 +746,6 @@ func normalizeListOrder(sub map[string]any) error {
 	}
 	return nil
 }
-
 
 // isTrashStatus 判断调用方是否在查/操作回收站态。
 // archive_drafts 的 status=99 表示已删除进回收站（provider.DeleteArchive）。
@@ -705,9 +762,6 @@ func isTrashStatus(v any) bool {
 	}
 	return false
 }
-
-
-
 
 // digList 从信封里取出文档数组，兼容 data/list/items 三种常见位置。
 func digList(v any) []any {
@@ -806,7 +860,7 @@ func agentCompose() Compose {
 	routes := map[string]string{
 		"manage_create": "agent_create", "manage_list": "agent_list", "manage_edit": "agent_edit",
 		"manage_delete": "agent_delete", "manage_toggle": "agent_toggle", "manage_run": "agent_run",
-		"manage_chat": "agent_chat",
+		"manage_chat":  "agent_chat",
 		"skill_search": "skill_search", "skill_install": "skill_install",
 		"task": "task",
 	}

@@ -62,15 +62,25 @@ var IntentCatalog = []*IntentSpec{
 	// ───────────────────────── 系统域（插件/维护，未合并）─────────────────────────
 	{
 		Name: "system_plugin", Title: "管理插件与维护", Domain: DomainSystem, Risk: RiskSystem,
-		Desc: "插件相关操作。action: robots_get/robots_set/htmlcache_build/fulltext_rebuild/backup_dump/migrate_db（其余缓存/全文/重定向等已并入 siteops_maintain / system_config）。",
+		// 2026-10-07：robots_get/robots_set 已迁到 siteops_maintain。迁移动机是**域归属**：
+		//   robots 端点在 domain.go 里 ns=plugin/robots 归 DomainSeo，
+		//   放在 system 域与域映射自相矛盾（工具 desc 声明的域与端点实际所属域不一致）。
+		//   迁到 siteops_maintain 后统一走 invokeRoutes 直落端点，
+		//   不再依赖 capEndpoints 里的 plugin_robots_* 回落（那两条记录保留，
+		//   cap 表是端点真相源，其他调用路径仍可能命中）。
+		// 剩下的四个动作全是主机级/全局动作，误操作后果都超出「改回来」范围：
+		//   - htmlcache_build / fulltext_rebuild：触发全站重活；
+		//   - backup_dump：导出整站数据；
+		//   - migrate_db：改表结构，不可回滚。
+		// 故整条意图默认关闭，需 ExposedIntents 显式开启。
+		Desc:       "插件级主机维护。（已放开），需 ExposedIntents 显式开启。action: htmlcache_build/fulltext_rebuild/backup_dump/migrate_db。",
+		DefaultOff: true,
 		Params: map[string]ParamSpec{
-			"action":  {Type: "string", Desc: "操作", Required: true, Enum: []string{"robots_get", "robots_set", "htmlcache_build", "fulltext_rebuild", "backup_dump", "migrate_db"}},
-			"content": {Type: "string", Desc: "robots.txt 内容（robots_set 用）"},
+			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"htmlcache_build", "fulltext_rebuild", "backup_dump", "migrate_db"}},
 		},
 		Required: []string{"action"},
-		Caps:     []string{"plugin_robots_get", "plugin_robots_set", "plugin_htmlcache_build", "plugin_fulltext_rebuild", "plugin_backup_dump", "setting_migrate_db"},
+		Caps:     []string{"plugin_htmlcache_build", "plugin_fulltext_rebuild", "plugin_backup_dump", "setting_migrate_db"},
 		Compose: switchCompose(map[string]string{
-			"robots_get": "plugin_robots_get", "robots_set": "plugin_robots_set",
 			"htmlcache_build": "plugin_htmlcache_build", "fulltext_rebuild": "plugin_fulltext_rebuild",
 			"backup_dump": "plugin_backup_dump", "migrate_db": "setting_migrate_db",
 		}),
@@ -277,12 +287,6 @@ func switchCompose(routes map[string]string) Compose {
 // 查旧值失败时原样返回：让端点照旧报错，不在这里猜值——凭空填一个
 // module_id 反而可能把数据写坏到别处。
 
-
-
-
-
-
-
 // isListAction 判断 action 是否为列表类动作（需要连分页信息一起回填）。
 //
 // 命名以 List 结尾，或属于 attachment/media 这类固定叫 list 的动作。
@@ -431,7 +435,6 @@ func jsonID(j map[string]any) int64 {
 	return 0
 }
 
-
 func parseArticle(text string) map[string]any {
 	var j map[string]any
 	if err := json.Unmarshal([]byte(text), &j); err != nil {
@@ -537,10 +540,10 @@ func endpointFailure(text string) string {
 // 标成失败会让 AI 反复重搜同一个不存在的关键词。只有 fs_replace 的
 // 「未找到匹配的文件」才是真失败（要改的东西一个都没改）。故精确到「的文件」。
 var textFailureMarkers = []string{
-	"错误：",           // 参数非法、路径穿越、文件不存在、超过大小限制
-	"未找到匹配的文件",     // fs_replace 无命中：一个文件都没改
-	"精确匹配失败",       // fs_edit 文本模式没匹配上
-	"⚠ 警告：",        // fs_write 覆盖风险，等待 confirm 二次确认
+	"错误：",      // 参数非法、路径穿越、文件不存在、超过大小限制
+	"未找到匹配的文件", // fs_replace 无命中：一个文件都没改
+	"精确匹配失败",   // fs_edit 文本模式没匹配上
+	"⚠ 警告：",    // fs_write 覆盖风险，等待 confirm 二次确认
 }
 
 // textFailure 判定纯文本通道的失败，返回可读原因；不是失败则返回 ""。

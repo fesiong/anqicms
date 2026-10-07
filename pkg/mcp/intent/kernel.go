@@ -22,6 +22,18 @@ type Config struct {
 	ExposedTools []string
 	// ToolListMode "summary" 时 tools/list 仅返回轻量 schema（描述含域/风险），降低 token 消耗。
 	ToolListMode string
+	// EnableSetScope 是否注册 mcp_set_scope（两阶段能力域裁剪）。**默认 false。**
+	//
+	// 2026-10-07：默认关闭，因为 SetScope 是**进程级全局**的——
+	// 它重注册的是共享 mcp.Server 的全局工具表，一个客户端调用会让所有并发
+	// 客户端的 tools/list 一起收窄，且新会话恢复不了（须重启服务）。
+	// 在改成会话级（scope 挂 session、每轮按 session 重算工具面）之前，
+	// 不把它放在默认暴露面上。详见 mcp.go 的 registerMeta 注释。
+	//
+	// 这与 DefaultOff 是两套机制：DefaultOff 管 IntentCatalog 里的意图，
+	// 本字段管 meta 工具，且不接受 ExposedIntents/ExposedTools 驱动——
+	// 后两者都是意图名/能力名粒度，无法表达「这条元工具要不要开」的语义。
+	EnableSetScope bool
 }
 
 // Kernel 是"意图层"内核：负责意图的注册状态、调用路由、两阶段 scope 与执行。
