@@ -76,13 +76,19 @@ Password: `123456`
 
 ### Content Management & Security
 - **Custom Content Models**: Define specific content models for flexible content structures
-- **Content Security Settings**: Sensitive word filtering and content review to ensure compliance
+- **Content Security Settings**: Sensitive word filtering and keyword replacement, plus content review to ensure compliance
 - **Anti-Crawling Disruption Code**: Generates disruption codes to protect content from bulk scraping
 - **Document Recycle Bin**: Recover deleted documents to prevent accidental data loss
-- **Backup and Recovery**: Supports data backup and recovery to ensure data security
+- **Backup and Recovery**: Supports data (including static files) backup and recovery to ensure data security
+- **reCAPTCHA**: Integrates reCAPTCHA into forms to strengthen bot protection
 
 ### AI & Automation
+- **AI Chat & Agent**: Built-in AI Chat assistant with a set of AI tools spanning content, SEO, operations, and commerce domains, orchestratable by an AI Agent
+- **MCP Server**: Built-in MCP (Model Context Protocol) server; the tool surface is unified and consolidated on an "intent catalog", with Bearer Token authentication and round-level operation approval (write operations confirmed in a batch), ready to be consumed by external AI clients such as Claude and Cursor
+- **AI Skill System (Skills)**: Built-in, extensible AI skills covering content planning, SEO analysis, batch operations, site health checks, troubleshooting, template development, and API development
+- **AI Visual Template Editing**: Modify template code directly with AI assistance
 - **AI Writing**: AI-powered content creation assistance (since April 2023)
+- **AI Auto-Tagging / AI Drawing / AI TDK**: Automatically generate tags, images, and title/keywords/description when creating articles
 - **LLMs.txt Support**: Automatically generates site LLMs.txt file for large language models to understand and index website content
 - **Structured Data**: Supports JSON-LD and other structured data output to enhance search engine understanding of page content
 - **Batch Document Import**: Supports batch importing documents via ZIP archives and Excel spreadsheets, suitable for large-scale content migration
@@ -103,6 +109,7 @@ Password: `123456`
 - **Single Page Management**: Tools for privacy policies, "About Us" pages, etc.
 - **Site-Wide Replacement Tool**: Batch replace keywords or links
 - **Email Notifications**: Send email alerts triggered by events such as registration or comments
+- **Email Subscription & Campaigns**: Supports site email subscription, subscriber management, and bulk campaigns with progress reporting
 - **Watermark Management**: Add watermarks to images to protect copyrights
 - **Static Page Caching**: Improve page load speed and reduce server load
 - **Traffic and Spider Statistics**: Track website visits and search engine crawler activities
@@ -113,6 +120,8 @@ AnQiCMS originated from the GoBlog project in 2019. After multiple refactoring a
 
 - **Latest**
   > Continuous iteration and optimization, with AI deeply integrated into content creation and site management, supporting AI Agent, MCP protocol, and multilingual global operations
+- **October 7, 2026, v3.6.5 Released**
+  > MCP tool layer rebuilt on an "intent catalog" with a consolidated tool surface and round-level operation approval; added email subscription & campaigns and an enriched AI skill system; fixed several security issues including database password / SMTP authorization code leakage
 - **June 16, 2026, v3.6.0 Released**
   > Major AI leap: AI Chat with 80+ built-in AI tools, MCP protocol support, AI Skill system, and city sub-site features
 - **January 5, 2026, v3.5.5 Released**
