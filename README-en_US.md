@@ -120,6 +120,8 @@ AnQiCMS originated from the GoBlog project in 2019. After multiple refactoring a
 
 - **Latest**
   > Continuous iteration and optimization, with AI deeply integrated into content creation and site management, supporting AI Agent, MCP protocol, and multilingual global operations
+- **October 8, 2026, v3.6.6 Released**
+  > Security fixes: SQL injection through the list ordering parameter, and sub-site jump login that treated the stored password hash as the shared secret (now a server-issued, short-lived single-use ticket); when a security gate blocks a call, the caller now gets the reason and what to do next
 - **October 7, 2026, v3.6.5 Released**
   > MCP tool layer rebuilt on an "intent catalog" with a consolidated tool surface and round-level operation approval; added email subscription & campaigns and an enriched AI skill system; fixed several security issues including database password / SMTP authorization code leakage
 - **June 16, 2026, v3.6.0 Released**
