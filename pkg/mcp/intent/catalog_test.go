@@ -99,7 +99,7 @@ func TestContentSaveArticleCreate(t *testing.T) {
 	if data["id"] != int64(42) {
 		t.Fatalf("expected id 42, got %v", data["id"])
 	}
-	// 新建回执应回填标题/链接/状态，与 ArticleOut 对齐（此前因 extractID 只认大写
+	// 新建回执应回填标题/链接/状态（此前因 extractID 只认大写
 	// "ID:" 而对 JSON 包络失效，新建 id 恒为 0）。
 	if data["title"] != "测试文章" {
 		t.Fatalf("expected title 测试文章, got %v", data["title"])

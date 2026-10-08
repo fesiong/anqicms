@@ -148,10 +148,16 @@ func (k *Kernel) makeHandler(name string, spec *IntentSpec, server *mcp.Server) 
 			k.audit(ctx, name, string(spec.Risk), argsJSON, cerr, start)
 		}
 		if cerr != nil {
+			// 必须以 tool-level 错误返回，**不能**把 Go error 透传给 SDK：
+			// server.callTool 拿到非 nil error 会直接升级成 JSON-RPC 协议错误，
+			// 整个 CallToolResult（含下面这句中文拒绝理由）被丢弃，
+			// 宿主只能显示 "MCP error -32603: MCP tool invocation did not complete"。
+			// 实测（2026-10-08）：mode 未开放 / 参数不合法 的门禁理由因此在协议层消失，
+			// 模型拿不到可执行的下一步，只会反复重试同一个调用。
 			return &mcp.CallToolResult{
 				Content: []mcp.Content{&mcp.TextContent{Text: cerr.Error()}},
 				IsError: true,
-			}, cerr
+			}, nil
 		}
 		out := &mcp.CallToolResult{}
 		if res.Data != nil {

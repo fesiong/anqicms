@@ -1,12 +1,9 @@
 package manageController
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"net/url"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -553,11 +550,23 @@ func LoginSubWebsite(ctx iris.Context) {
 		})
 		return
 	}
-	// 构造登录链接
-	nonce := strconv.FormatInt(time.Now().UnixMicro(), 10)
-	signHash := sha256.New()
-	signHash.Write([]byte(admin.Password + nonce))
-	sign := signHash.Sum(nil)
+	if admin.Status != 1 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("InsufficientPermissions"),
+		})
+		return
+	}
+	// 构造登录链接：票据用目标站点的密钥签发，短时有效且只能用一次
+	nonce := provider.MintAdminSSONonce(provider.AdminSSOTTL)
+	if nonce == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("LoginFailed"),
+		})
+		return
+	}
+	sign := provider.SignAdminSSO(subSite.TokenSecret, admin.UserName, nonce)
 
 	loginUrl := subSite.System.BaseUrl
 	if subSite.System.AdminUrl != "" {
@@ -571,7 +580,8 @@ func LoginSubWebsite(ctx iris.Context) {
 			loginUrl = parsed.String()
 		}
 	}
-	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s", loginUrl, subSite.Id, admin.UserName, hex.EncodeToString(sign), nonce)
+	link := fmt.Sprintf("%s/system/login?admin-login=true&site_id=%d&user_name=%s&sign=%s&nonce=%s",
+		loginUrl, subSite.Id, url.QueryEscape(admin.UserName), sign, url.QueryEscape(nonce))
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
