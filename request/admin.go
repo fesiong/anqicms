@@ -23,11 +23,12 @@ type AdminInfoRequest struct {
 	OldPassword string `json:"old_password"`
 	// RePassword 修改密码时的确认密码。
 	RePassword  string `json:"re_password"`
-	// 登录支持后台快速登录参数
+	// 站点切换登录参数，二者必须成对出现，且都只能来自服务端签发的跳转链接
+	// Sign 跳转登录票据签名，由目标站点密钥对 Nonce 计算。
 	Sign   string `json:"sign"`
 	// SiteId 多站点时指定的站点 ID。
 	SiteId uint   `json:"site_id"`
-	// Nonce 防重放随机串（登录安全校验参数）。
+	// Nonce 服务端签发的短期有效随机串，使用一次即失效。
 	Nonce  string `json:"nonce"`
 }
 

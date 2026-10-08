@@ -638,7 +638,7 @@ func isNotFoundResponse(out string) bool {
 // 端点把 order_by 重命名为 sort（capEndpoints["archive_list"].Rename），
 // controller/manageController/archive.go:46-57 读 sort 后拼成
 // `archives.<sort> <order>` 交给 provider.ParseOrderBy。
-// ParseOrderBy 只做**词法**安全校验（fieldNameRegex 匹配即放行），
+// ParseOrderBy 只做**词法**安全校验（orderColumnRegex 匹配即放行），
 // 不校验列是否真实存在——列不存在时它照样返回 "archives.xxx desc"，
 // MySQL 报 Unknown column，而控制器 Find 的 error 被丢弃，
 // 于是 list 回 ok=true + 空列表 + total=1856。

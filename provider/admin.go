@@ -1,8 +1,13 @@
 package provider
 
 import (
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -255,4 +260,85 @@ func (w *Website) AddAdminLog(ctx iris.Context, logData string) {
 	}
 
 	w.DB.Create(&adminLog)
+}
+
+// 后台免密跳转登录的票据。
+//
+// 旧实现把 admins.password 里的 bcrypt 哈希当共享密钥（sign = sha256(hash + nonce)），
+// nonce 由调用方随意填写、永不过期。于是哈希一旦从任何途径泄露——例如排序参数被逐字符
+// 拖出来——攻击者就得到永久免密登录，并且这条路径不经过验证码、错误锁定和 status 检查。
+// 现在密钥是站点自己的 TokenSecret，票据短时效、一次性，且不可延长有效期。
+const (
+	AdminSSOTTL = 2 * time.Minute
+
+	adminSSOPrefix  = "admin-sso"
+	adminSSOSkew    = time.Minute
+	adminSSOUsePref = "admin-sso-used-"
+)
+
+var (
+	ErrAdminSSOExpired = errors.New("admin sso ticket expired")
+	ErrAdminSSOInvalid = errors.New("admin sso ticket invalid")
+	ErrAdminSSOUsed    = errors.New("admin sso ticket already used")
+)
+
+// MintAdminSSONonce 生成 "<过期时间戳>:<随机串>"，有效期由服务端决定。
+func MintAdminSSONonce(ttl time.Duration) string {
+	buf := make([]byte, 16)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return fmt.Sprintf("%d:%s", time.Now().Add(ttl).Unix(), hex.EncodeToString(buf))
+}
+
+// SignAdminSSO 用目标站点的 TokenSecret 对票据签名。
+func SignAdminSSO(tokenSecret, userName, nonce string) string {
+	mac := hmac.New(sha256.New, []byte(tokenSecret))
+	mac.Write([]byte(strings.Join([]string{adminSSOPrefix, userName, nonce}, "|")))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
+// VerifyAdminSSO 校验票据：签名必须来自本站 TokenSecret，nonce 未过期、未被拉长过
+// 有效期，且在本进程内只用过一次。
+func (w *Website) VerifyAdminSSO(userName, nonce, sign string) error {
+	colon := strings.IndexByte(nonce, ':')
+	if colon <= 0 || w.TokenSecret == "" {
+		return ErrAdminSSOInvalid
+	}
+	expireAt, err := strconv.ParseInt(nonce[:colon], 10, 64)
+	if err != nil {
+		return ErrAdminSSOInvalid
+	}
+
+	now := time.Now()
+	expire := time.Unix(expireAt, 0)
+	if !expire.After(now) {
+		return ErrAdminSSOExpired
+	}
+	// 只承认「刚签发」的票据，拿到密钥也不能签出长期有效的登录凭据
+	if expire.After(now.Add(AdminSSOTTL + adminSSOSkew)) {
+		return ErrAdminSSOInvalid
+	}
+
+	expected := SignAdminSSO(w.TokenSecret, userName, nonce)
+	if !hmac.Equal([]byte(expected), []byte(sign)) {
+		return ErrAdminSSOInvalid
+	}
+
+	// 用后即焚。Cache 没有原子写入，这里的重复提交窗口只有毫秒级，
+	// 而提交者本来就必须持有本站密钥，因此只作为纵深防御。
+	// key 取 nonce 的摘要：file 缓存会把 key 当文件名。
+	marker := sha256.Sum256([]byte(nonce))
+	usedKey := adminSSOUsePref + hex.EncodeToString(marker[:])
+	var used string
+	if w.Cache.Get(usedKey, &used) == nil {
+		return ErrAdminSSOUsed
+	}
+	ttl := int64(time.Until(expire).Seconds())
+	if ttl < 5 {
+		ttl = 5
+	}
+	_ = w.Cache.Set(usedKey, "1", ttl)
+
+	return nil
 }

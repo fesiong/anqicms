@@ -1,8 +1,6 @@
 package manageController
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"net"
 	"net/url"
 	"os"
@@ -36,35 +34,71 @@ func AdminLogin(ctx iris.Context) {
 	req.UserName = strings.TrimSpace(req.UserName)
 	req.Password = strings.TrimSpace(req.Password)
 
-	// 如果使用了后台登录，则在这里进行判断
+	// 站点切换登录：校验服务端签发的一次性票据，通过后直接建立会话。
 	if req.Sign != "" && req.Nonce != "" {
 		if req.SiteId > 0 {
 			ctx.Values().Set("siteId", req.SiteId)
 			currentSite = provider.CurrentSite(ctx)
 		}
+
+		// 与账号密码登录共用同一套 IP 锁定计数
+		keyPrefix := "forbidden-admin-"
+		storeKey := keyPrefix + ctx.RemoteAddr()
+		var loginError response.LoginError
+		if err := currentSite.Cache.Get(storeKey, &loginError); err == nil && loginError.Times >= 5 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("AdministratorHasBeenTemporarilyLocked"),
+			})
+			return
+		}
+
+		// 先验票、再查账号，失败提示统一，不区分「账号不存在」和「票据不对」
+		ticketErr := currentSite.VerifyAdminSSO(req.UserName, req.Nonce, req.Sign)
+		if ticketErr != nil {
+			var ipLoginError response.LoginError
+			if err := currentSite.Cache.Get(storeKey, &ipLoginError); err == nil {
+				ipLoginError.Times++
+			} else {
+				ipLoginError.Times = 1
+			}
+			ipLoginError.LastTime = time.Now().Unix()
+			_ = currentSite.Cache.Set(storeKey, ipLoginError, 600)
+
+			currentSite.DB.Create(&model.AdminLoginLog{
+				Ip:       ctx.RemoteAddr(),
+				Status:   0,
+				UserName: req.UserName,
+			})
+
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("LoginFailed"),
+			})
+			return
+		}
+
 		admin, err := currentSite.GetAdminByUserName(req.UserName)
 		if err != nil {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("UserDoesNotExist"),
+				"msg":  ctx.Tr("LoginFailed"),
 			})
 			return
 		}
-		// 验证是否正确
-		signHash := sha256.New()
-		signHash.Write([]byte(admin.Password + req.Nonce))
-		sign := signHash.Sum(nil)
-
-		if hex.EncodeToString(sign) != req.Sign {
+		if admin.Status != 1 {
 			ctx.JSON(iris.Map{
 				"code": config.StatusFailed,
-				"msg":  ctx.Tr("VerificationCodeIsIncorrect"),
+				"msg":  ctx.Tr("AdministratorHasBeenTemporarilyLocked"),
 			})
 			return
 		}
+
 		// 验证通过，直接完成登录
+		currentSite.Cache.Delete(storeKey)
 		admin.Token = currentSite.GetAdminAuthToken(admin.Id, req.Remember)
 		admin.IsSuper = currentSite.Id == 1 && admin.GroupId == 1
+		currentSite.DB.Model(admin).UpdateColumn("login_time", time.Now().Unix())
 
 		// 记录日志
 		adminLog := model.AdminLoginLog{
