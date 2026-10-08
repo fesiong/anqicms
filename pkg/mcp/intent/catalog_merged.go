@@ -47,7 +47,6 @@ var mergedIntentCatalog = []*IntentSpec{
 		Required: []string{"action"},
 		Caps:     []string{"archive_list", "archive_get", "archive_create", "archive_update", "archive_publish", "archive_delete"},
 		Compose:  contentArticleCompose,
-		Output:   ArticleOut{},
 	},
 	// ───────────────────────── 内容域：分类/标签/单页/模型 ─────────────────────────
 	{
@@ -394,7 +393,7 @@ func contentArticleCompose(ctx context.Context, args map[string]any, cap CapInvo
 		if msg := endpointFailure(out); msg != "" {
 			return nil, fmt.Errorf("保存失败：%s（未做任何修改）", msg)
 		}
-		// 解析端点返回的文档对象，回填结构化回执（与 ArticleOut 对齐）。
+		// 解析端点返回的文档对象，回填结构化回执（id/title/link/url/status）。
 		// api_invoke 的 out 形如 {"ok":..,"data":<控制器响应>}，控制器再包一层
 		// {"code","msg","data":<文档>}，故文档在 data.data 里；extractID 同样优先取该路径。
 		art := parseArticle(out)

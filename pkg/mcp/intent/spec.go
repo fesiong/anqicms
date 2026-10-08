@@ -101,6 +101,13 @@ type IntentSpec struct {
 	// Data 字段，该 Data 才会作为 MCP StructuredContent 交付给模型；Delegate / switchCompose
 	// 等透传类 Compose 不 return Data，OutputSchema 因此只是"装饰"，不会被填进 StructuredContent。
 	// 需要真实结构化结果的意图（如 content_save_article）必须在 Compose 里 return &Result{Data: ...}。
+	//
+	// 声明前必须核对真实的 structuredContent：严格客户端（2026-10-08 实测 Qoder）会拿
+	// outputSchema 校验 structuredContent，一旦字段类型对不上就整体丢弃结果，
+	// 调用方只看到 "MCP tool invocation did not complete"，服务端审计却记 ok=1。
+	// structuredContent 顶层始终是端点信封 {code:int,data,ok:bool,status:int}，
+	// 业务载荷在 data 里——因此多 action 意图（同一工具的 list/get/save 形状不同）
+	// 无法用单一静态 schema 描述，不要给它声明 Output。
 	Output any
 
 	// DefaultOff 表示该意图默认不出现在任何工具清单里，只有被 ExposedIntents 显式命中才开放。

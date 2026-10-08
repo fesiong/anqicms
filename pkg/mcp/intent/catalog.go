@@ -210,14 +210,6 @@ var IntentCatalog = []*IntentSpec{
 	},
 }
 
-// ArticleOut 是内容类工作流的结构化输出样例（用于推导 OutputSchema）。
-type ArticleOut struct {
-	Id     int64  `json:"id"`
-	Title  string `json:"title,omitempty"`
-	Url    string `json:"url,omitempty"`
-	Status string `json:"status,omitempty"`
-}
-
 // switchCompose 构造一个"按 action 字段路由到不同底层能力"的组合工具。
 func switchCompose(routes map[string]string) Compose {
 	return func(ctx context.Context, args map[string]any, cap CapInvoker) (*Result, error) {

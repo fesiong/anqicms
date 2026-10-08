@@ -85,7 +85,10 @@ func TestHandlerWiringMarksGoErrorAsIsError(t *testing.T) {
 	req := &mcp.CallToolRequest{
 		Params: &mcp.CallToolParamsRaw{Name: "wire_probe_err", Arguments: json.RawMessage(`{"action":"x"}`)},
 	}
-	res, _ := k.makeHandler("wire_probe_err", spec, mcp.NewServer(&mcp.Implementation{Name: "t", Version: "v"}, nil))(context.Background(), req)
+	res, err := k.makeHandler("wire_probe_err", spec, mcp.NewServer(&mcp.Implementation{Name: "t", Version: "v"}, nil))(context.Background(), req)
+	if err != nil {
+		t.Fatalf("Compose 的 Go error 不能透传出 handler（会被升级成 JSON-RPC 协议错误，理由随之消失）：%v", err)
+	}
 	if !res.IsError {
 		t.Errorf("Compose 返回 Go error 时 isError 应为 true，实际=%+v", res)
 	}
