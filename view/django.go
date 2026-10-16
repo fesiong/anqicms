@@ -6,6 +6,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/fs"
+	"log"
 	"net/url"
 	"os"
 	stdPath "path"
@@ -269,12 +270,18 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 	var err error
 	// 检查模板是否有多语言
 	var mapLocales = map[string]struct{}{}
+	var firstErr error
 	sfs := getFS(site.GetTemplateDir())
 	rootDirName := getRootDirName(sfs)
 	var tplFiles = make(map[string]int64, 100)
 	err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			log.Println("walk template dir error:", path, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			// 单个文件读取失败不中断整体加载，避免后续模板全部失效
+			return nil
 		}
 
 		if info == nil || info.IsDir() {
@@ -301,11 +308,24 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 
 		contents, err := asset(sfs, path)
 		if err != nil {
-			return err
+			log.Println("read template file error:", path, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			// 单个文件读取失败不中断整体加载
+			return nil
 		}
 		tplFiles[path] = info.Size()
 		err = s.ParseTemplate(site, path, contents)
-		return err
+		if err != nil {
+			// 模板语法错误不中断整体加载：错误详情已由 ParseTemplate
+			// 缓存为伪模板，页面访问该模板时会显示具体错误而不是 404
+			if firstErr == nil {
+				firstErr = err
+			}
+			return nil
+		}
+		return nil
 	})
 	site.SetTemplates(tplFiles)
 	if len(mapLocales) > 0 {
@@ -319,7 +339,7 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 			site.TplI18n = tplI18n
 		}
 	}
-	return nil
+	return firstErr
 }
 
 // ParseTemplate adds a custom template from text.
@@ -329,9 +349,37 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 	defer s.rmu.Unlock()
 
 	name = strings.TrimPrefix(name, "/")
+	if s.templateCache[site.Id] == nil {
+		s.templateCache[site.Id] = make(map[string]*pongo2.Template)
+	}
 	_, err := s.Set[site.Id].FromBytes(contents)
+	if err != nil {
+		// 模板解析失败：缓存一个展示错误信息的伪模板，
+		// 页面访问该模板时直接显示具体错误，而不是 404 无提示。
+		log.Println("parse template error:", name, err)
+		s.templateCache[site.Id][name] = s.errorTemplate(site.Id, name, err)
+		return err
+	}
+	// 解析成功，清掉旧的错误展示模板，让修复后的模板立即恢复正常渲染
+	delete(s.templateCache[site.Id], name)
+	return nil
+}
 
-	return err
+// errorTemplate 把模板编译错误包装成一个展示错误信息的伪模板。
+// 错误文本会被转义，避免其中包含 {% {{ 等 pongo2 语法符导致伪模板自身解析失败。
+func (s *DjangoEngine) errorTemplate(siteId uint, name string, err error) *pongo2.Template {
+	msg := err.Error()
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"{", "&#123;",
+	)
+	tpl, tplErr := s.Set[siteId].FromBytes([]byte(replacer.Replace(msg) + "<br/> on file " + name))
+	if tplErr != nil {
+		return nil
+	}
+	return tpl
 }
 
 func (s *DjangoEngine) initSet(site *provider.Website) { // protected by the caller.
@@ -370,12 +418,21 @@ func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Templ
 		// reload the template from disk
 		res, err := s.Set[siteId].FromFile(relativeName)
 		if err != nil {
-			return nil
+			// 编译失败（通常是模板语法错误），返回错误展示模板，
+			// 让页面显示具体错误，而不是 404 无提示。
+			return s.errorTemplate(siteId, relativeName, err)
 		}
 		return res
 	}
 
 	if tmpl, err := s.Set[siteId].FromCache(relativeName); err == nil {
+		return tmpl
+	}
+	// 编译失败：回退到预解析（ParseTemplate）时缓存的错误展示模板
+	s.rmu.RLock()
+	tmpl, ok := s.templateCache[siteId][relativeName]
+	s.rmu.RUnlock()
+	if ok {
 		return tmpl
 	}
 	return nil
