@@ -177,6 +177,8 @@ func UseDesignInfo(ctx iris.Context) {
 	currentSite.AddAdminLog(ctx, ctx.Tr("EnableNewTemplateLog", req.Package))
 	// 重载模板
 	config.RestartChan <- config.RestartConfig{Code: 0, SiteId: currentSite.Id}
+	// 切换模板后清理 HTML 缓存，避免页面命中旧模板生成的缓存（与文件保存行为保持一致）
+	currentSite.RemoveHtmlCache()
 	time.Sleep(1 * time.Second)
 
 	ctx.JSON(iris.Map{

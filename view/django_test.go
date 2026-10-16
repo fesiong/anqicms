@@ -110,6 +110,49 @@ func TestReloadModeShowsParseError(t *testing.T) {
 	}
 }
 
+// 后台切换模板（TemplateName 变化）后重载，渲染必须切换到新模板目录，
+// 而不是继续读旧目录的文件（重载不彻底导致页面显示旧模板）。
+func TestSwitchTemplateRendersNewTemplate(t *testing.T) {
+	root := t.TempDir()
+	dirA := filepath.Join(root, "template", "default")
+	dirB := filepath.Join(root, "template", "other")
+	if err := os.MkdirAll(dirA, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(dirB, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirA, "index.html"), []byte("TEMPLATE-A"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dirB, "index.html"), []byte("TEMPLATE-B"), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := Django(".html")
+	var siteId uint = 9527
+	site := &provider.Website{}
+	site.Id = siteId
+	site.RootPath = root + string(filepath.Separator)
+	site.System = &config.SystemConfig{TemplateName: "default"}
+
+	if err := s.LoadTemplates(siteId, site); err != nil {
+		t.Fatalf("load template A failed: %v", err)
+	}
+	if out := execTemplate(t, s.fromCache(siteId, "index.html")); out != "TEMPLATE-A" {
+		t.Fatalf("expected TEMPLATE-A, got %q", out)
+	}
+
+	// 模拟后台切换模板：System.TemplateName 变化后触发 template_reload
+	site.System.TemplateName = "other"
+	if err := s.LoadTemplates(siteId, site); err != nil {
+		t.Fatalf("load template B failed: %v", err)
+	}
+	if out := execTemplate(t, s.fromCache(siteId, "index.html")); out != "TEMPLATE-B" {
+		t.Fatalf("after switch, expected TEMPLATE-B, got %q (stale template dir)", out)
+	}
+}
+
 // LoadTemplates：单个模板语法错误不得中断其余模板的加载。
 func TestLoadTemplatesContinuesAfterError(t *testing.T) {
 	root := t.TempDir()
