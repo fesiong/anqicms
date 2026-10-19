@@ -329,6 +329,11 @@ func VersionUpgrade(ctx iris.Context) {
 func GenerateCaptcha(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	safeSetting := currentSite.Safe
+	// 验证码是一次性凭据，绝不能被任何一层缓存回放：
+	// 命中缓存会让前端拿到已作废的 captcha_id，表现为"点了图片不换"或验证码永远校验失败。
+	ctx.Header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	ctx.Header("Pragma", "no-cache")                       // HTTP 1.0 兼容
+	ctx.Header("Expires", "Thu, 01 Jan 1970 00:00:00 GMT") // 过期时间设为过去
 	if safeSetting == nil || safeSetting.AdminCaptchaOff == 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
