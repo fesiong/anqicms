@@ -218,9 +218,13 @@ func TestEndpointFailureDetectsHTTP5xx(t *testing.T) {
 	}
 }
 
-// TestSeoSitemapSuppliesDefaultType seo action=sitemap 不传参数时端点会 500
-// （type 空拼出 /sitemap. 畸形路径），意图层要补默认 type=xml。
-func TestSeoSitemapSuppliesDefaultType(t *testing.T) {
+// TestSeoSitemapSendsNoConfigParams sitemap 重建不得给端点传配置参数。
+//
+// 2026-10-17 起 /plugin/sitemap/build 只按已保存配置重建，不再读请求体
+// （原先 handler 里有一段「先保存一次」，会把前端传来的残缺表单值覆盖成真实配置）。
+// 于是意图层再传 type/auto_build 就是**静默失效的假参数**：调用方以为能覆盖，
+// 实际不生效，而接口还返回成功。这条测试把「不再传」钉住。
+func TestSeoSitemapSendsNoConfigParams(t *testing.T) {
 	var got []map[string]any
 	inv := func(_ context.Context, name string, m map[string]any) (string, error) {
 		if p, ok := m["params"].(map[string]any); ok {
@@ -233,8 +237,14 @@ func TestSeoSitemapSuppliesDefaultType(t *testing.T) {
 	if _, err := spec.Compose(context.Background(), map[string]any{"action": "sitemap"}, inv); err != nil {
 		t.Fatalf("sitemap 不应报错：%v", err)
 	}
-	if len(got) == 0 || got[0]["type"] != "xml" {
-		t.Fatalf("应给 sitemap_rebuild 传 type=xml，实际=%v", got)
+	if len(got) == 0 {
+		t.Fatal("sitemap 应调用 sitemap_rebuild")
+	}
+	// 反向对照：只要有一个参数被传下去就报错，避免"没传"与"没调用"混淆。
+	for _, k := range []string{"type", "auto_build"} {
+		if v, has := got[0][k]; has {
+			t.Errorf("sitemap_rebuild 不应再传 %s（当前值=%v）：后端已忽略请求体", k, v)
+		}
 	}
 	// 端点报 500 时必须转成 error，不能静默
 	inv500 := func(_ context.Context, _ string, _ map[string]any) (string, error) {

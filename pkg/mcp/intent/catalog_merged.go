@@ -969,21 +969,12 @@ func seoCompose() Compose {
 		action, _ := args["action"].(string)
 		switch action {
 		case "sitemap":
-			// 端点是 PluginSitemapConfig，type 为空会拼出畸形路径 /sitemap.
-			// 并在生成阶段报 500（实测：不传任何参数时 status=500、msg 为空）。
-			// 这里给个合法默认值，调用方仍可通过 values.type 覆盖。
-			rebuildArgs := map[string]any{"type": "xml"}
-			if v, ok := args["values"]; ok {
-				if vm, ok := v.(map[string]any); ok {
-					if t, has := vm["type"]; has {
-						rebuildArgs["type"] = t
-					}
-					if ab, has := vm["auto_build"]; has {
-						rebuildArgs["auto_build"] = ab
-					}
-				}
-			}
-			out1, err := callCap(ctx, cap, "sitemap_rebuild", rebuildArgs)
+			// 生成端点只按「已保存的配置」重建，既不读也不存请求体
+			// （2026-10-17 移除了 handler 里的「先保存一次」，详见
+			//  controller/manageController/pluginSitemap.go 的注释）。
+			// 所以这里不再传 type/auto_build —— 传了也是被静默忽略的假参数。
+			// 要改 Sitemap 配置，请先用配置类意图保存，再做重建。
+			out1, err := callCap(ctx, cap, "sitemap_rebuild", nil)
 			if err != nil {
 				return nil, err
 			}
