@@ -23,3 +23,6 @@ keyword.json
 
 # 本地预编译后端二进制：ExecPath 必须落在仓库内，切勿编译到 /tmp（否则会误读 /tmp/config.json 连错库）
 /anqicms-bin
+
+# apilive 冒烟工具的本地编译产物（go build ./cmd/apilive）
+/apilive
