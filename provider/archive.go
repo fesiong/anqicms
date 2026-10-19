@@ -912,6 +912,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		req.Content = library.ReplaceSingleSpace(req.Content)
 		// todo 应该只替换 src,href 中的 baseUrl
 		req.Content = w.ReplaceContentUrl(req.Content, false)
+		// 图片Alt优化：为没有 alt 的图片填充文档标题（保存时固化，渲染零开销）
+		if w.Content.ImgAltAuto == 1 {
+			req.Content = FillContentImgAlt(req.Content, draft.Title)
+		}
 		//提取缩略图
 		if len(draft.Images) == 0 {
 			re, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)

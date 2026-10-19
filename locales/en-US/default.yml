@@ -156,6 +156,8 @@
 "ArticleImagesHaveBeenDeleted": "Article image deleted"
 "BatchUpdateDocumentFlagLog": "Batch update document Flag: %v => %s"
 "ArticleUpdated": "Article updated"
+"FillArchiveImgAlt": "Fill image alt: %v documents processed, %v images updated"
+"FillArchiveImgAltLog": "Fill image alt: %v documents processed, %v images updated"
 "BatchUpdateDocumentStatusLog": "Batch update document status: %v => %d"
 "BatchUpdateDocumentTimeLog": "Batch update document time: %v => %d"
 "BatchUpdateDocumentScheduledReleaseLog": "Update documents in batches and publish them on a scheduled basis: %v => %d"

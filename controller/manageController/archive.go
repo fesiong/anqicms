@@ -1275,3 +1275,27 @@ func UpdateArchiveTags(ctx iris.Context) {
 		"msg":  ctx.Tr("ArticleUpdated"),
 	})
 }
+
+// ArchiveFillImgAlt 全站回填图片 Alt：为所有文档正文里没有 alt 的图片
+// 补充文档标题（保存新文档时的自动补全由内容设置 img_alt_auto 控制）。
+// 只补空 alt，不覆盖已有值；处理完成自动清理相关页面缓存。
+func ArchiveFillImgAlt(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	docs, imgs, err := currentSite.FillAllArchiveImgAlt()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.AddAdminLog(ctx, ctx.Tr("FillArchiveImgAlt", docs, imgs))
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("FillArchiveImgAltLog", docs, imgs),
+		"data": iris.Map{
+			"docs": docs,
+			"imgs": imgs,
+		},
+	})
+}
