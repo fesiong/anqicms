@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/provider"
@@ -29,8 +30,36 @@ func PluginSaveAkismetSetting(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if raw := currentSite.GetSettingValue(provider.AkismetSettingKey); raw != "" {
+		// 部分更新基底：以已保存配置为现值，随后的 Unmarshal 只覆盖请求体中出现的字段。
+		_ = json.Unmarshal([]byte(raw), &req)
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
-	err := currentSite.SaveSettingValue(provider.AkismetSettingKey, req)
+	err = currentSite.SaveSettingValue(provider.AkismetSettingKey, req)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

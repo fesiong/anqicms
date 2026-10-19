@@ -1,10 +1,12 @@
 package manageController
 
 import (
+	"encoding/json"
 	"os"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -41,10 +43,37 @@ func PluginSaveLLMsSetting(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if currentSite.PluginLLMs != nil {
+		req = *currentSite.PluginLLMs
+	}
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	w2 := provider.GetWebsite(currentSite.Id)
 	w2.PluginLLMs = &req
-	err := currentSite.SaveSettingValue(provider.LLMsSettingKey, w2.PluginLLMs)
+	err = currentSite.SaveSettingValue(provider.LLMsSettingKey, w2.PluginLLMs)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

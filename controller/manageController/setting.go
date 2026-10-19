@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"time"
@@ -52,10 +53,40 @@ func SettingSystem(ctx iris.Context) {
 }
 
 // SettingSystemForm 保存站点系统配置，涉及域名变更时同步相关配置并重载模板。
+// 支持部分更新：请求体中显式出现的字段才会覆盖配置，未出现的字段保持原值
+// （管理后台整包提交与 MCP 意图层部分字段提交均安全）。
 func SettingSystemForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SystemConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：重新解析请求体拿到「实际出现的字段」，以现值为基底合并，
+	// 上面对 req 的解析只用作 JSON 合法性校验（与参数 schema 生成）。
+	var payload map[string]json.RawMessage
+	// 注意：这里用标准库解析而不是再次 ctx.ReadJSON，
+	// 避免参数 schema 生成（apicatalog 按 ctx.ReadJSON 的目标类型取参）被 map 覆盖。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.System
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -112,7 +143,7 @@ func SettingSystemForm(ctx iris.Context) {
 	currentSite.System.Language = req.Language
 	currentSite.System.ExtraFields = req.ExtraFields
 
-	err := currentSite.SaveSettingValue(provider.SystemSettingKey, currentSite.System)
+	err = currentSite.SaveSettingValue(provider.SystemSettingKey, currentSite.System)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -167,10 +198,38 @@ func SettingContent(ctx iris.Context) {
 }
 
 // SettingContentForm 保存内容设置，包括默认缩略图、缩略图、编辑器等配置。
+// 支持部分更新：请求体中显式出现的字段才会覆盖配置，未出现的字段保持原值。
 func SettingContentForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContentConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：重新解析请求体拿到「实际出现的字段」，以现值为基底合并。
+	var payload map[string]json.RawMessage
+	// 注意：这里用标准库解析而不是再次 ctx.ReadJSON，
+	// 避免参数 schema 生成（apicatalog 按 ctx.ReadJSON 的目标类型取参）被 map 覆盖。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.Content
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -192,6 +251,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.UrlTokenType = req.UrlTokenType
 	currentSite.Content.MultiCategory = req.MultiCategory
 	currentSite.Content.UseSort = req.UseSort
+	currentSite.Content.ImgAltAuto = req.ImgAltAuto
 	currentSite.Content.UseWebp = req.UseWebp
 	currentSite.Content.MatchTag = req.MatchTag
 	currentSite.Content.ConvertGif = req.ConvertGif
@@ -209,7 +269,7 @@ func SettingContentForm(ctx iris.Context) {
 	currentSite.Content.MaxPage = req.MaxPage
 	currentSite.Content.MaxLimit = req.MaxLimit
 
-	err := currentSite.SaveSettingValue(provider.ContentSettingKey, currentSite.Content)
+	err = currentSite.SaveSettingValue(provider.ContentSettingKey, currentSite.Content)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -272,13 +332,38 @@ func SettingIndexForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.Index
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	currentSite.Index.SeoTitle = req.SeoTitle
 	currentSite.Index.SeoKeywords = req.SeoKeywords
 	currentSite.Index.SeoDescription = req.SeoDescription
 	currentSite.Index.Sep = req.Sep
 
-	err := currentSite.SaveSettingValue(provider.IndexSettingKey, currentSite.Index)
+	err = currentSite.SaveSettingValue(provider.IndexSettingKey, currentSite.Index)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -312,10 +397,38 @@ func SettingContact(ctx iris.Context) {
 }
 
 // SettingContactForm 保存联系方式设置并清理缓存索引。
+// 支持部分更新：请求体中显式出现的字段才会覆盖配置，未出现的字段保持原值。
 func SettingContactForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ContactConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：重新解析请求体拿到「实际出现的字段」，以现值为基底合并。
+	var payload map[string]json.RawMessage
+	// 注意：这里用标准库解析而不是再次 ctx.ReadJSON，
+	// 避免参数 schema 生成（apicatalog 按 ctx.ReadJSON 的目标类型取参）被 map 覆盖。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.Contact
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -348,7 +461,7 @@ func SettingContactForm(ctx iris.Context) {
 	currentSite.Contact.Youtube = req.Youtube
 	currentSite.Contact.ExtraFields = req.ExtraFields
 
-	err := currentSite.SaveSettingValue(provider.ContactSettingKey, currentSite.Contact)
+	err = currentSite.SaveSettingValue(provider.ContactSettingKey, currentSite.Contact)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -437,10 +550,38 @@ func SettingSafe(ctx iris.Context) {
 }
 
 // SettingSafeForm 保存安全设置并清理缓存索引。
+// 支持部分更新：请求体中显式出现的字段才会覆盖配置，未出现的字段保持原值。
 func SettingSafeForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.SafeConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：重新解析请求体拿到「实际出现的字段」，以现值为基底合并。
+	var payload map[string]json.RawMessage
+	// 注意：这里用标准库解析而不是再次 ctx.ReadJSON，
+	// 避免参数 schema 生成（apicatalog 按 ctx.ReadJSON 的目标类型取参）被 map 覆盖。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.Safe
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -459,7 +600,7 @@ func SettingSafeForm(ctx iris.Context) {
 	currentSite.Safe.APIPublish = req.APIPublish
 	currentSite.Safe.AdminCaptchaOff = req.AdminCaptchaOff
 
-	err := currentSite.SaveSettingValue(provider.SafeSettingKey, currentSite.Safe)
+	err = currentSite.SaveSettingValue(provider.SafeSettingKey, currentSite.Safe)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

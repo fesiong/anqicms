@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -28,6 +30,31 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginStorageConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginStorage
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -81,7 +108,7 @@ func PluginStorageConfigForm(ctx iris.Context) {
 	w2.PluginStorage.SSHPrivateKey = req.SSHPrivateKey
 	w2.PluginStorage.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
 
-	err := w2.SaveSettingValue(provider.StorageSettingKey, w2.PluginStorage)
+	err = w2.SaveSettingValue(provider.StorageSettingKey, w2.PluginStorage)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

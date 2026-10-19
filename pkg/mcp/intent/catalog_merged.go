@@ -190,7 +190,7 @@ var mergedIntentCatalog = []*IntentSpec{
 		Params: map[string]ParamSpec{
 			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"setting", "site_info", "site_version", "site_anqi", "storage_get", "storage_save", "storage_upload", "template_info", "template_reload"}},
 			"section":   {Type: "string", Desc: "设置分区（setting 用）", Enum: []string{"system", "content", "contact", "diy_field", "index", "safe", "rewrite"}},
-			"values":    {Type: "object", Desc: "要更新的字段（setting 写 / storage_save 用）"},
+			"values":    {Type: "object", Desc: "要更新的字段，只覆盖传入的字段、未传字段保持原值，无需先读再全量回写（setting 写 / storage_save 用）"},
 			"content":   {Type: "string", Desc: "robots 等文本内容（storage_upload 用）"},
 			"file":      {Type: "string", Desc: "上传证书文件：data URI 或裸 base64（storage_upload 用）"},
 			"file_name": {Type: "string", Desc: "文件名（配合 file）"},

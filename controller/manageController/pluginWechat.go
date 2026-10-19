@@ -1,8 +1,10 @@
 package manageController
 
 import (
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
 )
@@ -32,6 +34,31 @@ func PluginWechatConfigForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginWechat
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	currentSite.PluginWechat.AppID = req.AppID
 	currentSite.PluginWechat.AppSecret = req.AppSecret
@@ -40,7 +67,7 @@ func PluginWechatConfigForm(ctx iris.Context) {
 	currentSite.PluginWechat.VerifyKey = req.VerifyKey
 	currentSite.PluginWechat.VerifyMsg = req.VerifyMsg
 
-	err := currentSite.SaveSettingValue(provider.WechatSettingKey, currentSite.PluginWechat)
+	err = currentSite.SaveSettingValue(provider.WechatSettingKey, currentSite.PluginWechat)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

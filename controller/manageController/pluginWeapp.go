@@ -1,8 +1,10 @@
 package manageController
 
 import (
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -31,13 +33,38 @@ func PluginWeappConfigForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginWeapp
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	currentSite.PluginWeapp.AppID = req.AppID
 	currentSite.PluginWeapp.AppSecret = req.AppSecret
 	currentSite.PluginWeapp.Token = req.Token
 	currentSite.PluginWeapp.EncodingAESKey = req.EncodingAESKey
 
-	err := currentSite.SaveSettingValue(provider.WeappSettingKey, currentSite.PluginWeapp)
+	err = currentSite.SaveSettingValue(provider.WeappSettingKey, currentSite.PluginWeapp)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

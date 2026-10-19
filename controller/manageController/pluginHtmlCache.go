@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"io"
 	"log/slog"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -32,6 +34,31 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginHtmlCache
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginHtmlCache
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -90,7 +117,7 @@ func PluginHtmlCacheConfigForm(ctx iris.Context) {
 	w2.PluginHtmlCache.SSHPrivateKey = req.SSHPrivateKey
 	w2.PluginHtmlCache.SSHWebroot = strings.TrimRight(req.SSHWebroot, "\\/")
 
-	err := w2.SaveSettingValue(provider.HtmlCacheSettingKey, w2.PluginHtmlCache)
+	err = w2.SaveSettingValue(provider.HtmlCacheSettingKey, w2.PluginHtmlCache)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

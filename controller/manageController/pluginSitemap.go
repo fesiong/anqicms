@@ -1,8 +1,11 @@
 package manageController
 
 import (
+	"encoding/json"
+
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -36,10 +39,36 @@ func PluginSitemap(ctx iris.Context) {
 }
 
 // PluginSitemapForm 保存 Sitemap 配置，并在类型变化时清理旧的 Sitemap。
+// 支持部分更新：请求体中显式出现的字段才会覆盖配置，未出现的字段保持原值。
 func PluginSitemapForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginSitemapConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginSitemap
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -60,7 +89,7 @@ func PluginSitemapForm(ctx iris.Context) {
 	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
 	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
-	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
+	err = currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

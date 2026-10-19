@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"image"
 	"io"
 	"os"
@@ -38,6 +39,31 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginTitleImage
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	if req.Width == 0 {
 		req.Width = 800
 	}
@@ -59,7 +85,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 	currentSite.PluginTitleImage.Noise = req.Noise
 	currentSite.PluginTitleImage.FontColor = req.FontColor
 
-	err := currentSite.SaveSettingValue(provider.TitleImageSettingKey, currentSite.PluginTitleImage)
+	err = currentSite.SaveSettingValue(provider.TitleImageSettingKey, currentSite.PluginTitleImage)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

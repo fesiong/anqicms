@@ -7,6 +7,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -35,10 +36,37 @@ func PluginSavePlaceSetting(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	if currentSite.PluginPlace != nil {
+		req = *currentSite.PluginPlace
+	}
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	w2 := provider.GetWebsite(currentSite.Id)
 	w2.PluginPlace = &req
-	err := currentSite.SaveSettingValue(provider.PlaceSettingKey, w2.PluginPlace)
+	err = currentSite.SaveSettingValue(provider.PlaceSettingKey, w2.PluginPlace)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
