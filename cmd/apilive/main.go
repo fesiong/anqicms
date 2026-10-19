@@ -37,7 +37,6 @@ import (
 	"time"
 
 	"github.com/kataras/iris/v12"
-	anqicms "kandaoni.com/anqicms"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/ai/eino"
@@ -80,10 +79,9 @@ func main() {
 		logger.Printf("i18n 加载失败（不影响多数端点）：%v", err)
 	}
 	provider.SetI18n(app.I18n)
-	// route.Register 还需要后台静态资源的 embed FS（route/manage.go 的 HandleDir("/")），
-	// 传空 FS 会让 iris panic："HandleDir: no directories found"。
-	// 这里复用根包的 anqicms.SystemFiles（icon.go: //go:embed system），与 bootstrap.go:105 一致。
-	route.Register(app, anqicms.SystemFiles)
+	// route.Register 现为单参数签名（bootstrap.go:105 同款）；后台静态资源
+	// 由 route/manage.go 的 system.HandleDir 从磁盘读取，不再需要 embed FS。
+	route.Register(app)
 	if err := app.Build(); err != nil {
 		logger.Fatalf("路由 Build 失败: %v", err)
 	}
