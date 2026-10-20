@@ -17,6 +17,7 @@ keyword.json
 *.log
 .atomcode
 .workbuddy
+.env
 
 # graphify 知识图谱产物：图本体与缓存是生成物，不入库（报告/使用说明/graph.html/权限审计 JSON 仍然跟踪）
 /graphify-out
