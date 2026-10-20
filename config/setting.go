@@ -50,6 +50,7 @@ type ContentConfig struct {
 	MultiCategory    int      `json:"multi_category"`        // 是否启用多分类支持：0=否，1=是
 	Editor           string   `json:"editor"`                // 使用的editor，默认为空，支持 空值|default=富文本编辑器，markdown=Markdown编辑器，simple=简易编辑器
 	UseSort          int      `json:"use_sort"`              // 启用文档排序：0=否，1=是
+	ImgAltAuto       int      `json:"img_alt_auto"`          // 图片Alt优化：保存文档时为正文里没有 alt 的图片自动填充文档标题（已有 alt 的不覆盖）：0=否，1=是
 	MaxPage          int      `json:"max_page"`              // 最大显示页码：默认1000
 	MaxLimit         int      `json:"max_limit"`             // 每页最大显示条数：默认100
 }

@@ -6,6 +6,7 @@ import (
 	"hash/crc32"
 	"io"
 	"io/fs"
+	"log"
 	"net/url"
 	"os"
 	stdPath "path"
@@ -263,18 +264,33 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 	if site == nil {
 		return errors.New("Website not found")
 	}
-	s.initSet(site)
-	s.Set[siteId].CleanCache()
+	// 每次重载都重建该站点的模板 Set：
+	// loader 的 fs 在创建时绑定到 site.GetTemplateDir()（RootPath + template/<TemplateName>）。
+	// 后台切换模板后 TemplateName 已变，必须用新目录重建 loader，
+	// 否则渲染时 FromFile 读到的仍是旧模板目录，页面显示旧模板。
+	newSet := pongo2.NewSet("", &tDjangoAssetLoader{fs: getFS(site.GetTemplateDir()), rootDir: "./"})
+	newSet.Globals = getPongoContext(s.globals)
+	newSet.Debug = s.reload
+	s.rmu.Lock()
+	s.Set[siteId] = newSet
+	s.templateCache[siteId] = nil
+	s.rmu.Unlock()
 
 	var err error
 	// 检查模板是否有多语言
 	var mapLocales = map[string]struct{}{}
+	var firstErr error
 	sfs := getFS(site.GetTemplateDir())
 	rootDirName := getRootDirName(sfs)
 	var tplFiles = make(map[string]int64, 100)
 	err = walk(sfs, "", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return err
+			log.Println("walk template dir error:", path, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			// 单个文件读取失败不中断整体加载，避免后续模板全部失效
+			return nil
 		}
 
 		if info == nil || info.IsDir() {
@@ -301,11 +317,24 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 
 		contents, err := asset(sfs, path)
 		if err != nil {
-			return err
+			log.Println("read template file error:", path, err)
+			if firstErr == nil {
+				firstErr = err
+			}
+			// 单个文件读取失败不中断整体加载
+			return nil
 		}
 		tplFiles[path] = info.Size()
 		err = s.ParseTemplate(site, path, contents)
-		return err
+		if err != nil {
+			// 模板语法错误不中断整体加载：错误详情已由 ParseTemplate
+			// 缓存为伪模板，页面访问该模板时会显示具体错误而不是 404
+			if firstErr == nil {
+				firstErr = err
+			}
+			return nil
+		}
+		return nil
 	})
 	site.SetTemplates(tplFiles)
 	if len(mapLocales) > 0 {
@@ -319,7 +348,7 @@ func (s *DjangoEngine) LoadTemplates(siteId uint, site *provider.Website) error 
 			site.TplI18n = tplI18n
 		}
 	}
-	return nil
+	return firstErr
 }
 
 // ParseTemplate adds a custom template from text.
@@ -329,17 +358,37 @@ func (s *DjangoEngine) ParseTemplate(site *provider.Website, name string, conten
 	defer s.rmu.Unlock()
 
 	name = strings.TrimPrefix(name, "/")
+	if s.templateCache[site.Id] == nil {
+		s.templateCache[site.Id] = make(map[string]*pongo2.Template)
+	}
 	_, err := s.Set[site.Id].FromBytes(contents)
-
-	return err
+	if err != nil {
+		// 模板解析失败：缓存一个展示错误信息的伪模板，
+		// 页面访问该模板时直接显示具体错误，而不是 404 无提示。
+		log.Println("parse template error:", name, err)
+		s.templateCache[site.Id][name] = errorTemplate(s.Set[site.Id], name, err)
+		return err
+	}
+	// 解析成功，清掉旧的错误展示模板，让修复后的模板立即恢复正常渲染
+	delete(s.templateCache[site.Id], name)
+	return nil
 }
 
-func (s *DjangoEngine) initSet(site *provider.Website) { // protected by the caller.
-	if s.Set[site.Id] == nil {
-		s.Set[site.Id] = pongo2.NewSet("", &tDjangoAssetLoader{fs: getFS(site.GetTemplateDir()), rootDir: "./"})
-		s.Set[site.Id].Globals = getPongoContext(s.globals)
-		s.Set[site.Id].Debug = s.reload
+// errorTemplate 把模板编译错误包装成一个展示错误信息的伪模板。
+// 错误文本会被转义，避免其中包含 {% {{ 等 pongo2 语法符导致伪模板自身解析失败。
+func errorTemplate(set *pongo2.TemplateSet, name string, err error) *pongo2.Template {
+	msg := err.Error()
+	replacer := strings.NewReplacer(
+		"&", "&amp;",
+		"<", "&lt;",
+		">", "&gt;",
+		"{", "&#123;",
+	)
+	tpl, tplErr := set.FromBytes([]byte(replacer.Replace(msg) + "<br/> on file " + name))
+	if tplErr != nil {
+		return nil
 	}
+	return tpl
 }
 
 // getPongoContext returns the pongo2.Context from map[string]interface{} or from pongo2.Context, used internaly
@@ -364,18 +413,32 @@ func getPongoContext(templateData interface{}) pongo2.Context {
 }
 
 func (s *DjangoEngine) fromCache(siteId uint, relativeName string) *pongo2.Template {
+	// LoadTemplates 可能正在切换模板目录（重建 Set），加锁取出引用后再使用，
+	// 避免读写 map 竞争；pongo2 的 FromCache/FromFile 内部自持锁，线程安全。
+	s.rmu.RLock()
+	set := s.Set[siteId]
+	errCache := s.templateCache[siteId]
+	s.rmu.RUnlock()
+	if set == nil {
+		return nil
+	}
+
 	if s.reload {
-		s.rmu.RLock()
-		defer s.rmu.RUnlock()
 		// reload the template from disk
-		res, err := s.Set[siteId].FromFile(relativeName)
+		res, err := set.FromFile(relativeName)
 		if err != nil {
-			return nil
+			// 编译失败（通常是模板语法错误），返回错误展示模板，
+			// 让页面显示具体错误，而不是 404 无提示。
+			return errorTemplate(set, relativeName, err)
 		}
 		return res
 	}
 
-	if tmpl, err := s.Set[siteId].FromCache(relativeName); err == nil {
+	if tmpl, err := set.FromCache(relativeName); err == nil {
+		return tmpl
+	}
+	// 编译失败：回退到预解析（ParseTemplate）时缓存的错误展示模板
+	if tmpl, ok := errCache[relativeName]; ok {
 		return tmpl
 	}
 	return nil

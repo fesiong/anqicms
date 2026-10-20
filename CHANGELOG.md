@@ -1,5 +1,32 @@
 # 更新日志
 
+## v3.6.7 `AnQiCMS` `2026-10-20`
+
+### ✨ 新增功能
+
+- **图片 Alt 自动补全**：按 GEO 要求，图片缺 alt 会直接影响图片类内容的可检索性。正文中的 alt 是插入图片时固化到 HTML 的内联属性，系统没有独立的 alt 库，因此走保存管线固化而非渲染时动态补——`FillContentImgAlt` 挂在 `SaveArchive` 的内容处理链上（与 `ReplaceContentUrl` / `ReplaceSingleSpace` 同级），纯字符串处理、不访问数据库，渲染路径零额外开销。规则为第 1 张用文档标题、后续追加序号以避免 SEO 重复，已有非空 alt 不覆盖（用户显式设置优先），标题做 HTML 转义防止破坏属性引号。开关位于内容设置 `img_alt_auto`，默认关闭。另提供全站回填端点 `POST /archive/fill-img-alt`，把历史文章的缺口一次性补上，同样只补空 alt 并清理相关页面缓存。
+- **设置端点支持部分更新**：新增 `library.MergeJSONPayload`，以现值为基底、只覆盖请求体中显式出现的字段——显式传空串 / `0` / `false` / `null` 仍然生效（用于主动清空），未传字段保持原值，按 json tag 匹配，无 tag / `-` / 非导出字段一律跳过。设置类保存端点此前只能靠 `ctx.ReadJSON` 把请求体解进结构体，未出现的字段一律落到零值，导致「只想改一个字段却把同结构里的其它配置静默清空」。已覆盖 26 个同构端点（index / anchor / fulltext / guestbook / interference / order / push / retailer / rewrite / sendmail / sitemap / titleimage / user / watermark / weapp / wechat / storage / htmlcache / akismet / google / limiter / llms / jsonld / place / translate / multilang）；`system_config` 意图的 values 描述同步更新，MCP 侧可放心只传要改的字段，无需先读再全量回写。
+- **AI 编辑器支持视频嵌入**：工具栏新增「嵌入视频」按钮（此前只有弹窗入口，工具栏点不到）。提交时按输入类型分派：YouTube 链接或 iframe 走 youtube 节点（保留原链接、可选中编辑删除），其它 iframe 原样插入，http 链接按 video 标签插入，其余按纯文本。
+- **顶部搜索支持三级菜单**：菜单从两层变三层后，原「有 routes 就只取第二层」的匹配逻辑会把分组节点当结果，真正的三级功能页永远进不了候选。改为不限深度递归收集，只收叶子页面（跳过分组节点、redirect 与 hideInMenu 子树）；结果带上级标题前缀便于区分归属，候选项 value 改用 path 以免同名功能互相覆盖；上级菜单标题参与匹配，搜「SEO」能列出该分类下的全部功能。
+
+### ⚡ 功能优化
+
+- **切换模板后重载彻底**：`LoadTemplates` 每次重建站点模板 Set——loader fs 在 Set 创建时固化绑定了模板目录，此前切换模板后 `TemplateName` 已变但 Set 不重建，渲染时 `FromFile` 仍读旧目录。同时 `fromCache` 加锁取出 set 引用再调用 pongo2，消除 Set 重建与并发渲染之间的 map 竞争；`UseDesignInfo` 在切换模板后清理 HTML 缓存，避免页面命中旧模板生成的缓存页。
+- **MCP 意图层去除 sitemap 假参数**：`POST /plugin/sitemap/build` 既不读也不存请求体后，`seo action=sitemap` 不再下发 `type` / `auto_build`——端点已忽略请求体，再传就是「调用方以为能覆盖、实际静默失效」的假参数。
+- **杂项**：重新生成 API 目录（新增 `POST /archive/fill-img-alt`，`/setting/content` 增加 `img_alt_auto`，`/plugin/sitemap/build` 移除全部配置参数，`/setting/{system,content,contact,safe}` 补上部分更新说明）；`apilive` 跟随 `route.Register` 单参数签名恢复编译；忽略 `.env` 避免密钥误提交；新增 `.graphifyignore`。
+
+### 🐛 问题修复
+
+- **设置页切换 tab 会清空其它 tab 的配置**：管理后台设置页是 tab 条件渲染 + 整包保存，只提交当前 tab 字段就会把其它 tab 的配置静默清空，MCP 意图层只想改一个字段时同样会连坐。前端四个设置页（system / content / safe / contact）改用 `formRef.getFieldsValue(true)` 取全量表单值；四个插件页（ai / limiter / multilang / sitemap）改为已访问过的 tab 常驻挂载、仅切换显示，解决切 tab 时表单被卸载导致的输入丢失。
+- **sitemap 点一次「生成」清空真实配置**：`POST /plugin/sitemap/build` 原先有一段「先保存一次」，把请求体当作全量配置写库；而前端「手动操作」tab 发出的是设置表单当前值，一旦该表单取不到值，点一次生成就会把真实配置清成默认值（type 回落 txt、auto_build 归零、排除项全部丢失），接口还返回成功，没有任何报错线索。职责边界划清：保存只归 `PluginSitemapForm`，生成一律以已保存配置为准。
+- **模板语法错误表现为 404**：`ParseTemplate` 解析失败时改为缓存错误伪模板（文本转义 `{}` 防二次解析失败）并打日志，成功时清除；`fromCache` 编译失败回退错误伪模板（`FromCache` 优先、伪模板兜底），修好文件后不重载也立即生效；`LoadTemplates` walk 单文件读/解析错误不再中断整体加载，汇总首个错误返回，不再静默吞错。
+- **对象存储上传含特殊字符的文件名失败**：R2 / S3 存储下部分文件上传报 `SignatureDoesNotMatch`。根因是 `objectURL` 用 `url.PathEscape` 编码整条 object key（把路径分隔符 `/` 也编成 `%2F`），而 `sign()` 签名时用的是解码后的 `req.URL.Path`，两端口径不一致，服务端按收到的 URI 重算签名必然对不上。之所以只有部分文件失败：`url.PathEscape` 只编码 URL 保留字符——`( )`、空格、中文、`%`、`#` 落在失败集，`a&b.zip`、`a+b.zip` 等则正常。现按 path segment 逐段编码、保留 `/` 分隔符（AWS SigV4 规范与 AWS SDK 的做法），objectURL / objectPath / copy-source 与签名 canonical URI 全部同源同口径。
+- **验证码可能被缓存回放**：`captcha_id` 是 base64Captcha 的一次性凭据（有 TTL，校验即失效），任何一层缓存回放都会让前端拿到已作废的 id，表现为「点了图片不换」或验证码永远校验失败。管理后台登录与前台/评论是两套独立实现（分别看 `Safe.AdminCaptchaOff` 与 `Safe.Captcha`），此前两边都没有任何缓存头，现均补上 `Cache-Control: no-store`，且写在 `captcha_off` 提前 return 之前——否则「关闭验证码」那条响应仍可被缓存。
+- **编辑器正文带无意义的 UUID**：aieditor 内置的 UniqueID 扩展默认给段落、标题、表格、图片等 14 类块级节点各生成一个 UUID，渲染时统一写成 `data-id`。这些 ID 只服务协作编辑的块定位，单机 CMS 用不上，却会随正文存库、进模板、进 AI 抓取结果，徒增体积且没有语义。经核对 aieditor 内部无任何一处读取该属性，改用官方构造参数关闭。
+- **菜单三级化后多处跳转失效**：插件菜单迁到三级分组后，仪表盘引导、附件替换、素材入口、关键词、留言邮件设置等处仍指向旧的扁平路径，点击会落到无匹配路由的空白页，已逐一修正。
+- **MCP 配置名不可辨识**：一键复制配置里的 server 名固定为 `anqicms`，多站点时难以区分。改为跟随站点名称并做保守清洗（去引号/控制字符、空白折成短横线，空值回退 `anqicms`），页面上同时回显当前名字。
+- **修复插件链接错误**。
+
 ## v3.6.6 `AnQiCMS` `2026-10-08`
 
 ### 🔒 安全修复

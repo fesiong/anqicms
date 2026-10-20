@@ -277,14 +277,14 @@ var domainIntentCatalog = []*IntentSpec{
 	// sitemap 走 cap(sitemap_rebuild+url_push)，robots/push 走端点；均经 api_invoke 执行。
 	{
 		Name: "seo", Title: "robots/sitemap/推送", Domain: DomainSeo, Risk: RiskWrite,
-		Desc: "SEO 收录相关操作。action: robots_get/robots_save(robots.txt 读写)/sitemap(重建 sitemap 并推送)/push_get/push_save/push_push/push_logs(链接推送配置与记录)。" +
-			"robots_save 传的是 content（端点侧字段名 robots 已自动换算）；sitemap 不传参数时默认按 xml 重建。",
+		Desc: "SEO 收录相关操作。action: robots_get/robots_save(robots.txt 读写)/sitemap(按已保存配置重建 sitemap 并推送)/push_get/push_save/push_push/push_logs(链接推送配置与记录)。" +
+			"robots_save 传的是 content（端点侧字段名 robots 已自动换算）；sitemap 不接受配置参数，要改配置请先保存再重建。",
 		Params: map[string]ParamSpec{
 			"action":  {Type: "string", Desc: "操作", Required: true, Enum: []string{"robots_get", "robots_save", "sitemap", "push_get", "push_save", "push_push", "push_logs"}},
 			"content": {Type: "string", Desc: "robots.txt 正文（robots_save 用）"},
 			"values": {Type: "object", Desc: "按 action 传：\n" +
 				"· push_save（**全量覆盖**）: baidu_api(百度推送地址)、bing_api、google_json、js_codes —— 改任一项都要四项传全\n" +
-				"· sitemap: type（xml 或 txt，默认 xml）、auto_build（**整数 0/1，不是布尔值**，传 true/false 会报 json 解析失败）"},
+				"· sitemap: 不接收任何配置项（type/auto_build 已不再生效，重建一律用已保存的配置）"},
 			"urls": {Type: "array", Items: "string", Desc: "要推送的 URL 列表（push_push 与 sitemap 的推送环节用）"},
 		},
 		Required: []string{"action"},

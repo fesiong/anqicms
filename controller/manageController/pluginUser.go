@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"regexp"
 	"strings"
 
@@ -27,6 +28,31 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginUserConfig
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginUser
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -62,7 +88,7 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 	currentSite.PluginUser.DefaultStatus = req.DefaultStatus
 	currentSite.PluginUser.Fields = fields
 
-	err := currentSite.SaveSettingValue(provider.UserSettingKey, currentSite.PluginUser)
+	err = currentSite.SaveSettingValue(provider.UserSettingKey, currentSite.PluginUser)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -229,18 +255,18 @@ func PluginUserDetailForm(ctx iris.Context) {
 		})
 		return
 	}
-		// UpdateAll 决定「未传的字段」怎么处理：
-		//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
-		//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
-		//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
-		//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
-		//
-		// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
-		// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
-		// Partial 优先于调用方传的 update_all。
-		if !req.Partial {
-			req.UpdateAll = true
-		}
+	// UpdateAll 决定「未传的字段」怎么处理：
+	//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
+	//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
+	//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
+	//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
+	//
+	// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
+	// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
+	// Partial 优先于调用方传的 update_all。
+	if !req.Partial {
+		req.UpdateAll = true
+	}
 
 	user, err := currentSite.SaveUserInfo(&req)
 	if err != nil {

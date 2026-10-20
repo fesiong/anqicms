@@ -1,8 +1,10 @@
 package manageController
 
 import (
+	"encoding/json"
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -46,6 +48,31 @@ func PluginSitemapForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginSitemap
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 	if req.Type != "xml" {
 		req.Type = "txt"
 	}
@@ -60,7 +87,7 @@ func PluginSitemapForm(ctx iris.Context) {
 	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
 	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
-	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
+	err = currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -81,39 +108,18 @@ func PluginSitemapForm(ctx iris.Context) {
 	})
 }
 
-// PluginSitemapBuild 执行 Sitemap 生成（重建）操作，并字段保存 Sitemap 配置
+// PluginSitemapBuild 执行 Sitemap 生成（重建）操作。
+//
+// 注意：本端点只负责「按已保存的配置生成」，不再读取、更不保存请求体。
+// 早先这里有一段「先保存一次」，会把请求体当作全量配置覆盖已存配置；
+// 而前端在「手动操作」tab 里发出的是设置表单的当前值，一旦该表单未被挂载
+// 或取值失败（getFieldsValue 返回空/残缺），点一次「生成」就会把真实配置
+// 清成默认值（type 回落 txt、auto_build 归零、排除项全部丢失）。
+// 配置的保存只归 PluginSitemapForm 负责，生成一律以已保存配置为准。
 func PluginSitemapBuild(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
-	var req config.PluginSitemapConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-	if req.Type != "xml" {
-		req.Type = "txt"
-	}
-	//先保存一次
-	currentSite.PluginSitemap.AutoBuild = req.AutoBuild
-	currentSite.PluginSitemap.Type = req.Type
-	currentSite.PluginSitemap.ExcludeTag = req.ExcludeTag
-	currentSite.PluginSitemap.ExcludeCategoryIds = req.ExcludeCategoryIds
-	currentSite.PluginSitemap.ExcludePageIds = req.ExcludePageIds
-	currentSite.PluginSitemap.ExcludeModuleIds = req.ExcludeModuleIds
 
-	err := currentSite.SaveSettingValue(provider.SitemapSettingKey, currentSite.PluginSitemap)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
-		return
-	}
-
-	//开始生成sitemap
-	err = currentSite.BuildSitemap()
+	err := currentSite.BuildSitemap()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

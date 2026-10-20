@@ -156,6 +156,8 @@
 "ArticleImagesHaveBeenDeleted": "文章图片已删除"
 "BatchUpdateDocumentFlagLog": "批量更新文档Flag：%v => %s"
 "ArticleUpdated": "文章已更新"
+"FillArchiveImgAlt": "回填图片Alt：处理文档 %v 篇，补充图片 %v 张"
+"FillArchiveImgAltLog": "回填图片Alt：处理文档 %v 篇，补充图片 %v 张"
 "BatchUpdateDocumentStatusLog": "批量更新文档状态：%v => %d"
 "BatchUpdateDocumentTimeLog": "批量更新文档时间：%v => %d"
 "BatchUpdateDocumentScheduledReleaseLog": "批量更新文档定时发布：%v => %d"

@@ -1,12 +1,14 @@
 package manageController
 
 import (
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -392,6 +394,31 @@ func PluginOrderConfigForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginOrder
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	currentSite.PluginOrder.NoProcess = req.NoProcess
 	currentSite.PluginOrder.AutoFinishDay = req.AutoFinishDay
@@ -399,7 +426,7 @@ func PluginOrderConfigForm(ctx iris.Context) {
 	currentSite.PluginOrder.SellerPercent = req.SellerPercent
 	currentSite.PluginOrder.NoNeedLogin = req.NoNeedLogin
 
-	err := currentSite.SaveSettingValue(provider.OrderSettingKey, currentSite.PluginOrder)
+	err = currentSite.SaveSettingValue(provider.OrderSettingKey, currentSite.PluginOrder)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

@@ -1,10 +1,12 @@
 package manageController
 
 import (
+	"encoding/json"
 	"time"
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -21,7 +23,6 @@ import (
 // 「未修改」这件事在响应里可见、可回传，且不与任何真实授权码冲突
 // （真实授权码是 16 位随机字符，不会恰好等于本串）。
 const SendmailPasswordMask = "********"
-
 
 // PluginSendmailList 获取邮件发送记录列表，支持分页。
 //
@@ -140,6 +141,31 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginSendmail
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	currentSite.PluginSendmail.Server = req.Server
 	currentSite.PluginSendmail.UseSSL = req.UseSSL
@@ -153,7 +179,7 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 	}
 	currentSite.PluginSendmail.Recipient = req.Recipient
 
-	err := currentSite.SaveSettingValue(provider.SendmailSettingKey, currentSite.PluginSendmail)
+	err = currentSite.SaveSettingValue(provider.SendmailSettingKey, currentSite.PluginSendmail)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

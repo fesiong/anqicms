@@ -28,7 +28,7 @@ func TestPluginSendmailSettingDoesNotMutateGlobal(t *testing.T) {
 	bad := global
 	bad.Password = SendmailPasswordMask
 	if global.Password == realPassword {
-		t.Fatalf("旧写法（拷贝指针）本应污染全局配置，却没污染——"+
+		t.Fatalf("旧写法（拷贝指针）本应污染全局配置，却没污染——" +
 			"测试前提不成立，请检查 PluginSendmail 是否已改为值类型")
 	}
 	if global.Password != SendmailPasswordMask {

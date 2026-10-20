@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"image"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"golang.org/x/image/webp"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/provider"
 )
 
@@ -30,6 +32,31 @@ func PluginWatermarkConfigForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.PluginWatermark
 	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginWatermark
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -62,7 +89,7 @@ func PluginWatermarkConfigForm(ctx iris.Context) {
 	currentSite.PluginWatermark.Position = req.Position
 	currentSite.PluginWatermark.Opacity = req.Opacity
 
-	err := currentSite.SaveSettingValue(provider.WatermarkSettingKey, currentSite.PluginWatermark)
+	err = currentSite.SaveSettingValue(provider.WatermarkSettingKey, currentSite.PluginWatermark)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

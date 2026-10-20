@@ -196,6 +196,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			archive.Post("/category", manageController.UpdateArchiveCategory)
 			archive.Post("/import", manageController.QuickImportArchive)
 			archive.Post("/tags", manageController.UpdateArchiveTags)
+			archive.Post("/fill-img-alt", manageController.ArchiveFillImgAlt)
 			archive.Get("/import/status", manageController.GetQuickImportArchiveStatus)
 			archive.Post("/import/exceltemplate", manageController.GetQuickImportExcelTemplate)
 		}

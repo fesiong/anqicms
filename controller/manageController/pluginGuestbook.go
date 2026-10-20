@@ -1,6 +1,7 @@
 package manageController
 
 import (
+	"encoding/json"
 	"strings"
 	"time"
 
@@ -278,6 +279,31 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 		})
 		return
 	}
+	// 部分更新：以现值为基底，仅覆盖请求体中显式出现的字段，未传字段保持原配置。
+	body, err := ctx.GetBody()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	var payload map[string]json.RawMessage
+	if err := json.Unmarshal(body, &payload); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	req = *currentSite.PluginGuestbook
+	if err := library.MergeJSONPayload(payload, &req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
 
 	var fields []*config.CustomField
 	var existsFields = map[string]struct{}{}
@@ -302,7 +328,7 @@ func PluginGuestbookSettingForm(ctx iris.Context) {
 	currentSite.PluginGuestbook.HeaderValue = req.HeaderValue
 	currentSite.PluginGuestbook.Fields = fields
 
-	err := currentSite.SaveSettingValue(provider.GuestbookSettingKey, currentSite.PluginGuestbook)
+	err = currentSite.SaveSettingValue(provider.GuestbookSettingKey, currentSite.PluginGuestbook)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

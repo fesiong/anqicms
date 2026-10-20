@@ -1,0 +1,11 @@
+# graphify 语料过滤：图片资产不进图谱
+# 图标/截图对「菜单→路由→函数→表」这类结构查询没有信息量，
+# 但会作为文档节点涌入聚类，把社区命名带偏（见 graphify-out/使用说明.md）。
+# 注意：.graphifyignore 只能额外排除，不能重新纳入 .gitignore 已排除的内容。
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.svg

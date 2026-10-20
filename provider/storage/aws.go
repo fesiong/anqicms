@@ -56,12 +56,28 @@ func (s *AwsS3Storage) scheme() string {
 	return "https"
 }
 
+// escapeKey 对 object key 做 URI 编码，供拼 URL 与签名共用。
+//
+// ⚠️ 不能直接用 url.PathEscape(key)：它会把路径分隔符 `/` 也编码成 `%2F`，
+// 于是「签名用的路径」和「线上实际收到的路径」口径不一致，S3/R2 重算签名
+// 必然对不上 → 403 SignatureDoesNotMatch。
+//
+// 正确做法（S3 SigV4 规范）：按 path segment 逐段编码，保留 `/` 作分隔符。
+// 这也是 AWS SDK 的行为。
+func escapeKey(key string) string {
+	segments := strings.Split(key, "/")
+	for i, seg := range segments {
+		segments[i] = url.PathEscape(seg)
+	}
+	return strings.Join(segments, "/")
+}
+
 func (s *AwsS3Storage) objectURL(key string) string {
-	return fmt.Sprintf("%s://%s/%s/%s", s.scheme(), s.host(), s.bucket, url.PathEscape(key))
+	return fmt.Sprintf("%s://%s/%s/%s", s.scheme(), s.host(), s.bucket, escapeKey(key))
 }
 
 func (s *AwsS3Storage) objectPath(key string) string {
-	return fmt.Sprintf("/%s/%s", s.bucket, url.PathEscape(key))
+	return fmt.Sprintf("/%s/%s", s.bucket, escapeKey(key))
 }
 
 // sha256Hex 计算 body 的 SHA256 十六进制
@@ -124,8 +140,14 @@ func (s *AwsS3Storage) sign(req *http.Request, bodyHash string) {
 	}
 
 	// 1. Canonical Request
+	//
+	// canonical URI 必须是「按 segment 编码、保留斜杠」的形态，且与
+	// objectURL 实际发出的路径完全一致。req.URL.Path 是解码后的值，
+	// req.URL.EscapedPath() 在 RawPath 存在时才会返回编码态——两者都不可靠，
+	// 这里直接用 escapeKey 重算，保证与 objectURL 同源同口径。
+	canonicalURI := escapeKey(req.URL.Path)
 	canonicalRequest := req.Method + "\n" +
-		req.URL.Path + "\n" +
+		canonicalURI + "\n" +
 		"" + "\n" + // query string（S3 简单操作无 query）
 		canonicalHeaders.String() + "\n" +
 		strings.Join(signedHeaders, ";") + "\n" +
@@ -245,7 +267,7 @@ func (s *AwsS3Storage) Exists(ctx context.Context, key string) (bool, error) {
 func (s *AwsS3Storage) Move(ctx context.Context, src, dest string) error {
 	emptyHash := sha256Hex(nil)
 
-	copySource := "/" + s.bucket + "/" + url.PathEscape(src)
+	copySource := "/" + s.bucket + "/" + escapeKey(src)
 
 	req, err := http.NewRequestWithContext(ctx, "PUT", s.objectURL(dest), nil)
 	if err != nil {
