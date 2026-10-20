@@ -120,6 +120,8 @@ AnQiCMS originated from the GoBlog project in 2019. After multiple refactoring a
 
 - **Latest**
   > Continuous iteration and optimization, with AI deeply integrated into content creation and site management, supporting AI Agent, MCP protocol, and multilingual global operations
+- **October 20, 2026, v3.6.7 Released**
+  > Settings save endpoints now support partial updates, so changing one field no longer wipes sibling config; added automatic image alt text with a site-wide backfill endpoint (GEO retrievability); fixed sitemap wiping real config on a single "generate" click, object storage uploads failing for filenames with parentheses or spaces, captcha responses being replayed from cache, template switches still rendering the old template, and meaningless UUIDs in editor HTML
 - **October 8, 2026, v3.6.6 Released**
   > Security fixes: SQL injection through the list ordering parameter, and sub-site jump login that treated the stored password hash as the shared secret (now a server-issued, short-lived single-use ticket); when a security gate blocks a call, the caller now gets the reason and what to do next
 - **October 7, 2026, v3.6.5 Released**
