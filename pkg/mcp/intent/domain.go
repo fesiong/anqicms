@@ -47,6 +47,14 @@ var domainByPlugin = map[string]Domain{
 	"withdraw":   DomainCommerce,
 	"commission": DomainCommerce,
 	"finance":    DomainCommerce,
+	// 商城扩展（AnqiShop 合并新增：营销活动/优惠券/物流/愿望清单/询盘订单）
+	"activity":      DomainCommerce,
+	"coupon":        DomainCommerce,
+	"shipping":      DomainCommerce,
+	"wishlist":      DomainCommerce,
+	"communication": DomainCommerce,
+	// 商城商品同步到 Google Merchant Center——属推广与 SEO
+	"googlemerchant": DomainSeo,
 	// 触达渠道
 	"wechat":     DomainChannel,
 	"weapp":      DomainChannel,
