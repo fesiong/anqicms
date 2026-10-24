@@ -43,18 +43,18 @@ func TestMatchGlobPattern(t *testing.T) {
 		{"?.go", "ab.go", false},
 
 		// ── ③ ** 跨任意层级 ──
-		{"**/*.go", "main.go", true},                     // 零层
-		{"**/*.go", "a/b/c/deep.go", true},               // 多层
+		{"**/*.go", "main.go", true},       // 零层
+		{"**/*.go", "a/b/c/deep.go", true}, // 多层
 		{"**/*.json", "a/b.json", true},
 		{"**/*.json", "a/b/c.json", true},
 		{"**/*.json", "a/b/c.txt", false},
 		{"**/catalog_*.go", "pkg/mcp/intent/catalog_api.go", true},
-		{"**/catalog_*.go", "catalog_api.go", true}, // ** 吃掉零层
+		{"**/catalog_*.go", "catalog_api.go", true},             // ** 吃掉零层
 		{"**/catalog_*.go", "pkg/mcp/intent/catalog.go", false}, // 同理：catalog.go 无下划线
-		{"**/catalog_*.go", "catalog.go", false},                  // 同上
-		{"pkg/**/*.go", "pkg/a.go", true},                // ** 匹配零层
-		{"pkg/**/*.go", "pkg/a/b/c.go", true},            // ** 匹配多层
-		{"pkg/**/*.go", "other/a.go", false},             // 前缀不符
+		{"**/catalog_*.go", "catalog.go", false},                // 同上
+		{"pkg/**/*.go", "pkg/a.go", true},                       // ** 匹配零层
+		{"pkg/**/*.go", "pkg/a/b/c.go", true},                   // ** 匹配多层
+		{"pkg/**/*.go", "other/a.go", false},                    // 前缀不符
 		{"**/mcp/**/*.go", "pkg/mcp/intent/catalog.go", true},
 		{"**/mcp/**/*.go", "pkg/other/intent/catalog.go", false},
 		// 末尾的 ** 吞掉剩余全部段

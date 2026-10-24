@@ -18,3 +18,15 @@ func TestSendMail(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestSendMail2(t *testing.T) {
+
+	dbSite, _ := GetDBWebsiteInfo(1)
+	InitWebsite(dbSite)
+	w := GetWebsite(1)
+
+	err := w.SendInvoiceMail(nil, nil, "invoices/202508312153240002.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+}

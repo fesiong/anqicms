@@ -4,6 +4,9 @@ import (
 	"net/url"
 	"strings"
 	"sync"
+
+	"golang.org/x/oauth2"
+	content "google.golang.org/api/content/v2.1"
 )
 
 type CodeItem struct {
@@ -95,6 +98,9 @@ type PluginSendmail struct {
 	Account   string `json:"account"`   // SMTP帐户
 	Password  string `json:"password"`  // SMTP密码
 	Recipient string `json:"recipient"` // 默认为SMTP账户，多个收件人请使用英文逗号`,`分开
+
+	UseBrevo    bool   `json:"use_brevo"`     // 是否改用 Brevo 邮件服务（商城营销邮件）
+	BrevoApiKey string `json:"brevo_api_key"` // Brevo API Key
 
 	Templates []EmailTemplate `json:"templates"` // 启用的模板列表
 }
@@ -484,10 +490,33 @@ type PluginLLMsConfig struct {
 }
 
 type PluginPlaceConfig struct {
-	Open        bool          `json:"open"`         // 是否启用城市分站
+	Open        bool          `json:"open"`
 	UrlType     string        `json:"url_type"`     // URL形式，subdomain|directory,默认：directory
 	ContentType string        `json:"content_type"` // 默认=内容需要绑定分站，full=全站复用
-	Fields      []CustomField `json:"fields"`       // 城市站自定义字段
+	Fields      []CustomField `json:"fields"`       // 自定义字段
+}
+
+type PluginGoogleMerchantConfig struct {
+	Open         bool   `json:"open"`
+	RedirectUrl  string `json:"redirect_url"`
+	ClientId     string `json:"client_id"`
+	ClientSecret string `json:"client_secret"`
+	PlacesApiKey string `json:"places_api_key"`
+
+	Email      string `json:"email"`
+	Name       string `json:"name"`
+	GivenName  string `json:"given_name"`
+	FamilyName string `json:"family_name"`
+
+	Token *oauth2.Token `json:"token"`
+
+	Accounts     []*content.AccountIdentifier `json:"accounts"`
+	MerchantId   uint64                       `json:"merchant_id"`
+	AggregatorId uint64                       `json:"aggregator_id"`
+	AccessToken  string                       `json:"access_token"`
+	RefreshToken string                       `json:"refresh_token"`
+	TokenType    string                       `json:"token_type"`
+	ExpireTme    int64                        `json:"expire_tme"`
 }
 
 func (g *CustomField) SplitContent() []string {

@@ -20,6 +20,27 @@ import (
 	"kandaoni.com/anqicms/response"
 )
 
+type SkuResponse struct {
+	Id             int64                  `json:"id"`
+	Title          string                 `json:"title"`
+	Thumb          string                 `json:"thumb"`
+	Currency       string                 `json:"currency"`
+	CurrencySymbol string                 `json:"currency_symbol"`
+	Price          int64                  `json:"price"`
+	MinPrice       int64                  `json:"min_price"` //默认的最低价等于本价格
+	MaxPrice       int64                  `json:"max_price"`
+	HasSku         bool                   `json:"has_sku"`         // 是否有sku
+	UserLimit      int                    `json:"user_limit"`      // 限购
+	QuotaUsed      int                    `json:"quota_used"`      // 用户曾经购买过多少个该商品，用户限购
+	OrderCount     int                    `json:"order_count"`     // 销量
+	Stock          int64                  `json:"stock"`           // 库存
+	OptionType     int                    `json:"option_type"`     // 规格类型
+	Options        []*model.ArchiveOption `json:"options"`         // 规格选项
+	Skus           []*model.ArchiveSku    `json:"skus"`            // 库存
+	WholesaleRules []*model.WholesaleRule `json:"wholesale_rules"` // 批发规则
+	Activity       *model.Activity        `json:"activity"`        // 营销活动
+}
+
 func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive, error) {
 	var archive *model.Archive
 	var err error
@@ -45,10 +66,37 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 			}
 		} else {
 			archive, err = w.GetArchiveByUrlToken(req.UrlToken)
+			// 处理sku的情况
+			if err != nil {
+				archiveSku, err := w.GetArchiveSkuByUrlToken(req.UrlToken)
+				if err != nil {
+					return nil, err
+				}
+				archive, err = w.GetArchiveById(archiveSku.ArchiveId)
+				if err != nil {
+					return nil, err
+				}
+
+				archiveSku.Thumb = archiveSku.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+				archiveSku.Link = w.GetUrl("archive", archive, 0, archiveSku)
+				options, _ := w.GetArchiveOptions(archive.Id)
+				archiveSku.Values = archiveSku.BuildValues(options)
+				archive.Sku = archiveSku
+			}
 		}
 	}
 	if archive == nil {
 		return nil, errors.New("no archive found")
+	}
+	if req.Variant > 0 {
+		archiveSku, err := w.GetArchiveSkuById(archive.Id, req.Variant)
+		if err == nil {
+			archiveSku.Thumb = archiveSku.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+			archiveSku.Link = w.GetUrl("archive", archive, 0, archiveSku)
+			options, _ := w.GetArchiveOptions(archive.Id)
+			archiveSku.Values = archiveSku.BuildValues(options)
+			archive.Sku = archiveSku
+		}
 	}
 
 	if err != nil && req.Id > 0 {
@@ -91,6 +139,17 @@ func (w *Website) ApiGetArchive(req *request.ApiArchiveRequest) (*model.Archive,
 		exist := w.CheckFavorites(int64(req.UserId), []int64{archive.Id})
 		if len(exist) > 0 {
 			archive.IsFavorite = true
+		}
+	}
+	// wholesaleRules
+	if archive.ProductType == config.ProductTypeWholesale {
+		archive.WholesaleRules, _ = w.GetArchiveWholesaleRules(archive.Id)
+	}
+	if archive.OptionType > 0 {
+		skuInfo, _ := w.ApiGetSku(&request.ApiArchiveRequest{Id: archive.Id, UserId: req.UserId})
+		archive.Options = skuInfo.Options
+		if archive.OptionType == config.OptionTypeCombine {
+			archive.Skus = skuInfo.Skus
 		}
 	}
 	// 读取flag
@@ -581,6 +640,9 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			if req.ModuleId > 0 {
 				tx = tx.Where("module_id = ?", req.ModuleId)
 			}
+			if req.ProductType > 0 {
+				tx = tx.Where("product_type = ?", req.ProductType)
+			}
 			if req.Flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", req.Flag)
 			} else if len(req.ExcludeFlags) > 0 {
@@ -633,6 +695,51 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 						tx = tx.Where("archives.price >= ? AND archives.price <= ?", minPrice, maxPrice)
 					} else {
 						tx = tx.Where("archives.price >= ?", minPrice)
+					}
+				} else if tmpv, ok := req.ExtraFields["filter.v.availability"]; ok {
+					if tmpv == "1" {
+						// in stock
+						tx = tx.Where("archives.stock > 0")
+					} else {
+						// out of stock
+						tx = tx.Where("archives.stock <= 0")
+					}
+				} else {
+					// options - use subquery with OR relationship for multiple option filters
+					var optionFilters []string
+					var optionArgs []interface{}
+					for k, v := range req.ExtraFields {
+						if strings.HasPrefix(k, "filter.option.") {
+							optionName := strings.TrimPrefix(k, "filter.option.")
+							optionValues := strings.Split(fmt.Sprint(v), ",")
+							var validValues []string
+							for _, val := range optionValues {
+								val = strings.TrimSpace(val)
+								if val != "" {
+									validValues = append(validValues, val)
+								}
+							}
+							if len(validValues) > 0 {
+								if len(validValues) == 1 {
+									optionFilters = append(optionFilters, "(archive_options.title = ? AND archive_option_values.title = ?)")
+									optionArgs = append(optionArgs, optionName, validValues[0])
+								} else {
+									placeholders := strings.Repeat("?,", len(validValues))
+									placeholders = placeholders[:len(placeholders)-1]
+									optionFilters = append(optionFilters, "(archive_options.title = ? AND archive_option_values.title IN ("+placeholders+"))")
+									optionArgs = append(optionArgs, optionName)
+									for _, val := range validValues {
+										optionArgs = append(optionArgs, val)
+									}
+								}
+							}
+						}
+					}
+					if len(optionFilters) > 0 {
+						needDistinct = true
+						tx = tx.Joins("INNER JOIN archive_options ON archives.id = archive_options.archive_id")
+						tx = tx.Joins("INNER JOIN archive_option_values ON archive_options.id = archive_option_values.option_id")
+						tx = tx.Where(strings.Join(optionFilters, " OR "), optionArgs...)
 					}
 				}
 			}
@@ -887,6 +994,28 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 				}
 			}
 		}
+		if req.ShowSkus {
+			for j, archive := range archives {
+				if archive.OptionType > 0 {
+					skuInfo, _ := w.ApiGetSku(&request.ApiArchiveRequest{Id: archive.Id, UserId: req.UserId})
+					archives[j].Options = skuInfo.Options
+					if archive.OptionType == config.OptionTypeCombine {
+						archives[j].Skus = skuInfo.Skus
+					}
+				}
+			}
+		} else if req.ShowOptions {
+			for j, archive := range archives {
+				options, _ := w.GetArchiveOptions(archive.Id)
+				archives[j].Options = options
+			}
+		}
+		if req.ShowWholesaleRules {
+			for j, archive := range archives {
+				rules, _ := w.GetArchiveWholesaleRules(archive.Id)
+				archives[j].WholesaleRules = rules
+			}
+		}
 		if req.UserId > 0 {
 			// 读取 favorite
 			var archiveFavorites []*model.ArchiveFavorite
@@ -1013,10 +1142,58 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			})
 		}
 	}
+	// sku变体
+	if req.ModuleId == 2 {
+		// 产品筛选，有sku
+		optionsFilter := w.GetArchiveOptionsFilter()
+		for k, v := range optionsFilter {
+			var tmpUrlParam = map[string]bool{}
+			if req.UrlParams != nil && req.UrlParams[v.FieldName] != "" {
+				tmpData := strings.Split(req.UrlParams[v.FieldName], ",")
+				for _, v := range tmpData {
+					tmpUrlParam[v] = true
+				}
+			}
+			for k2, v2 := range v.Items {
+				tmpParams, _ := url.ParseQuery(newQuery)
+				tmpParams.Set(v.FieldName, v2.Label)
+				isCurrent := false
+				if tmpUrlParam[v2.Label] {
+					isCurrent = true
+				}
+				optionsFilter[k].Items[k2].IsCurrent = isCurrent
+				optionsFilter[k].Items[k2].Link = urlPatten + tmpParams.Encode()
+			}
+			if req.AllText != "" {
+				tmpParams, _ := url.ParseQuery(newQuery)
+				tmpParams.Set(v.FieldName, "")
+				isCurrent := false
+				if len(tmpUrlParam) == 0 {
+					isCurrent = true
+				}
+				// 需要插入 全部 标签
+				filterItem := response.FilterItem{
+					Label:     req.AllText,
+					Value:     "",
+					Link:      urlPatten + tmpParams.Encode(),
+					IsCurrent: isCurrent,
+				}
+				v.Items = append(v.Items, response.FilterItem{})
+				copy(v.Items[1:], v.Items)
+				v.Items[0] = filterItem
+			}
+		}
+		filterGroups = append(filterGroups, optionsFilter...)
+	}
 	if req.ShowPrice {
 		// maxPrice
 		var maxPrice int64
 		w.DB.Model(model.Archive{}).Select("max(price)").Scan(&maxPrice)
+		var maxPrice2 int64
+		w.DB.Model(model.ArchiveSku{}).Select("max(price)").Scan(&maxPrice2)
+		if maxPrice2 > maxPrice {
+			maxPrice = maxPrice2
+		}
 		tmpParams, _ := url.ParseQuery(newQuery)
 		tmpParams.Set("price", req.UrlParams["price"])
 		// 把价格范围分成5份
@@ -1047,6 +1224,26 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			Name:      "Category",
 			FieldName: "category",
 			Items:     categoryItems,
+		})
+	}
+	if req.ShowAvailability {
+		filterGroups = append(filterGroups, response.FilterGroup{
+			Name:      "Availability",
+			FieldName: "filter.v.availability",
+			Items: []response.FilterItem{
+				{
+					Label:     "In Stock",
+					Value:     "1",
+					Link:      urlPatten + "filter.v.availability=1",
+					IsCurrent: strings.Contains(req.UrlParams["filter.v.availability"], "1"),
+				},
+				{
+					Label:     "Out of Stock",
+					Value:     "0",
+					Link:      urlPatten + "filter.v.availability=0",
+					IsCurrent: strings.Contains(req.UrlParams["filter.v.availability"], "0"),
+				},
+			},
 		})
 	}
 
@@ -1159,6 +1356,110 @@ func (w *Website) ApiGetArchiveParams(req *request.ApiArchiveRequest) ([]config.
 	}
 
 	return extraFields, nil
+}
+
+func (w *Website) ApiGetSku(req *request.ApiArchiveRequest) (*SkuResponse, error) {
+	var archive *model.Archive
+	var err error
+	if req.Id > 0 {
+		archive = w.GetArchiveByIdFromCache(req.Id)
+	}
+	if req.UrlToken != "" {
+		// 处理特殊的 prev and next
+		if req.UrlToken == "prev" || req.UrlToken == "next" {
+			if archive == nil {
+				return nil, errors.New("no archive found")
+			}
+			if req.UrlToken == "prev" {
+				archive, err = w.GetPreviousArchive(int64(archive.CategoryId), archive.Id)
+				if err != nil {
+					return nil, err
+				}
+			} else {
+				archive, err = w.GetNextArchive(int64(archive.CategoryId), archive.Id)
+				if err != nil {
+					return nil, err
+				}
+			}
+		} else {
+			archive, err = w.GetArchiveByUrlToken(req.UrlToken)
+		}
+	}
+	if archive == nil {
+		return nil, errors.New("no archive found")
+	}
+
+	archive.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	var skuResp = SkuResponse{
+		Id:             archive.Id,
+		Title:          archive.Title,
+		Thumb:          archive.Thumb,
+		Currency:       w.Currency.Currency,
+		CurrencySymbol: w.Currency.Symbol,
+		Price:          archive.Price,
+		MinPrice:       archive.Price,
+		MaxPrice:       archive.Price,
+		HasSku:         false,
+		UserLimit:      0,
+		QuotaUsed:      0,
+		OrderCount:     0,
+		Stock:          archive.Stock,
+		OptionType:     archive.OptionType,
+		Options:        nil,
+		Skus:           nil,
+	}
+	// 读取options
+	options, _ := w.GetArchiveOptions(archive.Id)
+	skus, _ := w.GetArchiveSkus(archive.Id)
+	if len(skus) > 0 {
+		skuResp.HasSku = true
+	}
+	skuResp.Options = options
+	for i, sku := range skus {
+		var values []model.ArchiveOptionValue
+		symbols := strings.Split(sku.Symbol, "-")
+		for _, sv := range symbols {
+			symbol, _ := strconv.ParseInt(sv, 10, 64)
+			for _, opt := range options {
+				for _, vv := range opt.Values {
+					if vv.Id == symbol {
+						values = append(values, vv)
+						break
+					}
+				}
+			}
+		}
+		skus[i].Values = values
+		if skus[i].Logo == "" {
+			for _, v := range values {
+				if v.Logo != "" {
+					skus[i].Logo = v.Logo
+					skus[i].Thumb = v.Thumb
+					break
+				}
+			}
+		}
+		if skuResp.MinPrice > skus[i].Price {
+			skuResp.MinPrice = skus[i].Price
+		}
+		if skuResp.MaxPrice < skus[i].Price {
+			skuResp.MaxPrice = skus[i].Price
+		}
+		// link
+		skus[i].Thumb = skus[i].GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+		skus[i].Link = w.GetUrl("archive", archive, 0, skus[i])
+	}
+	skuResp.Skus = skus
+	if req.UserId > 0 {
+		// 限购
+		// todo 暂时不处理
+	}
+	if archive.ProductType == config.ProductTypeWholesale {
+		wholesaleRules, _ := w.GetArchiveWholesaleRules(archive.Id)
+		skuResp.WholesaleRules = wholesaleRules
+	}
+
+	return &skuResp, nil
 }
 
 func (w *Website) ApiGetCategory(req *request.ApiCategoryRequest) (*model.Category, error) {
@@ -1686,6 +1987,63 @@ func (w *Website) ApiGetLanguages() ([]config.MultiLangSite, error) {
 	languages := w.GetMultiLangSites(mainId, false)
 
 	return languages, nil
+}
+
+func (w *Website) GetArchiveOptionsFilter() []response.FilterGroup {
+	var filterGroups []response.FilterGroup
+	cacheKey := "archive-options-filter"
+	err := w.Cache.Get(cacheKey, &filterGroups)
+	if err != nil {
+
+		var skuOptions []*model.ArchiveOption
+		w.DB.Model(model.ArchiveOption{}).Joins("INNER JOIN archives on archives.id = archive_options.archive_id").Find(&skuOptions)
+		var skuTitles = map[string][]int64{}
+		for _, v := range skuOptions {
+			v.Title = strings.Title(v.Title)
+			if len(v.Title) == 0 {
+				continue
+			}
+			skuTitles[v.Title] = append(skuTitles[v.Title], v.Id)
+		}
+		// 获取optionValue
+		var skuValues = map[string][]model.ArchiveOptionValue{}
+		for k, v := range skuTitles {
+			if len(v) > 0 {
+				var valueTitles []model.ArchiveOptionValue
+				w.DB.Model(model.ArchiveOptionValue{}).Where("option_id IN (?)", v).Group("title").Find(&valueTitles)
+				if len(valueTitles) == 0 {
+					continue
+				}
+				skuValues[k] = valueTitles
+			}
+		}
+		// map 按 key 排序
+		var sortKeys []string
+		for k := range skuValues {
+			sortKeys = append(sortKeys, k)
+		}
+		sort.Strings(sortKeys)
+
+		for _, k := range sortKeys {
+			filterGroup := response.FilterGroup{
+				Name:      k,
+				FieldName: "filter.option." + k,
+			}
+			for _, v := range skuValues[k] {
+				filterGroup.Items = append(filterGroup.Items, response.FilterItem{
+					Label: v.Title,
+					Value: v.Title,
+					Link:  v.Title,
+					Color: v.Color,
+				})
+			}
+			filterGroups = append(filterGroups, filterGroup)
+		}
+
+		w.Cache.Set(cacheKey, filterGroups, 1800)
+	}
+
+	return filterGroups
 }
 
 func (w *Website) GetMetadata(params map[string]string) *response.WebInfo {

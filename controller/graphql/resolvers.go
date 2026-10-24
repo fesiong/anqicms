@@ -8,6 +8,7 @@ import (
 	"github.com/graphql-go/graphql"
 	"github.com/graphql-go/graphql/language/ast"
 	"github.com/kataras/iris/v12"
+	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller"
 	"kandaoni.com/anqicms/model"
@@ -50,6 +51,13 @@ func resolvePageMeta(p graphql.ResolveParams) (interface{}, error) {
 
 	webInfo := currentSite.GetMetadata(params)
 
+	if params["match"] == provider.PatternSearch {
+		// 记录搜索
+		userId := ctx.Values().GetUintDefault("userId", 0)
+		addr := ctx.RemoteAddr()
+		go currentSite.AddSearchLog(params["q"], userId, addr)
+	}
+
 	return webInfo, nil
 }
 
@@ -68,6 +76,7 @@ func resolveArchive(p graphql.ResolveParams) (interface{}, error) {
 	if p.Args["render"] != nil {
 		render, _ = p.Args["render"].(bool)
 	}
+	variant, _ := p.Args["variant"].(int)
 	userId := ctx.Values().GetUintDefault("userId", 0)
 	userGroup, _ := ctx.Values().Get("userGroup").(*model.UserGroup)
 	userInfo, _ := ctx.Values().Get("userInfo").(*model.User)
@@ -80,6 +89,7 @@ func resolveArchive(p graphql.ResolveParams) (interface{}, error) {
 		UserId:    userId,
 		UserGroup: userGroup,
 		UserInfo:  userInfo,
+		Variant:   int64(variant),
 	}
 
 	return currentSite.ApiGetArchive(req)
@@ -176,6 +186,9 @@ func resolveArchives(p graphql.ResolveParams) (interface{}, error) {
 		ShowExtra:          showExtra,
 		ShowCategory:       existQueryField("category", p.Info.FieldASTs),
 		ShowTag:            existQueryField("tags", p.Info.FieldASTs),
+		ShowSkus:           existQueryField("skus", p.Info.FieldASTs),
+		ShowWholesaleRules: existQueryField("wholesale_rules", p.Info.FieldASTs),
+		ShowOptions:        existQueryField("options", p.Info.FieldASTs),
 		Draft:              draft,
 		Child:              child,
 		Order:              order,
@@ -208,19 +221,21 @@ func resolveFilters(p graphql.ResolveParams) (interface{}, error) {
 	moduleId, _ := p.Args["module_id"].(int)
 	showAll, _ := p.Args["show_all"].(bool)
 	allText, _ := p.Args["all_text"].(string)
+	showAvailability, _ := p.Args["show_availability"].(bool)
 	showPrice, _ := p.Args["show_price"].(bool)
 	showCategory, _ := p.Args["show_category"].(bool)
 	parentId, _ := p.Args["parent_id"].(int)
 	categoryId, _ := p.Args["category_id"].(int)
 
 	req := request.ApiFilterRequest{
-		ModuleId:     int64(moduleId),
-		ShowAll:      showAll,
-		AllText:      allText,
-		ShowPrice:    showPrice,
-		ShowCategory: showCategory,
-		ParentId:     int64(parentId),
-		CategoryId:   int64(categoryId),
+		ModuleId:         int64(moduleId),
+		ShowAll:          showAll,
+		AllText:          allText,
+		ShowAvailability: showAvailability,
+		ShowPrice:        showPrice,
+		ShowCategory:     showCategory,
+		ParentId:         int64(parentId),
+		CategoryId:       int64(categoryId),
 	}
 
 	return currentSite.ApiGetFilters(&req)
@@ -252,6 +267,28 @@ func resolveArchiveParams(p graphql.ResolveParams) (interface{}, error) {
 	}
 
 	return currentSite.ApiGetArchiveParams(req)
+}
+
+func resolveSku(p graphql.ResolveParams) (interface{}, error) {
+	rootValue := p.Info.RootValue.(map[string]interface{})
+	currentSite := rootValue["site"].(*provider.Website)
+	ctx := rootValue["ctx"].(iris.Context)
+
+	id, _ := p.Args["id"].(int)
+	urlToken, _ := p.Args["url_token"].(string)
+	if p.Args["filename"] != nil {
+		urlToken, _ = p.Args["filename"].(string)
+	}
+
+	userId := ctx.Values().GetUintDefault("userId", 0)
+
+	req := &request.ApiArchiveRequest{
+		Id:       int64(id),
+		UrlToken: urlToken,
+		UserId:   userId,
+	}
+
+	return currentSite.ApiGetSku(req)
 }
 
 func resolveUser(p graphql.ResolveParams) (interface{}, error) {
@@ -468,6 +505,45 @@ func resolveComments(p graphql.ResolveParams) (interface{}, error) {
 		"items": comments,
 		"total": total,
 	}, nil
+}
+
+func resolveReviews(p graphql.ResolveParams) (interface{}, error) {
+	rootValue := p.Info.RootValue.(map[string]interface{})
+	currentSite := rootValue["site"].(*provider.Website)
+	itemId, _ := p.Args["id"].(int)
+	userId, _ := p.Args["user_id"].(int)
+	order, _ := p.Args["order"].(string)
+	limit, _ := p.Args["limit"].(int)
+	if limit <= 0 {
+		limit = 10
+	}
+	offset, _ := p.Args["offset"].(int)
+	page, _ := p.Args["page"].(int)
+	if page < 1 {
+		page = 1
+	}
+
+	reviews, total := currentSite.GetOrderReviews(func(tx *gorm.DB) *gorm.DB {
+		if userId > 0 {
+			tx = tx.Where("user_id = ?", userId)
+		}
+		if itemId > 0 {
+			tx = tx.Where("archive_id = ?", itemId)
+		}
+		return tx.Where("status = ?", 1)
+	}, order, page, limit, offset)
+
+	return iris.Map{
+		"items": reviews,
+		"total": total,
+	}, nil
+}
+
+func resolveCurrency(p graphql.ResolveParams) (interface{}, error) {
+	rootValue := p.Info.RootValue.(map[string]interface{})
+	currentSite := rootValue["site"].(*provider.Website)
+
+	return currentSite.Currency, nil
 }
 
 func resolveSystemSetting(p graphql.ResolveParams) (interface{}, error) {

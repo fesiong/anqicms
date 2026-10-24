@@ -439,12 +439,12 @@ func marshalJSON(v any) (string, error) {
 // 逐字段无条件赋值的端点（material/place/group）加了也没用——它们没有这个开关，
 // 仍需意图层补齐，见 pkg/mcp/intent 的 invokeRouteOverwriteFields。
 var partialUpdateEndpoints = map[string]bool{
-	normalizeAPIPath("/archive/detail"):         true, // request.Archive
-	normalizeAPIPath("/category/detail"):        true, // request.Category
-	normalizeAPIPath("/module/detail"):          true, // request.ModuleRequest
-	normalizeAPIPath("/setting/nav"):            true, // request.NavConfig
-	normalizeAPIPath("/plugin/tag/detail"):      true, // request.PluginTag
-	normalizeAPIPath("/plugin/user/detail"):     true, // request.UserRequest
+	normalizeAPIPath("/archive/detail"):     true, // request.Archive
+	normalizeAPIPath("/category/detail"):    true, // request.Category
+	normalizeAPIPath("/module/detail"):      true, // request.ModuleRequest
+	normalizeAPIPath("/setting/nav"):        true, // request.NavConfig
+	normalizeAPIPath("/plugin/tag/detail"):  true, // request.PluginTag
+	normalizeAPIPath("/plugin/user/detail"): true, // request.UserRequest
 	// ⚠️ /plugin/redirect/detail **不在**这里：PluginRedirectRequest 没有 UpdateAll
 	// 字段，控制器也没有 `req.UpdateAll = true`（provider 是逐字段无条件赋值）。
 	// 加了也没用——那种端点仍需意图层补齐，见 invokeRouteOverwriteFields。

@@ -45,6 +45,7 @@ func ArchiveList(ctx iris.Context) {
 	status := ctx.URLParamDefault("status", "ok") // 支持 draft:草稿, ok:正式文档, plan:待发布文档
 	sort := ctx.URLParamDefault("sort", "id")
 	flag := ctx.URLParam("flag")
+	productType := ctx.URLParamIntDefault("productType", 0)
 	exact := ctx.URLParamBoolDefault("exact", false)
 	order := strings.ToLower(ctx.URLParamDefault("order", "desc"))
 	if order != "asc" {
@@ -113,12 +114,17 @@ func ArchiveList(ctx iris.Context) {
 				}
 			} else if moduleId > 0 {
 				tx = tx.Where("`module_id` = ?", moduleId)
+			} else {
+				tx = tx.Where("`module_id` != ?", 2)
 			}
 			if parentId > 0 {
 				tx = tx.Where("`parent_id` = ?", parentId)
 			}
 			if placeId > 0 {
 				tx = tx.Where("`place_id` = ?", placeId)
+			}
+			if productType > 0 {
+				tx = tx.Where("`product_type` = ?", productType)
 			}
 			if status == "delete" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDelete)
@@ -497,6 +503,22 @@ func ArchiveDetail(ctx iris.Context) {
 
 	tags := currentSite.GetTagsByItemId(archiveDraft.Id)
 	archiveDraft.Tags = tags
+	// 读取options
+	archiveDraft.Options, _ = currentSite.GetArchiveOptions(archiveDraft.Id)
+	archiveDraft.Skus, _ = currentSite.GetArchiveSkus(archiveDraft.Id)
+	for _, sku := range archiveDraft.Skus {
+		for i, value := range sku.Values {
+			if value.OptionTitle == "" {
+				for _, option := range archiveDraft.Options {
+					if option.Id == value.OptionId {
+						sku.Values[i].OptionTitle = option.Title
+						break
+					}
+				}
+			}
+		}
+	}
+	archiveDraft.WholesaleRules, _ = currentSite.GetArchiveWholesaleRules(archiveDraft.Id)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

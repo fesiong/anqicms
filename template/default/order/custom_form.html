@@ -1,0 +1,41 @@
+{% extends 'base.html' %}
+
+{% block title %}<title>Custom Form</title>{% endblock %}
+
+{% block head %}
+  <script src="https://js.stripe.com/v3/"></script>
+{% endblock %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <div class="row g-5">
+      <div class="col-lg-2"></div>
+      <!-- Checkout Form -->
+      <div class="col-lg-8">
+        <form id="custom-form" method="post" onsubmit="return false;">
+          <div class="mb-5" id="unlogin-contact">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="fw-bold mb-0">Thank you for completing your payment. Your order has been successfully paid. To proceed with your order, we need you to fill in some additional information via the form below.</h5>
+            </div>
+          </div>
+          <div id="user-form" class="mb-5">
+            
+          </div>
+
+          <div class="mb-5" id="custom-fields">
+            
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center pt-4 border-top">
+            <button type="submit" class="btn btn-dark px-5 py-3">Submit</button>
+          </div>
+        </form>
+      </div>
+      <div class="col-lg-2"></div>
+    </div>
+  </div>
+</main>
+
+{% endblock %}

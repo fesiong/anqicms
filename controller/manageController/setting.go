@@ -388,6 +388,9 @@ func SettingContact(ctx iris.Context) {
 	if system.Qrcode != "" && !strings.HasPrefix(system.Qrcode, "http") && !strings.HasPrefix(system.Qrcode, "//") {
 		system.Qrcode = currentSite.PluginStorage.StorageUrl + system.Qrcode
 	}
+	if system.ShopLogo != "" && !strings.HasPrefix(system.ShopLogo, "http") && !strings.HasPrefix(system.ShopLogo, "//") {
+		system.ShopLogo = currentSite.PluginStorage.StorageUrl + system.ShopLogo
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -437,6 +440,7 @@ func SettingContactForm(ctx iris.Context) {
 	}
 
 	req.Qrcode = strings.TrimPrefix(req.Qrcode, currentSite.PluginStorage.StorageUrl)
+	req.ShopLogo = strings.TrimPrefix(req.ShopLogo, currentSite.PluginStorage.StorageUrl)
 
 	if req.ExtraFields != nil {
 		for i := range req.ExtraFields {
@@ -460,6 +464,12 @@ func SettingContactForm(ctx iris.Context) {
 	currentSite.Contact.Instagram = req.Instagram
 	currentSite.Contact.Youtube = req.Youtube
 	currentSite.Contact.ExtraFields = req.ExtraFields
+	currentSite.Contact.ShopName = req.ShopName
+	currentSite.Contact.ShopLogo = req.ShopLogo
+	currentSite.Contact.ShopDescription = req.ShopDescription
+	currentSite.Contact.BusinessHours = req.BusinessHours
+	currentSite.Contact.ShippingTime = req.ShippingTime
+	currentSite.Contact.ShippingTimeRemark = req.ShippingTimeRemark
 
 	err = currentSite.SaveSettingValue(provider.ContactSettingKey, currentSite.Contact)
 	if err != nil {
@@ -1012,5 +1022,47 @@ func SettingAiForm(ctx iris.Context) {
 			"chat":  chatSettings.Configs,
 			"mcp":   chatSettings.Mcp,
 		},
+	})
+}
+
+func SettingCurrency(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": currentSite.Currency,
+	})
+}
+
+func SettingCurrencyForm(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	var req config.CurrencyConfig
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.Currency.Name = req.Name
+	currentSite.Currency.Currency = req.Currency
+	currentSite.Currency.Symbol = req.Symbol
+
+	err := currentSite.SaveSettingValue(provider.CurrencySettingKey, currentSite.Currency)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSystemConfiguration"))
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("ConfigurationUpdated"),
 	})
 }

@@ -827,6 +827,8 @@
 "SenderName": "发送者"
 "Back": "返回"
 "Info": "提示信息"
+"CouponCodeCanNotUse": "优惠券不可用"
+"CouponCodeValid": "优惠券有效"
 "PromptCannotBeEmpty": "提示信息不能为空"
 "BatchUpdateDocumentTagsLog": "批量更新文档标签：%v => %s"
 "UpdateGuestbookStatusLog": "更新留言状态：%d => %s"

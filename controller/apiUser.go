@@ -206,9 +206,56 @@ func ApiLogin(ctx iris.Context) {
 	}
 
 	if user == nil {
+		// 记录日志
+		loginLog := model.LoginLog{
+			UserId:   0,
+			Ip:       ctx.RemoteAddr(),
+			Status:   0,
+			UserName: req.UserName,
+			Password: req.Password,
+		}
+		currentSite.DB.Create(&loginLog)
+
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("LoginFailed"),
+		})
+		return
+	}
+	// 记录日志
+	loginLog := model.LoginLog{
+		UserId:   user.Id,
+		Ip:       ctx.RemoteAddr(),
+		Status:   1,
+		UserName: req.UserName,
+		Password: "",
+	}
+	currentSite.DB.Create(&loginLog)
+
+	_ = currentSite.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionUser, Type: request.LogTypeUserLogin, Id: int64(user.Id)})
+
+	// 审核和封禁中的用户不能登录
+	if user.Status != config.UserStatusActive {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserNotActive"),
+		})
+		return
+	}
+
+	// 已封禁的用户不能登录
+	if user.Status == config.UserStatusBlocked {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserBlocked"),
+		})
+		return
+	}
+
+	if user.Status == config.UserStatusPending {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UserPending"),
 		})
 		return
 	}

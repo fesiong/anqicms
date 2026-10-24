@@ -151,7 +151,6 @@ func GetSendMailResult(jobID string) (*SendMailResult, bool) {
 	return r.snapshotPtr(), true
 }
 
-
 func (w *Website) GetSubscribers(categoryId int64, keyword string, currentPage, pageSize int) ([]*model.Subscriber, int64) {
 	var subscribers []*model.Subscriber
 	offset := (currentPage - 1) * pageSize

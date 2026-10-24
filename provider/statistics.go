@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jinzhu/now"
@@ -57,13 +58,13 @@ func (w *Website) StatisticTraffic() []response.ChartData {
 
 	timeStamp := now.BeginningOfDay().AddDate(0, 0, -30).Unix()
 	var tmpResult []*model.StatisticLog
-	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count").Order("created_time ASC").Find(&tmpResult)
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count", "shop_count").Order("created_time ASC").Find(&tmpResult)
 	if len(tmpResult) == 0 {
 		// 首次访问没有数据，则先尝试生成
 		if w.StatisticLog != nil {
 			w.StatisticLog.Calc(w.DB)
 			// 再次查询
-			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count").Order("created_time ASC").Find(&tmpResult)
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ?", timeStamp).Omit("spider_count", "shop_count").Order("created_time ASC").Find(&tmpResult)
 		}
 	}
 	for _, v := range tmpResult {
@@ -114,6 +115,9 @@ func (w *Website) StatisticDetail(filename string, searchType string, currentPag
 }
 
 func (w *Website) CleanStatistics() {
+	// 删除 searchLog
+	w.DB.Where("created_time < ?", now.BeginningOfDay().Add(-30*24*time.Hour).Unix()).Delete(&model.SearchLog{})
+
 	//清理一个月前的记录
 	if w.StatisticLog == nil {
 		return
@@ -133,83 +137,81 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 		if explainCount <= 100000 {
 			exact = true
 		}
-		modules := w.GetCacheModules()
-		for _, v := range modules {
-			counter := response.ModuleCount{
-				Id:   v.Id,
-				Name: v.Title,
-			}
-			if exact {
-				w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
-			} else {
-				toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-					return tx.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).First(&model.Archive{})
-				})
-				counter.Total = w.GetExplainCount(toSql)
-				if counter.Total <= 100000 {
-					// 再次求取准确值
-					w.DB.Model(&model.Archive{}).Where("`module_id` = ?", v.Id).Count(&counter.Total)
-				}
-			}
-			result.ModuleCounts = append(result.ModuleCounts, counter)
-			result.ArchiveCount.Total += counter.Total
+		module := w.GetModuleFromCache(2)
+		counter := response.ModuleCount{
+			Id:   module.Id,
+			Name: module.Title,
 		}
+		if exact {
+			w.DB.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).Count(&counter.Total)
+		} else {
+			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+				return tx.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).First(&model.Archive{})
+			})
+			counter.Total = w.GetExplainCount(toSql)
+			if counter.Total <= 100000 {
+				// 再次求取准确值
+				w.DB.Model(&model.Archive{}).Where("`module_id` = ?", module.Id).Count(&counter.Total)
+			}
+		}
+		result.ModuleCounts = append(result.ModuleCounts, counter)
+		result.ArchiveCount.Total += counter.Total
 		lastWeek := now.BeginningOfWeek()
 		today := now.BeginningOfDay()
 		if exact {
-			w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
+			w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).First(&model.Archive{})
+				return tx.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).First(&model.Archive{})
 			})
 			result.ArchiveCount.LastWeek = w.GetExplainCount(toSql)
 			if result.ArchiveCount.LastWeek <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
+				w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, lastWeek.AddDate(0, 0, -7).Unix(), lastWeek.Unix()).Count(&result.ArchiveCount.LastWeek)
 			}
 		}
 		if exact {
-			w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
+			w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).First(&model.Archive{})
+				return tx.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).First(&model.Archive{})
 			})
 			result.ArchiveCount.Today = w.GetExplainCount(toSql)
 			if result.ArchiveCount.Today <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.Archive{}).Where("created_time >= ? and created_time < ?", today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
+				w.DB.Model(&model.Archive{}).Where("module_id = ? and created_time >= ? and created_time < ?", module.Id, today.Unix(), time.Now().Unix()).Count(&result.ArchiveCount.Today)
 			}
 		}
 		if exact {
-			w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+			w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).First(&model.ArchiveDraft{})
+				return tx.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).First(&model.ArchiveDraft{})
 			})
 			result.ArchiveCount.UnRelease = w.GetExplainCount(toSql)
 			if result.ArchiveCount.UnRelease <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.ArchiveDraft{}).Where("created_time > ?", time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
+				w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and created_time > ?", module.Id, time.Now().Unix()).Count(&result.ArchiveCount.UnRelease)
 			}
 		}
 		if exact {
-			w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
+			w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).Count(&result.ArchiveCount.Draft)
 		} else {
 			toSql := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
-				return tx.Model(&model.ArchiveDraft{}).Where("status = 0").First(&model.ArchiveDraft{})
+				return tx.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).First(&model.ArchiveDraft{})
 			})
 			result.ArchiveCount.Draft = w.GetExplainCount(toSql)
 			if result.ArchiveCount.Draft <= 100000 {
 				// 再次求取准确值
-				w.DB.Model(&model.ArchiveDraft{}).Where("status = 0").Count(&result.ArchiveCount.Draft)
+				w.DB.Model(&model.ArchiveDraft{}).Where("module_id = ? and status = 0", module.Id).Count(&result.ArchiveCount.Draft)
 			}
 		}
-		w.DB.Model(&model.Category{}).Where("`type` != ?", config.CategoryTypePage).Count(&result.CategoryCount)
+		w.DB.Model(&model.Category{}).Where("module_id = ? and `type` != ?", module.Id, config.CategoryTypePage).Count(&result.CategoryCount)
 		w.DB.Model(&model.Link{}).Count(&result.LinkCount)
 		w.DB.Model(&model.Guestbook{}).Count(&result.GuestbookCount)
 		designList := w.GetDesignList()
 		result.TemplateCount = int64(len(designList))
-		w.DB.Model(&model.Category{}).Where("`type` = ?", config.CategoryTypePage).Count(&result.PageCount)
+		w.DB.Model(&model.Category{}).Where("module_id = ? and `type` = ?", module.Id, config.CategoryTypePage).Count(&result.PageCount)
 		w.DB.Model(&model.Attachment{}).Count(&result.AttachmentCount)
 
 		timeStamp := now.BeginningOfDay().AddDate(0, 0, -7).Unix()
@@ -242,6 +244,280 @@ func (w *Website) GetStatisticsSummary(exact bool) *response.Statistics {
 	}
 
 	return &result
+}
+
+func (w *Website) StatisticCoupon(startTime int64, endTime int64) []response.ChartData {
+	// 优惠券领取数量
+	// 优惠券使用数量
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.CouponCode{}).Where("get_time >= ? and get_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(get_time)) AS `date`, count(*) as `value`, 'gain' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.CouponCode{}).Where("use_time >= ? and use_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(use_time)) AS `date`, count(*) as `value`, 'used' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+
+	return append(tmpResult, tmpResult2...)
+}
+
+func (w *Website) StatisticSearch(startTime int64, endTime int64) []response.ChartData {
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.SearchLog{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'search' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	return tmpResult
+}
+
+func (w *Website) StatisticCustomer(startTime int64, endTime int64) []response.ChartData {
+	// 新注册用户数量
+	// 活跃用户数量
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.User{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'register' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.LoginLog{}).Where("created_time >= ? and created_time < ? and status = 1", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'login' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+
+	return append(tmpResult, tmpResult2...)
+}
+
+func (w *Website) StatisticProduct(startTime int64, endTime int64) []response.ChartData {
+	// 上新
+	// 访问
+	var result []response.ChartData
+	w.DB.Model(&model.Archive{}).Where("module_id = 2 and created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'new' as `label`").Group("`date`").Order("`date`").Scan(&result)
+	// 如果结束时间是今天，则今天的数据需要获取最新的数据
+	today := now.EndOfDay().Unix()
+	if endTime == today {
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+		}
+	}
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+		}
+	}
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		result = append(result,
+			response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.ProductView,
+				Label: "views",
+			})
+	}
+
+	return result
+}
+
+func (w *Website) StatisticOrder(startTime int64, endTime int64) []response.ChartData {
+	// 下单
+	// 支付
+	var tmpResult []response.ChartData
+	w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'create' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	var tmpResult3 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+
+	tmpResult = append(tmpResult, tmpResult2...)
+	tmpResult = append(tmpResult, tmpResult3...)
+	return tmpResult
+}
+
+func (w *Website) StatisticConversion(startTime int64, endTime int64) []response.ChartData {
+	// 转化率
+	// 点击
+	// 加购
+	// checkout
+	// confirm
+	// pay
+	var result []response.ChartData
+
+	// 如果结束时间是今天，则今天的数据需要获取最新的数据
+	today := now.EndOfDay().Unix()
+	if endTime == today {
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+		}
+	}
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+		}
+	}
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		result = append(result,
+			response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.ProductView,
+				Label: "views",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.Cart,
+				Label: "cart",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.Checkout,
+				Label: "checkout",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.OrderCreate,
+				Label: "order_create",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.PayCreate,
+				Label: "pay_create",
+			}, response.ChartData{
+				Date:  vDate,
+				Value: v.ShopCount.Payment,
+				Label: "payment",
+			})
+	}
+
+	return result
+}
+
+func (w *Website) StatisticLive(startTime int64, endTime int64) map[string][]response.ChartData {
+	// 销售额，按天
+	var results = map[string][]response.ChartData{}
+	// 销售额
+	var tmpResult1 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult1)
+	results["amount"] = tmpResult1
+	// 平均订单金额
+	var tmpResult2 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, ROUND(sum(amount)/count(*)) as `value`, 'average' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	results["average_amount"] = tmpResult2
+	// 订单数量
+	var tmpResult3 []response.ChartData
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'count' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+	results["order_count"] = tmpResult3
+
+	// 如果结束时间是今天，则今天的数据需要获取最新的数据
+	today := now.EndOfDay().Unix()
+	if endTime == today {
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+		}
+	}
+	var tmpResult []*model.StatisticLog
+	w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Order("created_time ASC").Find(&tmpResult)
+	if len(tmpResult) == 0 {
+		// 首次访问没有数据，则先尝试生成
+		if w.StatisticLog != nil {
+			w.StatisticLog.Calc(w.DB)
+			// 再次查询
+			w.DB.Model(&model.StatisticLog{}).Where("`created_time` >= ? and created_time < ?", startTime, endTime).Omit("spider_count", "visit_count").Order("created_time ASC").Find(&tmpResult)
+		}
+	}
+	// 访问量 等
+	var productView []response.ChartData
+	// 复购，新客
+	var order []response.ChartData
+	// coupon
+	var coupon []response.ChartData
+	// 转化率
+	var conversion []response.ChartData
+	// customer
+	var customer []response.ChartData
+
+	for _, v := range tmpResult {
+		vDate := time.Unix(v.CreatedTime, 0).Format("2006-01-02")
+		// 访问量
+		productView = append(productView, response.ChartData{
+			Date:  vDate,
+			Label: "view",
+			Value: v.ShopCount.ProductView,
+		})
+		// 复购，新客
+		order = append(order, response.ChartData{
+			Date:  vDate,
+			Label: "first_order",
+			Value: v.ShopCount.FirstOrder,
+		}, response.ChartData{
+			Date:  vDate,
+			Label: "repurchase",
+			Value: v.ShopCount.Repurchase,
+		})
+		// coupon 使用量
+		coupon = append(coupon, response.ChartData{
+			Date:  vDate,
+			Label: "coupon_get",
+			Value: v.ShopCount.CouponGet,
+		}, response.ChartData{
+			Date:  vDate,
+			Label: "coupon_use",
+			Value: v.ShopCount.CouponUse,
+		})
+		// 转化率
+		conversion = append(conversion, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.ProductView,
+			Label: "views",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.Cart,
+			Label: "cart",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.Checkout,
+			Label: "checkout",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.OrderCreate,
+			Label: "order_create",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.ProductView,
+			Label: "pay_create",
+		}, response.ChartData{
+			Date:  vDate,
+			Value: v.ShopCount.ProductView,
+			Label: "payment",
+		})
+		//  客户
+		customer = append(customer, response.ChartData{
+			Date:  vDate,
+			Label: "new_user",
+			Value: v.ShopCount.UserCreate,
+		}, response.ChartData{
+			Date:  vDate,
+			Label: "active",
+			Value: v.ShopCount.UserLogin,
+		})
+	}
+
+	results["product_view"] = productView
+	results["order"] = order
+	results["coupon"] = coupon
+	results["conversion"] = conversion
+	results["customer"] = customer
+
+	return results
+}
+
+func (w *Website) StatisticSearchDetail(currentPage, limit int) ([]*model.SearchLog, int64) {
+	var total int64
+	var tmpResult []*model.SearchLog
+	if currentPage < 1 {
+		currentPage = 1
+	}
+	offset := (currentPage - 1) * limit
+
+	w.DB.Model(&model.SearchLog{}).Count(&total)
+	w.DB.Offset(offset).Limit(limit).Order("id desc").Find(&tmpResult)
+
+	return tmpResult, total
 }
 
 func (w *Website) SendStatisticsMail() {
@@ -462,4 +738,11 @@ func calcSpider(data map[string]int) int64 {
 	}
 
 	return int64(count)
+}
+
+// shop count cache
+type CachedShopCount struct {
+	mu             sync.Mutex
+	Counts         model.ShopCount
+	lastStoredTime int64
 }

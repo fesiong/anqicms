@@ -7,6 +7,35 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+func GetArchiveSku(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	archiveId := ctx.URLParamInt64Default("id", 0)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	filename := ctx.URLParam("filename")
+
+	req := &request.ApiArchiveRequest{
+		Id:       int64(archiveId),
+		UrlToken: filename,
+		UserId:   userId,
+	}
+
+	skuResp, err := currentSite.ApiGetSku(req)
+
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": skuResp,
+	})
+}
+
 func ApiGetFavorites(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)

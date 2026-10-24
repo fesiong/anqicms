@@ -126,6 +126,7 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	} else {
 		user = &model.User{}
 	}
+	oldGroupId := user.GroupId
 
 	if req.UpdateAll || req.UserName != "" {
 		user.UserName = req.UserName
@@ -264,6 +265,17 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 		//入库
 		w.DB.Model(model.User{}).Where("`id` = ?", user.Id).Updates(extraFields)
 	}
+
+	// 发送用户组变更邮件
+	if oldGroupId > 0 && oldGroupId != user.GroupId {
+		oldGroup, err := w.GetUserGroupInfo(oldGroupId)
+		if err == nil {
+			newGroup, _ := w.GetUserGroupInfo(user.GroupId)
+			user.Group = newGroup
+			w.SendUserGroupChangeEmail(user, oldGroup)
+		}
+	}
+
 	return user, err
 }
 
@@ -1133,6 +1145,13 @@ func (w *Website) UploadUserAvatar(userId uint, file multipart.File) (avatarUrl 
 // 处理新用户
 func (w *Website) ProcessNewUser(user *model.User) {
 	// 记录日志
+	_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionUser, Type: request.LogTypeUserCreate, Id: int64(user.Id)})
+
+	// 同步到brevo
+	client := w.BrevoClient("")
+	if client != nil {
+		_ = client.CreateContact(user)
+	}
 	// 新用户欢迎邮件
 	w.SendWelcomeEmail(user)
 }

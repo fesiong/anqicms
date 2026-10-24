@@ -390,7 +390,7 @@ func normalizeGlobPath(p string) string {
 //
 // 丢弃空段是必要的，不是洁癖：'**/catalog_*.go' 以 ** 开头，若保留首段空串，
 // ** 吃掉零层后会剩下「空段 + catalog_*.go」去匹配单段的 'catalog.go' 而失配
-//（这是第一版实现被测试抓到的真 bug）。标准 glob 语义里 'a//b' 等价于 'a/b'，
+// （这是第一版实现被测试抓到的真 bug）。标准 glob 语义里 'a//b' 等价于 'a/b'，
 // 所以丢弃是正确的。
 func splitGlobSegments(p string) []string {
 	parts := strings.Split(p, "/")
@@ -407,7 +407,7 @@ func splitGlobSegments(p string) []string {
 //
 // '**' 匹配 0..n 个路径段（标准 glob 语义），实现上枚举它可能吃掉多少段后递归。
 // 递归而非迭代：'a/**/b/**/c' 这类多个 '**' 只有递归才表达得了
-//（旧实现要求恰好一个 **，多个直接不进分支）。
+// （旧实现要求恰好一个 **，多个直接不进分支）。
 //
 // 末尾的 '**' 直接吞掉剩余全部段，因此 seg 是否还有元素都算匹配 —— 这正是
 // 'template/**' 能匹配 'template' 本身（零层）的原因。

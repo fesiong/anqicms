@@ -15,6 +15,7 @@ import (
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
+	"kandaoni.com/anqicms/request"
 	"kandaoni.com/anqicms/response"
 )
 
@@ -260,6 +261,31 @@ func (node *tagArchiveDetailNode) Execute(ctx *pongo2.ExecutionContext, writer p
 		content = category
 	case "Images":
 		content = archiveDetail.Images
+	case "Options":
+		options, _ := currentSite.GetArchiveOptions(archiveDetail.Id)
+		archiveDetail.Options = options
+		content = options
+	case "WholesaleRules":
+		if archiveDetail.ProductType == config.ProductTypeWholesale {
+			archiveDetail.WholesaleRules, _ = currentSite.GetArchiveWholesaleRules(archiveDetail.Id)
+		}
+		content = archiveDetail.WholesaleRules
+	case "Skus":
+		// skuInfo
+		skuInfo, _ := currentSite.ApiGetSku(&request.ApiArchiveRequest{Id: archiveDetail.Id, UserId: userId})
+		content = skuInfo.Skus
+	case "Sku":
+		options, _ := currentSite.GetArchiveOptions(archiveDetail.Id)
+		if archiveDetail.Sku == nil {
+			archiveDetail.Sku, _ = currentSite.GetDefaultSku(options)
+		}
+		if archiveDetail.Sku != nil {
+			archiveDetail.Sku.Values = archiveDetail.Sku.BuildValues(options)
+			archiveDetail.Sku.Link = currentSite.GetUrl("archive", archiveDetail, 0, archiveDetail.Sku)
+		}
+		content = archiveDetail.Sku
+	case "OrderFields":
+		content = archiveDetail.OrderFields
 	default:
 		// 备选方案：使用反射获取
 		if fieldName != "Extra" {

@@ -1,27 +1,19 @@
 {% extends 'base.html' %}
 
 {% block container %}
-
-{% include "partial/banner.html" %}
-<!-- crumb -->
-{% include "partial/crumb.html" %}
-<!-- crumb -->
-<div class="page">
-    <div class="container">
-        <div class="section page-item">
-            <!-- content -->
-            <div class="page-content">
-                <h1 class="single-content-title">{% pageDetail with name="Title" %}</h1>
-                <div class="single-arc">
-                    {%- pageDetail articleContent with name="Content" %}
-                    {{articleContent|safe}}
-                </div>
-            </div>
-            <!-- content -->
-            <!-- sidebar -->
-            {% include "partial/sidebar.html" %}
-            <!-- sidebar -->
+<main>
+  <article class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        <header class="mb-5 text-center">
+          <h1 class="fw-bold mb-4">{% pageDetail with name='Title' %}</h1>
+        </header>
+        <div class="article-content text-muted lead-content">
+          {%- pageDetail with name="Content" %}
         </div>
+      </div>
     </div>
-</div>
+  </article>
+
+</main>
 {% endblock %}

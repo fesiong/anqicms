@@ -3,54 +3,141 @@ package request
 import "kandaoni.com/anqicms/config"
 
 type Archive struct {
-	Id           int64                  `json:"id"`            // 文档 ID
-	ParentId     int64                  `json:"parent_id"`     // 父级文档 ID
-	PlaceId      uint                   `json:"place_id"`      // 城市站 ID
-	Title        string                 `json:"title"`         // 文档标题
-	SeoTitle     string                 `json:"seo_title"`     // 文档的 SEO 标题
-	ModuleId     uint                   `json:"module_id"`     // 模型 ID
-	CategoryId   uint                   `json:"category_id"`   // 文档分类 ID
-	CategoryIds  []uint                 `json:"category_ids"`  // 文档多分类 ID（启用文档多分类后使用）
-	Keywords     string                 `json:"keywords"`      // 文档关键词
-	Description  string                 `json:"description"`   // 文档描述
-	Content      string                 `json:"content"`       // 文档内容
-	Template     string                 `json:"template"`      // 指定文档使用的模板
-	Images       []string               `json:"images"`        // 文档图片集
-	Extra        map[string]interface{} `json:"extra"`         // 文档扩展字段（模型配置的字段）
-	CreatedTime  int64                  `json:"created_time"`  // 文档创建时间
-	UrlToken     string                 `json:"url_token"`     // 文档 URL 别名
-	Tags         []string               `json:"tags"`          // 文档标签
-	CanonicalUrl string                 `json:"canonical_url"` // 文档规范的链接（只有要将文档指向到另外的页面，才需要在这里填写）
-	FixedLink    string                 `json:"fixed_link"`    // 文档固定链接（只有你想把文档的链接持久固定，不随伪静态规则改变，才需要填写）
-	Flag         string                 `json:"flag"`          // 文档标记，默认无：h=头条、c=推荐、f=幻灯、a=特荐、s=滚动、h=加粗、p=图片、j=跳转
-	Flags        []string               `json:"flags"`         // flags 和 flag 二选一
-	UserId       uint                   `json:"user_id"`       // 文档作者 ID
-	Price        int64                  `json:"price"`         // 文档价格（单位：分）
-	Stock        int64                  `json:"stock"`         // 文档库存量（产品可用）
-	ReadLevel    int                    `json:"read_level"`    // 阅读关联用户组 level
-	Password     string                 `json:"password"`      // 文档密码（设置密码后，文档需要密码访问）
-	Sort         uint                   `json:"sort"`          // 排序，数值越大，越靠前（开启文档排序配置后生效）
-	Draft        bool                   `json:"draft"`         // 是否是草稿
-	RelationIds  []int64                `json:"relation_ids"`  // 相关文档的ID
-	Views        uint                   `json:"views"`         // 浏览量
+	Id           int64                  `json:"id"`
+	ParentId     int64                  `json:"parent_id"`
+	PlaceId      uint                   `json:"place_id"`
+	Title        string                 `json:"title"`
+	SeoTitle     string                 `json:"seo_title"`
+	ModuleId     uint                   `json:"module_id"`
+	CategoryId   uint                   `json:"category_id"`
+	CategoryIds  []uint                 `json:"category_ids"`
+	Keywords     string                 `json:"keywords"`
+	Description  string                 `json:"description"`
+	Content      string                 `json:"content"`
+	Template     string                 `json:"template"`
+	Images       []string               `json:"images"`
+	Extra        map[string]interface{} `json:"extra"`
+	CreatedTime  int64                  `json:"created_time"`
+	UrlToken     string                 `json:"url_token"`
+	Tags         []string               `json:"tags"`
+	CanonicalUrl string                 `json:"canonical_url"`
+	FixedLink    string                 `json:"fixed_link"`
+	Flag         string                 `json:"flag"`
+	Flags        []string               `json:"flags"`
+	UserId       uint                   `json:"user_id"`
+	Price        int64                  `json:"price"`
+	Stock        int64                  `json:"stock"`
+	ReadLevel    int                    `json:"read_level"` // 阅读关联 group level
+	Password     string                 `json:"password"`
+	Sort         uint                   `json:"sort"`         // 数值越大，越靠前
+	Draft        bool                   `json:"draft"`        // 是否是存草稿
+	RelationIds  []int64                `json:"relation_ids"` // 相关文档的ID
+	Views        uint                   `json:"views"`        // 浏览量
+	// 产品的字段
+	OriginPrice    int64                `json:"origin_price"`
+	CostPrice      int64                `json:"cost_price"`
+	VideoUrl       string               `json:"video_url"`
+	NeedLogistics  bool                 `json:"need_logistics"`
+	IsFreeShipping bool                 `json:"is_free_shipping"`
+	SoldCount      int64                `json:"sold_count"`
+	ReviewCount    int64                `json:"review_count"`
+	OptionType     int                  `json:"option_type"`
+	Weight         float64              `json:"weight"`      // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit     string               `json:"weight_unit"` // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length         float64              `json:"length"`
+	Width          float64              `json:"width"`
+	Height         float64              `json:"height"`
+	Volume         float64              `json:"volume"` // 固定是 m³，自动换算
+	LengthUnit     string               `json:"length_unit"`
+	Skus           []*ArchiveSku        `json:"skus"`
+	Options        []*ArchiveOption     `json:"options"`
+	ProductType    int                  `json:"product_type"`
+	AllowOversold  bool                 `json:"allow_oversold"`
+	WholesaleRules []*WholesaleRule     `json:"wholesale_rules"`
+	OrderFields    []config.CustomField `json:"order_fields,omitempty"`
+	MinQuantity    int                  `json:"min_quantity"`  // 最小购买数量
+	MaxQuantity    int                  `json:"max_quantity"`  // 最大购买数量
+	StepQuantity   int                  `json:"step_quantity"` // 购买数量步长
 
 	RemoveTag         bool `json:"-"` // 是否删除标签
 	RemoveImage       bool `json:"-"` // 是否删除图片
 	RemoveFlag        bool `json:"-"` // 是否删除flag
 	RemoveRelationIds bool `json:"-"` // 是否删除关联文档
 
-	ForceSave bool `json:"force_save"` // 在标题冲突时，是否强制保存
-	QuickSave bool `json:"quick_save"` // 是否是快速保存，快速保存模式下仅处理标题、关键词、描述、分类、图片、标签、标记、内容
-	UpdateAll bool `json:"update_all" ast:"-"`
+	// 是否强制保存
+	ForceSave  bool   `json:"force_save"`
+	ToLanguage string `json:"to_language"`
+	QuickSave  bool   `json:"quick_save"`
+	UpdateAll  bool   `json:"update_all" ast:"-"`
 	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
 	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
 	Partial bool `json:"partial" ast:"-"`
 
-	KeywordId   uint   `json:"keyword_id"`   // 关键词 ID，采集文档时使用
-	OriginUrl   string `json:"origin_url"`   // 文档来源 URL，默认采集文档时使用
-	OriginTitle string `json:"origin_title"` // 文档来源标题，默认采集文档时使用
-	OriginId    int    `json:"origin_id"`    // 文档来源 ID，默认采集文档时使用
-	ContentText string `json:"-"`
+	KeywordId   uint   `json:"keyword_id"`
+	OriginUrl   string `json:"origin_url"`
+	OriginTitle string `json:"origin_title"`
+	// 补充字段
+	Brand         string  `json:"brand"`
+	CommentCount  uint    `json:"comment_count"`
+	FavoriteCount uint    `json:"favorite_count"`
+	AverageScore  float32 `json:"average_score"`
+	HasPseudo     int     `json:"has_pseudo"`
+	OriginId      int     `json:"origin_id"`
+	ContentText   string  `json:"-"`
+}
+
+type ArchiveSku struct {
+	Id          int64                `json:"id"`
+	ArchiveId   int64                `json:"archive_id"`
+	Title       string               `json:"title"`     // sku 组合名字
+	UrlToken    string               `json:"url_token"` // sku的token
+	Sku         string               `json:"sku"`       // sku 货号
+	Barcode     string               `json:"barcode"`   //  条形码
+	HsCode      string               `json:"hs_code"`   //  海关编码
+	Images      []string             `json:"images"`
+	Stock       int64                `json:"stock"`
+	Price       int64                `json:"price"`
+	OriginPrice int64                `json:"origin_price"` // 原始价格
+	CostPrice   int64                `json:"cost_price"`   // 成本价
+	Weight      float64              `json:"weight"`       // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit  string               `json:"weight_unit"`  // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length      float64              `json:"length"`
+	Width       float64              `json:"width"`
+	Height      float64              `json:"height"`
+	Volume      float64              `json:"volume"` // 固定是 m³，自动换算
+	LengthUnit  string               `json:"length_unit"`
+	Values      []ArchiveOptionValue `json:"values"`
+	Status      int                  `json:"status"` // 状态,0:下架,1:上架
+}
+
+type ArchiveOptionValue struct {
+	Id          int64    `json:"id"`
+	ArchiveId   int64    `json:"archive_id"`
+	OptionId    int64    `json:"option_id"`
+	Title       string   `json:"title"`
+	Color       string   `json:"color"`
+	Images      []string `json:"images"`
+	Price       int64    `json:"price"` // 加价，sku加价模式使用
+	Stock       int64    `json:"stock"` // sku加价模式使用
+	IsDefault   bool     `json:"is_default"`
+	OptionTitle string   `json:"option_title"`
+}
+
+type ArchiveOption struct {
+	Id          int64                 `json:"id"`
+	ArchiveId   int64                 `json:"archive_id"`
+	Title       string                `json:"title"`
+	IsMain      uint                  `json:"is_main"`      // 是否主规格
+	IsAttribute bool                  `json:"is_attribute"` // 是否是属性，属性不参与sku计算
+	Values      []*ArchiveOptionValue `json:"values"`
+}
+
+type WholesaleRule struct {
+	Id           int64 `json:"id"`
+	ArchiveId    int64 `json:"archive_id"`
+	MinQuantity  int   `json:"min_quantity"`
+	MaxQuantity  int   `json:"max_quantity"`
+	DiscountRate int   `json:"discount_rate"`
 }
 
 type ArchiveImageDeleteRequest struct {

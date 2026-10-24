@@ -1,0 +1,99 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-10">
+        <h1 class="fw-bold mb-5 text-center">Contact Us</h1>
+
+        <div class="row g-5">
+          <!-- Contact Info -->
+          <div class="col-lg-5">
+            <div class="mb-5">
+              <h5 class="fw-bold mb-4">Contact Information</h5>
+              <div class="d-flex mb-3">
+                <i class="bi bi-geo-alt me-3 fs-5"></i>
+                <div>
+                  <h6 class="fw-bold mb-1">Address</h6>
+                  <p class="text-muted small mb-0">{% contact with name="Address" %}</p>
+                </div>
+              </div>
+              <div class="d-flex mb-3">
+                <i class="bi bi-envelope me-3 fs-5"></i>
+                <div>
+                  <h6 class="fw-bold mb-1">Email</h6>
+                  <p class="text-muted small mb-0">{% contact with name="Email" %}</p>
+                </div>
+              </div>
+              <div class="d-flex mb-3">
+                <i class="bi bi-telephone me-3 fs-5"></i>
+                <div>
+                  <h6 class="fw-bold mb-1">Phone</h6>
+                  <p class="text-muted small mb-0">{% contact with name="Cellphone" %}</p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h5 class="fw-bold mb-4">Working Hours</h5>
+              <p class="text-muted small mb-1">Mon - Fri: 09:00 - 18:00</p>
+              <p class="text-muted small mb-0">Sat - Sun: 10:00 - 16:00</p>
+            </div>
+
+            <div class="mt-5">
+              <h5 class="fw-bold mb-4">Follow Us</h5>
+              <div class="d-flex">
+                <a href="{% contact with name='Facebook' %}" class="btn btn-outline-dark btn-sm rounded-circle me-2" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;"><i class="bi bi-facebook"></i></a>
+                <a href="{% contact with name='Instagram' %}" class="btn btn-outline-dark btn-sm rounded-circle me-2" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;"><i class="bi bi-instagram"></i></a>
+                <a href="{% contact with name='Twitter' %}" class="btn btn-outline-dark btn-sm rounded-circle me-2" style="width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;"><i class="bi bi-twitter-x"></i></a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Contact Form -->
+          <div class="col-lg-7">
+            <div class="bg-light p-4 p-md-5">
+              <h5 class="fw-bold mb-4">Leave a Message</h5>
+              <form id="guestbookForm" onsubmit="return false;">
+                <input type="hidden" name="return" value="json">
+                <div class="row g-3">
+                  <div class="col-md-6">
+                    <div class="form-floating mb-3">
+                      <input type="text" name="user_name" class="form-control border-dark" id="contactName" placeholder="Name" required>
+                      <label for="contactName">Name</label>
+                    </div>
+                  </div>
+                  <div class="col-md-6">
+                    <div class="form-floating mb-3">
+                      <input type="email" name="email" class="form-control border-dark" id="contactEmail" placeholder="Email" required>
+                      <label for="contactEmail">Email</label>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <div class="form-floating mb-3">
+                      <input type="tel" name="contact" class="form-control border-dark" id="contactPhone" placeholder="Phone">
+                      <label for="contactPhone">Phone</label>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <div class="form-floating mb-4">
+                      <textarea class="form-control border-dark" name="content" placeholder="Message" id="contactMessage" style="height: 150px" required></textarea>
+                      <label for="contactMessage">Message</label>
+                    </div>
+                  </div>
+                  <div class="col-12">
+                    <button type="submit" class="btn btn-dark w-100 py-3">Send Message</button>
+                  </div>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+{% endblock %}

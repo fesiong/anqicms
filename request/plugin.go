@@ -88,8 +88,9 @@ type PluginGuestbookStatus struct {
 }
 
 type PluginGuestbookDelete struct {
-	Id  uint   `json:"id"`  // 留言 ID（删除单条时传）
-	Ids []uint `json:"ids"` // 留言 ID 列表（批量删除时传）
+	Id     uint   `json:"id"`
+	Ids    []uint `json:"ids"`
+	Status int    `json:"status"`
 }
 
 type PluginKeyword struct {

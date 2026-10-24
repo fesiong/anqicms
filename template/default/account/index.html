@@ -1,0 +1,242 @@
+{% extends 'base.html' %}
+
+{% block title %}<title>My Account</title>{% endblock %}
+
+{% block container %}
+<main>
+  {%- if !userInfo %}
+  {% jump '/login' %}
+  {%- endif %}
+
+  <div class="container py-5">
+    <div class="d-flex justify-content-between align-items-end mb-5 pb-3 border-bottom">
+      <div>
+        <h1 class="fw-bold mb-1">My Account</h1>
+        <a href="{% system with name='BaseUrl' %}/logout" id="logout" class="text-muted small text-decoration-underline">Log out</a>
+      </div>
+    </div>
+
+    <div class="row g-5">
+      <!-- Order History -->
+      <div class="col-lg-8">
+        <h4 class="fw-bold mb-4">Order history</h4>
+
+        <div class="table-responsive">
+          <table class="table align-middle">
+            <thead class="small text-muted text-uppercase">
+              <tr>
+                <th class="border-0 ps-0">Order</th>
+                <th class="border-0">Date</th>
+                <th class="border-0">Status</th>
+                <th class="border-0 text-end pe-0">Total</th>
+              </tr>
+            </thead>
+            <tbody class="small" id="orderHistory">
+            </tbody>
+          </table>
+        </div>
+
+        <!-- If no orders -->
+        <!-- <p class="text-muted py-5">You haven't placed any orders yet.</p> -->
+      </div>
+
+      <!-- Account Details -->
+      <div class="col-lg-4">
+        <h4 class="fw-bold mb-4">Account details</h4>
+
+        <div class="bg-light p-4">
+          <h6 class="fw-bold mb-3">Default address</h6>
+          <p class="small text-muted mb-4" id="defaultAddress">
+
+          </p>
+          <a href="{% system with name='BaseUrl' %}/account/address" class="text-dark text-decoration-underline small">View address</a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Order Detail Modal -->
+  <div class="modal fade" id="orderDetailModal" tabindex="-1" aria-labelledby="orderDetailModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content border-0 shadow-lg">
+        <div class="modal-header border-0 pb-0">
+          <h5 class="modal-title fw-bold" id="orderDetailModalLabel">Order <span id="modalOrderId"></span></h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body px-4 pb-4">
+          <p class="text-muted small mb-4" id="modalOrderDate"></p>
+
+          <div class="order-items mb-4">
+            <div class="table-responsive">
+              <table class="table align-middle">
+                <thead class="small text-muted text-uppercase">
+                  <tr>
+                    <th class="border-0 ps-0">Product</th>
+                    <th class="border-0 text-center">Quantity</th>
+                    <th class="border-0 text-end pe-0">Total</th>
+                  </tr>
+                </thead>
+                <tbody class="small" id="modalOrderItems">
+                  <!-- Items will be injected by JS -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="row g-4 pt-3 border-top">
+            <div class="col-md-6">
+              <h6 class="fw-bold small text-uppercase mb-3">Shipping Address</h6>
+              <div class="text-muted small" id="modalShippingAddress">
+                <!-- Address will be injected by JS -->
+              </div>
+            </div>
+            <div class="col-md-6 text-md-end">
+              <div class="d-flex justify-content-between gap-5 mb-2">
+                <span class="text-muted small">Order Status</span>
+                <span class="small fw-bold" id="modalStatus"></span>
+              </div>
+              <div class="d-flex justify-content-between gap-5 mb-2">
+                <span class="text-muted small">Subtotal</span>
+                <span class="small fw-bold" id="modalSubtotal"></span>
+              </div>
+              <div class="d-flex justify-content-between gap-5 mb-2">
+                <span class="text-muted small">Shipping</span>
+                <span class="small fw-bold">$0.00</span>
+              </div>
+              <div class="d-flex justify-content-between gap-5 pt-2 border-top">
+                <span class="fw-bold">Total</span>
+                <span class="fw-bold" id="modalTotal"></span>
+              </div>
+              <div class="d-flex justify-content-center gap-5 pt-2 d-none text-center" id="modalBtn">
+                <button class="btn btn-dark order-pay-btn">Pay Now</button> 
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</main>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function timestampToDate(timestamp) {
+    // 处理秒级时间戳（10位）转为毫秒级（13位）
+    if (timestamp.toString().length === 10) {
+      timestamp = timestamp * 1000;
+    }
+
+    const date = new Date(timestamp);
+    const months = [
+      "January", "February", "March", "April", "May", "June",
+      "July", "August", "September", "October", "November", "December"
+    ];
+
+    const month = months[date.getMonth()];
+    const day = date.getDate();
+    const year = date.getFullYear();
+
+    return `${month} ${day}, ${year}`;
+  }
+  function getStatus(status) {
+    let text = status
+    if (status == -1) {
+      text = "Closed"
+    } else if (status == 0) {
+      text = "Wait for pay"
+    } else if (status == 1) {
+      text = "Paid"
+    } else if (status == 2) {
+      text = "Delivery"
+    } else if (status == 3) {
+      text = "Completed"
+    } else if (status == 8) {
+      text = "Refunding"
+    } else if (status == 9) {
+      text = "Refunded"
+    }
+    return text;
+  }
+  $(function () {
+    let currentPage = 1;
+    let limit = 10;
+    $.get('/api/orders', { current: currentPage, pageSize: limit }, function (res) {
+      $('#orderHistory').html((res.data || []).map(order => `<tr>
+                <td class="ps-0 py-3"><a href="javascript:void(0)" class="text-dark text-decoration-underline" data-bs-toggle="modal" data-bs-target="#orderDetailModal" data-order-id="${order.order_id}">#${order.order_id}</a></td>
+                <td class="py-3">${timestampToDate(order.created_time)}</td>
+                <td class="py-3">${getStatus(order.status)}</td>
+                <td class="py-3 text-end pe-0 fw-bold">$${(order.amount / 100).toFixed(2)}</td>
+              </tr>`))
+    });
+    $.get('/api/order/address', function (res) {
+      let address = res.data || {};
+      if (address.id) {
+      $('#defaultAddress').html(`${address.name}<br>
+            ${address.town}
+            ${address.address_info}<br>
+            ${address.city} ${address.province} ${address.country}<br>
+            ${address.postcode}<br>
+            ${address.phone}`);
+      }
+    });
+
+  // Order Detail Modal Logic
+  const $orderDetailModal = $("#orderDetailModal");
+  if ($orderDetailModal.length) {
+    $orderDetailModal.on("show.bs.modal", function (event) {
+      const button = event.relatedTarget;
+      const orderId = $(button).data("order-id");
+
+      $(document).on('click', '.order-pay-btn', function () {
+        window.location.href = '/order/checkout?order_id=' + orderId;
+      })
+      
+      $.get("/api/order/detail", { order_id: orderId }, function (res) {
+        const data = res.data || {};
+
+        let address = data.order_address || {};
+        $("#modalOrderId").text('#' + orderId);
+        $("#modalOrderDate").text(timestampToDate(data.created_time));
+        $("#modalShippingAddress").html(`${address.name || ''}<br>
+            ${address.town || ''}
+            ${address.address_info || ''}<br>
+            ${address.city || ''} ${address.province || ''} ${address.country || ''}<br>
+            ${address.postcode || ''}<br>
+            ${address.phone || ''}`);
+        $("#modalStatus").text(getStatus(data.status));
+        $("#modalSubtotal").text((data.origin_amount/100).toFixed(2));
+        $("#modalTotal").text((data.amount/100).toFixed(2));
+        if (data.status === 0) {
+          $("#modalBtn").removeClass("d-none");
+        } else {
+          $("#modalBtn").addClass("d-none");
+        }
+
+        const itemsHtml = data.details
+          ?.map(
+            (item) => `
+                    <tr>
+                        <td class="ps-0 py-3">
+                            <a href="${item.goods?.link || ''}" class="d-flex align-items-center text-dark text-decoration-none">
+                                <img src="${item.goods?.thumb || ''}" alt="${item.goods?.title ||''}" class="me-3" style="width: 50px; height: 50px; object-fit: cover;">
+                                <div>
+                                  <div class="fw-bold">${item.goods?.title ||''}</div>
+                                  <div class="small text-muted">${item.goods_sku?.title || ''} </div>
+                                </div>
+                            </a>
+                        </td>
+                        <td class="py-3 text-center">${item.quantity}</td>
+                        <td class="py-3 text-end pe-0 fw-bold">${(item.price/100).toFixed(2)}</td>
+                    </tr>
+                `,
+          )
+          .join("");
+        $("#modalOrderItems").html(itemsHtml);
+      });
+    });
+  }
+  })
+</script>
+{% endblock %}

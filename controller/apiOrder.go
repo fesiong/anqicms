@@ -3,10 +3,15 @@ package controller
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"fmt"
+	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/go-pay/gopay"
 	"github.com/go-pay/gopay/alipay"
@@ -14,12 +19,13 @@ import (
 	"github.com/go-pay/gopay/wechat"
 	"github.com/kataras/iris/v12"
 	"github.com/skip2/go-qrcode"
-	"gorm.io/gorm"
+	"github.com/stripe/stripe-go/v82"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
+	"kandaoni.com/anqicms/response"
 )
 
 func ApiGetOrders(ctx iris.Context) {
@@ -50,6 +56,78 @@ func ApiGetOrders(ctx iris.Context) {
 	})
 }
 
+func ApiGetOrdersStatistics(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	// 统计数据，各个数量
+	statistic := response.OrderStatistic{
+		Total:      0,
+		Pending:    0,
+		Processing: 0,
+		Completed:  0,
+		Canceled:   0,
+		Refunding:  0,
+		Refunded:   0,
+		Wishlist:   0,
+	}
+
+	userId := ctx.Values().GetUintDefault("userId", 0)
+
+	// 统计当前用户的订单
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ?", userId).Count(&statistic.Total)
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ? AND status = ?", userId, config.OrderStatusWaiting).Count(&statistic.Pending)
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ? AND status (?)", userId, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Count(&statistic.Processing)
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ? AND status = ?", userId, config.OrderStatusCompleted).Count(&statistic.Completed)
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ? AND status = ?", userId, config.OrderStatusCanceled).Count(&statistic.Canceled)
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ? AND status = ?", userId, config.OrderStatusRefunding).Count(&statistic.Refunding)
+	currentSite.DB.Model(&model.Order{}).Where("user_id = ? AND status = ?", userId, config.OrderStatusRefunded).Count(&statistic.Refunded)
+	currentSite.DB.Model(&model.Wishlist{}).Where("user_id = ?", userId).Count(&statistic.Wishlist)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": statistic,
+	})
+}
+
+func ApiGetOrderChartData(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	showType := ctx.URLParam("type")
+	var tmpResult []response.ChartData
+	// 最近30天
+	startTime := time.Now().AddDate(0, 0, -30).Unix()
+	if showType == "" { // total
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status not in(?)", userId, startTime, []int{config.OrderStatusCanceled, config.OrderStatusWaiting}).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'total' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	} else if showType == "pending" {
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusWaiting).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'pending' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	} else if showType == "processing" {
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status (?)", userId, startTime, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'processing' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	} else if showType == "completed" {
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusCompleted).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'completed' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": tmpResult,
+	})
+}
+
+func ApiGetOrderServices(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+
+	services, total := currentSite.GetOrderServices(func(tx *gorm.DB) *gorm.DB {
+		return tx.Where("enabled = ?", true)
+	}, 1, 100)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  services,
+	})
+}
+
 func ApiGetOrderDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	orderId := ctx.URLParam("order_id")
@@ -71,10 +149,544 @@ func ApiGetOrderDetail(ctx iris.Context) {
 		return
 	}
 
+	// 检查是否需要填写表单
+	if order.Status == config.OrderStatusPaid {
+		var hasOrderFields bool
+		for _, v := range order.Details {
+			if len(v.OrderFields) > 0 {
+				hasOrderFields = true
+			}
+		}
+		if hasOrderFields {
+			frontUrl := currentSite.System.BaseUrl
+			if currentSite.System.FrontUrl != "" {
+				frontUrl = currentSite.System.FrontUrl
+			}
+			code := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+			jumpUrl := frontUrl + "/order/custom_form?order_id=" + order.OrderId + "&code=" + code
+			order.CustomFormUrl = jumpUrl
+		}
+	}
+
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
 		"msg":  "",
 		"data": order,
+	})
+}
+
+func ApiGetOrderCheckout(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	cartToken := ctx.GetCookie("cart")
+	if cartToken == "" {
+		cartToken = ctx.GetHeader("cart")
+	}
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	user, err := currentSite.GetUserInfoById(userId)
+	if err != nil {
+		user = nil
+	}
+	if userId > 0 && cartToken != "" {
+		// 更新 购物车
+		_ = currentSite.DB.Model(&model.Cart{}).Where("token = ?", cartToken).Update("user_id", req.UserId)
+	}
+
+	// order id
+	if req.OrderId != "" {
+		order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if order.Status != 0 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("OrderHasBeenProcessed"),
+			})
+			return
+		}
+		// if order.UserId != userId {
+		// 	ctx.JSON(iris.Map{
+		// 		"code": config.StatusFailed,
+		// 	})
+		// }
+		details := []response.OrderDetail{}
+		for _, detail := range order.Details {
+			item := response.OrderDetail{
+				GoodsId:     detail.GoodsId,
+				GoodsSkuId:  detail.GoodsSkuId,
+				Price:       detail.Price,
+				OriginPrice: detail.OriginPrice,
+				Amount:      detail.OriginAmount,
+				RealAmount:  detail.Amount,
+				Quantity:    detail.Quantity,
+				OrderExtra:  detail.OrderExtra,
+				OrderFields: detail.OrderFields,
+				SkuValues:   detail.SkuValues,
+			}
+			if detail.Goods != nil {
+				item.Link = detail.Goods.Link
+				item.Title = detail.Goods.Title
+				item.Thumb = detail.Goods.Thumb
+				item.Logo = detail.Goods.Logo
+			}
+			if detail.GoodsSku != nil {
+				item.SkuTitle = detail.GoodsSku.Title
+			}
+			details = append(details, item)
+		}
+		orderResp := response.OrderConfirmResponse{
+			CurrencyCode:   currentSite.Currency.Currency,
+			CurrencySymbol: currentSite.Currency.Symbol,
+			PayWays:        currentSite.GetPaymentWays(),
+			OrderId:        order.OrderId,
+			Amount:         order.Amount,
+			OriginAmount:   order.OriginAmount,
+			DiscountAmount: order.DiscountAmount,
+			CouponCode:     order.CouponCodeId,
+			AddressId:      order.AddressId,
+			ServiceFee:     order.ServiceFee,
+			Details:        details,
+		}
+
+		ctx.JSON(iris.Map{
+			"code": config.StatusOK,
+			"msg":  "",
+			"data": orderResp,
+		})
+		return
+	}
+
+	var couponCode *model.CouponCode
+	// 使用优惠券
+	if req.CouponCode != "" {
+		couponCode, err = currentSite.GetCouponCodeByCode(req.CouponCode)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	} else if req.CouponCodeId > 0 {
+		couponCode, err = currentSite.GetCouponCodeById(req.CouponCodeId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+	} else if req.CouponId > 0 {
+		// 优惠券
+		coupon, err := currentSite.GetCouponById(req.CouponId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		// 生成一个优惠券码
+		couponCode, err = currentSite.MakeCouponCode(coupon.Id, int64(userId), 1)
+		if couponCode == nil {
+			if err == nil {
+				err = errors.New("fail to get coupon")
+			}
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		couponCode.Coupon = coupon
+	}
+
+	var amount int64
+	var originAmount int64
+	var orderResp response.OrderConfirmResponse
+	orderResp.CurrencyCode = currentSite.Currency.Currency
+	orderResp.CurrencySymbol = currentSite.Currency.Symbol
+	orderResp.PayWays = currentSite.GetPaymentWays()
+
+	if len(req.Details) == 0 && req.GoodsId == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("PleaseSelectTheProduct"),
+		})
+		return
+	}
+	if len(req.Details) == 0 {
+		req.Details = []request.OrderDetail{{GoodsId: req.GoodsId, GoodsSkuId: req.GoodsSkuId, Quantity: req.Quantity}}
+	}
+	var activity *model.Activity
+	if req.ActivityId > 0 {
+		// 参加活动，只能购买单个商品
+		activity, err = currentSite.GetActivityById(req.ActivityId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		for _, detail := range req.Details {
+			if detail.GoodsId != activity.GoodsId {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  ctx.Tr("PleaseSelectTheProduct"),
+				})
+				return
+			}
+		}
+		if couponCode != nil && activity.CanUseCoupon == false {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  ctx.Tr("CouponCodeCanNotUse"),
+			})
+			return
+		}
+		orderResp.ActivityId = req.ActivityId
+	}
+
+	// 如果商品标记了包邮，则不参与计算运费
+	var calcQuantity int = 0
+	var calcWeight float64 = 0
+	var calcVolume float64 = 0
+
+	// VIP优惠
+	userDiscount, shippingDiscount := currentSite.GetUserDiscount(userId, user)
+	userDiscountAmount := int64(0)
+
+	if req.Type == config.OrderTypeVip {
+		group, err := currentSite.GetUserGroupInfo(uint(req.Details[0].GoodsId))
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		//计算价格
+		price := group.Price
+		originPrice := price
+		if activity != nil {
+			price = activity.Price
+		}
+		if userDiscount > 0 {
+			price = price * userDiscount / 100
+		}
+		detailAmount := price * int64(req.Details[0].Quantity)
+		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
+		amount += detailAmount
+		originAmount += originDetailAmount
+		orderResp.Details = append(orderResp.Details, response.OrderDetail{
+			GoodsId:     req.Details[0].GoodsId,
+			GoodsSkuId:  req.Details[0].GoodsSkuId,
+			Price:       price,
+			OriginPrice: originPrice,
+			Amount:      originDetailAmount,
+			RealAmount:  detailAmount,
+			Quantity:    req.Details[0].Quantity,
+			SkuValues:   req.Details[0].SkuValues,
+			Title:       group.Title,
+			Link:        "",
+			Thumb:       "",
+			SkuTitle:    "",
+		})
+	} else if req.Type == config.OrderTypeCommunication {
+		communicationOrder, err := currentSite.GetCommunicationOrderById(req.Details[0].GoodsId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		communicationOrder.GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.Content.DefaultThumb)
+		//计算价格
+		price := communicationOrder.QuotePrice
+		originPrice := price
+		if activity != nil {
+			price = activity.Price
+		}
+		if userDiscount > 0 {
+			price = price * userDiscount / 100
+		}
+		detailAmount := price * int64(req.Details[0].Quantity)
+		originDetailAmount := originPrice * int64(req.Details[0].Quantity)
+		userDiscountAmount += originDetailAmount - detailAmount
+		amount += detailAmount
+		originAmount += originDetailAmount
+		orderResp.Details = append(orderResp.Details, response.OrderDetail{
+			GoodsId:     req.Details[0].GoodsId,
+			GoodsSkuId:  req.Details[0].GoodsSkuId,
+			Price:       price,
+			OriginPrice: originPrice,
+			Amount:      originDetailAmount,
+			RealAmount:  detailAmount,
+			SkuValues:   req.Details[0].SkuValues,
+			Quantity:    req.Details[0].Quantity,
+			Title:       communicationOrder.Title,
+			Link:        "",
+			Logo:        communicationOrder.Logo,
+			Thumb:       communicationOrder.Thumb,
+			SkuTitle:    "",
+		})
+	} else {
+		for _, v := range req.Details {
+			archive, err := currentSite.GetArchiveById(v.GoodsId)
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  err.Error(),
+				})
+				return
+			}
+			archive.Link = currentSite.GetUrl(provider.PatternArchive, archive, 0)
+			archive.GetThumb(currentSite.PluginHtmlCache.StorageUrl, currentSite.Content.DefaultThumb)
+			if archive.MinQuantity > 0 && v.Quantity < archive.MinQuantity {
+				v.Quantity = archive.MinQuantity
+			}
+			if archive.MaxQuantity > 0 && v.Quantity > archive.MaxQuantity {
+				v.Quantity = archive.MaxQuantity
+			}
+			//计算价格
+			price := archive.Price
+			originPrice := price
+			if activity != nil {
+				price = activity.Price
+			}
+			skuTitle := ""
+			// sku_id
+			var archiveSku *model.ArchiveSku
+			if v.GoodsSkuId > 0 {
+				archiveSku, err = currentSite.GetArchiveSkuById(v.GoodsId, v.GoodsSkuId)
+				if err != nil {
+					ctx.JSON(iris.Map{
+						"code": config.StatusFailed,
+						"msg":  err.Error(),
+					})
+					return
+				}
+				// 如果数量超了，自动修改为剩余库存
+				if archive.AllowOversold == false && int(archiveSku.Stock) < v.Quantity {
+					v.Quantity = int(archiveSku.Stock)
+				}
+				skuTitle = archiveSku.Title
+				price = archiveSku.Price
+				originPrice = archiveSku.Price
+				if activity != nil {
+					activitySku, err := currentSite.GetActivitySkuBySkuId(activity.Id, v.GoodsSkuId)
+					if err == nil {
+						price = activitySku.Price
+					}
+				}
+			} else {
+				// 如果数量超了，自动修改为剩余库存
+				if archive.AllowOversold == false && int(archive.Stock) < v.Quantity {
+					v.Quantity = int(archive.Stock)
+				}
+			}
+			if archive.OptionType == config.OptionTypePrice && len(v.SkuValues) > 0 {
+				// 加价属性处理
+				var optionPrice int64 = 0
+				var originOptionPrice int64 = 0
+				for _, sv := range v.SkuValues {
+					// 如果option是属性，不需要处理库存
+					option, err := currentSite.GetArchiveOption(archive.Id, sv.OptionId)
+					if err != nil {
+						// 不存在属性
+						continue
+					}
+					// 获取optionValue
+					optionValue, err := currentSite.GetArchiveOptionValue(archive.Id, sv.Id)
+					if err != nil {
+						// 不存在属性值
+						continue
+					}
+					if !option.IsAttribute && archive.AllowOversold == false {
+						// 需要处理库存
+						if int(optionValue.Stock) < v.Quantity {
+							v.Quantity = int(optionValue.Stock)
+						}
+					}
+					if optionValue.Price > 0 {
+						optionPrice += optionValue.Price
+						originOptionPrice += optionValue.Price
+					}
+				}
+				// 更新价格
+				price += optionPrice
+				originPrice += originOptionPrice
+			}
+			if v.Quantity == 0 {
+				// 跳过无库存的商品
+				continue
+			}
+			// 批发价格设置
+			if archive.ProductType == config.ProductTypeWholesale {
+				wholesaleRules, _ := currentSite.GetArchiveWholesaleRules(archive.Id)
+				var percentage int64 = 100 // 默认没折扣
+				for _, rule := range wholesaleRules {
+					if v.Quantity >= rule.MinQuantity {
+						percentage = int64(rule.DiscountRate)
+						archive.WholesaleRule = rule
+					}
+				}
+				if percentage > 0 {
+					if userDiscount == 0 {
+						userDiscount = percentage
+					} else {
+						userDiscount = percentage * userDiscount / 100
+					}
+				}
+			}
+			if userDiscount > 0 {
+				price = price * userDiscount / 100
+			}
+			detailAmount := price * int64(v.Quantity)
+			originDetailAmount := originPrice * int64(v.Quantity)
+			userDiscountAmount += originDetailAmount - detailAmount
+
+			// 计算运费，非包邮商品才计算运费
+			weight, volume := 0.0, 0.0
+			if archive.NeedLogistics && !archive.IsFreeShipping {
+				// 计算重量和体积
+				tmpVolume, tmpWeight := currentSite.CalculateShippingAttrs(archive, v.Quantity)
+				if archiveSku != nil {
+					tmpVolume2, tmpWeight2 := currentSite.CalculateSkuShippingAttrs(archiveSku, v.Quantity)
+					if tmpVolume2 > 0 {
+						tmpVolume = tmpVolume2
+					}
+					if tmpWeight2 > 0 {
+						tmpWeight = tmpWeight2
+					}
+				}
+				weight = tmpWeight
+				volume = tmpVolume
+				calcWeight += weight
+				calcQuantity += v.Quantity
+				calcVolume += volume
+			}
+
+			amount += detailAmount
+			originAmount += originDetailAmount
+			orderResp.Details = append(orderResp.Details, response.OrderDetail{
+				GoodsId:       v.GoodsId,
+				GoodsSkuId:    v.GoodsSkuId,
+				Price:         price,
+				OriginPrice:   originPrice,
+				Amount:        originDetailAmount,
+				RealAmount:    detailAmount,
+				Quantity:      v.Quantity,
+				Weight:        weight,
+				Volume:        volume,
+				Title:         archive.Title,
+				Logo:          archive.Logo,
+				Thumb:         archive.Thumb,
+				SkuValues:     v.SkuValues,
+				SkuTitle:      skuTitle,
+				Link:          archive.Link,
+				WholesaleRule: archive.WholesaleRule,
+				OrderExtra:    v.OrderExtra,
+				OrderFields:   archive.OrderFields,
+			})
+		}
+	}
+	orderResp.Amount = amount
+	orderResp.OriginAmount = originAmount
+	// 用户优惠金额
+	orderResp.UserDiscount = userDiscountAmount
+	if couponCode != nil {
+		if couponCode.Status != 0 {
+			//ctx.JSON(iris.Map{
+			//	"code": config.StatusFailed,
+			//	"msg":  ctx.Tr("CouponCodeUsed"),
+			//})
+			//return
+			orderResp.CouponCode = ""
+			orderResp.CouponCodeId = 0
+			orderResp.CouponId = 0
+		} else {
+			couponMoney := couponCode.GetMoney(orderResp.Amount)
+			orderResp.CouponDiscount = couponMoney
+			orderResp.CouponCode = couponCode.Code
+			orderResp.CouponCodeId = couponCode.Id
+			orderResp.CouponId = couponCode.CouponId
+			orderResp.Amount = orderResp.Amount - couponMoney
+		}
+	}
+
+	if calcQuantity > 0 {
+		orderResp.ShippingQuantity = calcQuantity
+		orderResp.ShippingWeight = calcWeight
+		orderResp.ShippingVolume = calcVolume
+		// 计算运费
+		var orderAddress *model.OrderAddress
+		if req.Address != nil {
+			orderAddress = &model.OrderAddress{
+				CountryCode:  req.Address.CountryCode,
+				Country:      req.Address.Country,
+				ProvinceCode: req.Address.ProvinceCode,
+				Province:     req.Address.Province,
+				City:         req.Address.City,
+				Postcode:     req.Address.Postcode,
+			}
+		} else if req.AddressId > 0 {
+			orderAddress, _ = currentSite.GetOrderAddressById(req.AddressId)
+		}
+		orderResp.ShippingFee = currentSite.CalculateShippingFee(orderAddress, orderResp.Amount, calcQuantity, calcWeight, calcVolume)
+		if shippingDiscount > 0 {
+			originShippingFee := orderResp.ShippingFee
+			orderResp.ShippingFee = int64(float64(originShippingFee) * (float64(shippingDiscount) / 100))
+			orderResp.ShippingDiscount = originShippingFee - orderResp.ShippingFee
+		}
+		// 累计优惠金额
+		orderResp.DiscountAmount = orderResp.UserDiscount + orderResp.CouponDiscount + orderResp.ShippingDiscount
+		// 更新订单金额
+		orderResp.Amount += orderResp.ShippingFee
+	}
+
+	// orderService
+	if len(req.ServiceIds) > 0 {
+		services, _ := currentSite.GetOrderServices(func(tx *gorm.DB) *gorm.DB {
+			return tx.Where("id in (?)", req.ServiceIds)
+		}, 1, len(req.ServiceIds))
+		var serviceFee int64
+		for _, service := range services {
+			if service.FeeType == config.OrderServiceTypePercentage {
+				// 订单金额的百分比
+				tmpFee := int64(float64(orderResp.Amount) * (float64(service.Fee) / 100))
+				if service.MaxFee > 0 && tmpFee > service.MaxFee {
+					tmpFee = service.MaxFee
+				}
+				serviceFee += tmpFee
+			} else {
+				serviceFee += service.Fee
+			}
+		}
+		orderResp.ServiceIds = req.ServiceIds
+		orderResp.ServiceFee = serviceFee
+		orderResp.Amount += serviceFee
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": orderResp,
 	})
 }
 
@@ -362,6 +974,12 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		})
 		return
 	}
+	// 推送事件
+	currentSite.CreateEvent(provider.EventOrderCheckout, map[string]interface{}{
+		"order_id": order.OrderId,
+		"amount":   float32(order.Amount) / 100,
+		"status":   "pending",
+	}, &model.User{Id: uint(req.UserId)})
 
 	if req.PayWay == config.PayWayWechat {
 		createWechatPayment(ctx, payment)
@@ -371,6 +989,8 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createAlipayPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayPaypal {
 		createPaypalPayment(ctx, payment, order)
+	} else if req.PayWay == config.PayWayStripe {
+		createStripePayment(ctx, payment, order)
 	} else if req.PayWay == config.PayWayBalance {
 		createBalancePayment(ctx, payment, order)
 	} else {
@@ -687,6 +1307,52 @@ func createPaypalPayment(ctx iris.Context, payment *model.Payment, order *model.
 	})
 }
 
+func createStripePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
+	currentSite := provider.CurrentSite(ctx)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayStripe, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	client := stripe.NewClient(account.PayConfig.AppId)
+
+	params := &stripe.PaymentIntentCreateParams{
+		Amount:      stripe.Int64(payment.Amount),
+		Currency:    stripe.String(string(stripe.CurrencyUSD)),
+		Description: stripe.String(payment.Remark),
+		AutomaticPaymentMethods: &stripe.PaymentIntentCreateAutomaticPaymentMethodsParams{
+			Enabled: stripe.Bool(true),
+		},
+	}
+	params.AddMetadata("payment_id", payment.PaymentId)
+
+	pi, err := client.V1PaymentIntents.Create(ctx, params)
+	if err != nil {
+		// 处理创建失败
+		log.Println("stripe payment intent create error", err.Error())
+		return
+	}
+	// 更新id
+	payment.PaymentAccountId = account.Id
+	payment.TerraceId = pi.ID
+	currentSite.DB.Save(payment)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":       config.PayWayStripe,
+			"amount":        payment.Amount,
+			"client_secret": pi.ClientSecret,
+			"public_key":    account.PayConfig.AppSecret,
+			"payment_id":    pi.ID,
+		},
+	})
+}
+
 func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model.Order) {
 	currentSite := provider.CurrentSite(ctx)
 	// 检查用户余额是否足够
@@ -924,5 +1590,331 @@ func ApiCheckArchivePassword(ctx iris.Context) {
 			"status":  false,
 			"content": "",
 		},
+	})
+}
+
+func ApiReviewPublish(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	userId := ctx.Values().GetUintDefault("userId", 0)
+	var user *model.User
+	if userId > 0 {
+		user, err = currentSite.GetUserInfoById(userId)
+		if err == nil {
+			req.UserName = user.RealName
+			req.Email = user.Email
+		}
+	}
+	var order *model.Order
+	if req.OrderId != "" {
+		order, err = currentSite.GetOrderInfoByOrderId(req.OrderId)
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  err.Error(),
+			})
+			return
+		}
+		if order.UserId != userId {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("NoPermission"),
+			})
+			return
+		}
+		if order.HasReview == 1 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("OrderStatusError"),
+			})
+			return
+		}
+	}
+
+	if req.Score == 0 {
+		req.Score = 5
+	}
+
+	review := request.OrderReviewRequest{
+		UserId:       userId,
+		OrderId:      req.OrderId,
+		ArchiveId:    req.ArchiveId,
+		ArchiveSkuId: req.ArchiveSkuId,
+		Ip:           ctx.RemoteAddr(),
+		UserName:     req.UserName,
+		Email:        req.Email,
+		Score:        req.Score,
+		Content:      req.Content,
+		Images:       req.Images,
+		Status:       0,
+	}
+	if userId > 0 {
+		review.Status = 1
+	}
+
+	if order != nil {
+		for _, v := range order.Details {
+			newItem := review
+			newItem.ArchiveId = v.GoodsId
+			newItem.ArchiveSkuId = v.GoodsSkuId
+			err = currentSite.SaveOrderReview(&newItem)
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  err.Error(),
+				})
+				return
+			}
+		}
+	} else {
+		err = currentSite.SaveOrderReview(&review)
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "OK",
+	})
+}
+
+func ApiReviewPraise(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	userId := ctx.Values().GetIntDefault("userId", 0)
+	review, err := currentSite.GetOrderReview(uint(req.Id))
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 检查是否点赞过
+	_, err = currentSite.AddReviewPraise(uint(userId), int64(review.Id), review.ArchiveId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	review.VoteCount += 1
+	review.Active = true
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  currentSite.TplTr("LikeSuccessfully"),
+		"data": review,
+	})
+}
+
+func ApiGetShippingInfo(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": currentSite.Shipping,
+	})
+}
+
+// ApiGetOrderCustomForm 获取订单自定义表单，表单已经在订单详情中，因此返回整个订单
+func ApiGetOrderCustomForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	orderId := ctx.URLParam("order_id")
+	code := ctx.URLParam("code")
+	if orderId == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderIdRequired"),
+		})
+		return
+	}
+
+	order, err := currentSite.GetOrderInfoByOrderId(orderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderDoesNotExist"),
+		})
+		return
+	}
+
+	// 订单支付了才可以提交
+	if order.Status != config.OrderStatusPaid {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderStatusError"),
+		})
+		return
+	}
+	// 验证code
+	verifyCode := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+	if code != verifyCode {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("InvalidCode"),
+		})
+		return
+	}
+
+	user, err := currentSite.GetUserInfoById(order.UserId)
+	if err != nil {
+		user = &model.User{}
+	}
+
+	type CustomFormItem struct {
+		Id          int64                `json:"id"`
+		Title       string               `json:"title"`
+		OrderFields []config.CustomField `json:"order_fields"`
+	}
+
+	type CustomForm struct {
+		Details       []CustomFormItem `json:"details"`
+		OrderId       string           `json:"order_id"`
+		User          *model.User      `json:"user"`
+		ResetPassword bool             `json:"reset_password"` // 要求用户重置密码
+	}
+
+	var customForm = CustomForm{
+		OrderId:       orderId,
+		User:          user,
+		ResetPassword: user.ResetPassword,
+	}
+	var idMap = map[int64]bool{}
+	for _, v := range order.Details {
+		if _, ok := idMap[v.GoodsId]; ok {
+			continue
+		}
+		idMap[v.GoodsId] = true
+		if len(v.OrderFields) > 0 {
+			detail := CustomFormItem{
+				Id:          int64(v.Id),
+				OrderFields: v.OrderFields,
+			}
+			if v.Goods != nil {
+				detail.Title = v.Goods.Title
+			}
+			customForm.Details = append(customForm.Details, detail)
+		}
+	}
+
+	if len(customForm.Details) == 0 {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderDoesNotHaveCustomForm"),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": customForm,
+	})
+}
+
+func ApiSaveOrderCustomForm(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderRequest
+	var err error
+	if err = ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	// 更新订单自定义表单
+	order, err := currentSite.GetOrderInfoByOrderId(req.OrderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderDoesNotExist"),
+		})
+		return
+	}
+	// 订单支付了才可以提交
+	if order.Status != config.OrderStatusPaid {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("OrderStatusError"),
+		})
+		return
+	}
+
+	// 验证code
+	verifyCode := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+	if req.Code != verifyCode {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("InvalidCode"),
+		})
+		return
+	}
+
+	user, err := currentSite.GetUserInfoById(order.UserId)
+	if err != nil {
+		user = &model.User{}
+	}
+
+	if user.ResetPassword && req.Password != "" {
+		req.Password = strings.TrimSpace(req.Password)
+		if len(req.Password) < 6 {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("PasswordTooShort"),
+			})
+			return
+		}
+		// 更新密码
+		_ = user.EncryptPassword(req.Password)
+		user.ResetPassword = false
+		currentSite.DB.Save(user)
+	}
+
+	for _, val := range req.Details {
+		if val.OrderExtra != nil {
+			var detail model.OrderDetail
+			err = currentSite.DB.Where("`order_id` = ? AND id = ?", order.OrderId, val.Id).Take(&detail).Error
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  currentSite.TplTr("OrderUpdateFailed"),
+				})
+				return
+			}
+			// 开始更新
+			detail.OrderExtra = val.OrderExtra
+			err = currentSite.DB.Model(&detail).Update("order_extra", detail.OrderExtra).Error
+			if err != nil {
+				ctx.JSON(iris.Map{
+					"code": config.StatusFailed,
+					"msg":  currentSite.TplTr("OrderUpdateFailed"),
+				})
+				return
+			}
+		}
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  currentSite.TplTr("UpdateSuccessfully"),
 	})
 }

@@ -8,6 +8,7 @@ type ApiArchiveRequest struct {
 	Render   bool   `json:"render"`
 	Password string `json:"password"`
 	UserId   uint   `json:"user_id"`
+	Variant  int64  `json:"variant"`
 
 	UserGroup *model.UserGroup `json:"-"`
 	UserInfo  *model.User      `json:"-"`
@@ -19,6 +20,7 @@ type ApiArchiveListRequest struct {
 	Render             bool     `json:"render"`
 	ParentId           int64    `json:"parent_id"`
 	PlaceId            int64    `json:"place_id"`
+	ProductType        int      `json:"product_type"`
 	CategoryIds        []int    `json:"category_ids"`
 	ExcludeCategoryIds []int    `json:"exclude_category_ids"`
 	ExcludeFlags       []string `json:"exclude_flags"`
@@ -29,6 +31,9 @@ type ApiArchiveListRequest struct {
 	ShowExtra          bool     `json:"show_extra"`
 	ShowCategory       bool     `json:"show_category"`
 	ShowTag            bool     `json:"show_tag"`
+	ShowSkus           bool     `json:"show_skus"`
+	ShowOptions        bool     `json:"show_options"`
+	ShowWholesaleRules bool     `json:"show_wholesale_rules"`
 	Draft              bool     `json:"draft"`
 	Child              bool     `json:"child"`
 	Order              string   `json:"order"`
@@ -82,14 +87,15 @@ type ApiTagListRequest struct {
 }
 
 type ApiFilterRequest struct {
-	ModuleId     int64             `json:"module_id"`
-	ShowAll      bool              `json:"show_all"`
-	AllText      string            `json:"all_text"`
-	ShowPrice    bool              `json:"show_price"`
-	ShowCategory bool              `json:"show_category"`
-	ParentId     int64             `json:"parent_id"`
-	CategoryId   int64             `json:"category_id"`
-	UrlParams    map[string]string `json:"url_params"`
+	ModuleId         int64             `json:"module_id"`
+	ShowAll          bool              `json:"show_all"`
+	AllText          string            `json:"all_text"`
+	ShowPrice        bool              `json:"show_price"`
+	ShowAvailability bool              `json:"show_availability"`
+	ShowCategory     bool              `json:"show_category"`
+	ParentId         int64             `json:"parent_id"`
+	CategoryId       int64             `json:"category_id"`
+	UrlParams        map[string]string `json:"url_params"`
 }
 
 type ApiPlaceRequest struct {

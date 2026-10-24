@@ -150,3 +150,193 @@ func GetSpiderInclude(ctx iris.Context) {
 		"data": result,
 	})
 }
+
+func GetStatisticCoupon(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticCoupon(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func GetStatisticSearch(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticSearch(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func GetStatisticSearchDetail(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+
+	result, total := currentSite.StatisticSearchDetail(currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"data":  result,
+		"total": total,
+	})
+}
+
+func GetStatisticCustomer(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticCustomer(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func GetStatisticProduct(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticProduct(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func GetStatisticOrder(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticOrder(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func GetStatisticConversion(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticConversion(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}
+
+func GetStatisticLive(ctx iris.Context) {
+	currentSite := provider.CurrentSubSite(ctx)
+	start := ctx.URLParam("start_time")
+	end := ctx.URLParam("end_time")
+	startParse, err := now.Parse(start)
+	if err != nil {
+		// 30天
+		startParse = time.Now().AddDate(0, 0, -30)
+	}
+	endParse, err := now.Parse(end)
+	if err != nil {
+		endParse = time.Now()
+	}
+	startTime := now.With(startParse).BeginningOfDay().Unix()
+	endTime := now.With(endParse).EndOfDay().Unix()
+
+	result := currentSite.StatisticLive(startTime, endTime)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": result,
+	})
+}

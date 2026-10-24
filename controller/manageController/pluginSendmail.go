@@ -178,6 +178,25 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 		currentSite.PluginSendmail.Password = req.Password
 	}
 	currentSite.PluginSendmail.Recipient = req.Recipient
+	currentSite.PluginSendmail.UseBrevo = req.UseBrevo
+	if req.UseBrevo == false {
+		currentSite.PluginSendmail.BrevoApiKey = ""
+	}
+	// 需要先验证 brevo账号
+	if req.UseBrevo && req.BrevoApiKey != "" {
+		client := currentSite.BrevoClient(req.BrevoApiKey)
+		if client == nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  "Invalid Brevo API Key",
+			})
+			return
+		}
+		currentSite.PluginSendmail.BrevoApiKey = req.BrevoApiKey
+	}
+	if currentSite.PluginSendmail.BrevoApiKey == "" {
+		currentSite.PluginSendmail.UseBrevo = false
+	}
 
 	err = currentSite.SaveSettingValue(provider.SendmailSettingKey, currentSite.PluginSendmail)
 	if err != nil {
@@ -186,6 +205,10 @@ func PluginSendmailSettingForm(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+
+	if req.BrevoApiKey != "" {
+		go currentSite.SyncBrevo()
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("UpdateSendingEmailConfiguration"))

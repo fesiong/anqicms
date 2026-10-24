@@ -67,3 +67,25 @@ func TestGetAttachmentByFileLocation(t *testing.T) {
 		log.Printf("fileLocation: %s", fileLocation)
 	}
 }
+
+func TestGetFfmpegPath(t *testing.T) {
+	path, err := getFfmpegPath()
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.Printf("ffmpeg path: %s", path)
+}
+
+func TestGetAttachmentByFileLocation(t *testing.T) {
+	fileLocations := []string{
+		"uploads/2024/06/1688035200_123.jpg",
+		"https://www.anqicms.com/uploads/2024/06/1688035200_123.jpg",
+		"/uploads/2024/06/1688035200_123.jpg",
+	}
+	for _, fileLocation := range fileLocations {
+		if strings.Index(fileLocation, "uploads/") > 0 {
+			fileLocation = fileLocation[strings.Index(fileLocation, "uploads/"):]
+		}
+		log.Printf("fileLocation: %s", fileLocation)
+	}
+}

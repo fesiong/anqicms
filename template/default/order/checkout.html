@@ -1,0 +1,157 @@
+{% extends 'base.html' %}
+
+{% block title %}<title>Order Checkout</title>{% endblock %}
+
+{% block head %}
+  <script src="https://js.stripe.com/v3/"></script>
+{% endblock %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <div class="row g-5">
+      <!-- Checkout Form -->
+      <div class="col-lg-7 order-2 order-lg-1">
+        <form id="checkout-form" method="post" onsubmit="return false;">
+          <div class="mb-5" id="unlogin-contact">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="fw-bold mb-0">Contact Information</h5>
+              <p class="small mb-0">Already have an account? <a href="{% system with name='BaseUrl' %}/login" class="text-dark">Log in</a></p>
+            </div>
+            <div class="form-floating mb-3">
+              <input type="email" name="email" class="form-control border-dark" id="email" placeholder="name@example.com">
+              <label for="email">Email address</label>
+            </div>
+            <div class="form-check small">
+              <input class="form-check-input" type="checkbox" name="subscribed" value="1" id="subscribed">
+              <label class="form-check-label" for="subscribed">Email me with news and offers</label>
+            </div>
+          </div>
+
+          <div class="mb-5">
+            <h5 class="fw-bold mb-3">Shipping address</h5>
+            <div class="row g-3">
+              <div class="col-md-6">
+                <div class="form-floating">
+                  <input type="text" class="form-control border-dark" name="name" id="firstName" placeholder="First name" required>
+                  <label for="firstName">First name</label>
+                </div>
+              </div>
+              <div class="col-md-6">
+                <div class="form-floating">
+                  <input type="text" class="form-control border-dark" name="last_name" id="lastName" placeholder="Last name" required>
+                  <label for="lastName">Last name</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="form-floating">
+                  <input type="text" class="form-control border-dark" name="address_info" id="address" placeholder="Address" required>
+                  <label for="address">Address</label>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="form-floating">
+                  <input type="text" class="form-control border-dark" name="company" id="company" placeholder="Company name (optional)">
+                  <label for="apartment">Company name (optional)</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-floating">
+                  <input type="hidden" name="country_code" id="country_code" value="">
+                  <select name="country" id="country" data-type="country" data-options="countries" data-placeholder="Select Country" class="form-select" aria-label="Country"><option value="">Select Country</option></select>
+                  <label for="country">Country / Region</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-floating">
+                  <input type="text" name="city" id="city" data-type="city" class="form-select" aria-label="City" value="" required>
+                  <label for="city">City</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-floating">
+                  <input type="hidden" name="province_code" id="province_code" value="">
+                  <select name="province" id="province" data-type="province" data-options="provinces" data-placeholder="Select Province" class="form-select" aria-label="Province"><option value="">Select Province</option></select>
+                  <label for="province">State / Province</label>
+                </div>
+              </div>
+              <div class="col-md-4">
+                <div class="form-floating">
+                  <input type="text" class="form-control border-dark" name="postcode" id="zip" placeholder="ZIP code" required>
+                  <label for="zip">ZIP / Postal code</label>
+                </div>
+              </div>
+              <div class="col-md-8">
+                <div class="form-floating">
+                  <input type="tel" class="form-control border-dark" name="phone" id="phone" placeholder="Phone" required>
+                  <label for="phone">Phone</label>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-between align-items-center pt-4 border-top">
+            <a href="{% system with name='BaseUrl' %}/order/cart" class="text-dark text-decoration-none small"><i class="bi bi-chevron-left me-1"></i>Return to cart</a>
+            <button type="submit" class="btn btn-dark px-5 py-3">Continue to Pay</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Order Summary (Sticky) -->
+      <div class="col-lg-5 order-1 order-lg-2">
+        <div class="bg-light p-4 sticky-top" style="top: 100px;">
+          <h5 class="fw-bold mb-4">Order items</h5>
+          <div class="mb-4" id="order-items"></div>
+
+          <hr class="my-4">
+
+          <div class="input-group mb-4">
+            <input type="text" class="form-control border-dark" name="coupon_code" placeholder="Discount code">
+            <button class="btn btn-outline-dark px-4" type="button" id="apply-coupon">Apply</button>
+          </div>
+
+          <hr class="my-4">
+          <div id="order-summary">
+            <div class="d-flex justify-content-between mb-2 small">
+              <span class="text-muted">Subtotal</span>
+              <span class="fw-bold">$0.00</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2 small">
+              <span class="text-muted">Discount</span>
+              <span class="fw-bold">$0.00</span>
+            </div>
+            <div class="d-flex justify-content-between mb-2 small">
+              <span class="text-muted">Shipping</span>
+              <span class="text-muted">Calculated at next step</span>
+            </div>
+            <div class="d-flex justify-content-between mt-3">
+              <span class="h5 fw-bold mb-0">Total</span>
+              <span class="h5 fw-bold mb-0">$0.00</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</main>
+
+   <div class="modal  fade" id="stripe-modal" tabindex="-1" role="dialog">
+      <div class="modal-dialog modal-dialog-centered" role="document">
+         <div class="modal-content">
+            <div class="modal-header">
+               <h4 class="modal-title">Stripe Payment</h4>
+               <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+               <form id="payment-form">
+                  <div id="payment-element"></div>
+                  <div class="pay-actions mt-3 text-center"><button id="submit" class="btn btn-dark">PAY Now</button></div>
+                  <div id="error-message"></div>
+               </form>
+            </div>
+         </div>
+      </div>
+   </div>
+
+{% endblock %}

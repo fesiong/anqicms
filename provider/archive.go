@@ -804,6 +804,36 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 	if req.OriginId > 0 {
 		draft.OriginId = req.OriginId
 	}
+	// 产品的字段
+	draft.OriginPrice = req.OriginPrice
+	draft.CostPrice = req.CostPrice
+	draft.VideoUrl = req.VideoUrl
+	draft.NeedLogistics = req.NeedLogistics
+	draft.IsFreeShipping = req.IsFreeShipping
+	draft.OptionType = req.OptionType
+	draft.Weight = req.Weight
+	draft.WeightUnit = req.WeightUnit
+	draft.Length = req.Length
+	draft.Width = req.Width
+	draft.Height = req.Height
+	draft.Volume = req.Volume
+	draft.LengthUnit = req.LengthUnit
+	draft.MinQuantity = req.MinQuantity
+	draft.MaxQuantity = req.MaxQuantity
+	draft.StepQuantity = req.StepQuantity
+	draft.ProductType = req.ProductType
+	draft.AllowOversold = req.AllowOversold
+	if draft.ProductType == config.ProductTypeCustom {
+		draft.OrderFields = req.OrderFields
+	} else {
+		draft.OrderFields = nil
+	}
+	draft.Brand = req.Brand
+	draft.HasPseudo = req.HasPseudo
+	draft.OriginId = req.OriginId
+	draft.CommentCount = req.CommentCount
+	draft.FavoriteCount = req.FavoriteCount
+	draft.AverageScore = req.AverageScore
 
 	module = w.GetModuleFromCache(draft.ModuleId)
 	if module == nil {
@@ -1042,6 +1072,14 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			}
 		}
 	}
+	if req.UpdateAll || len(req.Options) > 0 {
+		// 产品保存sku
+		_ = w.SaveArchiveOptions(draft, req.Options, req.Skus)
+	}
+	if req.UpdateAll || len(req.WholesaleRules) > 0 {
+		// 保存wholesaleRules
+		_ = w.SaveArchiveWholesaleRules(draft.Id, req.WholesaleRules)
+	}
 	if req.UpdateAll || len(req.RelationIds) > 0 {
 		// 保存 Relations
 		_ = w.SaveArchiveRelations(draft.Id, req.RelationIds)
@@ -1252,6 +1290,14 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 	//w.Cache.CleanAll("archive-list")
 	//// 删除首页缓存
 	//w.DeleteCacheIndex()
+	// 如果启用了google推送
+	if archive.ModuleId == 2 {
+		googlgeMerchantSetting := w.GetGoogleMerchantSetting()
+		if googlgeMerchantSetting.Open {
+			// 检查是否是首次推送
+			go w.StartSyncGoogleMerchantProducts(false, archive)
+		}
+	}
 
 	//新发布的文章，执行推送
 	if newPost {
@@ -1965,6 +2011,295 @@ func (w *Website) SaveArchiveRelations(archiveId int64, relationIds []int64) err
 	w.DB.Unscoped().Where("`archive_id` = ? and `relation_id` NOT IN (?)", archiveId, relationIds).Delete(&model.ArchiveRelation{})
 
 	return nil
+}
+
+func (w *Website) SaveArchiveOptions(archive *model.ArchiveDraft, options []*request.ArchiveOption, archiveSkus []*request.ArchiveSku) error {
+	archiveId := archive.Id
+	if len(options) == 0 || archive.OptionType == config.OptionTypeNone {
+		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveOption{})
+		w.DB.Where("`archive_id` = ?", archiveId).Delete(&model.ArchiveOptionValue{})
+		return nil
+	}
+	if archive.OptionType == config.OptionTypePrice {
+		w.DB.Where("archive_id = ?", archiveId).Delete(&model.ArchiveSku{})
+	}
+	var valuesMap = map[string][]model.ArchiveOptionValue{}
+	var optionIds []int64
+	var optionStocks int64
+	for i, option := range options {
+		archiveOption := model.ArchiveOption{
+			ArchiveId:   archiveId,
+			IsMain:      option.IsMain,
+			Title:       option.Title,
+			IsAttribute: option.IsAttribute,
+			Sort:        uint(i + 1),
+		}
+		var existOption model.ArchiveOption
+		err := w.DB.Model(&model.ArchiveOption{}).Where("`archive_id` = ? and `title` = ?", archiveOption.ArchiveId, archiveOption.Title).Take(&existOption).Error
+		if err == nil {
+			existOption.IsMain = archiveOption.IsMain
+			existOption.Sort = archiveOption.Sort
+			existOption.IsAttribute = archiveOption.IsAttribute
+			w.DB.Model(&model.ArchiveOption{}).Where("`id` = ?", existOption.Id).Save(&existOption)
+			archiveOption.Id = existOption.Id
+		} else {
+			w.DB.Save(&archiveOption)
+		}
+		options[i].Id = archiveOption.Id
+		optionIds = append(optionIds, archiveOption.Id)
+		var optionValueIds []int64
+		for j, value := range option.Values {
+			if value.Stock > optionStocks {
+				optionStocks = value.Stock
+			}
+			archiveOptionValue := model.ArchiveOptionValue{
+				ArchiveId: archiveId,
+				OptionId:  archiveOption.Id,
+				Title:     value.Title,
+				Images:    value.Images,
+				Color:     value.Color,
+				Price:     value.Price,
+				Stock:     value.Stock,
+				IsDefault: value.IsDefault,
+				Sort:      uint(j + 1),
+			}
+			var existValue model.ArchiveOptionValue
+			err = w.DB.Model(&model.ArchiveOptionValue{}).Where("archive_id = ? and option_id = ? and title = ?", archiveOptionValue.ArchiveId, archiveOptionValue.OptionId, value.Title).Take(&existValue).Error
+			if err == nil {
+				existValue.Images = archiveOptionValue.Images
+				existValue.Color = archiveOptionValue.Color
+				existValue.Price = archiveOptionValue.Price
+				existValue.Stock = archiveOptionValue.Stock
+				existValue.Sort = archiveOptionValue.Sort
+				existValue.IsDefault = archiveOptionValue.IsDefault
+				w.DB.Model(&model.ArchiveOptionValue{}).Where("id = ?", existValue.Id).Save(&existValue)
+				archiveOptionValue.Id = existValue.Id
+			} else {
+				w.DB.Save(&archiveOptionValue)
+			}
+			options[i].Values[j].Id = archiveOptionValue.Id
+			optionValueIds = append(optionValueIds, archiveOptionValue.Id)
+			archiveOptionValue.OptionTitle = archiveOption.Title
+			valuesMap[archiveOption.Title] = append(valuesMap[archiveOption.Title], archiveOptionValue)
+		}
+		w.DB.Where("archive_id = ? and option_id = ? and id not in(?)", archiveId, archiveOption.Id, optionValueIds).Delete(&model.ArchiveOptionValue{})
+	}
+	w.DB.Where("archive_id = ? and id not in(?)", archiveId, optionIds).Delete(&model.ArchiveOption{})
+	// 写入sku
+	var skuIds []int64
+	var minPrice int64
+	var totalStock int64
+	for _, archiveSku := range archiveSkus {
+		var skuValues []model.ArchiveOptionValue
+		var skuSymbols []string
+		var valueNames []string
+		for _, opt := range archiveSku.Values {
+			if opt.OptionTitle == "" && opt.OptionId > 0 {
+				for _, tmp := range options {
+					if tmp.Id == opt.OptionId {
+						opt.OptionTitle = tmp.Title
+						break
+					}
+				}
+			}
+			var valueItem model.ArchiveOptionValue
+			subValues, ok := valuesMap[opt.OptionTitle]
+			if ok {
+				for j := range subValues {
+					if subValues[j].Title == opt.Title {
+						valueItem = subValues[j]
+						skuValues = append(skuValues, valueItem)
+						break
+					}
+				}
+			} else {
+				// 出错？
+				log.Printf("获取不到Option ？ opt = %v", opt)
+			}
+			skuSymbols = append(skuSymbols, strconv.FormatInt(valueItem.Id, 10))
+			tmpName := library.GetPinyin(valueItem.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+			if len(tmpName) > 20 {
+				tmpName = tmpName[:20]
+			}
+			valueNames = append(valueNames, tmpName)
+			// if archiveSku.Logo == "" && valuesMap[opt.Title].Logo != "" {
+			// 	archiveSku.Logo = valuesMap[opt.Title].Logo
+			// }
+		}
+		symbol := strings.Join(skuSymbols, "-")
+		if archiveSku.Sku == "" {
+			archiveSku.Sku = symbol
+		}
+		urlToken := strings.Join(valueNames, " ")
+		if len(urlToken) > 150 {
+			urlToken = urlToken[:150]
+		}
+		archiveSku.UrlToken = archive.UrlToken + "-" + urlToken
+		if len(archiveSku.UrlToken) > 190 {
+			urlTokenLen := len(urlToken)
+			archiveSku.UrlToken = archive.UrlToken[:188-urlTokenLen] + urlToken
+		}
+		totalStock += archiveSku.Stock
+		if minPrice == 0 || (archiveSku.Price > 0 && archiveSku.Price < minPrice) {
+			minPrice = archiveSku.Price
+		}
+		sku := model.ArchiveSku{
+			Id:          archiveSku.Id,
+			ArchiveId:   archiveId,
+			Title:       archiveSku.Title,
+			UrlToken:    archiveSku.UrlToken,
+			Symbol:      symbol,
+			Sku:         archiveSku.Sku,
+			Barcode:     archiveSku.Barcode,
+			HsCode:      archiveSku.HsCode,
+			Images:      archiveSku.Images,
+			Stock:       archiveSku.Stock,
+			Price:       archiveSku.Price,
+			OriginPrice: archiveSku.OriginPrice,
+			CostPrice:   archiveSku.CostPrice,
+			Weight:      archiveSku.Weight,
+			WeightUnit:  archiveSku.WeightUnit,
+			Length:      archiveSku.Length,
+			Width:       archiveSku.Width,
+			Height:      archiveSku.Height,
+			Volume:      archiveSku.Volume,
+			LengthUnit:  archiveSku.LengthUnit,
+			Values:      skuValues,
+			Status:      archiveSku.Status,
+		}
+		if sku.Id > 0 {
+			var exist model.ArchiveSku
+			w.DB.Where("archive_id = ? AND id = ?", archiveId, sku.Id).First(&exist)
+			if exist.Id > 0 {
+				exist.Title = sku.Title
+				exist.Symbol = sku.Symbol
+				exist.Sku = sku.Sku
+				exist.Barcode = sku.Barcode
+				exist.HsCode = sku.HsCode
+				exist.Images = sku.Images
+				exist.Stock = sku.Stock
+				exist.Price = sku.Price
+				exist.CostPrice = sku.CostPrice
+				exist.OriginPrice = sku.OriginPrice
+				exist.Weight = sku.Weight
+				exist.WeightUnit = sku.WeightUnit
+				exist.Length = sku.Length
+				exist.Width = sku.Width
+				exist.Height = sku.Height
+				exist.Volume = sku.Volume
+				exist.LengthUnit = sku.LengthUnit
+				exist.Values = skuValues
+				exist.Status = sku.Status
+				w.DB.Model(&model.ArchiveSku{}).Where("id = ?", exist.Id).Save(&exist)
+			} else {
+				sku.Id = 0
+				w.DB.Save(&sku)
+			}
+		} else {
+			w.DB.Save(&sku)
+		}
+		skuIds = append(skuIds, sku.Id)
+	}
+	if archive.OptionType == config.OptionTypePrice {
+		minPrice = archive.Price
+		totalStock = archive.Stock
+		if optionStocks > totalStock {
+			totalStock = optionStocks
+		}
+	}
+	w.DB.Model(&model.Archive{}).Where("id = ?", archiveId).UpdateColumns(map[string]interface{}{
+		"stock": totalStock,
+		"price": minPrice,
+	})
+	w.DB.Where("archive_id = ? and id not in (?)", archiveId, skuIds).Delete(&model.ArchiveSku{})
+
+	return nil
+}
+
+func (w *Website) SaveArchiveWholesaleRules(archiveId int64, rules []*request.WholesaleRule) error {
+	if len(rules) == 0 {
+		w.DB.Where("archive_id = ?", archiveId).Delete(&model.WholesaleRule{})
+		return nil
+	}
+	var ruleIds []int64
+	for _, rule := range rules {
+		var exist model.WholesaleRule
+		if rule.Id > 0 {
+			w.DB.Where("id = ?", rule.Id).First(&exist)
+			if exist.Id > 0 && exist.ArchiveId != archiveId {
+				// 排除这个id
+				exist = model.WholesaleRule{}
+			}
+		}
+		exist.ArchiveId = archiveId
+		exist.MinQuantity = rule.MinQuantity
+		exist.MaxQuantity = rule.MaxQuantity
+		exist.DiscountRate = rule.DiscountRate
+
+		w.DB.Save(&exist)
+		ruleIds = append(ruleIds, exist.Id)
+	}
+	w.DB.Where("archive_id = ?", archiveId).Where("id not in (?)", ruleIds).Delete(&model.WholesaleRule{})
+
+	return nil
+}
+
+func (w *Website) GetArchiveOptions(archiveId int64) ([]*model.ArchiveOption, error) {
+	var options []*model.ArchiveOption
+	if err := w.DB.Where("archive_id = ?", archiveId).Find(&options).Error; err != nil {
+		return nil, err
+	}
+	var values []model.ArchiveOptionValue
+	if err := w.DB.Where("archive_id = ?", archiveId).Find(&values).Error; err != nil {
+		return nil, err
+	}
+	for _, option := range options {
+		for _, value := range values {
+			if option.Id == value.OptionId {
+				value.Thumb = value.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+				option.Values = append(option.Values, value)
+			}
+		}
+	}
+
+	return options, nil
+}
+
+func (w *Website) GetArchiveOption(archiveId int64, optionId int64) (*model.ArchiveOption, error) {
+	var option model.ArchiveOption
+	if err := w.DB.Where("archive_id = ? AND id = ?", archiveId, optionId).First(&option).Error; err != nil {
+		return nil, err
+	}
+	return &option, nil
+}
+
+func (w *Website) GetArchiveOptionValue(archiveId int64, optionValueId int64) (*model.ArchiveOptionValue, error) {
+	var optionValue model.ArchiveOptionValue
+	if err := w.DB.Where("archive_id = ? AND id = ?", archiveId, optionValueId).First(&optionValue).Error; err != nil {
+		return nil, err
+	}
+	return &optionValue, nil
+}
+
+func (w *Website) GetArchiveSkus(archiveId int64) ([]*model.ArchiveSku, error) {
+	var skus []*model.ArchiveSku
+	if err := w.DB.Where("archive_id = ?", archiveId).Find(&skus).Error; err != nil {
+		return nil, err
+	}
+	for _, sku := range skus {
+		sku.Thumb = sku.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+	}
+
+	return skus, nil
+}
+
+func (w *Website) GetArchiveWholesaleRules(archiveId int64) ([]*model.WholesaleRule, error) {
+	var rules []*model.WholesaleRule
+	if err := w.DB.Where("archive_id = ?", archiveId).Find(&rules).Error; err != nil {
+		return nil, err
+	}
+
+	return rules, nil
 }
 
 type QuickImportArchive struct {
@@ -3193,4 +3528,61 @@ func (w *Website) applyArchiveFrontmatter(archive *model.ArchiveDraft, fm map[st
 		}
 	}
 	// 不支持 extra
+}
+
+func (w *Website) GetArchiveSkuById(archiveId, skuId int64) (*model.ArchiveSku, error) {
+	var sku model.ArchiveSku
+	err := w.DB.Where("id = ?", skuId).First(&sku).Error
+	if err != nil {
+		return nil, err
+	}
+	if archiveId != sku.ArchiveId {
+		return nil, errors.New("sku not found")
+	}
+	sku.Thumb = sku.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+
+	return &sku, nil
+}
+
+func (w *Website) GetArchiveSkuByUrlToken(urlToken string) (*model.ArchiveSku, error) {
+	var sku model.ArchiveSku
+	err := w.DB.Where("url_token = ?", urlToken).First(&sku).Error
+	if err != nil {
+		return nil, err
+	}
+	sku.Thumb = sku.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+
+	return &sku, nil
+}
+
+func (w *Website) GetDefaultSku(options []*model.ArchiveOption) (*model.ArchiveSku, error) {
+	var sku model.ArchiveSku
+	var valueIds []string
+	for _, opt := range options {
+		var tmpId int64
+		for _, val := range opt.Values {
+			if val.IsDefault {
+				tmpId = val.Id
+				break
+			}
+		}
+		if tmpId == 0 && len(opt.Values) > 0 {
+			tmpId = opt.Values[0].Id
+		}
+		valueIds = append(valueIds, strconv.FormatInt(tmpId, 10))
+	}
+	symbol := strings.Join(valueIds, "-")
+	err := w.DB.Where("symbol = ?", symbol).First(&sku).Error
+	if err != nil {
+		return nil, err
+	}
+	sku.Thumb = sku.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+
+	return &sku, nil
+}
+
+func (w *Website) GetArchiveSkuList(archiveId int64) []*model.ArchiveSku {
+	var skus []*model.ArchiveSku
+	w.DB.Where("archive_id = ?", archiveId).Find(&skus)
+	return skus
 }

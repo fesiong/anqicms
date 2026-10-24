@@ -43,6 +43,7 @@ type User struct {
 	InviteCode    string `json:"invite_code" gorm:"column:invite_code;type:varchar(100) not null;default:'';index:idx_invite_code"`
 	LastLogin     int64  `json:"last_login" gorm:"column:last_login;type:bigint(20);default:0"`
 	ExpireTime    int64  `json:"expire_time" gorm:"column:expire_time;type:bigint(20);default:0"`
+	BrevoId       int64  `json:"brevo_id" gorm:"column:brevo_id;type:bigint(20);defaul:0;index"` // brevo contact's id
 	// 是否订阅
 	Subscribed bool  `json:"subscribed" gorm:"column:subscribed;type:tinyint(1) not null;default:0"`
 	OrderCount int64 `json:"order_count" gorm:"column:order_count;type:bigint(20) not null;default:0"`
@@ -65,6 +66,17 @@ type UserGroup struct {
 	Price          int64            `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
 	Setting        UserGroupSetting `json:"setting" gorm:"setting;type:text DEFAULT NULL; COMMENT '配置信息'"` //配置
 	FavorablePrice int64            `json:"favorable_price" gorm:"-"`
+}
+
+type LoginLog struct {
+	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index:idx_user_id"`
+	Ip          string `json:"ip" gorm:"column:ip;type:varchar(32) not null;default:''"`
+	Status      uint   `json:"status" gorm:"column:status;type:tinyint(1) unsigned not null;default:0"` // 0 = false,1=true
+	UserName    string `json:"user_name" gorm:"column:user_name;type:varchar(128) not null;default:''"`
+	Password    string `json:"password" gorm:"column:password;type:varchar(128) not null;default:''"`
 }
 
 type UserGroupSetting struct {

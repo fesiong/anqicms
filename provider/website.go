@@ -67,14 +67,16 @@ type Website struct {
 	quickImportStatus       *QuickImportArchive
 	AkismetClient           *AkismetClient
 	googleAuthConfig        *oauth2.Config
+	googleMerchantConfig    *oauth2.Config
 	llmsBuildStatus         *LLMsBuildStatus
 
-	System  *config.SystemConfig
-	Content *config.ContentConfig
-	Index   *config.IndexConfig
-	Contact *config.ContactConfig
-	Safe    *config.SafeConfig
-	Banner  *config.BannerConfig
+	System   *config.SystemConfig
+	Content  *config.ContentConfig
+	Index    *config.IndexConfig
+	Contact  *config.ContactConfig
+	Shipping *config.ShippingConfig
+	Safe     *config.SafeConfig
+	Banner   *config.BannerConfig
 	//plugin
 	PluginPush         *config.PluginPushConfig
 	PluginSitemap      *config.PluginSitemapConfig
@@ -101,6 +103,7 @@ type Website struct {
 	MultiLanguage      *config.PluginMultiLangConfig
 	PluginTranslate    *config.PluginTranslateConfig
 	PluginJsonLd       *config.PluginJsonLdConfig
+	Currency           *config.CurrencyConfig
 	PluginLLMs         *config.PluginLLMsConfig
 	PluginPlace        *config.PluginPlaceConfig
 
@@ -121,6 +124,7 @@ type Website struct {
 	backLanguage string
 	ctx          iris.Context // 这个类型是指针，因此只能在拷贝后赋值
 	Template     *StoreTemplates
+	ShopCountLog *ShopCountLog
 	MailService  *MailService
 	// ai
 	AiSrv *AiChatService

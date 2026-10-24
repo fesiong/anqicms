@@ -469,3 +469,187 @@ func PluginOrderExport(ctx iris.Context) {
 		},
 	})
 }
+
+func PluginGetOrderReviews(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	orderId := ctx.URLParam("order_id")
+	archiveId := ctx.URLParamInt64Default("archive_id", 0)
+
+	orders, total := currentSite.GetOrderReviews(func(tx *gorm.DB) *gorm.DB {
+		if orderId != "" {
+			tx = tx.Where("`order_id` = ?", orderId)
+		}
+		if archiveId > 0 {
+			tx = tx.Where("`archive_id` = ?", archiveId)
+		}
+		return tx
+	}, "id desc", currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  orders,
+	})
+}
+
+func PluginSaveOrderReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.SaveOrderReview(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}
+
+func PluginGetOrderReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := ctx.URLParamInt64Default("id", 0)
+
+	review, err := currentSite.GetOrderReview(uint(id))
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+		"data": review,
+	})
+}
+
+func PluginDeleteOrderReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	err := currentSite.DeleteOrderReview(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}
+
+func PluginGetOrderServices(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+
+	orders, total := currentSite.GetOrderServices(func(tx *gorm.DB) *gorm.DB {
+		return tx
+	}, currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  orders,
+	})
+}
+
+func PluginGetOrderService(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := ctx.URLParamInt64Default("id", 0)
+
+	service, err := currentSite.GetOrderService(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+		"data": service,
+	})
+}
+
+func PluginSaveOrderService(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderServiceRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.SaveOrderService(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}
+
+func PluginDeleteOrderService(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderServiceRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	err := currentSite.DeleteOrderService(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}

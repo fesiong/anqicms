@@ -18,7 +18,8 @@ func (p *PluginUserConfig) GetDefaultStatus() int {
 }
 
 type PluginGoogleAuthConfig struct {
-	RedirectUrl  string `json:"redirect_url"`  // 登录成功后跳转的URL
-	ClientId     string `json:"client_id"`     // 谷歌应用
-	ClientSecret string `json:"client_secret"` // 谷歌应用密钥
+	RedirectUrl  string `json:"redirect_url"`   // 登录成功后跳转的URL
+	ClientId     string `json:"client_id"`      // 谷歌应用
+	ClientSecret string `json:"client_secret"`  // 谷歌应用密钥
+	PlacesApiKey string `json:"places_api_key"` // Google Places 地址补全 API Key（商城收货地址）
 }
