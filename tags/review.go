@@ -23,6 +23,10 @@ func (node *tagReviewListNode) Execute(ctx *pongo2.ExecutionContext, writer pong
 	if currentSite == nil || currentSite.DB == nil {
 		return nil
 	}
+	// 站点运行于普通内容模式时不渲染商城元素（合并计划阶段 5.3）
+	if currentSite.System.ShopMode == 0 {
+		return nil
+	}
 	args, err := parseArgs(node.args, ctx)
 	if err != nil {
 		return err

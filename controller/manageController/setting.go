@@ -126,6 +126,7 @@ func SettingSystemForm(ctx iris.Context) {
 	currentSite.System.SiteClose = req.SiteClose
 	currentSite.System.SiteCloseTips = req.SiteCloseTips
 	currentSite.System.BanSpider = req.BanSpider
+	currentSite.System.ShopMode = req.ShopMode
 	if currentSite.System.BaseUrl != req.BaseUrl {
 		// 如果本来storageUrl = baseUrl
 		if currentSite.PluginStorage.StorageUrl == currentSite.System.BaseUrl {

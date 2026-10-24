@@ -21,6 +21,7 @@ type SystemConfig struct {
 	SiteClose     int           `json:"site_close"`           // 是否关闭网站：0=否，1=是
 	SiteCloseTips string        `json:"site_close_tips"`      // 关闭网站页面上提示的内容。
 	BanSpider     int           `json:"ban_spider"`           // 是否禁止搜索引擎抓取。
+	ShopMode      int           `json:"shop_mode"`            // 站点运行模式：0=普通内容模式（隐藏商城前台 API 与菜单），1=商城模式（全功能）。切换只影响入口展示，不删数据。
 	TemplateName  string        `json:"template_name"`        // 模板包名
 	TemplateType  int           `json:"template_type"`        // 模板类型：0=自适应，1=代码适配，2=PC+手机独立模板
 	TemplateUrl   string        `json:"template_url" ast:"-"` // template 的静态文件目录
