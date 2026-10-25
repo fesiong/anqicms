@@ -496,27 +496,34 @@ type PluginPlaceConfig struct {
 	Fields      []CustomField `json:"fields"`       // 自定义字段
 }
 
+// PluginGoogleMerchantConfig 是「商品同步到 Google Merchant Center」的站点配置。
+//
+// ⚠️ 保存端点（POST /plugin/googlemerchant/config）把这个结构体**整体落库**，
+// 不是字段合并：请求体里没带的字段会被清成零值，包括 token 与 accounts。
+// 因此改配置必须先 GET 取全量、改完整体写回。
 type PluginGoogleMerchantConfig struct {
-	Open         bool   `json:"open"`
-	RedirectUrl  string `json:"redirect_url"`
-	ClientId     string `json:"client_id"`
-	ClientSecret string `json:"client_secret"`
-	PlacesApiKey string `json:"places_api_key"`
+	Open         bool   `json:"open"`           // 是否启用 Google 商品同步
+	RedirectUrl  string `json:"redirect_url"`   // OAuth 回调地址，必须与 Google Cloud 控制台登记的完全一致
+	ClientId     string `json:"client_id"`      // OAuth 客户端 ID
+	ClientSecret string `json:"client_secret"`  // OAuth 客户端密钥（敏感，读接口明文回显，这是后台配置的既有行为）
+	PlacesApiKey string `json:"places_api_key"` // Google Places API Key（店铺地址补全用）
 
-	Email      string `json:"email"`
-	Name       string `json:"name"`
-	GivenName  string `json:"given_name"`
-	FamilyName string `json:"family_name"`
+	Email      string `json:"email"`       // 授权 Google 账号的邮箱
+	Name       string `json:"name"`        // 授权账号的显示名
+	GivenName  string `json:"given_name"`  // 授权账号的名
+	FamilyName string `json:"family_name"` // 授权账号的姓
 
-	Token *oauth2.Token `json:"token"`
+	Token *oauth2.Token `json:"token"` // OAuth 令牌对象（access/refresh token 与过期时间都在这里），由 callback 写入
 
-	Accounts     []*content.AccountIdentifier `json:"accounts"`
-	MerchantId   uint64                       `json:"merchant_id"`
-	AggregatorId uint64                       `json:"aggregator_id"`
-	AccessToken  string                       `json:"access_token"`
-	RefreshToken string                       `json:"refresh_token"`
-	TokenType    string                       `json:"token_type"`
-	ExpireTme    int64                        `json:"expire_tme"`
+	Accounts     []*content.AccountIdentifier `json:"accounts"`      // 已授权的 Merchant 账号列表，account_select 从这里选
+	MerchantId   uint64                       `json:"merchant_id"`   // 当前选中的商户 ID，同步时用它
+	AggregatorId uint64                       `json:"aggregator_id"` // 聚合账号（MCA）ID，由授权返回的账号信息回填
+	// 以下四个是令牌的扁平副本，当前同步逻辑读的是 Token 对象，它们不参与判定。
+	// 保留仅为兼容既有库数据，勿作为令牌来源使用。
+	AccessToken  string `json:"access_token"`  // 冗余：令牌值以 token 对象为准
+	RefreshToken string `json:"refresh_token"` // 冗余：刷新令牌以 token 对象为准
+	TokenType    string `json:"token_type"`    // 冗余：令牌类型
+	ExpireTme    int64  `json:"expire_tme"`    // 冗余：过期时间（字段名拼写为 expire_tme，非 expire_time）
 }
 
 func (g *CustomField) SplitContent() []string {

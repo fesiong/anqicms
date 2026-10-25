@@ -124,18 +124,18 @@ type OrderExportRequest struct {
 }
 
 type OrderReviewRequest struct {
-	Id           int64    `json:"id"`
-	ArchiveId    int64    `json:"archive_id"`
-	ArchiveSkuId int64    `json:"archive_sku_id"`
-	OrderId      string   `json:"order_id"`
-	UserId       uint     `json:"user_id"`
-	UserName     string   `json:"user_name"`
-	Email        string   `json:"email"`
-	Ip           string   `json:"ip"`
-	Score        int      `json:"score"`
-	Content      string   `json:"content"`
-	Status       uint     `json:"status"`
-	Images       []string `json:"images"`
+	Id           int64    `json:"id"`             // 评价 ID，0 表示新建
+	ArchiveId    int64    `json:"archive_id"`     // 被评价的商品（文档）ID
+	ArchiveSkuId int64    `json:"archive_sku_id"` // 被评价的商品规格 ID，0 表示对商品整体评价
+	OrderId      string   `json:"order_id"`       // 订单号；同一订单的同一商品重复提交只会成功一条
+	UserId       uint     `json:"user_id"`        // 评价所属会员 ID；更新时必须与原评价一致，否则返回 Not Found
+	UserName     string   `json:"user_name"`      // 评价人昵称
+	Email        string   `json:"email"`          // 评价人邮箱
+	Ip           string   `json:"ip"`             // 评价来源 IP
+	Score        int      `json:"score"`          // 评分
+	Content      string   `json:"content"`        // 评价内容
+	Status       uint     `json:"status"`         // 状态：0 未处理（待审核），1 正常（已通过），-1 删除
+	Images       []string `json:"images"`         // 评价图片 URL 列表
 }
 
 type CartRequest struct {
@@ -162,15 +162,15 @@ type CartRequest struct {
 }
 
 type OrderServiceRequest struct {
-	Id          int64                  `json:"id"`
-	ServiceCode string                 `json:"service_code"`
-	ServiceName string                 `json:"service_name"`
-	ServiceType string                 `json:"service_type"`
-	Description string                 `json:"description"`
-	Enabled     bool                   `json:"enabled"`
-	Sort        uint                   `json:"sort"`
-	Fee         int64                  `json:"fee"`
-	FeeType     int                    `json:"fee_type"`
-	MaxFee      int64                  `json:"max_fee"`
-	Extra       map[string]interface{} `json:"extra,omitempty"`
+	Id          int64                  `json:"id"`              // 服务项 ID，0 表示新建
+	ServiceCode string                 `json:"service_code"`    // 服务编码（唯一标识，客户端取值时用它）
+	ServiceName string                 `json:"service_name"`    // 服务名称（结算页展示）
+	ServiceType string                 `json:"service_type"`    // 服务类型标记
+	Description string                 `json:"description"`     // 服务说明
+	Enabled     bool                   `json:"enabled"`         // 是否启用；false 时前台不可选
+	Sort        uint                   `json:"sort"`            // 排序，越小越靠前
+	Fee         int64                  `json:"fee"`             // 服务费（分）；fee_type=2 时是订单金额的百分比数值
+	FeeType     int                    `json:"fee_type"`        // 计费方式：0 固定金额，2 订单金额比例
+	MaxFee      int64                  `json:"max_fee"`         // 费用上限（分），0 表示不设上限
+	Extra       map[string]interface{} `json:"extra,omitempty"` // 其它自定义配置（原样存库）
 }
