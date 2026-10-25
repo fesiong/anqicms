@@ -490,7 +490,7 @@ type PluginLLMsConfig struct {
 }
 
 type PluginPlaceConfig struct {
-	Open        bool          `json:"open"`
+	Open        bool          `json:"open"`         // 是否开启城市分站
 	UrlType     string        `json:"url_type"`     // URL形式，subdomain|directory,默认：directory
 	ContentType string        `json:"content_type"` // 默认=内容需要绑定分站，full=全站复用
 	Fields      []CustomField `json:"fields"`       // 自定义字段

@@ -8,6 +8,12 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginActivityList 分页查询营销活动列表，支持按活动标题搜索。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "title": 活动标题模糊搜索。
 func PluginActivityList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -29,6 +35,10 @@ func PluginActivityList(ctx iris.Context) {
 	})
 }
 
+// PluginActivityDetail 按 ID 查询单个营销活动详情，返回结果已带该活动的全部规格（skus）。
+//
+// 参数说明：
+//   - 查询参数 "id": 活动 ID，必填；传 0 或活动不存在时返回错误信息。
 func PluginActivityDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)

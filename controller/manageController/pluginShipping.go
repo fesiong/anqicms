@@ -6,6 +6,7 @@ import (
 	"kandaoni.com/anqicms/provider"
 )
 
+// PluginGetShippingSetting 获取运费设置（无参数）。
 func PluginGetShippingSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

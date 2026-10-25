@@ -12,6 +12,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// PluginGoogleMerchantConfig 获取 Google 商品同步配置（无参数）。
 func PluginGoogleMerchantConfig(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetGoogleMerchantSetting()
@@ -56,6 +57,10 @@ func PluginGoogleMerchantConfigSave(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantAuthUrl 生成 Google 商家授权的跳转链接，供管理员点击完成授权。
+//
+// 参数说明：
+//   - 查询参数 "state": 防 CSRF 的随机串，可选；不传时服务端生成 32 位随机串，并在返回结果里一并给出，回调时需原样带回。
 func PluginGoogleMerchantAuthUrl(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	googleCfg := currentSite.GetGoogleMerchantConfig(true)
@@ -229,6 +234,11 @@ func PluginGoogleMerchantAccountSelect(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantSyncLogs 分页查询商品同步日志。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
 func PluginGoogleMerchantSyncLogs(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索
@@ -245,6 +255,11 @@ func PluginGoogleMerchantSyncLogs(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantSyncStatusList 分页查询各商品的 Google 同步状态。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
 func PluginGoogleMerchantSyncStatusList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	//需要支持分页，还要支持搜索

@@ -80,12 +80,12 @@ type ContactConfig struct {
 	Youtube            string        `json:"youtube"`              // 联系YouTube
 	Qrcode             string        `json:"qrcode"`               // 联系二维码，一般是微信二维码
 	ExtraFields        []CustomField `json:"extra_fields" ast:"-"` // 用户自定义字段
-	ShopName           string        `json:"shop_name"`
-	ShopLogo           string        `json:"shop_logo"`
-	ShopDescription    string        `json:"shop_description"`
-	BusinessHours      string        `json:"business_hours"`
-	ShippingTime       int           `json:"shipping_time"`
-	ShippingTimeRemark string        `json:"shipping_time_remark"`
+	ShopName           string        `json:"shop_name"`            // 店铺名称，商城模式下展示在店铺页
+	ShopLogo           string        `json:"shop_logo"`            // 店铺 Logo 图片地址（附件相对路径）
+	ShopDescription    string        `json:"shop_description"`     // 店铺简介
+	BusinessHours      string        `json:"business_hours"`       // 营业时间，自由文本，如 9:00-18:00
+	ShippingTime       int           `json:"shipping_time"`        // 预计发货时间，单位：天
+	ShippingTimeRemark string        `json:"shipping_time_remark"` // 发货时间的补充说明文本，如 下单后48小时内发货
 }
 
 type SafeConfig struct {

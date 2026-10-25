@@ -1026,6 +1026,7 @@ func SettingAiForm(ctx iris.Context) {
 	})
 }
 
+// SettingCurrency 获取商城币种与货币符号设置（无参数）。
 func SettingCurrency(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 

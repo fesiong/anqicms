@@ -8,6 +8,7 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
+// GetCommunicationSetting 获取询盘/客服设置（无参数）。
 func GetCommunicationSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	setting := currentSite.GetCommunicationSetting()
@@ -38,6 +39,13 @@ func SaveCommunicationSetting(ctx iris.Context) {
 	})
 }
 
+// CommunicationOrderList 分页查询询盘（沟通）订单列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "id": 按订单 ID 精确筛选，0 表示不限。
+//   - 查询参数 "status": 按状态筛选，waiting=待处理(0)/doing=进行中(1)/quote=已报价(2)/accepted=已接受(3)/finished=已完成(4)/closed=已关闭(-1)；不传则不筛选。
 func CommunicationOrderList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -95,6 +103,10 @@ func CommunicationOrderList(ctx iris.Context) {
 	})
 }
 
+// CommunicationOrderDetail 按 ID 查询询盘订单详情，同时回传当前的询盘设置。
+//
+// 参数说明：
+//   - 查询参数 "id": 询盘订单 ID，必填；为 0 时返回 Invalid Params。
 func CommunicationOrderDetail(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)
@@ -271,6 +283,13 @@ func CommunicationMessageDelete(ctx iris.Context) {
 	})
 }
 
+// CommunicationMessageList 分页查询某个询盘订单下的往来消息。
+//
+// 参数说明：
+//   - 查询参数 "comm_order_id": 询盘订单 ID，必填；为 0 时返回 Invalid Params。
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "q": 消息内容关键词模糊搜索。
 func CommunicationMessageList(ctx iris.Context) {
 	commOrderId := ctx.URLParamInt64Default("comm_order_id", 0)
 	currentPage := ctx.URLParamIntDefault("current", 1)

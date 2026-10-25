@@ -470,6 +470,13 @@ func PluginOrderExport(ctx iris.Context) {
 	})
 }
 
+// PluginGetOrderReviews 分页查询商品评价列表，支持按订单号与商品筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "order_id": 按订单号（varchar 业务单号，不是自增 id）精确筛选。
+//   - 查询参数 "archive_id": 按商品（文档）ID 筛选，0 表示不限。
 func PluginGetOrderReviews(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -521,6 +528,10 @@ func PluginSaveOrderReview(ctx iris.Context) {
 	})
 }
 
+// PluginGetOrderReview 按 ID 查询单条商品评价。
+//
+// 参数说明：
+//   - 查询参数 "id": 评价 ID，必填；传 0 或不存在时返回错误信息。
 func PluginGetOrderReview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)
@@ -566,6 +577,11 @@ func PluginDeleteOrderReview(ctx iris.Context) {
 	})
 }
 
+// PluginGetOrderServices 分页查询增值服务列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
 func PluginGetOrderServices(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -583,6 +599,10 @@ func PluginGetOrderServices(ctx iris.Context) {
 	})
 }
 
+// PluginGetOrderService 按 ID 查询单个增值服务。
+//
+// 参数说明：
+//   - 查询参数 "id": 增值服务 ID，必填；传 0 或不存在时返回错误信息。
 func PluginGetOrderService(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	id := ctx.URLParamInt64Default("id", 0)
