@@ -17,6 +17,7 @@ func manageRoute(app *iris.Application) {
 		manage.Post("/login", manageController.AdminLogin)
 		manage.Get("/captcha", manageController.GenerateCaptcha)
 		manage.Get("/siteinfo", manageController.GetCurrentSiteInfo)
+		manage.Post("/anqi/feedback", manageController.AnqiSendFeedback)
 
 		password := manage.Party("/password")
 		{
@@ -40,7 +41,6 @@ func manageRoute(app *iris.Application) {
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)
-			anqi.Post("/feedback", manageController.AnqiSendFeedback)
 			anqi.Post("/translate", manageController.AnqiTranslateArticle)
 			anqi.Post("/ai/pseudo", manageController.AnqiAiPseudoArticle)
 			anqi.Post("/ai/stream", manageController.AuthAiGenerateStream)
