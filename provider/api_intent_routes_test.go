@@ -483,6 +483,12 @@ func TestDomainIntentDefaultExposure(t *testing.T) {
 		"contentops_translate": "批量改写多语言副本，译文未经审校",
 		"commerce":             "会员/分组/分销商写操作影响真实用户",
 		"commerce_order":       "订单状态流转直接动资金，退款/取消不可回滚",
+		// 2026-10-25：商城合并新增端点对应的四个意图，按交易域口径一并默认关闭。
+		// 这份名单与 intent 包的 gatedDomainIntents 并行维护，改一处必须改两处。
+		"commerce_marketing":   "发券与活动直接改价格，券发出去收不回来",
+		"commerce_fulfillment": "运费规则与对外报价，改错即算错运费、报价会真实发出",
+		"commerce_review":      "评价审核与增值服务定价",
+		"seo_merchant":         "Google 商品同步：含 client_secret/refresh_token，且向外推送商品数据",
 		// 注：skill 曾以「涉及文件系统」列在此处，2026-10-07 移出并改为默认开放——
 		// 该理由不成立，它的 delete 已被审批门 + 端点字符白名单 + 只删 skills/<name> 覆盖。
 		// 改默认策略时必须同时改intent 包的 openNonDomainIntents 与这里。

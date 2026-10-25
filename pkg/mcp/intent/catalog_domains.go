@@ -99,6 +99,30 @@ var invokeRouteOverwriteFields = map[string][]string{
 		"parent_id", "sort", "template", "is_inherit", "images", "logo",
 		"latitude", "longitude", "timezone", "status",
 	},
+	// 优惠券（商城合并）：provider/coupon.go:50-62 逐字段无条件赋值，没有 UpdateAll。
+	// 只传 id+title 改名会把面额/门槛/类型/有效期全部清成 0——券面额清零即"废券"，
+	// 而且已发出去的券码还挂在这张券上，事后无法从券码侧补回。
+	normalizeEndpointPath("/plugin/coupon/detail"): {
+		"money", "start_time", "end_time", "title", "description", "expire",
+		"status", "type", "max_money", "money_type", "need_integral", "need_money", "range_type",
+	},
+	// 营销活动（商城合并）：provider/activity.go:106-118 同样逐字段赋值。
+	// 另外 SaveActivity 在 len(req.Skus)==0 时会**删除该活动的全部规格**，
+	// 所以 skus 必须一起保护——只改个标题就把规格清空，活动价格/库存随之失效。
+	normalizeEndpointPath("/plugin/activity/detail"): {
+		"goods_type", "start_time", "end_time", "user_limit", "title", "description",
+		"images", "goods_id", "status", "price", "stock", "extra", "can_use_coupon", "skus",
+	},
+}
+
+// preserveGetParam 登记「GET 兄弟的 id 参数名与 POST 不同」的端点。
+//
+// preserveOnInvokeRoute 默认用 id 去查同路径的 GET 兄弟，但端点的取名并不统一：
+// 优惠券详情读的是 coupon_id（manageController.CouponDetail），POST 写的是 id
+// （request.CouponRequest）。不改这里的话，回查永远返回 0 条，上面那张保护表
+// 就成了摆设——是静默失效，不是报错，所以必须显式登记。
+var preserveGetParam = map[string]string{
+	normalizeEndpointPath("/plugin/coupon/detail"): "coupon_id",
 }
 
 // partialInvokePaths 登记「走 PATCH 语义、不需要补齐」的 POST 端点。
@@ -162,10 +186,15 @@ func preserveOnInvokeRoute(ctx context.Context, cap CapInvoker, action string,
 	if getTarget == "" {
 		return
 	}
+	// GET 兄弟的参数名不一定叫 id（优惠券详情读的是 coupon_id，见 preserveGetParam）
+	idKey := "id"
+	if alt, ok := preserveGetParam[path]; ok && alt != "" {
+		idKey = alt
+	}
 	out, err := cap(ctx, "api_invoke", map[string]any{
 		"method": "GET",
 		"path":   path,
-		"params": map[string]any{"id": params["id"]},
+		"params": map[string]any{idKey: params["id"]},
 	})
 	if err != nil {
 		return
@@ -250,7 +279,7 @@ func invokeRoutes(intentName string, routes map[string]string, renames ...map[st
 
 // domainIntentCatalog 是补齐域的意图清单，由 init 合并进总的 IntentCatalog。
 // action 的归一化 list/detail/save/delete/setting_get/setting_save ...
-var domainIntentCatalog = []*IntentSpec{
+var domainIntentCatalog = append([]*IntentSpec{
 	// ───────────────────────── 内容域 ─────────────────────────
 	{
 		Name: "content_place", Title: "管理城市站", Domain: DomainContent, Risk: RiskWrite,
@@ -501,9 +530,10 @@ var domainIntentCatalog = []*IntentSpec{
 	{
 		Name: "commerce", Title: "会员/分组/分销商", Domain: DomainCommerce, Risk: RiskWrite,
 		Desc: "会员的增删改查与订单列表，会员分组的增删改查，分销商配置与审核。**默认关闭**，需 ExposedIntents 显式开启。" +
-			"action: user_list/user_get/user_create/user_update/user_delete/user_orders/group_list/group_detail/group_save/group_delete/retailer_list/retailer_detail/retailer_setting_get/retailer_setting_save/retailer_apply/retailer_realname。" +
+			"action: user_list/user_get/user_create/user_update/user_delete/user_orders/group_list/group_detail/group_save/group_delete/retailer_list/retailer_detail/retailer_setting_get/retailer_setting_save/retailer_apply/retailer_realname/wishlist_list。" +
 			"user_update 是**部分更新**，只传要改的字段即可，未传的字段自动沿用原值。" +
-			"group_save 与 retailer_setting_save 是全量覆盖语义，未登记的字段会被清成零值。",
+			"group_save 与 retailer_setting_save 是全量覆盖语义，未登记的字段会被清成零值。" +
+			"wishlist_list 只读：列出会员收藏的商品，可按 values.user_id 筛选。",
 		// 2026-10-07：默认关闭（交易域未随站点发行）。
 		// desc 里原先那段「意图层会先回查再补齐」的括号注释已移除：它描述的是
 		// preserveOnUpdate 机制，而该机制已于 2026-10-03 随根因修复删除
@@ -511,7 +541,7 @@ var domainIntentCatalog = []*IntentSpec{
 		// 留着等于在 desc 里陈述一个不存在的机制。面向调用方只需讲可观察的契约。
 		DefaultOff: true,
 		Params: map[string]ParamSpec{
-			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"user_list", "user_get", "user_create", "user_update", "user_delete", "user_orders", "group_list", "group_detail", "group_save", "group_delete", "retailer_list", "retailer_detail", "retailer_setting_get", "retailer_setting_save", "retailer_apply", "retailer_realname"}},
+			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"user_list", "user_get", "user_create", "user_update", "user_delete", "user_orders", "group_list", "group_detail", "group_save", "group_delete", "retailer_list", "retailer_detail", "retailer_setting_get", "retailer_setting_save", "retailer_apply", "retailer_realname", "wishlist_list"}},
 			"id":        {Type: "integer", Desc: "会员/分组/分销商 ID（retailer_apply / retailer_realname 也用会员的 id）"},
 			"user_name": {Type: "string", Desc: "用户名（user_create 用）"},
 			"password":  {Type: "string", Desc: "密码（user_create 必填；user_update 只在改密码时传）"},
@@ -526,7 +556,8 @@ var domainIntentCatalog = []*IntentSpec{
 				"· group_save: title、description、level(整数，越大权限越高)、price、favorable_price\n" +
 				"· retailer_setting_save: allow_self(整数 0/1)、become_retailer(整数，0=需审核 1=自动成为分销员)\n" +
 				"· retailer_apply: is_retailer(整数 0/1)\n" +
-				"· retailer_realname: real_name(真实姓名)"},
+				"· retailer_realname: real_name(真实姓名)\n" +
+				"· wishlist_list: 可选 user_id 只看某个会员的收藏；不传则列出全站愿望清单"},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"api_invoke"},
@@ -547,6 +578,7 @@ var domainIntentCatalog = []*IntentSpec{
 			"retailer_setting_save": "POST /plugin/retailer/config",
 			"retailer_apply":        "POST /plugin/retailer/apply",
 			"retailer_realname":     "POST /plugin/retailer/realname",
+			"wishlist_list":         "GET /plugin/wishlist/list",
 		}),
 	},
 	{
@@ -995,7 +1027,11 @@ var domainIntentCatalog = []*IntentSpec{
 			"helpers":        "GET /design/helpers",
 		}),
 	},
-}
+	// 商城（AnqiShop 合并）新增的四个意图单独成文件：见 catalog_shop.go。
+	// 用 append 拼接而不是另开一个 init()，是为了让「路径在 init 里追加」的顺序
+	// 依赖消失——Go 会先初始化被引用的变量，domainIntentCatalog 必然包含全部商城意图，
+	// 门禁测试（TestDomainIntentExposureIsDeliberate 遍历本切片）因此不会漏看它们。
+}, shopIntentCatalog...)
 
 // gatedDomainIntents 是补齐域中仍保持 DefaultOff 的意图及其理由。
 //
@@ -1016,7 +1052,12 @@ var gatedDomainIntents = map[string]string{
 	"contentops_transfer":  "跨站点数据迁移（主机级），覆盖目标站数据不可回滚",
 	"contentops_imagedeco": "配图/水印：上传字体图片文件并批量改写附件",
 	"commerce_pay":         "收款账户与支付证书，涉及资金凭证",
-	"commerce_finance":     "财务流水与提现审批，直接涉及资金", "channel_wechat": "公众号菜单与消息回复会同步到微信侧，对外可见",
+	"commerce_finance":     "财务流水与提现审批，直接涉及资金",
+	// 2026-10-25：商城合并带来的新端点，一并按交易域口径默认关闭。
+	"commerce_marketing":   "发券与做活动直接改价格（面额/活动价/门槛），发出去收不回来",
+	"commerce_fulfillment": "运费规则与对外报价：改错即算错运费，报价会真实发给客户",
+	"commerce_review":      "评价审核与增值服务定价，改错要等客户结算时才发现",
+	"seo_merchant":         "Google 商品同步：配置含 client_secret/refresh_token，且会向外推送商品数据", "channel_wechat": "公众号菜单与消息回复会同步到微信侧，对外可见",
 	"channel_thirdparty": "读写公众号/小程序/Google 授权配置（AppID、Secret）",
 	"channel_sendmail":   "SMTP 配置与测试发信，会真实投递邮件给收件人",
 	"channel_subscriber": "订阅用户群发（send），对外触达真实邮箱",
