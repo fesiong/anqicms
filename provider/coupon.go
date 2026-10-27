@@ -2,6 +2,7 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
@@ -155,9 +156,33 @@ func (w *Website) GetCouponCodes(ops func(tx *gorm.DB) *gorm.DB, order string, p
 	return couponCodes, total
 }
 
+// createCouponCodes 逐张生成券码并交给 create 落库，共 count 张。
+// base 是模板（券 ID、状态、有效期等），每张单独生成 Code。
+//
+// 抽成函数注入 create 是为了能在不起数据库的情况下验证「某一张插入失败时怎么处理」。
+// 任一张失败立即返回错误 —— 一张都没写进去却返回 nil，后台会拿到成功回执、
+// 列表却是空的，且没有任何线索可查（2026-10-27 修复）。
+func createCouponCodes(base model.CouponCode, coupon *model.Coupon, count int, create func(code *model.CouponCode) error) error {
+	for i := 0; i < count; i++ {
+		item := base
+		item.Id = 0
+		item.Money = coupon.GetMoney()
+		item.Code = library.Md5(strconv.FormatInt(time.Now().UnixNano(), 10))[i%16 : i%16+16]
+		if err := create(&item); err != nil {
+			return fmt.Errorf("生成第 %d/%d 张券码失败：%w", i+1, count, err)
+		}
+	}
+
+	return nil
+}
+
 func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.CouponCode, error) {
 	if couponId == 0 {
 		return nil, errors.New("invalid coupon id")
+	}
+	// count <= 0 时一张都不会生成，若直接返回 nil 又等于报了一次成功。
+	if count < 1 {
+		count = 1
 	}
 	coupon, err := w.GetCouponById(couponId)
 	if err != nil {
@@ -178,12 +203,18 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 			MoneyType: coupon.MoneyType,
 			MaxMoney:  coupon.MaxMoney,
 		}
-		for i := 0; i < count; i++ {
-			item := couponCode
-			item.Id = 0
-			item.Money = coupon.GetMoney()
-			item.Code = library.Md5(strconv.FormatInt(time.Now().UnixNano(), 10))[i%16 : i%16+16]
-			w.DB.Create(&item)
+		// 整批要么全部落库、要么一张不留：半批孤儿码会让管理员重试时重复发放，
+		// 而「回了成功、列表却是空的」更是无迹可查。
+		tx := w.DB.Begin()
+		err = createCouponCodes(couponCode, coupon, count, func(code *model.CouponCode) error {
+			return tx.Create(code).Error
+		})
+		if err != nil {
+			tx.Rollback()
+			return nil, err
+		}
+		if err = tx.Commit().Error; err != nil {
+			return nil, err
 		}
 
 		return nil, nil
@@ -211,7 +242,11 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 			MoneyType: coupon.MoneyType,
 			MaxMoney:  coupon.MaxMoney,
 		}
-		w.DB.Create(&couponCode)
+		// 落库失败必须上报：否则下面会把一个从没写进库的券码当成领取成功返回，
+		// 用户拿到的码在核销时必然查不到（2026-10-27 修复）。
+		if err = w.DB.Create(&couponCode).Error; err != nil {
+			return nil, err
+		}
 
 		couponCode.Description = coupon.Description
 		couponCode.Type = coupon.Type
@@ -240,7 +275,11 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 			MoneyType: coupon.MoneyType,
 			MaxMoney:  coupon.MaxMoney,
 		}
-		w.DB.Create(&couponCode)
+		// 落库失败必须上报：否则下面会把一个从没写进库的券码当成领取成功返回，
+		// 用户拿到的码在核销时必然查不到（2026-10-27 修复）。
+		if err = w.DB.Create(&couponCode).Error; err != nil {
+			return nil, err
+		}
 		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponGet, Id: couponCode.Id})
 
 		couponCode.Description = coupon.Description
@@ -262,7 +301,11 @@ func (w *Website) MakeCouponCode(couponId, userId int64, count int) (*model.Coup
 			MoneyType: coupon.MoneyType,
 			MaxMoney:  coupon.MaxMoney,
 		}
-		w.DB.Create(&couponCode)
+		// 落库失败必须上报：否则下面会把一个从没写进库的券码当成领取成功返回，
+		// 用户拿到的码在核销时必然查不到（2026-10-27 修复）。
+		if err = w.DB.Create(&couponCode).Error; err != nil {
+			return nil, err
+		}
 		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponGet, Id: couponCode.Id})
 
 		couponCode.Description = coupon.Description
