@@ -82,6 +82,7 @@ func GetCouponCodeList(ctx iris.Context) {
 	})
 }
 
+// MakeCouponCode 为指定优惠券批量生成优惠码，count 小于 1 时按 1 处理。
 func MakeCouponCode(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.MakeCouponCodeRequest
@@ -128,6 +129,7 @@ func CouponDetail(ctx iris.Context) {
 	})
 }
 
+// CouponDetailForm 新建或更新优惠券；纯全量覆盖，改一个字段也要带齐其它字段，否则会被清空。
 func CouponDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponRequest
@@ -154,6 +156,7 @@ func CouponDetailForm(ctx iris.Context) {
 	})
 }
 
+// DeleteCoupon 删除优惠券，并连带删除该券下的全部兑换码。
 func DeleteCoupon(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponRequest
@@ -180,6 +183,7 @@ func DeleteCoupon(ctx iris.Context) {
 	})
 }
 
+// DeleteCouponCode 删除优惠码；单个传 id，批量传 ids。
 func DeleteCouponCode(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponCodeRequest
@@ -209,6 +213,7 @@ func DeleteCouponCode(ctx iris.Context) {
 	})
 }
 
+// SaveCouponCode 新建或更新单张优惠码（id=0 表示新建，code 留空则自动生成）。
 func SaveCouponCode(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponCodeRequest
@@ -292,6 +297,7 @@ func GetCouponArchives(ctx iris.Context) {
 	})
 }
 
+// AddCouponArchives 把商品加入优惠券的适用范围；单个传 archive_id，批量传 archive_ids。
 func AddCouponArchives(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.CouponArchiveRequest
@@ -321,6 +327,7 @@ func AddCouponArchives(ctx iris.Context) {
 	})
 }
 
+// DeleteCouponArchives 把商品移出优惠券的适用范围；单个传 archive_id，批量传 archive_ids。
 func DeleteCouponArchives(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.CouponArchiveRequest

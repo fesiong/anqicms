@@ -20,6 +20,7 @@ func GetCommunicationSetting(ctx iris.Context) {
 	})
 }
 
+// SaveCommunicationSetting 保存询盘/客服设置（整体覆盖）。
 func SaveCommunicationSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.CommunicationConfig
@@ -138,6 +139,7 @@ func CommunicationOrderDetail(ctx iris.Context) {
 	})
 }
 
+// CommunicationOrderSaveImages 更新询盘订单的图片列表（整体替换，不是追加）。
 func CommunicationOrderSaveImages(ctx iris.Context) {
 	// 仅能更新图片
 	var req request.CommunicationOrderImagesRequest
@@ -207,6 +209,7 @@ func CommunicationSendQuote(ctx iris.Context) {
 	})
 }
 
+// CommunicationMessageSend 管理员回复询盘消息；sender_id/sender_name 由服务端按当前登录管理员覆盖，请求里传了也会被替换。
 func CommunicationMessageSend(ctx iris.Context) {
 	var req request.CommunicationMessageRequest
 	err := ctx.ReadJSON(&req)
@@ -257,6 +260,7 @@ func CommunicationMessageSend(ctx iris.Context) {
 	})
 }
 
+// CommunicationMessageDelete 删除单条询盘消息。
 func CommunicationMessageDelete(ctx iris.Context) {
 	var req request.CommunicationMessageRequest
 	err := ctx.ReadJSON(&req)
@@ -315,6 +319,7 @@ func CommunicationMessageList(ctx iris.Context) {
 	})
 }
 
+// CommunicationOrderClose 关闭询盘订单。
 func CommunicationOrderClose(ctx iris.Context) {
 	var req request.CommunicationOrderRequest
 	if err := ctx.ReadJSON(&req); err != nil {

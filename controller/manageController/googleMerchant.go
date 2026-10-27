@@ -24,6 +24,7 @@ func PluginGoogleMerchantConfig(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantConfigSave 保存 Google 商品同步配置；整体落库，未传的字段（含 token 与 accounts）会被清成零值。
 func PluginGoogleMerchantConfigSave(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginGoogleMerchantConfig
@@ -87,6 +88,7 @@ func PluginGoogleMerchantAuthUrl(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantCallback 接收 Google 授权回调：用 code 换令牌并落库，state 需与授权时一致。
 func PluginGoogleMerchantCallback(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginGoogleAuthRequest
@@ -187,6 +189,7 @@ func PluginGoogleMerchantCallback(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantAccountSelect 选择要同步商品的 Merchant Center 账号。
 func PluginGoogleMerchantAccountSelect(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetGoogleMerchantSetting()
@@ -276,6 +279,9 @@ func PluginGoogleMerchantSyncStatusList(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantSync 把商品推送到 Google Merchant Center。
+// 异步执行：接口立即返回，实际同步在后台跑，进度看 sync/statuses 与 sync/logs。
+// full=true 表示全量重建，否则按变动增量同步；ids 字段在本端点不被使用。
 func PluginGoogleMerchantSync(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	// 开始同步
@@ -295,6 +301,7 @@ func PluginGoogleMerchantSync(ctx iris.Context) {
 	})
 }
 
+// PluginGoogleMerchantSyncDelete 从 Google Merchant Center 删除 ids 指定的商品。
 func PluginGoogleMerchantSyncDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	// 开始同步

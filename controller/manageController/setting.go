@@ -1037,6 +1037,7 @@ func SettingCurrency(ctx iris.Context) {
 	})
 }
 
+// SettingCurrencyForm 保存商城币种与货币符号设置（整体覆盖）。
 func SettingCurrencyForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.CurrencyConfig

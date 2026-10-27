@@ -502,6 +502,7 @@ func PluginGetOrderReviews(ctx iris.Context) {
 	})
 }
 
+// PluginSaveOrderReview 新建或更新商品评价；status 取 0=未处理、1=正常、-1=删除。
 func PluginSaveOrderReview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderReviewRequest
@@ -552,6 +553,7 @@ func PluginGetOrderReview(ctx iris.Context) {
 	})
 }
 
+// PluginDeleteOrderReview 删除商品评价（按 id 物理删除，不可恢复）。
 func PluginDeleteOrderReview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderReviewRequest
@@ -623,6 +625,7 @@ func PluginGetOrderService(ctx iris.Context) {
 	})
 }
 
+// PluginSaveOrderService 新建或更新增值服务；fee_type 取 0=固定金额、2=按比例。
 func PluginSaveOrderService(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderServiceRequest
@@ -649,6 +652,7 @@ func PluginSaveOrderService(ctx iris.Context) {
 	})
 }
 
+// PluginDeleteOrderService 删除增值服务。
 func PluginDeleteOrderService(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderServiceRequest

@@ -61,6 +61,8 @@ func PluginActivityDetail(ctx iris.Context) {
 	})
 }
 
+// PluginActivityDetailForm 新建或更新营销活动；纯全量覆盖，改一个字段也要带齐其它字段。
+// 注意 skus 不传或传空数组会删掉该活动的全部规格。
 func PluginActivityDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ActivityRequest
@@ -87,6 +89,7 @@ func PluginActivityDetailForm(ctx iris.Context) {
 	})
 }
 
+// PluginActivityDelete 删除营销活动，并连带删除该活动的全部规格（activity_skus）。
 func PluginActivityDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ActivityRequest

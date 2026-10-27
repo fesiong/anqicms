@@ -19,6 +19,7 @@ func PluginGetShippingSetting(ctx iris.Context) {
 	})
 }
 
+// PluginSaveShippingSetting 保存运费设置（整体覆盖）。
 func PluginSaveShippingSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.ShippingConfig
