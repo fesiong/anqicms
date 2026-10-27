@@ -287,6 +287,20 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 	}
 }
 
+// SaveAnchor 保存锚文本，并立刻失效锚文本列表缓存。
+//
+// 新增/修改锚文本必须走它，不要直接 model.Anchor.Save：替换正文取词走的是
+// GetAllAnchors，那份列表带 1 小时缓存（AnchorCacheKey）。后台加完锚文本却不清缓存，
+// 接下来一小时发布的文章都用不上这个词，而「过一阵又自己好了」让人极难归因。
+func (w *Website) SaveAnchor(anchor *model.Anchor) error {
+	if err := anchor.Save(w.DB); err != nil {
+		return err
+	}
+	w.Cache.Delete(AnchorCacheKey)
+
+	return nil
+}
+
 // ReplaceAnchor 单个替换
 func (w *Website) ReplaceAnchor(anchor *model.Anchor) {
 	w.Cache.Delete(AnchorCacheKey)
@@ -345,19 +359,32 @@ func (w *Website) compileAnchors(anchors []*model.Anchor) {
 	w.anchorAcMatcher = library.NewAhoCorasickWithData(titles, data)
 }
 
+// ReplaceContentText 把正文里的锚文本关键词替换成链接，返回替换结果与是否有改动。
+//
+// 需要知道命中了哪些锚文本时用 replaceContentTextWithHits：
+// markdown 分支生成的是 `[关键词](链接)`，**不带 data-anchor 属性**，
+// 事后靠正则扫 data-anchor 是扫不到的（这个坑让 markdown 站点的
+// anchor_data 表长期为空，详见 ReplaceContent 的注释）。
 func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, link string) (string, bool) {
+	out, _, modified := w.replaceContentTextWithHits(anchors, content, link)
+	return out, modified
+}
+
+// replaceContentTextWithHits 是 ReplaceContentText 的实现，额外返回本次命中的锚文本 ID。
+// 重复出现的关键词被加粗时同样计入（与旧版「扫 data-anchor」的口径一致）。
+func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content string, link string) (string, []uint, bool) {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
 		if len(anchors) == 0 {
 			//没有关键词，终止执行
-			return content, false
+			return content, nil, false
 		}
 	}
 
 	w.compileAnchors(anchors)
 	if w.anchorAcMatcher == nil {
-		return content, false
+		return content, nil, false
 	}
 
 	// 获取纯文本字数
@@ -377,6 +404,9 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(w.PluginAnchor.AnchorDensity)))
 
 	isModified := false
+	// 本次命中的锚文本 ID：markdown 分支生成 `[文字](链接)` 没有 data-anchor 属性，
+	// 只能在这里顺手记下来，否则调用方无法回填 anchor_data。
+	var hits []uint
 	existsKeywords := make(map[string]bool, maxAnchorNum*2)
 	noStrongTag := w.PluginAnchor.NoStrongTag != 0
 	if isMarkdown {
@@ -415,9 +445,11 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				if !existsKeywords[titleLower] {
 					existsKeywords[titleLower] = true
 					isModified = true
+					hits = append(hits, anchor.Id)
 					return []byte(fmt.Sprintf("[%s](%s)", string(match.Pattern), anchor.Link))
 				} else if addStrongTag {
 					isModified = true
+					hits = append(hits, anchor.Id)
 					return []byte(fmt.Sprintf("**%s**", string(match.Pattern)))
 				}
 				return match.Pattern
@@ -510,7 +542,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		// 处理html
 		doc, err := html.Parse(strings.NewReader(content))
 		if err != nil {
-			return content, false
+			return content, nil, false
 		}
 		// 创建已处理节点的映射，避免重复替换
 		processedNodes := make(map[*html.Node]bool)
@@ -553,9 +585,11 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 					if !existsKeywords[titleLower] {
 						existsKeywords[titleLower] = true
 						modified = true
+						hits = append(hits, anchor.Id)
 						return []byte(fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, string(match.Pattern)))
 					} else if !noStrongTag {
 						modified = true
+						hits = append(hits, anchor.Id)
 						return []byte(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, string(match.Pattern)))
 					}
 					return match.Pattern
@@ -590,7 +624,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 			var buf bytes.Buffer
 			err = html.Render(&buf, doc)
 			if err != nil {
-				return content, false
+				return content, nil, false
 			}
 			content = buf.String()
 			// 只要body部分
@@ -602,7 +636,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		}
 	}
 
-	return content, isModified
+	return content, hits, isModified
 }
 
 // isInsideTag 检查节点是否在指定节点内
@@ -629,15 +663,26 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	if err != nil {
 		return ""
 	}
-	content, isModified := w.ReplaceContentText(anchors, archiveData.Content, link)
+	content, hits, isModified := w.replaceContentTextWithHits(anchors, archiveData.Content, link)
 
 	if isModified {
 		//内容有更新，执行更新
 		archiveData.Content = content
 		w.DB.Save(archiveData)
-		// 查找记录
-		re, _ := regexp.Compile(`data-anchor="(\d+)"`)
+		// 回填替换记录。
+		//
+		// 命中 id 以 replaceContentTextWithHits 的返回值为准，**不能只扫 data-anchor**：
+		// markdown 分支生成的是 `[关键词](链接)`，没有 data-anchor 属性，纯靠正则扫
+		// 会让 markdown 站点的 anchor_data 永远为空 —— 后台「替换次数」恒 0，
+		// 改锚文本链接时 ChangeAnchor 也找不到受影响文档，旧链接永远更新不掉。
+		// 正则扫描保留为兜底（历史数据里可能已有带 data-anchor 的 html 链接）。
 		var anchorIds = map[uint]struct{}{}
+		for _, anchorId := range hits {
+			if anchorId > 0 {
+				anchorIds[anchorId] = struct{}{}
+			}
+		}
+		re, _ := regexp.Compile(`data-anchor="(\d+)"`)
 		matches := re.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
 			anchorId, _ := strconv.ParseInt(match[1], 10, 64)

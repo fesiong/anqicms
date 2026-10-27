@@ -134,7 +134,9 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 	anchor.Link = req.Link
 	anchor.Weight = req.Weight
 
-	err = anchor.Save(currentSite.DB)
+	// 走 provider.SaveAnchor：它会顺手失效锚文本列表缓存。
+	// 直接用 anchor.Save 的话，新加的锚文本要等缓存过期（1 小时）才参与替换。
+	err = currentSite.SaveAnchor(anchor)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
