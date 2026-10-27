@@ -490,10 +490,10 @@ type PluginLLMsConfig struct {
 }
 
 type PluginPlaceConfig struct {
-	Open        bool          `json:"open"`         // 是否开启城市分站
+	Open        bool          `json:"open"`         // 是否启用城市分站
 	UrlType     string        `json:"url_type"`     // URL形式，subdomain|directory,默认：directory
 	ContentType string        `json:"content_type"` // 默认=内容需要绑定分站，full=全站复用
-	Fields      []CustomField `json:"fields"`       // 自定义字段
+	Fields      []CustomField `json:"fields"`       // 城市站自定义字段
 }
 
 // PluginGoogleMerchantConfig 是「商品同步到 Google Merchant Center」的站点配置。

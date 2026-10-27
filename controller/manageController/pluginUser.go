@@ -284,6 +284,8 @@ func PluginUserDetailForm(ctx iris.Context) {
 	})
 }
 
+// PluginUserChangeBalance 变更指定用户的余额，金额和备注必填。
+//
 // 参数说明：
 //   - 请求体 "user_id": 用户 ID。
 //   - 请求体 "amount": 变更金额，不能为 0，单位：分。
