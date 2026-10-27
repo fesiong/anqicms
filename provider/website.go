@@ -207,6 +207,29 @@ func (w *Website) Ctx() context.Context {
 	return w.ctx.Request().Context()
 }
 
+// Async 返回一个脱离了请求上下文的站点副本，专供 `go ...` 这类后台任务使用。
+//
+// 为什么必须有它：CurrentSite 返回的是 cloneWithContext 造出来的副本，副本上的
+// ctx 就是**本次请求**的 ctx。handler 一旦返回，net/http 立刻 cancel 这个 ctx，
+// 之后所有 `w.DB.WithContext(w.Ctx())` 的查询都会直接失败（实测 err=context canceled），
+// 而调用方普遍不检查错误 —— 于是任务静默跑一半就没了。
+//
+//	// 错：go 出去的任务挂着请求 ctx，请求返回后查库全失败
+//	go currentSite.ReplaceAnchor(nil)
+//	// 对：先摘掉 ctx，Ctx() 退化成 context.TODO()
+//	go currentSite.Async().ReplaceAnchor(nil)
+//
+// 只复制指针字段（浅拷贝），与 cloneWithContext 的行为一致；不做深拷贝是因为
+// 任务需要和主实例共享 DB、Cache、模板等运行时资源。
+func (w *Website) Async() *Website {
+	if w.ctx == nil {
+		return w
+	}
+	cloned := *w
+	cloned.ctx = nil
+	return &cloned
+}
+
 func (w *Website) CtxOri() iris.Context {
 	return w.ctx
 }

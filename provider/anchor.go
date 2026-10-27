@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -312,7 +314,12 @@ func (w *Website) ReplaceAnchor(anchor *model.Anchor) {
 	}
 }
 
-// ReplaceAnchors 批量替换
+// ReplaceAnchors 批量替换。
+//
+// ⚠ 这是后台「批量更新锚文本」按钮的实现，跑在 `go` 出去的 goroutine 里，
+// **调用方必须用 site.Async() 摘掉请求 ctx**（见 Website.Async 的注释）。
+// 挂着请求 ctx 调它，一请求返回，每篇 GetArchiveDataById 都 context canceled，
+// 表现出来就是「点了批量更新，只有前几篇有变化」。
 func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
@@ -326,10 +333,18 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	//每次取100个
 	limit := 100
 	lastId := int64(0)
-	var archives []*model.Archive
+	var done, failed int
+	startAt := time.Now()
 
 	for {
-		w.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&archives)
+		var archives []*model.Archive
+		// 查询错误必须显式处理：静默失败会让任务看起来「执行成功但没效果」，
+		// 而 lastId 不前进时下一轮又会重复取同一批，白白空转。
+		err := w.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&archives).Error
+		if err != nil {
+			log.Printf("[anchor] 批量替换中断：读取文章列表失败（lastId=%d）：%v", lastId, err)
+			break
+		}
 		if len(archives) == 0 {
 			break
 		}
@@ -338,9 +353,18 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 		for _, v := range archives {
 			//执行替换
 			link := w.GetUrl("archive", v, 0)
-			w.ReplaceContent(anchors, "archive", v.Id, link)
+			if w.ReplaceContent(anchors, "archive", v.Id, link) == "" {
+				// ReplaceContent 失败时返回空串，不区分「无改动」和「读不到正文」，
+				// 这里统一记为失败，至少能在日志里看到「有多少篇被跳过」。
+				failed++
+				continue
+			}
+			done++
 		}
 	}
+
+	log.Printf("[anchor] 批量替换结束：处理 %d 篇，失败 %d 篇，锚文本 %d 条，耗时 %s",
+		done+failed, failed, len(anchors), time.Since(startAt).Round(time.Millisecond))
 }
 
 func (w *Website) compileAnchors(anchors []*model.Anchor) {
@@ -390,9 +414,14 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 	// 获取纯文本字数
 	stripedContent := library.StripTags(content)
 	contentLen := len([]rune(stripedContent))
-	if w.PluginAnchor.AnchorDensity < 20 {
-		// 默认设置200
-		w.PluginAnchor.AnchorDensity = 200
+	// 密度是局部量，不要就地改 w.PluginAnchor：clone 出来的站点与全局实例共享
+	// 同一个 PluginAnchor 指针，就地赋值会把「默认值修正」写进站点配置。
+	// 默认 100 与后台设置页、config.PluginAnchorConfig 的注释保持一致
+	// （这里原来写的是 <20→200，等于默认密度只有文档承诺的一半，
+	//  同样的文章只能拿到一半的锚文本数量）。
+	density := w.PluginAnchor.AnchorDensity
+	if density < 10 {
+		density = 100
 	}
 
 	// 判断是否是Markdown，如果开头是标签，则认为不是Markdown
@@ -401,24 +430,35 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 		isMarkdown = true
 	}
 	// 最大可以替换的数量
-	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(w.PluginAnchor.AnchorDensity)))
+	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(density)))
+	if maxAnchorNum < 1 {
+		maxAnchorNum = 1
+	}
 
 	isModified := false
 	// 本次命中的锚文本 ID：markdown 分支生成 `[文字](链接)` 没有 data-anchor 属性，
 	// 只能在这里顺手记下来，否则调用方无法回填 anchor_data。
 	var hits []uint
+	// replacedCount 是「本次真正生成链接」的数量，用它判密度上限。
+	//
+	// 不能用 len(existsKeywords)：那个 map 除了记录本次替换过的词，还预填了正文里
+	// 原有的所有 <a> 文本和 markdown 链接文本（用来避免给已加链接的词再加一个）。
+	// 一篇文章自带的目录、外链、参考链接会把这些位置占满，于是
+	// len(existsKeywords) >= maxAnchorNum 在第一次替换前就成立，整篇一个锚文本都加不上。
+	// 命中重复词时的加粗也不该计入密度 —— 密度说的是「多少个锚文本链接」。
+	replacedCount := 0
 	existsKeywords := make(map[string]bool, maxAnchorNum*2)
 	noStrongTag := w.PluginAnchor.NoStrongTag != 0
 	if isMarkdown {
 		// Markdown的处理方式
 		var replaceMdText = func(text string, addStrongTag bool) string {
-			if len(text) == 0 || len(existsKeywords) >= maxAnchorNum {
+			if len(text) == 0 || replacedCount >= maxAnchorNum {
 				return text
 			}
 
 			textBytes := []byte(text)
 			newTextBytes := w.anchorAcMatcher.ReplaceAll(textBytes, func(match library.ACMatch) []byte {
-				if len(existsKeywords) >= maxAnchorNum {
+				if replacedCount >= maxAnchorNum {
 					return match.Pattern
 				}
 
@@ -446,6 +486,7 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 					existsKeywords[titleLower] = true
 					isModified = true
 					hits = append(hits, anchor.Id)
+					replacedCount++
 					return []byte(fmt.Sprintf("[%s](%s)", string(match.Pattern), anchor.Link))
 				} else if addStrongTag {
 					isModified = true
@@ -499,7 +540,7 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 				newText.WriteString(line + "\n")
 				continue
 			}
-			if len(existsKeywords) >= maxAnchorNum {
+			if replacedCount >= maxAnchorNum {
 				// 已达到上限，不再继续
 				newText.WriteString(line + "\n")
 				continue
@@ -551,7 +592,7 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 		var traverse func(*html.Node)
 		traverse = func(n *html.Node) {
 			if n.Type == html.TextNode && !isInsideTag(n, skipTags) && !processedNodes[n] {
-				if len(existsKeywords) >= maxAnchorNum {
+				if replacedCount >= maxAnchorNum {
 					// 已达到上限，不再继续
 					return
 				}
@@ -559,7 +600,7 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 				textBytes := []byte(n.Data)
 				modified := false
 				newTextBytes := w.anchorAcMatcher.ReplaceAll(textBytes, func(match library.ACMatch) []byte {
-					if len(existsKeywords) >= maxAnchorNum {
+					if replacedCount >= maxAnchorNum {
 						return match.Pattern
 					}
 
@@ -586,6 +627,7 @@ func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content st
 						existsKeywords[titleLower] = true
 						modified = true
 						hits = append(hits, anchor.Id)
+						replacedCount++
 						return []byte(fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, string(match.Pattern)))
 					} else if !noStrongTag {
 						modified = true
@@ -667,7 +709,12 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 
 	if isModified {
 		//内容有更新，执行更新
-		archiveData.Content = content
+		//
+		// 存回库前必须把 URL 还原：GetArchiveDataById 读正文时会做一次
+		// ReplaceContentUrl(content, true)（把 /uploads 补成存储域名），
+		// 直接 Save 会把补全后的绝对地址写进库 —— 每点一次批量替换，
+		// 全站图片地址就被改写一遍，之后换存储/CDN 就全挂了。
+		archiveData.Content = w.ReplaceContentUrl(content, false)
 		w.DB.Save(archiveData)
 		// 回填替换记录。
 		//
