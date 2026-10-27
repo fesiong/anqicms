@@ -148,6 +148,7 @@ func CommunicationOrderSaveImages(ctx iris.Context) {
 			"code": config.StatusFailed,
 			"msg":  "Invalid Params",
 		})
+		return
 	}
 	currentSite := provider.CurrentSite(ctx)
 

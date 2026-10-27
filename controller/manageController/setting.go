@@ -540,12 +540,12 @@ func SettingCacheForm(ctx iris.Context) {
 		currentSite.DeleteCache()
 
 		currentSite.AddAdminLog(ctx, ctx.Tr("UpdateCacheManually"))
-
-		ctx.JSON(iris.Map{
-			"code": config.StatusOK,
-			"msg":  ctx.Tr("CacheUpdated"),
-		})
 	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  ctx.Tr("CacheUpdated"),
+	})
 }
 
 // SettingSafe 获取安全设置，包括验证码、内容/频率限制、封禁规则及 API 开关。

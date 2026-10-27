@@ -83,6 +83,10 @@ func GetCouponCodeList(ctx iris.Context) {
 }
 
 // MakeCouponCode 为指定优惠券批量生成优惠码，count 小于 1 时按 1 处理。
+//
+// 不传 user_id 时批量生成 count 张未绑定的码，此时响应 data 为 null，
+// 需要再查 code/list 才能拿到码；传了 user_id 则只生成 1 张并直接返回该码，
+// 若该用户已领过（注册券/限量券/未使用的下单赠与券）会返回失败原因。
 func MakeCouponCode(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.MakeCouponCodeRequest
@@ -96,7 +100,7 @@ func MakeCouponCode(ctx iris.Context) {
 	if req.Count < 1 {
 		req.Count = 1
 	}
-	_, err := currentSite.MakeCouponCode(req.CouponId, req.UserId, req.Count)
+	couponCode, err := currentSite.MakeCouponCode(req.CouponId, req.UserId, req.Count)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -104,6 +108,12 @@ func MakeCouponCode(ctx iris.Context) {
 		})
 		return
 	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "success",
+		"data": couponCode,
+	})
 }
 
 // CouponDetail 按 ID 查询单个优惠券详情。注意参数名是 coupon_id，不是 id。
