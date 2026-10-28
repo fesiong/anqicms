@@ -168,6 +168,23 @@ func isSensitiveInputPath(path string) bool {
 	return sensitivePathRe.MatchString(path)
 }
 
+// withinRoot 判断 p 是否落在 root 内（含 root 本身）。
+//
+// 不能直接 strings.HasPrefix(p, root)：
+//   - projectRoot 常带尾斜杠（配置里写 ".../anqicms/"），而 filepath.Abs 的结果
+//     不带（".../anqicms"），于是 `path="."` 得到的根目录**自身**被判越界
+//     （2026-10-27 实测：fs_list_dir path="." 报"超出项目目录范围"）。
+//   - 前缀比较还会放过 ".../anqicms-backup" 这类同前缀的兄弟目录。
+// 故两边 Clean 后按「等于根」或「根+分隔符前缀」判定。
+func withinRoot(p, root string) bool {
+	root = filepath.Clean(root)
+	p = filepath.Clean(p)
+	if p == root {
+		return true
+	}
+	return strings.HasPrefix(p, root+string(os.PathSeparator))
+}
+
 // safePathResolve resolves a path relative to projectRoot and validates it.
 // More robust than the original safePath — returns friendly error messages.
 // All paths are bounded to projectRoot; temp files should use ensureCachePath() instead.
@@ -186,13 +203,13 @@ func safePathResolve(path, projectRoot string) (string, error) {
 		return "", fmt.Errorf("无法解析路径 '%s': %w", path, err)
 	}
 
-	if !strings.HasPrefix(p, root) {
+	if !withinRoot(p, root) {
 		return "", fmt.Errorf("路径 '%s' 超出项目目录范围", path)
 	}
 
 	// Check for symlink escape
 	real, err := filepath.EvalSymlinks(p)
-	if err == nil && !strings.HasPrefix(real, root) {
+	if err == nil && !withinRoot(real, root) {
 		return "", fmt.Errorf("路径 '%s' 通过符号链接指向项目外部", path)
 	}
 

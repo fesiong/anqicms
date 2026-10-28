@@ -172,6 +172,22 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 			return "错误：站点未初始化", nil
 		}
 
+		// cron 必须在建记录**之前**校验。
+		//
+		// 2026-10-27 实测：此前写的是「建完再解析，err == nil 才更新 next_run_at」，
+		// 于是 cron 传 "not-a-cron" 也能创建成功——回执说「智能体创建成功」，
+		// 而 next_run_at 永远是 0，调度器每轮都跳过它：一个看起来正常、
+		// 实际永不执行的僵尸 Agent。错误被咽在 if err == nil 里，
+		// 调用方没有任何线索可查（见硬教训③）。
+		var nextRunAt int64
+		if strings.TrimSpace(args.Cron) != "" {
+			sched, perr := cronParser.Parse(args.Cron)
+			if perr != nil {
+				return fmt.Sprintf("错误：cron 表达式非法: %v（示例 '0 8 * * *' 表示每天 8 点；留空表示仅手动触发）", perr), nil
+			}
+			nextRunAt = sched.Next(time.Now()).Unix()
+		}
+
 		agent := &model.AiAgent{
 			Name:      args.Name,
 			Strategy:  args.Strategy,
@@ -179,6 +195,7 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 			MaxRuns:   args.MaxRuns,
 			MaxRounds: args.MaxRounds,
 			Enabled:   1,
+			NextRunAt: nextRunAt,
 			SessionId: "", // 创建后分配
 		}
 		if err := w.DB.Create(agent).Error; err != nil {
@@ -187,15 +204,6 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 		// 分配专属会话 ID
 		agent.SessionId = fmt.Sprintf("agent_%d", agent.Id)
 		w.DB.Model(agent).Update("session_id", agent.SessionId)
-
-		// 如果有 cron 表达式，计算首次执行时间
-		if agent.CronExpr != "" {
-			scheduler, err := cronParser.Parse(agent.CronExpr)
-			if err == nil {
-				agent.NextRunAt = scheduler.Next(time.Now()).Unix()
-				w.DB.Model(agent).Update("next_run_at", agent.NextRunAt)
-			}
-		}
 
 		// 加入内存缓存
 		svc.agentsMu.Lock()
@@ -260,11 +268,19 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 			agent.Strategy = *args.Strategy
 		}
 		if args.Cron != nil {
-			updates["cron_expr"] = *args.Cron
-			agent.CronExpr = *args.Cron
 			if *args.Cron == "" {
+				updates["cron_expr"] = ""
+				agent.CronExpr = ""
 				agent.NextRunAt = 0
-			} else if sched, perr := cronParser.Parse(*args.Cron); perr == nil {
+			} else {
+				// 与创建同样：非法 cron 必须报错，不能静默留下 next_run_at=0
+				// 的「假成功」（此前 perr != nil 被 else-if 吞掉，调用方以为改好了）。
+				sched, perr := cronParser.Parse(*args.Cron)
+				if perr != nil {
+					return fmt.Sprintf("错误：cron 表达式非法: %v（示例 '0 8 * * *' 表示每天 8 点；传空字符串表示仅手动触发）", perr), nil
+				}
+				updates["cron_expr"] = *args.Cron
+				agent.CronExpr = *args.Cron
 				agent.NextRunAt = sched.Next(time.Now()).Unix()
 			}
 			updates["next_run_at"] = agent.NextRunAt

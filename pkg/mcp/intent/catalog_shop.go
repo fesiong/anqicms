@@ -107,7 +107,7 @@ var shopIntentCatalog = []*IntentSpec{
 				"setting_get", "setting_save",
 			}},
 			"id": {Type: "integer", Desc: "询盘订单 ID（order_get/order_close/order_images_save/quote_send）或消息 ID（message_delete）；" +
-				"按消息列表筛选订单用 values.comm_order_id"},
+				"message_list **必须**带上所属订单号：写 values.comm_order_id（或顶层 comm_order_id），不传会被端点拒绝（Invalid Params）"},
 			"page":      {Type: "integer", Desc: "页码，从 1 开始（order_list/message_list）", Default: 1},
 			"page_size": {Type: "integer", Desc: "每页条数（order_list/message_list）", Default: 20},
 			"values": {Type: "object", Desc: "按 action 传字段（未列出的 action 只需 id，不用 values）：\n" +

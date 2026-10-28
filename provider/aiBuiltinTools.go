@@ -117,7 +117,8 @@ func (svc *AiChatService) safePath(path string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("无法解析路径: %w", err)
 	}
-	if !strings.HasPrefix(p, svc.projectRoot) {
+	// 见 withinRoot 的说明：带尾斜杠的 projectRoot 会让根目录自身被判越界。
+	if !withinRoot(p, svc.projectRoot) {
 		return "", fmt.Errorf("路径超出项目目录范围: %s", p)
 	}
 	return p, nil
@@ -260,7 +261,7 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		ParamsOneOf: schema.NewParamsOneOfByParams(map[string]*schema.ParameterInfo{
 			"file_path": {Type: schema.String, Desc: "文件路径，相对项目根目录或绝对路径", Required: true},
 			"content":   {Type: schema.String, Desc: "文件内容", Required: true},
-			"confirm":   {Type: schema.Boolean, Desc: "发生警告仍需写入时，需确认写入", Required: false},
+			"confirm":   {Type: schema.Boolean, Desc: "覆盖保护：目标已存在且新内容不足原大小一半（原文件 >100 字节时）会拒绝写入并提示，须传 true 再调一次", Required: false},
 		}),
 	}, func(ctx context.Context, argsJSON string) (string, error) {
 		var args fileWriteArgs
@@ -609,31 +610,38 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		}
 
 		var cmd *exec.Cmd
+		timeout := time.Duration(args.Timeout) * time.Second
+		// 必须用 CommandContext（而不是先建 cmd 再 cmd.Run）：
+		// exec.Cmd.Run 不感知 ctx，真正的效果是「到点也不返回、把服务卡死」——
+		// 2026-10-27 实测 timeout=1 的 `sleep 5` 仍然等满 5 秒才回来。
+		// CommandContext 会在 ctx 到期时直接 Kill 子进程，超时才是真的超时。
+		runCtx, cancel := context.WithTimeout(ctx, timeout)
+		defer cancel()
 		if runtime.GOOS == "windows" {
-			cmd = exec.Command("cmd", "/C", args.Command)
+			cmd = exec.CommandContext(runCtx, "cmd", "/C", args.Command)
 		} else {
-			cmd = exec.Command("sh", "-c", args.Command)
+			cmd = exec.CommandContext(runCtx, "sh", "-c", args.Command)
 		}
 		cmd.Dir = svc.projectRoot
-
-		timeout := time.Duration(args.Timeout) * time.Second
-		ctx, cancel := context.WithTimeout(ctx, timeout)
-		defer cancel()
 
 		var stdout, stderr bytes.Buffer
 		cmd.Stdout = &stdout
 		cmd.Stderr = &stderr
 
 		err := cmd.Run()
-		if ctx.Err() == context.DeadlineExceeded {
-			return "", fmt.Errorf("命令执行超时（%d秒）", args.Timeout)
+		if runCtx.Err() == context.DeadlineExceeded {
+			return fmt.Sprintf("错误：命令执行超时（%d秒），进程已终止：%s", args.Timeout, args.Command), nil
 		}
 
 		var b strings.Builder
-		// 退出码写在开头：输出过长时尾部会被预算裁掉，写在末尾的话模型最先丢掉的
-		// 恰恰是「命令到底成功没有」这条最需要的信息。
+		// 非零退出码必须走文本失败前缀（"错误："）：它要触发 MCP 的 isError。
+		// 实测 2026-10-27：`sh -c "exit 3"` 之前只回一段普通文本、isError 缺失，
+		// 严格依赖 isError 的客户端会把失败当成功继续往下跑。
+		//
+		// 退出码仍写在开头：输出过长时尾部会被预算裁掉，写在末尾的话模型最先
+		// 丢掉的恰恰是「命令到底成功没有」这条最需要的信息。
 		if err != nil {
-			b.WriteString(fmt.Sprintf("$ %s\n[退出码/错误: %v]\n", args.Command, err))
+			b.WriteString(fmt.Sprintf("错误：命令执行失败（退出码非 0）：%v\n$ %s\n", err, args.Command))
 		} else {
 			b.WriteString(fmt.Sprintf("$ %s\n", args.Command))
 		}

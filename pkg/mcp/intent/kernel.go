@@ -93,7 +93,46 @@ func (k *Kernel) Execute(ctx context.Context, name, argsJSON string) (*Result, e
 	if args == nil {
 		args = map[string]any{}
 	}
+	// 未声明的顶层参数一律报错。
+	//
+	// 为什么不能宽容：端点对不认识的字段是**静默忽略**的（ReadJSON 只取自己
+	// 声明的 tag），于是 `rule_save` 传 `reply`（正确字段名是 content）会回
+	// ok=true 而什么都没存；`content_article list` 传 `foo_bar_baz` 同样回成功。
+	// 2026-10-27 实测：这类"字段名拼错"是模型最容易犯、也最难自查的错——
+	// 回执完全正常，只有回读才发现结果不对。
+	//
+	// 排除下划线开头的键：MCP 客户端会注入 _meta 之类的协议字段，那不是模型的错。
+	if err := validateArgNames(spec, args); err != nil {
+		return nil, err
+	}
 	return spec.Compose(ctx, args, k.cap)
+}
+
+// validateArgNames 检查参数名是否都在意图声明里。
+func validateArgNames(spec *IntentSpec, args map[string]any) error {
+	if spec == nil || len(spec.Params) == 0 {
+		return nil
+	}
+	var unknown []string
+	for k := range args {
+		if k == "action" || strings.HasPrefix(k, "_") {
+			continue
+		}
+		if _, ok := spec.Params[k]; !ok {
+			unknown = append(unknown, k)
+		}
+	}
+	if len(unknown) == 0 {
+		return nil
+	}
+	sortStrings(unknown)
+	valid := make([]string, 0, len(spec.Params))
+	for k := range spec.Params {
+		valid = append(valid, k)
+	}
+	sortStrings(valid)
+	return fmt.Errorf("意图 %s 不认识参数 %s（可用参数: %s）。端点会静默忽略未知字段，所以这里直接报错，避免「回执成功但什么都没发生」",
+		spec.Name, strings.Join(unknown, ", "), strings.Join(valid, ", "))
 }
 
 // SetScope 两阶段 tools/list：设置后仅暴露指定能力域；传空恢复全部。

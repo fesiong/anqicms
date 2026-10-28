@@ -72,11 +72,25 @@ var mergedIntentCatalog = []*IntentSpec{
 			"page_list", "page_get", "page_create", "page_update", "page_delete",
 			"module_list", "module_get", "module_create", "module_update", "module_delete",
 		},
-		Compose: switchCompose(map[string]string{
+		Compose: withExistsCheck(requireArgs(switchCompose(map[string]string{
 			"category_list": "category_list", "category_get": "category_get", "category_create": "category_create", "category_update": "category_update", "category_delete": "category_delete",
 			"tag_list": "tag_list", "tag_get": "tag_get", "tag_create": "tag_create", "tag_update": "tag_update", "tag_delete": "tag_delete",
 			"page_list": "page_list", "page_get": "page_get", "page_create": "page_create", "page_update": "page_update", "page_delete": "page_delete",
 			"module_list": "module_list", "module_get": "module_get", "module_create": "module_create", "module_update": "module_update", "module_delete": "module_delete",
+		}), map[string][]string{
+			// 2026-10-27 实测：category_create 不传 title 能建出一条无名分类，
+			// 端点回 ok + 对象体。分类是全站结构，无名分类会出现在前台导航里。
+			"category_create": {"title"},
+			"tag_create":      {"title"},
+			"page_create":     {"title"},
+			"module_create":   {"title"},
+			// create 之外，update/delete 缺 id 时端点会当"新建"或不报错。
+			"category_update": {"id"},
+			"tag_update":      {"id"},
+			"page_update":     {"id"},
+			"module_update":   {"id"},
+		}), map[string]bool{
+			"category_get": true, "tag_get": true, "page_get": true, "module_get": true,
 		}),
 	},
 	// ───────────────────────── 素材域 ─────────────────────────
@@ -282,8 +296,13 @@ func contentArticleCompose(ctx context.Context, args map[string]any, cap CapInvo
 				// 直接透传 null 会让调用方分不清「没有数据」和「调用出错」，
 				// 形状也不稳定（有时数组、有时 null、有时对象），故统一成
 				// {list,total,page,page_size,count}，list 至少是空数组。
+				//
+				// 失败响应（ok:false / code!=0 / 5xx）必须排除：否则会得到
+				// 「list:[] 看着像查过了，isError 却是 true」的矛盾结果。
 				if !hasData || data == nil {
-					data = []any{}
+					if endpointFailure(out) == "" {
+						data = []any{}
+					}
 				}
 				res.Data = listWithTotal(data, envelope, sub)
 			} else if action == "delete" {
@@ -322,7 +341,11 @@ func contentArticleCompose(ctx context.Context, args map[string]any, cap CapInvo
 		// /archive/status 只认 {ids, status}，其余一律剔除（理由同 stripListOnlyParams）。
 		stripListOnlyParams(sub)
 		if v, ok := sub["status"]; ok {
-			sub["status"] = articleStatusCode(v)
+			code, err := articleStatusCode(v)
+			if err != nil {
+				return nil, err
+			}
+			sub["status"] = code
 		}
 		// 端点对不存在的 id 也会回成功，必须先确认目标存在。
 		// 见 requireArchivesExist 的注释。
@@ -477,6 +500,11 @@ func listWithTotal(data any, envelope map[string]any, req map[string]any) any {
 	pageSize := toInt64(req["page_size"])
 	if pageSize <= 0 {
 		pageSize = 20
+	}
+	// 超过上限时回执要写**实际生效值**：provider 会把端点 pageSize 夹到
+	// MaxPageSize，回执若仍回显调用方传的 100000，就变成"说给 10 万实际给 200"。
+	if pageSize > MaxPageSize {
+		pageSize = MaxPageSize
 	}
 	out := map[string]any{
 		"list":      data,
@@ -987,6 +1015,15 @@ func seoCompose() Compose {
 			}
 			return &Result{Text: out1 + "\n" + out2}, nil
 		case "robots_get", "robots_save", "push_get", "push_save", "push_push", "push_logs":
+			// robots_save 必须显式带 content（允许空串=清空）。
+			// 漏传时端点会收到 robots:""，把 robots.txt 直接清空并回「配置已更新」——
+			// 与 siteops_maintain 的 robots_set 是同一个坑，两处都要挡
+			// （实测 2026-10-27：只传 action=robots_save 时 public/robots.txt 变空）。
+			if action == "robots_save" {
+				if _, ok := args["content"]; !ok {
+					return nil, fmt.Errorf("%w: action=robots_save 需要提供 content（清空请显式传空字符串；完全省略会被拒绝，以免误清空 robots.txt）", ErrMissingParam)
+				}
+			}
 			return capResult(endpointInvoke(ctx, cap, routes[action], args, renames))
 		default:
 			return nil, fmt.Errorf("不支持的操作: %s（可选: robots_get/robots_save/sitemap/push_get/push_save/push_push/push_logs）", action)

@@ -3,11 +3,29 @@ package intent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 )
+
+// ErrMissingParam 标记「参数校验未通过」。
+//
+// 与「action 无法分派」必须区分开：声明式穷举测试
+// （TestDomainIntentsDeclareEveryAction）会用空参数把每个 action 都调一遍，
+// 只关心"这个 action 认不认得"，不关心"参数够不够"。用哨兵错误让测试
+// 能一眼分辨——否则要么测试误报，要么为了过测试而放水掉真正的校验。
+var ErrMissingParam = errors.New("参数校验未通过")
+
+// MaxPageSize 是单次列表响应的条数上限。
+//
+// 背景（2026-10-27 实测）：content_article list 传 page_size=100000 时端点照单
+// 全收，一次返回 3550 篇文档、6.73MB structuredContent（约 150 万 token）。
+// provider 侧会在调端点前把 pageSize 夹到这个值（见 clampListPageSize），
+// 意图层在拼回执时也必须用同一个上限——否则回执说 page_size=100000、
+// 实际只给了 200 条，调用方会误以为拿到了全量或"少了 99.8%"。
+const MaxPageSize = 200
 
 // IntentCatalog 是"能力表达清单"的声明式载体：每个意图对外是一个工作流工具，
 // 内部通过 Caps 指向底层能力（原 endpoint 工具），由 Compose 编排。
@@ -30,7 +48,10 @@ var IntentCatalog = []*IntentSpec{
 		},
 		Required: []string{"action"},
 		Caps:     []string{"keyword_list", "keyword_create", "keyword_delete"},
-		Compose:  switchCompose(map[string]string{"list": "keyword_list", "create": "keyword_create", "delete": "keyword_delete"}),
+		// 2026-10-27 实测：create 不传 title 时端点回「关键词已更新」并 ok=true，
+		// 但库里什么都没建。空关键词对 SEO 毫无意义，必须在意图层拦住。
+		Compose: requireArgs(switchCompose(map[string]string{"list": "keyword_list", "create": "keyword_create", "delete": "keyword_delete"}),
+			map[string][]string{"create": {"title"}, "delete": {"id"}}),
 	},
 	{
 		Name: "seo_anchor", Title: "管理锚文本", Domain: DomainSeo, Risk: RiskWrite,
@@ -45,7 +66,10 @@ var IntentCatalog = []*IntentSpec{
 		},
 		Required: []string{"action"},
 		Caps:     []string{"anchor_list", "anchor_create", "anchor_delete"},
-		Compose:  switchCompose(map[string]string{"list": "anchor_list", "create": "anchor_create", "delete": "anchor_delete"}),
+		// 锚文本 = 词 + 链接，缺任一都无法生效。实测只传 title 也能创建成功，
+		// 结果是一条永远匹配不上（无链接）的死规则。
+		Compose: requireArgs(switchCompose(map[string]string{"list": "anchor_list", "create": "anchor_create", "delete": "anchor_delete"}),
+			map[string][]string{"create": {"title", "link"}, "delete": {"id"}}),
 	},
 	{
 		// 统计属数据域而非推广域：它只读取观测数据，不产生任何对外可见的 SEO 动作。
@@ -129,7 +153,7 @@ var IntentCatalog = []*IntentSpec{
 		Params: map[string]ParamSpec{
 			"path":    {Type: "string", Desc: "文件路径，相对项目根目录或绝对路径", Required: true},
 			"content": {Type: "string", Desc: "文件内容", Required: true},
-			"confirm": {Type: "boolean", Desc: "目标带警告（如覆盖非空文件）时，须传 true 确认写入"},
+			"confirm": {Type: "boolean", Desc: "覆盖保护：目标文件已存在且新内容不足原大小一半（>100 字节时）会拒绝写入并提示，须传 true 再调一次确认"},
 		},
 		Required: []string{"path", "content"},
 		Caps:     []string{"write_file"},
@@ -208,6 +232,133 @@ var IntentCatalog = []*IntentSpec{
 		Caps:    []string{"list_directory"},
 		Compose: Delegate("list_directory"),
 	},
+}
+
+// isBlankValue 判断参数是否"等同于没传"：nil、空白字符串、空数组/空对象。
+//
+// 用于必填校验：端点对这些字段普遍是宽容的（空值照样回 ok 并落库），
+// 于是空标题能建出无名对象、空 robots 能清空文件。这类"假成功"必须
+// 在意图层挡住，否则调用方只能靠回读才发现什么都没建成。
+func isBlankValue(v any) bool {
+	switch t := v.(type) {
+	case nil:
+		return true
+	case string:
+		return strings.TrimSpace(t) == ""
+	case []any:
+		return len(t) == 0
+	case map[string]any:
+		return len(t) == 0
+	}
+	return false
+}
+
+// lookupArgPath 按 "values.name" 这样的点路径取值；单段路径等同于取顶层。
+func lookupArgPath(args map[string]any, path string) any {
+	var cur any = args
+	for _, seg := range strings.Split(path, ".") {
+		m, ok := cur.(map[string]any)
+		if !ok {
+			return nil
+		}
+		cur, ok = m[seg]
+		if !ok {
+			return nil
+		}
+	}
+	return cur
+}
+
+// requireArgs 在 Compose 外层按 action 校验必填参数，不通过直接报错。
+//
+// 与 IntentSpec.Required 的分工：Required 是**整个工具**级（action 本身），
+// 这里是**动作级**——同一个工具的不同 action 必填项不同，写进 Required 会让
+// 其它 action 被误伤（MCP 侧会强制要求填根本没用的参数）。
+//
+// 字段名支持点路径（"values.name"），用于校验嵌套对象里的必填项。
+func requireArgs(inner Compose, rules map[string][]string) Compose {
+	return func(ctx context.Context, args map[string]any, cap CapInvoker) (*Result, error) {
+		action, _ := args["action"].(string)
+		if fields, ok := rules[action]; ok {
+			for _, f := range fields {
+				if isBlankValue(lookupArgPath(args, f)) {
+					return nil, fmt.Errorf("%w: action=%s 需要提供 %s（当前未传或为空）", ErrMissingParam, action, f)
+				}
+			}
+		}
+		return inner(ctx, args, cap)
+	}
+}
+
+// requireExistsBeforeWrite 在写操作前确认目标存在。
+//
+// 后台若干 detail 端点是「没有就新建」的语义（category/module/page/tag 的
+// POST 都是 save-or-create），所以对不存在的 id 传 update 会**凭空造出**
+// 一个 id 冲突的幽灵对象，且回执是 ok + 对象体——调用方以为改成功了某条
+// 已有数据，实际库里多了一条。这里用同前缀的 *_get 先探一次。
+//
+// getCap 不在 allow 里、或探测本身失败时放行：宁可让端点按原语义处理，
+// 也不要因为读端点不可用而把所有写操作挡死。
+func requireExistsBeforeWrite(ctx context.Context, cap CapInvoker, action string,
+	allow map[string]bool, args map[string]any) error {
+	var getCap string
+	switch {
+	case strings.HasSuffix(action, "_update"):
+		getCap = strings.TrimSuffix(action, "_update") + "_get"
+	case strings.HasSuffix(action, "_delete"):
+		getCap = strings.TrimSuffix(action, "_delete") + "_get"
+	default:
+		return nil
+	}
+	if !allow[getCap] {
+		return nil
+	}
+	id := toInt64(args["id"])
+	if id <= 0 {
+		return fmt.Errorf("%w: action=%s 需要提供 id（对象 ID），当前未传", ErrMissingParam, action)
+	}
+	out, err := callCap(ctx, cap, getCap, map[string]any{"id": id})
+	if err != nil {
+		return nil
+	}
+	if endpointFailure(out) != "" {
+		return fmt.Errorf("%w: action=%s 的目标不存在: id=%d（先用对应的 *_list 确认 ID）", ErrMissingParam, action, id)
+	}
+	var envelope map[string]any
+	if err := json.Unmarshal([]byte(out), &envelope); err == nil {
+		if data, ok := envelope["data"].(map[string]any); ok && len(data) == 0 {
+			return fmt.Errorf("%w: action=%s 的目标不存在: id=%d（先用对应的 *_list 确认 ID）", ErrMissingParam, action, id)
+		}
+	}
+	return nil
+}
+
+// requireKeyPresent 要求参数键**存在**，但值允许为空。
+//
+// 与 requireArgs 的区别在"清空"这类合法意图：robots_set 传 content=""
+// 表示合理地清空 robots.txt；而**根本没传** content 只可能是漏参数。
+// 两者在端点侧看起来一样（都落成空串），必须在这一层区分开。
+func requireKeyPresent(inner Compose, rules map[string][]string) Compose {
+	return func(ctx context.Context, args map[string]any, cap CapInvoker) (*Result, error) {
+		action, _ := args["action"].(string)
+		for _, f := range rules[action] {
+			if _, ok := args[f]; !ok {
+				return nil, fmt.Errorf("%w: action=%s 需要提供 %s（清空请显式传空字符串；完全省略会被拒绝，以免误清空）", ErrMissingParam, action, f)
+			}
+		}
+		return inner(ctx, args, cap)
+	}
+}
+
+// withExistsCheck 给 Compose 套上"写前确认目标存在"的闸门。
+func withExistsCheck(inner Compose, allow map[string]bool) Compose {
+	return func(ctx context.Context, args map[string]any, cap CapInvoker) (*Result, error) {
+		action, _ := args["action"].(string)
+		if err := requireExistsBeforeWrite(ctx, cap, action, allow, args); err != nil {
+			return nil, err
+		}
+		return inner(ctx, args, cap)
+	}
 }
 
 // switchCompose 构造一个"按 action 字段路由到不同底层能力"的组合工具。
@@ -344,7 +495,35 @@ func systemSettingCompose(ctx context.Context, args map[string]any, cap CapInvok
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Text: out, Data: map[string]any{"section": section, "action": "read"}}, nil
+	// 读取分支必须把**端点返回的真实配置**交出去。
+	//
+	// 2026-10-27 实测：这里曾直接 `&Result{Data: map{section,action}}`，
+	// 7 个 section 全部只回两个元信息字段，一个配置项都没有——而底层
+	// GET /setting/content 明明返回 22 个字段。AI 拿不到现值就无法做
+	// 「先读后改」，只能靠猜字段名盲写。
+	//
+	// 元信息不能吃掉载荷：真实配置平铺在顶层（与写分支、以及其它工具
+	// 的 data 语义一致），section/action 只做事后标注；若某个配置项恰好
+	// 叫 section/action，以配置项为准（元信息让位，避免覆盖真数据）。
+	res, err := capResult(out, nil)
+	if err != nil {
+		return nil, err
+	}
+	if m, ok := res.Data.(map[string]any); ok {
+		if _, exists := m["section"]; !exists {
+			m["section"] = section
+		}
+		if _, exists := m["action"]; !exists {
+			m["action"] = "read"
+		}
+		res.Data = m
+		return res, nil
+	}
+	if res.Data == nil {
+		// 端点回 data:null：如实返回空对象，别退回只有元信息的空壳。
+		return &Result{Text: out, Data: map[string]any{"section": section, "action": "read", "values": nil}}, nil
+	}
+	return &Result{Text: out, Data: map[string]any{"section": section, "action": "read", "values": res.Data}}, nil
 }
 
 func settingCaps(section string) (read, write string) {
@@ -565,30 +744,40 @@ func responseMsg(m map[string]any) string {
 // 声明 status 是枚举字符串（ok/draft/plan）—— 直接透传会让 ReadJSON 报
 // 「cannot unmarshal string into ... of type uint」，publish 动作完全不可用。
 // 列表过滤用的 status 字符串不受影响（那只在 archive_list 里用，不经这里）。
-func articleStatusCode(v any) any {
+//
+// ⚠️ 未知值必须报错，不能落到草稿。
+//
+// 2026-10-27 实测：这里曾把 default 分支写成 `return 0`（= 草稿），于是
+// `publish status="__bad__"` 把**已发布的文章静默下架**、回执还是 ok。
+// 而工具参数 desc 明说「传其它值会直接报错」——文档与实现相反，
+// 且后果是不可逆的状态变更。publish 是状态机动作，只有明确写出的
+// 目标状态才允许执行。
+func articleStatusCode(v any) (any, error) {
 	switch s := v.(type) {
 	case nil:
-		return v
+		return v, nil
 	case bool:
 		// 顺手兼容 draft=true/false 的写法。统一返回 int64：
 		// 断言与下游 JSON 序列化都按 int64 处理，混用 int 会让测试看不出类型漂移。
 		if s {
-			return int64(0)
+			return int64(0), nil
 		}
-		return int64(1)
+		return int64(1), nil
 	case float64:
-		return int64(s)
+		return int64(s), nil
 	case int:
-		return int64(s)
+		return int64(s), nil
 	case int64:
-		return s
+		return s, nil
 	case string:
 		switch strings.ToLower(strings.TrimSpace(s)) {
 		case "ok", "1", "publish", "published", "release":
-			return int64(1)
-		default: // draft / plan / 未知值都落到草稿
-			return int64(0)
+			return int64(1), nil
+		case "draft", "0", "plan", "unpublish", "offline":
+			return int64(0), nil
+		default:
+			return nil, fmt.Errorf("status 取值非法: %q（仅支持 ok=上架 / draft=下架，传其它值不会静默降级）", s)
 		}
 	}
-	return v
+	return nil, fmt.Errorf("status 类型非法: %T（仅支持字符串 ok/draft 或布尔 draft）", v)
 }

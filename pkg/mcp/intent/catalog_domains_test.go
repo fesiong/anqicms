@@ -2,6 +2,7 @@ package intent
 
 import (
 	"context"
+	"errors"
 	"sort"
 	"testing"
 
@@ -73,12 +74,20 @@ func TestInvokeRoutesRejectsMalformedTarget(t *testing.T) {
 //
 // 与 provider 侧的端点存在性校验互补：这里在 intent 包内单跑即可守住
 // 「Enum 与 routes 不一致」这类声明错配，不依赖 provider 的目录构建。
+//
+// 空参数调用时，"缺参数"（ErrMissingParam）是**合法**结果——说明 action 已被
+// 识别并进入各自的必填校验，恰恰证明分派是通的。只有「不支持的操作」这类
+// 才说明 Enum 与 routes 不一致。
 func TestDomainIntentsDeclareEveryAction(t *testing.T) {
 	checked := 0
 	for _, s := range domainIntentCatalog {
 		for _, action := range s.Params["action"].Enum {
 			c := &captureInvoker{}
 			if _, err := s.Compose(context.Background(), map[string]any{"action": action}, c.invoke); err != nil {
+				if errors.Is(err, ErrMissingParam) {
+					checked++ // 分派成功，只是空参数被必填校验拦下
+					continue
+				}
 				t.Errorf("意图 %s 声明了 action=%s 却无法分派: %v", s.Name, action, err)
 				continue
 			}

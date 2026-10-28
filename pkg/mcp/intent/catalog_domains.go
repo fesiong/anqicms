@@ -264,12 +264,17 @@ func invokeRoutes(intentName string, routes map[string]string, renames ...map[st
 				// 分页词用 args 里的原始意图参数（page/page_size），
 				// endpointParams 之后才被换算成端点的 current/pageSize。
 				res.Data = listWithTotal(data, envelope, args)
-			} else if hasData && isListAction(action) {
+			} else if hasData && isListAction(action) && endpointFailure(out) == "" {
 				// 列表端点命中 0 条时回的是 data:null（实测 content_place/list 就是）。
 				// 直接透传 null 会让调用方分不清「没有数据」与「调用出错」，
 				// 形状也不稳定（有时数组、有时 null、有时对象）——同一个工具的
 				// list 动作一会儿给数组一会儿给 null，调用方只能到处试。
 				// 归一成空数组：语义明确（「查过了，没有」），形状也稳定。
+				//
+				// ⚠️ 必须排除失败响应：端点失败时 data 也是 null，若无条件归一，
+				// 就会得到「data:[] + isError:true」这种自相矛盾的结果
+				// （2026-10-27 实测 commerce_fulfillment message_list 裸调即如此：
+				// 真实原因是缺必填 comm_order_id，却被包装成"查到了 0 条"）。
 				res.Data = []any{}
 			}
 		}
@@ -543,7 +548,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 		Params: map[string]ParamSpec{
 			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"user_list", "user_get", "user_create", "user_update", "user_delete", "user_orders", "group_list", "group_detail", "group_save", "group_delete", "retailer_list", "retailer_detail", "retailer_setting_get", "retailer_setting_save", "retailer_apply", "retailer_realname", "wishlist_list"}},
 			"id":        {Type: "integer", Desc: "会员/分组/分销商 ID（retailer_apply / retailer_realname 也用会员的 id）"},
-			"user_name": {Type: "string", Desc: "用户名（user_create 用）"},
+			"user_name": {Type: "string", Desc: "用户名（user_create 必填且全站唯一，重名直接报错）"},
 			"password":  {Type: "string", Desc: "密码（user_create 必填；user_update 只在改密码时传）"},
 			"email":     {Type: "string", Desc: "邮箱"},
 			"phone":     {Type: "string", Desc: "手机号"},
@@ -552,7 +557,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 			"page_size": {Type: "integer", Desc: "每页条数（*_list / user_orders）", Default: 20},
 			"values": {Type: "object", Desc: "按 action 传：" +
 				"· user_update: **部分更新**，只传要改的字段；未传的 email/phone/group_id/status 等会自动沿用原值\n" +
-				"· user_create: user_name、password(必填)、email、phone、group_id、status\n" +
+				"· user_create: user_name(必填、全站唯一，重名直接报错)、password(必填)、email、phone、group_id、status（成功回执 data.id 即新建用户 ID）\n" +
 				"· group_save: title、description、level(整数，越大权限越高)、price、favorable_price\n" +
 				"· retailer_setting_save: allow_self(整数 0/1)、become_retailer(整数，0=需审核 1=自动成为分销员)\n" +
 				"· retailer_apply: is_retailer(整数 0/1)\n" +
@@ -693,7 +698,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 		},
 		Required: []string{"action"},
 		Caps:     []string{"api_invoke"},
-		Compose: invokeRoutes("channel_wechat", map[string]string{
+		Compose: requireArgs(invokeRoutes("channel_wechat", map[string]string{
 			"menu_list":      "GET /plugin/wechat/menu/list",
 			"menu_save":      "POST /plugin/wechat/menu/save",
 			"menu_delete":    "POST /plugin/wechat/menu/delete",
@@ -704,6 +709,17 @@ var domainIntentCatalog = append([]*IntentSpec{
 			"rule_list":      "GET /plugin/wechat/reply/rule/list",
 			"rule_save":      "POST /plugin/wechat/reply/rule/save",
 			"rule_delete":    "POST /plugin/wechat/reply/rule/delete",
+		}), map[string][]string{
+			// 2026-10-27 实测：menu_save 不传 values 会写入一条 name 为空的菜单
+			// （前端菜单树里出现一个点不动的空节点）；rule_save 不传 content
+			// 会存下一条"触发但无回复"的规则，用户发关键词收到空白。
+			"menu_save": {"values.name"},
+			"rule_save": {"values.content"},
+			// 删除/回复缺 id 时端点报的是 ReadJSON 层错误，文案对调用方无指导性。
+			"menu_delete":    {"id"},
+			"message_reply":  {"id", "values.reply"},
+			"message_delete": {"id"},
+			"rule_delete":    {"id"},
 		}),
 	},
 	{
@@ -916,7 +932,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 		},
 		Required: []string{"action"},
 		Caps:     []string{"api_invoke"},
-		Compose: invokeRoutes("siteops_maintain", map[string]string{
+		Compose: requireKeyPresent(invokeRoutes("siteops_maintain", map[string]string{
 			"robots_get":           "GET /plugin/robots",
 			"robots_set":           "POST /plugin/robots",
 			"cache_get":            "GET /plugin/htmlcache/config",
@@ -939,7 +955,13 @@ var domainIntentCatalog = append([]*IntentSpec{
 			"replace":              "POST /plugin/replace/values",
 			// content → robots：端点 POST /plugin/robots 的请求结构体字段名是
 			// robots（request.PluginRobotsConfig），不重命名则 ReadJSON 收不到值。
-		}, map[string]string{"content": "robots"}),
+		}, map[string]string{"content": "robots"}), map[string][]string{
+			// 2026-10-27 实测：robots_set 不传 content 会把 robots.txt **清空**
+			// 并回「配置已更新」。要清空应该显式传空串——但即便如此也不该
+			// 由"忘传参数"触发，故这里要求必须给出 content 键（允许空串）。
+			// 空串是合法意图（清空文件），所以校验用"键是否存在"而非"是否非空"。
+			"robots_set": {"content"},
+		}),
 	},
 	{
 		Name: "siteops_upgrade", Title: "版本检查与升级", Domain: DomainSiteOps, Risk: RiskSystem,
