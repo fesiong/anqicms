@@ -7,6 +7,7 @@ vendor
 /config.json
 goblog
 /doc
+/tmp
 /test
 /data
 /system
