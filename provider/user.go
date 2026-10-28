@@ -117,13 +117,27 @@ func (w *Website) GetUsersInfoByIds(userIds []uint) []*model.User {
 func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	var user *model.User
 	var err error
+	// 用户名唯一性校验：user_name 是「按用户名登录」的凭据，重名会串号。
+	// 创建时重名直接拒绝（调用方自己填的名字，改一下就行）；
+	// 第三方自动注册不经过这里，那条路径用 uniqueUserName 加后缀而不是拒绝。
+	req.UserName = strings.TrimSpace(req.UserName)
 	if req.Id > 0 {
 		user, err = w.GetUserInfoById(req.Id)
 		if err != nil {
 			// 用户不存在
 			return nil, err
 		}
+		// 改名也不能撞上别人（与 UpdateUserInfo 同一口径）。
+		if req.UserName != "" && w.userNameTaken(req.UserName, user.Id) {
+			return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
+		}
 	} else {
+		if req.UserName == "" {
+			return nil, errors.New(w.Tr("PleaseEnterUsername"))
+		}
+		if w.userNameTaken(req.UserName, 0) {
+			return nil, errors.New(w.Tr("TheUsernameHasBeenRegistered"))
+		}
 		user = &model.User{}
 	}
 	oldGroupId := user.GroupId
@@ -277,6 +291,74 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	}
 
 	return user, err
+}
+
+// ── 用户名唯一性（2026-10-27）────────────────────────────────────────────
+//
+// user_name 不只是展示名：LoginViaPassword 有一条「按 user_name 登录」的分支，
+// 两个同名账号会让人登进别人那里。所以：
+//   - 后台/AI 创建（SaveUserInfo，用户名由调用方自选）→ 重名直接拒绝，不改写；
+//   - 第三方自动注册（Google/公众号/小程序，用户名取自平台昵称，用户无法自选）
+//     → 先查重，重复时追加数字后缀：张三、张三2、张三3……
+//
+// 之所以两条路径策略不同：前者用户能改，报错让他换一个就行；后者他改不了昵称，
+// 拒绝注册等于把第三方登录整个堵死。
+const (
+	// userNameMaxLen 与 model.User.UserName 的 varchar(64) 对齐。
+	// 后缀最多 4 位（2..9999），所以 base 压到 60 个字符即可保证总长不越界。
+	userNameMaxLen = 60
+	// defaultThirdPartyUserName 是平台没给昵称时的兜底名。
+	// 允许空用户名会让「按用户名登录」命中任意一条空名记录，必须堵掉。
+	defaultThirdPartyUserName = "用户"
+)
+
+// truncateRunes 按字符（不是字节）截断，避免切裂多字节字符。
+func truncateRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n])
+}
+
+// nextUniqueUserName 生成不冲突的用户名。taken 判定「该名字已被占用」。
+// 抽成纯函数是为了让后缀规则能脱库测试。
+func nextUniqueUserName(base string, taken func(string) bool) string {
+	base = strings.TrimSpace(base)
+	if base == "" {
+		base = defaultThirdPartyUserName
+	}
+	base = truncateRunes(base, userNameMaxLen)
+	if !taken(base) {
+		return base
+	}
+	for i := 2; i <= 9999; i++ {
+		candidate := base + strconv.Itoa(i)
+		if !taken(candidate) {
+			return candidate
+		}
+	}
+	// 极端兜底：base 的 9999 个后缀都被占。纳秒时间戳定长 19 位，
+	// 先把 base 压到 41 字符再拼，保证总长不超过 60。
+	return truncateRunes(base, userNameMaxLen-19) + strconv.FormatInt(time.Now().UnixNano(), 10)
+}
+
+// userNameTaken 判断用户名是否已被占用；excludeId > 0 时排除自身（更新场景）。
+func (w *Website) userNameTaken(userName string, excludeId uint) bool {
+	tx := w.DB.Model(&model.User{}).Where("`user_name` = ?", userName)
+	if excludeId > 0 {
+		tx = tx.Where("`id` <> ?", excludeId)
+	}
+	var count int64
+	tx.Count(&count)
+	return count > 0
+}
+
+// uniqueUserName 供第三方自动注册使用：重名时加数字后缀而不是拒绝。
+func (w *Website) uniqueUserName(base string, excludeId uint) string {
+	return nextUniqueUserName(base, func(candidate string) bool {
+		return w.userNameTaken(candidate, excludeId)
+	})
 }
 
 func (w *Website) DeleteUserInfo(userId uint) error {
@@ -606,7 +688,8 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 	if userErr != nil {
 		//系统没记录，则插入一条记录
 		user = &model.User{
-			UserName:      wecahtUserInfo.Nickname,
+			// 昵称来自微信，用户改不了；撞名时加数字后缀而不是拒绝注册。
+			UserName:      w.uniqueUserName(wecahtUserInfo.Nickname, 0),
 			AvatarURL:     wecahtUserInfo.Avatar,
 			ParentId:      req.InviteId,
 			GroupId:       w.PluginUser.DefaultGroupId,
@@ -647,7 +730,7 @@ func (w *Website) LoginViaWeapp(req *request.ApiLoginRequest) (*model.User, erro
 		}
 		//更新信息
 		if wecahtUserInfo.Nickname != "" && (userWechat.Nickname != wecahtUserInfo.Nickname || userWechat.AvatarURL != wecahtUserInfo.Avatar) {
-			user.UserName = wecahtUserInfo.Nickname
+			user.UserName = w.uniqueUserName(wecahtUserInfo.Nickname, user.Id)
 			user.AvatarURL = wecahtUserInfo.Avatar
 			err = w.DB.Save(user).Error
 			if err != nil {
@@ -682,7 +765,8 @@ func (w *Website) LoginViaWechat(req *request.ApiLoginRequest) (*model.User, err
 	var user *model.User
 	if userWechat.UserId == 0 {
 		user = &model.User{
-			UserName:      userWechat.Nickname,
+			// 昵称来自公众号，用户改不了；撞名时加数字后缀而不是拒绝注册。
+			UserName:      w.uniqueUserName(userWechat.Nickname, 0),
 			AvatarURL:     userWechat.AvatarURL,
 			GroupId:       w.PluginUser.DefaultGroupId,
 			Password:      "",
@@ -748,7 +832,7 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		user = &model.User{
 			Email:         googleUser.Email,
 			EmailVerified: googleUser.EmailVerified,
-			UserName:      googleUser.Name,
+			UserName:      w.uniqueUserName(googleUser.Name, 0),
 			AvatarURL:     googleUser.Picture,
 			GoogleId:      googleUser.Sub,
 			GroupId:       w.PluginUser.DefaultGroupId,
@@ -763,7 +847,10 @@ func (w *Website) LoginViaGoogle(req *request.ApiLoginRequest) (*model.User, err
 		w.ProcessNewUser(user)
 	} else {
 		user.GoogleId = googleUser.Sub
-		user.UserName = googleUser.Name
+		if googleUser.Name != "" {
+			// 老用户同步昵称时同样可能撞上别人的名字，排除自身后加后缀。
+			user.UserName = w.uniqueUserName(googleUser.Name, user.Id)
+		}
 		if googleUser.GivenName != "" {
 			user.RealName = googleUser.GivenName + " " + googleUser.FamilyName
 		}
