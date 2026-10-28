@@ -861,3 +861,4 @@
 "InvalidFilePath": "文件路径无效"
 "InvalidPackageName": "模板包名称无效"
 "InvalidFileName": "文件名无效"
+"TooManyRequests": "操作过于频繁，请稍后再试"

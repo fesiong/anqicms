@@ -855,3 +855,4 @@
 "InvalidFilePath": "檔案路徑無效"
 "InvalidPackageName": "模板包名稱無效"
 "InvalidFileName": "檔案名稱無效"
+"TooManyRequests": "操作過於頻繁，請稍後再試"

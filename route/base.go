@@ -67,9 +67,11 @@ func Register(app *iris.Application) {
 		api.Post("/friendlink/check", controller.VerifyApiLinkToken, controller.ApiImportCheckFriendLink)
 		// 前端api
 		api.Post("/login", controller.ApiLogin)
-		api.Post("/register", controller.ApiRegister)
-		api.Get("/verify/email", controller.ApiVerifyEmail)
-		api.Post("/verify/email", controller.ApiSendVerifyEmail)
+		// 下面三个端点都能判断「某个邮箱是否已注册」，共用一份按 IP 的预算：
+		// register 报「已注册」、verify/email 报「用户不存在」、state=exist 回布尔值。
+		api.Post("/register", middleware.AccountProbeGuard, controller.ApiRegister)
+		api.Get("/verify/email", middleware.AccountProbeGuard, controller.ApiVerifyEmail)
+		api.Post("/verify/email", middleware.AccountProbeGuard, controller.ApiSendVerifyEmail)
 		api.Post("/password/reset", controller.ApiResetUserPassword)
 		api.Get("/user/detail", middleware.UserAuth, controller.ApiGetUserDetail)
 		api.Post("/user/detail", middleware.UserAuth, controller.ApiUpdateUserDetail)

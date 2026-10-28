@@ -855,3 +855,4 @@
 "InvalidFilePath": "Invalid file path"
 "InvalidPackageName": "Invalid template package name"
 "InvalidFileName": "Invalid file name"
+"TooManyRequests": "Too many requests, please try again later"

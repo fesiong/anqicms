@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"crypto/subtle"
 	"strconv"
 	"strings"
 	"time"
@@ -391,19 +392,24 @@ func ApiVerifyEmail(ctx iris.Context) {
 	}
 	// 验证用户是否存在
 	if state == "exist" {
-		// 只能是JSON格式返回
+		// 只能是JSON格式返回。
+		// 只回布尔值：data.id 曾一并返回，它是「邮箱 → 站内 user id」的关联键，
+		// 而 /api/comment/list?user_id= 与 /api/review/list?user_id= 都不需要登录，
+		// 于是「邮箱 → id → 该用户全部公开评论」构成去匿名化链路；email 回显更是
+		// 零信息量（输入就是调用方自己给的）。code 语义保持不变，模板仍靠 code 判断。
 		ctx.JSON(iris.Map{
 			"code": config.StatusOK,
 			"msg":  "",
 			"data": iris.Map{
-				"id":    user.Id,
-				"email": user.Email,
+				"exist": true,
 			},
 		})
 		return
 	}
 	// 验证Token
-	verifyCode := library.CodeCache.Get(email, true)
+	// state=reset 只是把它带到重置页，验证码要留给随后的 POST /api/password/reset 消费；
+	// 这里提前 clear 会让用户提交时永远校验失败。
+	verifyCode := library.CodeCache.Get(email, state != "reset")
 	if verifyCode != code {
 		if returnType == "json" {
 			ctx.JSON(iris.Map{
@@ -695,16 +701,23 @@ func ApiResetUserPassword(ctx iris.Context) {
 		})
 		return
 	}
-	// 验证Token
-	verifyCode := library.CodeCache.Get(req.Token, true)
-	if verifyCode != req.Code {
-		// 暂时不做验证
-	}
-	verifyToken := library.Md5(user.Email + user.Password)
-	if verifyToken != req.Token {
+	// 验证凭据：与发信端（provider.SendVerifyEmail）共用 provider.ResetPasswordToken，
+	// 混入站点 TokenSecret。不能再用 Md5(email+password) —— Google / 公众号 / 邮箱验证码
+	// 注册的账号密码是空串，凭据会退化成 Md5(email)，知道邮箱就能改密。
+	verifyToken := provider.ResetPasswordToken(currentSite.TokenSecret, user.Email, user.Password)
+	if subtle.ConstantTimeCompare([]byte(verifyToken), []byte(req.Token)) != 1 {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  currentSite.TplTr("InvalidToken"),
+		})
+		return
+	}
+	// 验证邮件验证码：CodeCache 以 email 为 key（历史实现错写成 req.Token，永远取不到值，
+	// 于是留了个空分支，等于完全不校验）。这里不清除，输错可以重试；成功后统一消费。
+	if !library.CodeCache.Verify(req.Email, req.Code, false) {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("VerificationCodeIsIncorrect"),
 		})
 		return
 	}
@@ -718,6 +731,8 @@ func ApiResetUserPassword(ctx iris.Context) {
 		return
 	}
 	currentSite.DB.Save(user)
+	// 凭据与验证码都是一次性的，改密成功后立即失效
+	library.CodeCache.Delete(req.Email)
 	// 不直接登录
 
 	ctx.JSON(iris.Map{
