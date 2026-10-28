@@ -948,6 +948,7 @@ func ApiTagList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	limit := 10
 	offset := 0
+	limitHasOffset := false
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	itemId := ctx.URLParamInt64Default("itemId", 0)
 	listType := ctx.URLParamDefault("type", "list")
@@ -961,6 +962,7 @@ func ApiTagList(ctx iris.Context) {
 		if len(limitArgs) == 2 {
 			offset, _ = strconv.Atoi(limitArgs[0])
 			limit, _ = strconv.Atoi(limitArgs[1])
+			limitHasOffset = true
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
@@ -972,11 +974,25 @@ func ApiTagList(ctx iris.Context) {
 		}
 	}
 
-	if listType == "page" {
-		if currentPage > 1 {
-			offset = (currentPage - 1) * limit
-		}
+	// 偏移只有一个出口：显式 limit="offset,size" 优先，否则按 page 推算。
+	// 原先这段被 `if listType == "page"` 包着，而 GetTagList 内部又按页码重算一次，
+	// 两处各自为政，显式 offset 会被静默覆盖。
+	if currentPage > 1 && !limitHasOffset {
+		offset = (currentPage - 1) * limit
 	}
+
+	// 前端接口限制最大页码，与列表页（ArchiveIndex）同一口径；后台标签管理不设限制。
+	// 缺这道闸门时，扒站方按 ?page=N 能一路翻下去，每页都要扫一遍 tags 全表。
+	if currentPage > currentSite.Content.MaxPage {
+		ctx.JSON(iris.Map{
+			"code":  config.StatusOK,
+			"msg":   "",
+			"total": 0,
+			"data":  make([]*model.Tag, 0),
+		})
+		return
+	}
+
 	var categoryIds []uint
 	var categoryDetail *model.Category
 	tmpCatId := ctx.URLParam("categoryId")
@@ -992,7 +1008,8 @@ func ApiTagList(ctx iris.Context) {
 			}
 		}
 	}
-	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
+	// 只有 page 模式需要精确总数；list 模式跳过 count，避免全表扫描。
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, offset, limit, listType == "page", order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))

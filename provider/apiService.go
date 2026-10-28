@@ -1706,7 +1706,8 @@ func (w *Website) ApiGetTags(req *request.ApiTagListRequest) ([]*model.Tag, int6
 		categoryIds = append(categoryIds, uint(v))
 	}
 
-	tagList, total, _ := w.GetTagList(req.ItemId, "", categoryIds, req.Letter, req.Page, req.Limit, req.Offset, req.Order)
+	// 只有 page 模式需要精确总数；list 模式跳过 count，避免全表扫描。
+	tagList, total, _ := w.GetTagList(req.ItemId, "", categoryIds, req.Letter, req.Offset, req.Limit, req.Type == "page", req.Order)
 	for i := range tagList {
 		tagList[i].Link = w.GetUrl("tag", tagList[i], 0)
 		tagList[i].GetThumb(w.PluginStorage.StorageUrl, w.GetDefaultThumb(int(tagList[i].Id)))
