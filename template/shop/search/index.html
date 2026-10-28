@@ -1,0 +1,52 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+  <div class="container py-5">
+    {%- archiveList products with type="page" limit=16 moduleId=2 %}
+    <div class="text-center mb-5">
+      <h1 class="fw-bold mb-4">Search Results</h1>
+      <form class="row justify-content-center" action="/search" method="GET">
+        <div class="col-md-6">
+          <div class="input-group input-group-lg border border-dark">
+            <input type="search" name="q" class="form-control border-0 bg-transparent" placeholder="Search for products..." value="{{urlParams.q}}">
+            <button class="btn btn-link text-dark text-decoration-none border-0 px-3" type="submit">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <p class="mt-3 text-muted small">Found {{pagination.TotalItems}} results for "{{urlParams.q}}"</p>
+        </div>
+      </form>
+    </div>
+
+    <hr class="my-5">
+
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-4">
+      {%- for item in products %}
+      <div class="col">
+        <div class="card product-card border-0 h-100 bg-transparent">
+          <div class="position-relative overflow-hidden bg-light" style="aspect-ratio: 1/1;">
+            <a href="{{item.Link}}">
+              <img src="{{item.Thumb}}" class="card-img-top object-fit-cover h-100 w-100 transition-scale" alt="{{item.Title}}">
+            </a>
+          </div>
+          <div class="card-body px-0 pt-3">
+            <h6 class="card-title mb-1">
+              <a href="{{item.Link}}" class="text-decoration-none text-dark hover-underline">{{item.Title}}</a>
+            </h6>
+            <div class="d-flex align-items-center">
+              <span class="text-dark fw-bold me-2">${{priceFormat(item.Price)}}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      {%- endfor %}
+    </div>
+    {%- endarchiveList %}
+
+    <!-- Pagination -->
+    {%- include 'partial/pagination.html' %}
+  </div>
+
+</main>
+{% endblock %}

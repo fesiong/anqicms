@@ -1,19 +1,22 @@
-{%- pagination pages with show="4" %}
-        <nav class="mt-5 pt-4 border-top">
-          <ul class="pagination justify-content-center">
-            {%- if pages.PrevPage %}
-            <li class="page-item"><a class="page-link border-0 text-dark" href="{{pages.PrevPage.Link}}"><i class="bi bi-chevron-left"></i></a></li>
-            {% endif %}
-            {%- for item in pages.Pages %}
-            {%- if item.IsCurrent %}
-            <li class="page-item active"><a class="page-link border-0 bg-dark text-white">{{item.Name}}</a></li>
-            {%- else %}
-            <li class="page-item"><a class="page-link border-0 text-dark" href="{{item.Link}}">{{item.Name}}</a></li>
-            {%- endif %}
-            {%- endfor %}
-            {%- if pages.NextPage %}
-            <li class="page-item"><a class="page-link border-0 text-dark" href="{{pages.LastPage.Link}}"><i class="bi bi-chevron-right"></i></a></li>
-            {% endif %}
-          </ul>
-        </nav>
-{%- endpagination %}
+{% pagination pages with show="5" %}
+<!-- pageination -->
+<div class="pagnavi">
+    <a href="{{pages.FirstPage.Link}}" class="{% if pages.FirstPage.IsCurrent %}current{% endif %}">{% tr 'first-page' %}</a>
+    {% if pages.PrevPage %}
+    <a href="{{pages.PrevPage.Link}}"><i class="fa fa-angle-left"></i></a>
+    {% endif %}
+    {% for item in pages.Pages %}
+    {% if item.IsCurrent %}
+    <a href="javascript:;" class="current">{{item.Name}}</a>
+    {% else %}
+    <a href="{{item.Link}}">{{item.Name}}</a>
+    {% endif %}
+    {% endfor %}
+    {% if pages.NextPage %}
+    <a href="{{pages.NextPage.Link}}"><i class="fa fa-angle-right"></i></a>
+    {% endif %}
+    <a href="{{pages.LastPage.Link}}" class="{% if pages.LastPage.IsCurrent %}current{% endif %}">{% tr 'last-page' %}</a>
+    <a href="javascript:;">{% tr 'total-items%d' pages.TotalItems %}</a>
+</div>
+<!-- pagination -->
+{% endpagination %}

@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+  <div class="container py-5">
+    <div class="row">
+      <!-- Sidebar Filters -->
+      <aside class="col-lg-3 d-none d-lg-block" id="filter-sidebar">
+        <h4 class="fw-bold mb-4">Filter:</h4>
+        {% include 'partial/filters.html' %}
+      </aside>
+
+      <!-- Product Grid -->
+      <div class="col-lg-9">
+        <!-- Toolbar -->
+        <div class="d-flex justify-content-between align-items-center mb-4 pb-3 border-bottom">
+          <h1 class="h3 fw-bold mb-0">Products</h1>
+          <div class="d-flex align-items-center">
+            <label class="me-2 small text-muted d-none d-md-block">Sort by:</label>
+            <select class="form-select form-select-sm border-0 bg-light" name="order" id="order-by" style="width: auto;">
+              <option value="" selected>Featured</option>
+              <option value="views desc">Best selling</option>
+              <option value="price asc">Price, low to high</option>
+              <option value="price desc">Price, high to low</option>
+              <option value="created_time asc">Date, old to new</option>
+              <option value="created_time desc">Date, new to old</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Mobile Filter Toggle -->
+        <button class="btn btn-outline-dark w-100 mb-4 d-lg-none" data-bs-toggle="offcanvas" data-bs-target="#mobileFilters">
+          <i class="bi bi-sliders me-2"></i>Filter and sort
+        </button>
+
+        <!-- Grid -->
+        <div class="row row-cols-2 row-cols-md-3 g-4">
+          {%- archiveList products with type="page" limit=18 %}
+          {%- for item in products %}
+          <div class="col">
+            <div class="card product-card border-0 h-100 bg-transparent">
+              <div class="position-relative overflow-hidden bg-light" style="aspect-ratio: 1/1;">
+                <a href="{{item.Link}}">
+                  <img src="{{item.Thumb}}" class="card-img-top object-fit-cover h-100 w-100 transition-scale" alt="{{item.Title}}">
+                </a>
+                {%- if item.Stock == 0 %}
+                <span class="position-absolute top-0 start-0 m-2 badge bg-dark rounded-pill px-3 py-2">Sold out</span>
+                {%- elif item.OriginPrice > item.Price %}
+                <span class="position-absolute top-0 start-0 m-2 badge bg-danger rounded-pill px-3 py-2">Save ${{priceFormat(item.OriginPrice - item.Price)}}</span>
+                {%- endif %}
+              </div>
+              <div class="card-body px-0 pt-3">
+                <h6 class="card-title mb-1">
+                  <a href="{{item.Link}}" class="text-decoration-none text-dark hover-underline">{{item.Title}}</a>
+                </h6>
+                <div class="d-flex align-items-center">
+                  <span class="text-dark fw-bold me-2">${{priceFormat(item.Price)}}</span>
+                  {%- if item.OriginPrice > 0 %}<span class="text-muted text-decoration-line-through small">${{priceFormat(item.OriginPrice)}}</span>{% endif %}
+                </div>
+              </div>
+            </div>
+          </div>
+          {%- endfor %}
+          {%- endarchiveList %}
+        </div>
+
+        <!-- Pagination -->
+        {%- include 'partial/pagination.html' %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Mobile Filter Offcanvas -->
+  <div class="offcanvas offcanvas-end" tabindex="-1" id="mobileFilters">
+    <div class="offcanvas-header border-bottom">
+      <h5 class="offcanvas-title fw-bold">Filter and sort</h5>
+      <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+      {% include 'partial/filters.html' %}
+      <hr>
+      <!-- Add more mobile filter options here -->
+    </div>
+    <div class="offcanvas-footer p-3 border-top">
+      <button class="btn btn-dark w-100">Apply</button>
+    </div>
+  </div>
+
+</main>
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <h1 class="fw-bold mb-5 text-center">{% tagDetail with name="Title" %}</h1>
+
+    <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-4">
+      {%- tagDetail tagId with name="Id" %}
+      {%- archiveList archives with type="page" limit=18 tagId=tagId %}
+        {%- for item in archives %}
+      <div class="col">
+        <div class="card product-card border-0 h-100 bg-transparent">
+          <div class="position-relative overflow-hidden bg-light" style="aspect-ratio: 1/1;">
+            <a href="{{item.Link}}">
+              <img src="{{item.Thumb}}" class="card-img-top object-fit-cover h-100 w-100 transition-scale" alt="{{item.Title}}">
+            </a>
+            {%- if item.Stock == 0 %}
+            <span class="position-absolute top-0 start-0 m-2 badge bg-dark rounded-pill px-3 py-2">Sold out</span>
+            {%- elif item.OriginPrice > item.Price %}
+            <span class="position-absolute top-0 start-0 m-2 badge bg-danger rounded-pill px-3 py-2">Save ${{priceFormat(item.OriginPrice - item.Price)}}</span>
+            {%- endif %}
+          </div>
+          <div class="card-body px-0 pt-3">
+            <h6 class="card-title mb-1">
+              <a href="{{item.Link}}" class="text-decoration-none text-dark hover-underline">{{item.Title}}</a>
+            </h6>
+            <div class="d-flex align-items-center">
+              <span class="text-dark fw-bold me-2">${{priceFormat(item.Price)}}</span>
+              {%- if item.OriginPrice > 0 %}<span class="text-muted text-decoration-line-through small">${{priceFormat(item.OriginPrice)}}</span>{% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+      {%- endfor %}
+      {%- endarchiveList %}
+    </div>
+
+    <!-- Pagination -->
+    {%- include 'partial/pagination.html' %}
+  </div>
+
+</main>
+{% endblock %}

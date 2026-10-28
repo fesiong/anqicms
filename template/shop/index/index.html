@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block container %}
+  <main>
+
+    <!-- Hero Carousel -->
+    <section class="hero-carousel mb-5">
+      {%- bannerList banners %}
+      <div id="heroCarousel" class="carousel slide" data-bs-ride="carousel">
+        <!-- Indicators -->
+        <div class="carousel-indicators">
+          {%- for item in banners %}
+          <button type="button" data-bs-target="#heroCarousel" data-bs-slide-to="{{forloop.Counter-1}}" class="active" aria-current="true" aria-label="{{item.Alt}}"></button>
+          {% endfor %}
+        </div>
+
+        <div class="carousel-inner">
+          {%- for item in banners %}
+          <div class="carousel-item {% if forloop.Counter == 1 %} active{% endif %}" data-bs-interval="5000">
+            <div class="hero-slide-content py-5 bg-light border-bottom">
+              <div class="container py-lg-5">
+                <div class="row align-items-center g-5">
+                  <div class="col-lg-6">
+                    <h1 class="display-4 fw-bold mb-4">{{item.Alt}}</h1>
+                    <p class="lead text-muted mb-5">
+                      {{item.Description}}
+                    </p>
+                    <div class="d-flex gap-3">
+                      <a href="{{item.Link}}" class="btn btn-dark">Shop Now</a>
+                      <a href="{% system with name='BaseUrl' %}/about.html" class="btn btn-outline-dark">Our Story</a>
+                    </div>
+                  </div>
+                  <div class="col-lg-6">
+                    <img src="{{item.Logo}}" class="img-fluid rounded shadow-sm" alt="{{item.Alt}}">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        {%- if banners|length > 1 %}
+        <!-- Controls -->
+        <button class="carousel-control-prev" type="button" data-bs-target="#heroCarousel" data-bs-slide="prev">
+          <span class="carousel-control-prev-icon bg-dark rounded-circle p-3" aria-hidden="true"></span>
+          <span class="visually-hidden">Previous</span>
+        </button>
+        <button class="carousel-control-next" type="button" data-bs-target="#heroCarousel" data-bs-slide="next">
+          <span class="carousel-control-next-icon bg-dark rounded-circle p-3" aria-hidden="true"></span>
+          <span class="visually-hidden">Next</span>
+        </button>
+        {%- endif %}
+      </div>
+      {%- endbannerList %}
+    </section>
+
+    <!-- Featured Collection -->
+    <section class="container py-5">
+      <div class="text-center mb-5">
+        <h2 class="fw-bold h1">Featured products</h2>
+        <p class="text-muted">Explore our most popular items</p>
+      </div>
+      <div class="row row-cols-2 row-cols-md-3 row-cols-lg-4 g-4">
+        {%- archiveList archives with type="list" limit="4" categoryId=11 %}
+        {%- for item in archives %}
+        <div class="col">
+          <div class="card product-card border-0 h-100 bg-transparent">
+            <div class="position-relative overflow-hidden bg-light" style="aspect-ratio: 1/1;">
+              <a href="{{item.Link}}">
+                <img src="{{item.Thumb}}" class="card-img-top object-fit-cover h-100 w-100 transition-scale" alt="{{item.Title}}">
+              </a>
+              {%- if item.Stock == 0 %}
+              <span class="position-absolute top-0 start-0 m-2 badge bg-dark rounded-pill px-3 py-2">Sold out</span>
+              {%- elif item.OriginPrice > item.Price %}
+              <span class="position-absolute top-0 start-0 m-2 badge bg-danger rounded-pill px-3 py-2">Save ${{priceFormat(item.OriginPrice - item.Price)}}</span>
+              {%- endif %}
+            </div>
+            <div class="card-body px-0 pt-3">
+              <h6 class="card-title mb-1">
+                <a href="{{item.Link}}" class="text-decoration-none text-dark hover-underline">{{item.Title}}</a>
+              </h6>
+              <div class="d-flex align-items-center">
+                <span class="text-dark fw-bold me-2">${{priceFormat(item.Price)}}</span>
+                {%- if item.OriginPrice > 0 %}<span class="text-muted text-decoration-line-through small">${{priceFormat(item.OriginPrice)}}</span>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+        {%- endfor %}
+        {%- endarchiveList%}
+      </div>
+      <div class="text-center mt-5">
+        <a href="{% categoryDetail with name='Link' id=11 %}" class="btn btn-outline-dark px-5">View all</a>
+      </div>
+    </section>
+
+    <!-- Collections List Section -->
+    <section class="container py-5 border-top">
+      <div class="text-center mb-5">
+        <h2 class="fw-bold h2 text-uppercase" style="letter-spacing: 0.1em;">Our Collections</h2>
+      </div>
+      <div class="row g-4 justify-content-center">
+        {%- categoryList categories with moduleId=2 %}
+        {%- for item in categories %}
+        {%- if item.ParentId > 0 %}
+        <div class="col-6 col-md-4 col-lg-2 text-center">
+          <a href="{{item.Link}}" class="text-dark text-decoration-none d-block p-3 border border-dark hover-bg-dark hover-text-white transition-all">
+            <span class="small fw-bold text-uppercase collection-item-text" style="letter-spacing: 0.1em;">{{item.Title}}</span>
+          </a>
+        </div>
+        {%- endif %}
+        {%- endfor %}
+        {%- endcategoryList %}
+      </div>
+    </section>
+
+    <!-- Back in Stock Section -->
+    <section class="container py-5">
+      <h2 class="fw-bold mb-4 h3">Back in stock!</h2>
+      <div class="row g-4">
+        {%- archiveList archives with categoryId=12 limit="3" %}
+        <!-- Left Large Feature -->
+        <div class="col-md-8">
+          <div class="mb-3 overflow-hidden bg-light" style="aspect-ratio: 1/1;">
+            <a href="{{archives.0.Link}}"><img src="{{archives.0.Logo}}" class="w-100 h-100 object-fit-cover transition-scale" alt="{{archives.0.Title}}"/></a>
+          </div>
+          <a href="{{archives.0.Link}}" class="text-dark text-decoration-none small fw-bold hover-underline">{{archives.0.Title}} &rarr;</a>
+          <p class="small text-muted mb-0">${{priceFormat(archives.0.Price)}}</p>
+        </div>
+
+        <!-- Right Small Features -->
+        <div class="col-md-4">
+          <div class="d-flex flex-column h-100">
+            <!-- Top Small Product -->
+            <div class="mb-3">
+              <div class="mb-3 bg-light overflow-hidden" style="aspect-ratio: 11/10;">
+                <a href="{{archives.1.Link}}"><img src="{{archives.1.Logo}}" class="w-100 h-100 object-fit-cover transition-scale" alt="{{archives.1.Title}}"/></a>
+              </div>
+              <a href="{{archives.1.Link}}" class="text-dark text-decoration-none small fw-bold hover-underline">{{archives.1.Title}} &rarr;</a>
+              <p class="small text-muted mb-0">${{priceFormat(archives.1.Price)}}</p>
+            </div>
+
+            <!-- Bottom Small Feature -->
+            <div class="mt-auto">
+              <div class="mb-3 overflow-hidden bg-light" style="aspect-ratio: 11/10;">
+                <a href="{{archives.2.Link}}"><img src="{{archives.2.Logo}}" class="w-100 h-100 object-fit-cover transition-scale" alt="{{archives.2.Title}}"/></a>
+              </div>
+              <a href="{{archives.2.Link}}" class="text-dark text-decoration-none small fw-bold hover-underline">{{archives.2.Title}} &rarr;</a>
+              <p class="small text-muted mb-0">${{priceFormat(archives.2.Price)}}</p>
+            </div>
+          </div>
+        </div>
+        {%- endarchiveList %}
+      </div>
+    </section>
+
+    <!-- Quote Section -->
+    <section class="bg-light py-5 my-5 border-top border-bottom">
+      <div class="container py-4 text-center">
+        <div class="row justify-content-center">
+          <div class="col-lg-8">
+            <i class="bi bi-quote fs-1 text-muted mb-4 d-block"></i>
+            <h3 class="fst-italic mb-4 h2">"The leather is sourced from environmentally friendly tanneries in Italy, France, and Turkey, where Rure is based and everything is assembled by hand."</h3>
+            <p class="text-muted">— Rure Founder</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Categories -->
+    <section class="container py-5">
+      {%- categoryList categories with moduleId=2 parentId=0 limit="2" %}
+      <div class="row g-4">
+        {%- for item in categories %}
+        <div class="col-md-6">
+          <div class="position-relative overflow-hidden group shadow-sm" style="height: 500px;">
+            <img src="{{item.Logo}}" class="w-100 h-100 object-fit-cover transition-scale" alt="{{item.Title}}">
+            <div class="position-absolute bottom-0 start-0 w-100 p-5 bg-gradient-dark text-white">
+              <h4 class="fw-bold mb-2 h2">{{item.Title}}</h4>
+              <a href="{{item.Link}}" class="text-white text-decoration-underline">Shop now</a>
+            </div>
+          </div>
+        </div>
+        {%- endfor %}
+      </div>
+      {%- endcategoryList %}
+    </section>
+
+    <!-- News Section -->
+    <section class="container py-5 mb-5">
+      <div class="text-center mb-5">
+        <p class="small text-muted text-uppercase mb-2" style="letter-spacing: 0.2em; font-size: 0.75rem;">News</p>
+        <h2 class="fw-bold h1 text-uppercase" style="letter-spacing: 0.05em;">From the blog</h2>
+      </div>
+
+      <div class="row g-4 mb-5">
+        {%- archiveList archives with categoryId=13 limit="3" %}
+        {%- for item in archives %}
+        <div class="col-md-4">
+          <div class="mb-4 overflow-hidden bg-light" style="aspect-ratio: 16/9;">
+            <a href="{{item.Link}}">
+              <img src="{{item.Thumb}}" class="w-100 h-100 object-fit-cover transition-scale" alt="{{item.Title}}">
+            </a>
+          </div>
+          <p class="small text-muted text-uppercase mb-2" style="letter-spacing: 0.1em; font-size: 0.7rem;">{% categoryDetail with name="Title" id=item.CategoryId %}</p>
+          <h4 class="h6 fw-bold mb-3 text-uppercase" style="line-height: 1.5; letter-spacing: 0.05em;"><a href="{{item.Link}}" class="text-dark text-decoration-none">{{item.Title}}</a></h4>
+          <a href="{{item.Link}}" class="text-dark small text-decoration-underline">Read more</a>
+        </div>
+        {%- endfor %}
+        {%- endarchiveList %}
+      </div>
+
+      <div class="text-center">
+        <a href="{% categoryDetail with name='Link' id=13 %}" class="btn btn-dark px-5 py-3 text-uppercase small fw-bold" style="letter-spacing: 0.15em;">Discover all our stories</a>
+      </div>
+    </section>
+
+  </main>
+{% endblock %}

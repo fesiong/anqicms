@@ -1,19 +1,12 @@
 {% extends 'base.html' %}
 
 {% block container %}
-<main>
-
-  <div class="container py-5">
-    <div class="row justify-content-center">
-      <div class="col-md-6 col-lg-4">
-        <div class="text-center mb-5 mt-5">
-          <h1 class="fw-bold h2">Page Not Found.</h1>
-          <p class="text-muted">The page you are looking for does not exist.</p>
-          <a href="{% system with name='BaseUrl' %}" class="btn btn-dark">Go to Home</a>
+<div class="page">
+    <div class="container">
+        <div class="page404">
+            <h1>404</h1>
+            <p>{% tr 'page-missing' %}<a href="/" title="">{% tr 'back-home' %}</a></p>
         </div>
-      </div>
     </div>
-  </div>
-
-</main>
+</div>
 {% endblock %}
