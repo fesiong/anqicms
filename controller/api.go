@@ -1051,7 +1051,8 @@ func ApiLogStatistic(ctx iris.Context) {
 			archive := currentSite.GetArchiveByIdFromCache(req.Id)
 			if archive != nil {
 				_ = archive.AddViews(currentSite.DB)
-				if archive.ModuleId == 2 { // 产品
+				// 产品判定走 modules.kind，不再硬编码 id==2
+				if currentSite.IsProductModule(archive.ModuleId) {
 					// 统计文章的阅读数
 					req.Type = request.LogTypeProductView
 					// 推送事件

@@ -1308,6 +1308,16 @@ func (w *Website) restoreSingleData(name string, reader io.ReadCloser) {
 			return
 		}
 		for _, v := range modules {
+			// 旧模板包没有 kind 字段，而这里是 OnConflict{UpdateAll: true}——
+			// 直接导入会把现有模型的类型刷成空串（空串归一成 article，
+			// 产品模型当场退化成文章）。按表名兜底。
+			if v.Kind != model.ModuleKindArticle && v.Kind != model.ModuleKindProduct {
+				if v.TableName == "product" {
+					v.Kind = model.ModuleKindProduct
+				} else {
+					v.Kind = model.ModuleKindArticle
+				}
+			}
 			v.Database = w.Mysql.Database
 			w.DB.Clauses(clause.OnConflict{UpdateAll: true}).Create(&v)
 			// 更新模型数据

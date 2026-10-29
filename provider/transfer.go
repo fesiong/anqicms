@@ -336,6 +336,13 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 			CategoryFields: result.Data[i].CategoryFields,
 			IsSystem:       result.Data[i].IsSystem,
 			Status:         result.Data[i].Status,
+			Kind:           model.ModuleKindArticle,
+		}
+		// 对端是第三方 CMS 的转换脚本（xxx2anqicms.php），不会有 kind 字段，
+		// 只能按表名兜底。漏了这一步，迁过来的产品模型会变成文章 ——
+		// 前台价格区块、SKU 筛选与 Product 结构化数据一起消失，且不报错。
+		if module.TableName == "product" {
+			module.Kind = model.ModuleKindProduct
 		}
 		module.Id = result.Data[i].Id
 		if module.UrlToken == "" {

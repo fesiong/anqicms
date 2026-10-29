@@ -331,7 +331,9 @@ func (w *Website) buildArchiveDetailJsonLd(viewData map[string]interface{}, webI
 	}
 
 	if schemaType == "" {
-		if archive.ModuleId == 2 {
+		// 产品判定走 modules.kind，不再硬编码 id==2：
+		// 判错的后果是 Product 结构化数据静默退化成 Article（搜索里没有价格/库存）。
+		if w.IsProductModule(archive.ModuleId) {
 			schemaType = "Product"
 		} else {
 			schemaType = "Article"

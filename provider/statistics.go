@@ -281,7 +281,13 @@ func (w *Website) StatisticProduct(startTime int64, endTime int64) []response.Ch
 	// 上新
 	// 访问
 	var result []response.ChartData
-	w.DB.Model(&model.Archive{}).Where("module_id = 2 and created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'new' as `label`").Group("`date`").Order("`date`").Scan(&result)
+	// 上新。产品判定走 modules.kind，不再硬编码 module_id = 2：
+	// 硬编码时如果用户重建过模型（id 变化），这里会恒为 0，图表看着就是「没有上新」。
+	w.DB.Model(&model.Archive{}).
+		Where("module_id IN (SELECT `id` FROM `modules` WHERE `kind` = ?)", model.ModuleKindProduct).
+		Where("created_time >= ? and created_time < ?", startTime, endTime).
+		Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'new' as `label`").
+		Group("`date`").Order("`date`").Scan(&result)
 	// 如果结束时间是今天，则今天的数据需要获取最新的数据
 	today := now.EndOfDay().Unix()
 	if endTime == today {

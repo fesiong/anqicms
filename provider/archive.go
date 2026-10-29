@@ -1363,7 +1363,8 @@ func (w *Website) SuccessReleaseArchive(archive *model.Archive, newPost bool) er
 	//// 删除首页缓存
 	//w.DeleteCacheIndex()
 	// 如果启用了google推送
-	if archive.ModuleId == 2 {
+	// 产品判定走 modules.kind，不再硬编码 id==2
+	if w.IsProductModule(archive.ModuleId) {
 		googlgeMerchantSetting := w.GetGoogleMerchantSetting()
 		if googlgeMerchantSetting.Open {
 			// 检查是否是首次推送

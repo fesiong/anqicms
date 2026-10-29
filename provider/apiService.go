@@ -1142,9 +1142,8 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			})
 		}
 	}
-	// sku变体
-	if req.ModuleId == 2 {
-		// 产品筛选，有sku
+	// 产品筛选，有sku（类型判定走 modules.kind，不再硬编码 id==2）
+	if req.ModuleId > 0 && w.IsProductModule(uint(req.ModuleId)) {
 		optionsFilter := w.GetArchiveOptionsFilter()
 		for k, v := range optionsFilter {
 			var tmpUrlParam = map[string]bool{}

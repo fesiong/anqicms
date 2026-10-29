@@ -17,6 +17,7 @@ type ModuleRequest struct {
 	IsSystem       int                  `json:"is_system"`       // 是否内置模型
 	TitleName      string               `json:"-" ast:"-"`       // 已废弃
 	Status         *uint                `json:"status"`          // 模型的启用状态：0 禁用，1 启用
+	Kind           *string              `json:"kind"`            // 模型类型：article（默认）/ product；不传=保持原值
 	UpdateAll      bool                 `json:"update_all" ast:"-"`
 	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
 	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
