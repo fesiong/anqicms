@@ -1,10 +1,12 @@
 package provider
 
 import (
+	"time"
+
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
-	"time"
 )
 
 func (w *Website) GetActivities(ops func(tx *gorm.DB) *gorm.DB, order string, page, pageSize int) ([]*model.Activity, int64) {
@@ -93,8 +95,19 @@ func (w *Website) GetActivitySkuBySkuId(activityId, skuId int64) (*model.Activit
 	return &sku, nil
 }
 
+// SaveActivity 新建或更新营销活动。
+//
+// 语义（2026-10-29 指针化）：nil = 调用方没提（保持库里原值），
+// 非 nil = 显式写入（含 0：失效/免费/售罄/不限购/不叠加优惠）。
+// UpdateAll（后台表单全量提交）时，nil 才当成「用户清空」写零值。
+//
+// ⚠️ 规格（skus）单独一套语义：nil=不动、[]=清空全部、非空=按列表同步。
+// 改造前「不传」和「传空数组」是同一个零值，于是「只改个标题」就把规格
+// 整批删掉，活动价与库存随之失效，而回执是 ok（invokeRouteOverwriteFields
+// 当时靠 GET 回查补齐才挡住，回查失败就又漏了）。
 func (w *Website) SaveActivity(req *request.ActivityRequest) error {
 	var activity model.Activity
+	newPost := false
 	if req.Id > 0 {
 		err := w.DB.Where("id = ?", req.Id).First(&activity).Error
 		if err != nil {
@@ -102,23 +115,42 @@ func (w *Website) SaveActivity(req *request.ActivityRequest) error {
 		}
 	} else {
 		activity = model.Activity{}
+		newPost = true
 	}
-	activity.GoodsType = req.GoodsType
-	activity.StartTime = req.StartTime
-	activity.EndTime = req.EndTime
-	activity.UserLimit = req.UserLimit
-	activity.Title = req.Title
-	activity.Description = req.Description
-	activity.Images = req.Images
-	activity.GoodsId = req.GoodsId
-	activity.Status = req.Status
-	activity.Price = req.Price
-	activity.Stock = req.Stock
-	activity.Extra = req.Extra
-	activity.CanUseCoupon = req.CanUseCoupon
-	if len(req.Skus) > 0 {
+	if newPost {
+		// 新建默认生效。未传 status 落到 0 会造出一张「建好了但前台不展示」
+		// 的活动——后台列表看得见，用户端永远看不到，且没有任何报错。
+		activity.Status = 1
+	}
+
+	force := req.UpdateAll
+	if req.Title != "" {
+		activity.Title = req.Title
+	} else if force {
+		activity.Title = ""
+	}
+	library.Assign(&activity.GoodsType, req.GoodsType, force)
+	library.Assign(&activity.StartTime, req.StartTime, force)
+	library.Assign(&activity.EndTime, req.EndTime, force)
+	library.Assign(&activity.UserLimit, req.UserLimit, force)
+	library.Assign(&activity.Description, req.Description, force)
+	library.Assign(&activity.Images, req.Images, force)
+	library.Assign(&activity.GoodsId, req.GoodsId, force)
+	library.Assign(&activity.Price, req.Price, force)
+	library.Assign(&activity.Stock, req.Stock, force)
+	library.Assign(&activity.CanUseCoupon, req.CanUseCoupon, force)
+	library.Assign(&activity.Status, req.Status, force)
+	// Extra 是 model.ExtraData（命名类型），不能和 map 共用 Assign。
+	if req.Extra != nil {
+		activity.Extra = model.ExtraData(req.Extra)
+	} else if force {
+		activity.Extra = nil
+	}
+
+	// 传了规格时，活动库存以规格库存合计为准（覆盖上面按字段写入的值）。
+	if req.Skus != nil && len(*req.Skus) > 0 {
 		tmpStock := int64(0)
-		for _, item := range req.Skus {
+		for _, item := range *req.Skus {
 			tmpStock += item.Stock
 		}
 		activity.Stock = tmpStock
@@ -128,13 +160,18 @@ func (w *Website) SaveActivity(req *request.ActivityRequest) error {
 	if err != nil {
 		return err
 	}
-	if len(req.Skus) == 0 {
+	if req.Skus == nil {
+		// PATCH 没提规格：保持现有规格不动。
+		return nil
+	}
+	if len(*req.Skus) == 0 {
+		// 显式传空数组：删掉全部规格（这是「清空」的唯一入口）。
 		w.DB.Where("activity_id = ?", activity.Id).Delete(&model.ActivitySku{})
 		return nil
 	}
 	// 处理sku
 	var skuId []int64
-	for _, item := range req.Skus {
+	for _, item := range *req.Skus {
 		var sku model.ActivitySku
 		if item.Id > 0 {
 			err = w.DB.Where("id = ?", item.Id).First(&sku).Error

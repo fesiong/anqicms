@@ -139,7 +139,10 @@ func CouponDetail(ctx iris.Context) {
 	})
 }
 
-// CouponDetailForm 新建或更新优惠券；纯全量覆盖，改一个字段也要带齐其它字段，否则会被清空。
+// CouponDetailForm 新建或更新优惠券。
+//
+// 默认是全量覆盖（后台表单提交整个表单，字段没出现 = 用户清空了它）；
+// 传 partial=true 则走 PATCH，未传字段保持原值（AI/MCP 默认这样调）。
 func CouponDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponRequest
@@ -149,6 +152,9 @@ func CouponDetailForm(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	err := currentSite.SaveCoupon(&req)

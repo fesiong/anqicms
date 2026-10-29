@@ -87,8 +87,10 @@ var invokeRouteOverwriteFields = map[string][]string{
 	// 硬编码常量、根本不读 req.Status，即端点语义就是「保存即启用」。
 	// 补齐传 0 也会被它覆盖成 1，登记了只是白登记（实测确认）。
 	normalizeEndpointPath("/plugin/material/detail"): {"content", "category_id", "auto_update"},
-	// 会员分组：commerce group_save。分级信息（level/price）被清零会让权限与定价失效。
-	normalizeEndpointPath("/plugin/user/group/detail"): {"description", "level", "price", "favorable_price"},
+	// 会员分组：commerce group_save。2026-10-29 起 provider.SaveUserGroupInfo 已改
+	// PATCH（request.UserGroupRequest 指针化 + UpdateAll/Partial），本表项已移除，
+	// 改走下面的 partialInvokePaths。原实现在这里是因为「拼新对象 Save 全列」，
+	// 改个名字就会把 level/price/setting 清成零值。
 	// 城市站：provider/place.go:93-105 逐字段无条件赋值。
 	// 实测（2026-10-03，新建临时记录 id=1 后只传 id+title 改名）：
 	// seo_title / keywords / description / template / logo / images / status / latitude
@@ -99,20 +101,16 @@ var invokeRouteOverwriteFields = map[string][]string{
 		"parent_id", "sort", "template", "is_inherit", "images", "logo",
 		"latitude", "longitude", "timezone", "status",
 	},
-	// 优惠券（商城合并）：provider/coupon.go:50-62 逐字段无条件赋值，没有 UpdateAll。
-	// 只传 id+title 改名会把面额/门槛/类型/有效期全部清成 0——券面额清零即"废券"，
-	// 而且已发出去的券码还挂在这张券上，事后无法从券码侧补回。
-	normalizeEndpointPath("/plugin/coupon/detail"): {
-		"money", "start_time", "end_time", "title", "description", "expire",
-		"status", "type", "max_money", "money_type", "need_integral", "need_money", "range_type",
-	},
-	// 营销活动（商城合并）：provider/activity.go:106-118 同样逐字段赋值。
-	// 另外 SaveActivity 在 len(req.Skus)==0 时会**删除该活动的全部规格**，
-	// 所以 skus 必须一起保护——只改个标题就把规格清空，活动价格/库存随之失效。
-	normalizeEndpointPath("/plugin/activity/detail"): {
-		"goods_type", "start_time", "end_time", "user_limit", "title", "description",
-		"images", "goods_id", "status", "price", "stock", "extra", "can_use_coupon", "skus",
-	},
+	// 优惠券（商城合并）：2026-10-29 起 provider.SaveCoupon 已改为 PATCH 语义
+	// （request.CouponRequest 指针化 + UpdateAll/Partial），本表项已移除，
+	// 改走下面的 partialInvokePaths。留着会是两套机制叠加：
+	// 补齐要回查旧值，读端点返回派生值时等于用假数据覆盖真值。
+	// 券面额被清零的后果是「废券」，而已发出去的券码还挂在这张券上，无法从券码侧补回。
+	// 营销活动（商城合并）：2026-10-29 起 provider.SaveActivity 已改为 PATCH
+	// （request.ActivityRequest 指针化 + UpdateAll/Partial，skus 用 nil/[]/*[] 三态），
+	// 本表项已移除，改走下面的 partialInvokePaths。
+	// 之前必须靠补齐的是 skus：SaveActivity 在 len(skus)==0 时会 Delete 该活动的
+	// 全部规格 —— 「只改个标题」就把活动价/库存清空。改成三态后不传即不动。
 }
 
 // preserveGetParam 登记「GET 兄弟的 id 参数名与 POST 不同」的端点。
@@ -121,9 +119,12 @@ var invokeRouteOverwriteFields = map[string][]string{
 // 优惠券详情读的是 coupon_id（manageController.CouponDetail），POST 写的是 id
 // （request.CouponRequest）。不改这里的话，回查永远返回 0 条，上面那张保护表
 // 就成了摆设——是静默失效，不是报错，所以必须显式登记。
-var preserveGetParam = map[string]string{
-	normalizeEndpointPath("/plugin/coupon/detail"): "coupon_id",
-}
+//
+// 目前**没有登记项**：唯一需要它的 /plugin/coupon/detail 已于 2026-10-29
+// 改走 partialInvokePaths（端点自己就是 PATCH），不再回查补齐。
+// 机制保留：将来若有全量覆盖端点用非 id 的名字读详情，仍然需要它
+// （删掉这张表会让那种情况静默失效，而不是报错）。
+var preserveGetParam = map[string]string{}
 
 // partialInvokePaths 登记「走 PATCH 语义、不需要补齐」的 POST 端点。
 //
@@ -145,6 +146,18 @@ var partialInvokePaths = map[string]bool{
 	// 修复前它在 invokeRouteOverwriteFields 里（补齐兜底），
 	// 加 partial 后已从那张表移除——两套机制叠加是多余的，且补齐有风险。
 	normalizeEndpointPath("/plugin/user/detail"): true,
+	// 会员分组：2026-10-29 起 SaveUserGroupInfo 改为「先读库再按指针合并」，
+	// request.UserGroupRequest 也有 UpdateAll/Partial，端点自己能只覆盖传入字段。
+	normalizeEndpointPath("/plugin/user/group/detail"): true,
+	// 优惠券：2026-10-29 起 request.CouponRequest 指针化并加了 UpdateAll/Partial，
+	// provider.SaveCoupon 用 library.Assign 统一「非 nil 才写」。
+	// 之前它在 invokeRouteOverwriteFields 里靠 GET 回查补齐，但补齐是**兜底**：
+	// 回查失败（券被删、读接口变更）就退回全量覆盖，面额被清成 0 而回执照旧 ok。
+	// 现在端点自己就能只覆盖传入字段，补齐既多余又有用派生值覆盖真值的风险。
+	normalizeEndpointPath("/plugin/coupon/detail"): true,
+	// 营销活动：同上。SaveActivity 的 skus 用 nil/[]/*[] 三态区分
+	// 「不动 / 清空全部 / 按列表同步」，不传规格即不动，不会再删光。
+	normalizeEndpointPath("/plugin/activity/detail"): true,
 }
 
 // preserveOnInvokeRoute 在调用全量覆盖的 POST 端点前，把未传的受保护字段用旧值补齐。

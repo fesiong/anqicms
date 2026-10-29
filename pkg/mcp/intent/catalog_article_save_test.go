@@ -16,9 +16,6 @@ import (
 //
 // 它们共同的特点是**不报错但结果错**，AI 侧完全无从察觉，因此必须有断言兜住。
 
-
-
-
 // TestNormalizeListStatus 白名单外的 status 必须报错，不能透传给端点。
 //
 // 端点 ArchiveList 只对精确的 "ok"/"draft"/"plan" 做处理，其它值一律
@@ -445,16 +442,6 @@ func TestInvokeRoutesNonListUnaffected(t *testing.T) {
 	}
 }
 
-
-
-
-
-
-
-
-
-
-
 // TestInvokeRoutesPartialForUser commerce 的 user_update 走 invokeRoutes
 // （不是 switchCompose），且打到 PluginUserDetailForm —— pluginUser.go:242
 // 原本无条件 req.UpdateAll = true，SaveUserInfo 里 15 处都是
@@ -512,7 +499,6 @@ func TestInvokeRoutesPartialForUser(t *testing.T) {
 		t.Errorf("显式传的字段应原样送达，实际=%#v", sent["user_name"])
 	}
 }
-
 
 // TestInvokeRouteOverwriteTableConsistency 覆盖表里的端点必须真有 GET 兄弟，
 // 否则 preserveOnInvokeRoute 找不到旧值、登记等于空转。
@@ -651,12 +637,14 @@ func TestInvokeRoutesPreserveMaterial(t *testing.T) {
 func TestOverwriteTableOnlyDataEndpoints(t *testing.T) {
 	// 已知会丢数据字段的端点，按机制分两组
 	byPartial := []string{
-		"/system/api/plugin/user/detail", // provider/user.go 15 处 req.UpdateAll
+		"/system/api/plugin/user/detail",       // provider/user.go 15 处 req.UpdateAll
+		"/system/api/plugin/user/group/detail", // provider/user.go SaveUserGroupInfo 指针 + UpdateAll
+		"/system/api/plugin/coupon/detail",     // provider/coupon.go SaveCoupon 用 library.Assign + UpdateAll
+		"/system/api/plugin/activity/detail",   // provider/activity.go SaveActivity 同上（skus 三态）
 	}
 	byFill := []string{
-		"/system/api/plugin/material/detail",     // material.go 逐字段赋值
-		"/system/api/plugin/user/group/detail",   // user.go SaveUserGroupInfo 逐字段赋值
-		"/system/api/plugin/place/detail",        // place.go 逐字段赋值
+		"/system/api/plugin/material/detail", // material.go 逐字段赋值
+		"/system/api/plugin/place/detail",    // place.go 逐字段赋值
 	}
 	for _, p := range byFill {
 		if _, ok := invokeRouteOverwriteFields[p]; !ok {
@@ -682,7 +670,6 @@ func TestOverwriteTableOnlyDataEndpoints(t *testing.T) {
 		}
 	}
 }
-
 
 // TestInvokeRoutesPreservePlace content_place 的 save 走 invokeRoutes，
 // 打到 PlaceDetailForm → provider.SavePlace（place.go:93-105 逐字段无条件赋值）。
@@ -779,7 +766,6 @@ func TestPreserveOnInvokeRouteNeedsExistingRecord(t *testing.T) {
 	}
 }
 
-
 // TestPreserveOnUpdateBothNamingAccepted 调用方直接用端点名传时也不该被覆盖。
 func TestPreserveOnUpdateBothNamingAccepted(t *testing.T) {
 	spec := mustSpec(t, "structure")
@@ -806,4 +792,3 @@ func TestPreserveOnUpdateBothNamingAccepted(t *testing.T) {
 		t.Errorf("显式传的端点名 from_url 应保留，实际=%q", got)
 	}
 }
-

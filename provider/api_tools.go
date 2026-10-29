@@ -454,6 +454,18 @@ var partialUpdateEndpoints = map[string]bool{
 	// 之前是「拼新对象 Save 全列」，改个名字就会把 Level/Price/Setting 清成零值、
 	// 把 Status 刷成 1（停用的组被强制启用）。
 	normalizeAPIPath("/plugin/user/group/detail"): true, // request.UserGroupRequest
+	// 优惠券：2026-10-29 起 SaveCoupon 用 library.Assign(…, req.UpdateAll)，
+	// 控制器 `if !req.Partial { req.UpdateAll = true }`。
+	// 不注入 partial 就等于每次保存都全量覆盖 —— 「改个标题」会把面额清成 0，
+	// 而券面额清零的券还挂着已发出的券码，核销时按 0 元抵扣。
+	normalizeAPIPath("/plugin/coupon/detail"): true, // request.CouponRequest
+	// 营销活动：2026-10-29 起 SaveActivity 用 library.Assign + UpdateAll/Partial。
+	// 不注入 partial 就会全量覆盖：`len(skus)==0` 那条分支会**删除该活动的全部规格**
+	// （活动价与库存随之失效），而回执是 ok。
+	normalizeAPIPath("/plugin/activity/detail"): true, // request.ActivityRequest
+	// ⚠️ /plugin/coupon/code/detail **不在**这里：request.CouponCodeRequest
+	// 没有 UpdateAll/Partial（券码没有 GET 详情、也就没有全量编辑表单），
+	// SaveCouponCode 本身就是无条件 PATCH 语义，注入 partial 是空转。
 	// ⚠️ /plugin/redirect/detail **不在**这里：PluginRedirectRequest 没有 UpdateAll
 	// 字段，控制器也没有 `req.UpdateAll = true`（provider 是逐字段无条件赋值）。
 	// 加了也没用——那种端点仍需意图层补齐，见 invokeRouteOverwriteFields。
