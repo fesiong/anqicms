@@ -16,6 +16,12 @@ func (w *Website) AddFavorite(userId int64, archiveId, skuId int64) (bool, error
 	if err != nil {
 		return false, err
 	}
+	if skuId > 0 {
+		_, err = w.GetArchiveSkuById(archiveId, skuId)
+		if err != nil {
+			return false, err
+		}
+	}
 
 	favorite := model.ArchiveFavorite{
 		ArchiveId: archiveId,
@@ -60,12 +66,18 @@ func (w *Website) GetFavoriteList(userId int64, currentPage int, pageSize int) (
 	}
 	var userIds []int64
 	var archiveIds []int64
+	var skuIds []int64
 	for _, v := range archiveFavorites {
 		userIds = append(userIds, v.UserId)
 		archiveIds = append(archiveIds, v.ArchiveId)
+		if v.SkuId > 0 {
+			skuIds = append(skuIds, v.SkuId)
+		}
 	}
 	var archives []*model.Archive
+	var skus []*model.ArchiveSku
 	w.DB.Where("id IN(?)", archiveIds).Find(&archives)
+	w.DB.Where("id IN(?)", skuIds).Find(&skus)
 	var favorites = make([]*model.Archive, 0, len(archives))
 	for _, v := range archiveFavorites {
 		var archive *model.Archive
@@ -79,6 +91,18 @@ func (w *Website) GetFavoriteList(userId int64, currentPage int, pageSize int) (
 		}
 		if archive == nil {
 			continue
+		}
+		if v.SkuId > 0 {
+			for _, s := range skus {
+				if v.SkuId == int64(s.Id) {
+					skuThumb := s.GetThumb(w.PluginStorage.StorageUrl, w.Content.DefaultThumb)
+					if len(skuThumb) > 0 {
+						archive.Thumb = skuThumb
+					}
+					archive.Sku = s
+					break
+				}
+			}
 		}
 		favorites = append(favorites, archive)
 	}

@@ -120,12 +120,15 @@ func (node *tagTagListNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 			offset = (currentPage - 1) * limit
 		}
 	} else {
-		currentPage = 1
+		// list 模式不分页：偏移只由 limit 的显式偏移（"offset,size"）决定，
+		// 这里不再把页码折算进 offset，也不下沉给 GetTagList 去猜。
 		// list模式则始终使用 argQ
 		q = argQ
 	}
 
-	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
+	// 只有 page 模式要拿 total 生成分页条，list 模式拿到的总数没人用，
+	// 传 false 让 GetTagList 跳过 count（tags 表可能十几万行）。
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, offset, limit, listType == "page", order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))

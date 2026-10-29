@@ -22,13 +22,18 @@ func PluginTagList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	title := ctx.URLParam("title")
 	currentPage := ctx.URLParamIntDefault("current", 1)
+	if currentPage < 1 {
+		// offset 由本函数算好后传入，页码非法时必须夹住，否则会算出负 offset。
+		currentPage = 1
+	}
 	pageSize := ctx.URLParamIntDefault("pageSize", 20)
 	categoryId := uint(ctx.URLParamIntDefault("category_id", 0))
 	var categoryIds []uint
 	if categoryId > 0 {
 		categoryIds = append(categoryIds, categoryId)
 	}
-	tags, total, err := currentSite.GetTagList(0, title, categoryIds, "", currentPage, pageSize, 0, "id desc")
+	// 后台分页需要精确总数，needTotal 固定 true；后台访问不受前台的最大页码限制。
+	tags, total, err := currentSite.GetTagList(0, title, categoryIds, "", (currentPage-1)*pageSize, pageSize, true, "id desc")
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

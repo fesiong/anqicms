@@ -33,7 +33,8 @@ import (
 //   - 查询参数 "recycle": 是否查询回收站中的文档，默认为 false。
 //   - 查询参数 "collect": 是否只查询采集的文档，默认为 false。
 //   - 查询参数 "status": 文档状态：ok=正式文档，draft=草稿，plan=待发布文档；默认: ok。
-//   - 查询参数 "flag": 按文档标记筛选，默认无：h=头条、c=推荐、f=幻灯、a=特荐、s=滚动、h=加粗、p=图片、j=跳转
+//   - 查询参数 "flag": 按文档标记筛选，默认无：h=头条、c=推荐、f=幻灯、a=特荐、s=滚动、b=加粗、p=图片、j=跳转
+//   - 查询参数 "productType": 按产品类型筛选，0 表示不限；1=普通商品、2=批发、3=定制、4=虚拟、5=服务、6=订阅。注意参数名是驼峰 productType，写成 product_type 不会生效。
 func ArchiveList(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	currentPage := ctx.URLParamIntDefault("current", 1)
@@ -45,6 +46,7 @@ func ArchiveList(ctx iris.Context) {
 	status := ctx.URLParamDefault("status", "ok") // 支持 draft:草稿, ok:正式文档, plan:待发布文档
 	sort := ctx.URLParamDefault("sort", "id")
 	flag := ctx.URLParam("flag")
+	productType := ctx.URLParamIntDefault("productType", 0)
 	exact := ctx.URLParamBoolDefault("exact", false)
 	order := strings.ToLower(ctx.URLParamDefault("order", "desc"))
 	if order != "asc" {
@@ -113,12 +115,17 @@ func ArchiveList(ctx iris.Context) {
 				}
 			} else if moduleId > 0 {
 				tx = tx.Where("`module_id` = ?", moduleId)
+			} else {
+				tx = tx.Where("`module_id` != ?", 2)
 			}
 			if parentId > 0 {
 				tx = tx.Where("`parent_id` = ?", parentId)
 			}
 			if placeId > 0 {
 				tx = tx.Where("`place_id` = ?", placeId)
+			}
+			if productType > 0 {
+				tx = tx.Where("`product_type` = ?", productType)
 			}
 			if status == "delete" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDelete)
@@ -497,6 +504,22 @@ func ArchiveDetail(ctx iris.Context) {
 
 	tags := currentSite.GetTagsByItemId(archiveDraft.Id)
 	archiveDraft.Tags = tags
+	// 读取options
+	archiveDraft.Options, _ = currentSite.GetArchiveOptions(archiveDraft.Id)
+	archiveDraft.Skus, _ = currentSite.GetArchiveSkus(archiveDraft.Id)
+	for _, sku := range archiveDraft.Skus {
+		for i, value := range sku.Values {
+			if value.OptionTitle == "" {
+				for _, option := range archiveDraft.Options {
+					if option.Id == value.OptionId {
+						sku.Values[i].OptionTitle = option.Title
+						break
+					}
+				}
+			}
+		}
+	}
+	archiveDraft.WholesaleRules, _ = currentSite.GetArchiveWholesaleRules(archiveDraft.Id)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,

@@ -49,8 +49,32 @@ func ArchiveDetail(ctx iris.Context) {
 		}
 	}
 	if err != nil {
-		NotFound(ctx)
-		return
+		// 检查 sku
+		archiveSku, err := currentSite.GetArchiveSkuByUrlToken(urlToken)
+		if err != nil {
+			NotFound(ctx)
+			return
+		}
+		archive, err = currentSite.GetArchiveById(archiveSku.ArchiveId)
+		if err != nil {
+			NotFound(ctx)
+			return
+		}
+		archive.Sku = archiveSku
+		// 设置sku
+		ctx.ViewData("sku", archiveSku)
+	}
+	// 检查是否接收 variant
+	if ctx.URLParamExists("variant") {
+		variant := ctx.URLParamInt64Default("variant", 0)
+		archiveSku, err := currentSite.GetArchiveSkuById(archive.Id, variant)
+		if err == nil {
+			archive.Sku = archiveSku
+			// options, _ := currentSite.GetArchiveOptions(archive.Id)
+			// archiveSku.Values = archiveSku.BuildValues(options)
+			// 设置sku
+			ctx.ViewData("sku", archiveSku)
+		}
 	}
 	// 验证 module
 	moduleName := ctx.Params().GetString("module")

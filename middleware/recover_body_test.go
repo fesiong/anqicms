@@ -19,7 +19,7 @@ import (
 // （尤其是 AI）完全无法判读到底发生了什么——实测有 6 个 action 返回的都是它。
 //
 // 真实触发场景：POST 请求体为空时 ctx.ReadJSON(&req) 会 panic
-//（iris 内部对 nil Body 做 io.ReadAll）：
+// （iris 内部对 nil Body 做 io.ReadAll）：
 //
 //	contentops_translate/text_delete（不传任何参数）
 //	interaction/guestbook_status

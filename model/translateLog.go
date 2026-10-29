@@ -32,4 +32,6 @@ type TranslateTextLog struct {
 	ToLanguage  string `json:"to_language" gorm:"column:to_language;type:varchar(10);default:null"`
 	Text        string `json:"text" gorm:"column:text;type:text;default:null"`
 	Translated  string `json:"translated" gorm:"column:translated;type:text;default:null"`
+
+	All bool `json:"all,omitempty" gorm:"-"`
 }

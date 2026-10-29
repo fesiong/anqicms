@@ -24,51 +24,53 @@ import (
 )
 
 const (
-	SystemSettingKey  = "system"
-	ContentSettingKey = "content"
-	IndexSettingKey   = "index"
-	ContactSettingKey = "contact"
-	SafeSettingKey    = "safe"
-	BannerSettingKey  = "banner"
-	SensitiveWordsKey = "sensitive_words"
-	InstallTimeKey    = "install_time"
-	CacheTypeKey      = "cache_type"
-	DiyFieldsKey      = "diy_fields"
+	SystemSettingKey   = "system"
+	ContentSettingKey  = "content"
+	IndexSettingKey    = "index"
+	ContactSettingKey  = "contact"
+	ShippingSettingKey = "shipping"
+	SafeSettingKey     = "safe"
+	BannerSettingKey   = "banner"
+	SensitiveWordsKey  = "sensitive_words"
+	InstallTimeKey     = "install_time"
+	CacheTypeKey       = "cache_type"
+	DiyFieldsKey       = "diy_fields"
 
-	PushSettingKey          = "push"
-	SitemapSettingKey       = "sitemap"
-	RewriteSettingKey       = "rewrite"
-	AnchorSettingKey        = "anchor"
-	GuestbookSettingKey     = "guestbook"
-	UploadFilesSettingKey   = "upload_file"
-	SendmailSettingKey      = "sendmail"
-	ImportApiSettingKey     = "import_api"
-	StorageSettingKey       = "storage"
-	PaySettingKey           = "pay"
-	WeappSettingKey         = "weapp"
-	WechatSettingKey        = "wechat"
-	RetailerSettingKey      = "retailer"
-	UserSettingKey          = "user"
-	OrderSettingKey         = "order"
-	FulltextSettingKey      = "fulltext"
-	TitleImageSettingKey    = "title_image"
-	WatermarkSettingKey     = "watermark"
-	HtmlCacheSettingKey     = "html_cache"
-	AnqiSettingKey          = "anqi"
-	AiGenerateSettingKey    = "ai_generate"
-	TimeFactorKey           = "time_factor"
-	LimiterSettingKey       = "limiter"
-	MultiLangSettingKey     = "multi_lang"
-	TranslateSettingKey     = "translate"
-	JsonLdSettingKey        = "json_ld"
-	TagFieldsSettingKey     = "tag_fields"
-	AkismetSettingKey       = "akismet"
-	GoogleAuthSettingKey    = "google_auth"
-	CurrencySettingKey      = "currency"
-	CommunicationSettingKey = "communication"
-	LLMsSettingKey          = "llms"
-	AiSettingKey            = "ai_setting"
-	PlaceSettingKey         = "place"
+	PushSettingKey           = "push"
+	SitemapSettingKey        = "sitemap"
+	RewriteSettingKey        = "rewrite"
+	AnchorSettingKey         = "anchor"
+	GuestbookSettingKey      = "guestbook"
+	UploadFilesSettingKey    = "upload_file"
+	SendmailSettingKey       = "sendmail"
+	ImportApiSettingKey      = "import_api"
+	StorageSettingKey        = "storage"
+	PaySettingKey            = "pay"
+	WeappSettingKey          = "weapp"
+	WechatSettingKey         = "wechat"
+	RetailerSettingKey       = "retailer"
+	UserSettingKey           = "user"
+	OrderSettingKey          = "order"
+	FulltextSettingKey       = "fulltext"
+	TitleImageSettingKey     = "title_image"
+	WatermarkSettingKey      = "watermark"
+	HtmlCacheSettingKey      = "html_cache"
+	AnqiSettingKey           = "anqi"
+	AiGenerateSettingKey     = "ai_generate"
+	TimeFactorKey            = "time_factor"
+	LimiterSettingKey        = "limiter"
+	MultiLangSettingKey      = "multi_lang"
+	TranslateSettingKey      = "translate"
+	JsonLdSettingKey         = "json_ld"
+	TagFieldsSettingKey      = "tag_fields"
+	AkismetSettingKey        = "akismet"
+	GoogleAuthSettingKey     = "google_auth"
+	CurrencySettingKey       = "currency"
+	CommunicationSettingKey  = "communication"
+	GoogleMerchantSettingKey = "google_merchant"
+	LLMsSettingKey           = "llms"
+	AiSettingKey             = "ai_setting"
+	PlaceSettingKey          = "place"
 
 	CollectorSettingKey = "collector"
 	KeywordSettingKey   = "keyword"
@@ -98,6 +100,7 @@ func (w *Website) InitSetting() {
 	w.LoadContentSetting(settingMap[ContentSettingKey])
 	w.LoadIndexSetting(settingMap[IndexSettingKey])
 	w.LoadContactSetting(settingMap[ContactSettingKey])
+	w.LoadShippingSetting(settingMap[ShippingSettingKey])
 	w.LoadSafeSetting(settingMap[SafeSettingKey])
 	w.LoadBannerSetting(settingMap[BannerSettingKey])
 	w.LoadSensitiveWords(settingMap[SensitiveWordsKey])
@@ -129,6 +132,7 @@ func (w *Website) InitSetting() {
 	w.LoadMultiLangSetting(settingMap[MultiLangSettingKey])
 	w.LoadTranslateSetting(settingMap[TranslateSettingKey])
 	w.LoadJsonLdSetting(settingMap[JsonLdSettingKey])
+	w.LoadCurrencySetting(settingMap[CurrencySettingKey])
 	w.LoadLLMsSetting(settingMap[LLMsSettingKey])
 	w.LoadPlaceSetting(settingMap[PlaceSettingKey])
 	// 检查OpenAIAPI是否可用
@@ -308,6 +312,55 @@ func (w *Website) LoadContactSetting(value string) {
 	}
 }
 
+func (w *Website) LoadShippingSetting(value string) {
+	w.Shipping = &config.ShippingConfig{}
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), w.Shipping)
+	}
+	if w.Shipping.Units == nil {
+		// 默认支持的单位
+		w.Shipping.Units = []config.ShippingUnitItem{
+			{
+				Name:       "cm",
+				VolumeName: "cm³",
+				Ratio:      0.01,
+			},
+			{
+				Name:       "m",
+				VolumeName: "m³",
+				Ratio:      1,
+			},
+			{
+				Name:       "inch",
+				VolumeName: "in³",
+				Ratio:      0.0254,
+			},
+		}
+	}
+	if w.Shipping.WeightUnits == nil {
+		// 默认支持的单位
+		w.Shipping.WeightUnits = []config.ShippingUnitItem{
+			{
+				Name:  "kg",
+				Ratio: 1,
+			},
+			{
+				Name:  "g",
+				Ratio: 1000,
+			},
+			{
+				Name:  "lb",
+				Ratio: 0.453592,
+			},
+			{
+				Name:  "pc", // 计件
+				Ratio: 1,
+			},
+		}
+	}
+
+}
+
 func (w *Website) LoadSafeSetting(value string) {
 	w.Safe = &config.SafeConfig{}
 	if value != "" {
@@ -379,6 +432,10 @@ func (w *Website) LoadSendmailSetting(value string) {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), w.PluginSendmail)
 	}
+	// todo
+	// if len(w.PluginSendmail.SendType) == 0 {
+	// 	w.PluginSendmail.SendType = []int{SendTypeGuestbook}
+	// }
 }
 
 func (w *Website) LoadImportApiSetting(value string) {
@@ -790,6 +847,24 @@ func (w *Website) LoadLLMsSetting(value string) {
 	return
 }
 
+func (w *Website) LoadCurrencySetting(value string) {
+	w.Currency = &config.CurrencyConfig{
+		Currency: "USD",
+		Symbol:   "$",
+	}
+	if value == "" {
+		return
+	}
+	err := json.Unmarshal([]byte(value), w.Currency)
+	if err != nil {
+		// 默认没有
+		w.Currency = &config.CurrencyConfig{
+			Currency: "USD",
+			Symbol:   "$",
+		}
+	}
+}
+
 func (w *Website) LoadAiSetting(value string) *eino.Configs {
 	var settings eino.Configs
 	if w.Id != 1 {
@@ -865,6 +940,27 @@ func (w *Website) GetDiyFieldSetting() []config.CustomField {
 	}
 
 	return fields
+}
+
+func (w *Website) GetCommunicationSetting() *config.CommunicationConfig {
+	var setting config.CommunicationConfig
+	err := w.Cache.Get(CommunicationSettingKey, &setting)
+	if err != nil {
+		value := w.GetSettingValue(CommunicationSettingKey)
+		if value != "" {
+			err = json.Unmarshal([]byte(value), &setting)
+			if err == nil {
+				_ = w.Cache.Set(CommunicationSettingKey, setting, 86400)
+			}
+		}
+	}
+
+	return &setting
+}
+
+func (w *Website) SaveCommunicationSetting(setting *config.CommunicationConfig) {
+	_ = w.SaveSettingValue(CommunicationSettingKey, setting)
+	w.Cache.Delete(CommunicationSettingKey)
 }
 
 // Tr as Translate
@@ -1129,6 +1225,21 @@ func (w *Website) GetGoogleAuthSetting() *config.PluginGoogleAuthConfig {
 		frontUrl = w.System.FrontUrl
 	}
 	cfg.RedirectUrl = frontUrl + "/login/google"
+
+	return &cfg
+}
+
+func (w *Website) GetGoogleMerchantSetting() *config.PluginGoogleMerchantConfig {
+	var cfg config.PluginGoogleMerchantConfig
+	value := w.GetSettingValue(GoogleMerchantSettingKey)
+	if value != "" {
+		_ = json.Unmarshal([]byte(value), &cfg)
+	}
+	baseUrl := w.System.BaseUrl
+	if w.System.AdminUrl != "" {
+		baseUrl = w.System.AdminUrl
+	}
+	cfg.RedirectUrl = baseUrl + "/system/promotion/googlemerchant/callback"
 
 	return &cfg
 }

@@ -37,6 +37,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 		render, _ = ctx.URLParamBool("render")
 	}
 	password := ctx.URLParam("password")
+	variant := ctx.URLParamInt64Default("variant", 0)
 
 	req := &request.ApiArchiveRequest{
 		Id:        id,
@@ -46,6 +47,7 @@ func ApiArchiveDetail(ctx iris.Context) {
 		UserId:    userId,
 		UserGroup: userGroup,
 		UserInfo:  userInfo,
+		Variant:   variant,
 	}
 
 	archive, err := currentSite.ApiGetArchive(req)
@@ -74,6 +76,7 @@ func ApiArchiveFilters(ctx iris.Context) {
 	if allText == "false" {
 		showAll = false
 	}
+	showAvailability := ctx.URLParamBoolDefault("showAvailability", false)
 	showPrice := ctx.URLParamBoolDefault("showPrice", false)
 	showCategory := ctx.URLParamBoolDefault("showCategory", false)
 	parentId := ctx.URLParamInt64Default("parentId", 0)
@@ -90,14 +93,15 @@ func ApiArchiveFilters(ctx iris.Context) {
 	}
 
 	req := request.ApiFilterRequest{
-		ModuleId:     int64(moduleId),
-		ShowAll:      showAll,
-		AllText:      allText,
-		ShowPrice:    showPrice,
-		ShowCategory: showCategory,
-		ParentId:     parentId,
-		CategoryId:   categoryId,
-		UrlParams:    urlParams,
+		ModuleId:         int64(moduleId),
+		ShowAll:          showAll,
+		AllText:          allText,
+		ShowPrice:        showPrice,
+		ShowAvailability: showAvailability,
+		ShowCategory:     showCategory,
+		ParentId:         parentId,
+		CategoryId:       categoryId,
+		UrlParams:        urlParams,
 	}
 
 	filterGroups, err := currentSite.ApiGetFilters(&req)
@@ -130,6 +134,9 @@ func ApiArchiveList(ctx iris.Context) {
 	showExtra := ctx.URLParamBoolDefault("showExtra", false)
 	draft := ctx.URLParamBoolDefault("draft", false)
 	showCategory := ctx.URLParamBoolDefault("showCategory", false)
+	showOptions := ctx.URLParamBoolDefault("showOptions", false)
+	showSkus := ctx.URLParamBoolDefault("showSkus", false)
+	showWholesaleRules := ctx.URLParamBoolDefault("showWholesaleRules", false)
 
 	tmpUserId := ctx.URLParam("userId")
 	if tmpUserId == "self" {
@@ -237,10 +244,12 @@ func ApiArchiveList(ctx iris.Context) {
 	tagId := ctx.URLParamInt64Default("tagId", 0)
 	like := ctx.URLParam("like")
 	keywords := ctx.URLParam("keywords")
+	productType := ctx.URLParamIntDefault("productType", 0)
 
 	req := request.ApiArchiveListRequest{
 		Id:                 archiveId,
 		Render:             render,
+		ProductType:        productType,
 		ParentId:           int64(parentId),
 		PlaceId:            int64(placeId),
 		CategoryIds:        categoryIds,
@@ -252,6 +261,9 @@ func ApiArchiveList(ctx iris.Context) {
 		ShowContent:        showContent,
 		ShowExtra:          showExtra,
 		ShowCategory:       showCategory,
+		ShowOptions:        showOptions,
+		ShowSkus:           showSkus,
+		ShowWholesaleRules: showWholesaleRules,
 		Draft:              draft,
 		Child:              child,
 		Order:              order,
@@ -936,6 +948,7 @@ func ApiTagList(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	limit := 10
 	offset := 0
+	limitHasOffset := false
 	currentPage := ctx.URLParamIntDefault("page", 1)
 	itemId := ctx.URLParamInt64Default("itemId", 0)
 	listType := ctx.URLParamDefault("type", "list")
@@ -949,6 +962,7 @@ func ApiTagList(ctx iris.Context) {
 		if len(limitArgs) == 2 {
 			offset, _ = strconv.Atoi(limitArgs[0])
 			limit, _ = strconv.Atoi(limitArgs[1])
+			limitHasOffset = true
 		} else if len(limitArgs) == 1 {
 			limit, _ = strconv.Atoi(limitArgs[0])
 		}
@@ -960,11 +974,25 @@ func ApiTagList(ctx iris.Context) {
 		}
 	}
 
-	if listType == "page" {
-		if currentPage > 1 {
-			offset = (currentPage - 1) * limit
-		}
+	// 偏移只有一个出口：显式 limit="offset,size" 优先，否则按 page 推算。
+	// 原先这段被 `if listType == "page"` 包着，而 GetTagList 内部又按页码重算一次，
+	// 两处各自为政，显式 offset 会被静默覆盖。
+	if currentPage > 1 && !limitHasOffset {
+		offset = (currentPage - 1) * limit
 	}
+
+	// 前端接口限制最大页码，与列表页（ArchiveIndex）同一口径；后台标签管理不设限制。
+	// 缺这道闸门时，扒站方按 ?page=N 能一路翻下去，每页都要扫一遍 tags 全表。
+	if currentPage > currentSite.Content.MaxPage {
+		ctx.JSON(iris.Map{
+			"code":  config.StatusOK,
+			"msg":   "",
+			"total": 0,
+			"data":  make([]*model.Tag, 0),
+		})
+		return
+	}
+
 	var categoryIds []uint
 	var categoryDetail *model.Category
 	tmpCatId := ctx.URLParam("categoryId")
@@ -980,7 +1008,8 @@ func ApiTagList(ctx iris.Context) {
 			}
 		}
 	}
-	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, currentPage, limit, offset, order)
+	// 只有 page 模式需要精确总数；list 模式跳过 count，避免全表扫描。
+	tagList, total, _ := currentSite.GetTagList(itemId, q, categoryIds, letter, offset, limit, listType == "page", order)
 	for i := range tagList {
 		tagList[i].Link = currentSite.GetUrl("tag", tagList[i], 0)
 		tagList[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(tagList[i].Id)))
@@ -1454,6 +1483,69 @@ func ApiArchivePublish(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  msg,
 		"data": archive,
+	})
+}
+
+func ApiReviewList(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	archiveId := ctx.URLParamInt64Default("id", 0)
+	archiveId2 := ctx.URLParamInt64Default("archive_id", 0)
+	if archiveId2 > 0 {
+		archiveId = archiveId2
+	}
+	userId := uint(ctx.URLParamIntDefault("user_id", 0))
+	order := ctx.URLParamDefault("order", "id desc")
+	hasImage := ctx.URLParamBoolDefault("has_image", false)
+	limit := 10
+	offset := 0
+	currentPage := ctx.URLParamIntDefault("page", 1)
+	//listType :=  ctx.URLParamDefault("type", "list")
+
+	limitTmp := ctx.URLParam("limit")
+	if limitTmp != "" {
+		limitArgs := strings.Split(limitTmp, ",")
+		if len(limitArgs) == 2 {
+			offset, _ = strconv.Atoi(limitArgs[0])
+			limit, _ = strconv.Atoi(limitArgs[1])
+		} else if len(limitArgs) == 1 {
+			limit, _ = strconv.Atoi(limitArgs[0])
+		}
+		if limit > currentSite.Content.MaxLimit {
+			limit = currentSite.Content.MaxLimit
+		}
+		if limit < 1 {
+			limit = 1
+		}
+	}
+
+	archive, err := currentSite.GetArchiveById(archiveId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	reviewList, total := currentSite.GetOrderReviews(func(tx *gorm.DB) *gorm.DB {
+		if userId > 0 {
+			tx = tx.Where("user_id = ?", userId)
+		}
+		if archiveId > 0 {
+			tx = tx.Where("archive_id = ?", archiveId)
+		}
+		if hasImage {
+			tx = tx.Where("images is not null AND images != '{}'")
+		}
+		return tx.Where("status = ?", 1)
+	}, order, currentPage, limit, offset)
+
+	ctx.JSON(iris.Map{
+		"code":          config.StatusOK,
+		"msg":           "",
+		"total":         total,
+		"average_score": archive.AverageScore,
+		"data":          reviewList,
 	})
 }
 

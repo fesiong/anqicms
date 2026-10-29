@@ -5,8 +5,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,6 +18,7 @@ import (
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
+	"net/textproto"
 )
 
 const MailLogFile = "mail.log"
@@ -99,6 +103,20 @@ IP: {{guestbook.Ip}}
 {% system with name="SiteName" %} 团队 敬上`,
 	},
 	{
+		Key:         "welcome",
+		Type:        "user",
+		Name:        "欢迎邮件",
+		Readonly:    false,
+		Description: "当用户通过邮件成功注册账号时，会通过邮件发送欢迎邮件给用户。",
+		Subject:     `Welcome to {% system with name="SiteName" %}`,
+		Content: `Hi {{user.UserName}}, 
+
+Welcome to {% system with name="SiteName" %}. We are glad to have you as a member of our community.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
 		Key:         "new_order",
 		Type:        "system",
 		Name:        "订单确认通知",
@@ -168,6 +186,288 @@ IP: {{guestbook.Ip}}
 {% system with name="SiteName" %} 团队 敬上`,
 	},
 	{
+		Key:         "order_custom_form",
+		Type:        "system",
+		Name:        "订单表单收集邮件",
+		Readonly:    false,
+		Description: "当客户支付订单后，如果订单需要填写自定义表单时，会通过邮件发送给客户的邮箱。",
+		Subject:     `[{% system with name="SiteName" %}]: Your order({{order.OrderId}}) has been paid`,
+		Content: `Hi {{user.UserName}}, 
+
+Thank you for completing your payment. Your order has been successfully paid. To proceed with your order, we need you to fill in some additional information via the form below.
+
+Please click the link below to fill in the required custom form:
+{{url|safe}}
+
+Order Details:
+Order ID: {{order.OrderId}}
+Payment Time: {{stampToDate(order.PaidTime, "15:04:05, Jan 02, 2006")}}
+Total Amount: {{priceFormat(order.Amount)}}
+
+Please complete the form as soon as possible so we can continue processing your order. If you have any questions regarding your order, please don't hesitate to contact us.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "delivery_order",
+		Type:        "user",
+		Name:        "发货通知",
+		Readonly:    false,
+		Description: "当订单发货时，会通过邮件发送给设置的邮箱。",
+		Subject:     `[{% system with name="SiteName" %}]: Your order({{order.OrderId}}) has been shipped`,
+		Content: `Hi {{user.UserName}}, 
+
+Great news! Your order has been shipped and is on its way to you.
+
+Shipping Details:
+Order ID: {{order.OrderId}}
+{%- if order.TrackingNumber %}
+Carrier: {{order.ExpressCompany}}
+Tracking Number: {{order.TrackingNumber}}
+{%- endif %}
+Shipped Date: {{stampToDate(order.DeliverTime, "15:04:05, Jan 02, 2006")}}
+
+Estimated Delivery: The package should arrive within the next few days depending on your location.
+
+You can track your shipment using the tracking number provided above. If you have any questions regarding your shipment, please don't hesitate to contact us.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "finish_order",
+		Type:        "user",
+		Name:        "交易成功通知",
+		Readonly:    false,
+		Description: "当客户完成订单时，会通过邮件发送给设置的邮箱。",
+		Subject:     `[{% system with name="SiteName" %}]: Your order({{order.OrderId}}) has been completed`,
+		Content: `Hi {{user.UserName}}, 
+
+Your order has been marked as completed. Thank you for choosing {% system with name="SiteName" %}.
+
+Order Summary:
+Order ID: {{order.OrderId}}
+Completed Date: {{stampToDate(order.FinishedTime, "15:04:05, Jan 02, 2006")}}
+Total Amount: {{priceFormat(order.Amount)}}
+
+We hope you're satisfied with your purchase. If you have any feedback about your experience or the products, we'd love to hear from you.
+
+Don't forget to join our loyalty program to earn points for future purchases.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "review_order",
+		Type:        "user",
+		Name:        "订单评价邀请",
+		Readonly:    false,
+		Description: "当客户完成订单时，会通过邮件发送给设置的邮箱邀请评价。",
+		Delay:       259200,
+		Subject:     `[{% system with name="SiteName" %}]: How was your experience with us?`,
+		Content: `Hi {{user.UserName}}, 
+
+We hope you enjoyed your recent purchase from {% system with name="SiteName" %}. We'd love to hear about your experience!
+
+Taking a moment to share your feedback would be incredibly helpful. Your insights allow us to continue improving our products and services.
+
+Would you mind taking a few moments to rate your experience and share any thoughts you have about:
+- Product quality
+- Shipping speed
+- Customer service
+- Overall satisfaction
+
+Your feedback is valuable to us and helps other customers make informed decisions.
+
+Thank you for choosing {% system with name="SiteName" %}.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "refund_order",
+		Type:        "user",
+		Name:        "退款状态通知",
+		Readonly:    false,
+		Description: "当客户申请退款时，会通过邮件发送给设置的邮箱。",
+		Subject:     `[{% system with name="SiteName" %}]: Refund Update for Order {{order.OrderId}}`,
+		Content: `Hi {{user.UserName}}, 
+
+We're writing to update you on the refund request for your order.
+
+Refund Details:
+Order ID: {{orderRefund.OrderId}}
+Refund Amount: {{priceFormat(orderRefund.Amount)}}
+Refund Reason: {{orderRefund.Remark}}
+Request Date: {{stampToDate(orderRefund.RefundTime, "15:04:05, Jan 02, 2006")}}
+
+Current Status: {{orderRefund.Status}}
+
+Once approved, the refund will be processed back to your original payment method. Processing times may vary depending on your financial institution, typically taking 3-5 business days.
+
+If you have any questions about the refund process, please feel free to contact us.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "invoice",
+		Type:        "system",
+		Name:        "发票推送通知",
+		Readonly:    false,
+		Description: "当客户创建新订单时，会发送发票到客户邮箱。",
+		Delay:       300, // 300秒后发送
+		Subject:     `[{% system with name="SiteName" %}]: Invoice for Order {{order.OrderId}}`,
+		Content: `Hi {{user.UserName}}, 
+
+Please find attached the invoice for your order.
+
+Invoice Details:
+Order ID: {{order.OrderId}}
+Issue Date: {{stampToDate(order.CreatedTime, "15:04:05, Jan 02, 2006")}}
+Total Amount: {{priceFormat(order.Amount)}}
+
+The invoice is attached to this email as a PDF file. If you have any questions about the invoice or need additional information, please don't hesitate to contact us.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "recover_abandoned_checkout",
+		Type:        "user",
+		Name:        "未支付订单召回",
+		Readonly:    false,
+		Description: "在客户下单后未完成支付时，系统会发送电子邮件，以鼓励他们完成购买。",
+		Delay:       36000, // 10小时后发送
+		Subject:     `[{% system with name="SiteName" %}]: Complete your order - Items waiting for you!`,
+		Content: `Hi {{user.UserName}}, 
+
+We noticed you left some items in your cart without completing the purchase. Don't worry, your selected items are still reserved for you!
+
+Order Summary:
+Items: 
+{% for item in cart.Items %}
+- {{item.Title}} x{{item.Quantity}} ({{priceFormat(item.Price)}} each)
+{% endfor %}
+
+Total Amount: {{priceFormat(cart.Amount)}}
+
+Complete your purchase now to secure these items before they go back into inventory. We'd hate for you to miss out on what you've selected.
+
+[Complete Purchase Now]({{url|safe}})
+
+If you experienced any issues during checkout, please let us know and we'll assist you immediately.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "recover_abandoned_cart",
+		Type:        "user",
+		Name:        "购物车召回",
+		Readonly:    false,
+		Description: "当客户在购物车中添加商品后未完成支付时，系统会发送电子邮件，以鼓励他们完成购买。",
+		Delay:       14400, // 4小时后发送
+		Subject:     `[{% system with name="SiteName" %}]: Don't forget your items!`,
+		Content: `Hi {{user.UserName}}, 
+
+It looks like you were interested in some products but didn't complete your purchase. Your shopping cart is waiting for you with the following items:
+
+Items in Cart:
+{% for item in cart.Items %}
+- {{item.Title}} x{{item.Quantity}} ({{priceFormat(item.Price)}} each)
+{% endfor %}
+
+Total: {{priceFormat(cart.Amount)}}
+
+These items might sell out soon, so we recommend completing your purchase quickly to avoid disappointment.
+
+[Return to Cart]({url})
+
+We've also included a special discount code valid for the next 24 hours to thank you for your interest.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "communication_order_submit",
+		Type:        "system",
+		Name:        "沟通订单提交通知",
+		Readonly:    false,
+		Description: "当客户提交沟通订单时，会通过邮件发送给设置的邮箱。",
+		Subject:     `New customization on {% system with name="SiteName" %} submitted`,
+		Content: `Hi {{user.UserName}}, 
+
+Thank you for submitting the customization. We will review the design and get back to you during our working hours as soon as possible. We will keep you informed of any updates via email.
+
+Have any questions? Please leave messages on your customization page but not this email. Thank you!
+
+This is the permanent link of the customization - {{url|safe}}
+
+What can you do on the customization page?
+
+- Leave more messages to communicate with your stylist
+- Check the fabric and color, provide your size\nPlace an order after the price is set
+- Check the finished photos before shipment
+- Write a review
+
+Have questions? Reply to this email or message us on your order page. We're happy to help!
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "communication_order_quote",
+		Type:        "user",
+		Name:        "沟通订单报价通知",
+		Readonly:    false,
+		Description: "当沟通订单给客户发送报价时，会通过邮件发送给客户。",
+		Subject:     `Your Quote from {% system with name="SiteName" %} is Ready`,
+		Content: `Hi {{user.UserName}}, 
+
+Your customization quote is now available!
+
+Quote Summary:
+
+{{priceFormat(order.QuotePrice)}}
+
+Total: {{priceFormat(order.QuotePrice)}}
+
+Valid until: {{stampToDate(order.QuoteExpire, "January 02, 2006")}}
+
+View the complete quote details and accept it here:
+{{url|safe}}
+
+Have questions? Reply to this email or message us on your customization page. We're happy to help!
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "communication_order_reply",
+		Type:        "user",
+		Name:        "沟通订单回复通知",
+		Readonly:    false,
+		Description: "当沟通订单给客户发送回复时，会通过邮件发送给客户。",
+		Subject:     `You Have New Message about Customization from {% system with name="SiteName" %}`,
+		Content: `Hi {{user.UserName}}, 
+
+Your customization received a new message!
+
+Message:
+
+{{message.Content}}
+
+View the complete details here:
+{{url|safe}}
+
+Have questions? Reply to this email or message us on your customization page. We're happy to help!
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
 		Key:         "newsletter_confirm",
 		Type:        "user",
 		Name:        "邮件订阅确认",
@@ -190,6 +490,88 @@ IP: {{guestbook.Ip}}
 欢迎加入！
 
 {% system with name="SiteName" %} 团队 敬上`,
+	},
+	{
+		Key:         "group_change",
+		Type:        "user",
+		Name:        "会员等级变动通知",
+		Readonly:    false,
+		Description: "当用户等级发生变化时，会通过邮件发送给用户。",
+		Subject:     `[{% system with name="SiteName" %}]: Congratulations! Your membership level has been upgraded`,
+		Content: `Hi {{user.UserName}}, 
+
+Congratulations! We're excited to inform you that your membership level has been upgraded from {{oldGroup.Title}} to {{user.Group.Title}}.
+
+As a {{user.Group.Title}} member, you now enjoy additional benefits including:
+- Exclusive discounts
+- Priority customer support
+- Early access to new products
+- Free shipping on orders
+
+Thank you for your continued loyalty. We look forward to serving you better with your new status.
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "repurchase_promotion",
+		Type:        "user",
+		Name:        "首次购物后回购营销",
+		Readonly:    false,
+		Description: "当用户首次购物一定时间后，会通过邮件发送给用户。",
+		Delay:       1209600, // 14天后发送
+		Subject:     `[{% system with name="SiteName" %}]: We Miss You! Special Offer Inside`,
+		Content: `Hi {{user.UserName}}, 
+
+It's been a while since your first purchase with us, and we miss having you as a customer! We hope you're enjoying your products.
+
+As a returning customer, we'd love to offer you an incentive to shop with us again:
+
+Special Offers:
+{% archiveList archives with moduleId=2 limit=5 order="views desc" %}
+{% for item in archives %}
+- {{item.Title}}: {{priceFormat(item.Price)}}
+{% endfor %}
+{% endarchiveList %}
+
+We've also added new products that we think you'll love based on your previous purchase history.
+
+[Shop New Arrivals]({{url|safe}})
+
+Thank you for being part of our community. We hope to serve you again soon!
+
+Sincerely,
+The {% system with name="SiteName" %} Team`,
+	},
+	{
+		Key:         "recover_old_user",
+		Type:        "user",
+		Name:        "流失用户召回",
+		Readonly:    false,
+		Description: "用户长时间未发生互动时，系统会发送邮件给用户。",
+		Delay:       2592000,
+		Subject:     `[{% system with name="SiteName" %}]: We've Saved Something Special For You`,
+		Content: `Hi {{user.UserName}}, 
+
+We noticed it's been quite a while since your last visit, and we wanted to reach out to say we miss you!
+
+To welcome you back, we've prepared an exclusive offer just for you:
+
+Special Offers:
+{% archiveList archives with moduleId=2 limit=5 order="views desc" %}
+{% for item in archives %}
+- {{item.Title}}: {{priceFormat(item.Price)}}
+{% endfor %}
+{% endarchiveList %}
+
+Since you were last here, we've added many exciting new products and features that we think you'll love.
+
+[Explore New Products]({{url|safe}})
+
+Your feedback and presence mean a lot to us. We hope to see you again soon!
+
+With appreciation,
+The {% system with name="SiteName" %} Team`,
 	},
 }
 
@@ -524,7 +906,7 @@ func (w *Website) SendVerifyEmail(user *model.User, state string) error {
 		return errors.New("no template")
 	}
 
-	token := library.Md5(user.Email + user.Password)
+	token := ResetPasswordToken(w.TokenSecret, user.Email, user.Password)
 	verifyCode := library.CodeCache.Generate(user.Email)
 	verifyUrl := w.System.BaseUrl + "/api/verify/email?token=" + token + "&code=" + verifyCode + "&state=" + state + "&email=" + user.Email
 	data := map[string]interface{}{
@@ -591,7 +973,7 @@ func (w *Website) SendUserGroupChangeEmail(user *model.User, oldGroup *model.Use
 		return errors.New("no email")
 	}
 	template, exist := w.GetEmailTemplateInfo("group_change")
-	if !exist || !template.Open {
+	if !exist || !template.Open || w.PluginSendmail.UseBrevo == true {
 		return errors.New("no template")
 	}
 	data := map[string]interface{}{
@@ -630,7 +1012,8 @@ func (w *Website) SendNewOrderEmail(user *model.User, order *model.Order) error 
 		return err
 	}
 
-	if user.Email != "" && template.Open {
+	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
+	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
 		// 发给用户
 		w.SendMail(template.Subject, template.Content, nil, user.Email)
 	}
@@ -660,7 +1043,8 @@ func (w *Website) SendPayOrderEmail(user *model.User, order *model.Order) error 
 		return err
 	}
 
-	if user.Email != "" && template.Open {
+	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
+	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
 		// 发给用户
 		w.SendMail(template.Subject, template.Content, nil, user.Email)
 	}
@@ -697,5 +1081,340 @@ func (w *Website) CancelMailPlan(identifier string, isDel bool) error {
 			w.DB.Model(&model.MailPlan{}).Where("`identifier` = ?", identifier).UpdateColumn("status", -1)
 		}
 	}
+	return nil
+}
+
+func (w *Website) SendInvoiceMail(user *model.User, order *model.Order, invoicePath string) error {
+	if user == nil || user.Email == "" || w.PluginSendmail.UseBrevo == true {
+		return errors.New("no user")
+	}
+	template, exist := w.GetEmailTemplateInfo("invoice")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	pdfBuf, err := os.ReadFile(w.DataPath + invoicePath)
+	if err != nil {
+		return err
+	}
+	attachment := library.Attachment{
+		Filename: filepath.Base(invoicePath),
+		Header: textproto.MIMEHeader{
+			"Content-Disposition": []string{fmt.Sprintf("attachment; filename=\"%s\"", filepath.Base(invoicePath))},
+			"Content-Type":        []string{"application/pdf"},
+		},
+		Content: pdfBuf,
+	}
+
+	// 发给用户
+	w.SendMail(template.Subject, template.Content, &attachment, user.Email)
+
+	return nil
+}
+
+func (w *Website) SendCommunicationSummitedEmail(order *model.CommunicationOrder) error {
+	user, err := w.GetUserInfoById(uint(order.UserId))
+	if err != nil || user.Email != "" {
+		return errors.New("no user")
+	}
+
+	template, exist := w.GetEmailTemplateInfo("communication_order_submit")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	order.QuoteExpire = time.Now().AddDate(0, 0, 7).Unix()
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	jumpUrl := frontUrl + "/order/communication?id=" + strconv.FormatInt(order.Id, 10)
+	data := map[string]interface{}{
+		"website": w,
+		"user":    user,
+		"url":     jumpUrl,
+		"order":   order,
+	}
+
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
+}
+
+func (w *Website) SendCommunicationQuoteEmail(order *model.CommunicationOrder) error {
+	user, err := w.GetUserInfoById(uint(order.UserId))
+	if err != nil || user.Email != "" {
+		return errors.New("no user")
+	}
+
+	template, exist := w.GetEmailTemplateInfo("communication_order_quote")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	order.QuoteExpire = time.Now().AddDate(0, 0, 7).Unix()
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	jumpUrl := frontUrl + "/order/communication?id=" + strconv.FormatInt(order.Id, 10)
+	data := map[string]interface{}{
+		"website": w,
+		"user":    user,
+		"url":     jumpUrl,
+		"order":   order,
+	}
+
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
+}
+
+func (w *Website) SendCommunicationNewMessageEmail(message *model.CommunicationMessage) error {
+	order, err := w.GetCommunicationOrderById(message.CommOrderId)
+	if err != nil {
+		return err
+	}
+	user, err := w.GetUserInfoById(uint(order.UserId))
+	if err != nil || user.Email != "" {
+		return errors.New("no user")
+	}
+
+	template, exist := w.GetEmailTemplateInfo("communication_order_reply")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	jumpUrl := frontUrl + "/order/communication?id=" + strconv.FormatInt(order.Id, 10)
+	data := map[string]interface{}{
+		"website": w,
+		"user":    user,
+		"url":     jumpUrl,
+		"order":   order,
+		"message": message,
+	}
+
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	return w.SendMail(template.Subject, template.Content, nil, user.Email)
+}
+
+func (w *Website) SendOrderCustomFormEmail(user *model.User, order *model.Order) error {
+	if user == nil {
+		user = &model.User{}
+	}
+	template, exist := w.GetEmailTemplateInfo("order_custom_form")
+	if !exist {
+		return errors.New("no template")
+	}
+	// 检查是否有需要填写的表单
+	var orderExtras [][]config.CustomField
+	var idMap = map[int64]bool{}
+	for _, v := range order.Details {
+		if _, ok := idMap[v.GoodsId]; ok {
+			continue
+		}
+		idMap[v.GoodsId] = true
+		if len(v.OrderFields) > 0 {
+			orderExtras = append(orderExtras, v.OrderFields)
+		}
+	}
+
+	if len(orderExtras) == 0 {
+		return errors.New("no custom form")
+	}
+	frontUrl := w.System.BaseUrl
+	if w.System.FrontUrl != "" {
+		frontUrl = w.System.FrontUrl
+	}
+	code := library.Md5(order.OrderId + order.PaymentId + strconv.FormatInt(int64(order.Id), 10))
+	jumpUrl := frontUrl + "/order/custom_form?order_id=" + order.OrderId + "&code=" + code
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+		"url":     jumpUrl,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 开启了 brevo 则不发送给用户，因此要判断 UseBrevo == false 才发送
+	if user.Email != "" && template.Open && w.PluginSendmail.UseBrevo == false {
+		// 发给用户
+		w.SendMail(template.Subject, template.Content, nil, user.Email)
+	}
+	// 发给网站管理员
+	_ = w.sendMail(template.Subject, template.Content, nil, nil, false, false)
+
+	return nil
+}
+
+func (w *Website) SendDeliveryOrderEmail(user *model.User, order *model.Order) error {
+	if user == nil || user.Email == "" || w.PluginSendmail.UseBrevo == true {
+		return errors.New("no user")
+	}
+	template, exist := w.GetEmailTemplateInfo("delivery_order")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 发给用户
+	w.SendMail(template.Subject, template.Content, nil, user.Email)
+
+	return nil
+}
+
+func (w *Website) SendCompletedOrderEmail(user *model.User, order *model.Order) error {
+	if user == nil || user.Email == "" || w.PluginSendmail.UseBrevo == true {
+		return errors.New("no user")
+	}
+	template, exist := w.GetEmailTemplateInfo("finish_order")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 发给用户
+	w.SendMail(template.Subject, template.Content, nil, user.Email)
+
+	return nil
+}
+
+func (w *Website) SendRefundOrderEmail(user *model.User, order *model.Order) error {
+	if user == nil || user.Email == "" || w.PluginSendmail.UseBrevo == true {
+		return errors.New("no user")
+	}
+	template, exist := w.GetEmailTemplateInfo("refund_order")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 发给用户
+	w.SendMail(template.Subject, template.Content, nil, user.Email)
+
+	return nil
+}
+
+func (w *Website) SendReviewOrderPlan(user *model.User, order *model.Order) error {
+	if user == nil || user.Email == "" || w.PluginSendmail.UseBrevo == true {
+		return errors.New("no user")
+	}
+	template, exist := w.GetEmailTemplateInfo("review_order")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 添加到邮件计划
+	plan := model.MailPlan{
+		Identifier: "order_review_" + order.OrderId,
+		Recipients: []string{user.Email},
+		Subject:    template.Subject,
+		Content:    template.Content,
+		SendTime:   time.Now().Add(time.Second * time.Duration(template.Delay)).Unix(),
+	}
+	err = w.AddMailPlan(&plan)
+
+	return nil
+}
+
+func (w *Website) SendRecoverAbandonedOrderPlan(user *model.User, order *model.Order) error {
+	if user == nil || user.Email == "" || w.PluginSendmail.UseBrevo == true {
+		return errors.New("no user")
+	}
+	template, exist := w.GetEmailTemplateInfo("recover_abandoned_checkout")
+	if !exist || !template.Open {
+		return errors.New("no template")
+	}
+
+	data := map[string]interface{}{
+		"website": w,
+		"order":   order,
+		"user":    user,
+	}
+	var err error
+	template, err = w.RenderEmailTemplate(template, data)
+	if err != nil {
+		return err
+	}
+
+	// 添加到邮件计划
+	plan := model.MailPlan{
+		Identifier: "recover_abandoned_checkout_" + order.OrderId,
+		Recipients: []string{user.Email},
+		Subject:    template.Subject,
+		Content:    template.Content,
+		SendTime:   time.Now().Add(time.Second * time.Duration(template.Delay)).Unix(),
+	}
+	err = w.AddMailPlan(&plan)
+
 	return nil
 }

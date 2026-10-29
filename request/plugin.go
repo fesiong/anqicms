@@ -87,9 +87,12 @@ type PluginGuestbookStatus struct {
 	Status int    `json:"status"`
 }
 
+// PluginGuestbookDelete 是留言的删除入参。删单条传 id，删多条传 ids；
+// 两者都给时只按 id 删一条，ids 被忽略。
 type PluginGuestbookDelete struct {
-	Id  uint   `json:"id"`  // 留言 ID（删除单条时传）
-	Ids []uint `json:"ids"` // 留言 ID 列表（批量删除时传）
+	Id     uint   `json:"id"`     // 单条留言 ID，优先于 ids
+	Ids    []uint `json:"ids"`    // 批量删除的留言 ID 列表，逐条删除，不存在的跳过
+	Status int    `json:"status"` // 当前实现未使用（历史遗留字段），传了也不生效
 }
 
 type PluginKeyword struct {

@@ -79,6 +79,36 @@ func envelopeOf(payload any) map[string]any {
 	}
 }
 
+// mergeEndpointMsg 把端点原始响应里的 msg 补进结构化信封。
+//
+// 为什么需要：envelopeOf 只拿到业务载荷、看不到端点响应，msg 只能写死成空串。
+// 于是「保存成功」「配置已更新」这类提示只要工具带了 data 就会消失——调用方看到
+// code=0/ok=true，却不知道端点到底说了什么。
+// 实测（2026-10-28）：给 user_create 补上 data.id 之后，回执 msg 从「保存成功」
+// 变成了空串，正是踩在这条路径上（此前 data 为 nil，走的是文本直出分支）。
+//
+// 只填空位，不覆盖：Compose 自己写的 msg（如 seo 的「⚠ 警告：……」）信息量更高，
+// 端点那句通用提示不该顶掉它。
+func mergeEndpointMsg(obj any, rawText string) any {
+	m, ok := obj.(map[string]any)
+	if !ok {
+		return obj
+	}
+	if cur, exists := m["msg"]; exists {
+		if s, isStr := cur.(string); !isStr || s != "" {
+			return obj
+		}
+	}
+	var envelope struct {
+		Msg string `json:"msg"`
+	}
+	if err := json.Unmarshal([]byte(rawText), &envelope); err != nil || envelope.Msg == "" {
+		return obj
+	}
+	m["msg"] = envelope.Msg
+	return obj
+}
+
 // RegisterAll 把所有命中的意图与 meta 意图注册进给定 mcp.Server。
 func (k *Kernel) RegisterAll(server *mcp.Server) {
 	k.mu.Lock()
@@ -170,16 +200,21 @@ func (k *Kernel) makeHandler(name string, spec *IntentSpec, server *mcp.Server) 
 			// 同一份结果、两个通道形状不一致，AI 走 text 回退通道时
 			// 就拿不到分页信息（且会以为 total 是顶层字段）。
 			// 故有 Data 时以 Data 为准，序列化后同时供两个通道使用。
-			obj := structuredObject(res.Data)
+			//
+			// 出口统一脱敏（2026-10-27）：凭据字段一律换成 MaskedSecret。
+			// 放在这里而不是各 handler，是因为工具面持续新增，按端点补漏
+			// 必然漏掉下一个；出口只有一处，新工具自动继承。
+			obj := mergeEndpointMsg(structuredObject(MaskSecrets(res.Data)), res.Text)
 			out.StructuredContent = obj
 			if b, err := json.Marshal(obj); err == nil {
 				out.Content = []mcp.Content{&mcp.TextContent{Text: string(b)}}
 			} else {
 				// 序列化失败不该让整次调用失败，退回原始文本。
-				out.Content = []mcp.Content{&mcp.TextContent{Text: res.Text}}
+				out.Content = []mcp.Content{&mcp.TextContent{Text: MaskSecretsInJSON(res.Text)}}
 			}
 		} else {
-			out.Content = []mcp.Content{&mcp.TextContent{Text: res.Text}}
+			// 没有结构化载荷时文本直出，同样要过一遍掩码。
+			out.Content = []mcp.Content{&mcp.TextContent{Text: MaskSecretsInJSON(res.Text)}}
 		}
 		// 端点业务失败时 Compose 往往**不**返回 Go error（api_invoke 把 5xx /
 		// ok=false 都表达成"成功返回的 JSON"），于是 cerr 为 nil、IsError 保持 false。
@@ -235,7 +270,7 @@ func (k *Kernel) buildTool(spec *IntentSpec, full bool) *mcp.Tool {
 // registerMeta 注册 meta 意图（不在 catalog 中）。
 //
 // 2026-10-07：mcp_set_scope 改为**默认不注册**，需显式开启
-//（见 Config.EnableSetScope）。原因是它的 scope 是**进程级全局**的——
+// （见 Config.EnableSetScope）。原因是它的 scope 是**进程级全局**的——
 // Reregister 摘除/重注册的是共享 mcp.Server 的全局工具表，一个客户端设窄会
 // 让**所有并发客户端**的 tools/list 一起变窄，且新会话恢复不了（须重启）。
 // ScopeStaleAfter 的空闲自动恢复只是缓解，不是修复。
@@ -401,7 +436,7 @@ func (k *Kernel) Dispatch(ctx context.Context, name, argsJSON string) (*mcp.Call
 		Content: []mcp.Content{&mcp.TextContent{Text: res.Text}},
 	}
 	if res.Data != nil {
-		out.StructuredContent = structuredObject(res.Data)
+		out.StructuredContent = mergeEndpointMsg(structuredObject(res.Data), res.Text)
 	}
 	return out, nil
 }

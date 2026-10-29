@@ -1,0 +1,77 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+  <article class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-lg-8">
+        {% include 'partial/breadcrumb.html' %}
+
+        <header class="mb-5 text-center">
+          <h1 class="fw-bold mb-4">{% archiveDetail with name='Title' %}</h1>
+          <div class="d-flex align-items-center justify-content-center gap-3">
+            <span class="small text-muted">By: {% system with name="SiteName" %}</span>
+            <span class="small text-muted">At: {% archiveDetail with name="CreatedTime" format="January 02, 2006" %}</span>
+          </div>
+        </header>
+
+        <div class="article-content text-muted lead-content">
+          {%- archiveDetail with name="Content" %}
+        </div>
+
+        <footer class="mt-5 pt-5 border-top">
+          <div class="d-flex justify-content-between align-items-center mb-5">
+            <div class="d-flex">
+              <span class="small text-muted me-3">Share:</span>
+              <a href="#" class="text-dark me-3"><i class="bi bi-facebook"></i></a>
+              <a href="#" class="text-dark me-3"><i class="bi bi-twitter-x"></i></a>
+            </div>
+            <a href="{% categoryDetail with name='Link' %}" class="text-dark text-decoration-underline small">Back to list</a>
+          </div>
+
+          <!-- Previous/Next Navigation -->
+          <div class="blog-navigation row g-4 py-4 border-top border-bottom">
+            {%- prevArchive prev %}
+            <div class="col-sm-6 text-start">
+              <a href="{{prev.Link|default:'javascript:;'}}" class="text-decoration-none group">
+                <span class="d-block small text-muted text-uppercase mb-2" style="letter-spacing: 0.1em;">&larr; Previous Post</span>
+                <h6 class="text-dark fw-bold mb-0 hover-underline">{{prev.Title|default:"Empty"}}</h6>
+              </a>
+            </div>
+            {%- endprevArchive %}
+            {%- nextArchive next %}
+            <div class="col-sm-6 text-end border-start-sm">
+              <a href="{{next.Link|default:'javascript:;'}}" class="text-decoration-none group">
+                <span class="d-block small text-muted text-uppercase mb-2" style="letter-spacing: 0.1em;">Next Post &rarr;</span>
+                <h6 class="text-dark fw-bold mb-0 hover-underline">{{next.Title|default:"Empty"}}</h6>
+              </a>
+            </div>
+            {%- endnextArchive %}
+          </div>
+        </footer>
+
+        <!-- Related Posts -->
+        <section class="mt-5 pt-5 border-top">
+          <h4 class="fw-bold mb-4">More Articles</h4>
+          <div class="row g-4">
+            {%- archiveList archives with type="related" limit=6 %}
+            {%- for item in archives %}
+            <div class="col-md-6">
+              <div class="d-flex align-items-center">
+                {%- if item.Thumb %}<a href="{{item.Link}}" class="me-3" style="width: 80px; height: 80px;"><img src="{{item.Thumb}}" class="rounded" style="width: 80px; height: 80px; object-fit: cover;" alt="{{item.Title}}" /></a>{% endif %}
+                <div>
+                  <h6 class="mb-1"><a href="{{item.Link}}" class="text-decoration-none text-dark small fw-bold">{{item.Title}}</a></h6>
+                  <p class="small text-muted mb-0">{{stampToDate(item.CreatedTime, "January 02, 2006")}}</p>
+                </div>
+              </div>
+            </div>
+            {%- endfor %}
+            {%- endarchiveList %}
+          </div>
+        </section>
+      </div>
+    </div>
+  </article>
+
+</main>
+{% endblock %}

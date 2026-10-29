@@ -1256,6 +1256,9 @@ func (w *Website) GetTodayArticleCount(from int) int64 {
 			return w.cachedTodayArticleCount.AiGenerateCount
 		}
 		return w.cachedTodayArticleCount.CollectCount
+	} else if w.cachedTodayArticleCount.Day > 0 {
+		// 不同天
+		return 0
 	}
 
 	// 不同天或首次调用：重置缓存并从数据库重新统计当天数量

@@ -15,14 +15,14 @@ type Archive struct {
 	Description  string                 `json:"description"`   // 文档描述
 	Content      string                 `json:"content"`       // 文档内容
 	Template     string                 `json:"template"`      // 指定文档使用的模板
-	Images       []string               `json:"images"`        // 文档图片集
+	Images       []string               `json:"images"`        // 文档图片集；传空数组会清空图片
 	Extra        map[string]interface{} `json:"extra"`         // 文档扩展字段（模型配置的字段）
 	CreatedTime  int64                  `json:"created_time"`  // 文档创建时间
 	UrlToken     string                 `json:"url_token"`     // 文档 URL 别名
-	Tags         []string               `json:"tags"`          // 文档标签
+	Tags         []string               `json:"tags"`          // 文档标签；传空数组会清空标签
 	CanonicalUrl string                 `json:"canonical_url"` // 文档规范的链接（只有要将文档指向到另外的页面，才需要在这里填写）
 	FixedLink    string                 `json:"fixed_link"`    // 文档固定链接（只有你想把文档的链接持久固定，不随伪静态规则改变，才需要填写）
-	Flag         string                 `json:"flag"`          // 文档标记，默认无：h=头条、c=推荐、f=幻灯、a=特荐、s=滚动、h=加粗、p=图片、j=跳转
+	Flag         string                 `json:"flag"`          // 文档标记，默认无：h=头条、c=推荐、f=幻灯、a=特荐、s=滚动、b=加粗、p=图片、j=跳转
 	Flags        []string               `json:"flags"`         // flags 和 flag 二选一
 	UserId       uint                   `json:"user_id"`       // 文档作者 ID
 	Price        int64                  `json:"price"`         // 文档价格（单位：分）
@@ -33,15 +33,41 @@ type Archive struct {
 	Draft        bool                   `json:"draft"`         // 是否是草稿
 	RelationIds  []int64                `json:"relation_ids"`  // 相关文档的ID
 	Views        uint                   `json:"views"`         // 浏览量
+	// 产品的字段
+	OriginPrice    int64                `json:"origin_price"`           // 产品原价（划线价），单位：分
+	CostPrice      int64                `json:"cost_price"`             // 成本价，单位：分
+	VideoUrl       string               `json:"video_url"`              // 视频主图地址
+	NeedLogistics  bool                 `json:"need_logistics"`         // 是否需要物流配送
+	IsFreeShipping bool                 `json:"is_free_shipping"`       // 是否包邮（免运费）
+	SoldCount      int64                `json:"sold_count"`             // 已售数量，由订单流程累加，保存时忽略此字段
+	ReviewCount    int64                `json:"review_count"`           // 评价数量，系统统计，保存时忽略此字段
+	OptionType     int                  `json:"option_type"`            // SKU 模式：0=无 SKU、1=组合 SKU、2=加价 SKU
+	Weight         float64              `json:"weight"`                 // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit     string               `json:"weight_unit"`            // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length         float64              `json:"length"`                 // 长（用户配置的长度单位）
+	Width          float64              `json:"width"`                  // 宽（用户配置的长度单位）
+	Height         float64              `json:"height"`                 // 高（用户配置的长度单位）
+	Volume         float64              `json:"volume"`                 // 固定是 m³，自动换算
+	LengthUnit     string               `json:"length_unit"`            // 长度单位 m/cm/inch
+	Skus           []*ArchiveSku        `json:"skus"`                   // SKU 规格列表；只有 update_all=true 或 options 非空时才按整体替换保存
+	Options        []*ArchiveOption     `json:"options"`                // SKU 选项（规格维度）定义；不传表示不改动已有规格
+	ProductType    int                  `json:"product_type"`           // 产品类型：1=普通商品、2=批发、3=定制、4=虚拟、5=服务、6=订阅
+	AllowOversold  bool                 `json:"allow_oversold"`         // 是否允许超售（库存为 0 仍可下单）
+	WholesaleRules []*WholesaleRule     `json:"wholesale_rules"`        // 批发价规则；只有 update_all=true 或该数组非空时才保存
+	OrderFields    []config.CustomField `json:"order_fields,omitempty"` // 下单需填写的自定义字段；只有 product_type=3（定制）时写入，其它类型会被清空
+	MinQuantity    int                  `json:"min_quantity"`           // 最小购买数量
+	MaxQuantity    int                  `json:"max_quantity"`           // 最大购买数量
+	StepQuantity   int                  `json:"step_quantity"`          // 购买数量步长
 
 	RemoveTag         bool `json:"-"` // 是否删除标签
 	RemoveImage       bool `json:"-"` // 是否删除图片
 	RemoveFlag        bool `json:"-"` // 是否删除flag
 	RemoveRelationIds bool `json:"-"` // 是否删除关联文档
 
-	ForceSave bool `json:"force_save"` // 在标题冲突时，是否强制保存
-	QuickSave bool `json:"quick_save"` // 是否是快速保存，快速保存模式下仅处理标题、关键词、描述、分类、图片、标签、标记、内容
-	UpdateAll bool `json:"update_all" ast:"-"`
+	ForceSave  bool   `json:"force_save"`         // 在标题冲突时，是否强制保存
+	ToLanguage string `json:"to_language"`        // 多语言站点的译文语言代码（如 en）；当前保存流程不读取该字段
+	QuickSave  bool   `json:"quick_save"`         // 是否是快速保存，快速保存模式下仅处理标题、关键词、描述、分类、图片、标签、标记、内容
+	UpdateAll  bool   `json:"update_all" ast:"-"` // 是否整体覆盖：为 true 时才会把空的 skus/options/wholesale_rules/relation_ids 一起保存（即清空）
 	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
 	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
 	Partial bool `json:"partial" ast:"-"`
@@ -49,8 +75,68 @@ type Archive struct {
 	KeywordId   uint   `json:"keyword_id"`   // 关键词 ID，采集文档时使用
 	OriginUrl   string `json:"origin_url"`   // 文档来源 URL，默认采集文档时使用
 	OriginTitle string `json:"origin_title"` // 文档来源标题，默认采集文档时使用
-	OriginId    int    `json:"origin_id"`    // 文档来源 ID，默认采集文档时使用
-	ContentText string `json:"-"`
+	// 补充字段
+	Brand         string  `json:"brand"`          // 品牌
+	CommentCount  uint    `json:"comment_count"`  // 评论数量，系统统计，保存时忽略此字段
+	FavoriteCount uint    `json:"favorite_count"` // 收藏数量，系统统计，保存时忽略此字段
+	AverageScore  float32 `json:"average_score"`  // 平均评分，系统统计，保存时忽略此字段
+	HasPseudo     int     `json:"has_pseudo"`     // 内容是否经 AI 伪原创改写：0=否、1=是
+	OriginId      int     `json:"origin_id"`      // 来源类型：0=默认、1=采集、2=AI 生成
+	ContentText   string  `json:"-"`
+}
+
+type ArchiveSku struct {
+	Id          int64                `json:"id"`
+	ArchiveId   int64                `json:"archive_id"`
+	Title       string               `json:"title"`     // sku 组合名字
+	UrlToken    string               `json:"url_token"` // sku的token
+	Sku         string               `json:"sku"`       // sku 货号
+	Barcode     string               `json:"barcode"`   //  条形码
+	HsCode      string               `json:"hs_code"`   //  海关编码
+	Images      []string             `json:"images"`
+	Stock       int64                `json:"stock"`
+	Price       int64                `json:"price"`
+	OriginPrice int64                `json:"origin_price"` // 原始价格
+	CostPrice   int64                `json:"cost_price"`   // 成本价
+	Weight      float64              `json:"weight"`       // 如果填写了长宽高，并且设置了体积重系数，则自动计算重量
+	WeightUnit  string               `json:"weight_unit"`  // 如果填写了长宽高，并且设置了体积重系数，则自动使用重量单位kg
+	Length      float64              `json:"length"`
+	Width       float64              `json:"width"`
+	Height      float64              `json:"height"`
+	Volume      float64              `json:"volume"` // 固定是 m³，自动换算
+	LengthUnit  string               `json:"length_unit"`
+	Values      []ArchiveOptionValue `json:"values"`
+	Status      int                  `json:"status"` // 状态,0:下架,1:上架
+}
+
+type ArchiveOptionValue struct {
+	Id          int64    `json:"id"`
+	ArchiveId   int64    `json:"archive_id"`
+	OptionId    int64    `json:"option_id"`
+	Title       string   `json:"title"`
+	Color       string   `json:"color"`
+	Images      []string `json:"images"`
+	Price       int64    `json:"price"` // 加价，sku加价模式使用
+	Stock       int64    `json:"stock"` // sku加价模式使用
+	IsDefault   bool     `json:"is_default"`
+	OptionTitle string   `json:"option_title"`
+}
+
+type ArchiveOption struct {
+	Id          int64                 `json:"id"`
+	ArchiveId   int64                 `json:"archive_id"`
+	Title       string                `json:"title"`
+	IsMain      uint                  `json:"is_main"`      // 是否主规格
+	IsAttribute bool                  `json:"is_attribute"` // 是否是属性，属性不参与sku计算
+	Values      []*ArchiveOptionValue `json:"values"`
+}
+
+type WholesaleRule struct {
+	Id           int64 `json:"id"`
+	ArchiveId    int64 `json:"archive_id"`
+	MinQuantity  int   `json:"min_quantity"`
+	MaxQuantity  int   `json:"max_quantity"`
+	DiscountRate int   `json:"discount_rate"`
 }
 
 type ArchiveImageDeleteRequest struct {

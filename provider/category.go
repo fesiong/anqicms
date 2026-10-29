@@ -3,6 +3,7 @@ package provider
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/url"
 	"regexp"
 	"strconv"
@@ -80,12 +81,16 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if req.Id > 0 {
 		category, err = w.GetCategoryById(req.Id)
 		if err != nil {
-			// 表示不存在，则新建一个
-			category = &model.Category{
-				Status: 1,
-			}
-			category.Id = req.Id
-			newPost = true
+			// 传了 id 就是**更新**语义：目标不存在必须报错。
+			//
+			// 这里曾做成"不存在则新建一个并沿用 req.Id"，于是调用方（AI 或后台）
+			// 传错 id 时会凭空造出一条指定主键的幽灵分类，回执还是 ok + 对象体——
+			// 调用方以为改成功了某条已有数据（2026-10-27 实测：
+			// content_manage category_update id=999999 直接建出了 id=999999 的空分类）。
+			// 空分类会进前台导航与 sitemap，且没有标题，很难发现是从哪来的。
+			//
+			// 真需要"按指定 id 导入"的场景应走导入通道，不该复用更新入口。
+			return nil, fmt.Errorf("分类不存在: id=%d", req.Id)
 		}
 	} else {
 		category = &model.Category{

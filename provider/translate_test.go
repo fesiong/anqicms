@@ -16,10 +16,11 @@ import (
 //   - 没配 → t.Skip，如实说明"未验证"，而不是伪装成通过或失败。
 //
 // 跑法：
-//   BAIDU_TRANSLATE_APP_ID=xxx BAIDU_TRANSLATE_APP_SECRET=yyy \
-//     go test ./provider/ -run TestNewBaiduTranslate
-//   YOUDAO_TRANSLATE_APP_KEY=xxx YOUDAO_TRANSLATE_APP_SECRET=yyy \
-//     go test ./provider/ -run TestNewYoudaoTranslate
+//
+//	BAIDU_TRANSLATE_APP_ID=xxx BAIDU_TRANSLATE_APP_SECRET=yyy \
+//	  go test ./provider/ -run TestNewBaiduTranslate
+//	YOUDAO_TRANSLATE_APP_KEY=xxx YOUDAO_TRANSLATE_APP_SECRET=yyy \
+//	  go test ./provider/ -run TestNewYoudaoTranslate
 const translateSample = "安企CMS自推出以来，已经逐步扩展到多站点功能，用户群体也在不断扩大。" +
 	"在这个过程中，用户们对于多语言功能的呼声越来越高。" +
 	"尤其是在国际化环境中，内容的多语言切换和自动翻译的需求变得尤为迫切。"

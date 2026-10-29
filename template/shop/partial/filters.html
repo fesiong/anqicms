@@ -1,0 +1,45 @@
+        <div class="mb-4 filter-group">
+          <h6 class="filter-title">Category</h6>
+          {%- categoryDetail categoryId with name="Id" %}
+          {%- categoryList categories with moduleId=2 parentId=0 all=true %}
+          {%- for item in categories %}
+          <a href="{{item.Link}}" class="text-dark d-block">
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="cat-{{item.Id}}" value="{{item.Id}}" {% if item.Id == categoryId %} checked{% endif %}>
+              <label class="form-check-label small" for="cat-{{item.Id}}">{{item.Title}} ({{item.ArchiveCount}})</label>
+            </div>
+          </a>
+          {%- endfor %}
+          {%- endcategoryList %}
+        </div>
+        {%- archiveFilters filters with moduleId=2 allText=false showPrice=true showAvailability=true %}
+        {%- for item in filters %}
+        <div class="mb-4 filter-group">
+          <h6 class="filter-title">{{item.Name}}</h6>
+          {%- if item.Range %}
+          {% set priceValue = item.Range.Value|split:"-" %}
+          <div class="row g-2 ">
+            <div class="col-6">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-transparent">$</span>
+                <input type="number" name="price_from" class="form-control" placeholder="From" value="{{priceValue.0}}" min="{{item.Range.Min}}" max="{{item.Range.Max}}">
+              </div>
+            </div>
+            <div class="col-6">
+              <div class="input-group input-group-sm">
+                <span class="input-group-text bg-transparent">$</span>
+                <input type="number" name="price_to" class="form-control" placeholder="To" value="{{priceValue.1}}" min="{{item.Range.Min}}" max="{{item.Range.Max}}">
+              </div>
+            </div>
+          </div>
+          {%- else %}
+          {%- for subItem in item.Items %}
+          <div class="form-check mb-2">
+            <input class="form-check-input" type="checkbox" id="{{item.FieldName}}-{{forloop.Counter}}" name="{{item.FieldName}}" value="{{subItem.Value}}" {% if subItem.IsCurrent %} checked{% endif %}>
+            <label class="form-check-label small" for="{{item.FieldName}}-{{forloop.Counter}}">{{subItem.Label}}</label>
+          </div>
+          {%- endfor %}
+          {%- endif %}
+        </div>
+        {% endfor %}
+        {%- endarchiveFilters %}

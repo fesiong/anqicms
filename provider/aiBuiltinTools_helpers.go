@@ -168,6 +168,23 @@ func isSensitiveInputPath(path string) bool {
 	return sensitivePathRe.MatchString(path)
 }
 
+// withinRoot 判断 p 是否落在 root 内（含 root 本身）。
+//
+// 不能直接 strings.HasPrefix(p, root)：
+//   - projectRoot 常带尾斜杠（配置里写 ".../anqicms/"），而 filepath.Abs 的结果
+//     不带（".../anqicms"），于是 `path="."` 得到的根目录**自身**被判越界
+//     （2026-10-27 实测：fs_list_dir path="." 报"超出项目目录范围"）。
+//   - 前缀比较还会放过 ".../anqicms-backup" 这类同前缀的兄弟目录。
+// 故两边 Clean 后按「等于根」或「根+分隔符前缀」判定。
+func withinRoot(p, root string) bool {
+	root = filepath.Clean(root)
+	p = filepath.Clean(p)
+	if p == root {
+		return true
+	}
+	return strings.HasPrefix(p, root+string(os.PathSeparator))
+}
+
 // safePathResolve resolves a path relative to projectRoot and validates it.
 // More robust than the original safePath — returns friendly error messages.
 // All paths are bounded to projectRoot; temp files should use ensureCachePath() instead.
@@ -186,13 +203,13 @@ func safePathResolve(path, projectRoot string) (string, error) {
 		return "", fmt.Errorf("无法解析路径 '%s': %w", path, err)
 	}
 
-	if !strings.HasPrefix(p, root) {
+	if !withinRoot(p, root) {
 		return "", fmt.Errorf("路径 '%s' 超出项目目录范围", path)
 	}
 
 	// Check for symlink escape
 	real, err := filepath.EvalSymlinks(p)
-	if err == nil && !strings.HasPrefix(real, root) {
+	if err == nil && !withinRoot(real, root) {
 		return "", fmt.Errorf("路径 '%s' 通过符号链接指向项目外部", path)
 	}
 
@@ -390,7 +407,7 @@ func normalizeGlobPath(p string) string {
 //
 // 丢弃空段是必要的，不是洁癖：'**/catalog_*.go' 以 ** 开头，若保留首段空串，
 // ** 吃掉零层后会剩下「空段 + catalog_*.go」去匹配单段的 'catalog.go' 而失配
-//（这是第一版实现被测试抓到的真 bug）。标准 glob 语义里 'a//b' 等价于 'a/b'，
+// （这是第一版实现被测试抓到的真 bug）。标准 glob 语义里 'a//b' 等价于 'a/b'，
 // 所以丢弃是正确的。
 func splitGlobSegments(p string) []string {
 	parts := strings.Split(p, "/")
@@ -407,7 +424,7 @@ func splitGlobSegments(p string) []string {
 //
 // '**' 匹配 0..n 个路径段（标准 glob 语义），实现上枚举它可能吃掉多少段后递归。
 // 递归而非迭代：'a/**/b/**/c' 这类多个 '**' 只有递归才表达得了
-//（旧实现要求恰好一个 **，多个直接不进分支）。
+// （旧实现要求恰好一个 **，多个直接不进分支）。
 //
 // 末尾的 '**' 直接吞掉剩余全部段，因此 seg 是否还有元素都算匹配 —— 这正是
 // 'template/**' 能匹配 'template' 本身（零层）的原因。

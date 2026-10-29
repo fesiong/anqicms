@@ -2,14 +2,14 @@ package model
 
 // AiChatMessage stores a single chat message in the database.
 type AiChatMessage struct {
-	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	Id          uint  `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64 `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	// Seq 单调递增序号，保证同一 session 内消息的写入顺序
 	// 解决异步并发写入导致 DB 乱序的问题
-	Seq         int    `json:"seq" gorm:"column:seq;type:int(10) unsigned not null;default:0;index:idx_seq;comment:消息序号"`
-	SessionId   string `json:"session_id" gorm:"column:session_id;type:varchar(64) not null;default:'';index:idx_session_id"`
-	Role        string `json:"role" gorm:"column:role;type:varchar(16) not null;default:''"`
-	Content     string `json:"content" gorm:"column:content;type:longtext"`
+	Seq       int    `json:"seq" gorm:"column:seq;type:int(10) unsigned not null;default:0;index:idx_seq;comment:消息序号"`
+	SessionId string `json:"session_id" gorm:"column:session_id;type:varchar(64) not null;default:'';index:idx_session_id"`
+	Role      string `json:"role" gorm:"column:role;type:varchar(16) not null;default:''"`
+	Content   string `json:"content" gorm:"column:content;type:longtext"`
 	// ToolCallID 用于 tool 角色时记录工具调用ID，与 AI 返回的 tool_call 配对
 	ToolCallID string `json:"tool_call_id" gorm:"column:tool_call_id;type:varchar(64) not null;default:'';index;comment:工具调用ID"`
 	// ToolName 记录调用的工具名称，用于压缩时智能精简（如 read_file 保留骨架、bash 取首行）

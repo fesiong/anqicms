@@ -3,11 +3,12 @@ package storage
 import (
 	"bytes"
 	"context"
-	"github.com/upyun/go-sdk/v3/upyun"
 	"io"
-	"kandaoni.com/anqicms/config"
 	"mime"
 	"path"
+
+	"github.com/upyun/go-sdk/v3/upyun"
+	"kandaoni.com/anqicms/config"
 )
 
 type UpyunStorage struct {

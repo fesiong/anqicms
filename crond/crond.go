@@ -42,6 +42,8 @@ func dailyTask() {
 	CleanUserVip()
 	// 每天检查一次LLMs更新频率
 	CheckLLMsUpdateFrequency()
+	// 同步 brevo 数据
+	SyncBrevo()
 }
 
 func daily8HourTask() {
@@ -56,6 +58,10 @@ func hourlyTask() {
 	startDigKeywords()
 	// 每小时检查一次账号状态
 	CheckAuthValid()
+	// 取消活动
+	UpdateActivities()
+	// 检查购物车，订单
+	CheckCartAndOrders()
 }
 
 func hourly10MinuteTask() {
@@ -76,6 +82,8 @@ func minutelyTask() {
 	UpdateTimeFactor()
 	// 每分钟检查一次 AI文章计划
 	AiArticlePlan()
+	// 优惠券过期
+	CouponExpire()
 }
 
 func startDigKeywords() {
@@ -180,6 +188,26 @@ func CheckWithdrawToWechat() {
 	}
 }
 
+func CouponExpire() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckCouponCodeExpire()
+	}
+}
+
+func UpdateActivities() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckActivities()
+	}
+}
+
 func AutoCheckOrders() {
 	websites := provider.GetWebsites()
 	for _, w := range websites {
@@ -187,6 +215,16 @@ func AutoCheckOrders() {
 			continue
 		}
 		w.AutoCheckOrders()
+	}
+}
+
+func CheckCartAndOrders() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.CheckCartAndOrders()
 	}
 }
 
@@ -254,5 +292,16 @@ func SendStatisticsMail() {
 			continue
 		}
 		w.SendStatisticsMail()
+	}
+}
+
+func SyncBrevo() {
+	websites := provider.GetWebsites()
+	for _, w := range websites {
+		if !w.Initialed {
+			continue
+		}
+		w.SyncBrevo()
+		w.RecoverPurchase()
 	}
 }

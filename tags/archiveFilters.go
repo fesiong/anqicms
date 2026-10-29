@@ -40,6 +40,10 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	if args["showPrice"] != nil {
 		showPrice = args["showPrice"].Bool()
 	}
+	showAvailability := false
+	if args["showAvailability"] != nil {
+		showAvailability = args["showAvailability"].Bool()
+	}
 	showAll := false
 	if args["showAll"] != nil {
 		showAll = args["showAll"].Bool()
@@ -89,14 +93,15 @@ func (node *tagArchiveFiltersNode) Execute(ctx *pongo2.ExecutionContext, writer 
 	urlParams, _ := ctx.Public["urlParams"].(map[string]string)
 
 	req := request.ApiFilterRequest{
-		ModuleId:     int64(moduleId),
-		ShowAll:      showAll,
-		AllText:      allText,
-		ShowPrice:    showPrice,
-		ShowCategory: showCategory,
-		ParentId:     int64(parentId),
-		CategoryId:   int64(categoryId),
-		UrlParams:    urlParams,
+		ModuleId:         int64(moduleId),
+		ShowAll:          showAll,
+		AllText:          allText,
+		ShowPrice:        showPrice,
+		ShowAvailability: showAvailability,
+		ShowCategory:     showCategory,
+		ParentId:         int64(parentId),
+		CategoryId:       int64(categoryId),
+		UrlParams:        urlParams,
 	}
 
 	filterGroups, err2 := currentSite.ApiGetFilters(&req)

@@ -1,6 +1,7 @@
 package provider
 
 import (
+	"fmt"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -398,5 +399,40 @@ func UploadMany(ctx iris.Context) {
 	params := mergeParams(b, nil)
 	if paramDesc(params, "file") == "" {
 		t.Errorf("无字面量字段名时应补通用 file 参数，实得 %+v", params)
+	}
+}
+
+// TestURLParamParamsHaveDesc 要求所有 URLParam 来源的参数都带说明。
+//
+// 为什么单独卡 urlparam：它的参数名只存在于 ctx.URLParam*("x") 的字面量里，
+// 没有 struct tag 也没有类型定义可查，说明只能来自注释。历史上这批参数长期
+// 整片无说明（优惠券/询盘/统计共 59 个），被误当成「生成器取不到注释」，
+// 实际是源码里根本没写注释——写法见 doc/api-catalog-annotations.md：
+// handler 文档注释的「参数说明：」段落，或取参语句的上方/行尾注释。
+//
+// 这条闸门的作用：新增 URLParam 端点却漏写注释时立刻变红，而不是悄悄让
+// api_schema 只给模型一个没有语义的字段名。
+func TestURLParamParamsHaveDesc(t *testing.T) {
+	cata, err := BuildAPICatalogFromSource()
+	if err != nil {
+		t.Skipf("当前环境无源码，跳过 (%v)", err)
+	}
+	var missing []string
+	for _, ep := range cata.Endpoints {
+		if ep.ParamSource != "urlparam" {
+			continue
+		}
+		for _, p := range ep.Params {
+			if strings.TrimSpace(p.Desc) == "" {
+				missing = append(missing, fmt.Sprintf("%s %s → %s（handler %s）",
+					ep.Method, ep.Path, p.Name, ep.Handler))
+			}
+		}
+	}
+	if len(missing) > 0 {
+		t.Fatalf("%d 个 URLParam 参数缺说明。补法：在 handler 文档注释里加\n"+
+			"// 参数说明：\n//   - 查询参数 \"名字\": 说明\n"+
+			"或在取参语句上方/行尾写注释，然后 `go run ./cmd/apicatalog` 重新生成：\n%s",
+			len(missing), strings.Join(missing, "\n"))
 	}
 }

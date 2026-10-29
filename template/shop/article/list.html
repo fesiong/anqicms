@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <h1 class="fw-bold mb-5 text-center">News & Insights</h1>
+
+    <div class="row g-4">
+      {%- archiveList archives with type="page" limit=18 %}
+        {%- for item in archives %}
+      <div class="col-md-4">
+        <div class="card border-0 h-100 bg-transparent">
+          <div class="overflow-hidden mb-3" style="aspect-ratio: 16/10;">
+            <a href="{{item.Link}}">
+              <img src="{{item.Thumb}}" class="card-img-top object-fit-cover h-100 w-100 transition-scale" alt="{{item.Title}}">
+            </a>
+          </div>
+          <div class="card-body p-0">
+            <p class="small text-muted mb-2">{{stampToDate(item.CreatedTime, "January 02, 2006")}}</p>
+            <h4 class="card-title mb-3">
+              <a href="{{item.Link}}" class="text-decoration-none text-dark hover-underline">{{item.Title}}</a>
+            </h4>
+            <p class="card-text text-muted small mb-3">{{item.Description|truncatechars:170}}</p>
+            <a href="{{item.Link}}" class="text-dark text-decoration-underline small fw-bold">Read More</a>
+          </div>
+        </div>
+      </div>
+      {%- endfor %}
+      {%- endarchiveList %}
+    </div>
+
+    <!-- Pagination -->
+    {%- include 'partial/pagination.html' %}
+  </div>
+
+</main>
+{% endblock %}

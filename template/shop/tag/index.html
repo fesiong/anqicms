@@ -1,0 +1,47 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <h1 class="fw-bold mb-5 text-center">Tags</h1>
+
+    <div class="row g-4">
+      {% if urlParams.letter %}
+      {% tagList tags with type="page" letter=urlParams.letter limit="20" %}
+      <div class="d-flex gap-2 flex-wrap">
+        {% for item in tags %}
+        <a href="{{item.Link}}" class="btn btn-outline-dark">{{item.Title}}</a>
+        {% endfor %}
+      </div>
+      {% endtagList %}
+      {% include "partial/pagination.html" %}
+      {% else %}
+      {% for letter in "ABCEDFGHIJKLMNOPQRSTUVWXYZ" %}
+      {% tagList tags with type="list" letter=letter limit="20" %}
+      {% if tags|length > 0 %}
+      <div class="card mt-3">
+        <div class="card-body">
+          <h5 class="card-title d-flex justify-content-between">
+            <div>{{letter}}</div>
+            <a href="/tags?letter={{letter}}" class="text-dark small text-decoration-none hover-underline">More</a>
+          </h5>
+          <div class="card-text mt-4 d-flex gap-3 flex-wrap">
+            {% for item in tags %}
+            <a href="{{item.Link}}" class="btn btn-outline-dark">{{item.Title}}</a>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endtagList %}
+      {% endfor %}
+      {% endif %}
+    </div>
+
+    <!-- Pagination -->
+    {%- include 'partial/pagination.html' %}
+  </div>
+
+</main>
+{% endblock %}

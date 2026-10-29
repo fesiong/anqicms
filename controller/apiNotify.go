@@ -17,6 +17,8 @@ import (
 	"github.com/go-pay/xlog"
 	"github.com/kataras/iris/v12"
 	"github.com/medivhzhan/weapp/v3/server"
+	"github.com/stripe/stripe-go/v82"
+	"github.com/stripe/stripe-go/v82/webhook"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -368,6 +370,108 @@ func NotifyPayPal(ctx iris.Context) {
 
 	ctx.StatusCode(http.StatusOK)
 	ctx.WriteString("Webhook processed")
+}
+
+func NotifyStripe(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	body, err := ctx.GetBody()
+	if err != nil {
+		log.Printf("Error reading body: %v", err)
+		ctx.StatusCode(http.StatusServiceUnavailable)
+		return
+	}
+	library.DebugLog(currentSite.CachePath, "stripe_notify", string(body))
+	// 验证Webhook签名
+	e := stripe.Event{}
+	if err = json.Unmarshal(body, &e); err != nil {
+		log.Printf("Failed to parse webhook body json: %s", err.Error())
+		ctx.StatusCode(http.StatusServiceUnavailable)
+		return
+	}
+	payment, err := currentSite.GetPaymentInfoByPaymentId(e.ID)
+	if err != nil {
+		return
+	}
+	if payment.PaidTime > 0 {
+		ctx.StatusCode(http.StatusOK)
+		return
+	}
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "stripe.log", "account-notfound", err)
+		ctx.WriteString("fail")
+		return
+	}
+
+	endpointSecret := account.PayConfig.WebhookId
+	signatureHeader := ctx.GetHeader("Stripe-Signature")
+
+	event, err := webhook.ConstructEvent(body, signatureHeader, endpointSecret)
+	if err != nil {
+		log.Printf("Webhook signature verification failed: %v", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+
+	// 处理事件类型
+	switch event.Type {
+	case "payment_intent.succeeded":
+		var pi stripe.PaymentIntent
+		err = json.Unmarshal(event.Data.Raw, &pi)
+		if err != nil {
+			log.Printf("Error parsing payment intent: %v", err)
+			ctx.StatusCode(http.StatusBadRequest)
+			return
+		}
+		//检查payment订单
+		payment, err = currentSite.GetPaymentInfoByPaymentId(pi.ID)
+		if err != nil {
+			return
+		}
+		if payment.PaidTime > 0 {
+			ctx.StatusCode(http.StatusOK)
+			return
+		}
+		order, err := currentSite.GetOrderInfoByOrderId(payment.OrderId)
+		if err != nil {
+			//ctx.WriteString(bm.NotOK("支付失败"))
+			return
+		}
+		if order.PaidTime > 0 {
+			// todo 已支付了，这个payment需要退款
+			ctx.StatusCode(http.StatusOK)
+			return
+		}
+
+		payment.PayWay = config.PayWayStripe
+		err = currentSite.TraceQuery(payment)
+		if err != nil {
+			//ctx.WriteString(bm.NotOK("支付失败"))
+			return
+		}
+	case "payment_intent.payment_failed":
+		var pi stripe.PaymentIntent
+		err = json.Unmarshal(event.Data.Raw, &pi)
+		if err != nil {
+			log.Printf("Error parsing payment intent: %v", err)
+			ctx.StatusCode(http.StatusBadRequest)
+			return
+		}
+		//检查payment订单
+		payment, err = currentSite.GetPaymentInfoByPaymentId(pi.ID)
+		if err != nil {
+			return
+		}
+		order, err := currentSite.GetOrderInfoByOrderId(payment.OrderId)
+		if err == nil {
+			_ = currentSite.SetOrderCanceled(order)
+		}
+
+	default:
+		log.Printf("Unhandled event type: %s", event.Type)
+	}
+
+	ctx.StatusCode(http.StatusOK)
 }
 
 // SubscribeMsgPopup 订阅消息弹框事件

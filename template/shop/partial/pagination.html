@@ -1,0 +1,19 @@
+{%- pagination pages with show="4" %}
+        <nav class="mt-5 pt-4 border-top">
+          <ul class="pagination justify-content-center">
+            {%- if pages.PrevPage %}
+            <li class="page-item"><a class="page-link border-0 text-dark" href="{{pages.PrevPage.Link}}"><i class="bi bi-chevron-left"></i></a></li>
+            {% endif %}
+            {%- for item in pages.Pages %}
+            {%- if item.IsCurrent %}
+            <li class="page-item active"><a class="page-link border-0 bg-dark text-white">{{item.Name}}</a></li>
+            {%- else %}
+            <li class="page-item"><a class="page-link border-0 text-dark" href="{{item.Link}}">{{item.Name}}</a></li>
+            {%- endif %}
+            {%- endfor %}
+            {%- if pages.NextPage %}
+            <li class="page-item"><a class="page-link border-0 text-dark" href="{{pages.LastPage.Link}}"><i class="bi bi-chevron-right"></i></a></li>
+            {% endif %}
+          </ul>
+        </nav>
+{%- endpagination %}

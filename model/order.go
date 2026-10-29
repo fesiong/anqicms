@@ -5,45 +5,57 @@ import (
 	"time"
 
 	"gorm.io/gorm"
+	"kandaoni.com/anqicms/config"
 )
 
 type Order struct {
-	Id                uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime       int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime       int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	OrderId           string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;unique"`
-	PaymentId         string `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;index"`
-	UserId            uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	AddressId         uint   `json:"address_id" gorm:"column:address_id;type:int(10) unsigned not null;default:0"`
-	Remark            string `json:"remark" gorm:"column:remark;type:varchar(250) not null;default:''"`
-	Type              string `json:"type" gorm:"column:type;type:varchar(20) not null;default:'goods'"` // 订单类型，支持 goods|vip,默认goods
-	Status            int    `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
-	RefundStatus      int    `json:"refund_status" gorm:"column:refund_status;type:tinyint(1) not null;default:0"`
-	OriginAmount      int64  `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0;comment:订单商品总价"`
-	Amount            int64  `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:订单计算运费、优惠后的总价"`
-	PaidTime          int64  `json:"paid_time" gorm:"column:paid_time;type:bigint(20) not null;default:0;comment:支付时间"`
-	EndTime           int64  `json:"end_time" gorm:"column:end_time;type:bigint(20) not null;default:0;comment:在确认支付之前，为订单关闭时间，在支付完成后，为自动确认收货时间"`
-	DeliverTime       int64  `json:"deliver_time" gorm:"column:deliver_time;type:bigint(20) not null;default:0;comment:发货时间"`
-	FinishedTime      int64  `json:"finished_time" gorm:"column:finished_time;type:bigint(20) not null;default:0;comment:订单完成时间"`
-	DiscountAmount    int64  `json:"discount_amount" gorm:"column:discount_amount;type:bigint(20) not null;default:0;comment:优惠金额"` // 可能一个订单支持多个优惠，优惠汇总
-	UserDiscount      int64  `json:"user_discount" gorm:"column:user_discount;type:bigint(20) not null;default:0;comment:用户优惠金额"`   // 用户优惠金额,可能是用户组，也可能是分享优惠
-	CouponDiscount    int64  `json:"coupon_discount" gorm:"column:coupon_discount;type:bigint(20) not null;default:0;comment:优惠券优惠金额"`
-	CouponCodeId      string `json:"coupon_code_id" gorm:"column:coupon_code_id;type:varchar(36) not null;default:''"`
-	SellerId          uint   `json:"seller_id" gorm:"column:seller_id;type:int(10) unsigned not null;default:0;index"` // 卖家
-	SellerAmount      int64  `json:"seller_amount" gorm:"column:seller_amount;type:bigint(20) not null;default:0;comment:卖家可得金额"`
-	ShareUserId       uint   `json:"share_user_id" gorm:"column:share_user_id;type:int(10) unsigned not null;default:0;index"`                // 分享者
-	ShareParentUserId uint   `json:"share_parent_user_id" gorm:"column:share_parent_user_id;type:int(10) unsigned not null;default:0;index"`  // 分享者的上级
-	ShareAmount       int64  `json:"share_amount" gorm:"column:share_amount;type:bigint(20) not null;default:0;comment:分销可得金额"`               // 分销可得金额
-	ShareParentAmount int64  `json:"share_parent_amount" gorm:"column:share_parent_amount;type:bigint(20) not null;default:0;comment:奖励金，上级"` // 分销可得金额
-	ExpressCompany    string `json:"express_company" gorm:"column:express_company;type:varchar(100) not null;default:''"`                     // 快递公司
-	TrackingNumber    string `json:"tracking_number" gorm:"column:tracking_number;type:varchar(100) not null;default:''"`                     // 快递单号
+	Id                uint    `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime       int64   `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime       int64   `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	OrderId           string  `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;unique"`
+	PaymentId         string  `json:"payment_id" gorm:"column:payment_id;type:varchar(36) not null;index"`
+	UserId            uint    `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
+	AddressId         uint    `json:"address_id" gorm:"column:address_id;type:int(10) unsigned not null;default:0"`
+	Remark            string  `json:"remark" gorm:"column:remark;type:varchar(250) not null;default:''"`
+	Type              string  `json:"type" gorm:"column:type;type:varchar(20) not null;default:'goods'"` // 订单类型，支持 goods|vip|communication,默认goods
+	Status            int     `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
+	RefundStatus      int     `json:"refund_status" gorm:"column:refund_status;type:tinyint(1) not null;default:0"`
+	OriginAmount      int64   `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0;comment:订单商品总价"`
+	Amount            int64   `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0;comment:订单计算运费、优惠后的总价"`
+	PaidTime          int64   `json:"paid_time" gorm:"column:paid_time;type:bigint(20) not null;default:0;comment:支付时间"`
+	EndTime           int64   `json:"end_time" gorm:"column:end_time;type:bigint(20) not null;default:0;comment:在确认支付之前，为订单关闭时间，在支付完成后，为自动确认收货时间"`
+	DeliverTime       int64   `json:"deliver_time" gorm:"column:deliver_time;type:bigint(20) not null;default:0;comment:发货时间"`
+	FinishedTime      int64   `json:"finished_time" gorm:"column:finished_time;type:bigint(20) not null;default:0;comment:订单完成时间"`
+	ActivityId        int64   `json:"activity_id" gorm:"column:activity_id;type:bigint(20) not null;default:0"`                      // 活动ID
+	HasReview         int     `json:"has_review" gorm:"column:has_review;type:tinyint(1) not null;default:0"`                        // 是否已评价
+	DiscountAmount    int64   `json:"discount_amount" gorm:"column:discount_amount;type:bigint(20) not null;default:0;comment:优惠金额"` // 可能一个订单支持多个优惠，优惠汇总
+	UserDiscount      int64   `json:"user_discount" gorm:"column:user_discount;type:bigint(20) not null;default:0;comment:用户优惠金额"`   // 用户优惠金额,可能是用户组，也可能是分享优惠
+	CouponDiscount    int64   `json:"coupon_discount" gorm:"column:coupon_discount;type:bigint(20) not null;default:0;comment:优惠券优惠金额"`
+	CouponCodeId      string  `json:"coupon_code_id" gorm:"column:coupon_code_id;type:varchar(36) not null;default:''"`
+	ShippingFee       int64   `json:"shipping_fee" gorm:"column:shipping_fee;type:bigint(20) not null;default:0;comment:运费"`
+	ShippingDiscount  int64   `json:"shipping_discount" gorm:"column:shipping_discount;type:bigint(20) not null;default:0;comment:运费优惠金额"`
+	ShippingQuantity  int     `json:"shipping_quantity" gorm:"column:shipping_quantity;type:int(10) unsigned not null;default:0;comment:结算时总数量"`
+	ShippingVolume    float64 `json:"shipping_volume" gorm:"column:shipping_volume;type:decimal(12,6) not null;default:0.000000;comment:结算时总体积(m³)"`
+	ShippingWeight    float64 `json:"shipping_weight" gorm:"column:shipping_weight;type:decimal(12,6) not null;default:0.000000;comment:结算时总重量(kg)"`
+	ServiceFee        int64   `json:"service_fee" gorm:"column:service_fee;type:bigint(20) not null;default:0;comment:附加服务费用"` // 合并附加服务费用
+	SellerId          uint    `json:"seller_id" gorm:"column:seller_id;type:int(10) unsigned not null;default:0;index"`        // 卖家
+	SellerAmount      int64   `json:"seller_amount" gorm:"column:seller_amount;type:bigint(20) not null;default:0;comment:卖家可得金额"`
+	ShareUserId       uint    `json:"share_user_id" gorm:"column:share_user_id;type:int(10) unsigned not null;default:0;index"`                // 分享者
+	ShareParentUserId uint    `json:"share_parent_user_id" gorm:"column:share_parent_user_id;type:int(10) unsigned not null;default:0;index"`  // 分享者的上级
+	ShareAmount       int64   `json:"share_amount" gorm:"column:share_amount;type:bigint(20) not null;default:0;comment:分销可得金额"`               // 分销可得金额
+	ShareParentAmount int64   `json:"share_parent_amount" gorm:"column:share_parent_amount;type:bigint(20) not null;default:0;comment:奖励金，上级"` // 分销可得金额
+	ExpressCompany    string  `json:"express_company" gorm:"column:express_company;type:varchar(100) not null;default:''"`                     // 快递公司
+	TrackingNumber    string  `json:"tracking_number" gorm:"column:tracking_number;type:varchar(100) not null;default:''"`                     // 快递单号
+	InvoicePath       string  `json:"invoice_path" gorm:"column:invoice_path;type:varchar(100) not null;default:''"`                           //
 
-	OrderAddress *OrderAddress  `json:"order_address,omitempty" gorm:"-"`
-	User         *User          `json:"user" gorm:"-"`
-	ShareUser    *User          `json:"share_user,omitempty" gorm:"-"`
-	ParentUser   *User          `json:"parent_user,omitempty" gorm:"-"`
-	IsUpdated    int            `json:"is_updated" gorm:"-"`
-	Details      []*OrderDetail `json:"details" gorm:"-"`
+	OrderAddress  *OrderAddress        `json:"order_address,omitempty" gorm:"-"`
+	User          *User                `json:"user" gorm:"-"`
+	ShareUser     *User                `json:"share_user,omitempty" gorm:"-"`
+	ParentUser    *User                `json:"parent_user,omitempty" gorm:"-"`
+	IsUpdated     int                  `json:"is_updated" gorm:"-"`
+	Details       []*OrderDetail       `json:"details" gorm:"-"`
+	Services      []*OrderServiceAddon `json:"services" gorm:"-"`
+	CustomFormUrl string               `json:"custom_form_url" gorm:"-"` // 需要填写表单的时候，返回这个字段
 }
 
 func (o *Order) AfterCreate(tx *gorm.DB) (err error) {
@@ -59,21 +71,36 @@ func (o *Order) AfterCreate(tx *gorm.DB) (err error) {
 }
 
 type OrderDetail struct {
-	Id           uint       `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime  int64      `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime  int64      `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	OrderId      string     `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
-	UserId       uint       `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	GoodsId      int64      `json:"goods_id" gorm:"column:goods_id;type:bigint(20) not null;index"`
-	GoodsSkuId   int64      `json:"goods_sku_id" gorm:"column:goods_sku_id;type:bigint(20) not null;default:0;index"`
-	Price        int64      `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
-	OriginPrice  int64      `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
-	Amount       int64      `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"` // 实际支付的金额，用于退款的时候进行退款操作
-	OriginAmount int64      `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0"`
-	Quantity     int        `json:"quantity" gorm:"column:quantity;type:int(10) not null;default:0"`
-	Status       int        `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
-	Goods        *Archive   `json:"goods" gorm:"-"`
-	Group        *UserGroup `json:"group" gorm:"-"`
+	Id            uint                 `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime   int64                `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime   int64                `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	OrderId       string               `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
+	UserId        uint                 `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
+	GoodsId       int64                `json:"goods_id" gorm:"column:goods_id;type:bigint(20) not null;index"`
+	GoodsSkuId    int64                `json:"goods_sku_id" gorm:"column:goods_sku_id;type:bigint(20) not null;default:0;index"`
+	Price         int64                `json:"price" gorm:"column:price;type:bigint(20) not null;default:0"`
+	OriginPrice   int64                `json:"origin_price" gorm:"column:origin_price;type:bigint(20) not null;default:0"`
+	Amount        int64                `json:"amount" gorm:"column:amount;type:bigint(20) not null;default:0"` // 实际支付的金额，用于退款的时候进行退款操作
+	OriginAmount  int64                `json:"origin_amount" gorm:"column:origin_amount;type:bigint(20) not null;default:0"`
+	Quantity      int                  `json:"quantity" gorm:"column:quantity;type:int(10) not null;default:0"`
+	Weight        float64              `json:"weight" gorm:"column:weight;type:decimal(12,6) not null;default:0.000000;comment:商品重量(kg)"`
+	Volume        float64              `json:"volume" gorm:"column:volume;type:decimal(12,6) not null;default:0.000000;comment:商品总体积(m³)"`
+	Status        int                  `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`
+	OrderExtra    ExtraData            `json:"order_extra,omitempty" gorm:"column:order_extra;type:longtext default null"` // 订单自定义字段
+	SkuValues     ArchiveOptionValues  `json:"sku_values" gorm:"column:sku_values;type:text default null"`                 // SKU 组合字段
+	Goods         *Archive             `json:"goods" gorm:"-"`
+	GoodsSku      *ArchiveSku          `json:"goods_sku" gorm:"-"`
+	Group         *UserGroup           `json:"group" gorm:"-"`
+	Communication *CommunicationOrder  `json:"communication_order,omitempty" gorm:"-"`
+	OrderFields   []config.CustomField `json:"order_fields" gorm:"-"`
+}
+
+type OrderOptionStock struct {
+	Id            uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	OrderId       string `json:"order_id" gorm:"column:order_id;type:varchar(36) not null;default:'';index"`
+	OrderDetailId uint   `json:"order_detail_id" gorm:"column:order_detail_id;type:int(10) unsigned not null;default:0;index"`
+	OptionValueId int64  `json:"option_value_id" gorm:"column:option_value_id;type:int(10) unsigned not null;default:0;index"`
+	Quantity      int    `json:"quantity" gorm:"column:quantity;type:int(10) not null;default:0"`
 }
 
 type OrderAddress struct {

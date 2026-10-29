@@ -469,3 +469,211 @@ func PluginOrderExport(ctx iris.Context) {
 		},
 	})
 }
+
+// PluginGetOrderReviews 分页查询商品评价列表，支持按订单号与商品筛选。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+//   - 查询参数 "order_id": 按订单号（varchar 业务单号，不是自增 id）精确筛选。
+//   - 查询参数 "archive_id": 按商品（文档）ID 筛选，0 表示不限。
+func PluginGetOrderReviews(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+	orderId := ctx.URLParam("order_id")
+	archiveId := ctx.URLParamInt64Default("archive_id", 0)
+
+	orders, total := currentSite.GetOrderReviews(func(tx *gorm.DB) *gorm.DB {
+		if orderId != "" {
+			tx = tx.Where("`order_id` = ?", orderId)
+		}
+		if archiveId > 0 {
+			tx = tx.Where("`archive_id` = ?", archiveId)
+		}
+		return tx
+	}, "id desc", currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  orders,
+	})
+}
+
+// PluginSaveOrderReview 新建或更新商品评价；status 取 0=未处理、1=正常、-1=删除。
+func PluginSaveOrderReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.SaveOrderReview(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}
+
+// PluginGetOrderReview 按 ID 查询单条商品评价。
+//
+// 参数说明：
+//   - 查询参数 "id": 评价 ID，必填；传 0 或不存在时返回错误信息。
+func PluginGetOrderReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := ctx.URLParamInt64Default("id", 0)
+
+	review, err := currentSite.GetOrderReview(uint(id))
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+		"data": review,
+	})
+}
+
+// PluginDeleteOrderReview 删除商品评价（按 id 物理删除，不可恢复）。
+func PluginDeleteOrderReview(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderReviewRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	err := currentSite.DeleteOrderReview(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}
+
+// PluginGetOrderServices 分页查询增值服务列表。
+//
+// 参数说明：
+//   - 查询参数 "current": 当前页码，默认为 1。
+//   - 查询参数 "pageSize": 每页条数，默认为 20。
+func PluginGetOrderServices(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	currentPage := ctx.URLParamIntDefault("current", 1)
+	pageSize := ctx.URLParamIntDefault("pageSize", 20)
+
+	orders, total := currentSite.GetOrderServices(func(tx *gorm.DB) *gorm.DB {
+		return tx
+	}, currentPage, pageSize)
+
+	ctx.JSON(iris.Map{
+		"code":  config.StatusOK,
+		"msg":   "",
+		"total": total,
+		"data":  orders,
+	})
+}
+
+// PluginGetOrderService 按 ID 查询单个增值服务。
+//
+// 参数说明：
+//   - 查询参数 "id": 增值服务 ID，必填；传 0 或不存在时返回错误信息。
+func PluginGetOrderService(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	id := ctx.URLParamInt64Default("id", 0)
+
+	service, err := currentSite.GetOrderService(id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+		"data": service,
+	})
+}
+
+// PluginSaveOrderService 新建或更新增值服务；fee_type 取 0=固定金额、2=按比例。
+func PluginSaveOrderService(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderServiceRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	err := currentSite.SaveOrderService(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}
+
+// PluginDeleteOrderService 删除增值服务。
+func PluginDeleteOrderService(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.OrderServiceRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	err := currentSite.DeleteOrderService(req.Id)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "Success",
+	})
+}

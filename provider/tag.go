@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"gorm.io/gorm"
+
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -16,11 +18,17 @@ import (
 	"kandaoni.com/anqicms/request"
 )
 
-func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, firstLetter string, currentPage, pageSize int, offset int, order string) ([]*model.Tag, int64, error) {
+// GetTagList 分页查询标签列表。
+//
+// offset 由调用方显式计算后传入，这里不再按页码二次推算——否则调用方算好的
+// 偏移会被静默覆盖，`limit=20,10` 这类显式偏移与 `page` 混用时行为不可预期。
+//
+// needTotal 为 false 时**不执行 count**。tags 表在真实站点上轻易到十几万行
+// （采集/导入的残留标签），一次 SELECT count(*) 就是一次全索引扫描，
+// 而不分页的 list 调用方根本用不到精确总数。曾经因为每个 tag 列表请求都无条件
+// count，叠加扒站方按 ?page=N 无限翻页，单机打出 60 条/分的慢查询把 CPU 拉满。
+func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, firstLetter string, offset, pageSize int, needTotal bool, order string) ([]*model.Tag, int64, error) {
 	var tags []*model.Tag
-	if currentPage > 1 {
-		offset = (currentPage - 1) * pageSize
-	}
 	if order != "" {
 		order = ParseOrderBy(order, "")
 	} else {
@@ -28,34 +36,75 @@ func (w *Website) GetTagList(itemId int64, title string, categoryIds []uint, fir
 		order = "id desc"
 	}
 
-	var total int64
-
-	builder := w.DB.WithContext(w.Ctx()).Model(&model.Tag{}).Order(order)
-	if firstLetter != "" {
-		builder = builder.Where("`first_letter` = ?", firstLetter)
-	}
+	// itemId 过滤用的 tag_id 先查出来，供列表查询与 count 估算共用。
+	var itemTagIds []uint
 	if itemId != 0 {
-		var ids []uint
-		w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &ids)
-		if len(ids) == 0 {
+		w.DB.WithContext(w.Ctx()).Model(&model.TagData{}).Where("`item_id` = ?", itemId).Pluck("tag_id", &itemTagIds)
+		if len(itemTagIds) == 0 {
 			// 不用再查询了，直接返回结果
 			return tags, 0, nil
 		}
-		builder = builder.Where("`id` IN(?)", ids)
 	}
-	if title != "" {
-		builder = builder.Where("`title` like ?", "%"+title+"%")
+
+	// 筛选条件只声明一次，列表查询与 count 估算共用，避免两条路径条件漂移。
+	apply := func(db *gorm.DB) *gorm.DB {
+		if firstLetter != "" {
+			db = db.Where("`first_letter` = ?", firstLetter)
+		}
+		if len(itemTagIds) > 0 {
+			db = db.Where("`id` IN(?)", itemTagIds)
+		}
+		if title != "" {
+			db = db.Where("`title` like ?", "%"+title+"%")
+		}
+		if len(categoryIds) > 0 {
+			if len(categoryIds) == 1 {
+				db = db.Where("`category_id` = ?", categoryIds[0])
+			} else {
+				db = db.Where("`category_id` IN(?)", categoryIds)
+			}
+		}
+		return db
 	}
-	if len(categoryIds) > 0 {
-		if len(categoryIds) == 1 {
-			builder = builder.Where("`category_id` = ?", categoryIds[0])
-		} else {
-			builder = builder.Where("`category_id` IN(?)", categoryIds)
+
+	builder := apply(w.DB.WithContext(w.Ctx()).Model(&model.Tag{})).Order(order)
+
+	if !needTotal {
+		// list 模式：跳过 count，total 退回本页条数（与 GetArchiveList 一致）。
+		if err := builder.Limit(pageSize).Offset(offset).Find(&tags).Error; err != nil {
+			return nil, 0, err
+		}
+		return tags, int64(len(tags)), nil
+	}
+
+	// 分页模式：count 结果缓存 300s；行数超 10 万的表用 EXPLAIN 估算，
+	// 不再真扫全表。与 GetArchiveList 的处理方式保持一致。
+	var total int64
+	sqlCount := w.DB.WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
+		return apply(tx.Model(&model.Tag{})).Order(order).Find(&[]*model.Tag{})
+	})
+	cacheKeyCount := "tag-list-count-" + library.Md5(sqlCount)[8:24]
+	// Cache 可能是 nil（半初始化的站点，见 anchor_test.go 的注释），
+	// 缓存只是优化，缺了不能影响取数。
+	cacheHit := false
+	if w.Cache != nil {
+		if err := w.Cache.Get(cacheKeyCount, &total); err == nil {
+			cacheHit = true
+		}
+	}
+	if !cacheHit {
+		total = w.GetExplainCount(sqlCount)
+		if total < 100000 {
+			if countErr := builder.Count(&total).Error; countErr != nil {
+				return nil, 0, countErr
+			}
+		}
+		if w.Cache != nil {
+			_ = w.Cache.Set(cacheKeyCount, total, 300)
 		}
 	}
 
-	err := builder.Count(&total).Limit(pageSize).Offset(offset).Find(&tags).Error
-	if err != nil {
+	if err := builder.Limit(pageSize).Offset(offset).Find(&tags).Error; err != nil {
 		return nil, 0, err
 	}
 

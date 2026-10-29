@@ -179,6 +179,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	showContent := false
 	showExtra := false
 	showTag := false
+	showOptions := false
+	showSkus := false
+	showWholesaleRules := false
 	showCategory := false
 
 	if args["type"] != nil {
@@ -208,6 +211,15 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	}
 	if args["showTag"] != nil {
 		showTag = args["showTag"].Bool()
+	}
+	if args["showOptions"] != nil {
+		showOptions = args["showOptions"].Bool()
+	}
+	if args["showSkus"] != nil {
+		showSkus = args["showSkus"].Bool()
+	}
+	if args["showWholesaleRules"] != nil {
+		showWholesaleRules = args["showWholesaleRules"].Bool()
 	}
 	if args["showCategory"] != nil {
 		showCategory = args["showCategory"].Bool()
@@ -246,6 +258,8 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	if price != "" {
 		extraParams["price"] = price
 	}
+	// 支持skuOptions筛选
+	// skuOptions 只支持来自URL，不支持 args 参数，因此不需要在这里处理
 	// 支持标签参数搜索
 	module = currentSite.GetModuleFromCache(moduleId)
 	if module != nil {
@@ -301,7 +315,7 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 	archiveDetail, ok := ctx.Public["archive"].(*model.Archive)
 	if ok {
 		archiveId = archiveDetail.Id
-		keywords = strings.Split(archiveDetail.Keywords, ",")[0]
+		keywords = strings.Split(strings.ReplaceAll(archiveDetail.Keywords, "，", ","), ",")[0]
 	}
 	// 允许通过keywords调用
 	like := ""
@@ -351,6 +365,9 @@ func (node *tagArchiveListNode) Execute(ctx *pongo2.ExecutionContext, writer pon
 		ShowExtra:          showExtra,
 		ShowCategory:       showCategory,
 		ShowTag:            showTag,
+		ShowOptions:        showOptions,
+		ShowSkus:           showSkus,
+		ShowWholesaleRules: showWholesaleRules,
 		Draft:              false,
 		Child:              child,
 		Order:              order,

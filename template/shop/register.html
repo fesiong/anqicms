@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+  <div class="container py-5">
+    <div class="row justify-content-center">
+      <div class="col-md-6 col-lg-4">
+        <div class="text-center mb-5">
+          <h1 class="fw-bold h2">Create Account</h1>
+        </div>
+
+        <form id="registerForm" onsubmit="return false;">
+          <div class="form-floating mb-3">
+            <input type="text" name="first_name" class="form-control border-dark" id="regFirstName" placeholder="First name" required>
+            <label for="regFirstName">First name</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input type="text" name="last_name" class="form-control border-dark" id="regLastName" placeholder="Last name" required>
+            <label for="regLastName">Last name</label>
+          </div>
+          <div class="form-floating mb-3">
+            <input type="email" name="email" class="form-control border-dark" id="regEmail" placeholder="name@example.com" required>
+            <label for="regEmail">Email</label>
+          </div>
+          <div class="form-floating mb-4">
+            <input type="password" name="password" class="form-control border-dark" id="regPassword" placeholder="Password" required>
+            <label for="regPassword">Password</label>
+          </div>
+
+          <div class="d-grid gap-3 mb-4">
+            <button type="submit" class="btn btn-dark py-3">Create</button>
+            <a href="{% system with name='BaseUrl' %}/login" class="text-center text-dark small text-decoration-underline">Already have an account? Login here</a>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</main>
+{% endblock %}

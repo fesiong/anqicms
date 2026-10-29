@@ -417,7 +417,13 @@ func TestBashTool_KeepsExitCodeWhenOutputFloods(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out, "[退出码/错误:") {
+	// 断言改了两处措辞，意图不变：失败必须留在**开头**且带上退出码信息。
+	// 2026-10-27 起失败回执改用文本失败前缀「错误：」（让 MCP 的 isError 生效），
+	// 详见 aiBuiltinTools.go 的 bash 分支注释。
+	if !strings.HasPrefix(out, "错误：") {
+		t.Errorf("失败回执应以「错误：」开头，才能让 MCP 置 isError: %q", out[:60])
+	}
+	if !strings.Contains(out, "退出码非 0") || !strings.Contains(out, "exit status 3") {
 		t.Errorf("超长输出下仍须保留退出码: %q", out[:120])
 	}
 }

@@ -1,0 +1,16 @@
+{
+	"template_id": 0,
+	"auth_id": 0,
+	"name": "default",
+	"package": "default",
+	"version": "",
+	"description": "",
+	"author": "",
+	"homepage": "",
+	"created": "2026-01-29 22:03:21",
+	"template_type": 0,
+	"status": 1,
+	"tpl_files": null,
+	"static_files": null,
+	"preview_data": true
+}

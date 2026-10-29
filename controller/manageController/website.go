@@ -34,11 +34,30 @@ func GetWebsiteList(ctx iris.Context) {
 	baseUrl := ctx.URLParam("base_url")
 	dbSites, total := provider.GetDBWebsites(name, baseUrl, currentPage, pageSize)
 
+	// 必须脱敏：此前直接返回 model.Website，`mysql.password`（实测 "root"）
+	// 与 `token_secret` 都是明文。detail 接口早已改用 WebsiteDetailResponse，
+	// list 漏了同一处——两个入口读同一批数据，只堵一个等于没堵。
+	// 2026-10-27 由 MCP 全接口测试发现：siteops_website/list 能读到库密码。
+	list := make([]request.WebsiteDetailResponse, 0, len(dbSites))
+	for _, site := range dbSites {
+		item := request.WebsiteDetailResponse{
+			Id:       site.Id,
+			RootPath: site.RootPath,
+			Name:     site.Name,
+			Status:   site.Status,
+			Mysql:    request.SafeMysql(site.Mysql),
+		}
+		if site.Id == 1 {
+			item.Mysql = request.SafeMysql(config.Server.Mysql)
+		}
+		list = append(list, item)
+	}
+
 	ctx.JSON(iris.Map{
 		"code":  config.StatusOK,
 		"msg":   "",
 		"total": total,
-		"data":  dbSites,
+		"data":  list,
 	})
 }
 

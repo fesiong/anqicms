@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+
+{% block container %}
+<main>
+
+  <div class="container py-5">
+    <h1 class="fw-bold mb-5 text-center">Frequently Asked Questions</h1>
+
+    <div class="accordion accordion-flush" id="faqAccordion">
+      {%- archiveList faqs with type="page" limit=20 showContent=true %}
+      {%- for faq in faqs %}
+      <div class="accordion-item bg-transparent">
+        <h2 class="accordion-header">
+          <button class="accordion-button collapsed px-0 bg-transparent text-dark fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#faq-{{forloop.Counter}}">
+            {{faq.Title}}
+          </button>
+        </h2>
+        <div id="faq-{{forloop.Counter}}" class="accordion-collapse collapse" data-bs-parent="#faqAccordion">
+          <div class="accordion-body px-0 py-3 text-muted">
+            {{faq.Content|safe}}
+          </div>
+        </div>
+      </div>
+      {%- endfor %}
+      {%- endarchiveList %}
+    </div>
+
+    <!-- Pagination -->
+    {%- include 'partial/pagination.html' %}
+  </div>
+
+</main>
+{% endblock %}

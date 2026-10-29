@@ -31,13 +31,13 @@ type AnqiDownloadTemplateRequest struct {
 
 // AnqiFeedbackRequest 向安企云提交使用反馈的结构体
 type AnqiFeedbackRequest struct {
-	Title    string   `json:"title"`   // 反馈标题
-	Type     string   `json:"type"`    // 反馈类型：bug|suggest|consult
-	Content  string   `json:"content"` // 反馈内容
-	Domain   string   `json:"domain"`  // 联系方式
-	Version  string   `json:"version" ast:"-"`
-	Platform string   `json:"platform" ast:"-"`
-	Images   []string `json:"images"` // 截图地址列表（通过上传附件获得）
+	UserName string `json:"user_name"` // 反馈用户
+	Type     string `json:"type"`      // 反馈类型：bug|suggest|consult
+	Content  string `json:"content"`   // 反馈内容
+	Contact  string `json:"contact"`   // 联系方式
+	Version  string `json:"version" ast:"-"`
+	Platform string `json:"platform" ast:"-"`
+	Return   string `json:"return" ast:"-"` // 返回类型：json|html
 }
 
 type AnqiExtractRequest struct {

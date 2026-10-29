@@ -2,6 +2,7 @@ package provider
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 
 	"gorm.io/gorm/clause"
@@ -56,11 +57,10 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if req.Id > 0 {
 		module, err = w.GetModuleById(req.Id)
 		if err != nil {
-			// 表示不存在，则新建一个
-			module = &model.Module{
-				Status: 1,
-			}
-			module.Id = req.Id
+			// 同 SaveCategory：传 id 即更新，不存在必须报错。
+			// 曾"不存在则按 req.Id 新建"，会造出幽灵模型（模型是内容表结构的定义，
+			// 多一个空模型会出现在建文档的选项里）。2026-10-27 由全接口测试发现。
+			return nil, fmt.Errorf("模型不存在: id=%d", req.Id)
 		}
 	} else {
 		module = &model.Module{

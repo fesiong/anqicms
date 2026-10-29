@@ -97,24 +97,38 @@ func TestContentArticleSaveSucceeds(t *testing.T) {
 //
 // 端点是 ArchiveStatusRequest.Status uint（0=草稿 1=正式），意图层对外是枚举字符串，
 // 实测直接透传会报「cannot unmarshal string into ... of type uint」，publish 完全不可用。
+//
+// 2026-10-27：未知值从"落到草稿(0)"改成报错。落草稿意味着
+// `publish status="__bad__"` 会把已发布文章**静默下架**且回执 ok，
+// 与参数 desc「传其它值会直接报错」相反。
 func TestArticleStatusCodeNormalize(t *testing.T) {
 	cases := []struct {
 		in   any
 		want int64
 	}{
 		{"ok", 1}, {"OK", 1}, {"1", 1}, {"publish", 1},
-		{"draft", 0}, {"plan", 0}, {"", 0}, {"未知", 0},
+		{"draft", 0}, {"plan", 0}, {"0", 0},
 		{float64(1), 1}, {float64(0), 0}, {1, 1},
 		{true, 0}, {false, 1},
 	}
 	for _, c := range cases {
-		got := articleStatusCode(c.in)
+		got, err := articleStatusCode(c.in)
+		if err != nil {
+			t.Errorf("articleStatusCode(%#v) 不该报错: %v", c.in, err)
+			continue
+		}
 		if g, ok := got.(int64); !ok || g != c.want {
 			t.Errorf("articleStatusCode(%#v) = %#v，期望 int64(%d)", c.in, got, c.want)
 		}
 	}
-	if got := articleStatusCode(nil); got != nil {
-		t.Errorf("nil 应原样返回，实际 %#v", got)
+	// 未知值 / 空串必须报错，不能静默降级成草稿。
+	for _, bad := range []any{"未知", "", "__bad__", "offline2", struct{}{}} {
+		if got, err := articleStatusCode(bad); err == nil {
+			t.Errorf("articleStatusCode(%#v) 应报错，实际返回 %#v（会把文章静默下架）", bad, got)
+		}
+	}
+	if got, err := articleStatusCode(nil); err != nil || got != nil {
+		t.Errorf("nil 应原样返回且不报错，实际 %#v / %v", got, err)
 	}
 }
 

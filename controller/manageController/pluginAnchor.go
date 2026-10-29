@@ -134,7 +134,9 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 	anchor.Link = req.Link
 	anchor.Weight = req.Weight
 
-	err = anchor.Save(currentSite.DB)
+	// 走 provider.SaveAnchor：它会顺手失效锚文本列表缓存。
+	// 直接用 anchor.Save 的话，新加的锚文本要等缓存过期（1 小时）才参与替换。
+	err = currentSite.SaveAnchor(anchor)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -145,7 +147,9 @@ func PluginAnchorDetailForm(ctx iris.Context) {
 
 	if changeTitle || changeLink {
 		//锚文本名称更改了，不管连接有没有更改，都删掉旧的
-		go currentSite.ChangeAnchor(anchor, changeTitle)
+		// 必须走 Async：后台任务不能挂请求 ctx，否则 handler 返回后
+		// 所有 WithContext(w.Ctx()) 的查询都会 context canceled。
+		go currentSite.Async().ChangeAnchor(anchor, changeTitle)
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("ModifyAnchorTextLog", anchor.Id, anchor.Title))
@@ -183,9 +187,12 @@ func PluginAnchorReplace(ctx iris.Context) {
 			return
 		}
 
-		go currentSite.ReplaceAnchor(anchor)
+		// 异步任务必须摘掉请求 ctx（见 Website.Async 的注释）：批量替换要遍历
+		// 全站文章、跑几十秒，而 handler 一返回请求 ctx 就被 cancel，任务会在
+		// 头几篇之后静默失败 —— 这就是「点了批量更新，只有很少文章变了」的成因。
+		go currentSite.Async().ReplaceAnchor(anchor)
 	} else {
-		go currentSite.ReplaceAnchor(nil)
+		go currentSite.Async().ReplaceAnchor(nil)
 	}
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("PerformAnchorTextBatchReplacement"))

@@ -355,15 +355,18 @@ func (w *Website) AnqiShareTemplate(req *request.AnqiTemplateRequest) error {
 }
 
 func (w *Website) AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
-	if config.AnqiUser.AuthId == 0 {
-		return errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
-	}
 	req.Version = config.Version
 	req.Platform = runtime.GOOS
-	req.Domain = w.System.BaseUrl
+	if req.UserName == "" {
+		req.UserName = w.System.SiteName
+	}
+	if req.Contact == "" {
+		req.Contact = w.Contact.Cellphone
+	}
+	req.Return = "json"
 	// 开始提交数据
 	var result AnqiDownloadTemplateResult
-	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/feedback").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).SetDebug(true).Post("https://www.anqicms.com/guestbook.html").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
 		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]

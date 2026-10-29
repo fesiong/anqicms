@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"mime/multipart"
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -287,6 +289,20 @@ func (w *Website) ChangeAnchor(anchor *model.Anchor, changeTitle bool) {
 	}
 }
 
+// SaveAnchor 保存锚文本，并立刻失效锚文本列表缓存。
+//
+// 新增/修改锚文本必须走它，不要直接 model.Anchor.Save：替换正文取词走的是
+// GetAllAnchors，那份列表带 1 小时缓存（AnchorCacheKey）。后台加完锚文本却不清缓存，
+// 接下来一小时发布的文章都用不上这个词，而「过一阵又自己好了」让人极难归因。
+func (w *Website) SaveAnchor(anchor *model.Anchor) error {
+	if err := anchor.Save(w.DB); err != nil {
+		return err
+	}
+	w.Cache.Delete(AnchorCacheKey)
+
+	return nil
+}
+
 // ReplaceAnchor 单个替换
 func (w *Website) ReplaceAnchor(anchor *model.Anchor) {
 	w.Cache.Delete(AnchorCacheKey)
@@ -298,7 +314,12 @@ func (w *Website) ReplaceAnchor(anchor *model.Anchor) {
 	}
 }
 
-// ReplaceAnchors 批量替换
+// ReplaceAnchors 批量替换。
+//
+// ⚠ 这是后台「批量更新锚文本」按钮的实现，跑在 `go` 出去的 goroutine 里，
+// **调用方必须用 site.Async() 摘掉请求 ctx**（见 Website.Async 的注释）。
+// 挂着请求 ctx 调它，一请求返回，每篇 GetArchiveDataById 都 context canceled，
+// 表现出来就是「点了批量更新，只有前几篇有变化」。
 func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
@@ -312,10 +333,18 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 	//每次取100个
 	limit := 100
 	lastId := int64(0)
-	var archives []*model.Archive
+	var done, failed int
+	startAt := time.Now()
 
 	for {
-		w.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&archives)
+		var archives []*model.Archive
+		// 查询错误必须显式处理：静默失败会让任务看起来「执行成功但没效果」，
+		// 而 lastId 不前进时下一轮又会重复取同一批，白白空转。
+		err := w.DB.Where("`id` > ?", lastId).Order("id asc").Limit(limit).Find(&archives).Error
+		if err != nil {
+			log.Printf("[anchor] 批量替换中断：读取文章列表失败（lastId=%d）：%v", lastId, err)
+			break
+		}
 		if len(archives) == 0 {
 			break
 		}
@@ -324,9 +353,18 @@ func (w *Website) ReplaceAnchors(anchors []*model.Anchor) {
 		for _, v := range archives {
 			//执行替换
 			link := w.GetUrl("archive", v, 0)
-			w.ReplaceContent(anchors, "archive", v.Id, link)
+			if w.ReplaceContent(anchors, "archive", v.Id, link) == "" {
+				// ReplaceContent 失败时返回空串，不区分「无改动」和「读不到正文」，
+				// 这里统一记为失败，至少能在日志里看到「有多少篇被跳过」。
+				failed++
+				continue
+			}
+			done++
 		}
 	}
+
+	log.Printf("[anchor] 批量替换结束：处理 %d 篇，失败 %d 篇，锚文本 %d 条，耗时 %s",
+		done+failed, failed, len(anchors), time.Since(startAt).Round(time.Millisecond))
 }
 
 func (w *Website) compileAnchors(anchors []*model.Anchor) {
@@ -345,27 +383,45 @@ func (w *Website) compileAnchors(anchors []*model.Anchor) {
 	w.anchorAcMatcher = library.NewAhoCorasickWithData(titles, data)
 }
 
+// ReplaceContentText 把正文里的锚文本关键词替换成链接，返回替换结果与是否有改动。
+//
+// 需要知道命中了哪些锚文本时用 replaceContentTextWithHits：
+// markdown 分支生成的是 `[关键词](链接)`，**不带 data-anchor 属性**，
+// 事后靠正则扫 data-anchor 是扫不到的（这个坑让 markdown 站点的
+// anchor_data 表长期为空，详见 ReplaceContent 的注释）。
 func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, link string) (string, bool) {
+	out, _, modified := w.replaceContentTextWithHits(anchors, content, link)
+	return out, modified
+}
+
+// replaceContentTextWithHits 是 ReplaceContentText 的实现，额外返回本次命中的锚文本 ID。
+// 重复出现的关键词被加粗时同样计入（与旧版「扫 data-anchor」的口径一致）。
+func (w *Website) replaceContentTextWithHits(anchors []*model.Anchor, content string, link string) (string, []uint, bool) {
 	link = strings.TrimPrefix(link, w.System.BaseUrl)
 	if len(anchors) == 0 {
 		anchors, _ = w.GetAllAnchors()
 		if len(anchors) == 0 {
 			//没有关键词，终止执行
-			return content, false
+			return content, nil, false
 		}
 	}
 
 	w.compileAnchors(anchors)
 	if w.anchorAcMatcher == nil {
-		return content, false
+		return content, nil, false
 	}
 
 	// 获取纯文本字数
 	stripedContent := library.StripTags(content)
 	contentLen := len([]rune(stripedContent))
-	if w.PluginAnchor.AnchorDensity < 20 {
-		// 默认设置200
-		w.PluginAnchor.AnchorDensity = 200
+	// 密度是局部量，不要就地改 w.PluginAnchor：clone 出来的站点与全局实例共享
+	// 同一个 PluginAnchor 指针，就地赋值会把「默认值修正」写进站点配置。
+	// 默认 100 与后台设置页、config.PluginAnchorConfig 的注释保持一致
+	// （这里原来写的是 <20→200，等于默认密度只有文档承诺的一半，
+	//  同样的文章只能拿到一半的锚文本数量）。
+	density := w.PluginAnchor.AnchorDensity
+	if density < 10 {
+		density = 100
 	}
 
 	// 判断是否是Markdown，如果开头是标签，则认为不是Markdown
@@ -374,21 +430,35 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		isMarkdown = true
 	}
 	// 最大可以替换的数量
-	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(w.PluginAnchor.AnchorDensity)))
+	maxAnchorNum := int(math.Ceil(float64(contentLen) / float64(density)))
+	if maxAnchorNum < 1 {
+		maxAnchorNum = 1
+	}
 
 	isModified := false
+	// 本次命中的锚文本 ID：markdown 分支生成 `[文字](链接)` 没有 data-anchor 属性，
+	// 只能在这里顺手记下来，否则调用方无法回填 anchor_data。
+	var hits []uint
+	// replacedCount 是「本次真正生成链接」的数量，用它判密度上限。
+	//
+	// 不能用 len(existsKeywords)：那个 map 除了记录本次替换过的词，还预填了正文里
+	// 原有的所有 <a> 文本和 markdown 链接文本（用来避免给已加链接的词再加一个）。
+	// 一篇文章自带的目录、外链、参考链接会把这些位置占满，于是
+	// len(existsKeywords) >= maxAnchorNum 在第一次替换前就成立，整篇一个锚文本都加不上。
+	// 命中重复词时的加粗也不该计入密度 —— 密度说的是「多少个锚文本链接」。
+	replacedCount := 0
 	existsKeywords := make(map[string]bool, maxAnchorNum*2)
 	noStrongTag := w.PluginAnchor.NoStrongTag != 0
 	if isMarkdown {
 		// Markdown的处理方式
 		var replaceMdText = func(text string, addStrongTag bool) string {
-			if len(text) == 0 || len(existsKeywords) >= maxAnchorNum {
+			if len(text) == 0 || replacedCount >= maxAnchorNum {
 				return text
 			}
 
 			textBytes := []byte(text)
 			newTextBytes := w.anchorAcMatcher.ReplaceAll(textBytes, func(match library.ACMatch) []byte {
-				if len(existsKeywords) >= maxAnchorNum {
+				if replacedCount >= maxAnchorNum {
 					return match.Pattern
 				}
 
@@ -415,9 +485,12 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				if !existsKeywords[titleLower] {
 					existsKeywords[titleLower] = true
 					isModified = true
+					hits = append(hits, anchor.Id)
+					replacedCount++
 					return []byte(fmt.Sprintf("[%s](%s)", string(match.Pattern), anchor.Link))
 				} else if addStrongTag {
 					isModified = true
+					hits = append(hits, anchor.Id)
 					return []byte(fmt.Sprintf("**%s**", string(match.Pattern)))
 				}
 				return match.Pattern
@@ -467,7 +540,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				newText.WriteString(line + "\n")
 				continue
 			}
-			if len(existsKeywords) >= maxAnchorNum {
+			if replacedCount >= maxAnchorNum {
 				// 已达到上限，不再继续
 				newText.WriteString(line + "\n")
 				continue
@@ -510,7 +583,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		// 处理html
 		doc, err := html.Parse(strings.NewReader(content))
 		if err != nil {
-			return content, false
+			return content, nil, false
 		}
 		// 创建已处理节点的映射，避免重复替换
 		processedNodes := make(map[*html.Node]bool)
@@ -519,7 +592,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		var traverse func(*html.Node)
 		traverse = func(n *html.Node) {
 			if n.Type == html.TextNode && !isInsideTag(n, skipTags) && !processedNodes[n] {
-				if len(existsKeywords) >= maxAnchorNum {
+				if replacedCount >= maxAnchorNum {
 					// 已达到上限，不再继续
 					return
 				}
@@ -527,7 +600,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 				textBytes := []byte(n.Data)
 				modified := false
 				newTextBytes := w.anchorAcMatcher.ReplaceAll(textBytes, func(match library.ACMatch) []byte {
-					if len(existsKeywords) >= maxAnchorNum {
+					if replacedCount >= maxAnchorNum {
 						return match.Pattern
 					}
 
@@ -553,9 +626,12 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 					if !existsKeywords[titleLower] {
 						existsKeywords[titleLower] = true
 						modified = true
+						hits = append(hits, anchor.Id)
+						replacedCount++
 						return []byte(fmt.Sprintf("<a href=\"%s\" data-anchor=\"%d\">%s</a>", anchor.Link, anchor.Id, string(match.Pattern)))
 					} else if !noStrongTag {
 						modified = true
+						hits = append(hits, anchor.Id)
 						return []byte(fmt.Sprintf("<strong data-anchor=\"%d\">%s</strong>", anchor.Id, string(match.Pattern)))
 					}
 					return match.Pattern
@@ -590,7 +666,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 			var buf bytes.Buffer
 			err = html.Render(&buf, doc)
 			if err != nil {
-				return content, false
+				return content, nil, false
 			}
 			content = buf.String()
 			// 只要body部分
@@ -602,7 +678,7 @@ func (w *Website) ReplaceContentText(anchors []*model.Anchor, content string, li
 		}
 	}
 
-	return content, isModified
+	return content, hits, isModified
 }
 
 // isInsideTag 检查节点是否在指定节点内
@@ -629,15 +705,31 @@ func (w *Website) ReplaceContent(anchors []*model.Anchor, itemType string, itemI
 	if err != nil {
 		return ""
 	}
-	content, isModified := w.ReplaceContentText(anchors, archiveData.Content, link)
+	content, hits, isModified := w.replaceContentTextWithHits(anchors, archiveData.Content, link)
 
 	if isModified {
 		//内容有更新，执行更新
-		archiveData.Content = content
+		//
+		// 存回库前必须把 URL 还原：GetArchiveDataById 读正文时会做一次
+		// ReplaceContentUrl(content, true)（把 /uploads 补成存储域名），
+		// 直接 Save 会把补全后的绝对地址写进库 —— 每点一次批量替换，
+		// 全站图片地址就被改写一遍，之后换存储/CDN 就全挂了。
+		archiveData.Content = w.ReplaceContentUrl(content, false)
 		w.DB.Save(archiveData)
-		// 查找记录
-		re, _ := regexp.Compile(`data-anchor="(\d+)"`)
+		// 回填替换记录。
+		//
+		// 命中 id 以 replaceContentTextWithHits 的返回值为准，**不能只扫 data-anchor**：
+		// markdown 分支生成的是 `[关键词](链接)`，没有 data-anchor 属性，纯靠正则扫
+		// 会让 markdown 站点的 anchor_data 永远为空 —— 后台「替换次数」恒 0，
+		// 改锚文本链接时 ChangeAnchor 也找不到受影响文档，旧链接永远更新不掉。
+		// 正则扫描保留为兜底（历史数据里可能已有带 data-anchor 的 html 链接）。
 		var anchorIds = map[uint]struct{}{}
+		for _, anchorId := range hits {
+			if anchorId > 0 {
+				anchorIds[anchorId] = struct{}{}
+			}
+		}
+		re, _ := regexp.Compile(`data-anchor="(\d+)"`)
 		matches := re.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
 			anchorId, _ := strconv.ParseInt(match[1], 10, 64)

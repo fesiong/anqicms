@@ -19,6 +19,7 @@ type OrderRequest struct {
 	DeliverTime       int64                `json:"deliver_time"`
 	FinishedTime      int64                `json:"finished_time"`
 	DiscountAmount    int64                `json:"discount_amount"` // 可能一个订单支持多个优惠
+	ActivityId        int64                `json:"activity_id"`     // 活动ID
 	CouponId          int64                `json:"coupon_id"`
 	CouponCodeId      int64                `json:"coupon_code_id"`
 	CouponCode        string               `json:"coupon_code"`
@@ -28,10 +29,12 @@ type OrderRequest struct {
 	ShareSelfAmount   int64                `json:"share_self_amount"`   // 本级
 	Address           *OrderAddressRequest `json:"address"`
 	Details           []OrderDetail        `json:"details"`
+	ServiceIds        []int64              `json:"service_ids"`
 
 	// 接受单个，不需要detail
-	GoodsId  int64 `json:"goods_id"`
-	Quantity int   `json:"quantity"`
+	GoodsId    int64 `json:"goods_id"`
+	GoodsSkuId int64 `json:"goods_sku_id"`
+	Quantity   int   `json:"quantity"`
 	// 重置密码
 	Password string `json:"password"`
 	Code     string `json:"code"`
@@ -74,17 +77,19 @@ type PaymentAccountDeleteRequest struct {
 }
 
 type OrderDetail struct {
-	Id          uint   `json:"id"`
-	OrderId     string `json:"order_id"`
-	UserId      uint   `json:"user_id"`
-	GoodsId     int64  `json:"goods_id"`
-	GoodsSkuId  int64  `json:"goods_sku_id"`
-	Price       int64  `json:"price"`
-	OriginPrice int64  `json:"origin_price"`
-	Amount      int64  `json:"amount"`
-	RealAmount  int64  `json:"real_amount"` // 实际支付的金额，用于退款的时候进行退款操作
-	Quantity    int    `json:"quantity"`
-	Status      int    `json:"status"`
+	Id          uint                       `json:"id"`
+	OrderId     string                     `json:"order_id"`
+	UserId      uint                       `json:"user_id"`
+	GoodsId     int64                      `json:"goods_id"`
+	GoodsSkuId  int64                      `json:"goods_sku_id"`
+	Price       int64                      `json:"price"`
+	OriginPrice int64                      `json:"origin_price"`
+	Amount      int64                      `json:"amount"`
+	RealAmount  int64                      `json:"real_amount"` // 实际支付的金额，用于退款的时候进行退款操作
+	Quantity    int                        `json:"quantity"`
+	Status      int                        `json:"status"`
+	SkuValues   []model.ArchiveOptionValue `json:"sku_values"` // SKU 组合字段
+	OrderExtra  map[string]interface{}     `json:"order_extra"`
 }
 
 type OrderRefundRequest struct {
@@ -116,4 +121,56 @@ type OrderExportRequest struct {
 	Status    string `json:"status"`     // 订单状态：waiting,paid,delivery,finished,refunding,closed
 	StartTime int64  `json:"start_time"` // 开始时间戳
 	EndTime   int64  `json:"end_time"`   // 结束时间戳
+}
+
+type OrderReviewRequest struct {
+	Id           int64    `json:"id"`             // 评价 ID，0 表示新建
+	ArchiveId    int64    `json:"archive_id"`     // 被评价的商品（文档）ID
+	ArchiveSkuId int64    `json:"archive_sku_id"` // 被评价的商品规格 ID，0 表示对商品整体评价
+	OrderId      string   `json:"order_id"`       // 订单号；同一订单的同一商品重复提交只会成功一条
+	UserId       uint     `json:"user_id"`        // 评价所属会员 ID；更新时必须与原评价一致，否则返回 Not Found
+	UserName     string   `json:"user_name"`      // 评价人昵称
+	Email        string   `json:"email"`          // 评价人邮箱
+	Ip           string   `json:"ip"`             // 评价来源 IP
+	Score        int      `json:"score"`          // 评分
+	Content      string   `json:"content"`        // 评价内容
+	Status       uint     `json:"status"`         // 状态：0 未处理（待审核），1 正常（已通过），-1 删除
+	Images       []string `json:"images"`         // 评价图片 URL 列表
+}
+
+type CartRequest struct {
+	Id          int64                      `json:"id"`
+	UserId      int64                      `json:"user_id"`
+	Token       string                     `json:"token"`
+	UserName    string                     `json:"user_name"`
+	ArchiveId   int64                      `json:"archive_id"`
+	SkuId       int64                      `json:"sku_id"`
+	SkuValues   []model.ArchiveOptionValue `json:"sku_values"` // SKU 组合字段
+	Quantity    int                        `json:"quantity"`
+	Force       bool                       `json:"force"` // 强制覆盖
+	Title       string                     `json:"title"`
+	SkuTitle    string                     `json:"sku_title"`
+	Description string                     `json:"description"`
+	Remark      string                     `json:"remark"`
+	Thumb       string                     `json:"thumb"`
+	Price       int64                      `json:"price"`
+	OriginPrice int64                      `json:"origin_price"`
+	Status      int                        `json:"status"`
+	CreatedTime int64                      `json:"created_time"`
+	UpdatedTime int64                      `json:"updated_time"`
+	OrderExtra  map[string]interface{}     `json:"order_extra"`
+}
+
+type OrderServiceRequest struct {
+	Id          int64                  `json:"id"`              // 服务项 ID，0 表示新建
+	ServiceCode string                 `json:"service_code"`    // 服务编码（唯一标识，客户端取值时用它）
+	ServiceName string                 `json:"service_name"`    // 服务名称（结算页展示）
+	ServiceType string                 `json:"service_type"`    // 服务类型标记
+	Description string                 `json:"description"`     // 服务说明
+	Enabled     bool                   `json:"enabled"`         // 是否启用；false 时前台不可选
+	Sort        uint                   `json:"sort"`            // 排序，越小越靠前
+	Fee         int64                  `json:"fee"`             // 服务费（分）；fee_type=2 时是订单金额的百分比数值
+	FeeType     int                    `json:"fee_type"`        // 计费方式：0 固定金额，2 订单金额比例
+	MaxFee      int64                  `json:"max_fee"`         // 费用上限（分），0 表示不设上限
+	Extra       map[string]interface{} `json:"extra,omitempty"` // 其它自定义配置（原样存库）
 }

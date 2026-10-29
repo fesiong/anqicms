@@ -202,6 +202,247 @@ func init() {
 		},
 	})
 
+	// ArchiveOptionValueType 定义
+	archiveOptionValueType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "ArchiveOptionValue",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"archive_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"option_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"title": &graphql.Field{
+				Type: graphql.String,
+			},
+			"images": &graphql.Field{
+				Type: graphql.NewList(graphql.String),
+			},
+			"logo": &graphql.Field{
+				Type: graphql.String,
+			},
+			"thumb": &graphql.Field{
+				Type: graphql.String,
+			},
+			"color": &graphql.Field{
+				Type: graphql.String,
+			},
+			"price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"stock": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"is_default": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"sort": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"created_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"updated_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+		},
+	})
+
+	// ArchiveOptionType 定义
+	archiveOptionType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "ArchiveOption",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"archive_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"title": &graphql.Field{
+				Type: graphql.String,
+			},
+			"sort": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"is_main": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"created_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"updated_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"values": &graphql.Field{
+				Type: graphql.NewList(archiveOptionValueType),
+			},
+		},
+	})
+
+	// ArchiveSkuType 定义
+	archiveSkuType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "ArchiveSku",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"archive_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"title": &graphql.Field{
+				Type: graphql.String,
+			},
+			"symbol": &graphql.Field{
+				Type: graphql.String,
+			},
+			"sku": &graphql.Field{
+				Type: graphql.String,
+			},
+			"barcode": &graphql.Field{
+				Type: graphql.String,
+			},
+			"hs_code": &graphql.Field{
+				Type: graphql.String,
+			},
+			"link": &graphql.Field{
+				Type: graphql.String,
+			},
+			"images": &graphql.Field{
+				Type: graphql.NewList(graphql.String),
+			},
+			"logo": &graphql.Field{
+				Type: graphql.String,
+			},
+			"thumb": &graphql.Field{
+				Type: graphql.String,
+			},
+			"stock": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"origin_price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"cost_price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"weight": &graphql.Field{
+				Type: graphql.Float,
+			},
+			"weight_unit": &graphql.Field{
+				Type: graphql.String,
+			},
+			"sold_count": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"created_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"updated_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"values": &graphql.Field{
+				Type: graphql.NewList(archiveOptionValueType),
+			},
+			"status": &graphql.Field{
+				Type: graphql.Int,
+			},
+		},
+	})
+
+	// WholesaleRuleType 定义
+	wholesaleRuleType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "WholesaleRule",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"archive_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"sku_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"min_quantity": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"max_quantity": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"discount_rate": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"created_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"updated_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+		},
+	})
+
+	skuType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Sku",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"title": &graphql.Field{
+				Type: graphql.String,
+			},
+			"thumb": &graphql.Field{
+				Type: graphql.String,
+			},
+			"currency": &graphql.Field{
+				Type: graphql.String,
+			},
+			"currency_symbol": &graphql.Field{
+				Type: graphql.String,
+			},
+			"price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"min_price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"max_price": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"has_sku": &graphql.Field{
+				Type: graphql.Boolean,
+			},
+			"user_limit": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"quota_used": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"order_count": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"stock": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"option_type": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"options": &graphql.Field{
+				Type: graphql.NewList(archiveOptionType),
+			},
+			"skus": &graphql.Field{
+				Type: graphql.NewList(archiveSkuType),
+			},
+			"wholesale_rules": &graphql.Field{
+				Type: graphql.NewList(wholesaleRuleType),
+			},
+		},
+	})
+
 	customFieldType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "CustomField",
 		Fields: graphql.Fields{
@@ -362,6 +603,9 @@ func init() {
 			"weight_unit": &graphql.Field{
 				Type: graphql.String,
 			},
+			"product_type": &graphql.Field{
+				Type: graphql.Int,
+			},
 			"allow_oversold": &graphql.Field{
 				Type: graphql.Boolean,
 			},
@@ -372,6 +616,9 @@ func init() {
 			//"parent": &graphql.Field{
 			//	Type: archiveType,
 			//},
+			"brand": &graphql.Field{
+				Type: graphql.String,
+			},
 			"module_name": &graphql.Field{
 				Type: graphql.String,
 			},
@@ -417,8 +664,41 @@ func init() {
 			"is_favorite": &graphql.Field{
 				Type: graphql.Boolean,
 			},
+			"quantity": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"cart_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"amount": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"origin_amount": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"options": &graphql.Field{
+				Type: graphql.NewList(archiveOptionType),
+			},
+			"wholesale_rules": &graphql.Field{
+				Type: graphql.NewList(wholesaleRuleType),
+			},
+			"wholesale_rule": &graphql.Field{
+				Type: wholesaleRuleType,
+			},
 			"extra": &graphql.Field{
 				Type: JSONScalar, // 需要确认是否已定义
+			},
+			"order_extra": &graphql.Field{
+				Type: JSONScalar,
+			},
+			"skus": &graphql.Field{
+				Type: graphql.NewList(archiveSkuType),
+			},
+			"sku": &graphql.Field{
+				Type: archiveSkuType,
+			},
+			"order_fields": &graphql.Field{
+				Type: graphql.NewList(customFieldType),
 			},
 		},
 	})
@@ -764,6 +1044,21 @@ func init() {
 		},
 	})
 
+	currentySettingType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "CurrencySetting",
+		Fields: graphql.Fields{
+			"name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"currency": &graphql.Field{
+				Type: graphql.String,
+			},
+			"symbol": &graphql.Field{
+				Type: graphql.String,
+			},
+		},
+	})
+
 	systemSettingType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "SystemSetting",
 		Fields: graphql.Fields{
@@ -870,6 +1165,27 @@ func init() {
 				Type: graphql.String,
 			},
 			"qrcode": &graphql.Field{
+				Type: graphql.String,
+			},
+			"shop_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"shop_logo": &graphql.Field{
+				Type: graphql.String,
+			},
+			"shop_description": &graphql.Field{
+				Type: graphql.String,
+			},
+			"business_hours": &graphql.Field{
+				Type: graphql.String,
+			},
+			"delivery_location": &graphql.Field{
+				Type: graphql.String,
+			},
+			"shipping_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"shipping_time_remark": &graphql.Field{
 				Type: graphql.String,
 			},
 			"extra_fields": &graphql.Field{
@@ -1064,6 +1380,78 @@ func init() {
 		},
 	})
 
+	reviewType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Review",
+		Fields: graphql.Fields{
+			"id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"archive_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"archive_sku_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"user_id": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"order_id": &graphql.Field{
+				Type: graphql.String,
+			},
+			"ip": &graphql.Field{
+				Type: graphql.String,
+			},
+			"score": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"vote_count": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"content": &graphql.Field{
+				Type: graphql.String,
+			},
+			"images": &graphql.Field{
+				Type: graphql.NewList(graphql.String),
+			},
+			"status": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"user_name": &graphql.Field{
+				Type: graphql.String,
+			},
+			"email": &graphql.Field{
+				Type: graphql.String,
+			},
+			"avatar_url": &graphql.Field{
+				Type: graphql.String,
+			},
+			"archive_title": &graphql.Field{
+				Type: graphql.String,
+			},
+			"sku_title": &graphql.Field{
+				Type: graphql.String,
+			},
+			"created_time": &graphql.Field{
+				Type: graphql.Int,
+			},
+		},
+	})
+
+	reviewListType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "ReviewList",
+		Fields: graphql.Fields{
+			"total": &graphql.Field{
+				Type: graphql.Int,
+			},
+			"items": &graphql.Field{
+				Type: graphql.NewList(reviewType),
+			},
+			"page": &graphql.Field{
+				Type: graphql.Int,
+			},
+		},
+	})
+
 	// 定义查询
 	queryType := graphql.NewObject(graphql.ObjectConfig{
 		Name: "Query",
@@ -1098,6 +1486,9 @@ func init() {
 					"password": &graphql.ArgumentConfig{
 						Type: graphql.String,
 					},
+					"variant": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
 				},
 				Resolve: resolveArchive,
 			},
@@ -1109,6 +1500,9 @@ func init() {
 					},
 					"render": &graphql.ArgumentConfig{
 						Type: graphql.Boolean,
+					},
+					"product_type": &graphql.ArgumentConfig{
+						Type: graphql.Int,
 					},
 					"parent_id": &graphql.ArgumentConfig{
 						Type: graphql.Int,
@@ -1206,6 +1600,9 @@ func init() {
 					"show_price": &graphql.ArgumentConfig{
 						Type: graphql.Boolean,
 					},
+					"show_availability": &graphql.ArgumentConfig{
+						Type: graphql.Boolean,
+					},
 					"show_category": &graphql.ArgumentConfig{
 						Type: graphql.Boolean,
 					},
@@ -1235,6 +1632,21 @@ func init() {
 					},
 				},
 				Resolve: resolveArchiveParams,
+			},
+			"sku": &graphql.Field{
+				Type: skuType,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"filename": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"url_token": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+				},
+				Resolve: resolveSku,
 			},
 			"user": &graphql.Field{
 				Type: userType,
@@ -1414,6 +1826,33 @@ func init() {
 				},
 				Resolve: resolveComments,
 			},
+			"reviews": &graphql.Field{
+				Type: reviewListType,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{ // archiveId
+						Type: graphql.Int,
+					},
+					"user_id": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"order": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"page": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"limit": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"offset": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"render": &graphql.ArgumentConfig{
+						Type: graphql.Boolean,
+					},
+				},
+				Resolve: resolveReviews,
+			},
 			"system": &graphql.Field{
 				Type:    systemSettingType,
 				Args:    graphql.FieldConfigArgument{},
@@ -1442,6 +1881,11 @@ func init() {
 				Type:    graphql.NewList(customFieldType),
 				Args:    graphql.FieldConfigArgument{},
 				Resolve: resolveGuestbookFields,
+			},
+			"currency": &graphql.Field{
+				Type:    currentySettingType,
+				Args:    graphql.FieldConfigArgument{},
+				Resolve: resolveCurrency,
 			},
 			"banners": &graphql.Field{
 				Type: graphql.NewList(bannerType),
@@ -1475,9 +1919,44 @@ func init() {
 		},
 	})
 
+	// 定义变更
+	mutationType := graphql.NewObject(graphql.ObjectConfig{
+		Name: "Mutation",
+		Fields: graphql.Fields{
+			"createReview": &graphql.Field{
+				Type: reviewType,
+				Args: graphql.FieldConfigArgument{
+					"id": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"order_id": &graphql.ArgumentConfig{
+						Type: graphql.Int,
+					},
+					"user_name": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"email": &graphql.ArgumentConfig{
+						Type: graphql.String,
+					},
+					"content": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.String),
+					},
+					"score": &graphql.ArgumentConfig{
+						Type: graphql.NewNonNull(graphql.Int),
+					},
+					"images": &graphql.ArgumentConfig{
+						Type: graphql.NewList(graphql.String),
+					},
+				},
+				Resolve: createReview,
+			},
+		},
+	})
+
 	// 创建Schema
 	schema, err := graphql.NewSchema(graphql.SchemaConfig{
-		Query: queryType,
+		Query:    queryType,
+		Mutation: mutationType,
 	})
 
 	if err != nil {

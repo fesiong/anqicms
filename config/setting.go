@@ -21,6 +21,7 @@ type SystemConfig struct {
 	SiteClose     int           `json:"site_close"`           // 是否关闭网站：0=否，1=是
 	SiteCloseTips string        `json:"site_close_tips"`      // 关闭网站页面上提示的内容。
 	BanSpider     int           `json:"ban_spider"`           // 是否禁止搜索引擎抓取。
+	ShopMode      int           `json:"shop_mode"`            // 站点运行模式：0=普通内容模式（隐藏商城前台 API 与菜单），1=商城模式（全功能）。切换只影响入口展示，不删数据。
 	TemplateName  string        `json:"template_name"`        // 模板包名
 	TemplateType  int           `json:"template_type"`        // 模板类型：0=自适应，1=代码适配，2=PC+手机独立模板
 	TemplateUrl   string        `json:"template_url" ast:"-"` // template 的静态文件目录
@@ -63,22 +64,28 @@ type IndexConfig struct {
 }
 
 type ContactConfig struct {
-	UserName    string        `json:"user_name"`            // 联系人
-	Cellphone   string        `json:"cellphone"`            // 联系电话
-	Address     string        `json:"address"`              // 联系地址
-	Email       string        `json:"email"`                // 联系邮箱
-	Wechat      string        `json:"wechat"`               // 联系微信
-	QQ          string        `json:"qq"`                   // 联系QQ
-	WhatsApp    string        `json:"whats_app"`            // 联系WhatsApp
-	Facebook    string        `json:"facebook"`             // 联系Facebook
-	Twitter     string        `json:"twitter"`              // 联系Twitter
-	Tiktok      string        `json:"tiktok"`               // 联系TikTok
-	Pinterest   string        `json:"pinterest"`            // 联系Pinterest
-	Linkedin    string        `json:"linkedin"`             // 联系LinkedIn
-	Instagram   string        `json:"instagram"`            // 联系Instagram
-	Youtube     string        `json:"youtube"`              // 联系YouTube
-	Qrcode      string        `json:"qrcode"`               // 联系二维码，一般是微信二维码
-	ExtraFields []CustomField `json:"extra_fields" ast:"-"` // 用户自定义字段
+	UserName           string        `json:"user_name"`            // 联系人
+	Cellphone          string        `json:"cellphone"`            // 联系电话
+	Address            string        `json:"address"`              // 联系地址
+	Email              string        `json:"email"`                // 联系邮箱
+	Wechat             string        `json:"wechat"`               // 联系微信
+	QQ                 string        `json:"qq"`                   // 联系QQ
+	WhatsApp           string        `json:"whats_app"`            // 联系WhatsApp
+	Facebook           string        `json:"facebook"`             // 联系Facebook
+	Twitter            string        `json:"twitter"`              // 联系Twitter
+	Tiktok             string        `json:"tiktok"`               // 联系TikTok
+	Pinterest          string        `json:"pinterest"`            // 联系Pinterest
+	Linkedin           string        `json:"linkedin"`             // 联系LinkedIn
+	Instagram          string        `json:"instagram"`            // 联系Instagram
+	Youtube            string        `json:"youtube"`              // 联系YouTube
+	Qrcode             string        `json:"qrcode"`               // 联系二维码，一般是微信二维码
+	ExtraFields        []CustomField `json:"extra_fields" ast:"-"` // 用户自定义字段
+	ShopName           string        `json:"shop_name"`            // 店铺名称，商城模式下展示在店铺页
+	ShopLogo           string        `json:"shop_logo"`            // 店铺 Logo 图片地址（附件相对路径）
+	ShopDescription    string        `json:"shop_description"`     // 店铺简介
+	BusinessHours      string        `json:"business_hours"`       // 营业时间，自由文本，如 9:00-18:00
+	ShippingTime       int           `json:"shipping_time"`        // 预计发货时间，单位：天
+	ShippingTimeRemark string        `json:"shipping_time_remark"` // 发货时间的补充说明文本，如 下单后48小时内发货
 }
 
 type SafeConfig struct {
@@ -122,4 +129,93 @@ type BannerConfig struct {
 type CacheConfig struct {
 	CacheType string `json:"cache_type"` // 缓存类型：0=自动选择，1=使用文件缓存，2=使用内存缓存
 	Update    bool   `json:"update"`     // 是否更新缓存类型，为 false 时执行清理缓存。
+}
+
+// ---- 商城相关配置（mall 合并） ----
+
+type CurrencyConfig struct {
+	Name     string `json:"name"`     // 货币名称
+	Currency string `json:"currency"` // 货币代码
+	Symbol   string `json:"symbol"`   // 货币符号
+}
+
+type ExtraField struct {
+	Name    string      `json:"name"`
+	Type    string      `json:"type"`
+	Value   interface{} `json:"value"`
+	Remark  string      `json:"remark"`
+	Content string      `json:"content"`
+}
+
+type FreeShippingRule struct {
+	Type      int     `json:"type"`      // 0=不启用，1=金额满n包邮，2=重量数满n包邮，3=体积数满n包邮， 4=按数量计费满n件包邮
+	Threshold float64 `json:"threshold"` // 满额阈值，为了兼容其它单位，这里满额的时候，保留元，不转换为分
+}
+
+type PlaceItem struct {
+	CountryCode  string `json:"country_code"`
+	ProvinceCode string `json:"province_code"`
+	Country      string `json:"country"`
+	Province     string `json:"province"`
+	City         string `json:"city"`
+	Address      string `json:"address"` // 详细地址
+	Latitude     string `json:"latitude"`
+	Longitude    string `json:"longitude"`
+}
+
+type ShippingConfig struct {
+	Units             []ShippingUnitItem `json:"units"`              // 计量单位列表
+	VolumetricDivisor int                `json:"volumetric_divisor"` // 体积单位换算比例，如 cm³/5000 = 1kg，5000 = 1kg
+	WeightUnits       []ShippingUnitItem `json:"weight_units"`       // 重量单位列表
+	Type              int                `json:"type"`               // 1 = 固定运费， 2 = 按重量计费， 3 = 按体积计费，4 = 按数量计费， 5 = 按金额计费
+	// 全局是否免运费
+	IsFreeShipping bool `json:"is_free_shipping"` // 是否免费配送 false=自定义运费 true=包邮, 如果设置了包邮，则下面的配置将被忽略。
+	// 发货地
+	DeliveryPlace PlaceItem `json:"delivery_place"` // 发货地址
+	// 满额免运费规则
+	FreeShippingRule FreeShippingRule `json:"free_shipping_rule"` // 满额免运费规则
+	// 默认运费规则，当不匹配任何地区时，使用默认运费规则
+	DefaultRule ShippingRule `json:"default_rule"` // 默认运费规则
+	// 自定义地区运费规则
+	RegionRules []ShippingRule `json:"region_rules"` // 自定义地区运费规则
+}
+
+type ShippingRule struct {
+	Id           int64       `json:"id,omitempty"`
+	FirstUnit    float64     `json:"first_unit"`
+	FirstFee     int64       `json:"first_fee"` // 首单位运费，单位为分
+	ContinueUnit float64     `json:"continue_unit"`
+	ContinueFee  int64       `json:"continue_fee"` // 续重费用，单位为分
+	Regions      []PlaceItem `json:"regions"`
+}
+
+type ShippingUnitItem struct {
+	Name       string  `json:"name"`        // 长度单位名称，如 cm
+	VolumeName string  `json:"volume_name"` // 体积单位名，如 cm³
+	Ratio      float64 `json:"ratio"`       // 换算比例
+}
+
+func (s *ShippingConfig) GetWeightUnit(name string) ShippingUnitItem {
+	for _, item := range s.WeightUnits {
+		if item.Name == name {
+			return item
+		}
+	}
+	return ShippingUnitItem{
+		Name:  "kg",
+		Ratio: 1,
+	}
+}
+
+func (s *ShippingConfig) GetLengthUnit(name string) ShippingUnitItem {
+	for _, item := range s.Units {
+		if item.Name == name {
+			return item
+		}
+	}
+	return ShippingUnitItem{
+		Name:       "m",
+		VolumeName: "m³",
+		Ratio:      1,
+	}
 }

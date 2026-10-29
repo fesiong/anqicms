@@ -26,11 +26,12 @@ type ServerJson struct {
 
 type ConfigJson struct {
 	//setting
-	System  SystemConfig  `json:"system"`
-	Content ContentConfig `json:"content"`
-	Index   IndexConfig   `json:"index"`
-	Contact ContactConfig `json:"contact"`
-	Safe    SafeConfig    `json:"safe"`
+	System   SystemConfig   `json:"system"`
+	Content  ContentConfig  `json:"content"`
+	Index    IndexConfig    `json:"index"`
+	Contact  ContactConfig  `json:"contact"`
+	Shipping ShippingConfig `json:"shipping"`
+	Safe     SafeConfig     `json:"safe"`
 	//plugin
 	PluginPush        PluginPushConfig      `json:"plugin_push"`
 	PluginSitemap     PluginSitemapConfig   `json:"plugin_sitemap"`
@@ -57,7 +58,7 @@ func initPath() {
 	if strings.Contains(baseName, "go_build") || strings.Contains(ExecPath, "go-build") || strings.Contains(baseName, "Test") {
 		ExecPath, _ = os.Getwd()
 	}
-	if strings.Contains(baseName, "Test") || strings.Contains(ExecPath, "/provider") {
+	if strings.Contains(baseName, "Test") || strings.Contains(ExecPath, "/test") || strings.Contains(ExecPath, "/provider") {
 		ExecPath = filepath.Dir(ExecPath)
 	}
 	length := utf8.RuneCountInString(ExecPath)

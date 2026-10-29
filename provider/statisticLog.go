@@ -265,6 +265,7 @@ func (s *StatisticLog) Calc(db *gorm.DB) {
 				// 记录存在，更新数据库
 				lastStatistic.SpiderCount = logData.SpiderCount
 				lastStatistic.VisitCount = logData.VisitCount
+				lastStatistic.ShopCount = logData.ShopCount
 				db.Save(&lastStatistic)
 			}
 		}
@@ -374,6 +375,14 @@ func (s *StatisticLog) CalcLog(lt time.Time) (*model.StatisticLog, error) {
 	}
 	// 统计ip
 	statistic.VisitCount.IPCount = len(ipMap)
+	// 统计 shopCount
+	shopCountPath := fmt.Sprintf("%sshop-%s.log", s.Path, lt.Format("20060102"))
+	var shopCount model.ShopCount
+	buf, err := os.ReadFile(shopCountPath)
+	if err == nil {
+		_ = json.Unmarshal(buf, &shopCount)
+	}
+	statistic.ShopCount = shopCount
 
 	return &statistic, nil
 }
@@ -498,6 +507,12 @@ func (w *Website) InitStatistic() {
 		fmt.Println("InitStatisticLog error:", err)
 		return
 	}
+	w.ShopCountLog, err = NewShopCountCache(w.RootPath + "data/statistic/")
+	if err != nil {
+		fmt.Println("InitShopCountLog error:", err)
+		return
+	}
+	// 数据的合并，会在statistic中处理
 	// 先从旧站点迁移数据
 	// 处理 statistic
 	if w.DB.Migrator().HasTable(&Statistic{}) {
@@ -519,4 +534,13 @@ func (w *Website) InitStatistic() {
 		w.DB.Migrator().DropTable(&Statistic{})
 	}
 
+}
+
+func (w *Website) AddSearchLog(q string, userId uint, ip string) {
+	var searchLog = model.SearchLog{
+		Ip:      ip,
+		Keyword: q,
+		UserId:  int64(userId),
+	}
+	w.DB.Create(&searchLog)
 }

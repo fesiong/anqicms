@@ -3,6 +3,7 @@ package tags
 import (
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 
 	"github.com/flosch/pongo2/v6"
@@ -76,6 +77,21 @@ func (node *tagContactNode) Execute(ctx *pongo2.ExecutionContext, writer pongo2.
 			if !strings.HasPrefix(content, "http") && !strings.HasPrefix(content, "//") {
 				content = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
 			}
+		case "ShopName":
+			content = currentSite.Contact.ShopName
+		case "ShopLogo":
+			content = currentSite.Contact.ShopLogo
+			if !strings.HasPrefix(content, "http") && !strings.HasPrefix(content, "//") {
+				content = currentSite.PluginStorage.StorageUrl + "/" + strings.TrimPrefix(content, "/")
+			}
+		case "ShopDescription":
+			content = currentSite.Contact.ShopDescription
+		case "BusinessHours":
+			content = currentSite.Contact.BusinessHours
+		case "ShippingTime":
+			content = strconv.Itoa(currentSite.Contact.ShippingTime)
+		case "ShippingTimeRemark":
+			content = currentSite.Contact.ShippingTimeRemark
 		default:
 			if currentSite.Contact.ExtraFields != nil {
 				for i := range currentSite.Contact.ExtraFields {

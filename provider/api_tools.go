@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"kandaoni.com/anqicms/pkg/mcp/intent"
@@ -305,7 +306,11 @@ func (svc *AiChatService) capAPIInvoke(ctx context.Context, argsJSON string) (st
 		return "", err
 	}
 
-	params := injectPartialUpdate(method, path, a.Params)
+	params := clampListPageSize(injectPartialUpdate(method, path, a.Params))
+	params, err = restoreMaskedParams(site, adminID, method, path, params)
+	if err != nil {
+		return "", err
+	}
 	res, err := site.InvokeAdminAPI(adminID, method, path, params)
 	if err != nil {
 		return "", err
@@ -439,15 +444,147 @@ func marshalJSON(v any) (string, error) {
 // 逐字段无条件赋值的端点（material/place/group）加了也没用——它们没有这个开关，
 // 仍需意图层补齐，见 pkg/mcp/intent 的 invokeRouteOverwriteFields。
 var partialUpdateEndpoints = map[string]bool{
-	normalizeAPIPath("/archive/detail"):         true, // request.Archive
-	normalizeAPIPath("/category/detail"):        true, // request.Category
-	normalizeAPIPath("/module/detail"):          true, // request.ModuleRequest
-	normalizeAPIPath("/setting/nav"):            true, // request.NavConfig
-	normalizeAPIPath("/plugin/tag/detail"):      true, // request.PluginTag
-	normalizeAPIPath("/plugin/user/detail"):     true, // request.UserRequest
+	normalizeAPIPath("/archive/detail"):     true, // request.Archive
+	normalizeAPIPath("/category/detail"):    true, // request.Category
+	normalizeAPIPath("/module/detail"):      true, // request.ModuleRequest
+	normalizeAPIPath("/setting/nav"):        true, // request.NavConfig
+	normalizeAPIPath("/plugin/tag/detail"):  true, // request.PluginTag
+	normalizeAPIPath("/plugin/user/detail"): true, // request.UserRequest
 	// ⚠️ /plugin/redirect/detail **不在**这里：PluginRedirectRequest 没有 UpdateAll
 	// 字段，控制器也没有 `req.UpdateAll = true`（provider 是逐字段无条件赋值）。
 	// 加了也没用——那种端点仍需意图层补齐，见 invokeRouteOverwriteFields。
+}
+
+// restoreMaskedParams 把写入参数里的掩码值替换成当前配置里的真实值。
+//
+// 为什么必须有这一步：读接口从 2026-10-27 起统一把凭据字段掩码成 ********
+// （见 intent.MaskSecrets）。如果只是"读时藏起来"而没有回写保护，
+// 调用方「读全量 → 改一个字段 → 整体写回」的常规流程会把掩码写进配置：
+// 数据库密码变成 ********、站点连不上库且不报错，OAuth 客户端密钥变成
+// 一串星号、授权全线失效。这类故障排查成本极高（数据看着"有值"）。
+//
+// 真值从哪来：用**同路径的 GET** 回查现网配置。这套后台的配置端点普遍是
+// GET/POST 同路径（/plugin/storage、/plugin/wechat/config、/plugin/google/setting…），
+// 所以不需要维护第二张映射表。
+//
+// 拿不到现值时必须**报错拒绝**，不能放行：
+// 放行的后果是把掩码写进配置，而回执依然是成功——这是我们最不想要的
+// 「假成功」。报错至少让调用方知道要显式给新值。
+func restoreMaskedParams(site *Website, adminID uint, method, path string, params map[string]any) (map[string]any, error) {
+	if !intent.ContainsMaskedSecret(params) {
+		return params, nil
+	}
+	if !strings.EqualFold(method, "POST") {
+		return nil, fmt.Errorf("请求参数里出现了凭据掩码 %s，但它只能用于回写保护，不能作为查询条件", intent.MaskedSecret)
+	}
+	res, err := site.InvokeAdminAPI(adminID, "GET", path, nil)
+	if err != nil {
+		return nil, fmt.Errorf("参数含凭据掩码 %s，且回查现值失败（%v）：请显式传入真实值，掩码不能被写进配置", intent.MaskedSecret, err)
+	}
+	if !res.OK {
+		return nil, fmt.Errorf("参数含凭据掩码 %s，但 %s GET 无法提供现值（%s）：请显式传入真实值", intent.MaskedSecret, path, res.Msg)
+	}
+	filled, leftover := fillMaskedFromCurrent(params, res.Data)
+	if len(leftover) > 0 {
+		return nil, fmt.Errorf("以下字段是掩码但当前配置里没有可沿用的现值，请显式提供真实值: %s",
+			strings.Join(leftover, ", "))
+	}
+	return filled, nil
+}
+
+// fillMaskedFromCurrent 用现值递归替换掩码，返回替换后的副本与仍然残留掩码的字段名。
+func fillMaskedFromCurrent(params map[string]any, current any) (map[string]any, []string) {
+	cur, _ := current.(map[string]any)
+	out := make(map[string]any, len(params))
+	var leftover []string
+	for k, v := range params {
+		switch t := v.(type) {
+		case string:
+			if t != intent.MaskedSecret {
+				out[k] = v
+				continue
+			}
+			if s, ok := cur[k].(string); ok && s != "" && s != intent.MaskedSecret {
+				out[k] = s
+				continue
+			}
+			out[k] = v
+			leftover = append(leftover, k)
+		case map[string]any:
+			sub, subLeft := fillMaskedFromCurrent(t, cur[k])
+			out[k] = sub
+			for _, f := range subLeft {
+				leftover = append(leftover, k+"."+f)
+			}
+		default:
+			out[k] = v
+		}
+	}
+	return out, leftover
+}
+
+// maxListPageSize 与意图层共用同一个上限（说明见 intent.MaxPageSize）。
+const maxListPageSize = intent.MaxPageSize
+
+// clampListPageSize 把列表端点的分页参数夹到安全范围。
+//
+// 只动端点侧的 camelCase 分页键（current/pageSize），不碰 page_size：
+// sitemap 等配置端点的 page_size 是**业务字段**（每页 URL 数），
+// 误夹会把用户的配置改小。分页词表换算发生在意图层，到这里是 pageSize。
+//
+// 夹紧而非报错：调用方（模型）拿到 total + count=200 就能自然判断出
+// "还有更多、要翻页"，比抛错更能推进任务；而 pageSize=0/负数会被端点
+// 当成"用默认值"或产出 SQL LIMIT -1，故一并归一到 1。
+func clampListPageSize(params map[string]any) map[string]any {
+	if len(params) == 0 {
+		return params
+	}
+	need := false
+	for _, k := range []string{"pageSize", "current"} {
+		if _, ok := params[k]; ok {
+			need = true
+			break
+		}
+	}
+	if !need {
+		return params
+	}
+	out := make(map[string]any, len(params))
+	for k, v := range params {
+		out[k] = v
+	}
+	if n, ok := toIntValue(out["pageSize"]); ok {
+		if n < 1 {
+			n = 1
+		}
+		if n > maxListPageSize {
+			n = maxListPageSize
+		}
+		out["pageSize"] = n
+	}
+	if n, ok := toIntValue(out["current"]); ok && n < 1 {
+		out["current"] = 1
+	}
+	return out
+}
+
+// toIntValue 把 JSON 数字/字符串数字转成 int，非数字返回 ok=false。
+func toIntValue(v any) (int, bool) {
+	switch n := v.(type) {
+	case int:
+		return n, true
+	case int64:
+		return int(n), true
+	case float64:
+		return int(n), true
+	case json.Number:
+		i, err := n.Int64()
+		return int(i), err == nil
+	case string:
+		i, err := strconv.Atoi(strings.TrimSpace(n))
+		return i, err == nil
+	}
+	return 0, false
 }
 
 // injectPartialUpdate 对支持 PATCH 的 POST 端点补上 partial=true。

@@ -92,3 +92,4 @@
 "LastPage": "最後のページ"
 "PreviousPage": "前のページ"
 "NextPage": "次のページ"
+"TooManyRequests": "リクエストが多すぎます。しばらくしてから再度お試しください"

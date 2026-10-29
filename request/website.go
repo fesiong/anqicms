@@ -35,15 +35,15 @@ type WebsiteDeleteRequest struct {
 //
 // 读接口只声明真正要输出的字段，从结构上杜绝这类误用。
 type WebsiteDetailResponse struct {
-	Id        uint                   `json:"id,omitempty"` // 站点ID
-	RootPath  string                 `json:"root_path"`  // 站点根目录
-	Name      string                 `json:"name"`       // 站点名称
-	Status    uint                   `json:"status"`     // 站点状态
-	Mysql     WebsiteMysqlSafe       `json:"mysql"`      // 站点数据库配置（密码已脱敏）
-	AdminUser string                 `json:"admin_user"` // 管理员用户名（不含密码）
-	BaseUrl   string                 `json:"base_url"`   // 站点网址
-	FrontUrl  string                 `json:"front_url"`  // 前台网址（前后端分离的站点可配置）
-	Initialed bool                   `json:"initialed"`  // 站点是否已初始化完成
+	Id        uint             `json:"id,omitempty"` // 站点ID
+	RootPath  string           `json:"root_path"`    // 站点根目录
+	Name      string           `json:"name"`         // 站点名称
+	Status    uint             `json:"status"`       // 站点状态
+	Mysql     WebsiteMysqlSafe `json:"mysql"`        // 站点数据库配置（密码已脱敏）
+	AdminUser string           `json:"admin_user"`   // 管理员用户名（不含密码）
+	BaseUrl   string           `json:"base_url"`     // 站点网址
+	FrontUrl  string           `json:"front_url"`    // 前台网址（前后端分离的站点可配置）
+	Initialed bool             `json:"initialed"`    // 站点是否已初始化完成
 }
 
 // WebsiteMysqlSafe 是**不含密码**的数据库配置，专门用于读接口。
@@ -56,10 +56,10 @@ type WebsiteDetailResponse struct {
 // 保留 database/user/host/port 是必要的：调用方要靠这些判断
 // 「这个站点连的是哪个库」，对诊断配置问题有用；只有 password 该藏。
 type WebsiteMysqlSafe struct {
-	Database string `json:"database"`    // 数据库名称
-	User     string `json:"user"`        // 数据库用户名
-	Host     string `json:"host"`        // 数据库地址
-	Port     int    `json:"port"`        // 数据库端口
+	Database string `json:"database"` // 数据库名称
+	User     string `json:"user"`     // 数据库用户名
+	Host     string `json:"host"`     // 数据库地址
+	Port     int    `json:"port"`     // 数据库端口
 	// Password 固定输出掩码而非真实值，语义与 pluginSendmail 的授权码掩码一致。
 	// 注意：仅脱敏不够，写端点还须识别该掩码并沿用内存真值（回写保护），
 	// 否则有人用读到的详情原样保存会把掩码写进库、导致站点连不上数据库。
@@ -77,6 +77,7 @@ const MysqlPasswordMask = "********"
 //   - UseDefault=true：密码复用主站点的，本就没有独立值可返回，
 //     但输出空串会被误读成「这个库没设密码」；
 //   - 本来就是空：输出空串同样会误导（读方分不清「没密码」与「被脱敏了」）。
+//
 // 统一用固定的掩码串，读方一眼就知道「这里本该有值但被藏了」。
 func SafeMysql(m config.MysqlConfig) WebsiteMysqlSafe {
 	return WebsiteMysqlSafe{
