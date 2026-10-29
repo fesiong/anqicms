@@ -34,6 +34,13 @@ func TestInjectPartialUpdateCoversKnownEndpoints(t *testing.T) {
 		"/plugin/coupon/detail",
 		// 活动同理，而且更狠：不传 skus 会走到 `len(skus)==0` 分支删光全部规格。
 		"/plugin/activity/detail",
+		// 2026-10-29 第三批：素材 / 素材分类 / 城市站全部指针化。
+		// 素材原本硬编码 Status=1（永远无法禁用）且 md5 取的是旧内容；
+		// 城市站改个标题就把经纬度/时区/logo/正文清空，还会用空标题重新生成
+		// url_token —— 旧链接 404 且不可回滚。
+		"/plugin/material/detail",
+		"/plugin/material/category/detail",
+		"/plugin/place/detail",
 	}
 	for _, p := range mustCover {
 		got := injectPartialUpdate("POST", p, map[string]any{"id": 1, "title": "x"})
@@ -50,8 +57,8 @@ func TestInjectPartialUpdateSkipsNonPatch(t *testing.T) {
 	if got := injectPartialUpdate("GET", "/archive/detail", map[string]any{"id": 1}); got["partial"] != nil {
 		t.Error("GET 不该注入 partial")
 	}
-	// 不在清单里的端点（如逐字段赋值的 material/place）不该注入
-	for _, p := range []string{"/plugin/material/detail", "/plugin/place/detail", "/plugin/redirect/detail"} {
+	// 不在清单里的端点（逐字段赋值、没有 Partial 字段）不该注入
+	for _, p := range []string{"/plugin/redirect/detail", "/plugin/material/import"} {
 		if got := injectPartialUpdate("POST", p, map[string]any{"id": 1}); got["partial"] != nil {
 			t.Errorf("POST %s 是逐字段无条件赋值型，注入 partial 无效，不该加进清单", p)
 		}

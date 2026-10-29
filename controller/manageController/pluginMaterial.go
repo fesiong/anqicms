@@ -100,6 +100,11 @@ func PluginMaterialDetailForm(ctx iris.Context) {
 		return
 	}
 
+	// 后台表单是全量提交（req.UpdateAll），AI/MCP 默认走 PATCH（partial）。
+	if !req.Partial {
+		req.UpdateAll = true
+	}
+
 	category, err := currentSite.SaveMaterial(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{
@@ -168,6 +173,11 @@ func PluginMaterialCategoryDetailForm(ctx iris.Context) {
 			"msg":  err.Error(),
 		})
 		return
+	}
+
+	// 后台表单是全量提交（req.UpdateAll），AI/MCP 默认走 PATCH（partial）。
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	category, err := currentSite.SaveMaterialCategory(&req)

@@ -111,22 +111,36 @@ type PluginFileUploadDelete struct {
 	Hash string `json:"hash"` // 文件 hash
 }
 
+// PluginMaterial 素材保存请求。指针字段语义见 request/archive.go 顶部注释：
+// nil = 没提这个字段（保持原值），非 nil = 明确写入（含 0 / 空串）。
+//
+// Title 也必须是指针：空串在旧实现里有特殊含义（「没给标题就自动从正文截取」），
+// 值类型下它同时是「未传」，PATCH 改正文就会把已有的标题重算一遍。
 type PluginMaterial struct {
-	Id         uint   `json:"id"`          // 素材 ID，新增时不需要传
-	Title      string `json:"title"`       // 素材名称
-	CategoryId uint   `json:"category_id"` // 素材分类 ID
-	Content    string `json:"content"`     // 素材内容
-	Status     uint   `json:"status"`      // 素材状态：0=禁用，1=启用
-	AutoUpdate uint   `json:"auto_update"` // 素材更新时，是否自动更新引用该素材的文档
+	Id         uint    `json:"id"`          // 素材 ID，新增时不需要传
+	Title      *string `json:"title"`       // 素材名称；传空串=按正文自动截取，不传=保持原值
+	CategoryId *uint   `json:"category_id"` // 素材分类 ID
+	Content    *string `json:"content"`     // 素材内容
+	Status     *uint   `json:"status"`      // 素材状态：0=禁用，1=启用
+	AutoUpdate *uint   `json:"auto_update"` // 素材更新时，是否自动更新引用该素材的文档
+	UpdateAll  bool    `json:"update_all" ast:"-"`
+	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。
+	// 与 UpdateAll 互为反向开关，且优先——控制器用 req.UpdateAll = !req.Partial 归一。
+	Partial bool `json:"partial" ast:"-"`
 }
 
 type PluginMaterialDelete struct {
 	Id uint `json:"id"` // 素材 ID
 }
 
+// PluginMaterialCategory 素材分类保存请求。Status 原本不存在，
+// 导致 SaveMaterialCategory 只能硬编码 `Status = 1` —— 素材分类永远无法停用。
 type PluginMaterialCategory struct {
-	Id    uint   `json:"id"`    // 分类 ID，新增时不需要传
-	Title string `json:"title"` // 分类名称
+	Id        uint    `json:"id"`     // 分类 ID，新增时不需要传
+	Title     *string `json:"title"`  // 分类名称
+	Status    *uint   `json:"status"` // 状态：0=停用，1=启用
+	UpdateAll bool    `json:"update_all" ast:"-"`
+	Partial   bool    `json:"partial" ast:"-"`
 }
 
 type PluginMaterialCategoryDelete struct {
