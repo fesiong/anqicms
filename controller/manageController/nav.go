@@ -3,6 +3,7 @@ package manageController
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -96,8 +97,8 @@ func SettingNavForm(ctx iris.Context) {
 					tmpNav, err := subSite.GetNavById(req.Id)
 					if err == nil {
 						req.Title = tmpNav.Title
-						req.SubTitle = tmpNav.SubTitle
-						req.Description = tmpNav.Description
+						req.SubTitle = library.Ptr(tmpNav.SubTitle)
+						req.Description = library.Ptr(tmpNav.Description)
 					}
 					_, _ = subSite.SaveNav(&req)
 				}

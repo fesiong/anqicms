@@ -436,6 +436,12 @@ func PluginUserGroupDetailForm(ctx iris.Context) {
 		return
 	}
 
+	// 与 PluginUserDetailForm 同一口径：表单提交是全量覆盖（UpdateAll），
+	// AI/程序化调用传 partial=true 才是 PATCH。
+	if !req.Partial {
+		req.UpdateAll = true
+	}
+
 	group, err := currentSite.SaveUserGroupInfo(&req)
 	if err != nil {
 		ctx.JSON(iris.Map{

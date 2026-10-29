@@ -143,14 +143,16 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if req.UpdateAll || req.UrlToken != "" {
 		module.UrlToken = req.UrlToken
 	}
-	if req.UpdateAll || req.Status > 0 {
-		module.Status = req.Status
+	if req.Status != nil {
+		module.Status = *req.Status
 	}
-	if req.UpdateAll || req.TitleName != "" {
-		module.Keywords = req.Keywords
+	// 原来这里判的是 req.TitleName（已废弃字段），导致「改关键词」永远不生效：
+	// 只有传了 title_name 才会把 keywords 写进去。改用 keywords 自己的指针判断。
+	if req.Keywords != nil {
+		module.Keywords = *req.Keywords
 	}
-	if req.UpdateAll || req.Description != "" {
-		module.Description = req.Description
+	if req.Description != nil {
+		module.Description = *req.Description
 	}
 
 	err = w.DB.Save(module).Error

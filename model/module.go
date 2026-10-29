@@ -33,11 +33,42 @@ type Module struct {
 type moduleFields []config.CustomField
 
 func (a moduleFields) Value() (driver.Value, error) {
+	// nil 表示「这个模型没配置字段」，应落成 SQL NULL 而不是字符串 "null"。
+	// json.Marshal(nil slice) 产出字面量 null，写进库后：
+	//   1. 外部读库的人看到的是 4 个字符，而不是空值；
+	//   2. 任何 json.Unmarshal 到非指针结构的消费方都会报
+	//      "cannot unmarshal null into Go value of type []config.CustomField"。
+	// 实测曾把 id=3652 的 fields 写成 "null"。
+	// 注意只判 nil：空切片（[]）有「显式清空字段配置」的语义，必须照常序列化成 "[]"。
+	if a == nil {
+		return nil, nil
+	}
 	return json.Marshal(a)
 }
 
+// Scan 读库。必须能吃 NULL：字段列允许 NULL（type:longtext default null），
+// database/sql 对 NULL 传的是无类型 nil，原来的 `data.([]byte)` 会直接 panic。
+// 同时兼容历史脏数据：早先 Value() 把 nil 切片写成了字符串 "null"。
 func (a *moduleFields) Scan(data interface{}) error {
-	return json.Unmarshal(data.([]byte), &a)
+	if data == nil {
+		*a = nil
+		return nil
+	}
+	var raw []byte
+	switch v := data.(type) {
+	case []byte:
+		raw = v
+	case string:
+		raw = []byte(v)
+	default:
+		*a = nil
+		return nil
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		*a = nil
+		return nil
+	}
+	return json.Unmarshal(raw, a)
 }
 
 func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {

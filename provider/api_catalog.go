@@ -1313,7 +1313,14 @@ func exprString(e ast.Expr) string {
 }
 
 // schemaTypeOf 把 Go 类型映射到 JSON schema 类型，与 intent.ParamSpec.Type 口径一致。
+//
+// ⚠️ 必须先剥掉指针前缀：请求结构体用 `*int64` 表示「可缺省、nil 即不改」，
+// 但它在 JSON 里的类型仍是 integer。不剥的话 `*int64` 会落到 default 分支
+// 变成 object —— 模型按 object 传 `{}`，端点 ReadJSON 直接失败（invalid request），
+// 而且 api_catalog.json 与源码的差异测试也发现不了（两边都是 object）。
 func schemaTypeOf(goType string) string {
+	// 一层指针即可：请求结构体不出现 **T。*[]string 也要剥，剥完落到 array。
+	goType = strings.TrimPrefix(goType, "*")
 	switch {
 	case strings.HasPrefix(goType, "[]"):
 		return "array"

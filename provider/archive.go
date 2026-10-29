@@ -534,25 +534,28 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		return nil, err
 	}
 
-	if len(req.CategoryIds) > 0 {
-		for i := 0; i < len(req.CategoryIds); i++ {
-			// 防止 0
-			if req.CategoryIds[i] == 0 {
-				req.CategoryIds = append(req.CategoryIds[:i], req.CategoryIds[i+1:]...)
+	// 多分类归一：只给 category_id 时等价于「只保留这一个分类」；
+	// nil 保持 nil（= 调用方没提分类，不改），空数组保持空数组（新建时会被下面拦下）。
+	if req.CategoryIds == nil && req.CategoryId > 0 {
+		req.CategoryIds = library.Ptr([]uint{req.CategoryId})
+	}
+	if req.CategoryIds != nil {
+		nonZero := make([]uint, 0, len(*req.CategoryIds))
+		for _, catId := range *req.CategoryIds {
+			if catId > 0 {
+				nonZero = append(nonZero, catId)
 			}
 		}
-	}
-	if len(req.CategoryIds) == 0 && req.CategoryId > 0 {
-		req.CategoryIds = append(req.CategoryIds, req.CategoryId)
-	}
-	for _, catId := range req.CategoryIds {
-		category := w.GetCategoryFromCache(catId)
-		if category == nil || category.Type != config.CategoryTypeArchive {
-			return nil, errors.New(w.Tr("PleaseSelectAColumn"))
+		req.CategoryIds = &nonZero
+		for _, catId := range nonZero {
+			category := w.GetCategoryFromCache(catId)
+			if category == nil || category.Type != config.CategoryTypeArchive {
+				return nil, errors.New(w.Tr("PleaseSelectAColumn"))
+			}
 		}
-	}
-	if len(req.CategoryIds) > 0 {
-		req.CategoryId = req.CategoryIds[0]
+		if len(nonZero) > 0 {
+			req.CategoryId = nonZero[0]
+		}
 	}
 
 	if req.CategoryId > 0 {
@@ -591,7 +594,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		newPost = true
 		draft = &model.ArchiveDraft{}
 
-		if len(req.CategoryIds) == 0 {
+		if req.CategoryIds == nil || len(*req.CategoryIds) == 0 {
 			return nil, errors.New(w.Tr("PleaseSelectAColumn"))
 		}
 		category, err = w.GetCategoryById(req.CategoryId)
@@ -632,42 +635,45 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			req.Title = req.Title[:strings.LastIndexAny(req.Title, " ")]
 		}
 	}
-	//提取描述
-	if req.Description == "" {
+	// 提取描述：没传（nil）或整表单提交时留空，都按正文自动截取；
+	// PATCH 下显式传空串表示「清空描述」，不再自动回填。
+	if req.Description == nil || (req.UpdateAll && *req.Description == "") {
 		tmpContent := req.Content
 		if w.Content.Editor == "markdown" {
 			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
-		req.Description = library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "), 250)
+		req.Description = library.Ptr(library.ParseDescription(strings.ReplaceAll(CleanTagsAndSpaces(tmpContent), "\n", " "), 250))
 	}
 	// 限制数量
-	descRunes := []rune(req.Description)
-	if len(descRunes) > 1000 {
-		req.Description = string(descRunes[:1000])
+	if req.Description != nil {
+		descRunes := []rune(*req.Description)
+		if len(descRunes) > 1000 {
+			req.Description = library.Ptr(string(descRunes[:1000]))
+		}
 	}
-	if len(req.Flag) > 0 {
-		req.Flags = strings.Split(req.Flag, ",")
+	if len(req.Flag) > 0 && req.Flags == nil {
+		req.Flags = library.Ptr(strings.Split(req.Flag, ","))
 	}
 
 	if req.QuickSave {
-		// quick save 只支持6个字段
+		// 快速保存只处理标题/关键词/描述/分类/图片，其余字段一律不动。
 		if req.ModuleId > 0 {
 			draft.ModuleId = req.ModuleId
 		}
 		if req.Title != "" {
 			draft.Title = req.Title
 		}
-		if req.Keywords != "" {
-			draft.Keywords = req.Keywords
+		if req.Keywords != nil {
+			draft.Keywords = *req.Keywords
 		}
-		if req.Description != "" {
-			draft.Description = req.Description
+		if req.Description != nil {
+			draft.Description = *req.Description
 		}
 		if req.CategoryId > 0 {
 			draft.CategoryId = req.CategoryId
 		}
-		if len(req.Images) > 0 {
-			draft.Images = req.Images
+		if req.Images != nil {
+			draft.Images = *req.Images
 		}
 		// 保存主表
 		if isReleased {
@@ -690,20 +696,16 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			w.DB.Save(&archiveData)
 		}
 		// 保存Flags
-		if len(req.Flags) > 0 {
-			_ = w.SaveArchiveFlags(draft.Id, req.Flags)
-		} else if req.RemoveFlag {
-			_ = w.SaveArchiveFlags(draft.Id, nil)
+		if req.Flags != nil {
+			_ = w.SaveArchiveFlags(draft.Id, *req.Flags)
 		}
-		if len(req.CategoryIds) > 0 {
+		if req.CategoryIds != nil {
 			// 保存分类ID
-			_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
+			_ = w.SaveArchiveCategories(draft.Id, *req.CategoryIds)
 		}
-		// tags
-		if len(req.Tags) > 0 {
-			_ = w.SaveTagData(draft.Id, req.Tags)
-		} else if req.RemoveTag {
-			_ = w.SaveTagData(draft.Id, nil)
+		// tags：传了 tags（含空数组）就按传入值覆盖，没传则只做自动匹配
+		if req.Tags != nil {
+			_ = w.SaveTagData(draft.Id, *req.Tags)
 		} else if w.Content.MatchTag == 1 {
 			// 自动匹配标签
 			_ = w.AutoMatchTag(&draft.Archive)
@@ -724,70 +726,82 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		return &draft.Archive, nil
 	}
 	// 正常的保存行为
+	//
+	// ⚠️ 标量字段一律「指针非 nil 才写」，不再用 `req.X > 0` / `req.X != ""`：
+	// 后者让 0/false/空串无法写入（售罄、禁用、清空 SEO 标题都是合法意图），
+	// 并且在 partial 调用（AI/MCP 默认 PATCH）里，请求体没带的字段会被静默清零。
+	// 这条规则对本函数管辖的全部模型生效，新增字段必须遵守（护栏见
+	// provider/archive_zero_guard_test.go）。
+	if newPost {
+		// 新建时 Request 的 nil = "没填"，要落成数据库默认值而不是零值。
+		// GORM 的 Save 写全列，DB 的 DEFAULT 不生效，所以默认值必须在这里显式给：
+		// product_type 缺省为 1（普通商品），stock 缺省为 9999999（不限量）。
+		draft.ProductType = config.ProductTypeNormal
+		draft.Stock = 9999999
+	}
 	if req.UpdateAll || req.ModuleId > 0 {
 		draft.ModuleId = req.ModuleId
 	}
-	if req.UpdateAll || req.ParentId > 0 {
-		draft.ParentId = req.ParentId
+	if req.ParentId != nil {
+		draft.ParentId = *req.ParentId
 	}
-	if req.UpdateAll || req.PlaceId > 0 {
-		draft.PlaceId = req.PlaceId
+	if req.PlaceId != nil {
+		draft.PlaceId = *req.PlaceId
 	}
-	if req.UpdateAll || req.Title != "" {
+	// 标题必填，空值永远不是合法写入值：UpdateAll 下漏传也不能把已有标题清空。
+	if req.Title != "" {
 		draft.Title = req.Title
 	}
-	if req.UpdateAll || req.SeoTitle != "" {
-		draft.SeoTitle = req.SeoTitle
+	if req.SeoTitle != nil {
+		draft.SeoTitle = *req.SeoTitle
 	}
-	if req.UpdateAll || req.Keywords != "" {
-		draft.Keywords = req.Keywords
+	if req.Keywords != nil {
+		draft.Keywords = *req.Keywords
 	}
-	if req.UpdateAll || req.Description != "" {
-		draft.Description = req.Description
+	if req.Description != nil {
+		draft.Description = *req.Description
 	}
 	if req.UpdateAll || req.CategoryId > 0 {
 		draft.CategoryId = req.CategoryId
 	}
-	if req.UpdateAll || len(req.Images) > 0 {
-		draft.Images = req.Images
-	} else if req.RemoveImage {
-		draft.Images = nil
+	if req.Images != nil {
+		draft.Images = *req.Images
 	}
-	if req.UpdateAll || req.Description != "" {
-		draft.Template = req.Template
+	if req.Template != nil {
+		draft.Template = *req.Template
 	}
-	if req.UpdateAll || req.Description != "" {
-		draft.CanonicalUrl = req.CanonicalUrl
+	if req.CanonicalUrl != nil {
+		draft.CanonicalUrl = *req.CanonicalUrl
 	}
 	oldFixedLink := ""
-	if req.UpdateAll || req.FixedLink != "" {
+	if req.FixedLink != nil {
 		oldFixedLink = draft.FixedLink
-		draft.FixedLink = req.FixedLink
+		draft.FixedLink = *req.FixedLink
 	}
-	if req.UpdateAll || req.Price > 0 {
-		draft.Price = req.Price
+	if req.Price != nil {
+		draft.Price = *req.Price
 	}
-	if req.UpdateAll || req.Stock > 0 {
-		draft.Stock = req.Stock
+	if req.Stock != nil {
+		draft.Stock = *req.Stock
 	}
-	if req.UpdateAll || req.ReadLevel > 0 {
-		draft.ReadLevel = req.ReadLevel
+	if req.ReadLevel != nil {
+		draft.ReadLevel = *req.ReadLevel
 	}
-	if req.UpdateAll || req.Password != "" {
-		draft.Password = req.Password
+	if req.Password != nil {
+		draft.Password = *req.Password
 	}
-	if req.UpdateAll || req.Sort > 0 {
-		draft.Sort = req.Sort
+	if req.Sort != nil {
+		draft.Sort = *req.Sort
 	}
-	if req.UserId > 0 {
-		draft.UserId = req.UserId
+	if req.UserId != nil {
+		draft.UserId = *req.UserId
 	}
-	if req.Views > 0 {
-		draft.Views = req.Views
+	if req.Views != nil {
+		draft.Views = *req.Views
 	}
 
-	if req.KeywordId > 0 {
-		draft.KeywordId = req.KeywordId
+	if req.KeywordId != nil {
+		draft.KeywordId = *req.KeywordId
 	}
 	if req.OriginUrl != "" {
 		if utf8.RuneCountInString(req.OriginUrl) > 190 {
@@ -801,39 +815,96 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 		draft.OriginTitle = req.OriginTitle
 	}
-	if req.OriginId > 0 {
-		draft.OriginId = req.OriginId
+	if req.OriginId != nil {
+		draft.OriginId = *req.OriginId
 	}
 	// 产品的字段
-	draft.OriginPrice = req.OriginPrice
-	draft.CostPrice = req.CostPrice
-	draft.VideoUrl = req.VideoUrl
-	draft.NeedLogistics = req.NeedLogistics
-	draft.IsFreeShipping = req.IsFreeShipping
-	draft.OptionType = req.OptionType
-	draft.Weight = req.Weight
-	draft.WeightUnit = req.WeightUnit
-	draft.Length = req.Length
-	draft.Width = req.Width
-	draft.Height = req.Height
-	draft.Volume = req.Volume
-	draft.LengthUnit = req.LengthUnit
-	draft.MinQuantity = req.MinQuantity
-	draft.MaxQuantity = req.MaxQuantity
-	draft.StepQuantity = req.StepQuantity
-	draft.ProductType = req.ProductType
-	draft.AllowOversold = req.AllowOversold
-	if draft.ProductType == config.ProductTypeCustom {
-		draft.OrderFields = req.OrderFields
-	} else {
+	if req.OriginPrice != nil {
+		draft.OriginPrice = *req.OriginPrice
+	}
+	if req.CostPrice != nil {
+		draft.CostPrice = *req.CostPrice
+	}
+	if req.VideoUrl != nil {
+		draft.VideoUrl = *req.VideoUrl
+	}
+	if req.NeedLogistics != nil {
+		draft.NeedLogistics = *req.NeedLogistics
+	}
+	if req.IsFreeShipping != nil {
+		draft.IsFreeShipping = *req.IsFreeShipping
+	}
+	if req.OptionType != nil {
+		draft.OptionType = *req.OptionType
+	}
+	if req.Weight != nil {
+		draft.Weight = *req.Weight
+	}
+	if req.WeightUnit != nil {
+		draft.WeightUnit = *req.WeightUnit
+	}
+	if req.Length != nil {
+		draft.Length = *req.Length
+	}
+	if req.Width != nil {
+		draft.Width = *req.Width
+	}
+	if req.Height != nil {
+		draft.Height = *req.Height
+	}
+	if req.Volume != nil {
+		draft.Volume = *req.Volume
+	}
+	if req.LengthUnit != nil {
+		draft.LengthUnit = *req.LengthUnit
+	}
+	if req.MinQuantity != nil {
+		draft.MinQuantity = *req.MinQuantity
+	}
+	if req.MaxQuantity != nil {
+		draft.MaxQuantity = *req.MaxQuantity
+	}
+	if req.StepQuantity != nil {
+		draft.StepQuantity = *req.StepQuantity
+	}
+	if req.ProductType != nil {
+		draft.ProductType = *req.ProductType
+	}
+	if req.AllowOversold != nil {
+		draft.AllowOversold = *req.AllowOversold
+	}
+	// 定制商品的订单字段与 product_type 是绑定关系：非定制商品必须清空，
+	// 否则会留下上一次是定制商品时的表单定义（前台会继续要求填写）。
+	if req.OrderFields != nil {
+		if draft.ProductType == config.ProductTypeCustom {
+			draft.OrderFields = *req.OrderFields
+		} else {
+			draft.OrderFields = nil
+		}
+	} else if draft.ProductType != config.ProductTypeCustom {
 		draft.OrderFields = nil
 	}
-	draft.Brand = req.Brand
-	draft.HasPseudo = req.HasPseudo
-	draft.OriginId = req.OriginId
-	draft.CommentCount = req.CommentCount
-	draft.FavoriteCount = req.FavoriteCount
-	draft.AverageScore = req.AverageScore
+	if req.Brand != nil {
+		draft.Brand = *req.Brand
+	}
+	if req.HasPseudo != nil {
+		draft.HasPseudo = *req.HasPseudo
+	}
+	if req.SoldCount != nil {
+		draft.SoldCount = *req.SoldCount
+	}
+	if req.ReviewCount != nil {
+		draft.ReviewCount = *req.ReviewCount
+	}
+	if req.CommentCount != nil {
+		draft.CommentCount = *req.CommentCount
+	}
+	if req.FavoriteCount != nil {
+		draft.FavoriteCount = *req.FavoriteCount
+	}
+	if req.AverageScore != nil {
+		draft.AverageScore = *req.AverageScore
+	}
 
 	module = w.GetModuleFromCache(draft.ModuleId)
 	if module == nil {
@@ -845,8 +916,10 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		//extra
 		if len(module.Fields) > 0 {
 			for _, v := range module.Fields {
-				//先检查是否有必填而没有填写的
-				if v.Required && req.Extra[v.FieldName] == nil {
+				// 必填校验只在「后台整表单提交」时做。
+				// PATCH 调用（AI/MCP）通常只带一两个扩展字段，剩下的缺失是正常的，
+				// 在这里报必填会让「只改一个自定义字段」永远失败。
+				if v.Required && req.UpdateAll && req.Extra[v.FieldName] == nil {
 					return nil, errors.New(w.Tr("%sIsRequired", v.Name))
 				}
 				if req.Extra[v.FieldName] != nil {
@@ -901,7 +974,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 							}
 						}
 					}
-				} else {
+				} else if req.UpdateAll {
+					// 只有整表单提交才把「没出现的字段」当作用户清空；
+					// PATCH 时没传的扩展字段必须保持原值，否则改一个字段会抹掉其余自定义字段。
 					if v.Type == config.CustomFieldTypeNumber {
 						//只有这个类型的数据是数字，转成数字
 						extraFields[v.FieldName] = 0
@@ -913,7 +988,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}
 	}
 
-	if req.UpdateAll && len(req.Flags) == 0 {
+	if req.UpdateAll && (req.Flags == nil || len(*req.Flags) == 0) {
 		imgRe, _ := regexp.Compile(`(?i)<img.*?src=["'](.+?)["'].*?>`)
 		hasImage := imgRe.MatchString(req.Content)
 		if !hasImage {
@@ -922,7 +997,7 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			hasImage = imgRe.MatchString(req.Content)
 		}
 		if hasImage {
-			req.Flags = append(req.Flags, "p")
+			req.Flags = library.Ptr([]string{"p"})
 		}
 	}
 
@@ -1054,20 +1129,20 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 			return nil, err
 		}
 	}
-	if req.UpdateAll || len(req.Flags) > 0 {
-		// 保存Flags
-		_ = w.SaveArchiveFlags(draft.Id, req.Flags)
+	if req.Flags != nil {
+		// 保存Flags；空数组表示清空标记
+		_ = w.SaveArchiveFlags(draft.Id, *req.Flags)
 	}
-	if req.UpdateAll || len(req.CategoryIds) > 0 {
+	if req.CategoryIds != nil {
 		// 保存分类ID
-		_ = w.SaveArchiveCategories(draft.Id, req.CategoryIds)
+		_ = w.SaveArchiveCategories(draft.Id, *req.CategoryIds)
 	}
 	if isReleased {
 		// 更新分类的文档计数
 		// 如果文档数量大于100万，则不自动计数
 		totalArchive := w.GetExplainCount("SELECT id FROM archives")
 		if totalArchive < 1000000 {
-			for _, catId := range req.CategoryIds {
+			for _, catId := range library.Deref(req.CategoryIds) {
 				w.UpdateCategoryArchiveCount(catId)
 			}
 		}
@@ -1080,9 +1155,9 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		// 保存wholesaleRules
 		_ = w.SaveArchiveWholesaleRules(draft.Id, req.WholesaleRules)
 	}
-	if req.UpdateAll || len(req.RelationIds) > 0 {
-		// 保存 Relations
-		_ = w.SaveArchiveRelations(draft.Id, req.RelationIds)
+	if req.RelationIds != nil {
+		// 保存 Relations；空数组表示清空关联
+		_ = w.SaveArchiveRelations(draft.Id, *req.RelationIds)
 	}
 	if req.Content != "" {
 		//检查有多少个material
@@ -1213,15 +1288,12 @@ func (w *Website) SaveArchive(req *request.Archive) (*model.Archive, error) {
 		}()
 	}
 
-	if req.UpdateAll || len(req.Tags) > 0 {
-		if len(req.Tags) > 0 {
-			_ = w.SaveTagData(draft.Id, req.Tags)
-		} else if req.RemoveTag {
-			_ = w.SaveTagData(draft.Id, nil)
-		} else if w.Content.MatchTag == 1 {
-			// 自动匹配标签
-			_ = w.AutoMatchTag(&draft.Archive)
-		}
+	if req.Tags != nil {
+		// 传了 tags（含空数组）就按传入值覆盖，空数组表示清空；没传则保持原标签。
+		_ = w.SaveTagData(draft.Id, *req.Tags)
+	} else if req.UpdateAll && w.Content.MatchTag == 1 {
+		// 自动匹配标签
+		_ = w.AutoMatchTag(&draft.Archive)
 	}
 
 	// 缓存清理
@@ -2660,8 +2732,8 @@ func (qia *QuickImportArchive) startZip(file multipart.File) error {
 					tmpCategory, _ = qia.w.SaveCategory(&request.Category{
 						Title:    categoryTitle,
 						ModuleId: category.ModuleId,
-						ParentId: category.Id,
-						Status:   1,
+						ParentId: library.Ptr(category.Id),
+						Status:   library.Ptr(uint(1)),
 						Type:     config.CategoryTypeArchive,
 					})
 				}
@@ -3036,9 +3108,9 @@ func (qia *QuickImportArchive) startExcel(file io.Reader) error {
 					}
 					tmpCategory, err = qia.w.SaveCategory(&request.Category{
 						Title:    categoryTitle,
-						ParentId: parentId,
+						ParentId: library.Ptr(parentId),
 						ModuleId: moduleId,
-						Status:   1,
+						Status:   library.Ptr(uint(1)),
 						Type:     config.CategoryTypeArchive,
 					})
 				}
@@ -3519,7 +3591,7 @@ func (w *Website) applyArchiveFrontmatter(archive *model.ArchiveDraft, fm map[st
 			tmpCategory, _ := w.SaveCategory(&request.Category{
 				Title:    categoryTitle,
 				ModuleId: archive.ModuleId,
-				Status:   1,
+				Status:   library.Ptr(uint(1)),
 				Type:     config.CategoryTypeArchive,
 			})
 			if tmpCategory != nil {

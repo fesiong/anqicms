@@ -137,19 +137,21 @@ type PluginMaterialImportRequest struct {
 	Materials []*PluginMaterial `json:"materials"` // 素材列表
 }
 
+// PluginTag 标签保存请求。指针字段语义见 request/archive.go 顶部注释：
+// nil = 没提这个字段（保持原值），非 nil = 明确写入（含 0 / 空串）。
 type PluginTag struct {
 	Id          uint                   `json:"id"`             // 标签 ID
-	Title       string                 `json:"title"`          // 标签名称
-	CategoryId  uint                   `json:"category_id"`    // 分类 ID
-	UrlToken    string                 `json:"url_token"`      // URL 别名
-	SeoTitle    string                 `json:"seo_title"`      // SEO 标题
-	Keywords    string                 `json:"keywords"`       // 标签关键词
-	Description string                 `json:"description"`    // 描述
-	FirstLetter string                 `json:"first_letter"`   // 索引字母，A-Z
-	Content     string                 `json:"content"`        // 标签内容
-	Logo        string                 `json:"logo"`           // 标签图标地址
-	Template    string                 `json:"template"`       // 标签自定义模板
-	Status      uint                   `json:"status" ast:"-"` // 状态：1=正常，0=隐藏
+	Title       string                 `json:"title"`          // 标签名称（必填，空值非法）
+	CategoryId  *uint                  `json:"category_id"`    // 分类 ID；显式传 0 表示不分类
+	UrlToken    string                 `json:"url_token"`      // URL 别名（空表示自动生成）
+	SeoTitle    *string                `json:"seo_title"`      // SEO 标题；传空串表示清空
+	Keywords    *string                `json:"keywords"`       // 标签关键词；传空串表示清空
+	Description *string                `json:"description"`    // 描述；传空串表示清空
+	FirstLetter *string                `json:"first_letter"`   // 索引字母，A-Z；传空串表示清空
+	Content     *string                `json:"content"`        // 标签内容；传空串表示清空
+	Logo        *string                `json:"logo"`           // 标签图标地址；传空串表示清空
+	Template    *string                `json:"template"`       // 标签自定义模板；传空串表示用默认模板
+	Status      *uint                  `json:"status" ast:"-"` // 状态：1=正常，0=隐藏
 	Extra       map[string]interface{} `json:"extra"`          // 标签的自定义字段内容
 	UpdateAll   bool                   `json:"update_all" ast:"-"`
 	// Partial 走 PATCH 语义：只覆盖显式传入的字段，未传的一律保持原值。

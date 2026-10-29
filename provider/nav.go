@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 )
@@ -135,74 +136,87 @@ func (w *Website) GetNavTypeByTitle(title string) (*model.NavType, error) {
 }
 
 func (w *Website) SaveNav(req *request.NavConfig) (*model.Nav, error) {
-	if req.Title == "" {
-		if req.NavType == model.NavTypeCategory {
-			category := w.GetCategoryFromCache(uint(req.PageId))
-			if category != nil {
-				req.Title = category.Title
-			}
-		} else if req.NavType == model.NavTypeArchive {
-			archive, _ := w.GetArchiveById(req.PageId)
-			if archive != nil {
-				req.Title = archive.Title
-			}
-		}
-	}
-	if req.Title == "" {
-		return nil, errors.New(w.Tr("PleaseFillInTheNavigationDisplayName"))
-	}
-
 	var nav *model.Nav
 	var err error
+	isNew := false
 	if req.Id > 0 {
 		nav, err = w.GetNavById(req.Id)
 		if err != nil {
 			// 表示不存在，则新建一个
+			isNew = true
 			nav = &model.Nav{
 				Status: 1,
 			}
 			nav.Id = req.Id
 		}
 	} else {
+		isNew = true
 		nav = &model.Nav{
 			Status: 1,
 		}
 	}
 
-	if req.UpdateAll || req.Title != "" {
+	// 标题：新建时可以按 nav_type + page_id 推导（前端就是这么用的），
+	// 更新时**不传标题 = 不改标题**——原来这里无条件要求标题非空，
+	// 于是「把 5 号导航隐藏」（只传 id + status）会被判定成「请填写导航显示名称」，
+	// PATCH 语义根本走不通。只有调用方显式改关联对象时才重新推导标题。
+	if req.Title == "" && (isNew || req.NavType != nil || req.PageId != nil) {
+		navType := library.DerefOr(req.NavType, nav.NavType)
+		pageId := library.DerefOr(req.PageId, nav.PageId)
+		if navType == model.NavTypeCategory {
+			category := w.GetCategoryFromCache(uint(pageId))
+			if category != nil {
+				req.Title = category.Title
+			}
+		} else if navType == model.NavTypeArchive {
+			archive, _ := w.GetArchiveById(pageId)
+			if archive != nil {
+				req.Title = archive.Title
+			}
+		}
+	}
+	if req.Title == "" && isNew {
+		return nil, errors.New(w.Tr("PleaseFillInTheNavigationDisplayName"))
+	}
+
+	// 标题必填，空值永远不是合法写入值：UpdateAll 下漏传也不能把已有标题清空。
+	if req.Title != "" {
 		nav.Title = req.Title
 	}
-	if req.UpdateAll || req.SubTitle != "" {
-		nav.SubTitle = req.SubTitle
+	if req.SubTitle != nil {
+		nav.SubTitle = *req.SubTitle
 	}
-	if req.UpdateAll || req.Description != "" {
-		nav.Description = req.Description
+	if req.Description != nil {
+		nav.Description = *req.Description
 	}
-	if req.UpdateAll || req.ParentId > 0 {
-		nav.ParentId = req.ParentId
+	if req.ParentId != nil {
+		nav.ParentId = *req.ParentId
 	}
-	if req.UpdateAll || req.NavType > 0 {
-		nav.NavType = req.NavType
+	if req.NavType != nil {
+		nav.NavType = *req.NavType
 	}
-	if req.UpdateAll || req.PageId > 0 {
-		nav.PageId = req.PageId
+	if req.PageId != nil {
+		nav.PageId = *req.PageId
 	}
-	if req.UpdateAll || req.TypeId > 0 {
-		nav.TypeId = req.TypeId
+	if req.TypeId != nil {
+		nav.TypeId = *req.TypeId
 	}
-	if req.UpdateAll || req.Link != "" {
-		nav.Link = req.Link
+	if req.Link != nil {
+		nav.Link = *req.Link
 	}
-	if req.UpdateAll || req.Sort > 0 {
-		nav.Sort = req.Sort
+	if req.Sort != nil {
+		nav.Sort = *req.Sort
 	}
-	if req.UpdateAll || req.Logo != "" {
-		nav.Logo = req.Logo
+	if req.Logo != nil {
+		nav.Logo = *req.Logo
 	}
-	if req.UpdateAll || req.Style != "" {
-		nav.Style = req.Style
+	if req.Style != nil {
+		nav.Style = *req.Style
 	}
-	nav.Status = 1
+	// 原来这里硬编码 nav.Status = 1，导致导航永远无法隐藏（前端传 status=0 也会被覆盖）。
+	if req.Status != nil {
+		nav.Status = *req.Status
+	}
 
 	err = nav.Save(w.DB)
 	if err != nil {

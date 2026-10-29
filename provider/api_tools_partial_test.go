@@ -24,6 +24,10 @@ func TestInjectPartialUpdateCoversKnownEndpoints(t *testing.T) {
 		"/setting/nav",
 		"/plugin/tag/detail",
 		"/plugin/user/detail",
+		// 2026-10-29 起 UserGroupRequest 也有 UpdateAll/Partial 开关：
+		// 原来是「拼新对象 Save 全列」，改个名字就会把 Level/Price/Setting 清成零值、
+		// 把 Status（停用）刷回 1。端点是 save-or-create，既有记录必须走 PATCH。
+		"/plugin/user/group/detail",
 	}
 	for _, p := range mustCover {
 		got := injectPartialUpdate("POST", p, map[string]any{"id": 1, "title": "x"})
@@ -40,8 +44,8 @@ func TestInjectPartialUpdateSkipsNonPatch(t *testing.T) {
 	if got := injectPartialUpdate("GET", "/archive/detail", map[string]any{"id": 1}); got["partial"] != nil {
 		t.Error("GET 不该注入 partial")
 	}
-	// 不在清单里的端点（如逐字段赋值的 material/place/group）不该注入
-	for _, p := range []string{"/plugin/material/detail", "/plugin/place/detail", "/plugin/user/group/detail"} {
+	// 不在清单里的端点（如逐字段赋值的 material/place）不该注入
+	for _, p := range []string{"/plugin/material/detail", "/plugin/place/detail", "/plugin/redirect/detail"} {
 		if got := injectPartialUpdate("POST", p, map[string]any{"id": 1}); got["partial"] != nil {
 			t.Errorf("POST %s 是逐字段无条件赋值型，注入 partial 无效，不该加进清单", p)
 		}

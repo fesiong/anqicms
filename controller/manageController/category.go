@@ -7,6 +7,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -262,9 +263,9 @@ func CategoryDetailForm(ctx iris.Context) {
 					tmpCategory, err := subSite.GetCategoryById(req.Id)
 					if err == nil {
 						req.Title = tmpCategory.Title
-						req.Content = tmpCategory.Content
-						req.Description = tmpCategory.Description
-						req.Keywords = tmpCategory.Keywords
+						req.Content = library.Ptr(tmpCategory.Content)
+						req.Description = library.Ptr(tmpCategory.Description)
+						req.Keywords = library.Ptr(tmpCategory.Keywords)
 					}
 					_, _ = subSite.SaveCategory(&req)
 				}

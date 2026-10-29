@@ -169,7 +169,7 @@ func ApiImportArchive(ctx iris.Context) {
 				category, err = currentSite.SaveCategory(&request.Category{
 					Title:    categoryTitle,
 					ModuleId: moduleId,
-					Status:   1,
+					Status:   library.Ptr(uint(1)),
 					Type:     config.CategoryTypeArchive,
 				})
 			}
@@ -228,72 +228,167 @@ func ApiImportArchive(ctx iris.Context) {
 		return
 	}
 
+	// 表单通道无法区分「字段没传」与「传了空」，用原始文本是否为空判断字段是否出现：
+	// 数字 "0" / 布尔 "false" 都是非空文本，因此显式传 0（售罄）与 false（不包邮）
+	// 都能被正确识别为「调用方要求写入」。
+	provided := func(key string) bool {
+		return strings.TrimSpace(ctx.PostValue(key)) != ""
+	}
 	var req = request.Archive{
-		ParentId:       parentId,
-		PlaceId:        uint(placeId),
 		Title:          title,
-		SeoTitle:       seoTitle,
 		CategoryId:     categoryId,
-		CategoryIds:    categoryIds,
-		Keywords:       keywords,
-		Description:    description,
 		Content:        content,
-		Template:       template,
-		CanonicalUrl:   canonicalUrl,
-		FixedLink:      fixedLink,
 		Flag:           flag,
-		Flags:          flags,
-		UserId:         userId,
-		Price:          price,
-		OriginPrice:    originPrice,
-		CostPrice:      costPrice,
-		Stock:          stock,
-		ReadLevel:      readLevel,
-		Password:       password,
-		Views:          views,
-		Images:         images,
-		UrlToken:       urlToken,
-		Extra:          map[string]interface{}{},
-		Draft:          draft,
-		Sort:           sort,
 		OriginUrl:      originUrl,
 		OriginTitle:    originTitle,
-		KeywordId:      keywordId,
-		CommentCount:   commentCount,
-		FavoriteCount:  favoriteCount,
-		AverageScore:   float32(averageScore),
-		VideoUrl:       videoUrl,
-		NeedLogistics:  needLogistics,
-		IsFreeShipping: isFreeShipping,
-		SoldCount:      soldCount,
-		ReviewCount:    reviewCount,
-		OptionType:     optionType,
-		Weight:         weight,
-		WeightUnit:     weightUnit,
-		Length:         length,
-		Width:          width,
-		Height:         height,
-		Volume:         volume,
-		LengthUnit:     lengthUnit,
-		AllowOversold:  allowOversold,
-		MinQuantity:    minQuantity,
-		MaxQuantity:    maxQuantity,
-		StepQuantity:   stepQuantity,
-		ProductType:    productType,
-		Brand:          brand,
-		HasPseudo:      hasPseudo,
-		OriginId:       originId,
-		RelationIds:    relationIds,
-		OrderFields:    orderFields,
+		UrlToken:       urlToken,
+		Draft:          draft,
+		Extra:          map[string]interface{}{},
 		Skus:           importSkus,
 		Options:        importOptions,
 		WholesaleRules: wholesaleRules,
 	}
-	if views > 0 {
-		req.Views = uint(views)
+	// 指针字段：只有字段真的出现在表单里才写，没出现就保持原值（新建时用模型默认值）。
+	if provided("parent_id") {
+		req.ParentId = library.Ptr(parentId)
 	}
-	if views > 0 {
-		req.Views = uint(views)
+	if provided("place_id") {
+		req.PlaceId = library.Ptr(uint(placeId))
+	}
+	if seoTitle != "" {
+		req.SeoTitle = library.Ptr(seoTitle)
+	}
+	if len(categoryIds) > 0 {
+		req.CategoryIds = library.Ptr(categoryIds)
+	}
+	if keywords != "" {
+		req.Keywords = library.Ptr(keywords)
+	}
+	if description != "" {
+		req.Description = library.Ptr(description)
+	}
+	if template != "" {
+		req.Template = library.Ptr(template)
+	}
+	if canonicalUrl != "" {
+		req.CanonicalUrl = library.Ptr(canonicalUrl)
+	}
+	if fixedLink != "" {
+		req.FixedLink = library.Ptr(fixedLink)
+	}
+	if len(flags) > 0 {
+		req.Flags = library.Ptr(flags)
+	}
+	if len(images) > 0 {
+		req.Images = library.Ptr(images)
+	}
+	if len(relationIds) > 0 {
+		req.RelationIds = library.Ptr(relationIds)
+	}
+	if provided("user_id") {
+		req.UserId = library.Ptr(userId)
+	}
+	if provided("price") {
+		req.Price = library.Ptr(price)
+	}
+	if provided("origin_price") {
+		req.OriginPrice = library.Ptr(originPrice)
+	}
+	if provided("cost_price") {
+		req.CostPrice = library.Ptr(costPrice)
+	}
+	if provided("stock") {
+		req.Stock = library.Ptr(stock)
+	}
+	if provided("read_level") {
+		req.ReadLevel = library.Ptr(readLevel)
+	}
+	if provided("password") {
+		req.Password = library.Ptr(password)
+	}
+	if provided("sort") {
+		req.Sort = library.Ptr(sort)
+	}
+	if provided("views") {
+		req.Views = library.Ptr(views)
+	}
+	if provided("keyword_id") {
+		req.KeywordId = library.Ptr(keywordId)
+	}
+	if provided("comment_count") {
+		req.CommentCount = library.Ptr(commentCount)
+	}
+	if provided("favorite_count") {
+		req.FavoriteCount = library.Ptr(favoriteCount)
+	}
+	if provided("average_score") {
+		req.AverageScore = library.Ptr(float32(averageScore))
+	}
+	if videoUrl != "" {
+		req.VideoUrl = library.Ptr(videoUrl)
+	}
+	if provided("need_logistics") {
+		req.NeedLogistics = library.Ptr(needLogistics)
+	}
+	if provided("is_free_shipping") {
+		req.IsFreeShipping = library.Ptr(isFreeShipping)
+	}
+	if provided("sold_count") {
+		req.SoldCount = library.Ptr(soldCount)
+	}
+	if provided("review_count") {
+		req.ReviewCount = library.Ptr(reviewCount)
+	}
+	if provided("option_type") {
+		req.OptionType = library.Ptr(optionType)
+	}
+	if provided("weight") {
+		req.Weight = library.Ptr(weight)
+	}
+	if weightUnit != "" {
+		req.WeightUnit = library.Ptr(weightUnit)
+	}
+	if provided("length") {
+		req.Length = library.Ptr(length)
+	}
+	if provided("width") {
+		req.Width = library.Ptr(width)
+	}
+	if provided("height") {
+		req.Height = library.Ptr(height)
+	}
+	if provided("volume") {
+		req.Volume = library.Ptr(volume)
+	}
+	if lengthUnit != "" {
+		req.LengthUnit = library.Ptr(lengthUnit)
+	}
+	if provided("allow_oversold") {
+		req.AllowOversold = library.Ptr(allowOversold)
+	}
+	if provided("min_quantity") {
+		req.MinQuantity = library.Ptr(minQuantity)
+	}
+	if provided("max_quantity") {
+		req.MaxQuantity = library.Ptr(maxQuantity)
+	}
+	if provided("step_quantity") {
+		req.StepQuantity = library.Ptr(stepQuantity)
+	}
+	if provided("product_type") {
+		req.ProductType = library.Ptr(productType)
+	}
+	if brand != "" {
+		req.Brand = library.Ptr(brand)
+	}
+	if provided("has_pseudo") {
+		req.HasPseudo = library.Ptr(hasPseudo)
+	}
+	if provided("origin_id") {
+		req.OriginId = library.Ptr(originId)
+	}
+	if len(orderFields) > 0 {
+		req.OrderFields = library.Ptr(orderFields)
 	}
 
 	// 如果传了ID，则采用覆盖的形式
@@ -435,11 +530,12 @@ func ApiImportArchive(ctx iris.Context) {
 		}
 	}
 	if logo != "" {
-		req.Images = append(req.Images, logo)
+		imgs := library.Deref(req.Images)
+		req.Images = library.Ptr(append(imgs, logo))
 	}
 	if tmpTag != "" {
 		tags := strings.Split(strings.ReplaceAll(tmpTag, "，", ","), ",")
-		req.Tags = tags
+		req.Tags = library.Ptr(tags)
 	}
 
 	// 处理extraFields

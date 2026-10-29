@@ -450,6 +450,10 @@ var partialUpdateEndpoints = map[string]bool{
 	normalizeAPIPath("/setting/nav"):        true, // request.NavConfig
 	normalizeAPIPath("/plugin/tag/detail"):  true, // request.PluginTag
 	normalizeAPIPath("/plugin/user/detail"): true, // request.UserRequest
+	// 用户组：2026-10-29 起 UserGroupRequest 也有 UpdateAll/Partial 开关，
+	// 之前是「拼新对象 Save 全列」，改个名字就会把 Level/Price/Setting 清成零值、
+	// 把 Status 刷成 1（停用的组被强制启用）。
+	normalizeAPIPath("/plugin/user/group/detail"): true, // request.UserGroupRequest
 	// ⚠️ /plugin/redirect/detail **不在**这里：PluginRedirectRequest 没有 UpdateAll
 	// 字段，控制器也没有 `req.UpdateAll = true`（provider 是逐字段无条件赋值）。
 	// 加了也没用——那种端点仍需意图层补齐，见 invokeRouteOverwriteFields。

@@ -83,12 +83,17 @@ func ApiUpdateRetailerInfo(ctx iris.Context) {
 	}
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
-	err := currentSite.DB.Model(model.User{}).Where("`id` = ?", userId).UpdateColumn("real_name", req.RealName).Error
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  currentSite.TplTr("UpdateInfoFailed"),
-		})
+	// 没传 real_name 就别动它：原来无条件 UpdateColumn，请求体里漏了这个字段
+	// 就会把用户的真实姓名刷成空串。
+	if req.RealName != nil {
+		err := currentSite.DB.Model(model.User{}).Where("`id` = ?", userId).UpdateColumn("real_name", *req.RealName).Error
+		if err != nil {
+			ctx.JSON(iris.Map{
+				"code": config.StatusFailed,
+				"msg":  currentSite.TplTr("UpdateInfoFailed"),
+			})
+			return
+		}
 	}
 
 	ctx.JSON(iris.Map{

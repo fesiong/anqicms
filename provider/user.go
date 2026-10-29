@@ -142,57 +142,35 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 	}
 	oldGroupId := user.GroupId
 
+	// 指针字段的归一：nil 表示调用方没提这个字段，保持库里原值；
+	// UpdateAll（表单全量提交）时才把「没提」当成「清空」。
+	// 不能再用 `req.X != ""` / `req.X > 0` 判断——那会把「显式传空/传 0」也当成没传。
 	if req.UpdateAll || req.UserName != "" {
 		user.UserName = req.UserName
 	}
-	if req.UpdateAll || req.RealName != "" {
-		user.RealName = req.RealName
+	library.Assign(&user.RealName, req.RealName, req.UpdateAll)
+	library.Assign(&user.FirstName, req.FirstName, req.UpdateAll)
+	library.Assign(&user.LastName, req.LastName, req.UpdateAll)
+	library.Assign(&user.Introduce, req.Introduce, req.UpdateAll)
+	library.Assign(&user.Phone, req.Phone, req.UpdateAll)
+	library.Assign(&user.Email, req.Email, req.UpdateAll)
+	library.Assign(&user.InviteCode, req.InviteCode, req.UpdateAll)
+	library.Assign(&user.Birthday, req.Birthday, req.UpdateAll)
+	if req.AvatarURL != nil {
+		user.AvatarURL = strings.TrimPrefix(*req.AvatarURL, w.PluginStorage.StorageUrl)
+	} else if req.UpdateAll {
+		user.AvatarURL = ""
 	}
-	if req.UpdateAll || req.FirstName != "" {
-		user.FirstName = req.FirstName
-	}
-	if req.UpdateAll || req.LastName != "" {
-		user.LastName = req.LastName
-	}
-	if req.UpdateAll || req.Birthday > 0 {
-		user.Birthday = req.Birthday
-	}
-	if req.UpdateAll || req.AvatarURL != "" {
-		user.AvatarURL = req.AvatarURL
-		user.AvatarURL = strings.TrimPrefix(user.AvatarURL, w.PluginStorage.StorageUrl)
-	}
-	if req.UpdateAll || req.Introduce != "" {
-		user.Introduce = req.Introduce
-	}
-	if req.UpdateAll || req.Phone != "" {
-		user.Phone = req.Phone
-	}
-	if req.UpdateAll || req.Email != "" {
-		user.Email = req.Email
-	}
-	if req.UpdateAll || req.IsRetailer > 0 {
-		user.IsRetailer = req.IsRetailer
-	}
-	if req.UpdateAll || req.ParentId > 0 {
-		user.ParentId = req.ParentId
-	}
-	if req.UpdateAll || req.InviteCode != "" {
-		user.InviteCode = req.InviteCode
-	}
-	if req.UpdateAll || req.GroupId > 0 {
-		user.GroupId = req.GroupId
-		if user.GroupId == 0 {
-			user.GroupId = w.PluginUser.DefaultGroupId
-		}
-	}
-	if req.UpdateAll || req.ExpireTime > 0 {
-		user.ExpireTime = req.ExpireTime
-	}
-	if req.UpdateAll || req.Status > 0 {
-		user.Status = req.Status
-		if user.GroupId == 0 {
-			user.GroupId = w.PluginUser.DefaultGroupId
-		}
+	library.Assign(&user.IsRetailer, req.IsRetailer, req.UpdateAll)
+	library.Assign(&user.ParentId, req.ParentId, req.UpdateAll)
+	library.Assign(&user.ExpireTime, req.ExpireTime, req.UpdateAll)
+	// Status 的 0=待审核、-1=禁用 都是合法业务值，必须走指针才能写进去。
+	library.Assign(&user.Status, req.Status, req.UpdateAll)
+	library.Assign(&user.GroupId, req.GroupId, req.UpdateAll)
+	// 用户组为空时落到默认组（原来是只挂在 GroupId>0 / Status>0 分支里，
+	// 现在统一在末尾校正，语义不变但不会再漏）。
+	if user.GroupId == 0 {
+		user.GroupId = w.PluginUser.DefaultGroupId
 	}
 
 	req.Password = strings.TrimSpace(req.Password)
@@ -205,10 +183,13 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 		w.ProcessNewUser(user)
 	}
 	// 判断订阅
-	subscriber, err2 := w.GetSubscriberByEmail(req.Email)
-	if err2 == nil {
-		// 添加订阅
-		w.DB.Model(&model.Subscriber{}).Where("id = ?", subscriber.Id).UpdateColumn("user_id", int64(user.Id))
+	// 用合并后的 user.Email 而不是 req.Email：PATCH 时 req.Email 是 nil。
+	if user.Email != "" {
+		subscriber, err2 := w.GetSubscriberByEmail(user.Email)
+		if err2 == nil {
+			// 添加订阅
+			w.DB.Model(&model.Subscriber{}).Where("id = ?", subscriber.Id).UpdateColumn("user_id", int64(user.Id))
+		}
 	}
 	//extra
 	extraFields := map[string]interface{}{}
@@ -264,11 +245,15 @@ func (w *Website) SaveUserInfo(req *request.UserRequest) (*model.User, error) {
 					}
 				}
 			} else {
-				if v.Type == config.CustomFieldTypeNumber {
-					//只有这个类型的数据是数字，转成数字
-					extraFields[v.FieldName] = 0
-				} else {
-					extraFields[v.FieldName] = ""
+				// 自定义字段没出现在请求里：只有全量提交才按空值补齐。
+				// PATCH（AI/MCP 改一个手机号）不能顺手把其它自定义字段清空。
+				if req.UpdateAll {
+					if v.Type == config.CustomFieldTypeNumber {
+						//只有这个类型的数据是数字，转成数字
+						extraFields[v.FieldName] = 0
+					} else {
+						extraFields[v.FieldName] = ""
+					}
 				}
 			}
 		}
@@ -445,27 +430,45 @@ func (w *Website) GetUserGroupInfoByLevel(level int) (*model.UserGroup, error) {
 }
 
 func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) (*model.UserGroup, error) {
-	var group = model.UserGroup{
-		Title:       req.Title,
-		Description: req.Description,
-		Level:       req.Level,
-		Price:       req.Price,
-		Status:      1,
-		Setting:     req.Setting,
-	}
+	// 这里原来是「用请求字段拼一个新对象再 Save」，GORM 的 Save 会写全列，
+	// 于是没传的 Level/Price/Description 被清成零值，Status 更是硬编码成 1
+	// ——用户组只要保存过一次就再也停不掉。改成先读库再按指针合并。
+	var group *model.UserGroup
 	if req.Id > 0 {
-		_, err := w.GetUserGroupInfo(req.Id)
+		exist, err := w.GetUserGroupInfo(req.Id)
 		if err != nil {
 			// 不存在
 			return nil, err
 		}
-		group.Id = req.Id
+		group = exist
+	} else {
+		group = &model.UserGroup{Status: 1}
 	}
-	if err := w.DB.Save(&group).Error; err != nil {
+	library.Assign(&group.Title, req.Title, req.UpdateAll)
+	library.Assign(&group.Description, req.Description, req.UpdateAll)
+	if req.Level != nil {
+		group.Level = *req.Level
+	} else if req.UpdateAll {
+		group.Level = 0
+	}
+	if req.Price != nil {
+		group.Price = *req.Price
+	} else if req.UpdateAll {
+		group.Price = 0
+	}
+	// Status 的 0 是「停用」，是合法值，不能用 >0 判断。
+	if req.Status != nil {
+		group.Status = *req.Status
+	}
+	if req.Setting != nil {
+		group.Setting = *req.Setting
+	}
+
+	if err := w.DB.Save(group).Error; err != nil {
 		return nil, err
 	}
 
-	return &group, nil
+	return group, nil
 }
 
 func (w *Website) GetUserWechatByOpenid(openid string) (*model.UserWechat, error) {
@@ -984,43 +987,49 @@ func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {
 	// if user.Email != "" {
 	// 	req.Email = ""
 	// }
-	if req.Phone != "" {
-		// if !w.VerifyCellphoneFormat(req.Phone) {
+	if req.Phone != nil {
+		// if !w.VerifyCellphoneFormat(*req.Phone) {
 		// 	return errors.New(w.Tr("IncorrectMobilePhoneNumber"))
 		// }
-		exist, err := w.GetUserInfoByPhone(req.Phone)
-		if err == nil && exist.Id != user.Id {
-			return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
+		if *req.Phone != "" {
+			exist, err := w.GetUserInfoByPhone(*req.Phone)
+			if err == nil && exist.Id != user.Id {
+				return errors.New(w.Tr("TheMobilePhoneNumberHasBeenRegistered"))
+			}
 		}
-		user.Phone = req.Phone
+		user.Phone = *req.Phone
 	}
-	if req.Email != "" {
-		if !w.VerifyEmailFormat(req.Email) {
-			return errors.New(w.Tr("IncorrectEmail"))
+	if req.Email != nil {
+		if *req.Email != "" {
+			if !w.VerifyEmailFormat(*req.Email) {
+				return errors.New(w.Tr("IncorrectEmail"))
+			}
+			exist, err := w.GetUserInfoByEmail(*req.Email)
+			if err == nil && exist.Id != user.Id {
+				return errors.New(w.Tr("TheEmailHasBeenRegistered"))
+			}
 		}
-		exist, err := w.GetUserInfoByEmail(req.Email)
-		if err == nil && exist.Id != user.Id {
-			return errors.New(w.Tr("TheEmailHasBeenRegistered"))
-		}
-		user.Email = req.Email
+		user.Email = *req.Email
 	}
 	if req.UserName != "" {
 		user.UserName = req.UserName
 	}
-	if req.RealName != "" {
-		user.RealName = req.RealName
+	if req.RealName != nil {
+		user.RealName = *req.RealName
 	}
-	if req.FirstName != "" {
-		user.FirstName = req.FirstName
+	if req.FirstName != nil {
+		user.FirstName = *req.FirstName
 	}
-	if req.LastName != "" {
-		user.LastName = req.LastName
+	if req.LastName != nil {
+		user.LastName = *req.LastName
 	}
-	if req.FirstName != "" && req.LastName != "" && user.RealName == "" {
-		user.RealName = req.FirstName + " " + req.LastName
+	// 姓名是「姓 + 名」拼出来的展示名：只有当调用方真的传了这两项、
+	// 且拼完后真实姓名仍为空时才补，不能因为 PATCH 没传就把已有的 RealName 冲掉。
+	if req.FirstName != nil && req.LastName != nil && user.RealName == "" {
+		user.RealName = *req.FirstName + " " + *req.LastName
 	}
-	if req.Introduce != "" {
-		user.Introduce = req.Introduce
+	if req.Introduce != nil {
+		user.Introduce = *req.Introduce
 	}
 	if user.GroupId == 0 {
 		user.GroupId = w.PluginUser.DefaultGroupId

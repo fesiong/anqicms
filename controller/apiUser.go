@@ -502,16 +502,36 @@ func ApiUpdateUserDetail(ctx iris.Context) {
 		})
 		return
 	}
+	// 只 Trim 调用方真的传了的字段：nil 代表「不改」，不能在这里补成空串。
 	req.UserName = strings.TrimSpace(req.UserName)
-	req.RealName = strings.TrimSpace(req.RealName)
-	req.FirstName = strings.TrimSpace(req.FirstName)
-	req.LastName = strings.TrimSpace(req.LastName)
-	if req.FirstName != "" {
-		req.RealName = req.FirstName + " " + req.LastName
+	if req.RealName != nil {
+		v := strings.TrimSpace(*req.RealName)
+		req.RealName = &v
 	}
-	req.Phone = strings.TrimSpace(req.Phone)
-	req.Email = strings.TrimSpace(req.Email)
-	req.Introduce = strings.TrimSpace(req.Introduce)
+	if req.FirstName != nil {
+		v := strings.TrimSpace(*req.FirstName)
+		req.FirstName = &v
+	}
+	if req.LastName != nil {
+		v := strings.TrimSpace(*req.LastName)
+		req.LastName = &v
+	}
+	if req.FirstName != nil && *req.FirstName != "" {
+		realName := *req.FirstName + " " + library.Deref(req.LastName)
+		req.RealName = &realName
+	}
+	if req.Phone != nil {
+		v := strings.TrimSpace(*req.Phone)
+		req.Phone = &v
+	}
+	if req.Email != nil {
+		v := strings.TrimSpace(*req.Email)
+		req.Email = &v
+	}
+	if req.Introduce != nil {
+		v := strings.TrimSpace(*req.Introduce)
+		req.Introduce = &v
+	}
 	userId := ctx.Values().GetUintDefault("userId", 0)
 
 	err := currentSite.UpdateUserInfo(userId, &req)

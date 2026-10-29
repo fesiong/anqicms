@@ -871,8 +871,14 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 		return &settings
 	}
 
-	if w.Cache.Get("ai_setting", &settings) == nil {
-		return &settings
+	// Cache 是接口，站点未完成初始化时它是 nil（createDefaultWebsite 不建缓存，
+	// 测试里手工构造的 Website 也不会建）。原样调用会 nil 解引用直接 panic 进程
+	// ——这条路径挂在 Agent 调度器的 30 秒 tick 上，等于「跑够 30 秒就崩」。
+	// 缓存不可用就当作未命中，继续走读库分支。
+	if w.Cache != nil {
+		if w.Cache.Get("ai_setting", &settings) == nil {
+			return &settings
+		}
 	}
 
 	if value == "" {
