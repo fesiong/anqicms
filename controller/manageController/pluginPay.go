@@ -86,11 +86,7 @@ func PluginGetPaymentAccountDetail(ctx iris.Context) {
 func PluginSavePaymentAccount(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PaymentAccountRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

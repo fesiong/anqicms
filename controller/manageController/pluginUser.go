@@ -116,11 +116,10 @@ func PluginUserFieldsSettingForm(ctx iris.Context) {
 func PluginUserFieldsDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.ModuleFieldRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requireNonEmpty(ctx, req.FieldName, "field_name") {
 		return
 	}
 
@@ -428,11 +427,7 @@ func PluginUserGroupDetail(ctx iris.Context) {
 func PluginUserGroupDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.UserGroupRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

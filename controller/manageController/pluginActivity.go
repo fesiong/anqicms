@@ -69,11 +69,7 @@ func PluginActivityDetail(ctx iris.Context) {
 func PluginActivityDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ActivityRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	if !req.Partial {

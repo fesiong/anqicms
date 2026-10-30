@@ -31,11 +31,7 @@ func PluginLinkList(ctx iris.Context) {
 func PluginLinkDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLink
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

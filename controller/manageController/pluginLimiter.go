@@ -100,11 +100,11 @@ func PluginGetBlockedIPs(ctx iris.Context) {
 func PluginRemoveBlockedIP(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginLimiterRemoveIPRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// ip 为空时不能让接口回"删除成功"。
+	if !requireNonEmpty(ctx, req.Ip, "ip") {
 		return
 	}
 

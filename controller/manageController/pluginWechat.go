@@ -240,11 +240,7 @@ func PluginWechatReplyRuleDelete(ctx iris.Context) {
 func PluginWechatReplyRuleForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatReplyRuleRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -317,11 +313,7 @@ func PluginWechatMenuDelete(ctx iris.Context) {
 func PluginWechatMenuSave(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.WechatMenuRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

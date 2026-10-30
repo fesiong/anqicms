@@ -26,11 +26,7 @@ func PluginKeywordSetting(ctx iris.Context) {
 func PluginSaveKeywordSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.KeywordJson
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -91,12 +87,15 @@ func PluginKeywordList(ctx iris.Context) {
 func PluginKeywordDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginKeyword
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+	// 传了 id 说明是修改，记录不存在时必须报错，不能顺手新建一条带该 id 的记录。
+	if req.Id > 0 {
+		if _, err := currentSite.GetKeywordById(req.Id); err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
 	}
 
 	var keyword *model.Keyword
@@ -175,11 +174,10 @@ func PluginKeywordDetailForm(ctx iris.Context) {
 func PluginKeywordDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginKeywordDelete
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !req.All && !requireAnyID(ctx, req.Id, req.Ids) {
 		return
 	}
 

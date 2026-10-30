@@ -174,11 +174,12 @@ func GetValidWebsiteList(ctx iris.Context) {
 func PluginRemoveMultiLangSite(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMultiLangSiteDeleteRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 既没给站点 id 也没给语言代码，等于没有目标，不能回"删除成功"。
+	if req.Id <= 0 && req.Language == "" {
+		ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": ctx.Tr("MissingRequiredParameter", "id")})
 		return
 	}
 
@@ -203,11 +204,7 @@ func PluginRemoveMultiLangSite(ctx iris.Context) {
 func PluginSaveMultiLangSite(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMultiLangSiteRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	req.ParentId = currentSite.Id
@@ -335,11 +332,12 @@ func GetTranslateHtmlCaches(ctx iris.Context) {
 func PluginRemoveTranslateHtmlCache(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMultiLangCacheRemoveRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// all 为真表示清全部；否则必须给出要清空的 uri 列表。
+	if !req.All && len(req.Uris) == 0 {
+		ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": ctx.Tr("MissingRequiredParameter", "uris")})
 		return
 	}
 

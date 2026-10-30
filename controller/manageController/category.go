@@ -192,11 +192,7 @@ func CategoryDetail(ctx iris.Context) {
 func CategoryDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	// UpdateAll 决定「未传的字段」怎么处理：

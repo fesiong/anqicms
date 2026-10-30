@@ -506,11 +506,13 @@ func PluginGetOrderReviews(ctx iris.Context) {
 func PluginSaveOrderReview(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.OrderReviewRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 有 id 是改已有评价；没有 id 是新增，此时必须能定位到订单或商品。
+	// 不能一律要求 id：这会把"新增评价"这条合法路径一起堵死。
+	if req.Id == 0 && req.OrderId == "" && req.ArchiveId == 0 {
+		ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": ctx.Tr("MissingRequiredParameter", "id")})
 		return
 	}
 

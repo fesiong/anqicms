@@ -291,15 +291,22 @@ func SaveSubscriberCategory(ctx iris.Context) {
 func DeleteSubscriberCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.SubscriberCategoryRequest
-	if err := ctx.ReadJSON(&req); err != nil {
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 缺少分类 id 时不能回"删除成功"。
+	if !requirePositive(ctx, req.Id, "id") {
+		return
+	}
+
+	err := currentSite.DeleteSubscriberCategory(req.Id)
+	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
 		return
 	}
-
-	currentSite.DeleteSubscriberCategory(req.Id)
 
 	currentSite.AddAdminLog(ctx, ctx.Tr("DeleteSubscriberCategory%d:%s", req.Id, req.Title))
 

@@ -96,11 +96,7 @@ func PluginGuestbookDetail(ctx iris.Context) {
 func PluginGuestbookUpdateStatus(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginGuestbookStatus
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -149,11 +145,10 @@ func PluginGuestbookUpdateStatus(ctx iris.Context) {
 func PluginGuestbookDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginGuestbookDelete
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requireAnyID(ctx, req.Id, req.Ids) {
 		return
 	}
 

@@ -797,15 +797,18 @@ func ArchiveRelease(ctx iris.Context) {
 func ArchiveDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchiveRecoverRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
+	// 没有 id 就没有删除目标。
+	if !requirePositive(ctx, req.Id, "id") {
+		return
+	}
+	// 正式表和草稿表都没命中时，不能回"文章已删除"。
+	found := false
 	archive, err := currentSite.GetArchiveById(req.Id)
 	if err == nil {
+		found = true
 		// 文档在正式表，把它移到草稿箱
 		err = currentSite.DeleteArchive(archive)
 		if err != nil {
@@ -835,6 +838,7 @@ func ArchiveDelete(ctx iris.Context) {
 		// 从草稿表删除
 		archiveDraft, err := currentSite.GetArchiveDraftById(req.Id)
 		if err == nil {
+			found = true
 			err = currentSite.DeleteArchiveDraft(archiveDraft)
 			if err != nil {
 				ctx.JSON(iris.Map{
@@ -860,6 +864,10 @@ func ArchiveDelete(ctx iris.Context) {
 
 			currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentLog", archiveDraft.Id, archiveDraft.Title))
 		}
+	}
+
+	if !requireFound(ctx, found) {
+		return
 	}
 
 	ctx.JSON(iris.Map{
@@ -1115,11 +1123,10 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 func UpdateArchiveSort(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchiveSortRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 

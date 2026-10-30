@@ -198,12 +198,15 @@ func PlaceDetail(ctx iris.Context) {
 func PlaceDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PlaceRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+	// 传了 id 说明是修改，记录不存在时必须报错，不能顺手新建一条带该 id 的记录。
+	if req.Id > 0 {
+		if _, err := currentSite.GetPlaceById(req.Id); err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
 	}
 
 	// 后台表单是全量提交（req.UpdateAll），AI/MCP 默认走 PATCH（partial）。
@@ -295,11 +298,11 @@ func PlaceDetailForm(ctx iris.Context) {
 func PlaceDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PlaceDeleteRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 删除必须指定城市 id，缺省时不能回"已删除"。
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 	place, err := currentSite.GetPlaceById(req.Id)

@@ -125,11 +125,10 @@ func PluginRetailerConfigForm(ctx iris.Context) {
 func PluginRetailerSetRealName(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.RetailerRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 
@@ -154,11 +153,10 @@ func PluginRetailerSetRealName(ctx iris.Context) {
 func PluginRetailerApply(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.RetailerApplyRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 

@@ -358,11 +358,10 @@ func AttachmentScanUploads(ctx iris.Context) {
 func AttachmentChangeCategory(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ChangeAttachmentCategory
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requireAnyID(ctx, 0, req.Ids) {
 		return
 	}
 

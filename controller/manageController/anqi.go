@@ -522,11 +522,7 @@ type AuthAiImageConfirmRequest struct {
 func AuthAiGenerateImageConfirm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req AuthAiImageConfirmRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	if req.Action == 1 {
