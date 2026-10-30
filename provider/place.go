@@ -517,6 +517,11 @@ func (w *Website) GetPlaceFromCache(placeId uint) *model.Place {
 }
 
 func (w *Website) GetPlaceFromCacheByToken(urlToken string, parents ...*model.Place) *model.Place {
+	// 空 token 不能参与匹配：库里只要有一条 url_token 为空的记录，
+	// 任何拿空串来查的调用方都会命中它（子域名解析、路由兜底都走这里）。
+	if urlToken == "" {
+		return nil
+	}
 	places := w.GetCachePlaces()
 	var parent *model.Place
 	if len(parents) > 0 {

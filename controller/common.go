@@ -863,6 +863,13 @@ func ParseRoute(ctx iris.Context) (map[string]string, bool) {
 				}
 			}
 			if !exist {
+				// 城市站规则不能当通用规则兜底：它的 pattern 是 `/{filename}`，
+				// 谁都能匹配。子域名模式下城市站 URL 靠子域名解析，目录模式下
+				// 上面的主循环已带"记录存在"校验处理过；落到这里会把任何未命中
+				// 的 URL 都当城市站详情页（/blog、/about-us 一律 404）。
+				if ruleName == provider.PatternPlace || ruleName == provider.PatternPlaceIndex {
+					continue
+				}
 				reg := regexp.MustCompile(rewritePattern.Rules[ruleName])
 				match := reg.FindStringSubmatch(paramValue)
 				if len(match) == 0 && strings.Contains(rewritePattern.Rules[ruleName], "\\?") {

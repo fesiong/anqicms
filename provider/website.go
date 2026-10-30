@@ -672,7 +672,11 @@ func matchRootAndFallback(sites []*Website, host string, ctx iris.Context) *Webs
 					topDomain = host[subIndex+1:]
 				}
 				hostName := parsed.Hostname()
-				if strings.HasSuffix(hostName, topDomain) {
+				// host 不带点（localhost、纯 IP）时 subdomain 与 topDomain 都是空串，
+				// 而 strings.HasSuffix(x, "") 恒为真 → 会拿空 token 去查城市站，
+				// 一旦库里存在 url_token 为空的城市站记录，整站每个 URL（含首页）
+				// 都会被当成城市站详情页。空值必须直接跳过。
+				if subdomain != "" && topDomain != "" && strings.HasSuffix(hostName, topDomain) {
 					// 同域名，继续处理
 					place := w.GetPlaceFromCacheByToken(subdomain)
 					if place != nil {
