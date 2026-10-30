@@ -957,15 +957,31 @@ func (w *Website) GetRetailerMembers(retailerId uint, page, pageSize int) ([]*mo
 }
 
 func (w *Website) UpdateUserRealName(userId uint, realName string) error {
-	err := w.DB.Model(&model.User{}).Where("`id` = ?", userId).UpdateColumn("real_name", realName).Error
-
-	return err
+	// 同 SetRetailerInfo：影响 0 行要区分"值没变"和"用户不存在"。
+	res := w.DB.Model(&model.User{}).Where("`id` = ?", userId).UpdateColumn("real_name", realName)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		if _, err := w.GetUserInfoById(userId); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *Website) SetRetailerInfo(userId uint, isRetailer int) error {
-	err := w.DB.Model(&model.User{}).Where("`id` = ?", userId).UpdateColumn("is_retailer", isRetailer).Error
-
-	return err
+	// 用户不存在时 UpdateColumn 影响 0 行且不报错，端点却回"配置已更新"。
+	res := w.DB.Model(&model.User{}).Where("`id` = ?", userId).UpdateColumn("is_retailer", isRetailer)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		if _, err := w.GetUserInfoById(userId); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (w *Website) UpdateUserInfo(userId uint, req *request.UserRequest) error {

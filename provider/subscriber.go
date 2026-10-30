@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	"gorm.io/gorm"
+
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 )
@@ -404,10 +406,18 @@ func (w *Website) GetSubscriberCategoryByTitle(title string) (*model.SubscriberC
 	return &category, nil
 }
 
-func (w *Website) DeleteSubscriberCategory(id int64) {
-	w.DB.Model(&model.SubscriberCategory{}).Where("id = ?", id).Delete(&model.SubscriberCategory{})
+func (w *Website) DeleteSubscriberCategory(id int64) error {
+	// 原来无论删没删掉都回"删除成功"，不存在时调用方拿不到任何提示。
+	res := w.DB.Model(&model.SubscriberCategory{}).Where("id = ?", id).Delete(&model.SubscriberCategory{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
 	// 更新关联的订阅者
 	w.DB.Model(&model.Subscriber{}).Where("category_id = ?", id).Update("category_id", 0)
+	return nil
 }
 
 func (w *Website) UpdateSubscriberCount(categoryId int64) {

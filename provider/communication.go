@@ -238,7 +238,16 @@ func (w *Website) CommunicationMessageSend(req *request.CommunicationMessageRequ
 }
 
 func (w *Website) DeleteCommunicationMessage(id int64) error {
-	return w.DB.Where("id = ?", id).Delete(&model.CommunicationMessage{}).Error
+	// 一行都没删掉说明这条消息不存在；原来直接返回 gorm 的 err（nil），
+	// 端点就回了 "deleted"，调用方分不清"删掉了"和"本来就没有"。
+	res := w.DB.Where("id = ?", id).Delete(&model.CommunicationMessage{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 func (w *Website) GetCommunicationMessages(commOrderId int64, q string, currentPage, pageSize int) ([]*model.CommunicationMessage, int64) {

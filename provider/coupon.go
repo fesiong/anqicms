@@ -99,7 +99,15 @@ func (w *Website) DeleteCoupon(couponId int64) error {
 }
 
 func (w *Website) DeleteCouponCode(codeIds []int64) error {
-	return w.DB.Where("id IN (?)", codeIds).Delete(&model.CouponCode{}).Error
+	// 一张都没删掉说明这些券码都不存在，不能回"删除成功"。
+	res := w.DB.Where("id IN (?)", codeIds).Delete(&model.CouponCode{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
 // SaveCouponCode 修改一张已存在的券码。
