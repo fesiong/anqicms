@@ -321,9 +321,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		w.DB.Raw(sql).Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
-				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives)
 			} else {
-				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives)
 			}
 		}
 		for i := range archives {
@@ -372,9 +372,9 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		//	builder.Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
-				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives)
 			} else {
-				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Scan(&archives)
+				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives)
 			}
 		}
 		for i := range archives {
@@ -1516,6 +1516,9 @@ func (w *Website) DeleteArchiveDraft(draft *model.ArchiveDraft) error {
 	w.DB.Unscoped().Where("`archive_id` = ?", draft.Id).Delete(&model.ArchiveFlag{})
 	// 删除 文档TagData
 	w.DB.Unscoped().Where("`item_id` = ?", draft.Id).Delete(&model.TagData{})
+	// 删除商品属性。只在彻底删除时清：回收站/撤回发布只是在 archives 和
+	// archive_drafts 之间搬行、ID 不变，侧表跟着 ID 走，不用动。
+	w.DB.Unscoped().Where("`archive_id` = ?", draft.Id).Delete(&model.ArchiveProduct{})
 	// 删除模型数据
 	module := w.GetModuleFromCache(draft.ModuleId)
 	if module != nil {
@@ -1784,7 +1787,7 @@ func (w *Website) GetCacheFixedLinks() map[string]int64 {
 	}
 
 	var archives []model.Archive
-	err = w.DB.Model(model.Archive{}).Where("`fixed_link` != ''").Select("fixed_link", "id").Scan(&archives).Error
+	err = w.DB.Model(model.Archive{}).Where("`fixed_link` != ''").Select("fixed_link", "id").Find(&archives).Error
 	if err != nil {
 		return nil
 	}
@@ -1977,13 +1980,15 @@ func (w *Website) UpgradeMultiCategory() {
 	}
 	var lastId int64 = 0
 	for {
-		var archives []*tinyArchive
-		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Order("id asc").Limit(1000).Scan(&archives)
-		if len(archives) == 0 {
+		// 变量别叫 archives：这里只需要 id/category_id，用 Scan 取窄结构没问题，
+		// 但同名变量会让「禁止 Scan 取 model.Archive」的护栏误报。
+		var tinyArchives []*tinyArchive
+		w.DB.Model(&model.Archive{}).Where("`id` > ?", lastId).Order("id asc").Limit(1000).Scan(&tinyArchives)
+		if len(tinyArchives) == 0 {
 			break
 		}
-		lastId = archives[len(archives)-1].Id
-		for _, arc := range archives {
+		lastId = tinyArchives[len(tinyArchives)-1].Id
+		for _, arc := range tinyArchives {
 			arcCategory := model.ArchiveCategory{
 				CategoryId: arc.CategoryId,
 				ArchiveId:  arc.Id,

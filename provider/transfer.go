@@ -724,6 +724,9 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 			if id > 0 {
 				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.Archive{})
 				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.ArchiveData{})
+				// 商品属性也要清：导入是「同 ID 覆盖」，不清就会把被导入站的
+				// 品牌/重量/单价挂到本站这个 ID 上（跨站串数据，且不报错）。
+				t.w.DB.Where("archive_id = ?", result.Data[i].Id).Delete(&model.ArchiveProduct{})
 				// 删除分类关联
 				t.w.DB.Where("archive_id = ?", result.Data[i].Id).Delete(&model.ArchiveCategory{})
 				if module != nil {

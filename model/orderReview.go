@@ -3,6 +3,8 @@ package model
 import (
 	"github.com/lib/pq"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
+	"kandaoni.com/anqicms/config"
 )
 
 type OrderReview struct {
@@ -50,9 +52,21 @@ func (o *OrderReview) AfterCreate(tx *gorm.DB) (err error) {
 		averageScore = sumScore / float32(total)
 	}
 
-	tx.Model(&Archive{}).Where("`id` = ?", o.ArchiveId).UpdateColumns(map[string]interface{}{
-		"review_count":  total,
-		"average_score": averageScore,
+	// review_count / average_score 已迁到 archive_products；UpdateColumns 会跳过
+	// hook（gorm 硬写 SkipHooks），所以这里必须显式写侧表。
+	// 用 upsert 而不是 Update：只填了价格、没配任何商品属性的商品在侧表里没有行，
+	// 直接 Update 会命中 0 行，评分永远不显示。
+	tx.Clauses(clause.OnConflict{
+		Columns: []clause.Column{{Name: "archive_id"}},
+		DoUpdates: clause.Assignments(map[string]interface{}{
+			"review_count":  total,
+			"average_score": averageScore,
+		}),
+	}).Create(&ArchiveProduct{
+		ArchiveId:    o.ArchiveId,
+		ReviewCount:  total,
+		AverageScore: averageScore,
+		ProductType:  config.ProductTypeNormal,
 	})
 	// // 更新点赞数量
 	// var praiseTotal int64

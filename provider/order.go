@@ -19,6 +19,7 @@ import (
 	_ "github.com/matm/go-nowpayments/payments"
 	"github.com/stripe/stripe-go/v82"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -1451,10 +1452,19 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 				price += optionPrice
 				originPrice += originOptionPrice
 			}
-			// 减库存
-			tx.Model(&model.Archive{}).Where("id = ?", archive.Id).UpdateColumns(map[string]interface{}{
-				"stock":      gorm.Expr("stock - ?", v.Quantity),
-				"sold_count": gorm.Expr("sold_count + ?", v.Quantity),
+			// 减库存：stock 留在主表、sold_count 已迁到 archive_products，
+			// 一条 UPDATE 跨不了两张表，所以拆成两步（同一事务）。
+			tx.Model(&model.Archive{}).Where("id = ?", archive.Id).
+				UpdateColumn("stock", gorm.Expr("stock - ?", v.Quantity))
+			// 用 upsert：侧表没有行时（商品没配任何属性）也要能记销量，
+			// 直接 Update 会命中 0 行，销量永远不动。
+			tx.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "archive_id"}},
+				DoUpdates: clause.Assignments(map[string]interface{}{"sold_count": gorm.Expr("sold_count + ?", v.Quantity)}),
+			}).Create(&model.ArchiveProduct{
+				ArchiveId:   archive.Id,
+				SoldCount:   int64(v.Quantity),
+				ProductType: config.ProductTypeNormal,
 			})
 			if activity != nil {
 				tx.Model(&model.Activity{}).Where("id = ?", activity.Id).UpdateColumns(map[string]interface{}{
