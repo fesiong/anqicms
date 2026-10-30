@@ -541,6 +541,20 @@ func collectHandlerBindings(dir string) (map[string]handlerBinding, error) {
 	return out, nil
 }
 
+// jsonPayloadHelpers 是"替代 ctx.ReadJSON 的包级函数"白名单。
+//
+// 约定：这类 helper 必须把要绑定的目标放在第 2 个实参（ctx 之后），
+// 生成器只认这个位置。新增 helper 时同步加进本表，否则
+// TestNoUnrecognizedPayloadHelper 会红——它扫的是"第一个实参是 ctx 的裸函数调用"，
+// 正是所有这类 helper 的签名特征。
+var jsonPayloadHelpers = map[string]bool{
+	"readJSONPayload": true,
+}
+
+func isJSONPayloadHelper(name string) bool {
+	return jsonPayloadHelpers[name]
+}
+
 // analyzeHandlerBody 判定单个函数体的取参方式，优先级：结构体 > 文件 > 表单 > URLParam。
 //
 // 与结构体字段不同，URLParam/PostValue/FormFile 的参数名来自函数调用的字面量实参，
@@ -566,6 +580,23 @@ func analyzeHandlerBody(fset *token.FileSet, file *ast.File, body *ast.BlockStmt
 	tails := nodeEndLines(fset, body)
 
 	visit := func(stmt ast.Stmt, call *ast.CallExpr) {
+		// 取参的包装函数：readJSONPayload(ctx, &req) 是 ctx.ReadJSON(&req)
+		// 加空载荷校验后的替代品（controller/manageController/payload_guard.go）。
+		// 它不在 ctx 上，下面的 SelectorExpr 分支匹配不到 —— 漏掉这段的后果是
+		// 这 50 多个端点的参数 schema 在重新生成时被静默清空（param_source 从
+		// struct 退化成 none），而 MCP 的 api_invoke 与意图层参数门禁都读这份
+		// schema。护栏：TestCatalogRecognizesPayloadHelpers 与
+		// TestNoUnrecognizedPayloadHelper。
+		if ident, ok := call.Fun.(*ast.Ident); ok && isJSONPayloadHelper(ident.Name) {
+			readJSON = true
+			if len(call.Args) > 1 {
+				structType, inline = resolveArgJSONTarget(fset, file, body, call.Args[1])
+				if len(inline) > 0 {
+					inlineFields = inline
+				}
+			}
+			return
+		}
 		sel, ok := call.Fun.(*ast.SelectorExpr)
 		if !ok {
 			return
