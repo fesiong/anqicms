@@ -126,7 +126,13 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Where("`place_id` = ?", placeId)
 			}
 			if productType > 0 {
-				tx = tx.Where("`product_type` = ?", productType)
+				// product_type 3.8.0 起只在 archive_products 上（archives 的列已删）。
+				// 用 LEFT JOIN + IFNULL 而不是 INNER：侧表只给"配过属性"的商品建行，
+				// 普通商品（product_type=1 且其余全默认）没有行，INNER JOIN 会把它筛没。
+				// 这里的外层表已被 alias 成 archives（正式稿/草稿两条路径共用），
+				// 所以关联条件写 archives.id 对两边都成立。
+				tx = tx.Joins("LEFT JOIN archive_products ON archive_products.archive_id = archives.id").
+					Where("IFNULL(archive_products.product_type, 1) = ?", productType)
 			}
 			if status == "delete" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDelete)
