@@ -1,0 +1,40 @@
+{% extends 'base.html' %}
+
+{% block container %}
+
+{% include "partial/banner.html" %}
+{% include "partial/crumb.html" %}
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-content-title">{% categoryDetail with name="Title" %}</div>
+                <ul class="list-case-ul">
+                    {% archiveList products with type="page" limit="12" %}
+                    {% for item in products %}
+                    <li>
+                        <div class="list-item">
+                            <div class="list-item-img"><a href="{{item.Link}}">
+                                    <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                                </a></div>
+                            <div class="list-item-text">
+                                <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                                <p>{{item.Description}}</p>
+                                <a href="{{item.Link}}" class="more">{% tr 'detail' %}</a>
+                            </div>
+                        </div>
+                    </li>
+                    {% endfor %}
+                    {% endarchiveList %}
+                </ul>
+                {% include "partial/pagination.html" %}
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+</div>
+{% endblock %}

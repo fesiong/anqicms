@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+
+{% block container %}
+
+{% include "partial/banner.html" %}
+<!-- crumb -->
+{% include "partial/crumb.html" %}
+<!-- crumb -->
+<div class="page">
+    <div class="container">
+        <div class="section page-item">
+            <!-- content -->
+            <div class="page-content">
+                <div class="single-title">
+                    <h1>{% archiveDetail with name="Title" %}</h1>
+                    <div class="info">
+                        <span>{% tr 'source:' %}<a href="{% categoryDetail with name='Link' %}">{% categoryDetail with name='Title' %}</a></span> /
+                        <span><span>{% tr 'time:' %}</span>{% archiveDetail with name="CreatedTime" format="2006-01-02" %}</span>
+                    </div>
+                </div>
+                <div class="single-arc">
+                    {% archiveDetail articleContent with name="Content" %}
+                    {{articleContent|safe}}
+                </div>
+                <div class="tags">
+                    {% tagList tags with limit="5" %}
+                    {% if tags %}
+                    <span>
+                        <span>{% tr 'tags:' %}</span>
+                        {% for item in tags %}
+                        <a href="{{item.Link}}">{{item.Title}}</a>
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+                    {% endtagList %}
+                </div>
+                <div class="prenext">
+                    {% prevArchive prev %}
+                    {% if prev %}
+                    <p><span>{% tr 'prev-article:' %}</span> <a href="{{prev.Link}}">{{prev.Title}}</a></p>
+                    {% endif %}
+                    {% endprevArchive %}
+                    {% nextArchive next %}
+                    {% if next %}
+                    <p><span>{% tr 'next-article:' %}</span> <a href="{{next.Link}}">{{next.Title}}</a></p>
+                    {% endif %}
+                    {% endnextArchive %}
+                </div>
+            </div>
+            <!-- content -->
+            <!-- sidebar -->
+            {% include "partial/sidebar.html" %}
+            <!-- sidebar -->
+        </div>
+    </div>
+    <!-- rel-pro -->
+    <div class="rel">
+        <div class="container">
+            <h2>{% tr 'related-products' %}</h2>
+            <ul class="rel-pro-ul">
+                {% archiveList products with type="list" moduleId="2" categoryId=0 limit="4" %}
+                {% for item in products %}
+                <li>
+                    <div class="list-item">
+                        <div class="list-item-img"><a href="{{item.Link}}">
+                                <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                            </a></div>
+                        <div class="list-item-text">
+                            <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+    </div>
+    <!-- rel-pro -->
+</div>
+{% endblock %}
