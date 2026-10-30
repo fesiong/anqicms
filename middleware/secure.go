@@ -7,7 +7,7 @@ import (
 // SecurityHeaders 添加安全响应头
 func SecurityHeaders(ctx iris.Context) {
 	// 防止点击劫持
-	ctx.Header("X-Frame-Options", "SAMEORIGIN")
+	// ctx.Header("X-Frame-Options", "SAMEORIGIN")
 	// 禁止 MIME 类型嗅探
 	// ctx.Header("X-Content-Type-Options", "nosniff")
 	// 控制 Referer 头信息
