@@ -8,9 +8,9 @@
 | 项 | 值 |
 |---|---|
 | 模块路径 | `kandaoni.com/anqicms`（Go 1.26，iris + cloudwego/eino） |
-| 后端仓库 | `~/data/backend/anqicms` |
-| 前端仓库 | `<后端仓库>/anqicms-admin`，即 `~/data/backend/anqicms/anqicms-admin`（UmiJS + antd/ProForm，包名 `AnQiCMS`） |
-| 两仓关系 | **无代码级引用**，只通过 HTTP 契约耦合 |
+| 仓库 | **单仓**：`~/data/backend/anqicms`，前端在其子目录 `anqicms-admin/`（2026-10-31 并入） |
+| 前端目录 | `anqicms-admin/`（UmiJS + antd/ProForm，包名 `AnQiCMS`），源码随主仓跟踪，无独立 `.git` |
+| 前后端关系 | **无代码级引用**，只通过 HTTP 契约耦合 |
 | 前端 baseUrl | `'/system/api'` ↔ 后端 `app.Party("/system").Party("/api")`（`route/manage.go`） |
 | 版本号 | `config/constant.go:3` 的 `const Version`（**不在 package.json**） |
 | 本地 MCP | `http://127.0.0.1:8001/api/mcp` |
@@ -107,18 +107,19 @@ go run ./cmd/apilive -wire         # MCP 协议层冒烟
 - ⚠️ 改完 `pkg/mcp` 必须重编译重启才生效。
 - 端到端验证套路：起 8011 临时服务 → 真实调 MCP → 验证 → 恢复 `api_exposure.mode=read` → 停 8011 → 必要时重启 8001。
 
-## 8. 前端（`anqicms-admin`）协作约定
+## 8. 前端（`anqicms-admin/`）协作约定
 
-前端仓库已迁到**后端仓库目录内**：`~/data/backend/anqicms/anqicms-admin`（旧路径 `~/data/frontend/anqicms-admin2` 已不存在）。
+前端源码在 `~/data/backend/anqicms/anqicms-admin/`，与后端**同一个 git 仓**（2026-10-31 并入；
+此前是嵌在工作区里的独立仓库 + `.git/info/exclude` 排除，该限制已取消）。
 
-- ⚠️ 它是**独立的 git 仓库**（remote `git@github.com:fesiong/anqicms-admin.git`），却**位于后端 git 工作区内**（嵌套仓库）。
-  已通过 **`.git/info/exclude`** 加 `/anqicms-admin` 排除，后端 `git status` 不再显示它。
-  - **为什么不写进 `.gitignore`**：`.gitignore` 会连带让 **graphify 跳过整个前端语料**，而
-    `.graphifyignore` 只能额外排除、**无法把 `.gitignore` 排除的内容重新纳入**（见 `.graphifyignore` 顶部说明）。
-    `.git/info/exclude` 是纯本地 git 层配置、不入库，graphify 不读它 —— 两头都保住。
-  - ⚠️ 因此这条防护**不会随仓库分发**（别人 clone 后没有）。后端提交仍**禁止 `git add .` / `git add -f anqicms-admin`**：
-    一旦把它当 gitlink 提交进去，前端内容全丢。前端改动一律进**前端仓库内单独提交**。
-- 两仓仍**无代码级引用**，只通过 HTTP 契约耦合（`baseUrl='/system/api'`）。
+- 该目录内**没有** `.git`，在里面跑 `git rev-parse --show-toplevel` 返回后端根目录 —— 这是正常的。
+- 追踪范围：508 个源文件（`src/` `config/` `public/` + 各类配置文件），**不含**依赖与构建产物。
+  `node_modules` / `dist` / `graphify-out` / `.DS_Store` 由 `anqicms-admin/.gitignore` 继承排除。
+  ⚠️ `yarn.lock` 也被那份 `.gitignore` 忽略 → 主仓里没有前端锁文件，clone 后装依赖拿到的是浮动版本。
+- 前端改动与配套后端改动**可以同批提交**，不必再拆仓库。
+- ⚠️ **别再往 `.gitignore` 里写 `anqicms-admin/`**：那会让 graphify 跳过整个前端语料，
+  而 `.graphifyignore` 只能额外排除、**无法把 `.gitignore` 排除的内容重新纳入**（见 `.graphifyignore` 顶部说明）。
+- 前后端仍**无代码级引用**，只通过 HTTP 契约耦合（`baseUrl='/system/api'`）。
 - ⚠️ **tab 式设置页必须提交全量字段**：`setting/system|content|safe|contact` 是 tab 条件渲染 + 后端整包覆盖保存，`onFinish` 只带当前 tab 字段会**清空其它 tab**。
   `onSubmit` 必须用 `formRef.current?.getFieldsValue(true)`。新增 tab 式设置页同样遵守。
   其余多 tab 页（ai/limiter/sitemap/multilang）改 `visitedTabs` **常驻挂载 + `display:none` 切换**。
@@ -162,9 +163,8 @@ go run ./cmd/apilive -wire         # MCP 协议层冒烟
 
 ## 12. Git 与发布
 
-- 提交按**功能分批**，每批要能独立编译 + 测试通过。
-- ⚠️ 后端 `git add` 前先扫一眼待提交清单里有没有 `anqicms-admin/`（嵌套前端仓，见 §8）。
-  ⚠️ 跨批次文件必须手工拆：先 `cp` 备份到 /tmp → `git checkout HEAD --` 还原 → 只改本批部分提交 → 从 /tmp 拷回完整版。**备份在批次之间必须一直留着**。配套测试文件也要跟着拆。
+- 提交按**功能分批**，每批要能独立编译 + 测试通过。前端与后端同一仓，配套改动可与后端同批提交。
+- ⚠️ 跨批次文件必须手工拆：先 `cp` 备份到 /tmp → `git checkout HEAD --` 还原 → 只改本批部分提交 → 从 /tmp 拷回完整版。**备份在批次之间必须一直留着**。配套测试文件也要跟着拆。
 - 修订已提交内容用 `GIT_EDITOR=true git commit --fixup=amend:<sha>` + `git rebase --autosquash`（未推送时安全）。注意该 git 版本**不支持 `-m` 与 `--fixup` 同用**。
 - 发布清单**只有 4 个文件**：`CHANGELOG.md` / `README.md` / `README-en_US.md` / `config/constant.go`。
   ⚠️ `release/` 被 `.gitignore` 忽略且从未入库，**不要 `git add release/...`**（曾导致 commit 没带文件、tag 打到上一个提交）。
