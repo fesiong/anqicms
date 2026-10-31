@@ -29,7 +29,7 @@ ifeq ($(version),)
 	version := $(shell git describe --tags --always --dirty="-dev")
 endif
 
-.PHONY: all clean tidy oem oem-list build archive
+.PHONY: all clean tidy oem oem-list admin build archive
 
 all: clean tidy build archive
 
@@ -43,6 +43,24 @@ oem:
 
 oem-list:
 	@$(GO) run ./cmd/oemgen -list
+
+# 后台 SPA 由后端从磁盘 system/ 目录直接服务（route/manage.go），而 system/
+# 此前只能靠人手工从 dist 拷贝。这对 OEM 是致命的：二进制是 A 品牌、UI 还是
+# 官方版，界面照常工作，只有客户截图时才会发现。所以让构建自己完成这一步。
+# 只想验证后端改动时用 SKIP_ADMIN=1 跳过（约省 5 分钟）。
+admin: oem
+	@echo "🎨 Building admin for OEM=$(OEM)..."
+	cd ./anqicms-admin && yarn build
+	@echo "📁 Sync dist -> system"
+	rm -rf ./system
+	mkdir -p ./system
+	cp -R ./anqicms-admin/dist/. ./system/
+
+ifeq ($(SKIP_ADMIN),1)
+BUILD_DEPS := oem
+else
+BUILD_DEPS := admin
+endif
 
 clean:
 	@echo "🧹 Cleaning..."
@@ -58,7 +76,7 @@ tidy:
 	$(GO) mod tidy
 	$(GO) mod vendor
 
-build: oem
+build: $(BUILD_DEPS)
 	@echo "🔨 Building for $(GOOS)/$(GOARCH)..."
 	mkdir -p -v ./release/$(GOOS)/cache
 	mkdir -p -v ./release/$(GOOS)/public/static

@@ -13,8 +13,9 @@ import setting from './zh-TW/setting';
 import statistic from './zh-TW/statistic';
 import tool from './zh-TW/tool';
 import website from './zh-TW/website';
+import { brandizeMessages } from '../oem/brandize';
 
-export default {
+export default brandizeMessages({
   'site.title': 'AnQiCMS',
   ...pages,
   ...menu,
@@ -31,4 +32,4 @@ export default {
   ...content,
   ...plugin,
   ...common,
-};
+});

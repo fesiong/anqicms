@@ -4,7 +4,7 @@
 
 export interface OEMBrand {
   id: string;
-  /** 品牌主名（拉丁字母），用于 document.title 兜底与 Logo alt */
+  /** 品牌主名（拉丁字母），用于 document.title 与 Logo alt */
   name: string;
   /** 中文名，为空时回退 name */
   nameCn: string;
@@ -18,6 +18,10 @@ export interface OEMBrand {
   authBase: string;
   /** 是否官方版：模板市场、官网账号绑定等入口仅官方版可见 */
   official: boolean;
+  /** Logo 地址，空表示沿用官方内置图标 */
+  logo: string;
+  /** favicon 地址，空表示沿用官方图标 */
+  favicon: string;
 }
 
 export const brand: OEMBrand = {
@@ -29,6 +33,8 @@ export const brand: OEMBrand = {
   docs: 'https://www.anqicms.com',
   authBase: 'https://auth.anqicms.com/auth',
   official: true,
+  logo: '',
+  favicon: '',
 };
 
 export default brand;
