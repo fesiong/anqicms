@@ -1,10 +1,22 @@
 # supports linux, macOS, freebsd
-BINARY_NAME := anqicms
+#
+# OEM 品牌标识，对应 config/oem/<OEM>/brand.json。默认 anqicms（官方版）。
+# 品牌在编译期通过 -X 固化进二进制，所以同一份源码可产出多个互不影响的安装包，
+# 不需要为每个客户维护 fork，也不需要任何运行时开关。
+OEM ?= anqicms
+# 主程序名必须与 brand.json 的 binary 字段一致：升级逻辑靠它识别压缩包里哪个文件
+# 是主程序。官方版是 anqishop（与 start.sh / stop.sh / windowsMake.sh 一致）。
+BINARY_NAME ?= anqishop
 BIN_SUFFIX :=
 GO := go
 GOOS ?= $(shell $(GO) env GOOS)
 GOARCH ?= $(shell $(GO) env GOARCH)
-LDFLAGS := -ldflags '-w -s'
+LDFLAGS := -ldflags '-w -s -X kandaoni.com/anqicms/config.OEMID=$(OEM)'
+ifeq ($(OEM),anqicms)
+	ARCHIVE_NAME := $(BINARY_NAME)
+else
+	ARCHIVE_NAME := $(OEM)
+endif
 # freebsd needs the noasm tag to avoid sonic/loader native code via cloudwego/base64x
 EXTRA_TAGS :=
 # ifeq ($(GOOS),freebsd)
@@ -17,9 +29,20 @@ ifeq ($(version),)
 	version := $(shell git describe --tags --always --dirty="-dev")
 endif
 
-.PHONY: all clean tidy build archive
+.PHONY: all clean tidy oem oem-list build archive
 
 all: clean tidy build archive
+
+# 构建前门禁：品牌数据必须完整，且前端注入文件必须与所选 OEM 一致。
+# 放在 build 之前而不是让人记住，是因为“忘了跑”的后果是交付一个品牌错乱的包，
+# 而这种错误在界面上只表现为某一处 logo 对不上，验收时极易漏过。
+oem:
+	@echo "🎨 OEM=$(OEM)"
+	@$(GO) run ./cmd/oemgen -check
+	@$(GO) run ./cmd/oemgen -oem $(OEM)
+
+oem-list:
+	@$(GO) run ./cmd/oemgen -list
 
 clean:
 	@echo "🧹 Cleaning..."
@@ -35,7 +58,7 @@ tidy:
 	$(GO) mod tidy
 	$(GO) mod vendor
 
-build:
+build: oem
 	@echo "🔨 Building for $(GOOS)/$(GOARCH)..."
 	mkdir -p -v ./release/$(GOOS)/cache
 	mkdir -p -v ./release/$(GOOS)/public/static
@@ -56,7 +79,10 @@ build:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build -trimpath $(EXTRA_TAGS) $(LDFLAGS) -o ./release/$(GOOS)/$(BINARY_NAME)$(BIN_SUFFIX) kandaoni.com/anqicms/main
 	strip ./release/$(GOOS)/$(BINARY_NAME)$(BIN_SUFFIX)
 	rm -rf anqicms.syso
+	@if [ "$(OEM)" != "anqicms" ]; then \
+		echo "⚠️  前端品牌文件已切换为 $(OEM)：提交前请执行 git checkout -- anqicms-admin/src/oem"; \
+	fi
 
 archive:
 	@echo "📦 Creating archive..."
-	@(cd ./release/$(GOOS)/ && zip -r -9 ../$(BINARY_NAME)-$(GOOS)-$(GOARCH)-$(version).zip .)
+	@(cd ./release/$(GOOS)/ && zip -r -9 ../$(ARCHIVE_NAME)-$(GOOS)-$(GOARCH)-$(version).zip .)
