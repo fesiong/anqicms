@@ -92,12 +92,21 @@ func PluginMaterialDetail(ctx iris.Context) {
 func PluginMaterialDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterial
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+
+	// 传了 id 说明是修改，记录不存在时必须报错，不能顺手新建一条带该 id 的记录。
+	if req.Id > 0 {
+		if _, err := currentSite.GetMaterialById(req.Id); err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
+	}
+
+	// 后台表单是全量提交（req.UpdateAll），AI/MCP 默认走 PATCH（partial）。
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	category, err := currentSite.SaveMaterial(&req)
@@ -162,12 +171,13 @@ func PluginMaterialDelete(ctx iris.Context) {
 func PluginMaterialCategoryDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.PluginMaterialCategory
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+
+	// 后台表单是全量提交（req.UpdateAll），AI/MCP 默认走 PATCH（partial）。
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	category, err := currentSite.SaveMaterialCategory(&req)

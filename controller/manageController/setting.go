@@ -750,11 +750,7 @@ func SettingBanner(ctx iris.Context) {
 func DeleteSettingBanner(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.BannerItemDeleteRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -765,6 +761,8 @@ func DeleteSettingBanner(ctx iris.Context) {
 		})
 		return
 	}
+	// 该 id 不在任何分组里时，不能回"配置已更新"。
+	found := false
 	for i := range currentSite.Banner.Banners {
 		if req.Type == "" {
 			req.Type = currentSite.Banner.Banners[i].Type
@@ -772,6 +770,7 @@ func DeleteSettingBanner(ctx iris.Context) {
 		if req.Type == currentSite.Banner.Banners[i].Type {
 			for j := range currentSite.Banner.Banners[i].List {
 				if currentSite.Banner.Banners[i].List[j].Id == req.Id {
+					found = true
 					currentSite.Banner.Banners[i].List = append(currentSite.Banner.Banners[i].List[:j], currentSite.Banner.Banners[i].List[j+1:]...)
 					if len(currentSite.Banner.Banners[i].List) == 0 && req.Type != "default" {
 						currentSite.Banner.Banners = append(currentSite.Banner.Banners[:i], currentSite.Banner.Banners[i+1:]...)
@@ -781,6 +780,10 @@ func DeleteSettingBanner(ctx iris.Context) {
 			}
 			break
 		}
+	}
+
+	if !requireFound(ctx, found) {
+		return
 	}
 
 	err := currentSite.SaveSettingValue(provider.BannerSettingKey, currentSite.Banner)
@@ -965,11 +968,7 @@ func SettingAiForm(ctx iris.Context) {
 		Chat  []*eino.Config           `json:"chat"`
 		Mcp   *eino.McpConfig          `json:"mcp"`
 	}
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -1041,11 +1040,7 @@ func SettingCurrency(ctx iris.Context) {
 func SettingCurrencyForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.CurrencyConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

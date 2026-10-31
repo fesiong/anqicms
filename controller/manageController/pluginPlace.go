@@ -198,12 +198,20 @@ func PlaceDetail(ctx iris.Context) {
 func PlaceDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PlaceRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+	// 传了 id 说明是修改，记录不存在时必须报错，不能顺手新建一条带该 id 的记录。
+	if req.Id > 0 {
+		if _, err := currentSite.GetPlaceById(req.Id); err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
+	}
+
+	// 后台表单是全量提交（req.UpdateAll），AI/MCP 默认走 PATCH（partial）。
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	place, err := currentSite.SavePlace(&req)
@@ -256,10 +264,12 @@ func PlaceDetailForm(ctx iris.Context) {
 					// 修改的话，就排除 title, content，description，keywords 字段
 					tmpPlace, err := subSite.GetPlaceById(req.Id)
 					if err == nil {
-						req.Title = tmpPlace.Title
-						req.Content = tmpPlace.Content
-						req.Description = tmpPlace.Description
-						req.Keywords = tmpPlace.Keywords
+						// 这些字段是各语言站点自己维护的，同步时用子站的现值覆盖，
+						// 避免主站内容把子站译文冲掉。指针化后要显式包一层。
+						req.Title = library.Ptr(tmpPlace.Title)
+						req.Content = library.Ptr(tmpPlace.Content)
+						req.Description = library.Ptr(tmpPlace.Description)
+						req.Keywords = library.Ptr(tmpPlace.Keywords)
 					}
 					_, _ = subSite.SavePlace(&req)
 				}
@@ -288,11 +298,11 @@ func PlaceDetailForm(ctx iris.Context) {
 func PlaceDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PlaceDeleteRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 删除必须指定城市 id，缺省时不能回"已删除"。
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 	place, err := currentSite.GetPlaceById(req.Id)

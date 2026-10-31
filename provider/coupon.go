@@ -38,29 +38,50 @@ func (w *Website) GetCouponById(id int64) (*model.Coupon, error) {
 	return &coupon, nil
 }
 
+// SaveCoupon 新建或更新优惠券。
+//
+// 语义（2026-10-29 指针化）：请求里除 Id 外都是指针。
+//   - nil + !UpdateAll（PATCH，AI/MCP 默认）→ 不碰库里原值；
+//   - nil + UpdateAll（后台表单全量提交）→ 写零值（表单里没出现 = 用户清空了它）；
+//   - 非 nil → 一律写入，包含 0。
+//
+// 为什么必须区分：优惠券的 0 全是有效业务值 —— status=0 停用、expire=0 跟随
+// 固定起止时间、need_money=0 无门槛、need_integral=0 免费兑换、range_type=0
+// 全站可用、max_money=0 不封顶。用 `req.X > 0` 判断「要不要写」会让这些值
+// 永远写不进去；而逐字段无条件赋值会让「改个标题」把面额清零 —— 面额清零的
+// 券仍挂着已发出的券码，核销时按 0 元抵扣，事后无法从券码侧补回。
 func (w *Website) SaveCoupon(req *request.CouponRequest) error {
 	var coupon model.Coupon
+	newPost := false
 	if req.Id > 0 {
-		err := w.DB.Where("id = ?", req.Id).First(&coupon).Error
-		if err != nil {
+		if err := w.DB.Where("`id` = ?", req.Id).First(&coupon).Error; err != nil {
 			return err
 		}
 	} else {
 		coupon = model.Coupon{}
+		newPost = true
 	}
-	coupon.Money = req.Money
-	coupon.StartTime = req.StartTime
-	coupon.EndTime = req.EndTime
-	coupon.Title = req.Title
-	coupon.Description = req.Description
-	coupon.Expire = req.Expire
-	coupon.Status = req.Status
-	coupon.Type = req.Type
-	coupon.MaxMoney = req.MaxMoney
-	coupon.MoneyType = req.MoneyType
-	coupon.NeedIntegral = req.NeedIntegral
-	coupon.NeedMoney = req.NeedMoney
-	coupon.RangeType = req.RangeType
+
+	if newPost {
+		// 新建的券默认启用。未传 status 时落到 0 会造出一张「建好了但领不到」
+		// 的券：领券接口按 status=1 过滤，后台列表却显示它存在。
+		coupon.Status = 1
+	}
+
+	force := req.UpdateAll
+	library.Assign(&coupon.Money, req.Money, force)
+	library.Assign(&coupon.StartTime, req.StartTime, force)
+	library.Assign(&coupon.EndTime, req.EndTime, force)
+	library.Assign(&coupon.Title, req.Title, force)
+	library.Assign(&coupon.Description, req.Description, force)
+	library.Assign(&coupon.Expire, req.Expire, force)
+	library.Assign(&coupon.Status, req.Status, force)
+	library.Assign(&coupon.Type, req.Type, force)
+	library.Assign(&coupon.MaxMoney, req.MaxMoney, force)
+	library.Assign(&coupon.MoneyType, req.MoneyType, force)
+	library.Assign(&coupon.NeedIntegral, req.NeedIntegral, force)
+	library.Assign(&coupon.NeedMoney, req.NeedMoney, force)
+	library.Assign(&coupon.RangeType, req.RangeType, force)
 
 	return w.DB.Save(&coupon).Error
 }
@@ -78,16 +99,32 @@ func (w *Website) DeleteCoupon(couponId int64) error {
 }
 
 func (w *Website) DeleteCouponCode(codeIds []int64) error {
-	return w.DB.Where("id IN (?)", codeIds).Delete(&model.CouponCode{}).Error
+	// 一张都没删掉说明这些券码都不存在，不能回"删除成功"。
+	res := w.DB.Where("id IN (?)", codeIds).Delete(&model.CouponCode{})
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		return gorm.ErrRecordNotFound
+	}
+	return nil
 }
 
+// SaveCouponCode 修改一张已存在的券码。
+//
+// 只有 PATCH 语义：券码没有 GET 详情端点，后台也就没有「全量编辑表单」，
+// 人工能做的只有「绑定会员 / 改面额 / 改有效期 / 标记失效」这几种局部动作。
+// 因此 nil 一律表示「不碰」，0 一律表示「显式写成 0」——
+// 0 元券码与 status=0（失效）都是合法状态，不能被 `> 0` 守卫挡在门外。
 func (w *Website) SaveCouponCode(req *request.CouponCodeRequest) error {
 	var couponCode model.CouponCode
 	err := w.DB.Where("id = ?", req.Id).Take(&couponCode).Error
 	if err != nil {
 		return err
 	}
-	couponCode.UserId = req.UserId
+	if req.UserId != nil {
+		couponCode.UserId = *req.UserId
+	}
 	if req.Code != "" {
 		couponCode.Code = req.Code
 	}
@@ -95,17 +132,17 @@ func (w *Website) SaveCouponCode(req *request.CouponCodeRequest) error {
 		couponCode.GetTime = time.Now().Unix()
 		_ = w.ShopCountLog.Write(&request.LogStatisticRequest{Action: request.LogActionOrder, Type: request.LogTypeCouponGet, Id: couponCode.Id})
 	}
-	if req.Money > 0 {
-		couponCode.Money = req.Money
+	if req.Money != nil {
+		couponCode.Money = *req.Money
 	}
-	if req.StartTime > 0 {
-		couponCode.StartTime = req.StartTime
+	if req.StartTime != nil {
+		couponCode.StartTime = *req.StartTime
 	}
-	if req.EndTime > 0 {
-		couponCode.EndTime = req.EndTime
+	if req.EndTime != nil {
+		couponCode.EndTime = *req.EndTime
 	}
-	if req.Status > 0 {
-		couponCode.Status = req.Status
+	if req.Status != nil {
+		couponCode.Status = *req.Status
 	}
 
 	return w.DB.Save(&couponCode).Error

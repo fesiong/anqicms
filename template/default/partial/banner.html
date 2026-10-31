@@ -1,0 +1,17 @@
+{% if webInfo.PageName == "pageDetail" %}
+    {% pageDetail bannerImages with name="Images" %}
+{% else %}
+    {% categoryDetail bannerImages with name="Images" %}
+{% endif %}
+
+{% if bannerImages %}
+<!-- page-banner -->
+<div class="page-banner">
+    {% for item in bannerImages %}
+    {% if forloop.First %}
+    <img src="{{item}}" alt="" />
+    {% endif %}
+    {% endfor %}
+</div>
+<!-- page-banner -->
+{% endif %}

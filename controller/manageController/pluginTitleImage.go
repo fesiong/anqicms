@@ -157,11 +157,13 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 		fileName = "uploads/titleimage/title_font.ttf"
 	} else {
 		// image
-		_, _, err = image.Decode(file)
+		var imgFormat string
+		_, imgFormat, err = image.Decode(file)
 		if err != nil {
 			file.Seek(0, 0)
 			if strings.HasSuffix(info.Filename, "webp") {
 				_, err = webp.Decode(file)
+				imgFormat = "webp"
 			}
 			if err != nil {
 				ctx.JSON(iris.Map{
@@ -172,7 +174,7 @@ func PluginTitleImageUploadFile(ctx iris.Context) {
 			}
 		}
 		file.Seek(0, 0)
-		fileName = "uploads/titleimage/" + library.Md5(info.Filename) + filepath.Ext(info.Filename)
+		fileName = "uploads/titleimage/" + library.Md5(info.Filename) + imageFormatExt(imgFormat)
 	}
 	buff, err := io.ReadAll(file)
 	if err != nil {

@@ -628,11 +628,11 @@ func (w *Website) AnqiAiGenerateArticle(keyword *model.Keyword) (int, error) {
 			Title:      req.Title,
 			ModuleId:   0,
 			CategoryId: categoryId,
-			Keywords:   keyword.Title,
+			Keywords:   library.Ptr(keyword.Title),
 			Content:    strings.Join(content, "\n"),
-			KeywordId:  keyword.Id,
+			KeywordId:  library.Ptr(keyword.Id),
 			OriginUrl:  keyword.Title,
-			OriginId:   config.ArchiveFromAi,
+			OriginId:   library.Ptr(config.ArchiveFromAi),
 			ForceSave:  true,
 		}
 		if w.AiGenerateConfig.SaveType == 0 {
@@ -798,12 +798,12 @@ func (w *Website) AnqiSyncAiPlanResult(plan *model.AiArticlePlan) error {
 				Title:      result.Data.Title,
 				ModuleId:   0,
 				CategoryId: categoryId,
-				Keywords:   result.Data.Keyword,
+				Keywords:   library.Ptr(result.Data.Keyword),
 				Content:    result.Data.Content,
 				ForceSave:  true,
 			}
 			if keyword != nil {
-				archive.KeywordId = keyword.Id
+				archive.KeywordId = library.Ptr(keyword.Id)
 				archive.OriginUrl = keyword.Title
 			}
 			if w.AiGenerateConfig.SaveType == 0 {

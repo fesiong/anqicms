@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"time"
 
 	"gorm.io/gorm/clause"
 	"kandaoni.com/anqicms/config"
@@ -18,6 +19,90 @@ func (w *Website) GetModules() ([]model.Module, error) {
 		return nil, err
 	}
 	return modules, nil
+}
+
+// ensureModuleKindColumn 给 modules 表补 kind 列并回填历史数据。
+//
+// 为什么不能只靠 AutoMigrateDB：它只在 last_run_version != config.Version
+// 时执行（升级才跑），新增列在老站库上不会自动出现——而 kind 是每次读模块
+// 都要用的字段，缺列会让所有模块查询直接 Unknown column（整站 500）。
+// 所以放在 InitModelData 里（每次站点初始化都跑）。
+//
+// 回填用 setting 标记只做一次：否则每次开机都会把 table_name=product 的模型
+// 刷成 product，用户在后台手工改过的类型永远改不回来。
+func (w *Website) ensureModuleKindColumn() error {
+	if w.DB == nil || !w.DB.Migrator().HasTable(&model.Module{}) {
+		return nil
+	}
+	if !w.DB.Migrator().HasColumn(&model.Module{}, "kind") {
+		if err := w.DB.Exec("ALTER TABLE `modules` ADD COLUMN `kind` varchar(20) NOT NULL DEFAULT 'article'").Error; err != nil {
+			return err
+		}
+		w.DeleteCacheModules()
+	}
+	const flagKey = "upgrade_module_kind"
+	if w.GetSettingValue(flagKey) != "" {
+		return nil
+	}
+	// 历史数据：表名是 product 的就是产品模型，其余（含用户自建表名）按文章处理。
+	if err := w.DB.Model(&model.Module{}).Where("`table_name` = ?", "product").
+		Update("kind", model.ModuleKindProduct).Error; err != nil {
+		return err
+	}
+	_ = w.DB.Model(&model.Module{}).Where("`kind` = ''").
+		Update("kind", model.ModuleKindArticle).Error
+	_ = w.SaveSettingValue(flagKey, time.Now().Format("2006-01-02 15:04:05"))
+	w.DeleteCacheModules()
+	return nil
+}
+
+// normalizeModuleKind 把库里的值收敛到两个合法枚举。
+//
+// 空串/未知值一律按 article 处理：旧行为就是「不是 2 就当文章」，
+// 这样即使某行的 kind 是脏数据，页面也不至于整块空白。
+func normalizeModuleKind(kind string) string {
+	if kind == model.ModuleKindProduct {
+		return model.ModuleKindProduct
+	}
+	return model.ModuleKindArticle
+}
+
+// GetModuleKind 返回模型类型（article / product）。
+//
+// 不复用 GetModuleFromCache：那个只返回 status=1 的模型，产品模块一停用
+// 这里就退化成 article，商品页被按文章渲染（价格区块与 Product 结构化
+// 数据一起消失）——这是旧硬编码（id==2 不看 status）没有的退化路径，
+// 不能借改类型判断重新引入。因此用独立的缓存只存 id→kind。
+func (w *Website) GetModuleKind(moduleId uint) string {
+	if w.DB == nil {
+		return model.ModuleKindArticle
+	}
+	if w.Cache != nil {
+		var cached map[uint]string
+		if err := w.Cache.Get("module_kinds", &cached); err == nil && cached != nil {
+			return normalizeModuleKind(cached[moduleId])
+		}
+	}
+	var modules []model.Module
+	if err := w.DB.Model(&model.Module{}).Select("`id`", "`kind`").Find(&modules).Error; err != nil {
+		return model.ModuleKindArticle
+	}
+	kinds := make(map[uint]string, len(modules))
+	for _, m := range modules {
+		kinds[m.Id] = m.Kind
+	}
+	if w.Cache != nil {
+		_ = w.Cache.Set("module_kinds", kinds, 0)
+	}
+	return normalizeModuleKind(kinds[moduleId])
+}
+
+// IsProductModule 判断给定模型是不是「产品」类型。
+//
+// 替代散落各处的 `ModuleId == 2`。模块 id 是自增的，删了重建、导入站点后
+// 未必还是 2；把 1 号模型改名成「产品」也不会生效。
+func (w *Website) IsProductModule(moduleId uint) bool {
+	return w.GetModuleKind(moduleId) == model.ModuleKindProduct
 }
 
 func (w *Website) GetModuleById(id uint) (*model.Module, error) {
@@ -143,14 +228,30 @@ func (w *Website) SaveModule(req *request.ModuleRequest) (module *model.Module, 
 	if req.UpdateAll || req.UrlToken != "" {
 		module.UrlToken = req.UrlToken
 	}
-	if req.UpdateAll || req.Status > 0 {
-		module.Status = req.Status
+	if req.Status != nil {
+		module.Status = *req.Status
 	}
-	if req.UpdateAll || req.TitleName != "" {
-		module.Keywords = req.Keywords
+	// kind 只接受两个枚举值。传错要报错而不是静默忽略——前端选了「产品」但
+	// 后端不认识时，模型会落成文章，商品页静默退化成文章渲染。
+	if req.Kind != nil {
+		switch *req.Kind {
+		case model.ModuleKindArticle, model.ModuleKindProduct:
+			module.Kind = *req.Kind
+		default:
+			return nil, fmt.Errorf("未知的模型类型: %q（只支持 %s / %s）", *req.Kind, model.ModuleKindArticle, model.ModuleKindProduct)
+		}
+	} else if req.UpdateAll && module.Kind == "" {
+		// 新建且没指定类型：默认文章。GORM 的 Save 写全列，DB 的 DEFAULT 不生效，
+		// 漏了这一步库里就是空串（读的时候虽会归一成 article，但脏数据会传染给导出/外部读库）。
+		module.Kind = model.ModuleKindArticle
 	}
-	if req.UpdateAll || req.Description != "" {
-		module.Description = req.Description
+	// 原来这里判的是 req.TitleName（已废弃字段），导致「改关键词」永远不生效：
+	// 只有传了 title_name 才会把 keywords 写进去。改用 keywords 自己的指针判断。
+	if req.Keywords != nil {
+		module.Keywords = *req.Keywords
+	}
+	if req.Description != nil {
+		module.Description = *req.Description
 	}
 
 	err = w.DB.Save(module).Error
@@ -220,7 +321,13 @@ func (w *Website) DeleteModule(module *model.Module) error {
 }
 
 func (w *Website) DeleteCacheModules() {
+	if w.Cache == nil {
+		return
+	}
 	w.Cache.Delete("modules")
+	// id→kind 是独立缓存（见 GetModuleKind：不能复用 modules 列表，
+	// 那份只含 status=1 的模型）。改模型/改类型时两张都要失效。
+	w.Cache.Delete("module_kinds")
 }
 
 func (w *Website) GetCacheModules() []model.Module {

@@ -1,0 +1,76 @@
+<div class="sidebar">
+    <div class="side">
+        <h2>{% tr 'product-center' %}</h2>
+        <div class="side-item">
+            <div class="accordion">
+                {% categoryList productCategories with moduleId="2" parentId="0" %}
+                {% for item in productCategories %}
+                <button class="accordion-item">{{item.Title}}</button>
+                <div class="accordion-item-content">
+                    <ul class="ind-pro-nav-ul">
+                        {% if item.HasChildren %}
+                        {% categoryList subCategories with moduleId="1" parentId=item.Id %}
+                        {% for inner in subCategories %}
+                        <li><a href="{{inner.Link}}" title="">{{inner.Title}}</a></li>
+                        {% endfor %}
+                        {% endcategoryList %}
+                        {% else %}
+                        {% archiveList products with type="list" categoryId=item.Id limit="8" %}
+                        {% for inner in products %}
+                        <li><a href="{{inner.Link}}" title="">{{inner.Title}}</a></li>
+                        {% endfor %}
+                        {% endarchiveList %}
+                        {% endif %}
+                    </ul>
+                </div>
+                {% endfor %}
+                {% endcategoryList %}
+            </div>
+        </div>
+    </div>
+    <div class="side">
+        <h2>{% tr 'recommend-products' %}</h2>
+        <div class="side-item">
+            <ul class="side-pro-ul">
+                {% archiveList products with type="list" moduleId="2" categoryId=0 limit="4" %}
+                {% for item in products %}
+                <li>
+                    <div class="list-item">
+                        <div class="list-item-img"><a href="{{item.Link}}">
+                                <div class="imgitem"><img src="{{item.Thumb}}" alt="{{item.Title}}"></div>
+                            </a></div>
+                        <div class="list-item-text">
+                            <h3><a href="{{item.Link}}">{{item.Title}}</a></h3>
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+    </div>
+    <div class="side">
+        <h2>{% tr 'hot-articles' %}</h2>
+        <div class="side-item">
+            <ul class="side-blog-ul">
+                {% archiveList articles with type="list" moduleId="1" categoryId=0 limit="8" %}
+                {% for item in articles %}
+                <li><a href="{{item.Link}}">{{item.Title}}</a></li>
+                {% endfor %}
+                {% endarchiveList %}
+            </ul>
+        </div>
+    </div>
+    <div class="side">
+        <h2>{% tr 'contact-us' %}</h2>
+        <div class="side-item">
+            <p>{% tr 'company' %}: {% system with name="SiteName" %}</p>
+            <p>{% tr 'contacts' %}: {% contact with name="UserName" %}</p>
+            <p>{% tr 'cellphone' %}: {% contact with name="Cellphone" %}</p>
+            <p>{% tr 'wechat' %}: {% contact with name="Wechat" %}</p>
+            <p>{% tr 'e-mail' %}: {% contact with name="Email" %}</p>
+            <p>{% tr 'address' %}: {% contact with name="Address" %}</p>
+        </div>
+    </div>
+</div>
+</div>

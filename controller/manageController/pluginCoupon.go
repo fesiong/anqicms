@@ -139,16 +139,18 @@ func CouponDetail(ctx iris.Context) {
 	})
 }
 
-// CouponDetailForm 新建或更新优惠券；纯全量覆盖，改一个字段也要带齐其它字段，否则会被清空。
+// CouponDetailForm 新建或更新优惠券。
+//
+// 默认是全量覆盖（后台表单提交整个表单，字段没出现 = 用户清空了它）；
+// 传 partial=true 则走 PATCH，未传字段保持原值（AI/MCP 默认这样调）。
 func CouponDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	err := currentSite.SaveCoupon(&req)
@@ -197,11 +199,10 @@ func DeleteCoupon(ctx iris.Context) {
 func DeleteCouponCode(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.CouponCodeRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requireAnyID(ctx, req.Id, req.Ids) {
 		return
 	}
 
@@ -311,11 +312,11 @@ func GetCouponArchives(ctx iris.Context) {
 func AddCouponArchives(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.CouponArchiveRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 券 id 和商品 id 都没给，没法建立适用范围。
+	if !requireAnyID(ctx, req.CouponId, req.ArchiveIds) {
 		return
 	}
 	if req.ArchiveId > 0 {
@@ -341,11 +342,14 @@ func AddCouponArchives(ctx iris.Context) {
 func DeleteCouponArchives(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req request.CouponArchiveRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 没有券 id 不知道该从哪里移除；商品 id 也没给则没有移除目标。
+	if !requirePositive(ctx, req.CouponId, "coupon_id") {
+		return
+	}
+	if !requireAnyID(ctx, req.ArchiveId, req.ArchiveIds) {
 		return
 	}
 	if req.ArchiveId > 0 {

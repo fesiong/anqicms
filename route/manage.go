@@ -575,7 +575,9 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				htmlcache.Get("/push/logs", manageController.PluginHtmlCachePushLogs)
 			}
 
-			aiGenerate := manage.Party("/aigenerate")
+			// 这里的中间件不能漏：aigenerate 是 manage 的子组，而 manage 组本身只挂了
+			// ParseAdminUrl。漏了 ParseAdminToken 就能不带 token 读写 AI 配置、触发批量生成。
+			aiGenerate := manage.Party("/aigenerate", middleware.ParseAdminToken, middleware.AdminPermission)
 			{
 				//采集全局设置
 				aiGenerate.Get("/checkapi", manageController.HandleAiGenerateCheckApi)
@@ -690,7 +692,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				googlemerchant.Post("/config", manageController.PluginGoogleMerchantConfigSave)
 				googlemerchant.Get("/auth/url", manageController.PluginGoogleMerchantAuthUrl)
 				googlemerchant.Post("/callback", manageController.PluginGoogleMerchantCallback)
-				googlemerchant.Post("account/select", manageController.PluginGoogleMerchantAccountSelect)
+				googlemerchant.Post("/account/select", manageController.PluginGoogleMerchantAccountSelect)
 				googlemerchant.Post("/sync", manageController.PluginGoogleMerchantSync)
 				googlemerchant.Post("/sync/delete", manageController.PluginGoogleMerchantSyncDelete)
 				googlemerchant.Get("/sync/statuses", manageController.PluginGoogleMerchantSyncStatusList)

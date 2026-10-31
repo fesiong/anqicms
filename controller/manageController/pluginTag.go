@@ -6,6 +6,7 @@ import (
 
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -203,10 +204,10 @@ func PluginTagDetailForm(ctx iris.Context) {
 					tmpTag, err := subSite.GetTagById(req.Id)
 					if err == nil {
 						req.Title = tmpTag.Title
-						req.SeoTitle = tmpTag.SeoTitle
-						req.Description = tmpTag.Description
-						req.Keywords = tmpTag.Keywords
-						req.Content = tmpTag.Content
+						req.SeoTitle = library.Ptr(tmpTag.SeoTitle)
+						req.Description = library.Ptr(tmpTag.Description)
+						req.Keywords = library.Ptr(tmpTag.Keywords)
+						req.Content = library.Ptr(tmpTag.Content)
 					}
 					_, _ = subSite.SaveTag(&req)
 				}

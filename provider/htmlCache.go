@@ -417,6 +417,11 @@ func (w *Website) BuildSinglePlaceCache(ctx iris.Context, place *model.Place) {
 	if !strings.HasSuffix(tplName, ".html") {
 		tplName += ".html"
 	}
+	// 模板没实现城市站页面时直接跳过：内部请求只会拿到 404 页，
+	// 而 404 页会被当成正常内容写进 HTML 缓存。
+	if _, ok := w.TemplateExist(tplName); !ok {
+		return
+	}
 	_ = newCtx.Application().View(newCtx, tplName, "", newCtx.GetViewData())
 
 	// mobile

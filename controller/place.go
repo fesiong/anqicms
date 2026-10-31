@@ -64,6 +64,13 @@ func PlacePage(ctx iris.Context) {
 	if !strings.HasSuffix(tplName, ".html") {
 		tplName += ".html"
 	}
+	// 当前模板可能根本没实现城市站页面（例如商城模板只有 account/order/product）。
+	// 这种情况必须按 404 处理：直接 View 会渲染出模板错误页，
+	// 而错误页渲染是"成功"的，会被当成正常内容写进 HTML 缓存，整站跟着坏。
+	if _, ok := currentSite.TemplateExist(GetViewPath(ctx, tplName)); !ok {
+		NotFound(ctx)
+		return
+	}
 
 	recorder := ctx.Recorder()
 	err := ctx.View(GetViewPath(ctx, tplName))
@@ -91,6 +98,11 @@ func PlaceIndex(ctx iris.Context) {
 	}
 
 	tplName := "place/index.html"
+	// 同 PlacePage：模板没实现城市站列表页时按 404 处理，不能吐模板错误页。
+	if _, ok := currentSite.TemplateExist(GetViewPath(ctx, tplName)); !ok {
+		NotFound(ctx)
+		return
+	}
 
 	err := ctx.View(GetViewPath(ctx, tplName))
 	if err != nil {

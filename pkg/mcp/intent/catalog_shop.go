@@ -53,19 +53,21 @@ var shopIntentCatalog = []*IntentSpec{
 				"type 券类型(1 注册送/2 限量领取/3 下单赠送/4 促销满减无需领取/5 自由规则/6 积分兑换/7 活动奖品)、" +
 				"start_time 与 end_time 生效区间(unix 秒,0=不限)、expire 领取后有效天数、status(1 启用/0 停用)、" +
 				"range_type 适用范围(0 全部商品/1 仅指定商品可用/2 指定商品不可用)、description 说明。" +
-				"**POST 是逐字段无条件覆盖**：未传的字段由意图层回查 coupon_get 补齐，但回查失败就会清零，改部分字段前先 coupon_get\n" +
+				"**未传字段保持原值**（2026-10-29 起端点已是 PATCH 语义，只需传要改的字段，不再需要先 coupon_get）；" +
+				"要停用/清空某个字段就**显式传 0**（status=0 停用、need_money=0 无门槛、expire=0 跟随固定起止时间），0 会真的写进库\n" +
 				"· coupon_delete：只需 id，values 不用传\n" +
 				"· coupon_archives_add / coupon_archives_delete：coupon_id 必填；archive_ids 商品 ID 数组（单条也可用 archive_id）\n" +
 				"· coupon_code_make：coupon_id 必填、count 生成张数(>0)、user_id 可选（绑定到指定会员）\n" +
 				"· coupon_code_save：id 为券码 ID(>0 改，0 新建)、user_id 归属会员、coupon_id 所属券、code 券码串(空则自动生成)、" +
 				"status(1 可用/0 已用或失效)、money 覆盖该券码面额(分)、start_time/end_time 券码级有效期" +
-				"——**没有 GET 详情端点，是纯全量覆盖，改单个字段必须自己带齐其余字段**\n" +
+				"——**未传字段保持原值**，只需传要改的那几个（2026-10-29 起不再是全量覆盖）；" +
+				"0 会真的写入（money=0 零元码、status=0 标记失效），不会落入「没传」\n" +
 				"· coupon_code_delete：ids 券码 ID 数组（必填；**没有单条删除**，单条也要包成数组）\n" +
 				"· activity_save：title 活动名、description 介绍、goods_id 关联商品 ID、goods_type 商品类型标记(≤16 字符,通常留空)、" +
 				"price 活动价(分)、stock 活动库存、start_time/end_time 活动时间(unix 秒)、user_limit 每人限购(0 不限)、" +
 				"images 宣传图 URL 数组、can_use_coupon 是否允许叠加优惠券、extra 附加设置对象、status(1 生效/0 失效)、" +
-				"skus 规格数组[{id,sku_id,goods_id,price,stock}]。⚠️ **skus 不传或传空数组会删掉该活动的全部规格**，" +
-				"改价改库存前先 activity_get 拿到 skus 一起回传\n" +
+				"skus 规格数组[{id,sku_id,goods_id,price,stock}]。**未传字段保持原值**（2026-10-29 起 PATCH 语义，" +
+				"只需传要改的字段）；skus 三态：不传=不动规格、传空数组=清空全部、非空=按列表同步\n" +
 				"· activity_delete：只需 id，values 不用传",
 			},
 		},

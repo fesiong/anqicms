@@ -1436,7 +1436,7 @@ func ApiArchivePublish(ctx iris.Context) {
 		}
 	}
 	userId := ctx.Values().GetIntDefault("userId", 0)
-	req.UserId = uint(userId)
+	req.UserId = library.Ptr(uint(userId))
 	req.Extra = map[string]interface{}{}
 	// read body twice
 	var extraReq = map[string]interface{}{}

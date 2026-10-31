@@ -91,20 +91,29 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 		}
 		newPost = true
 	}
-	place.Title = req.Title
-	place.SeoTitle = req.SeoTitle
-	place.Keywords = req.Keywords
-	place.Description = req.Description
-	place.ParentId = req.ParentId
-	place.Sort = req.Sort
-	place.Status = req.Status
-	place.Template = req.Template
-	place.IsInherit = req.IsInherit
-	place.Images = req.Images
-	place.Logo = req.Logo
-	place.Latitude = req.Latitude
-	place.Longitude = req.Longitude
-	place.Timezone = req.Timezone
+	force := req.UpdateAll && !req.Partial
+
+	library.Assign(&place.Title, req.Title, force)
+	library.Assign(&place.SeoTitle, req.SeoTitle, force)
+	library.Assign(&place.Keywords, req.Keywords, force)
+	library.Assign(&place.Description, req.Description, force)
+	library.Assign(&place.ParentId, req.ParentId, force)
+	library.Assign(&place.Sort, req.Sort, force)
+	library.Assign(&place.Template, req.Template, force)
+	library.Assign(&place.IsInherit, req.IsInherit, force)
+	library.Assign(&place.Images, req.Images, force)
+	library.Assign(&place.Logo, req.Logo, force)
+	library.Assign(&place.Latitude, req.Latitude, force)
+	library.Assign(&place.Longitude, req.Longitude, force)
+	library.Assign(&place.Timezone, req.Timezone, force)
+	// Status 的 0 是合法值（停用）。原实现先给新建记录 Status=1，紧接着被
+	// `place.Status = req.Status`（未传时为 0）覆盖，于是新建的城市站在前台
+	// 默认是停用的——后台看得见、用户打不开，且不报错。
+	if newPost {
+		place.Status = library.DerefOr(req.Status, 1)
+	} else {
+		library.Assign(&place.Status, req.Status, force)
+	}
 	if req.Extra != nil {
 		place.Extra = req.Extra
 	}
@@ -115,16 +124,28 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 	if place.Logo != "" {
 		place.Logo = strings.TrimPrefix(place.Logo, w.PluginStorage.StorageUrl)
 	}
-	// 判断重复
-	req.UrlToken = library.ParseUrlToken(req.UrlToken)
-	if req.UrlToken == "" {
-		req.UrlToken = library.GetPinyin(req.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+	// url_token 三态：nil=保持原值、空串=按标题重新生成、非空=用它。
+	//
+	// 原实现无条件 `ParseUrlToken(req.UrlToken)` 再在空时用 `req.Title` 生成拼音。
+	// PATCH 只传 status 时两者都是空串 → url_token 被改写成空/残片，城市站旧链接
+	// 直接 404。这是本端点里后果最重的一处，因为它不可回滚（别人已经收录的链接）。
+	urlToken := place.UrlToken
+	if req.UrlToken != nil {
+		urlToken = library.ParseUrlToken(*req.UrlToken)
 	}
-	req.UrlToken = w.VerifyPlaceUrlToken(req.UrlToken, place.Id)
-	place.UrlToken = req.UrlToken
-	// 将单个&nbsp;替换为空格
-	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = w.ReplaceContentUrl(req.Content, false)
+	if urlToken == "" {
+		urlToken = library.GetPinyin(place.Title, w.Content.UrlTokenType == config.UrlTokenTypeSort)
+	}
+	urlToken = w.VerifyPlaceUrlToken(urlToken, place.Id)
+	place.UrlToken = urlToken
+	// 内容同理：nil=保持原值，否则「改个状态」会把整篇正文清空。
+	content := place.Content
+	if req.Content != nil {
+		content = library.ReplaceSingleSpace(*req.Content)
+		content = w.ReplaceContentUrl(content, false)
+	} else if force {
+		content = ""
+	}
 	if place.Extra != nil {
 		placeFields := w.PluginPlace.Fields
 		if len(placeFields) > 0 {
@@ -167,7 +188,7 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 	autoAddImage := false
 	//提取描述
 	if place.Description == "" {
-		tmpContent := req.Content
+		tmpContent := content
 		if w.Content.Editor == "markdown" {
 			tmpContent = library.MarkdownToHTML(tmpContent)
 		}
@@ -176,7 +197,7 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 	//提取缩略图
 	if len(place.Logo) == 0 {
 		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-		match := re.FindStringSubmatch(req.Content)
+		match := re.FindStringSubmatch(content)
 		if len(match) > 1 {
 			//提取缩略图
 			place.Logo = match[1]
@@ -184,17 +205,18 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 		} else {
 			// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 			re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-			match = re.FindStringSubmatch(req.Content)
+			match = re.FindStringSubmatch(content)
 			if len(match) > 2 {
 				place.Logo = match[2]
 				autoAddImage = true
 			}
 		}
 	}
-	// 过滤外链
-	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
+	// 过滤外链：只对本次要写入的内容生效（PATCH 没传 content 时不必对旧正文
+	// 再跑一遍正则，也没有「改写库里已有内容」的授权）。
+	if req.Content != nil && (w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2) {
 		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
-		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+		content = re.ReplaceAllStringFunc(content, func(s string) string {
 			match := re.FindStringSubmatch(s)
 			if len(match) < 3 {
 				return s
@@ -216,7 +238,7 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 		// 匹配Markdown [link](url)
 		// 由于不支持零宽断言，因此匹配所有
 		re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
-		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+		content = re.ReplaceAllStringFunc(content, func(s string) string {
 			// 过滤掉 ! 开头的
 			if strings.HasPrefix(s, "!") {
 				return s
@@ -238,7 +260,7 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 			return s
 		})
 	}
-	place.Content = req.Content
+	place.Content = content
 
 	err = w.DB.Save(place).Error
 	if err != nil {
@@ -294,13 +316,13 @@ func (w *Website) SavePlace(req *request.PlaceRequest) (place *model.Place, err 
 			if autoAddImage {
 				//提取缩略图
 				re, _ = regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-				match := re.FindStringSubmatch(req.Content)
+				match := re.FindStringSubmatch(content)
 				if len(match) > 1 {
 					place.Logo = match[1]
 				} else {
 					// 匹配Markdown ![新的图片](http://xxx/xxx.webp)
 					re, _ = regexp.Compile(`!\[([^]]*)\]\(([^)]+)\)`)
-					match = re.FindStringSubmatch(req.Content)
+					match = re.FindStringSubmatch(content)
 					if len(match) > 2 {
 						place.Logo = match[2]
 					}
@@ -495,6 +517,11 @@ func (w *Website) GetPlaceFromCache(placeId uint) *model.Place {
 }
 
 func (w *Website) GetPlaceFromCacheByToken(urlToken string, parents ...*model.Place) *model.Place {
+	// 空 token 不能参与匹配：库里只要有一条 url_token 为空的记录，
+	// 任何拿空串来查的调用方都会命中它（子域名解析、路由兜底都走这里）。
+	if urlToken == "" {
+		return nil
+	}
 	places := w.GetCachePlaces()
 	var parent *model.Place
 	if len(parents) > 0 {

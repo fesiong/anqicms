@@ -28,11 +28,7 @@ func PluginGoogleMerchantConfig(ctx iris.Context) {
 func PluginGoogleMerchantConfigSave(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.PluginGoogleMerchantConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	setting := currentSite.GetGoogleMerchantSetting()
@@ -194,11 +190,7 @@ func PluginGoogleMerchantAccountSelect(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	setting := currentSite.GetGoogleMerchantSetting()
 	var req request.PluginGoogleMerchantAccountRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -306,11 +298,10 @@ func PluginGoogleMerchantSyncDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	// 开始同步
 	var req request.PluginGoogleMerchantSyncRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requireAnyID(ctx, 0, req.Ids) {
 		return
 	}
 	err := currentSite.DeleteSyncGoogleMerchantProducts(req.Ids)

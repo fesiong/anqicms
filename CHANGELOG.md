@@ -1,5 +1,23 @@
 # 更新日志
 
+## v3.8.0 `AnQiCMS` `2026-10-31`
+
+### ⚠️ 破坏性变更
+
+- **`archives` / `archive_drafts` 删除 29 个历史列**（升级时自动执行，不可回滚，升级前请备份）。两类列：① 23 个商城专用列（`brand` `video_url` `need_logistics` `is_free_shipping` `sold_count` `review_count` `average_score` `option_type` `weight` `weight_unit` `length` `width` `height` `volume` `length_unit` `allow_oversold` `order_fields` `min_quantity` `max_quantity` `step_quantity` `product_type` `origin_price` `cost_price`）；② 6 个全仓零引用的死列（`deleted_time` `logo` `sku_type` `rating_count` `is_wholesale` `has_order_fields`）。`price` 与 `stock` 保留在主表——`stock` 有一整套原子表达式写（下单扣减、退单回补、SKU 汇总重算），拆表就无法用一条 UPDATE 完成；`price` 同时承担商品售价与付费阅读门槛两种含义。
+- **商品属性迁到 `archive_products` 侧表**：`archive_id` 为主键，与正式稿/草稿共用同一套 ID，发布或撤回只在主表之间搬行，侧表不用跟着搬。只给"配过属性"的商品建行，文章不留空记录。读取由 GORM 的 `Query().After` 回调一次 IN 查询批量补全，写入由 `Archive.AfterSave` 落侧表，`Archive` 结构体上的字段名与 json tag 全部保留，前端与模板契约不变。
+- **升级顺序有硬约束**：先回填、再删列；回填失败则不删列（标记不写，下次启动重试）。同一次启动完成，不需要分版本灰度。
+- **依赖旧列的裸 SQL 会失效**：`WHERE product_type = ?` 这类条件已改为 `LEFT JOIN archive_products` + `IFNULL(...,1)`（保住"普通商品没有侧表行"的情况）。若自行开发过插件直查这些列，需一并调整。
+
+### ⚡ 功能优化
+
+- **`archives` 清理 4 个冗余索引**：`idx_articles_url_token`（与 `idx_archives_url_token` 同列）、`idx_fixed_link`（与 `idx_archives_fixed_link` 同列）、`idx_category_id`（被 `idx_category_archive_id` 的最左前缀覆盖）、`idx_updated_time`（索引错的列是 `created_time`，与 `idx_created_time` 完全重复）。最后一个不只是删：删掉后在 `updated_time` 列上重建同名索引，因为草稿定时清理与 `timefactor` 都按 `updated_time` 过滤。判断依据是实际索引列而非索引名——`archive_drafts` 的 `idx_updated_time` 索引的正是 `updated_time`，不能一起删。
+- **`apicatalog` 生成器识别取参包装函数**：`readJSONPayload(ctx, &req)` 这类包级函数此前不被识别（只认 `ctx.Xxx()` 形式），重新生成端点清单会把 53 个端点的参数 schema 静默清空，而 MCP 的 `api_invoke` 与意图层参数门禁都读这份数据。
+
+### 🐛 问题修复
+
+- **端点参数 schema 可能被一次性清空**：同上。已补白名单与两条护栏（一条断言具体 handler 解析出结构体，一条扫描控制器源码，凡"首参是 ctx、名字带 payload/json/bind 却未登记"的调用直接报错）。
+
 ## v3.6.7 `AnQiCMS` `2026-10-20`
 
 ### ✨ 新增功能

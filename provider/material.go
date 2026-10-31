@@ -53,6 +53,7 @@ func (w *Website) GetMaterialList(categoryId uint, keyword string, currentPage, 
 }
 
 func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Material, err error) {
+	newPost := false
 	if req.Id > 0 {
 		material, err = w.GetMaterialById(req.Id)
 		if err != nil {
@@ -62,73 +63,105 @@ func (w *Website) SaveMaterial(req *request.PluginMaterial) (material *model.Mat
 		material = &model.Material{
 			Status: 1,
 		}
+		newPost = true
 	}
+	force := req.UpdateAll && !req.Partial
+
 	oldContent := material.Content
-	material.Title = req.Title
-	material.Status = 1
-	material.CategoryId = req.CategoryId
-	material.AutoUpdate = req.AutoUpdate
-	md5Str := library.Md5(material.Content)
-	material.Md5 = md5Str
-
-	// 将单个&nbsp;替换为空格
-	req.Content = library.ReplaceSingleSpace(req.Content)
-	req.Content = w.ReplaceContentUrl(req.Content, false)
-	baseHost := ""
-
-	frontUrl := w.System.BaseUrl
-	if w.System.FrontUrl != "" {
-		frontUrl = w.System.FrontUrl
+	library.Assign(&material.CategoryId, req.CategoryId, force)
+	library.Assign(&material.AutoUpdate, req.AutoUpdate, force)
+	// Status 的 0 是合法值（禁用），既不能用 `if req.Status > 0` 挡掉，
+	// 更不能硬编码成 1——那会让素材永远无法禁用。
+	if newPost {
+		material.Status = library.DerefOr(req.Status, 1)
+	} else {
+		library.Assign(&material.Status, req.Status, force)
 	}
-	urls, err := url.Parse(frontUrl)
-	if err == nil {
-		baseHost = urls.Host
+
+	// 内容处理：只有调用方真的传了 content 才跑（替换单个 &nbsp;、换成本地
+	// 域名、过滤外链、下载远程图片）。没传就保持库里的原值——否则「改个标题」
+	// 会把正文清空，引用该素材的文档下次自动更新时变成空白。
+	content := material.Content
+	if req.Content != nil {
+		content = library.ReplaceSingleSpace(*req.Content)
+		content = w.ReplaceContentUrl(content, false)
+	} else if force {
+		content = ""
 	}
-	// 过滤外链
-	if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
-		re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
-		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
-			match := re.FindStringSubmatch(s)
-			if len(match) < 3 {
-				return s
-			}
-			aUrl, err2 := url.Parse(match[1])
-			if err2 == nil {
-				if aUrl.Host != "" && aUrl.Host != baseHost {
-					//过滤外链
-					if w.Content.FilterOutlink == 1 {
-						return match[2]
-					} else if !strings.Contains(match[0], "nofollow") {
-						newUrl := match[1] + `" rel="nofollow`
-						s = strings.Replace(match[0], match[1], newUrl, 1)
+
+	if req.Content != nil {
+		baseHost := ""
+
+		frontUrl := w.System.BaseUrl
+		if w.System.FrontUrl != "" {
+			frontUrl = w.System.FrontUrl
+		}
+		urls, err := url.Parse(frontUrl)
+		if err == nil {
+			baseHost = urls.Host
+		}
+		// 过滤外链
+		if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
+			re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
+			content = re.ReplaceAllStringFunc(content, func(s string) string {
+				match := re.FindStringSubmatch(s)
+				if len(match) < 3 {
+					return s
+				}
+				aUrl, err2 := url.Parse(match[1])
+				if err2 == nil {
+					if aUrl.Host != "" && aUrl.Host != baseHost {
+						//过滤外链
+						if w.Content.FilterOutlink == 1 {
+							return match[2]
+						} else if !strings.Contains(match[0], "nofollow") {
+							newUrl := match[1] + `" rel="nofollow`
+							s = strings.Replace(match[0], match[1], newUrl, 1)
+						}
 					}
 				}
-			}
-			return s
-		})
-	}
-	if w.Content.RemoteDownload == 1 {
-		re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
-		req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
-			match := re.FindStringSubmatch(s)
-			if len(match) < 2 {
 				return s
-			}
-			imgUrl, err2 := url.Parse(match[1])
-			if err2 == nil {
-				if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
-					//外链
-					attachment, err2 := w.DownloadRemoteImage(match[1], "", 0)
-					if err2 == nil {
-						// 下载完成
-						s = strings.Replace(s, match[1], attachment.Logo, 1)
+			})
+		}
+		if w.Content.RemoteDownload == 1 {
+			re, _ := regexp.Compile(`(?i)<img.*?src="(.+?)".*?>`)
+			content = re.ReplaceAllStringFunc(content, func(s string) string {
+				match := re.FindStringSubmatch(s)
+				if len(match) < 2 {
+					return s
+				}
+				imgUrl, err2 := url.Parse(match[1])
+				if err2 == nil {
+					if imgUrl.Host != "" && imgUrl.Host != baseHost && !strings.HasPrefix(match[1], w.PluginStorage.StorageUrl) {
+						//外链
+						attachment, err2 := w.DownloadRemoteImage(match[1], "", 0)
+						if err2 == nil {
+							// 下载完成
+							s = strings.Replace(s, match[1], attachment.Logo, 1)
+						}
 					}
 				}
-			}
-			return s
-		})
+				return s
+			})
+		}
 	}
-	material.Content = req.Content
+	material.Content = content
+	// md5 必须是**当前**内容的摘要。原来这一行在 content 赋值之前，
+	// 于是 md5 永远滞后一次，新建素材的 md5 恒为 md5("")。
+	material.Md5 = library.Md5(material.Content)
+
+	// 标题：nil = 保持原值；空串 = 按正文自动截取（历史语义，素材列表需要
+	// 一个可读标题）；非空 = 直接用。
+	if req.Title != nil && *req.Title != "" {
+		material.Title = *req.Title
+	} else if req.Title != nil || newPost {
+		runeContent := []rune(material.Content)
+		if len(runeContent) > 30 {
+			material.Title = string(runeContent[:30]) + "..."
+		} else {
+			material.Title = material.Content
+		}
+	}
 
 	err = w.DB.Save(material).Error
 
@@ -221,6 +254,7 @@ func (w *Website) DeleteMaterialCategory(id uint) error {
 }
 
 func (w *Website) SaveMaterialCategory(req *request.PluginMaterialCategory) (category *model.MaterialCategory, err error) {
+	newPost := false
 	if req.Id > 0 {
 		category, err = w.GetMaterialCategoryById(req.Id)
 		if err != nil {
@@ -230,9 +264,17 @@ func (w *Website) SaveMaterialCategory(req *request.PluginMaterialCategory) (cat
 		category = &model.MaterialCategory{
 			Status: 1,
 		}
+		newPost = true
 	}
-	category.Title = req.Title
-	category.Status = 1
+	force := req.UpdateAll && !req.Partial
+	library.Assign(&category.Title, req.Title, force)
+	// Status 的 0 是合法值（停用）。原实现硬编码 `Status = 1`，
+	// 导致素材分类永远无法停用，`GetMaterialCategories` 也就永远返回全部分类。
+	if newPost {
+		category.Status = library.DerefOr(req.Status, 1)
+	} else {
+		library.Assign(&category.Status, req.Status, force)
+	}
 
 	err = w.DB.Save(category).Error
 
@@ -317,26 +359,29 @@ func (w *Website) SaveMaterials(materials []*request.PluginMaterial) error {
 				continue
 			}
 		}
-		md5Str := library.Md5(materials[i].Content)
+		// 批量导入是「全量写入」场景，nil 与零值等价，直接解引用即可。
+		content := library.Deref(materials[i].Content)
+		title := library.Deref(materials[i].Title)
+		md5Str := library.Md5(content)
 		err = w.DB.Where("md5 = ?", md5Str).Take(&exists).Error
 		if err == nil {
 			//已存在，更新
 			material = exists
 		}
 		//开始操作数据
-		material.Content = materials[i].Content
-		material.CategoryId = materials[i].CategoryId
+		material.Content = content
+		material.CategoryId = library.Deref(materials[i].CategoryId)
 		material.Md5 = md5Str
-		if materials[i].Title == "" {
-			runeContent := []rune(materials[i].Content)
+		if title == "" {
+			runeContent := []rune(content)
 			if len(runeContent) > 30 {
-				materials[i].Title = string(runeContent[:30]) + "..."
+				title = string(runeContent[:30]) + "..."
 			} else {
-				materials[i].Title = materials[i].Content
+				title = content
 			}
 		}
-		material.Title = materials[i].Title
-		material.AutoUpdate = materials[i].AutoUpdate
+		material.Title = title
+		material.AutoUpdate = library.Deref(materials[i].AutoUpdate)
 		material.Status = 1
 		//入库
 		w.DB.Save(&material)

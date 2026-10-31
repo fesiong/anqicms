@@ -3,6 +3,7 @@ package manageController
 import (
 	"github.com/kataras/iris/v12"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -96,8 +97,8 @@ func SettingNavForm(ctx iris.Context) {
 					tmpNav, err := subSite.GetNavById(req.Id)
 					if err == nil {
 						req.Title = tmpNav.Title
-						req.SubTitle = tmpNav.SubTitle
-						req.Description = tmpNav.Description
+						req.SubTitle = library.Ptr(tmpNav.SubTitle)
+						req.Description = library.Ptr(tmpNav.Description)
 					}
 					_, _ = subSite.SaveNav(&req)
 				}
@@ -187,12 +188,15 @@ func SettingNavType(ctx iris.Context) {
 func SettingNavTypeForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+	// 传了 id 说明是修改，记录不存在时必须报错，不能顺手新建一条带该 id 的记录。
+	if req.Id > 0 {
+		if _, err := currentSite.GetNavTypeById(req.Id); err != nil {
+			ctx.JSON(iris.Map{"code": config.StatusFailed, "msg": err.Error()})
+			return
+		}
 	}
 
 	navType, err := currentSite.SaveNavType(&req)
@@ -242,11 +246,10 @@ func SettingNavTypeForm(ctx iris.Context) {
 func SettingNavTypeDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.NavTypeRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 	navType, err := currentSite.GetNavTypeById(req.Id)

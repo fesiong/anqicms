@@ -98,17 +98,21 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 		}
 		newPost = true
 	}
-	if req.UpdateAll || req.Title != "" {
+	// ⚠️ 标量字段一律「指针非 nil 才写」：`if req.X > 0` / `req.X != ""` 会让
+	// 0（隐藏分类、移到顶级、排序复位）与空串（清空 SEO 标题/模板）永远写不进去。
+	// 护栏见 provider/archive_zero_guard_test.go。
+	// 标题必填，空值永远不是合法写入值：UpdateAll 下漏传也不能把已有标题清空。
+	if req.Title != "" {
 		category.Title = req.Title
 	}
-	if req.UpdateAll || req.SeoTitle != "" {
-		category.SeoTitle = req.SeoTitle
+	if req.SeoTitle != nil {
+		category.SeoTitle = *req.SeoTitle
 	}
-	if req.UpdateAll || req.Keywords != "" {
-		category.Keywords = req.Keywords
+	if req.Keywords != nil {
+		category.Keywords = *req.Keywords
 	}
-	if req.UpdateAll || req.Description != "" {
-		category.Description = req.Description
+	if req.Description != nil {
+		category.Description = *req.Description
 	}
 	if req.UpdateAll || req.Type > 0 {
 		category.Type = req.Type
@@ -116,29 +120,29 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if req.UpdateAll || req.ModuleId > 0 {
 		category.ModuleId = req.ModuleId
 	}
-	if req.UpdateAll || req.ParentId > 0 {
-		category.ParentId = req.ParentId
+	if req.ParentId != nil {
+		category.ParentId = *req.ParentId
 	}
-	if req.UpdateAll || req.Sort > 0 {
-		category.Sort = req.Sort
+	if req.Sort != nil {
+		category.Sort = *req.Sort
 	}
-	if req.UpdateAll || req.Status > 0 {
-		category.Status = req.Status
+	if req.Status != nil {
+		category.Status = *req.Status
 	}
-	if req.UpdateAll || req.Template != "" {
-		category.Template = req.Template
+	if req.Template != nil {
+		category.Template = *req.Template
 	}
-	if req.UpdateAll || req.DetailTemplate != "" {
-		category.DetailTemplate = req.DetailTemplate
+	if req.DetailTemplate != nil {
+		category.DetailTemplate = *req.DetailTemplate
 	}
-	if req.UpdateAll || req.IsInherit > 0 {
-		category.IsInherit = req.IsInherit
+	if req.IsInherit != nil {
+		category.IsInherit = *req.IsInherit
 	}
-	if req.UpdateAll || len(req.Images) > 0 {
-		category.Images = req.Images
+	if req.Images != nil {
+		category.Images = *req.Images
 	}
-	if req.UpdateAll || req.Logo != "" {
-		category.Logo = req.Logo
+	if req.Logo != nil {
+		category.Logo = *req.Logo
 	}
 	if req.Extra != nil {
 		category.Extra = req.Extra
@@ -185,11 +189,10 @@ func (w *Website) SaveCategory(req *request.Category) (category *model.Category,
 	if category.Type == config.CategoryTypePage {
 		category.ModuleId = 0
 	}
-	if req.UpdateAll || req.Content != "" {
+	if req.Content != nil {
 		// 将单个&nbsp;替换为空格
-		req.Content = library.ReplaceSingleSpace(req.Content)
-		req.Content = w.ReplaceContentUrl(req.Content, false)
-		category.Content = req.Content
+		content := library.ReplaceSingleSpace(*req.Content)
+		category.Content = w.ReplaceContentUrl(content, false)
 	}
 	if category.Extra != nil {
 		module := w.GetModuleFromCache(category.ModuleId)

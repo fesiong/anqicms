@@ -75,44 +75,23 @@ import (
 //
 //	grep -c "req.UpdateAll" provider/<资源>.go     # 0 → 属 ②，收进本表
 //	grep -n "req\.[A-Z][A-Za-z]* = req\." provider/<资源>.go   # 属 ②
+//
+// 2026-10-29 起**没有登记项**：最后两个 ②（material / place）也已指针化 +
+// 加 UpdateAll/Partial 开关，迁到了下面的 partialInvokePaths。
+// 机制保留——将来新增「逐字段无条件赋值」的保存端点仍然要登记进来，
+// 删掉这张表会让那个端点静默清零（不报错），而不是编译失败。
 var invokeRouteOverwriteFields = map[string][]string{
 	// key 必须是 normalizeEndpointPath 之后的形态（带 /system/api 前缀），
 	// 因为查表用的就是规范化后的路径——写成裸路径会永远查不到。
 	//
-	// 素材：provider/material.go:66-70 是逐字段无条件赋值（material.Title = req.Title…），
-	// 没有 UpdateAll 但效果等价。实测（2026-10-03）素材 id=2「请输入验证码以便正常访问」
-	// 只传 id+title 改名后 content 被清空（正文丢失），故保护 content。
+	// 素材：原 provider/material.go 逐字段无条件赋值、且 `material.Status = 1`
+	// 硬编码（status 根本读不到 req 的值，补齐传 0 也会被覆盖成 1）。
+	// 2026-10-29 已指针化并加开关，本表项移除。
 	//
-	// ⚠️ **status 不在保护列表**：material.go:68 写的是 `material.Status = 1` ——
-	// 硬编码常量、根本不读 req.Status，即端点语义就是「保存即启用」。
-	// 补齐传 0 也会被它覆盖成 1，登记了只是白登记（实测确认）。
-	normalizeEndpointPath("/plugin/material/detail"): {"content", "category_id", "auto_update"},
-	// 会员分组：commerce group_save。分级信息（level/price）被清零会让权限与定价失效。
-	normalizeEndpointPath("/plugin/user/group/detail"): {"description", "level", "price", "favorable_price"},
-	// 城市站：provider/place.go:93-105 逐字段无条件赋值。
-	// 实测（2026-10-03，新建临时记录 id=1 后只传 id+title 改名）：
-	// seo_title / keywords / description / template / logo / images / status / latitude
-	// **8 个字段全被清空**（status 从 1 变 0 即站点被停用），波及面比会员那次更广。
-	// 城市站是站点结构，模板/logo/坐标被清会直接影响前台渲染。
-	normalizeEndpointPath("/plugin/place/detail"): {
-		"seo_title", "keywords", "url_token", "description", "content",
-		"parent_id", "sort", "template", "is_inherit", "images", "logo",
-		"latitude", "longitude", "timezone", "status",
-	},
-	// 优惠券（商城合并）：provider/coupon.go:50-62 逐字段无条件赋值，没有 UpdateAll。
-	// 只传 id+title 改名会把面额/门槛/类型/有效期全部清成 0——券面额清零即"废券"，
-	// 而且已发出去的券码还挂在这张券上，事后无法从券码侧补回。
-	normalizeEndpointPath("/plugin/coupon/detail"): {
-		"money", "start_time", "end_time", "title", "description", "expire",
-		"status", "type", "max_money", "money_type", "need_integral", "need_money", "range_type",
-	},
-	// 营销活动（商城合并）：provider/activity.go:106-118 同样逐字段赋值。
-	// 另外 SaveActivity 在 len(req.Skus)==0 时会**删除该活动的全部规格**，
-	// 所以 skus 必须一起保护——只改个标题就把规格清空，活动价格/库存随之失效。
-	normalizeEndpointPath("/plugin/activity/detail"): {
-		"goods_type", "start_time", "end_time", "user_limit", "title", "description",
-		"images", "goods_id", "status", "price", "stock", "extra", "can_use_coupon", "skus",
-	},
+	// 城市站：原 provider/place.go 逐字段无条件赋值，实测只传 id+title 改名后
+	// seo_title / keywords / description / template / logo / images / status /
+	// latitude 8 个字段全被清空，且 url_token 被空标题重新生成（旧链接 404）。
+	// 2026-10-29 已指针化并加开关，本表项移除。
 }
 
 // preserveGetParam 登记「GET 兄弟的 id 参数名与 POST 不同」的端点。
@@ -121,9 +100,12 @@ var invokeRouteOverwriteFields = map[string][]string{
 // 优惠券详情读的是 coupon_id（manageController.CouponDetail），POST 写的是 id
 // （request.CouponRequest）。不改这里的话，回查永远返回 0 条，上面那张保护表
 // 就成了摆设——是静默失效，不是报错，所以必须显式登记。
-var preserveGetParam = map[string]string{
-	normalizeEndpointPath("/plugin/coupon/detail"): "coupon_id",
-}
+//
+// 目前**没有登记项**：唯一需要它的 /plugin/coupon/detail 已于 2026-10-29
+// 改走 partialInvokePaths（端点自己就是 PATCH），不再回查补齐。
+// 机制保留：将来若有全量覆盖端点用非 id 的名字读详情，仍然需要它
+// （删掉这张表会让那种情况静默失效，而不是报错）。
+var preserveGetParam = map[string]string{}
 
 // partialInvokePaths 登记「走 PATCH 语义、不需要补齐」的 POST 端点。
 //
@@ -145,6 +127,28 @@ var partialInvokePaths = map[string]bool{
 	// 修复前它在 invokeRouteOverwriteFields 里（补齐兜底），
 	// 加 partial 后已从那张表移除——两套机制叠加是多余的，且补齐有风险。
 	normalizeEndpointPath("/plugin/user/detail"): true,
+	// 会员分组：2026-10-29 起 SaveUserGroupInfo 改为「先读库再按指针合并」，
+	// request.UserGroupRequest 也有 UpdateAll/Partial，端点自己能只覆盖传入字段。
+	normalizeEndpointPath("/plugin/user/group/detail"): true,
+	// 优惠券：2026-10-29 起 request.CouponRequest 指针化并加了 UpdateAll/Partial，
+	// provider.SaveCoupon 用 library.Assign 统一「非 nil 才写」。
+	// 之前它在 invokeRouteOverwriteFields 里靠 GET 回查补齐，但补齐是**兜底**：
+	// 回查失败（券被删、读接口变更）就退回全量覆盖，面额被清成 0 而回执照旧 ok。
+	// 现在端点自己就能只覆盖传入字段，补齐既多余又有用派生值覆盖真值的风险。
+	normalizeEndpointPath("/plugin/coupon/detail"): true,
+	// 营销活动：同上。SaveActivity 的 skus 用 nil/[]/*[] 三态区分
+	// 「不动 / 清空全部 / 按列表同步」，不传规格即不动，不会再删光。
+	normalizeEndpointPath("/plugin/activity/detail"): true,
+	// 素材：2026-10-29 起 request.PluginMaterial 指针化 + UpdateAll/Partial，
+	// provider.SaveMaterial 用 library.Assign。「改标题把正文清空」不再发生；
+	// 同时 Status 不再硬编码为 1（素材终于可以禁用），md5 改为取当前内容。
+	normalizeEndpointPath("/plugin/material/detail"): true,
+	// 素材分类：同上（原本 `category.Status = 1` 硬编码，分类永远无法停用）。
+	normalizeEndpointPath("/plugin/material/category/detail"): true,
+	// 城市站：2026-10-29 起 request.PlaceRequest 指针化 + UpdateAll/Partial。
+	// url_token 改成三态（nil=不动 / 空串=按标题重生成 / 非空=用它），
+	// 不再出现「改个状态把 URL 改掉、旧链接 404」。
+	normalizeEndpointPath("/plugin/place/detail"): true,
 }
 
 // preserveOnInvokeRoute 在调用全量覆盖的 POST 端点前，把未传的受保护字段用旧值补齐。
@@ -292,7 +296,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 		Params: map[string]ParamSpec{
 			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "detail", "save", "delete", "setting_get", "setting_save"}},
 			"id":     {Type: "integer", Desc: "城市站 ID"},
-			"values": {Type: "object", Desc: "城市站内容（save 写操作）/配置内容（setting 写操作）"},
+			"values": {Type: "object", Desc: "城市站内容（save）/配置内容（setting 写操作）。save 时**未传的字段保持原值**，url_token 不传=不改链接、传空串=按标题重新生成"},
 		},
 		Required: []string{"action"},
 		Caps:     []string{"api_invoke"},
@@ -391,7 +395,7 @@ var domainIntentCatalog = append([]*IntentSpec{
 		Params: map[string]ParamSpec{
 			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"list", "detail", "save", "delete", "import", "category_list", "category_save", "category_delete"}},
 			"id":        {Type: "integer", Desc: "素材 ID"},
-			"values":    {Type: "object", Desc: "素材字段（save 时传入）"},
+			"values":    {Type: "object", Desc: "素材字段（save 时传入）。**未传的字段保持原值**；status=0 停用素材、传空 title 按正文自动截取标题；无需先 detail 回查"},
 			"page":      {Type: "integer", Desc: "页码，从 1 开始（列表类 action）", Default: 1},
 			"page_size": {Type: "integer", Desc: "每页条数（列表类 action）", Default: 20},
 		},

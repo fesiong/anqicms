@@ -178,10 +178,8 @@ func (w *Website) DeleteTag(id uint) error {
 func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 	newPost := false
 	req.Title = strings.TrimSpace(req.Title)
-	if len(req.Title) == 0 {
-		return nil, errors.New(w.Tr("TagNameCannotBeEmpty"))
-	}
 	if req.Id > 0 {
+		// 有 id 就按 id 定位：更新时不传标题 = 不改标题。
 		tag, err = w.GetTagById(req.Id)
 		if err != nil {
 			// 表示不存在，则新建一个
@@ -192,6 +190,10 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 			newPost = true
 		}
 	} else {
+		// 没给 id：按标题查重（同名视为同一个标签），空标题没法查。
+		if len(req.Title) == 0 {
+			return nil, errors.New(w.Tr("TagNameCannotBeEmpty"))
+		}
 		tag, err = w.GetTagByTitle(req.Title)
 		if err != nil {
 			tag = &model.Tag{
@@ -200,30 +202,39 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 			newPost = true
 		}
 	}
-	if req.UpdateAll || req.Title != "" {
+	// 只有「新建」才强制要求标题。原来是无条件要求，于是 PATCH
+	// 「把 5 号标签隐藏」（只传 id + status）会被判成「标签名称不能为空」。
+	if newPost && len(req.Title) == 0 {
+		return nil, errors.New(w.Tr("TagNameCannotBeEmpty"))
+	}
+	// 标题必填，空值永远不是合法写入值：UpdateAll 下漏传也不能把已有名字清空。
+	if req.Title != "" {
 		tag.Title = req.Title
 	}
-	if req.UpdateAll || req.SeoTitle != "" {
-		tag.SeoTitle = req.SeoTitle
+	if req.SeoTitle != nil {
+		tag.SeoTitle = *req.SeoTitle
 	}
-	if req.UpdateAll || req.Keywords != "" {
-		tag.Keywords = req.Keywords
+	if req.Keywords != nil {
+		tag.Keywords = *req.Keywords
 	}
-	tag.Status = 1
-	if req.UpdateAll || req.Description != "" {
-		tag.Description = req.Description
+	// 原来这里硬编码 tag.Status = 1，标签永远无法隐藏。
+	if req.Status != nil {
+		tag.Status = *req.Status
 	}
-	if req.UpdateAll || req.FirstLetter != "" {
-		tag.FirstLetter = req.FirstLetter
+	if req.Description != nil {
+		tag.Description = *req.Description
 	}
-	if req.UpdateAll || req.CategoryId > 0 {
-		tag.CategoryId = req.CategoryId
+	if req.FirstLetter != nil {
+		tag.FirstLetter = *req.FirstLetter
 	}
-	if req.UpdateAll || req.Template != "" {
-		tag.Template = req.Template
+	if req.CategoryId != nil {
+		tag.CategoryId = *req.CategoryId
 	}
-	if req.UpdateAll || req.Logo != "" {
-		tag.Logo = req.Logo
+	if req.Template != nil {
+		tag.Template = *req.Template
+	}
+	if req.Logo != nil {
+		tag.Logo = *req.Logo
 	}
 	if tag.Logo != "" {
 		tag.Logo = strings.TrimPrefix(tag.Logo, w.PluginStorage.StorageUrl)
@@ -247,13 +258,14 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 		return
 	}
 	w.CleanCachedTags()
-	// 保存 content
-	if len(req.Content) > 0 || len(req.Extra) > 0 {
-		if req.Content != "" {
+	// 保存 content：nil = 不改内容表，非 nil（含空串）= 覆盖。
+	content := ""
+	if req.Content != nil || len(req.Extra) > 0 {
+		if req.Content != nil {
 			// 将单个&nbsp;替换为空格
-			req.Content = library.ReplaceSingleSpace(req.Content)
+			content = library.ReplaceSingleSpace(*req.Content)
 			// todo 应该只替换 src,href 中的 baseUrl
-			req.Content = w.ReplaceContentUrl(req.Content, false)
+			content = w.ReplaceContentUrl(content, false)
 			// 过滤外链
 			if w.Content.FilterOutlink == 1 || w.Content.FilterOutlink == 2 {
 				baseHost := ""
@@ -267,7 +279,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 				}
 
 				re, _ := regexp.Compile(`(?i)<a.*?href="(.+?)".*?>(.*?)</a>`)
-				req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+				content = re.ReplaceAllStringFunc(content, func(s string) string {
 					match := re.FindStringSubmatch(s)
 					if len(match) < 3 {
 						return s
@@ -289,7 +301,7 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 				// 匹配Markdown [link](url)
 				// 由于不支持零宽断言，因此匹配所有
 				re, _ = regexp.Compile(`!?\[([^]]*)\]\(([^)]+)\)`)
-				req.Content = re.ReplaceAllStringFunc(req.Content, func(s string) string {
+				content = re.ReplaceAllStringFunc(content, func(s string) string {
 					// 过滤掉 ! 开头的
 					if strings.HasPrefix(s, "!") {
 						return s
@@ -342,10 +354,20 @@ func (w *Website) SaveTag(req *request.PluginTag) (tag *model.Tag, err error) {
 				}
 			}
 		}
+		// 只传 content 或只传 extra 时，另一侧必须保持库里原值：
+		// GORM Save 写全列，直接写 nil 会把已有的扩展字段/正文抹掉。
+		var existContent model.TagContent
+		_ = w.DB.Where("`id` = ?", tag.Id).Limit(1).Find(&existContent).Error
 		tagContent := &model.TagContent{
 			Id:      tag.Id,
-			Content: req.Content,
-			Extra:   req.Extra,
+			Content: existContent.Content,
+			Extra:   existContent.Extra,
+		}
+		if req.Content != nil {
+			tagContent.Content = content
+		}
+		if req.Extra != nil {
+			tagContent.Extra = req.Extra
 		}
 		err = w.DB.Save(tagContent).Error
 		if err != nil {

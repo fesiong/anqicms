@@ -336,6 +336,13 @@ func (t *TransferWebsite) transferModules(moduleIds []uint) error {
 			CategoryFields: result.Data[i].CategoryFields,
 			IsSystem:       result.Data[i].IsSystem,
 			Status:         result.Data[i].Status,
+			Kind:           model.ModuleKindArticle,
+		}
+		// 对端是第三方 CMS 的转换脚本（xxx2anqicms.php），不会有 kind 字段，
+		// 只能按表名兜底。漏了这一步，迁过来的产品模型会变成文章 ——
+		// 前台价格区块、SKU 筛选与 Product 结构化数据一起消失，且不报错。
+		if module.TableName == "product" {
+			module.Kind = model.ModuleKindProduct
 		}
 		module.Id = result.Data[i].Id
 		if module.UrlToken == "" {
@@ -717,6 +724,9 @@ func (t *TransferWebsite) transferArchives(moduleIds []uint) error {
 			if id > 0 {
 				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.Archive{})
 				t.w.DB.Where("id = ?", result.Data[i].Id).Delete(&model.ArchiveData{})
+				// 商品属性也要清：导入是「同 ID 覆盖」，不清就会把被导入站的
+				// 品牌/重量/单价挂到本站这个 ID 上（跨站串数据，且不报错）。
+				t.w.DB.Where("archive_id = ?", result.Data[i].Id).Delete(&model.ArchiveProduct{})
 				// 删除分类关联
 				t.w.DB.Where("archive_id = ?", result.Data[i].Id).Delete(&model.ArchiveCategory{})
 				if module != nil {

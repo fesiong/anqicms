@@ -134,6 +134,33 @@ func PluginWatermarkPreview(ctx iris.Context) {
 // 参数说明：
 //   - 表单参数 "name": 资源类型，只能为 "font_path"（字体，仅支持 .ttf）或 "image_path"（水印图片）。
 //   - 表单参数 "file": 上传的文件。
+//
+// imageFormatExt 由 image.Decode 返回的格式给出落地扩展名（白名单映射，未知回落 .png）。
+//
+// 为什么不能用用户上传的文件名后缀：内容校验（image.Decode）挡不住"图片马"——
+// 一张合法 GIF 尾部追加 <?php ... ?> 依然能解码成功，若按其文件名写成 .phtml，
+// 落地到 uploads 目录就会被 php-fpm 执行。2026-10-31 的木马事件属于同类落地方式。
+func imageFormatExt(format string) string {
+	switch strings.ToLower(strings.TrimSpace(format)) {
+	case "jpeg", "jpg":
+		return ".jpg"
+	case "png":
+		return ".png"
+	case "gif":
+		return ".gif"
+	case "webp":
+		return ".webp"
+	case "bmp":
+		return ".bmp"
+	case "tiff", "tif":
+		return ".tiff"
+	case "ico":
+		return ".ico"
+	default:
+		return ".png"
+	}
+}
+
 func PluginWatermarkUploadFile(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	name := ctx.PostValue("name")
@@ -168,11 +195,13 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 		fileName = "uploads/watermark/watermark_font.ttf"
 	} else {
 		// image
-		_, _, err = image.Decode(file)
+		var imgFormat string
+		_, imgFormat, err = image.Decode(file)
 		if err != nil {
 			file.Seek(0, 0)
 			if strings.HasSuffix(info.Filename, "webp") {
 				_, err = webp.Decode(file)
+				imgFormat = "webp"
 			}
 			if err != nil {
 				ctx.JSON(iris.Map{
@@ -183,7 +212,7 @@ func PluginWatermarkUploadFile(ctx iris.Context) {
 			}
 		}
 		file.Seek(0, 0)
-		fileName = "uploads/watermark/watermark_image" + filepath.Ext(info.Filename)
+		fileName = "uploads/watermark/watermark_image" + imageFormatExt(imgFormat)
 	}
 	buff, err := io.ReadAll(file)
 	if err != nil {

@@ -267,11 +267,7 @@ func PluginGetEmailTemplateDetail(ctx iris.Context) {
 func PluginSendmailSaveTemplate(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req config.EmailTemplate
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

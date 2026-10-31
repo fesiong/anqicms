@@ -168,13 +168,17 @@ func TestShopIntentParamsHaveDocs(t *testing.T) {
 	}
 }
 
-// TestCouponSavePreservesFieldsViaAliasedGetKey 校验优惠券保存前的「回查补齐」真的生效。
+// TestCouponSaveUsesPartialNotGetFill 校验优惠券保存走 PATCH 而不是「回查补齐」。
 //
-// 两处都容易静默失效：
-//  1. coupon 的 GET 详情读的是 **coupon_id**，POST 写的是 **id**。补齐逻辑默认拿 id 去查，
-//     参数名对不上时端点只返回 0 条（不报错），保护表就成了摆设；
-//  2. SaveCoupon 是逐字段无条件赋值，漏补的字段会被清成 0——面额清零的券还挂着已发出去的券码。
-func TestCouponSavePreservesFieldsViaAliasedGetKey(t *testing.T) {
+// 历史：SaveCoupon 原本是逐字段无条件赋值，意图层只能靠 GET 回查把旧值补齐，
+// 而 coupon 的详情读的是 **coupon_id**、写的是 **id**，参数名对不上时
+// 回查返回 0 条（不报错），保护表就成了摆设 —— 面额被清成 0 的券还挂着
+// 已发出去的券码，事后无法从券码侧补回。
+//
+// 2026-10-29 起 provider.SaveCoupon 改成 PATCH（指针 + UpdateAll/Partial），
+// 于是这里应当**只发一次 POST**：不再回查（回查要读旧值，读端点返回
+// 派生值时等于用假数据覆盖真值），未传字段由端点自己保持原值。
+func TestCouponSaveUsesPartialNotGetFill(t *testing.T) {
 	spec := specByNameForTest(t, "commerce_marketing")
 
 	var calls []map[string]any
@@ -183,9 +187,6 @@ func TestCouponSavePreservesFieldsViaAliasedGetKey(t *testing.T) {
 			t.Fatalf("应统一经 api_invoke 执行，实际调用了 %s", name)
 		}
 		calls = append(calls, args)
-		if args["method"] == "GET" {
-			return `{"code":0,"data":{"id":7,"title":"旧标题","money":5000,"type":2,"status":1,"range_type":1}}`, nil
-		}
 		return `{"code":0,"data":null}`, nil
 	}
 
@@ -197,42 +198,44 @@ func TestCouponSavePreservesFieldsViaAliasedGetKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("coupon_save 执行失败: %v", err)
 	}
-	if len(calls) != 2 {
-		t.Fatalf("应发生 GET+POST 两次调用，实际 %d 次", len(calls))
+	if len(calls) != 1 {
+		t.Fatalf("端点已是 PATCH 语义，应只有一次 POST，实际 %d 次（多出来的那次是 GET 回查）", len(calls))
+	}
+	if calls[0]["method"] != "POST" {
+		t.Errorf("应为 POST，实际 %v", calls[0]["method"])
 	}
 
-	getParams, _ := calls[0]["params"].(map[string]any)
-	if calls[0]["method"] != "GET" {
-		t.Fatalf("第一次调用应为 GET 回查，实际 %v", calls[0]["method"])
-	}
-	if toInt64(getParams["coupon_id"]) != 7 {
-		t.Errorf("回查必须用端点认的参数名 coupon_id，实际 params=%v（用 id 会查不到，保护表静默失效）", getParams)
-	}
-
-	postParams, _ := calls[1]["params"].(map[string]any)
+	postParams, _ := calls[0]["params"].(map[string]any)
 	if postParams["title"] != "新标题" {
 		t.Errorf("显式传入的 title 应被尊重，实际 %v", postParams["title"])
 	}
-	for field, want := range map[string]float64{"money": 5000, "type": 2, "status": 1, "range_type": 1} {
-		if got := toFloat(postParams[field]); got != want {
-			t.Errorf("未传的 %s 应从回查结果补齐为 %v，实际 %v（会被清零）", field, want, postParams[field])
+	// 关键：除 id/title 外不应凭空出现别的字段。多出来的字段意味着
+	// 意图层又去回查并覆盖了调用方没提的值。
+	for field := range postParams {
+		switch field {
+		case "id", "title", "partial":
+		default:
+			t.Errorf("不该出现未传的字段 %s=%v（端点已是 PATCH，回查补齐会覆盖真值）",
+				field, postParams[field])
 		}
 	}
 }
 
 // TestActivitySavePreservesSkus 校验活动保存不会顺手删光规格。
 //
-// SaveActivity 在 len(req.Skus)==0 时会 Delete 该活动的全部 ActivitySku。
-// 也就是说「只改个活动标题」如果不补齐 skus，规格会整批消失，活动价与库存随之失效。
+// 历史：SaveActivity 在 len(req.Skus)==0 时会 Delete 该活动的全部 ActivitySku，
+// 而「没传 skus」与「传空数组」在值类型下是同一个零值 —— 只改个活动标题就会
+// 把规格整批删掉，活动价与库存随之失效。当时靠意图层 GET 回查补齐 skus 兜底。
+//
+// 2026-10-29 起 request.ActivityRequest.Skus 改成 *[]ActivitySku 三态
+// （nil=不动 / []=清空 / 非空=同步），端点自己就能区分，于是这里应当
+// **只发一次 POST 且不带 skus**：不带 = 不动，不再需要回查。
 func TestActivitySavePreservesSkus(t *testing.T) {
 	spec := specByNameForTest(t, "commerce_marketing")
 
 	var calls []map[string]any
 	inv := func(_ context.Context, _ string, args map[string]any) (string, error) {
 		calls = append(calls, args)
-		if args["method"] == "GET" {
-			return `{"code":0,"data":{"id":9,"title":"活动","price":1999,"skus":[{"id":3,"sku_id":11,"price":1999,"stock":5}]}}`, nil
-		}
 		return `{"code":0,"data":null}`, nil
 	}
 
@@ -243,16 +246,15 @@ func TestActivitySavePreservesSkus(t *testing.T) {
 	}, inv); err != nil {
 		t.Fatalf("activity_save 执行失败: %v", err)
 	}
-	if len(calls) != 2 {
-		t.Fatalf("应发生 GET+POST 两次调用，实际 %d 次", len(calls))
+	if len(calls) != 1 {
+		t.Fatalf("端点已是 PATCH 语义，应只有一次 POST，实际 %d 次（多出来的那次是 GET 回查）", len(calls))
 	}
-	postParams, _ := calls[1]["params"].(map[string]any)
-	skus, _ := postParams["skus"].([]any)
-	if len(skus) != 1 {
-		t.Fatalf("未传 skus 时应从回查结果补齐，否则会删除全部规格；实际 skus=%v", postParams["skus"])
+	postParams, _ := calls[0]["params"].(map[string]any)
+	if _, ok := postParams["skus"]; ok {
+		t.Errorf("未传 skus 时不该凭空带上 skus（端点的 nil=不动，补了等于替调用方做主）；实际 %v", postParams["skus"])
 	}
-	if toFloat(postParams["price"]) != 1999 {
-		t.Errorf("未传的 price 应被补齐，实际 %v", postParams["price"])
+	if postParams["title"] != "改名" {
+		t.Errorf("显式传入的 title 应被尊重，实际 %v", postParams["title"])
 	}
 }
 

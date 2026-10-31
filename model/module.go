@@ -10,11 +10,29 @@ import (
 	"kandaoni.com/anqicms/config"
 )
 
+// 模型类型（模块 = 内容模型，决定前台按什么模板与 schema 渲染）。
+//
+// 历史上这个语义靠 `ModuleId == 2` 硬编码表达，散落在 controller/api.go、
+// provider/{apiService,jsonLd,archive,statistics}.go 五处。问题在于：
+//   - 模块 id 是自增的，删了重建、导入站点后未必还是 2；
+//   - 「产品」是语义，2 是实现细节，任何调整模型顺序的操作都会让商品页
+//     静默按文章渲染（不报错、不崩溃，只是价格区块和 Product 结构化数据消失）；
+//   - 反过来，用户把 1 号模型改名成「产品」也不会生效。
+//
+// 2026-10-29 起改为显式字段 modules.kind。
+const (
+	// ModuleKindArticle 文章：默认类型。
+	ModuleKindArticle = "article"
+	// ModuleKindProduct 产品：有价格/库存/SKU，前台按 Product 渲染。
+	ModuleKindProduct = "product"
+)
+
 type Module struct {
 	Id             uint         `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime    int64        `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	UpdatedTime    int64        `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	TableName      string       `json:"table_name" gorm:"column:table_name;type:varchar(50) not null;default:''"`
+	Kind           string       `json:"kind" gorm:"column:kind;type:varchar(20) not null;default:'article'"`
 	Name           string       `json:"name" gorm:"column:name;type:varchar(50) not null;default:''"`
 	UrlToken       string       `json:"url_token" gorm:"column:url_token;type:varchar(50) not null;default:''"` // 定义
 	Title          string       `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
@@ -33,11 +51,42 @@ type Module struct {
 type moduleFields []config.CustomField
 
 func (a moduleFields) Value() (driver.Value, error) {
+	// nil 表示「这个模型没配置字段」，应落成 SQL NULL 而不是字符串 "null"。
+	// json.Marshal(nil slice) 产出字面量 null，写进库后：
+	//   1. 外部读库的人看到的是 4 个字符，而不是空值；
+	//   2. 任何 json.Unmarshal 到非指针结构的消费方都会报
+	//      "cannot unmarshal null into Go value of type []config.CustomField"。
+	// 实测曾把 id=3652 的 fields 写成 "null"。
+	// 注意只判 nil：空切片（[]）有「显式清空字段配置」的语义，必须照常序列化成 "[]"。
+	if a == nil {
+		return nil, nil
+	}
 	return json.Marshal(a)
 }
 
+// Scan 读库。必须能吃 NULL：字段列允许 NULL（type:longtext default null），
+// database/sql 对 NULL 传的是无类型 nil，原来的 `data.([]byte)` 会直接 panic。
+// 同时兼容历史脏数据：早先 Value() 把 nil 切片写成了字符串 "null"。
 func (a *moduleFields) Scan(data interface{}) error {
-	return json.Unmarshal(data.([]byte), &a)
+	if data == nil {
+		*a = nil
+		return nil
+	}
+	var raw []byte
+	switch v := data.(type) {
+	case []byte:
+		raw = v
+	case string:
+		raw = []byte(v)
+	default:
+		*a = nil
+		return nil
+	}
+	if len(raw) == 0 || string(raw) == "null" {
+		*a = nil
+		return nil
+	}
+	return json.Unmarshal(raw, a)
 }
 
 func (m *Module) Migrate(tx *gorm.DB, tplPath string, focus bool) {

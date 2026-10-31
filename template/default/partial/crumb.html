@@ -1,0 +1,13 @@
+<!-- crumb -->
+<div class="crumb">
+    <div class="container">
+        <span>{% tr 'your-location:' %}</span>
+        {%- breadcrumb crumbs %}
+        {%- for item in crumbs %}
+        <a href="{{item.Link}}">{{item.Name}}</a>
+        {%- if forloop.Last == false %} - {% endif %}
+        {%- endfor %}
+        {%- endbreadcrumb %}
+    </div>
+</div>
+<!-- crumb -->

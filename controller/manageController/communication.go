@@ -24,11 +24,7 @@ func GetCommunicationSetting(ctx iris.Context) {
 func SaveCommunicationSetting(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.CommunicationConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 
@@ -264,22 +260,23 @@ func CommunicationMessageSend(ctx iris.Context) {
 // CommunicationMessageDelete 删除单条询盘消息。
 func CommunicationMessageDelete(ctx iris.Context) {
 	var req request.CommunicationMessageRequest
-	err := ctx.ReadJSON(&req)
-	if err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  "Invalid Params",
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 删除必须指定消息 id，缺省时不能回"已删除"。
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 	currentSite := provider.CurrentSite(ctx)
 
-	err = currentSite.DeleteCommunicationMessage(req.Id)
+	err := currentSite.DeleteCommunicationMessage(req.Id)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
+		// 少了 return 会紧跟着再写一次成功回执，响应体变成两段 JSON 拼接。
+		return
 	}
 
 	ctx.JSON(iris.Map{
@@ -323,11 +320,11 @@ func CommunicationMessageList(ctx iris.Context) {
 // CommunicationOrderClose 关闭询盘订单。
 func CommunicationOrderClose(ctx iris.Context) {
 	var req request.CommunicationOrderRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// 关闭订单必须指定订单 id，缺省时不能回"已关闭"。
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 
@@ -338,6 +335,9 @@ func CommunicationOrderClose(ctx iris.Context) {
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
 		})
+		// 少了 return，错误回执之后又跟着写了一次成功的 JSON，
+		// 客户端读到的是两段拼在一起的响应体（既不是合法 JSON，也藏掉了真实错误）。
+		return
 	}
 
 	ctx.JSON(iris.Map{

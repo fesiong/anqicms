@@ -7,6 +7,7 @@ import (
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -191,11 +192,7 @@ func CategoryDetail(ctx iris.Context) {
 func CategoryDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.Category
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	// UpdateAll 决定「未传的字段」怎么处理：
@@ -262,9 +259,9 @@ func CategoryDetailForm(ctx iris.Context) {
 					tmpCategory, err := subSite.GetCategoryById(req.Id)
 					if err == nil {
 						req.Title = tmpCategory.Title
-						req.Content = tmpCategory.Content
-						req.Description = tmpCategory.Description
-						req.Keywords = tmpCategory.Keywords
+						req.Content = library.Ptr(tmpCategory.Content)
+						req.Description = library.Ptr(tmpCategory.Description)
+						req.Keywords = library.Ptr(tmpCategory.Keywords)
 					}
 					_, _ = subSite.SaveCategory(&req)
 				}

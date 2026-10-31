@@ -24,11 +24,7 @@ func HandleAiGenerateSetting(ctx iris.Context) {
 func HandleAiGenerateSettingSave(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)
 	var req config.AiGenerateConfig
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 

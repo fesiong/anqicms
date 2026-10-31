@@ -300,11 +300,17 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 }
 
 func (w *Website) InitModelData() {
+	// 老站库的 modules 表没有 kind 列，Automigrate 又只在版本变化时跑，
+	// 所以这里无条件补一次（幂等）。
+	_ = w.ensureModuleKindColumn()
+	// 商品属性拆表（3.7.1 回填 + 3.8.0 删列），顺序与失败闸门见 initArchiveSchema。
+	w.initArchiveSchema()
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品
 	var modules = []model.Module{
 		{
 			Id:        1,
 			TableName: "article",
+			Kind:      model.ModuleKindArticle,
 			UrlToken:  "news",
 			Name:      w.Tr("articleModule"),
 			Title:     w.Tr("ArticleCenter"),
@@ -315,6 +321,7 @@ func (w *Website) InitModelData() {
 		{
 			Id:        2,
 			TableName: "product",
+			Kind:      model.ModuleKindProduct,
 			UrlToken:  "product",
 			Name:      w.Tr("productModule"),
 			Title:     w.Tr("ProductCenter"),

@@ -11,6 +11,7 @@ import (
 	"github.com/xuri/excelize/v2"
 	"gorm.io/gorm"
 	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/provider"
 	"kandaoni.com/anqicms/request"
@@ -125,7 +126,13 @@ func ArchiveList(ctx iris.Context) {
 				tx = tx.Where("`place_id` = ?", placeId)
 			}
 			if productType > 0 {
-				tx = tx.Where("`product_type` = ?", productType)
+				// product_type 3.8.0 起只在 archive_products 上（archives 的列已删）。
+				// 用 LEFT JOIN + IFNULL 而不是 INNER：侧表只给"配过属性"的商品建行，
+				// 普通商品（product_type=1 且其余全默认）没有行，INNER JOIN 会把它筛没。
+				// 这里的外层表已被 alias 成 archives（正式稿/草稿两条路径共用），
+				// 所以关联条件写 archives.id 对两边都成立。
+				tx = tx.Joins("LEFT JOIN archive_products ON archive_products.archive_id = archives.id").
+					Where("IFNULL(archive_products.product_type, 1) = ?", productType)
 			}
 			if status == "delete" {
 				tx = tx.Where("`status` = ?", config.ContentStatusDelete)
@@ -182,7 +189,7 @@ func ArchiveList(ctx iris.Context) {
 	var archiveIds []uint
 	builder.Limit(pageSize).Offset(offset).Select("archives.id").Pluck("id", &archiveIds)
 	if len(archiveIds) > 0 {
-		dbTable(currentSite.DB).Where("id IN (?)", archiveIds).Order(orderBy).Scan(&archives)
+		dbTable(currentSite.DB).Where("id IN (?)", archiveIds).Order(orderBy).Find(&archives)
 		for i := range archives {
 			archives[i].GetThumb(currentSite.PluginStorage.StorageUrl, currentSite.GetDefaultThumb(int(archives[i].Id)))
 			archives[i].Link = currentSite.GetUrl("archive", archives[i], 0)
@@ -567,8 +574,8 @@ func ArchiveDetailForm(ctx iris.Context) {
 		}
 	}
 	// 检查 fixed_link
-	if req.FixedLink != "" {
-		exists, err := currentSite.GetArchiveByFixedLink(req.FixedLink)
+	if req.FixedLink != nil && *req.FixedLink != "" {
+		exists, err := currentSite.GetArchiveByFixedLink(*req.FixedLink)
 		if err == nil && exists.Id != req.Id {
 			// 做提示
 			ctx.JSON(iris.Map{
@@ -578,7 +585,7 @@ func ArchiveDetailForm(ctx iris.Context) {
 			return
 		}
 		// 再检查草稿
-		exists2, err := currentSite.GetArchiveDraftByFixedLink(req.FixedLink)
+		exists2, err := currentSite.GetArchiveDraftByFixedLink(*req.FixedLink)
 		if err == nil && exists2.Id != req.Id {
 			// 做提示
 			ctx.JSON(iris.Map{
@@ -588,29 +595,13 @@ func ArchiveDetailForm(ctx iris.Context) {
 			return
 		}
 	}
-	if len(req.Images) == 0 {
-		req.RemoveImage = true
+	// 图片/标签/标记/关联文档的「清空」由「传空数组」表达（见 request.Archive 的指针语义），
+	// 这里不再把「没传」翻译成 RemoveXxx —— 那样一次 PATCH 就会把没涉及的数据抹掉。
+	if len(req.Flag) > 0 && req.Flags == nil {
+		req.Flags = library.Ptr(strings.Split(req.Flag, ","))
 	}
-	if len(req.Tags) == 0 {
-		if req.Id > 0 {
-			var existCount int64
-			currentSite.DB.Model(&model.TagData{}).Where("`item_id` = ?", req.Id).Count(&existCount)
-			if existCount > 0 {
-				req.RemoveTag = true
-			}
-		}
-	}
-	if len(req.Flag) > 0 {
-		req.Flags = strings.Split(req.Flag, ",")
-	}
-	if len(req.Flags) == 0 {
-		req.RemoveFlag = true
-	}
-	if len(req.RelationIds) == 0 {
-		req.RemoveRelationIds = true
-	}
-	// UpdateAll 决定「未传的字段」怎么处理：
-	//   true  —— 全量覆盖。未传=零值的字段会被清空。这是**表单提交**的语义：
+	// UpdateAll 决定「列表类字段」（skus/options/wholesale_rules）与扩展字段补默认值的行为：
+	//   true  —— 全量覆盖。未传=零值的列表会被清空。这是**表单提交**的语义：
 	//            前端提交整个表单，某个字段没出现在表单里就意味着用户清空了它。
 	//   false —— PATCH 语义。只覆盖显式传入的字段，未传的一律保持库里的原值。
 	//            这是 **AI/程序化调用**需要的语义：只想改标题，不该动其它字段。
@@ -618,6 +609,9 @@ func ArchiveDetailForm(ctx iris.Context) {
 	// 用 Partial（反向开关）而非直接暴露 UpdateAll，是为了区分「调用方没传这个字段」
 	// 与「调用方显式传了 false」——Go 的 bool 零值做不到，前端又不传该字段。
 	// Partial 优先于调用方传的 update_all。
+	//
+	// 自 2026-10-29 起，标量字段一律由 request.Archive 的指针是否为 nil 判断，
+	// UpdateAll 不再参与它们的取舍。
 	if !req.Partial {
 		req.UpdateAll = true
 	}
@@ -684,9 +678,9 @@ func ArchiveDetailForm(ctx iris.Context) {
 							req.Content = tmpContent.Content
 						}
 						req.Title = tmpArchive.Title
-						req.Description = tmpArchive.Description
-						req.Keywords = tmpArchive.Keywords
-						req.SeoTitle = tmpArchive.SeoTitle
+						req.Description = library.Ptr(tmpArchive.Description)
+						req.Keywords = library.Ptr(tmpArchive.Keywords)
+						req.SeoTitle = library.Ptr(tmpArchive.SeoTitle)
 					}
 					_, _ = subSite.SaveArchive(&req)
 				}
@@ -809,15 +803,18 @@ func ArchiveRelease(ctx iris.Context) {
 func ArchiveDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchiveRecoverRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
+	// 没有 id 就没有删除目标。
+	if !requirePositive(ctx, req.Id, "id") {
+		return
+	}
+	// 正式表和草稿表都没命中时，不能回"文章已删除"。
+	found := false
 	archive, err := currentSite.GetArchiveById(req.Id)
 	if err == nil {
+		found = true
 		// 文档在正式表，把它移到草稿箱
 		err = currentSite.DeleteArchive(archive)
 		if err != nil {
@@ -847,6 +844,7 @@ func ArchiveDelete(ctx iris.Context) {
 		// 从草稿表删除
 		archiveDraft, err := currentSite.GetArchiveDraftById(req.Id)
 		if err == nil {
+			found = true
 			err = currentSite.DeleteArchiveDraft(archiveDraft)
 			if err != nil {
 				ctx.JSON(iris.Map{
@@ -872,6 +870,10 @@ func ArchiveDelete(ctx iris.Context) {
 
 			currentSite.AddAdminLog(ctx, ctx.Tr("DeleteDocumentLog", archiveDraft.Id, archiveDraft.Title))
 		}
+	}
+
+	if !requireFound(ctx, found) {
+		return
 	}
 
 	ctx.JSON(iris.Map{
@@ -1127,11 +1129,10 @@ func UpdateArchiveReleasePlan(ctx iris.Context) {
 func UpdateArchiveSort(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ArchiveSortRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requirePositive(ctx, req.Id, "id") {
 		return
 	}
 

@@ -641,7 +641,11 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 				tx = tx.Where("module_id = ?", req.ModuleId)
 			}
 			if req.ProductType > 0 {
-				tx = tx.Where("product_type = ?", req.ProductType)
+				// 3.8.0 起 product_type 只在 archive_products（archives 的列已删）。
+				// LEFT JOIN + IFNULL 保住"普通商品没有侧表行"的情况，见
+				// manageController/archive.go 同一处判断的说明。
+				tx = tx.Joins("LEFT JOIN archive_products ON archive_products.archive_id = archives.id").
+					Where("IFNULL(archive_products.product_type, 1) = ?", req.ProductType)
 			}
 			if req.Flag != "" {
 				tx = tx.Joins("INNER JOIN archive_flags ON archives.id = archive_flags.archive_id and archive_flags.flag = ?", req.Flag)
@@ -1142,9 +1146,8 @@ func (w *Website) ApiGetFilters(req *request.ApiFilterRequest) ([]response.Filte
 			})
 		}
 	}
-	// sku变体
-	if req.ModuleId == 2 {
-		// 产品筛选，有sku
+	// 产品筛选，有sku（类型判定走 modules.kind，不再硬编码 id==2）
+	if req.ModuleId > 0 && w.IsProductModule(uint(req.ModuleId)) {
 		optionsFilter := w.GetArchiveOptionsFilter()
 		for k, v := range optionsFilter {
 			var tmpUrlParam = map[string]bool{}

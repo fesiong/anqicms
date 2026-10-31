@@ -75,11 +75,7 @@ func PluginAnchorDetail(ctx iris.Context) {
 func PluginAnchorDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchor
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
 	}
 	frontUrl := currentSite.System.BaseUrl
@@ -211,11 +207,10 @@ func PluginAnchorReplace(ctx iris.Context) {
 func PluginAnchorDelete(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.PluginAnchorDelete
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	if !requireAnyID(ctx, req.Id, req.Ids) {
 		return
 	}
 

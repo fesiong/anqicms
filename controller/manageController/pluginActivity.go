@@ -61,17 +61,19 @@ func PluginActivityDetail(ctx iris.Context) {
 	})
 }
 
-// PluginActivityDetailForm 新建或更新营销活动；纯全量覆盖，改一个字段也要带齐其它字段。
-// 注意 skus 不传或传空数组会删掉该活动的全部规格。
+// PluginActivityDetailForm 新建或更新营销活动。
+//
+// 默认全量覆盖（后台表单提交整个表单，没出现的字段 = 用户清空了它）；
+// 传 partial=true 则走 PATCH，未传字段保持原值（AI/MCP 默认这样调）。
+// 规格 skus 单独一套语义：不传=不动、传空数组=清空全部、非空=按列表同步。
 func PluginActivityDetailForm(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.ActivityRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
 		return
+	}
+	if !req.Partial {
+		req.UpdateAll = true
 	}
 
 	err := currentSite.SaveActivity(&req)

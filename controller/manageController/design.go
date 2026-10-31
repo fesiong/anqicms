@@ -191,11 +191,11 @@ func UseDesignInfo(ctx iris.Context) {
 func DeleteDesignInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	var req request.UseDesignRequest
-	if err := ctx.ReadJSON(&req); err != nil {
-		ctx.JSON(iris.Map{
-			"code": config.StatusFailed,
-			"msg":  err.Error(),
-		})
+	if !readJSONPayload(ctx, &req) {
+		return
+	}
+	// package 为空时不能把空名字当模板去删。
+	if !requireNonEmpty(ctx, req.Package, "package") {
 		return
 	}
 
