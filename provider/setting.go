@@ -971,7 +971,16 @@ func (w *Website) SaveCommunicationSetting(setting *config.CommunicationConfig) 
 
 // Tr as Translate
 // 这是一个兼容函数，请使用 ctx.Tr
+// Tr 翻译并做品牌替换。
+//
+// 品牌名散落在 9 个语言的 locales 里（安装页标题、默认站点名、未登录提示等），
+// 逐个改文件既会漏、也会在升级覆盖 locales 时被冲掉。所以统一在出口替换：
+// 与凭据脱敏走同一套思路——集中一处，新增文案自动继承。
 func (w *Website) Tr(str string, args ...interface{}) string {
+	return config.Brandize(w.tr(str, args...))
+}
+
+func (w *Website) tr(str string, args ...interface{}) string {
 	if I18n == nil {
 		I18n = i18n.New()
 		err := I18n.Load(config.ExecPath+"locales/*/*.yml", config.LoadLocales()...)

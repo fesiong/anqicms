@@ -1057,7 +1057,7 @@ func (svc *AiChatService) getBuiltinEinoTools() ([]*schema.ToolInfo, map[string]
 		if err != nil {
 			return "", fmt.Errorf("创建请求失败: %w", err)
 		}
-		req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; AnQiCMS AI Bot)")
+		req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; "+config.Brand().Name+" AI Bot)")
 
 		resp, err := client.Do(req)
 		if err != nil {
@@ -1141,7 +1141,7 @@ func searchDuckDuckGo(ctx context.Context, query string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("创建请求失败: %w", err)
 	}
-	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; AnQiCMS AI Bot)")
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; "+config.Brand().Name+" AI Bot)")
 
 	resp, err := client.Do(req)
 	if err != nil {

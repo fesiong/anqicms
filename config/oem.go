@@ -9,6 +9,7 @@ import (
 	"log"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // DefaultOEMID 是官方版的标识，同时是编译期标识的默认值。
@@ -264,4 +265,50 @@ func OEMIDs() []string {
 func LookupOEM(id string) (OEMBrand, bool) {
 	b, ok := oemBrands[id]
 	return b, ok
+}
+
+// 键用整个品牌结构而不是 id：id 相同但字段不同的两个值（测试里构造的品牌）
+// 会共享替换器，导致「中文名缺失」这类分支被上一次的结果污染。
+var brandReplacerCache sync.Map // OEMBrand -> *strings.Replacer
+
+// replacer 返回该品牌的文案替换器（按品牌值缓存）。
+func (b OEMBrand) replacer() *strings.Replacer {
+	if v, ok := brandReplacerCache.Load(b); ok {
+		return v.(*strings.Replacer)
+	}
+	cn := b.NameCN
+	if cn == "" {
+		// 中文名是可选的，缺省时用主名兜底；
+		// 若替换成空串，界面上会剩下「欢迎使用」这种断句。
+		cn = b.Name
+	}
+	r := strings.NewReplacer(
+		"安企CMS", cn,
+		"安企", cn,
+		"AnQiCMS", b.Name,
+		"AnqiCMS", b.Name,
+		"anqicms", b.ID,
+	)
+	actual, _ := brandReplacerCache.LoadOrStore(b, r)
+	return actual.(*strings.Replacer)
+}
+
+// Brandize 把文本里的官方品牌名替换成当前品牌。
+//
+// 官方版原样返回，逐字节不变，所以这个函数对主站行为零影响。
+//
+// 为什么在出口统一替换而不是改 locales：品牌文案分散在 9 个语言文件里
+// （安装页标题、默认站点名、未登录提示、AI 助手自述），逐个改既会漏，
+// 也会在升级覆盖 locales 时被冲掉。出口替换与凭据脱敏是同一套思路 ——
+// 集中一处，上游新增文案自动继承。
+func Brandize(s string) string {
+	return BrandizeWith(Brand(), s)
+}
+
+// BrandizeWith 用指定品牌替换文案，供测试与按品牌渲染的场景使用。
+func BrandizeWith(b OEMBrand, s string) string {
+	if s == "" || b.ID == DefaultOEMID {
+		return s
+	}
+	return b.replacer().Replace(s)
 }

@@ -1,8 +1,56 @@
 package provider
 
-import "kandaoni.com/anqicms/response"
+import (
+	"strings"
+
+	"kandaoni.com/anqicms/config"
+	"kandaoni.com/anqicms/response"
+)
+
+// officialDocsHost 是帮助文档里所有链接原本指向的域名。
+const officialDocsHost = "https://www.anqicms.com"
+
+// rewriteDocsLinks 把帮助链接的域名换成当前品牌的文档站。
+//
+// 不换会怎样：客户点「帮助」看到的是官方文档站，满屏官方品牌与官方教程 ——
+// 这是后台里面积最大、最容易被发现的品牌泄露点（87 条链接、整页内容）。
+//
+// 层级是递归的（标签文档里还嵌着子标签文档），所以必须逐层处理。
+// base 为空表示该品牌没有独立文档站，此时清空链接而不是保留官方地址。
+func rewriteDocsLinks(groups []response.DesignDocGroup, base string) []response.DesignDocGroup {
+	base = strings.TrimSuffix(base, "/")
+	if base == officialDocsHost {
+		return groups // 官方版保持原样，链接逐字节不变
+	}
+	var walk func(docs []response.DesignDoc) []response.DesignDoc
+	walk = func(docs []response.DesignDoc) []response.DesignDoc {
+		for i := range docs {
+			if strings.HasPrefix(docs[i].Link, officialDocsHost) {
+				if base == "" {
+					docs[i].Link = ""
+				} else {
+					docs[i].Link = base + strings.TrimPrefix(docs[i].Link, officialDocsHost)
+				}
+			}
+			if len(docs[i].Docs) > 0 {
+				docs[i].Docs = walk(docs[i].Docs)
+			}
+		}
+		return docs
+	}
+	for i := range groups {
+		groups[i].Docs = walk(groups[i].Docs)
+	}
+	return groups
+}
 
 func (w *Website) GetDesignDocs() []response.DesignDocGroup {
+	// 没有独立文档站的品牌整块隐藏帮助面板：与其给一页点不开的目录，
+	// 不如明确告诉客户「没有」，而不是把他导到官方站上。
+	docsBase := config.Brand().Docs
+	if docsBase == "" {
+		return nil
+	}
 
 	var designDocs = []response.DesignDocGroup{
 		{
@@ -194,7 +242,7 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 		},
 	}
 
-	return designDocs
+	return rewriteDocsLinks(designDocs, docsBase)
 }
 
 func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
@@ -1693,5 +1741,5 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 		},
 	}
 
-	return designTplHelpers
+	return rewriteDocsLinks(designTplHelpers, config.Brand().Docs)
 }

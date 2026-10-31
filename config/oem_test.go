@@ -139,3 +139,45 @@ func TestNameForLocale(t *testing.T) {
 		t.Errorf("中文名缺失应回退主名，got %q", got)
 	}
 }
+
+// Brandize 是品牌文案的唯一出口：locales 里 9 个语言的品牌名都在这里被替换。
+// 官方版必须逐字节不变，OEM 版必须一个不剩地换掉。
+func TestBrandize(t *testing.T) {
+	official, _ := LookupOEM(DefaultOEMID)
+	inputs := []string{
+		"安企CMS(AnQiCMS)初始化安装",
+		"欢迎使用安企内容管理系统",
+		"请先登录 AnQiCMS 账号",
+		"AnqiCMS 安装成功",
+		"https://www.anqicms.com/help",
+	}
+	for _, in := range inputs {
+		if got := BrandizeWith(official, in); got != in {
+			t.Errorf("官方版被改动：\n in  %q\n out %q", in, got)
+		}
+	}
+
+	oem := OEMBrand{ID: "acme", Name: "AcmeCMS", NameCN: "艾克米CMS"}
+	cases := map[string]string{
+		"安企CMS(AnQiCMS)初始化安装":          "艾克米CMS(AcmeCMS)初始化安装",
+		"欢迎使用安企内容管理系统":                 "欢迎使用艾克米CMS内容管理系统",
+		"请先登录 AnQiCMS 账号":              "请先登录 AcmeCMS 账号",
+		"AnqiCMS 安装成功":                 "AcmeCMS 安装成功",
+		"https://www.anqicms.com/help": "https://www.acme.com/help",
+	}
+	for in, want := range cases {
+		if got := BrandizeWith(oem, in); got != want {
+			t.Errorf("OEM 替换不对：\n in   %q\n got  %q\n want %q", in, got, want)
+		}
+	}
+
+	// 中文名缺失时用主名兜底，不能替换成空串（界面上会剩下断句）。
+	noCN := OEMBrand{ID: "acme", Name: "AcmeCMS"}
+	if got := BrandizeWith(noCN, "欢迎使用安企CMS"); got != "欢迎使用AcmeCMS" {
+		t.Errorf("中文名缺失兜底不对：%q", got)
+	}
+
+	if got := BrandizeWith(oem, ""); got != "" {
+		t.Errorf("空串应原样返回，got %q", got)
+	}
+}

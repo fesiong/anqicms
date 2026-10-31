@@ -817,7 +817,7 @@ func (svc *AiChatService) ExecuteAgent(agent *model.AiAgent) (finalResponse stri
 	}()
 
 	// 构建系统提示
-	systemPrompt := `你是一个 AnQiCMS 的 AI 智能体，需要独立完成任务。
+	systemPrompt := `你是一个 ` + config.Brand().Name + ` 的 AI 智能体，需要独立完成任务。
 
 ## 任务策略
 ` + agent.Strategy + `
@@ -1196,13 +1196,13 @@ func (svc *AiChatService) BuildAIResponse(message string, toolNames []string) st
 	// 生产环境中会使用大语言模型（LLM）
 
 	if containsAny(msg, []string{"help", "tool", "capability"}) {
-		response := "可用的 AnQiCMS MCP 工具：\n\n"
+		response := "可用的 " + config.Brand().Name + " MCP 工具：\n\n"
 		response += formatTools(toolNames)
 		return response
 	}
 
 	// 默认回复
-	response := "你好！我是您的 AnQiCMS AI 助手，可以帮助您管理文章、分类、标签和附件。\n\n"
+	response := "你好！我是您的 " + config.Brand().Name + " AI 助手，可以帮助您管理文章、分类、标签和附件。\n\n"
 	if svc.site != nil {
 		response += fmt.Sprintf("当前站点：%s\n\n", svc.site.System.SiteName)
 	}

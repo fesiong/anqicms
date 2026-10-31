@@ -500,7 +500,7 @@ func (c *AkismetClient) do(req *http.Request) (*http.Response, error) {
 	if c.UserAgent != "" {
 		req.Header.Set("User-Agent", c.UserAgent)
 	} else {
-		req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", "AnQiCMS", config.Version))
+		req.Header.Set("User-Agent", fmt.Sprintf("%s/%s", config.Brand().Name, config.Version))
 	}
 	if c.HTTPClient == nil {
 		return http.DefaultClient.Do(req)

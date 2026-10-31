@@ -551,7 +551,9 @@ func createDefaultWebsite(ctx iris.Context) *Website {
 		DataPath:   config.ExecPath + "data" + string(filepath.Separator),
 		PublicPath: config.ExecPath + "public" + string(filepath.Separator),
 		System: &config.SystemConfig{
-			SiteName:     "AnQiCMS",
+			// 新站点的默认站名。客户建站后第一眼看到的标题就是它，
+			// 留官方名等于把品牌直接写到客户网站上。
+			SiteName:     config.Brand().Name,
 			TemplateName: "default",
 		},
 		ctx: ctx,

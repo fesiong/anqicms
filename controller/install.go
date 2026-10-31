@@ -52,7 +52,7 @@ func Install(ctx iris.Context) {
   <meta charset="UTF-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>安企CMS(AnqiCMS)初始化安装</title>
+  <title>__OEM_TITLE__初始化安装</title>
   <style>
     .container {
       padding: 30px;
@@ -218,7 +218,7 @@ func Install(ctx iris.Context) {
         <div class="layui-form-item">
           <label class="layui-form-label">{% tr "DatabaseName" %}</label>
           <div class="layui-input-block">
-            <input type="text" name="database" value="anqicms" required placeholder="{% tr "WhichDatabaseToInstall" %}" autocomplete="off" class="layui-input">
+            <input type="text" name="database" value="__OEM_DB__" required placeholder="{% tr "WhichDatabaseToInstall" %}" autocomplete="off" class="layui-input">
             <div class="layui-form-mid layui-aux-word">{% tr "IfTheDatabaseDoesNotExistTheProgramWillTryToCreateIt" %}</div>
           </div>
         </div>
@@ -321,6 +321,12 @@ func Install(ctx iris.Context) {
 		match := re.FindStringSubmatch(s)
 		return defaultSite.Tr(match[1])
 	})
+
+	// 品牌占位符：安装页是客户见到产品的第一屏，标题和默认库名都不能带官方标识。
+	// 用占位符而不是在模板里拼字符串，是为了让模板本身保持可读。
+	brand := config.Brand()
+	viewTpl = strings.ReplaceAll(viewTpl, "__OEM_TITLE__", brand.NameCN+"("+brand.Name+")")
+	viewTpl = strings.ReplaceAll(viewTpl, "__OEM_DB__", brand.SQLDatabaseName())
 
 	ctx.WriteString(viewTpl)
 }

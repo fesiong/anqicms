@@ -3,9 +3,9 @@ package manageController
 import (
 	"archive/zip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -124,6 +124,9 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 	result["version"] = config.Version
 	result["trial"] = config.Trial
+	// 当前构建的品牌标识。排障时第一件事就是确认「这个包是给谁做的」，
+	// 而它只能来自编译期注入，不能在界面上改。
+	result["oem"] = config.CurrentOEMID()
 	var ms runtime.MemStats
 	runtime.ReadMemStats(&ms)
 	result["memory_usage"] = ms.Alloc
@@ -135,9 +138,29 @@ func GetStatisticsDashboard(ctx iris.Context) {
 	})
 }
 
+// versionCheckURL 拼出「检查最新版」的请求地址。
+//
+// oem 参数不能省：官网用同一个 shopversion.json 服务所有品牌，
+// 靠它决定把哪条版本线（以及配套的升级包命名）下发给这个客户端。
+func versionCheckURL(brand config.OEMBrand) string {
+	return brand.DownloadBase + "/shopversion.json?goos=" + runtime.GOOS +
+		"&goarch=" + runtime.GOARCH + "&type=" + config.VersionType +
+		"&oem=" + url.QueryEscape(brand.ID)
+}
+
+// upgradePackageURL 拼出升级包下载地址。包名里的主程序名取品牌配置，
+// 与升级包里实际的文件名同源，否则 isMainBinaryFile 会认不出主程序。
+func upgradePackageURL(brand config.OEMBrand, version string) string {
+	name := brand.Binary + "-" + runtime.GOOS + "-" + runtime.GOARCH
+	if config.VersionType != "" {
+		name = brand.Binary + "-" + config.VersionType + "-" + runtime.GOOS + "-" + runtime.GOARCH
+	}
+	return brand.DownloadBase + "/" + name + "-v" + version + ".zip?oem=" + url.QueryEscape(brand.ID)
+}
+
 // CheckVersion 检查当前版本是否为最新版。
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/shopversion.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
+	link := versionCheckURL(config.Brand())
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
@@ -199,10 +222,10 @@ func VersionUpgrade(ctx iris.Context) {
 		version = lastVersion.TrialVersion
 	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqishop-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
-	if config.VersionType != "" {
-		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqishop-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
-	}
+	// 包名由官网按 oem 参数决定，这里只按约定拼出请求地址；
+	// 主程序名取自品牌配置，与升级包里实际的文件名同源。
+	brand := config.Brand()
+	link := upgradePackageURL(brand, version)
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).Timeout(20 * time.Minute).Get(link).EndBytes()
 	if errs != nil || resp.StatusCode != 200 {
@@ -248,6 +271,8 @@ func VersionUpgrade(ctx iris.Context) {
 	execPath := filepath.Join(config.ExecPath, exec)
 	tmpExecPath := execPath + ".new"
 
+	mainBinaryFound := false
+
 	for _, f := range zipReader.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -265,7 +290,9 @@ func VersionUpgrade(ctx iris.Context) {
 			continue
 		}
 		realName := filepath.Join(config.ExecPath, f.Name)
-		if f.Name == "anqishop" || f.Name == "anqishop.exe" {
+		isMainBinary := isMainBinaryFile(f.Name, brand, exec)
+		if isMainBinary {
+			mainBinaryFound = true
 			// 先以临时文件存储
 			realName = tmpExecPath
 		}
@@ -286,10 +313,21 @@ func VersionUpgrade(ctx iris.Context) {
 
 		reader.Close()
 		_ = newFile.Close()
-		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqishop,cwebp
-		if f.Name == "anqishop" || f.Name == "anqishop.exe" || strings.HasPrefix(f.Name, "cwebp_") {
+		// 对于可执行文件，需要赋予可执行权限，可执行文件有：主程序,cwebp
+		if isMainBinary || strings.HasPrefix(f.Name, "cwebp_") {
 			_ = os.Chmod(realName, os.ModePerm)
 		}
+	}
+	// 包里没有主程序，几乎总是品牌配置的 binary 名与实际包不一致。
+	// 原实现会让后续 rename 失败、回滚旧文件，然后照样回「升级成功」——
+	// 界面显示已是最新、跑的仍是旧版本，是本次品牌化最容易踩的静默坑。
+	if !mainBinaryFound {
+		log.Printf("Upgrade aborted: no main binary %q / %q in %s", brand.Binary, exec, link)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("VersionUpdateFailed"),
+		})
+		return
 	}
 	// 尝试更换主程序
 	oldPath := execPath + ".old"
@@ -323,6 +361,23 @@ func VersionUpgrade(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  msg,
 	})
+}
+
+// isMainBinaryFile 判断升级包里的这个条目是不是主程序。
+//
+// 依据两条，满足其一即可：
+//   - 与品牌配置的 binary 同名：自己发布的包（每个 OEM 的主程序名不同）
+//   - 与当前运行中的可执行文件同名：客户改过文件名的情况
+//
+// 早期实现硬编码 anqishop，品牌化之后必须跟着品牌走 —— 只比较 anqishop 的话，
+// OEM 包的升级会找不到主程序，而后续回滚逻辑会让它「成功」地什么也没换。
+func isMainBinaryFile(name string, brand config.OEMBrand, running string) bool {
+	base := strings.TrimSuffix(filepath.Base(name), ".exe")
+	if base == strings.TrimSuffix(brand.Binary, ".exe") && base != "" {
+		return true
+	}
+	running = strings.TrimSuffix(running, ".exe")
+	return running != "" && base == running
 }
 
 // GenerateCaptcha 生成验证码

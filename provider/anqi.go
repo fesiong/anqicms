@@ -34,7 +34,24 @@ import (
 	"kandaoni.com/anqicms/response"
 )
 
-const AnqiApi = "https://auth.anqicms.com/auth"
+// AnqiApi 是账号/授权/AI 网关的根地址，随 OEM 品牌在编译期固化。
+//
+// 官方版的值与历史上硬编码的地址完全一致，因此改造不改变官方行为；
+// OEM 版把它指向自己的网关（或代理到官网并带 oem 头）。
+var AnqiApi = config.Brand().AuthBase
+
+// oemHeader 是出站请求携带的品牌标识头。
+// 服务端据此区分是哪个 OEM 的客户端在请求（授权、升级包、AI 配额都按它分发），
+// 与查询参数 oem 同源，避免两处各写一遍。
+func oemHeader() string {
+	return config.CurrentOEMID()
+}
+
+// userAgent 形如 anqicms/3.8.0，标识由品牌 ID 决定。
+// 用 ID 而不是品牌展示名，是为了让官方版的 UA 与改造前逐字节一致。
+func userAgent() string {
+	return config.CurrentOEMID() + "/" + config.Version
+}
 
 var ErrDoing = errors.New("doing")
 
@@ -366,7 +383,7 @@ func (w *Website) AnqiSendFeedback(req *request.AnqiFeedbackRequest) error {
 	req.Return = "json"
 	// 开始提交数据
 	var result AnqiDownloadTemplateResult
-	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).SetDebug(true).Post("https://www.anqicms.com/guestbook.html").Send(req).EndStruct(&result)
+	_, body, errs := w.NewAuthReq(gorequest.TypeMultipart).SetDebug(true).Post(config.Brand().Website + "/guestbook.html").Send(req).EndStruct(&result)
 	if len(errs) > 0 {
 		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
 		return errs[0]
@@ -996,7 +1013,8 @@ func (w *Website) AnqiAiGenerateStream(keyword *request.KeywordRequest) (string,
 			return "", err
 		}
 		anqiReq.Header.Add("token", config.AnqiUser.Token)
-		anqiReq.Header.Add("User-Agent", "anqicms/"+config.Version)
+		anqiReq.Header.Add("User-Agent", userAgent())
+		anqiReq.Header.Add("oem", oemHeader())
 		anqiReq.Header.Add("domain", w.System.BaseUrl)
 		resp, err := client.Do(anqiReq)
 		if err != nil {
@@ -1359,7 +1377,8 @@ func (w *Website) NewAuthReq(contentType string) *gorequest.SuperAgent {
 		//set key header
 		Set("domain", w.System.BaseUrl).
 		//set oem header
-		Set("User-Agent", "anqicms/"+config.Version)
+		Set("oem", oemHeader()).
+		Set("User-Agent", userAgent())
 
 	return req
 }

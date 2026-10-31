@@ -422,7 +422,9 @@ func GetQuickImportExcelTemplate(ctx iris.Context) {
 		{Field: "title", Value: "示例标题"},
 		{Field: "content", Value: "示例内容"},
 		{Field: "seo_title", Value: "示例SEO标题"},
-		{Field: "logo", Value: "https://www.anqicms.com/anqicms.png"},
+		// 示例值用 example.com 而不是官网图片：这份 Excel 是给客户下载编辑的，
+		// 里面带官方图片地址等于把品牌印在客户的导入模板上。
+		{Field: "logo", Value: "https://www.example.com/logo.png"},
 		{Field: "keywords", Value: "示例关键词"},
 		{Field: "description", Value: "示例介绍"},
 		{Field: "price", Value: "9980"},

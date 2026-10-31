@@ -529,7 +529,7 @@ func (svc *AiChatService) getEinoTools() ([]*schema.ToolInfo, map[string]toolHan
 		}
 
 		// 构建消息：Agent 的历史上下文 + 用户消息
-		systemPrompt := `你是 AnQiCMS 的 AI 智能体。以下是你的策略和对话历史。
+		systemPrompt := `你是 ` + config.Brand().Name + ` 的 AI 智能体。以下是你的策略和对话历史。
 用户正在与你对话，请回答问题并可以执行工具。`
 
 		if agent.Strategy != "" {
