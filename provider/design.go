@@ -321,21 +321,32 @@ func (w *Website) UploadDesignZip(file io.ReaderAt, info *multipart.FileHeader, 
 			continue
 		}
 		fileExt := filepath.Ext(f.Name)
-		if fileExt == ".php" {
-			continue
-		}
 		f.Name = strings.ReplaceAll(f.Name, "\\", "/")
 		var realName string
 		// 模板文件
-		if strings.HasPrefix(f.Name, "template/") {
+		switch {
+		case strings.HasPrefix(f.Name, "template/"):
 			if fileExt != ".html" && fileExt != ".json" && fileExt != ".db" {
 				continue
 			}
-			realName = w.RootPath + "template/" + packageName + "/" + strings.TrimPrefix(f.Name, "template/")
-		}
+			// 条目名由上传者控制，必须做越界校验（Zip Slip）
+			joined, ok := joinArchivePath(w.RootPath+"template/"+packageName, strings.TrimPrefix(f.Name, "template/"))
+			if !ok {
+				continue
+			}
+			realName = joined
 		// static
-		if strings.HasPrefix(f.Name, "static/") {
-			realName = w.PublicPath + "static/" + packageName + "/" + strings.TrimPrefix(f.Name, "static/")
+		case strings.HasPrefix(f.Name, "static/"):
+			if !isAllowedDesignStaticExt(fileExt) {
+				continue
+			}
+			joined, ok := joinArchivePath(w.PublicPath+"static/"+packageName, strings.TrimPrefix(f.Name, "static/"))
+			if !ok {
+				continue
+			}
+			realName = joined
+		default:
+			continue
 		}
 
 		reader, err := f.Open()
@@ -460,10 +471,47 @@ func compress(file *os.File, prefix string, zw *zip.Writer) error {
 	return nil
 }
 
+// allowedDesignStaticExt 模板包 static 目录允许的静态资源后缀。
+//
+// public/static/<pkg>/ 会被浏览器直接访问，只跳过 .php 挡不住 .phtml/.pht/.phar
+// 等同样可被解析的后缀（与附件上传同源）。这里按模板实际会用到的资源类型列举，
+// 未知后缀一律不落盘。
+var allowedDesignStaticExt = map[string]bool{
+	".html": true, ".htm": true, ".css": true, ".js": true, ".mjs": true,
+	".map": true, ".json": true, ".xml": true, ".txt": true, ".md": true,
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
+	".svg": true, ".ico": true, ".avif": true, ".bmp": true, ".tiff": true,
+	".woff": true, ".woff2": true, ".ttf": true, ".otf": true, ".eot": true,
+	".mp4": true, ".webm": true, ".mp3": true, ".wav": true, ".ogg": true,
+	".pdf": true, ".zip": true,
+}
+
+func isAllowedDesignStaticExt(fileExt string) bool {
+	ext := normalizeExt(fileExt)
+	if ext == "" {
+		return false
+	}
+	return allowedDesignStaticExt[ext]
+}
+
+// joinArchivePath 把 zip 条目名拼到目标目录下，并保证结果不越出该目录。
+// 条目名由上传者控制，含 ../ 时会写到目标之外（Zip Slip）。
+func joinArchivePath(root, rel string) (string, bool) {
+	root = filepath.Clean(root)
+	// 先归一成以 "/" 开头的形式再拼：Clean 会把 ../ 消解在根上，Join 之后无法越界。
+	rel = filepath.Clean("/" + strings.ReplaceAll(rel, "\\", "/"))
+	joined := filepath.Join(root, rel)
+	if joined == root || !strings.HasPrefix(joined, root+string(filepath.Separator)) {
+		return "", false
+	}
+	return joined, true
+}
+
 func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHeader, packageName, fileType, filePath string) error {
 	fileExt := filepath.Ext(info.Filename)
-	if fileExt == ".php" {
-		return errors.New(w.Tr("CannotUploadPhpFile"))
+	// 静态资源不再用「只拦 .php」的黑名单：同目录下 .phtml/.pht/.phar 一样会被解析。
+	if fileType == "static" && !isAllowedDesignStaticExt(fileExt) {
+		return errors.New(w.Tr("NotAllowedToUploadThisFileType"))
 	}
 
 	designInfo, err := w.GetDesignInfo(packageName, false)
@@ -500,10 +548,11 @@ func (w *Website) UploadDesignFile(file multipart.File, info *multipart.FileHead
 				continue
 			}
 			ext := filepath.Ext(f.Name)
-			if ext == ".php" {
-				continue
-			}
-			if fileType != "static" && ext != ".html" {
+			if fileType == "static" {
+				if !isAllowedDesignStaticExt(ext) {
+					continue
+				}
+			} else if ext != ".html" {
 				continue
 			}
 			f.Name = strings.ReplaceAll(f.Name, "\\", "/")

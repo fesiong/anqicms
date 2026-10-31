@@ -43,6 +43,58 @@ var webpPath string
 var pngquantPath string
 var ffmpegPath string
 
+// allowedAttachmentExt 附件上传的扩展名白名单（含前导点、全小写）。
+//
+// 为什么是白名单：2026-10-31 本站 uploads 目录被写入 shell.php5 与 s2.phtml。
+// 旧实现用 `fileExt == ".php" || fileExt == ".jsp"` 拦截，但 php-fpm 能解析的后缀
+// 远不止这两个（.php3 .php4 .php5 .php7 .phtml .pht .phar 都算），黑名单漏一个
+// 就是一次 RCE；白名单漏一个只是误拒一个业务类型，后者可发现、可回滚。
+//
+// 维护约定：新增业务类型改这里，并同步 attachment_ext_test.go 的正向表。
+// 两张表要一起动 —— 测试变红是为了让人停一下，确认「这个后缀真的不可执行」。
+var allowedAttachmentExt = map[string]bool{
+	// 图片
+	".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true,
+	".avif": true, ".tiff": true, ".tif": true, ".bmp": true, ".ico": true,
+	".svg": true, ".heic": true,
+	// 视频
+	".mp4": true, ".webm": true, ".mov": true, ".avi": true, ".mkv": true,
+	".flv": true, ".wmv": true, ".m4v": true,
+	// 音频
+	".mp3": true, ".wav": true, ".m4a": true, ".aac": true, ".ogg": true, ".flac": true,
+	// 文档
+	".pdf": true, ".doc": true, ".docx": true, ".xls": true, ".xlsx": true,
+	".ppt": true, ".pptx": true, ".txt": true, ".csv": true, ".md": true,
+	".json": true, ".xml": true,
+	// 压缩包
+	".zip": true, ".rar": true, ".7z": true, ".gz": true, ".tar": true, ".bz2": true,
+	// 字体：标题配图只支持 .ttf，是既有业务依赖
+	".ttf": true, ".otf": true, ".woff": true, ".woff2": true, ".eot": true,
+}
+
+// normalizeExt 把扩展名归一成「带前导点的小写形式」，供各条白名单共用。
+// 空串原样返回空串（调用方一律视为不允许）。
+func normalizeExt(fileExt string) string {
+	ext := strings.ToLower(strings.TrimSpace(fileExt))
+	if ext == "" {
+		return ""
+	}
+	if !strings.HasPrefix(ext, ".") {
+		ext = "." + ext
+	}
+	return ext
+}
+
+// IsAllowedAttachmentExt 判断附件扩展名是否在白名单内。
+// 入参可带或不带前导点，大小写不敏感；空串、"."、".." 一律视为不允许。
+func IsAllowedAttachmentExt(fileExt string) bool {
+	ext := normalizeExt(fileExt)
+	if ext == "" {
+		return false
+	}
+	return allowedAttachmentExt[ext]
+}
+
 func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHeader, categoryId uint, attachId, userId uint) (*model.Attachment, error) {
 	db := w.DB
 
@@ -53,17 +105,14 @@ func (w *Website) AttachmentUpload(file multipart.File, info *multipart.FileHead
 	if err != nil || kind == filetype.Unknown || kind.MIME.Type == "video" {
 		fileExt = strings.ToLower(filepath.Ext(info.Filename))
 	}
-	if fileExt == ".php" || fileExt == ".jsp" {
-		return nil, errors.New(w.Tr("NotAllowedToUploadPhpFiles"))
+	if !IsAllowedAttachmentExt(fileExt) {
+		return nil, errors.New(w.Tr("NotAllowedToUploadThisFileType"))
 	}
 	if fileExt == ".jpeg" {
 		fileExt = ".jpg"
 	}
 	if fileExt == ".ico" || fileExt == ".bmp" {
 		fileExt = ".png"
-	}
-	if fileExt == "." {
-		fileExt = ""
 	}
 	isImage := 0
 	if fileExt == ".jpg" || fileExt == ".png" || fileExt == ".gif" || fileExt == ".webp" || fileExt == ".avif" || fileExt == ".tiff" {

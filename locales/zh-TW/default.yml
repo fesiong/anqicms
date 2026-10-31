@@ -732,6 +732,7 @@
 "InsufficientTextContent": "文字內容不足"
 "InsufficientGeneratedContent": "生成內容不足"
 "NotAllowedToUploadPhpFiles": "不允許上傳php檔案"
+"NotAllowedToUploadThisFileType": "不允許上傳該類型的檔案"
 "ReplacementFailedCurrentlyUploadedResourcesAlreadyExist": "替換失敗，已存在目前上傳的資源。"
 "UnsupportedImageFormatLog": "不支援的圖片格式: %s。"
 "PleaseDeleteTheImagesUnderTheCategoryBeforeDeletingTheCategory": "請刪除分類下的圖片，才能刪除分類"

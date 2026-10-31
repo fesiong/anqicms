@@ -732,6 +732,7 @@
 "InsufficientTextContent": "文本内容不足"
 "InsufficientGeneratedContent": "生成内容不足"
 "NotAllowedToUploadPhpFiles": "不允许上传php文件"
+"NotAllowedToUploadThisFileType": "不允许上传该类型的文件"
 "ReplacementFailedCurrentlyUploadedResourcesAlreadyExist": "替换失败，已存在当前上传的资源。"
 "UnsupportedImageFormatLog": "不支持的图片格式: %s。"
 "PleaseDeleteTheImagesUnderTheCategoryBeforeDeletingTheCategory": "请删除分类下的图片，才能删除分类"
