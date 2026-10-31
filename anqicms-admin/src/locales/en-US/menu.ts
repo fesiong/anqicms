@@ -117,7 +117,6 @@ export default {
   'menu.plugin.google': 'Google Auth',
   'menu.plugin.llms': 'LLMs Settings',
   'menu.design.doc': 'Documentation',
-  'menu.design.market': 'Design market',
   'menu.design.ai-design': 'AI template design',
   'menu.design.diy': 'Template content settings',
   'menu.statistic': 'Statistics',

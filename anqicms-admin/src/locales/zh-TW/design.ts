@@ -1,5 +1,4 @@
 export default {
-  'design.market.downloading': '正在下載中...',
   'design.confirm-enable': '確定要啟用這套設計範本嗎？',
   'design.switching-template': '正在切換範本',
   'design.cannot-delete': '預設範本不能刪除',

@@ -117,7 +117,6 @@ export default {
   'menu.plugin.llms': 'LLMs 配置',
   'menu.design.detail': '範本管理',
   'menu.design.doc': '開發文件',
-  'menu.design.market': '設計市場',
   'menu.design.ai-design': 'AI 範本設計',
   'menu.design.diy': '範本內容設定',
   'menu.statistic': '資料',

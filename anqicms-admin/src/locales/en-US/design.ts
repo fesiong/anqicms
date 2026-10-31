@@ -1,5 +1,4 @@
 export default {
-  'design.market.downloading': 'Downloading...',
   'design.confirm-enable':
     'Are you sure you want to enable this design template?',
   'design.switching-template': 'Switching template',

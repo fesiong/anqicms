@@ -454,12 +454,6 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "开发文档",
 				Backend:  "/design/docs",
 			},
-			{
-				Path:     "/design/market",
-				GroupKey: "design",
-				Name:     "设计市场",
-				Backend:  "/design/market",
-			},
 		},
 	},
 	{

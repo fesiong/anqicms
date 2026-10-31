@@ -117,7 +117,6 @@ export default {
   'menu.design.editor': '修改代码',
   'menu.design.detail': '模板管理',
   'menu.design.doc': '开发文档',
-  'menu.design.market': '设计市场',
   'menu.design.ai-design': 'AI模板设计',
   'menu.design.diy': '模板内容设置',
   'menu.statistic': '数据',
