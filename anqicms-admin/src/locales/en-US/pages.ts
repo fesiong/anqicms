@@ -1,0 +1,56 @@
+export default {
+  'pages.login.failure': 'Login failed, please try again!',
+  'pages.login.success': 'Login successful!',
+  'pages.login.captcha-failure': 'Failed to get the verification code',
+  'pages.login.verify-failure': 'Verification failed',
+  'pages.login.reset-account-success':
+    'Admin account password reset successfully',
+  'pages.login.anqicms': 'AnQiCMS',
+  'pages.login.welcome': 'Welcome to AnQiCMS',
+  'pages.login.tips': 'You are about to log in to:',
+  'pages.login.account-falure': 'Incorrect username or password',
+  'pages.login.username.placeholder': 'Username',
+  'pages.login.username.required': 'Please enter your username!',
+  'pages.login.password.placeholder': 'Password',
+  'pages.login.password.required': 'Please enter your password!',
+  'pages.login.auto-login': 'Remember me',
+  'pages.login.forget-password': 'Forgot password',
+  'pages.login.reset-account': 'Reset Admin Password',
+  'pages.login.cancel': 'Cancel',
+  'pages.login.prev': 'Previous',
+  'pages.login.finished': 'Complete Verification',
+  'pages.login.submit': 'Submit',
+  'pages.login.step.select': 'Select Verification Method',
+  'pages.login.step.verify': 'Verify Site Ownership',
+  'pages.login.step.reset': 'Reset Password',
+  'pages.login.step.username': 'Admin account',
+  'pages.login.step.password.placeholder':
+    'Please enter a password of at least 6 characters',
+  'pages.login.step.file': 'File Verification',
+  'pages.login.step.file.tips1': '1. Please ',
+  'pages.login.step.file.tips1.download': 'click to download',
+  'pages.login.step.file.tips1.download-file': ' the verification file',
+  'pages.login.step.file.tips2':
+    '2. Place the verification file in the public directory of the website',
+  'pages.login.step.file.tips3':
+    '3. Make sure the verification file is accessible',
+  'pages.login.step.file.tips4': '4. Click the "Complete Verification" button',
+  'pages.login.step.dns': 'DNS Verification',
+  'pages.login.step.dns.tips1':
+    "1. Log in to your domain provider's website (e.g., wanwang.aliyun.com or dns.com)",
+  'pages.login.step.dns.tips2.before':
+    '2. Add the following TXT record to the ',
+  'pages.login.step.dns.tips2.after': ' DNS settings',
+  'pages.login.step.copy-success': 'Content copied',
+  'pages.login.step.copy': 'Copy',
+  'pages.login.step.dns.tips2.tips':
+    'Note: DNS changes may take some time to take effect. Wait a few minutes after adding the record before clicking Complete Verification.',
+  'pages.login.step.dns.tips3': '3. Click the "Complete Verification" button',
+  'pages.login.step.file.tips':
+    'Place the verification file in the public directory of the website',
+  'pages.login.step.dns.tips': 'Add a TXT DNS record to complete verification',
+  'pages.login.step.file.visit': 'Try accessing',
+  'app.links.anqicms': 'AnQiCMS',
+  'pages.404.description': 'Sorry, the page you visited does not exist.',
+  'pages.404.back-home': 'Back to Admin Panel',
+};

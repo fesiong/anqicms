@@ -1,0 +1,43 @@
+.collaspe-item {
+  border: 1px solid #d9d9d9;
+  border-radius: 2px;
+  + .collaspe-item {
+    margin-top: 20px;
+  }
+  .collaspe-header {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    padding: 12px 16px;
+    color: rgba(0, 0, 0, 0.88);
+    line-height: 1.5714285714285714;
+    cursor: pointer;
+    transition: all 0.3s;
+  }
+  .collaspe-icon {
+    margin-right: 10px;
+    transition: all 0.3s;
+  }
+  .collaspe-header-text {
+    flex: auto;
+  }
+  .collaspe-extra {
+    margin-left: auto;
+  }
+  .collaspe-content {
+    display: none;
+    padding: 16px 16px;
+    border-top: 1px solid #d9d9d9;
+  }
+  &.collaspe-item-active {
+    > .collaspe-header {
+      .collaspe-icon {
+        transform: rotate(90deg);
+      }
+    }
+    > .collaspe-content {
+      display: block;
+    }
+  }
+}

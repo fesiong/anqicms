@@ -1,0 +1,84 @@
+.editor-container {
+  position: relative;
+}
+.bytemd {
+  height: calc(100vh - 200px);
+}
+.bytemd-fullscreen {
+  z-index: 9999;
+}
+.markdown-body {
+  box-sizing: border-box;
+  overflow: initial;
+  color: #333;
+  font-size: 16px;
+  line-height: 1.6;
+  word-wrap: break-word;
+  background-color: #fff;
+}
+.markdown-body img {
+  max-width: 100%;
+}
+.markdown-body code {
+  padding: 0.2em 0;
+  color: #000;
+  font-size: 0.85em;
+  font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;
+  background-color: #f0f0f0;
+  border-radius: 3px;
+}
+.markdown-body code::after,
+.markdown-body code::before {
+  letter-spacing: -0.2em;
+  content: '\00a0';
+}
+.markdown-body pre {
+  padding: 0.8em;
+  overflow: auto;
+  color: #333;
+  font-family: Consolas, 'Liberation Mono', Menlo, Courier, monospace;
+  line-height: 1.4;
+  white-space: pre;
+  text-align: left;
+  word-wrap: normal;
+  word-break: normal;
+  word-spacing: normal;
+  tab-size: 8;
+  hyphens: none;
+  background: #f5f5f5;
+  border-radius: 3px;
+}
+.markdown-body pre > code {
+  display: inline;
+  max-width: initial;
+  margin: 0;
+  padding: 0;
+  overflow: initial;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+}
+.markdown-body pre code:after,
+.markdown-body pre code:before {
+  content: normal;
+}
+.markdown-body table {
+  display: block;
+  width: 100%;
+  margin: 10px 0 15px 0;
+  overflow: auto;
+  word-break: normal;
+  word-break: keep-all;
+  border-collapse: collapse;
+  border-spacing: 0;
+}
+.markdown-body table td,
+.markdown-body table th {
+  padding: 6px 13px;
+  border: 1px solid #d6d6d6;
+}
+.markdown-body table th {
+  color: #000;
+  font-weight: 700;
+}

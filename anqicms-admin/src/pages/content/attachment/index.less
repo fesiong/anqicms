@@ -1,0 +1,148 @@
+.image-page {
+  .header {
+    padding: 40px 40px 30px;
+    .title {
+      font-weight: 600;
+      font-size: 18px;
+      line-height: 38px;
+    }
+    .meta {
+      margin-top: 20px;
+    }
+    .ant-btn {
+      min-width: 112px;
+    }
+  }
+  .body {
+    padding-right: 40px;
+    padding-left: 40px;
+  }
+  .icon {
+    margin-right: 6px;
+  }
+  .image-list {
+    .image-item {
+      position: relative;
+      height: 0;
+      padding-bottom: 100%;
+      background: #f1f1f1;
+      border: 1px solid #eee;
+      .inner {
+        position: absolute;
+        display: flex;
+        align-items: center;
+        width: 100%;
+        height: 100%;
+        > div {
+          margin: auto;
+        }
+        .link {
+          width: 100%;
+          height: 100%;
+        }
+      }
+      .checkbox {
+        position: absolute;
+        top: 5px;
+        right: 5px;
+        z-index: 9;
+      }
+      .ant-image {
+        width: 100%;
+        height: 100%;
+      }
+      .img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .info {
+        position: absolute;
+        bottom: 0;
+        width: 100%;
+        padding: 5px 10px;
+        overflow: hidden;
+        color: #fff;
+        line-height: 32px;
+        white-space: nowrap;
+        text-align: center;
+        text-overflow: ellipsis;
+        text-shadow: 1px 1px 3px #666;
+        background-color: rgba(0, 0, 0, 0.3);
+        opacity: 0.5;
+        transition: all 0.5s;
+      }
+      :hover .info {
+        bottom: 0;
+        opacity: 1;
+      }
+    }
+  }
+  .default-img {
+    width: 100% !important;
+    height: 100% !important;
+    margin: 0 auto;
+  }
+}
+.preview-images {
+  margin-top: 16px;
+}
+.preview-image {
+  width: 100px;
+  height: 100px;
+  margin-bottom: 10px;
+  object-fit: contain;
+  border: 1px solid #eee;
+}
+.article-preview {
+  img {
+    max-width: 100%;
+  }
+}
+.attachment-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  .preview {
+    flex: 1;
+    max-height: 600px;
+    margin-right: 20px;
+    text-align: center;
+    .img {
+      width: 100%;
+    }
+  }
+  .detail {
+    flex: 1;
+    .info {
+    }
+    .item {
+      display: flex;
+      padding: 3px 0;
+      .name {
+        margin-right: 10px;
+        font-weight: bold;
+      }
+      .value {
+        flex: 1;
+        word-break: break-all;
+      }
+    }
+    .btns {
+      margin: 20px 0;
+    }
+  }
+}
+@media (max-width: 480px) {
+  .image-page {
+    .body {
+      padding-right: 0;
+      padding-left: 0;
+    }
+  }
+  .meta {
+    .ant-space {
+      flex-wrap: wrap;
+    }
+  }
+}

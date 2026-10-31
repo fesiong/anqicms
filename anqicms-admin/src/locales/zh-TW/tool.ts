@@ -1,0 +1,26 @@
+export default {
+  'tool.version': '目前版本',
+  'tool.new-version': '最新版本',
+  'tool.version.description': '版本說明',
+  'tool.upgrade-to-new': '升級至最新版',
+  'tool.version.tips.before': '您的系統已經是最新版。如果不確定，您可以造訪',
+  'tool.version.tips.after': '取得最新版',
+  'tool.confirm-upgrade': '確定要升級至最新版嗎？',
+  'tool.upgrading': '正在升級中，請勿重新整理頁面',
+  'tool.confirm-restart': '重新啟動執行新版',
+  'tool.restarting': '正在重新啟動中',
+  'tool.cache.confirm-migrate': '確定要更新資料庫表結構嗎？',
+  'tool.cache.temp-cache': '暫時快取',
+  'tool.cache.never': '從未更新',
+  'tool.cache.last-time': '上次更新時間',
+  'tool.cache.clean': '更新快取',
+  'tool.cache.cache-type': '暫時快取方式設定',
+  'tool.cache.cache-type.auto': '自動處理',
+  'tool.cache.cache-type.file': '檔案快取',
+  'tool.cache.cache-type.memory': '記憶體快取',
+  'tool.cache.cache-type.description':
+    '預設自動處理，伺服器記憶體小於等於1G的採用檔案快取，大於1G的採用記憶體快取',
+  'tool.cache.table-upgrade': '更新資料庫表結構',
+  'tool.cache.table-upgrade.description':
+    '若發現缺少某個表或表欄位不正確，可能需要點擊下方的更新資料庫表結構按鈕來修正',
+};

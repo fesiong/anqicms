@@ -1,0 +1,440 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+.colorWeak {
+  filter: invert(80%);
+}
+
+.ant-layout {
+  min-height: 100vh;
+}
+.ant-pro-sider.ant-layout-sider.ant-pro-sider-fixed {
+  left: unset;
+}
+
+canvas {
+  display: block;
+}
+
+body {
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+.layout-vertical .ant-form-item-row {
+  flex-direction: column !important;
+}
+.layout-vertical .ant-form-item-row .ant-form-item-label {
+  margin: 0;
+  padding: 0 0 8px;
+  white-space: initial;
+  text-align: start;
+}
+.layout-vertical .ant-form-item-row .ant-form-item-label > label {
+  height: auto;
+  margin: 0;
+  &::after {
+    visibility: hidden;
+  }
+}
+.layout-vertical .ant-form-item-row .ant-form-item-control {
+  flex: 1 1 0%;
+}
+.ant-tabs-top > .ant-tabs-nav {
+  margin-bottom: 0;
+}
+.heading-title {
+  white-space: normal;
+}
+.text-muted {
+  color: #999;
+}
+.text-red {
+  color: #f30;
+}
+.text-primary {
+  color: #1890ff;
+}
+.link {
+  cursor: pointer;
+}
+.hidden {
+  display: none !important;
+}
+.mt-small {
+  margin-top: 8px;
+}
+.mb-small {
+  margin-bottom: 8px;
+}
+.mt-normal {
+  margin-top: 16px;
+}
+.mb-normal {
+  margin-bottom: 16px;
+}
+.ml-normal {
+  margin-left: 16px;
+}
+.pull-left {
+  float: left;
+}
+.pull-right {
+  float: right;
+}
+.elem-quote {
+  margin-top: 10px;
+  margin-bottom: 10px;
+  padding: 15px;
+  line-height: 1.6;
+  background-color: #e6f7ff;
+  border: 0;
+  border-left: 5px solid #1890ff;
+  border-radius: 0 2px 2px 0;
+  pre {
+    margin: 0;
+  }
+}
+/* 站点模式配色（shop_mode）：
+   普通内容模式（0）顶栏/侧栏为白色，商城模式（1）为深色顶栏 + 浅灰侧栏。
+   模式标记由 src/app.tsx 写入 body[data-shop-mode]，这里只区分背景与文字颜色；
+   菜单圆角、选中底色、子菜单加粗等装饰两版共用，主色（#1890ff）不随模式变化。 */
+.ant-pro-page-container-children-container,
+.ant-pro-page-container .ant-pro-page-container-warp-page-header {
+  padding-inline: 24px !important;
+}
+.ant-pro-layout .ant-layout-header.ant-pro-layout-header {
+  background-color: #ffffff;
+}
+.ant-menu .ant-menu-item {
+  border-radius: 10px;
+}
+/* 侧栏（垂直）菜单的选中/悬停底色；顶部水平菜单不受影响，
+   否则水平菜单选中项会出现一块浅灰背景，看起来像渲染错位。 */
+.ant-menu-light:not(.ant-menu-horizontal) .ant-menu-item-selected {
+  background-color: #fafafa;
+}
+.ant-menu-light:not(.ant-menu-horizontal)
+  .ant-menu-item:not(.ant-menu-item-selected):hover {
+  background-color: #f1f1f1;
+}
+.ant-menu-light:not(.ant-menu-horizontal) .ant-menu-submenu-title:hover {
+  background-color: #f1f1f1;
+}
+.ant-menu-submenu-title .ant-pro-base-menu-inline-item-text {
+  font-weight: 600;
+}
+.ant-pro-layout .ant-layout-sider.ant-pro-sider {
+  padding-top: 10px;
+}
+.ant-pro-layout .ant-pro-sider .ant-layout-sider-children {
+  border-inline-end: none;
+  margin-inline-end: 0;
+}
+
+/* 顶栏右侧操作区不参与压缩：空间不足时让顶部菜单收缩（antd 会自动折叠成「...」），
+   而不是把「绑定安企账号」挤成两行、把「重启」裁掉。商城模式菜单多，必现。 */
+.ant-pro-global-header-right-content {
+  flex-shrink: 0;
+}
+
+/* 顶栏前景色：普通模式深色字（白底），商城模式浅色字（深底）。
+   供 CSS Modules 里的顶栏组件读取，避免各组件重复写死颜色。 */
+:root {
+  --admin-header-fg: #252a3d;
+  --admin-header-fg-hover: #252a3d;
+}
+
+/* 商城模式：沿用商城分支原有的深色外观 */
+body[data-shop-mode='1'] {
+  --admin-header-fg: #dfdfdf;
+  --admin-header-fg-hover: #fff;
+
+  .ant-menu-dark {
+    color: #dfdfdf;
+    background-color: #1a1a1a;
+  }
+  .ant-pro-layout .ant-layout-header.ant-pro-layout-header {
+    color: #dfdfdf;
+    background-color: #1a1a1a;
+  }
+  .ant-pro-global-header-logo h1 {
+    color: #dfdfdf;
+  }
+  .ant-pro-layout .ant-layout-sider.ant-pro-sider {
+    background-color: #ebebeb;
+  }
+}
+.logo-uploader {
+  width: auto !important;
+  .ant-upload {
+    position: relative;
+    .delete {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      display: none;
+      padding: 3px;
+      color: #fff;
+      background-color: rgba(0, 0, 0, 0.3);
+    }
+    &:hover {
+      .delete {
+        display: block;
+      }
+    }
+  }
+}
+
+.ant-upload-item {
+  position: relative;
+  display: inline-block;
+  width: 104px;
+  height: 104px;
+  margin: 0 8px 8px 0;
+  vertical-align: top;
+  border: 1px dashed #ccc;
+  .ant-image {
+    position: static;
+    display: block;
+    width: 100%;
+    height: 100%;
+    -o-object-fit: contain;
+    object-fit: contain;
+    .ant-image-img {
+      height: 100%;
+    }
+  }
+  img {
+    position: static;
+    display: block;
+    width: 100%;
+    height: 100%;
+    -o-object-fit: contain;
+    object-fit: contain;
+  }
+  .delete {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: none;
+    padding: 3px;
+    color: #fff;
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.5);
+    cursor: pointer;
+  }
+  .ant-upload-item-action {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: none;
+    display: none;
+    align-items: center;
+    justify-content: space-around;
+    width: 100%;
+    padding: 3px;
+    color: #fff;
+    color: #fff;
+    text-align: center;
+    background-color: rgba(0, 0, 0, 0.5);
+  }
+  &:hover {
+    .delete {
+      display: block;
+    }
+    .ant-upload-item-action {
+      display: flex;
+    }
+  }
+  &.drag-over {
+    border: 1px dashed #1890ff;
+    opacity: 0.5;
+  }
+  .add {
+    height: 100%;
+    padding: 20px 0;
+    text-align: center;
+    background-color: #fafafa;
+    cursor: pointer;
+  }
+  &.ant-upload-file {
+    width: inherit;
+    height: inherit;
+    word-break: break-all;
+  }
+}
+.text-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  align-items: center;
+  .text-group {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    width: 100%;
+    .text-action {
+      display: flex;
+      flex: 0 0 70px;
+      align-items: center;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.2s ease;
+    }
+    .text-key {
+      flex: 1;
+      color: #666;
+    }
+    .text-value {
+      flex: 2;
+    }
+    &:hover {
+      .text-action {
+        opacity: 1;
+      }
+    }
+  }
+  .text-group .ant-form-item {
+    margin-bottom: 0;
+  }
+  .add-line {
+    cursor: pointer;
+  }
+}
+
+.input-field-item {
+  margin-bottom: 20px;
+  .field-label {
+    margin-right: 10px;
+    line-height: 32px;
+  }
+  .field-value {
+  }
+}
+.list-thumb {
+  max-width: 50px;
+  max-height: 50px;
+}
+.ant-form-horizontal .ant-form-item-label {
+  min-width: 100px;
+}
+.aside-card {
+  margin-bottom: 20px;
+  .ant-form-item:last-child {
+    margin-bottom: 0;
+  }
+}
+.ant-pro-table {
+  .ant-form-item {
+    margin-bottom: 12px;
+  }
+}
+.ant-form-item {
+  margin-bottom: 14px;
+}
+.ant-pro-table-list-toolbar {
+  .ant-space {
+    flex-wrap: wrap;
+  }
+}
+.space-wrap {
+  flex-wrap: wrap;
+}
+.ant-form-item-extra {
+  word-break: break-all;
+}
+.ant-pro-table-list-toolbar-right > div {
+  flex-flow: row wrap;
+}
+.ant-pro-table-alert-info {
+  flex-flow: row wrap;
+}
+@media (max-width: 480px) {
+  .ant-table {
+    width: 100%;
+    overflow-x: auto;
+    &-thead > tr,
+    &-tbody > tr {
+      > th,
+      > td {
+        white-space: pre;
+        > span {
+          display: block;
+        }
+      }
+    }
+  }
+  .ant-pro-page-container-children-content {
+    margin: 12px !important;
+  }
+  .ant-pro-page-container-children-container,
+  .ant-pro-page-container .ant-pro-page-container-warp-page-header {
+    padding-inline: 12px !important;
+  }
+  .ant-pro-page-container .ant-pro-page-container-warp-page-header {
+    padding-block-start: 0px !important;
+    padding-block-end: 8px !important;
+  }
+}
+.center-mid-card {
+  max-width: 640px;
+  margin: 16px auto;
+}
+.field-item {
+  display: flex;
+  .field-label {
+    width: 150px;
+  }
+  .field-value {
+    flex: 1;
+  }
+}
+.word-wrap {
+  word-break: break-all;
+}
+.error-icon {
+  margin-left: 4px;
+  color: #f30;
+}
+// Compatible with IE11
+@media screen and(-ms-high-contrast: active), (-ms-high-contrast: none) {
+  body .ant-design-pro > .ant-layout {
+    min-height: 100vh;
+  }
+}
+.article-content * {
+  max-width: 100%;
+}
+.module-tags {
+  font-weight: normal;
+  .module-tag {
+    display: inline-block;
+    min-width: 80px;
+    padding: 8px 16px;
+    text-align: center;
+    cursor: pointer;
+    &.active {
+      color: #1890ff;
+    }
+  }
+}
+.ant-card {
+  .ant-card-head {
+    .ant-tabs-top {
+      margin-bottom: -1px;
+      > .ant-tabs-nav::before {
+        border-bottom: none;
+      }
+    }
+  }
+}
+.ant-card-contain-tabs > div.ant-card-head {
+  min-height: 56px !important;
+}

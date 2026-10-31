@@ -1,0 +1,165 @@
+// AI Editor Overlay
+.ai-editor-overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 60px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.ai-editor-panel {
+  display: flex;
+  flex-direction: column;
+  width: 520px;
+  max-height: calc(100% - 80px);
+  overflow: hidden;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+}
+
+.ai-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  color: #1a1a1a;
+  font-weight: 600;
+  font-size: 15px;
+  border-bottom: 1px solid #f0f0f0;
+
+  .ai-editor-close {
+    padding: 4px;
+    color: #999;
+    font-size: 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+
+    &:hover {
+      color: #666;
+      background: #f5f5f5;
+    }
+  }
+}
+
+.ai-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.ai-editor-input {
+  font-size: 14px;
+  border-radius: 8px;
+
+  &:focus,
+  &-focused {
+    box-shadow: 0 0 0 2px rgba(22, 119, 255, 0.1) !important;
+  }
+}
+
+.ai-editor-tags {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ai-editor-tags-hint {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  color: #888;
+  font-size: 12px;
+}
+
+.ai-editor-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ai-editor-tag {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+  padding: 4px 12px;
+  color: #555;
+  font-size: 13px;
+  background: #f7f7f8;
+  border: 1px solid #e8e8e8;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+
+  .ai-editor-tag-icon {
+    display: inline-flex;
+    align-items: center;
+    font-size: 12px;
+  }
+
+  &:hover {
+    color: #1677ff;
+    background: #e6f4ff;
+    border-color: #91caff;
+  }
+
+  &.active {
+    color: #1677ff;
+    background: #e6f4ff;
+    border-color: #1677ff;
+  }
+}
+
+.ai-editor-loading {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 16px 0;
+  color: #888;
+  font-size: 13px;
+}
+
+.ai-editor-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.ai-editor-result-label {
+  color: #888;
+  font-weight: 500;
+  font-size: 13px;
+}
+
+.ai-editor-result-content {
+  max-height: 240px;
+  padding: 12px;
+  overflow-y: auto;
+  color: #333;
+  font-size: 14px;
+  line-height: 1.6;
+  word-break: break-word;
+  background: #f7f7f8;
+  border: 1px solid #e8e8e8;
+  border-radius: 8px;
+}
+
+.ai-editor-result-check {
+  color: #888;
+  font-size: 13px;
+}
+
+.ai-editor-result-actions {
+  display: flex;
+  gap: 8px;
+}

@@ -1,0 +1,133 @@
+.module-tags {
+  font-weight: normal;
+  .module-tag {
+    display: inline-block;
+    padding: 8px 10px;
+    cursor: pointer;
+    &.active {
+      color: #1890ff;
+    }
+  }
+}
+.update-color {
+  color: #1890ff;
+}
+.update-tag {
+  color: #f30;
+}
+.extract-tag {
+  color: rgba(0, 0, 0, 0.88);
+}
+.relation-item {
+  display: flex;
+  padding: 8px 0;
+  border-bottom: 1px solid #e8e8e8;
+  .name {
+    flex: 1;
+  }
+  .close {
+    display: none;
+    padding: 0 10px;
+    color: #1890ff;
+  }
+  &:hover {
+    .close {
+      display: block;
+    }
+  }
+  &:last-child {
+    border-bottom: none;
+  }
+}
+.media-flex {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+  .video-item {
+    flex: 0 0 216px;
+    height: 216px;
+    > div {
+      width: 100%;
+      height: 100%;
+    }
+    .ant-upload-item {
+      width: 100%;
+      height: 100%;
+      .add {
+        padding-top: 40%;
+      }
+    }
+  }
+  .images-item {
+    flex: 1;
+  }
+}
+.options {
+  .option-item {
+    margin-bottom: 20px;
+  }
+  .option-values {
+    margin-right: 50px;
+    .ant-form-item {
+      margin-bottom: 0;
+    }
+  }
+}
+.archive-skus {
+  width: 100%;
+}
+.archive-skus tr th {
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.archive-skus tr td {
+  padding: 16px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.sku-item-value-color {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  margin-left: 5px;
+  padding: 1px;
+  vertical-align: text-bottom;
+  border: 1px solid #f0f0f0;
+  border-radius: 4px;
+}
+.sku-item-value-border {
+  border-right: 1px solid #f0f0f0;
+}
+.wholesale-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0px;
+}
+.wholesale-item {
+  display: flex;
+  gap: 10px;
+  align-items: start;
+  width: 100%;
+}
+.wholesale-item-add {
+  justify-content: center;
+}
+.wholesale-remove {
+  margin-top: 5px;
+  visibility: hidden;
+}
+.wholesale-item:hover .wholesale-remove {
+  visibility: visible;
+}
+.flex-1 {
+  flex: 1;
+  margin-bottom: 0;
+}
+.sku-logo-item {
+  width: 48px;
+  height: 48px;
+  margin: 0;
+  .add {
+    padding: 16px;
+    line-height: 1;
+  }
+}

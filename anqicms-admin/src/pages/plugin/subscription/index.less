@@ -1,0 +1,26 @@
+.template-card {
+  position: relative;
+  cursor: pointer;
+  .template-card-header {
+    display: flex;
+  }
+  .template-open-icon {
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    color: #999;
+  }
+  &.open {
+    .template-open-icon {
+      color: #0165ff;
+    }
+  }
+}
+.template-tips {
+  span {
+    color: #0165ff;
+  }
+}
+.email-editor .bytemd {
+  max-height: 500px;
+}

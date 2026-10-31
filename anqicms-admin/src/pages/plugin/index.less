@@ -1,0 +1,26 @@
+.plugin-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid #eee;
+  cursor: pointer;
+  .avatar {
+    width: 100px;
+    height: 100px;
+    margin-right: 10px;
+    padding: 5px;
+    vertical-align: middle;
+  }
+  .info {
+    flex: 1;
+    text-align: center;
+  }
+}
+@media (max-width: 480px) {
+  .plugin-item {
+    flex-direction: column;
+    .avatar {
+      margin-right: 0;
+    }
+  }
+}
