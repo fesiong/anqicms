@@ -1,4 +1,5 @@
 import { anqiSendFeedback } from '@/services';
+import { brand } from '@/oem/brand';
 import { FormOutlined } from '@ant-design/icons';
 import {
   ModalForm,
@@ -57,12 +58,12 @@ const Footer: React.FC = () => {
         © {currentYear} <FormattedMessage id="component.footer.copyright" />
       </span>
       <div>
-        <a href="https://www.anqicms.com/help" target="_blank" rel="noreferrer">
+        <a href={`${brand.docs}/help`} target="_blank" rel="noreferrer">
           <FormattedMessage id="component.footer.help" />
         </a>
         <span>|</span>
         <a
-          href="https://www.anqicms.com/manual"
+          href={`${brand.docs}/manual`}
           target="_blank"
           rel="noreferrer"
         >

@@ -1,4 +1,5 @@
 import Footer from '@/components/Footer';
+import { brand } from '@/oem/brand';
 import RightContent from '@/components/RightContent';
 import { LinkOutlined } from '@ant-design/icons';
 import type {
@@ -123,7 +124,7 @@ export const layout: RunTimeLayoutConfig = ({ initialState }) => {
     links: [
       <a
         key="anqicms"
-        href="https://www.anqicms.com/"
+        href={brand.website}
         target="_blank"
         rel="noreferrer"
       >

@@ -157,13 +157,22 @@ func TestBrandize(t *testing.T) {
 		}
 	}
 
-	oem := OEMBrand{ID: "acme", Name: "AcmeCMS", NameCN: "艾克米CMS"}
+	oem := OEMBrand{
+		ID: "acme", Name: "AcmeCMS", NameCN: "艾克米CMS",
+		Website: "https://www.acme.test", AuthBase: "https://auth.acme.test/auth",
+	}
 	cases := map[string]string{
 		"安企CMS(AnQiCMS)初始化安装":          "艾克米CMS(AcmeCMS)初始化安装",
 		"欢迎使用安企内容管理系统":                 "欢迎使用艾克米CMS内容管理系统",
 		"请先登录 AnQiCMS 账号":              "请先登录 AcmeCMS 账号",
 		"AnqiCMS 安装成功":                 "AcmeCMS 安装成功",
-		"https://www.anqicms.com/help": "https://www.acme.com/help",
+		"https://www.anqicms.com/help": "https://www.acme.test/help",
+		// 子域示例（locales 里有 m. 与 admin. 几十处）：换主机不换前缀，
+		// 用「anqicms.com 整段换掉」而不是逐个枚举，才补得齐。
+		"https://admin.anqicms.com": "https://admin.acme.test",
+		"https://m.anqicms.com":     "https://m.acme.test",
+		// 授权端点整段换成品牌自己的网关，不能只是换域名。
+		"https://auth.anqicms.com/auth/v1": "https://auth.acme.test/auth/v1",
 	}
 	for in, want := range cases {
 		if got := BrandizeWith(oem, in); got != want {

@@ -1,4 +1,5 @@
 import { getDesignDocs } from '@/services';
+import { brand } from '@/oem/brand';
 import { PageContainer } from '@ant-design/pro-components';
 import { FormattedMessage, useIntl } from '@umijs/max';
 import { Alert, Card, Modal } from 'antd';
@@ -52,8 +53,8 @@ const DesignDoc: React.FC = () => {
           message={
             <div>
               <FormattedMessage id="design.doc.tips" />
-              <a href="https://www.anqicms.com/manual" target="_blank" rel="noreferrer">
-                https://www.anqicms.com/manual
+              <a href={`${brand.docs}/manual`} target="_blank" rel="noreferrer">
+                {`${brand.docs}/manual`}
               </a>
             </div>
           }

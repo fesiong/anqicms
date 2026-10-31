@@ -1,3 +1,4 @@
+import { brand } from '@/oem/brand';
 import {
   checkVersion,
   getDashboardInfo,
@@ -195,7 +196,7 @@ const Dashboard: React.FC = () => {
                 <span>
                   <a
                     className="link"
-                    href="https://www.anqicms.com/help"
+                    href={`${brand.docs}/help`}
                     target="_blank"
                     rel="noreferrer"
                   >
@@ -712,11 +713,11 @@ const Dashboard: React.FC = () => {
             <p>
               <FormattedMessage id="dashboard.soft-info.official-web" />
               <a
-                href="https://www.anqicms.com/"
+                href={brand.website}
                 target={'_blank'}
                 rel="noreferrer"
               >
-                https://www.anqicms.com
+                {`${brand.website}`}
               </a>
             </p>
             <div>

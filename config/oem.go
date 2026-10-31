@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log"
+	"net/url"
 	"sort"
 	"strings"
 	"sync"
@@ -306,9 +307,42 @@ func Brandize(s string) string {
 }
 
 // BrandizeWith 用指定品牌替换文案，供测试与按品牌渲染的场景使用。
+//
+// 顺序不能乱：先整段换地址，再换名字。反过来的话
+// "https://www.anqicms.com" 会被名字规则拆成 "https://www.acme"，
+// 变成一个打不开的地址；而 "auth.anqicms.com/auth" 会被规格化成
+// 一个存在但错误的端点。
 func BrandizeWith(b OEMBrand, s string) string {
 	if s == "" || b.ID == DefaultOEMID {
 		return s
 	}
+	host := hostOf(b.Website)
+	if b.AuthBase != "" {
+		s = strings.ReplaceAll(s, "https://auth.anqicms.com/auth", strings.TrimSuffix(b.AuthBase, "/"))
+	}
+	if b.Website != "" {
+		s = strings.ReplaceAll(s, "https://www.anqicms.com", strings.TrimSuffix(b.Website, "/"))
+	}
+	// 其余子域（m. / admin. / 裸域）统一换成品牌站的主机名 ——
+	// locales 里有几十处示例地址，逐个枚举补不全。
+	if host != "" {
+		s = strings.ReplaceAll(s, "anqicms.com", host)
+	}
 	return b.replacer().Replace(s)
+}
+
+// hostOf 从地址里取主机名，去掉 www. 前缀。
+//
+// 去前缀是必须的：locales 里既有 www.anqicms.com 也有 m./admin. 子域，
+// 整段换掉 www. 之后剩下的子域要靠主机名替换，如果主机名是 www.acme.test，
+// 就会拼出 admin.www.acme.test 这种不存在的地址。
+func hostOf(raw string) string {
+	if raw == "" {
+		return ""
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return ""
+	}
+	return strings.TrimPrefix(u.Host, "www.")
 }

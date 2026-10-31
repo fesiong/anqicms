@@ -200,7 +200,7 @@ const PluginLinkApi: React.FC<any> = (props) => {
                       message={
                         <pre>
                           <code>
-                            {`{\n    "code": 200,\n    "msg": "",\n    "data": {\n      [\n        {\n          "id": 1,\n          "link": "https://www.anqicms.com/",\n          "title": "AnQiCMS",\n        },\n        {\n          "id": 2,\n          "link": "https://www.baidu.com/",\n          "title": "百度",\n        }\n      ]\n    }\n}`}
+                            {`{\n    "code": 200,\n    "msg": "",\n    "data": {\n      [\n        {\n          "id": 1,\n          "link": "https://www.example.com/",\n          "title": "示例站点",\n        },\n        {\n          "id": 2,\n          "link": "https://www.baidu.com/",\n          "title": "百度",\n        }\n      ]\n    }\n}`}
                           </code>
                         </pre>
                       }

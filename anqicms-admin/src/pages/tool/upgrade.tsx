@@ -1,3 +1,4 @@
+import { brand } from '@/oem/brand';
 import {
   anqiRestart,
   checkVersion,
@@ -136,8 +137,8 @@ const ToolUpgradeForm: React.FC<any> = () => {
             ) : (
               <div>
                 <FormattedMessage id="tool.version.tips.before" />{' '}
-                <a href="https://www.anqicms.com/download" target={'_blank'}>
-                  https://www.anqicms.com/download
+                <a href={`${brand.website}/download`} target={'_blank'}>
+                  {`${brand.website}/download`}
                 </a>{' '}
                 <FormattedMessage id="tool.version.tips.after" />
               </div>

@@ -1,4 +1,5 @@
 import { FormattedMessage, useIntl, useModel } from '@umijs/max';
+import { brand } from '@/oem/brand';
 import { Button, Modal } from 'antd';
 import React, { useCallback, useRef, useState } from 'react';
 
@@ -40,7 +41,7 @@ export function useVipModal(): VipModalResult {
   );
 
   const handleOrderVip = () => {
-    window.open('https://www.anqicms.com/account/vip');
+    window.open(`${brand.website}/account/vip`);
   };
 
   const handleCancel = () => {
@@ -79,7 +80,7 @@ export function useVipModal(): VipModalResult {
         <p>
           <FormattedMessage id="component.right-content.vip-prefix" />
           <a
-            href="https://www.anqicms.com/account/vip"
+            href={`${brand.website}/account/vip`}
             target="_blank"
             rel="noreferrer"
           >

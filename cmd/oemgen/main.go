@@ -27,6 +27,7 @@ func main() {
 	check := flag.Bool("check", false, "只校验品牌数据，不写文件；有问题退出码 1")
 	list := flag.Bool("list", false, "列出已登记的品牌标识")
 	current := flag.Bool("current", false, "打印当前二进制编译期固化的品牌（用于核对产物）")
+	brandDir := flag.String("brand-dir", "", "对该目录下的文本文件做品牌替换（用于打包副本，如 release/<os>/template）")
 
 	flag.Parse()
 
@@ -84,6 +85,16 @@ func main() {
 	brand, ok := config.LookupOEM(*oemID)
 	if !ok {
 		fatal("未登记的品牌 %q，可用：%s", *oemID, joinIDs(ids))
+	}
+
+	// 只做目录替换时不必生成前端文件（打包机可能没装 node）。
+	if *brandDir != "" {
+		n, err := brandifyDir(*brandDir, brand)
+		if err != nil {
+			fatal("品牌替换失败：%v", err)
+		}
+		fmt.Printf("已替换 %s 下 %d 个文件中的品牌文案（%s）\n", *brandDir, n, brand.ID)
+		return
 	}
 
 	root, err := repoRoot()

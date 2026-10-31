@@ -1,4 +1,5 @@
 import { anqiLogin, anqiRestart, checkAnqiInfo, getSiteInfo } from '@/services';
+import { brand } from '@/oem/brand';
 import {
   GlobalOutlined,
   LockOutlined,
@@ -84,7 +85,7 @@ const GlobalHeaderRight: React.FC = () => {
 
   const handleOrderVip = () => {
     setOrderVisible(true);
-    window.open('https://www.anqicms.com/account/vip');
+    window.open(`${brand.website}/account/vip`);
   };
 
   const reloadAccount = async () => {
@@ -162,7 +163,7 @@ const GlobalHeaderRight: React.FC = () => {
           style={{ fontSize: 18 }}
           className="action"
           onClick={() => {
-            window.open('https://www.anqicms.com/');
+            window.open(`${brand.website}`);
           }}
         >
           <QuestionCircleOutlined />
@@ -245,7 +246,7 @@ const GlobalHeaderRight: React.FC = () => {
             }}
           >
             <a
-              href="https://www.anqicms.com/register"
+              href={`${brand.website}/register`}
               target={'_blank'}
               rel="nofollow noreferrer"
             >
@@ -369,20 +370,9 @@ const GlobalHeaderRight: React.FC = () => {
               <FormattedMessage id="component.right-content.vip-tips" />
             </p>
             <p>
-              <span className="optional">*</span>
-              <FormattedMessage id="component.right-content.download-prefix" />
-              <a
-                href="https://www.anqicms.com/anqibox.html"
-                target="_blank"
-                rel="noreferrer"
-              >
-                <FormattedMessage id="component.right-content.download-name" />
-              </a>
-            </p>
-            <p>
               <FormattedMessage id="component.right-content.vip-prefix" />
               <a
-                href="https://www.anqicms.com/account/vip"
+                href={`${brand.website}/account/vip`}
                 target="_blank"
                 rel="noreferrer"
               >

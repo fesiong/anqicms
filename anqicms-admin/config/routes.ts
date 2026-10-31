@@ -732,11 +732,6 @@ export default [
         component: '@/pages/design/doc',
       },
       {
-        path: '/design/market',
-        name: 'market',
-        component: '@/pages/design/market',
-      },
-      {
         path: '/design/diyfield',
         name: 'diy',
         component: '@/pages/design/diyfield',

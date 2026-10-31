@@ -1,5 +1,19 @@
 import { brand } from './brand';
 
+function hostOf(website: string): string {
+  if (!website) {
+    return '';
+  }
+  try {
+    // 去掉 www.：locales 里既有 www.anqicms.com 也有 m./admin. 子域，
+    // 整段换掉 www. 之后剩下的子域靠主机名替换，带 www. 会拼出
+    // admin.www.acme.test 这种不存在的地址。
+    return new URL(website).host.replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
 /**
  * 把文案里的官方品牌名换成当前品牌。
  *
@@ -9,23 +23,40 @@ import { brand } from './brand';
  * 在语言包出口统一替换，只需要一个函数，新文案自动继承。
  *
  * 官方版原样返回，逐字节不变，因此对主站零影响。
- * 后端 config.Brandize 是同一套规则，两侧替换结果必须一致。
+ * 后端 config.BrandizeWith 是同一套规则，两侧替换结果必须一致。
  */
 export function brandize(text: string): string {
   if (!text || brand.official) {
     return text;
   }
+  let s = text;
+  // 先整段换地址，再换名字。反过来会把 "https://www.anqicms.com" 拆成
+  // "https://www.acme"，变成打不开的地址。
+  if (brand.authBase) {
+    s = s
+      .split('https://auth.anqicms.com/auth')
+      .join(brand.authBase.replace(/\/$/, ''));
+  }
+  if (brand.website) {
+    s = s
+      .split('https://www.anqicms.com')
+      .join(brand.website.replace(/\/$/, ''));
+  }
+  const host = hostOf(brand.website);
+  if (host) {
+    s = s.split('anqicms.com').join(host);
+  }
   // 顺序要紧：「安企CMS」必须排在「安企」前面，
   // 否则先命中短词会剩下一截「CMS」粘在品牌名后面。
-  return text
-    .split('安企CMS')
-    .join(brand.nameCn)
-    .split('安企')
-    .join(brand.nameCn)
+  return s
     .split('AnQiCMS')
     .join(brand.name)
     .split('AnqiCMS')
     .join(brand.name)
+    .split('安企CMS')
+    .join(brand.nameCn)
+    .split('安企')
+    .join(brand.nameCn)
     .split('anqicms')
     .join(brand.id);
 }

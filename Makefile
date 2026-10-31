@@ -85,6 +85,7 @@ build: $(BUILD_DEPS)
 	cp -r ./public/static/default ./release/$(GOOS)/public/static/
 	cp -r ./public/*.xsl ./release/$(GOOS)/public/ 2>/dev/null || true
 	cp -r ./template/default ./release/$(GOOS)/template/
+	@$(GO) run ./cmd/oemgen -oem $(OEM) -brand-dir ./release/$(GOOS)/template
 	-cp -r ./system ./release/$(GOOS)/
 	cp -r ./locales ./release/$(GOOS)/
 	cp -r ./CHANGELOG.md ./release/$(GOOS)/
