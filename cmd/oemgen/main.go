@@ -10,6 +10,8 @@
 //	go run ./cmd/oemgen -oem acme       # 同上，但生成 acme 的前端文件
 //	go run ./cmd/oemgen -check          # 只校验（不写文件），有问题退出码 1
 //	go run ./cmd/oemgen -list           # 列出已登记的品牌
+//	go run ./cmd/oemgen -verify http://127.0.0.1:8001 -oem acme
+//	                                    # 抓运行中站点的真实响应，检查是否有别的品牌漏出
 package main
 
 import (
@@ -28,6 +30,7 @@ func main() {
 	list := flag.Bool("list", false, "列出已登记的品牌标识")
 	current := flag.Bool("current", false, "打印当前二进制编译期固化的品牌（用于核对产物）")
 	brandDir := flag.String("brand-dir", "", "对该目录下的文本文件做品牌替换（用于打包副本，如 release/<os>/template）")
+	verify := flag.String("verify", "", "对运行中的站点做品牌黑盒检查，如 http://127.0.0.1:8001；配合 -oem 指定该站点的品牌")
 
 	flag.Parse()
 
@@ -95,6 +98,10 @@ func main() {
 		}
 		fmt.Printf("已替换 %s 下 %d 个文件中的品牌文案（%s）\n", *brandDir, n, brand.ID)
 		return
+	}
+
+	if *verify != "" {
+		os.Exit(runVerify(*verify, brand))
 	}
 
 	root, err := repoRoot()

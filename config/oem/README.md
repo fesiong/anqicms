@@ -69,4 +69,29 @@ make build OEM=acme                                           # 产出 acme 品�
 ```bash
 go test ./config/ -run 'Brand|OEM'   # 字段完整性、兜底行为、官方值回归
 go run ./cmd/oemgen -check           # 构建前门禁，有问题退出码 1
+go test ./cmd/oemgen/                # 品牌验收工具自身的反向对照
 ```
+
+## 验收：装完之后还看不看得见别家的名字
+
+```bash
+make brand-check URL=http://127.0.0.1:8001          # 官方版
+make brand-check URL=http://127.0.0.1:8001 OEM=acme # 客户版
+```
+
+抓首页、后台外壳、`robots.txt`、`sitemap.xml` 的真实响应，扫两类问题：
+
+- **不该有的**：其它已登记品牌的标识出现（禁词表来自 `config/oem/` 里除本品牌
+  以外的所有品牌，所以多加一个客户就自动多一份检查）；
+- **该有的没有**：后台标题里连本品牌名都没有——通常是 `-oem` 传错了，工具会顺带
+  识别站点真实品牌并提示正确取值。
+
+两个已知边界，别把它当万能：
+
+1. **要对着 `make build` 的产物跑**。源码起的 dev 服务用的是仓库里的
+   `template/default`，里面的官方反链是打包时由 `-brand-dir` 替换的，跑 dev 服务
+   必然误报。
+2. **不覆盖后台 SPA 里由 JS 在浏览器端替换的文案**。那部分要真实执行 JS 才能看到，
+   而前端目前没有测试框架，这块是纯人工验收——改完 `src/locales` 或 `src/oem/`
+   之后，请实际登录后台看一遍侧边栏、页脚与登录页。
+

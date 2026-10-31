@@ -29,7 +29,7 @@ ifeq ($(version),)
 	version := $(shell git describe --tags --always --dirty="-dev")
 endif
 
-.PHONY: all clean tidy oem oem-list admin build archive
+.PHONY: all clean tidy oem oem-list brand-check admin build archive
 
 all: clean tidy build archive
 
@@ -43,6 +43,13 @@ oem:
 
 oem-list:
 	@$(GO) run ./cmd/oemgen -list
+
+# 品牌验收：抓运行中站点的真实响应，检查有没有别的品牌漏出来。
+# 要对着 make build 产出的包做，别对着源码起的 dev 服务：dev 用的是仓库里的
+# template/default，里面本来就有官方反链（打包时由 -brand-dir 替换），会误报。
+brand-check:
+	@test -n "$(URL)" || { echo "用法：make brand-check URL=http://127.0.0.1:8001 [OEM=acme]"; exit 1; }
+	@$(GO) run ./cmd/oemgen -verify $(URL) -oem $(OEM)
 
 # 后台 SPA 由后端从磁盘 system/ 目录直接服务（route/manage.go），而 system/
 # 此前只能靠人手工从 dist 拷贝。这对 OEM 是致命的：二进制是 A 品牌、UI 还是
