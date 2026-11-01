@@ -37,7 +37,7 @@ ifeq ($(version),)
 	version := $(shell git describe --tags --always --dirty="-dev")
 endif
 
-.PHONY: all clean tidy oem oem-list brand-check admin build archive
+.PHONY: all clean tidy oem oem-list brand-check deps admin build archive
 
 all: clean tidy build archive
 
@@ -63,9 +63,43 @@ brand-check:
 # 此前只能靠人手工从 dist 拷贝。这对 OEM 是致命的：二进制是 A 品牌、UI 还是
 # 官方版，界面照常工作，只有客户截图时才会发现。所以让构建自己完成这一步。
 # 只想验证后端改动时用 SKIP_ADMIN=1 跳过（约省 5 分钟）。
-admin: oem
+ADMIN_DIR := ./anqicms-admin
+ADMIN_NM := $(ADMIN_DIR)/node_modules
+# 判据是「package.json + yarn.lock 的内容指纹」，不是 mtime：
+# yarn 在 "Already up-to-date" 时**不会**重写 node_modules/.yarn-integrity，
+# 按时间戳比较会让每次构建都白跑一次 install（还连带跑 postinstall 的 max setup，
+# 十几秒起步）。指纹文件放在 node_modules 里，随它一起被删掉。
+ADMIN_MARK := $(ADMIN_NM)/.anqicms-deps
+YARN ?= yarn
+# 发布构建要可复现，所以有锁文件时默认按锁文件装。改过依赖却没更新锁文件会
+# 直接失败——这是有意的，此时先在 anqicms-admin 里跑一次 yarn install。
+# 离线打包机：make admin YARN_FLAGS='--frozen-lockfile --offline'
+ifeq ($(wildcard $(ADMIN_DIR)/yarn.lock),)
+	YARN_FLAGS ?=
+else
+	YARN_FLAGS ?= --frozen-lockfile
+endif
+
+# ⚠️ 打包机常常是干净 clone（没有 node_modules），直接 yarn build 会死在
+# "Cannot find module '@umijs/max'"。依赖安装是构建的前置条件，不该留给
+# 打包的人自己想起来。
+deps:
+	@want=$$(cat $(ADMIN_DIR)/package.json $(ADMIN_DIR)/yarn.lock 2>/dev/null | cksum | tr -d ' '); \
+	have=$$(cat $(ADMIN_MARK) 2>/dev/null); \
+	if [ -d "$(ADMIN_NM)" ] && [ -n "$$have" ] && [ "$$want" = "$$have" ]; then \
+		echo "📦 前端依赖与 package.json/yarn.lock 一致，跳过安装"; \
+	else \
+		command -v $(YARN) >/dev/null 2>&1 || { \
+			echo "❌ 未找到 $(YARN)：前端依赖 umi/max，需要 Yarn 1.x（npm i -g yarn）与 node >= 18"; \
+			exit 1; }; \
+		echo "📦 安装前端依赖（首次约 3~8 分钟，node_modules 约 2.9G）"; \
+		cd $(ADMIN_DIR) && $(YARN) install $(YARN_FLAGS) \
+			&& echo "$$want" > node_modules/.anqicms-deps; \
+	fi
+
+admin: oem deps
 	@echo "🎨 Building admin for OEM=$(OEM)..."
-	cd ./anqicms-admin && yarn build
+	cd $(ADMIN_DIR) && $(YARN) build
 	@echo "📁 Sync dist -> system"
 	rm -rf ./system
 	mkdir -p ./system
