@@ -11,6 +11,14 @@ BIN_SUFFIX :=
 GO := go
 GOOS ?= $(shell $(GO) env GOOS)
 GOARCH ?= $(shell $(GO) env GOARCH)
+# 构建期工具（cmd/oemgen）必须在**宿主平台**上编译执行。不能直接用 $(GOOS)：
+# `make build GOOS=windows` 传的命令行变量会被 make 自动导出到 recipe 环境，
+# 于是 `go run ./cmd/oemgen` 会去编一个 windows 版二进制再在本机执行，
+# 报 `fork/exec .../exe/oemgen: exec format error`。
+# GOHOSTOS/GOHOSTARCH 是「当前机器」的值，不受 GOOS/GOARCH 环境影响。
+HOST_OS := $(shell $(GO) env GOHOSTOS)
+HOST_ARCH := $(shell $(GO) env GOHOSTARCH)
+HOST_ENV := GOOS=$(HOST_OS) GOARCH=$(HOST_ARCH)
 LDFLAGS := -ldflags '-w -s -X kandaoni.com/anqicms/config.OEMID=$(OEM)'
 ifeq ($(OEM),anqicms)
 	ARCHIVE_NAME := $(BINARY_NAME)
@@ -38,18 +46,18 @@ all: clean tidy build archive
 # 而这种错误在界面上只表现为某一处 logo 对不上，验收时极易漏过。
 oem:
 	@echo "🎨 OEM=$(OEM)"
-	@$(GO) run ./cmd/oemgen -check
-	@$(GO) run ./cmd/oemgen -oem $(OEM)
+	@$(HOST_ENV) $(GO) run ./cmd/oemgen -check
+	@$(HOST_ENV) $(GO) run ./cmd/oemgen -oem $(OEM)
 
 oem-list:
-	@$(GO) run ./cmd/oemgen -list
+	@$(HOST_ENV) $(GO) run ./cmd/oemgen -list
 
 # 品牌验收：抓运行中站点的真实响应，检查有没有别的品牌漏出来。
 # 要对着 make build 产出的包做，别对着源码起的 dev 服务：dev 用的是仓库里的
 # template/default，里面本来就有官方反链（打包时由 -brand-dir 替换），会误报。
 brand-check:
 	@test -n "$(URL)" || { echo "用法：make brand-check URL=http://127.0.0.1:8001 [OEM=acme]"; exit 1; }
-	@$(GO) run ./cmd/oemgen -verify $(URL) -oem $(OEM)
+	@$(HOST_ENV) $(GO) run ./cmd/oemgen -verify $(URL) -oem $(OEM)
 
 # 后台 SPA 由后端从磁盘 system/ 目录直接服务（route/manage.go），而 system/
 # 此前只能靠人手工从 dist 拷贝。这对 OEM 是致命的：二进制是 A 品牌、UI 还是
@@ -92,7 +100,7 @@ build: $(BUILD_DEPS)
 	cp -r ./public/static/default ./release/$(GOOS)/public/static/
 	cp -r ./public/*.xsl ./release/$(GOOS)/public/ 2>/dev/null || true
 	cp -r ./template/default ./release/$(GOOS)/template/
-	@$(GO) run ./cmd/oemgen -oem $(OEM) -brand-dir ./release/$(GOOS)/template
+	@$(HOST_ENV) $(GO) run ./cmd/oemgen -oem $(OEM) -brand-dir ./release/$(GOOS)/template
 	-cp -r ./system ./release/$(GOOS)/
 	cp -r ./locales ./release/$(GOOS)/
 	cp -r ./CHANGELOG.md ./release/$(GOOS)/
@@ -103,7 +111,12 @@ build: $(BUILD_DEPS)
 	-cp -r ./source/cwebp_$(GOOS)_$(GOARCH)$(BIN_SUFFIX) ./release/$(GOOS)/source/
 	find ./release/$(GOOS) -name '.DS_Store' | xargs rm -f
 	GOOS=$(GOOS) GOARCH=$(GOARCH) $(GO) build -trimpath $(EXTRA_TAGS) $(LDFLAGS) -o ./release/$(GOOS)/$(BINARY_NAME)$(BIN_SUFFIX) kandaoni.com/anqicms/main
+# strip 只认宿主平台的产物格式：在 macOS 上对 linux ELF / windows PE 调用
+# 只会报 "can't process non-object and non-archive file"。ldflags 的 -w -s 已经
+# 去掉符号表与 DWARF，所以跨平台编译时跳过即可，不必强求。
+ifeq ($(GOOS),$(HOST_OS))
 	strip ./release/$(GOOS)/$(BINARY_NAME)$(BIN_SUFFIX)
+endif
 	rm -rf anqicms.syso
 	@if [ "$(OEM)" != "anqicms" ]; then \
 		echo "⚠️  前端品牌文件已切换为 $(OEM)：提交前请执行 git checkout -- anqicms-admin/src/oem"; \
