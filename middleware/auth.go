@@ -156,7 +156,7 @@ func AdminPermission(ctx iris.Context) {
 
 	// 检查后台对应的前端
 	var front string
-	for _, g := range config.DefaultMenuGroups {
+	for _, g := range config.MenuGroups() {
 		exists := false
 		for _, m := range g.Menus {
 			if m.Backend != "" && strings.HasPrefix(uri, m.Backend) {

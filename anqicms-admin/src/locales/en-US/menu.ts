@@ -116,6 +116,7 @@ export default {
   'menu.plugin.akismet': 'Akismet',
   'menu.plugin.google': 'Google Auth',
   'menu.plugin.llms': 'LLMs Settings',
+  'menu.design.market': 'Design market',
   'menu.design.doc': 'Documentation',
   'menu.design.ai-design': 'AI template design',
   'menu.design.diy': 'Template content settings',

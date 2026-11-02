@@ -1,4 +1,5 @@
 export default {
+  'design.market.downloading': '正在下载中...',
   'design.confirm-enable': '确定要启用这套设计模板吗？',
   'design.switching-template': '正在切换模板',
   'design.cannot-delete': '默认模板不能删除',

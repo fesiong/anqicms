@@ -454,6 +454,12 @@ var DefaultMenuGroups = []*MenuGroup{
 				Name:     "开发文档",
 				Backend:  "/design/docs",
 			},
+			{
+				Path:     "/design/market",
+				GroupKey: "design",
+				Name:     "设计市场",
+				Backend:  "/design/market",
+			},
 		},
 	},
 	{
@@ -559,4 +565,35 @@ var DefaultMenuGroups = []*MenuGroup{
 			},
 		},
 	},
+}
+
+// MenuGroups 返回当前品牌下后台可见的菜单分组。
+//
+// 设计市场（/design/market）是官方模板市场的入口：它的页面用 iframe 嵌入
+// https://www.anqicms.com/design，本身带有官方品牌属性。对 OEM 品牌展示它
+// 等于把官方市场漏给客户，所以只在官方品牌（IsOfficial）下出现，其余一律
+// 从菜单中剔除。前端路由（anqicms-admin/config/routes.ts）用 hideInMenu
+// 做同样的构建期判定，这里负责让后端 AdminMenus 接口与权限映射保持一致。
+func MenuGroups() []*MenuGroup {
+	if IsOfficial() {
+		return DefaultMenuGroups
+	}
+	out := make([]*MenuGroup, 0, len(DefaultMenuGroups))
+	for _, g := range DefaultMenuGroups {
+		if g.Key != "design" {
+			out = append(out, g)
+			continue
+		}
+		menus := make([]*Menu, 0, len(g.Menus))
+		for _, m := range g.Menus {
+			if m.Path == "/design/market" {
+				continue
+			}
+			menus = append(menus, m)
+		}
+		ng := *g
+		ng.Menus = menus
+		out = append(out, &ng)
+	}
+	return out
 }
