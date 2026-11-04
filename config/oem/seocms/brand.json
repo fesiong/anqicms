@@ -1,0 +1,13 @@
+{
+  "id": "seocms",
+  "name": "SeoCMS",
+  "name_cn": "搜外CMS",
+  "vendor": "SeoCMS",
+  "website": "https://www.seocms.com",
+  "docs": "https://docs.anqicms.com",
+  "auth_base": "https://auth.anqicms.com/auth",
+  "download_base": "https://www.anqicms.com/downloads",
+  "binary": "seocms",
+  "database": "seocms",
+  "support_email": ""
+}
