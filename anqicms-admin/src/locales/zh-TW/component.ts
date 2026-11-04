@@ -130,10 +130,7 @@ export default {
   'component.right-content.remain.suffix': '篇/天',
   'component.right-content.vip-title': 'VIP 會員',
   'component.right-content.vip-tips':
-    '您尚未成為 VIP 會員，部分軟體功能將受限。購買會員可以使用更豐富的安企盒子和安企CMS功能。',
-  'component.right-content.download-prefix':
-    '表示該功能為安企盒子功能。更多的 VIP 功能使用，請下載',
-  'component.right-content.download-name': '安企盒子',
+    '您尚未成為 VIP 會員，部分軟體功能將受限。購買會員可以使用更豐富的安企CMS功能。',
   'component.right-content.update': '更新帳號狀態',
   'component.right-content.order.confirm': '已購買？',
   'component.right-content.order': '前往購買',
@@ -144,8 +141,6 @@ export default {
   'component.right-content.free_token.description':
     '免費使用者和 VIP 使用者每天均贈送一定額度的 Token，如果贈送 Token 已耗盡，則需要儲值才能繼續使用 AI/翻譯相關功能。',
   'component.right-content.total-token': '累計已用 Token：',
-  'component.right-content.total-token.description':
-    'Token 的計費規則，請造訪 https://www.anqicms.com/account/token-price.html 查看詳情。',
   'component.right-content.un-pay-token': '未結清 Token：',
   'component.right-content.is-owe-fee':
     '已欠費，AI/翻譯已暫停使用，請及時儲值以恢復使用',

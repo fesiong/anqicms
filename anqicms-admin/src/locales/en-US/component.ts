@@ -140,10 +140,7 @@ export default {
   'component.right-content.remain.suffix': 'posts/day',
   'component.right-content.vip-title': 'VIP member',
   'component.right-content.vip-tips':
-    'You are not a VIP member yet, so some features are limited. A membership unlocks more Anqi Box and AnQiCMS features.',
-  'component.right-content.download-prefix':
-    'This is an Anqi Box feature. For more VIP features, download ',
-  'component.right-content.download-name': 'Anqi Box',
+    'You are not a VIP member yet, so some features are limited. A membership unlocks more AnQiCMS features.',
   'component.right-content.update': 'Refresh account status',
   'component.right-content.order.confirm': 'Already purchased?',
   'component.right-content.order': 'Go to purchase',
@@ -154,8 +151,6 @@ export default {
   'component.right-content.free_token.description':
     'Free and VIP users receive a daily allotment of tokens. Once the free tokens are used up, you need to top up to keep using the AI/translation features.',
   'component.right-content.total-token': 'Total tokens used: ',
-  'component.right-content.total-token.description':
-    'For token pricing rules, visit https://www.anqicms.com/account/token-price.html for details.',
   'component.right-content.un-pay-token': 'Unsettled tokens: ',
   'component.right-content.is-owe-fee':
     'Your account is in arrears. AI/translation is suspended; please top up to resume',

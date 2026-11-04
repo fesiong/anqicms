@@ -235,9 +235,6 @@ const AiGetTdk: React.FC<AiGetTdkProps> = (props) => {
               </Tag>
             )}
           </Space>
-          <div>
-            <FormattedMessage id="component.right-content.total-token.description" />
-          </div>
         </div>
       </div>
       <ProForm layout="horizontal" formRef={formRef} submitter={false}>

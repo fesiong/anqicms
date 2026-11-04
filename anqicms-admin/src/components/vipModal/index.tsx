@@ -79,13 +79,7 @@ export function useVipModal(): VipModalResult {
         </p>
         <p>
           <FormattedMessage id="component.right-content.vip-prefix" />
-          <a
-            href={`${brand.website}/account/vip`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <FormattedMessage id="component.right-content.vip-name" />
-          </a>
+          <FormattedMessage id="component.right-content.vip-name" />
           <FormattedMessage id="component.right-content.vip-suffix" />
         </p>
       </div>

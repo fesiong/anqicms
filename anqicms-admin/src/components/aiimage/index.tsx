@@ -240,11 +240,6 @@ const AiImageGenerate: React.FC<AiImageGenerateProps> = (props) => {
                 </Tag>
               )}
             </Space>
-            <div>
-              {props.intl?.formatMessage({
-                id: 'component.right-content.total-token.description',
-              })}
-            </div>
           </div>
         </div>
         <ProForm layout="horizontal" formRef={formRef} submitter={false}>

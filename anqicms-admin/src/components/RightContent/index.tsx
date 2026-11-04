@@ -496,9 +496,6 @@ const GlobalHeaderRight: React.FC = () => {
                 </label>
                 <Space direction="vertical">
                   <div>{anqiUser.total_token}</div>
-                  <div className="text-muted">
-                    <FormattedMessage id="component.right-content.total-token.description" />
-                  </div>
                 </Space>
               </div>
               <div className="item">
@@ -523,13 +520,7 @@ const GlobalHeaderRight: React.FC = () => {
             </p>
             <p>
               <FormattedMessage id="component.right-content.vip-prefix" />
-              <a
-                href={`${brand.website}/account/vip`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <FormattedMessage id="component.right-content.vip-name" />
-              </a>
+              <FormattedMessage id="component.right-content.vip-name" />
               <FormattedMessage id="component.right-content.vip-suffix" />
             </p>
           </div>
@@ -592,9 +583,6 @@ const GlobalHeaderRight: React.FC = () => {
               </label>
               <Space direction="vertical">
                 <div>{anqiUser.total_token}</div>
-                <div className="text-muted">
-                  <FormattedMessage id="component.right-content.total-token.description" />
-                </div>
               </Space>
             </div>
             <div className="item">
