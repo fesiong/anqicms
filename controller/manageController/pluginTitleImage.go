@@ -106,7 +106,7 @@ func PluginTitleImageConfigForm(ctx iris.Context) {
 // PluginTitleImagePreview 文档标题生成图片预览。
 //
 // 参数说明：
-//   - 查询参数 "text": 预览文字，默认为“欢迎使用安企CMS”。
+//   - 查询参数 "text": 预览文字，默认为“欢迎使用强大的CMS”。
 func PluginTitleImagePreview(ctx iris.Context) {
 	currentSite := provider.CurrentSubSite(ctx)
 	text := ctx.URLParamDefault("text", ctx.Tr("WelcomeToAnqiCMS"))
