@@ -24,7 +24,6 @@ import { parse } from 'query-string';
 import React, { useEffect, useState } from 'react';
 import CopyToClipboard from 'react-copy-to-clipboard';
 
-import loginBg from '@/images/login_bg.webp';
 import { getSiteInfo } from '@/services';
 import { setSessionStore, setStore } from '@/utils/store';
 import './index.less';
@@ -239,9 +238,6 @@ const Login: React.FC = () => {
         <div className="login-modal">
           <div className="lang">
             <SelectLang />
-          </div>
-          <div className="login-bg">
-            <img src={loginBg} />
           </div>
           <LoginForm
             className="login-form"
