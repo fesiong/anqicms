@@ -1,8 +1,16 @@
-import { anqiLogin, anqiRestart, checkAnqiInfo, getSiteInfo } from '@/services';
+import {
+  anqiLogin,
+  anqiRegister,
+  anqiRestart,
+  checkAnqiInfo,
+  getSiteInfo,
+} from '@/services';
 import { brand } from '@/oem/brand';
 import {
   GlobalOutlined,
   LockOutlined,
+  MailOutlined,
+  PhoneOutlined,
   QuestionCircleOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -25,6 +33,7 @@ export type SiderTheme = 'light' | 'dark';
 const GlobalHeaderRight: React.FC = () => {
   const { initialState, setInitialState } = useModel('@@initialState');
   const [visible, setVisible] = useState<boolean>(false);
+  const [registerVisible, setRegisterVisible] = useState<boolean>(false);
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
   const [orderVisible, setOrderVisible] = useState<boolean>(false);
   const [code] = useState<number>(0);
@@ -54,6 +63,16 @@ const GlobalHeaderRight: React.FC = () => {
     className = `right  dark`;
   }
 
+  const refreshAnqiUser = async () => {
+    const user = await initialState.fetchAnqiUser?.();
+    if (user) {
+      await setInitialState((s) => ({
+        ...s,
+        anqiUser: user,
+      }));
+    }
+  };
+
   const handleSubmit = async (values: any) => {
     const res = await anqiLogin(values);
     if (res.code !== 0) {
@@ -65,13 +84,30 @@ const GlobalHeaderRight: React.FC = () => {
         intl.formatMessage({ id: 'component.right-content.login.success' }),
     );
     setVisible(false);
-    const user = await initialState.fetchAnqiUser?.();
-    if (user) {
-      await setInitialState((s) => ({
-        ...s,
-        anqiUser: user,
-      }));
+    await refreshAnqiUser();
+  };
+
+  // 注册在后台内完成：成功后后端已写入登录态，这里只需刷新前端账号信息。
+  const handleRegister = async (values: any) => {
+    if (!values.email && !values.phone) {
+      message.error(
+        intl.formatMessage({
+          id: 'component.right-content.register.contact.required',
+        }),
+      );
+      return;
     }
+    const res = await anqiRegister(values);
+    if (res.code !== 0) {
+      message.error(res.msg);
+      return;
+    }
+    message.success(
+      res.msg ||
+        intl.formatMessage({ id: 'component.right-content.register.success' }),
+    );
+    setRegisterVisible(false);
+    await refreshAnqiUser();
   };
 
   const showDetail = () => {
@@ -246,11 +282,127 @@ const GlobalHeaderRight: React.FC = () => {
             }}
           >
             <a
-              href={`${brand.website}/register`}
-              target={'_blank'}
-              rel="nofollow noreferrer"
+              onClick={() => {
+                setVisible(false);
+                setRegisterVisible(true);
+              }}
             >
               <FormattedMessage id="component.right-content.register" />
+            </a>
+          </div>
+        </LoginForm>
+      </Modal>
+      <Modal
+        open={registerVisible}
+        onCancel={() => {
+          setRegisterVisible(false);
+        }}
+        maskClosable={false}
+        footer={null}
+      >
+        <LoginForm
+          title={intl.formatMessage({
+            id: 'component.right-content.register.title',
+          })}
+          subTitle={
+            <div>
+              <FormattedMessage id="component.right-content.register.tips" />
+            </div>
+          }
+          submitter={{
+            searchConfig: {
+              submitText: intl.formatMessage({
+                id: 'component.right-content.register.submit',
+              }),
+            },
+          }}
+          onFinish={async (values) => {
+            await handleRegister(values);
+          }}
+        >
+          <ProFormText
+            name="user_name"
+            fieldProps={{
+              size: 'large',
+              prefix: <UserOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.username',
+            })}
+            rules={[
+              {
+                required: true,
+                message: intl.formatMessage({
+                  id: 'component.right-content.username.required',
+                }),
+              },
+            ]}
+          />
+          <ProFormText.Password
+            name="password"
+            fieldProps={{
+              size: 'large',
+              prefix: <LockOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.password',
+            })}
+            rules={[
+              {
+                required: true,
+                message: intl.formatMessage({
+                  id: 'component.right-content.password.required',
+                }),
+              },
+              {
+                min: 6,
+                message: intl.formatMessage({
+                  id: 'component.right-content.register.password.min',
+                }),
+              },
+            ]}
+          />
+          <ProFormText
+            name="email"
+            fieldProps={{
+              size: 'large',
+              prefix: <MailOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.register.email',
+            })}
+            rules={[
+              {
+                type: 'email',
+                message: intl.formatMessage({
+                  id: 'component.right-content.register.email.invalid',
+                }),
+              },
+            ]}
+          />
+          <ProFormText
+            name="phone"
+            fieldProps={{
+              size: 'large',
+              prefix: <PhoneOutlined />,
+            }}
+            placeholder={intl.formatMessage({
+              id: 'component.right-content.register.phone',
+            })}
+          />
+          <div
+            style={{
+              paddingBottom: 24,
+              textAlign: 'right',
+            }}
+          >
+            <a
+              onClick={() => {
+                setRegisterVisible(false);
+                setVisible(true);
+              }}
+            >
+              <FormattedMessage id="component.right-content.register.back" />
             </a>
           </div>
         </LoginForm>

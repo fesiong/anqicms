@@ -107,6 +107,18 @@ export default {
   'component.right-content.password': '密碼',
   'component.right-content.password.required': '請輸入密碼！',
   'component.right-content.register': '還沒有帳號，免費註冊',
+  'component.right-content.register.title': '免費註冊帳號',
+  'component.right-content.register.tips':
+    '註冊後可直接在後台使用雲端 AI 等服務，無需跳轉外部網站。郵件信箱和手機號碼至少填寫一個。',
+  'component.right-content.register.email': '電子郵件',
+  'component.right-content.register.phone': '手機號碼',
+  'component.right-content.register.contact.required':
+    '郵件信箱和手機號碼至少填寫一個',
+  'component.right-content.register.password.min': '密碼至少 6 位',
+  'component.right-content.register.email.invalid': '電子郵件格式不正確',
+  'component.right-content.register.submit': '註冊',
+  'component.right-content.register.success': '註冊成功',
+  'component.right-content.register.back': '已有帳號，返回登入',
   'component.right-content.account': '帳號資訊',
   'component.right-content.hello': '您好：',
   'component.right-content.friend': '朋友',

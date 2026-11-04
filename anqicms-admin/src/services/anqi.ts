@@ -8,6 +8,15 @@ export async function anqiLogin(body: any, options?: { [key: string]: any }) {
   });
 }
 
+// 后台内嵌注册：账号在后台完成创建，成功后直接进入登录态，不跳官网。
+export async function anqiRegister(body: any, options?: { [key: string]: any }) {
+  return post({
+    url: '/anqi/register',
+    body,
+    options,
+  });
+}
+
 export async function getAnqiInfo(
   params?: any,
   options?: { [key: string]: any },

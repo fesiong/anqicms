@@ -272,6 +272,50 @@ func (w *Website) AnqiLogin(req *request.AnqiLoginRequest) error {
 	return nil
 }
 
+// AnqiRegister 在后台内嵌完成官网账号注册。
+//
+// 官网 /register 注册成功即返回 token（见 docs/oem-account-api.md），
+// 所以这里不需要再走一次 /login；直接把返回的账号信息写成登录态。
+// oem 放在请求体里：官网 AuthRegister 优先读 body.oem，header 是兜底。
+func (w *Website) AnqiRegister(req *request.AnqiRegisterRequest) error {
+	defaultSite := CurrentSite(nil)
+	if w.Id == 1 {
+		defaultSite = w
+	}
+	payload := map[string]string{
+		"user_name": req.UserName,
+		"password":  req.Password,
+		"email":     req.Email,
+		"phone":     req.Phone,
+		"oem":       oemHeader(),
+	}
+	var result AnqiLoginResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/register").Send(payload).EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return errs[0]
+	}
+
+	if result.Code != 0 {
+		return errors.New(result.Msg)
+	}
+
+	if result.Data == nil || result.Data.Token == "" {
+		// 官网契约里 data 必带 token；缺失说明协议变了，不能当成功处理。
+		return errors.New(w.Tr("RegisterFailedPleaseTryAgain"))
+	}
+
+	config.AnqiUser = *result.Data
+	config.AnqiUser.LoginTime = time.Now().Unix()
+	config.AnqiUser.CheckTime = config.AnqiUser.LoginTime
+	if err := defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (w *Website) AnqiCheckLogin(force bool) {
 	if config.AnqiUser.AuthId == 0 {
 		return

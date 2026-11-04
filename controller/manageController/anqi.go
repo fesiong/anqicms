@@ -44,6 +44,54 @@ func AnqiLogin(ctx iris.Context) {
 	})
 }
 
+// AnqiRegister 在后台内嵌注册安企云账号，注册成功后直接进入登录态。
+// 不再让用户跳去官网：OEM 品牌下 brand.website 是客户自己的站点，那里没有注册页。
+func AnqiRegister(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.AnqiRegisterRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	req.UserName = strings.TrimSpace(req.UserName)
+	req.Password = strings.TrimSpace(req.Password)
+	req.Email = strings.TrimSpace(req.Email)
+	req.Phone = strings.TrimSpace(req.Phone)
+
+	if req.UserName == "" || req.Password == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("PleaseFillInTheUsernameAndPasswordCorrectly"),
+		})
+		return
+	}
+	if req.Email == "" && req.Phone == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("FillInAtLeastOneOfTheEmailAndMobilePhoneNumber"),
+		})
+		return
+	}
+
+	if err := currentSite.AnqiRegister(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": config.AnqiUser,
+	})
+}
+
 // GetAnqiInfo 异步检查安企云登录状态并返回当前授权信息。
 func GetAnqiInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)

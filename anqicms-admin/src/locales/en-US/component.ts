@@ -116,6 +116,19 @@ export default {
   'component.right-content.password': 'Password',
   'component.right-content.password.required': 'Please enter your password!',
   'component.right-content.register': 'No account? Register for free',
+  'component.right-content.register.title': 'Create a free account',
+  'component.right-content.register.tips':
+    'After registering you can use cloud AI and other services right here in the admin panel, without leaving to an external website. Provide at least one of email or phone.',
+  'component.right-content.register.email': 'Email',
+  'component.right-content.register.phone': 'Phone',
+  'component.right-content.register.contact.required':
+    'Provide at least one of email or phone',
+  'component.right-content.register.password.min':
+    'Password must be at least 6 characters',
+  'component.right-content.register.email.invalid': 'Invalid email address',
+  'component.right-content.register.submit': 'Register',
+  'component.right-content.register.success': 'Registered successfully',
+  'component.right-content.register.back': 'Already have an account? Back to sign in',
   'component.right-content.account': 'Account info',
   'component.right-content.hello': 'Hello, ',
   'component.right-content.friend': 'friend',

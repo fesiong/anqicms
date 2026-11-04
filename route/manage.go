@@ -38,6 +38,7 @@ func manageRoute(app *iris.Application) {
 			anqi.Get("/info", manageController.GetAnqiInfo)
 			anqi.Get("/check", manageController.CheckAnqiInfo)
 			anqi.Post("/login", manageController.AnqiLogin)
+			anqi.Post("/register", manageController.AnqiRegister)
 			anqi.Post("/upload", manageController.AnqiUploadAttachment)
 			anqi.Post("/template/share", manageController.AnqiShareTemplate)
 			anqi.Post("/template/download", manageController.AnqiDownloadTemplate)

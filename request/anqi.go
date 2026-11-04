@@ -5,6 +5,15 @@ type AnqiLoginRequest struct {
 	Password string `json:"password"`  // 安企云账号密码
 }
 
+// AnqiRegisterRequest 后台内嵌注册安企云账号。
+// 邮箱与手机号至少填一个，这是官网 RegisterUser 的硬性要求。
+type AnqiRegisterRequest struct {
+	UserName string `json:"user_name"` // 安企云账号用户名
+	Password string `json:"password"`  // 安企云账号密码
+	Email    string `json:"email"`     // 邮箱，与手机号至少填一个
+	Phone    string `json:"phone"`     // 手机号，与邮箱至少填一个
+}
+
 type AnqiTemplateRequest struct {
 	TemplateId    uint     `json:"template_id" ast:"-"`   // 模板 ID
 	OnlyTemplate  bool     `json:"only_template"`         // 是否只分享模板（不含数据）
