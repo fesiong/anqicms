@@ -118,7 +118,7 @@ export default {
   'component.right-content.register': 'No account? Register for free',
   'component.right-content.register.title': 'Create a free account',
   'component.right-content.register.tips':
-    'After registering you can use cloud AI and other services right here in the admin panel, without leaving to an external website. Provide at least one of email or phone.',
+    'After registering you can use cloud AI and other services right here in the admin panel. Provide at least one of email or phone.',
   'component.right-content.register.email': 'Email',
   'component.right-content.register.phone': 'Phone',
   'component.right-content.register.contact.required':

@@ -109,7 +109,7 @@ export default {
   'component.right-content.register': '未有账号，免费注册',
   'component.right-content.register.title': '免费注册账号',
   'component.right-content.register.tips':
-    '注册后可直接在后台使用云端 AI 等服务，无需跳转外部网站。邮箱和手机号至少填写一个。',
+    '注册后可直接在后台使用云端 AI 等服务。邮箱和手机号至少填写一个。',
   'component.right-content.register.email': '邮箱',
   'component.right-content.register.phone': '手机号',
   'component.right-content.register.contact.required':
