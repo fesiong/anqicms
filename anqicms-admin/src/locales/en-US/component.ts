@@ -128,7 +128,8 @@ export default {
   'component.right-content.register.email.invalid': 'Invalid email address',
   'component.right-content.register.submit': 'Register',
   'component.right-content.register.success': 'Registered successfully',
-  'component.right-content.register.back': 'Already have an account? Back to sign in',
+  'component.right-content.register.back':
+    'Already have an account? Back to sign in',
   'component.right-content.account': 'Account info',
   'component.right-content.hello': 'Hello, ',
   'component.right-content.friend': 'friend',
@@ -154,7 +155,8 @@ export default {
     'Scan the QR code with WeChat to complete payment',
   'component.right-content.vip.pay.amount': 'Amount due: ',
   'component.right-content.vip.pay.waiting': 'Waiting for payment result…',
-  'component.right-content.vip.pay.success': 'Payment successful, VIP is active',
+  'component.right-content.vip.pay.success':
+    'Payment successful, VIP is active',
   'component.right-content.vip.pay.timeout':
     'Payment result not detected yet, check the account info later',
   'component.right-content.vip.pay.done': 'Done',
@@ -162,6 +164,16 @@ export default {
   'component.right-content.switch-account': 'Switch account',
   'component.right-content.invalid': 'Expired',
   'component.right-content.integral': 'Remaining points: ',
+  'component.right-content.integral.recharge': 'Top up',
+  'component.right-content.integral.modal.title': 'Top up points',
+  'component.right-content.integral.package': 'Points package',
+  'component.right-content.integral.price': 'Unit price: ',
+  'component.right-content.integral.arrive': 'Points per unit: ',
+  'component.right-content.integral.points': 'points',
+  'component.right-content.integral.quantity': 'Units',
+  'component.right-content.integral.total': 'Total',
+  'component.right-content.integral.pay.success':
+    'Payment successful, points added',
   'component.right-content.free-token': 'Remaining free tokens: ',
   'component.right-content.free_token.description':
     'Free and VIP users receive a daily allotment of tokens. Once the free tokens are used up, you need to top up to keep using the AI/translation features.',

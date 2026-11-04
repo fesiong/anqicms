@@ -37,6 +37,7 @@ const GlobalHeaderRight: React.FC = () => {
   const [registerVisible, setRegisterVisible] = useState<boolean>(false);
   const [detailVisible, setDetailVisible] = useState<boolean>(false);
   const [orderVisible, setOrderVisible] = useState<boolean>(false);
+  const [integralVisible, setIntegralVisible] = useState<boolean>(false);
   const [code] = useState<number>(0);
   const [errorMsg] = useState<string>('');
   const [siteInfo, setSiteInfo] = useState<any>({});
@@ -443,75 +444,6 @@ const GlobalHeaderRight: React.FC = () => {
                 intl.formatMessage({ id: 'component.right-content.friend' })}
               <FormattedMessage id="component.right-content.welcome" />
             </p>
-            <div className="account-info">
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.auth-id" />
-                </label>
-                <div>{anqiUser.auth_id}</div>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.account-name" />
-                </label>
-                <div>{anqiUser.user_name}</div>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.expire-time" />
-                </label>
-                <Space>
-                  <span>
-                    {dayjs(anqiUser.expire_time * 1000).format('YYYY-MM-DD')}
-                  </span>
-                  {anqiUser.valid === false && (
-                    <Tag color="red">
-                      {intl.formatMessage({
-                        id: 'component.right-content.invalid',
-                      })}
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.integral" />
-                </label>
-                <div>{anqiUser.integral}</div>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.free-token" />
-                </label>
-                <Space direction="vertical">
-                  <div>{anqiUser.free_token}</div>
-                  <div className="text-muted">
-                    <FormattedMessage id="component.right-content.free_token.description" />
-                  </div>
-                </Space>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.total-token" />
-                </label>
-                <Space direction="vertical">
-                  <div>{anqiUser.total_token}</div>
-                </Space>
-              </div>
-              <div className="item">
-                <label>
-                  <FormattedMessage id="component.right-content.un-pay-token" />
-                </label>
-                <Space>
-                  <span>{anqiUser.un_pay_token}</span>
-                  {anqiUser.is_owe_fee === 1 && (
-                    <Tag color="red">
-                      <FormattedMessage id="component.right-content.is-owe-fee" />
-                    </Tag>
-                  )}
-                </Space>
-              </div>
-            </div>
           </div>
         ) : (
           <div>
@@ -564,7 +496,19 @@ const GlobalHeaderRight: React.FC = () => {
               <label>
                 <FormattedMessage id="component.right-content.integral" />
               </label>
-              <div>{anqiUser.integral}</div>
+              <div>
+                <Space>
+                  <span>{anqiUser.integral}</span>
+                  <Button
+                    type="link"
+                    size="small"
+                    style={{ padding: 0 }}
+                    onClick={() => setIntegralVisible(true)}
+                  >
+                    <FormattedMessage id="component.right-content.integral.recharge" />
+                  </Button>
+                </Space>
+              </div>
             </div>
             <div className="item">
               <label>
@@ -632,6 +576,29 @@ const GlobalHeaderRight: React.FC = () => {
           <VipPurchase
             onClose={async () => {
               setOrderVisible(false);
+              await reloadAccount();
+            }}
+          />
+        )}
+      </Modal>
+      <Modal
+        open={integralVisible}
+        onCancel={() => {
+          setIntegralVisible(false);
+        }}
+        title={intl.formatMessage({
+          id: 'component.right-content.integral.modal.title',
+        })}
+        maskClosable={false}
+        footer={null}
+        width={520}
+      >
+        {/* 与 VIP 共用一个面板，只是 type 不同：数量可填、金额按份累计 */}
+        {integralVisible && (
+          <VipPurchase
+            type="integral"
+            onClose={async () => {
+              setIntegralVisible(false);
               await reloadAccount();
             }}
           />
