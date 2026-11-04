@@ -3,6 +3,7 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log"
 	"math/rand"
 	"strings"
@@ -33,6 +34,32 @@ type PaypalWebhookResource struct {
 	} `json:"amount"`
 	ParentPayment string `json:"parent_payment"`
 	ValidUntil    string `json:"valid_until"`
+	// 捕获类事件（PAYMENT.CAPTURE.*）的 id 是 capture id，不是下单时的 order id，
+	// 关联的订单号放在 supplementary_data.related_ids.order_id
+	SupplementaryData struct {
+		RelatedIds struct {
+			OrderId string `json:"order_id"`
+		} `json:"related_ids"`
+	} `json:"supplementary_data"`
+}
+
+// GetPaymentInfoByPaypalResource 按 webhook 资源定位支付单。
+// CHECKOUT.ORDER.* 的 resource.id 就是 order id（= payment.terrace_id）；
+// PAYMENT.CAPTURE.* 的 resource.id 是 capture id，得用 related_ids.order_id 换算。
+func (w *Website) GetPaymentInfoByPaypalResource(res *PaypalWebhookResource) (*model.Payment, error) {
+	if res == nil {
+		return nil, errors.New("paypal webhook resource is nil")
+	}
+	payment, err := w.GetPaymentInfoByTerraceId(res.Id)
+	if err == nil {
+		return payment, nil
+	}
+	if orderId := res.SupplementaryData.RelatedIds.OrderId; orderId != "" {
+		if p, err2 := w.GetPaymentInfoByTerraceId(orderId); err2 == nil {
+			return p, nil
+		}
+	}
+	return nil, err
 }
 
 func (w *Website) GetPaymentWays() []string {
@@ -220,7 +247,7 @@ func (w *Website) ProcessPaypalEvent(event *paypal.WebhookEvent) {
 		xlog.Errorf("Failed to unmarshal resource: %v, %v", err, string(event.Resource))
 		return
 	}
-	payment, err := w.GetPaymentInfoByTerraceId(resp.Id)
+	payment, err := w.GetPaymentInfoByPaypalResource(&resp)
 	if err != nil {
 		xlog.Errorf("Failed to get payment info: %v", err)
 		return
