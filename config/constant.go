@@ -95,7 +95,8 @@ const (
 	PayWayBalance    = "balance"    // 余额支付
 	PayWayPaypal     = "paypal"     // paypal
 	PayWayStripe     = "stripe"     // stripe
-	PayWayNowpayment = "nowpayment" // nowpayment
+	PayWayNowpayment = "nowpayment" // nowpayment（加密货币，NOWPayments）
+	PayWayXunhupay   = "xunhupay"   // 虎皮椒（个人微信/支付宝聚合）
 )
 
 const (

@@ -9,7 +9,7 @@ type PaymentAccount struct {
 	Id                 int64     `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`                       // 账户 ID
 	CreatedTime        int64     `json:"created_time" gorm:"column:created_time;type:int(11);autoCreateTime;index:idx_created_time" ast:"-"` // 创建时间
 	UpdatedTime        int64     `json:"updated_time" gorm:"column:updated_time;type:int(11);autoUpdateTime;index:idx_updated_time" ast:"-"` // 更新时间
-	PayWay             string    `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`                           // 支付方式：wechat=微信网页支付，weapp=微信小程序支付，alipay=支付宝支付，offline=线下支付，balance=余额支付，paypal=paypal
+	PayWay             string    `json:"pay_way" gorm:"column:pay_way;type:varchar(32) not null;default:'';index"`                           // 支付方式：wechat=微信网页支付，weapp=微信小程序支付，alipay=支付宝支付，offline=线下支付，balance=余额支付，paypal=paypal，stripe=stripe，xunhupay=虎皮椒，nowpayment=NOWPayments（加密货币）
 	AccountName        string    `json:"account_name" gorm:"column:name;type:varchar(100) not null"`                                         // 账户名称
 	Status             uint      `json:"status" gorm:"column:status;type:tinyint(1) not null;default:0"`                                     // 状态 (1启用, 0停用, 2风控暂停)
 	HealthScore        int       `json:"health_score" gorm:"column:health_score;type:int(10) not null;default:0"`                            // 健康度评分 (0-100)
@@ -37,15 +37,21 @@ type PaymentStatistic struct {
 }
 
 type PayConfig struct {
-	AppId          string `json:"app_id"`           // 支付宝的appId，微信的appId，PayPal的clientId, Stripe的apiKey
-	AppSecret      string `json:"app_secret"`       // 支付宝的privateKey， 微信的appSecret，PayPal的clientSecret, Stripe的publicKey
+	AppId          string `json:"app_id"`           // 支付宝的appId，微信的appId，PayPal的clientId, Stripe的apiKey，虎皮椒的APPID，NOWPayments的API Key
+	AppSecret      string `json:"app_secret"`       // 支付宝的privateKey， 微信的appSecret，PayPal的clientSecret, Stripe的publicKey，虎皮椒的APPSECRET
 	ApiKey         string `json:"api_key"`          // 微信的apiKey
 	Account        string `json:"account"`          // PayPal的account，Stripe的account，微信的商户号，支付宝的商户号
 	CertPath       string `json:"cert_path"`        // 支付宝的应用公钥，微信的证书路径
 	PublicCertPath string `json:"public_cert_path"` // 支付宝的公钥证书文件路径，微信的keyPath
 	RootCertPath   string `json:"root_cert_path"`   // 支付宝的根证书文件路径
-	WebhookId      string `json:"webhook_id"`       // PayPal的webhookId，Stripe的webhookSecret
-	Sandbox        bool   `json:"sandbox"`          // 沙盒环境
+	WebhookId      string `json:"webhook_id"`       // PayPal的webhookId，Stripe的webhookSecret，NOWPayments的IPN Secret
+	// ApiUrl 自定义网关地址。虎皮椒官方要求把网关做成变量（主站 api.xunhupay.com 挂掉时切
+	// api.dpweixin.com）；NOWPayments 用它指向沙盒 api.sandbox.nowpayments.io。留空走默认。
+	ApiUrl string `json:"api_url"`
+	// PriceCurrency NOWPayments 的法币计价币种（usd/eur/cny…）。加密支付必须有一个法币标价，
+	// 而 payment.Amount 只有数值、没有币种，所以由商户显式声明。留空按 usd。
+	PriceCurrency string `json:"price_currency"`
+	Sandbox       bool   `json:"sandbox"` // 沙盒环境
 }
 
 func (e PayConfig) Value() (driver.Value, error) {

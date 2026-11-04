@@ -622,6 +622,172 @@ func NotifyStripe(ctx iris.Context) {
 	ctx.StatusCode(http.StatusOK)
 }
 
+// NotifyXunhupay 虎皮椒支付结果通知（form 提交）。
+//
+// 网关只认纯文本 success，返回其它内容会重试 6 次；反过来，**任何校验不过都必须返回非 success**。
+// 虎皮椒官方公告里被刷单的站点，全都是这一步没验签 / 没验状态，任何人 POST 一下就自动发货。
+func NotifyXunhupay(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	_ = ctx.Request().ParseForm()
+	params := provider.XunhupayFormParams(ctx.Request().Form)
+	library.DebugLog(currentSite.CachePath, "xunhupay.log", params)
+
+	// reject 统一处理失败：写清楚是哪一步不过，再让网关重试
+	reject := func(reason string, err error) {
+		library.DebugLog(currentSite.CachePath, "xunhupay.log", "reason", reason, "err", err,
+			"trade_order_id", params["trade_order_id"])
+		ctx.WriteString("fail")
+	}
+
+	if params["trade_order_id"] == "" {
+		reject("trade-order-id-missing", nil)
+		return
+	}
+	// 通知里的商户订单号就是下单时传的 payment.PaymentId
+	payment, err := currentSite.GetPaymentInfoByPaymentId(params["trade_order_id"])
+	if err != nil {
+		reject("payment-not-found", err)
+		return
+	}
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
+	if err != nil {
+		reject("account-not-found", err)
+		return
+	}
+	if err = provider.XunhupayNotifySignVerify(params, account.PayConfig.AppSecret, account.PayConfig.AppId); err != nil {
+		reject("sign-verify-failed", err)
+		return
+	}
+
+	switch params["status"] {
+	case provider.XunhupayStatusPaid:
+		// 继续走下面的支付成功逻辑
+	case provider.XunhupayStatusRefunded, provider.XunhupayStatusRefunding, provider.XunhupayStatusRefundFailed:
+		// 退款结果也发到同一个 notify_url
+		order, oErr := currentSite.GetOrderInfoByOrderId(payment.OrderId)
+		if oErr != nil {
+			reject("order-not-found", oErr)
+			return
+		}
+		refund, rErr := currentSite.GetOrderRefundByOrderId(order.OrderId)
+		if rErr != nil {
+			reject("refund-not-found", rErr)
+			return
+		}
+		switch params["status"] {
+		case provider.XunhupayStatusRefunded:
+			refund.Status = config.OrderRefundStatusDone
+		case provider.XunhupayStatusRefundFailed:
+			refund.Status = config.OrderRefundStatusFailed
+		default:
+			// RD 退款中：保持待处理，等下一次通知
+			refund.Status = config.OrderRefundStatusWaiting
+		}
+		refund.Remark = params["status"]
+		refund.RefundTime = time.Now().Unix()
+		_ = currentSite.SuccessRefundOrder(refund, order)
+		ctx.WriteString("success")
+		return
+	default:
+		// 非终态（等待支付等）：确认收到但不改订单状态
+		library.DebugLog(currentSite.CachePath, "xunhupay.log", "unhandled-status", params["status"])
+		ctx.WriteString("success")
+		return
+	}
+
+	// total_fee 单位是元，payment.Amount 单位是分
+	amountFen, aErr := provider.XunhupayAmountFen(params["total_fee"])
+	if aErr != nil || amountFen != payment.Amount {
+		reject("amount-mismatch", fmt.Errorf("notify total_fee %q -> %d fen, payment %d fen (%v)",
+			params["total_fee"], amountFen, payment.Amount, aErr))
+		return
+	}
+	if payment.PaidTime > 0 {
+		library.DebugLog(currentSite.CachePath, "xunhupay.log", "already-paid", payment.PaymentId)
+		ctx.WriteString("success")
+		return
+	}
+
+	buyerInfo := params["open_order_id"]
+	if err = currentSite.MarkPaymentPaid(payment, params["transaction_id"], "", buyerInfo); err != nil {
+		reject("mark-paid-failed", err)
+		return
+	}
+
+	ctx.WriteString("success")
+}
+
+// NotifyNowpayment NOWPayments IPN 回调（JSON + x-nowpayments-sig 头）。
+func NotifyNowpayment(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	body, err := ctx.GetBody()
+	signature := ctx.GetHeader("x-nowpayments-sig")
+	library.DebugLog(currentSite.CachePath, "nowpayment.log", "sig:"+signature, string(body))
+
+	if err != nil || len(body) == 0 {
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+
+	notify, err := provider.ParseNowpaymentNotify(body)
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "decode-failed", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+
+	// 下单时把 payment.PaymentId 当作 order_id 传过去，IPN 原样带回
+	payment, err := currentSite.GetPaymentInfoByPaymentId(string(notify.OrderId))
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "payment-not-found", notify.OrderId)
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+	account, err := currentSite.GetPaymentAccountById(payment.PaymentAccountId)
+	if err != nil {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "account-not-found", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+	// 验签失败返回 400：NOWPayments 后台会把这次投递标红，比静默 200 好排查
+	if err = provider.VerifyNowpaymentIPN(body, signature, account.PayConfig.WebhookId); err != nil {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "sign-verify-failed", err)
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+
+	// 未到账的状态（waiting/confirming/partially_paid/failed/expired…）一律只记日志：
+	// partially_paid 是用户少付，必须人工判断，绝不能当成支付成功
+	if !provider.NowpaymentIsPaid(notify.PaymentStatus) {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "status", notify.PaymentStatus, notify.OrderId)
+		ctx.StatusCode(http.StatusOK)
+		return
+	}
+	if payment.PaidTime > 0 {
+		ctx.StatusCode(http.StatusOK)
+		return
+	}
+
+	// price_amount 是法币金额（payment.Amount 是分）
+	amountFen, aErr := notify.AmountFen()
+	if aErr != nil || amountFen != payment.Amount {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "amount-mismatch",
+			string(notify.PriceAmount), strconv.FormatInt(payment.Amount, 10), aErr)
+		ctx.StatusCode(http.StatusBadRequest)
+		return
+	}
+
+	terraceId := string(notify.PaymentId)
+	if err = currentSite.MarkPaymentPaid(payment, terraceId, notify.PayAddress, notify.PayCurrency); err != nil {
+		library.DebugLog(currentSite.CachePath, "nowpayment.log", "mark-paid-failed", err)
+		// 订单已被另一张支付单付掉等情况：单据本身没问题，返回 200 停止重试，靠日志人工跟进
+		ctx.StatusCode(http.StatusOK)
+		return
+	}
+
+	ctx.StatusCode(http.StatusOK)
+}
+
 // SubscribeMsgPopup 订阅消息弹框事件
 func SubscribeMsgPopup(ctx iris.Context, popupEvent *server.SubscribeMsgPopupEvent) {
 	currentSite := provider.CurrentSite(ctx)

@@ -190,6 +190,8 @@ func Register(app *iris.Application) {
 		notify.Post("/alipay/pay", controller.NotifyAlipay)
 		notify.Post("/paypal/pay", controller.NotifyPayPal)
 		notify.Post("/stripe/pay", middleware.ShopModeGuard, controller.NotifyStripe)
+		notify.Post("/xunhupay/pay", middleware.ShopModeGuard, controller.NotifyXunhupay)
+		notify.Post("/nowpayment/pay", middleware.ShopModeGuard, controller.NotifyNowpayment)
 	}
 
 	returnParty := app.Party("/return")

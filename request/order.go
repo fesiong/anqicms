@@ -58,7 +58,7 @@ type PaymentRequest struct {
 
 type PaymentAccountRequest struct {
 	Id                 int64           `json:"id"`                   // 账户 ID
-	PayWay             string          `json:"pay_way"`              // 支付方式：wechat=微信网页支付，weapp=微信小程序支付，alipay=支付宝支付，offline=线下支付，balance=余额支付，paypal=paypal
+	PayWay             string          `json:"pay_way"`              // 支付方式：wechat=微信网页支付，weapp=微信小程序支付，alipay=支付宝支付，offline=线下支付，balance=余额支付，paypal=paypal，stripe=stripe，xunhupay=虎皮椒，nowpayment=NOWPayments（加密货币）
 	AccountName        string          `json:"account_name"`         // 账户名称
 	Status             uint            `json:"status"`               // 状态 (1启用, 0停用, 2风控暂停)
 	HealthScore        int             `json:"health_score"`         // 健康度评分 (0-100)

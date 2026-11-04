@@ -16,7 +16,6 @@ import (
 	"github.com/go-pay/gopay/alipay"
 	"github.com/go-pay/gopay/paypal"
 	"github.com/go-pay/gopay/wechat"
-	_ "github.com/matm/go-nowpayments/payments"
 	"github.com/stripe/stripe-go/v82"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -697,9 +696,18 @@ func (w *Website) SetOrderRefund(order *model.Order, status int) error {
 			}
 			// 更新id
 			// refund success
+		} else if payment.PayWay == config.PayWayXunhupay {
+			account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+			if err != nil {
+				return err
+			}
+			if err = w.RefundXunhupayPayment(payment, account, refund.Amount, refund.Remark); err != nil {
+				return err
+			}
 		} else if payment.PayWay == config.PayWayNowpayment {
-			// nowpayment refund
-			// todo nowpayment
+			// NOWPayments 没有退款 API（退款只能走 payout 手动出金），这里**不能**静默通过：
+			// 空分支会一路把 refund 标成「已退款」、订单算成退款完成，实际一分钱没退。
+			return errors.New("nowpayment does not support automatic refund, please refund manually in NOWPayments dashboard")
 		} else {
 			// 线下支付，的退款流程
 			// 不用处理
@@ -2235,6 +2243,31 @@ func (w *Website) TraceQuery(payment *model.Payment) error {
 			w.DB.Create(&finance)
 			//支付成功逻辑处理
 			_ = w.SuccessPaidOrder(order, payment)
+		}
+	} else if payment.PayWay == config.PayWayXunhupay {
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		status, err := w.QueryXunhupayPayment(payment, account)
+		if err != nil {
+			return err
+		}
+		if status == XunhupayStatusPaid {
+			return w.MarkPaymentPaid(payment, "", "", "")
+		}
+	} else if payment.PayWay == config.PayWayNowpayment {
+		account, err := w.GetPaymentAccountById(payment.PaymentAccountId)
+		if err != nil {
+			return err
+		}
+		invoice, err := w.GetNowpaymentInvoice(account, payment.TerraceId)
+		if err != nil {
+			return err
+		}
+		// payment_status 只在发票详情里返回，创建发票时不带
+		if NowpaymentIsPaid(string(invoice.PaymentStatus)) {
+			return w.MarkPaymentPaid(payment, "", "", "")
 		}
 	}
 

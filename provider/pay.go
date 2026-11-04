@@ -1,11 +1,15 @@
 package provider
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log"
 	"math/rand"
+	"net/http"
 	"strings"
 	"time"
 
@@ -19,6 +23,99 @@ import (
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/request"
 )
+
+// payFlexString 兼容支付网关返回的字符串/数字。
+// 同一字段在不同接口里类型不一致（如 total_fee 可能是 "19.00" 也可能是 19.0），
+// 声明成 string 或 json.Number 都会让整个响应解析失败。
+type payFlexString string
+
+func (f *payFlexString) UnmarshalJSON(b []byte) error {
+	if len(b) == 0 || string(b) == "null" {
+		*f = ""
+		return nil
+	}
+	if b[0] == '"' {
+		var s string
+		if err := json.Unmarshal(b, &s); err != nil {
+			return err
+		}
+		*f = payFlexString(s)
+		return nil
+	}
+	*f = payFlexString(string(b))
+	return nil
+}
+
+// paymentOrderTitle 把订单备注裁剪成网关可接受的标题。
+// 各网关对标题的限制不一样（虎皮椒「不超 42 个汉字且不能带 %」、NOWPayments 限长），
+// 统一在这里去掉 % 与空白并按字符数截断，避免下单被网关直接拒掉。
+func paymentOrderTitle(remark string, maxRunes int) string {
+	title := strings.ReplaceAll(strings.TrimSpace(remark), "%", "")
+	if title == "" {
+		title = "Order"
+	}
+	runes := []rune(title)
+	if maxRunes > 0 && len(runes) > maxRunes {
+		title = string(runes[:maxRunes])
+	}
+	return title
+}
+
+// paymentPostJSON 向支付网关发送 JSON 请求，返回响应体与状态码。
+// header 用于 NOWPayments 这类把密钥放在请求头的网关。
+func paymentPostJSON(apiUrl string, body []byte, header map[string]string) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiUrl, bytes.NewReader(body))
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json")
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return raw, resp.StatusCode, nil
+}
+
+// paymentGetJSON 同 paymentPostJSON，用于查询类接口。
+func paymentGetJSON(apiUrl string, header map[string]string) ([]byte, int, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiUrl, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	for k, v := range header {
+		req.Header.Set(k, v)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+	return raw, resp.StatusCode, nil
+}
 
 type PaypalWebhookResource struct {
 	Id         string `json:"id"`
@@ -41,6 +138,76 @@ type PaypalWebhookResource struct {
 			OrderId string `json:"order_id"`
 		} `json:"related_ids"`
 	} `json:"supplementary_data"`
+}
+
+// MarkPaymentPaid 把支付单标记为已支付，并推进订单状态。
+//
+// 这段逻辑每个渠道、两条路径（异步通知 / 主动查单）都要走一遍，字段或顺序错一个就会出现
+// 「payment 有 paid_time、order 还停在待支付」或重复生成财务流水。集中在这里，别各写一份。
+//
+// paid_time 用 `paid_time = 0` 的条件更新做闸门：微信/虎皮椒都会重试通知，模板还会开着
+// 轮询打 /api/payment/check（内部就是 TraceQuery），两条路径并发进来时只能有一条真正生效。
+func (w *Website) MarkPaymentPaid(payment *model.Payment, terraceId, buyerId, buyerInfo string) error {
+	if payment == nil {
+		return errors.New("payment is nil")
+	}
+	if payment.PaidTime > 0 {
+		return nil
+	}
+	order, err := w.GetOrderInfoByOrderId(payment.OrderId)
+	if err != nil {
+		return err
+	}
+	if order.PaidTime > 0 {
+		// 订单已被另一张支付单付掉，这张单得人工退款，不能当成支付成功
+		return fmt.Errorf("order %s already paid, payment %s needs manual refund", order.OrderId, payment.PaymentId)
+	}
+
+	paidTime := time.Now().Unix()
+	updates := map[string]interface{}{"paid_time": paidTime}
+	if terraceId != "" {
+		updates["terrace_id"] = terraceId
+		payment.TerraceId = terraceId
+	}
+	if buyerId != "" {
+		updates["buyer_id"] = buyerId
+		payment.BuyerId = buyerId
+	}
+	if buyerInfo != "" {
+		updates["buyer_info"] = buyerInfo
+		payment.BuyerInfo = buyerInfo
+	}
+	res := w.DB.Model(&model.Payment{}).Where("id = ? and paid_time = 0", payment.Id).Updates(updates)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 已被并发的另一条通知/查单处理过，直接返回成功，避免重复记账
+		return nil
+	}
+	payment.PaidTime = paidTime
+
+	order.PaymentId = payment.PaymentId
+	w.DB.Model(order).UpdateColumn("payment_id", payment.PaymentId)
+
+	//生成用户支付记录
+	var userBalance int64
+	err = w.DB.Model(&model.User{}).Where("`id` = ?", payment.UserId).Pluck("balance", &userBalance).Error
+	finance := model.Finance{
+		UserId:      payment.UserId,
+		Direction:   config.FinanceOutput,
+		Amount:      payment.Amount,
+		AfterAmount: userBalance,
+		Action:      config.FinanceActionBuy,
+		OrderId:     payment.OrderId,
+		Status:      1,
+	}
+	if err = w.DB.Create(&finance).Error; err != nil {
+		return err
+	}
+
+	//支付成功逻辑处理
+	return w.SuccessPaidOrder(order, payment)
 }
 
 // GetPaymentInfoByPaypalResource 按 webhook 资源定位支付单。

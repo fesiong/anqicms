@@ -991,6 +991,10 @@ func ApiCreateOrderPayment(ctx iris.Context) {
 		createPaypalPayment(ctx, payment, order)
 	} else if req.PayWay == config.PayWayStripe {
 		createStripePayment(ctx, payment, order)
+	} else if req.PayWay == config.PayWayXunhupay {
+		createXunhupayPayment(ctx, payment)
+	} else if req.PayWay == config.PayWayNowpayment {
+		createNowpaymentPayment(ctx, payment)
 	} else if req.PayWay == config.PayWayBalance {
 		createBalancePayment(ctx, payment, order)
 	} else {
@@ -1422,6 +1426,93 @@ func createBalancePayment(ctx iris.Context, payment *model.Payment, order *model
 			"payment_id": payment.PaymentId,
 			"order_id":   order.OrderId,
 			"status":     1,
+		},
+	})
+}
+
+// createXunhupayPayment 虎皮椒下单：网关返回跳转地址（手机端）与二维码图片地址（PC 端）。
+//
+// PC 端 `url` 官方已停用，只给 url_qrcode，所以两个都往回调数据里塞：
+// 模板有 jump_url 就跳转、没有就拿 code_url 当 <img src>，与微信扫码支付同一套约定。
+func createXunhupayPayment(ctx iris.Context, payment *model.Payment) {
+	currentSite := provider.CurrentSite(ctx)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayXunhupay, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
+
+	payUrl, qrcodeUrl, err := currentSite.CreateXunhupayPayment(payment, account,
+		currentSite.System.BaseUrl+"/notify/xunhupay/pay", frontUrl+"/account/index")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
+
+	data := iris.Map{
+		"pay_way": config.PayWayXunhupay,
+	}
+	if payUrl != "" {
+		data["jump_url"] = payUrl
+	}
+	if qrcodeUrl != "" {
+		data["code_url"] = qrcodeUrl
+		data["qrcode"] = qrcodeUrl
+	}
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": data,
+	})
+}
+
+// createNowpaymentPayment NOWPayments 下单：创建发票，用户跳到托管页选币种付款。
+func createNowpaymentPayment(ctx iris.Context, payment *model.Payment) {
+	currentSite := provider.CurrentSite(ctx)
+	account := currentSite.GetSingleValidPaymentAccount(config.PayWayNowpayment, payment.Amount)
+	if account == nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.TplTr("UnableToCreatePaymentOrder"),
+		})
+		return
+	}
+	frontUrl := currentSite.System.BaseUrl
+	if currentSite.System.FrontUrl != "" {
+		frontUrl = currentSite.System.FrontUrl
+	}
+
+	invoice, err := currentSite.CreateNowpaymentInvoice(payment, account,
+		currentSite.System.BaseUrl+"/notify/nowpayment/pay", frontUrl+"/account/index", frontUrl+"/account/index")
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	currentSite.DB.Model(payment).UpdateColumn("payment_account_id", account.Id)
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": iris.Map{
+			"pay_way":    config.PayWayNowpayment,
+			"jump_url":   invoice.InvoiceUrl,
+			"payment_id": string(invoice.Id),
+			"amount":     payment.Amount,
+			"currency":   provider.NowpaymentPriceCurrency(account),
 		},
 	})
 }
