@@ -209,7 +209,7 @@ func neutralBrand(id string) OEMBrand {
 		NameCN:       id,
 		Vendor:       id,
 		Website:      "https://www.anqicms.com",
-		Docs:         "https://www.anqicms.com",
+		Docs:         "https://docs.anqicms.com",
 		AuthBase:     "https://auth.anqicms.com/auth",
 		DownloadBase: "https://www.anqicms.com/downloads",
 		Binary:       "anqishop",

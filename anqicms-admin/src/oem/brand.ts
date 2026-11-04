@@ -30,7 +30,7 @@ export const brand: OEMBrand = {
   nameCn: '安企CMS',
   vendor: 'AnQiCMS',
   website: 'https://www.anqicms.com',
-  docs: 'https://www.anqicms.com',
+  docs: 'https://docs.anqicms.com',
   authBase: 'https://auth.anqicms.com/auth',
   official: true,
   logo: '',

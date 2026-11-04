@@ -8,7 +8,7 @@ import (
 )
 
 // officialDocsHost 是帮助文档里所有链接原本指向的域名。
-const officialDocsHost = "https://www.anqicms.com"
+const officialDocsHost = "https://docs.anqicms.com"
 
 // rewriteDocsLinks 把帮助链接的域名换成当前品牌的文档站。
 //
@@ -58,15 +58,15 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("SomeBasicConventions"),
-					Link:  "https://www.anqicms.com/help-design/116.html",
+					Link:  "https://docs.anqicms.com/help/design-convention/",
 				},
 				{
 					Title: w.Tr("DirectoryAndTemplate"),
-					Link:  "https://www.anqicms.com/help-design/117.html",
+					Link:  "https://docs.anqicms.com/help/design-director/",
 				},
 				{
 					Title: w.Tr("LabelsAndUsage"),
-					Link:  "https://www.anqicms.com/help-design/118.html",
+					Link:  "https://docs.anqicms.com/help/design-tag/",
 				},
 			},
 		},
@@ -75,31 +75,31 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("SystemSettingsLabels"),
-					Link:  "https://www.anqicms.com/manual-normal/73.html",
+					Link:  "https://docs.anqicms.com/manual/tag-system/",
 				},
 				{
 					Title: w.Tr("ContactPartyTag"),
-					Link:  "https://www.anqicms.com/manual-normal/74.html",
+					Link:  "https://docs.anqicms.com/manual/tag-contact/",
 				},
 				{
 					Title: w.Tr("UniversalTdkTag"),
-					Link:  "https://www.anqicms.com/manual-normal/75.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tdk/",
 				},
 				{
 					Title: w.Tr("NavigationListTag"),
-					Link:  "https://www.anqicms.com/manual-normal/76.html",
+					Link:  "https://docs.anqicms.com/manual/tag-navList/",
 				},
 				{
 					Title: w.Tr("BreadcrumbNavigationTag"),
-					Link:  "https://www.anqicms.com/manual-normal/87.html",
+					Link:  "https://docs.anqicms.com/manual/tag-breadcrumb/",
 				},
 				{
 					Title: w.Tr("StatisticalCodeTag"),
-					Link:  "https://www.anqicms.com/manual-normal/91.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tongji/",
 				},
 				{
 					Title: w.Tr("HomeBannerTag"),
-					Link:  "https://www.anqicms.com/manual-normal/3317.html",
+					Link:  "https://docs.anqicms.com/manual/tag-bannerList/",
 				},
 			},
 		},
@@ -108,23 +108,23 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("CategoryListTag"),
-					Link:  "https://www.anqicms.com/manual-category/77.html",
+					Link:  "https://docs.anqicms.com/manual/tag-categoryList/",
 				},
 				{
 					Title: w.Tr("CategoryDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-category/78.html",
+					Link:  "https://docs.anqicms.com/manual/tag-categoryDetail/",
 				},
 				{
 					Title: w.Tr("SinglePageListTag"),
-					Link:  "https://www.anqicms.com/manual-category/83.html",
+					Link:  "https://docs.anqicms.com/manual/tag-pageList/",
 				},
 				{
 					Title: w.Tr("SinglePageDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-category/84.html",
+					Link:  "https://docs.anqicms.com/manual/tag-pageDetail/",
 				},
 				{
 					Title: w.Tr("DocumentModelDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-normal/3489.html",
+					Link:  "https://docs.anqicms.com/manual/tag-moduleDetail/",
 				},
 			},
 		},
@@ -133,31 +133,31 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("DocumentListTag"),
-					Link:  "https://www.anqicms.com/manual-archive/79.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveList/",
 				},
 				{
 					Title: w.Tr("DocumentDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-archive/80.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveDetail/",
 				},
 				{
 					Title: w.Tr("PreviousDocumentTag"),
-					Link:  "https://www.anqicms.com/manual-archive/88.html",
+					Link:  "https://docs.anqicms.com/manual/tag-prevArchive/",
 				},
 				{
 					Title: w.Tr("NextDocumentTag"),
-					Link:  "https://www.anqicms.com/manual-archive/89.html",
+					Link:  "https://docs.anqicms.com/manual/tag-nextArchive/",
 				},
 				{
 					Title: w.Tr("RelatedDocumentsTag"),
-					Link:  "https://www.anqicms.com/manual-archive/92.html",
+					Link:  "https://docs.anqicms.com/manual/tag-relatedArchive/",
 				},
 				{
 					Title: w.Tr("DocumentParameterTag"),
-					Link:  "https://www.anqicms.com/manual-archive/95.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveParams/",
 				},
 				{
 					Title: w.Tr("DocumentParameterFilterTag"),
-					Link:  "https://www.anqicms.com/manual-archive/96.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveFilters/",
 				},
 			},
 		},
@@ -166,15 +166,15 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("DocumentTagListTag"),
-					Link:  "https://www.anqicms.com/manual-tag/81.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveTag/",
 				},
 				{
 					Title: w.Tr("TagDocumentListTag"),
-					Link:  "https://www.anqicms.com/manual-tag/82.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tagDataList/",
 				},
 				{
 					Title: w.Tr("TagDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-tag/90.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tagDetail/",
 				},
 			},
 		},
@@ -183,23 +183,23 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("CommentTag"),
-					Link:  "https://www.anqicms.com/manual-other/85.html",
+					Link:  "https://docs.anqicms.com/manual/tag-commentList/",
 				},
 				{
 					Title: w.Tr("MessageTag"),
-					Link:  "https://www.anqicms.com/manual-other/86.html",
+					Link:  "https://docs.anqicms.com/manual/tag-guestbook/",
 				},
 				{
 					Title: w.Tr("PaginationTag"),
-					Link:  "https://www.anqicms.com/manual-other/94.html",
+					Link:  "https://docs.anqicms.com/manual/tag-pagination/",
 				},
 				{
 					Title: w.Tr("FriendlyLinkTag"),
-					Link:  "https://www.anqicms.com/manual-other/97.html",
+					Link:  "https://docs.anqicms.com/manual/tag-linkList/",
 				},
 				{
 					Title: w.Tr("MessageVerificationCodeUseTag"),
-					Link:  "https://www.anqicms.com/manual-other/139.html",
+					Link:  "https://docs.anqicms.com/manual/tag-captcha/",
 				},
 			},
 		},
@@ -208,35 +208,35 @@ func (w *Website) GetDesignDocs() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("OtherAuxiliaryTags"),
-					Link:  "https://www.anqicms.com/manual-common/93.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tags/",
 				},
 				{
 					Title: w.Tr("MoreFilters"),
-					Link:  "https://www.anqicms.com/manual-common/98.html",
+					Link:  "https://docs.anqicms.com/manual/tag-filters/",
 				},
 				{
 					Title: w.Tr("DefineVariableAssignmentTag"),
-					Link:  "https://www.anqicms.com/manual-common/99.html",
+					Link:  "https://docs.anqicms.com/manual/tag-with/",
 				},
 				{
 					Title: w.Tr("FormatTimestampTag"),
-					Link:  "https://www.anqicms.com/manual-common/100.html",
+					Link:  "https://docs.anqicms.com/manual/tag-stampToDate/",
 				},
 				{
 					Title: w.Tr("ForLoopTraversalTag"),
-					Link:  "https://www.anqicms.com/manual-common/101.html",
+					Link:  "https://docs.anqicms.com/manual/tag-for/",
 				},
 				{
 					Title: w.Tr("RemoveLogicalTagOccupiedLines"),
-					Link:  "https://www.anqicms.com/manual-common/102.html",
+					Link:  "https://docs.anqicms.com/manual/tag-remove/",
 				},
 				{
 					Title: w.Tr("ArithmeticOperationTag"),
-					Link:  "https://www.anqicms.com/manual-common/103.html",
+					Link:  "https://docs.anqicms.com/manual/tag-calc/",
 				},
 				{
 					Title: w.Tr("IfLogicalJudgmentTag"),
-					Link:  "https://www.anqicms.com/manual-common/104.html",
+					Link:  "https://docs.anqicms.com/manual/tag-if/",
 				},
 			},
 		},
@@ -254,7 +254,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("SystemSettingsLabels"),
-					Link:  "https://www.anqicms.com/manual-normal/73.html",
+					Link:  "https://docs.anqicms.com/manual/tag-system/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("WebsiteName"),
@@ -300,7 +300,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("ContactPartyTag"),
-					Link:  "https://www.anqicms.com/manual-normal/74.html",
+					Link:  "https://docs.anqicms.com/manual/tag-contact/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("ContactPerson"),
@@ -370,7 +370,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("UniversalTdkTag"),
-					Link:  "https://www.anqicms.com/manual-normal/75.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tdk/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("PageTitle"),
@@ -392,7 +392,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("NavigationListTag"),
-					Link:  "https://www.anqicms.com/manual-normal/76.html",
+					Link:  "https://docs.anqicms.com/manual/tag-navList/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("FirstLevelNavigation"),
@@ -497,7 +497,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("BreadcrumbNavigationTag"),
-					Link:  "https://www.anqicms.com/manual-normal/87.html",
+					Link:  "https://docs.anqicms.com/manual/tag-breadcrumb/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("ShowTitle"),
@@ -523,12 +523,12 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("StatisticalCodeTag"),
-					Link:  "https://www.anqicms.com/manual-normal/91.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tongji/",
 					Code:  `{{- pluginJsCode|safe }}`,
 				},
 				{
 					Title: w.Tr("HomeBannerTag"),
-					Link:  "https://www.anqicms.com/manual-normal/3317.html",
+					Link:  "https://docs.anqicms.com/manual/tag-bannerList/",
 					Code: `{% bannerList banners %}
 					{% for item in banners %}
 					<a href="{{item.Link}}" target="_blank">
@@ -546,7 +546,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("CategoryListTag"),
-					Link:  "https://www.anqicms.com/manual-category/77.html",
+					Link:  "https://docs.anqicms.com/manual/tag-categoryList/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("FirstLevelClassification"),
@@ -639,7 +639,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("CategoryDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-category/78.html",
+					Link:  "https://docs.anqicms.com/manual/tag-categoryDetail/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("CategoryId"),
@@ -688,7 +688,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("SinglePageListTag"),
-					Link:  "https://www.anqicms.com/manual-category/83.html",
+					Link:  "https://docs.anqicms.com/manual/tag-pageList/",
 					Code: `<ul>
 				{% pageList pages %}
 					{% for item in pages %}
@@ -701,7 +701,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("SinglePageDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-category/84.html",
+					Link:  "https://docs.anqicms.com/manual/tag-pageDetail/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("SinglePageId"),
@@ -746,7 +746,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("DocumentModelDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-normal/3489.html",
+					Link:  "https://docs.anqicms.com/manual/tag-moduleDetail/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("ModelId"),
@@ -774,7 +774,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("DocumentListTag"),
-					Link:  "https://www.anqicms.com/manual-archive/79.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveList/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("DocumentListDisplay"),
@@ -992,7 +992,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("DocumentDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-archive/80.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveDetail/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("DocumentId"),
@@ -1083,7 +1083,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("PreviousDocumentTag"),
-					Link:  "https://www.anqicms.com/manual-archive/88.html",
+					Link:  "https://docs.anqicms.com/manual/tag-prevArchive/",
 					Code: `{% prevArchive prev %}
 				上一篇：
 				{% if prev %}
@@ -1095,7 +1095,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("NextDocumentTag"),
-					Link:  "https://www.anqicms.com/manual-archive/89.html",
+					Link:  "https://docs.anqicms.com/manual/tag-nextArchive/",
 					Code: `{% nextArchive next %}
 				下一篇：
 				{% if next %}
@@ -1107,7 +1107,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("RelatedDocumentsTag"),
-					Link:  "https://www.anqicms.com/manual-archive/92.html",
+					Link:  "https://docs.anqicms.com/manual/tag-relatedArchive/",
 					Code: `<div>
 				{% archiveList archives with type="related" limit="10" %}
 					{% for item in archives %}
@@ -1137,7 +1137,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("DocumentParameterTag"),
-					Link:  "https://www.anqicms.com/manual-archive/95.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveParams/",
 					Code: `<div>
 					{% archiveParams params %}
 					{% for item in params %}
@@ -1151,7 +1151,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("DocumentParameterFilterTag"),
-					Link:  "https://www.anqicms.com/manual-archive/96.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveFilters/",
 					Code: `<div>
 					{% archiveFilters filters with moduleId="1" allText="不限" %}
 						{% for item in filters %}
@@ -1173,7 +1173,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("DocumentTagListTag"),
-					Link:  "https://www.anqicms.com/manual-tag/81.html",
+					Link:  "https://docs.anqicms.com/manual/tag-archiveTag/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("NormalTagList"),
@@ -1231,7 +1231,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("TagDocumentListTag"),
-					Link:  "https://www.anqicms.com/manual-tag/82.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tagDataList/",
 					Code: `<ul>
 					{% tagDataList archives with type="page" limit="10" %}
 						{% for item in archives %}
@@ -1282,7 +1282,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("TagDetailsTag"),
-					Link:  "https://www.anqicms.com/manual-tag/90.html",
+					Link:  "https://docs.anqicms.com/manual/tag-tagDetail/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("TagId"),
@@ -1314,7 +1314,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title: w.Tr("CommentTag"),
-					Link:  "https://www.anqicms.com/manual-other/85.html",
+					Link:  "https://docs.anqicms.com/manual/tag-commentList/",
 					Docs: []response.DesignDoc{
 						{
 							Title: w.Tr("RegularCommentList"),
@@ -1466,7 +1466,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("MessageTag"),
-					Link:  "https://www.anqicms.com/manual-other/86.html",
+					Link:  "https://docs.anqicms.com/manual/tag-guestbook/",
 					Docs: []response.DesignDoc{
 						{
 							Title:   w.Tr("DefaultMessageForm"),
@@ -1543,7 +1543,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("PaginationTag"),
-					Link:  "https://www.anqicms.com/manual-other/94.html",
+					Link:  "https://docs.anqicms.com/manual/tag-pagination/",
 					Code: `<div class="pagination">
 					{% pagination pages with show="5" %}
 					<ul>
@@ -1565,7 +1565,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("FriendlyLinkTag"),
-					Link:  "https://www.anqicms.com/manual-other/97.html",
+					Link:  "https://docs.anqicms.com/manual/tag-linkList/",
 					Code: `{% linkList friendLinks %}
 				{% if friendLinks %}
 				<div>
@@ -1579,7 +1579,7 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 				},
 				{
 					Title: w.Tr("MessageVerificationCodeUseTag"),
-					Link:  "https://www.anqicms.com/manual-other/139.html",
+					Link:  "https://docs.anqicms.com/manual/tag-captcha/",
 					Code: `<div style="display: flex; clear: both">
 					<input type="hidden" name="captcha_id" id="captcha_id">
 					<input type="text" name="captcha" required placeholder="请填写验证码" class="layui-input" style="flex: 1">
@@ -1607,133 +1607,133 @@ func (w *Website) GetDesignTplHelpers() []response.DesignDocGroup {
 			Docs: []response.DesignDoc{
 				{
 					Title:   w.Tr("JudgeWhetherItContainsACertainKeyword"),
-					Link:    "https://www.anqicms.com/manual-filter/250.html",
+					Link:    "https://docs.anqicms.com/manual/filter-contain/",
 					Content: w.Tr("ContainTheFilterCanDetermineWhetherAKeywordIsContainedInALineOfStringArrayMapStructAndTheResultWillReturnABooleanValue"),
 					Code:    `{{obj|contain:"关键词"}}`,
 				},
 				{
 					Title:   w.Tr("DeleteLeadingAndTrailingSpacesKeywords"),
-					Link:    "https://www.anqicms.com/manual-filter/251.html",
+					Link:    "https://docs.anqicms.com/manual/filter-trim/",
 					Content: w.Tr(`trim、trimLeft、trimRight 过滤器可以分别删除字符串首尾空格、特定字符。`),
 					Code:    `{{obj|trim}}`,
 				},
 				{
 					Title:   w.Tr("CountTheNumberOfTimesAKeywordAppears"),
-					Link:    "https://www.anqicms.com/manual-filter/252.html",
+					Link:    "https://docs.anqicms.com/manual/filter-count/",
 					Content: w.Tr(`count 过滤器可以计算某个关键词在一行字符串或数组（array/slice）中出现的次数。`),
 					Code:    `{{obj|count:"关键词"}}`,
 				},
 				{
 					Title:   w.Tr("GetThePositionOfAKeyword"),
-					Link:    "https://www.anqicms.com/manual-filter/254.html",
+					Link:    "https://docs.anqicms.com/manual/filter-index/",
 					Content: w.Tr(`index 过滤器可以计算某个关键词在一行字符串或数组（array/slice）中出现的位置。如果字符串中包含多个需要查找的关键词，则index返回的是首次出现的位置。如果没有找到，则返回-1。注意：如果字符串中有中文，则计算位置的时候，一个中文算3个位置。`),
 					Code:    `{{obj|index:"关键词"}}`,
 				},
 				{
 					Title:   w.Tr("ReplaceKeywords"),
-					Link:    "https://www.anqicms.com/manual-filter/256.html",
+					Link:    "https://docs.anqicms.com/manual/filter-replace/",
 					Content: w.Tr(`replace 过滤器可以将字符串中的旧的词old替换词新的词new，返回替换后的新字符串。如果 old 为空，它将在字符串的开头和每个 UTF-8 序列之后进行匹配。如果new为空，则移除old。`),
 					Code:    `{{obj|replace:"old,new"}}`,
 				},
 				{
 					Title:   w.Tr("RepeatOutputMultipleTimes"),
-					Link:    "https://www.anqicms.com/manual-filter/257.html",
+					Link:    "https://docs.anqicms.com/manual/filter-repeat/",
 					Content: w.Tr(`repeat 过滤器可以将一个字符串按指定次数重复。`),
 					Code:    `{{obj|repeat:次数}}`,
 				},
 				{
 					Title:   w.Tr("AddNumbersStrings"),
-					Link:    "https://www.anqicms.com/manual-filter/259.html",
+					Link:    "https://docs.anqicms.com/manual/filter-add/",
 					Content: w.Tr(`add 过滤器可以将怎么将两个数字、字符串相加。add 可以将整数、浮点数、字符串混合相加。也就是在你进行相加计算的时候，可以忽略他们的类型，在自动转换失败的时候，则会忽略相加的内容。`),
 					Code:    `{{ obj|add:obj2 }}`,
 				},
 				{
 					Title:   w.Tr("ConvertTheFirstLetterToUppercase"),
-					Link:    "https://www.anqicms.com/manual-filter/261.html",
+					Link:    "https://docs.anqicms.com/manual/filter-capfirst/",
 					Content: w.Tr(`capfirst 过滤器可以将英文字符串第一个字母转换为大写。只有英文字母会被转换。`),
 					Code:    `{{ obj|capfirst }}`,
 				},
 				{
 					Title:   w.Tr("ConvertEnglishToUppercase"),
-					Link:    "https://www.anqicms.com/manual-filter/261.html",
+					Link:    "https://docs.anqicms.com/manual/filter-capfirst/",
 					Content: w.Tr(`upper 过滤器可以将英文字符串中所有的字母转换成大写。`),
 					Code:    `{{ obj|upper }}`,
 				},
 				{
 					Title:   w.Tr("ConvertEnglishToLowercase"),
-					Link:    "https://www.anqicms.com/manual-filter/261.html",
+					Link:    "https://docs.anqicms.com/manual/filter-capfirst/",
 					Content: w.Tr(`lower 过滤器可以将英文字符串中所有的字母转换成小写。`),
 					Code:    `{{ obj|lower }}`,
 				},
 				{
 					Title:   w.Tr("ConvertTheFirstLetterOfEachWordToUppercase"),
-					Link:    "https://www.anqicms.com/manual-filter/261.html",
+					Link:    "https://docs.anqicms.com/manual/filter-capfirst/",
 					Content: w.Tr(`title 过滤器可以将英文字符串中所有的单词的首字母转换成大写。`),
 					Code:    `{{ obj|title }}`,
 				},
 				{
 					Title:   w.Tr("SetDefaultValue"),
-					Link:    "https://www.anqicms.com/manual-filter/265.html",
+					Link:    "https://docs.anqicms.com/manual/filter-default/",
 					Content: w.Tr(`default 过滤器可以在如果数字或字符串、对象没有值的时候给数字或字符串设置默认值。default_if_none 过滤器可以判断指针类型的对象是否为空，如果为空，则设置默认值。`),
 					Code:    `{{ obj|default:"默认值" }}`,
 				},
 				{
 					Title:   w.Tr("HtmlCodeIsNotEscaped"),
-					Link:    "https://www.anqicms.com/manual-filter/280.html",
+					Link:    "https://docs.anqicms.com/manual/filter-safe/",
 					Content: w.Tr(`safe 过滤器可以取消模板输出的默认转义属性，让直接输出html代码到界面，让浏览器解析HTML代码。一般用在富文本输出中，如显示文章详情等情况下。注意：使用 safe 过滤器，默认认为你的输出是安全的，它不会对特殊字符进行转义，因此如果代码中包含有xss注入等问题情况，它也会原样输出。请注意防范风险。`),
 					Code:    `{{ obj|safe }}`,
 				},
 				{
 					Title:   w.Tr("TheFirstValueOfAStringOrArray"),
-					Link:    "https://www.anqicms.com/manual-filter/269.html",
+					Link:    "https://docs.anqicms.com/manual/filter-first/",
 					Content: w.Tr(`first 过滤器可以获得字符串第一个字符或数组第一个值。如果原字符串、数组为空，什么也不返回。如果字符串是中文，则返回第一个汉字。`),
 					Code:    `{{ obj|first }}`,
 				},
 				{
 					Title:   w.Tr("TheLastValueOfAStringOrArray"),
-					Link:    "https://www.anqicms.com/manual-filter/269.html",
+					Link:    "https://docs.anqicms.com/manual/filter-first/",
 					Content: w.Tr(`last 过滤器可以获取字符串最后一个字符或数组最后一个值。如果原字符串、数组为空，什么也不返回。如果字符串是中文，则返回最后一个汉字。`),
 					Code:    `{{ obj|last }}`,
 				},
 				{
 					Title:   w.Tr("RetainASpecifiedNumberOfDecimalPlaces"),
-					Link:    "https://www.anqicms.com/manual-filter/270.html",
+					Link:    "https://docs.anqicms.com/manual/filter-floatformat/",
 					Content: w.Tr(`floatformat 过滤器可以将一个浮点数保留2位小数输出。也可以保留指定的其他位数小数点。如保留小数点后3位等。同时支持负数位数，如果设置的是负数，则从最后一位往前推算。`),
 					Code:    `{{ obj|floatformat:2 }}`,
 				},
 				{
 					Title:   w.Tr("GetTheLengthOfAnObject"),
-					Link:    "https://www.anqicms.com/manual-filter/274.html",
+					Link:    "https://docs.anqicms.com/manual/filter-length/",
 					Content: w.Tr(`length 过滤器可以获取字符串、数组、键值对的长度。对于字符串，则计算它的utf8实际字符的数量，一个字母为一个，一个汉字也为1个。数组和键值对则计算它们的索引数量。`),
 					Code:    `{{ obj|length }}`,
 				},
 				{
 					Title:   w.Tr("ConvertMultipleLinesOfTextToHtml"),
-					Link:    "https://www.anqicms.com/manual-filter/275.html",
+					Link:    "https://docs.anqicms.com/manual/filter-linebreaks/",
 					Content: w.Tr(`linebreaks 过滤器可以将多行文本按换行符转换成html标签。每行开头和结尾采用<p>和</p>包裹，中间有空行则采用 <br/>。还可以使用 linebreaksbr 来进行处理。与 linebreaks不同的地方是，linebreaksbr只是直接将换行符替换成 <br/>，并且不在开头和结尾添加p标签。还可以使用 linenumbers 来给多行文本的每一行进行标号，符号从1开始。如 1.。`),
 					Code:    `{{ obj|linebreaks }}`,
 				},
 				{
 					Title:   w.Tr("RemoveHtmlCode"),
-					Link:    "https://www.anqicms.com/manual-filter/279.html",
+					Link:    "https://docs.anqicms.com/manual/filter-removetags/",
 					Content: w.Tr(`striptags 过滤器可以移除html代码中的所有html标签。removetags 过滤器可以将移除html代码中指定标签。`),
 					Code:    `{{ obj|striptags }}`,
 				},
 				{
 					Title:   w.Tr("FormatAnyValueAsAStringOutput"),
-					Link:    "https://www.anqicms.com/manual-filter/283.html",
+					Link:    "https://docs.anqicms.com/manual/filter-stringformat/",
 					Content: w.Tr(`stringformat 过滤器可以将数字、字符串、数组等任意值按指定格式格式化成字符串输出。`),
 					Code:    `{{ obj|stringformat:"#+v" }}`,
 				},
 				{
 					Title:   w.Tr("InterceptAndAddAString..."),
-					Link:    "https://www.anqicms.com/manual-filter/284.html",
+					Link:    "https://docs.anqicms.com/manual/filter-truncatechars/",
 					Content: w.Tr(`truncatechars 过滤器可以对字符串进行截取并添加...，该方法会截断单词，指定长度包括...。truncatewords 过滤器可以对字符串按单词进行截取并添加...。`),
 					Code:    `{{ obj|truncatechars:50 }}`,
 				},
 				{
 					Title:   w.Tr("HtmlInterceptionAndAddition..."),
-					Link:    "https://www.anqicms.com/manual-filter/284.html",
+					Link:    "https://docs.anqicms.com/manual/filter-truncatechars/",
 					Content: w.Tr(`truncatechars_html 过滤器可以对html代码进行截取并添加...，该方法会截断单词，指定长度包括...。truncatewords_html 过滤器可以对html代码按单词进行截取并添加...。`),
 					Code:    `{{ obj|truncatechars_html:200 }}`,
 				},

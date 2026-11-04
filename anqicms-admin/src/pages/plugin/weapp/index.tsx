@@ -49,15 +49,9 @@ const PluginWeapp: React.FC<any> = () => {
           <p>
             <FormattedMessage id="plugin.weapp.default.tips" />
           </p>
-          <p>
-            <FormattedMessage id="plugin.weapp.default.help" />
-            <a href={`${brand.docs}/help-basic/3495.html`} target="_blank" rel="noreferrer">
-              {`${brand.docs}/help-basic/3495.html`}
-            </a>
-          </p>
           <p><FormattedMessage id="plugin.weapp.default.source" /></p>
         </div>
-        <Button onClick={() => window.open('https://github.com/fesiong/anqicms-app/releases')}>
+        <Button onClick={() => window.open('https://github.com/fesiong/cms-miniprogram/releases')}>
           <FormattedMessage id="plugin.weapp.default.download" />
         </Button>
       </Card>
