@@ -1,7 +1,7 @@
 import { FormattedMessage, useIntl, useModel } from '@umijs/max';
-import { brand } from '@/oem/brand';
-import { Button, Modal } from 'antd';
+import { Modal } from 'antd';
 import React, { useCallback, useRef, useState } from 'react';
+import VipPurchase from '../vipPurchase';
 
 interface VipModalResult {
   /** 当前用户是否为有效 VIP */
@@ -40,48 +40,27 @@ export function useVipModal(): VipModalResult {
     [isVip],
   );
 
-  const handleOrderVip = () => {
-    window.open(`${brand.website}/account/vip`);
-  };
-
   const handleCancel = () => {
     setVisible(false);
     actionRef.current = undefined;
   };
 
+  // 购买直接在后台完成：OEM 品牌下 brand.website 是客户自己的站点，
+  // 那里没有 /account/vip 这个页面，任何跳转都是死路。
   const VipModal: React.FC = () => (
     <Modal
       title={intl.formatMessage({ id: 'component.right-content.vip-title' })}
       open={visible}
       onCancel={handleCancel}
       width={500}
-      footer={
-        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button onClick={handleCancel}>
-            <FormattedMessage id="component.close" />
-          </Button>
-          <Button type="primary" onClick={handleOrderVip}>
-            <FormattedMessage id="component.right-content.order" />
-          </Button>
-        </div>
-      }
+      footer={null}
     >
       <div className="vip-modal-content">
         {text && <div className="mb-normal">{text}</div>}
         <p>
           <FormattedMessage id="component.right-content.vip-tips" />
         </p>
-        <p>
-          <FormattedMessage id="component.right-content.order.confirm" />
-          <Button type="link" onClick={handleOrderVip}>
-            <FormattedMessage id="component.right-content.order" />
-          </Button>
-        </p>
-        <p>
-          <FormattedMessage id="component.right-content.vip-prefix" />
-          <FormattedMessage id="component.right-content.vip-name" />
-          <FormattedMessage id="component.right-content.vip-suffix" />
-        </p>
+        {visible && <VipPurchase onClose={handleCancel} />}
       </div>
     </Modal>
   );

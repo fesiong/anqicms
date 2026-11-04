@@ -92,6 +92,88 @@ func AnqiRegister(ctx iris.Context) {
 	})
 }
 
+// GetAnqiPackages 返回可购买的充值套餐，价格由官网下发，本地不做缓存与换算。
+func GetAnqiPackages(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	packages, err := currentSite.AnqiPackages()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": packages,
+	})
+}
+
+// AnqiRecharge 在官网下单，返回微信二维码或收银台跳转地址。
+func AnqiRecharge(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	var req request.AnqiRechargeRequest
+	if err := ctx.ReadJSON(&req); err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	if req.Type == "" {
+		req.Type = "vip"
+	}
+	if req.Quantity <= 0 {
+		req.Quantity = 1
+	}
+
+	order, err := currentSite.AnqiRecharge(&req)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": order,
+	})
+}
+
+// AnqiRechargeStatus 供前端轮询支付结果；已付款时顺手同步本地登录态。
+func AnqiRechargeStatus(ctx iris.Context) {
+	currentSite := provider.CurrentSite(ctx)
+	orderId := strings.TrimSpace(ctx.URLParam("order_id"))
+	if orderId == "" {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  currentSite.Tr("invalidParameter"),
+		})
+		return
+	}
+
+	status, err := currentSite.AnqiRechargeStatus(orderId)
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+
+	ctx.JSON(iris.Map{
+		"code": config.StatusOK,
+		"msg":  "",
+		"data": status,
+	})
+}
+
 // GetAnqiInfo 异步检查安企云登录状态并返回当前授权信息。
 func GetAnqiInfo(ctx iris.Context) {
 	currentSite := provider.CurrentSite(ctx)

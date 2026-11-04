@@ -25,6 +25,7 @@ import { Badge, Button, Modal, Space, Tag, Tooltip, message } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useState } from 'react';
 import HeaderSearch from '../HeaderSearch';
+import VipPurchase from '../vipPurchase';
 import Avatar from './AvatarDropdown';
 import './index.less';
 
@@ -121,7 +122,6 @@ const GlobalHeaderRight: React.FC = () => {
 
   const handleOrderVip = () => {
     setOrderVisible(true);
-    window.open(`${brand.website}/account/vip`);
   };
 
   const reloadAccount = async () => {
@@ -621,21 +621,21 @@ const GlobalHeaderRight: React.FC = () => {
           setOrderVisible(false);
         }}
         title={intl.formatMessage({
-          id: 'component.right-content.order.confirm',
+          id: 'component.right-content.vip.modal.title',
         })}
         maskClosable={false}
         footer={null}
+        width={520}
       >
-        <div className="order-control">
-          <Space align="center">
-            <Button onClick={reloadAccount}>
-              <FormattedMessage id="component.close" />
-            </Button>
-            <Button type="primary" onClick={reloadAccount}>
-              <FormattedMessage id="component.right-content.update" />
-            </Button>
-          </Space>
-        </div>
+        {/* 关闭即卸载，购买状态自然重置；打开时重新拉最新套餐 */}
+        {orderVisible && (
+          <VipPurchase
+            onClose={async () => {
+              setOrderVisible(false);
+              await reloadAccount();
+            }}
+          />
+        )}
       </Modal>
     </>
   );

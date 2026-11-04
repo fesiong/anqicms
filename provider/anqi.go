@@ -61,6 +61,61 @@ type AnqiLoginResult struct {
 	Data *config.AnqiUserConfig `json:"data"`
 }
 
+// AnqiPackage 是官网下发的一个充值套餐。price 单位是分，有效期单位由 unit 描述。
+// 价格与档位完全由官网配置决定，客户端不得写死或缓存过久——官网调价后本地还显示
+// 老价格，付完就对不上账。
+type AnqiPackage struct {
+	GoodsId   uint   `json:"goods_id"`
+	Title     string `json:"title"`
+	Price     int64  `json:"price"`
+	ExpireDay int64  `json:"expire_day"`
+	Total     int64  `json:"total"`
+	Unit      string `json:"unit"`
+}
+
+type AnqiPackages struct {
+	Vip      []AnqiPackage `json:"vip"`
+	Integral AnqiPackage   `json:"integral"`
+	PayWays  []string      `json:"pay_ways"`
+}
+
+type AnqiPackagesResult struct {
+	Code int          `json:"code"`
+	Msg  string       `json:"msg"`
+	Data AnqiPackages `json:"data"`
+}
+
+// AnqiRechargeOrder 是下单后的支付参数。
+// 微信返回 code_url（可直接放进 img src 的 data URI），支付宝返回 jump_url。
+type AnqiRechargeOrder struct {
+	OrderId   string  `json:"order_id"`
+	Amount    float64 `json:"amount"`
+	AmountFen int64   `json:"amount_fen"`
+	PayWay    string  `json:"pay_way"`
+	CodeUrl   string  `json:"code_url"`
+	JumpUrl   string  `json:"jump_url"`
+}
+
+type AnqiRechargeResult struct {
+	Code int               `json:"code"`
+	Msg  string            `json:"msg"`
+	Data AnqiRechargeOrder `json:"data"`
+}
+
+type AnqiRechargeStatus struct {
+	OrderId string                 `json:"order_id"`
+	Status  int                    `json:"status"`
+	Paid    bool                   `json:"paid"`
+	Amount  float64                `json:"amount"`
+	User    *config.AnqiUserConfig `json:"user"`
+}
+
+type AnqiRechargeStatusResult struct {
+	Code int                `json:"code"`
+	Msg  string             `json:"msg"`
+	Data AnqiRechargeStatus `json:"data"`
+}
+
 type AnqiTemplateResult struct {
 	Code int                    `json:"code"`
 	Msg  string                 `json:"msg"`
@@ -314,6 +369,81 @@ func (w *Website) AnqiRegister(req *request.AnqiRegisterRequest) error {
 	}
 
 	return nil
+}
+
+// AnqiPackages 拉取官网充值套餐，供后台内嵌的购买弹窗展示。
+func (w *Website) AnqiPackages() (*AnqiPackages, error) {
+	var result AnqiPackagesResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Get(AnqiApi + "/packages").EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return nil, errs[0]
+	}
+
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	return &result.Data, nil
+}
+
+// AnqiRecharge 在官网下单并取回支付参数。
+//
+// 资金流是官网代收：本地只拿到二维码或跳转地址，不接触任何支付凭据。
+func (w *Website) AnqiRecharge(req *request.AnqiRechargeRequest) (*AnqiRechargeOrder, error) {
+	if config.AnqiUser.AuthId == 0 || config.AnqiUser.Token == "" {
+		return nil, errors.New(w.Tr("PleaseLogInToAnqicmsAccountFirst"))
+	}
+
+	var result AnqiRechargeResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Post(AnqiApi + "/recharge").Send(req).EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return nil, errs[0]
+	}
+
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	return &result.Data, nil
+}
+
+// AnqiRechargeStatus 轮询订单状态，已付款时把最新账号信息同步回本地登录态。
+//
+// 走轮询而不是回调：OEM 客户大量内网部署，官网打不进去，只能客户端主动问。
+func (w *Website) AnqiRechargeStatus(orderId string) (*AnqiRechargeStatus, error) {
+	var result AnqiRechargeStatusResult
+	_, body, errs := w.NewAuthReq(gorequest.TypeJSON).Get(AnqiApi + "/recharge/status").Query("order_id=" + orderId).EndStruct(&result)
+
+	if len(errs) > 0 {
+		library.DebugLog(config.ExecPath+"cache/", "error.log", string(body))
+		return nil, errs[0]
+	}
+
+	if result.Code != 0 {
+		return nil, errors.New(result.Msg)
+	}
+
+	if result.Data.Paid && result.Data.User != nil {
+		// ⚠️ 官网在这条响应里**故意把 token 清空**（不复用支付通道下发凭据）。
+		// 整体覆盖会把本地 token 抹掉，之后所有 /auth 请求都会 401，所以这里必须
+		// 先留存再回填——与 AnqiCheckLogin 的字段级合并是同一个原因。
+		token := config.AnqiUser.Token
+		config.AnqiUser = *result.Data.User
+		config.AnqiUser.Token = token
+		config.AnqiUser.CheckTime = time.Now().Unix()
+
+		defaultSite := CurrentSite(nil)
+		if w.Id == 1 {
+			defaultSite = w
+		}
+		_ = defaultSite.SaveSettingValue(AnqiSettingKey, config.AnqiUser)
+	}
+
+	return &result.Data, nil
 }
 
 func (w *Website) AnqiCheckLogin(force bool) {

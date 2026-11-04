@@ -17,6 +17,42 @@ export async function anqiRegister(body: any, options?: { [key: string]: any }) 
   });
 }
 
+// 充值套餐：价格由官网下发，客户端不写死。
+export async function getAnqiPackages(
+  params?: any,
+  options?: { [key: string]: any },
+) {
+  return get({
+    url: '/anqi/packages',
+    params,
+    options,
+  });
+}
+
+// 下单：返回微信二维码或收银台跳转地址，资金由官网代收。
+export async function anqiRecharge(
+  body: any,
+  options?: { [key: string]: any },
+) {
+  return post({
+    url: '/anqi/recharge',
+    body,
+    options,
+  });
+}
+
+// 支付结果轮询（内网部署收不到官网回调）。
+export async function anqiRechargeStatus(
+  params?: any,
+  options?: { [key: string]: any },
+) {
+  return get({
+    url: '/anqi/recharge/status',
+    params,
+    options,
+  });
+}
+
 export async function getAnqiInfo(
   params?: any,
   options?: { [key: string]: any },

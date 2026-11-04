@@ -38,6 +38,15 @@ type AnqiDownloadTemplateRequest struct {
 	TemplateId uint `json:"template_id"` // 模板 ID
 }
 
+// AnqiRechargeRequest 后台内嵌购买 VIP / 充值积分。
+// 金额与套餐由官网决定，这里只传选择项。
+type AnqiRechargeRequest struct {
+	Type     string `json:"type"`     // vip=续期用户组，integral=充积分
+	GoodsId  uint   `json:"goods_id"` // 套餐 ID；vip 时对应用户组 ID
+	Quantity int64  `json:"quantity"` // VIP 年数 / 积分份数，<=0 按 1 处理
+	PayWay   string `json:"pay_way"`  // wechat|alipay，留空默认微信
+}
+
 // AnqiFeedbackRequest 向安企云提交使用反馈的结构体
 type AnqiFeedbackRequest struct {
 	UserName string `json:"user_name"` // 反馈用户
