@@ -40,10 +40,12 @@ const RULE_EVENTS = [
 
 // 通知规则（含模板）（R105）：规则事件类型只能从固定列表选择；
 // 模板语法交由后端 ValidateNotificationTemplate 校验，前端只校验平台覆盖必须是 JSON 对象。
-const ChannelNotifications: React.FC = () => {
+const ChannelNotifications: React.FC<{ active?: boolean }> = ({ active }) => {
   const intl = useIntl();
   const ruleActionRef = useRef<ActionType>();
   const templateActionRef = useRef<ActionType>();
+  // 记录是否已经激活过：首次激活由挂载负责拉取，重新激活才额外 reload，避免重复请求
+  const activatedRef = useRef(false);
 
   const [targetGroups, setTargetGroups] = useState<any[]>([]);
   const [targetLabels, setTargetLabels] = useState<Record<number, string>>({});
@@ -100,10 +102,20 @@ const ChannelNotifications: React.FC = () => {
     setTemplates(Array.isArray(res.data) ? res.data : []);
   };
 
+  // 父级常驻挂载 + display 切换：重新进入本 tab 必须重拉目标/模板下拉与两张表，
+  // 否则「先在目标页新增群目标，再来配规则」在通知页已打开过时会看不到新目标
   useEffect(() => {
+    if (active === false) {
+      return;
+    }
     loadTargets();
     loadTemplates();
-  }, []);
+    if (activatedRef.current) {
+      ruleActionRef.current?.reload();
+      templateActionRef.current?.reload();
+    }
+    activatedRef.current = true;
+  }, [active]);
 
   const eventLabel = (eventType: string) =>
     intl.formatMessage({ id: `plugin.channels.rule.event.${eventType}` });

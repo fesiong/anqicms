@@ -45,6 +45,8 @@ const ChannelBinding: React.FC<{ active?: boolean }> = ({ active }) => {
   const [tokenVisible, setTokenVisible] = useState<boolean>(false);
   const [tokenData, setTokenData] = useState<any>(null);
   const [remaining, setRemaining] = useState<number>(0);
+  // 记录是否已经激活过：首次激活由挂载负责拉取，重新激活才额外 reload，避免重复请求
+  const activatedRef = useRef(false);
 
   const loadChannels = async () => {
     const res = await channelList();
@@ -55,17 +57,20 @@ const ChannelBinding: React.FC<{ active?: boolean }> = ({ active }) => {
     setChannels(Array.isArray(res.data) ? res.data : []);
   };
 
-  useEffect(() => {
-    loadChannels();
-  }, []);
-
-  // 离开本 tab 时立刻丢弃明文与弹窗状态
+  // 父级常驻挂载 + display 切换：
+  // 离开本 tab 时立刻丢弃明文与弹窗状态；重新进入时重拉渠道与绑定列表
   useEffect(() => {
     if (active === false) {
       setTokenVisible(false);
       setTokenData(null);
       setRemaining(0);
+      return;
     }
+    loadChannels();
+    if (activatedRef.current) {
+      actionRef.current?.reload();
+    }
+    activatedRef.current = true;
   }, [active]);
 
   // 用服务端 expires_at 做倒计时，每秒刷新；到期后剩余秒数归零
@@ -229,11 +234,12 @@ const ChannelBinding: React.FC<{ active?: boolean }> = ({ active }) => {
             {intl.formatMessage({ id: 'plugin.channels.binding.add' })}
           </Button>,
         ]}
-        request={async () => {
+        // 「查看全部」放进 params：pro-table 只在 params 变化时重发请求，
+        // 只让开关写进 request 闭包会导致切开关没有任何反应
+        params={{ all: viewAll && access.canSuper ? 1 : 0 }}
+        request={async (params) => {
           // 默认只查本人；查看全部需要超级管理员，后端非超管返回 1002 时原样提示
-          const res = await channelBindings({
-            all: viewAll && access.canSuper ? 1 : 0,
-          });
+          const res = await channelBindings({ all: params.all });
           if (res.code !== 0) {
             message.error(res.msg);
             return { data: [], success: false, total: 0 };

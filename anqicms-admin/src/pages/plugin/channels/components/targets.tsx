@@ -25,13 +25,15 @@ const timeText = (seconds?: number) => {
 
 // 会话目标（R104）：只允许创建群目标；私聊目标由绑定流程产生，页面只读展示。
 // 不提供删除：取消批准用 approved=0（表格里直接切换）。
-const ChannelTargets: React.FC = () => {
+const ChannelTargets: React.FC<{ active?: boolean }> = ({ active }) => {
   const intl = useIntl();
   const actionRef = useRef<ActionType>();
   const [channels, setChannels] = useState<any[]>([]);
   const [channelId, setChannelId] = useState<number>();
   const [editVisible, setEditVisible] = useState<boolean>(false);
   const [currentTarget, setCurrentTarget] = useState<any>({});
+  // 记录是否已经激活过：首次激活由挂载负责拉取，重新激活才额外 reload，避免重复请求
+  const activatedRef = useRef(false);
 
   const loadChannels = async () => {
     const res = await channelList();
@@ -42,9 +44,18 @@ const ChannelTargets: React.FC = () => {
     setChannels(Array.isArray(res.data) ? res.data : []);
   };
 
+  // 父级常驻挂载 + display 切换：重新进入本 tab 必须重拉渠道下拉与表格，
+  // 否则渠道在别处增删后这里仍是旧数据
   useEffect(() => {
+    if (active === false) {
+      return;
+    }
     loadChannels();
-  }, []);
+    if (activatedRef.current) {
+      actionRef.current?.reload();
+    }
+    activatedRef.current = true;
+  }, [active]);
 
   const kindLabel = (kind: string) => {
     if (kind === 'group' || kind === 'private') {
@@ -212,13 +223,18 @@ const ChannelTargets: React.FC = () => {
           search={false}
           actionRef={actionRef}
           pagination={false}
+          // 渠道放进 params：pro-table 只在 params 变化时重发请求，
+          // 仅靠 request 闭包捕获 channelId 在 A→B 切换时不会重新请求
+          params={{ channel_id: channelId }}
           locale={{
             emptyText: intl.formatMessage({
               id: 'plugin.channels.target.empty',
             }),
           }}
-          request={async () => {
-            const res = await channelTargets({ channel_id: channelId });
+          request={async (params) => {
+            const res = await channelTargets({
+              channel_id: params.channel_id,
+            });
             if (res.code !== 0) {
               message.error(res.msg);
               return { data: [], success: false, total: 0 };

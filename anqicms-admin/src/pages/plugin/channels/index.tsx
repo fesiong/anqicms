@@ -1,5 +1,6 @@
-import { Card, PageContainer } from '@ant-design/pro-components';
+import { PageContainer } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
+import { Card } from 'antd';
 import React, { useState } from 'react';
 import ChannelBinding from './components/binding';
 import ChannelConnect from './components/connect';
@@ -13,7 +14,8 @@ const PluginChannels: React.FC = () => {
   // 已访问过的 tab 常驻挂载（仅切换显示），避免切换 tab 时表单被卸载丢失未保存输入
   const [visitedTabs, setVisitedTabs] = useState<string[]>(['connect']);
 
-  // 常驻挂载 + display 切换；binding 需要感知离开以清空一次性 token 明文
+  // 常驻挂载 + display 切换；子组件靠 active 感知重新进入
+  // （binding 离开时清空一次性 token 明文，其余 tab 重新激活时重拉下拉与列表）
   const renderTab = (key: string, node: React.ReactNode) => {
     if (!visitedTabs.includes(key)) {
       return null;
@@ -65,8 +67,14 @@ const PluginChannels: React.FC = () => {
           'binding',
           <ChannelBinding active={activeTabKey === 'binding'} />,
         )}
-        {renderTab('targets', <ChannelTargets />)}
-        {renderTab('notifications', <ChannelNotifications />)}
+        {renderTab(
+          'targets',
+          <ChannelTargets active={activeTabKey === 'targets'} />,
+        )}
+        {renderTab(
+          'notifications',
+          <ChannelNotifications active={activeTabKey === 'notifications'} />,
+        )}
         {renderTab('records', <ChannelRecords />)}
       </Card>
     </PageContainer>
