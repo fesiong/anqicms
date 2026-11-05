@@ -12,6 +12,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -1150,5 +1151,306 @@ func TestDingTalkSendRetryAfterFromHeader(t *testing.T) {
 	}
 	if result.RetryAfterSeconds != 7 {
 		t.Errorf("RetryAfterSeconds = %d，期望 7", result.RetryAfterSeconds)
+	}
+}
+
+// TestDingTalkSendForbiddenIsPermanent 固化「发送端 403 = 权限问题 = 永久错误」：
+// 机器人被移出群 / 没有发送权限，重试不会变好；按 transient 重试只会让每条通知多打一次
+// token 请求。必须与 401 分开：只有 401 才可能是缓存 token 被平台提前作废。
+func TestDingTalkSendForbiddenIsPermanent(t *testing.T) {
+	const appId = "ding_forbidden"
+	dingTalkTokenCache.invalidate(appId)
+	t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case dingTalkTokenEndpoint:
+			_, _ = w.Write([]byte(`{"accessToken":"token_403","expireIn":7200}`))
+		case dingTalkGroupSendEndpoint:
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"code":"Forbidden.AccessDenied","message":"robot has been removed from the conversation"}`))
+		default:
+			t.Errorf("未预期的请求路径 %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: appId, AppSecret: "secret"},
+		server.URL, server.Client(),
+	)
+	result, err := adapter.Send(context.Background(), TargetRef{
+		Kind:             TargetKindGroup,
+		PlatformTargetId: "cid_group_1",
+	}, OutboundMessage{Text: "你好"})
+	if err == nil {
+		t.Fatalf("发送端 403 应返回错误")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) {
+		t.Fatalf("返回了非 SendError：%v", err)
+	}
+	if sendErr.Class != ErrorClassPermanent {
+		t.Fatalf("发送端 403 应为 permanent（权限问题重试不会变好），实际 %s：%s", sendErr.Class, sendErr.Message)
+	}
+	if strings.Contains(sendErr.Message, "已清除缓存") {
+		t.Errorf("403 不应走「清缓存 + 按 transient 重试」分支，实际文案 %q", sendErr.Message)
+	}
+	if result.PlatformMessageId != "" {
+		t.Errorf("失败时不应返回成功回执，实际 %q", result.PlatformMessageId)
+	}
+}
+
+// TestDingTalkSendTokenStageAuthFailuresArePermanent 固化取 token 阶段的鉴权失败：
+// appKey/appSecret 无效（HTTP 401/403）重试不会变好，且必须停在 token 阶段、不发消息。
+func TestDingTalkSendTokenStageAuthFailuresArePermanent(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		status int
+	}{
+		{name: "取 token 返回 401", status: http.StatusUnauthorized},
+		{name: "取 token 返回 403", status: http.StatusForbidden},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			appId := "ding_token_auth_" + strconv.Itoa(tc.status)
+			dingTalkTokenCache.invalidate(appId)
+			t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+			var sendCalls atomic.Int32
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case dingTalkTokenEndpoint:
+					w.WriteHeader(tc.status)
+					_, _ = w.Write([]byte(`{"code":"InvalidAuthentication","message":"invalid appKey or appSecret"}`))
+				case dingTalkPrivateSendEndpoint:
+					sendCalls.Add(1)
+					_, _ = w.Write([]byte(`{"processQueryKey":"pqk_should_not_happen"}`))
+				default:
+					t.Errorf("未预期的请求路径 %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+
+			adapter := newDingTalkAdapterWithEndpoint(
+				PlatformCredentials{AppId: appId, AppSecret: "secret"},
+				server.URL, server.Client(),
+			)
+			_, err := adapter.Send(context.Background(), TargetRef{
+				Kind:             TargetKindPrivate,
+				PlatformTargetId: "staff_1",
+			}, OutboundMessage{Text: "你好"})
+			if err == nil {
+				t.Fatalf("取 token 失败应返回错误")
+			}
+			var sendErr *SendError
+			if !errors.As(err, &sendErr) || sendErr.Class != ErrorClassPermanent {
+				t.Fatalf("取 token 阶段 HTTP %d 期望 permanent，实际 %v", tc.status, err)
+			}
+			if got := sendCalls.Load(); got != 0 {
+				t.Errorf("取 token 失败后不应继续发消息，实际发了 %d 次", got)
+			}
+		})
+	}
+}
+
+// TestDingTalkInboundP2PNeverMentionsBot 固化「私聊事件 MentionedBot 恒为 false」：
+// 平台在单聊里即使把本条消息算进 atList，也不得让 MentionedBot 为 true。
+func TestDingTalkInboundP2PNeverMentionsBot(t *testing.T) {
+	const appId = "ding_p2p_mention"
+	base := chatbot.BotCallbackDataModel{
+		ConversationId:   "cid_p2p_1",
+		ConversationType: "1",
+		MsgId:            "msg_p2p_1",
+		ChatbotCorpId:    "corp_1",
+		SenderStaffId:    "staff_1",
+		Msgtype:          "text",
+		Text:             chatbot.BotCallbackDataTextModel{Content: "你好"},
+		IsInAtList:       true,
+	}
+	p2p, ok := normalizeDingTalkInbound(&base, appId)
+	if !ok {
+		t.Fatalf("单聊消息未被识别")
+	}
+	if p2p.ChatType != ChatTypeP2P {
+		t.Fatalf("ChatType = %q，期望 %q", p2p.ChatType, ChatTypeP2P)
+	}
+	if p2p.MentionedBot {
+		t.Errorf("单聊事件即使 IsInAtList=true 也必须 MentionedBot=false")
+	}
+
+	// 正向对照：同样的 atList 在群聊里必须映射成 true，证明上面的 false 不是恒 false。
+	group := base
+	group.ConversationType = "2"
+	groupEvent, _ := normalizeDingTalkInbound(&group, appId)
+	if !groupEvent.MentionedBot {
+		t.Errorf("群聊 IsInAtList=true 时 MentionedBot 应为 true：私聊断言可能在空转")
+	}
+
+	// 未知会话类型同样不采信 atList（它随后会被 InboundEvent.Validate 拒绝）。
+	unknown := base
+	unknown.ConversationType = "9"
+	unknownEvent, _ := normalizeDingTalkInbound(&unknown, appId)
+	if unknownEvent.MentionedBot {
+		t.Errorf("未知会话类型不应采信 atList")
+	}
+}
+
+// TestFeishuBotIdentityTimeoutFailsClosed 固化建连前拉取机器人身份的超时：
+// lark 客户端默认没有响应超时，半开连接会让整条重连循环永久卡住。
+// 超时必须按「拉取失败」处理（open_id 为空 → MentionedBot 恒 false），而不是无限等待。
+func TestFeishuBotIdentityTimeoutFailsClosed(t *testing.T) {
+	creds := PlatformCredentials{AppId: "cli_bot_timeout", AppSecret: "secret", OrganizationId: "tenant_1"}
+	blocking := func(ctx context.Context, _ PlatformCredentials) string {
+		<-ctx.Done()
+		// 超时之后即使还返回了值也不得采信：这条路径等价于「请求被取消」。
+		return "ou_bot_stale"
+	}
+	started := time.Now()
+	openId := fetchFeishuBotIdentity(context.Background(), blocking, creds, 50*time.Millisecond)
+	elapsed := time.Since(started)
+	if openId != "" {
+		t.Errorf("拉取超时后必须 fail closed（open_id 为空），实际 %q", openId)
+	}
+	if elapsed > 2*time.Second {
+		t.Errorf("拉取身份的超时没有生效：耗时 %s", elapsed)
+	}
+
+	// 正常路径不受影响：及时返回的 open_id 原样使用（只做 TrimSpace）。
+	fast := func(context.Context, PlatformCredentials) string { return "  ou_bot_fast " }
+	if got := fetchFeishuBotIdentity(context.Background(), fast, creds, time.Second); got != "ou_bot_fast" {
+		t.Errorf("正常路径 open_id = %q，期望 ou_bot_fast", got)
+	}
+}
+
+// TestDingTalkSendReportsSecondSegmentFailure 固化「多段发送中途失败」：
+// 错误分类与 Retry-After 必须取自失败的那一段，且不得返回成功回执。
+func TestDingTalkSendReportsSecondSegmentFailure(t *testing.T) {
+	const appId = "ding_seg2_fail"
+	dingTalkTokenCache.invalidate(appId)
+	t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+	var sendCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case dingTalkTokenEndpoint:
+			_, _ = w.Write([]byte(`{"accessToken":"token_seg2","expireIn":7200}`))
+		case dingTalkPrivateSendEndpoint:
+			if sendCalls.Add(1) == 1 {
+				_, _ = w.Write([]byte(`{"processQueryKey":"pqk_seg_1"}`))
+				return
+			}
+			w.Header().Set("Retry-After", "5")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"code":"Throttling","message":"too many requests"}`))
+		default:
+			t.Errorf("未预期的请求路径 %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: appId, AppSecret: "secret"},
+		server.URL, server.Client(),
+	)
+	text := strings.Repeat("长通知正文", 500) // 2500 rune > 1800 → 至少两段
+	result, err := adapter.Send(context.Background(), TargetRef{
+		Kind:             TargetKindPrivate,
+		PlatformTargetId: "staff_1",
+	}, OutboundMessage{Text: text})
+	if err == nil {
+		t.Fatalf("第 2 段 429 应返回错误")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) {
+		t.Fatalf("返回了非 SendError：%v", err)
+	}
+	if sendErr.Class != ErrorClassTransient {
+		t.Errorf("第 2 段 429 应为 transient，实际 %s：%s", sendErr.Class, sendErr.Message)
+	}
+	if result.RetryAfterSeconds != 5 {
+		t.Errorf("RetryAfterSeconds = %d，期望取第 2 段 429 的 5", result.RetryAfterSeconds)
+	}
+	if result.PlatformMessageId != "" {
+		t.Errorf("失败时不应返回成功回执（第 1 段已送达也不回执），实际 %q", result.PlatformMessageId)
+	}
+	if got := sendCalls.Load(); got != 2 {
+		t.Errorf("第 2 段失败后应立即停止，实际发了 %d 段", got)
+	}
+}
+
+// TestFeishuSendReportsSecondSegmentFailure 固化飞书多段发送中途失败：
+// 第 2 段建消息失败时错误分类来自第 2 段，且不返回成功回执。
+func TestFeishuSendReportsSecondSegmentFailure(t *testing.T) {
+	call := 0
+	adapter := &feishuAdapter{
+		creds: PlatformCredentials{AppId: "cli_seg2", AppSecret: "secret", OrganizationId: "tenant_1"},
+		createMessage: func(_ context.Context, _ feishuSendRequest) (*larkim.CreateMessageResp, error) {
+			call++
+			if call == 1 {
+				return &larkim.CreateMessageResp{
+					CodeError: larkcore.CodeError{Code: 0},
+					Data:      &larkim.CreateMessageRespData{MessageId: channelStringPtr("om_seg_1")},
+				}, nil
+			}
+			return &larkim.CreateMessageResp{
+				CodeError: larkcore.CodeError{Code: 230002, Msg: "bot is not in the chat"},
+			}, nil
+		},
+	}
+	result, err := adapter.Send(context.Background(), TargetRef{
+		Kind:             TargetKindGroup,
+		PlatformTargetId: "oc_chat_1",
+	}, OutboundMessage{Text: strings.Repeat("通知正文", 1000)}) // 4000 rune > 3500 → 两段
+	if err == nil {
+		t.Fatalf("第 2 段失败应返回错误")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) || sendErr.Class != ErrorClassPermanent {
+		t.Fatalf("第 2 段业务码 230002 期望 permanent，实际 %v", err)
+	}
+	if !strings.Contains(sendErr.Message, "230002") {
+		t.Errorf("错误文案应带上第 2 段的业务码，实际 %q", sendErr.Message)
+	}
+	if result.PlatformMessageId != "" {
+		t.Errorf("失败时不应返回成功回执，实际 %q", result.PlatformMessageId)
+	}
+	if call != 2 {
+		t.Errorf("第 2 段失败后应立即停止，实际调用 %d 次", call)
+	}
+}
+
+// TestParseRetryAfterSeconds 固化 Retry-After 解析：秒数与 HTTP 日期两种形态都支持，
+// 解析不出来或日期已经过去一律返回 0（绝不返回负数）。
+func TestParseRetryAfterSeconds(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+		want  int
+	}{
+		{name: "秒数", value: "7", want: 7},
+		{name: "带空白的秒数", value: " 12 ", want: 12},
+		{name: "空值", value: "", want: 0},
+		{name: "零秒", value: "0", want: 0},
+		{name: "负秒数不得返回负数", value: "-30", want: 0},
+		{name: "无法解析", value: "soon", want: 0},
+	}
+	for _, tc := range cases {
+		if got := parseRetryAfterSeconds(tc.value); got != tc.want {
+			t.Errorf("%s：parseRetryAfterSeconds(%q) = %d，期望 %d", tc.name, tc.value, got, tc.want)
+		}
+	}
+
+	// HTTP-date 分支：未来 30 秒的日期应解析出接近 30 的秒数（秒级截断会少 1 秒以内）。
+	future := time.Now().Add(30 * time.Second).UTC().Format(http.TimeFormat)
+	if got := parseRetryAfterSeconds(future); got < 27 || got > 30 {
+		t.Errorf("HTTP-date 未来 30 秒解析为 %d 秒，期望 27~30", got)
+	}
+	// 已经过去的日期：等待时间已过，返回 0 而不是负数。
+	past := time.Now().Add(-2 * time.Minute).UTC().Format(http.TimeFormat)
+	if got := parseRetryAfterSeconds(past); got != 0 {
+		t.Errorf("HTTP-date 已过期解析为 %d，期望 0", got)
 	}
 }

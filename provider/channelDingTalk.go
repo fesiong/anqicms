@@ -252,11 +252,12 @@ func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials
 //   - ChatId    ← conversationId（群聊时即 openConversationId）
 //   - ChatType  ← conversationType：1 单聊 → p2p，2 群聊 → group，其它留空
 //   - Text      ← text.content（仅 msgtype == text），原文保留不裁剪
-//   - MentionedBot ← isInAtList（平台是否把本应用算进 @ 列表）
+//   - MentionedBot ← isInAtList，且仅当会话类型是群聊（单聊恒为 false，见下）
 func normalizeDingTalkInbound(data *dchatbot.BotCallbackDataModel, appId string) (InboundEvent, bool) {
 	if data == nil {
 		return InboundEvent{}, false
 	}
+	chatType := normalizeDingTalkConversationType(data.ConversationType)
 	inbound := InboundEvent{
 		EventId:        strings.TrimSpace(data.MsgId),
 		Kind:           strings.TrimSpace(data.Msgtype),
@@ -264,8 +265,10 @@ func normalizeDingTalkInbound(data *dchatbot.BotCallbackDataModel, appId string)
 		AppId:          appId,
 		UserId:         strings.TrimSpace(data.SenderStaffId),
 		ChatId:         strings.TrimSpace(data.ConversationId),
-		ChatType:       normalizeDingTalkConversationType(data.ConversationType),
-		MentionedBot:   data.IsInAtList,
+		ChatType:       chatType,
+		// 群聊 @ 门禁只针对群聊（见 InboundEvent.MentionedBot 的注释）：单聊里平台即使把本条
+		// 消息算进 atList，也必须收敛成 false；未知会话类型同样不采信（随后会被 Validate 拒绝）。
+		MentionedBot: data.IsInAtList && chatType == ChatTypeGroup,
 	}
 	if inbound.OrganizationId == "" {
 		inbound.OrganizationId = strings.TrimSpace(data.SenderCorpId)
@@ -411,15 +414,13 @@ func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg Outbou
 		retryAfter, sendErr := dingTalkPostJSON(ctx, a.httpClientOrDefault(), a.openAPIHostOrDefault(), path, accessToken, body, &segmentResult)
 		if sendErr != nil {
 			var respErr *platformResponseError
-			if errors.As(sendErr, &respErr) {
-				switch respErr.StatusCode {
-				case http.StatusUnauthorized, http.StatusForbidden:
-					// 凭据错误在取 token 阶段就会失败，发送端 401/403 只可能是缓存 token
-					// 被平台提前作废：清缓存后按 transient 返回，重试即可成功。
-					dingTalkTokenCache.invalidate(creds.AppId)
-					return SendResult{}, transientSendError("钉钉访问令牌失效，已清除缓存，可重试（HTTP %d）：%s",
-						respErr.StatusCode, sanitizePlatformMessage(respErr.Message))
-				}
+			// 只有 401 才可能是「缓存 token 被平台提前作废」：清缓存后按 transient 返回，重试即可成功。
+			// 403 是权限问题（机器人被移出群 / 没有发送权限），重试不会变好，必须走通用分类判 permanent；
+			// 若按 transient 处理，每次重试还会多打一次 token 请求。
+			if errors.As(sendErr, &respErr) && respErr.StatusCode == http.StatusUnauthorized {
+				dingTalkTokenCache.invalidate(creds.AppId)
+				return SendResult{}, transientSendError("钉钉访问令牌失效，已清除缓存，可重试（HTTP %d）：%s",
+					respErr.StatusCode, sanitizePlatformMessage(respErr.Message))
 			}
 			// 429 会把建议等待时间一起带出去（RetryAfterSeconds），供 T8 安排下一次重试。
 			return SendResult{RetryAfterSeconds: retryAfter}, ClassifyPlatformSendError(sendErr)

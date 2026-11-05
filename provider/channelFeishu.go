@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -45,6 +46,11 @@ type feishuAdapter struct {
 // ⚠ 保守值：飞书文本消息的实际限制按请求体 150KB 计（im/v1/message/create 文档），
 // 这里取 3500 是为了同时容纳多字节中文与 JSON 转义后的体积；未用真实租户校准，T11 校准。
 const feishuMaxTextRunes = 3500
+
+// feishuBotIdentityTimeout 是建连前同步拉取机器人身份的时限。
+// lark.Client 默认 ReqTimeout=0（等价 http.DefaultClient，没有响应超时），
+// 建连前的同步请求一旦撞上半开连接就会把整条重连循环永久卡住，因此必须自带超时。
+const feishuBotIdentityTimeout = 5 * time.Second
 
 // feishuSendRequest 是一次文本发送的参数。
 //
@@ -105,12 +111,8 @@ func (a *feishuAdapter) runOnce(ctx context.Context, creds PlatformCredentials, 
 	defer cancel()
 
 	// 机器人 open_id 用来判断群聊消息是否 @ 了本应用（规格 §7 群聊门禁）。
-	// 每轮建连取一次；取不到就按「未 @」处理（fail closed），不因此中断连接。
-	fetchBotOpenId := a.fetchBotOpenId
-	if fetchBotOpenId == nil {
-		fetchBotOpenId = feishuBotOpenId
-	}
-	botOpenId := fetchBotOpenId(runCtx, creds)
+	// 每轮建连取一次；取不到（含超时）就按「未 @」处理（fail closed），不因此中断连接。
+	botOpenId := fetchFeishuBotIdentity(runCtx, a.fetchBotOpenId, creds, feishuBotIdentityTimeout)
 
 	// 长连接模式下 SDK 的 Do 路径不做签名校验（signature 只用于 HTTP webhook），
 	// 因此 verificationToken / encryptKey 都留空。
@@ -139,6 +141,30 @@ func (a *feishuAdapter) runOnce(ctx context.Context, creds PlatformCredentials, 
 	return client.Start(ctx)
 }
 
+// fetchFeishuBotIdentity 在限定时间内取机器人 open_id。
+//
+// 建连前是同步调用：lark 客户端默认没有响应超时，一条半开连接会让整条重连循环永久卡住
+// 且没有任何日志。这里强制套一层超时（只作用于本次请求，不动 SDK 全局配置），
+// 超时按「拉取失败」处理：记一行日志并返回空串——调用方据此 fail closed
+// （MentionedBot 恒 false），但不中断长连接。
+//
+// fetch 为 nil 时走生产实现 feishuBotOpenId（该参数同时是测试注入点）。
+func fetchFeishuBotIdentity(ctx context.Context, fetch func(context.Context, PlatformCredentials) string, creds PlatformCredentials, timeout time.Duration) string {
+	if fetch == nil {
+		fetch = feishuBotOpenId
+	}
+	// 超时靠 ctx 传导：SDK 的请求用同一个 ctx，超时后连接被主动断掉，不会泄漏 goroutine。
+	fetchCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	openId := fetch(fetchCtx, creds)
+	if errors.Is(fetchCtx.Err(), context.DeadlineExceeded) {
+		// 超时只记这一条：底层失败分支在 ctx 已过期时不再重复写日志。
+		log.Printf("[channel] 飞书获取机器人信息超过 %s 未返回，群聊 @ 门禁按未 @ 处理", timeout)
+		return ""
+	}
+	return strings.TrimSpace(openId)
+}
+
 // feishuBotOpenId 通过 bot/v3/info 取本应用机器人的 open_id。
 //
 // 该接口在 SDK 里没有生成（v3.12.2 只有 channel 包内部用 raw Get 调它），
@@ -147,6 +173,10 @@ func (a *feishuAdapter) runOnce(ctx context.Context, creds PlatformCredentials, 
 func feishuBotOpenId(ctx context.Context, creds PlatformCredentials) string {
 	resp, err := feishuClientFor(creds).Get(ctx, "/open-apis/bot/v3/info", nil, larkcore.AccessTokenTypeTenant)
 	if err != nil {
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			// 超时由 fetchFeishuBotIdentity 统一记日志，这里不重复写第二行。
+			return ""
+		}
 		log.Printf("[channel] 飞书获取机器人信息失败，群聊 @ 门禁按未 @ 处理：%s", sanitizePlatformMessage(err.Error()))
 		return ""
 	}

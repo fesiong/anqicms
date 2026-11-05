@@ -71,7 +71,8 @@ type InboundEvent struct {
 
 	// MentionedBot 表示这条群聊消息明确 @ 了本应用机器人（规格 §7 群聊门禁的依据）。
 	// 平台没有可靠字段、或机器人身份未能取得时一律为 false（fail closed）：
-	// 调用方不得把 false 解读成「可以放行」。私聊事件恒为 false。
+	// 调用方不得把 false 解读成「可以放行」。私聊事件恒为 false——两个适配器都在标准化时
+	// 按会话类型收敛（feishuMentionedBot / normalizeDingTalkInbound），不要绕过它们直接信平台字段。
 	MentionedBot bool
 }
 
