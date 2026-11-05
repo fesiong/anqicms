@@ -1,6 +1,8 @@
 package provider
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -92,6 +94,34 @@ func (p ChannelPolicy) Decision(intentName, action string) PolicyDecision {
 	return PolicyDecisionDeny
 }
 
+// ChannelArgsHash 计算审批参数的规范化摘要：json.Unmarshal 成 any，再 json.Marshal
+// 规范化（键序确定、空白归一）后取 SHA-256 小写十六进制。
+//
+// 返回空串表示参数不是合法 JSON——调用方必须据此拒绝，不能把空串当成「没有参数」
+// 去和审批记录里的空 args_hash 比对：那会让一条 args_hash 为空的脏记录变成万能审批。
+//
+// 一致性约束：T7 落审批时必须用**本函数**算 args_hash。用别的序列化方式
+// （例如直接 hash 原始请求体）会因为键序/空白差异算出另一个摘要，
+// 表现为「管理员确认真实发生、执行时永远对不上」。
+// 已知边界：走 any 意味着数字统一按 float64 处理，绝对值超过 2^53 的整数会丢精度。
+// 审批参数里没有这种量级的 ID；真要出现，两侧也必须用本函数才能对齐，不能各算各的。
+func ChannelArgsHash(argsJson string) string {
+	raw := strings.TrimSpace(argsJson)
+	if raw == "" {
+		return ""
+	}
+	var payload any
+	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
+		return ""
+	}
+	canonical, err := json.Marshal(payload)
+	if err != nil {
+		return ""
+	}
+	sum := sha256.Sum256(canonical)
+	return hex.EncodeToString(sum[:])
+}
+
 // ExecutionPrincipal 是一次渠道请求的执行主体。
 //
 // 只由调用方（T6 的聊天执行器）在请求内构造并逐层传入，**不放 context 全局单例、
@@ -103,7 +133,12 @@ type ExecutionPrincipal struct {
 	BindingId uint
 	// ChannelId 是 R28 追加的字段：没有它就读不到该渠道的策略与接待智能体，
 	// 判定只能退化成「站点默认放行」，与渠道级隔离的初衷正好相反。
-	ChannelId      uint
+	ChannelId uint
+	// AgentId 是**本次实际执行的智能体**（R35），不是渠道配置里那个接待智能体。
+	// 会话切换智能体后，被执行的智能体的接待白名单必须自己参与判定；若这里退化成
+	// 「读 channel.AgentId」，白名单校验的主体与执行主体就不是同一个，切换即绕过。
+	// 门禁要求它非 0 且与渠道配置的接待智能体一致（见 channelForPrincipal）。
+	AgentId        uint
 	SessionId      string
 	PolicyRevision int64
 	// InGroup 标记本条消息来自群聊。首版群聊只允许群安全工具（规格 §7），
@@ -129,4 +164,13 @@ var (
 	ErrChannelPermissionDenied   = errors.New("管理员缺少该操作的后台权限")
 	ErrChannelCapBlocked         = errors.New("底层能力未开放或未映射后台权限")
 	ErrChannelAPIPathBlocked     = errors.New("通用调用禁止访问该后台路径")
+	// ErrChannelDisabled：渠道停用（enabled = 0）或「仅通知」（chat_enabled = 0）。
+	// 「仅通知」渠道只投递通知、不执行管理动作，权限层必须在读渠道时就把这类请求拒掉：
+	// Enabled 由 T4 的 worker 生命周期兜住，ChatEnabled 没有任何其它读取点，
+	// 漏判一次就是「仅通知渠道可执行管理动作」。与 ErrChannelPrincipalInvalid 分开，
+	// 是为了排障时能区分「配置关了聊天」与「主体/绑定对不上」。
+	ErrChannelDisabled = errors.New("渠道已停用或未开启聊天管理")
+	// ErrChannelApprovalInvalid：审批凭据无法自证（不存在、不匹配、已过期、参数或策略已变）。
+	// 文案里不出现任何标识、参数或摘要。
+	ErrChannelApprovalInvalid = errors.New("审批记录无效或已失效，请重新确认")
 )

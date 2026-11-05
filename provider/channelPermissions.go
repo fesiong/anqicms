@@ -7,6 +7,7 @@ import (
 	"path"
 	"sort"
 	"strings"
+	"time"
 
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -110,6 +111,11 @@ type CapPermission struct {
 	Dynamic bool
 	// Builtin 标记这是内置主机级能力（非端点能力）。
 	Builtin bool
+	// MissingEndpoint 为 true 表示这是**端点能力**，但该端点无法在端点目录中定位
+	// （route/ 改名、api_catalog 过期或目录不可用）。这是最容易发生的漂移：
+	// 行为上等同 blocked（默认拒绝），但必须与「有意关闭」区分开，否则
+	// 「路由改名导致整类能力静默变成 blocked」不会让任何测试变红。
+	MissingEndpoint bool
 	// Method / Path 是能力等价的端点（Path 带 /system/api 前缀，仅端点能力有值）。
 	Method string
 	Path   string
@@ -146,10 +152,12 @@ func ChannelCapPermission(capName string) (CapPermission, bool) {
 	method := strings.ToUpper(strings.TrimSpace(endpoint.Method))
 	cat, err := BuildAPICatalog()
 	if err != nil {
-		return CapPermission{Blocked: true, Reason: "API 目录不可用，无法映射权限"}, true
+		// 目录不可用与「端点查不到」是同一个问题的两种表现：映射失去了依据。
+		// 都标 MissingEndpoint，让护栏测试把它们当漂移处理，而不是一条日志了事。
+		return CapPermission{Blocked: true, MissingEndpoint: true, Method: method, Path: full, Reason: "API 目录不可用，无法映射权限"}, true
 	}
 	if _, found := cat.FindEndpoint(method, full); !found {
-		return CapPermission{Blocked: true, Reason: "端点目录中不存在 " + full + "，无法映射权限"}, true
+		return CapPermission{Blocked: true, MissingEndpoint: true, Method: method, Path: full, Reason: "端点目录中不存在 " + full + "，无法映射权限"}, true
 	}
 	menuPath, found := channelMenuPathForURI(strings.TrimPrefix(full, "/system/api"))
 	if !found {
@@ -181,14 +189,55 @@ func (w *Website) CheckIntentPermission(ctx context.Context, p ExecutionPrincipa
 	return w.checkIntentPermission(ctx, p, intentName, action, false)
 }
 
-// CheckIntentPermissionApproved 是「审批已通过」后的复核入口：
-// 除 confirm 之外的门禁全部照旧生效（曝光/白名单/渠道策略其余取值/管理员状态与菜单权限）。
+// CheckIntentPermissionApproved 是「审批已通过」后的复核入口：必须先用审批凭据自证，
+// 然后除 confirm 之外的门禁全部照旧生效（曝光/白名单/渠道策略其余取值/管理员状态与菜单权限）。
 //
 // 为什么单独给一个入口：审批通过后 T7 必须再复核一次权限（规格 §8「权限仍允许」），
 // 若仍走 CheckIntentPermission，同一个 confirm 决策会让它再次返回 ErrChannelPolicyNeedsConfirm，
 // 执行器只能二选一——死循环，或者干脆跳过整段复核。后者就是「确认即提权」。
-func (w *Website) CheckIntentPermissionApproved(ctx context.Context, p ExecutionPrincipal, intentName, action string) error {
+//
+// 自证的内容（R34）：approvalId + argsJson 必须对得上该绑定在此策略修订号下的一条
+// 未过期的 approved/executing 记录。**不接收凭据就跳过 confirm 等于把 confirm 整条策略
+// 变成无效**——任何调用方只要改调本函数，就能绕过所有确认。
+//
+// 边界：tool/action 与审批记录的匹配由 T7 在消费审批时负责（它才是审批单的写入方），
+// 本函数只证明「该绑定在此 revision 下确有一条未过期的已批准记录，且参数一致」。
+// 因此 T7 必须先用同一 public_id 把记录条件更新为 executing（消费），再调本函数复核。
+func (w *Website) CheckIntentPermissionApproved(ctx context.Context, p ExecutionPrincipal, approvalId string, argsJson string, intentName, action string) error {
+	if err := w.checkChannelPrincipal(p); err != nil {
+		return err
+	}
+	if err := w.checkChannelApprovalProof(ctx, p, approvalId, argsJson); err != nil {
+		return err
+	}
 	return w.checkIntentPermission(ctx, p, intentName, action, true)
+}
+
+// checkChannelApprovalProof 校验审批凭据确实属于该执行主体，且参数与策略未被改动。
+//
+// 查询必须带 site_id：public_id 是随机串但仍然按站点隔离查询，
+// 免得任何一个站点的记录被另一个站点当成自己批的。任一条件不满足一律
+// ErrChannelApprovalInvalid（不区分「不存在」与「不匹配」，避免把审批单号当探测通道）。
+func (w *Website) checkChannelApprovalProof(ctx context.Context, p ExecutionPrincipal, approvalId, argsJson string) error {
+	publicId := strings.TrimSpace(approvalId)
+	if publicId == "" {
+		return fmt.Errorf("%w：缺少审批标识", ErrChannelApprovalInvalid)
+	}
+	argsHash := ChannelArgsHash(argsJson)
+	if argsHash == "" {
+		return fmt.Errorf("%w：审批参数无法解析", ErrChannelApprovalInvalid)
+	}
+	var approval model.ChannelApproval
+	err := w.DB.WithContext(ctx).
+		Where("`site_id` = ? AND `public_id` = ? AND `binding_id` = ? AND `status` IN ? AND `expires_at` > ? AND `policy_revision` = ? AND `args_hash` = ?",
+			p.SiteId, publicId, p.BindingId,
+			[]string{model.ApprovalStatusApproved, model.ApprovalStatusExecuting},
+			time.Now().Unix(), p.PolicyRevision, argsHash).
+		Take(&approval).Error
+	if err != nil {
+		return fmt.Errorf("%w：审批记录不存在、已过期或与本次请求不匹配", ErrChannelApprovalInvalid)
+	}
+	return nil
 }
 
 func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipal, intentName, action string, approved bool) error {
@@ -210,7 +259,7 @@ func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipa
 	if err != nil {
 		return err
 	}
-	if err := w.checkChannelAgentWhitelist(ctx, channel, intentName); err != nil {
+	if err := w.checkChannelAgentWhitelist(ctx, p.AgentId, intentName); err != nil {
 		return err
 	}
 	if err := w.checkChannelPolicy(channel, p, intentName, action, approved); err != nil {
@@ -228,8 +277,13 @@ func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipa
 //
 // 只做三件事：cap 映射（含 api_invoke 的动态解析）→ 管理员有效状态 → 菜单权限。
 // 它不做曝光/白名单/渠道策略（那些属于意图级），也不做审批（属于 T7）。
+// 但它同样要过 channelForPrincipal：渠道停用 / 仅通知 / 智能体对不上必须在
+// 每次 cap 调用前也拒绝——意图级检查发生在会话开始时，中间渠道可能被停用。
 func (w *Website) CheckCapPermission(ctx context.Context, p ExecutionPrincipal, capName, argsJSON string) error {
 	if err := w.checkChannelPrincipal(p); err != nil {
+		return err
+	}
+	if _, err := w.channelForPrincipal(ctx, p); err != nil {
 		return err
 	}
 	name := strings.TrimSpace(capName)
@@ -301,7 +355,16 @@ func (w *Website) checkChannelPrincipal(p ExecutionPrincipal) error {
 	return nil
 }
 
-// channelForPrincipal 取执行主体对应的渠道（站点内）。查不到即视为主体无效。
+// channelForPrincipal 取执行主体对应的渠道（站点内），并校验渠道处于「可管理」状态。
+//
+// 三道判定：
+//  1. 渠道存在且属于当前站点；
+//  2. enabled = 1（连接启用）且 chat_enabled = 1（开启聊天管理）。仅通知渠道
+//     （chat_enabled = 0）只投递通知，不该执行任何管理动作。Enabled 虽然由 T4 的
+//     worker 生命周期兜住，但租约与 worker 是「连接层」，权限层不能把 fail-closed
+//     寄托在另一层没漏判上——这是本层最合适的拒绝点；
+//  3. 执行主体声明的智能体必须非 0 且与渠道配置的接待智能体一致（R35）。否则
+//     会话切到另一个智能体后，被执行的智能体的接待白名单完全不参与判定。
 func (w *Website) channelForPrincipal(ctx context.Context, p ExecutionPrincipal) (*model.MessageChannel, error) {
 	var ch model.MessageChannel
 	err := w.DB.WithContext(ctx).
@@ -309,6 +372,12 @@ func (w *Website) channelForPrincipal(ctx context.Context, p ExecutionPrincipal)
 		Take(&ch).Error
 	if err != nil {
 		return nil, fmt.Errorf("%w：渠道不存在或不属于当前站点", ErrChannelPrincipalInvalid)
+	}
+	if ch.Enabled != 1 || ch.ChatEnabled != 1 {
+		return nil, fmt.Errorf("%w：渠道 %d", ErrChannelDisabled, ch.Id)
+	}
+	if p.AgentId == 0 || p.AgentId != ch.AgentId {
+		return nil, fmt.Errorf("%w：执行主体智能体 %d 与渠道接待智能体不一致", ErrChannelAgentNotAllowed, p.AgentId)
 	}
 	return &ch, nil
 }
@@ -337,32 +406,36 @@ func (w *Website) channelExposureConfig() intent.Config {
 	}
 }
 
-// checkChannelAgentWhitelist 校验接待智能体是否被授权使用该意图。
+// checkChannelAgentWhitelist 校验**本次执行的智能体**（principal.AgentId）是否被授权使用该意图。
 // 无记录 / 空数组 / 解析失败 / 未列名 → 拒绝；**不支持通配符**（不发明 "*"）。
-func (w *Website) checkChannelAgentWhitelist(ctx context.Context, ch *model.MessageChannel, intentName string) error {
-	if ch.AgentId == 0 {
+//
+// 按 principal.AgentId 而不是 channel.AgentId 查：两者已被 channelForPrincipal 强制相等，
+// 但用执行主体取值能保证「白名单校验的主体 = 执行主体」这一条在代码上直接可见，
+// 不会因为将来放宽渠道判定而静默换成另一个智能体的策略。
+func (w *Website) checkChannelAgentWhitelist(ctx context.Context, agentId uint, intentName string) error {
+	if agentId == 0 {
 		return fmt.Errorf("%w：渠道未配置接待智能体", ErrChannelAgentNotAllowed)
 	}
 	var policy model.AgentReceptionPolicy
 	err := w.DB.WithContext(ctx).
-		Where("`site_id` = ? AND `agent_id` = ?", w.Id, ch.AgentId).
+		Where("`site_id` = ? AND `agent_id` = ?", w.Id, agentId).
 		Take(&policy).Error
 	if err != nil {
-		return fmt.Errorf("%w：智能体 %d 没有接待策略", ErrChannelAgentNotAllowed, ch.AgentId)
+		return fmt.Errorf("%w：智能体 %d 没有接待策略", ErrChannelAgentNotAllowed, agentId)
 	}
 	if strings.TrimSpace(policy.AllowedIntents) == "" {
-		return fmt.Errorf("%w：智能体 %d 的接待白名单为空", ErrChannelAgentNotAllowed, ch.AgentId)
+		return fmt.Errorf("%w：智能体 %d 的接待白名单为空", ErrChannelAgentNotAllowed, agentId)
 	}
 	var allowed []string
 	if err := json.Unmarshal([]byte(policy.AllowedIntents), &allowed); err != nil {
-		return fmt.Errorf("%w：智能体 %d 的接待白名单无法解析", ErrChannelAgentNotAllowed, ch.AgentId)
+		return fmt.Errorf("%w：智能体 %d 的接待白名单无法解析", ErrChannelAgentNotAllowed, agentId)
 	}
 	for _, name := range allowed {
 		if strings.TrimSpace(name) == intentName {
 			return nil
 		}
 	}
-	return fmt.Errorf("%w：智能体 %d 不允许 %s", ErrChannelAgentNotAllowed, ch.AgentId, intentName)
+	return fmt.Errorf("%w：智能体 %d 不允许 %s", ErrChannelAgentNotAllowed, agentId, intentName)
 }
 
 // checkChannelPolicy 校验渠道策略修订号与「意图 + 动作」裁决。

@@ -30,8 +30,8 @@ func channelPermTestSite(t *testing.T) *Website {
 	}
 	// 接待策略表在当前开发库上尚未建立（T1 的迁移清单里没有它），本任务按需补建。
 	// 其余表（渠道 / 绑定 / 管理员）由 T1、T2 的迁移保证存在。
-	if err := w.DB.AutoMigrate(&model.AgentReceptionPolicy{}); err != nil {
-		t.Fatalf("迁移接待策略表失败：%v", err)
+	if err := w.DB.AutoMigrate(&model.AgentReceptionPolicy{}, &model.ChannelApproval{}); err != nil {
+		t.Fatalf("迁移接待策略/审批表失败：%v", err)
 	}
 	return w
 }
@@ -40,17 +40,25 @@ func channelPermSuffix() string {
 	return fmt.Sprintf("%d", time.Now().UnixNano())
 }
 
-// newPermTestChannel 建一条渠道。AppId 必带随机后缀：uk_app_identity_hash 全局唯一，
-// 固定值会撞上库里残留行。AgentId 同样取随机值，避免撞上他人策略。
+// newPermTestChannel 建一条「启用 + 开启聊天管理」的渠道。AppId 必带随机后缀：
+// uk_app_identity_hash 全局唯一，固定值会撞上库里残留行。AgentId 同样取随机值，
+// 避免撞上他人策略。
 func newPermTestChannel(t *testing.T, w *Website, policyJSON string, revision int) *model.MessageChannel {
+	t.Helper()
+	return newPermTestChannelState(t, w, policyJSON, revision, 1, 1)
+}
+
+// newPermTestChannelState 允许指定 enabled / chatEnabled，用于验证
+// 「渠道停用」「仅通知渠道」必须在权限层被拒绝（R36）。
+func newPermTestChannelState(t *testing.T, w *Website, policyJSON string, revision int, enabled, chatEnabled int) *model.MessageChannel {
 	t.Helper()
 	suffix := channelPermSuffix()
 	ch := &model.MessageChannel{
 		SiteId:      w.Id,
 		Platform:    model.ChannelPlatformFeishu,
 		Name:        "权限测试渠道-" + suffix,
-		Enabled:     1,
-		ChatEnabled: 1,
+		Enabled:     enabled,
+		ChatEnabled: chatEnabled,
 		AgentId:     uint(9000000 + time.Now().UnixNano()%90000),
 		AppId:       "perm_app_" + suffix,
 		OrgId:       "perm_org_" + suffix,
@@ -157,15 +165,49 @@ func setPermTestAllowedIntents(t *testing.T, w *Website, agentId uint, names []s
 	}
 }
 
+// permTestPrincipal 构造执行主体。AgentId 取渠道配置的接待智能体：
+// R35 起门禁要求「执行主体声明的智能体」非 0 且与渠道一致。
 func permTestPrincipal(w *Website, ch *model.MessageChannel, adminId, bindingId uint) ExecutionPrincipal {
 	return ExecutionPrincipal{
 		SiteId:         w.Id,
 		AdminId:        adminId,
 		BindingId:      bindingId,
 		ChannelId:      ch.Id,
+		AgentId:        ch.AgentId,
 		SessionId:      "perm-sess-" + channelPermSuffix(),
 		PolicyRevision: int64(ch.Revision),
 	}
+}
+
+// newPermTestApproval 建一条审批记录，并在用例结束时按自己的 ID 精确删除。
+// mutate 用于构造过期 / 策略 revision 不符 / 他人绑定 / 参数哈希不符等无效变体；
+// 若 mutate 把 ArgsHash 改了，这里不会再覆盖（保持调用方意图）。
+func newPermTestApproval(t *testing.T, w *Website, bindingId uint, policyRevision int, argsJson string, mutate func(*model.ChannelApproval)) *model.ChannelApproval {
+	t.Helper()
+	approval := &model.ChannelApproval{
+		SiteId:         w.Id,
+		BindingId:      bindingId,
+		Tool:           "seo_keyword",
+		Action:         "list",
+		CanonicalArgs:  argsJson,
+		ArgsHash:       ChannelArgsHash(argsJson),
+		ExpiresAt:      time.Now().Unix() + 600,
+		PolicyRevision: policyRevision,
+		Status:         model.ApprovalStatusApproved,
+		PublicId:       "perm-approval-" + channelPermSuffix(),
+	}
+	if mutate != nil {
+		mutate(approval)
+	}
+	if err := w.DB.Create(approval).Error; err != nil {
+		t.Fatalf("创建测试审批失败：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.DB.Where("id = ? AND site_id = ?", approval.Id, w.Id).Delete(&model.ChannelApproval{}).Error; err != nil {
+			t.Logf("清理审批 %d 失败：%v", approval.Id, err)
+		}
+	})
+	return approval
 }
 
 // ============================================================
@@ -174,6 +216,10 @@ func permTestPrincipal(w *Website, ch *model.MessageChannel, adminId, bindingId 
 
 // TestEveryCapHasPermissionDecision 遍历真实的 capHandlers：每个 cap 都必须
 // 要么映射到后台菜单权限路径，要么显式 blocked。任何「未解析」都判失败。
+//
+// 「端点查不到」单独统计并断言为 0（R37）：路由改名 / api_catalog 过期会让整类
+// 能力静默变成 blocked，行为上仍是拒绝（安全），但功能会悄悄消失而不变红——
+// 这类漂移必须在测试里点名。
 func TestEveryCapHasPermissionDecision(t *testing.T) {
 	w := channelPermTestSite(t)
 	svc := &AiChatService{db: w.DB, site: w}
@@ -183,7 +229,7 @@ func TestEveryCapHasPermissionDecision(t *testing.T) {
 	}
 
 	var menuMapped, dynamic, builtinBlocked, unmappedBlocked int
-	var undecided []string
+	var undecided, missingEndpoints []string
 	names := make([]string, 0, len(caps))
 	for name := range caps {
 		names = append(names, name)
@@ -199,9 +245,12 @@ func TestEveryCapHasPermissionDecision(t *testing.T) {
 			if strings.TrimSpace(perm.Reason) == "" {
 				t.Errorf("cap %s 被 blocked 但没写原因", name)
 			}
-			if perm.Builtin {
+			switch {
+			case perm.MissingEndpoint:
+				missingEndpoints = append(missingEndpoints, name)
+			case perm.Builtin:
 				builtinBlocked++
-			} else {
+			default:
 				unmappedBlocked++
 			}
 		case perm.MenuPath == "":
@@ -217,8 +266,13 @@ func TestEveryCapHasPermissionDecision(t *testing.T) {
 		sort.Strings(undecided)
 		t.Fatalf("以下 cap 没有权限判定（未知 cap 必须显式 blocked 或映射菜单）：%s", strings.Join(undecided, ", "))
 	}
-	t.Logf("cap 总数=%d 菜单映射=%d 动态解析=%d 内置关闭=%d 未映射关闭=%d\n%s",
-		len(caps), menuMapped, dynamic, builtinBlocked, unmappedBlocked, strings.Join(names, ", "))
+	sort.Strings(missingEndpoints)
+	t.Logf("cap 总数=%d 菜单映射=%d 动态解析=%d 内置关闭=%d 未映射关闭=%d 端点缺失=%d\n%s",
+		len(caps), menuMapped, dynamic, builtinBlocked, unmappedBlocked, len(missingEndpoints), strings.Join(names, ", "))
+	if len(missingEndpoints) > 0 {
+		t.Errorf("以下 cap 声明的端点不在端点目录中（route/ 改名或目录过期，跑 go run ./cmd/apicatalog 重新生成）：%s",
+			strings.Join(missingEndpoints, ", "))
+	}
 
 	// 规格 §7：fs/shell/联网首版固定关闭。少写一个就说明映射表被削弱了。
 	for _, name := range []string{
@@ -250,7 +304,7 @@ func TestEveryCapHasPermissionDecision(t *testing.T) {
 func TestUnknownIntentIsDenied(t *testing.T) {
 	w := channelPermTestSite(t)
 	p := ExecutionPrincipal{
-		SiteId: w.Id, AdminId: 1, BindingId: 1, ChannelId: 1,
+		SiteId: w.Id, AdminId: 1, BindingId: 1, ChannelId: 1, AgentId: 1,
 		SessionId: "perm-unknown", PolicyRevision: 1,
 	}
 	err := w.CheckIntentPermission(context.Background(), p, "no_such_intent_"+channelPermSuffix(), "list")
@@ -421,11 +475,13 @@ func TestChannelSwitchNeedsConfirmSentinel(t *testing.T) {
 	if errors.Is(err, ErrChannelPolicyDenied) {
 		t.Fatalf("confirm 不能被当成 deny：%v", err)
 	}
-	// 审批通过后的复核：除 confirm 外其余门禁照旧生效，不能再次要求确认。
-	if err := w.CheckIntentPermissionApproved(ctx, p, "seo_keyword", "list"); err != nil {
-		t.Fatalf("审批后复核应放行，实际：%v", err)
+	// 审批通过后的复核：必须带审批凭据自证（R34），除 confirm 外其余门禁照旧生效。
+	argsJson := `{"title":"confirm-sentinel"}`
+	approval := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
+	if err := w.CheckIntentPermissionApproved(ctx, p, approval.PublicId, argsJson, "seo_keyword", "list"); err != nil {
+		t.Fatalf("持有效审批的复核应放行，实际：%v", err)
 	}
-	// allow 路径不应被哨兵误伤。
+	// allow 路径不应被哨兵误伤，也不该要求审批凭据。
 	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "create"); err != nil {
 		t.Fatalf("allow 应放行，实际：%v", err)
 	}
@@ -488,6 +544,289 @@ func TestPolicyRevisionMismatchDenied(t *testing.T) {
 	if err := w.CheckIntentPermission(ctx, current, "seo_keyword", "list"); err != nil {
 		t.Fatalf("修订号一致应放行，实际：%v", err)
 	}
+}
+
+// ============================================================
+// 绑定有效性 / 渠道状态门禁（R36、规格 §6）
+// ============================================================
+
+// TestRevokedBindingIsDenied 绑定是执行主体的身份凭据：撤销、借他人绑定、跨渠道绑定
+// 都必须立即失效（规格 §6）。三个子用例都真实改库 / 真实建库行，不是只改内存结构——
+// 删掉 checkChannelBinding 里的 revoked_at = 0、admin_id 或 channel_id 条件都会变红。
+func TestRevokedBindingIsDenied(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	policy := `{"intents":{"seo_keyword":{"*":"allow"}}}`
+
+	// 公共夹具：放行 seo_keyword 的渠道 + 有菜单权限的管理员 + 有效绑定。
+	setup := func(t *testing.T) (*model.MessageChannel, *model.Admin, *model.ChannelBinding) {
+		t.Helper()
+		ch := newPermTestChannel(t, w, policy, 1)
+		setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
+		admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+		binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+		return ch, admin, binding
+	}
+
+	t.Run("撤销后立即失效", func(t *testing.T) {
+		ch, admin, binding := setup(t)
+		p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+		if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); err != nil {
+			t.Fatalf("撤销前应放行（基线），实际：%v", err)
+		}
+		// 真实改库：revoked_at 非 0。
+		if err := w.DB.Model(&model.ChannelBinding{}).
+			Where("id = ? AND site_id = ?", binding.Id, w.Id).
+			Update("revoked_at", time.Now().Unix()).Error; err != nil {
+			t.Fatalf("撤销绑定失败：%v", err)
+		}
+		if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelPrincipalInvalid) {
+			t.Fatalf("已撤销绑定必须返回 ErrChannelPrincipalInvalid，实际：%v", err)
+		}
+	})
+
+	t.Run("绑定属于他管理员", func(t *testing.T) {
+		ch, admin, _ := setup(t)
+		// 库里真实存在一条属于另一个管理员的绑定，principal 的 AdminId 指向本人。
+		other := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+		otherBinding := newPermTestBinding(t, w, ch.Id, other.Id)
+		p := permTestPrincipal(w, ch, admin.Id, otherBinding.Id)
+		if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelPrincipalInvalid) {
+			t.Fatalf("借用他人绑定必须返回 ErrChannelPrincipalInvalid，实际：%v", err)
+		}
+	})
+
+	t.Run("绑定属于他渠道", func(t *testing.T) {
+		chA, admin, bindingA := setup(t)
+		chB := newPermTestChannel(t, w, policy, 1)
+		setPermTestAllowedIntents(t, w, chB.AgentId, []string{"seo_keyword"})
+		// principal 声明渠道 B，却拿渠道 A 的绑定 ID：渠道与绑定必须一一对应。
+		p := permTestPrincipal(w, chB, admin.Id, bindingA.Id)
+		if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelPrincipalInvalid) {
+			t.Fatalf("跨渠道绑定必须返回 ErrChannelPrincipalInvalid，实际：%v", err)
+		}
+		// 反向对照：换成渠道 A 自己的绑定必须放行（否决「一律拒绝」的实现）。
+		if err := w.CheckIntentPermission(ctx, permTestPrincipal(w, chA, admin.Id, bindingA.Id), "seo_keyword", "list"); err != nil {
+			t.Fatalf("本渠道绑定应放行，实际：%v", err)
+		}
+	})
+}
+
+// TestChannelDisabledIsDenied 渠道停用（enabled = 0）时，意图级与每次 cap 复核都必须拒绝。
+func TestChannelDisabledIsDenied(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	ch := newPermTestChannelState(t, w, `{"intents":{"seo_keyword":{"*":"allow"}}}`, 1, 0, 1)
+	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
+	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+
+	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelDisabled) {
+		t.Fatalf("停用渠道的意图检查必须返回 ErrChannelDisabled，实际：%v", err)
+	}
+	if err := w.CheckCapPermission(ctx, p, "api_list", `{}`); !errors.Is(err, ErrChannelDisabled) {
+		t.Fatalf("停用渠道的 cap 复核必须返回 ErrChannelDisabled，实际：%v", err)
+	}
+}
+
+// TestChatDisabledIsDenied 「仅通知」渠道（chat_enabled = 0）不得执行任何管理动作。
+func TestChatDisabledIsDenied(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	ch := newPermTestChannelState(t, w, `{"intents":{"seo_keyword":{"*":"allow"}}}`, 1, 1, 0)
+	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
+	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+
+	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelDisabled) {
+		t.Fatalf("仅通知渠道的意图检查必须返回 ErrChannelDisabled，实际：%v", err)
+	}
+	if err := w.CheckCapPermission(ctx, p, "api_list", `{}`); !errors.Is(err, ErrChannelDisabled) {
+		t.Fatalf("仅通知渠道的 cap 复核必须返回 ErrChannelDisabled，实际：%v", err)
+	}
+}
+
+// TestAgentPrincipalMustMatchChannel 白名单校验的主体必须与执行主体是同一个智能体（R35）：
+// 会话切到另一个智能体后，不能拿渠道里配置的接待智能体的白名单去放行。
+//
+// 反向构造：给「另一个智能体」也写一份允许该意图的白名单，这样测试失败只可能来自
+// 「执行智能体 ≠ 渠道接待智能体」这条判定本身，而不是白名单缺记录。
+func TestAgentPrincipalMustMatchChannel(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	ch := newPermTestChannel(t, w, `{"intents":{"seo_keyword":{"*":"allow"}}}`, 1)
+	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
+	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+
+	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); err != nil {
+		t.Fatalf("主体智能体与渠道一致时应放行（基线），实际：%v", err)
+	}
+
+	// 另一个智能体也有同样的白名单，但 principal 声明的智能体不是渠道的接待智能体。
+	otherAgentId := ch.AgentId + 1
+	setPermTestAllowedIntents(t, w, otherAgentId, []string{"seo_keyword"})
+	t.Cleanup(func() {
+		if err := w.DB.Where("site_id = ? AND agent_id = ?", w.Id, otherAgentId).Delete(&model.AgentReceptionPolicy{}).Error; err != nil {
+			t.Logf("清理对照智能体 %d 的接待策略失败：%v", otherAgentId, err)
+		}
+	})
+	switched := p
+	switched.AgentId = otherAgentId
+	if err := w.CheckIntentPermission(ctx, switched, "seo_keyword", "list"); !errors.Is(err, ErrChannelAgentNotAllowed) {
+		t.Fatalf("执行智能体与渠道接待智能体不一致必须返回 ErrChannelAgentNotAllowed，实际：%v", err)
+	}
+
+	// AgentId 为 0 同样拒绝（缺省拒绝，不猜渠道配置）。
+	missing := p
+	missing.AgentId = 0
+	if err := w.CheckIntentPermission(ctx, missing, "seo_keyword", "list"); !errors.Is(err, ErrChannelAgentNotAllowed) {
+		t.Fatalf("缺少执行智能体必须返回 ErrChannelAgentNotAllowed，实际：%v", err)
+	}
+}
+
+// ============================================================
+// 审批自证（R34）
+// ============================================================
+
+// TestApprovalProof 验证 CheckIntentPermissionApproved 是「跳过 confirm」的唯一入口，
+// 且必须自证审批：审批标识、绑定、过期、参数哈希、策略修订号任一不符即拒绝。
+// 同时验证「审批通过」不是总开关：曝光、菜单权限、绑定有效性仍然逐项生效。
+func TestApprovalProof(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	ch := newPermTestChannel(t, w, `{"intents":{"seo_keyword":{"list":"confirm","create":"allow"}}}`, 1)
+	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
+	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+	argsJson := `{"title":"审批自证"}`
+
+	validApproval := func(t *testing.T) *model.ChannelApproval {
+		t.Helper()
+		return newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
+	}
+
+	rejectCases := []struct {
+		name  string
+		setup func(t *testing.T) (publicId string, args string)
+	}{
+		{
+			name:  "无审批标识",
+			setup: func(t *testing.T) (string, string) { return "   ", argsJson },
+		},
+		{
+			name: "审批记录不存在",
+			setup: func(t *testing.T) (string, string) {
+				return "no-such-approval-" + channelPermSuffix(), argsJson
+			},
+		},
+		{
+			name: "参数不是合法 JSON",
+			setup: func(t *testing.T) (string, string) {
+				return validApproval(t).PublicId, `{"title":`
+			},
+		},
+		{
+			name: "参数哈希不符",
+			setup: func(t *testing.T) (string, string) {
+				return validApproval(t).PublicId, `{"title":"被篡改的参数"}`
+			},
+		},
+		{
+			name: "审批属于他人绑定",
+			setup: func(t *testing.T) (string, string) {
+				other := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+				otherBinding := newPermTestBinding(t, w, ch.Id, other.Id)
+				return newPermTestApproval(t, w, otherBinding.Id, ch.Revision, argsJson, nil).PublicId, argsJson
+			},
+		},
+		{
+			name: "审批已过期",
+			setup: func(t *testing.T) (string, string) {
+				return newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, func(a *model.ChannelApproval) {
+					a.ExpiresAt = time.Now().Unix() - 1
+				}).PublicId, argsJson
+			},
+		},
+		{
+			name: "策略修订号不符",
+			setup: func(t *testing.T) (string, string) {
+				return newPermTestApproval(t, w, binding.Id, ch.Revision+1, argsJson, nil).PublicId, argsJson
+			},
+		},
+		{
+			name: "未批准（pending）",
+			setup: func(t *testing.T) (string, string) {
+				return newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, func(a *model.ChannelApproval) {
+					a.Status = model.ApprovalStatusPending
+				}).PublicId, argsJson
+			},
+		},
+	}
+	for _, tc := range rejectCases {
+		t.Run(tc.name, func(t *testing.T) {
+			publicId, args := tc.setup(t)
+			err := w.CheckIntentPermissionApproved(ctx, p, publicId, args, "seo_keyword", "list")
+			if !errors.Is(err, ErrChannelApprovalInvalid) {
+				t.Fatalf("必须返回 ErrChannelApprovalInvalid，实际：%v", err)
+			}
+		})
+	}
+
+	t.Run("有效审批放行", func(t *testing.T) {
+		if err := w.CheckIntentPermissionApproved(ctx, p, validApproval(t).PublicId, argsJson, "seo_keyword", "list"); err != nil {
+			t.Fatalf("有效审批应放行，实际：%v", err)
+		}
+	})
+
+	t.Run("executing 状态同样有效", func(t *testing.T) {
+		approval := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, func(a *model.ChannelApproval) {
+			a.Status = model.ApprovalStatusExecuting
+		})
+		if err := w.CheckIntentPermissionApproved(ctx, p, approval.PublicId, argsJson, "seo_keyword", "list"); err != nil {
+			t.Fatalf("executing 状态的审批应放行，实际：%v", err)
+		}
+	})
+
+	// 以下三个子用例证明「审批通过」不是总开关：其余门禁仍逐项生效。
+	t.Run("有效审批不能越过站点曝光", func(t *testing.T) {
+		withTestAiSetting(t, w, []string{"content_article"})
+		err := w.CheckIntentPermissionApproved(ctx, p, validApproval(t).PublicId, argsJson, "seo_keyword", "list")
+		if !errors.Is(err, ErrChannelIntentNotExposed) {
+			t.Fatalf("有效审批仍必须受站点曝光门禁约束，实际：%v", err)
+		}
+	})
+
+	t.Run("有效审批不能越过菜单权限", func(t *testing.T) {
+		noMenu := newPermTestAdmin(t, w, []string{"/account/list"}, 1)
+		noMenuBinding := newPermTestBinding(t, w, ch.Id, noMenu.Id)
+		noMenuP := permTestPrincipal(w, ch, noMenu.Id, noMenuBinding.Id)
+		approval := newPermTestApproval(t, w, noMenuBinding.Id, ch.Revision, argsJson, nil)
+		err := w.CheckIntentPermissionApproved(ctx, noMenuP, approval.PublicId, argsJson, "seo_keyword", "list")
+		if !errors.Is(err, ErrChannelPermissionDenied) {
+			t.Fatalf("有效审批仍必须受菜单权限约束，实际：%v", err)
+		}
+	})
+
+	t.Run("有效审批不能越过绑定撤销", func(t *testing.T) {
+		revoked := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+		revokedBinding := newPermTestBinding(t, w, ch.Id, revoked.Id)
+		approval := newPermTestApproval(t, w, revokedBinding.Id, ch.Revision, argsJson, nil)
+		revokedP := permTestPrincipal(w, ch, revoked.Id, revokedBinding.Id)
+		if err := w.DB.Model(&model.ChannelBinding{}).
+			Where("id = ? AND site_id = ?", revokedBinding.Id, w.Id).
+			Update("revoked_at", time.Now().Unix()).Error; err != nil {
+			t.Fatalf("撤销绑定失败：%v", err)
+		}
+		err := w.CheckIntentPermissionApproved(ctx, revokedP, approval.PublicId, argsJson, "seo_keyword", "list")
+		if !errors.Is(err, ErrChannelPrincipalInvalid) {
+			t.Fatalf("有效审批仍必须受绑定有效性约束，实际：%v", err)
+		}
+	})
 }
 
 // ============================================================
@@ -602,7 +941,7 @@ func TestSiteExposureGateUsesOwnSiteConfig(t *testing.T) {
 	}
 
 	// 场景 3：端到端——渠道意图检查在曝光门禁处拒绝 DefaultOff 意图。
-	p := ExecutionPrincipal{SiteId: w.Id, AdminId: 1, BindingId: 1, ChannelId: 1, SessionId: "perm-exposure", PolicyRevision: 1}
+	p := ExecutionPrincipal{SiteId: w.Id, AdminId: 1, BindingId: 1, ChannelId: 1, AgentId: 1, SessionId: "perm-exposure", PolicyRevision: 1}
 	err := w.CheckIntentPermission(context.Background(), p, "system_plugin", "backup_dump")
 	if !errors.Is(err, ErrChannelIntentNotExposed) {
 		t.Fatalf("DefaultOff 意图必须被站点曝光门禁拒绝，实际：%v", err)
