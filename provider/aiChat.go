@@ -156,6 +156,12 @@ type AiChatService struct {
 	pendingApprovals   map[string]chan string
 	pendingApprovalsMu sync.Mutex
 
+	// 渠道聊天的审批后端（T6 注入点，T7 实现持久化审批）。
+	// 零值表示没有后端：需要审批的渠道写操作一律拒绝（见 channelChat.go 的 approvalDecision）。
+	// 放在服务级而不是全局，是为了让每个站点/服务实例只拿到自己的审批实现。
+	channelApproval   ChannelApprovalFunc
+	channelApprovalMu sync.RWMutex
+
 	// msgSeq: 全局单调递增序号，保证同一 session 内 DB 消息写入顺序
 	// 解决异步并发写入导致 DB 乱序的问题
 	msgSeq int64
