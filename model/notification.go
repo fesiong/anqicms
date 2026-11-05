@@ -1,5 +1,14 @@
 package model
 
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strconv"
+	"strings"
+
+	"gorm.io/gorm"
+)
+
 // NotificationRule 通知规则：首版按事件类型匹配，不引入任意表达式条件语言。
 type NotificationRule struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
@@ -58,4 +67,30 @@ type NotificationDelivery struct {
 	PlatformMessageId string `json:"platform_message_id" gorm:"column:platform_message_id;type:varchar(128) not null;default:'';comment:平台消息ID"`
 	// DeliveryHash 为 (EventId, RuleId, TargetId) 的 SHA-256，唯一，避免长复合唯一索引。
 	DeliveryHash string `json:"delivery_hash" gorm:"column:delivery_hash;type:char(64) not null;default:'';uniqueIndex:uk_delivery_hash;comment:投递三元组SHA256"`
+}
+
+// ComputeDeliveryHash 计算投递三元组 (eventId, ruleId, targetId) 的 SHA-256 小写十六进制摘要。
+// 手法与 ComputeAppIdentityHash 一致：十进制文本 + \x1f 连接 + SHA-256 + 小写 hex。
+// 用分隔符而非直接拼数字是必需的：不加分隔时 (1, 23) 与 (12, 3) 会拼成同一个串，
+// 两个不同投递任务算出同一摘要，uk_delivery_hash 就会把正常任务顶掉。
+func ComputeDeliveryHash(eventId, ruleId, targetId uint) string {
+	joined := strings.Join([]string{
+		strconv.FormatUint(uint64(eventId), 10),
+		strconv.FormatUint(uint64(ruleId), 10),
+		strconv.FormatUint(uint64(targetId), 10),
+	}, appIdentityFieldSeparator)
+	sum := sha256.Sum256([]byte(joined))
+	return hex.EncodeToString(sum[:])
+}
+
+// BeforeSave 在写入前补算投递摘要，理由与 MessageChannel.BeforeSave 相同：
+// 漏算的后果是对第二条才炸的唯一索引，且错误信息指不到「摘要没填」。
+// 三元组任一为 0 即视为未填全（部分更新/只带主键的结构体更新），
+// 此时返回 nil，避免把半截三元组的摘要写进已有行。
+func (d *NotificationDelivery) BeforeSave(tx *gorm.DB) error {
+	if d.EventId == 0 || d.RuleId == 0 || d.TargetId == 0 {
+		return nil
+	}
+	d.DeliveryHash = ComputeDeliveryHash(d.EventId, d.RuleId, d.TargetId)
+	return nil
 }

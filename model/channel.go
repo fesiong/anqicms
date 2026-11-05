@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"strings"
+
+	"gorm.io/gorm"
 )
 
 // 渠道平台标识。数据库里存的就是这两个值，下游适配器按它选择实现。
@@ -71,6 +73,20 @@ type MessageChannel struct {
 	Revision   int    `json:"revision" gorm:"column:revision;type:int(10) not null;default:1;comment:配置修订号(乐观锁)"`
 }
 
+// BeforeSave 在写入前补算应用身份摘要，避免每个写入口都要记得调 ComputeAppIdentityHash。
+// 漏算的代价不对称：第一条空摘要能插进去，第二条才撞 uk_app_identity_hash，
+// 报出来的还是「应用已被别的站点占用」这种误导性错误。
+//
+// AppId 为空即返回 nil：部分更新/只带主键的结构体更新时 app_id 是零值，
+// 若照算会把空应用摘要写进已有行，直接击穿唯一约束并毁掉原摘要。
+func (m *MessageChannel) BeforeSave(tx *gorm.DB) error {
+	if strings.TrimSpace(m.AppId) == "" {
+		return nil
+	}
+	m.AppIdentityHash = ComputeAppIdentityHash(m.Platform, m.AppId, m.OrgId)
+	return nil
+}
+
 // AgentReceptionPolicy 接待智能体的管理能力白名单。
 // 无授权配置时默认无管理能力（fail closed）。
 // 每个站点每个智能体只允许一条策略：由 uk_agent_policy 复合唯一索引兜底，
@@ -79,8 +95,8 @@ type AgentReceptionPolicy struct {
 	Id             uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime    int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	UpdatedTime    int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	SiteId         uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_agent_id,priority:1;uniqueIndex:uk_agent_policy,priority:1;comment:站点ID"`
-	AgentId        uint   `json:"agent_id" gorm:"column:agent_id;type:int(10) unsigned not null;default:0;index:idx_site_agent_id,priority:2;uniqueIndex:uk_agent_policy,priority:2;comment:智能体ID"`
+	SiteId         uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_agent_policy,priority:1;comment:站点ID"`
+	AgentId        uint   `json:"agent_id" gorm:"column:agent_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_agent_policy,priority:2;comment:智能体ID"`
 	AllowedIntents string `json:"allowed_intents" gorm:"column:allowed_intents;type:text;comment:允许的意图JSON数组"`
 }
 
@@ -198,11 +214,27 @@ type ChannelLease struct {
 	FencingVersion  int64  `json:"fencing_version" gorm:"column:fencing_version;type:bigint(20) not null;default:0;comment:栅栏版本(每次换主递增)"`
 }
 
+// NewChannelLease 按渠道配置构造一条连接租约，并同步派生应用身份摘要。
+// ChannelLease 上不存 platform/app_id（规格 §4 只定义摘要列），因此摘要只能在这里算：
+// 让调用方各自调 ComputeAppIdentityHash 迟早会漏，而漏掉的租约会带空摘要入库，
+// 「同一企业应用只允许一个活动所有者」的判据就被绕过去了。channel 约定非 nil。
+func NewChannelLease(siteId uint, channel *MessageChannel, owner string, expiresAt int64) *ChannelLease {
+	return &ChannelLease{
+		SiteId:          siteId,
+		AppIdentityHash: ComputeAppIdentityHash(channel.Platform, channel.AppId, channel.OrgId),
+		Owner:           owner,
+		ExpiresAt:       expiresAt,
+	}
+}
+
 // ChannelAudit 渠道管理行为审计。不保存秘密与完整敏感正文。
+// idx_site_created 的列序必须是 (site_id, created_time)：审计分页恒为
+// WHERE site_id=? ORDER BY created_time DESC，反序的 (created_time, site_id)
+// 用不上前缀过滤，站点一多就退化成全表扫描。
 type ChannelAudit struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_site_created,priority:1;comment:发生时间"`
-	SiteId      uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_created,priority:2;comment:站点ID"`
+	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_site_created,priority:2;comment:发生时间"`
+	SiteId      uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_created,priority:1;comment:站点ID"`
 	ChannelId   uint   `json:"channel_id" gorm:"column:channel_id;type:int(10) unsigned not null;default:0;index:idx_channel_id;comment:渠道ID"`
 	BindingId   uint   `json:"binding_id" gorm:"column:binding_id;type:int(10) unsigned not null;default:0;index:idx_binding_id;comment:操作者绑定ID(0=系统)"`
 	TaskId      string `json:"task_id" gorm:"column:task_id;type:varchar(64) not null;default:'';index:idx_task_id;comment:关联任务/运行ID"`

@@ -5,6 +5,7 @@ import (
 	"go/parser"
 	"go/token"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -399,5 +400,248 @@ func TestAgentReceptionPolicyUniquePerAgent(t *testing.T) {
 	// 反向对照：别的模型同名字段不带 uk_agent_policy，证明断言不是恒真。
 	if got := uniqueIndexNames(t, model.MessageChannel{}, "AgentId"); len(got) != 0 {
 		t.Errorf("反向对照失效：MessageChannel.AgentId 没有 uk_agent_policy，解析结果却有 %v", got)
+	}
+}
+
+// TestMessageChannelBeforeSaveSetsAppIdentityHash 锁定「写入口不必手工调摘要函数」。
+// 摘要列是 default:” + 唯一索引：漏算时第一条空摘要能插进去、第二条才炸，
+// 错误信息还会伪装成「该应用已被别的站点占用」。所以 hook 必须自己补算。
+func TestMessageChannelBeforeSaveSetsAppIdentityHash(t *testing.T) {
+	const (
+		platform = "feishu"
+		appId    = "cli_a1b2c3d4e5f6"
+		orgId    = "tenant_9f8e7d"
+	)
+	m := &model.MessageChannel{Platform: platform, AppId: appId, OrgId: orgId}
+	if err := m.BeforeSave(nil); err != nil {
+		t.Fatalf("BeforeSave 返回错误：%v", err)
+	}
+	want := model.ComputeAppIdentityHash(platform, appId, orgId)
+	if m.AppIdentityHash != want {
+		t.Fatalf("hook 没写入应用身份摘要：got %q want %q", m.AppIdentityHash, want)
+	}
+
+	// 幂等：保存两次（GORM 的 Save 会先查后写，可能触发多次）不得改变摘要。
+	first := m.AppIdentityHash
+	if err := m.BeforeSave(nil); err != nil {
+		t.Fatalf("第二次 BeforeSave 返回错误：%v", err)
+	}
+	if m.AppIdentityHash != first {
+		t.Errorf("同一对象两次 BeforeSave 算出了不同摘要：%s vs %s", first, m.AppIdentityHash)
+	}
+}
+
+// TestMessageChannelBeforeSaveSkipsEmptyAppId 是上一条的负向对照，也是部分更新的安全阀：
+// app_id 为空时 hook 必须原样返回，否则只带主键的整结构体更新会把空摘要写进已有行，
+// 既毁掉原摘要，又让第二条渠道插入时撞唯一索引。
+func TestMessageChannelBeforeSaveSkipsEmptyAppId(t *testing.T) {
+	cases := []struct {
+		name    string
+		channel model.MessageChannel
+	}{
+		{"完全零值", model.MessageChannel{}},
+		{"只有主键与策略字段（部分更新的典型形态）", model.MessageChannel{Id: 7, Revision: 3, PolicyJson: `{"x":"allow"}`}},
+		{"app_id 只有空白", model.MessageChannel{Platform: "feishu", AppId: "   "}},
+	}
+	for _, c := range cases {
+		m := c.channel
+		if err := m.BeforeSave(nil); err != nil {
+			t.Errorf("%s：BeforeSave 返回错误：%v", c.name, err)
+			continue
+		}
+		if m.AppIdentityHash != "" {
+			t.Errorf("%s：hook 在 app_id 为空时写入了摘要 %q，会顶掉已有行的身份", c.name, m.AppIdentityHash)
+		}
+	}
+}
+
+// TestNotificationDeliveryBeforeSaveSetsDeliveryHash 锁定投递摘要由 hook 派生，
+// 并用固定值锁死拼接协议：十进制 + \x1f 连接 + SHA-256 + 小写 hex，顺序为 (event, rule, target)。
+func TestNotificationDeliveryBeforeSaveSetsDeliveryHash(t *testing.T) {
+	const (
+		eventId  = 11
+		ruleId   = 22
+		targetId = 33
+		// 固定值由 sha256("11\x1f22\x1f33") 独立算出。
+		wantHash = "455413770e1cbd99fcb01855d7cccff51aaaabccfaf45fa3867f9aaa0977ea25"
+	)
+	d := &model.NotificationDelivery{EventId: eventId, RuleId: ruleId, TargetId: targetId}
+	if err := d.BeforeSave(nil); err != nil {
+		t.Fatalf("BeforeSave 返回错误：%v", err)
+	}
+	if want := model.ComputeDeliveryHash(eventId, ruleId, targetId); d.DeliveryHash != want {
+		t.Fatalf("hook 没写入投递摘要：got %q want %q", d.DeliveryHash, want)
+	}
+	if d.DeliveryHash != wantHash {
+		t.Errorf("投递摘要与固定值不符：got %s want %s（拼接顺序、分隔符或大小写被改了）", d.DeliveryHash, wantHash)
+	}
+
+	if again := model.ComputeDeliveryHash(eventId, ruleId, targetId); again != d.DeliveryHash {
+		t.Errorf("同三元组算出了两个摘要：%s vs %s", again, d.DeliveryHash)
+	}
+
+	// 三元组顺序敏感：交换 rule/target 必须换摘要，否则两个不同投递任务会互相顶掉。
+	if model.ComputeDeliveryHash(eventId, ruleId, targetId) == model.ComputeDeliveryHash(eventId, targetId, ruleId) {
+		t.Error("交换规则/目标后摘要不变：三元组顺序没有参与计算")
+	}
+	// 分隔符必须真的在起作用：(1, 23) 与 (12, 3) 直接拼接会撞成同一摘要。
+	if model.ComputeDeliveryHash(1, 23, 4) == model.ComputeDeliveryHash(12, 3, 4) {
+		t.Error("三元组之间没有分隔：字段边界有歧义，不同投递任务可能撞同一摘要")
+	}
+}
+
+// TestNotificationDeliveryBeforeSaveSkipsZeroTriple 是上一条的负向对照：
+// 三元组任一为 0 都视为「未填全」，hook 必须原样返回，不得写入半截摘要。
+func TestNotificationDeliveryBeforeSaveSkipsZeroTriple(t *testing.T) {
+	cases := []struct {
+		name     string
+		delivery model.NotificationDelivery
+	}{
+		{"完全零值", model.NotificationDelivery{}},
+		{"缺规则", model.NotificationDelivery{EventId: 11, TargetId: 33}},
+		{"缺目标", model.NotificationDelivery{EventId: 11, RuleId: 22}},
+		{"缺事件", model.NotificationDelivery{RuleId: 22, TargetId: 33}},
+	}
+	for _, c := range cases {
+		d := c.delivery
+		if err := d.BeforeSave(nil); err != nil {
+			t.Errorf("%s：BeforeSave 返回错误：%v", c.name, err)
+			continue
+		}
+		if d.DeliveryHash != "" {
+			t.Errorf("%s：hook 在三元组不全时写入了摘要 %q", c.name, d.DeliveryHash)
+		}
+	}
+}
+
+// TestNewChannelLeaseDerivesAppIdentityHash 锁定租约构造时同步派生摘要：
+// ChannelLease 不存 platform/app_id，摘要只能来自渠道配置，漏算就是空摘要租约，
+// 会让「同一企业应用只允许一个活动所有者」的判据失效。
+func TestNewChannelLeaseDerivesAppIdentityHash(t *testing.T) {
+	const (
+		siteId    = 9
+		owner     = "worker-a"
+		expiresAt = int64(1700000000)
+	)
+	ch := &model.MessageChannel{Platform: model.ChannelPlatformDingTalk, AppId: "ding_app_01", OrgId: "corp_1"}
+	lease := model.NewChannelLease(siteId, ch, owner, expiresAt)
+
+	want := model.ComputeAppIdentityHash(ch.Platform, ch.AppId, ch.OrgId)
+	if lease.AppIdentityHash != want {
+		t.Errorf("租约的应用身份摘要与渠道不一致：got %q want %q", lease.AppIdentityHash, want)
+	}
+	if lease.AppIdentityHash == "" {
+		t.Error("租约摘要为空：空摘要会让唯一索引把不同应用判成同一个")
+	}
+	if lease.SiteId != siteId {
+		t.Errorf("SiteId 未填入：got %d want %d", lease.SiteId, siteId)
+	}
+	if lease.Owner != owner {
+		t.Errorf("Owner 未填入：got %q want %q", lease.Owner, owner)
+	}
+	if lease.ExpiresAt != expiresAt {
+		t.Errorf("ExpiresAt 未填入：got %d want %d", lease.ExpiresAt, expiresAt)
+	}
+
+	// 摘要与实际应用一一对应：换应用必须换摘要（否则租约会在两个应用间串台）。
+	other := model.NewChannelLease(siteId, &model.MessageChannel{Platform: model.ChannelPlatformDingTalk, AppId: "ding_app_02"}, owner, expiresAt)
+	if other.AppIdentityHash == lease.AppIdentityHash {
+		t.Error("不同应用构造出了同一摘要的租约")
+	}
+}
+
+// TestChannelUniqueConstraintsDeclared 把「字段 → 唯一索引名」逐条钉住。
+// 这些索引是入库去重与归属约束的唯一屏障：索引名被改、tag 被删都不会让编译或
+// 现有测试变红，只会让重复数据悄悄进库，所以必须显式断言。
+func TestChannelUniqueConstraintsDeclared(t *testing.T) {
+	cases := []struct {
+		modelValue interface{}
+		field      string
+		indexName  string
+	}{
+		{model.ChannelBindingToken{}, "TokenHash", "uk_token_hash"},
+		{model.ChannelBinding{}, "IdentityHash", "uk_identity_hash"},
+		{model.ChannelTarget{}, "TargetHash", "uk_target_hash"},
+		{model.ChannelInbox{}, "EventHash", "uk_event_hash"},
+		{model.ChannelSession{}, "SessionHash", "uk_session_hash"},
+		{model.NotificationEvent{}, "EventKeyHash", "uk_event_key_hash"},
+		{model.NotificationDelivery{}, "DeliveryHash", "uk_delivery_hash"},
+		{model.ChannelApproval{}, "PublicId", "uk_public_id"},
+	}
+	for _, c := range cases {
+		typ := reflect.TypeOf(c.modelValue)
+		got := uniqueIndexNames(t, c.modelValue, c.field)
+		if !got[c.indexName] {
+			t.Errorf("model.%s.%s 缺少唯一索引 %s：重复数据会直接落库（实际唯一索引 %v）", typ.Name(), c.field, c.indexName, got)
+			continue
+		}
+		if len(got) != 1 {
+			t.Errorf("model.%s.%s 挂了多个唯一索引 %v，列与索引应对齐到一个", typ.Name(), c.field, got)
+		}
+	}
+
+	// 反向对照：解析器对没有唯一索引的字段必须返回空集合，否则上面的断言全是空转。
+	if got := uniqueIndexNames(t, model.ChannelBindingToken{}, "SiteId"); len(got) != 0 {
+		t.Errorf("反向对照失效：ChannelBindingToken.SiteId 只有普通索引，解析出的唯一索引却是 %v", got)
+	}
+}
+
+// gormIndexPriority 取出某字段在指定 index 声明里的 priority（未声明或索引不存在返回 0）。
+func gormIndexPriority(tag, indexName string) int {
+	for _, part := range strings.Split(tag, ";") {
+		key, value, ok := strings.Cut(part, ":")
+		if !ok || key != "index" && key != "uniqueIndex" {
+			continue
+		}
+		segments := strings.Split(value, ",")
+		if segments[0] != indexName {
+			continue
+		}
+		for _, meta := range segments[1:] {
+			raw, ok := strings.CutPrefix(meta, "priority:")
+			if !ok {
+				continue
+			}
+			n, err := strconv.Atoi(raw)
+			if err != nil {
+				return 0
+			}
+			return n
+		}
+	}
+	return 0
+}
+
+// TestChannelAuditIndexOrdersSiteFirst 锁定审计索引列序 (site_id, created_time)。
+// 审计查询恒为 WHERE site_id=? ORDER BY created_time DESC：GORM 按 priority 升序建列，
+// 一旦把 created_time 写成 priority:1，索引就变成 (created_time, site_id)，
+// 站点过滤用不上前缀，站点一多就退化成全表扫描（功能不坏、只是慢，没人会发现）。
+func TestChannelAuditIndexOrdersSiteFirst(t *testing.T) {
+	typ := reflect.TypeOf(model.ChannelAudit{})
+	fieldTag := func(name string) string {
+		field, ok := typ.FieldByName(name)
+		if !ok {
+			t.Fatalf("model.ChannelAudit 缺少字段 %s", name)
+		}
+		return field.Tag.Get("gorm")
+	}
+	sitePriority := gormIndexPriority(fieldTag("SiteId"), "idx_site_created")
+	createdPriority := gormIndexPriority(fieldTag("CreatedTime"), "idx_site_created")
+	if sitePriority == 0 || createdPriority == 0 {
+		t.Fatalf("idx_site_created 缺失或没声明 priority：site=%d created=%d", sitePriority, createdPriority)
+	}
+	if sitePriority >= createdPriority {
+		t.Errorf("idx_site_created 的列序反了：site_id priority=%d, created_time priority=%d，建出来会先排时间列", sitePriority, createdPriority)
+	}
+
+	// 解析器自检 + 反向对照：priority 必须被真读出来，且反序能被判成反序。
+	if got := gormIndexPriority("column:x;index:idx_a,priority:2", "idx_a"); got != 2 {
+		t.Errorf("解析器没读出 priority:2，实际 %d", got)
+	}
+	if got := gormIndexPriority("column:x;index:idx_a,priority:2", "idx_other"); got != 0 {
+		t.Errorf("解析器把别的索引的 priority 算到了 idx_other 上：%d", got)
+	}
+	if !(gormIndexPriority("column:x;index:idx_a,priority:2", "idx_a") > gormIndexPriority("column:y;index:idx_a,priority:1", "idx_a")) {
+		t.Error("反向对照失效：priority 2 vs 1 应判为反序")
 	}
 }
