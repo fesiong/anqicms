@@ -839,13 +839,37 @@ func (w *Website) SuccessPaidOrder(order *model.Order, payment *model.Payment) e
 	order.PaidTime = time.Now().Unix()
 	order.Status = config.OrderStatusPaid
 
-	db := w.DB.Begin()
-	if err := w.DB.Model(order).Where("status  = ?", originStatus).Select("paid_time", "status").Updates(order).Error; err != nil {
-		db.Rollback()
+	// 状态迁移赢家才产生事件等副作用（R70）：
+	// 用条件 UPDATE 的 RowsAffected 判断并发/重复回调里的唯一赢家。
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	res := tx.Model(&model.Order{}).
+		Where("id = ? AND status = ?", order.Id, originStatus).
+		Select("paid_time", "status").Updates(order)
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected == 0 {
+		// 已有赢家完成迁移：直接返回，不再执行邮件/推送/计费等副作用。
+		tx.Rollback()
+		return nil
+	}
+	paidAddress := order.OrderAddress
+	if paidAddress == nil && order.AddressId > 0 {
+		if loaded, loadErr := w.GetOrderAddressById(order.AddressId); loadErr == nil {
+			paidAddress = loaded
+		}
+	}
+	if _, err := w.emitNotificationEvent(tx, NotifyEventOrderPaid, order.OrderId, order.PaidTime, orderNotificationPayload(order, paidAddress, "paid"), NotifyEventStatusReady); err != nil {
+		tx.Rollback()
 		return err
 	}
-
-	db.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
 	// 更新用户字段
 	w.DB.Model(model.User{}).Where("id = ?", order.UserId).UpdateColumn("order_count", gorm.Expr("`order_count` + 1"))
 	// 支付成功
@@ -1630,9 +1654,20 @@ func (w *Website) CreateOrder(userId uint, req *request.OrderRequest) (*model.Or
 		order.SellerAmount = sellerAmount
 	}
 
-	tx.Save(&order)
+	if err := tx.Save(&order).Error; err != nil {
+		tx.Rollback()
+		return nil, err
+	}
+	// 通知事件与订单同事务（R69）：数据库错误让业务回滚；通知侧的非数据库问题
+	// 在扇出内部消化，不会让已完成的下单失败。匿名订单同样产生事件。
+	if _, err := w.emitNotificationEvent(tx, NotifyEventOrderCreated, order.OrderId, order.CreatedTime, orderNotificationPayload(&order, orderAddress, "pending"), NotifyEventStatusReady); err != nil {
+		tx.Rollback()
+		return nil, err
+	}
 
-	tx.Commit()
+	if err := tx.Commit().Error; err != nil {
+		return nil, err
+	}
 	// 清空购物车
 	if userId > 0 {
 		w.DB.Where("user_id = ?", userId).Delete(&model.Cart{})

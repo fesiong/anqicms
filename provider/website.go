@@ -514,6 +514,11 @@ func InitWebsite(mw *model.Website) {
 		if channelManagerOnInit.Load() {
 			startChannelManagerOnInit(&w)
 		}
+		// 通知投递工作者与服务入口同生命周期：只在进程入口显式打开开关后启动，
+		// 测试/命令行不会自动跑后台投递。重复调用是幂等的。
+		if notifyWorkerOnInit.Load() {
+			startNotifyWorkerOnInit(&w)
+		}
 		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
@@ -526,6 +531,7 @@ func InitWebsite(mw *model.Website) {
 		// 站点被置为未初始化（连库失败 / 状态停用 / 路径异常）：停掉残留管理器，
 		// 否则它会继续用旧的 DB 句柄续租、重连。
 		w.StopChannelManager()
+		w.StopNotifyWorker()
 	}
 }
 

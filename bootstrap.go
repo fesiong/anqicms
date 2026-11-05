@@ -63,6 +63,9 @@ func (bootstrap *Bootstrap) Serve() {
 	// 时开关若仍是 false，该进程内的渠道管理器会全程不启动 —— 装完只发
 	// RestartChan{Code:0} 重载模板、不重启进程，T9 保存配置就会拿到「渠道管理器未启动」。
 	provider.EnableChannelManagerOnInit()
+	// 通知投递工作者同理：默认不随站点初始化启动（测试/工具不发通知），
+	// 进程入口显式打开，且必须在 InitWebsites 之前。
+	provider.EnableNotifyWorkerOnInit()
 
 	//自动迁移表
 	if provider.GetDefaultDB() != nil {

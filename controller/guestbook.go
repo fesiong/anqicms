@@ -144,7 +144,7 @@ func GuestbookForm(ctx iris.Context) {
 		ExtraData: extraData,
 	}
 
-	err := currentSite.DB.Save(guestbook).Error
+	err := currentSite.SaveGuestbookWithNotification(guestbook)
 	if err != nil {
 		msg := currentSite.TplTr("SaveFailed")
 		if returnType == "json" {
@@ -163,11 +163,21 @@ func GuestbookForm(ctx iris.Context) {
 	_ = provider.TriggerHook(hookCtx)
 	// akismet 验证
 	go func() {
+		enabled := currentSite.AkismetCheckEnabled(provider.CheckTypeGuestbook)
 		spamStatus, isChecked := currentSite.AkismentCheck(ctx, provider.CheckTypeGuestbook, guestbook)
 		if isChecked {
 			currentSite.DB.Model(guestbook).UpdateColumn("status", spamStatus)
 		}
 		currentSite.ProcessGuestbook(guestbook, spamStatus)
+		outcome := provider.AkismetOutcomeNotConfigured
+		if enabled {
+			if isChecked {
+				outcome = provider.AkismetOutcomeChecked
+			} else {
+				outcome = provider.AkismetOutcomeFailed
+			}
+		}
+		currentSite.ProcessGuestbookNotification(guestbook, spamStatus, outcome)
 	}()
 
 	msg := currentSite.PluginGuestbook.ReturnMessage

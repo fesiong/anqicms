@@ -27,8 +27,8 @@ type NotificationTemplate struct {
 	Id                    uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime           int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	UpdatedTime           int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	SiteId                uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_key,priority:1;comment:站点ID"`
-	Key                   string `json:"key" gorm:"column:key;type:varchar(64) not null;default:'';index:idx_site_key,priority:2;comment:模板键"`
+	SiteId                uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_site_key,priority:1;comment:站点ID"`
+	Key                   string `json:"key" gorm:"column:key;type:varchar(64) not null;default:'';uniqueIndex:uk_site_key,priority:2;comment:模板键"`
 	Name                  string `json:"name" gorm:"column:name;type:varchar(100) not null;default:'';comment:模板名称"`
 	Subject               string `json:"subject" gorm:"column:subject;type:varchar(255) not null;default:'';comment:标题"`
 	Content               string `json:"content" gorm:"column:content;type:text;comment:正文(Pongo2 受限上下文)"`
@@ -45,7 +45,9 @@ type NotificationEvent struct {
 	EventKey    string `json:"event_key" gorm:"column:event_key;type:varchar(191) not null;default:'';comment:业务事件键(事件类型+业务标识)"`
 	OccurredAt  int64  `json:"occurred_at" gorm:"column:occurred_at;type:bigint(20) not null;default:0;index:idx_occurred_at;comment:业务发生时间戳"`
 	PayloadJson string `json:"payload_json" gorm:"column:payload_json;type:text;comment:白名单字段JSON"`
-	Status      string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'';index:idx_status;comment:状态(含 waiting_classification)"`
+	Status      string `json:"status" gorm:"column:status;type:varchar(32) not null;default:'';index:idx_status;comment:状态(含 waiting_classification)"`
+	// LastError 是待分类/失败原因摘要；只放静态分类文案，不含密钥与正文。
+	LastError string `json:"last_error" gorm:"column:last_error;type:text;comment:待分类/失败原因摘要(不含密钥与正文)"`
 	// EventKeyHash 为 EventKey 的 SHA-256，唯一，用于「同一业务事件只创建一次」。
 	EventKeyHash string `json:"event_key_hash" gorm:"column:event_key_hash;type:char(64) not null;default:'';uniqueIndex:uk_event_key_hash;comment:业务事件键SHA256"`
 }
@@ -65,6 +67,9 @@ type NotificationDelivery struct {
 	LeaseUntil        int64  `json:"lease_until" gorm:"column:lease_until;type:bigint(20) not null;default:0;index:idx_lease_until;comment:发送租约到期时间戳"`
 	LastError         string `json:"last_error" gorm:"column:last_error;type:text;comment:最近一次错误摘要"`
 	PlatformMessageId string `json:"platform_message_id" gorm:"column:platform_message_id;type:varchar(128) not null;default:'';comment:平台消息ID"`
+	// Subject/Content 是扇出时渲染的最终文本，重试复用：模板事后修改不影响历史投递，文本确定。
+	Subject string `json:"subject" gorm:"column:subject;type:varchar(255) not null;default:'';comment:扇出时渲染的最终标题"`
+	Content string `json:"content" gorm:"column:content;type:text;comment:扇出时渲染的最终文本，重试复用"`
 	// DeliveryHash 为 (EventId, RuleId, TargetId) 的 SHA-256，唯一，避免长复合唯一索引。
 	DeliveryHash string `json:"delivery_hash" gorm:"column:delivery_hash;type:char(64) not null;default:'';uniqueIndex:uk_delivery_hash;comment:投递三元组SHA256"`
 }
