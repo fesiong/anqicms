@@ -501,6 +501,9 @@ func InitWebsite(mw *model.Website) {
 		// AI: 先创建 ai chat service（初始化工具），再创建 mcp server（注册工具）
 		w.NewAiChatService()
 		w.NewMcpServer()
+		// 渠道长连接管理器：只对已启用渠道建立连接。老库可能还没迁移渠道表，
+		// 管理器内部只记日志，不阻断站点初始化；重复调用是幂等的。
+		w.StartChannelManager(context.Background())
 		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)

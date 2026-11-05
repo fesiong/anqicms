@@ -1588,6 +1588,9 @@ func Restart() error {
 func Shutdown() {
 	sites := GetWebsites()
 	for _, w := range sites {
+		// 先取消渠道长连接并等待 worker 退出，再关闭数据库：
+		// 反过来 worker 的续租会打到已关闭的连接上。
+		w.StopChannelManager()
 		// 关闭数据库
 		if w.DB != nil {
 			db, err := w.DB.DB()

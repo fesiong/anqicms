@@ -168,8 +168,8 @@ type ChannelInbox struct {
 	BindingId  uint   `json:"binding_id" gorm:"column:binding_id;type:int(10) unsigned not null;default:0;index:idx_binding_id;comment:来源绑定ID(0=未绑定)"`
 	EventKind  string `json:"event_kind" gorm:"column:event_kind;type:varchar(32) not null;default:'';index:idx_event_kind;comment:事件类型 message/card_action/..."`
 	Content    string `json:"content" gorm:"column:content;type:text;comment:脱敏正文(不存token明文)"`
-	Status     string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'';index:idx_status;comment:处理状态"`
-	LeaseUntil int64  `json:"lease_until" gorm:"column:lease_until;type:bigint(20) not null;default:0;index:idx_lease_until;comment:处理租约到期时间戳"`
+	Status     string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'';index:idx_status;index:idx_status_lease_until,priority:1;comment:处理状态"`
+	LeaseUntil int64  `json:"lease_until" gorm:"column:lease_until;type:bigint(20) not null;default:0;index:idx_lease_until;index:idx_status_lease_until,priority:2;comment:处理租约到期时间戳"`
 	// EventHash 为平台事件标识的 SHA-256，唯一，用于入站去重。
 	EventHash string `json:"event_hash" gorm:"column:event_hash;type:char(64) not null;default:'';uniqueIndex:uk_event_hash;comment:平台事件SHA256"`
 }
@@ -220,7 +220,8 @@ type ChannelLease struct {
 	UpdatedTime int64 `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime"`
 	SiteId      uint  `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_id;comment:持有租约的站点ID"`
 	// AppIdentityHash 为「平台+应用ID(+组织)」的 SHA-256，全局唯一，每应用一个活动所有者。
-	AppIdentityHash string `json:"app_identity_hash" gorm:"column:app_identity_hash;type:char(64) not null;default:'';uniqueIndex:uk_app_identity_hash;comment:应用身份SHA256"`
+	// 摘要不序列化：后台响应不得输出应用身份摘要（全局约束）。
+	AppIdentityHash string `json:"-" gorm:"column:app_identity_hash;type:char(64) not null;default:'';uniqueIndex:uk_app_identity_hash;comment:应用身份SHA256(不序列化)"`
 	Owner           string `json:"owner" gorm:"column:owner;type:varchar(128) not null;default:'';comment:持有者实例标识"`
 	ExpiresAt       int64  `json:"expires_at" gorm:"column:expires_at;type:bigint(20) not null;default:0;index:idx_expires_at;comment:租约到期时间戳(30秒，10秒续租)"`
 	FencingVersion  int64  `json:"fencing_version" gorm:"column:fencing_version;type:bigint(20) not null;default:0;comment:栅栏版本(每次换主递增)"`
