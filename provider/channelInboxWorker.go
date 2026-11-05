@@ -31,6 +31,9 @@ const (
 	channelInboxPollInterval = time.Second
 	// channelInboxReasonLimit 是 last_error 的字符上限（与列宽 varchar(255) 对齐）。
 	channelInboxReasonLimit = 255
+	// channelInboxFinishTimeout 是终态写入的超时：写入必须脱离调用方的取消信号
+	// （见 finishInbox），脱离了之后就得自己带上限，不能无限等库。
+	channelInboxFinishTimeout = 5 * time.Second
 )
 
 // last_error 里固定的忽略原因。文案不含正文、身份摘要或任何平台标识原文。
@@ -502,8 +505,11 @@ func approvalChatId(ctx context.Context, site *Website, sessionId uint) string {
 //
 // FailApproval 只接受 executing（执行器消费后才会进入该状态），而这里的行还停在
 // approved；直接条件更新为 cancelled 既符合审批状态机，也不会误伤已被消费的行。
+// 与 finishInbox 同理：这是终态写入，不能被调用方已取消的 ctx 吞掉。
 func (c *channelInboxConsumer) cancelApprovedApproval(ctx context.Context, publicId string) {
-	res := c.site.DB.WithContext(ctx).Model(&model.ChannelApproval{}).
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelInboxFinishTimeout)
+	defer cancel()
+	res := c.site.DB.WithContext(writeCtx).Model(&model.ChannelApproval{}).
 		Where("`site_id` = ? AND `public_id` = ? AND `status` = ?", c.site.Id, publicId, model.ApprovalStatusApproved).
 		Update("status", model.ApprovalStatusCancelled)
 	if res.Error != nil {
@@ -558,11 +564,17 @@ func (c *channelInboxConsumer) sendReply(ctx context.Context, inbox *model.Chann
 }
 
 // finishInbox 落最终状态与去敏原因；释放租约（lease_until = 0）。
+//
+// 写库必须脱离调用方的取消信号：消费者的 ctx 与连接租约同生命周期，adapter.Run
+// 返回（关机/删站/失租）时会取消它。用已取消的 ctx 写库只会失败并留下
+// status=processing + 未释放的租约，60 秒后 claimNext 重新认领、整轮重跑。
 func (c *channelInboxConsumer) finishInbox(ctx context.Context, id uint, status, reason string) {
 	if id == 0 || c.site == nil || c.site.DB == nil {
 		return
 	}
-	res := c.site.DB.WithContext(ctx).Model(&model.ChannelInbox{}).
+	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelInboxFinishTimeout)
+	defer cancel()
+	res := c.site.DB.WithContext(writeCtx).Model(&model.ChannelInbox{}).
 		Where("`id` = ? AND `site_id` = ? AND `channel_id` = ?", id, c.site.Id, c.channelId).
 		Updates(map[string]any{
 			"status":      status,

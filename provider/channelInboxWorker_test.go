@@ -1007,3 +1007,86 @@ func TestChannelWorkerStartsInboxConsumer(t *testing.T) {
 		t.Fatalf("停止管理器后消费者必须退出，任务状态被改成了 %q", lateAfter.Status)
 	}
 }
+
+// ============================================================
+// 10. 终态写入必须抗取消（审查 I-1）
+//
+// 消费者用连接租约的 ctx 处理任务；adapter.Run 返回（关机/删站/失租）时
+// channelWorker.inboxCancel() 会取消它。若此时正在处理一条任务，终态写入绝不能
+// 因为 ctx 已取消而失败——否则该行停在 processing，60 秒后被 claimNext 重新认领，
+// 整轮（模型调用、回复、审批提示）重跑一遍，而后台永远显示 processing 且无原因。
+// ============================================================
+
+// TestChannelInboxFinishSurvivesCancelledContext 复现取消发生在模型调用期间：
+// 行必须落到 failed 并留下脱敏原因，且租约已释放。
+func TestChannelInboxFinishSurvivesCancelledContext(t *testing.T) {
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
+		policy:      `{"intents":{"api":{"*":"allow"}}}`,
+		whitelist:   []string{"api"},
+		permissions: []string{"/"},
+	})
+	env.useScriptedModel(t)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// 模型第一次被调用时取消 ctx，并返回一个工具调用：本轮不会在此结束，
+	// 下一轮开头的 ctx.Done 检查命中后整轮以 ctx.Err() 失败收尾。
+	// 工具名故意不在可见集合内——本轮只借它把执行推进到下一轮，不产生真实副作用。
+	env.model.script = func(int, []*schema.Message) *schema.Message {
+		cancel()
+		return schema.AssistantMessage("", []schema.ToolCall{{
+			ID:       "inbox-cancel-1",
+			Type:     "function",
+			Function: schema.FunctionCall{Name: "inbox_cancelled_tool", Arguments: `{}`},
+		}})
+	}
+
+	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
+	claimed, ok, err := env.consumer.claimNext(ctx)
+	if err != nil || !ok || claimed == nil {
+		t.Fatalf("认领任务失败：ok=%v err=%v", ok, err)
+	}
+	env.consumer.processInbox(ctx, claimed)
+
+	after := env.reloadInbox(t, row.Id)
+	if after.Status == model.InboxStatusProcessing {
+		t.Fatalf("ctx 被取消时终态写入不得丢失：任务仍停在 processing（lease_until=%d），"+
+			"会在租约到期后被重新认领并整轮重跑", after.LeaseUntil)
+	}
+	if after.Status != model.InboxStatusFailed {
+		t.Fatalf("被取消的轮次必须标记 failed，实际 %q", after.Status)
+	}
+	if after.LeaseUntil != 0 {
+		t.Fatalf("终态必须释放租约（lease_until=0），实际 %d", after.LeaseUntil)
+	}
+	if after.LastError != channelInboxReasonTurnFailed {
+		t.Fatalf("失败的轮次必须留下脱敏原因「%s」，实际 %q", channelInboxReasonTurnFailed, after.LastError)
+	}
+	if strings.Contains(after.LastError, "context canceled") {
+		t.Fatalf("last_error 不得写入原始错误文本，实际 %q", after.LastError)
+	}
+}
+
+// TestChannelInboxFinishInboxWritesWithCancelledContext 是最小回归锁：
+// 不依赖模型脚本，直接证明 finishInbox 在已取消的 ctx 下仍能落终态。
+func TestChannelInboxFinishInboxWritesWithCancelledContext(t *testing.T) {
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
+		policy:      `{"intents":{"api":{"*":"allow"}}}`,
+		whitelist:   []string{"api"},
+		permissions: []string{"/"},
+	})
+	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	env.consumer.finishInbox(ctx, row.Id, model.InboxStatusDone, "")
+
+	after := env.reloadInbox(t, row.Id)
+	if after.Status != model.InboxStatusDone {
+		t.Fatalf("已取消的 ctx 下 finishInbox 仍须落终态，实际 %q", after.Status)
+	}
+	if after.LeaseUntil != 0 {
+		t.Fatalf("终态必须释放租约（lease_until=0），实际 %d", after.LeaseUntil)
+	}
+}
