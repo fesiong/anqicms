@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -54,9 +55,14 @@ const (
 // 入口先做执行主体校验（主体完整性 → 渠道可管理 → 绑定有效 + 管理员启用），
 // 任一失败原样返回 channelPrincipal.go 的哨兵，调用方用 errors.Is 分流。
 //
-// 参数归一：空串 / 全空白 / 字面 null 一律当成 {}（零参意图），随后用
-// channelCanonicalArgs 规范化，摘要用 ChannelArgsHash 计算——**不许另写序列化**：
+// 参数归一：走包内唯一的 channelCanonicalArgs（与 T6 的 Pending 完全同一份实现）——
+// 空串 / 全空白 / 字面 null 一律当成 {}（零参意图），其余规范化成键序确定的 JSON，
+// 摘要用 ChannelArgsHash 计算——**不许另写序列化**：
 // 执行侧（T6）与自证侧（T5）用的是这一套，换一套就会出现「确认成功、执行永远对不上」。
+//
+// 归一之后还要求参数是 JSON **对象**：工具参数只有对象这一种形态，执行侧
+// applyApprovalGrant 也按对象解析。放行 [] / "x" / 1 只会造出「批得下、执行不了」的单，
+// 而每次尝试执行都要先自证、再消费——那种单就是个必然失败的坑。
 //
 // Action 从规范化参数原样推导，解析不出就是空串，绝不回落 "*"：
 // "*" 是 ChannelPolicy.Decision 内部的策略兜底语义，不是审批单的身份字段。
@@ -91,11 +97,18 @@ func (w *Website) CreateApproval(p ExecutionPrincipal, toolName, argsJson string
 		return nil, fmt.Errorf("%w：缺少工具名", ErrChannelApprovalInvalid)
 	}
 
-	canonicalArgs := channelApprovalCanonicalArgs(argsJson)
+	canonicalArgs := channelCanonicalArgs(argsJson)
+	// R65：归一后必须是 JSON 对象。非对象（[]、"x"、1）在这里就拒绝，
+	// 而不是造出一张执行侧永远解析不了的审批单。
+	var payload map[string]any
+	if err := json.Unmarshal([]byte(canonicalArgs), &payload); err != nil || payload == nil {
+		return nil, fmt.Errorf("%w：审批参数必须是 JSON 对象", ErrChannelApprovalInvalid)
+	}
 	argsHash := ChannelArgsHash(canonicalArgs)
 	if argsHash == "" {
-		// 空摘要绝不能落库：T6 的自证把「args_hash 为空」当拒绝，但一条空摘要记录
-		// 在其它读路径上就是「没有任何参数约束」的万能审批。
+		// 对象校验已挡在前面，这里是二次防线：空摘要绝不能落库。T6 的自证把
+		// 「args_hash 为空」当拒绝，但一条空摘要记录在其它读路径上就是
+		// 「没有任何参数约束」的万能审批。
 		return nil, fmt.Errorf("%w：审批参数无法解析", ErrChannelApprovalInvalid)
 	}
 
@@ -154,6 +167,12 @@ func (w *Website) CreateApproval(p ExecutionPrincipal, toolName, argsJson string
 //
 // 两个路径都用同一条条件更新消费 pending：绑定、public_id、未过期三者同时成立才生效，
 // 并发双击只有一个赢家。
+//
+// R66（身份边界，未扩签名）：bindingId **必须**由调用方从已认证的点击者身份解析得到，
+// 禁止来自请求体/卡片回调里的任何不受信字段——本函数的归属校验只能证明
+// 「这张单属于这个 bindingId」，证明不了「你真的是那个绑定的人」。
+// 本任务还没有生产调用方；T9 接线时必须用「当前登录管理员 → 其有效绑定」派生 bindingId，
+// 并补一条「A 用自己的 bindingId 点 B 的单必须失败」的用例。
 func (w *Website) DecideApproval(publicId string, bindingId uint, decision string) error {
 	if w == nil || w.DB == nil {
 		return fmt.Errorf("%w：站点未初始化", ErrChannelApprovalInvalid)
@@ -217,9 +236,13 @@ func (w *Website) DecideApproval(publicId string, bindingId uint, decision strin
 		}
 	}
 
+	// R67：now 在条件更新前重新取。校验链（重跑意图门禁、菜单权限查询）要花时间，
+	// 用校验开始前的时间戳去判「未过期」，等于给出一个比实际更宽的窗口：
+	// 校验期间刚好过期的单仍然会被批准。
+	updateNow := time.Now().Unix()
 	res := w.DB.WithContext(ctx).Model(&model.ChannelApproval{}).
-		Where("`site_id` = ? AND `public_id` = ? AND `binding_id` = ? AND `status` = ? AND `expires_at` > ?",
-			w.Id, id, bindingId, model.ApprovalStatusPending, now).
+		Where("`site_id` = ? AND `public_id` = ? AND `binding_id` = ? AND `status` = ? AND `expires_at` > ? AND `args_hash` = ? AND `policy_revision` = ?",
+			w.Id, id, bindingId, model.ApprovalStatusPending, updateNow, approval.ArgsHash, approval.PolicyRevision).
 		Update("status", target)
 	if res.Error != nil {
 		return fmt.Errorf("更新审批状态失败：%w", res.Error)
@@ -386,20 +409,6 @@ func (w *Website) channelSessionForApproval(ctx context.Context, channelId uint,
 		return nil, fmt.Errorf("%w：渠道会话不存在", ErrChannelApprovalInvalid)
 	}
 	return &session, nil
-}
-
-// channelApprovalCanonicalArgs 归一审批参数：空串 / 全空白 / 字面 null 一律当成 {}
-// （零参意图的合法调用），其余交给 channelCanonicalArgs。
-//
-// 为什么 null 要特判：json.Unmarshal("null") 得到 nil，再 Marshal 回 "null"，
-// 摘要算的是字符串 "null" 而不是"没有参数"。零参调用在 T6 侧规范化结果是 "{}"，
-// 两边不一致就会表现为「确认了但执行时摘要对不上」。
-func channelApprovalCanonicalArgs(argsJson string) string {
-	raw := strings.TrimSpace(argsJson)
-	if raw == "" || raw == "null" {
-		return "{}"
-	}
-	return channelCanonicalArgs(raw)
 }
 
 // channelApprovalResultSummary 把执行结果压成单行摘要，最多 200 个字符（R60）。

@@ -897,12 +897,21 @@ func (st *channelTurnState) setPending(call *schema.ToolCall, action string, cau
 	}
 }
 
-// channelCanonicalArgs 把参数 JSON 规范化（键序确定、空白归一）。非法 JSON 原样返回：
-// T7 落审批前会再用 ChannelArgsHash 校验，空串/非法参数在那里被拒绝。
+// channelCanonicalArgs 是包内**唯一**的参数归一实现（R65），T6 的 setPending 与
+// T7 的 CreateApproval 都必须用它：两处各写一份归一，就会出现「确认时是 ""、
+// 落库时是 {}」这类批得下、执行不了的漂移。
+//
+// 规则：
+//   - 空串 / 全空白 / 字面 null 一律当成 {}（零参意图的合法调用）；
+//     json.Unmarshal("null") 得到 nil、再序列化回 "null"，摘要算的是字符串 "null"
+//     而不是「没有参数」，与零参调用的 "{}" 对不上。
+//   - 其余走 any → Marshal 规范化（键序确定、空白归一），与 ChannelArgsHash 同源。
+//   - 非法 JSON 原样返回：T7 落审批前的对象/摘要校验要据此拒绝，
+//     不能在这里吞成 {} 把一条无法解析的调用伪装成零参调用。
 func channelCanonicalArgs(argsJSON string) string {
 	raw := strings.TrimSpace(argsJSON)
-	if raw == "" {
-		return ""
+	if raw == "" || raw == "null" {
+		return "{}"
 	}
 	var payload any
 	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
@@ -935,15 +944,16 @@ func (st *channelTurnState) applyApprovalGrant(grant *ChannelApprovalGrant) erro
 	if name == "" || !st.visible[name] {
 		return fmt.Errorf("%w：%s", ErrChannelToolNotVisible, name)
 	}
+	// 归一与 T6/T7 同一份实现：零参调用的 "" / "null" 在这里也是 "{}"，
+	// 否则「审批落库是 {}、执行侧却报参数为空」，零参意图永远执行不了（R65）。
 	args := channelCanonicalArgs(grant.ArgsJSON)
-	if args == "" {
-		return fmt.Errorf("%w：审批参数为空", ErrChannelApprovalInvalid)
-	}
-	// 参数必须是能解析成 JSON 对象的合法参数：action 从它派生（与 args_hash 同源）。
-	// 解析不出就是空串，与审批行的空 action 逐字比对，绝不回落 "*"。
+	// 参数必须是能解析成 JSON 对象的合法参数：工具参数只有对象这一种形态，
+	// action 也从它派生（与 args_hash 同源）。数组/字符串/数字在这里就拒绝，
+	// 不要等到摘要比对失败——那会把「参数形态不对」伪装成「凭据不符」。
+	// 解析不出 action 就是空串，与审批行的空 action 逐字比对，绝不回落 "*"。
 	var payload map[string]any
-	if err := json.Unmarshal([]byte(args), &payload); err != nil {
-		return fmt.Errorf("%w：审批参数无法解析", ErrChannelApprovalInvalid)
+	if err := json.Unmarshal([]byte(args), &payload); err != nil || payload == nil {
+		return fmt.Errorf("%w：审批参数必须是 JSON 对象", ErrChannelApprovalInvalid)
 	}
 	st.approvalGrant = &ChannelApprovalGrant{
 		ApprovalId: approvalId,
@@ -1246,14 +1256,27 @@ func (st *channelTurnState) runApprovedCall(ctx context.Context, out ChannelTurn
 	if grant == nil {
 		return out, fmt.Errorf("%w：缺少审批凭据", ErrChannelApprovalInvalid)
 	}
-	// R60：执行之前先消费审批（approved → executing）。消费是条件更新，只有赢家能继续；
-	// 失败意味着这张单已被消费 / 已过期 / 从未批准，此时**绝不执行**——否则同一条审批
-	// 被重放两次就会产生两次真实副作用。自证（CheckIntentPermissionApproved）接受
-	// approved 与 executing 两种状态，所以先消费再复核不会互相打架。
+	// R64：**先自证，再消费**。自证（CheckIntentPermissionApproved）接受 approved 与
+	// executing 两种状态，所以放在消费之前完全成立；反过来先消费就有个致命缺口：
+	// MarkApprovalExecuting 的 WHERE 只有 site_id + public_id + status + expires_at，
+	// 同站点任意绑定只要知道 public_id 就能把一张合法 approved 单推进 executing，
+	// 随后自证失败再落 failed——审批台账被烧毁且不可回退。
+	// 自证只读库、不写状态：失败时这张单仍保持 approved，真正的主人还能继续批准/执行。
 	if st.w == nil {
-		// 没有站点就消费不了审批，也就无法保证「只执行一次」：按拒绝处理，不做乐观放行。
+		// 没有站点就自证不了、也消费不了，也就无法保证「只执行一次」：按拒绝处理。
 		return out, fmt.Errorf("%w：缺少站点上下文", ErrChannelApprovalInvalid)
 	}
+	if err := st.w.CheckIntentPermissionApproved(
+		ctx, st.principal, grant.ApprovalId, grant.ArgsJSON, grant.ToolName, st.approvalAction,
+	); err != nil {
+		// 只记日志、只回哨兵：回执里不出现审批单号、参数或失败细节。
+		st.log().Warn("渠道审批自证失败，已拒绝执行", "error", err)
+		return out, channelSafePermissionError(err)
+	}
+	// R60：自证通过后再消费审批（approved → executing）。消费是条件更新，只有赢家能继续；
+	// 两个并发请求都能通过自证，唯一性由这里的 RowsAffected 决出。失败意味着这张单
+	// 已被别人消费 / 已过期 / 从未批准，此时**绝不执行**——否则同一条审批被重放两次
+	// 就会产生两次真实副作用。
 	if err := st.w.MarkApprovalExecuting(grant.ApprovalId); err != nil {
 		// 只记日志、只回哨兵：回执里不出现审批单号、参数或失败细节。
 		st.log().Warn("消费渠道审批失败，已拒绝执行", "error", err)
