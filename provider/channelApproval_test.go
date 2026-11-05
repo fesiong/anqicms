@@ -588,7 +588,13 @@ func TestApprovalProofFailureDoesNotConsume(t *testing.T) {
 // 顺序调用两次 MarkApprovalExecuting 抓不到「先查后写」：第一次已经把状态改走了，
 // 第二次无论怎么实现都会失败。这里让 8 个 goroutine 在栅栏后同时消费同一张 approved 单：
 // 只有条件更新（status='approved' AND expires_at > now）能让赢家恰好一个。
-// 变异验证：去掉条件更新里的 status 谓词，8 个都会成功，本用例立刻变红。
+// 本用例锁的是「以 RowsAffected == 1 判定赢家」这一步：改成先查后写、或忽略
+// RowsAffected 直接返回 nil，8 个都会成功，用例立刻变红。
+// 条件更新里的 status 谓词不由本用例覆盖——MySQL 默认按「改变的行数」计
+// RowsAffected，并发把 status 写成同一个 executing 之后，第二次更新本身就是
+// 0 行，去掉谓词这里照样只有一个赢家。该谓词由收尾后重放覆盖，见
+// TestApprovalDoubleClickExecutesOnce 里 CompleteApproval 之后再调
+// MarkApprovalExecuting 必须失败的断言。
 func TestApprovalMarkExecutingConcurrentSingleWinner(t *testing.T) {
 	env := newApprovalTestEnv(t)
 	w := env.w

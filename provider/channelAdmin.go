@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"log"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 
 	"kandaoni.com/anqicms/model"
 	"kandaoni.com/anqicms/pkg/mcp/intent"
@@ -31,6 +33,47 @@ import (
 // 静默改变渠道接口的协议；两处掩码将来是否需要一致是产品问题，不是实现细节。
 // 保存时收到这个值或空串，表示「沿用库中真值」（R84）。
 const ChannelSecretMask = "********"
+
+// channelSecretSafeLoggerConfig 是渠道写入专用的 GORM 日志配置：
+// 与 dao.go 的 defaultLogger 同写入端、同级别，只把 ParameterizedQueries 打开。
+//
+// 默认 logger 在 Warn 级别会把整条 SQL（含 INSERT 的参数值）打出来；渠道表唯一的
+// 写入错误路径恰恰是 uk_app_identity_hash 冲突，那一行 INSERT 里带着 app_secret。
+// 参数化后日志只剩占位符，密钥不再进入日志。
+var channelSecretSafeLoggerConfig = logger.Config{
+	SlowThreshold:             500 * time.Millisecond,
+	LogLevel:                  logger.Warn,
+	IgnoreRecordNotFoundError: true,
+	Colorful:                  false,
+	ParameterizedQueries:      true,
+}
+
+// channelSecretSafeLogger 是携带 app_secret 的写操作唯一允许使用的 GORM logger。
+var channelSecretSafeLogger = logger.New(log.New(os.Stdout, "\r\n", log.LstdFlags), channelSecretSafeLoggerConfig)
+
+// SaveMessageChannel 是 message_channels 的唯一写入入口。
+//
+// 用 Session 把参数化 logger 绑到本次写入（gorm.Session.Logger 会覆盖 tx.Config.Logger），
+// 而不是全局改 defaultLogger：其它表的排障仍需要完整参数。
+func (w *Website) SaveMessageChannel(write func(tx *gorm.DB) error) error {
+	return write(w.DB.Session(&gorm.Session{Logger: channelSecretSafeLogger}))
+}
+
+// channelAppIdentityTaken 在写入前检查应用身份是否已被别的渠道占用。
+//
+// 预检查的意义不只是文案：命中时直接返回静态错误，避免走到唯一键冲突那条
+// 「数据库报错 → 日志打印 SQL」的路径。唯一键仍然保留，用于兜住并发插入。
+func (w *Website) channelAppIdentityTaken(channelId uint, appIdentityHash string) (bool, error) {
+	query := w.DB.Model(&model.MessageChannel{}).Where("app_identity_hash = ?", appIdentityHash)
+	if channelId > 0 {
+		query = query.Where("id <> ?", channelId)
+	}
+	var count int64
+	if err := query.Count(&count).Error; err != nil {
+		return false, err
+	}
+	return count > 0, nil
+}
 
 var (
 	// errChannelAdminNotFound 表示渠道不存在或不属于当前站点。
@@ -239,7 +282,17 @@ func (w *Website) createAdminChannel(req *request.Channel, platform, name, appId
 		PolicyJson:  policyJson,
 		Revision:    1,
 	}
-	if err := w.DB.Create(channel).Error; err != nil {
+	taken, err := w.channelAppIdentityTaken(0, model.ComputeAppIdentityHash(platform, appId, orgId))
+	if err != nil {
+		log.Printf("[channel] 站点 %d 检查应用身份失败：%s", w.Id, sanitizePlatformMessage(err.Error()))
+		return nil, errChannelSaveFailed
+	}
+	if taken {
+		return nil, errChannelAppIdentConflict
+	}
+	if err := w.SaveMessageChannel(func(tx *gorm.DB) error {
+		return tx.Create(channel).Error
+	}); err != nil {
 		if isDuplicateKeyError(err) {
 			return nil, errChannelAppIdentConflict
 		}
@@ -265,27 +318,39 @@ func (w *Website) updateAdminChannel(req *request.Channel, platform, name, appId
 	}
 	// 用 map 更新：BeforeSave 钩子在 map 更新里拿不到 AppId，摘要必须在应用层补算，
 	// 否则保存后摘要会停在旧值，「同一企业应用全局唯一」的判据直接被击穿。
-	res := w.DB.Model(&model.MessageChannel{}).
-		Where("`id` = ? AND `site_id` = ? AND `revision` = ?", req.Id, w.Id, req.Revision).
-		Updates(map[string]any{
-			"platform":          platform,
-			"name":              name,
-			"app_id":            appId,
-			"org_id":            orgId,
-			"app_identity_hash": model.ComputeAppIdentityHash(platform, appId, orgId),
-			"app_secret":        secret,
-			"enabled":           req.Enabled,
-			"chat_enabled":      req.ChatEnabled,
-			"agent_id":          req.AgentId,
-			"policy_json":       policyJson,
-			"revision":          gorm.Expr("revision + 1"),
-			"updated_time":      time.Now().Unix(),
-		})
-	if res.Error != nil {
-		if isDuplicateKeyError(res.Error) {
+	appIdentityHash := model.ComputeAppIdentityHash(platform, appId, orgId)
+	taken, err := w.channelAppIdentityTaken(req.Id, appIdentityHash)
+	if err != nil {
+		log.Printf("[channel] 站点 %d 检查应用身份失败：%s", w.Id, sanitizePlatformMessage(err.Error()))
+		return nil, errChannelSaveFailed
+	}
+	if taken {
+		return nil, errChannelAppIdentConflict
+	}
+	var res *gorm.DB
+	if err := w.SaveMessageChannel(func(tx *gorm.DB) error {
+		res = tx.Model(&model.MessageChannel{}).
+			Where("`id` = ? AND `site_id` = ? AND `revision` = ?", req.Id, w.Id, req.Revision).
+			Updates(map[string]any{
+				"platform":          platform,
+				"name":              name,
+				"app_id":            appId,
+				"org_id":            orgId,
+				"app_identity_hash": appIdentityHash,
+				"app_secret":        secret,
+				"enabled":           req.Enabled,
+				"chat_enabled":      req.ChatEnabled,
+				"agent_id":          req.AgentId,
+				"policy_json":       policyJson,
+				"revision":          gorm.Expr("revision + 1"),
+				"updated_time":      time.Now().Unix(),
+			})
+		return res.Error
+	}); err != nil {
+		if isDuplicateKeyError(err) {
 			return nil, errChannelAppIdentConflict
 		}
-		log.Printf("[channel] 站点 %d 更新渠道 %d 失败：%s", w.Id, req.Id, sanitizePlatformMessage(res.Error.Error()))
+		log.Printf("[channel] 站点 %d 更新渠道 %d 失败：%s", w.Id, req.Id, sanitizePlatformMessage(err.Error()))
 		return nil, errChannelSaveFailed
 	}
 	if res.RowsAffected == 0 {

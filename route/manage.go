@@ -730,6 +730,20 @@ func manageRoute(app *iris.Application) {
 			channels.Post("/delete", manageController.ChannelDelete)
 			channels.Get("/status", manageController.ChannelStatus)
 			channels.Get("/capabilities", manageController.ChannelCapabilities)
+			channels.Post("/test", manageController.ChannelTestSend)
+			channels.Post("/binding/token", manageController.ChannelBindingToken)
+			channels.Get("/bindings", manageController.ChannelBindings)
+			channels.Post("/binding/revoke", manageController.ChannelBindingRevoke)
+			channels.Get("/targets", manageController.ChannelTargets)
+			channels.Post("/target", manageController.ChannelTargetSave)
+			channels.Get("/rules", manageController.ChannelRules)
+			channels.Post("/rule", manageController.ChannelRuleSave)
+			channels.Post("/rule/delete", manageController.ChannelRuleDelete)
+			channels.Get("/templates", manageController.ChannelTemplates)
+			channels.Post("/template", manageController.ChannelTemplateSave)
+			channels.Post("/template/preview", manageController.ChannelTemplatePreview)
+			channels.Get("/records", manageController.ChannelRecords)
+			channels.Post("/delivery/retry", manageController.ChannelDeliveryRetry)
 		}
 	}
 }
