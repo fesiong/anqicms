@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"log"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -27,6 +26,17 @@ const (
 	channelManagerScanInterval   = 30 * time.Second
 	channelManagerShutdownWait   = 5 * time.Second
 	channelManagerRebuildBacklog = 8
+	// 未取得租约 / 失去租约后的重试退避：1 秒起，60 秒封顶（规格 §5）。
+	channelRetryBackoffBase = time.Second
+	channelRetryBackoffMax  = 60 * time.Second
+)
+
+var (
+	// errChannelWorkerStopTimeout 表示旧连接没有在时限内退出。
+	// 调用方不得在此情况下建立新连接：否则新旧连接会同时接收平台消息。
+	errChannelWorkerStopTimeout = errors.New("旧连接未在时限内退出，请稍后重试")
+	// errChannelManagerStopped 表示管理器已停止，拒绝新的重建请求。
+	errChannelManagerStopped = errors.New("渠道管理器已停止")
 )
 
 // R21：绑定输入尝试限速。同一用户 10 分钟内最多 5 次失败尝试，成功不计数。
@@ -49,18 +59,23 @@ type channelManagerOptions struct {
 	renewEvery   time.Duration
 	scanEvery    time.Duration
 	shutdownWait time.Duration
+	// retryBackoffBase/retryBackoffMax 控制「未取得租约 / 失去租约」后的重试退避。
+	retryBackoffBase time.Duration
+	retryBackoffMax  time.Duration
 	// now 是可注入时间源（租约与绑定限速共用），测试不 sleep 真实时间。
 	now func() time.Time
 }
 
 func defaultChannelManagerOptions() channelManagerOptions {
 	return channelManagerOptions{
-		newAdapter:   NewPlatformAdapter,
-		leaseTTL:     channelLeaseTTL,
-		renewEvery:   channelLeaseRenewInterval,
-		scanEvery:    channelManagerScanInterval,
-		shutdownWait: channelManagerShutdownWait,
-		now:          time.Now,
+		newAdapter:       NewPlatformAdapter,
+		leaseTTL:         channelLeaseTTL,
+		renewEvery:       channelLeaseRenewInterval,
+		scanEvery:        channelManagerScanInterval,
+		shutdownWait:     channelManagerShutdownWait,
+		retryBackoffBase: channelRetryBackoffBase,
+		retryBackoffMax:  channelRetryBackoffMax,
+		now:              time.Now,
 	}
 }
 
@@ -81,6 +96,12 @@ func (o channelManagerOptions) withDefaults() channelManagerOptions {
 	if o.shutdownWait <= 0 {
 		o.shutdownWait = defaults.shutdownWait
 	}
+	if o.retryBackoffBase <= 0 {
+		o.retryBackoffBase = defaults.retryBackoffBase
+	}
+	if o.retryBackoffMax < o.retryBackoffBase {
+		o.retryBackoffMax = defaults.retryBackoffMax
+	}
 	if o.now == nil {
 		o.now = defaults.now
 	}
@@ -95,8 +116,25 @@ var channelManagerRegistry = struct {
 	bySite map[uint]*channelManager
 }{bySite: make(map[uint]*channelManager)}
 
+// channelManagerOnInit 控制「站点初始化时是否自动建立渠道长连接」。
+//
+// 默认关闭：测试与命令行工具会频繁调用 InitWebsite，若默认开启，
+// 只要库里存在 enabled=1 的渠道就会用真实凭据建连并写真实租约。
+// 进程入口 bootstrap.Serve 必须在 InitWebsites 之前显式打开。
+var channelManagerOnInit atomic.Bool
+
+// EnableChannelManagerOnInit 打开「站点初始化时启动渠道管理器」的开关。
+// 只应由进程入口（bootstrap.Serve）在 InitWebsites 之前调用一次。
+func EnableChannelManagerOnInit() {
+	channelManagerOnInit.Store(true)
+}
+
 // StartChannelManager 为当前站点启动渠道连接管理器。
-// 幂等：同一站点重复调用不会产生第二份 goroutine。只对 Enabled == 1 的渠道建立连接。
+// 幂等：同一站点（同一 *Website/DB 身份）重复调用不会产生第二份 goroutine。
+// 只对 Enabled == 1 的渠道建立连接。
+//
+// ctx 只能是进程级上下文：管理器生命周期跟随它，传入请求级 ctx 会在请求结束时
+// 把该站点的全部渠道连接一起取消。
 func (w *Website) StartChannelManager(ctx context.Context) {
 	w.startChannelManager(ctx, defaultChannelManagerOptions())
 }
@@ -107,6 +145,7 @@ func (w *Website) StopChannelManager() {
 }
 
 // RebuildChannel 强制重建单个渠道的连接（配置保存后由 T9 调用，立即生效）。
+// 旧连接未在时限内退出时返回错误：此时不会建立新连接，下一次扫描会继续尝试。
 func (w *Website) RebuildChannel(channelId uint) error {
 	channelManagerRegistry.Lock()
 	manager := channelManagerRegistry.bySite[w.Id]
@@ -124,8 +163,7 @@ func (w *Website) RebuildChannel(channelId uint) error {
 		}
 		return errors.New("读取渠道失败")
 	}
-	manager.requestRebuild(channelId)
-	return nil
+	return manager.requestRebuild(channelId)
 }
 
 func (w *Website) startChannelManager(ctx context.Context, opts channelManagerOptions) {
@@ -133,14 +171,28 @@ func (w *Website) startChannelManager(ctx context.Context, opts channelManagerOp
 		return
 	}
 	channelManagerRegistry.Lock()
-	if _, exists := channelManagerRegistry.bySite[w.Id]; exists {
+	if existing, exists := channelManagerRegistry.bySite[w.Id]; exists {
+		if existing.servesSite(w) {
+			channelManagerRegistry.Unlock()
+			return
+		}
+		// 同一个 site_id 换成了新的 *Website / 新 DB 句柄（InitWebsite 重入、
+		// 站点重新连库）：旧管理器还绑在旧句柄上，必须先停掉再重建。
+		delete(channelManagerRegistry.bySite, w.Id)
 		channelManagerRegistry.Unlock()
-		return
+		log.Printf("[channel] 站点 %d 的渠道管理器绑定了旧的站点/数据库句柄，先停止旧管理器再重建", w.Id)
+		existing.stop()
+		channelManagerRegistry.Lock()
 	}
 	manager := newChannelManager(w, opts)
 	channelManagerRegistry.bySite[w.Id] = manager
 	channelManagerRegistry.Unlock()
 	manager.start(ctx)
+}
+
+// servesSite 判断管理器是否仍然服务于同一个站点实例与同一个 DB 句柄。
+func (m *channelManager) servesSite(w *Website) bool {
+	return m.site == w && m.site.DB == w.DB
 }
 
 func (w *Website) stopChannelManager() {
@@ -166,11 +218,16 @@ type channelManager struct {
 	mu      sync.Mutex
 	workers map[uint]*channelWorker
 
-	rebuildCh chan channelRebuildRequest
+	rebuildCh chan *channelRebuildRequest
 	wg        sync.WaitGroup
 	// abandoned 在停止等待超时后置位：仍在运行的 worker 不得释放租约，
 	// 否则新实例会立刻抢到租约并与尚未退出的旧连接并存。
 	abandoned atomic.Bool
+
+	// retries 记录「未取得租约 / 失去租约」渠道的退避状态（1s 起、60s 封顶）。
+	// 按渠道而非按 worker 记录：重试会替换 worker，退避必须跨 worker 延续。
+	retryMu sync.Mutex
+	retries map[uint]*channelRetryState
 
 	bindMu          sync.Mutex
 	bindingAttempts map[string]*bindingAttemptState
@@ -179,6 +236,13 @@ type channelManager struct {
 type channelRebuildRequest struct {
 	channelId uint
 	done      chan struct{}
+	err       error
+}
+
+// channelRetryState 是单个渠道的可重试退避状态。
+type channelRetryState struct {
+	backoff time.Duration
+	nextAt  time.Time
 }
 
 type bindingAttemptState struct {
@@ -192,7 +256,8 @@ func newChannelManager(w *Website, opts channelManagerOptions) *channelManager {
 		opts:            opts.withDefaults(),
 		owner:           newChannelManagerOwner(w.Id),
 		workers:         make(map[uint]*channelWorker),
-		rebuildCh:       make(chan channelRebuildRequest, channelManagerRebuildBacklog),
+		rebuildCh:       make(chan *channelRebuildRequest, channelManagerRebuildBacklog),
+		retries:         make(map[uint]*channelRetryState),
 		bindingAttempts: make(map[string]*bindingAttemptState),
 	}
 }
@@ -247,7 +312,7 @@ func (m *channelManager) scanLoop() {
 		case <-m.ctx.Done():
 			return
 		case request := <-m.rebuildCh:
-			m.rebuildOne(request.channelId)
+			request.err = m.rebuildOne(request.channelId)
 			close(request.done)
 		case <-ticker.C:
 			m.reconcile()
@@ -256,17 +321,22 @@ func (m *channelManager) scanLoop() {
 }
 
 // requestRebuild 让扫描循环立即处理一次单渠道重建，并等待其完成。
-// 若管理器正在停止则直接返回，不阻塞调用方。
-func (m *channelManager) requestRebuild(channelId uint) {
-	request := channelRebuildRequest{channelId: channelId, done: make(chan struct{})}
+// 旧连接未在时限内退出时返回错误；管理器正在停止时同样返回错误，不阻塞调用方。
+func (m *channelManager) requestRebuild(channelId uint) error {
+	if m.ctx == nil {
+		return errChannelManagerStopped
+	}
+	request := &channelRebuildRequest{channelId: channelId, done: make(chan struct{})}
 	select {
 	case m.rebuildCh <- request:
 	case <-m.ctx.Done():
-		return
+		return errChannelManagerStopped
 	}
 	select {
 	case <-request.done:
+		return request.err
 	case <-m.ctx.Done():
+		return errChannelManagerStopped
 	}
 }
 
@@ -282,6 +352,7 @@ func (m *channelManager) enabledChannels() ([]model.MessageChannel, error) {
 
 // reconcile 对比「已启用渠道」与「正在运行的 worker」：
 // 消失/禁用 → 停连接并释放租约；配置变化 → 停旧连接（保持租约）后重建；新增 → 启动。
+// 「未取得租约 / 失去租约」的 worker 按退避重试；旧连接未退出前绝不启动新连接。
 func (m *channelManager) reconcile() {
 	channels, err := m.enabledChannels()
 	if err != nil {
@@ -308,15 +379,41 @@ func (m *channelManager) reconcile() {
 		channel, exists := desired[id]
 		if !exists {
 			// 渠道被删除或禁用：租约不再有意义，正常释放。
-			m.stopWorker(id, true)
+			if m.stopWorker(id, true) {
+				m.clearRetry(id)
+			}
+			continue
+		}
+		if worker.abandoned.Load() {
+			// 上一轮停止超时：旧连接仍在跑。继续等它退出，退出前不建新连接。
+			if m.stopWorker(id, worker.pendingReleaseValue()) {
+				log.Printf("[channel] 站点 %d 渠道 %d 的旧连接已退出，恢复该渠道", m.site.Id, id)
+			}
 			continue
 		}
 		if worker.signature != channelConfigSignatureOf(&channel) {
 			// 配置变化：保持租约（不释放再抢，避免被其它实例截走），
 			// 先 cancel 旧 Run 并等它退出，再按新配置建立连接。
-			m.stopWorker(id, false)
+			m.clearRetry(id)
+			if !m.stopWorker(id, false) {
+				// 旧连接没在时限内退出：本轮不重建，等下一轮。
+				continue
+			}
 			m.startWorker(channel)
+			continue
 		}
+		if worker.currentState() != channelWorkerRetryable {
+			// 终态（Run 已返回）：不自动重连，等配置变化或显式重建。
+			continue
+		}
+		if !m.retryDue(id) {
+			continue
+		}
+		// 可重试：先移除退出的 worker，再重新走一遍「抢租约 → Run」。
+		if !m.stopWorker(id, true) {
+			continue
+		}
+		m.startWorker(channel)
 	}
 
 	for _, channel := range channels {
@@ -327,23 +424,32 @@ func (m *channelManager) reconcile() {
 }
 
 // rebuildOne 是 RebuildChannel 的立即生效路径：无论配置是否变化都强制重建。
-func (m *channelManager) rebuildOne(channelId uint) {
+// 返回错误表示旧连接未在时限内退出（此时不建立新连接）。
+func (m *channelManager) rebuildOne(channelId uint) error {
 	var channel model.MessageChannel
 	err := m.site.DB.Where("id = ? AND site_id = ?", channelId, m.site.Id).Take(&channel).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			m.stopWorker(channelId, true)
-			return
+			if m.stopWorker(channelId, true) {
+				m.clearRetry(channelId)
+			}
+			return nil
 		}
 		log.Printf("[channel] 站点 %d 读取渠道 %d 失败：%s", m.site.Id, channelId, sanitizePlatformMessage(err.Error()))
-		return
+		return errors.New("读取渠道失败")
 	}
 	if channel.Enabled != 1 {
-		m.stopWorker(channelId, true)
-		return
+		if m.stopWorker(channelId, true) {
+			m.clearRetry(channelId)
+		}
+		return nil
 	}
-	m.stopWorker(channelId, false)
+	m.clearRetry(channelId)
+	if !m.stopWorker(channelId, false) {
+		return errChannelWorkerStopTimeout
+	}
 	m.startWorker(channel)
+	return nil
 }
 
 func (m *channelManager) worker(id uint) *channelWorker {
@@ -378,21 +484,103 @@ func (m *channelManager) startWorker(channel model.MessageChannel) {
 	}()
 }
 
-// stopWorker 取消单个 worker 并等待其退出。
+// stopWorker 取消单个 worker 并在 shutdownWait 内等待其退出。
 // releaseLease=false 用于重建：旧连接退出后租约仍归本实例，新连接直接续租。
-func (m *channelManager) stopWorker(channelId uint, releaseLease bool) {
+//
+// 返回 false 表示旧连接没有在时限内退出：此时 worker 仍留在表里并标记 abandoned，
+// 租约不释放、也不会启动新连接；下一轮扫描继续尝试停止/重建。
+func (m *channelManager) stopWorker(channelId uint, releaseLease bool) bool {
 	m.mu.Lock()
 	worker := m.workers[channelId]
-	delete(m.workers, channelId)
 	m.mu.Unlock()
 	if worker == nil {
-		return
+		return true
 	}
+	// 记录释放意图：超时后下一轮重试沿用同一个意图，不因重试把租约误释放。
+	worker.pendingRelease.Store(releaseLease)
 	if !releaseLease {
 		worker.releaseOnStop.Store(false)
 	}
 	worker.cancel()
-	<-worker.done
+	return m.awaitWorkerStop(channelId, worker)
+}
+
+// awaitWorkerStop 等 worker 退出，超时按 abandoned 语义处理。
+func (m *channelManager) awaitWorkerStop(channelId uint, worker *channelWorker) bool {
+	if worker.waitExit(m.opts.shutdownWait) {
+		m.removeWorker(channelId, worker)
+		// 正常路径下 worker 自己已经释放过租约（releaseOnStop），这里只处理
+		// 「超时放弃时被抑制了释放」的收尾，条件删除保证重复释放无副作用。
+		if worker.pendingReleaseValue() && !worker.leaseLost.Load() && !m.abandoned.Load() {
+			m.releaseLease(worker.leaseSnapshot())
+		}
+		return true
+	}
+	worker.abandoned.Store(true)
+	// 旧连接还没退出：此时释放租约会让别的实例立刻建立第二条连接。
+	worker.releaseOnStop.Store(false)
+	log.Printf("[channel] 站点 %d 渠道 %d 旧连接未在 %s 内退出，保留租约并等待其退出后重建",
+		m.site.Id, channelId, m.opts.shutdownWait)
+	return false
+}
+
+// removeWorker 仅在表里仍是同一个 worker 时删除，避免误删刚替换上的新 worker。
+func (m *channelManager) removeWorker(channelId uint, worker *channelWorker) {
+	m.mu.Lock()
+	if m.workers[channelId] == worker {
+		delete(m.workers, channelId)
+	}
+	m.mu.Unlock()
+}
+
+// ---------- 可重试退避 ----------
+
+// noteWorkerRunning 在 worker 真正开始 Run 时调用：该渠道的重试退避清零。
+func (m *channelManager) noteWorkerRunning(worker *channelWorker) {
+	m.mu.Lock()
+	current := m.workers[worker.channel.Id] == worker
+	m.mu.Unlock()
+	if !current {
+		return
+	}
+	m.clearRetry(worker.channel.Id)
+}
+
+// noteWorkerRetryable 为可重试退出安排下一次尝试（1s 起，每次翻倍，60s 封顶）。
+func (m *channelManager) noteWorkerRetryable(channelId uint) {
+	m.retryMu.Lock()
+	defer m.retryMu.Unlock()
+	state := m.retries[channelId]
+	if state == nil {
+		state = &channelRetryState{}
+		m.retries[channelId] = state
+	}
+	if state.backoff <= 0 {
+		state.backoff = m.opts.retryBackoffBase
+	} else {
+		state.backoff *= 2
+		if state.backoff > m.opts.retryBackoffMax {
+			state.backoff = m.opts.retryBackoffMax
+		}
+	}
+	state.nextAt = m.opts.now().Add(state.backoff)
+}
+
+// retryDue 判断该渠道是否已到下一次尝试时间。
+func (m *channelManager) retryDue(channelId uint) bool {
+	m.retryMu.Lock()
+	defer m.retryMu.Unlock()
+	state := m.retries[channelId]
+	if state == nil {
+		return true
+	}
+	return !m.opts.now().Before(state.nextAt)
+}
+
+func (m *channelManager) clearRetry(channelId uint) {
+	m.retryMu.Lock()
+	defer m.retryMu.Unlock()
+	delete(m.retries, channelId)
 }
 
 // ---------- 租约 ----------
@@ -605,7 +793,9 @@ func channelConfigSignatureOf(channel *model.MessageChannel) channelConfigSignat
 }
 
 // isDuplicateKeyError 识别 MySQL 1062（唯一键冲突）。
-// 项目没有开启 gorm TranslateError，只能从驱动错误类型判断，外加文本兜底。
+// 只认驱动返回的 *mysql.MySQLError：文本兜底（例如 strings.Contains(err, "1062")）
+// 会把错误消息里恰好带这个数字的其它错误（如连接号、ID）误判成唯一键冲突并静默吞掉。
+// 项目没有开启 gorm TranslateError，驱动错误类型是唯一可靠依据。
 func isDuplicateKeyError(err error) bool {
 	if err == nil {
 		return false
@@ -614,8 +804,7 @@ func isDuplicateKeyError(err error) bool {
 	if errors.As(err, &mysqlErr) {
 		return mysqlErr.Number == 1062
 	}
-	message := err.Error()
-	return strings.Contains(message, "Duplicate entry") || strings.Contains(message, "1062")
+	return false
 }
 
 // channelBindingAttemptKey 是 R21 的限速键摘要：站点 + 渠道 + 平台用户。

@@ -57,6 +57,9 @@ func (bootstrap *Bootstrap) Serve() {
 
 	//自动迁移表
 	if provider.GetDefaultDB() != nil {
+		// 渠道长连接管理器默认不随站点初始化启动（测试/工具不连平台）；
+		// 进程入口必须在这里显式打开，且要在 InitWebsites 之前。
+		provider.EnableChannelManagerOnInit()
 		provider.InitWebsites()
 	}
 

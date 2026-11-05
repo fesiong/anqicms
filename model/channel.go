@@ -171,7 +171,8 @@ type ChannelInbox struct {
 	Status     string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'';index:idx_status;index:idx_status_lease_until,priority:1;comment:处理状态"`
 	LeaseUntil int64  `json:"lease_until" gorm:"column:lease_until;type:bigint(20) not null;default:0;index:idx_lease_until;index:idx_status_lease_until,priority:2;comment:处理租约到期时间戳"`
 	// EventHash 为平台事件标识的 SHA-256，唯一，用于入站去重。
-	EventHash string `json:"event_hash" gorm:"column:event_hash;type:char(64) not null;default:'';uniqueIndex:uk_event_hash;comment:平台事件SHA256"`
+	// 摘要不序列化：后台响应不得输出事件摘要（全局约束）。
+	EventHash string `json:"-" gorm:"column:event_hash;type:char(64) not null;default:'';uniqueIndex:uk_event_hash;comment:平台事件SHA256(不序列化)"`
 }
 
 // ChannelSession 渠道会话与内部 chat 会话的映射。

@@ -503,7 +503,11 @@ func InitWebsite(mw *model.Website) {
 		w.NewMcpServer()
 		// 渠道长连接管理器：只对已启用渠道建立连接。老库可能还没迁移渠道表，
 		// 管理器内部只记日志，不阻断站点初始化；重复调用是幂等的。
-		w.StartChannelManager(context.Background())
+		// 必须显式开启（bootstrap.Serve 在 InitWebsites 之前调用 EnableChannelManagerOnInit），
+		// 否则测试与命令行工具会拿真实凭据去连平台并写真实租约。
+		if channelManagerOnInit.Load() {
+			w.StartChannelManager(context.Background())
+		}
 		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
@@ -512,6 +516,10 @@ func InitWebsite(mw *model.Website) {
 		if w.Id == 1 {
 			w.LoadAiSetting("")
 		}
+	} else {
+		// 站点被置为未初始化（连库失败 / 状态停用 / 路径异常）：停掉残留管理器，
+		// 否则它会继续用旧的 DB 句柄续租、重连。
+		w.StopChannelManager()
 	}
 }
 
@@ -847,6 +855,13 @@ func GetWebsite(siteId uint) *Website {
 }
 
 func RemoveWebsite(siteId uint, removeFile bool) {
+	// 删除前先停掉该站点的渠道长连接与续租：站点从注册表摘除后，
+	// 管理器仍绑着已失效的 *Website/DB 句柄，会继续连平台并写租约。
+	// 注意：下面的 GetWebsite 在 Delete 之后返回 nil 是既有行为（DROP DATABASE
+	// 因此不会执行），本任务不改变它，只加停止逻辑。
+	if stopped := GetWebsite(siteId); stopped != nil {
+		stopped.StopChannelManager()
+	}
 	websites.Delete(siteId)
 	site := GetWebsite(siteId)
 	if site != nil {

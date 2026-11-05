@@ -290,6 +290,20 @@ func (f *fakeChannelFactory) waitForRun(t *testing.T, appId string, want int) *f
 	return nil
 }
 
+// waitAdapterCount 等工厂为同一 AppId 构造出第 want 个适配器。
+// 用适配器数量而不是 Run 次数衡量「重试尝试」：抢租约失败时也会构造适配器但不 Run。
+func waitAdapterCount(t *testing.T, factory *fakeChannelFactory, appId string, want int, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if factory.adapterCount(appId) >= want {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatalf("等待渠道 %s 的第 %d 次建连尝试超时（当前 %d 次）", appId, want, factory.adapterCount(appId))
+}
+
 func testChannelManagerOptions(factory *fakeChannelFactory) channelManagerOptions {
 	opts := defaultChannelManagerOptions()
 	opts.newAdapter = factory.newAdapter
@@ -479,10 +493,11 @@ func TestLostLeaseCancelsRunningChannel(t *testing.T) {
 
 	waitFakeExit(t, first, 3*time.Second)
 
-	// 终态：配置没变就不自动重连。
+	// 终态：配置没变就不立即重连。失去租约是可重试退出，但必须等退避窗口
+	// （默认 1s，本测试 150ms 内远未到期），所以这里 Run 仍应是 1 次。
 	time.Sleep(150 * time.Millisecond)
 	if got := registry.runCount(ch.AppId); got != 1 {
-		t.Fatalf("失去租约后自动重连了：Run 调用 %d 次，应为 1", got)
+		t.Fatalf("退避窗口内就自动重连了：Run 调用 %d 次，应为 1", got)
 	}
 
 	// 旧 owner 不得把新 owner 的租约删掉。
@@ -567,7 +582,9 @@ func TestChannelDuplicateEventIsIgnored(t *testing.T) {
 		UserId:         "dup-user",
 		ChatId:         "dup-chat",
 		ChatType:       ChatTypeGroup,
-		Text:           "  你好，测试  ",
+		// 群聊必须显式 @ 机器人才会落 Inbox（§7 第一层门禁）。
+		MentionedBot: true,
+		Text:         "  你好，测试  ",
 	}
 	for i := 0; i < 2; i++ {
 		if err := sink(context.Background(), ev); err != nil {
@@ -657,8 +674,9 @@ func TestShutdownWaitsForChannelWorkers(t *testing.T) {
 	if elapsed < 100*time.Millisecond {
 		t.Fatalf("Stop 在等待上限前就返回了（%s），没有等待 worker", elapsed)
 	}
-	if elapsed > 500*time.Millisecond {
-		t.Fatalf("Stop 没有在等待上限附近返回（%s）", elapsed)
+	// 上界放宽到「等待上限 + 1s」：CI 抖动下只多等一个量级的余量，下界不放。
+	if maxElapsed := opts.shutdownWait + time.Second; elapsed > maxElapsed {
+		t.Fatalf("Stop 没有在等待上限附近返回（%s，上限 %s）", elapsed, maxElapsed)
 	}
 	select {
 	case <-cooperativeAdapter.exited:
@@ -920,6 +938,396 @@ func TestChannelLeaseHashNotSerialized(t *testing.T) {
 	for _, expected := range []string{`"site_id":1`, `"owner":"owner-serialize"`, `"expires_at":1700000000`} {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("租约 JSON 缺少 %s：%s", expected, text)
+		}
+	}
+}
+
+// ============================================================
+// 审查修复（租约重试、停止超时、站点生命周期、群聊门禁）
+// ============================================================
+
+// TestChannelLeaseRetriedAfterOpponentReleases 锁定「没拿到租约不是永久占位」：
+// 对手释放后，本实例必须按退避自动重试并最终 Run；退避未到期时不得狂查库。
+func TestChannelLeaseRetriedAfterOpponentReleases(t *testing.T) {
+	w := channelManagerTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	hash := channelAppHash(ch)
+
+	clock := newFakeChannelClock()
+	opponent := fmt.Sprintf("opponent-%d", time.Now().UnixNano())
+	opponentLease := model.NewChannelLease(w.Id, ch, opponent, clock.Now().Add(5*time.Minute).Unix())
+	opponentLease.FencingVersion = 1
+	if err := w.DB.Create(opponentLease).Error; err != nil {
+		t.Fatalf("创建对手租约失败：%v", err)
+	}
+
+	registry := newFakeChannelFactory(nil)
+	opts := testChannelManagerOptions(registry)
+	opts.now = clock.Now
+	opts.retryBackoffBase = time.Second
+	opts.retryBackoffMax = 4 * time.Second
+	startTestChannelManager(t, w, opts)
+
+	// 首轮：构造了适配器但没拿到租约，Run 不执行。
+	waitAdapterCount(t, registry, ch.AppId, 1, 3*time.Second)
+	time.Sleep(100 * time.Millisecond)
+	if got := registry.runCount(ch.AppId); got != 0 {
+		t.Fatalf("没拿到租约却调用了 Run %d 次", got)
+	}
+
+	if err := w.DB.Where("app_identity_hash = ?", hash).Delete(&model.ChannelLease{}).Error; err != nil {
+		t.Fatalf("删除对手租约失败：%v", err)
+	}
+	// 假时钟没动 → 退避未到期 → 不得立刻重试（否则每轮扫描都在查库）。
+	time.Sleep(150 * time.Millisecond)
+	if got := registry.adapterCount(ch.AppId); got != 1 {
+		t.Fatalf("退避未到期就重试了：建连尝试 %d 次，应为 1", got)
+	}
+
+	// 退避到期：下一轮扫描重新抢租约并真正 Run。
+	// 注意第一次尝试只构造了适配器没有 Run，所以第二次尝试对应 adapters[1]。
+	clock.Advance(1100 * time.Millisecond)
+	waitAdapterCount(t, registry, ch.AppId, 2, 3*time.Second)
+	registry.waitForRun(t, ch.AppId, 2)
+	if got := registry.runCount(ch.AppId); got != 1 {
+		t.Fatalf("重试后 Run 调用 %d 次，应为 1", got)
+	}
+
+	var lease model.ChannelLease
+	if err := w.DB.Where("app_identity_hash = ?", hash).Take(&lease).Error; err != nil {
+		t.Fatalf("重试后没有重新写入租约：%v", err)
+	}
+	if lease.Owner == opponent || strings.TrimSpace(lease.Owner) == "" {
+		t.Fatalf("重试后的租约 owner 为 %q，应为本实例", lease.Owner)
+	}
+}
+
+// TestLostLeaseRetriesWithBackoff 锁定「失去租约后按指数退避重试」：
+// 重试必须重新抢租约（抢不到不 Run），且退避逐次翻倍，不能每轮扫描狂试。
+func TestLostLeaseRetriesWithBackoff(t *testing.T) {
+	w := channelManagerTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+
+	clock := newFakeChannelClock()
+	registry := newFakeChannelFactory(nil)
+	opts := testChannelManagerOptions(registry)
+	opts.now = clock.Now
+	opts.retryBackoffBase = time.Second
+	opts.retryBackoffMax = 8 * time.Second
+	startTestChannelManager(t, w, opts)
+
+	first := registry.waitForRun(t, ch.AppId, 1)
+
+	// 对手接管（未过期）：续租失败 → 取消 Run → 可重试退出。
+	intruder := fmt.Sprintf("intruder-%d", time.Now().UnixNano())
+	res := w.DB.Model(&model.ChannelLease{}).
+		Where("app_identity_hash = ?", channelAppHash(ch)).
+		Updates(map[string]interface{}{
+			"owner":           intruder,
+			"expires_at":      clock.Now().Add(time.Hour).Unix(),
+			"fencing_version": gorm.Expr("fencing_version + 1"),
+		})
+	if res.Error != nil || res.RowsAffected != 1 {
+		t.Fatalf("模拟换主失败：err=%v rows=%d", res.Error, res.RowsAffected)
+	}
+	waitFakeExit(t, first, 3*time.Second)
+
+	// 第一次退避（1s）未到期：不重试。
+	time.Sleep(150 * time.Millisecond)
+	if got := registry.adapterCount(ch.AppId); got != 1 {
+		t.Fatalf("退避未到期就重试了：建连尝试 %d 次", got)
+	}
+
+	// 进行第一次重试：对手租约未过期，抢不到，Run 不得再次发生。
+	clock.Advance(1100 * time.Millisecond)
+	waitAdapterCount(t, registry, ch.AppId, 2, 3*time.Second)
+	time.Sleep(100 * time.Millisecond)
+	if got := registry.runCount(ch.AppId); got != 1 {
+		t.Fatalf("重试时没抢到租约却调用了 Run：%d 次", got)
+	}
+
+	// 第二次退避应翻倍到 2s：推进 1.5s 不得重试，再推进 0.7s 才重试。
+	clock.Advance(1500 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
+	if got := registry.adapterCount(ch.AppId); got != 2 {
+		t.Fatalf("退避没有翻倍：距上次尝试 1.5s 就重试了（建连尝试 %d 次）", got)
+	}
+	clock.Advance(700 * time.Millisecond)
+	waitAdapterCount(t, registry, ch.AppId, 3, 3*time.Second)
+	if got := registry.runCount(ch.AppId); got != 1 {
+		t.Fatalf("重试时没抢到租约却调用了 Run：%d 次", got)
+	}
+}
+
+// TestChannelRebuildTimeoutKeepsLeaseAndAvoidsSecondRun 锁定停止超时的 abandoned 语义：
+// RebuildChannel 在时限内返回错误；不释放租约、不起第二条连接；
+// 旧连接退出后下一轮扫描继续完成重建。
+func TestChannelRebuildTimeoutKeepsLeaseAndAvoidsSecondRun(t *testing.T) {
+	w := channelManagerTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+
+	registry := newFakeChannelFactory(func(appId string, index int) *fakeChannelAdapter {
+		adapter := newFakeChannelAdapter()
+		if index == 0 {
+			// 模拟钉钉 SDK 不感知 ctx：退出远慢于 shutdownWait。
+			adapter.ignoreCancel = true
+			adapter.exitDelay = 400 * time.Millisecond
+		}
+		return adapter
+	})
+	opts := testChannelManagerOptions(registry)
+	opts.shutdownWait = 80 * time.Millisecond
+	startTestChannelManager(t, w, opts)
+
+	first := registry.waitForRun(t, ch.AppId, 1)
+
+	startedAt := time.Now()
+	err := w.RebuildChannel(ch.Id)
+	elapsed := time.Since(startedAt)
+	if err == nil {
+		t.Fatal("旧连接未在时限内退出时 RebuildChannel 必须返回错误")
+	}
+	if !strings.Contains(err.Error(), "退出") {
+		t.Fatalf("RebuildChannel 错误不可读：%v", err)
+	}
+	if elapsed < opts.shutdownWait {
+		t.Fatalf("RebuildChannel 没等满时限就返回了（%s）", elapsed)
+	}
+	if limit := opts.shutdownWait + time.Second; elapsed > limit {
+		t.Fatalf("RebuildChannel 超出时限（%s > %s）", elapsed, limit)
+	}
+
+	// 旧连接还活着：租约不得释放，也不得建立第二条连接。
+	var lease model.ChannelLease
+	if err := w.DB.Where("app_identity_hash = ?", channelAppHash(ch)).Take(&lease).Error; err != nil {
+		t.Fatalf("停止超时后租约被释放了：%v", err)
+	}
+	select {
+	case <-first.exited:
+		t.Fatal("忽略取消的适配器在时限内退出了，无法验证超时路径")
+	default:
+	}
+	if got := registry.runCount(ch.AppId); got != 1 {
+		t.Fatalf("旧连接未退出就启动了新连接：Run %d 次", got)
+	}
+
+	// 旧连接退出后，下一轮扫描继续完成重建：先退出、再 Run，租约保持不变。
+	waitFakeExit(t, first, 3*time.Second)
+	registry.waitForRun(t, ch.AppId, 2)
+	select {
+	case <-first.exited:
+	default:
+		t.Fatal("旧连接没退出就建立了新连接")
+	}
+	var after model.ChannelLease
+	if err := w.DB.Where("app_identity_hash = ?", channelAppHash(ch)).Take(&after).Error; err != nil {
+		t.Fatalf("重建后租约消失了：%v", err)
+	}
+	if after.Owner != lease.Owner || after.FencingVersion != lease.FencingVersion {
+		t.Fatalf("超时重建改了租约归属：owner %q→%q fencing %d→%d",
+			lease.Owner, after.Owner, lease.FencingVersion, after.FencingVersion)
+	}
+}
+
+// TestChannelLifecycleStopsOnRemoveWebsite 锁定站点删除路径：先停管理器再从注册表摘除，
+// 正常退出的连接按规则释放租约（避免用过期租约挡住别人接管）。
+func TestChannelLifecycleStopsOnRemoveWebsite(t *testing.T) {
+	w := channelManagerTestSite(t)
+
+	fakeId := uint(900000) + uint(time.Now().UnixNano()%100000)
+	fakeSite := &Website{Id: fakeId, Mysql: w.Mysql, DB: w.DB, Initialed: true}
+	websites.Set(fakeSite)
+	t.Cleanup(func() {
+		fakeSite.StopChannelManager()
+		websites.Delete(fakeId)
+	})
+
+	ch := newManagerTestChannel(t, fakeSite, true)
+	registry := newFakeChannelFactory(nil)
+	fakeSite.startChannelManager(context.Background(), testChannelManagerOptions(registry))
+	adapter := registry.waitForRun(t, ch.AppId, 1)
+
+	RemoveWebsite(fakeId, false)
+
+	waitFakeExit(t, adapter, 3*time.Second)
+	if _, ok := websites.Get(fakeId); ok {
+		t.Fatal("RemoveWebsite 后站点仍在注册表里")
+	}
+	if manager := channelManagerRegistry.bySite[fakeId]; manager != nil {
+		t.Fatal("RemoveWebsite 后渠道管理器仍在注册表里")
+	}
+	var lease model.ChannelLease
+	err := w.DB.Where("app_identity_hash = ?", channelAppHash(ch)).Take(&lease).Error
+	if err == nil {
+		t.Fatal("站点删除后正常退出的连接没有释放租约")
+	}
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("读取租约失败：%v", err)
+	}
+}
+
+// TestChannelLifecycleRebuildsOnSiteReinit 锁定 InitWebsite 重入：
+// 同一 site_id 换了新的 *Website / DB 句柄时，旧管理器必须先停、旧连接先退出，
+// 再换上新管理器，不能留着绑旧句柄的管理器继续续租重连。
+func TestChannelLifecycleRebuildsOnSiteReinit(t *testing.T) {
+	w := channelManagerTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+
+	registry := newFakeChannelFactory(nil)
+	startTestChannelManager(t, w, testChannelManagerOptions(registry))
+	first := registry.waitForRun(t, ch.AppId, 1)
+
+	// 等价于 InitWebsite 重入：新的 Website 指针 + 新的 DB 句柄。
+	replacement := &Website{
+		Id:        w.Id,
+		Mysql:     w.Mysql,
+		DB:        w.DB.Session(&gorm.Session{}),
+		Initialed: true,
+	}
+	t.Cleanup(func() { replacement.StopChannelManager() })
+	replacement.startChannelManager(context.Background(), testChannelManagerOptions(registry))
+
+	manager := channelManagerRegistry.bySite[w.Id]
+	if manager == nil {
+		t.Fatal("同 site_id 重启后注册表里没有管理器")
+	}
+	if manager.site != replacement {
+		t.Fatal("注册表里仍绑着旧的 *Website，管理器没有被重建")
+	}
+	select {
+	case <-first.exited:
+	default:
+		t.Fatal("旧管理器没有停止旧连接")
+	}
+	registry.waitForRun(t, ch.AppId, 2)
+}
+
+// TestChannelLifecycleInitSwitch 锁定显式开关：InitWebsite 默认不启动渠道管理器
+// （否则所有既有 provider 测试都会用生产参数真实建连），打开后才启动。
+func TestChannelLifecycleInitSwitch(t *testing.T) {
+	w := channelManagerTestSite(t)
+
+	// 保护：开发库里若真有启用渠道，打开开关会让本测试用生产参数真实建连。
+	var enabledCount int64
+	if err := w.DB.Model(&model.MessageChannel{}).Where("site_id = ? AND enabled = ?", w.Id, 1).Count(&enabledCount).Error; err != nil {
+		t.Fatalf("统计启用渠道失败：%v", err)
+	}
+	if enabledCount > 0 {
+		t.Skipf("站点 %d 存在 %d 个启用渠道，跳过以免真实建连", w.Id, enabledCount)
+	}
+
+	initSite := func() {
+		dbSite, err := GetDBWebsiteInfo(1)
+		if err != nil {
+			t.Fatalf("读取站点失败：%v", err)
+		}
+		dbSite.Status = 1
+		InitWebsite(dbSite)
+	}
+
+	// 开关关闭（默认）：再次 InitWebsite 也不得启动管理器。
+	// 关键在于 fixture 已经停过一次，这里断言的是「InitWebsite 自己没启动」。
+	initSite()
+	if manager := channelManagerRegistry.bySite[w.Id]; manager != nil {
+		t.Fatal("开关关闭时 InitWebsite 启动了渠道管理器")
+	}
+
+	previous := channelManagerOnInit.Load()
+	channelManagerOnInit.Store(true)
+	t.Cleanup(func() {
+		channelManagerOnInit.Store(previous)
+		w.StopChannelManager()
+	})
+
+	initSite()
+	if manager := channelManagerRegistry.bySite[w.Id]; manager == nil {
+		t.Fatal("开关打开后 InitWebsite 应启动渠道管理器")
+	}
+}
+
+// TestChannelLifecycleGroupMessageGate 锁定规格 §7 第一层门禁：
+// 群聊未 @ 机器人的消息直接丢弃、不落 Inbox、不回复；@ 了的照常落库。
+func TestChannelLifecycleGroupMessageGate(t *testing.T) {
+	w := channelManagerTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+
+	registry := newFakeChannelFactory(nil)
+	startTestChannelManager(t, w, testChannelManagerOptions(registry))
+	adapter := registry.waitForRun(t, ch.AppId, 1)
+	sink := adapter.waitSink(t)
+
+	unmentioned := InboundEvent{
+		EventId:        fmt.Sprintf("group-quiet-%d", time.Now().UnixNano()),
+		Kind:           InboundKindText,
+		OrganizationId: ch.OrgId,
+		AppId:          ch.AppId,
+		UserId:         "group-user",
+		ChatId:         "group-chat",
+		ChatType:       ChatTypeGroup,
+		MentionedBot:   false,
+		Text:           "大家好，今天下午开会",
+	}
+	if err := sink(context.Background(), unmentioned); err != nil {
+		t.Fatalf("群聊未 @ 的消息处理返回错误：%v", err)
+	}
+	time.Sleep(50 * time.Millisecond)
+
+	var quietCount int64
+	if err := w.DB.Model(&model.ChannelInbox{}).
+		Where("event_hash = ?", wantEventDigest(w.Id, ch.Id, ch.Platform, unmentioned.EventId)).
+		Count(&quietCount).Error; err != nil {
+		t.Fatalf("统计入站任务失败：%v", err)
+	}
+	if quietCount != 0 {
+		t.Fatalf("群聊未 @ 机器人的消息落库了（%d 条）", quietCount)
+	}
+	if got := adapter.sendCount(); got != 0 {
+		t.Fatalf("群聊未 @ 机器人的消息触发了 %d 次回复", got)
+	}
+
+	// 反向对照：@ 了机器人就必须落库，证明上面的 0 不是整条链路空转。
+	mentioned := unmentioned
+	mentioned.EventId = unmentioned.EventId + "-at"
+	mentioned.MentionedBot = true
+	mentioned.Text = "请帮我看看今天的订单"
+	if err := sink(context.Background(), mentioned); err != nil {
+		t.Fatalf("@ 机器人的消息处理返回错误：%v", err)
+	}
+	var atCount int64
+	if err := w.DB.Model(&model.ChannelInbox{}).
+		Where("event_hash = ?", wantEventDigest(w.Id, ch.Id, ch.Platform, mentioned.EventId)).
+		Count(&atCount).Error; err != nil {
+		t.Fatalf("统计入站任务失败：%v", err)
+	}
+	if atCount != 1 {
+		t.Fatalf("@ 机器人的群聊消息落库 %d 条，应为 1", atCount)
+	}
+}
+
+// TestChannelLifecycleInboxEventHashNotSerialized 锁定全局约束：后台响应不得包含事件摘要。
+func TestChannelLifecycleInboxEventHashNotSerialized(t *testing.T) {
+	inbox := &model.ChannelInbox{
+		SiteId:    1,
+		ChannelId: 2,
+		Content:   "你好",
+		Status:    model.InboxStatusPending,
+		EventHash: strings.Repeat("ab", 32),
+	}
+	raw, err := json.Marshal(inbox)
+	if err != nil {
+		t.Fatalf("序列化入站任务失败：%v", err)
+	}
+	text := string(raw)
+	if strings.Contains(text, "event_hash") {
+		t.Fatalf("入站任务 JSON 包含 event_hash：%s", text)
+	}
+	if strings.Contains(text, inbox.EventHash) {
+		t.Fatalf("入站任务 JSON 包含事件摘要值：%s", text)
+	}
+	// 反向对照：不是整个结构体被丢空。
+	for _, expected := range []string{`"site_id":1`, `"channel_id":2`, `"status":"pending"`} {
+		if !strings.Contains(text, expected) {
+			t.Fatalf("入站任务 JSON 缺少 %s：%s", expected, text)
 		}
 	}
 }
