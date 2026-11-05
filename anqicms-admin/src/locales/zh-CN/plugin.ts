@@ -2255,4 +2255,11 @@ export default {
   'plugin.channels.records.expires': '过期时间',
   'plugin.channels.records.policy-revision': '策略版本',
   'plugin.channels.records.created-time': '时间',
+  'plugin.channels.target.select-channel': '请先选择渠道',
+  'plugin.channels.target.binding': '绑定',
+  'plugin.channels.records.next-attempt': '下次尝试',
+  'plugin.channels.records.platform-message-id': '平台消息 ID',
+  'plugin.channels.records.session-id': '会话 ID',
+  'plugin.channels.records.status.ok': '成功',
+  'plugin.channels.records.status.denied': '拒绝',
 };

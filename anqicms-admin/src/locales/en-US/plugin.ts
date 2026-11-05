@@ -2377,4 +2377,11 @@ export default {
   'plugin.channels.records.expires': 'Expires at',
   'plugin.channels.records.policy-revision': 'Policy revision',
   'plugin.channels.records.created-time': 'Time',
+  'plugin.channels.target.select-channel': 'Select a channel first',
+  'plugin.channels.target.binding': 'Binding',
+  'plugin.channels.records.next-attempt': 'Next attempt',
+  'plugin.channels.records.platform-message-id': 'Platform message ID',
+  'plugin.channels.records.session-id': 'Session ID',
+  'plugin.channels.records.status.ok': 'OK',
+  'plugin.channels.records.status.denied': 'Denied',
 };
