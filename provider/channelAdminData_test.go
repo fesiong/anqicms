@@ -940,13 +940,16 @@ func TestChannelTestSendUsesApprovedTarget(t *testing.T) {
 	}
 	t.Cleanup(func() { channelTestAdapterFactory = original })
 
-	// 1) 无目标：只校验配置，不发消息。
+	// 1) 无目标：只校验配置，不发消息，且必须如实说自己没验证过（T12b R1）。
 	result, err := w.ChannelTestSend(ch.Id, 0)
 	if err != nil {
 		t.Fatalf("配置校验失败：%v", err)
 	}
-	if !result.Valid || result.Sent {
-		t.Fatalf("无目标只做配置校验：%+v", result)
+	if result.Valid || result.Verified || result.Sent {
+		t.Fatalf("无目标只做配置校验，不得声称有效或已验证：%+v", result)
+	}
+	if strings.TrimSpace(result.Message) == "" {
+		t.Fatal("未验证的回执必须说明原因")
 	}
 	if fake.callCount() != 0 {
 		t.Fatal("无目标时不得发送任何消息")

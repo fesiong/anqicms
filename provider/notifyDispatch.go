@@ -46,11 +46,17 @@ var notifyDeliveryBackoff = []time.Duration{
 // 渲染在扇出时完成一次并写入投递行；重试不再渲染，模板事后修改不影响历史投递。
 // 规则 JSON 损坏、目标/渠道失效都只跳过或落 failed 投递，不让业务事务失败；
 // 只有数据库错误返回给调用方。
+//
+// ⚠ 投递表还没迁移时直接返回 nil：事件行已经写进去了（表存在时），
+// 但缺表不能升级成业务失败 —— 否则升级窗口里下单/留言会被通知拖垮。
 func (w *Website) fanOutNotificationEvent(tx *gorm.DB, event *model.NotificationEvent) error {
 	if w == nil || tx == nil || event == nil {
 		return nil
 	}
 	if event.Status != NotifyEventStatusReady {
+		return nil
+	}
+	if !ensureNotificationTable(tx, &model.NotificationDelivery{}, "notification_deliveries") {
 		return nil
 	}
 

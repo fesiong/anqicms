@@ -386,6 +386,8 @@ func notificationEventUintField(event *model.NotificationEvent, key string) uint
 // 的审计 ID 是当前唯一稳定的失败身份。一次运行里多个工具失败会产生多条通知（可接受）。
 // 不扫描 denied：那是权限拒绝，不是任务失败。
 // 只取最近 notifyDeriveAuditWindow 内失败的审计：历史失败早已派生过，重放没有意义。
+// 只取 binding_id > 0：管理员试发（channel.test）与后台操作失败的审计没有绑定身份，
+// 不属于「智能体任务失败」，派生成 agent.failed 会往群里发无关噪音。
 // payload 只放标识与动作名，绝不含参数正文、错误原文或用户消息。
 func (w *Website) deriveAgentFailedNotificationEvents() int {
 	if !w.DB.Migrator().HasTable(&model.ChannelAudit{}) {
@@ -393,7 +395,7 @@ func (w *Website) deriveAgentFailedNotificationEvents() int {
 	}
 	cutoff := time.Now().Unix() - int64(notifyDeriveAuditWindow/time.Second)
 	var audits []model.ChannelAudit
-	if err := w.DB.Where("site_id = ? AND result = ? AND created_time >= ?", w.Id, "failed", cutoff).
+	if err := w.DB.Where("site_id = ? AND result = ? AND binding_id > 0 AND created_time >= ?", w.Id, "failed", cutoff).
 		Order("id desc").Limit(notifyDeriveAuditLimit).Find(&audits).Error; err != nil {
 		log.Printf("[notify] 站点 %d 读取失败审计失败：%s", w.Id, sanitizePlatformMessage(err.Error()))
 		return 0

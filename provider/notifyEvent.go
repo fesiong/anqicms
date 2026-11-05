@@ -9,6 +9,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"gorm.io/gorm"
@@ -36,17 +37,50 @@ func notifyEventKeyHash(eventKey string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// notificationTableExists 探测通知表是否已迁移。
+//
+// 包级变量是为了可测：老库升级窗口里通知表可能不存在，用真实开发库 DROP 表来复现
+// 既危险又不可并行，测试改为注入这个探测。
+var notificationTableExists = func(db *gorm.DB, model any) bool {
+	return db.Migrator().HasTable(model)
+}
+
+// notificationTableNoted 记录本进程已提示过的缺失通知表名。
+// 升级窗口里每个下单/留言请求都会走到探测，不节流会把日志刷爆。
+var notificationTableNoted sync.Map
+
+// ensureNotificationTable 确认通知表存在；缺失时每进程每表只记一次日志。
+//
+// 缺表绝不能升级成业务失败：通知是旁路，表没迁移好不应该让下单/留言回滚
+// （旧实现里 INSERT 报错会触发调用方 tx.Rollback，等于通知把业务带下水）。
+// 日志只写表名，不含事件载荷或用户内容。
+func ensureNotificationTable(db *gorm.DB, table any, name string) bool {
+	if notificationTableExists(db, table) {
+		return true
+	}
+	if _, noted := notificationTableNoted.LoadOrStore(name, struct{}{}); !noted {
+		log.Printf("[notify] 通知表 %s 尚未迁移，已跳过通知写入（业务主线不受影响），请到后台执行「修复数据库」", name)
+	}
+	return false
+}
+
 // emitNotificationEvent 是通知事件的唯一写入口。
 //
 // 事务边界（R68）：事件与业务写同一个 tx；数据库错误必须返回给调用方，让业务事务回滚。
 // 通知侧的非数据库问题（目标未批准、模板渲染失败、规则 JSON 损坏）在扇出内部消化，
 // 只跳过或落 failed 投递，不影响业务结果。
 //
+// ⚠ 唯一例外是「通知表还没迁移」：这时返回 (nil, nil)，让业务事务照常提交。
+// 缺表不是数据错误，而是部署时序问题；把它升级成业务失败会让升级窗口里的下单/留言全部失败。
+//
 // status == ready 时在同一 tx 内立即扇出；waiting_classification 由
 // ProcessGuestbookNotification / worker 恢复后再扇出。
 func (w *Website) emitNotificationEvent(tx *gorm.DB, eventType, businessKey string, occurredAt int64, payload map[string]any, status string) (*model.NotificationEvent, error) {
 	if w == nil || tx == nil {
 		return nil, errors.New("通知事件缺少数据库事务")
+	}
+	if !ensureNotificationTable(tx, &model.NotificationEvent{}, "notification_events") {
+		return nil, nil
 	}
 	if occurredAt <= 0 {
 		occurredAt = time.Now().Unix()

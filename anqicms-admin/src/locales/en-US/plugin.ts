@@ -2258,6 +2258,8 @@ export default {
   'plugin.channels.test.target.description':
     'Only approved group targets of this channel are listed; leave empty to validate the configuration only',
   'plugin.channels.test.valid': 'Configuration is valid',
+  'plugin.channels.test.unverified':
+    'Required fields are filled, but credentials were not verified against the platform (a successful connection is the real proof)',
   'plugin.channels.test.sent': 'Test message sent',
   'plugin.channels.test.permanent':
     'Credentials or proactive messaging permission are invalid, check the app secret and bot permissions',

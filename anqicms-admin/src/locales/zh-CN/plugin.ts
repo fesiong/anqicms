@@ -2138,6 +2138,8 @@ export default {
   'plugin.channels.test.target.description':
     '只列出该渠道已批准的群目标；留空则只做配置校验',
   'plugin.channels.test.valid': '配置校验通过',
+  'plugin.channels.test.unverified':
+    '必填项已填写，但未连接平台验证（长连接建立成功才代表可用）',
   'plugin.channels.test.sent': '示例消息已发送',
   'plugin.channels.test.permanent':
     '凭据或主动发送权限有误，请检查应用密钥与机器人权限',

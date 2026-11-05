@@ -59,6 +59,10 @@ var (
 // channelTestMessageText 是试发的固定示例文本（R94）。不含站点数据，也不可配置。
 const channelTestMessageText = "AnQiCMS 测试消息"
 
+// channelTestUnverifiedMessage 是「只检查必填项」的回执文案：必须如实说没连过平台。
+// 文案里不得出现「有效/valid」——那正是终审指出的误导。
+const channelTestUnverifiedMessage = "仅检查必填项，未连接平台验证"
+
 // channelTestSendTimeout 是单次试发的超时：不能让后台请求被平台网络拖住。
 const channelTestSendTimeout = 15 * time.Second
 
@@ -183,11 +187,19 @@ type ChannelRecordsPage struct {
 }
 
 // ChannelTestSendResult 是试发回执（R94）。
+//
+// Valid 与 Verified 是两件事，必须分开：
+//   - Verified 表示「真的连过平台」（发出去并拿到平台的接受或分类失败）；
+//   - Valid 表示「这次试发没有失败」。
+//
+// targetId==0 的「只检查必填项」没有连平台，两个字段都必须是 false —— 否则后台会
+// 把「必填项填了」误报成「配置校验通过」。
 type ChannelTestSendResult struct {
-	Valid   bool   `json:"valid"`
-	Sent    bool   `json:"sent"`
-	Class   string `json:"class,omitempty"`
-	Message string `json:"message,omitempty"`
+	Valid    bool   `json:"valid"`
+	Verified bool   `json:"verified"`
+	Sent     bool   `json:"sent"`
+	Class    string `json:"class,omitempty"`
+	Message  string `json:"message,omitempty"`
 }
 
 // ChannelBindings 返回当前站点的绑定。
@@ -877,7 +889,13 @@ func (w *Website) ChannelTestSend(channelId, targetId uint) (*ChannelTestSendRes
 		return nil, errChannelTestConfigInvalid
 	}
 	if targetId == 0 {
-		return &ChannelTestSendResult{Valid: true}, nil
+		// 只检查必填项与适配器可构造：没有发起任何平台请求，不能说「配置有效」。
+		// 真实可用性只能由长连接建立或一次真实发送证明（前端据此显示「未验证」）。
+		return &ChannelTestSendResult{
+			Valid:    false,
+			Verified: false,
+			Message:  channelTestUnverifiedMessage,
+		}, nil
 	}
 
 	var target model.ChannelTarget
@@ -903,6 +921,8 @@ func (w *Website) ChannelTestSend(channelId, targetId uint) (*ChannelTestSendRes
 	targetHash := bindingTargetDigest(w.Id, channel.Id, target.Kind, target.PlatformTargetId)
 	if sendErr != nil {
 		// 发送失败不是接口失败：后台需要看到分类与脱敏后的平台文案。
+		// Verified 仍为 true：凭据已经被真实平台判过（拒绝也是判定结果），
+		// 前端靠 Verified 区分「没连过平台」与「连了但被拒」。
 		message := errChannelTestSendFailed.Error()
 		class := ""
 		if classified := ClassifyPlatformSendError(sendErr); classified != nil {
@@ -910,11 +930,11 @@ func (w *Website) ChannelTestSend(channelId, targetId uint) (*ChannelTestSendRes
 			message = sanitizePlatformMessage(classified.Message)
 		}
 		w.writeChannelAudit("channel.test", channel.Id, 0, targetHash, "failed")
-		return &ChannelTestSendResult{Valid: true, Class: class, Message: message}, nil
+		return &ChannelTestSendResult{Valid: false, Verified: true, Class: class, Message: message}, nil
 	}
 	_ = result
 	w.writeChannelAudit("channel.test", channel.Id, 0, targetHash, "ok")
-	return &ChannelTestSendResult{Valid: true, Sent: true}, nil
+	return &ChannelTestSendResult{Valid: true, Verified: true, Sent: true}, nil
 }
 
 // channelAdminIsSuper 判断管理员是否具备跨管理员操作权限（adminId==1 或 GroupId==1）。

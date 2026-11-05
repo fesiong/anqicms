@@ -2103,6 +2103,8 @@ export default {
   'plugin.channels.test.target.description':
     '只列出該渠道已批准的群組目標；留空則只做設定校驗',
   'plugin.channels.test.valid': '設定校驗通過',
+  'plugin.channels.test.unverified':
+    '必填項已填寫，但未連接平台驗證（長連接建立成功才代表可用）',
   'plugin.channels.test.sent': '範例訊息已發送',
   'plugin.channels.test.permanent':
     '憑證或主動發送權限有誤，請檢查應用密鑰與機器人權限',

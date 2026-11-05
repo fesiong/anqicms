@@ -1134,7 +1134,9 @@ func TestChannelRebuildTimeoutKeepsLeaseAndAvoidsSecondRun(t *testing.T) {
 }
 
 // TestChannelLifecycleStopsOnRemoveWebsite 锁定站点删除路径：先停管理器再从注册表摘除，
-// 正常退出的连接按规则释放租约（避免用过期租约挡住别人接管）。
+// 正常退出的连接按规则释放租约（避免用过期租约挡住别人接管）；
+// 同时必须先停通知工作者（T12b R3）——它每 30 秒扫表并 UPDATE 投递行，
+// 站点被摘除后仍在跑就是拿着失效句柄空转。
 func TestChannelLifecycleStopsOnRemoveWebsite(t *testing.T) {
 	w := channelManagerTestSite(t)
 
@@ -1143,6 +1145,7 @@ func TestChannelLifecycleStopsOnRemoveWebsite(t *testing.T) {
 	websites.Set(fakeSite)
 	t.Cleanup(func() {
 		fakeSite.StopChannelManager()
+		fakeSite.StopNotifyWorker()
 		websites.Delete(fakeId)
 	})
 
@@ -1150,6 +1153,11 @@ func TestChannelLifecycleStopsOnRemoveWebsite(t *testing.T) {
 	registry := newFakeChannelFactory(nil)
 	fakeSite.startChannelManager(context.Background(), testChannelManagerOptions(registry))
 	adapter := registry.waitForRun(t, ch.AppId, 1)
+	// 通知工作者用 50ms 周期只是为了「有没有在跑」可观测；站点没有已批准目标，不会发消息。
+	fakeSite.startNotifyWorker(context.Background(), notifyWorkerTestOptions())
+	if worker := notifyWorkerRegistry.bySite[fakeId]; worker == nil {
+		t.Fatal("前置条件不成立：通知工作者没有登记到注册表")
+	}
 
 	RemoveWebsite(fakeId, false)
 
@@ -1159,6 +1167,9 @@ func TestChannelLifecycleStopsOnRemoveWebsite(t *testing.T) {
 	}
 	if manager := channelManagerRegistry.bySite[fakeId]; manager != nil {
 		t.Fatal("RemoveWebsite 后渠道管理器仍在注册表里")
+	}
+	if worker := notifyWorkerRegistry.bySite[fakeId]; worker != nil {
+		t.Fatal("RemoveWebsite 后通知工作者仍在注册表里：它会继续对已删除站点扫表")
 	}
 	var lease model.ChannelLease
 	err := w.DB.Where("app_identity_hash = ?", channelAppHash(ch)).Take(&lease).Error

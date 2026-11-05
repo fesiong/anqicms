@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/flosch/pongo2/v6"
+	"gorm.io/gorm"
 
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -678,4 +679,183 @@ func TestTemplateRejectsSystemAndIncludeTags(t *testing.T) {
 	if !strings.Contains(text, "已支付") {
 		t.Fatalf("合法模板渲染结果不对：%q", text)
 	}
+}
+
+// ============================================================
+// T12b R4：通知表缺失时不得回滚业务事务
+//
+// 升级窗口（旧库 + 新二进制、AutoMigrate 未跑/失败）里通知表可能不存在。
+// 那时 INSERT 会报错 → 业务事务回滚 → 下单/留言直接失败，属于通知把业务带下水。
+// 用例一律用可注入的表存在性探测，绝不在真实开发库上 DROP 表。
+// ============================================================
+
+// injectNotificationTableProbe 替换通知表存在性探测，用例结束恢复。
+func injectNotificationTableProbe(t *testing.T, probe func(db *gorm.DB, m any) bool) {
+	t.Helper()
+	previous := notificationTableExists
+	notificationTableExists = probe
+	t.Cleanup(func() { notificationTableExists = previous })
+}
+
+// TestNotificationTableMissingKeepsGuestbook 锁住「通知表缺失也不能拦下留言」。
+func TestNotificationTableMissingKeepsGuestbook(t *testing.T) {
+	w := notifyTestSite(t)
+	injectNotificationTableProbe(t, func(db *gorm.DB, m any) bool {
+		switch m.(type) {
+		case *model.NotificationEvent, *model.NotificationDelivery:
+			return false
+		}
+		return db.Migrator().HasTable(m)
+	})
+
+	guestbook := &model.Guestbook{
+		UserName: "缺表留言人-" + notifyTestSuffix(),
+		Content:  "通知表缺失时留言仍必须写入",
+	}
+	if err := w.SaveGuestbookWithNotification(guestbook); err != nil {
+		t.Fatalf("通知表缺失不得让留言保存失败：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.DB.Unscoped().Where("id = ?", guestbook.Id).Delete(&model.Guestbook{}).Error; err != nil {
+			t.Logf("清理留言 %d 失败：%v", guestbook.Id, err)
+		}
+	})
+	if guestbook.Id == 0 {
+		t.Fatal("留言没有拿到自增 ID：事务被回滚了")
+	}
+	var count int64
+	if err := w.DB.Model(&model.Guestbook{}).Where("id = ?", guestbook.Id).Count(&count).Error; err != nil {
+		t.Fatalf("回读留言失败：%v", err)
+	}
+	if count != 1 {
+		t.Fatalf("通知表缺失时留言必须照常落库，实际 %d 条", count)
+	}
+	businessKey := strconv.FormatUint(uint64(guestbook.Id), 10)
+	cleanupNotifyBusinessKeys(t, w, NotifyEventGuestbookCreated+":"+businessKey)
+	if got := notifyTestCountEventsByKey(t, w, NotifyEventGuestbookCreated+":"+businessKey); got != 0 {
+		t.Fatalf("事件表缺失时不得留下事件行，实际 %d 条", got)
+	}
+}
+
+// TestNotificationTablePresentWritesGuestbookEvent 是上一条的反向对照：
+// 表在（探测走真实迁移状态）时事件行必须照写，证明上一条断言的不是「永远没有事件」。
+func TestNotificationTablePresentWritesGuestbookEvent(t *testing.T) {
+	w := notifyTestSite(t)
+
+	guestbook := &model.Guestbook{
+		UserName: "有表留言人-" + notifyTestSuffix(),
+		Content:  "通知表齐全时必须写事件",
+	}
+	if err := w.SaveGuestbookWithNotification(guestbook); err != nil {
+		t.Fatalf("保存留言失败：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.DB.Unscoped().Where("id = ?", guestbook.Id).Delete(&model.Guestbook{}).Error; err != nil {
+			t.Logf("清理留言 %d 失败：%v", guestbook.Id, err)
+		}
+	})
+	businessKey := strconv.FormatUint(uint64(guestbook.Id), 10)
+	cleanupNotifyBusinessKeys(t, w, NotifyEventGuestbookCreated+":"+businessKey)
+	if got := notifyTestCountEventsByKey(t, w, NotifyEventGuestbookCreated+":"+businessKey); got != 1 {
+		t.Fatalf("通知表齐全时必须写 1 条事件行（反向对照），实际 %d 条", got)
+	}
+}
+
+// TestEmitNotificationSkipsWhenEventTableMissing 锁住事件表缺失时的短路：
+// 返回 nil error 让业务事务照常提交，但不留事件行。
+func TestEmitNotificationSkipsWhenEventTableMissing(t *testing.T) {
+	w := notifyTestSite(t)
+	injectNotificationTableProbe(t, func(db *gorm.DB, m any) bool {
+		if _, ok := m.(*model.NotificationEvent); ok {
+			return false
+		}
+		return db.Migrator().HasTable(m)
+	})
+
+	businessKey := "missing-events-" + notifyTestSuffix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		t.Fatalf("开启事务失败：%v", tx.Error)
+	}
+	event, err := w.emitNotificationEvent(tx, NotifyEventOrderPaid, businessKey,
+		time.Now().Unix(), map[string]any{"order_id": "missing-events"}, NotifyEventStatusReady)
+	if err != nil {
+		tx.Rollback()
+		t.Fatalf("事件表缺失不得返回错误（会把业务事务带走）：%v", err)
+	}
+	if event != nil {
+		tx.Rollback()
+		t.Fatalf("事件表缺失时不得返回事件：%+v", event)
+	}
+	if err := tx.Commit().Error; err != nil {
+		t.Fatalf("提交事务失败：%v", err)
+	}
+	cleanupNotifyBusinessKeys(t, w, NotifyEventOrderPaid+":"+businessKey)
+	if got := notifyTestCountEventsByKey(t, w, NotifyEventOrderPaid+":"+businessKey); got != 0 {
+		t.Fatalf("事件表缺失时不得写入事件行，实际 %d 条", got)
+	}
+}
+
+// TestEmitNotificationSkipsFanOutWhenDeliveryTableMissing 锁住投递表缺失时的短路：
+// 事件行照写（通知队列可后补），扇出直接返回 nil，不让业务事务失败。
+func TestEmitNotificationSkipsFanOutWhenDeliveryTableMissing(t *testing.T) {
+	w := notifyTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	target := newNotifyTestGroupTarget(t, w, ch.Id, 1)
+	// 有规则、有已批准目标：护栏被去掉时扇出会真的去插投递行并报错，用例必红。
+	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)
+
+	injectNotificationTableProbe(t, func(db *gorm.DB, m any) bool {
+		if _, ok := m.(*model.NotificationDelivery); ok {
+			return false
+		}
+		return db.Migrator().HasTable(m)
+	})
+
+	businessKey := "missing-deliveries-" + notifyTestSuffix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		t.Fatalf("开启事务失败：%v", tx.Error)
+	}
+	event, err := w.emitNotificationEvent(tx, NotifyEventOrderPaid, businessKey,
+		time.Now().Unix(), map[string]any{"order_id": "missing-deliveries"}, NotifyEventStatusReady)
+	if err != nil {
+		tx.Rollback()
+		t.Fatalf("投递表缺失不得返回错误（会把业务事务带走）：%v", err)
+	}
+	if err := tx.Commit().Error; err != nil {
+		t.Fatalf("提交事务失败：%v", err)
+	}
+	cleanupNotifyBusinessKeys(t, w, NotifyEventOrderPaid+":"+businessKey)
+
+	if event == nil || event.Id == 0 {
+		t.Fatal("投递表缺失不影响事件行写入，事件必须已经落库")
+	}
+	if got := notifyTestCountEventsByKey(t, w, NotifyEventOrderPaid+":"+businessKey); got != 1 {
+		t.Fatalf("投递表缺失时事件行必须写入 1 条，实际 %d 条", got)
+	}
+	if got := len(notifyTestDeliveries(t, w, event.Id, rule.Id)); got != 0 {
+		t.Fatalf("投递表缺失时不得创建投递，实际 %d 条", got)
+	}
+}
+
+// TestEmitNotificationPropagatesErrorsWhenTablePresent 是 R4 缺表兜底的边界：
+// 兜底只对「表不存在」生效，表存在时任何错误仍必须原样返回给调用方，
+// 否则业务事务会在通知半成功的情况下提交。
+func TestEmitNotificationPropagatesErrorsWhenTablePresent(t *testing.T) {
+	w := notifyTestSite(t)
+
+	businessKey := "propagate-" + notifyTestSuffix()
+	tx := w.DB.Begin()
+	if tx.Error != nil {
+		t.Fatalf("开启事务失败：%v", tx.Error)
+	}
+	defer tx.Rollback()
+	// 不可序列化的载荷：走的是同一个错误返回路径（表存在，不得被兜底吞掉）。
+	_, err := w.emitNotificationEvent(tx, NotifyEventOrderPaid, businessKey, time.Now().Unix(),
+		map[string]any{"order_id": func() {}}, NotifyEventStatusReady)
+	if err == nil {
+		t.Fatal("表存在时错误必须原样返回，不能因为「可能是缺表」就一律吞掉")
+	}
+	cleanupNotifyBusinessKeys(t, w, NotifyEventOrderPaid+":"+businessKey)
 }

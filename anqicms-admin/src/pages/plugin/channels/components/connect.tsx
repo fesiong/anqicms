@@ -237,9 +237,15 @@ const ChannelConnect: React.FC = () => {
     );
   };
 
-  // 试发与只校验共用同一份结果提示：按 class 区分凭据/权限问题与平台暂时不可用，
-  // message 来自后端且已脱敏，原样展示
+  // 试发与只校验共用同一份结果提示。
+  // 先看 verified：后端「只检查必填项」时 verified=false（没有连过平台），
+  // 必须先如实说明未验证，不能落到下面按 class/sent 分支的「成功」提示里。
+  // 之后按 class 区分凭据/权限问题与平台暂时不可用，message 来自后端且已脱敏，原样展示。
   const showTestResult = (data: any) => {
+    if (data.verified === false) {
+      message.info(intl.formatMessage({ id: 'plugin.channels.test.unverified' }));
+      return;
+    }
     if (data.class === 'permanent') {
       Modal.error({
         title: intl.formatMessage({ id: 'plugin.channels.test.failed' }),
@@ -267,11 +273,13 @@ const ChannelConnect: React.FC = () => {
     } else if (data.sent) {
       message.success(intl.formatMessage({ id: 'plugin.channels.test.sent' }));
     } else {
-      message.success(intl.formatMessage({ id: 'plugin.channels.test.valid' }));
+      // 既没连过平台、也没给出分类：同样不能暗示「有效」。
+      message.info(intl.formatMessage({ id: 'plugin.channels.test.unverified' }));
     }
   };
 
-  // 只校验配置：不带 target_id，后端只检查凭据与适配器可用性
+  // 只校验配置：不带 target_id，后端只检查必填项与适配器能否构造 ——
+  // 没有任何平台请求，返回 verified=false，界面必须显示「未验证」而不是「校验通过」。
   const handleCheck = async (record: any) => {
     const res = await channelTest({ id: record.id });
     if (res.code !== 0) {

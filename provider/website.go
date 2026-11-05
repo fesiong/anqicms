@@ -869,10 +869,12 @@ func GetWebsite(siteId uint) *Website {
 func RemoveWebsite(siteId uint, removeFile bool) {
 	// 删除前先停掉该站点的渠道长连接与续租：站点从注册表摘除后，
 	// 管理器仍绑着已失效的 *Website/DB 句柄，会继续连平台并写租约。
+	// 通知工作者同理：它每 30 秒扫一次表并 UPDATE 投递行，站点删掉后仍在跑就是空转。
 	// 注意：下面的 GetWebsite 在 Delete 之后返回 nil 是既有行为（DROP DATABASE
 	// 因此不会执行），本任务不改变它，只加停止逻辑。
 	if stopped := GetWebsite(siteId); stopped != nil {
 		stopped.StopChannelManager()
+		stopped.StopNotifyWorker()
 	}
 	websites.Delete(siteId)
 	site := GetWebsite(siteId)
