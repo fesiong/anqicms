@@ -149,15 +149,18 @@ type ChannelTarget struct {
 
 // ChannelInbox 平台入站事件（去重后持久化）。绑定消息不留 token 正文。
 type ChannelInbox struct {
-	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	SiteId      uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_id;comment:站点ID"`
-	ChannelId   uint   `json:"channel_id" gorm:"column:channel_id;type:int(10) unsigned not null;default:0;index:idx_channel_id;comment:渠道ID"`
-	EventKind   string `json:"event_kind" gorm:"column:event_kind;type:varchar(32) not null;default:'';index:idx_event_kind;comment:事件类型 message/card_action/..."`
-	Content     string `json:"content" gorm:"column:content;type:text;comment:脱敏正文(不存token明文)"`
-	Status      string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'';index:idx_status;comment:处理状态"`
-	LeaseUntil  int64  `json:"lease_until" gorm:"column:lease_until;type:bigint(20) not null;default:0;index:idx_lease_until;comment:处理租约到期时间戳"`
+	Id          uint  `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	CreatedTime int64 `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
+	UpdatedTime int64 `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
+	SiteId      uint  `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_id;comment:站点ID"`
+	ChannelId   uint  `json:"channel_id" gorm:"column:channel_id;type:int(10) unsigned not null;default:0;index:idx_channel_id;comment:渠道ID"`
+	// BindingId 指向产生这条排队任务的绑定。撤销绑定时凭它失效排队任务（规格 §6）。
+	// 入站去重发生在绑定之前，所以这里允许为 0（未绑定来源）。
+	BindingId  uint   `json:"binding_id" gorm:"column:binding_id;type:int(10) unsigned not null;default:0;index:idx_binding_id;comment:来源绑定ID(0=未绑定)"`
+	EventKind  string `json:"event_kind" gorm:"column:event_kind;type:varchar(32) not null;default:'';index:idx_event_kind;comment:事件类型 message/card_action/..."`
+	Content    string `json:"content" gorm:"column:content;type:text;comment:脱敏正文(不存token明文)"`
+	Status     string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'';index:idx_status;comment:处理状态"`
+	LeaseUntil int64  `json:"lease_until" gorm:"column:lease_until;type:bigint(20) not null;default:0;index:idx_lease_until;comment:处理租约到期时间戳"`
 	// EventHash 为平台事件标识的 SHA-256，唯一，用于入站去重。
 	EventHash string `json:"event_hash" gorm:"column:event_hash;type:char(64) not null;default:'';uniqueIndex:uk_event_hash;comment:平台事件SHA256"`
 }
