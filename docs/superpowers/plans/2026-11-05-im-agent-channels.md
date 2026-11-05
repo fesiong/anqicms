@@ -507,6 +507,28 @@ git add provider/channel_live_test.go docs/superpowers/specs/2026-11-05-im-agent
 git commit -m "test(渠道): 飞书钉钉联调清单与平台核验记录"
 ```
 
+## 修订：任务 12（收尾）拆为 T12a / T12b
+
+原计划写到任务 11 结束，实际收尾工作（终审提出的接线与诚实性问题）在实现阶段拆成两批，口径如下。这两批不引入新端点，`route/manage.go` 不变。
+
+### 任务 12a：接线、写门禁与代次
+
+- 入站任务消费：`ChannelInboxWorker` 真正消费 inbox 行（此前只落库不执行）。
+- 审批执行：审批行按条件更新推进到 executing/succeeded/failed/unknown，执行前重新校验参数与权限。
+- 渠道写门禁：写操作在 backend 侧统一校验（不只依赖前端按钮）。
+- Generation 代次：会话切换智能体/新建会话使旧待执行工作失效。
+- inbox 状态与 `LastError`：失败必须留下可观测原因。
+
+### 任务 12b：终审 6 条发现中属实的 5 条 + 1 条否证
+
+- **试发如实**：`ChannelTestSend(targetId=0)` 只检查必填项、没有发起任何平台请求，回执改为 `valid=false, verified=false` 并附「未连接平台验证」文案；只有真的发出消息（成功或拿到平台分类失败）才 `verified=true`。前端据 `verified` 显示「未验证」，不再提示「配置校验通过」。
+- **agent.failed 只从绑定会话派生**：`deriveAgentFailedNotificationEvents` 加 `binding_id > 0`。管理员试发/后台操作失败的审计（`binding_id=0`）没有绑定身份，不属于智能体任务失败，不进群。
+- **生命周期**：`RemoveWebsite` 与进程退出（抽出的 `shutdownWebsite`）都必须先停通知工作者再关库；顺序为停渠道管理器 → 停通知工作者 → 关库 → 关日志。
+- **通知表缺失兜底**：升级窗口（旧库 + 新二进制、AutoMigrate 未跑）里 `notification_events` / `notification_deliveries` 缺失时，`emitNotificationEvent` / `fanOutNotificationEvent` 记一次日志并返回 nil，**不得回滚业务事务**；表存在时的数据库错误仍原样返回。
+- **路由回归锁**：终审「`/channels/` 与 `/channels` 不匹配」是误报 —— Iris `cleanPath` 会去掉尾斜杠，`Party("/channels").Get("/")` 实际注册为 `/system/api/channels`（无斜杠 200，带斜杠 301）。不改路由，只补真实路由表断言（`GET /system/api/channels`、`GET /system/api/channels/records`、`POST /system/api/channels/test`）。
+
+**审批确认口径修订**（同步到规格 §8）：首版用私聊文本指令 `批准 <公开ID>` / `拒绝 <公开ID>`，不发确认卡片 —— 飞书 ws SDK v3.12.2 无法接收卡片回调（`WithCardHandler` 被注释），钉钉 Stream 侧也只有归一化没有发送能力。群聊里不提供审批指令入口；卡片交互留到后续版本。
+
 ## 规格覆盖对照
 
 | 规格章节 | 对应任务 |
