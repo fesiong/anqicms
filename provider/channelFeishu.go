@@ -8,6 +8,7 @@ import (
 	"log"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	lark "github.com/larksuite/oapi-sdk-go/v3"
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
@@ -32,7 +33,30 @@ import (
 //     「1 秒起、60 秒封顶、带抖动」不一致，因此这里关掉 SDK 重连，由本适配器统一控制。
 type feishuAdapter struct {
 	creds PlatformCredentials
+
+	// createMessage 可注入：默认走 feishuClientFor(creds).Im.Message.Create。
+	// 留出这个钩子是为了在没有真实租户的测试里断言「群聊用 chat_id、私聊用 open_id」。
+	createMessage feishuCreateMessageFunc
+	// fetchBotOpenId 可注入：默认走 bot/v3/info。测试里替换以免发真实请求。
+	fetchBotOpenId func(ctx context.Context, creds PlatformCredentials) string
 }
+
+// feishuMaxTextRunes 是单条文本消息的分段上限（rune 数）。
+// ⚠ 保守值：飞书文本消息的实际限制按请求体 150KB 计（im/v1/message/create 文档），
+// 这里取 3500 是为了同时容纳多字节中文与 JSON 转义后的体积；未用真实租户校准，T11 校准。
+const feishuMaxTextRunes = 3500
+
+// feishuSendRequest 是一次文本发送的参数。
+//
+// 不用 *larkim.CreateMessageReq 是因为 SDK 把 receive_id_type 藏在未导出的 apiReq 里，
+// 包外既读不到也断言不了；抽成结构体后测试可以直接验证接收者 ID 类型。
+type feishuSendRequest struct {
+	ReceiveIdType string
+	ReceiveId     string
+	Text          string
+}
+
+type feishuCreateMessageFunc func(ctx context.Context, req feishuSendRequest) (*larkim.CreateMessageResp, error)
 
 func (a *feishuAdapter) Name() string { return model.ChannelPlatformFeishu }
 
@@ -47,8 +71,11 @@ func (a *feishuAdapter) Run(ctx context.Context, creds PlatformCredentials, sink
 		return errors.New("入站事件处理函数不能为空")
 	}
 
-	for attempt := 0; ; attempt++ {
-		err := a.runOnce(ctx, creds, sink)
+	// attempt 用原子量：onConnected 由 SDK 的回调 goroutine 调用，runOnce 返回后在
+	// 本 goroutine 读它做退避。连接一旦确认建立就复位，避免抖动几次后每次重连都等 30~60 秒。
+	var attempt atomic.Int32
+	for {
+		err := a.runOnce(ctx, creds, sink, func() { attempt.Store(0) })
 		if ctx.Err() != nil {
 			// 正常停止：不要把自己的取消当成连接失败，否则 T4 会看到一条无意义的错误。
 			return nil
@@ -62,25 +89,40 @@ func (a *feishuAdapter) Run(ctx context.Context, creds PlatformCredentials, sink
 		}
 		// 日志只记状态与文案：SDK 报错里不含 secret，但仍统一过一遍 sanitize。
 		log.Printf("[channel] 飞书长连接中断：%s", sanitizePlatformMessage(err.Error()))
-		if !waitBeforeReconnect(ctx, attempt, model.ChannelPlatformFeishu) {
+		if !waitBeforeReconnect(ctx, int(attempt.Load()), model.ChannelPlatformFeishu) {
 			return nil
 		}
+		attempt.Add(1)
 	}
 }
 
 // runOnce 是一次完整的连接生命周期：建连 → 收事件 → 断开/取消后返回。
-func (a *feishuAdapter) runOnce(ctx context.Context, creds PlatformCredentials, sink InboundSink) error {
+// onConnected 在「连接确认建立」时被调用（SDK 的 OnReady / OnReconnected 回调）。
+func (a *feishuAdapter) runOnce(ctx context.Context, creds PlatformCredentials, sink InboundSink, onConnected func()) error {
+	// 回调是 SDK 用 context.Background() 派生的，与 Run 的 ctx 没有派生关系：
+	// 这里再包一层，保证 Run 取消时 sink 里挂着的活也能一起停。
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// 机器人 open_id 用来判断群聊消息是否 @ 了本应用（规格 §7 群聊门禁）。
+	// 每轮建连取一次；取不到就按「未 @」处理（fail closed），不因此中断连接。
+	fetchBotOpenId := a.fetchBotOpenId
+	if fetchBotOpenId == nil {
+		fetchBotOpenId = feishuBotOpenId
+	}
+	botOpenId := fetchBotOpenId(runCtx, creds)
+
 	// 长连接模式下 SDK 的 Do 路径不做签名校验（signature 只用于 HTTP webhook），
 	// 因此 verificationToken / encryptKey 都留空。
 	dispatcher := larkdispatcher.NewEventDispatcher("", "")
-	dispatcher.OnP2MessageReceiveV1(func(handlerCtx context.Context, event *larkim.P2MessageReceiveV1) error {
+	dispatcher.OnP2MessageReceiveV1(func(_ context.Context, event *larkim.P2MessageReceiveV1) error {
 		// 回调跑在 SDK 的 goroutine 上：panic 会打穿到 SDK，必须自己兜住。
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				log.Printf("[channel] 飞书事件处理发生 panic，已忽略本次事件")
 			}
 		}()
-		a.handleInboundEvent(handlerCtx, creds, event, sink)
+		a.handleInboundEvent(runCtx, creds, event, botOpenId, sink)
 		return nil
 	})
 
@@ -89,13 +131,53 @@ func (a *feishuAdapter) runOnce(ctx context.Context, creds PlatformCredentials, 
 		// 只留 error 级：debug 级会打印事件体，正文与凭据都没有进日志的必要。
 		larkws.WithLogLevel(larkcore.LogLevelError),
 		larkws.WithAutoReconnect(false),
+		// OnReady/OnReconnected 由 activateConnection 在连接被采纳之后触发
+		// （ws/client_session.go:56-72），是「连接确实建立了」的直接证据。
+		larkws.WithOnReady(onConnected),
+		larkws.WithOnReconnected(onConnected),
 	)
 	return client.Start(ctx)
 }
 
+// feishuBotOpenId 通过 bot/v3/info 取本应用机器人的 open_id。
+//
+// 该接口在 SDK 里没有生成（v3.12.2 只有 channel 包内部用 raw Get 调它），
+// 这里沿用同样的调用方式：lark.Client.Get + tenant_access_token。
+// 失败只记一行日志并返回空串：调用方按 fail closed 处理，不影响长连接本身。
+func feishuBotOpenId(ctx context.Context, creds PlatformCredentials) string {
+	resp, err := feishuClientFor(creds).Get(ctx, "/open-apis/bot/v3/info", nil, larkcore.AccessTokenTypeTenant)
+	if err != nil {
+		log.Printf("[channel] 飞书获取机器人信息失败，群聊 @ 门禁按未 @ 处理：%s", sanitizePlatformMessage(err.Error()))
+		return ""
+	}
+	if resp == nil || resp.StatusCode != 200 {
+		status := 0
+		if resp != nil {
+			status = resp.StatusCode
+		}
+		log.Printf("[channel] 飞书获取机器人信息失败（HTTP %d），群聊 @ 门禁按未 @ 处理", status)
+		return ""
+	}
+	var payload struct {
+		Code int `json:"code"`
+		Bot  struct {
+			OpenId string `json:"open_id"`
+		} `json:"bot"`
+	}
+	if err := json.Unmarshal(resp.RawBody, &payload); err != nil {
+		log.Printf("[channel] 飞书机器人信息解析失败，群聊 @ 门禁按未 @ 处理")
+		return ""
+	}
+	if payload.Code != 0 {
+		log.Printf("[channel] 飞书机器人信息返回业务错误 code=%d，群聊 @ 门禁按未 @ 处理", payload.Code)
+		return ""
+	}
+	return strings.TrimSpace(payload.Bot.OpenId)
+}
+
 // handleInboundEvent 做「标准化 → 验身份 → 调 sink」。任何失败只写日志，不回抛给 SDK：
 // 回调返回错误会让 SDK 给平台回 500，而本层不掌握去重与重投语义（T4 的职责）。
-func (a *feishuAdapter) handleInboundEvent(ctx context.Context, creds PlatformCredentials, event *larkim.P2MessageReceiveV1, sink InboundSink) {
+func (a *feishuAdapter) handleInboundEvent(ctx context.Context, creds PlatformCredentials, event *larkim.P2MessageReceiveV1, botOpenId string, sink InboundSink) {
 	// 事件头里的 app_id 是平台写入的，与凭据比对能识别「配置串了应用」；
 	// 标准化结果里的 AppId 仍取凭据（T3 契约），这里是额外的显式校验。
 	if headerAppId := feishuEventHeaderAppId(event); headerAppId != "" && headerAppId != creds.AppId {
@@ -111,6 +193,7 @@ func (a *feishuAdapter) handleInboundEvent(ctx context.Context, creds PlatformCr
 		// 机器人自己的消息（含回显）不进模型：否则会自激。
 		return
 	}
+	inbound.MentionedBot = feishuMentionedBot(event.Event.Message, inbound.ChatType, botOpenId)
 	if err := inbound.Validate(creds.AppId, creds.OrganizationId); err != nil {
 		log.Printf("[channel] 飞书入站事件未通过身份校验，已丢弃：%v", err)
 		return
@@ -119,6 +202,29 @@ func (a *feishuAdapter) handleInboundEvent(ctx context.Context, creds PlatformCr
 		// 只记事件 ID 与错误，不记正文。
 		log.Printf("[channel] 飞书入站事件处理失败 eventId=%s：%s", inbound.EventId, sanitizePlatformMessage(err.Error()))
 	}
+}
+
+// feishuMentionedBot 判断群聊消息是否明确 @ 了本应用机器人。
+//
+// 私聊恒为 false（规格 §7 的 @ 门禁只针对群聊）；botOpenId 为空时也 false（fail closed，
+// 取不到机器人身份就不放行需要 @ 的群聊消息）。
+func feishuMentionedBot(message *larkim.EventMessage, chatType, botOpenId string) bool {
+	if message == nil || chatType != ChatTypeGroup {
+		return false
+	}
+	botOpenId = strings.TrimSpace(botOpenId)
+	if botOpenId == "" {
+		return false
+	}
+	for _, mention := range message.Mentions {
+		if mention == nil || mention.Id == nil {
+			continue
+		}
+		if strings.TrimSpace(feishuStringValue(mention.Id.OpenId)) == botOpenId {
+			return true
+		}
+	}
+	return false
 }
 
 // normalizeFeishuInbound 把 im.message.receive_v1 事件标准化为 InboundEvent。
@@ -201,61 +307,87 @@ func feishuEventSenderType(event *larkim.P2MessageReceiveV1) string {
 }
 
 // Send 发送一条文本消息。群聊用 chat_id，私聊用 open_id（规格 §12 的用户/群标识口径）。
+//
+// 正文超过 feishuMaxTextRunes 时按 rune 分段逐条发送：超长正文会被平台以 230020 拒绝，
+// 而 230020 属于 permanent——不分段等于让长通知永久丢失。任一段失败立即返回该段的分类
+// 错误（已发出的段不回收：平台消息无法原子回滚，重发会造成重复）。
 func (a *feishuAdapter) Send(ctx context.Context, target TargetRef, msg OutboundMessage) (SendResult, error) {
-	creds := normalizePlatformCredentials(a.creds)
-	if creds.AppId == "" || creds.AppSecret == "" {
-		// 原型适配器（注册表返回的、未绑定凭据的实例）也会走到这里。
-		return SendResult{}, permanentSendError("飞书适配器未绑定应用凭据，无法发送")
-	}
 	if err := validateTargetRef(target); err != nil {
 		return SendResult{}, err
 	}
 	if strings.TrimSpace(msg.Text) == "" {
+		if msg.Card != nil {
+			// 卡片发送不在本轮范围（控制者裁决）：明确拒绝，不写「假装支持」的分支。
+			return SendResult{}, permanentSendError("卡片消息暂不支持，请改用文本")
+		}
 		return SendResult{}, permanentSendError("消息内容为空，未发送")
 	}
+	// msg.Card 非 nil 但有正文时同样被忽略：本轮只发文本。
 
-	// 飞书要求 content 是「JSON 序列化后的字符串」，文本消息形如 {"text":"..."}。
-	content, err := json.Marshal(map[string]string{"text": msg.Text})
-	if err != nil {
-		// 只有字符串到 JSON 的编码，理论上不会失败；仍按永久错误处理，不重试。
-		return SendResult{}, permanentSendError("序列化飞书文本消息失败：%v", err)
-	}
-
+	// 群聊的目标标识是 chat_id，私聊是 open_id；传错类型平台会直接报参数错误。
 	receiveIdType := "open_id"
 	if target.Kind == TargetKindGroup {
 		receiveIdType = "chat_id"
 	}
-	req := larkim.NewCreateMessageReqBuilder().
-		ReceiveIdType(receiveIdType).
-		Body(larkim.NewCreateMessageReqBodyBuilder().
-			ReceiveId(strings.TrimSpace(target.PlatformTargetId)).
-			MsgType("text").
-			Content(string(content)).
-			Build()).
-		Build()
+	receiveId := strings.TrimSpace(target.PlatformTargetId)
 
-	resp, callErr := feishuClientFor(creds).Im.Message.Create(ctx, req)
-	if callErr != nil {
-		return SendResult{}, ClassifyPlatformSendError(callErr)
+	createMessage := a.createMessage
+	if createMessage == nil {
+		createMessage = defaultFeishuCreateMessage(normalizePlatformCredentials(a.creds))
 	}
-	if resp == nil {
-		return SendResult{}, transientSendError("飞书未返回响应")
-	}
-	if !resp.Success() {
-		status := 0
-		if resp.ApiResp != nil {
-			status = resp.ApiResp.StatusCode
+
+	result := SendResult{}
+	for _, segment := range splitPlatformText(msg.Text, feishuMaxTextRunes) {
+		resp, callErr := createMessage(ctx, feishuSendRequest{
+			ReceiveIdType: receiveIdType,
+			ReceiveId:     receiveId,
+			Text:          segment,
+		})
+		if callErr != nil {
+			return SendResult{}, ClassifyPlatformSendError(callErr)
 		}
-		return SendResult{}, ClassifyPlatformSendError(
-			newPlatformResponseError(model.ChannelPlatformFeishu, status, resp.Code, resp.Msg),
-		)
+		if resp == nil {
+			return SendResult{}, transientSendError("飞书未返回响应")
+		}
+		if !resp.Success() {
+			status := 0
+			if resp.ApiResp != nil {
+				status = resp.ApiResp.StatusCode
+			}
+			return SendResult{}, ClassifyPlatformSendError(
+				newPlatformResponseError(model.ChannelPlatformFeishu, status, resp.Code, resp.Msg),
+			)
+		}
+		if resp.Data == nil || resp.Data.MessageId == nil {
+			// 消息已发出但平台没给 ID：不重发（重发会产生重复消息），只记日志。
+			log.Printf("[channel] 飞书发送成功但未返回 message_id，目标类型=%s", target.Kind)
+			continue
+		}
+		// 多段时以最后一段的 ID 作为回执：调用方关心的是「这条通知的最终一条消息」。
+		result.PlatformMessageId = *resp.Data.MessageId
 	}
-	if resp.Data == nil || resp.Data.MessageId == nil {
-		// 消息已发出但平台没给 ID：不重发（重发会产生重复消息），只记日志。
-		log.Printf("[channel] 飞书发送成功但未返回 message_id，目标类型=%s", target.Kind)
-		return SendResult{}, nil
+	return result, nil
+}
+
+// defaultFeishuCreateMessage 是生产路径：把 feishuSendRequest 组装成 SDK 请求并发出。
+func defaultFeishuCreateMessage(creds PlatformCredentials) feishuCreateMessageFunc {
+	return func(ctx context.Context, req feishuSendRequest) (*larkim.CreateMessageResp, error) {
+		// 飞书要求 content 是「JSON 序列化后的字符串」，文本消息形如 {"text":"..."}。
+		content, err := json.Marshal(map[string]string{"text": req.Text})
+		if err != nil {
+			// 只有字符串到 JSON 的编码，理论上不会失败；仍按永久错误处理，不重试。
+			return nil, permanentSendError("序列化飞书文本消息失败：%v", err)
+		}
+		sdkReq := larkim.NewCreateMessageReqBuilder().
+			ReceiveIdType(req.ReceiveIdType).
+			Body(larkim.NewCreateMessageReqBodyBuilder().
+				ReceiveId(req.ReceiveId).
+				MsgType("text").
+				Content(string(content)).
+				Build()).
+			Build()
+		return feishuClientFor(creds).Im.Message.Create(ctx, sdkReq)
 	}
-	return SendResult{PlatformMessageId: *resp.Data.MessageId}, nil
 }
 
 // feishuClients 复用 lark.Client：它内部带 tenant_access_token 缓存，

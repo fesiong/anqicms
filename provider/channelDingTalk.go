@@ -9,6 +9,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -63,12 +64,21 @@ const (
 	// dingTalkSilenceReconnect 超过这个时长没有任何帧就认为连接已死。
 	// ⚠ 未在真实租户校准：服务端 ping 频率未知，取值偏大以避免误判。
 	dingTalkSilenceReconnect = 10 * time.Minute
+	// dingTalkMaxTextRunes 是单条文本消息的分段上限（rune 数）。
+	// ⚠ 保守值：钉钉文本消息的实际限制未在真实租户量过，这里取 1800 rune，
+	// 兼顾多字节中文与 msgParam JSON 转义后的体积；未校准，T11 校准。
+	dingTalkMaxTextRunes = 1800
 )
 
 func (a *dingtalkAdapter) Name() string { return model.ChannelPlatformDingTalk }
 
 // Run 建立钉钉 Stream 连接并把机器人消息/卡片回调标准化后交给 sink。
 // ctx 取消时返回 nil；鉴权类错误直接返回错误，不做无限快速重连。
+//
+// ⚠ 退出延迟：SDK 建连分两步——取连接地址的 HTTP 请求带 ctx（client.go:322 且自带 5 秒超时），
+// 但随后的 WebSocket 拨号用不接收 ctx 的 websocket.DefaultDialer.Dial（client.go:105），
+// 最坏要等 gorilla 的默认握手超时约 45 秒。因此 ctx 取消后 Run 可能还要等一次拨号结束
+// 才真正返回，调用方不要用很短的超时去等它退出。
 func (a *dingtalkAdapter) Run(ctx context.Context, creds PlatformCredentials, sink InboundSink) error {
 	creds = normalizePlatformCredentials(creds)
 	if err := validatePlatformCredentials(creds); err != nil {
@@ -78,8 +88,10 @@ func (a *dingtalkAdapter) Run(ctx context.Context, creds PlatformCredentials, si
 		return errors.New("入站事件处理函数不能为空")
 	}
 
-	for attempt := 0; ; attempt++ {
-		err := a.runOnce(ctx, creds, sink)
+	// attempt 用原子量：连接可用时由回调 goroutine 复位，runOnce 返回后在本 goroutine 读取。
+	var attempt atomic.Int32
+	for {
+		err := a.runOnce(ctx, creds, sink, func() { attempt.Store(0) })
 		if ctx.Err() != nil {
 			return nil
 		}
@@ -90,9 +102,10 @@ func (a *dingtalkAdapter) Run(ctx context.Context, creds PlatformCredentials, si
 			return fmt.Errorf("钉钉 Stream 连接无法建立：%s", sanitizePlatformMessage(err.Error()))
 		}
 		log.Printf("[channel] 钉钉 Stream 连接中断：%s", sanitizePlatformMessage(err.Error()))
-		if !waitBeforeReconnect(ctx, attempt, model.ChannelPlatformDingTalk) {
+		if !waitBeforeReconnect(ctx, int(attempt.Load()), model.ChannelPlatformDingTalk) {
 			return nil
 		}
+		attempt.Add(1)
 	}
 }
 
@@ -114,7 +127,12 @@ func (s *dingTalkRunState) silentFor() time.Duration {
 }
 
 // runOnce 是一次完整的连接生命周期：建连 → 收回调 → 掉线/取消/探活超时后返回。
-func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials, sink InboundSink) error {
+//
+// onAlive 在「确认连接可用」时被调用以复位退避计数。SDK 没有就绪回调（v0.9.0 的
+// StreamClient 只有 AutoReconnect 开关），因此以「收到任意一帧」为直接证据：
+// SYSTEM/ping 由服务端定期下发，收到它说明读循环真的在工作。只认握手成功不够——
+// 服务端可能接受握手后立刻断开，那会让退避永远停在 1 秒。
+func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials, sink InboundSink, onAlive func()) error {
 	state := newDingTalkRunState()
 	dropped := make(chan struct{}, 1)
 	markDropped := func() {
@@ -124,13 +142,19 @@ func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials
 		}
 	}
 
+	// SDK 回调拿到的 ctx 是 context.Background() 派生的，与 Run 的 ctx 无派生关系：
+	// 这里再包一层，保证 Run 取消时 sink 里挂着的活也能一起停。
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	stream := dclient.NewStreamClient(
 		dclient.WithAppCredential(dclient.NewAppCredentialConfig(creds.AppId, creds.AppSecret)),
 		dclient.WithAutoReconnect(false),
 	)
 
-	stream.RegisterChatBotCallbackRouter(func(callbackCtx context.Context, data *dchatbot.BotCallbackDataModel) ([]byte, error) {
+	stream.RegisterChatBotCallbackRouter(func(_ context.Context, data *dchatbot.BotCallbackDataModel) ([]byte, error) {
 		state.touch()
+		onAlive()
 		// 回调跑在 SDK 的 goroutine 上：panic 会打穿到 SDK，必须自己兜住。
 		defer func() {
 			if recovered := recover(); recovered != nil {
@@ -146,14 +170,15 @@ func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials
 			log.Printf("[channel] 钉钉入站事件未通过身份校验，已丢弃：%v", err)
 			return []byte(""), nil
 		}
-		if err := sink(callbackCtx, inbound); err != nil {
+		if err := sink(runCtx, inbound); err != nil {
 			log.Printf("[channel] 钉钉入站事件处理失败 eventId=%s：%s", inbound.EventId, sanitizePlatformMessage(err.Error()))
 		}
 		return []byte(""), nil
 	})
 
-	stream.RegisterCardCallbackRouter(func(callbackCtx context.Context, request *dcard.CardRequest) (*dcard.CardResponse, error) {
+	stream.RegisterCardCallbackRouter(func(_ context.Context, request *dcard.CardRequest) (*dcard.CardResponse, error) {
 		state.touch()
+		onAlive()
 		defer func() {
 			if recovered := recover(); recovered != nil {
 				log.Printf("[channel] 钉钉卡片回调发生 panic，已忽略本次回调")
@@ -161,11 +186,17 @@ func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials
 		}()
 		inbound, ok := normalizeDingTalkCardAction(request, creds.AppId)
 		if !ok {
+			log.Printf("[channel] 钉钉卡片回调缺少卡片实例标识，已丢弃")
 			return &dcard.CardResponse{}, nil
 		}
 		// 卡片回调不含会话标识：不适用 InboundEvent.Validate（它会因 ChatId 为空拒绝），
-		// 由 T7 用卡片实例标识定位审批单。这里只把已验证的企业/操作人/动作交给 sink。
-		if err := sink(callbackCtx, inbound); err != nil {
+		// 但身份（应用 + 企业）仍要校验——否则任何持有应用回调地址的企业都能触发审批动作。
+		// ⚠ 卡片回调本身不携带 appId，"应用一致"这一项只能拿凭据自证；真正的外部输入是企业。
+		if err := inbound.ValidateIdentity(creds.AppId, creds.OrganizationId); err != nil {
+			log.Printf("[channel] 钉钉卡片回调未通过身份校验，已丢弃：%v", err)
+			return &dcard.CardResponse{}, nil
+		}
+		if err := sink(runCtx, inbound); err != nil {
 			log.Printf("[channel] 钉钉卡片回调处理失败 eventId=%s：%s", inbound.EventId, sanitizePlatformMessage(err.Error()))
 		}
 		return &dcard.CardResponse{}, nil
@@ -179,9 +210,10 @@ func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials
 		return nil, nil
 	})
 
-	// ping 保留 SDK 原有语义（回 pong），同时作为存活信号。
+	// ping 保留 SDK 原有语义（回 pong），同时作为存活信号与「连接可用」证据。
 	stream.RegisterRouter(dutils.SubscriptionTypeKSystem, "ping", func(_ context.Context, frame *dpayload.DataFrame) (*dpayload.DataFrameResponse, error) {
 		state.touch()
+		onAlive()
 		pong := dpayload.NewDataFrameAckPong(frame.GetMessageId())
 		pong.Data = frame.Data
 		return pong, nil
@@ -220,6 +252,7 @@ func (a *dingtalkAdapter) runOnce(ctx context.Context, creds PlatformCredentials
 //   - ChatId    ← conversationId（群聊时即 openConversationId）
 //   - ChatType  ← conversationType：1 单聊 → p2p，2 群聊 → group，其它留空
 //   - Text      ← text.content（仅 msgtype == text），原文保留不裁剪
+//   - MentionedBot ← isInAtList（平台是否把本应用算进 @ 列表）
 func normalizeDingTalkInbound(data *dchatbot.BotCallbackDataModel, appId string) (InboundEvent, bool) {
 	if data == nil {
 		return InboundEvent{}, false
@@ -232,6 +265,7 @@ func normalizeDingTalkInbound(data *dchatbot.BotCallbackDataModel, appId string)
 		UserId:         strings.TrimSpace(data.SenderStaffId),
 		ChatId:         strings.TrimSpace(data.ConversationId),
 		ChatType:       normalizeDingTalkConversationType(data.ConversationType),
+		MentionedBot:   data.IsInAtList,
 	}
 	if inbound.OrganizationId == "" {
 		inbound.OrganizationId = strings.TrimSpace(data.SenderCorpId)
@@ -259,27 +293,32 @@ func normalizeDingTalkConversationType(conversationType string) string {
 //
 // 卡片回调只带企业、操作人、卡片实例与动作参数，没有会话标识，
 // 因此 ChatId / ChatType 留空（不编造），Text 放动作标识。
+// 卡片实例标识（OutTrackId）是唯一能定位审批单的字段：缺失就直接拒绝，
+// 不能产生 ":approve" 这种谁也定位不到的 EventId。
 func normalizeDingTalkCardAction(request *dcard.CardRequest, appId string) (InboundEvent, bool) {
 	if request == nil {
 		return InboundEvent{}, false
 	}
 	outTrackId := strings.TrimSpace(request.OutTrackId)
+	if outTrackId == "" {
+		return InboundEvent{}, false
+	}
 	actionId := ""
 	if actions := request.CardActionData.CardPrivateData.ActionIdList; len(actions) > 0 {
 		actionId = strings.TrimSpace(actions[0])
 	}
-	inbound := InboundEvent{
+	eventId := outTrackId
+	if actionId != "" {
 		// 同一张卡片的同一次操作得到同一个 ID：重复点击由 T7 的条件更新消费兜住。
-		EventId:        outTrackId + ":" + actionId,
+		eventId = outTrackId + ":" + actionId
+	}
+	inbound := InboundEvent{
+		EventId:        eventId,
 		Kind:           InboundKindCardAction,
 		OrganizationId: strings.TrimSpace(request.CorpId),
 		AppId:          appId,
 		UserId:         strings.TrimSpace(request.UserId),
 		Text:           actionId,
-	}
-	if strings.TrimSpace(inbound.EventId) == ":" {
-		// 卡片实例标识与动作标识都缺失：这条回调什么也定位不到。
-		return InboundEvent{}, false
 	}
 	return inbound, true
 }
@@ -313,69 +352,99 @@ func dingTalkConnectFatalError(err error) bool {
 
 // Send 发送一条文本消息：群聊走 groupMessages/send，单聊走 oToMessages/batchSend。
 //
+// 正文超过 dingTalkMaxTextRunes 时按 rune 分段逐条发送：超长正文会被平台以 4xx 拒绝，
+// 而 4xx 属于 permanent——不分段等于让长通知永久丢失。任一段失败立即返回该段的分类
+// 错误（已发出的段不回收：平台消息无法原子回滚，重发会造成重复）。
+//
 // 发送只需要一次尝试：重试、投递状态与下一步动作属于 T8 的 worker。
 func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg OutboundMessage) (SendResult, error) {
 	creds := normalizePlatformCredentials(a.creds)
-	if creds.AppId == "" || creds.AppSecret == "" {
-		return SendResult{}, permanentSendError("钉钉适配器未绑定应用凭据，无法发送")
-	}
 	if err := validateTargetRef(target); err != nil {
 		return SendResult{}, err
 	}
 	if strings.TrimSpace(msg.Text) == "" {
+		if msg.Card != nil {
+			// 卡片发送不在本轮范围（控制者裁决）：明确拒绝，不写「假装支持」的分支。
+			return SendResult{}, permanentSendError("卡片消息暂不支持，请改用文本")
+		}
 		return SendResult{}, permanentSendError("消息内容为空，未发送")
 	}
+	// msg.Card 非 nil 但有正文时同样被忽略：本轮只发文本。
 
-	msgParam, err := json.Marshal(map[string]string{"content": msg.Text})
-	if err != nil {
-		return SendResult{}, permanentSendError("序列化钉钉文本消息失败：%v", err)
-	}
-
+	// token 在分段循环外取一次：分段只是拆分正文，不该让每条消息都去换一次 token。
 	accessToken, tokenErr := a.accessToken(ctx, creds)
 	if tokenErr != nil {
 		return SendResult{}, tokenErr
 	}
 
-	path := dingTalkPrivateSendEndpoint
-	body := map[string]any{
-		"robotCode": creds.AppId,
-		// robotCode 即自建应用的 appKey，与 stream 用的 clientId 是同一个值。
-		"userIds":  []string{strings.TrimSpace(target.PlatformTargetId)},
-		"msgKey":   dingTalkTextMsgKey,
-		"msgParam": string(msgParam),
-	}
-	if target.Kind == TargetKindGroup {
-		path = dingTalkGroupSendEndpoint
-		body = map[string]any{
-			"robotCode":          creds.AppId,
-			"openConversationId": strings.TrimSpace(target.PlatformTargetId),
-			"msgKey":             dingTalkTextMsgKey,
-			"msgParam":           string(msgParam),
+	targetId := strings.TrimSpace(target.PlatformTargetId)
+	result := SendResult{}
+	for _, segment := range splitPlatformText(msg.Text, dingTalkMaxTextRunes) {
+		msgParam, err := json.Marshal(map[string]string{"content": segment})
+		if err != nil {
+			return SendResult{}, permanentSendError("序列化钉钉文本消息失败：%v", err)
 		}
-	}
 
-	var result struct {
-		ProcessQueryKey           string   `json:"processQueryKey"`
-		InvalidStaffIdList        []string `json:"invalidStaffIdList"`
-		FlowControlledStaffIdList []string `json:"flowControlledStaffIdList"`
-	}
-	sendErr := dingTalkPostJSON(ctx, a.httpClientOrDefault(), a.openAPIHostOrDefault(), path, accessToken, body, &result)
-	if sendErr != nil {
-		var respErr *platformResponseError
-		if errors.As(sendErr, &respErr) && respErr.StatusCode == http.StatusUnauthorized {
-			// 缓存里的 token 失效：清掉它，让下一次发送重新取；本次仍按契约记为 permanent。
-			dingTalkTokenCache.invalidate(creds.AppId)
+		path := dingTalkPrivateSendEndpoint
+		body := map[string]any{
+			"robotCode": creds.AppId,
+			// robotCode 即自建应用的 appKey，与 stream 用的 clientId 是同一个值。
+			"userIds":  []string{targetId},
+			"msgKey":   dingTalkTextMsgKey,
+			"msgParam": string(msgParam),
 		}
-		return SendResult{}, ClassifyPlatformSendError(sendErr)
+		if target.Kind == TargetKindGroup {
+			path = dingTalkGroupSendEndpoint
+			body = map[string]any{
+				"robotCode":          creds.AppId,
+				"openConversationId": targetId,
+				"msgKey":             dingTalkTextMsgKey,
+				"msgParam":           string(msgParam),
+			}
+		}
+
+		var segmentResult struct {
+			ProcessQueryKey           string   `json:"processQueryKey"`
+			InvalidStaffIdList        []string `json:"invalidStaffIdList"`
+			FlowControlledStaffIdList []string `json:"flowControlledStaffIdList"`
+		}
+		retryAfter, sendErr := dingTalkPostJSON(ctx, a.httpClientOrDefault(), a.openAPIHostOrDefault(), path, accessToken, body, &segmentResult)
+		if sendErr != nil {
+			var respErr *platformResponseError
+			if errors.As(sendErr, &respErr) {
+				switch respErr.StatusCode {
+				case http.StatusUnauthorized, http.StatusForbidden:
+					// 凭据错误在取 token 阶段就会失败，发送端 401/403 只可能是缓存 token
+					// 被平台提前作废：清缓存后按 transient 返回，重试即可成功。
+					dingTalkTokenCache.invalidate(creds.AppId)
+					return SendResult{}, transientSendError("钉钉访问令牌失效，已清除缓存，可重试（HTTP %d）：%s",
+						respErr.StatusCode, sanitizePlatformMessage(respErr.Message))
+				}
+			}
+			// 429 会把建议等待时间一起带出去（RetryAfterSeconds），供 T8 安排下一次重试。
+			return SendResult{RetryAfterSeconds: retryAfter}, ClassifyPlatformSendError(sendErr)
+		}
+		if len(segmentResult.InvalidStaffIdList) > 0 && segmentResult.ProcessQueryKey == "" {
+			// 单聊目标不存在/已离职：重试也不会好。只要有回执说明已送达一部分，就不算失败。
+			return SendResult{}, permanentSendError("钉钉单聊目标无效：1 个目标不在可用范围")
+		}
+		if len(segmentResult.FlowControlledStaffIdList) > 0 && segmentResult.ProcessQueryKey == "" {
+			return SendResult{}, transientSendError("钉钉发送被限流，需稍后重试")
+		}
+		// 多段时以最后一段的回执作为结果。
+		result.PlatformMessageId = segmentResult.ProcessQueryKey
 	}
-	if len(result.InvalidStaffIdList) > 0 && result.ProcessQueryKey == "" {
-		// 单聊目标不存在/已离职：重试也不会好。只要有回执说明已送达一部分，就不算失败。
-		return SendResult{}, permanentSendError("钉钉单聊目标无效：%d 个目标不在可用范围", len(result.InvalidStaffIdList))
+	return result, nil
+}
+
+// newDingTalkAdapterWithEndpoint 构造指向自定义 OpenAPI 端点与 HTTP 客户端的适配器。
+// 只给测试用（httptest.Server 驱动发送路径）；生产一律走 NewPlatformAdapter。
+func newDingTalkAdapterWithEndpoint(creds PlatformCredentials, host string, httpClient *http.Client) *dingtalkAdapter {
+	return &dingtalkAdapter{
+		creds:       normalizePlatformCredentials(creds),
+		openAPIHost: host,
+		httpClient:  httpClient,
 	}
-	if len(result.FlowControlledStaffIdList) > 0 && result.ProcessQueryKey == "" {
-		return SendResult{}, transientSendError("钉钉发送被限流，需稍后重试")
-	}
-	return SendResult{PlatformMessageId: result.ProcessQueryKey}, nil
 }
 
 // accessToken 返回可用的企业内部应用 accessToken（进程内缓存，带提前过期）。
@@ -400,14 +469,16 @@ func (a *dingtalkAdapter) httpClientOrDefault() *http.Client {
 // dingTalkPostJSON 发一个 JSON 请求并反序列化 2xx 响应体。
 // 非 2xx 转成带状态码的 platformResponseError；网络层失败原样返回，
 // 让 ClassifyPlatformSendError 的网络分支把它判成 transient。
-func dingTalkPostJSON(ctx context.Context, httpClient *http.Client, host, path, accessToken string, body any, out any) error {
+//
+// 返回值 retryAfter 只有 429 才会非 0：从 Retry-After 头解析出的建议等待秒数（T8 用）。
+func dingTalkPostJSON(ctx context.Context, httpClient *http.Client, host, path, accessToken string, body any, out any) (int, error) {
 	requestBody, err := json.Marshal(body)
 	if err != nil {
-		return newPlatformResponseError(model.ChannelPlatformDingTalk, 0, 0, "请求体序列化失败")
+		return 0, newPlatformResponseError(model.ChannelPlatformDingTalk, 0, 0, "请求体序列化失败")
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, host+path, bytes.NewReader(requestBody))
 	if err != nil {
-		return newPlatformResponseError(model.ChannelPlatformDingTalk, 0, 0, "构造请求失败")
+		return 0, newPlatformResponseError(model.ChannelPlatformDingTalk, 0, 0, "构造请求失败")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
@@ -420,24 +491,49 @@ func dingTalkPostJSON(ctx context.Context, httpClient *http.Client, host, path, 
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer func() {
 		_ = resp.Body.Close()
 	}()
+	retryAfter := 0
+	if resp.StatusCode == http.StatusTooManyRequests {
+		retryAfter = parseRetryAfterSeconds(resp.Header.Get("Retry-After"))
+	}
 	raw, readErr := io.ReadAll(resp.Body)
 	if readErr != nil {
-		return newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, "读取响应失败")
+		return retryAfter, newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, "读取响应失败")
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, dingTalkErrorText(raw))
+		return retryAfter, newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, dingTalkErrorText(raw))
 	}
 	if out != nil {
 		if err := json.Unmarshal(raw, out); err != nil {
-			return newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, "响应解析失败")
+			return retryAfter, newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, "响应解析失败")
 		}
 	}
-	return nil
+	return retryAfter, nil
+}
+
+// parseRetryAfterSeconds 解析 Retry-After 头：支持秒数与 HTTP 日期两种形态。
+// 解析不出来返回 0（调用方按自己的退避策略处理），绝不返回负数。
+func parseRetryAfterSeconds(value string) int {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if seconds, err := strconv.Atoi(value); err == nil {
+		if seconds > 0 {
+			return seconds
+		}
+		return 0
+	}
+	if when, err := http.ParseTime(value); err == nil {
+		if seconds := int(time.Until(when).Seconds()); seconds > 0 {
+			return seconds
+		}
+	}
+	return 0
 }
 
 // dingTalkErrorText 从钉钉错误响应里取出可读文案（{code,message,requestid}）。
@@ -486,7 +582,7 @@ func (c *dingTalkTokenStore) get(ctx context.Context, httpClient *http.Client, h
 		AccessToken string `json:"accessToken"`
 		ExpireIn    int64  `json:"expireIn"`
 	}
-	if err := dingTalkPostJSON(ctx, httpClient, strings.TrimRight(adapterHost, "/"), dingTalkTokenEndpoint, "", map[string]string{
+	if _, err := dingTalkPostJSON(ctx, httpClient, strings.TrimRight(adapterHost, "/"), dingTalkTokenEndpoint, "", map[string]string{
 		"appKey":    creds.AppId,
 		"appSecret": creds.AppSecret,
 	}, &result); err != nil {

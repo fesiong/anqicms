@@ -2,12 +2,17 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"unicode/utf8"
 
 	larkcore "github.com/larksuite/oapi-sdk-go/v3/core"
 	larkevent "github.com/larksuite/oapi-sdk-go/v3/event"
@@ -226,21 +231,108 @@ func TestSendErrorClassifiesAuthAsPermanent(t *testing.T) {
 	}
 }
 
-// TestAdapterRegistryRejectsUnknownPlatform 固化平台注册表：只认飞书与钉钉。
+// TestInboundEventValidateIdentityIgnoresChatFields 固化卡片回调走的身份闸门：
+// ValidateIdentity 只看应用与企业两项，不因 ChatId/ChatType 为空而拒绝（卡片回调本来就没有会话）。
+func TestInboundEventValidateIdentityIgnoresChatFields(t *testing.T) {
+	const (
+		expectedAppId = "ding_test_app"
+		expectedOrgId = "corp_1"
+	)
+	base := InboundEvent{
+		EventId:        "card_instance_1:approve",
+		Kind:           InboundKindCardAction,
+		OrganizationId: expectedOrgId,
+		AppId:          expectedAppId,
+		UserId:         "staff_1",
+		Text:           "approve",
+	}
+	if err := base.ValidateIdentity(expectedAppId, expectedOrgId); err != nil {
+		t.Fatalf("合法卡片事件未通过身份校验：%v", err)
+	}
+	// 同一事件走完整 Validate 必然被 ChatId 拒绝：这正是卡片回调要单独走 ValidateIdentity 的原因。
+	if err := base.Validate(expectedAppId, expectedOrgId); err == nil {
+		t.Fatalf("缺会话标识的事件不应通过完整 Validate")
+	}
+
+	cases := []struct {
+		name    string
+		mutate  func(*InboundEvent)
+		wantErr string
+	}{
+		{name: "应用为空被拒绝", mutate: func(e *InboundEvent) { e.AppId = " " }, wantErr: "应用"},
+		{name: "应用不一致被拒绝", mutate: func(e *InboundEvent) { e.AppId = "ding_other" }, wantErr: "应用"},
+		{name: "企业为空被拒绝", mutate: func(e *InboundEvent) { e.OrganizationId = "" }, wantErr: "组织"},
+		{name: "企业不一致被拒绝", mutate: func(e *InboundEvent) { e.OrganizationId = "corp_2" }, wantErr: "组织"},
+	}
+	failed := 0
+	for _, tc := range cases {
+		event := base
+		tc.mutate(&event)
+		err := event.ValidateIdentity(expectedAppId, expectedOrgId)
+		if err == nil {
+			t.Errorf("%s：期望报错，实际通过", tc.name)
+			continue
+		}
+		failed++
+		if !strings.Contains(err.Error(), tc.wantErr) {
+			t.Errorf("%s：错误文案缺少「%s」，实际为「%s」", tc.name, tc.wantErr, err.Error())
+		}
+		for _, secret := range []string{expectedAppId, expectedOrgId} {
+			if strings.Contains(err.Error(), secret) {
+				t.Errorf("%s：错误文案回显了标识值「%s」", tc.name, secret)
+			}
+		}
+	}
+	if failed < 4 {
+		t.Fatalf("身份校验实际拒绝的用例只有 %d 个，期望 4 个：断言可能在空转", failed)
+	}
+}
+
+// TestAdapterRegistryRejectsUnknownPlatform 固化平台注册表：只认飞书与钉钉，
+// 且唯一的构造入口 NewPlatformAdapter 必须要求凭据——不存在「无凭据原型」这条恒失败路径。
 func TestAdapterRegistryRejectsUnknownPlatform(t *testing.T) {
+	validCreds := PlatformCredentials{AppId: "app_1", AppSecret: "secret_1", OrganizationId: "org_1"}
 	for _, name := range []string{"feishu", "dingtalk"} {
-		adapter, ok := GetPlatformAdapter(name)
+		adapter, ok := NewPlatformAdapter(name, validCreds)
 		if !ok || adapter == nil {
 			t.Fatalf("%s 适配器未注册", name)
 		}
 		if adapter.Name() != name {
 			t.Errorf("适配器 %s 的 Name() 返回 %q，与注册键不一致", name, adapter.Name())
 		}
+		// 工厂产出的实例必须是「已绑定凭据」的：空正文的拒绝理由应是内容为空，
+		// 而不是「未绑定凭据」这类永远发不出去的原型态。
+		_, err := adapter.Send(context.Background(), TargetRef{Kind: TargetKindGroup, PlatformTargetId: "target_1"}, OutboundMessage{})
+		if err == nil {
+			t.Errorf("%s 空正文未返回错误", name)
+		} else {
+			if strings.Contains(err.Error(), "未绑定") || strings.Contains(err.Error(), "unbound") {
+				t.Errorf("%s 工厂返回了无凭据原型：%v", name, err)
+			}
+			if !strings.Contains(err.Error(), "内容为空") {
+				t.Errorf("%s 空正文的错误文案异常：%v", name, err)
+			}
+		}
 	}
 
+	// 未知平台与空白名称都不兜底。
 	for _, name := range []string{"wechat", "wecom", "lark", "", "   ", "slack"} {
-		if adapter, ok := GetPlatformAdapter(name); ok || adapter != nil {
+		if adapter, ok := NewPlatformAdapter(name, validCreds); ok || adapter != nil {
 			t.Errorf("未支持平台 %q 不应注册，实际返回 %v", name, adapter)
+		}
+	}
+
+	// 构造即要求凭据：缺 AppId 或 AppSecret 一律 false，杜绝「能构造但永远发不出去」的实例。
+	for _, creds := range []PlatformCredentials{
+		{},
+		{AppId: "app_1"},
+		{AppSecret: "secret_1"},
+		{AppId: "  ", AppSecret: "  "},
+	} {
+		for _, name := range []string{"feishu", "dingtalk"} {
+			if adapter, ok := NewPlatformAdapter(name, creds); ok || adapter != nil {
+				t.Errorf("%s 在凭据不完整时不应构造成功（AppId=%q AppSecret=%q）", name, creds.AppId, creds.AppSecret)
+			}
 		}
 	}
 
@@ -477,8 +569,22 @@ func TestDingTalkNormalizeInbound(t *testing.T) {
 	if event.Text != " 帮我统计今天的订单 " {
 		t.Errorf("Text = %q，正文应原样保留", event.Text)
 	}
+	if event.MentionedBot {
+		t.Errorf("IsInAtList 缺省时 MentionedBot 应为 false")
+	}
 	if err := event.Validate(appId, "corp_1"); err != nil {
 		t.Errorf("标准化后的事件未通过身份校验：%v", err)
+	}
+
+	// 群聊里 @ 了应用：isInAtList 是平台给的判定，直接映射。
+	atMessage := *groupMessage
+	atMessage.IsInAtList = true
+	atEvent, ok := normalizeDingTalkInbound(&atMessage, appId)
+	if !ok {
+		t.Fatalf("@ 应用的消息未被识别")
+	}
+	if !atEvent.MentionedBot {
+		t.Errorf("IsInAtList=true 时 MentionedBot 应为 true")
 	}
 
 	// 单聊映射。
@@ -563,7 +669,486 @@ func TestDingTalkNormalizeInbound(t *testing.T) {
 	if cardEvent.Text != "approve" {
 		t.Errorf("卡片回调 Text = %q，期望动作标识 approve", cardEvent.Text)
 	}
+	if cardEvent.MentionedBot {
+		t.Errorf("卡片回调不应被标成「@ 了应用」")
+	}
+	// 卡片实例标识缺失：无法定位审批单，直接拒绝，不能产出 ":approve" 这类 EventId。
+	if _, ok := normalizeDingTalkCardAction(&card.CardRequest{
+		CorpId: "corp_1",
+		UserId: "staff_9",
+		CardActionData: card.PrivateCardActionData{
+			CardPrivateData: card.CardPrivateData{ActionIdList: []string{"approve"}},
+		},
+	}, appId); ok {
+		t.Errorf("缺少 outTrackId 的卡片回调应被拒绝")
+	}
 	if _, ok := normalizeDingTalkCardAction(nil, appId); ok {
 		t.Errorf("nil 卡片回调不应被识别")
+	}
+}
+
+// TestSplitPlatformText 固化正文分段契约：按 rune 切、不裂 UTF-8、优先在换行/句读处断、
+// 拼接回原文、空串返回 nil。
+func TestSplitPlatformText(t *testing.T) {
+	if segments := splitPlatformText("", 10); segments != nil {
+		t.Errorf("空串应返回 nil，实际 %v", segments)
+	}
+	// 单段边界：刚好等于上限不应被切开。
+	exact := strings.Repeat("a", 10)
+	if segments := splitPlatformText(exact, 10); len(segments) != 1 || segments[0] != exact {
+		t.Errorf("恰好等于上限的正文应原样一段，实际 %v", segments)
+	}
+	// maxRunes <= 0 视为不分段（防御性分支，避免调用方传错就把正文切成空段）。
+	if segments := splitPlatformText("abc", 0); len(segments) != 1 || segments[0] != "abc" {
+		t.Errorf("maxRunes<=0 应不分段，实际 %v", segments)
+	}
+
+	cases := []struct {
+		name     string
+		text     string
+		maxRunes int
+		wantLen  int
+	}{
+		{name: "超一个字符切两段", text: strings.Repeat("a", 11), maxRunes: 10, wantLen: 2},
+		{name: "长中文多段", text: strings.Repeat("中文测试", 50), maxRunes: 100, wantLen: 2},
+		{name: "无断点硬切", text: strings.Repeat("x", 250), maxRunes: 100, wantLen: 3},
+		{
+			name:     "换行处断开",
+			text:     strings.Repeat("a", 90) + "\n" + strings.Repeat("b", 90),
+			maxRunes: 100,
+			wantLen:  2,
+		},
+		{
+			name:     "句号处断开",
+			text:     strings.Repeat("中", 99) + "。" + strings.Repeat("文", 99),
+			maxRunes: 100,
+			wantLen:  2,
+		},
+	}
+	for _, tc := range cases {
+		segments := splitPlatformText(tc.text, tc.maxRunes)
+		if len(segments) != tc.wantLen {
+			t.Errorf("%s：段数 = %d，期望 %d", tc.name, len(segments), tc.wantLen)
+		}
+		if joined := strings.Join(segments, ""); joined != tc.text {
+			t.Errorf("%s：拼接后与原文不一致（len %d vs %d）", tc.name, len(joined), len(tc.text))
+		}
+		for i, segment := range segments {
+			if segment == "" {
+				t.Errorf("%s：第 %d 段为空", tc.name, i)
+			}
+			if count := len([]rune(segment)); count > tc.maxRunes {
+				t.Errorf("%s：第 %d 段 %d rune 超过上限 %d", tc.name, i, count, tc.maxRunes)
+			}
+			if !utf8.ValidString(segment) {
+				t.Errorf("%s：第 %d 段不是合法 UTF-8", tc.name, i)
+			}
+		}
+	}
+
+	// 断点必须落在换行之后，不能在上限处硬切。
+	lineText := strings.Repeat("a", 90) + "\n" + strings.Repeat("b", 90)
+	if first := splitPlatformText(lineText, 100)[0]; !strings.HasSuffix(first, "\n") {
+		t.Errorf("换行处断开的期望落空，第一段结尾是 %q", first[len(first)-3:])
+	}
+	// 句号同理。
+	dotText := strings.Repeat("中", 99) + "。" + strings.Repeat("文", 99)
+	if first := splitPlatformText(dotText, 100)[0]; !strings.HasSuffix(first, "。") {
+		t.Errorf("句号处断开的期望落空，第一段结尾 3 字符是 %q", []rune(first)[len([]rune(first))-3:])
+	}
+
+	// 中文按 rune 切：max=3 时每段最多 3 个汉字，不会出现半个字符。
+	chinese := strings.Repeat("你好世界", 10)
+	for i, segment := range splitPlatformText(chinese, 3) {
+		if !utf8.ValidString(segment) || len([]rune(segment)) > 3 {
+			t.Errorf("中文第 %d 段不合法：%q", i, segment)
+		}
+	}
+}
+
+// TestFeishuMentionedBot 固化飞书群聊 @ 判定：只有 mentions 里出现本应用机器人的 open_id
+// 才算「明确 @ 应用」；私聊与取不到机器人身份时一律 false（fail closed）。
+func TestFeishuMentionedBot(t *testing.T) {
+	const botOpenId = "ou_bot_1"
+	message := &larkim.EventMessage{
+		Mentions: []*larkim.MentionEvent{
+			{Id: &larkim.UserId{OpenId: channelStringPtr("ou_someone_else")}},
+			{Id: &larkim.UserId{OpenId: channelStringPtr(botOpenId)}},
+		},
+	}
+	if !feishuMentionedBot(message, ChatTypeGroup, botOpenId) {
+		t.Errorf("群聊 mentions 含机器人 open_id 时应判为已 @")
+	}
+	if feishuMentionedBot(message, ChatTypeGroup, "ou_other_bot") {
+		t.Errorf("mentions 不含机器人 open_id 时不应判为已 @")
+	}
+	if feishuMentionedBot(message, ChatTypeP2P, botOpenId) {
+		t.Errorf("私聊事件的 MentionedBot 必须保持 false")
+	}
+	if feishuMentionedBot(message, ChatTypeGroup, "") {
+		t.Errorf("取不到机器人 open_id 时必须 fail closed")
+	}
+	if feishuMentionedBot(nil, ChatTypeGroup, botOpenId) {
+		t.Errorf("nil 消息不应判为已 @")
+	}
+	// mentions 里个别项结构不全（Id 为 nil）不应 panic，也不应误判。
+	partial := &larkim.EventMessage{Mentions: []*larkim.MentionEvent{nil, {}}}
+	if feishuMentionedBot(partial, ChatTypeGroup, botOpenId) {
+		t.Errorf("结构不全的 mentions 不应判为已 @")
+	}
+}
+
+// captureFeishuSends 把飞书的发送调用记录下来，返回一个假的成功响应。
+func captureFeishuSends(t *testing.T, ids ...string) (*feishuAdapter, *[]feishuSendRequest) {
+	t.Helper()
+	requests := make([]feishuSendRequest, 0, len(ids))
+	call := 0
+	adapter := &feishuAdapter{
+		creds: PlatformCredentials{AppId: "cli_app", AppSecret: "secret", OrganizationId: "tenant_1"},
+		createMessage: func(_ context.Context, req feishuSendRequest) (*larkim.CreateMessageResp, error) {
+			requests = append(requests, req)
+			messageId := ""
+			if call < len(ids) {
+				messageId = ids[call]
+			}
+			call++
+			return &larkim.CreateMessageResp{
+				CodeError: larkcore.CodeError{Code: 0},
+				Data:      &larkim.CreateMessageRespData{MessageId: channelStringPtr(messageId)},
+			}, nil
+		},
+	}
+	return adapter, &requests
+}
+
+// TestFeishuSendUsesChatIdForGroup 断言群聊用 chat_id 且回执取最后一段的消息 ID。
+func TestFeishuSendUsesChatIdForGroup(t *testing.T) {
+	adapter, requests := captureFeishuSends(t, "om_seg_1", "om_seg_2")
+	longText := strings.Repeat("通知正文", 1000) // 4000 rune > 3500，必须分段
+	result, err := adapter.Send(context.Background(), TargetRef{
+		Kind:             TargetKindGroup,
+		PlatformTargetId: "oc_chat_1",
+	}, OutboundMessage{Text: longText})
+	if err != nil {
+		t.Fatalf("发送失败：%v", err)
+	}
+	if len(*requests) < 2 {
+		t.Fatalf("超长正文应分段发送，实际只发了 %d 段", len(*requests))
+	}
+	for i, req := range *requests {
+		if req.ReceiveIdType != "chat_id" {
+			t.Errorf("第 %d 段 receive_id_type = %q，群聊期望 chat_id", i, req.ReceiveIdType)
+		}
+		if req.ReceiveId != "oc_chat_1" {
+			t.Errorf("第 %d 段 receive_id = %q，期望 oc_chat_1", i, req.ReceiveId)
+		}
+		if count := len([]rune(req.Text)); count > feishuMaxTextRunes {
+			t.Errorf("第 %d 段 %d rune 超过上限 %d", i, count, feishuMaxTextRunes)
+		}
+	}
+	if joined := joinFeishuTexts(*requests); joined != longText {
+		t.Errorf("分段后拼接与原文不一致（%d vs %d 字符）", len(joined), len(longText))
+	}
+	if result.PlatformMessageId != "om_seg_2" {
+		t.Errorf("回执 message_id = %q，期望最后一段的 om_seg_2", result.PlatformMessageId)
+	}
+}
+
+// TestFeishuSendUsesOpenIdForPrivate 断言私聊用 open_id。
+func TestFeishuSendUsesOpenIdForPrivate(t *testing.T) {
+	adapter, requests := captureFeishuSends(t, "om_p2p_1")
+	result, err := adapter.Send(context.Background(), TargetRef{
+		Kind:             TargetKindPrivate,
+		PlatformTargetId: "ou_user_1",
+	}, OutboundMessage{Text: "你好"})
+	if err != nil {
+		t.Fatalf("发送失败：%v", err)
+	}
+	if len(*requests) != 1 {
+		t.Fatalf("短文本应只发一段，实际 %d 段", len(*requests))
+	}
+	req := (*requests)[0]
+	if req.ReceiveIdType != "open_id" {
+		t.Errorf("私聊 receive_id_type = %q，期望 open_id", req.ReceiveIdType)
+	}
+	if req.ReceiveId != "ou_user_1" {
+		t.Errorf("私聊 receive_id = %q，期望 ou_user_1", req.ReceiveId)
+	}
+	if req.Text != "你好" {
+		t.Errorf("正文 = %q，期望原样透传", req.Text)
+	}
+	if result.PlatformMessageId != "om_p2p_1" {
+		t.Errorf("回执 message_id = %q，期望 om_p2p_1", result.PlatformMessageId)
+	}
+}
+
+func joinFeishuTexts(requests []feishuSendRequest) string {
+	var builder strings.Builder
+	for _, req := range requests {
+		builder.WriteString(req.Text)
+	}
+	return builder.String()
+}
+
+// TestSendRejectsCardOnlyMessage 断言卡片没有被「假装支持」：只有 Card 没有 Text 时
+// 两个适配器都必须拒绝，且拒绝是 permanent（重试不会变好）。
+func TestSendRejectsCardOnlyMessage(t *testing.T) {
+	creds := PlatformCredentials{AppId: "app_1", AppSecret: "secret_1", OrganizationId: "org_1"}
+	feishu := &feishuAdapter{creds: creds, createMessage: func(context.Context, feishuSendRequest) (*larkim.CreateMessageResp, error) {
+		t.Errorf("卡片消息不应触达发送 SDK")
+		return nil, nil
+	}}
+	dingtalk := newDingTalkAdapterWithEndpoint(creds, "http://127.0.0.1:1", nil)
+	target := TargetRef{Kind: TargetKindGroup, PlatformTargetId: "target_1"}
+	card := map[string]any{"type": "template", "data": map[string]any{}}
+
+	for name, adapter := range map[string]PlatformAdapter{"feishu": feishu, "dingtalk": dingtalk} {
+		_, err := adapter.Send(context.Background(), target, OutboundMessage{Card: card})
+		if err == nil {
+			t.Fatalf("%s 只发卡片时应拒绝", name)
+		}
+		var sendErr *SendError
+		if !errors.As(err, &sendErr) {
+			t.Fatalf("%s 返回了非 SendError：%v", name, err)
+		}
+		if sendErr.Class != ErrorClassPermanent {
+			t.Errorf("%s 卡片消息的错误分类 = %s，期望 permanent", name, sendErr.Class)
+		}
+		if !strings.Contains(sendErr.Message, "卡片消息暂不支持") {
+			t.Errorf("%s 错误文案应说明卡片不支持，实际 %q", name, sendErr.Message)
+		}
+	}
+
+	// 有正文时 Card 被显式忽略：不能因为带了 Card 就改变文本发送行为。
+	adapter, requests := captureFeishuSends(t, "om_text_1")
+	if _, err := adapter.Send(context.Background(), target, OutboundMessage{Text: "正文", Card: card}); err != nil {
+		t.Fatalf("带正文的消息应正常发送：%v", err)
+	}
+	if len(*requests) != 1 || (*requests)[0].Text != "正文" {
+		t.Errorf("带 Card 时正文未被正确发送：%+v", *requests)
+	}
+}
+
+// TestDingTalkSendRejectsEmptyText 断言空正文在本地就被拒绝（permanent），不发任何请求。
+func TestDingTalkSendRejectsEmptyText(t *testing.T) {
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: "ding_empty_text", AppSecret: "secret"},
+		"http://127.0.0.1:1", nil,
+	)
+	_, err := adapter.Send(context.Background(), TargetRef{Kind: TargetKindPrivate, PlatformTargetId: "staff_1"}, OutboundMessage{Text: "   "})
+	if err == nil {
+		t.Fatalf("空正文应被拒绝")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) || sendErr.Class != ErrorClassPermanent {
+		t.Fatalf("空正文的期望 permanent，实际 %v", err)
+	}
+	if !strings.Contains(sendErr.Message, "内容为空") {
+		t.Errorf("错误文案 = %q，期望说明内容为空", sendErr.Message)
+	}
+}
+
+// TestDingTalkSendFetchesTokenOnce 断言连续两次发送只取一次 accessToken，且分段发送复用同一 token。
+func TestDingTalkSendFetchesTokenOnce(t *testing.T) {
+	const appId = "ding_token_once"
+	dingTalkTokenCache.invalidate(appId)
+	t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+	var tokenCalls, sendCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case dingTalkTokenEndpoint:
+			tokenCalls.Add(1)
+			if got := r.Header.Get("x-acs-dingtalk-access-token"); got != "" {
+				t.Errorf("取 token 的请求不该带 access token 头，实际 %q", got)
+			}
+			_, _ = w.Write([]byte(`{"accessToken":"token_1","expireIn":7200}`))
+		case dingTalkGroupSendEndpoint:
+			sendCalls.Add(1)
+			if got := r.Header.Get("x-acs-dingtalk-access-token"); got != "token_1" {
+				t.Errorf("发送请求应带缓存 token，实际 %q", got)
+			}
+			var body map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("发送请求体不是合法 JSON：%v", err)
+			}
+			if body["openConversationId"] != "cid_group_1" {
+				t.Errorf("群聊发送的 openConversationId = %v，期望 cid_group_1", body["openConversationId"])
+			}
+			if body["robotCode"] != appId {
+				t.Errorf("群聊发送的 robotCode = %v，期望 %s", body["robotCode"], appId)
+			}
+			if _, ok := body["userIds"]; ok {
+				t.Errorf("群聊发送不应带 userIds")
+			}
+			_, _ = w.Write([]byte(`{"processQueryKey":"pqk_1"}`))
+		default:
+			t.Errorf("未预期的请求路径 %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: appId, AppSecret: "secret", OrganizationId: "corp_1"},
+		server.URL, server.Client(),
+	)
+	target := TargetRef{Kind: TargetKindGroup, PlatformTargetId: "cid_group_1"}
+	for i := 0; i < 2; i++ {
+		result, err := adapter.Send(context.Background(), target, OutboundMessage{Text: "你好"})
+		if err != nil {
+			t.Fatalf("第 %d 次发送失败：%v", i+1, err)
+		}
+		if result.PlatformMessageId != "pqk_1" {
+			t.Errorf("第 %d 次回执 = %q，期望 pqk_1", i+1, result.PlatformMessageId)
+		}
+	}
+	if got := tokenCalls.Load(); got != 1 {
+		t.Fatalf("两次发送取了 %d 次 token，期望 1 次", got)
+	}
+	if got := sendCalls.Load(); got != 2 {
+		t.Fatalf("两次发送实际发了 %d 次，期望 2 次", got)
+	}
+}
+
+// TestDingTalkSendSplitsLongText 断言超长正文被分段，而不是整条丢给平台（4xx → permanent → 丢消息）。
+func TestDingTalkSendSplitsLongText(t *testing.T) {
+	const appId = "ding_split_long"
+	dingTalkTokenCache.invalidate(appId)
+	t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+	var sendCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case dingTalkTokenEndpoint:
+			_, _ = w.Write([]byte(`{"accessToken":"token_2","expireIn":7200}`))
+		case dingTalkPrivateSendEndpoint:
+			sendCalls.Add(1)
+			var body struct {
+				UserIds  []string `json:"userIds"`
+				MsgParam string   `json:"msgParam"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("请求体不是合法 JSON：%v", err)
+			}
+			if len(body.UserIds) != 1 || body.UserIds[0] != "staff_1" {
+				t.Errorf("单聊发送的 userIds = %v，期望 [staff_1]", body.UserIds)
+			}
+			var param struct {
+				Content string `json:"content"`
+			}
+			if err := json.Unmarshal([]byte(body.MsgParam), &param); err != nil {
+				t.Errorf("msgParam 不是合法 JSON：%v", err)
+			}
+			if count := len([]rune(param.Content)); count > dingTalkMaxTextRunes {
+				t.Errorf("单段 %d rune 超过上限 %d", count, dingTalkMaxTextRunes)
+			}
+			_, _ = w.Write([]byte(`{"processQueryKey":"pqk_seg"}`))
+		default:
+			t.Errorf("未预期的请求路径 %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: appId, AppSecret: "secret"},
+		server.URL, server.Client(),
+	)
+	text := strings.Repeat("长通知正文", 500) // 2500 rune > 1800
+	if _, err := adapter.Send(context.Background(), TargetRef{Kind: TargetKindPrivate, PlatformTargetId: "staff_1"}, OutboundMessage{Text: text}); err != nil {
+		t.Fatalf("分段发送失败：%v", err)
+	}
+	if got := sendCalls.Load(); got < 2 {
+		t.Fatalf("超长正文只发了 %d 段，期望至少 2 段", got)
+	}
+}
+
+// TestDingTalkSendUnauthorizedIsTransient 断言发送端 401 不是 permanent：
+// 先清 token 缓存再按 transient 返回，重试时重新取 token（这里用取 token 次数证明缓存确实被清）。
+func TestDingTalkSendUnauthorizedIsTransient(t *testing.T) {
+	const appId = "ding_unauthorized"
+	dingTalkTokenCache.invalidate(appId)
+	t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+	var tokenCalls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case dingTalkTokenEndpoint:
+			tokenCalls.Add(1)
+			_, _ = w.Write([]byte(`{"accessToken":"token_expired","expireIn":7200}`))
+		case dingTalkPrivateSendEndpoint:
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"code":"InvalidAuthentication","message":"access token expired"}`))
+		default:
+			t.Errorf("未预期的请求路径 %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: appId, AppSecret: "secret"},
+		server.URL, server.Client(),
+	)
+	target := TargetRef{Kind: TargetKindPrivate, PlatformTargetId: "staff_1"}
+	_, err := adapter.Send(context.Background(), target, OutboundMessage{Text: "你好"})
+	if err == nil {
+		t.Fatalf("401 应返回错误")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) {
+		t.Fatalf("返回了非 SendError：%v", err)
+	}
+	if sendErr.Class != ErrorClassTransient {
+		t.Fatalf("发送端 401 应为 transient（重取 token 即可成功），实际 %s：%s", sendErr.Class, sendErr.Message)
+	}
+	if !strings.Contains(sendErr.Message, "已清除缓存") {
+		t.Errorf("错误文案应说明已清除缓存，实际 %q", sendErr.Message)
+	}
+
+	// 缓存被清的直接证据：再次发送必须重新取 token。
+	if _, err := adapter.Send(context.Background(), target, OutboundMessage{Text: "你好"}); err == nil {
+		t.Fatalf("第二次 401 也应返回错误")
+	}
+	if got := tokenCalls.Load(); got != 2 {
+		t.Fatalf("401 后 token 缓存未清除：两次发送共取 %d 次 token，期望 2 次", got)
+	}
+}
+
+// TestDingTalkSendRetryAfterFromHeader 断言 429 的 Retry-After 被带进 SendResult，供 T8 排重试。
+func TestDingTalkSendRetryAfterFromHeader(t *testing.T) {
+	const appId = "ding_retry_after"
+	dingTalkTokenCache.invalidate(appId)
+	t.Cleanup(func() { dingTalkTokenCache.invalidate(appId) })
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case dingTalkTokenEndpoint:
+			_, _ = w.Write([]byte(`{"accessToken":"token_429","expireIn":7200}`))
+		case dingTalkPrivateSendEndpoint:
+			w.Header().Set("Retry-After", "7")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"code":"Throttling","message":"too many requests"}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	defer server.Close()
+
+	adapter := newDingTalkAdapterWithEndpoint(
+		PlatformCredentials{AppId: appId, AppSecret: "secret"},
+		server.URL, server.Client(),
+	)
+	result, err := adapter.Send(context.Background(), TargetRef{Kind: TargetKindPrivate, PlatformTargetId: "staff_1"}, OutboundMessage{Text: "你好"})
+	if err == nil {
+		t.Fatalf("429 应返回错误")
+	}
+	var sendErr *SendError
+	if !errors.As(err, &sendErr) || sendErr.Class != ErrorClassTransient {
+		t.Fatalf("429 期望 transient，实际 %v", err)
+	}
+	if result.RetryAfterSeconds != 7 {
+		t.Errorf("RetryAfterSeconds = %d，期望 7", result.RetryAfterSeconds)
 	}
 }

@@ -53,6 +53,9 @@ type PlatformAdapter interface {
 
 // InboundSink 消费一条已标准化的入站事件。返回错误表示本次处理失败（例如入库失败），
 // 适配器只记录日志，不向平台回调返回错误——是否让平台重投由 T4 的持久化语义决定。
+//
+// ⚠ 两个 SDK 都会并发调用 sink（回调跑在各自的分发 goroutine 上），且不保证同一会话的
+// 事件按序到达：同一会话的串行化、去重与顺序由调用方（T4/T6）负责，不要假定 sink 串行执行。
 type InboundSink func(context.Context, InboundEvent) error
 
 // InboundEvent 是平台事件标准化后的结果。字段全部来自平台回调，不含本地渠道配置。
@@ -65,16 +68,47 @@ type InboundEvent struct {
 	ChatId         string
 	ChatType       string
 	Text           string
+
+	// MentionedBot 表示这条群聊消息明确 @ 了本应用机器人（规格 §7 群聊门禁的依据）。
+	// 平台没有可靠字段、或机器人身份未能取得时一律为 false（fail closed）：
+	// 调用方不得把 false 解读成「可以放行」。私聊事件恒为 false。
+	MentionedBot bool
+}
+
+// ValidateIdentity 只校验身份两项：AppId 与 OrganizationId 都必须非空且与渠道配置严格相等。
+//
+// 独立成方法是因为平台卡片回调不携带会话标识（ChatId/ChatType 必然为空），
+// 走完整 Validate 会被无条件拒绝；卡片回调只做身份校验，其余字段由 T7 的审批流程自行判定。
+// 错误文案是静态中文，只说明「哪一项不匹配」，绝不回显标识值本身——这些错误会进日志。
+func (e InboundEvent) ValidateIdentity(expectedAppId, expectedOrgId string) error {
+	appId := strings.TrimSpace(e.AppId)
+	if appId == "" {
+		return errors.New("事件来源应用不能为空")
+	}
+	if appId != strings.TrimSpace(expectedAppId) {
+		return errors.New("事件来源应用与渠道配置不一致")
+	}
+	orgId := strings.TrimSpace(e.OrganizationId)
+	if orgId == "" {
+		return errors.New("事件来源组织不能为空")
+	}
+	if orgId != strings.TrimSpace(expectedOrgId) {
+		return errors.New("事件来源组织与渠道配置不一致")
+	}
+	return nil
 }
 
 // Validate 校验事件身份与渠道配置一致。expectedAppId/expectedOrgId 来自渠道配置。
 //
-// 严格相等：expectedOrgId 为空时不放行任何事件（fail closed）。错误文案是静态中文，
-// 只说明「哪一项不匹配」，绝不回显标识值本身——这些错误会进日志。
+// 身份两项（AppId/OrganizationId）交给 ValidateIdentity：严格相等，空值不放行（fail closed）。
+// 另外要求 EventId/UserId/ChatId 非空、ChatType 只能是 p2p/group。
 //
 // 卡片点击事件（Kind == InboundKindCardAction）例外：平台卡片回调不携带会话标识，
-// 由调用方按 T7 的审批流程处理，不走本方法（见 channelDingTalk.go 的说明）。
+// 这类事件只走 ValidateIdentity（见 channelDingTalk.go 的说明）。
 func (e InboundEvent) Validate(expectedAppId, expectedOrgId string) error {
+	if err := e.ValidateIdentity(expectedAppId, expectedOrgId); err != nil {
+		return err
+	}
 	if strings.TrimSpace(e.EventId) == "" {
 		return errors.New("事件标识不能为空")
 	}
@@ -83,12 +117,6 @@ func (e InboundEvent) Validate(expectedAppId, expectedOrgId string) error {
 	}
 	if strings.TrimSpace(e.ChatId) == "" {
 		return errors.New("会话标识不能为空")
-	}
-	if strings.TrimSpace(e.AppId) != strings.TrimSpace(expectedAppId) {
-		return errors.New("事件来源应用与渠道配置不一致")
-	}
-	if strings.TrimSpace(e.OrganizationId) != strings.TrimSpace(expectedOrgId) {
-		return errors.New("事件来源组织与渠道配置不一致")
 	}
 	switch e.ChatType {
 	case ChatTypeP2P, ChatTypeGroup:
@@ -120,16 +148,23 @@ type TargetRef struct {
 	PlatformTargetId string
 }
 
-// OutboundMessage 是一次发送的内容。首版只发文本；Card 预留给后续卡片能力。
+// OutboundMessage 是一次发送的内容。
+//
+// 首版只支持文本：Card 是预留字段，适配器的 Send 明确忽略它（卡片发送由 T7 决定）。
+// Text 为空而 Card 非空时，Send 返回 permanent 错误而不是「假装支持卡片」。
 type OutboundMessage struct {
 	Text string
 	Card map[string]any
 }
 
 // SendResult 是发送成功后的回执。PlatformMessageId 是平台消息 ID（可能为空：
-// 平台吞掉回执时仍算发送成功，只是拿不到可追踪 ID）。
+// 平台吞掉回执时仍算发送成功，只是拿不到可追踪 ID）；正文被分成多段时取最后一段的 ID。
+//
+// RetryAfterSeconds 只在返回错误时可能有意义（当前仅钉钉 429 会填）：平台通过
+// Retry-After 头给出的建议等待秒数，0 表示平台没给。T8 用它决定下一次重试的时间。
 type SendResult struct {
 	PlatformMessageId string
+	RetryAfterSeconds int
 }
 
 // ErrorClass 是发送错误的唯一分类维度：调用方只据此决定「重试」还是「放弃」。
@@ -330,6 +365,48 @@ func validateTargetRef(target TargetRef) *SendError {
 	}
 }
 
+// splitPlatformText 把正文按 rune 上限切成多段。
+//
+// 规则（T3 契约）：
+//   - 按 rune 切，绝不切断 UTF-8 编码（中文、emoji 不会被撕成半个字符）；
+//   - 每段长度都不超过 maxRunes；
+//   - 尽量在换行或句读处断开，找不到才在上限处硬切；
+//   - 空串返回 nil；maxRunes <= 0 视为「不分段」，原样返回一段。
+//
+// 不裁剪任何空白：把返回值依次拼接必须精确等于原文，断点处的换行留给后一段。
+func splitPlatformText(text string, maxRunes int) []string {
+	if text == "" {
+		return nil
+	}
+	if maxRunes <= 0 {
+		return []string{text}
+	}
+	runes := []rune(text)
+	segments := make([]string, 0, len(runes)/maxRunes+1)
+	for len(runes) > maxRunes {
+		cut := platformTextBreakIndex(runes, maxRunes)
+		segments = append(segments, string(runes[:cut]))
+		runes = runes[cut:]
+	}
+	if len(runes) > 0 {
+		segments = append(segments, string(runes))
+	}
+	return segments
+}
+
+// platformTextBreakIndex 返回第一段的切点（不包含）。从上限往前找第一个换行/句读，
+// 找到就在它之后断开；找不到就返回 maxRunes（硬切）。
+// 起点从 1 开始：切点 0 会产生空段，没有意义。
+func platformTextBreakIndex(runes []rune, maxRunes int) int {
+	for i := maxRunes - 1; i > 0; i-- {
+		switch runes[i] {
+		case '\n', '。', '！', '？', '；', '.', '!', '?', ';':
+			return i + 1
+		}
+	}
+	return maxRunes
+}
+
 // PlatformIdentityHash 是「站点 + 渠道 + 平台 + 组织 + 平台用户」的身份摘要。
 //
 // 复用 channelDigest（逐段 TrimSpace → \x1f 连接 → SHA-256 → 小写 hex），
@@ -345,37 +422,37 @@ func PlatformIdentityHash(siteId uint, channelId uint, platform, orgId, userId s
 	)
 }
 
-// platformAdapterRegistry 是平台名到适配器原型的映射。
-// 原型不带凭据：Run 由调用方逐次传 creds，Send 必须用 NewPlatformAdapter 绑定凭据。
-var platformAdapterRegistry = map[string]PlatformAdapter{
-	model.ChannelPlatformFeishu:   &feishuAdapter{},
-	model.ChannelPlatformDingTalk: &dingtalkAdapter{},
+// platformAdapterFactories 是平台名到适配器工厂的映射。注册表里只有工厂，没有
+// 「不带凭据的原型」：Send 的签名不含 creds，任何不绑定凭据的实例都只能永远失败，
+// 因此不可达的构造路径必须删掉，而不是留给调用方踩。
+var platformAdapterFactories = map[string]func(creds PlatformCredentials) PlatformAdapter{
+	model.ChannelPlatformFeishu: func(creds PlatformCredentials) PlatformAdapter {
+		return &feishuAdapter{creds: creds}
+	},
+	model.ChannelPlatformDingTalk: func(creds PlatformCredentials) PlatformAdapter {
+		return &dingtalkAdapter{creds: creds}
+	},
 }
 
-// GetPlatformAdapter 返回未绑定凭据的适配器原型；未知平台返回 false（不兜底）。
-func GetPlatformAdapter(name string) (PlatformAdapter, bool) {
-	adapter, ok := platformAdapterRegistry[strings.ToLower(strings.TrimSpace(name))]
-	return adapter, ok
-}
-
-// NewPlatformAdapter 返回已绑定凭据的适配器实例。Send 需要凭据（PlatformAdapter.Send
-// 的签名里没有 creds），所以投递侧必须用它构造，不能拿注册表里的原型发消息。
+// NewPlatformAdapter 是唯一的适配器构造入口：返回已绑定凭据的实例。
+// 未知平台或凭据不完整（AppId / AppSecret 为空）都返回 false——构造即要求凭据，
+// 从源头杜绝「发不出去的适配器」。
 func NewPlatformAdapter(name string, creds PlatformCredentials) (PlatformAdapter, bool) {
 	creds = normalizePlatformCredentials(creds)
-	switch strings.ToLower(strings.TrimSpace(name)) {
-	case model.ChannelPlatformFeishu:
-		return &feishuAdapter{creds: creds}, true
-	case model.ChannelPlatformDingTalk:
-		return &dingtalkAdapter{creds: creds}, true
-	default:
+	if creds.AppId == "" || creds.AppSecret == "" {
 		return nil, false
 	}
+	factory, ok := platformAdapterFactories[strings.ToLower(strings.TrimSpace(name))]
+	if !ok {
+		return nil, false
+	}
+	return factory(creds), true
 }
 
 // PlatformNames 返回已实现平台名，按字典序固定排序（便于比对与展示）。
 func PlatformNames() []string {
-	names := make([]string, 0, len(platformAdapterRegistry))
-	for name := range platformAdapterRegistry {
+	names := make([]string, 0, len(platformAdapterFactories))
+	for name := range platformAdapterFactories {
 		names = append(names, name)
 	}
 	sort.Strings(names)
