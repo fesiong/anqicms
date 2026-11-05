@@ -19,9 +19,10 @@ import (
 //     「加了菜单就能映射」单独成立不算证明 —— 它无法区分「解析器在工作」与「解析器恒返回 true」；
 //  3. 正对照：注入含渠道菜单的清单 → /plugin/channels；
 //  4. 生产清单必须覆盖 T9a 的全部 URI，否则严格版会把它们全部拒掉；
-//  5. 严格版自己 `if !mapped` 分支里必须真的调用 adminPermissionDenied(ctx)。
+//  5. 严格版自己 `if !mapped` 分支里必须真的调用 adminPermissionDenied(ctx)，且紧接着 return。
 //     以上 1~4 只证明「路由挂了严格版」和「解析器能返回 mapped=false」，都没碰到
 //     「未映射之后到底拒没拒」这一步——把那句拒绝改成 ctx.Next()，1~4 全会照常通过。
+//     ctx.JSON 不中止链，所以「拒了」与「停下了」必须分开锁。
 func TestChannelRoutesRequireChannelMenuPermission(t *testing.T) {
 	// ---- 1) 路由必须使用严格版中间件 ----
 	middlewares := channelPartyMiddlewares(t)
@@ -117,6 +118,22 @@ func TestChannelRoutesRequireChannelMenuPermission(t *testing.T) {
 	if !denied {
 		t.Fatal("AdminPermissionRequired 的 `if !mapped` 分支里没有 adminPermissionDenied(ctx)：" +
 			"URI 映射不到菜单时不再拒绝，严格版就退化成宽松版，渠道端点会重新默认放行")
+	}
+
+	// 拒绝必须紧跟 return。iris 的 ctx.JSON 只写响应、不中止链：留下拒绝却删掉 return，
+	// 客户端看到的仍是 403，但请求会继续进入 handler 执行写操作（渠道端点会签发绑定 token、
+	// 改平台凭据），副作用已经发生。上面那条断言只证明「拒了」，证明不了「停下来了」。
+	returned := false
+	ast.Inspect(unmappedBody, func(n ast.Node) bool {
+		if _, ok := n.(*ast.ReturnStmt); ok {
+			returned = true
+			return false
+		}
+		return true
+	})
+	if !returned {
+		t.Fatal("AdminPermissionRequired 的 `if !mapped` 分支拒绝后没有 return：" +
+			"Iris 不会中止链，响应虽是 403，请求仍会继续进入 handler 执行写操作")
 	}
 }
 
