@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -499,5 +500,279 @@ func TestSuccessPaidOrderEmitsPaidTimeInTemplate(t *testing.T) {
 	}
 	if strings.TrimSpace(fallbackText) != wantCreated {
 		t.Fatalf("paid_time 缺失时应回落到 created_time %q，实际 %q", wantCreated, fallbackText)
+	}
+}
+
+// ============================================================
+// 12. 领取租约：同一投递并发抢占只有一个赢家
+// ============================================================
+
+func TestDeliveryClaimHasSingleWinner(t *testing.T) {
+	w := notifyTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	target := newNotifyTestGroupTarget(t, w, ch.Id, 1)
+	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)
+	event := notifyTestEmitReady(t, w, NotifyEventOrderPaid, "claim-"+notifyTestSuffix(), map[string]any{
+		"order_id": "claim-order",
+		"status":   "paid",
+	})
+	delivery := notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusPending {
+		t.Fatalf("扇出后投递应为 pending，实际 %q", delivery.Status)
+	}
+
+	// 两个 goroutine 同时抢同一条投递：条件 UPDATE 必须只让一个 RowsAffected == 1。
+	now := time.Now()
+	claims := make([]bool, 2)
+	errs := make([]error, 2)
+	start := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	for i := 0; i < 2; i++ {
+		go func(index int) {
+			defer wg.Done()
+			<-start
+			claims[index], errs[index] = w.claimNotificationDelivery(
+				&model.NotificationDelivery{Id: delivery.Id}, now, notifyDeliveryLeaseTTL,
+			)
+		}(i)
+	}
+	close(start)
+	wg.Wait()
+
+	winners := 0
+	for i, claimErr := range errs {
+		if claimErr != nil {
+			t.Fatalf("第 %d 次领取返回错误：%v", i+1, claimErr)
+		}
+		if claims[i] {
+			winners++
+		}
+	}
+	if winners != 1 {
+		t.Fatalf("同一条投递只允许一个领取赢家，实际 %d 个", winners)
+	}
+
+	delivery = notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Attempts != 1 {
+		t.Fatalf("赢家只允许把 attempts 加 1，实际 %d", delivery.Attempts)
+	}
+	if delivery.Status != NotifyDeliveryStatusSending {
+		t.Fatalf("领取成功后投递应为 sending，实际 %q", delivery.Status)
+	}
+	if delivery.LeaseUntil <= now.Unix() {
+		t.Fatalf("领取成功后必须写入未来租约，实际 lease_until=%d（now=%d）", delivery.LeaseUntil, now.Unix())
+	}
+}
+
+// ============================================================
+// 13. 租约过期：标 unknown，且永不自动重试
+// ============================================================
+
+func TestDeliveryStaleSendingBecomesUnknown(t *testing.T) {
+	w := notifyTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	target := newNotifyTestGroupTarget(t, w, ch.Id, 1)
+	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)
+	event := notifyTestEmitReady(t, w, NotifyEventOrderPaid, "stale-"+notifyTestSuffix(), map[string]any{
+		"order_id": "stale-order",
+		"status":   "paid",
+	})
+	delivery := notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+
+	// 造出「进程在发送中途崩溃」的现场：状态停在 sending，租约已过期 120 秒。
+	staleLease := time.Now().Unix() - 120
+	if err := w.DB.Model(&model.NotificationDelivery{}).Where("id = ?", delivery.Id).
+		Updates(map[string]any{
+			"status":      NotifyDeliveryStatusSending,
+			"lease_until": staleLease,
+			"attempts":    1,
+		}).Error; err != nil {
+		t.Fatalf("把投递改造成租约过期的 sending 失败：%v", err)
+	}
+
+	adapter := newNotifyFakeAdapter()
+	notifyTestRunCycle(t, w, notifyTestOptions(adapter, nil))
+
+	delivery = notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusUnknown {
+		t.Fatalf("租约过期的 sending 投递应标为 unknown，实际 %q", delivery.Status)
+	}
+	if delivery.LeaseUntil != 0 {
+		t.Fatalf("标 unknown 时必须清空租约，实际 %d", delivery.LeaseUntil)
+	}
+	if delivery.LastError == "" {
+		t.Fatal("标 unknown 时必须留下人工排查原因")
+	}
+	if got := adapter.callsFor(target.PlatformTargetId); got != 0 {
+		t.Fatalf("结果未知的投递不得再发平台请求（可能重复），实际调用 %d 次", got)
+	}
+
+	// 后续轮次：unknown 不在 pending/retry 的领取条件里，不得被重新领取。
+	notifyTestRunCycle(t, w, notifyTestOptions(adapter, nil))
+	delivery = notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusUnknown {
+		t.Fatalf("unknown 投递不得被后续轮次重新领取，实际 %q", delivery.Status)
+	}
+	if delivery.Attempts != 1 {
+		t.Fatalf("unknown 投递不得再消耗尝试次数，实际 %d", delivery.Attempts)
+	}
+	if got := adapter.callsFor(target.PlatformTargetId); got != 0 {
+		t.Fatalf("后续轮次也不得发送结果未知的投递，实际调用 %d 次", got)
+	}
+}
+
+// ============================================================
+// 14. 复核失效：管理员停用 / 目标未批准都取消投递
+// ============================================================
+
+func TestDeliveryCancelOnDisabledAdmin(t *testing.T) {
+	w := notifyTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	admin := newPermTestAdmin(t, w, nil, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	target := newNotifyTestPrivateTarget(t, w, ch.Id, binding.Id, 1)
+	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)
+	event := notifyTestEmitReady(t, w, NotifyEventOrderPaid, "disabled-admin-"+notifyTestSuffix(), map[string]any{
+		"order_id": "disabled-admin-order",
+		"status":   "paid",
+	})
+	delivery := notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusPending {
+		t.Fatalf("扇出后投递应为 pending，实际 %q", delivery.Status)
+	}
+
+	// 绑定仍然有效（revoked_at = 0），但对应的后台管理员被停用：私聊目标不再可用。
+	if err := w.DB.Model(&model.Admin{}).Where("id = ?", admin.Id).Update("status", 0).Error; err != nil {
+		t.Fatalf("停用测试管理员失败：%v", err)
+	}
+
+	adapter := newNotifyFakeAdapter()
+	notifyTestRunCycle(t, w, notifyTestOptions(adapter, nil))
+
+	delivery = notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusCancelled {
+		t.Fatalf("管理员停用后投递应为 cancelled，实际 %q（LastError=%q）", delivery.Status, delivery.LastError)
+	}
+	if !strings.Contains(delivery.LastError, "管理员已停用") {
+		t.Fatalf("取消原因应指向管理员停用，实际 %q", delivery.LastError)
+	}
+	if got := adapter.callsFor(target.PlatformTargetId); got != 0 {
+		t.Fatalf("管理员停用时不得发送平台请求，实际调用 %d 次", got)
+	}
+}
+
+func TestDeliveryCancelOnUnapprovedTarget(t *testing.T) {
+	w := notifyTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	target := newNotifyTestGroupTarget(t, w, ch.Id, 1)
+	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)
+	event := notifyTestEmitReady(t, w, NotifyEventOrderPaid, "unapproved-"+notifyTestSuffix(), map[string]any{
+		"order_id": "unapproved-order",
+		"status":   "paid",
+	})
+	delivery := notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusPending {
+		t.Fatalf("扇出后投递应为 pending，实际 %q", delivery.Status)
+	}
+
+	// 目标批准被收回：已建立的投递不再补发。
+	if err := w.DB.Model(&model.ChannelTarget{}).Where("id = ? AND site_id = ?", target.Id, w.Id).
+		Update("approved", 0).Error; err != nil {
+		t.Fatalf("撤销目标批准失败：%v", err)
+	}
+
+	adapter := newNotifyFakeAdapter()
+	notifyTestRunCycle(t, w, notifyTestOptions(adapter, nil))
+
+	delivery = notifyTestDeliveryForTarget(t, w, event.Id, rule.Id, target.Id)
+	if delivery.Status != NotifyDeliveryStatusCancelled {
+		t.Fatalf("目标批准被收回后投递应为 cancelled，实际 %q（LastError=%q）", delivery.Status, delivery.LastError)
+	}
+	if !strings.Contains(delivery.LastError, "目标未批准") {
+		t.Fatalf("取消原因应指向目标未批准，实际 %q", delivery.LastError)
+	}
+	if got := adapter.callsFor(target.PlatformTargetId); got != 0 {
+		t.Fatalf("目标未批准时不得发送平台请求，实际调用 %d 次", got)
+	}
+}
+
+// ============================================================
+// 15. 待分类事件由 worker 恢复收敛（goroutine 丢失 / 进程重启）
+// ============================================================
+
+func TestGuestbookEventRecoversFromWaitingClassification(t *testing.T) {
+	w := notifyTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+	target := newNotifyTestGroupTarget(t, w, ch.Id, 1)
+	rule := newNotifyTestRule(t, w, NotifyEventGuestbookCreated, 0, target.Id)
+
+	newRecoverGuestbook := func(name, content string, status int) (*model.Guestbook, *model.NotificationEvent) {
+		t.Helper()
+		guestbook := &model.Guestbook{UserName: name, Content: content}
+		if err := w.SaveGuestbookWithNotification(guestbook); err != nil {
+			t.Fatalf("保存留言 %q 失败：%v", name, err)
+		}
+		t.Cleanup(func() {
+			if err := w.DB.Unscoped().Where("id = ?", guestbook.Id).Delete(&model.Guestbook{}).Error; err != nil {
+				t.Logf("清理留言 %d 失败：%v", guestbook.Id, err)
+			}
+		})
+		businessKey := strconv.FormatUint(uint64(guestbook.Id), 10)
+		cleanupNotifyBusinessKeys(t, w, NotifyEventGuestbookCreated+":"+businessKey)
+		// 模拟后台把留言审核通过/标为垃圾：goroutine 已经丢失，worker 只能读留言当前状态。
+		if err := w.DB.Model(&model.Guestbook{}).Where("id = ?", guestbook.Id).
+			Update("status", status).Error; err != nil {
+			t.Fatalf("设置留言 %d 状态失败：%v", guestbook.Id, err)
+		}
+		event := notifyTestLoadEvent(t, w, NotifyEventGuestbookCreated, businessKey)
+		if event.Status != NotifyEventStatusWaitingClassification {
+			t.Fatalf("留言事件保存后应为 waiting_classification，实际 %q", event.Status)
+		}
+		return guestbook, event
+	}
+
+	// 15a. 留言已被审核通过 → 事件转 ready 并产生可发送的投递。
+	approvedGuestbook, _ := newRecoverGuestbook(
+		"恢复测试留言人-"+notifyTestSuffix(), "审核通过后应恢复投递", 1,
+	)
+	// 断言库里的当前状态（内存结构体不会被这次 UPDATE 刷新）：worker 读的就是这一份。
+	var approvedStatus model.Guestbook
+	if err := w.DB.Where("id = ?", approvedGuestbook.Id).Take(&approvedStatus).Error; err != nil {
+		t.Fatalf("读取恢复测试留言失败：%v", err)
+	}
+	if approvedStatus.Status != 1 {
+		t.Fatalf("留言 %d 状态应已改为 1，实际 %d", approvedGuestbook.Id, approvedStatus.Status)
+	}
+	adapter := newNotifyFakeAdapter()
+	notifyTestRunCycle(t, w, notifyTestOptions(adapter, nil))
+
+	approvedEvent := notifyTestLoadEvent(t, w, NotifyEventGuestbookCreated, strconv.FormatUint(uint64(approvedGuestbook.Id), 10))
+	if approvedEvent.Status != NotifyEventStatusReady {
+		t.Fatalf("留言审核通过后事件应由 worker 恢复为 ready，实际 %q（LastError=%q）", approvedEvent.Status, approvedEvent.LastError)
+	}
+	approvedDeliveries := notifyTestDeliveries(t, w, approvedEvent.Id, rule.Id)
+	if len(approvedDeliveries) != 1 {
+		t.Fatalf("恢复为 ready 后应扇出 1 条投递，实际 %d 条", len(approvedDeliveries))
+	}
+	switch approvedDeliveries[0].Status {
+	case NotifyDeliveryStatusSent, NotifyDeliveryStatusPending, NotifyDeliveryStatusSending:
+	default:
+		t.Fatalf("恢复出的投递应处于已发送/待发送状态，实际 %q（LastError=%q）",
+			approvedDeliveries[0].Status, approvedDeliveries[0].LastError)
+	}
+
+	// 15b. 留言被标为垃圾 → 事件 cancelled，且不产生投递。
+	spamGuestbook, _ := newRecoverGuestbook(
+		"恢复测试垃圾留言人-"+notifyTestSuffix(), "买量加微信", 2,
+	)
+	notifyTestRunCycle(t, w, notifyTestOptions(adapter, nil))
+
+	spamEvent := notifyTestLoadEvent(t, w, NotifyEventGuestbookCreated, strconv.FormatUint(uint64(spamGuestbook.Id), 10))
+	if spamEvent.Status != NotifyEventStatusCancelled {
+		t.Fatalf("留言被标为垃圾后事件应为 cancelled，实际 %q", spamEvent.Status)
+	}
+	if got := len(notifyTestDeliveries(t, w, spamEvent.Id, rule.Id)); got != 0 {
+		t.Fatalf("垃圾留言的恢复不得产生投递，实际 %d 条", got)
 	}
 }

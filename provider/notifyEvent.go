@@ -225,10 +225,21 @@ func (w *Website) ProcessGuestbookNotification(gb *model.Guestbook, spamStatus i
 		tx.Rollback()
 		return
 	}
-	if err := tx.Model(&model.NotificationEvent{}).Where("id = ?", event.Id).
-		Update("status", NotifyEventStatusReady).Error; err != nil {
+	// 转 ready 必须是条件更新（镜像 notifyWorker.markNotificationEventReady）：
+	// 从上面的读到这里的写之间，事件可能已被 controller 的另一个 goroutine 或 worker 恢复推进。
+	// 只按 id 更新会让双方都继续扇出——uk_delivery_hash 只是兜住了重复行，
+	// 「谁是赢家」变得不可观测，最后一个提交的事务还会覆盖对方的 last_error。
+	res := tx.Model(&model.NotificationEvent{}).
+		Where("id = ? AND status = ?", event.Id, NotifyEventStatusWaitingClassification).
+		Updates(map[string]any{"status": NotifyEventStatusReady, "last_error": ""})
+	if res.Error != nil {
 		tx.Rollback()
-		log.Printf("[notify] 站点 %d 留言事件 %d 转 ready 失败：%s", w.Id, event.Id, sanitizePlatformMessage(err.Error()))
+		log.Printf("[notify] 站点 %d 留言事件 %d 转 ready 失败：%s", w.Id, event.Id, sanitizePlatformMessage(res.Error.Error()))
+		return
+	}
+	if res.RowsAffected != 1 {
+		// 已有赢家完成迁移：直接退出，不重复扇出。
+		tx.Rollback()
 		return
 	}
 	event.Status = NotifyEventStatusReady

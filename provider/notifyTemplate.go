@@ -139,6 +139,9 @@ func renderNotificationTemplateText(template string, ctx pongo2.Context) (string
 	if template == "" {
 		return "", nil
 	}
+	// nil loader 是刻意的：没有 loader 就没有文件系统入口，词法白名单漏掉的
+	// include/extends/import 也读不到文件。反过来说，别给这个 set 换成带 loader 的实现，
+	// 也别把带 loader 的标签（如项目自定义的 system）放进白名单——那会让模板能读任意文件。
 	set := pongo2.NewSet("notify", nil)
 	for _, tag := range notifyBannedPongoTags {
 		_ = set.BanTag(tag)
@@ -164,6 +167,9 @@ func notificationTemplateContext(eventType, payloadJSON, targetKind, siteName, s
 	}
 
 	occurred := notificationPayloadTime(eventType, payload)
+	// occurred_time 是唯一的非原始类型：pongo2 的 date/time 过滤器要求 time.Time，
+	// 传字符串会在过滤器里报类型错误。occurred_at 是它的预格式化副本（"2006-01-02 15:04:05"），
+	// 供不需要 date 过滤器的模板直接用；其余键一律 string，不放任何模型对象。
 	ctx := pongo2.Context{
 		"site_name":     sanitizeNotificationValue(siteName, notifyTemplateFieldMaxRunes),
 		"site_url":      sanitizeNotificationValue(siteURL, notifyTemplateFieldMaxRunes),

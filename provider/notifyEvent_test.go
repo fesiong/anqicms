@@ -406,6 +406,35 @@ func TestGuestbookEventWaitsForClassification(t *testing.T) {
 	if got := len(notifyTestDeliveries(t, w, spamEvent.Id, rule.Id)); got != 0 {
 		t.Fatalf("垃圾留言不得产生投递，实际 %d 条", got)
 	}
+
+	// 检测未完成（AkismetOutcomeFailed，且留言非垃圾）：必须停在待分类、留下静态原因、零投递。
+	// 与「垃圾留言」分支的区别是状态不同：这里不得被当成 ready 或 cancelled。
+	pending := &model.Guestbook{
+		UserName: "检测失败留言人-" + notifyTestSuffix(),
+		Content:  "检测服务不可用时的正常留言",
+	}
+	if err := w.SaveGuestbookWithNotification(pending); err != nil {
+		t.Fatalf("保存检测失败留言失败：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := w.DB.Unscoped().Where("id = ?", pending.Id).Delete(&model.Guestbook{}).Error; err != nil {
+			t.Logf("清理检测失败留言 %d 失败：%v", pending.Id, err)
+		}
+	})
+	pendingKey := strconv.FormatUint(uint64(pending.Id), 10)
+	cleanupNotifyBusinessKeys(t, w, NotifyEventGuestbookCreated+":"+pendingKey)
+
+	w.ProcessGuestbookNotification(pending, 1, AkismetOutcomeFailed)
+	pendingEvent := notifyTestLoadEvent(t, w, NotifyEventGuestbookCreated, pendingKey)
+	if pendingEvent.Status != NotifyEventStatusWaitingClassification {
+		t.Fatalf("垃圾检测未完成时事件必须停在 waiting_classification，实际 %q", pendingEvent.Status)
+	}
+	if pendingEvent.LastError == "" {
+		t.Fatal("垃圾检测未完成时必须记录静态原因，便于后台排查")
+	}
+	if got := len(notifyTestDeliveries(t, w, pendingEvent.Id, rule.Id)); got != 0 {
+		t.Fatalf("垃圾检测未完成时不得产生投递，实际 %d 条", got)
+	}
 }
 
 // ============================================================
@@ -479,6 +508,13 @@ func TestSuccessPaidOrderEmitsEventOnce(t *testing.T) {
 	first := *order
 	second := *order
 
+	// order_count 只在状态迁移赢家分支之后累加（SuccessPaidOrder 里 RowsAffected == 1 之后），
+	// 是「赢家独占副作用」的可观测证据：事件行数被 uk_event_key_hash 兜住，删掉赢家判断也不会变红。
+	var beforeOrderCount int64
+	if err := w.DB.Model(&model.User{}).Where("id = ?", user.Id).Pluck("order_count", &beforeOrderCount).Error; err != nil {
+		t.Fatalf("读取用户下单数失败：%v", err)
+	}
+
 	start := make(chan struct{})
 	errs := make([]error, 2)
 	var wg sync.WaitGroup
@@ -511,6 +547,17 @@ func TestSuccessPaidOrderEmitsEventOnce(t *testing.T) {
 	}
 	if count != 1 {
 		t.Fatalf("并发支付只允许产生 1 条 order.paid 事件，实际 %d 条", count)
+	}
+
+	// 赢家独占的副作用：只有 RowsAffected == 1 的那次调用会执行到 order_count 累加。
+	// 这里断言「恰好 +1」而不是「>= 1」：删掉赢家判断后两次调用都会累加，delta 变 2。
+	var afterOrderCount int64
+	if err := w.DB.Model(&model.User{}).Where("id = ?", user.Id).Pluck("order_count", &afterOrderCount).Error; err != nil {
+		t.Fatalf("读取用户下单数失败：%v", err)
+	}
+	if delta := afterOrderCount - beforeOrderCount; delta != 1 {
+		t.Fatalf("并发支付只允许赢家累加用户下单数：期望 +1，实际 +%d（之前 %d，之后 %d）",
+			delta, beforeOrderCount, afterOrderCount)
 	}
 }
 
