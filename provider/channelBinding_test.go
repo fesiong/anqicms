@@ -282,18 +282,24 @@ func TestBindingTokenConcurrentConsume(t *testing.T) {
 	// 否则调度器可能把前几个 goroutine 整串执行完，测试退化成「顺序争抢」，
 	// 掩盖不了「先读后写」这类竞态。
 	start := make(chan struct{})
+	var ready sync.WaitGroup
 	var successes int64
 	var wg sync.WaitGroup
+	ready.Add(10)
 	for i := 0; i < 10; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			// 先报到再等放行：只 close(start) 不保证其它 goroutine 已经调度到 <-start，
+			// 前几个可能整串跑完，测试就退化成顺序争抢。
+			ready.Done()
 			<-start
 			if _, consumeErr := w.ConsumeBindingToken(plain, ident); consumeErr == nil {
 				atomic.AddInt64(&successes, 1)
 			}
 		}()
 	}
+	ready.Wait()
 	close(start)
 	wg.Wait()
 
@@ -578,6 +584,30 @@ func TestBindingTokenRebindAfterRevoke(t *testing.T) {
 	}
 	if rebound.Revision != revoked.Revision+1 {
 		t.Fatalf("换绑应让 revision 再递增 1：撤销后 %d，换绑后 %d", revoked.Revision, rebound.Revision)
+	}
+
+	// 以上断言读的是返回值，而返回值由 ConsumeBindingToken 在复活分支手工补齐内存
+	// 字段（existing.AdminId = token.AdminId 等）。Updates 映射只要漏掉 admin_id 之类的
+	// 键，RowsAffected 仍为 1、返回值依旧正确，库里却还指着旧管理员。所以换绑结果必须
+	// 按 id 从库里重读一条来断言，返回值断言只是补充。
+	var reboundStored model.ChannelBinding
+	if err := w.DB.Where("id = ?", rebound.Id).Take(&reboundStored).Error; err != nil {
+		t.Fatalf("重读换绑后的绑定失败：%v", err)
+	}
+	if reboundStored.Id != first.Id {
+		t.Fatalf("库里换绑应落在原绑定行 id=%d，实际 %d", first.Id, reboundStored.Id)
+	}
+	if reboundStored.AdminId != adminB.Id {
+		t.Fatalf("库里换绑后 admin_id 应为 B(%d)，实际 %d（返回值正确不代表落库正确）", adminB.Id, reboundStored.AdminId)
+	}
+	if reboundStored.RevokedAt != 0 {
+		t.Fatalf("库里换绑后 revoked_at 应为 0，实际 %d", reboundStored.RevokedAt)
+	}
+	if reboundStored.Revision != revoked.Revision+1 {
+		t.Fatalf("库里换绑后 revision 应为 %d，实际 %d", revoked.Revision+1, reboundStored.Revision)
+	}
+	if reboundStored.PlatformUserId != ident.UserId || reboundStored.OrgId != ident.OrganizationId {
+		t.Fatalf("库里换绑后平台身份字段不对：user=%q org=%q", reboundStored.PlatformUserId, reboundStored.OrgId)
 	}
 
 	var target model.ChannelTarget

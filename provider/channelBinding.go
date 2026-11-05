@@ -168,6 +168,15 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 	tokenHash := hashBindingToken(plain)
 
 	var binding *model.ChannelBinding
+	// 闭包内的失败要带「给调用方看的静态文案」，而 Transaction 还会原样返回
+	// Begin/Commit/回滚层的驱动原始错误（如「Deadlock found…」、连接重置），
+	// 两者在 error 值上无法区分。闭包内一律走 fail() 登记，出口据此分流：
+	// 只有经 fail() 产生的错误允许直出，其余一律换成静态串。
+	var txFailure error
+	fail := func(msg string) error {
+		txFailure = errors.New(msg)
+		return txFailure
+	}
 	err := w.DB.Transaction(func(tx *gorm.DB) error {
 		now := time.Now().Unix()
 		// 条件更新是并发消费的唯一闸门：只有一个事务能让 RowsAffected == 1。
@@ -175,44 +184,49 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 			Where("token_hash = ? AND consumed_at = 0 AND expires_at > ?", tokenHash, now).
 			Update("consumed_at", now)
 		if res.Error != nil {
-			return errors.New("消费绑定令牌失败")
+			return fail("消费绑定令牌失败")
 		}
 		if res.RowsAffected != 1 {
-			return errors.New("绑定令牌无效或已过期")
+			return fail("绑定令牌无效或已过期")
 		}
 
 		var token model.ChannelBindingToken
 		if txErr := tx.Where("token_hash = ?", tokenHash).Take(&token).Error; txErr != nil {
-			return errors.New("绑定令牌无效或已过期")
+			return fail("绑定令牌无效或已过期")
 		}
 		if token.SiteId != w.Id {
-			return errors.New("绑定令牌不属于当前站点")
+			return fail("绑定令牌不属于当前站点")
 		}
 		if token.ChannelId != ident.ChannelId {
-			return errors.New("绑定令牌与当前渠道不匹配")
+			return fail("绑定令牌与当前渠道不匹配")
 		}
 
 		// 令牌有效不等于生成者现在仍可用：TTL 有一小时，期间管理员可能已被停用。
 		// 生成时（CreateBindingToken）与撤销时都只认 Status == 1，消费侧必须同口径，
 		// 否则已停用管理员的私聊目标会以 approved=1 落库，T8 之后仍会继续投递。
 		// 放在事务内是为了让失败连带回滚令牌消费，管理员恢复后同一令牌仍可用。
-		tokenAdmin, adminErr := w.GetAdminInfoById(token.AdminId)
-		if adminErr != nil || tokenAdmin == nil || tokenAdmin.Status != 1 {
-			return errors.New("管理员不存在或已被禁用")
+		// 用 tx 读 admins 表而不是另开连接：读的是与已锁 token 行无交集的另一张表，
+		// 不会自锁，但不必为一个校验再占一条连接（并发消费时少一轮连接争用）。
+		var tokenAdmin model.Admin
+		if txErr := tx.Where("id = ?", token.AdminId).Take(&tokenAdmin).Error; txErr != nil {
+			return fail("管理员不存在或已被禁用")
+		}
+		if tokenAdmin.Status != 1 {
+			return fail("管理员不存在或已被禁用")
 		}
 
 		var channel model.MessageChannel
 		if txErr := tx.Where("id = ?", token.ChannelId).Take(&channel).Error; txErr != nil {
-			return errors.New("渠道不存在")
+			return fail("渠道不存在")
 		}
 		if channel.SiteId != w.Id {
-			return errors.New("渠道不存在")
+			return fail("渠道不存在")
 		}
 		if strings.TrimSpace(channel.AppId) != appId {
-			return errors.New("绑定令牌与当前平台应用不匹配")
+			return fail("绑定令牌与当前平台应用不匹配")
 		}
 		if strings.TrimSpace(channel.OrgId) != orgId {
-			return errors.New("绑定令牌与当前组织不匹配")
+			return fail("绑定令牌与当前组织不匹配")
 		}
 
 		identityHash := bindingIdentityDigest(w.Id, channel.Id, orgId, userId)
@@ -222,10 +236,10 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 		if txErr := tx.Model(&model.ChannelBinding{}).
 			Where("identity_hash = ? AND revoked_at = 0", identityHash).
 			Count(&sameIdentity).Error; txErr != nil {
-			return errors.New("读取已有绑定失败")
+			return fail("读取已有绑定失败")
 		}
 		if sameIdentity > 0 {
-			return errors.New("该平台身份已绑定，请先解绑后再试")
+			return fail("该平台身份已绑定，请先解绑后再试")
 		}
 
 		// R13：同一管理员在同一渠道已有有效绑定 → 拒绝并提示先解绑；绝不覆盖。
@@ -233,10 +247,10 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 		if txErr := tx.Model(&model.ChannelBinding{}).
 			Where("site_id = ? AND channel_id = ? AND admin_id = ? AND revoked_at = 0", w.Id, channel.Id, token.AdminId).
 			Count(&sameAdmin).Error; txErr != nil {
-			return errors.New("读取已有绑定失败")
+			return fail("读取已有绑定失败")
 		}
 		if sameAdmin > 0 {
-			return errors.New("该管理员在当前渠道已有绑定，请先解绑后再试")
+			return fail("该管理员在当前渠道已有绑定，请先解绑后再试")
 		}
 
 		// uk_identity_hash 覆盖已撤销的历史行，所以「撤销后换绑」不能直接插新行，
@@ -255,11 +269,11 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 					"revision":         gorm.Expr("revision + 1"),
 				})
 			if res.Error != nil {
-				return errors.New("保存绑定失败")
+				return fail("保存绑定失败")
 			}
 			if res.RowsAffected != 1 {
 				// 并发下被别人抢先恢复成了有效绑定：按冲突处理，绝不覆盖。
-				return errors.New("该平台身份已绑定，请先解绑后再试")
+				return fail("该平台身份已绑定，请先解绑后再试")
 			}
 			existing.AdminId = token.AdminId
 			existing.OrgId = orgId
@@ -280,10 +294,10 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 				Revision:       1,
 			}
 			if txErr := tx.Create(binding).Error; txErr != nil {
-				return errors.New("保存绑定失败")
+				return fail("保存绑定失败")
 			}
 		default:
-			return errors.New("读取已有绑定失败")
+			return fail("读取已有绑定失败")
 		}
 
 		// 私聊目标同样有唯一摘要：撤销后重新绑定同一个人会撞上旧行，按摘要复用并重新批准。
@@ -298,7 +312,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 					"binding_id": binding.Id,
 					"approved":   1,
 				}).Error; txErr != nil {
-				return errors.New("保存私聊目标失败")
+				return fail("保存私聊目标失败")
 			}
 		case errors.Is(targetErr, gorm.ErrRecordNotFound):
 			target = model.ChannelTarget{
@@ -311,16 +325,21 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 				TargetHash:       targetHash,
 			}
 			if txErr := tx.Create(&target).Error; txErr != nil {
-				return errors.New("保存私聊目标失败")
+				return fail("保存私聊目标失败")
 			}
 		default:
-			return errors.New("读取已有私聊目标失败")
+			return fail("读取已有私聊目标失败")
 		}
 
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		// 闭包经 fail() 产生的错误是给调用方看的静态串，原样返回；
+		// 其余（Begin/Commit/回滚层的驱动错误）一律换成静态串，不透出原文。
+		if txFailure != nil {
+			return nil, txFailure
+		}
+		return nil, errors.New("消费绑定令牌失败")
 	}
 
 	return binding, nil

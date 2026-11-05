@@ -30,15 +30,13 @@ const (
 	ApprovalStatusCancelled = "cancelled"
 )
 
-// 入站任务状态。状态机：pending → processing → done；
-// pending/processing 也可到 cancelled（绑定撤销、会话代次切换）。
+// 入站任务状态。状态机：pending → cancelled（绑定撤销、会话代次切换）。
 // 与审批状态同理：后续任务只允许引用这些常量，避免两处各写一份字符串漂移。
-// 只有本任务（撤销时失效排队任务）与已知规格用到的取值在这里定义，不做穷举占位。
+// 只登记本任务（撤销时失效排队任务）真正用到的取值：processing/done 等执行期
+// 状态由 T4 落地状态机时自行登记，这里不做占位猜测。
 const (
-	InboxStatusPending    = "pending"
-	InboxStatusProcessing = "processing"
-	InboxStatusDone       = "done"
-	InboxStatusCancelled  = "cancelled"
+	InboxStatusPending   = "pending"
+	InboxStatusCancelled = "cancelled"
 )
 
 // appIdentityFieldSeparator 是应用身份拼接用的分隔符（ASCII Unit Separator）。
