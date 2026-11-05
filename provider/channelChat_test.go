@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -1398,8 +1399,348 @@ func TestInteractionResultMarkedUntrusted(t *testing.T) {
 }
 
 // ============================================================
-// Minor：maxRounds 截断必须可识别
+// R55：批准后执行（不调用模型，只执行凭据指向的那一次调用）
 // ============================================================
+
+// newApprovalRow 建一条真实审批行（R34 口径的字段），供「批准后执行」用例使用。
+// 清理按 public_id + site_id 精确删除。
+func (e *channelTurnTestEnv) newApprovalRow(t *testing.T, tool, argsJSON, status string, expiresAt int64) *model.ChannelApproval {
+	t.Helper()
+	argsHash := ChannelArgsHash(argsJSON)
+	if argsHash == "" {
+		t.Fatalf("测试夹具参数必须是合法 JSON，实际：%q", argsJSON)
+	}
+	row := &model.ChannelApproval{
+		SiteId:         e.w.Id,
+		BindingId:      e.binding.Id,
+		Tool:           tool,
+		Action:         actionOfArgsJSON(argsJSON),
+		CanonicalArgs:  channelCanonicalArgs(argsJSON),
+		ArgsHash:       argsHash,
+		ExpiresAt:      expiresAt,
+		PolicyRevision: e.channel.Revision,
+		Status:         status,
+		PublicId:       "appr_" + channelPermSuffix(),
+	}
+	if err := e.w.DB.Create(row).Error; err != nil {
+		t.Fatalf("创建审批行失败：%v", err)
+	}
+	t.Cleanup(func() {
+		if err := e.w.DB.Where("id = ? AND site_id = ?", row.Id, e.w.Id).
+			Delete(&model.ChannelApproval{}).Error; err != nil {
+			t.Logf("清理审批行 %d 失败：%v", row.Id, err)
+		}
+	})
+	return row
+}
+
+// countCapExecutions 把某个 cap handler 换成「计数 + 真实执行」的包装，
+// 既能证明执行了，又能证明只执行了一次。
+func countCapExecutions(t *testing.T, svc *AiChatService, capName string) *int {
+	t.Helper()
+	orig, ok := svc.capHandlers[capName]
+	if !ok || orig == nil {
+		t.Fatalf("能力 %s 未装配，无法做执行计数", capName)
+	}
+	count := 0
+	svc.capHandlers[capName] = func(ctx context.Context, args string) (string, error) {
+		count++
+		return orig(ctx, args)
+	}
+	return &count
+}
+
+func TestChannelApprovalGrantExecutesOnce(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"api"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		// 正常轮次请求这个动作会被判 confirm（正是 T7 建审批单的场景）。
+		policy:      `{"intents":{"api":{"schema":"confirm"}}}`,
+		whitelist:   []string{"api"},
+		permissions: []string{"/"},
+	})
+	ctx := context.Background()
+	chatId := "grant-chat-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	const argsJSON = `{"action":"schema","path":"/system/api/archive/list"}`
+	row := env.newApprovalRow(t, "api", argsJSON, model.ApprovalStatusApproved, time.Now().Add(10*time.Minute).Unix())
+	executed := countCapExecutions(t, env.svc, capAPISchema)
+
+	req := env.request(chatId, "确认执行", 1, false)
+	// 参数键序故意与落库时不同：执行器必须用同一套规范化后再比对摘要。
+	req.Approval = &ChannelApprovalGrant{
+		ApprovalId: row.PublicId,
+		ToolName:   "api",
+		ArgsJSON:   `{"path":"/system/api/archive/list","action":"schema"}`,
+	}
+	m := &scriptedChannelModel{}
+	res, err := env.svc.runChannelTurn(ctx, req, scriptedChannelFactory(m))
+	if err != nil {
+		t.Fatalf("审批通过后必须执行，实际错误：%v", err)
+	}
+	if m.calls() != 0 {
+		t.Fatalf("批准后执行不得调用模型，实际调用 %d 次", m.calls())
+	}
+	if *executed != 1 {
+		t.Fatalf("批准后必须且只能执行 1 次，实际 %d 次", *executed)
+	}
+	if strings.TrimSpace(res.Reply) == "" {
+		t.Fatalf("必须返回执行结果，实际：%+v", res)
+	}
+	// 结果同时写进私有历史，且 assistant(tool_calls) 与 tool 结果成对。
+	history := channelHistoryMessages(res.SessionHash)
+	callIds, answered := channelHistoryPairs(t, history)
+	if len(callIds) != 1 {
+		t.Fatalf("批准执行必须落一条 assistant(tool_calls)，实际：%+v", history)
+	}
+	for _, id := range callIds {
+		content, ok := answered[id]
+		if !ok {
+			t.Fatalf("tool_call %s 缺少对应 tool 结果，实际：%+v", id, history)
+		}
+		if content != res.Reply {
+			t.Fatalf("历史里的工具结果应与返回结果一致，历史：%q / 返回：%q", content, res.Reply)
+		}
+	}
+}
+
+func TestChannelApprovalGrantRejectsMismatchedArgs(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"api"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		policy:      `{"intents":{"api":{"schema":"confirm"}}}`,
+		whitelist:   []string{"api"},
+		permissions: []string{"/"},
+	})
+	ctx := context.Background()
+	chatId := "grant-mismatch-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	// 审批单批准的是 archive/list，重放时换成 detail：参数摘要对不上。
+	row := env.newApprovalRow(t, "api", `{"action":"schema","path":"/system/api/archive/list"}`,
+		model.ApprovalStatusApproved, time.Now().Add(10*time.Minute).Unix())
+	executed := countCapExecutions(t, env.svc, capAPISchema)
+
+	req := env.request(chatId, "确认执行", 1, false)
+	req.Approval = &ChannelApprovalGrant{
+		ApprovalId: row.PublicId,
+		ToolName:   "api",
+		ArgsJSON:   `{"action":"schema","path":"/system/api/archive/detail"}`,
+	}
+	m := &scriptedChannelModel{}
+	res, err := env.svc.runChannelTurn(ctx, req, scriptedChannelFactory(m))
+	if !errors.Is(err, ErrChannelApprovalInvalid) {
+		t.Fatalf("参数与审批不符必须返回 ErrChannelApprovalInvalid，实际：%v", err)
+	}
+	if *executed != 0 {
+		t.Fatalf("凭据无效时不得执行任何工具，实际执行 %d 次", *executed)
+	}
+	if m.calls() != 0 {
+		t.Fatalf("凭据无效时不得调用模型，实际 %d 次", m.calls())
+	}
+	if strings.Contains(res.Reply, "archive/detail") || strings.Contains(res.Reply, "params") {
+		t.Fatalf("拒绝回执不得带出参数或结果正文，实际：%q", res.Reply)
+	}
+
+	// 审批凭据为空同样必须拒绝（否则等于「不带凭据就跳过 confirm」）。
+	req.Approval = &ChannelApprovalGrant{ToolName: "api", ArgsJSON: `{"action":"schema","path":"/system/api/archive/list"}`}
+	if _, err := env.svc.runChannelTurn(ctx, req, scriptedChannelFactory(m)); !errors.Is(err, ErrChannelApprovalInvalid) {
+		t.Fatalf("缺少审批标识必须返回 ErrChannelApprovalInvalid，实际：%v", err)
+	}
+	if *executed != 0 {
+		t.Fatalf("缺少审批标识时不得执行任何工具，实际执行 %d 次", *executed)
+	}
+	// 工具不在可见集合内也必须拒绝。
+	req.Approval = &ChannelApprovalGrant{ApprovalId: row.PublicId, ToolName: "content_article", ArgsJSON: argsForList()}
+	if _, err := env.svc.runChannelTurn(ctx, req, scriptedChannelFactory(m)); !errors.Is(err, ErrChannelToolNotVisible) {
+		t.Fatalf("不可见工具必须返回 ErrChannelToolNotVisible，实际：%v", err)
+	}
+	if m.calls() != 0 {
+		t.Fatalf("拒绝路径不得调用模型，实际 %d 次", m.calls())
+	}
+}
+
+func argsForList() string { return `{"action":"list","page":1}` }
+
+// ============================================================
+// R56：pending 也必须保持消息序列完整
+// ============================================================
+
+func TestChannelPendingKeepsMessageSequence(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"seo_keyword"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		policy:      `{"intents":{"seo_keyword":{"*":"confirm"}}}`,
+		whitelist:   []string{"seo_keyword"},
+		permissions: []string{"/"},
+	})
+	ctx := context.Background()
+	chatId := "pending-seq-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	executed := 0
+	for name := range env.svc.capHandlers {
+		env.svc.capHandlers[name] = func(ctx context.Context, args string) (string, error) {
+			executed++
+			return "意外执行", nil
+		}
+	}
+
+	// 一轮 2 个 tool_call：首个触发 confirm → 本轮中止，第二个既没执行也要有占位结果。
+	m := &scriptedChannelModel{script: func(round int, in []*schema.Message) *schema.Message {
+		return schema.AssistantMessage("", []schema.ToolCall{
+			{
+				ID: "p1-ask", Type: "function",
+				Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"action":"list","page":1}`},
+			},
+			{
+				ID: "p1-rest", Type: "function",
+				Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"action":"list","page":2}`},
+			},
+		})
+	}}
+	res, err := env.svc.runChannelTurn(ctx, env.request(chatId, "列两个页", 1, false), scriptedChannelFactory(m))
+	if err != nil {
+		t.Fatalf("confirm 应返回待确认结果而不是错误，实际：%v", err)
+	}
+	if res.Pending == nil {
+		t.Fatalf("必须返回待确认字段，实际：%+v", res)
+	}
+	if m.calls() != 1 {
+		t.Fatalf("待确认后本轮必须立即结束，实际模型调用 %d 次", m.calls())
+	}
+	if executed != 0 {
+		t.Fatalf("待确认的调用与同批其余调用都不得执行，实际执行 %d 次", executed)
+	}
+
+	history := channelHistoryMessages(res.SessionHash)
+	callIds, answered := channelHistoryPairs(t, history)
+	if len(callIds) != 2 {
+		t.Fatalf("assistant 消息应带 2 个 tool_call，实际：%+v", history)
+	}
+	toolMsgs := 0
+	for _, msg := range history {
+		if msg.Role == "tool" {
+			toolMsgs++
+		}
+	}
+	if toolMsgs != 2 {
+		t.Fatalf("每个 tool_call 都必须有 tool 结果（1 条待确认 + 1 条占位），实际 %d 条：%+v", toolMsgs, history)
+	}
+	for _, id := range callIds {
+		if _, ok := answered[id]; !ok {
+			t.Fatalf("tool_call %s 缺少对应 tool 消息，历史：%+v", id, history)
+		}
+	}
+	if _, ok := answered["p1-ask"]; !ok {
+		t.Fatalf("待确认的调用必须有 tool 消息，实际：%+v", history)
+	}
+	if content, ok := answered["p1-rest"]; !ok || content != channelPendingPlaceholderText {
+		t.Fatalf("未执行的调用必须落占位结果 %q，实际：%q（%+v）", channelPendingPlaceholderText, content, history)
+	}
+}
+
+// channelHistoryPairs 收集历史里所有 assistant(tool_calls) 的调用 ID，
+// 以及每个 tool_call_id 对应的 tool 消息内容。断言用，不参与生产逻辑。
+func channelHistoryPairs(t *testing.T, history []ChatMessage) ([]string, map[string]string) {
+	t.Helper()
+	callIds := make([]string, 0, 4)
+	answered := make(map[string]string, 4)
+	for _, msg := range history {
+		switch msg.Role {
+		case "assistant":
+			if strings.TrimSpace(msg.ToolCalls) == "" {
+				continue
+			}
+			var calls []schema.ToolCall
+			if err := json.Unmarshal([]byte(msg.ToolCalls), &calls); err != nil {
+				t.Fatalf("历史里的 tool_calls 无法解析：%v（%s）", err, msg.ToolCalls)
+			}
+			for _, call := range calls {
+				callIds = append(callIds, call.ID)
+			}
+		case "tool":
+			answered[msg.ToolCallID] = msg.Content
+		}
+	}
+	return callIds, answered
+}
+
+// ============================================================
+// R57：历史裁剪必须按 assistant + 全部 tool 结果整组丢弃
+// ============================================================
+
+func TestChannelHistoryTrimKeepsToolGroups(t *testing.T) {
+	sessionHash := "trim-session-" + channelPermSuffix()
+	t.Cleanup(func() {
+		channelChatHistories.mu.Lock()
+		delete(channelChatHistories.entries, sessionHash)
+		channelChatHistories.mu.Unlock()
+	})
+
+	total := 0
+	for i := 0; i < 68; i++ {
+		callId := fmt.Sprintf("trim-call-%d", i)
+		callsJSON, err := json.Marshal([]schema.ToolCall{{
+			ID:       callId,
+			Type:     "function",
+			Function: schema.FunctionCall{Name: "seo_keyword", Arguments: argsForList()},
+		}})
+		if err != nil {
+			t.Fatalf("序列化 tool_calls 失败：%v", err)
+		}
+		channelHistoryAppend(sessionHash, ChatMessage{Role: "user", Content: fmt.Sprintf("第 %d 个问题", i)})
+		channelHistoryAppend(sessionHash, ChatMessage{Role: "assistant", ToolCalls: string(callsJSON)})
+		channelHistoryAppend(sessionHash, ChatMessage{Role: "tool", Content: fmt.Sprintf("结果 %d", i), ToolCallID: callId, ToolName: "seo_keyword"})
+		total += 3
+	}
+
+	history := channelHistoryMessages(sessionHash)
+	if len(history) >= total {
+		t.Fatalf("超过上限的历史必须被裁剪，实际 %d 条（追加 %d 条）", len(history), total)
+	}
+	if len(history) > channelMaxHistoryMessages {
+		t.Fatalf("裁剪后不得超过上限 %d，实际 %d 条", channelMaxHistoryMessages, len(history))
+	}
+	if len(history) == 0 {
+		t.Fatal("裁剪不应把历史清空")
+	}
+	if history[0].Role == "tool" {
+		t.Fatalf("裁剪后首条不得是 tool 消息（会切开调用对），实际首条：%+v", history[0])
+	}
+
+	// 先收集所有 tool 结果，再逐个核对 assistant 的每个 tool_call 都有结果。
+	answered := make(map[string]bool, len(history))
+	for _, msg := range history {
+		if msg.Role == "tool" {
+			answered[msg.ToolCallID] = true
+		}
+	}
+	declared := make(map[string]bool, len(history))
+	for _, msg := range history {
+		if msg.Role != "assistant" || strings.TrimSpace(msg.ToolCalls) == "" {
+			continue
+		}
+		var calls []schema.ToolCall
+		if err := json.Unmarshal([]byte(msg.ToolCalls), &calls); err != nil {
+			t.Fatalf("历史里的 tool_calls 无法解析：%v", err)
+		}
+		for _, call := range calls {
+			declared[call.ID] = true
+			if !answered[call.ID] {
+				t.Fatalf("tool_call %s 缺少对应的 tool 结果，历史：%+v", call.ID, history)
+			}
+		}
+	}
+	// 反向：保留的 tool 消息必须能找到它的 assistant 调用（首条 tool 已被上面的断言拦住，
+	// 这里再按 id 全量核对一遍，防止组中间被切开）。
+	for _, msg := range history {
+		if msg.Role == "tool" && !declared[msg.ToolCallID] {
+			t.Fatalf("保留的 tool 消息 %s 没有对应的 assistant 调用，历史：%+v", msg.ToolCallID, history)
+		}
+	}
+}
 
 func TestChannelTurnTruncationIsSignalled(t *testing.T) {
 	w := channelChatTestSite(t)
