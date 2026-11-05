@@ -29,6 +29,7 @@ require (
 	github.com/jinzhu/now v1.1.5
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/kataras/iris/v12 v12.2.11
+	github.com/larksuite/oapi-sdk-go/v3 v3.12.2
 	github.com/lib/pq v1.10.9
 	github.com/matm/go-nowpayments v1.0.4
 	github.com/medivhzhan/weapp/v3 v3.8.4
@@ -37,6 +38,7 @@ require (
 	github.com/modelcontextprotocol/go-sdk v1.6.1
 	github.com/mojocn/base64Captcha v1.3.8
 	github.com/mozillazg/go-pinyin v0.21.0
+	github.com/open-dingtalk/dingtalk-stream-sdk-go v0.9.0
 	github.com/parnurzeal/gorequest v0.2.17
 	github.com/pkg/sftp v1.13.10
 	github.com/qiniu/go-sdk/v7 v7.25.5
@@ -112,6 +114,7 @@ require (
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
 	github.com/golang/protobuf v1.5.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
