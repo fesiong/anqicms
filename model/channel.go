@@ -203,7 +203,7 @@ type ChannelApproval struct {
 	Tool           string `json:"tool" gorm:"column:tool;type:varchar(64) not null;default:'';index:idx_tool;comment:工具/意图名"`
 	Action         string `json:"action" gorm:"column:action;type:varchar(64) not null;default:'';comment:动作名"`
 	CanonicalArgs  string `json:"canonical_args" gorm:"column:canonical_args;type:text;comment:规范化参数JSON"`
-	ArgsHash       string `json:"args_hash" gorm:"column:args_hash;type:char(64) not null;default:'';comment:规范化参数SHA256"`
+	ArgsHash       string `json:"-" gorm:"column:args_hash;type:char(64) not null;default:'';comment:规范化参数SHA256(不序列化)"`
 	ExpiresAt      int64  `json:"expires_at" gorm:"column:expires_at;type:bigint(20) not null;default:0;index:idx_expires_at;comment:过期时间戳(默认10分钟)"`
 	PolicyRevision int    `json:"policy_revision" gorm:"column:policy_revision;type:int(10) not null;default:0;comment:确认时的渠道策略修订号"`
 	Status         string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'pending';index:idx_status;comment:状态 pending/approved/executing/succeeded/failed/unknown/rejected/expired/cancelled"`

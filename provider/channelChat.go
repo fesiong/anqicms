@@ -112,7 +112,10 @@ type ChannelApprovalGrant struct {
 // 调用方（T7）据此创建审批单并回确认卡片，管理员批准后再带审批凭据重新发起。
 type ChannelPendingConfirmation struct {
 	ToolName string
-	Action   string
+	// Action 是从**原始参数**解析出的动作，解析不出就是空串。
+	// 空 action 必须原样落库：审批行的 action 是身份字段，策略查找里的 "*" 兜底
+	// 不属于审批身份——把空串写成 "*" 就等于「批准了该工具的全部动作」。
+	Action string
 	// ArgsJSON 是规范化后的参数 JSON（键序确定、空白归一），可直接用于算审批参数摘要。
 	ArgsJSON string
 	Reason   string
@@ -936,8 +939,8 @@ func (st *channelTurnState) applyApprovalGrant(grant *ChannelApprovalGrant) erro
 	if args == "" {
 		return fmt.Errorf("%w：审批参数为空", ErrChannelApprovalInvalid)
 	}
-	// action 必须能从参数解析出来：解析不出的参数无法定位渠道策略，
-	// 也就无法说明「批准的是哪一次动作」。
+	// 参数必须是能解析成 JSON 对象的合法参数：action 从它派生（与 args_hash 同源）。
+	// 解析不出就是空串，与审批行的空 action 逐字比对，绝不回落 "*"。
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(args), &payload); err != nil {
 		return fmt.Errorf("%w：审批参数无法解析", ErrChannelApprovalInvalid)
@@ -1243,6 +1246,19 @@ func (st *channelTurnState) runApprovedCall(ctx context.Context, out ChannelTurn
 	if grant == nil {
 		return out, fmt.Errorf("%w：缺少审批凭据", ErrChannelApprovalInvalid)
 	}
+	// R60：执行之前先消费审批（approved → executing）。消费是条件更新，只有赢家能继续；
+	// 失败意味着这张单已被消费 / 已过期 / 从未批准，此时**绝不执行**——否则同一条审批
+	// 被重放两次就会产生两次真实副作用。自证（CheckIntentPermissionApproved）接受
+	// approved 与 executing 两种状态，所以先消费再复核不会互相打架。
+	if st.w == nil {
+		// 没有站点就消费不了审批，也就无法保证「只执行一次」：按拒绝处理，不做乐观放行。
+		return out, fmt.Errorf("%w：缺少站点上下文", ErrChannelApprovalInvalid)
+	}
+	if err := st.w.MarkApprovalExecuting(grant.ApprovalId); err != nil {
+		// 只记日志、只回哨兵：回执里不出现审批单号、参数或失败细节。
+		st.log().Warn("消费渠道审批失败，已拒绝执行", "error", err)
+		return out, fmt.Errorf("%w", ErrChannelApprovalInvalid)
+	}
 	callID := channelApprovedCallId(st.sessionHash, grant.ApprovalId)
 	call := &schema.ToolCall{
 		ID:   callID,
@@ -1276,6 +1292,24 @@ func (st *channelTurnState) runApprovedCall(ctx context.Context, out ChannelTurn
 		ToolName:   call.Function.Name,
 	})
 	out.Reply = content
+	// R60 收尾：成功 → succeeded，失败 → failed。收尾调用失败**只记日志**，
+	// 不得反过来把已经发生的调用判成失败：调用方一旦重试就是第二次真实副作用。
+	if st.w != nil {
+		failed := callErr != nil || (result != nil && result.IsError)
+		summary := content
+		if strings.TrimSpace(summary) == "" && callErr != nil {
+			summary = callErr.Error()
+		}
+		var ferr error
+		if failed {
+			ferr = st.w.FailApproval(grant.ApprovalId, summary)
+		} else {
+			ferr = st.w.CompleteApproval(grant.ApprovalId, summary)
+		}
+		if ferr != nil {
+			st.log().Warn("写渠道审批执行结果失败", "error", ferr)
+		}
+	}
 	if callErr != nil {
 		return out, callErr
 	}

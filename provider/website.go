@@ -501,6 +501,12 @@ func InitWebsite(mw *model.Website) {
 		// AI: 先创建 ai chat service（初始化工具），再创建 mcp server（注册工具）
 		w.NewAiChatService()
 		w.NewMcpServer()
+		// 渠道审批恢复（R62）：重启把 pending/approved 取消、把 executing 标成 unknown，
+		// 不自动重放任何写操作（executing 的结果不确定，只能提示到后台核查）。
+		// 失败只告警：老库可能还没迁移审批表，站点初始化不能被它阻断。
+		if aerr := w.recoverChannelApprovals(); aerr != nil {
+			slog.Warn("恢复渠道审批状态失败", "siteId", w.Id, "error", aerr)
+		}
 		// 渠道长连接管理器：只对已启用渠道建立连接。老库可能还没迁移渠道表，
 		// 管理器内部只记日志，不阻断站点初始化；重复调用是幂等的。
 		// 必须显式开启（bootstrap.Serve 在 InitWebsites 之前调用 EnableChannelManagerOnInit），

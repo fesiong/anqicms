@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -1466,6 +1467,14 @@ func TestChannelApprovalGrantExecutesOnce(t *testing.T) {
 	const argsJSON = `{"action":"schema","path":"/system/api/archive/list"}`
 	row := env.newApprovalRow(t, "api", argsJSON, model.ApprovalStatusApproved, time.Now().Add(10*time.Minute).Unix())
 	executed := countCapExecutions(t, env.svc, capAPISchema)
+	// 不变式（T6 遗留修正）：记录 grant 轮真正传给 cap 的参数。它必须等于 grant 的
+	// 规范化参数——「只执行一条」不够，还要证明执行的就是管理员批的那一条。
+	var capArgs []string
+	wrapped := env.svc.capHandlers[capAPISchema]
+	env.svc.capHandlers[capAPISchema] = func(ctx context.Context, args string) (string, error) {
+		capArgs = append(capArgs, args)
+		return wrapped(ctx, args)
+	}
 
 	req := env.request(chatId, "确认执行", 1, false)
 	// 参数键序故意与落库时不同：执行器必须用同一套规范化后再比对摘要。
@@ -1502,6 +1511,43 @@ func TestChannelApprovalGrantExecutesOnce(t *testing.T) {
 		if content != res.Reply {
 			t.Fatalf("历史里的工具结果应与返回结果一致，历史：%q / 返回：%q", content, res.Reply)
 		}
+	}
+
+	// 不变式：cap 实参与历史里的 tool_calls.arguments 都必须来自 grant。
+	// cap 侧不能直接比原文：合并意图由 switchCompose 先把 action 分派键摘掉再把其余字段
+	// 原样交给能力（pkg/mcp/intent/catalog.go:365 的 sub 构造），所以这里按「去掉 action
+	// 之后逐字段相等」比对——多一个字段、少一个字段、值不同都算参数被换过。
+	grantCanonical := channelCanonicalArgs(req.Approval.ArgsJSON)
+	var grantPayload map[string]any
+	if err := json.Unmarshal([]byte(grantCanonical), &grantPayload); err != nil {
+		t.Fatalf("解析 grant 参数失败：%v", err)
+	}
+	delete(grantPayload, "action")
+	if len(capArgs) != 1 {
+		t.Fatalf("cap 必须恰好被调用 1 次，实际 %d 次：%v", len(capArgs), capArgs)
+	}
+	var capPayload map[string]any
+	if err := json.Unmarshal([]byte(capArgs[0]), &capPayload); err != nil {
+		t.Fatalf("解析 cap 实参失败：%v（原文 %q）", err, capArgs[0])
+	}
+	if !reflect.DeepEqual(capPayload, grantPayload) {
+		t.Fatalf("cap 实参必须等于 grant 参数（去掉 action 分派键），期望 %v，实际 %v", grantPayload, capPayload)
+	}
+	var historyToolArgs []string
+	for _, msg := range history {
+		if msg.Role != "assistant" || strings.TrimSpace(msg.ToolCalls) == "" {
+			continue
+		}
+		var calls []schema.ToolCall
+		if err := json.Unmarshal([]byte(msg.ToolCalls), &calls); err != nil {
+			t.Fatalf("解析历史 tool_calls 失败：%v", err)
+		}
+		for _, c := range calls {
+			historyToolArgs = append(historyToolArgs, c.Function.Arguments)
+		}
+	}
+	if len(historyToolArgs) != 1 || historyToolArgs[0] != grantCanonical {
+		t.Fatalf("历史 tool_calls.arguments 必须与 grant 逐字一致，期望 %q，实际 %v", grantCanonical, historyToolArgs)
 	}
 }
 
