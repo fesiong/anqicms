@@ -25,7 +25,7 @@ const STATUS_OPTIONS: Record<string, string[]> = {
     'unknown',
     'cancelled',
   ],
-  inbox: ['pending', 'cancelled'],
+  inbox: ['pending', 'processing', 'done', 'failed', 'cancelled'],
   approval: [
     'pending',
     'approved',
@@ -160,6 +160,14 @@ const ChannelRecords: React.FC = () => {
       title: intl.formatMessage({ id: 'plugin.channels.records.status' }),
       dataIndex: 'status',
       render: (_, record) => <Tag>{statusLabel(record.status)}</Tag>,
+    },
+    {
+      // 入站任务被忽略/失败的原因（后端已脱敏，不含正文与平台标识原文）。
+      title: intl.formatMessage({ id: 'plugin.channels.records.last_error' }),
+      dataIndex: 'last_error',
+      width: 200,
+      ellipsis: true,
+      render: (_, record) => record.last_error || '-',
     },
     {
       title: intl.formatMessage({ id: 'plugin.channels.records.lease' }),

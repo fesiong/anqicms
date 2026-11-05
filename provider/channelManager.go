@@ -62,6 +62,8 @@ type channelManagerOptions struct {
 	// retryBackoffBase/retryBackoffMax 控制「未取得租约 / 失去租约」后的重试退避。
 	retryBackoffBase time.Duration
 	retryBackoffMax  time.Duration
+	// inboxPollEvery 是入站消费者的空闲轮询间隔（默认 1 秒，测试注入更短值）。
+	inboxPollEvery time.Duration
 	// now 是可注入时间源（租约与绑定限速共用），测试不 sleep 真实时间。
 	now func() time.Time
 }
@@ -75,6 +77,7 @@ func defaultChannelManagerOptions() channelManagerOptions {
 		shutdownWait:     channelManagerShutdownWait,
 		retryBackoffBase: channelRetryBackoffBase,
 		retryBackoffMax:  channelRetryBackoffMax,
+		inboxPollEvery:   channelInboxPollInterval,
 		now:              time.Now,
 	}
 }
@@ -101,6 +104,9 @@ func (o channelManagerOptions) withDefaults() channelManagerOptions {
 	}
 	if o.retryBackoffMax < o.retryBackoffBase {
 		o.retryBackoffMax = defaults.retryBackoffMax
+	}
+	if o.inboxPollEvery <= 0 {
+		o.inboxPollEvery = defaults.inboxPollEvery
 	}
 	if o.now == nil {
 		o.now = defaults.now

@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+	"errors"
 	"log"
 	"regexp"
 	"strconv"
@@ -9,6 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"gorm.io/gorm"
 
 	"kandaoni.com/anqicms/model"
 )
@@ -134,6 +137,17 @@ func (wk *channelWorker) run() {
 		wk.renewLoop(renewCtx, lease)
 	}()
 
+	// 入站消费者与连接同生命周期：拿到租约、开始接消息之前启动，
+	// adapter.Run 返回后取消并等待它退出（不留下孤儿 goroutine）。
+	inboxCtx, inboxCancel := context.WithCancel(wk.ctx)
+	inboxDone := make(chan struct{})
+	go func() {
+		defer close(inboxDone)
+		consumer := newChannelInboxConsumer(manager.site, channel.Id, adapter)
+		consumer.pollEvery = manager.opts.inboxPollEvery
+		consumer.run(inboxCtx)
+	}()
+
 	// 适配器内部已负责网络重连与退避；这里不再套一层重连循环。
 	// Run 返回即终态：记录错误，等配置变化或显式重建才重试。
 	err := adapter.Run(wk.ctx, PlatformCredentials{
@@ -142,6 +156,8 @@ func (wk *channelWorker) run() {
 		OrganizationId: channel.OrgId,
 	}, wk.inboundSink(adapter))
 
+	inboxCancel()
+	<-inboxDone
 	renewCancel()
 	<-renewDone
 
@@ -244,12 +260,46 @@ func (wk *channelWorker) handleInbound(ctx context.Context, adapter PlatformAdap
 		return nil
 	}
 
+	// 发送人身份摘要与绑定归属在这里一次算好：消费侧只认任务行上的身份摘要，
+	// 不再回读平台 payload。查库失败按未绑定继续（绑定表抖动不能丢消息），
+	// 消费侧还会按同一摘要再查一次。
+	userId := strings.TrimSpace(event.UserId)
+	identityHash := ""
+	if userId != "" {
+		identityHash = bindingIdentityDigest(
+			manager.site.Id,
+			channel.Id,
+			strings.TrimSpace(event.OrganizationId),
+			userId,
+		)
+	}
+	bindingId := uint(0)
+	if identityHash != "" {
+		var binding model.ChannelBinding
+		err := manager.site.DB.WithContext(ctx).
+			Where("`site_id` = ? AND `channel_id` = ? AND `identity_hash` = ? AND `revoked_at` = 0",
+				manager.site.Id, channel.Id, identityHash).
+			Take(&binding).Error
+		switch {
+		case err == nil:
+			bindingId = binding.Id
+		case errors.Is(err, gorm.ErrRecordNotFound):
+		default:
+			log.Printf("[channel] 站点 %d 渠道 %d 查询入站绑定失败，按未绑定落库：%s",
+				manager.site.Id, channel.Id, sanitizePlatformMessage(err.Error()))
+		}
+	}
+
 	inbox := &model.ChannelInbox{
-		SiteId:    manager.site.Id,
-		ChannelId: channel.Id,
-		EventKind: event.Kind,
-		Content:   sanitizeInboundContent(event.Text),
-		Status:    model.InboxStatusPending,
+		SiteId:         manager.site.Id,
+		ChannelId:      channel.Id,
+		BindingId:      bindingId,
+		EventKind:      event.Kind,
+		Content:        sanitizeInboundContent(event.Text),
+		Status:         model.InboxStatusPending,
+		PlatformChatId: strings.TrimSpace(event.ChatId),
+		IdentityHash:   identityHash,
+		ChatType:       strings.TrimSpace(event.ChatType),
 		EventHash: channelDigest(
 			strconv.FormatUint(uint64(manager.site.Id), 10),
 			strconv.FormatUint(uint64(channel.Id), 10),

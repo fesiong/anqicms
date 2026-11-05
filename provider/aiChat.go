@@ -213,6 +213,13 @@ func (w *Website) NewAiChatService() *AiChatService {
 		svc.telemetryRecorder = NewTelemetryRecorder(w.DB)
 	}
 
+	// 渠道轮次必须自带写门禁后端：渠道的权限边界是 intentGate（曝光/白名单/渠道策略/
+	// 管理员/菜单/cap），confirm 已在 intentGate 更早处产出 Pending；WriteGate 是主会话的
+	// 交互式确认，渠道没有交互层。不注入会让「策略 allow 的写操作」在 nil 后端下恒被拒绝。
+	// 只对渠道轮次生效（channelApprovalBackend 的读取点只有 channelTurnState.approvalDecision），
+	// SetChannelApprovalBackend 的 nil-deny 语义与主会话行为保持不变。
+	svc.SetChannelApprovalBackend(channelPolicyApprovalBackend)
+
 	// E 阶段：AIChat 改用意图内核（与 MCP 共用 IntentCatalog）。
 	// 端点 + 内置 handler 仅作为意图委托的底层能力（caps），不再作为独立工具暴露给模型。
 	//

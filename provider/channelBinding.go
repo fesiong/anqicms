@@ -77,6 +77,20 @@ func bindingTargetDigest(siteId, channelId uint, kind, platformTargetId string) 
 	)
 }
 
+// bumpChannelSessionGeneration 让「站点 + 渠道 + 平台用户」对应的会话代次递增。
+//
+// 换绑复活与撤销绑定都必须调用：代次是审批行与在途上下文的失效依据，
+// 会话行本身不换主（uk_session_hash 不变），只让旧代次不再匹配新请求。
+func bumpChannelSessionGeneration(tx *gorm.DB, siteId uint, channel *model.MessageChannel, orgId, userId string) error {
+	if tx == nil || channel == nil {
+		return nil
+	}
+	userHash := PlatformIdentityHash(siteId, channel.Id, channel.Platform, orgId, userId)
+	return tx.Model(&model.ChannelSession{}).
+		Where("`site_id` = ? AND `channel_id` = ? AND `user_hash` = ?", siteId, channel.Id, userHash).
+		Update("generation", gorm.Expr("generation + 1")).Error
+}
+
 // CreateBindingToken 为「某渠道 + 某管理员」生成一次性绑定令牌。
 //
 // 返回的明文只在本次响应里出现一次：库里只存它的 SHA-256，并且所有错误信息都不含明文。
@@ -283,6 +297,10 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 			// 按 revision 做乐观锁的后续写入会立刻撞失败。
 			existing.Revision++
 			binding = &existing
+			// 换绑复活：同一身份的旧会话代次必须失效，旧审批/旧上下文不能延续到新绑定。
+			if txErr := bumpChannelSessionGeneration(tx, w.Id, &channel, orgId, userId); txErr != nil {
+				return fail("失效渠道会话失败")
+			}
 		case errors.Is(findErr, gorm.ErrRecordNotFound):
 			binding = &model.ChannelBinding{
 				SiteId:         w.Id,
@@ -410,6 +428,17 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 			Where("binding_id = ? AND status = ?", binding.Id, model.InboxStatusPending).
 			Update("status", model.InboxStatusCancelled).Error; err != nil {
 			return errors.New("失效排队任务失败")
+		}
+
+		// 绑定身份变化：同一平台用户在该渠道的会话代次必须递增，
+		// 让换绑前的旧审批与旧上下文全部失效。
+		var channel model.MessageChannel
+		if txErr := tx.Where("`id` = ? AND `site_id` = ?", binding.ChannelId, w.Id).Take(&channel).Error; txErr != nil {
+			if !errors.Is(txErr, gorm.ErrRecordNotFound) {
+				return errors.New("失效渠道会话失败")
+			}
+		} else if txErr := bumpChannelSessionGeneration(tx, w.Id, &channel, binding.OrgId, binding.PlatformUserId); txErr != nil {
+			return errors.New("失效渠道会话失败")
 		}
 
 		// 规格 §4：私聊目标来自有效绑定。绑定撤销后它不得再被当作已批准目标投递；

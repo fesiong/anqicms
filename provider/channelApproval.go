@@ -129,6 +129,9 @@ func (w *Website) CreateApproval(p ExecutionPrincipal, toolName, argsJson string
 		ExpiresAt:      now.Unix() + int64(ttl.Seconds()),
 		PolicyRevision: channel.Revision,
 		Status:         model.ApprovalStatusPending,
+		// 代次与策略修订号同属「确认时的上下文」：换绑复活、撤销绑定、切换接待智能体
+		// 都会让旧单失效，批准与执行前必须与 channel_sessions.generation 严格相等。
+		Generation: session.Generation,
 	}
 
 	// 公开 ID 是 16 字节随机值的 base64url。唯一索引冲突最多重试一次：
@@ -217,12 +220,23 @@ func (w *Website) DecideApproval(publicId string, bindingId uint, decision strin
 		if approval.PolicyRevision != channel.Revision {
 			return fmt.Errorf("%w：审批策略修订号 %d 与当前 %d 不一致", ErrChannelPolicyStale, approval.PolicyRevision, channel.Revision)
 		}
-		// 2) 参数自证：正文与摘要必须同时对得上（数据库被改参数时摘要不再匹配）。
+		// 2) 会话代次：确认时的会话上下文必须仍然有效。换绑复活、撤销绑定、
+		//    切换接待智能体都会让旧单失效；这里读库重算而不是信审批行（行是确认时的快照）。
+		var session model.ChannelSession
+		if err := w.DB.WithContext(ctx).
+			Where("`id` = ? AND `site_id` = ?", approval.SessionId, w.Id).
+			Take(&session).Error; err != nil {
+			return fmt.Errorf("%w：审批关联的会话已失效", ErrChannelPolicyStale)
+		}
+		if session.Generation != approval.Generation {
+			return fmt.Errorf("%w：会话代次已变化", ErrChannelPolicyStale)
+		}
+		// 3) 参数自证：正文与摘要必须同时对得上（数据库被改参数时摘要不再匹配）。
 		argsHash := ChannelArgsHash(approval.CanonicalArgs)
 		if argsHash == "" || argsHash != approval.ArgsHash {
 			return fmt.Errorf("%w：审批参数与摘要不一致", ErrChannelApprovalInvalid)
 		}
-		// 3) 完整意图门禁（approved=true：跳过 confirm，但策略其余取值与修订号仍校验）。
+		// 4) 完整意图门禁（approved=true：跳过 confirm，但策略其余取值与修订号仍校验）。
 		action := actionOfArgsJSON(approval.CanonicalArgs)
 		if err := w.checkIntentPermission(ctx, p, approval.Tool, action, true); err != nil {
 			return err

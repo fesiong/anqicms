@@ -137,13 +137,14 @@ type ChannelDeliveryRecord struct {
 	CreatedTime       int64  `json:"created_time"`
 }
 
-// ChannelInboxRecord 是入站任务的白名单投影（不含 content/event_hash）。
+// ChannelInboxRecord 是入站任务的白名单投影（不含 content/event_hash/identity_hash）。
 type ChannelInboxRecord struct {
 	Id          uint   `json:"id"`
 	ChannelId   uint   `json:"channel_id"`
 	BindingId   uint   `json:"binding_id"`
 	EventKind   string `json:"event_kind"`
 	Status      string `json:"status"`
+	LastError   string `json:"last_error"`
 	LeaseUntil  int64  `json:"lease_until"`
 	CreatedTime int64  `json:"created_time"`
 }
@@ -744,6 +745,7 @@ func (w *Website) ChannelRecords(recordType, status string, page, pageSize int) 
 				BindingId:   row.BindingId,
 				EventKind:   row.EventKind,
 				Status:      row.Status,
+				LastError:   row.LastError,
 				LeaseUntil:  row.LeaseUntil,
 				CreatedTime: row.CreatedTime,
 			})

@@ -345,7 +345,23 @@ func (w *Website) updateAdminChannel(req *request.Channel, platform, name, appId
 				"revision":          gorm.Expr("revision + 1"),
 				"updated_time":      time.Now().Unix(),
 			})
-		return res.Error
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected == 0 {
+			// 行在读取后被删/被改：不在这里往下走（避免对不存在的渠道改会话代次）。
+			return nil
+		}
+		// 切换接待智能体等于换执行主体：该渠道全部会话代次递增，
+		// 旧审批与旧上下文立即失效（规格 §8「权限仍允许」）。
+		if existing.AgentId != req.AgentId {
+			if txErr := tx.Model(&model.ChannelSession{}).
+				Where("`site_id` = ? AND `channel_id` = ?", w.Id, req.Id).
+				Update("generation", gorm.Expr("generation + 1")).Error; txErr != nil {
+				return txErr
+			}
+		}
+		return nil
 	}); err != nil {
 		if isDuplicateKeyError(err) {
 			return nil, errChannelAppIdentConflict

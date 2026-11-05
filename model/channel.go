@@ -30,13 +30,21 @@ const (
 	ApprovalStatusCancelled = "cancelled"
 )
 
-// 入站任务状态。状态机：pending → cancelled（绑定撤销、会话代次切换）。
+// 入站任务状态。状态机（T12a 消费接线后完整）：
+//
+//	pending    → processing（被某个实例按 lease_until 抢占）
+//	processing → done | failed（处理完成 / 处理出错）
+//	pending    → cancelled（绑定撤销、渠道删除的级联失效）
+//
 // 与审批状态同理：后续任务只允许引用这些常量，避免两处各写一份字符串漂移。
-// 只登记本任务（撤销时失效排队任务）真正用到的取值：processing/done 等执行期
-// 状态由 T4 落地状态机时自行登记，这里不做占位猜测。
+// 语义差异不能合并：done 是「处理完了」（含按规则忽略，原因写 last_error），
+// failed 是「处理过程出错」（不自动重试，留痕给后台看）。
 const (
-	InboxStatusPending   = "pending"
-	InboxStatusCancelled = "cancelled"
+	InboxStatusPending    = "pending"
+	InboxStatusProcessing = "processing"
+	InboxStatusDone       = "done"
+	InboxStatusFailed     = "failed"
+	InboxStatusCancelled  = "cancelled"
 )
 
 // appIdentityFieldSeparator 是应用身份拼接用的分隔符（ASCII Unit Separator）。
@@ -173,6 +181,16 @@ type ChannelInbox struct {
 	// EventHash 为平台事件标识的 SHA-256，唯一，用于入站去重。
 	// 摘要不序列化：后台响应不得输出事件摘要（全局约束）。
 	EventHash string `json:"-" gorm:"column:event_hash;type:char(64) not null;default:'';uniqueIndex:uk_event_hash;comment:平台事件SHA256(不序列化)"`
+	// PlatformChatId 是回复目标：私聊为用户 open_id/staffId，群聊为 chat_id。
+	// 消费侧据此派生会话摘要与出站目标，不再回读平台 payload。
+	PlatformChatId string `json:"platform_chat_id" gorm:"column:platform_chat_id;type:varchar(128) not null;default:'';comment:平台会话标识(回复目标)"`
+	// IdentityHash 是发送人身份的 SHA-256（站点+渠道+组织+平台用户），
+	// 用于查 channel_bindings.identity_hash。**不存平台用户明文**，也不序列化。
+	IdentityHash string `json:"-" gorm:"column:identity_hash;type:char(64) not null;default:'';index:idx_identity_hash;comment:发送人身份SHA256(不序列化)"`
+	// ChatType 取 group / p2p：群聊与私聊的权限边界、回复目标都不同，必须随任务落库。
+	ChatType string `json:"chat_type" gorm:"column:chat_type;type:varchar(16) not null;default:'';comment:会话类型 group/p2p"`
+	// LastError 记录忽略原因或处理失败原因（已脱敏，不含正文与平台标识原文）。
+	LastError string `json:"last_error" gorm:"column:last_error;type:varchar(255) not null;default:'';comment:忽略/失败原因(已脱敏)"`
 }
 
 // ChannelSession 渠道会话与内部 chat 会话的映射。
@@ -210,6 +228,9 @@ type ChannelApproval struct {
 	ResultSummary  string `json:"result_summary" gorm:"column:result_summary;type:text;comment:执行结果摘要"`
 	// PublicId 是卡片携带的随机公开确认 ID（16 字节随机值），唯一。
 	PublicId string `json:"public_id" gorm:"column:public_id;type:varchar(64) not null;default:'';uniqueIndex:uk_public_id;comment:随机公开确认ID"`
+	// Generation 是创建时的渠道会话代次。批准与执行前都必须与 channel_sessions.generation
+	// 相等：换绑复活、撤销绑定、切换接待智能体都会让旧单失效（规格 §8「权限仍允许」）。
+	Generation int64 `json:"generation" gorm:"column:generation;type:bigint(20) not null;default:0;comment:创建时的会话代次"`
 }
 
 // ChannelLease 平台连接所有权租约。
