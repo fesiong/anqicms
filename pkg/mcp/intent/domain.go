@@ -30,6 +30,7 @@ var domainByNS = map[string]Domain{
 	"website":    DomainSiteOps,
 	"version":    DomainSiteOps,
 	"anqi":       DomainSiteOps,
+	"channels":   DomainChannel, // IM 渠道管理（飞书/钉钉），与 plugin 下的 wechat/weapp 同域
 }
 
 // domainByPlugin 是 /plugin/<二级模块> 的归属，覆盖全部 223 个 plugin 端点。

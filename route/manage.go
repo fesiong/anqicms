@@ -718,5 +718,18 @@ func manageRoute(app *iris.Application) {
 				shipping.Post("/setting", manageController.PluginSaveShippingSetting)
 			}
 		}
+
+		// 企业 IM 渠道（飞书长连接 / 钉钉 Stream）的连接配置、状态与能力清单。
+		// 用 AdminPermissionRequired 而不是 AdminPermission：后台历史行为对「不在菜单里的
+		// 路径」是放行的，而渠道端点能改平台凭据、能开聊天管理，必须显式授权（规格 §10）。
+		channels := manage.Party("/channels", middleware.ParseAdminToken, middleware.AdminPermissionRequired)
+		{
+			channels.Get("/", manageController.ChannelList)
+			channels.Get("/detail", manageController.ChannelDetail)
+			channels.Post("/detail", manageController.ChannelDetailForm)
+			channels.Post("/delete", manageController.ChannelDelete)
+			channels.Get("/status", manageController.ChannelStatus)
+			channels.Get("/capabilities", manageController.ChannelCapabilities)
+		}
 	}
 }

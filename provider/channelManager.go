@@ -157,24 +157,51 @@ func (w *Website) StopChannelManager() {
 
 // RebuildChannel 强制重建单个渠道的连接（配置保存后由 T9 调用，立即生效）。
 // 旧连接未在时限内退出时返回错误：此时不会建立新连接，下一次扫描会继续尝试。
+//
+// 刻意**不**先校验渠道行是否存在：删除渠道后同样要立刻通知管理器，
+// 而那时行已经没了。存在性判断由 rebuildOne 统一做（读不到行 → 停 worker 并释放租约）。
 func (w *Website) RebuildChannel(channelId uint) error {
 	channelManagerRegistry.Lock()
 	manager := channelManagerRegistry.bySite[w.Id]
 	channelManagerRegistry.Unlock()
-	if manager == nil {
-		return errors.New("渠道管理器未启动")
-	}
 	if channelId == 0 {
 		return errors.New("渠道不存在")
 	}
-	var channel model.MessageChannel
-	if err := w.DB.Where("id = ? AND site_id = ?", channelId, w.Id).Take(&channel).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return errors.New("渠道不存在")
-		}
-		return errors.New("读取渠道失败")
+	if manager == nil {
+		// 与 requestRebuild 的内部失败用同一个哨兵：调用方只需要区分
+		// 「管理器没在跑（可忽略）」与「旧连接没退出（需回执给管理员）」。
+		return errChannelManagerStopped
 	}
 	return manager.requestRebuild(channelId)
+}
+
+// currentChannelRuntime 返回渠道在本进程内的连接运行态（只读，R87）。
+//
+// running 表示该渠道的 worker 已取得租约并在跑适配器；leaseExpiresAt 取自 worker
+// 持有的租约快照（0 表示当前没有租约）。只暴露这两个值：
+// 应用身份摘要、owner 原文都属于「换主」判据，不能进后台响应。
+// 多实例部署时这是「本进程视角」，不是集群共识。
+func currentChannelRuntime(siteId, channelId uint) (running bool, leaseExpiresAt int64) {
+	if siteId == 0 || channelId == 0 {
+		return false, 0
+	}
+	channelManagerRegistry.Lock()
+	manager := channelManagerRegistry.bySite[siteId]
+	channelManagerRegistry.Unlock()
+	if manager == nil {
+		return false, 0
+	}
+	worker := manager.worker(channelId)
+	if worker == nil {
+		return false, 0
+	}
+	if lease := worker.leaseSnapshot(); lease != nil {
+		leaseExpiresAt = lease.ExpiresAt
+	}
+	if worker.abandoned.Load() {
+		return false, leaseExpiresAt
+	}
+	return worker.currentState() == channelWorkerRunning, leaseExpiresAt
 }
 
 func (w *Website) startChannelManager(ctx context.Context, opts channelManagerOptions) {

@@ -66,6 +66,8 @@ var payloadGuardHandlers = []string{
 	"DeleteSettingBanner",
 	"PluginSendmailSaveTemplate",
 	"PluginSaveShippingSetting",
+	"ChannelDetailForm",
+	"ChannelDelete",
 }
 
 // targetGuardHandlers：删除/定向修改类端点必须校验"目标存在"，否则空载荷或
@@ -98,6 +100,7 @@ var targetGuardHandlers = map[string]string{
 	"DeleteDesignInfo":               "requireNonEmpty(ctx, req.Package",
 	"PluginRemoveTranslateHtmlCache": "len(req.Uris) == 0",
 	"PluginGoogleMerchantSyncDelete": "requireAnyID(ctx, 0, req.Ids",
+	"ChannelDelete":                  "requirePositive(ctx, req.Id",
 }
 
 // TestIsEmptyJSONPayload 空载荷的判定口径：只有真"什么都没带"才算空。
