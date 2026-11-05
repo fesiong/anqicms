@@ -1,5 +1,11 @@
 package model
 
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"strings"
+)
+
 // 渠道平台标识。数据库里存的就是这两个值，下游适配器按它选择实现。
 const (
 	ChannelPlatformFeishu   = "feishu"
@@ -22,9 +28,28 @@ const (
 	ApprovalStatusCancelled = "cancelled"
 )
 
+// appIdentityFieldSeparator 是应用身份拼接用的分隔符（ASCII Unit Separator）。
+// 不用 ':' 之类的可打印字符：只要应用ID或组织标识里出现分隔符，
+// 相邻字段换一种切分就能拼出同一个字符串，唯一约束会被静默击穿。
+const appIdentityFieldSeparator = "\x1f"
+
+// ComputeAppIdentityHash 计算「平台 + 应用ID(+组织)」的 SHA-256 小写十六进制摘要。
+// 各段先 TrimSpace 再拼接：后台表单与平台回调常带首尾空格，不归一化会让同一个应用
+// 算出两个不同摘要，唯一索引形同虚设。组织标识允许为空（拼成空段）。
+func ComputeAppIdentityHash(platform, appId, organizationId string) string {
+	joined := strings.Join([]string{
+		strings.TrimSpace(platform),
+		strings.TrimSpace(appId),
+		strings.TrimSpace(organizationId),
+	}, appIdentityFieldSeparator)
+	sum := sha256.Sum256([]byte(joined))
+	return hex.EncodeToString(sum[:])
+}
+
 // MessageChannel 站点接入的企业 IM 渠道（飞书长连接 / 钉钉 Stream）。
 // 一个企业应用只允许归属一个站点连接，否则平台会把消息随机分流到不同连接；
-// 该约束由 ChannelLease 的应用身份摘要全局兜底。
+// 该约束由 AppIdentityHash 的唯一索引在配置层兜底，ChannelLease 再按同一摘要
+// 全局判定连接所有权。
 type MessageChannel struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
@@ -37,6 +62,9 @@ type MessageChannel struct {
 	AgentId     uint   `json:"agent_id" gorm:"column:agent_id;type:int(10) unsigned not null;default:0;index:idx_agent_id;comment:接待智能体ID"`
 	AppId       string `json:"app_id" gorm:"column:app_id;type:varchar(100) not null;default:'';index:idx_platform_app_id,priority:2;comment:平台应用ID"`
 	OrgId       string `json:"org_id" gorm:"column:org_id;type:varchar(100) not null;default:'';comment:组织标识(飞书 tenant_key / 钉钉 corp_id)"`
+	// AppIdentityHash 为「平台+应用ID(+组织)」的 SHA-256，唯一：同一企业应用不允许被两个站点连接各写一份配置。
+	// 只用唯一索引而不用 (platform, app_id) 复合唯一，避免长复合索引；摘要不序列化。
+	AppIdentityHash string `json:"-" gorm:"column:app_identity_hash;type:char(64) not null;default:'';uniqueIndex:uk_app_identity_hash;comment:平台+应用ID(+组织)的SHA256(不序列化)"`
 	// AppSecret 为平台应用密钥：不序列化，后台响应不得泄露。
 	AppSecret  string `json:"-" gorm:"column:app_secret;type:varchar(255) not null;default:'';comment:应用密钥(不序列化)"`
 	PolicyJson string `json:"policy_json" gorm:"column:policy_json;type:text;comment:能力动作策略JSON(intent+action → deny/confirm/allow)"`
@@ -45,12 +73,14 @@ type MessageChannel struct {
 
 // AgentReceptionPolicy 接待智能体的管理能力白名单。
 // 无授权配置时默认无管理能力（fail closed）。
+// 每个站点每个智能体只允许一条策略：由 uk_agent_policy 复合唯一索引兜底，
+// 否则并发保存会留下多条互相矛盾的策略，读取时取哪条全看运气。
 type AgentReceptionPolicy struct {
 	Id             uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime    int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	UpdatedTime    int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	SiteId         uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_agent_id,priority:1;comment:站点ID"`
-	AgentId        uint   `json:"agent_id" gorm:"column:agent_id;type:int(10) unsigned not null;default:0;index:idx_site_agent_id,priority:2;comment:智能体ID"`
+	SiteId         uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_agent_id,priority:1;uniqueIndex:uk_agent_policy,priority:1;comment:站点ID"`
+	AgentId        uint   `json:"agent_id" gorm:"column:agent_id;type:int(10) unsigned not null;default:0;index:idx_site_agent_id,priority:2;uniqueIndex:uk_agent_policy,priority:2;comment:智能体ID"`
 	AllowedIntents string `json:"allowed_intents" gorm:"column:allowed_intents;type:text;comment:允许的意图JSON数组"`
 }
 

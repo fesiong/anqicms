@@ -227,3 +227,177 @@ func TestChannelSensitiveFieldsNotSerialized(t *testing.T) {
 		}
 	}
 }
+
+// TestComputeAppIdentityHashStableAndScoped 锁定应用身份摘要的两个前提：
+// 同输入必须同结果（否则唯一索引拦不住重复配置），任一维度变化必须换摘要
+// （否则两个不同应用会互相顶掉对方的渠道配置）。
+func TestComputeAppIdentityHashStableAndScoped(t *testing.T) {
+	const (
+		platform = "feishu"
+		appId    = "cli_a1b2c3d4e5f6"
+		orgId    = "tenant_9f8e7d"
+		// 固定值由 sha256("feishu\x1fcli_a1b2c3d4e5f6\x1ftenant_9f8e7d") 独立算出。
+		// 它锁死拼接顺序、分隔符与大小写：改了任何一处这条立刻红。
+		wantHash = "6e97cc9760b37795b4ab6c64135c64f9d7aa4cbe1ef50a6fdc82b964f8166723"
+	)
+	base := model.ComputeAppIdentityHash(platform, appId, orgId)
+	if base != wantHash {
+		t.Fatalf("摘要与固定值不符：got %s want %s", base, wantHash)
+	}
+	if len(base) != 64 {
+		t.Fatalf("摘要长度 %d，char(64) 列放不下（或补零读回对不上）", len(base))
+	}
+	if strings.Trim(base, "0123456789abcdef") != "" {
+		t.Fatalf("摘要 %q 不是小写十六进制，与库里的 char(64) 存储约定不一致", base)
+	}
+
+	if again := model.ComputeAppIdentityHash(platform, appId, orgId); again != base {
+		t.Errorf("同输入算出了两个摘要：%s vs %s，唯一索引会漏掉重复配置", base, again)
+	}
+
+	// TrimSpace 归一化：表单粘贴/平台回调带来的首尾空白不得改变身份。
+	if padded := model.ComputeAppIdentityHash("  "+platform+"\t", appId+" ", "\n"+orgId); padded != base {
+		t.Errorf("首尾空白改变了摘要：%s vs %s，同一个应用会被当成两个", padded, base)
+	}
+
+	scoped := []struct {
+		name                   string
+		platform, appId, orgId string
+	}{
+		{"平台不同", "dingtalk", appId, orgId},
+		{"应用不同", platform, appId + "x", orgId},
+		{"组织不同", platform, appId, orgId + "x"},
+		{"组织从有到无", platform, appId, ""},
+	}
+	for _, c := range scoped {
+		if got := model.ComputeAppIdentityHash(c.platform, c.appId, c.orgId); got == base {
+			t.Errorf("%s 却算出同一摘要：唯一索引会把两个不同应用判成同一个", c.name)
+		}
+	}
+
+	// 分隔符必须真的在起作用：把字符从应用ID挪到组织里要换摘要。
+	// 若用空串拼接或可打印字符且未转义，这两种输入会撞成同一个摘要。
+	if model.ComputeAppIdentityHash(platform, "ab", "c") == model.ComputeAppIdentityHash(platform, "a", "bc") {
+		t.Error("应用ID与组织之间没有分隔：字段边界有歧义，不同应用可能撞同一摘要")
+	}
+	// 组织为空是合法输入（钉钉部分应用没有 corp_id 之外的归属），必须算得出确定值。
+	if got := model.ComputeAppIdentityHash("dingtalk", "ding_app_01", ""); got != "d1a8e9b5cabc1b1f8d874f0fef9845d3d65e96a419a1c7b7360ef3898252a358" {
+		t.Errorf("组织为空时的摘要与固定值不符：got %s", got)
+	}
+}
+
+// parseGormIndexes 解析 gorm tag 里的索引声明，返回 索引名 → 是否唯一。
+// 只认 index / uniqueIndex 两个键；priority:1、length:191 这类索引元数据带冒号，必须跳过，
+// 否则会被当成索引名，让下面的断言看起来成立实则空转。
+func parseGormIndexes(tag string) map[string]bool {
+	indexes := make(map[string]bool)
+	for _, part := range strings.Split(tag, ";") {
+		key, value, ok := strings.Cut(part, ":")
+		if !ok {
+			continue
+		}
+		unique := false
+		switch key {
+		case "uniqueIndex":
+			unique = true
+		case "index":
+		default:
+			continue
+		}
+		for _, name := range strings.Split(value, ",") {
+			if name == "" || strings.Contains(name, ":") {
+				continue
+			}
+			indexes[name] = indexes[name] || unique
+		}
+	}
+	return indexes
+}
+
+// uniqueIndexNames 返回某字段参与的、带唯一性的索引名集合。
+func uniqueIndexNames(t *testing.T, modelValue interface{}, fieldName string) map[string]bool {
+	t.Helper()
+	typ := reflect.TypeOf(modelValue)
+	field, ok := typ.FieldByName(fieldName)
+	if !ok {
+		t.Fatalf("model.%s 缺少字段 %s", typ.Name(), fieldName)
+	}
+	names := make(map[string]bool)
+	for name, unique := range parseGormIndexes(field.Tag.Get("gorm")) {
+		if unique {
+			names[name] = true
+		}
+	}
+	return names
+}
+
+// TestMessageChannelHasUniqueAppIdentity 锁定规格第 4 节「同一企业应用只允许归属一个站点连接」：
+// 配置层必须有自己的唯一约束，不能只靠 ChannelLease 的运行期兜底
+// （两个站点各写一份配置、再争租约，表现为一边拿不到连接）。
+func TestMessageChannelHasUniqueAppIdentity(t *testing.T) {
+	typ := reflect.TypeOf(model.MessageChannel{})
+	field, ok := typ.FieldByName("AppIdentityHash")
+	if !ok {
+		t.Fatal("model.MessageChannel 缺少 AppIdentityHash：同一企业应用可以被两个站点各写一份渠道配置")
+	}
+	if tag := field.Tag.Get("json"); tag != "-" {
+		t.Errorf("AppIdentityHash 的 json tag 是 %q，必须为 \"-\"（摘要不对外输出）", tag)
+	}
+	gorm := field.Tag.Get("gorm")
+	if !strings.Contains(gorm, "column:app_identity_hash") {
+		t.Errorf("AppIdentityHash 的 gorm tag 不含 column:app_identity_hash：%q", gorm)
+	}
+	if !strings.Contains(gorm, "char(64)") {
+		t.Errorf("AppIdentityHash 的列类型不是 char(64)：%q", gorm)
+	}
+	if got := uniqueIndexNames(t, model.MessageChannel{}, "AppIdentityHash"); !got["uk_app_identity_hash"] {
+		t.Errorf("AppIdentityHash 没有 uk_app_identity_hash 唯一索引：应用归属约束缺失（实际唯一索引 %v）", got)
+	} else if len(got) != 1 {
+		t.Errorf("AppIdentityHash 挂了多个唯一索引 %v，列与索引应对齐到一个", got)
+	}
+
+	// 解析器自检：普通 index 不得被当成唯一索引，priority 元数据不得被当成索引名。
+	self := parseGormIndexes("column:x;index:idx_a,priority:1;uniqueIndex:uk_b,priority:2")
+	if unique, ok := self["idx_a"]; !ok {
+		t.Error("解析器没解析出普通索引 idx_a")
+	} else if unique {
+		t.Error("解析器把普通索引 idx_a 当成了唯一索引")
+	}
+	if unique, ok := self["uk_b"]; !ok || !unique {
+		t.Errorf("解析器没把 uk_b 标记为唯一索引：%v", self)
+	}
+	if self["priority"] {
+		t.Error("解析器把 priority 元数据当成了索引名")
+	}
+
+	// 反向对照：同结构体里没有唯一索引的字段必须解析为空集合，
+	// 否则 parseGormIndexes 恒返回真，上面的断言全是空转。
+	if got := uniqueIndexNames(t, model.MessageChannel{}, "Name"); len(got) != 0 {
+		t.Errorf("反向对照失效：Name 无唯一索引，解析结果却有 %v", got)
+	}
+	// 反向对照 2：普通 index（idx_site_id）不得被算进唯一索引集合。
+	if got := uniqueIndexNames(t, model.MessageChannel{}, "SiteId"); len(got) != 0 {
+		t.Errorf("反向对照失效：SiteId 只有普通索引，解析出的唯一索引却是 %v", got)
+	}
+}
+
+// TestAgentReceptionPolicyUniquePerAgent 锁定「每站点每智能体只有一条策略」。
+// 两列必须挂同一个索引名：各挂各的单列唯一索引会变成「一个智能体全站只能出现一次」，
+// 那是比缺失约束更糟的错误语义。
+func TestAgentReceptionPolicyUniquePerAgent(t *testing.T) {
+	for _, fieldName := range []string{"SiteId", "AgentId"} {
+		got := uniqueIndexNames(t, model.AgentReceptionPolicy{}, fieldName)
+		if !got["uk_agent_policy"] {
+			t.Errorf("AgentReceptionPolicy.%s 没有 uk_agent_policy 唯一索引：同一智能体可以有互相矛盾的策略（实际唯一索引 %v）", fieldName, got)
+			continue
+		}
+		if len(got) != 1 {
+			t.Errorf("AgentReceptionPolicy.%s 挂了多个唯一索引 %v，复合唯一约束只能是一个索引名", fieldName, got)
+		}
+	}
+
+	// 反向对照：别的模型同名字段不带 uk_agent_policy，证明断言不是恒真。
+	if got := uniqueIndexNames(t, model.MessageChannel{}, "AgentId"); len(got) != 0 {
+		t.Errorf("反向对照失效：MessageChannel.AgentId 没有 uk_agent_policy，解析结果却有 %v", got)
+	}
+}
