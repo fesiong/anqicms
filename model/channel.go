@@ -30,6 +30,17 @@ const (
 	ApprovalStatusCancelled = "cancelled"
 )
 
+// 入站任务状态。状态机：pending → processing → done；
+// pending/processing 也可到 cancelled（绑定撤销、会话代次切换）。
+// 与审批状态同理：后续任务只允许引用这些常量，避免两处各写一份字符串漂移。
+// 只有本任务（撤销时失效排队任务）与已知规格用到的取值在这里定义，不做穷举占位。
+const (
+	InboxStatusPending    = "pending"
+	InboxStatusProcessing = "processing"
+	InboxStatusDone       = "done"
+	InboxStatusCancelled  = "cancelled"
+)
+
 // appIdentityFieldSeparator 是应用身份拼接用的分隔符（ASCII Unit Separator）。
 // 不用 ':' 之类的可打印字符：只要应用ID或组织标识里出现分隔符，
 // 相邻字段换一种切分就能拼出同一个字符串，唯一约束会被静默击穿。

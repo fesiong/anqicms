@@ -25,10 +25,6 @@ const (
 	channelDigestSeparator = "\x1f"
 	// channelTargetKindPrivate 是私聊目标的 kind 取值（群聊为 group，由人工配置）。
 	channelTargetKindPrivate = "private"
-	// 入站任务状态。model 层目前只有审批状态常量，这里先按入站管线的语义定义两份，
-	// T4 落地入站状态机时应移到 model 包统一维护。
-	channelInboxStatusPending   = "pending"
-	channelInboxStatusCancelled = "cancelled"
 )
 
 // ChannelPlatformIdentity 是一次绑定请求里来自平台的已验证身份。
@@ -96,7 +92,8 @@ func (w *Website) CreateBindingToken(channelId, adminId uint) (plain string, exp
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", 0, errors.New("渠道不存在")
 		}
-		return "", 0, err
+		// 原始 DB 报错可能带唯一索引里的摘要或其它内部标识，一律换成静态串。
+		return "", 0, errors.New("读取渠道失败")
 	}
 	if channel.SiteId != w.Id {
 		return "", 0, errors.New("渠道不存在")
@@ -108,7 +105,7 @@ func (w *Website) CreateBindingToken(channelId, adminId uint) (plain string, exp
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", 0, errors.New("管理员不存在或已被禁用")
 		}
-		return "", 0, err
+		return "", 0, errors.New("读取管理员失败")
 	}
 	if admin.Status != 1 {
 		return "", 0, errors.New("管理员不存在或已被禁用")
@@ -178,7 +175,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 			Where("token_hash = ? AND consumed_at = 0 AND expires_at > ?", tokenHash, now).
 			Update("consumed_at", now)
 		if res.Error != nil {
-			return res.Error
+			return errors.New("消费绑定令牌失败")
 		}
 		if res.RowsAffected != 1 {
 			return errors.New("绑定令牌无效或已过期")
@@ -193,6 +190,15 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 		}
 		if token.ChannelId != ident.ChannelId {
 			return errors.New("绑定令牌与当前渠道不匹配")
+		}
+
+		// 令牌有效不等于生成者现在仍可用：TTL 有一小时，期间管理员可能已被停用。
+		// 生成时（CreateBindingToken）与撤销时都只认 Status == 1，消费侧必须同口径，
+		// 否则已停用管理员的私聊目标会以 approved=1 落库，T8 之后仍会继续投递。
+		// 放在事务内是为了让失败连带回滚令牌消费，管理员恢复后同一令牌仍可用。
+		tokenAdmin, adminErr := w.GetAdminInfoById(token.AdminId)
+		if adminErr != nil || tokenAdmin == nil || tokenAdmin.Status != 1 {
+			return errors.New("管理员不存在或已被禁用")
 		}
 
 		var channel model.MessageChannel
@@ -216,7 +222,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 		if txErr := tx.Model(&model.ChannelBinding{}).
 			Where("identity_hash = ? AND revoked_at = 0", identityHash).
 			Count(&sameIdentity).Error; txErr != nil {
-			return txErr
+			return errors.New("读取已有绑定失败")
 		}
 		if sameIdentity > 0 {
 			return errors.New("该平台身份已绑定，请先解绑后再试")
@@ -227,7 +233,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 		if txErr := tx.Model(&model.ChannelBinding{}).
 			Where("site_id = ? AND channel_id = ? AND admin_id = ? AND revoked_at = 0", w.Id, channel.Id, token.AdminId).
 			Count(&sameAdmin).Error; txErr != nil {
-			return txErr
+			return errors.New("读取已有绑定失败")
 		}
 		if sameAdmin > 0 {
 			return errors.New("该管理员在当前渠道已有绑定，请先解绑后再试")
@@ -249,7 +255,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 					"revision":         gorm.Expr("revision + 1"),
 				})
 			if res.Error != nil {
-				return res.Error
+				return errors.New("保存绑定失败")
 			}
 			if res.RowsAffected != 1 {
 				// 并发下被别人抢先恢复成了有效绑定：按冲突处理，绝不覆盖。
@@ -259,6 +265,9 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 			existing.OrgId = orgId
 			existing.PlatformUserId = userId
 			existing.RevokedAt = 0
+			// revision 由 SQL 自增，结构体不会自动跟随；不补这一步调用方拿到的是旧值，
+			// 按 revision 做乐观锁的后续写入会立刻撞失败。
+			existing.Revision++
 			binding = &existing
 		case errors.Is(findErr, gorm.ErrRecordNotFound):
 			binding = &model.ChannelBinding{
@@ -271,10 +280,10 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 				Revision:       1,
 			}
 			if txErr := tx.Create(binding).Error; txErr != nil {
-				return txErr
+				return errors.New("保存绑定失败")
 			}
 		default:
-			return findErr
+			return errors.New("读取已有绑定失败")
 		}
 
 		// 私聊目标同样有唯一摘要：撤销后重新绑定同一个人会撞上旧行，按摘要复用并重新批准。
@@ -289,7 +298,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 					"binding_id": binding.Id,
 					"approved":   1,
 				}).Error; txErr != nil {
-				return txErr
+				return errors.New("保存私聊目标失败")
 			}
 		case errors.Is(targetErr, gorm.ErrRecordNotFound):
 			target = model.ChannelTarget{
@@ -302,10 +311,10 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 				TargetHash:       targetHash,
 			}
 			if txErr := tx.Create(&target).Error; txErr != nil {
-				return txErr
+				return errors.New("保存私聊目标失败")
 			}
 		default:
-			return targetErr
+			return errors.New("读取已有私聊目标失败")
 		}
 
 		return nil
@@ -333,7 +342,7 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("操作者不存在或已被禁用")
 		}
-		return err
+		return errors.New("读取操作者失败")
 	}
 	if operator.Status != 1 {
 		return errors.New("操作者不存在或已被禁用")
@@ -344,7 +353,7 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return errors.New("绑定不存在")
 		}
-		return err
+		return errors.New("读取绑定失败")
 	}
 	if binding.SiteId != w.Id {
 		return errors.New("绑定不存在")
@@ -363,7 +372,7 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 				"revision":   gorm.Expr("revision + 1"),
 			})
 		if res.Error != nil {
-			return res.Error
+			return errors.New("撤销绑定失败")
 		}
 		if res.RowsAffected == 0 {
 			return nil
@@ -374,14 +383,14 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 		if err := tx.Model(&model.ChannelApproval{}).
 			Where("binding_id = ? AND status IN ?", binding.Id, []string{model.ApprovalStatusPending, model.ApprovalStatusApproved}).
 			Update("status", model.ApprovalStatusCancelled).Error; err != nil {
-			return err
+			return errors.New("失效未执行审批失败")
 		}
 
 		// 排队中的入站任务失效。executing 等已开跑的状态不在这里处理，由 T4 的租约兜底。
 		if err := tx.Model(&model.ChannelInbox{}).
-			Where("binding_id = ? AND status = ?", binding.Id, channelInboxStatusPending).
-			Update("status", channelInboxStatusCancelled).Error; err != nil {
-			return err
+			Where("binding_id = ? AND status = ?", binding.Id, model.InboxStatusPending).
+			Update("status", model.InboxStatusCancelled).Error; err != nil {
+			return errors.New("失效排队任务失败")
 		}
 
 		// 规格 §4：私聊目标来自有效绑定。绑定撤销后它不得再被当作已批准目标投递；
@@ -389,7 +398,7 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 		if err := tx.Model(&model.ChannelTarget{}).
 			Where("binding_id = ? AND kind = ?", binding.Id, channelTargetKindPrivate).
 			Update("approved", 0).Error; err != nil {
-			return err
+			return errors.New("收回私聊目标失败")
 		}
 
 		return nil
