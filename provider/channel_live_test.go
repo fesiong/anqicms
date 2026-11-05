@@ -96,13 +96,13 @@ func TestChannelLiveDingTalk(t *testing.T) {
 		t.Fatalf("钉钉适配器构造失败：凭据非空却返回 false")
 	}
 
-	// 1. 错误凭据：钉钉取 accessToken 端点对不存在的 appKey 返回 4xx，分类必然是 permanent，
-	//    这里连分类一起断言（分类器允许，就不放宽）。
+	// 1. 错误凭据：钉钉错误凭据的返回形态未实测；这里只断言被拒绝且不回显密钥，
+	//    实测分类见日志（与飞书口径一致，平台行为不由本测试裁决）。
 	channelLiveAssertRejectedCredentials(t, model.ChannelPlatformDingTalk, PlatformCredentials{
 		AppId:          "live-probe-invalid-appkey",
 		AppSecret:      "live-probe-invalid-secret",
 		OrganizationId: creds.OrganizationId,
-	}, ErrorClassPermanent, "live-probe-invalid-secret", creds.AppSecret)
+	}, "", "live-probe-invalid-secret", creds.AppSecret)
 
 	// 2. 主动群发送（openConversationId）。
 	group := TargetRef{Kind: TargetKindGroup, PlatformTargetId: env["DINGTALK_TEST_CONVERSATION_ID"]}
