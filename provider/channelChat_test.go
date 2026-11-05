@@ -1563,6 +1563,239 @@ func TestChannelApprovalGrantRejectsMismatchedArgs(t *testing.T) {
 
 func argsForList() string { return `{"action":"list","page":1}` }
 
+// stubEndpointCap 给端点类 cap 的委托装一个「只计数、不落库」的桩。
+//
+// 端点 cap 不会单独结算：callCap 发现它有 capEndpoints 映射就统一换算成 api_invoke
+// 再交给 capInvoker（pkg/mcp/intent/cap_routes.go:241）。单测环境里 api_invoke 会真的
+// 走端点并撞上开放范围闸门（mode_off），所以这里直接桩掉 api_invoke：
+// 计数值 = 「意图确实委托到了端点执行」。真实端点调用在本任务的用例里既无价值也会改真实数据。
+func stubEndpointCap(t *testing.T, svc *AiChatService) *int {
+	t.Helper()
+	if svc.capHandlers == nil {
+		t.Fatalf("capHandlers 未装配，无法做执行计数")
+	}
+	count := 0
+	svc.capHandlers[capAPIInvoke] = func(ctx context.Context, args string) (string, error) {
+		count++
+		return "已执行", nil
+	}
+	return &count
+}
+
+// TestChannelApprovalGrantRejectsOtherTool 是 R58 在 T6 侧的护栏：
+// 审批凭据必须绑定工具身份，不能「确认一个工具，执行另一个工具」。
+//
+// 构造的是本轮实测过的那条越权路径：审批行 tool=seo_keyword、args 与
+// content_article 的 list 完全相同（args_hash 一致），grant 却指向 content_article。
+// exposure / 白名单 / 策略 / 菜单权限都为 content_article 放行，因此去掉
+// tool/action 比对后它会真的执行——红色只能来自「工具身份不符」这一条判定。
+func TestChannelApprovalGrantRejectsOtherTool(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"seo_keyword", "content_article"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		policy:      `{"intents":{"seo_keyword":{"*":"confirm"},"content_article":{"*":"confirm"}}}`,
+		whitelist:   []string{"seo_keyword", "content_article"},
+		permissions: []string{"/"},
+	})
+	ctx := context.Background()
+	chatId := "grant-other-tool-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	argsJSON := argsForList()
+	row := env.newApprovalRow(t, "seo_keyword", argsJSON, model.ApprovalStatusApproved, time.Now().Add(10*time.Minute).Unix())
+	executed := 0
+	for name := range env.svc.capHandlers {
+		env.svc.capHandlers[name] = func(ctx context.Context, args string) (string, error) {
+			executed++
+			return "意外执行", nil
+		}
+	}
+
+	req := env.request(chatId, "确认执行", 1, false)
+	req.Approval = &ChannelApprovalGrant{
+		ApprovalId: row.PublicId,
+		ToolName:   "content_article",
+		ArgsJSON:   argsJSON,
+	}
+	m := &scriptedChannelModel{}
+	res, err := env.svc.runChannelTurn(ctx, req, scriptedChannelFactory(m))
+	if !errors.Is(err, ErrChannelApprovalInvalid) {
+		t.Fatalf("审批行 tool=seo_keyword 时用 content_article 的凭据必须返回 ErrChannelApprovalInvalid，实际：%v", err)
+	}
+	if executed != 0 {
+		t.Fatalf("工具身份不符时不得执行任何 cap，实际执行 %d 次", executed)
+	}
+	if m.calls() != 0 {
+		t.Fatalf("工具身份不符时不得调用模型，实际 %d 次", m.calls())
+	}
+	// 回执只给哨兵文案，不说明是哪一条不匹配（不把审批单号变成探测通道）。
+	if strings.Contains(res.Reply, "content_article") || strings.Contains(res.Reply, "seo_keyword") {
+		t.Fatalf("拒绝回执不得带出工具名，实际：%q", res.Reply)
+	}
+}
+
+// TestChannelApprovalGrantScopesWriteGateBypass 锁定 write_gate 的 grant 分支（R55 + R58）：
+//   - grant 对应的那次写调用必须**不再**二次审批（否则 T7 会新建第二张审批单）；
+//   - 同一轮里不在 grant 中的写调用仍然必须走 ChannelApprovalFunc 并被拒。
+//
+// 这条分支此前只在临时探针里被执行过，没有任何常驻测试钉住。
+func TestChannelApprovalGrantScopesWriteGateBypass(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"seo_keyword"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		policy:      `{"intents":{"seo_keyword":{"create":"confirm"}}}`,
+		whitelist:   []string{"seo_keyword"},
+		permissions: []string{"/"},
+	})
+	ctx := context.Background()
+	chatId := "grant-write-gate-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	argsJSON := `{"action":"create","title":"审批后创建"}`
+	row := env.newApprovalRow(t, "seo_keyword", argsJSON, model.ApprovalStatusApproved, time.Now().Add(10*time.Minute).Unix())
+	executed := stubEndpointCap(t, env.svc)
+
+	st, err := env.svc.prepareChannelTurn(ctx, env.request(chatId, "确认执行", 1, false))
+	if err != nil {
+		t.Fatalf("准备渠道轮次失败：%v", err)
+	}
+	defer st.release()
+	// 模拟 T7 的「批准后执行」：只执行 grant 指定的那一条调用。
+	st.approvalGrant = &ChannelApprovalGrant{ApprovalId: row.PublicId, ToolName: "seo_keyword", ArgsJSON: argsJSON}
+	st.approvalAction = actionOfArgsJSON(argsJSON)
+
+	backendCalls := 0
+	env.svc.SetChannelApprovalBackend(func(ctx context.Context, req ChannelApprovalRequest) (string, string) {
+		backendCalls++
+		return "deny", "测试拒绝"
+	})
+	t.Cleanup(func() { env.svc.SetChannelApprovalBackend(nil) })
+
+	granted := &schema.ToolCall{
+		ID:   "granted-write",
+		Type: "function",
+		Function: schema.FunctionCall{
+			Name:      "seo_keyword",
+			Arguments: argsJSON,
+		},
+	}
+	res, err := st.executeToolCall(ctx, granted)
+	if err != nil {
+		t.Fatalf("grant 对应的写调用必须绕过二次审批，实际：%v（结果：%+v）", err, res)
+	}
+	if backendCalls != 0 {
+		t.Fatalf("grant 对应的写调用不得再问审批后端，实际调用 %d 次", backendCalls)
+	}
+	if *executed != 1 {
+		t.Fatalf("grant 对应的写调用必须真正执行 1 次，实际 %d 次（结果：%+v）", *executed, res)
+	}
+
+	// 同一轮另一个写调用（工具相同、参数不同）：不在 grant 内，必须回到审批后端。
+	other := &schema.ToolCall{
+		ID:   "other-write",
+		Type: "function",
+		Function: schema.FunctionCall{
+			Name:      "seo_keyword",
+			Arguments: `{"action":"create","title":"另一个"}`,
+		},
+	}
+	backendCalls = 0
+	if _, err := st.executeToolCall(ctx, other); !errors.Is(err, ErrChannelApprovalDenied) {
+		t.Fatalf("未在 grant 中的写调用必须被审批后端拒绝（ErrChannelApprovalDenied），实际：%v", err)
+	}
+	if backendCalls != 1 {
+		t.Fatalf("未在 grant 中的写调用必须恰好问一次审批后端，实际 %d 次", backendCalls)
+	}
+	if *executed != 1 {
+		t.Fatalf("未在 grant 中的写调用不得执行 cap，实际累计执行 %d 次", *executed)
+	}
+
+	// 不同工具名同样不在 grant 内：直接喂写门（绕过意图门）证明分支本身也没有放宽。
+	backendCalls = 0
+	otherTool := &schema.ToolCall{
+		ID:   "other-tool-write",
+		Type: "function",
+		Function: schema.FunctionCall{
+			Name:      "content_article",
+			Arguments: `{"action":"save","title":"另一个工具"}`,
+		},
+	}
+	exec := &ToolExecContext{
+		SessionID:  st.chatSessionID,
+		IsAgent:    false,
+		RootPath:   w.RootPath,
+		ApprovalFn: st.approvalDecision,
+	}
+	chain := NewMiddlewareChain(&WriteGateMiddleware{})
+	if _, denied, _ := chain.ExecuteTool(ctx, otherTool, st.handlers["seo_keyword"], exec); !denied {
+		t.Fatalf("不同工具的写调用必须被写门拦下，实际未拒绝（结果：%+v）", otherTool)
+	}
+	if backendCalls != 1 {
+		t.Fatalf("不同工具的写调用必须走审批后端，实际 %d 次", backendCalls)
+	}
+}
+
+// TestChannelApprovalGrantUsesPendingAction 钉住「Pending → 审批行 → 批准后执行」的
+// action 口径一致（R58）：T7 按 Pending.Action 落库，执行前复核按 grant.ArgsJSON 派生的
+// 原始 action 比对。任一侧把空 action 回落成 "*"，这里都会变成 ErrChannelApprovalInvalid。
+func TestChannelApprovalGrantUsesPendingAction(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"seo_keyword"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		policy:      `{"intents":{"seo_keyword":{"*":"confirm"}}}`,
+		whitelist:   []string{"seo_keyword"},
+		permissions: []string{"/"},
+	})
+	ctx := context.Background()
+	chatId := "grant-pending-action-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	// 第一轮：策略 confirm → 产生 Pending，不执行。
+	asking := &scriptedChannelModel{script: func(round int, in []*schema.Message) *schema.Message {
+		return schema.AssistantMessage("", []schema.ToolCall{{
+			ID:       "pending-action-1",
+			Type:     "function",
+			Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"page":1,"action":"list"}`},
+		}})
+	}}
+	first, err := env.svc.runChannelTurn(ctx, env.request(chatId, "列一下关键词", 1, false), scriptedChannelFactory(asking))
+	if err != nil {
+		t.Fatalf("confirm 应返回待确认而非失败，实际：%v", err)
+	}
+	if first.Pending == nil {
+		t.Fatalf("必须返回待确认字段，实际：%+v", first)
+	}
+	if first.Pending.Action != "list" {
+		t.Fatalf("Pending.Action 必须是参数里的原始 action（不得回落 \"*\"），实际：%q", first.Pending.Action)
+	}
+
+	// T7 落库：tool / action / 参数全部取自 Pending。
+	row := env.newApprovalRow(t, first.Pending.ToolName, first.Pending.ArgsJSON,
+		model.ApprovalStatusApproved, time.Now().Add(10*time.Minute).Unix())
+	if row.Action != first.Pending.Action {
+		t.Fatalf("审批行 action 必须与 Pending.Action 一致，Pending=%q 行=%q", first.Pending.Action, row.Action)
+	}
+
+	// 第二轮：批准后执行，grant 完全照抄 Pending。
+	executed := stubEndpointCap(t, env.svc)
+	req := env.request(chatId, "确认执行", 1, false)
+	req.Approval = &ChannelApprovalGrant{
+		ApprovalId: row.PublicId,
+		ToolName:   first.Pending.ToolName,
+		ArgsJSON:   first.Pending.ArgsJSON,
+	}
+	m := &scriptedChannelModel{}
+	if _, err := env.svc.runChannelTurn(ctx, req, scriptedChannelFactory(m)); err != nil {
+		t.Fatalf("Pending → 审批行 → 批准后执行 必须一路对齐，实际：%v", err)
+	}
+	if *executed != 1 {
+		t.Fatalf("批准后必须执行 1 次，实际 %d 次", *executed)
+	}
+	if m.calls() != 0 {
+		t.Fatalf("批准后执行不得调用模型，实际 %d 次", m.calls())
+	}
+}
+
 // ============================================================
 // R56：pending 也必须保持消息序列完整
 // ============================================================

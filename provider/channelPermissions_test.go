@@ -182,13 +182,17 @@ func permTestPrincipal(w *Website, ch *model.MessageChannel, adminId, bindingId 
 // newPermTestApproval 建一条审批记录，并在用例结束时按自己的 ID 精确删除。
 // mutate 用于构造过期 / 策略 revision 不符 / 他人绑定 / 参数哈希不符等无效变体；
 // 若 mutate 把 ArgsHash 改了，这里不会再覆盖（保持调用方意图）。
+//
+// Action 与 Tool 一样是审批单的**身份字段**（R58）：action 从 argsJson 里取原始值
+// （T7 落库口径就是 Pending.Action = actionOfArgsJSON(args)），没有 action 键就是空串。
+// 硬编码成某个值会让「审批行 action 与调用 action 是否一致」这条判定在测试里空转。
 func newPermTestApproval(t *testing.T, w *Website, bindingId uint, policyRevision int, argsJson string, mutate func(*model.ChannelApproval)) *model.ChannelApproval {
 	t.Helper()
 	approval := &model.ChannelApproval{
 		SiteId:         w.Id,
 		BindingId:      bindingId,
 		Tool:           "seo_keyword",
-		Action:         "list",
+		Action:         actionOfArgsJSON(argsJson),
 		CanonicalArgs:  argsJson,
 		ArgsHash:       ChannelArgsHash(argsJson),
 		ExpiresAt:      time.Now().Unix() + 600,
@@ -476,7 +480,7 @@ func TestChannelSwitchNeedsConfirmSentinel(t *testing.T) {
 		t.Fatalf("confirm 不能被当成 deny：%v", err)
 	}
 	// 审批通过后的复核：必须带审批凭据自证（R34），除 confirm 外其余门禁照旧生效。
-	argsJson := `{"title":"confirm-sentinel"}`
+	argsJson := `{"action":"list","title":"confirm-sentinel"}`
 	approval := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
 	if err := w.CheckIntentPermissionApproved(ctx, p, approval.PublicId, argsJson, "seo_keyword", "list"); err != nil {
 		t.Fatalf("持有效审批的复核应放行，实际：%v", err)
@@ -703,7 +707,8 @@ func TestApprovalProof(t *testing.T) {
 	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
 	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
 	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
-	argsJson := `{"title":"审批自证"}`
+	// R58：参数里带 action，审批行的 action 由它派生，与调用方传入的 action 逐字比对。
+	argsJson := `{"action":"list","title":"审批自证"}`
 
 	validApproval := func(t *testing.T) *model.ChannelApproval {
 		t.Helper()
@@ -827,6 +832,62 @@ func TestApprovalProof(t *testing.T) {
 			t.Fatalf("有效审批仍必须受绑定有效性约束，实际：%v", err)
 		}
 	})
+}
+
+// ============================================================
+// 审批自证必须绑定工具身份（R58）
+// ============================================================
+
+// TestApprovalProofBindsToolIdentity 证明审批凭据不是「一张参数哈希票」：
+// 审批行的 tool / action 是「管理员批准了哪一次操作」的身份字段，必须逐字比对。
+//
+// 越权路径（本轮实测）：审批行 tool=seo_keyword、args={"action":"list","page":1}，
+// 复核时传 intentName=content_article + 同样参数 → 只比摘要时摘要一致，于是
+// 「确认一个工具，可以执行另一个工具」。本用例的 exposure / 白名单 / 策略 / 菜单权限
+// 都为 content_article 放行，因此去掉 tool/action 比对后它必然会通过——
+// 失败只可能来自工具身份这一条判定（反向对照有效）。
+func TestApprovalProofBindsToolIdentity(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	ch := newPermTestChannel(t, w,
+		`{"intents":{"seo_keyword":{"*":"allow"},"content_article":{"*":"allow"}}}`, 1)
+	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword", "content_article"})
+	admin := newPermTestAdmin(t, w, []string{"/"}, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+	withTestAiSetting(t, w, []string{"seo_keyword", "content_article"})
+
+	argsJson := `{"action":"list","page":1}`
+	row := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
+
+	// 1) 参数完全一致、工具不同：必须拒绝。
+	if err := w.CheckIntentPermissionApproved(ctx, p, row.PublicId, argsJson, "content_article", "list"); !errors.Is(err, ErrChannelApprovalInvalid) {
+		t.Fatalf("审批行 tool=seo_keyword 时用 content_article 复核必须返回 ErrChannelApprovalInvalid，实际：%v", err)
+	}
+	// 2) 工具一致、action 不同（含空 action）：同样必须拒绝。
+	for _, action := range []string{"create", ""} {
+		if err := w.CheckIntentPermissionApproved(ctx, p, row.PublicId, argsJson, "seo_keyword", action); !errors.Is(err, ErrChannelApprovalInvalid) {
+			t.Fatalf("审批行 action=list 时用 action=%q 复核必须返回 ErrChannelApprovalInvalid，实际：%v", action, err)
+		}
+	}
+	// 3) 完全一致：必须放行（反向对照，否决「一律拒绝」的实现）。
+	if err := w.CheckIntentPermissionApproved(ctx, p, row.PublicId, argsJson, "seo_keyword", "list"); err != nil {
+		t.Fatalf("工具与参数都与审批行一致时必须放行，实际：%v", err)
+	}
+
+	// 4) 空 action 就用空 action 比，**不回落 "*"**：审批行 action 取自 ArgsJSON 原始值，
+	// 无 action 键即空串；拿 "*" 去比必须对不上（否则「批准一个无动作调用」=「批准全部动作」）。
+	noActionArgs := `{"title":"无动作参数"}`
+	noActionRow := newPermTestApproval(t, w, binding.Id, ch.Revision, noActionArgs, nil)
+	if noActionRow.Action != "" {
+		t.Fatalf("ArgsJSON 没有 action 时审批行 action 必须是空串，实际：%q", noActionRow.Action)
+	}
+	if err := w.CheckIntentPermissionApproved(ctx, p, noActionRow.PublicId, noActionArgs, "seo_keyword", ""); err != nil {
+		t.Fatalf("空 action 与审批行空 action 一致时必须放行（策略仍按 * 兜底），实际：%v", err)
+	}
+	if err := w.CheckIntentPermissionApproved(ctx, p, noActionRow.PublicId, noActionArgs, "seo_keyword", "*"); !errors.Is(err, ErrChannelApprovalInvalid) {
+		t.Fatalf("用 \"*\" 复核空 action 的审批行必须被拒（不得回落通配符），实际：%v", err)
+	}
 }
 
 // ============================================================

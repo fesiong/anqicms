@@ -196,29 +196,39 @@ func (w *Website) CheckIntentPermission(ctx context.Context, p ExecutionPrincipa
 // 若仍走 CheckIntentPermission，同一个 confirm 决策会让它再次返回 ErrChannelPolicyNeedsConfirm，
 // 执行器只能二选一——死循环，或者干脆跳过整段复核。后者就是「确认即提权」。
 //
-// 自证的内容（R34）：approvalId + argsJson 必须对得上该绑定在此策略修订号下的一条
-// 未过期的 approved/executing 记录。**不接收凭据就跳过 confirm 等于把 confirm 整条策略
-// 变成无效**——任何调用方只要改调本函数，就能绕过所有确认。
+// 自证的内容（R34 + R58）：approvalId + argsJson + 工具身份（intentName/action）必须对得上
+// 该绑定在此策略修订号下的一条未过期的 approved/executing 记录。**不接收凭据就跳过 confirm
+// 等于把 confirm 整条策略变成无效**——任何调用方只要改调本函数，就能绕过所有确认。
 //
-// 边界：tool/action 与审批记录的匹配由 T7 在消费审批时负责（它才是审批单的写入方），
-// 本函数只证明「该绑定在此 revision 下确有一条未过期的已批准记录，且参数一致」。
+// R58 为什么必须比对工具身份：只比参数摘要时，两个工具的参数恰好一致（例如都只带
+// {"action":"list","page":1}）就能「确认 seo_keyword、执行 content_article」。审批行本身
+// 就记了 tool/action，它们是「管理员批准了哪一次操作」的身份字段，不是元数据。
+//
+// 边界：审批状态机的推进（消费 approved → executing）仍由 T7 负责，本函数只读复核。
 // 因此 T7 必须先用同一 public_id 把记录条件更新为 executing（消费），再调本函数复核。
 func (w *Website) CheckIntentPermissionApproved(ctx context.Context, p ExecutionPrincipal, approvalId string, argsJson string, intentName, action string) error {
 	if err := w.checkChannelPrincipal(p); err != nil {
 		return err
 	}
-	if err := w.checkChannelApprovalProof(ctx, p, approvalId, argsJson); err != nil {
+	if err := w.checkChannelApprovalProof(ctx, p, approvalId, argsJson, intentName, action); err != nil {
 		return err
 	}
 	return w.checkIntentPermission(ctx, p, intentName, action, true)
 }
 
-// checkChannelApprovalProof 校验审批凭据确实属于该执行主体，且参数与策略未被改动。
+// checkChannelApprovalProof 校验审批凭据确实属于该执行主体，且**工具身份、参数与策略**
+// 都未被改动。
 //
 // 查询必须带 site_id：public_id 是随机串但仍然按站点隔离查询，
 // 免得任何一个站点的记录被另一个站点当成自己批的。任一条件不满足一律
-// ErrChannelApprovalInvalid（不区分「不存在」与「不匹配」，避免把审批单号当探测通道）。
-func (w *Website) checkChannelApprovalProof(ctx context.Context, p ExecutionPrincipal, approvalId, argsJson string) error {
+// ErrChannelApprovalInvalid（不区分「不存在」与「不匹配」，避免把审批单号当探测通道，
+// 也不暴露是哪一条不符）。
+//
+// R58：`tool` / `action` 必须逐字比对审批行。action 用调用方给的**原始值**
+// （即从 ArgsJSON 里解析出的 action，解析不出就是空串），这里不做任何兜底：
+// "*" 是 ChannelPolicy.Decision 内部的策略兜底语义，不是审批单的身份字段——
+// 把空 action 当成 "*" 会让「批准了一个无动作调用」变成「批准了该工具的全部动作」。
+func (w *Website) checkChannelApprovalProof(ctx context.Context, p ExecutionPrincipal, approvalId, argsJson, intentName, action string) error {
 	publicId := strings.TrimSpace(approvalId)
 	if publicId == "" {
 		return fmt.Errorf("%w：缺少审批标识", ErrChannelApprovalInvalid)
@@ -229,8 +239,8 @@ func (w *Website) checkChannelApprovalProof(ctx context.Context, p ExecutionPrin
 	}
 	var approval model.ChannelApproval
 	err := w.DB.WithContext(ctx).
-		Where("`site_id` = ? AND `public_id` = ? AND `binding_id` = ? AND `status` IN ? AND `expires_at` > ? AND `policy_revision` = ? AND `args_hash` = ?",
-			p.SiteId, publicId, p.BindingId,
+		Where("`site_id` = ? AND `public_id` = ? AND `binding_id` = ? AND `tool` = ? AND `action` = ? AND `status` IN ? AND `expires_at` > ? AND `policy_revision` = ? AND `args_hash` = ?",
+			p.SiteId, publicId, p.BindingId, strings.TrimSpace(intentName), action,
 			[]string{model.ApprovalStatusApproved, model.ApprovalStatusExecuting},
 			time.Now().Unix(), p.PolicyRevision, argsHash).
 		Take(&approval).Error

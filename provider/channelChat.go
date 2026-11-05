@@ -265,6 +265,12 @@ type channelTurnState struct {
 	// approvalGrant 非 nil 表示本轮是「批准后执行」（R55）：不调用模型，
 	// 只执行这一条已自证的调用。意图门禁因此改用 CheckIntentPermissionApproved。
 	approvalGrant *ChannelApprovalGrant
+	// approvalAction 是 grant.ArgsJSON 里解析出的**原始** action（R58），
+	// 与 args_hash 同源（同一份规范化后的参数），审批自证时逐字比对审批行的 action 列。
+	// 刻意不回落 "*"：ArgsJSON 里没有 action 就是空串，"*" 只属于
+	// ChannelPolicy.Decision 内部的策略兜底语义。空 action 若被当成 "*"，
+	// 「批准一个无动作调用」就等于「批准该工具的全部动作」。
+	approvalAction string
 
 	releaseGate func()
 	releaseOnce sync.Once
@@ -711,8 +717,11 @@ func (st *channelTurnState) checkToolPermission(ctx context.Context, name, actio
 // 的死循环；而为了绕开它去跳过整段复核对等于「确认即提权」。
 func (st *channelTurnState) intentGate(ctx context.Context, name, action string) error {
 	if st != nil && st.approvalGrant != nil {
+		// R58：name 取**本次调用**的工具名（与审批行不符就在自证处拒绝），
+		// action 取 grant.ArgsJSON 派生的原始 action（与 args_hash 同源，
+		// 不接受调用方另传的 action 覆盖），两者都不做 "*" 兜底。
 		return st.w.CheckIntentPermissionApproved(
-			ctx, st.principal, st.approvalGrant.ApprovalId, st.approvalGrant.ArgsJSON, name, action)
+			ctx, st.principal, st.approvalGrant.ApprovalId, st.approvalGrant.ArgsJSON, name, st.approvalAction)
 	}
 	return st.w.CheckIntentPermission(ctx, st.principal, name, action)
 }
@@ -938,6 +947,10 @@ func (st *channelTurnState) applyApprovalGrant(grant *ChannelApprovalGrant) erro
 		ToolName:   name,
 		ArgsJSON:   args,
 	}
+	// R58：工具身份的第二半是 action，与 args_hash 取自同一份规范化参数
+	// （actionOfArgsJSON 与 ChannelArgsHash 都按 any → Marshal 规范化后解析）。
+	// 解析不出就是空串，绝不回落 "*"——见 channelTurnState.approvalAction 的说明。
+	st.approvalAction = actionOfArgsJSON(args)
 	return nil
 }
 
@@ -1007,10 +1020,11 @@ func (st *channelTurnState) approvalDecision(ctx context.Context, call *schema.T
 		return "deny", ErrChannelApprovalUnavailable.Error()
 	}
 	// R55：批准后执行。这条调用已经由 intentGate → CheckIntentPermissionApproved
-	// 按「绑定 + 策略修订号 + 参数摘要 + 未过期 + 已批准/执行中」自证过一次，
-	// 且 grant 只存在于本次请求内、工具名与参数必须逐字对上。此时再走运行时审批回调
-	// 只会让 T7 新建第二张审批单（批准→再要确认的死循环），所以直接放行这一次。
-	// 注意放行范围：仅限本轮唯一那条已自证的调用，不是「本会话完全控制」。
+	// 按「绑定 + 工具身份（tool/action）+ 策略修订号 + 参数摘要 + 未过期 + 已批准/执行中」
+	// 自证过一次，且 grant 只存在于本次请求内、工具名与参数必须逐字对上。此时再走运行时
+	// 审批回调只会让 T7 新建第二张审批单（批准→再要确认的死循环），所以直接放行这一次。
+	// 注意放行范围：仅限本轮唯一那条已自证的调用，不是「本会话完全控制」——
+	// 同一轮里工具名或参数不同的调用仍然要回到 ChannelApprovalFunc 走完整审批。
 	if st.approvalGrant != nil &&
 		strings.TrimSpace(call.Function.Name) == st.approvalGrant.ToolName &&
 		channelCanonicalArgs(call.Function.Arguments) == st.approvalGrant.ArgsJSON {
