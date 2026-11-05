@@ -8,7 +8,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"go/ast"
+	"go/parser"
+	"go/token"
 	"log"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -1202,18 +1206,40 @@ func TestChannelLifecycleRebuildsOnSiteReinit(t *testing.T) {
 	registry.waitForRun(t, ch.AppId, 2)
 }
 
-// TestChannelLifecycleInitSwitch 锁定显式开关：InitWebsite 默认不启动渠道管理器
-// （否则所有既有 provider 测试都会用生产参数真实建连），打开后才启动。
+// TestChannelLifecycleInitSwitch 锁定「站点初始化只在开关打开时启动管理器」这条接线。
+// 默认关闭否则所有既有 provider 测试都会用生产参数真实建连，打开后才启动。
+//
+// 这里不再因为开发库存在 enabled 渠道就跳过：开关关闭时 InitWebsite 必须不启动，
+// 这个断言与库里有没有启用渠道无关。开关打开的那一半替换 startChannelManagerOnInit
+// 接缝，因此只用真实凭据建连的风险不存在。
 func TestChannelLifecycleInitSwitch(t *testing.T) {
 	w := channelManagerTestSite(t)
-
-	// 保护：开发库里若真有启用渠道，打开开关会让本测试用生产参数真实建连。
-	var enabledCount int64
-	if err := w.DB.Model(&model.MessageChannel{}).Where("site_id = ? AND enabled = ?", w.Id, 1).Count(&enabledCount).Error; err != nil {
-		t.Fatalf("统计启用渠道失败：%v", err)
+	if manager := channelManagerRegistry.bySite[w.Id]; manager != nil {
+		t.Fatal("测试前置条件不成立：fixture 没停掉站点 1 的渠道管理器")
 	}
-	if enabledCount > 0 {
-		t.Skipf("站点 %d 存在 %d 个启用渠道，跳过以免真实建连", w.Id, enabledCount)
+
+	var (
+		startMu    sync.Mutex
+		startCalls int
+		startSites []uint
+	)
+	previousStart := startChannelManagerOnInit
+	startChannelManagerOnInit = func(site *Website) {
+		startMu.Lock()
+		defer startMu.Unlock()
+		startCalls++
+		startSites = append(startSites, site.Id)
+	}
+	previousSwitch := channelManagerOnInit.Load()
+	t.Cleanup(func() {
+		startChannelManagerOnInit = previousStart
+		channelManagerOnInit.Store(previousSwitch)
+		w.StopChannelManager()
+	})
+	startCount := func() int {
+		startMu.Lock()
+		defer startMu.Unlock()
+		return startCalls
 	}
 
 	initSite := func() {
@@ -1227,21 +1253,26 @@ func TestChannelLifecycleInitSwitch(t *testing.T) {
 
 	// 开关关闭（默认）：再次 InitWebsite 也不得启动管理器。
 	// 关键在于 fixture 已经停过一次，这里断言的是「InitWebsite 自己没启动」。
+	channelManagerOnInit.Store(false)
 	initSite()
+	if got := startCount(); got != 0 {
+		t.Fatalf("开关关闭时 InitWebsite 仍调用了启动入口 %d 次", got)
+	}
 	if manager := channelManagerRegistry.bySite[w.Id]; manager != nil {
 		t.Fatal("开关关闭时 InitWebsite 启动了渠道管理器")
 	}
 
-	previous := channelManagerOnInit.Load()
+	// 开关打开：必须调用启动入口，且传入的是本次初始化的站点。
 	channelManagerOnInit.Store(true)
-	t.Cleanup(func() {
-		channelManagerOnInit.Store(previous)
-		w.StopChannelManager()
-	})
-
 	initSite()
-	if manager := channelManagerRegistry.bySite[w.Id]; manager == nil {
-		t.Fatal("开关打开后 InitWebsite 应启动渠道管理器")
+	if got := startCount(); got != 1 {
+		t.Fatalf("开关打开后 InitWebsite 应调用启动入口 1 次，实际 %d 次", got)
+	}
+	startMu.Lock()
+	gotSites := append([]uint(nil), startSites...)
+	startMu.Unlock()
+	if len(gotSites) != 1 || gotSites[0] != w.Id {
+		t.Fatalf("启动入口拿到的站点不对：%v（期望站点 %d）", gotSites, w.Id)
 	}
 }
 
@@ -1304,6 +1335,148 @@ func TestChannelLifecycleGroupMessageGate(t *testing.T) {
 	}
 }
 
+// TestChannelRebuildDisabledOrRemovedChannelReportsStopTimeout 锁定「禁用 / 删除渠道」的立即生效路径：
+// 旧连接没在时限内退出时必须返回可重试错误，而不是给调用方一个「已停」的成功回执 ——
+// 旧连接可能还在收消息，成功回执会让保存配置的人以为已经停了。
+func TestChannelRebuildDisabledOrRemovedChannelReportsStopTimeout(t *testing.T) {
+	cases := []struct {
+		name   string
+		remove func(t *testing.T, w *Website, ch *model.MessageChannel)
+		// direct：走管理器内部入口。公开的 RebuildChannel 会先做一次存在性校验，
+		// 删除路径的 not-found 分支只能在管理器内部复现（渠道在两次读之间被删）。
+		direct bool
+	}{
+		{
+			name: "渠道被禁用",
+			remove: func(t *testing.T, w *Website, ch *model.MessageChannel) {
+				res := w.DB.Model(&model.MessageChannel{}).Where("id = ? AND site_id = ?", ch.Id, w.Id).Update("enabled", 0)
+				if res.Error != nil || res.RowsAffected != 1 {
+					t.Fatalf("禁用测试渠道失败：%v（影响 %d 行）", res.Error, res.RowsAffected)
+				}
+			},
+		},
+		{
+			name: "渠道被删除",
+			remove: func(t *testing.T, w *Website, ch *model.MessageChannel) {
+				if err := w.DB.Where("id = ? AND site_id = ?", ch.Id, w.Id).Delete(&model.MessageChannel{}).Error; err != nil {
+					t.Fatalf("删除测试渠道失败：%v", err)
+				}
+			},
+			direct: true,
+		},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			w := channelManagerTestSite(t)
+			ch := newManagerTestChannel(t, w, true)
+
+			registry := newFakeChannelFactory(func(string, int) *fakeChannelAdapter {
+				// 模拟钉钉 SDK 不感知 ctx：退出远慢于 shutdownWait。
+				adapter := newFakeChannelAdapter()
+				adapter.ignoreCancel = true
+				adapter.exitDelay = 400 * time.Millisecond
+				return adapter
+			})
+			opts := testChannelManagerOptions(registry)
+			opts.shutdownWait = 80 * time.Millisecond
+			// 关掉周期扫描，避免它和本用例的断言抢着停同一个 worker。
+			opts.scanEvery = time.Hour
+			startTestChannelManager(t, w, opts)
+			first := registry.waitForRun(t, ch.AppId, 1)
+
+			tc.remove(t, w, ch)
+
+			startedAt := time.Now()
+			var err error
+			if tc.direct {
+				manager := channelManagerRegistry.bySite[w.Id]
+				if manager == nil {
+					t.Fatal("测试管理器没有登记到注册表")
+				}
+				err = manager.rebuildOne(ch.Id)
+			} else {
+				err = w.RebuildChannel(ch.Id)
+			}
+			elapsed := time.Since(startedAt)
+
+			if err == nil {
+				t.Fatalf("%s且旧连接未在时限内退出时，重建必须返回错误（当前给的是成功）", tc.name)
+			}
+			if !strings.Contains(err.Error(), "退出") {
+				t.Fatalf("重建错误不可读：%v", err)
+			}
+			if elapsed < opts.shutdownWait {
+				t.Fatalf("没等满停止时限就返回了（%s < %s）", elapsed, opts.shutdownWait)
+			}
+			if limit := opts.shutdownWait + time.Second; elapsed > limit {
+				t.Fatalf("超出停止时限（%s > %s）", elapsed, limit)
+			}
+
+			// 旧连接还活着：租约不得释放，也不得出现第二条连接。
+			var lease model.ChannelLease
+			if err := w.DB.Where("app_identity_hash = ?", channelAppHash(ch)).Take(&lease).Error; err != nil {
+				t.Fatalf("停止超时后租约被释放了：%v", err)
+			}
+			if got := registry.runCount(ch.AppId); got != 1 {
+				t.Fatalf("旧连接未退出就建立了新连接：Run %d 次", got)
+			}
+
+			// 旧连接退出后，下一轮扫描完成收尾：worker 出表、租约按规则释放。
+			waitFakeExit(t, first, 3*time.Second)
+			manager := channelManagerRegistry.bySite[w.Id]
+			if manager == nil {
+				t.Fatal("测试管理器没有登记到注册表")
+			}
+			manager.reconcile()
+			if worker := manager.worker(ch.Id); worker != nil {
+				t.Fatal("旧连接退出后 worker 仍留在表里")
+			}
+			var count int64
+			if err := w.DB.Model(&model.ChannelLease{}).
+				Where("app_identity_hash = ?", channelAppHash(ch)).
+				Count(&count).Error; err != nil {
+				t.Fatalf("统计租约失败：%v", err)
+			}
+			if count != 0 {
+				t.Fatalf("渠道已不需要连接，旧连接退出后租约仍被保留（%d 行）", count)
+			}
+		})
+	}
+}
+
+// TestChannelManagerStopIsIdempotent 锁定站点禁用路径依赖的前提：控制器与清理各调一次
+// StopChannelManager，重复调用必须安全（幂等），且不得把租约留成幽灵行。
+func TestChannelManagerStopIsIdempotent(t *testing.T) {
+	w := channelManagerTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+
+	registry := newFakeChannelFactory(nil)
+	startTestChannelManager(t, w, testChannelManagerOptions(registry))
+	adapter := registry.waitForRun(t, ch.AppId, 1)
+
+	w.StopChannelManager()
+	// 第二次：注册表条目已被第一次删除，必须是安全的空操作。
+	w.StopChannelManager()
+	// 从来没有管理器的站点同样不能 panic。
+	w.stopChannelManager()
+
+	waitFakeExit(t, adapter, 3*time.Second)
+	if manager := channelManagerRegistry.bySite[w.Id]; manager != nil {
+		t.Fatal("停止后注册表里仍留着该站点的管理器")
+	}
+	var count int64
+	if err := w.DB.Model(&model.ChannelLease{}).
+		Where("app_identity_hash = ?", channelAppHash(ch)).
+		Count(&count).Error; err != nil {
+		t.Fatalf("统计租约失败：%v", err)
+	}
+	if count != 0 {
+		t.Fatalf("正常退出后租约没有被释放（%d 行）", count)
+	}
+}
+
 // TestChannelLifecycleInboxEventHashNotSerialized 锁定全局约束：后台响应不得包含事件摘要。
 func TestChannelLifecycleInboxEventHashNotSerialized(t *testing.T) {
 	inbox := &model.ChannelInbox{
@@ -1329,5 +1502,300 @@ func TestChannelLifecycleInboxEventHashNotSerialized(t *testing.T) {
 		if !strings.Contains(text, expected) {
 			t.Fatalf("入站任务 JSON 缺少 %s：%s", expected, text)
 		}
+	}
+}
+
+// ============================================================
+// 启动接线的静态护栏（不依赖真实安装流程与数据库）
+// ============================================================
+
+func parseGoFileForGuard(t *testing.T, path string) (*token.FileSet, *ast.File) {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("解析 %s 失败：%v", path, err)
+	}
+	return fset, file
+}
+
+func parseGoSourceForGuard(t *testing.T, source string) (*token.FileSet, *ast.File) {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, "guard_synthetic.go", source, 0)
+	if err != nil {
+		t.Fatalf("解析内联源码失败：%v", err)
+	}
+	return fset, file
+}
+
+// findFuncBodyForGuard 找到指定函数（recvType 为空表示普通函数）的函数体。
+func findFuncBodyForGuard(t *testing.T, file *ast.File, recvType, name string) *ast.BlockStmt {
+	t.Helper()
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok || fn.Name.Name != name || fn.Body == nil {
+			continue
+		}
+		if recvType == "" {
+			if fn.Recv == nil || len(fn.Recv.List) == 0 {
+				return fn.Body
+			}
+			continue
+		}
+		if fn.Recv == nil || len(fn.Recv.List) != 1 {
+			continue
+		}
+		star, ok := fn.Recv.List[0].Type.(*ast.StarExpr)
+		if !ok {
+			continue
+		}
+		if ident, ok := star.X.(*ast.Ident); ok && ident.Name == recvType {
+			return fn.Body
+		}
+	}
+	t.Fatalf("没有找到函数 %s.%s", recvType, name)
+	return nil
+}
+
+// isQualifiedCall 判断表达式是否为 pkg.fn(...) 调用。
+func isQualifiedCall(expr ast.Expr, pkg, fn string) bool {
+	call, ok := expr.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	ident, ok := selector.X.(*ast.Ident)
+	return ok && ident.Name == pkg && selector.Sel.Name == fn
+}
+
+// containsQualifiedCall 在任意深度上查找 pkg.fn(...) 调用。
+func containsQualifiedCall(node ast.Node, pkg, fn string) bool {
+	found := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		if call, ok := n.(*ast.CallExpr); ok && isQualifiedCall(call, pkg, fn) {
+			found = true
+			return false
+		}
+		return true
+	})
+	return found
+}
+
+// serveChannelInitScan 是对 bootstrap.Serve 里「开关打开」这条接线的扫描结果。
+type serveChannelInitScan struct {
+	// enableTopLevel：provider.EnableChannelManagerOnInit() 是 Serve 主体的顶层语句（无条件执行）。
+	enableTopLevel bool
+	enablePos      token.Pos
+	// enableNested：调用存在但不是顶层语句（被放进 if / for 等块里）。
+	enableNested bool
+	// gatePos：if provider.GetDefaultDB() != nil 的位置，NoPos 表示没找到。
+	gatePos token.Pos
+}
+
+func scanServeChannelInit(body *ast.BlockStmt) serveChannelInitScan {
+	var scan serveChannelInitScan
+	for _, stmt := range body.List {
+		if expr, ok := stmt.(*ast.ExprStmt); ok && isQualifiedCall(expr.X, "provider", "EnableChannelManagerOnInit") {
+			scan.enableTopLevel = true
+			scan.enablePos = stmt.Pos()
+		}
+		if ifStmt, ok := stmt.(*ast.IfStmt); ok && scan.gatePos == token.NoPos &&
+			containsQualifiedCall(ifStmt.Cond, "provider", "GetDefaultDB") {
+			scan.gatePos = ifStmt.Pos()
+		}
+	}
+	scan.enableNested = !scan.enableTopLevel && containsQualifiedCall(body, "provider", "EnableChannelManagerOnInit")
+	return scan
+}
+
+// TestBootstrapEnablesChannelManagerOutsideDatabaseGate 锁定本轮修复：
+// 全新安装时启动阶段没有 config.json（GetDefaultDB() == nil），开关若被放进
+// if provider.GetDefaultDB() != nil 块里，这个进程内的渠道管理器会全程不启动，
+// 安装流程随后调用的 InitWebsite 也拿不到开关。断言用 go/ast 直接看源码结构，
+// 不需要真实安装流程，也不依赖库里有没有启用渠道。
+func TestBootstrapEnablesChannelManagerOutsideDatabaseGate(t *testing.T) {
+	_, bootstrapFile := parseGoFileForGuard(t, filepath.Join("..", "bootstrap.go"))
+	body := findFuncBodyForGuard(t, bootstrapFile, "Bootstrap", "Serve")
+	scan := scanServeChannelInit(body)
+	if scan.gatePos == token.NoPos {
+		t.Fatal("bootstrap.Serve 里没有找到 if provider.GetDefaultDB() != nil：bootstrap 结构变了，需要同步本护栏")
+	}
+	if scan.enableNested {
+		t.Fatal("provider.EnableChannelManagerOnInit() 被放进了条件块：全新安装时 GetDefaultDB() 为 nil，开关永远打不开")
+	}
+	if !scan.enableTopLevel {
+		t.Fatal("bootstrap.Serve 顶层没有调用 provider.EnableChannelManagerOnInit()")
+	}
+	if scan.enablePos > scan.gatePos {
+		t.Fatal("provider.EnableChannelManagerOnInit() 必须在 if provider.GetDefaultDB() != nil（InitWebsites）之前调用")
+	}
+
+	// 反向对照：把同一个扫描器用在本轮修复前的写法上，必须判为「被关进条件块」。
+	const regression = `package anqicms
+
+func (bootstrap *Bootstrap) Serve() {
+	if provider.GetDefaultDB() != nil {
+		provider.EnableChannelManagerOnInit()
+		provider.InitWebsites()
+	}
+}`
+	_, syntheticFile := parseGoSourceForGuard(t, regression)
+	synthetic := scanServeChannelInit(findFuncBodyForGuard(t, syntheticFile, "Bootstrap", "Serve"))
+	if synthetic.gatePos == token.NoPos {
+		t.Fatal("扫描器没认出内联样例里的 GetDefaultDB 分支")
+	}
+	if synthetic.enableTopLevel || !synthetic.enableNested {
+		t.Fatalf("扫描器抓不住「把开关放进 GetDefaultDB 分支」的回归：%+v", synthetic)
+	}
+}
+
+// mentionsDatabase 判断函数体内是否读库：调用 GetDefaultDB 或直接引用 defaultDB。
+func mentionsDatabase(node ast.Node) bool {
+	found := false
+	ast.Inspect(node, func(n ast.Node) bool {
+		if found {
+			return false
+		}
+		switch value := n.(type) {
+		case *ast.CallExpr:
+			switch fun := value.Fun.(type) {
+			case *ast.Ident:
+				if fun.Name == "GetDefaultDB" {
+					found = true
+				}
+			case *ast.SelectorExpr:
+				if fun.Sel.Name == "GetDefaultDB" {
+					found = true
+				}
+			}
+		case *ast.Ident:
+			if value.Name == "defaultDB" {
+				found = true
+			}
+		}
+		return !found
+	})
+	return found
+}
+
+// TestEnableChannelManagerOnInitDoesNotReadDatabase 锁定：开关只写包级原子量，不依赖数据库。
+// 全新安装时启动阶段 GetDefaultDB() 返回 nil，开关必须在那一刻就能打开。
+func TestEnableChannelManagerOnInitDoesNotReadDatabase(t *testing.T) {
+	_, providerFile := parseGoFileForGuard(t, "channelManager.go")
+	body := findFuncBodyForGuard(t, providerFile, "", "EnableChannelManagerOnInit")
+	if mentionsDatabase(body) {
+		t.Fatal("EnableChannelManagerOnInit 不得依赖数据库：全新安装启动阶段 GetDefaultDB() 为 nil")
+	}
+
+	// 反向对照：同一个检测器必须抓得住读库写法。
+	const regression = `package provider
+
+func EnableChannelManagerOnInit() {
+	if GetDefaultDB() != nil {
+		channelManagerOnInit.Store(true)
+	}
+}`
+	_, regressionFile := parseGoSourceForGuard(t, regression)
+	if !mentionsDatabase(findFuncBodyForGuard(t, regressionFile, "", "EnableChannelManagerOnInit")) {
+		t.Fatal("检测器抓不住读库写法")
+	}
+}
+
+// isCurrentStopChannelManagerCall 判断语句是否为 current.StopChannelManager()。
+func isCurrentStopChannelManagerCall(stmt ast.Stmt) bool {
+	expr, ok := stmt.(*ast.ExprStmt)
+	if !ok {
+		return false
+	}
+	call, ok := expr.X.(*ast.CallExpr)
+	if !ok {
+		return false
+	}
+	selector, ok := call.Fun.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	receiver, ok := selector.X.(*ast.Ident)
+	return ok && receiver.Name == "current" && selector.Sel.Name == "StopChannelManager"
+}
+
+// isCurrentInitialedFalseAssign 判断语句是否为 current.Initialed = false。
+func isCurrentInitialedFalseAssign(stmt ast.Stmt) bool {
+	assign, ok := stmt.(*ast.AssignStmt)
+	if !ok || len(assign.Lhs) != 1 || len(assign.Rhs) != 1 {
+		return false
+	}
+	target, ok := assign.Lhs[0].(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	receiver, ok := target.X.(*ast.Ident)
+	if !ok || receiver.Name != "current" || target.Sel.Name != "Initialed" {
+		return false
+	}
+	value, ok := assign.Rhs[0].(*ast.Ident)
+	return ok && value.Name == "false"
+}
+
+// scanWebsiteDisableStopsChannelManager 扫描后台站点保存 handler：
+// 每处把站点置为未初始化（current.Initialed = false）都必须紧跟在本块上一句
+// current.StopChannelManager() 之后 —— 该路径不经过 InitWebsite。
+func scanWebsiteDisableStopsChannelManager(file *ast.File) (cases []token.Pos, uncovered []token.Pos) {
+	ast.Inspect(file, func(n ast.Node) bool {
+		block, ok := n.(*ast.BlockStmt)
+		if !ok {
+			return true
+		}
+		for i, stmt := range block.List {
+			if !isCurrentInitialedFalseAssign(stmt) {
+				continue
+			}
+			cases = append(cases, stmt.Pos())
+			if i == 0 || !isCurrentStopChannelManagerCall(block.List[i-1]) {
+				uncovered = append(uncovered, stmt.Pos())
+			}
+		}
+		return true
+	})
+	return cases, uncovered
+}
+
+// TestWebsiteDisableStopsChannelManager 锁定后台禁用站点路径：controller 里两处
+// current.Initialed = false 不经过 InitWebsite，必须显式停掉渠道管理器，
+// 否则它会继续连平台、续租并往 Inbox 落库。
+func TestWebsiteDisableStopsChannelManager(t *testing.T) {
+	fset, file := parseGoFileForGuard(t, filepath.Join("..", "controller", "manageController", "website.go"))
+	cases, uncovered := scanWebsiteDisableStopsChannelManager(file)
+	if len(cases) == 0 {
+		t.Fatal("website.go 里没有找到 current.Initialed = false：handler 结构变了，需要同步本护栏")
+	}
+	if len(uncovered) > 0 {
+		t.Fatalf("%s 把站点置为未初始化却没先调用 current.StopChannelManager()：站点被禁用后渠道管理器仍在运行",
+			fset.Position(uncovered[0]))
+	}
+
+	// 反向对照：同一个扫描器对内联的旧写法必须报缺失。
+	const regression = `package manageController
+
+func SaveWebsite(ctx iris.Context) {
+	if dbSite.Status != 1 {
+		current.Initialed = false
+	}
+}`
+	regressionSet, regressionFile := parseGoSourceForGuard(t, regression)
+	regressionCases, regressionUncovered := scanWebsiteDisableStopsChannelManager(regressionFile)
+	if len(regressionCases) != 1 || len(regressionUncovered) != 1 {
+		t.Fatalf("扫描器抓不住「置未初始化但没停管理器」的写法：%d / %d",
+			len(regressionCases), len(regressionUncovered))
+	}
+	if pos := regressionSet.Position(regressionUncovered[0]); pos.Line != 5 {
+		t.Fatalf("扫描器报的位置不对：%s", pos)
 	}
 }

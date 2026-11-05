@@ -506,7 +506,7 @@ func InitWebsite(mw *model.Website) {
 		// 必须显式开启（bootstrap.Serve 在 InitWebsites 之前调用 EnableChannelManagerOnInit），
 		// 否则测试与命令行工具会拿真实凭据去连平台并写真实租约。
 		if channelManagerOnInit.Load() {
-			w.StartChannelManager(context.Background())
+			startChannelManagerOnInit(&w)
 		}
 		w.NewMailService()
 		// 初始化索引,异步处理

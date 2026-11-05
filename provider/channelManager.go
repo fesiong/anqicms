@@ -125,8 +125,19 @@ var channelManagerOnInit atomic.Bool
 
 // EnableChannelManagerOnInit 打开「站点初始化时启动渠道管理器」的开关。
 // 只应由进程入口（bootstrap.Serve）在 InitWebsites 之前调用一次。
+//
+// 它只写包级原子量，不读数据库：全新安装时启动阶段还没有 config.json
+// （GetDefaultDB() == nil），开关也必须在那一刻就打开，安装流程随后调用的
+// InitWebsite 才能启动管理器。
 func EnableChannelManagerOnInit() {
 	channelManagerOnInit.Store(true)
+}
+
+// startChannelManagerOnInit 是「站点初始化时启动渠道管理器」的唯一入口。
+// 生产直接调用 StartChannelManager；测试替换它，在带 enabled 渠道的开发库上
+// 也能验证「开关打开才启动」这条接线，而不会用真实凭据去连平台。
+var startChannelManagerOnInit = func(w *Website) {
+	w.StartChannelManager(context.Background())
 }
 
 // StartChannelManager 为当前站点启动渠道连接管理器。
@@ -425,6 +436,8 @@ func (m *channelManager) reconcile() {
 
 // rebuildOne 是 RebuildChannel 的立即生效路径：无论配置是否变化都强制重建。
 // 返回错误表示旧连接未在时限内退出（此时不建立新连接）。
+// 「渠道已删除 / 已禁用」同样要等旧连接退出才返回成功：旧连接还在收消息时
+// 回一句成功，会让保存配置的管理员以为已经停了。
 func (m *channelManager) rebuildOne(channelId uint) error {
 	var channel model.MessageChannel
 	err := m.site.DB.Where("id = ? AND site_id = ?", channelId, m.site.Id).Take(&channel).Error
@@ -432,8 +445,9 @@ func (m *channelManager) rebuildOne(channelId uint) error {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			if m.stopWorker(channelId, true) {
 				m.clearRetry(channelId)
+				return nil
 			}
-			return nil
+			return errChannelWorkerStopTimeout
 		}
 		log.Printf("[channel] 站点 %d 读取渠道 %d 失败：%s", m.site.Id, channelId, sanitizePlatformMessage(err.Error()))
 		return errors.New("读取渠道失败")
@@ -441,8 +455,9 @@ func (m *channelManager) rebuildOne(channelId uint) error {
 	if channel.Enabled != 1 {
 		if m.stopWorker(channelId, true) {
 			m.clearRetry(channelId)
+			return nil
 		}
-		return nil
+		return errChannelWorkerStopTimeout
 	}
 	m.clearRetry(channelId)
 	if !m.stopWorker(channelId, false) {

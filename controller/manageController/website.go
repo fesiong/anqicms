@@ -269,6 +269,9 @@ func SaveWebsiteInfo(ctx iris.Context) {
 				}
 			}
 			if dbSite.Status != 1 {
+				// 站点被禁用：这里不经过 InitWebsite，必须显式停掉渠道管理器，
+				// 否则它会继续连平台、续租并往 Inbox 落库。
+				current.StopChannelManager()
 				current.Initialed = false
 			}
 		}
@@ -417,6 +420,8 @@ func SaveWebsiteInfo(ctx iris.Context) {
 				return
 			}
 			if dbSite.Status != 1 {
+				// 站点被禁用：同上方分支，未经过 InitWebsite 也要停掉渠道管理器。
+				current.StopChannelManager()
 				current.Initialed = false
 			}
 		}
