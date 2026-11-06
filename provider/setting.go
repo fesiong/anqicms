@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -77,6 +78,14 @@ const (
 	InterferenceKey     = "interference"
 	LastRunVersionKey   = "last_run_version"
 )
+
+// Share AI settings synchronization across request and async clones of a site.
+var aiSettingLocks sync.Map
+
+func (w *Website) aiSettingLock() *sync.Mutex {
+	lock, _ := aiSettingLocks.LoadOrStore(w.Id, &sync.Mutex{})
+	return lock.(*sync.Mutex)
+}
 
 // I18n 来自运行中设置的I18n 对象
 var I18n *i18n.I18n
@@ -871,6 +880,11 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 		return &settings
 	}
 
+	// Serialize cache fills with saves so an older read cannot undo invalidation.
+	lock := w.aiSettingLock()
+	lock.Lock()
+	defer lock.Unlock()
+
 	// Cache 是接口，站点未完成初始化时它是 nil（createDefaultWebsite 不建缓存，
 	// 测试里手工构造的 Website 也不会建）。原样调用会 nil 解引用直接 panic 进程
 	// ——这条路径挂在 Agent 调度器的 30 秒 tick 上，等于「跑够 30 秒就崩」。
@@ -882,7 +896,19 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 	}
 
 	if value == "" {
-		value = w.GetSettingValue(AiSettingKey)
+		if w.DB == nil {
+			return &settings
+		}
+		if err := w.DB.Model(&model.Setting{}).Where("`key` = ?", AiSettingKey).Pluck("value", &value).Error; err != nil {
+			return &settings
+		}
+		if value == "" {
+			// 空配置可缓存，但不应初始化官方 AI；查询失败则仍需重试。
+			if w.Cache != nil {
+				w.Cache.Set("ai_setting", settings, 86400)
+			}
+			return &settings
+		}
 	}
 	if err := json.Unmarshal([]byte(value), &settings); err != nil {
 		return &settings
@@ -915,7 +941,9 @@ func (w *Website) LoadAiSetting(value string) *eino.Configs {
 		}
 	}
 
-	w.Cache.Set("ai_setting", settings, 86400)
+	if w.Cache != nil {
+		w.Cache.Set("ai_setting", settings, 86400)
+	}
 	return &settings
 }
 
@@ -1050,7 +1078,18 @@ func (w *Website) SaveSettingValue(key string, value interface{}) error {
 	}
 	setting.Value = string(buf)
 
-	return w.DB.Save(&setting).Error
+	if key == AiSettingKey {
+		lock := w.aiSettingLock()
+		lock.Lock()
+		defer lock.Unlock()
+	}
+	if err := w.DB.Save(&setting).Error; err != nil {
+		return err
+	}
+	if key == AiSettingKey && w.Cache != nil {
+		w.Cache.Delete("ai_setting")
+	}
+	return nil
 }
 
 func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
@@ -1062,7 +1101,18 @@ func (w *Website) SaveSettingValueRaw(key string, value interface{}) error {
 		Value: fmt.Sprint(value),
 	}
 
-	return w.DB.Save(&setting).Error
+	if key == AiSettingKey {
+		lock := w.aiSettingLock()
+		lock.Lock()
+		defer lock.Unlock()
+	}
+	if err := w.DB.Save(&setting).Error; err != nil {
+		return err
+	}
+	if key == AiSettingKey && w.Cache != nil {
+		w.Cache.Delete("ai_setting")
+	}
+	return nil
 }
 
 func (w *Website) DeleteCache() {

@@ -29,6 +29,7 @@ import (
 	"gopkg.in/yaml.v3"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
+	"gorm.io/gorm/logger"
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/library"
 	"kandaoni.com/anqicms/model"
@@ -263,7 +264,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 	// 对于没有分页的list，则缓存
 	var cacheKey = ""
 	if currentPage == 0 && !draft {
-		sql := w.DB.WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql := w.DB.Session(&gorm.Session{Logger: w.DB.Logger.LogMode(logger.Silent)}).WithContext(w.Ctx()).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
 				tx = ops(tx)
 			}
@@ -295,7 +296,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 
 	if currentPage > 0 {
 		// 缓存count
-		sqlCount := w.DB.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sqlCount := w.DB.Session(&gorm.Session{Logger: w.DB.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			if ops != nil {
 				tx = ops(tx)
 			}
@@ -315,7 +316,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		// 先查询ID
 		var archiveIds []int64
 		builder = builder.Limit(pageSize).Offset(offset).Select("archives.id").Order(order)
-		sql := builder.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql := builder.Session(&gorm.Session{Logger: builder.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Find(&[]model.Archive{})
 		})
 		w.DB.Raw(sql).Pluck("id", &archiveIds)
@@ -365,7 +366,7 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		}
 		builder = builder.Limit(pageSize).Offset(offset).Order(order).Select("archives.id")
 		var archiveIds []int64
-		sql := builder.ToSQL(func(tx *gorm.DB) *gorm.DB {
+		sql := builder.Session(&gorm.Session{Logger: builder.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Find(&[]model.Archive{})
 		})
 		w.DB.Raw(sql).Pluck("id", &archiveIds)

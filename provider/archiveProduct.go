@@ -180,7 +180,7 @@ func (w *Website) registerArchiveProductLoader() {
 	if w.DB.Callback().Query().Get(archiveProductLoaderCallback) != nil {
 		return
 	}
-	_ = w.DB.Callback().Query().After("gorm:query").Register(archiveProductLoaderCallback, fillArchiveProducts)
+	_ = w.DB.Callback().Query().After("gorm:query").Before("gorm:after_query").Register(archiveProductLoaderCallback, fillArchiveProducts)
 }
 
 // fillArchiveProducts 是 registerArchiveProductLoader 注册的回调本体。
