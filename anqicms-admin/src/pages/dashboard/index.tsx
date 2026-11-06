@@ -7,6 +7,7 @@ import {
   getStatisticSummary,
   getStatisticTraffic,
 } from '@/services';
+import { contentEditPath, moduleListPath } from '@/utils/contentRoutes';
 import { getStore, setStore } from '@/utils/store';
 import {
   FileAddOutlined,
@@ -429,7 +430,7 @@ const Dashboard: React.FC = () => {
                           10.{' '}
                           <span
                             className="link"
-                            onClick={() => handleJump('/product/detail')}
+                            onClick={() => handleJump(contentEditPath())}
                           >
                             <FormattedMessage id="dashboard.guide.step.publish" />
                           </span>
@@ -459,7 +460,7 @@ const Dashboard: React.FC = () => {
           <Card
             title={intl.formatMessage({ id: 'dashboard.quick' })}
             extra={
-              <Button onClick={() => handleJump('/product/detail')}>
+              <Button onClick={() => handleJump(contentEditPath())}>
                 <FormattedMessage id="dashboard.guide.step.publish" />
               </Button>
             }
@@ -470,7 +471,8 @@ const Dashboard: React.FC = () => {
                   flex={1}
                   key={index}
                   onClick={() => {
-                    handleJump('/product/index?module_id=' + item.id);
+                    // 逐模型跳转按 kind + 站点模式分流，不再一律写死 /product/index
+                    handleJump(moduleListPath(item));
                   }}
                 >
                   <Statistic
