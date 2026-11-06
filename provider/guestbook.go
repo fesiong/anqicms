@@ -249,6 +249,7 @@ func (w *Website) SendGuestbookToMail(guestbook *model.Guestbook) {
 	data := map[string]interface{}{
 		"website":   w,
 		"guestbook": guestbook,
+		"user":      &model.User{UserName: guestbook.UserName},
 	}
 	//发送邮件
 	template, exist := w.GetEmailTemplateInfo("guestbook")
@@ -262,7 +263,7 @@ func (w *Website) SendGuestbookToMail(guestbook *model.Guestbook) {
 
 	// 回复邮件
 	template, exist = w.GetEmailTemplateInfo("auto_reply")
-	if exist && template.Open {
+	if exist && template.Open && recipient != "" {
 		var err error
 		template, err = w.RenderEmailTemplate(template, data)
 		if err == nil {

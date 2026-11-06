@@ -14,6 +14,8 @@ import (
 )
 
 func init() {
+	provider.RegisterEmailTemplateFunc("priceFormat", PriceFormat)
+	provider.RegisterEmailTemplateFunc("stampToDate", TimestampToDate)
 	pongo2.RegisterFilter("contain", filterContain)
 	pongo2.RegisterFilter("trim", filterTrim)
 	pongo2.RegisterFilter("trimLeft", filterTrimLeft)
