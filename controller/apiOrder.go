@@ -97,13 +97,13 @@ func ApiGetOrderChartData(ctx iris.Context) {
 	// 最近30天
 	startTime := time.Now().AddDate(0, 0, -30).Unix()
 	if showType == "" { // total
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status not in(?)", userId, startTime, []int{config.OrderStatusCanceled, config.OrderStatusWaiting}).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'total' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status not in(?)", userId, startTime, []int{config.OrderStatusCanceled, config.OrderStatusWaiting}).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'total' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	} else if showType == "pending" {
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusWaiting).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'pending' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusWaiting).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'pending' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	} else if showType == "processing" {
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status (?)", userId, startTime, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'processing' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status (?)", userId, startTime, []int{config.OrderStatusPaid, config.OrderStatusDelivering}).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'processing' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	} else if showType == "completed" {
-		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusCompleted).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, sum(amount) as `value`, 'completed' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+		currentSite.DB.Model(&model.Order{}).Where("user_id = ? and created_time >= ? and status = ?", userId, startTime, config.OrderStatusCompleted).Select(provider.ChartDateSQL("created_time") + ", sum(amount) as `value`, 'completed' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 	}
 
 	ctx.JSON(iris.Map{

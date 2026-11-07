@@ -21,6 +21,17 @@ type SpiderData struct {
 	Spider        string
 }
 
+// ChartDateSQL 生成图表按天分组时的日期列，别名固定为 `date`。
+//
+// 不要退回成 DATE(FROM_UNIXTIME(col))：DSN 开了 parseTime=True（provider/dao.go），
+// 驱动会把 DATE 结果解析成 time.Time，GORM 塞进 response.ChartData.Date（string）后
+// JSON 序列化成 RFC3339 的 "2026-11-05T00:00:00+08:00"，前端图表 x 轴就显示这一长串。
+// 用 DATE_FORMAT 让 MySQL 直接返回字符串，落到 string 字段就是约定的 2006-01-02，
+// 与 Go 侧 time.Unix(..).Format("2006-01-02") 的分支保持一致。
+func ChartDateSQL(column string) string {
+	return "DATE_FORMAT(FROM_UNIXTIME(`" + column + "`), '%Y-%m-%d') AS `date`"
+}
+
 func (w *Website) StatisticSpider() []response.ChartData {
 	var result []response.ChartData
 
@@ -240,17 +251,17 @@ func (w *Website) StatisticCoupon(startTime int64, endTime int64) []response.Cha
 	// 优惠券领取数量
 	// 优惠券使用数量
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.CouponCode{}).Where("get_time >= ? and get_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(get_time)) AS `date`, count(*) as `value`, 'gain' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.CouponCode{}).Where("get_time >= ? and get_time < ?", startTime, endTime).Select(ChartDateSQL("get_time") + ", count(*) as `value`, 'gain' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.CouponCode{}).Where("use_time >= ? and use_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(use_time)) AS `date`, count(*) as `value`, 'used' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.CouponCode{}).Where("use_time >= ? and use_time < ?", startTime, endTime).Select(ChartDateSQL("use_time") + ", count(*) as `value`, 'used' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 
 	return append(tmpResult, tmpResult2...)
 }
 
 func (w *Website) StatisticSearch(startTime int64, endTime int64) []response.ChartData {
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.SearchLog{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'search' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.SearchLog{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'search' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	return tmpResult
 }
@@ -259,10 +270,10 @@ func (w *Website) StatisticCustomer(startTime int64, endTime int64) []response.C
 	// 新注册用户数量
 	// 活跃用户数量
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.User{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'register' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.User{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'register' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.LoginLog{}).Where("created_time >= ? and created_time < ? and status = 1", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'login' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.LoginLog{}).Where("created_time >= ? and created_time < ? and status = 1", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'login' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 
 	return append(tmpResult, tmpResult2...)
 }
@@ -276,7 +287,7 @@ func (w *Website) StatisticProduct(startTime int64, endTime int64) []response.Ch
 	w.DB.Model(&model.Archive{}).
 		Where("module_id IN (SELECT `id` FROM `modules` WHERE `kind` = ?)", model.ModuleKindProduct).
 		Where("created_time >= ? and created_time < ?", startTime, endTime).
-		Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'new' as `label`").
+		Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'new' as `label`").
 		Group("`date`").Order("`date`").Scan(&result)
 	// 如果结束时间是今天，则今天的数据需要获取最新的数据
 	today := now.EndOfDay().Unix()
@@ -312,12 +323,12 @@ func (w *Website) StatisticOrder(startTime int64, endTime int64) []response.Char
 	// 下单
 	// 支付
 	var tmpResult []response.ChartData
-	w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(created_time)) AS `date`, count(*) as `value`, 'create' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
+	w.DB.Model(&model.Order{}).Where("created_time >= ? and created_time < ?", startTime, endTime).Select(ChartDateSQL("created_time") + ", count(*) as `value`, 'create' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult)
 
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", count(*) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 	var tmpResult3 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
 
 	tmpResult = append(tmpResult, tmpResult2...)
 	tmpResult = append(tmpResult, tmpResult3...)
@@ -388,15 +399,15 @@ func (w *Website) StatisticLive(startTime int64, endTime int64) map[string][]res
 	var results = map[string][]response.ChartData{}
 	// 销售额
 	var tmpResult1 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult1)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", sum(amount) as `value`, 'pay' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult1)
 	results["amount"] = tmpResult1
 	// 平均订单金额
 	var tmpResult2 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, ROUND(sum(amount)/count(*)) as `value`, 'average' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", ROUND(sum(amount)/count(*)) as `value`, 'average' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult2)
 	results["average_amount"] = tmpResult2
 	// 订单数量
 	var tmpResult3 []response.ChartData
-	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select("DATE(FROM_UNIXTIME(paid_time)) AS `date`, count(*) as `value`, 'count' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
+	w.DB.Model(&model.Order{}).Where("paid_time >= ? and paid_time < ?", startTime, endTime).Select(ChartDateSQL("paid_time") + ", count(*) as `value`, 'count' as `label`").Group("`date`").Order("`date`").Scan(&tmpResult3)
 	results["order_count"] = tmpResult3
 
 	// 如果结束时间是今天，则今天的数据需要获取最新的数据
