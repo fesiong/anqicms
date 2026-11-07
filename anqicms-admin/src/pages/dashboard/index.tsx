@@ -8,6 +8,7 @@ import {
   getStatisticTraffic,
 } from '@/services';
 import { contentEditPath, moduleListPath } from '@/utils/contentRoutes';
+import { isShopMode } from '@/utils/shopMode';
 import { getStore, setStore } from '@/utils/store';
 import {
   FileAddOutlined,
@@ -53,6 +54,10 @@ const Dashboard: React.FC = () => {
   const [exact, setExact] = useState<boolean>(true);
   const intl = useIntl();
 
+  // 订单统计只在商城模式下有意义：普通内容模式既隐藏该选项卡，也不再请求订单数据。
+  // initialState.system 在首屏渲染前已由 getInitialState 取回，这里不会出现先显示后隐藏的闪烁。
+  const shopMode = isShopMode(initialState?.system);
+
   const getSummary = (ex: boolean) => {
     const hide = message.loading(
       {
@@ -83,11 +88,13 @@ const Dashboard: React.FC = () => {
 
   const getSetting = async () => {
     getSummary(false);
-    getStatisticOrder()
-      .then((res) => {
-        setOrdersData(res.data || []);
-      })
-      .catch(() => {});
+    if (shopMode) {
+      getStatisticOrder()
+        .then((res) => {
+          setOrdersData(res.data || []);
+        })
+        .catch(() => {});
+    }
     getStatisticTraffic()
       .then((res) => {
         setTrafficData(res.data || []);
@@ -567,15 +574,21 @@ const Dashboard: React.FC = () => {
               bodyStyle={{ padding: '0 24px 24px' }}
             >
               <div className="statistic-card">
-                <Tabs size="large" tabBarStyle={{ marginBottom: 24 }}>
-                  <TabPane
-                    tab={intl.formatMessage({ id: 'menu.statistic.orders' })}
-                    key="orders"
-                  >
-                    <div className="statistic-bar">
-                      <Line {...ordersConfig} />
-                    </div>
-                  </TabPane>
+                <Tabs
+                  size="large"
+                  defaultActiveKey="traffic"
+                  tabBarStyle={{ marginBottom: 24 }}
+                >
+                  {shopMode && (
+                    <TabPane
+                      tab={intl.formatMessage({ id: 'menu.statistic.orders' })}
+                      key="orders"
+                    >
+                      <div className="statistic-bar">
+                        <Line {...ordersConfig} />
+                      </div>
+                    </TabPane>
+                  )}
                   <TabPane
                     tab={intl.formatMessage({ id: 'menu.statistic.traffic' })}
                     key="traffic"
