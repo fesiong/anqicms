@@ -2,14 +2,26 @@ package provider
 
 import (
 	"context"
+	"log"
 	"math/rand"
+	"sync"
 	"time"
 
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
 )
 
+var timeFactorTaskLocks sync.Map
+
 func (w *Website) TryToRunTimeFactor() {
+	value, _ := timeFactorTaskLocks.LoadOrStore(w.Id, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	if !mu.TryLock() {
+		log.Printf("site %d: skipping overlapping time factor task", w.Id)
+		return
+	}
+	defer mu.Unlock()
+
 	if w.PluginTimeFactor == nil || (!w.PluginTimeFactor.Open && !w.PluginTimeFactor.ReleaseOpen) {
 		return
 	}
@@ -204,21 +216,21 @@ func (w *Website) TimeReleaseArchives(setting *config.PluginTimeFactor) {
 	var drafts []model.ArchiveDraft
 	if setting.Random {
 		// 一次最多读取100个
-		var maxId struct {
+		var bounds struct {
 			MaxId int64 `json:"max_id"`
-		}
-		var minId struct {
 			MinId int64 `json:"min_id"`
 		}
-		db.WithContext(context.Background()).Select("max(id) as max_id").Take(&maxId)
-		db.WithContext(context.Background()).Select("min(id) as min_id").Take(&minId)
-		if maxId.MaxId <= 0 || minId.MinId <= 0 {
+		if err := db.WithContext(context.Background()).Select("max(id) as max_id, min(id) as min_id").Take(&bounds).Error; err != nil {
+			log.Printf("site %d: random draft bounds query failed: %v", w.Id, err)
 			return
 		}
-		randId := minId.MinId
-		if maxId.MaxId > minId.MinId {
+		if bounds.MaxId <= 0 || bounds.MinId <= 0 {
+			return
+		}
+		randId := bounds.MinId
+		if bounds.MaxId > bounds.MinId {
 			rd := rand.New(rand.NewSource(time.Now().UnixNano()))
-			randId = rd.Int63n(maxId.MaxId-minId.MinId) + minId.MinId
+			randId = rd.Int63n(bounds.MaxId-bounds.MinId) + bounds.MinId
 		}
 		err = db.Where("id >= ?", randId).Order("id asc").Limit(limit).Find(&drafts).Error
 		if err != nil {

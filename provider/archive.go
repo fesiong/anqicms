@@ -306,9 +306,14 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		err := w.Cache.Get(cacheKeyCount, &total)
 		if err != nil {
 			// 如果使用explain分析行数大于10万，则不再使用count统计行数
-			total = w.GetExplainCount(sqlCount)
+			total, err = w.getExplainCount(sqlCount)
+			if err != nil {
+				return nil, 0, err
+			}
 			if total < 100000 {
-				builder.Count(&total)
+				if err := builder.Count(&total).Error; err != nil {
+					return nil, 0, err
+				}
 			}
 			_ = w.Cache.Set(cacheKeyCount, total, 300)
 		}
@@ -319,12 +324,18 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		sql := builder.Session(&gorm.Session{Logger: builder.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Find(&[]model.Archive{})
 		})
-		w.DB.Raw(sql).Pluck("id", &archiveIds)
+		if err := w.DB.Raw(sql).Pluck("id", &archiveIds).Error; err != nil {
+			return nil, 0, err
+		}
 		if len(archiveIds) > 0 {
 			if draft {
-				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			} else {
-				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			}
 		}
 		for i := range archives {
@@ -335,24 +346,38 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		wg := &sync.WaitGroup{}
 		wg.Add(1)
 		w.Cache.AddPending(cacheKey, wg)
+		defer func() {
+			w.Cache.DelPending(cacheKey)
+			wg.Done()
+		}()
 		if strings.Contains(order, "rand") {
 			// 如果文章总量大于10万，则使用下面的方法处理
-			totalArchive := w.GetExplainCount("SELECT id FROM archives")
+			totalArchive, err := w.getExplainCount("SELECT id FROM archives")
+			if err != nil {
+				return nil, 0, err
+			}
 			if totalArchive > 100000 {
 				var minMax struct {
 					MinId int `json:"min_id"`
 					MaxId int `json:"max_id"`
 				}
-				builder.WithContext(context.Background()).Select("MIN(archives.id) as min_id, MAX(archives.id) as max_id").Scan(&minMax)
+				if err := builder.WithContext(context.Background()).Select("MIN(archives.id) as min_id, MAX(archives.id) as max_id").Scan(&minMax).Error; err != nil {
+					return nil, 0, err
+				}
 				if minMax.MinId == 0 || minMax.MaxId == 0 {
 					return nil, 0, errors.New("empty archive")
 				}
 				var existIds []int64
 				randId := rand.New(rand.NewSource(time.Now().UnixNano()))
 				for i := 0; i < pageSize; i++ {
-					tmpId := randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					tmpId := minMax.MinId
+					if minMax.MaxId > minMax.MinId {
+						tmpId = randId.Intn(minMax.MaxId-minMax.MinId) + minMax.MinId
+					}
 					var findId int64
-					builder.WithContext(context.Background()).Where("archives.id >= ?", tmpId).Select("archives.id").Limit(1).Pluck("id", &findId)
+					if err := builder.WithContext(context.Background()).Where("archives.id >= ?", tmpId).Select("archives.id").Limit(1).Pluck("id", &findId).Error; err != nil {
+						return nil, 0, err
+					}
 					if findId > 0 {
 						existIds = append(existIds, findId)
 					}
@@ -369,13 +394,19 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		sql := builder.Session(&gorm.Session{Logger: builder.Logger.LogMode(logger.Silent)}).ToSQL(func(tx *gorm.DB) *gorm.DB {
 			return tx.Find(&[]model.Archive{})
 		})
-		w.DB.Raw(sql).Pluck("id", &archiveIds)
+		if err := w.DB.Raw(sql).Pluck("id", &archiveIds).Error; err != nil {
+			return nil, 0, err
+		}
 		//	builder.Pluck("id", &archiveIds)
 		if len(archiveIds) > 0 {
 			if draft {
-				w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Table("`archive_drafts` as archives").Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			} else {
-				w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives)
+				if err := w.DB.Model(&model.Archive{}).Where("id IN (?)", archiveIds).Order(order).Find(&archives).Error; err != nil {
+					return nil, 0, err
+				}
 			}
 		}
 		for i := range archives {
@@ -386,8 +417,6 @@ func (w *Website) GetArchiveList(ops func(tx *gorm.DB) *gorm.DB, order string, c
 		if !draft {
 			_ = w.Cache.Set(cacheKey, archives, 600)
 		}
-		w.Cache.DelPending(cacheKey)
-		wg.Done()
 	}
 
 	return archives, total, nil
@@ -398,11 +427,16 @@ type ExplainCount struct {
 }
 
 func (w *Website) GetExplainCount(sql string) int64 {
+	count, _ := w.getExplainCount(sql)
+	return count
+}
+
+func (w *Website) getExplainCount(sql string) (int64, error) {
 	var result ExplainCount
 	// 安全防护：只允许 SELECT 查询
 	trimmed := strings.TrimSpace(sql)
 	if !strings.HasPrefix(strings.ToUpper(trimmed), "SELECT") {
-		return 0
+		return 0, errors.New("estimate requires a SELECT query")
 	}
 	// 禁止多语句和危险操作
 	upperSql := strings.ToUpper(trimmed)
@@ -413,9 +447,15 @@ func (w *Website) GetExplainCount(sql string) int64 {
 		strings.Contains(upperSql, "SLEEP") ||
 		strings.Contains(upperSql, "BENCHMARK") ||
 		strings.Contains(upperSql, "LOAD_FILE") {
-		return 0
+		return 0, nil
 	}
-	w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN " + sql).Scan(&result)
+	tx := w.DB.Session(&gorm.Session{PrepareStmt: false}).Raw("EXPLAIN " + sql).Scan(&result)
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	if tx.RowsAffected == 0 {
+		return 0, errors.New("EXPLAIN returned no rows")
+	}
 
 	// MySQL EXPLAIN rows may contain extras like "3 (0%)" for partitioned tables;
 	// extract the leading numeric value.
@@ -423,10 +463,14 @@ func (w *Website) GetExplainCount(sql string) int64 {
 	if idx := strings.Index(rowsStr, " "); idx > 0 {
 		rowsStr = rowsStr[:idx]
 	}
-	if n, err := strconv.ParseInt(rowsStr, 10, 64); err == nil {
-		return n
+	n, err := strconv.ParseInt(rowsStr, 10, 64)
+	if err != nil {
+		return 0, err
 	}
-	return 0
+	if n < 0 {
+		return 0, errors.New("negative EXPLAIN row estimate")
+	}
+	return n, nil
 }
 
 func (w *Website) GetArchiveExtraFromCache(archiveId int64) (extra map[string]*config.CustomField) {
@@ -1813,7 +1857,17 @@ func (w *Website) GetFixedLinkFromCache(fixedLink string) int64 {
 }
 
 // PublishPlanArchives 发布计划文章，单次最多处理100篇
+var plannedArchiveReleaseLocks sync.Map
+
 func (w *Website) PublishPlanArchives() {
+	value, _ := plannedArchiveReleaseLocks.LoadOrStore(w.Id, &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	if !mu.TryLock() {
+		log.Printf("site %d: skipping overlapping planned archive release", w.Id)
+		return
+	}
+	defer mu.Unlock()
+
 	timeStamp := time.Now().Unix()
 
 	var drafts []*model.ArchiveDraft

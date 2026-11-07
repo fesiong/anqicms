@@ -364,7 +364,10 @@ func Inspect(ctx iris.Context) {
 }
 
 func FileServe(ctx iris.Context) bool {
-	currentSite := provider.CurrentSite(ctx)
+	return fileServe(ctx, provider.CurrentSite(ctx))
+}
+
+func fileServe(ctx iris.Context, currentSite *provider.Website) bool {
 	uri := ctx.RequestPath(false)
 	// 旧的Sitemap重定向
 	if (strings.HasPrefix(uri, "/archive") || strings.HasPrefix(uri, "/tag") || strings.HasPrefix(uri, "/category")) && (strings.HasSuffix(uri, ".xml") || strings.HasSuffix(uri, ".txt")) {
@@ -420,12 +423,28 @@ func FileServe(ctx iris.Context) bool {
 		return true
 	}
 	// 自动生成Sitemap
-	if currentSite.PluginSitemap != nil && ((strings.HasSuffix(uri, "sitemap.xml") && currentSite.PluginSitemap.Type == "xml") ||
-		(strings.HasSuffix(uri, "sitemap.txt") && currentSite.PluginSitemap.Type == "txt")) &&
+	sitemapURI := uri
+	mainSite := currentSite.GetMainWebsite()
+	if sitemapURI != strings.TrimRight(currentSite.BaseURI, "/")+"/sitemap.xml" &&
+		sitemapURI != strings.TrimRight(currentSite.BaseURI, "/")+"/sitemap.txt" &&
+		mainSite.MultiLanguage != nil && mainSite.MultiLanguage.Open && mainSite.MultiLanguage.Type != config.MultiLangTypeDomain {
+		for _, site := range mainSite.MultiLanguage.SubSites {
+			if strings.HasPrefix(sitemapURI, "/"+site.Language+"/") {
+				sitemapURI = strings.TrimPrefix(sitemapURI, "/"+site.Language)
+				break
+			}
+		}
+	}
+	if currentSite.PluginSitemap != nil && ((sitemapURI == strings.TrimRight(currentSite.BaseURI, "/")+"/sitemap.xml" && currentSite.PluginSitemap.Type == "xml") ||
+		(sitemapURI == strings.TrimRight(currentSite.BaseURI, "/")+"/sitemap.txt" && currentSite.PluginSitemap.Type == "txt")) &&
 		!ctx.Values().GetBoolDefault("sitemap", false) {
-		_ = currentSite.BuildSitemap()
+		if err := currentSite.EnsureSitemap(); err != nil {
+			log.Printf("site %d: sitemap generation failed: %v", currentSite.Id, err)
+			ctx.StatusCode(http.StatusServiceUnavailable)
+			return true
+		}
 		ctx.Values().Set("sitemap", true)
-		return FileServe(ctx)
+		return fileServe(ctx, currentSite)
 	}
 	// 自动生成robots.txt
 	if strings.HasSuffix(uri, "robots.txt") && !ctx.Values().GetBoolDefault("robots", false) {

@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"kandaoni.com/anqicms/config"
@@ -68,6 +70,39 @@ func (w *Website) DeleteSitemap(sitemapType string) {
 	}
 }
 
+var sitemapGenerationLocks sync.Map
+
+func ensureSitemapFile(path string, build func() error) error {
+	value, _ := sitemapGenerationLocks.LoadOrStore(filepath.Clean(path), &sync.Mutex{})
+	mu := value.(*sync.Mutex)
+	mu.Lock()
+	defer mu.Unlock()
+
+	info, err := os.Stat(path)
+	if err == nil && !info.IsDir() {
+		return nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := build(); err != nil {
+		return err
+	}
+	info, err = os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("sitemap output is a directory: %s", path)
+	}
+	return nil
+}
+
+func (w *Website) EnsureSitemap() error {
+	path := filepath.Join(w.PublicPath, "sitemap."+w.PluginSitemap.Type)
+	return ensureSitemapFile(path, w.BuildSitemap)
+}
+
 // BuildSitemap 手动生成sitemap
 func (w *Website) BuildSitemap() error {
 	//每一个sitemap包含50000条记录
@@ -111,12 +146,10 @@ func (w *Website) BuildSitemap() error {
 
 	//index 和 category 存放在同一个文件，文章单独一个文件
 	indexFile := NewSitemapIndexGenerator(w, w.PluginSitemap.Type, fmt.Sprintf("%ssitemap.%s", w.PublicPath, w.PluginSitemap.Type), baseUrl, false)
-	defer indexFile.Save()
 
 	indexFile.AddIndex(fmt.Sprintf("%s/sitemap-category.%s", baseUrl, w.PluginSitemap.Type))
 
 	categoryFile := NewSitemapGenerator(w, fmt.Sprintf("%ssitemap-category.%s", w.PublicPath, w.PluginSitemap.Type), baseUrl, false)
-	defer categoryFile.Save()
 	//写入首页
 	var alternates []AlternateLink
 	if multiLang {
@@ -153,7 +186,9 @@ func (w *Website) BuildSitemap() error {
 	categoryFile.AddLoc(baseUrl, time.Now().Format("2006-01-02"), alternates)
 	//写入分类页
 	var categories []*model.Category
-	categoryBuilder.Find(&categories)
+	if err := categoryBuilder.Find(&categories).Error; err != nil {
+		return err
+	}
 	for _, v := range categories {
 		defaultLink := w.GetUrl("category", v, 0)
 		alternates = alternates[:0]
@@ -200,7 +235,9 @@ func (w *Website) BuildSitemap() error {
 		finished := false
 		for remainNum > 0 {
 			// 单次查询2000条
-			archiveBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(2000).Find(&archives)
+			if err := archiveBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(2000).Find(&archives).Error; err != nil {
+				return err
+			}
 			if len(archives) == 0 {
 				finished = true
 				break
@@ -238,7 +275,9 @@ func (w *Website) BuildSitemap() error {
 			remainNum -= len(archives)
 			lastId = archives[len(archives)-1].Id
 		}
-		_ = archiveFile.Save()
+		if err := archiveFile.Save(); err != nil {
+			return err
+		}
 		if finished {
 			break
 		}
@@ -259,7 +298,9 @@ func (w *Website) BuildSitemap() error {
 			finished := false
 			for remainNum > 0 {
 				// 单次查询5000条
-				tagBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(5000).Find(&tags)
+				if err := tagBuilder.WithContext(context.Background()).Where("id > ?", lastId).Limit(5000).Find(&tags).Error; err != nil {
+					return err
+				}
 				if len(tags) == 0 {
 					finished = true
 					break
@@ -297,16 +338,22 @@ func (w *Website) BuildSitemap() error {
 				remainNum -= len(tags)
 				lastId = int64(tags[len(tags)-1].Id)
 			}
-			_ = tagFile.Save()
+			if err := tagFile.Save(); err != nil {
+				return err
+			}
 			if finished {
 				break
 			}
 		}
 	}
 
-	_ = w.UpdateSitemapTime()
-
-	return nil
+	if err := categoryFile.Save(); err != nil {
+		return err
+	}
+	if err := indexFile.Save(); err != nil {
+		return err
+	}
+	return w.UpdateSitemapTime()
 }
 
 // AddonSitemap 追加sitemap
