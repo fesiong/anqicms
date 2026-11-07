@@ -385,6 +385,7 @@ export default {
   'plugin.fulltext.rebuild.confirm':
     'Are you sure you want to rebuild the index?',
   'plugin.fulltext.indexing': 'Rebuilding the index, please wait...',
+  'plugin.fulltext.indexed': 'Indexed documents: {count}',
   'plugin.fulltext.contain_length': 'Search term match length',
   'plugin.fulltext.contain_length.tips':
     'The minimum length of search term matching, 0 by default. When the search term is shorter than x, results must fully contain it; when longer, results must contain at least x characters.',

@@ -355,6 +355,7 @@ export default {
   'plugin.fulltext.engine-password': '密碼',
   'plugin.fulltext.rebuild.confirm': '確定要重建索引嗎？',
   'plugin.fulltext.indexing': '正在重建索引，請稍候。。',
+  'plugin.fulltext.indexed': '索引數量：{count}',
   'plugin.fulltext.contain_length': '搜尋詞包含長度',
   'plugin.fulltext.contain_length.tips':
     '搜尋詞包含的最小長度，預設 0，搜尋詞長度低於 x 個則搜尋結果需要全包含，高於 x 個則至少包含 x 個字元',

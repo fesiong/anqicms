@@ -19,11 +19,24 @@ type FulltextStatus struct {
 	Status  int    `json:"status"`  // 0 未启用，1初始化中，2 初始化完成，-1 错误
 	Total   int64  `json:"total"`   // 索引总数
 	Current int64  `json:"current"` // 当前进度
+	Indexed int64  `json:"indexed"` // 索引中的文档数量（由搜索引擎统计）
 	Msg     string `json:"msg"`     // 进度消息
 }
 
+// GetFullTextStatus 返回状态快照。
+// Indexed 每次调用都向搜索引擎取一次实时值（悟空读的是内存计数器，开销可忽略），
+// 因此不需要额外缓存；返回副本是为了避免与后台构建协程同时读写同一个结构体。
 func (w *Website) GetFullTextStatus() *FulltextStatus {
-	return w.fulltextStatus
+	if w.fulltextStatus == nil {
+		return nil
+	}
+	status := *w.fulltextStatus
+	if w.searcher != nil {
+		if n, err := w.searcher.Count(); err == nil {
+			status.Indexed = n
+		}
+	}
+	return &status
 }
 
 func (w *Website) InitFulltext(focus bool) {

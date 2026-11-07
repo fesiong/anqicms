@@ -353,6 +353,7 @@ export default {
   'plugin.fulltext.engine-password': '密码',
   'plugin.fulltext.rebuild.confirm': '确定要重建索引吗？',
   'plugin.fulltext.indexing': '正在重建索引，请稍候。。',
+  'plugin.fulltext.indexed': '索引数量：{count}',
   'plugin.fulltext.contain_length': '搜索词包含长度',
   'plugin.fulltext.contain_length.tips':
     '搜索词包含的最小长度，默认 0，搜索词长度低于x个则搜索结果需要全包含，高于x个则至少包含x个字符',

@@ -143,6 +143,18 @@ func (s *WukongService) Search(keyword string, moduleId uint, page int, pageSize
 	return docs, total, nil
 }
 
+func (s *WukongService) Count() (int64, error) {
+	if s.searcher == nil {
+		return 0, errors.New("uninitialized")
+	}
+	// 悟空没有"索引中有多少个文档"的直接接口，只能读引擎计数器。
+	// 注意 NumDocumentsIndexed 统计的是**写入次数**：同一篇文档被重复
+	// 更新会重复计数，所以它略大于实际文档数；但索引重建后的首次值
+	// 就等于真实写入条数（重建会新建引擎，计数器归零），足以回答
+	// "索引里到底装了多少条"这个问题。
+	return int64(s.searcher.NumDocumentsIndexed()), nil
+}
+
 func (s *WukongService) Close() {
 	if s.searcher != nil {
 		s.searcher.Close()
