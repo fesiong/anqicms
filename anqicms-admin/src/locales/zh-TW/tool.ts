@@ -9,6 +9,8 @@ export default {
   'tool.upgrading': '正在升級中，請勿重新整理頁面',
   'tool.confirm-restart': '重新啟動執行新版',
   'tool.restarting': '正在重新啟動中',
+  'tool.upgrade-done': '升級完成，需要重新啟動',
+  'tool.upgrade-failed': '升級失敗',
   'tool.cache.confirm-migrate': '確定要更新資料庫表結構嗎？',
   'tool.cache.temp-cache': '暫時快取',
   'tool.cache.never': '從未更新',

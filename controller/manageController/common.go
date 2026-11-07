@@ -3,6 +3,7 @@ package manageController
 import (
 	"archive/zip"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/url"
@@ -217,6 +218,31 @@ func VersionUpgrade(ctx iris.Context) {
 		})
 		return
 	}
+
+	// 当前主程序的真实路径必须在动手之前确定，而且要归一化：
+	// 上一轮升级把 anqicms rename 成 anqicms.old 之后，Linux 会把正在运行的
+	// /proc/self/exe 同步改成 anqicms.old，此时再升一次就会把备份当成主程序，
+	// 备份出 anqicms.old.old，真正的 anqicms 一次都没被替换，界面却报成功。
+	rawExec, err := os.Executable()
+	if err != nil {
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  err.Error(),
+		})
+		return
+	}
+	execPath, runningOld := provider.NormalizeExecPath(rawExec)
+	if runningOld || execPath == "" {
+		log.Printf("Upgrade aborted: running backup binary %q", rawExec)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("UpgradeRequiresRestart", filepath.Base(rawExec), filepath.Base(execPath)),
+		})
+		return
+	}
+	exec := filepath.Base(execPath)
+	tmpExecPath := execPath + ".new"
+
 	var version = lastVersion.Version
 	if lastVersion.Trial {
 		version = lastVersion.TrialVersion
@@ -237,7 +263,7 @@ func VersionUpgrade(ctx iris.Context) {
 	}
 	// 将文件写入
 	tmpFile := config.ExecPath + filepath.Base(link)
-	err := os.WriteFile(tmpFile, body, os.ModePerm)
+	err = os.WriteFile(tmpFile, body, os.ModePerm)
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
@@ -265,11 +291,6 @@ func VersionUpgrade(ctx iris.Context) {
 	_ = os.RemoveAll(config.ExecPath + "system")
 
 	var errorFiles []string
-	path, _ := os.Executable()
-	exec := filepath.Base(path)
-
-	execPath := filepath.Join(config.ExecPath, exec)
-	tmpExecPath := execPath + ".new"
 
 	mainBinaryFound := false
 
@@ -329,22 +350,14 @@ func VersionUpgrade(ctx iris.Context) {
 		})
 		return
 	}
-	// 尝试更换主程序
-	oldPath := execPath + ".old"
-	_ = os.Remove(oldPath)
-	err = os.Rename(execPath, oldPath)
-	if err == nil {
-		err = os.Rename(tmpExecPath, execPath)
-		if err == nil {
-			_ = os.Chmod(execPath, os.ModePerm)
-			// 移动成功
-			_ = os.Remove(oldPath)
-		} else {
-			//移动失败
-			err = os.Rename(oldPath, execPath)
-		}
-	} else {
-		log.Println("fail to rename old executable.", err)
+	// 更换主程序。失败必须报错：升级最坏的状态不是失败，是「界面说成功、跑的还是旧程序」。
+	if err = swapExecutable(tmpExecPath, execPath); err != nil {
+		log.Printf("Upgrade swap executable failed: %v", err)
+		ctx.JSON(iris.Map{
+			"code": config.StatusFailed,
+			"msg":  ctx.Tr("VersionUpdateFailed") + ": " + err.Error(),
+		})
+		return
 	}
 	if len(errorFiles) > 1 {
 		log.Println("Upgrade error files: ", errorFiles)
@@ -361,6 +374,131 @@ func VersionUpgrade(ctx iris.Context) {
 		"code": config.StatusOK,
 		"msg":  msg,
 	})
+}
+
+// swapExecutable 用 newPath 处的文件替换 targetPath，旧文件备份为 targetPath+".old"。
+//
+// 三条硬规矩（每一条都对应一次真实事故）：
+//  1. 备份路径永远由目标文件自身推出（同目录 + ".old"），绝不拼工作目录 ——
+//     config.ExecPath 与主程序所在目录在 go_build、软链、自定义安装下并不相同；
+//  2. 前置校验要报出具体缺失路径，否则线上只能靠猜；
+//  3. 替换失败必须返回错误。凡是「报成功但没换掉」的路径都是埋雷。
+func swapExecutable(newPath, targetPath string) error {
+	oldPath := targetPath + ".old"
+
+	if _, err := os.Stat(newPath); err != nil {
+		return fmt.Errorf("新程序不存在：%s", newPath)
+	}
+	info, err := os.Stat(targetPath)
+	if err != nil {
+		return fmt.Errorf("当前主程序不存在：%s", targetPath)
+	}
+	if info.IsDir() {
+		return fmt.Errorf("当前主程序路径是目录：%s", targetPath)
+	}
+	dirInfo, err := os.Stat(filepath.Dir(oldPath))
+	if err != nil {
+		return fmt.Errorf("备份目录不可用：%s（%v）", filepath.Dir(oldPath), err)
+	}
+	if !dirInfo.IsDir() {
+		return fmt.Errorf("备份目录不是目录：%s", filepath.Dir(oldPath))
+	}
+
+	// 先清掉历史版本留下的 xxx.old.old / xxx.old.old.old，
+	// 再清本轮备份位置：Windows 上 rename 到已存在的目标是直接失败的。
+	cleanupNestedBackups(targetPath)
+	_ = os.Remove(oldPath)
+
+	if err = moveExecutable(targetPath, oldPath); err != nil {
+		return fmt.Errorf("备份旧程序失败：%s → %s（%v）", targetPath, oldPath, err)
+	}
+	if err = moveExecutable(newPath, targetPath); err != nil {
+		// 换不上去就把备份退回原位，别把站点留在「没有主程序」的状态
+		if rerr := moveExecutable(oldPath, targetPath); rerr != nil {
+			return fmt.Errorf("替换主程序失败且回滚失败：%s → %s（%v / 回滚 %v）", newPath, targetPath, err, rerr)
+		}
+		return fmt.Errorf("替换主程序失败：%s → %s（%v）", newPath, targetPath, err)
+	}
+	_ = os.Chmod(targetPath, os.ModePerm)
+	// 备份保留到下一次升级：新程序起不来时还能手工换回去。
+	log.Printf("Upgrade: main binary replaced, backup kept at %s", oldPath)
+	return nil
+}
+
+// moveExecutable 把 src 搬到 dst，用于替换主程序。
+//
+// 优先 rename：同目录内是原子操作，也是唯一能安全「覆盖正在运行的程序」的方式
+// （直接 open 正在执行的文件写会得到 ETXTBSY）。rename 失败时依次退化为
+// 「删掉旧 inode 再 rename」「复制到临时文件再改名」——跨设备、目标被占用等场景下
+// 这两步能救回来，而复制走的是新 inode，不会碰到正在运行的那个。
+func moveExecutable(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	_ = os.Remove(dst)
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	if err := copyExecutable(src, dst); err != nil {
+		return err
+	}
+	// 复制成功才删源，保持"搬走"语义；删失败不影响结果。
+	_ = os.Remove(src)
+	return os.Chmod(dst, os.ModePerm)
+}
+
+// copyExecutable 先写 dst+".tmp" 再改名覆盖，避免写到一半把目标截断成半个可执行文件。
+func copyExecutable(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	tmp := dst + ".tmp"
+	out, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, os.ModePerm)
+	if err != nil {
+		return err
+	}
+	if _, err = io.Copy(out, in); err != nil {
+		out.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err = out.Sync(); err != nil {
+		out.Close()
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err = out.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return err
+	}
+	if err = os.Rename(tmp, dst); err != nil {
+		// Windows 上目标存在时改名会失败，删掉再试一次
+		if rmErr := os.Remove(dst); rmErr != nil && !os.IsNotExist(rmErr) {
+			_ = os.Remove(tmp)
+			return err
+		}
+		if err = os.Rename(tmp, dst); err != nil {
+			_ = os.Remove(tmp)
+			return err
+		}
+	}
+	return nil
+}
+
+// cleanupNestedBackups 清掉「升级后未重启」留下的嵌套备份：xxx.old.old、xxx.old.old.old…
+//
+// 那些文件是旧实现的产物（每升一次就把上一轮的备份再备份一次），既占磁盘又会误导
+// 运维以为有可用备份。只处理 .old 的重复后缀，不碰当前主程序和单层备份。
+func cleanupNestedBackups(targetPath string) {
+	for depth := 2; depth <= 8; depth++ {
+		path := targetPath + strings.Repeat(".old", depth)
+		if err := os.Remove(path); err == nil {
+			log.Printf("Upgrade: removed nested backup %s", path)
+		}
+	}
 }
 
 // isMainBinaryFile 判断升级包里的这个条目是不是主程序。

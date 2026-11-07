@@ -234,6 +234,7 @@
 "FoundANewTrialVersion": "发现新的体验版"
 "VersionUpdateFailed": "版本更新失败"
 "VersionUpdatePartiallyFailed": "版本更新部分失败, 以下文件未更新：%v"
+"UpgradeRequiresRestart": "当前运行的是备份程序 %s，直接升级会把备份再备份一次且换不掉真正的主程序。请先重启到 %s 再执行升级。"
 "UpdateSystemVersion": "更新系统版本：%s => %s"
 "TheVersionHasBeenUpgraded": "已升级版本，请重启软件以使用新版。"
 "AdjustPseudoStaticConfigurationLog": "调整伪静态配置：%d"

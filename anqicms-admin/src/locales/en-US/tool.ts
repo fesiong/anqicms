@@ -11,6 +11,8 @@ export default {
   'tool.upgrading': 'Upgrading, do not refresh the page',
   'tool.confirm-restart': 'Restart to run the new version',
   'tool.restarting': 'Restarting',
+  'tool.upgrade-done': 'Upgrade completed, restart required',
+  'tool.upgrade-failed': 'Upgrade failed',
   'tool.cache.confirm-migrate':
     'Are you sure you want to update the database schema?',
   'tool.cache.temp-cache': 'Temporary Cache',

@@ -1563,9 +1563,11 @@ func Restart() error {
 	if err != nil {
 		return err
 	}
-	// if the file is old
-	if strings.HasSuffix(self, ".old") {
-		self = strings.TrimRight(self, ".old")
+	// 升级换主程序后，/proc/self/exe 会指向被改名或已删除的 inode（甚至带 " (deleted)"），
+	// 直接 exec 会失败把服务留在已退出状态。归一化 + 回落见 resolveRestartTarget。
+	self, err = resolveRestartTarget(self)
+	if err != nil {
+		return err
 	}
 	args := os.Args
 	env := os.Environ()

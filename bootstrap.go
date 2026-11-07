@@ -86,7 +86,12 @@ func (bootstrap *Bootstrap) Serve() {
 			fmt.Println("监听到路由更改")
 			_ = bootstrap.Shutdown()
 			log.Println("进程结束，开始重启")
-			_ = provider.Restart()
+			// 到这里监听已经停了，Restart 再失败就是「服务已下线且没人拉起」，
+			// 必须让错误可见并退出，交给守护进程重新拉起，而不是静默留一个空壳进程。
+			if err := provider.Restart(); err != nil {
+				log.Println("重启失败，进程退出等待守护拉起：", err)
+				os.Exit(1)
+			}
 		case 2:
 			fmt.Println("监听到退出信号")
 			//_ = bootstrap.Shutdown()

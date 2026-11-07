@@ -234,6 +234,7 @@
 "FoundANewTrialVersion": "Found a new trial version"
 "VersionUpdateFailed": "Version update failed"
 "VersionUpdatePartiallyFailed": "Version update partially failed, the following files were not updated: %v"
+"UpgradeRequiresRestart": "The software is currently running from the backup binary %s. Upgrading now would back up the backup and leave the real main program untouched. Please restart to %s before upgrading."
 "UpdateSystemVersion": "Update system version: %s => %s"
 "TheVersionHasBeenUpgraded": "The version has been upgraded. Please restart the software to use the new version. "
 "AdjustPseudoStaticConfigurationLog": "Adjust pseudo-static configuration: %d"
