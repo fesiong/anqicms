@@ -788,10 +788,11 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 			if len(req.TagIds) > 0 {
 				tx = tx.Joins("INNER JOIN `tag_data` as t ON archives.id = t.item_id AND t.`tag_id` IN (?)", req.TagIds)
 			}
-			if len(req.Ids) > 0 {
-				tx = tx.Where("archives.`id` IN(?)", req.Ids)
-			} else if len(ids) > 0 {
+			if len(ids) > 0 || fulltextSearch {
+				// 如果使用了全文搜索，则使用ids来查询
 				tx = tx.Where("archives.`id` IN(?)", ids)
+			} else if len(req.Ids) > 0 {
+				tx = tx.Where("archives.`id` IN(?)", req.Ids)
 			} else if req.Q != "" {
 				// 如果文章数量达到10万，则只能匹配开头，否则就模糊搜索
 				var allArchives int64
