@@ -37,7 +37,7 @@ type CouponArchive struct {
 type CouponCode struct {
 	Id          int64  `json:"id" gorm:"column:id;type:int(20) not null;primary_key;AUTO_INCREMENT"`
 	CouponId    int64  `json:"coupon_id" gorm:"column:coupon_id;type:int(11);index"`
-	Code        string `json:"code" gorm:"column:code;type:varchar(255);index"`
+	Code        string `json:"code" gorm:"column:code;type:varchar(128);index"`
 	StartTime   int64  `json:"start_time" gorm:"column:start_time;type:int(11);index"`
 	EndTime     int64  `json:"end_time" gorm:"column:end_time;type:int(11);index"`
 	UserId      int64  `json:"user_id" gorm:"column:user_id;type:int(11);index"`
