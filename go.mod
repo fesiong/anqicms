@@ -18,6 +18,7 @@ require (
 	github.com/getlantern/systray v1.2.2
 	github.com/go-pay/gopay v1.5.115
 	github.com/go-pay/xlog v0.0.3
+	github.com/go-sql-driver/mysql v1.9.3
 	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/golang/freetype v0.0.0-20170609003504-e2365dfdc4a0
 	github.com/gomarkdown/markdown v0.0.0-20260411013819-759bbc3e3207
@@ -30,7 +31,6 @@ require (
 	github.com/jlaffaye/ftp v0.2.0
 	github.com/kataras/iris/v12 v12.2.11
 	github.com/lib/pq v1.10.9
-	github.com/matm/go-nowpayments v1.0.4
 	github.com/medivhzhan/weapp/v3 v3.8.4
 	github.com/meilisearch/meilisearch-go v0.36.1
 	github.com/melbahja/goph v1.4.0
@@ -109,7 +109,6 @@ require (
 	github.com/go-pay/crypto v0.0.1 // indirect
 	github.com/go-pay/util v0.0.4 // indirect
 	github.com/go-pay/xtime v0.0.2 // indirect
-	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
 	github.com/gofrs/flock v0.13.0 // indirect
 	github.com/golang/groupcache v0.0.0-20200121045136-8c9f03a8e57e // indirect
@@ -157,7 +156,6 @@ require (
 	github.com/richardlehane/mscfb v1.0.7 // indirect
 	github.com/richardlehane/msoleps v1.0.6 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
-	github.com/rotisserie/eris v0.5.4 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/schollz/closestmatch v2.1.0+incompatible // indirect
 	github.com/segmentio/asm v1.1.3 // indirect
