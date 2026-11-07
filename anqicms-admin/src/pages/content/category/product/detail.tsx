@@ -1,4 +1,5 @@
 import NewContainer from '@/components/NewContainer';
+import ArchivePicker from '@/components/archiveSearch/ArchivePicker';
 import AttachmentSelect from '@/components/attachment';
 import CollapseItem from '@/components/collaspeItem';
 import MarkdownEditor from '@/components/markdown';
@@ -902,23 +903,12 @@ const ArchiveCategoryDetail: React.FC = () => {
                                   </div>
                                 </ProFormText>
                               ) : item.type === 'archive' ? (
-                                <ProFormText label={item.name}>
-                                  <ProFormSelect
-                                    name={['extra', item.field_name]}
-                                    showSearch
-                                    mode="multiple"
-                                    options={searchArchives.map((a: any) => ({
-                                      title: a.title,
-                                      label: a.title,
-                                      value: a.id,
-                                    }))}
-                                    fieldProps={{
-                                      onSearch: (e) => {
-                                        onSearchArchives(e);
-                                      },
-                                    }}
-                                  />
-                                </ProFormText>
+                                <ProForm.Item
+                                  label={item.name}
+                                  name={['extra', item.field_name]}
+                                >
+                                  <ArchivePicker />
+                                </ProForm.Item>
                               ) : item.type === 'category' ? (
                                 <ProFormText label={item.name}>
                                   <ProFormSelect

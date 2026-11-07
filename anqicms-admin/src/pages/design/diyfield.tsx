@@ -1,4 +1,5 @@
 import NewContainer from '@/components/NewContainer';
+import ArchivePicker from '@/components/archiveSearch/ArchivePicker';
 import AttachmentSelect from '@/components/attachment';
 import {
   getArchives,
@@ -930,8 +931,10 @@ const SettingDiyFieldFrom: React.FC<any> = () => {
                         </div>
                       </ProFormText>
                     ) : item.type === 'archive' ? (
-                      <ProFormText
-                        width="lg"
+                      <ProForm.Item
+                        name={[index, 'value']}
+                        style={{ maxWidth: 552 }}
+                        getValueProps={() => ({ value: item.value || [] })}
                         label={
                           <span>
                             {item.remark} (
@@ -942,26 +945,13 @@ const SettingDiyFieldFrom: React.FC<any> = () => {
                           </span>
                         }
                       >
-                        <ProFormSelect
-                          name={[index, 'value']}
-                          showSearch
-                          mode="multiple"
-                          options={searchArchives.map((a: any) => ({
-                            title: a.title,
-                            label: a.title,
-                            value: a.id,
-                          }))}
-                          fieldProps={{
-                            value: item.value || undefined,
-                            onChange: (e: any) => {
-                              handleUpdateFieldValue(index, e);
-                            },
-                            onSearch: (e) => {
-                              onSearchArchives(e);
-                            },
+                        <ArchivePicker
+                          value={item.value || []}
+                          onChange={(ids) => {
+                            handleUpdateFieldValue(index, ids);
                           }}
                         />
-                      </ProFormText>
+                      </ProForm.Item>
                     ) : item.type === 'category' ? (
                       <ProFormText
                         width="lg"
