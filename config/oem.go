@@ -212,7 +212,7 @@ func neutralBrand(id string) OEMBrand {
 		Docs:         "https://docs.anqicms.com",
 		AuthBase:     "https://auth.anqicms.com/auth",
 		DownloadBase: "https://www.anqicms.com/downloads",
-		Binary:       "anqishop",
+		Binary:       "anqicms",
 		Database:     strings.NewReplacer("-", "_", ".", "_").Replace(id),
 	}
 }

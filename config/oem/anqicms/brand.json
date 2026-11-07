@@ -7,7 +7,7 @@
   "docs": "https://docs.anqicms.com",
   "auth_base": "https://auth.anqicms.com/auth",
   "download_base": "https://www.anqicms.com/downloads",
-  "binary": "anqishop",
+  "binary": "anqicms",
   "database": "anqicms",
   "support_email": ""
 }

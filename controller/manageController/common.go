@@ -507,7 +507,7 @@ func cleanupNestedBackups(targetPath string) {
 //   - 与品牌配置的 binary 同名：自己发布的包（每个 OEM 的主程序名不同）
 //   - 与当前运行中的可执行文件同名：客户改过文件名的情况
 //
-// 早期实现硬编码 anqishop，品牌化之后必须跟着品牌走 —— 只比较 anqishop 的话，
+// 早期实现硬编码 anqicms，品牌化之后必须跟着品牌走 —— 只比较 anqicms 的话，
 // OEM 包的升级会找不到主程序，而后续回滚逻辑会让它「成功」地什么也没换。
 func isMainBinaryFile(name string, brand config.OEMBrand, running string) bool {
 	base := strings.TrimSuffix(filepath.Base(name), ".exe")

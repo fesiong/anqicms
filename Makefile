@@ -5,8 +5,8 @@
 # 不需要为每个客户维护 fork，也不需要任何运行时开关。
 OEM ?= anqicms
 # 主程序名必须与 brand.json 的 binary 字段一致：升级逻辑靠它识别压缩包里哪个文件
-# 是主程序。官方版是 anqishop（与 start.sh / stop.sh / windowsMake.sh 一致）。
-BINARY_NAME ?= anqishop
+# 是主程序。官方版是 anqicms（与 start.sh / stop.sh / windowsMake.sh 一致）。
+BINARY_NAME ?= anqicms
 BIN_SUFFIX :=
 GO := go
 GOOS ?= $(shell $(GO) env GOOS)
@@ -135,7 +135,6 @@ build: $(BUILD_DEPS)
 	cp -r ./public/*.xsl ./release/$(GOOS)/public/ 2>/dev/null || true
 	cp -r ./template/default ./release/$(GOOS)/template/
 	@$(HOST_ENV) $(GO) run ./cmd/oemgen -oem $(OEM) -brand-dir ./release/$(GOOS)/template
-	-cp -r ./system ./release/$(GOOS)/
 	cp -r ./locales ./release/$(GOOS)/
 	cp -r ./CHANGELOG.md ./release/$(GOOS)/
 	cp -r ./License ./release/$(GOOS)/

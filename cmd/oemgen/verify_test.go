@@ -22,7 +22,7 @@ func officialBrand() config.OEMBrand {
 		Website:      "https://www.anqicms.com",
 		AuthBase:     "https://auth.anqicms.com/auth",
 		DownloadBase: "https://www.anqicms.com/downloads",
-		Binary:       "anqishop",
+		Binary:       "anqicms",
 	}
 }
 

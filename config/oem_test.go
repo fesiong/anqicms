@@ -25,7 +25,7 @@ func TestOfficialBrandUnchanged(t *testing.T) {
 		{"DownloadBase", b.DownloadBase, "https://www.anqicms.com/downloads"},
 		// 升级包内主程序名：升级逻辑据此识别要替换哪个文件，
 		// 与历史官方包保持一致，改了会让存量安装无法升级。
-		{"Binary", b.Binary, "anqishop"},
+		{"Binary", b.Binary, "anqicms"},
 		{"Database", b.Database, "anqicms"},
 	}
 	for _, c := range cases {

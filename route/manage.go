@@ -1,16 +1,17 @@
 package route
 
 import (
+	"embed"
+
 	"github.com/kataras/iris/v12"
-	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/controller/manageController"
 	"kandaoni.com/anqicms/middleware"
 )
 
-func manageRoute(app *iris.Application) {
+func manageRoute(app *iris.Application, systemFiles embed.FS) {
 	system := app.Party("/system", middleware.ParseAdminUrlFile, manageController.AdminFileServ)
 	{
-		system.HandleDir("/", config.ExecPath+"system")
+		system.HandleDir("/", systemFiles)
 	}
 	manage := system.Party("/api", middleware.ParseAdminUrl)
 	{

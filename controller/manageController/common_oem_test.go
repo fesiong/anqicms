@@ -42,7 +42,7 @@ func TestVersionCheckURLCarriesOEM(t *testing.T) {
 
 func TestUpgradePackageURLUsesBrandBinary(t *testing.T) {
 	official, _ := config.LookupOEM(config.DefaultOEMID)
-	want := official.DownloadBase + "/anqishop-" + runtime.GOOS + "-" + runtime.GOARCH + "-v3.9.0.zip?oem=anqicms"
+	want := official.DownloadBase + "/anqicms-" + runtime.GOOS + "-" + runtime.GOARCH + "-v3.9.0.zip?oem=anqicms"
 	if got := upgradePackageURL(official, "3.9.0"); got != want {
 		t.Errorf("官方包地址变了：\n got %s\nwant %s", got, want)
 	}
@@ -64,16 +64,16 @@ func TestIsMainBinaryFile(t *testing.T) {
 		running string
 		want    bool
 	}{
-		{"官方主程序", "anqishop", official, "anqishop", true},
-		{"官方主程序带目录", "dist/anqishop", official, "anqishop", true},
-		{"windows 主程序", "anqishop.exe", official, "anqishop", true},
+		{"官方主程序", "anqicms", official, "anqicms", true},
+		{"官方主程序带目录", "dist/anqicms", official, "anqicms", true},
+		{"windows 主程序", "anqicms.exe", official, "anqicms", true},
 		{"OEM 主程序", "acmecms", config.OEMBrand{Binary: "acmecms"}, "acmecms", true},
 		{"客户改过名", "renamed", config.OEMBrand{Binary: "acmecms"}, "renamed", true},
-		{"非主程序", "CHANGELOG.md", official, "anqishop", false},
-		{"同前缀但不是", "anqishop.bak", official, "anqishop", false},
-		{"cwebp 不是主程序", "cwebp_linux_amd64", official, "anqishop", false},
+		{"非主程序", "CHANGELOG.md", official, "anqicms", false},
+		{"同前缀但不是", "anqicms.bak", official, "anqicms", false},
+		{"cwebp 不是主程序", "cwebp_linux_amd64", official, "anqicms", false},
 		// 空 binary 不能匹配空条目名，否则会把根目录下同名的空串误判成主程序。
-		{"空品牌名不匹配", "", config.OEMBrand{}, "anqishop", false},
+		{"空品牌名不匹配", "", config.OEMBrand{}, "anqicms", false},
 	}
 
 	for _, c := range cases {
