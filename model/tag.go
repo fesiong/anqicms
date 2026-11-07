@@ -11,7 +11,7 @@ type Tag struct {
 	Id          uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
 	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:''"`
+	Title       string `json:"title" gorm:"column:title;type:varchar(250) not null;default:'';index:idx_tag_title"`
 	CategoryId  uint   `json:"category_id" gorm:"column:category_id;type:int(10) unsigned not null;default:0;index"`
 	SeoTitle    string `json:"seo_title" gorm:"column:seo_title;type:varchar(250) not null;default:''"`
 	Keywords    string `json:"keywords" gorm:"column:keywords;type:varchar(250) not null;default:''"`
@@ -31,9 +31,10 @@ type Tag struct {
 }
 
 type TagData struct {
-	Id     uint  `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	TagId  uint  `json:"tag_id" gorm:"column:tag_id;type:int(10) not null;default:0;index"`
-	ItemId int64 `json:"item_id" gorm:"column:item_id;type:bigint(20) not null;default:0;index:idx_item_id"`
+	Id uint `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
+	// Keep both directions covering; non-unique indexes preserve legacy duplicates.
+	TagId  uint  `json:"tag_id" gorm:"column:tag_id;type:int(10) not null;default:0;index;index:idx_tag_item,priority:1;index:idx_item_tag,priority:2"`
+	ItemId int64 `json:"item_id" gorm:"column:item_id;type:bigint(20) not null;default:0;index:idx_item_id;index:idx_tag_item,priority:2;index:idx_item_tag,priority:1"`
 }
 
 type TagContent struct {
