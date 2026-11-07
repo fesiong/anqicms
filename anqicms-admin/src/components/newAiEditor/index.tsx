@@ -29,6 +29,7 @@ import {
 import AttachmentSelect from '../attachment';
 import './index.less';
 import MaterialSelect, { MaterialElement } from './material';
+import { enableRelativeLinks } from './relativeLinks';
 
 const MonacoEditor = lazy(() => import('react-monaco-editor'));
 
@@ -640,6 +641,7 @@ const NewAiEditor: React.FC<NewAiEditorProps> = forwardRef((props, ref) => {
         },
       });
 
+      enableRelativeLinks(aiEditor);
       aiEditorRef.current = aiEditor;
     }
   };
