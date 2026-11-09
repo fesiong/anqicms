@@ -874,15 +874,18 @@ func (w *Website) ChannelTestSend(channelId, targetId uint) (*ChannelTestSendRes
 	if err != nil {
 		return nil, err
 	}
-	if strings.TrimSpace(channel.Platform) == "" ||
-		strings.TrimSpace(channel.AppId) == "" ||
-		strings.TrimSpace(channel.AppSecret) == "" {
+	if strings.TrimSpace(channel.Platform) == "" {
 		return nil, errChannelTestConfigInvalid
 	}
 	creds := PlatformCredentials{
 		AppId:          channel.AppId,
 		AppSecret:      channel.AppSecret,
 		OrganizationId: channel.OrgId,
+	}
+	// 与建连共用同一道闸门（adapter.Run 里的 validatePlatformCredentials）：
+	// 缺哪一项就报哪一项，避免「配置校验通过、建连却被拒」的两份清单漂移。
+	if err := validatePlatformCredentials(creds); err != nil {
+		return nil, err
 	}
 	adapter, ok := channelTestAdapterFactory(channel.Platform, creds)
 	if !ok || adapter == nil {

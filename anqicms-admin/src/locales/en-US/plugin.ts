@@ -2215,7 +2215,7 @@ export default {
   'plugin.channels.app-id.description': 'Feishu App ID, or DingTalk AppKey',
   'plugin.channels.org-id': 'Organization ID',
   'plugin.channels.org-id.description':
-    'Feishu tenant_key may be empty; DingTalk corp_id is recommended',
+    'Optional. Leave empty to fetch automatically (Feishu requires tenant:tenant:readonly; otherwise the first inbound message decides)',
   'plugin.channels.app-secret': 'App secret',
   'plugin.channels.app-secret.description':
     'Only the mask is shown after saving; submit it unchanged if you do not want to update the secret',

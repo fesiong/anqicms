@@ -76,7 +76,13 @@ type InboundEvent struct {
 	MentionedBot bool
 }
 
-// ValidateIdentity 只校验身份两项：AppId 与 OrganizationId 都必须非空且与渠道配置严格相等。
+// ValidateIdentity 只校验身份两项：AppId 必须与渠道配置严格相等，
+// OrganizationId 必须非空；expectedOrgId 非空时还必须严格相等。
+//
+// expectedOrgId 为空是「组织标识尚未确定」的锚定阶段：渠道既没能在建连前
+// 从平台接口取到组织标识，也没有管理员手工填写，此时放行首条非空组织事件，
+// 由 channelWorker 把它锚定成后续校验基准（见 channelWorker.validateInboundIdentity）。
+// 空组织事件在任何阶段都拒绝——锚定不能锚在空值上，否则等于放行一切。
 //
 // 独立成方法是因为平台卡片回调不携带会话标识（ChatId/ChatType 必然为空），
 // 走完整 Validate 会被无条件拒绝；卡片回调只做身份校验，其余字段由 T7 的审批流程自行判定。
@@ -93,7 +99,8 @@ func (e InboundEvent) ValidateIdentity(expectedAppId, expectedOrgId string) erro
 	if orgId == "" {
 		return errors.New("事件来源组织不能为空")
 	}
-	if orgId != strings.TrimSpace(expectedOrgId) {
+	expected := strings.TrimSpace(expectedOrgId)
+	if expected != "" && orgId != expected {
 		return errors.New("事件来源组织与渠道配置不一致")
 	}
 	return nil
@@ -101,7 +108,8 @@ func (e InboundEvent) ValidateIdentity(expectedAppId, expectedOrgId string) erro
 
 // Validate 校验事件身份与渠道配置一致。expectedAppId/expectedOrgId 来自渠道配置。
 //
-// 身份两项（AppId/OrganizationId）交给 ValidateIdentity：严格相等，空值不放行（fail closed）。
+// 身份两项（AppId/OrganizationId）交给 ValidateIdentity：应用严格相等、组织非空，
+// expectedOrgId 为空时代表「锚定阶段」，只要求事件组织非空（见 ValidateIdentity）。
 // 另外要求 EventId/UserId/ChatId 非空、ChatType 只能是 p2p/group。
 //
 // 卡片点击事件（Kind == InboundKindCardAction）例外：平台卡片回调不携带会话标识，
@@ -331,16 +339,18 @@ func sanitizePlatformMessage(message string) string {
 
 // validatePlatformCredentials 是所有适配器建立连接前的统一校验。
 // 错误文案不含凭据内容。
+//
+// 组织标识**不在**这里拦：它在平台后台没有展示页，要求站长手工填写等于把
+// 「拿不到的值」变成接入门槛。现在的策略是建连前自动向平台接口获取
+// （ResolvePlatformOrganization），取不到就以首条入站事件锚定
+// （channelWorker.validateInboundIdentity）。空组织事件仍由 ValidateIdentity 拒绝，
+// 「空值等于放行一切」这条 fail-closed 边界没有被削弱。
 func validatePlatformCredentials(creds PlatformCredentials) error {
 	if strings.TrimSpace(creds.AppId) == "" {
 		return errors.New("平台应用 ID 未配置")
 	}
 	if strings.TrimSpace(creds.AppSecret) == "" {
 		return errors.New("平台应用密钥未配置")
-	}
-	if strings.TrimSpace(creds.OrganizationId) == "" {
-		// 组织标识是入站事件的校验基准，空值等于放行一切，必须在这里拦住。
-		return errors.New("平台组织标识未配置")
 	}
 	return nil
 }

@@ -2098,7 +2098,7 @@ export default {
   'plugin.channels.app-id.description': '飞书 App ID，或钉钉 AppKey',
   'plugin.channels.org-id': '组织标识',
   'plugin.channels.org-id.description':
-    '飞书 tenant_key 可留空；钉钉 corp_id 建议填写',
+    '可选。留空将自动获取（飞书需 tenant:tenant:readonly 权限，取不到时以首条入站消息的企业为准）',
   'plugin.channels.app-secret': '应用密钥',
   'plugin.channels.app-secret.description':
     '保存后只显示掩码；不修改密钥时请保持原样提交',

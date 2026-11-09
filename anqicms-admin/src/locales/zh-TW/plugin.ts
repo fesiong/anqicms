@@ -2063,7 +2063,7 @@ export default {
   'plugin.channels.app-id.description': '飛書 App ID，或釘釘 AppKey',
   'plugin.channels.org-id': '組織標識',
   'plugin.channels.org-id.description':
-    '飛書 tenant_key 可留空；釘釘 corp_id 建議填寫',
+    '可選。留空將自動取得（飛書需 tenant:tenant:readonly 權限，取不到時以首條入站訊息的企業為準）',
   'plugin.channels.app-secret': '應用密鑰',
   'plugin.channels.app-secret.description':
     '儲存後只顯示遮罩；不修改密鑰時請保持原樣提交',

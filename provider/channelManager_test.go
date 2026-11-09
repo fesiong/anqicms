@@ -122,6 +122,7 @@ type fakeChannelAdapter struct {
 
 	mu        sync.Mutex
 	runCalls  int
+	lastCreds PlatformCredentials
 	sink      InboundSink
 	sendCalls []fakeSendCall
 
@@ -155,6 +156,7 @@ func (f *fakeChannelAdapter) Name() string { return "fake" }
 func (f *fakeChannelAdapter) Run(ctx context.Context, creds PlatformCredentials, sink InboundSink) error {
 	f.mu.Lock()
 	f.runCalls++
+	f.lastCreds = creds
 	f.sink = sink
 	f.mu.Unlock()
 	f.startOnce.Do(func() { close(f.started) })
@@ -185,6 +187,13 @@ func (f *fakeChannelAdapter) runCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return f.runCalls
+}
+
+// creds 返回最近一次 Run 收到的凭据（断言自动获取/锚定的组织标识是否传给了适配器）。
+func (f *fakeChannelAdapter) creds() PlatformCredentials {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.lastCreds
 }
 
 func (f *fakeChannelAdapter) sendCount() int {

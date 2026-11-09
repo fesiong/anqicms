@@ -43,9 +43,12 @@ const (
 // 入站 sink 会被 SDK 多个 goroutine 并发调用（见 InboundSink 注释），
 // 这里只做「去重 + 落库」/「绑定消费」，不为 inbox 增加按会话串行队列（T6 职责）。
 type channelWorker struct {
-	manager   *channelManager
-	channel   model.MessageChannel
-	signature channelConfigSignature
+	manager *channelManager
+	channel model.MessageChannel
+	// signature 是 worker 启动时看到的渠道配置签名，扫描循环用它判断外部配置变更。
+	// 组织标识在建连前自动获取并落库后，本连接已按新配置持有租约，必须同步签名，
+	// 否则扫描循环会把这次自己写入的组织标识误当成外部变更，再重连一次。
+	signature atomic.Value
 
 	ctx    context.Context
 	cancel context.CancelFunc
@@ -64,12 +67,27 @@ type channelWorker struct {
 
 	lease atomic.Pointer[model.ChannelLease]
 
+	// orgId 是本次连接的组织标识校验基准。飞书回调可能并发，用 atomic 保存：
+	// 建连前可能是空串（锚定阶段），首条非空组织事件用 CAS 把它锚定成基准。
+	orgId atomic.Value
+	// restartAfterAdoption 标记「基准是本次连接内锚定的」：当前事件处理完后
+	// 主动停止本连接并请求重建，让新连接按新摘要持有租约（旧摘要租约随之释放）。
+	restartAfterAdoption atomic.Bool
+
 	mu      sync.Mutex
 	lastErr string
 }
 
 func (wk *channelWorker) currentState() channelWorkerState {
 	return channelWorkerState(wk.state.Load())
+}
+
+// configSignature 返回 worker 眼里的渠道配置签名（与扫描循环的读取串行安全）。
+func (wk *channelWorker) configSignature() channelConfigSignature {
+	if value := wk.signature.Load(); value != nil {
+		return value.(channelConfigSignature)
+	}
+	return channelConfigSignature{}
 }
 
 func (wk *channelWorker) pendingReleaseValue() bool {
@@ -104,6 +122,34 @@ func (wk *channelWorker) run() {
 	defer close(wk.done)
 	manager := wk.manager
 	channel := &wk.channel
+
+	// 组织标识是入站事件的校验基准，但平台后台没有展示页、站长拿不到。
+	// 建连前先自动向平台索要一次；取不到就进入「首条入站事件锚定」模式，
+	// 不影响建连（锚定模式同样只放行非空组织事件，见 validateInboundIdentity）。
+	if strings.TrimSpace(channel.OrgId) == "" {
+		org, resolveErr := manager.resolveOrganizationFor(wk.ctx, channel)
+		switch {
+		case resolveErr != nil:
+			log.Printf("[channel] 站点 %d 渠道 %d 自动获取组织标识失败，改为用首条入站消息的企业锚定（如需提前固定，可为应用开通企业信息读取权限后重启渠道）：%s",
+				manager.site.Id, channel.Id, sanitizePlatformMessage(resolveErr.Error()))
+		case org != "":
+			channel.OrgId = org
+			if persisted, persistErr := manager.persistChannelOrganization(channel, org); persistErr != nil {
+				// 落库失败不影响本次连接：内存里仍用自动获取值，重启后会重新获取。
+				log.Printf("[channel] 站点 %d 渠道 %d 组织标识落库失败，本次连接仍使用自动获取值：%s",
+					manager.site.Id, channel.Id, sanitizePlatformMessage(persistErr.Error()))
+			} else {
+				if persisted != org {
+					// 期间管理员已手工保存了组织标识：以库里的值为准。
+					log.Printf("[channel] 站点 %d 渠道 %d 已存在手工配置的组织标识，后台自动获取值不覆盖", manager.site.Id, channel.Id)
+				}
+				// 本连接已按落库后的配置（含新摘要）建立，同步签名，避免扫描循环
+				// 把自己刚写入的组织标识误判成外部变更、再重连一次。
+				wk.signature.Store(channelConfigSignatureOf(channel))
+			}
+		}
+	}
+	wk.orgId.Store(strings.TrimSpace(channel.OrgId))
 
 	adapter, ok := manager.opts.newAdapter(channel.Platform, PlatformCredentials{
 		AppId:          channel.AppId,
@@ -178,6 +224,18 @@ func (wk *channelWorker) run() {
 	if wk.releaseOnStop.Load() && !manager.abandoned.Load() {
 		manager.releaseLease(lease)
 	}
+	if wk.restartAfterAdoption.Load() {
+		// 组织标识是本次连接从事件锚定的：库里已更新，主动请求重建，
+		// 让新连接按新摘要抢租约。必须在 run 退出后异步请求——scanLoop 的
+		// rebuildOne 会等待本 goroutine 退出，同步等待会互相卡死。
+		go func(id uint) {
+			if rebuildErr := manager.requestRebuild(id); rebuildErr != nil &&
+				!errors.Is(rebuildErr, errChannelManagerStopped) {
+				log.Printf("[channel] 站点 %d 渠道 %d 锚定组织标识后重建连接失败：%v",
+					manager.site.Id, id, rebuildErr)
+			}
+		}(channel.Id)
+	}
 }
 
 // renewLoop 每 renewEvery 续租一次；续租失败（RowsAffected != 1）即失去租约，
@@ -220,6 +278,58 @@ func (wk *channelWorker) inboundSink(adapter PlatformAdapter) InboundSink {
 	}
 }
 
+// effectiveOrgId 返回本次连接当前的组织标识基准（空串表示还在锚定阶段）。
+func (wk *channelWorker) effectiveOrgId() string {
+	if value := wk.orgId.Load(); value != nil {
+		return value.(string)
+	}
+	return ""
+}
+
+// validateInboundIdentity 是入站身份闸门的最后一层，也是「事件锚定」的落点：
+//
+//   - 已有基准（手工配置 / 接口获取 / 已锚定）→ 严格相等，与旧行为一致；
+//   - 基准为空（锚定阶段）→ 只接受非空组织事件，并用 CAS 把首个值变成基准。
+//     CAS 保证并发事件里只有一个值能赢；输掉的事件按赢家重新校验，不匹配即丢弃。
+//
+// 锚定成功后立即落库（条件更新，不覆盖管理员手工值），并请求重建连接：
+// 应用身份摘要随组织标识变化，新连接必须以新摘要持有租约。
+func (wk *channelWorker) validateInboundIdentity(event InboundEvent) error {
+	expected := wk.effectiveOrgId()
+	if expected != "" {
+		return event.ValidateIdentity(wk.channel.AppId, expected)
+	}
+	if err := event.ValidateIdentity(wk.channel.AppId, ""); err != nil {
+		// 唯一可能：事件组织为空。锚定不能锚在空值上。
+		return err
+	}
+	adopted := strings.TrimSpace(event.OrganizationId)
+	if !wk.orgId.CompareAndSwap("", adopted) {
+		// 并发事件先锚定了别的值：按新基准重新校验。
+		return event.ValidateIdentity(wk.channel.AppId, wk.effectiveOrgId())
+	}
+	persisted, err := wk.manager.persistChannelOrganization(&wk.channel, adopted)
+	if err != nil {
+		log.Printf("[channel] 站点 %d 渠道 %d 锚定组织标识落库失败，仅本次连接生效（重启后会重新锚定）：%s",
+			wk.manager.site.Id, wk.channel.Id, sanitizePlatformMessage(err.Error()))
+		return nil
+	}
+	if persisted != adopted {
+		// 期间管理员已手工保存了组织标识：以库里的值为准（自动值不覆盖它）。
+		// 基准从空变成手工值，本连接的租约摘要已经过期，必须按新配置重建。
+		wk.orgId.Store(persisted)
+		wk.restartAfterAdoption.Store(true)
+		return event.ValidateIdentity(wk.channel.AppId, persisted)
+	}
+	log.Printf("[channel] 站点 %d 渠道 %d 已用首条入站消息锚定组织标识，连接将按新配置重建",
+		wk.manager.site.Id, wk.channel.Id)
+	// 库里已是新配置：同步签名，让本次停止只由下面的重建请求驱动，
+	// 不被扫描循环当成外部变更重复处理。
+	wk.signature.Store(channelConfigSignatureOf(&wk.channel))
+	wk.restartAfterAdoption.Store(true)
+	return nil
+}
+
 // handleInbound 是入站处理顺序（规格 §6/§7）：
 //  1. 身份校验失败 → 丢弃；
 //  2. EventId 为空 → 丢弃并记脱敏日志（R22，优先于绑定判定，避免无标识事件消费令牌）；
@@ -232,7 +342,16 @@ func (wk *channelWorker) handleInbound(ctx context.Context, adapter PlatformAdap
 	manager := wk.manager
 	channel := &wk.channel
 
-	if err := event.ValidateIdentity(channel.AppId, channel.OrgId); err != nil {
+	// 锚定模式可能在本条事件里产生新的基准：处理完当前事件（含绑定回执）后
+	// 主动停止连接，由管理器按库里新配置重建。
+	// 注意不要在这里把标记清零：run 退出后还要靠它发起重建请求。
+	defer func() {
+		if wk.restartAfterAdoption.Load() {
+			wk.cancel()
+		}
+	}()
+
+	if err := wk.validateInboundIdentity(event); err != nil {
 		log.Printf("[channel] 站点 %d 渠道 %d 入站事件身份校验失败，已丢弃：%s",
 			manager.site.Id, channel.Id, sanitizePlatformMessage(err.Error()))
 		return nil

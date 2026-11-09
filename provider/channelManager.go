@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -54,7 +55,10 @@ const (
 // 生产默认值见 defaultChannelManagerOptions；测试替换适配器工厂与周期，不 mock 被测逻辑。
 type channelManagerOptions struct {
 	// newAdapter 默认指向 NewPlatformAdapter；测试注入假适配器，只替代平台网络。
-	newAdapter   func(name string, creds PlatformCredentials) (PlatformAdapter, bool)
+	newAdapter func(name string, creds PlatformCredentials) (PlatformAdapter, bool)
+	// resolveOrg 在建连前自动获取组织标识（默认 ResolvePlatformOrganization）。
+	// 取不到不算失败：连接按「首条入站事件锚定」模式建立。测试注入固定值/错误。
+	resolveOrg   func(ctx context.Context, platform string, creds PlatformCredentials) (string, error)
 	leaseTTL     time.Duration
 	renewEvery   time.Duration
 	scanEvery    time.Duration
@@ -71,6 +75,7 @@ type channelManagerOptions struct {
 func defaultChannelManagerOptions() channelManagerOptions {
 	return channelManagerOptions{
 		newAdapter:       NewPlatformAdapter,
+		resolveOrg:       ResolvePlatformOrganization,
 		leaseTTL:         channelLeaseTTL,
 		renewEvery:       channelLeaseRenewInterval,
 		scanEvery:        channelManagerScanInterval,
@@ -86,6 +91,9 @@ func (o channelManagerOptions) withDefaults() channelManagerOptions {
 	defaults := defaultChannelManagerOptions()
 	if o.newAdapter == nil {
 		o.newAdapter = defaults.newAdapter
+	}
+	if o.resolveOrg == nil {
+		o.resolveOrg = defaults.resolveOrg
 	}
 	if o.leaseTTL <= 0 {
 		o.leaseTTL = defaults.leaseTTL
@@ -394,6 +402,70 @@ func (m *channelManager) enabledChannels() ([]model.MessageChannel, error) {
 	return channels, err
 }
 
+// resolveOrganizationFor 在建连前自动向平台索要组织标识（默认实现：
+// ResolvePlatformOrganization）。失败不阻断建连：worker 会转为事件锚定模式。
+func (m *channelManager) resolveOrganizationFor(ctx context.Context, channel *model.MessageChannel) (string, error) {
+	return m.opts.resolveOrg(ctx, channel.Platform, PlatformCredentials{
+		AppId:          channel.AppId,
+		AppSecret:      channel.AppSecret,
+		OrganizationId: channel.OrgId,
+	})
+}
+
+// persistChannelOrganization 把自动获取/锚定到的组织标识写入渠道行。
+//
+// 条件更新：只在本行组织标识仍为空时写入。管理员手工保存的值、或另一条路径
+// （另一实例锚定/后台保存）先写入的值优先，后台自动获取绝不覆盖它们。
+// 应用身份摘要必须同步更新：唯一索引与连接租约都按它取键，摘要停在旧值会让
+// 「同一企业应用全局唯一」的判断失真。
+//
+// 返回值是写入后库里的实际组织标识。CAS 未命中（已被别人写入）时也返回库中现值，
+// 由调用方决定采用哪个；行已不存在时返回错误。
+func (m *channelManager) persistChannelOrganization(channel *model.MessageChannel, org string) (string, error) {
+	org = strings.TrimSpace(org)
+	if org == "" {
+		return "", errors.New("组织标识不能为空")
+	}
+	res := m.site.DB.Model(&model.MessageChannel{}).
+		Where("`id` = ? AND `site_id` = ? AND (`org_id` IS NULL OR TRIM(`org_id`) = '')", channel.Id, m.site.Id).
+		Updates(map[string]any{
+			"org_id":            org,
+			"app_identity_hash": model.ComputeAppIdentityHash(channel.Platform, channel.AppId, org),
+			"updated_time":      m.nowUnix(),
+		})
+	if res.Error != nil {
+		return "", res.Error
+	}
+	if res.RowsAffected == 1 {
+		channel.OrgId = org
+		return org, nil
+	}
+	var current model.MessageChannel
+	if err := m.site.DB.Where("`id` = ? AND `site_id` = ?", channel.Id, m.site.Id).Take(&current).Error; err != nil {
+		return "", err
+	}
+	currentOrg := strings.TrimSpace(current.OrgId)
+	if currentOrg == "" {
+		// 条件更新没命中、回读仍是空：只可能是并发写删把行改回去了。
+		return "", errors.New("组织标识写入未生效")
+	}
+	channel.OrgId = currentOrg
+	return currentOrg, nil
+}
+
+// leaseIdentityStillValid 判断 worker 手里的租约摘要是否仍对应渠道当前的应用身份。
+//
+// 组织标识被自动获取/锚定后摘要会变化。此时旧摘要的租约必须释放：没有人会再用
+// 旧摘要取租约，它会永远留在表里成为孤儿行；重建时若误保留，还会让「旧连接已退出、
+// 新连接复用租约」的前提不成立。
+func (m *channelManager) leaseIdentityStillValid(worker *channelWorker, channel *model.MessageChannel) bool {
+	lease := worker.leaseSnapshot()
+	if lease == nil {
+		return true
+	}
+	return lease.AppIdentityHash == model.ComputeAppIdentityHash(channel.Platform, channel.AppId, channel.OrgId)
+}
+
 // reconcile 对比「已启用渠道」与「正在运行的 worker」：
 // 消失/禁用 → 停连接并释放租约；配置变化 → 停旧连接（保持租约）后重建；新增 → 启动。
 // 「未取得租约 / 失去租约」的 worker 按退避重试；旧连接未退出前绝不启动新连接。
@@ -435,11 +507,13 @@ func (m *channelManager) reconcile() {
 			}
 			continue
 		}
-		if worker.signature != channelConfigSignatureOf(&channel) {
+		if worker.configSignature() != channelConfigSignatureOf(&channel) {
 			// 配置变化：保持租约（不释放再抢，避免被其它实例截走），
 			// 先 cancel 旧 Run 并等它退出，再按新配置建立连接。
+			// 例外：应用身份摘要变了（组织标识被自动获取/锚定）——旧摘要的租约
+			// 不能再保留，否则它会成为永远不会被再取的孤儿行。
 			m.clearRetry(id)
-			if !m.stopWorker(id, false) {
+			if !m.stopWorker(id, !m.leaseIdentityStillValid(worker, &channel)) {
 				// 旧连接没在时限内退出：本轮不重建，等下一轮。
 				continue
 			}
@@ -493,7 +567,13 @@ func (m *channelManager) rebuildOne(channelId uint) error {
 		return errChannelWorkerStopTimeout
 	}
 	m.clearRetry(channelId)
-	if !m.stopWorker(channelId, false) {
+	// 应用身份摘要变化（组织标识被自动获取/锚定）时旧租约必须释放，
+	// 否则它会留在表里成为孤儿行；摘要未变时保持租约，避免被其它实例截走。
+	releaseLease := true
+	if worker := m.worker(channelId); worker != nil {
+		releaseLease = !m.leaseIdentityStillValid(worker, &channel)
+	}
+	if !m.stopWorker(channelId, releaseLease) {
 		return errChannelWorkerStopTimeout
 	}
 	m.startWorker(channel)
@@ -512,13 +592,13 @@ func (m *channelManager) startWorker(channel model.MessageChannel) {
 	}
 	ctx, cancel := context.WithCancel(m.ctx)
 	worker := &channelWorker{
-		manager:   m,
-		channel:   channel,
-		signature: channelConfigSignatureOf(&channel),
-		ctx:       ctx,
-		cancel:    cancel,
-		done:      make(chan struct{}),
+		manager: m,
+		channel: channel,
+		ctx:     ctx,
+		cancel:  cancel,
+		done:    make(chan struct{}),
 	}
+	worker.signature.Store(channelConfigSignatureOf(&channel))
 	worker.releaseOnStop.Store(true)
 
 	m.mu.Lock()

@@ -1033,6 +1033,66 @@ func TestChannelTestSendUsesApprovedTarget(t *testing.T) {
 	}
 }
 
+// TestChannelTestSendTreatsOrgIdAsOptional 锁住「组织标识不再是配置门槛」：
+// 它由建连前的平台接口自动获取、取不到则由首条入站事件锚定，因此配置校验只在
+// 应用 ID / 密钥缺失时拒绝。负向对照：清空 app_id 或 app_secret 必须变红，
+// 证明校验仍在真正检查凭据，而不是整段空转。
+func TestChannelTestSendTreatsOrgIdAsOptional(t *testing.T) {
+	w := channelDataTestSite(t)
+	ch := newManagerTestChannel(t, w, true)
+
+	fake := newNotifyFakeAdapter()
+	original := channelTestAdapterFactory
+	channelTestAdapterFactory = func(string, PlatformCredentials) (PlatformAdapter, bool) {
+		return fake, true
+	}
+	t.Cleanup(func() { channelTestAdapterFactory = original })
+
+	// 正向对照：凭据完整时配置校验通过，但不得声称已验证（没有连平台）。
+	result, err := w.ChannelTestSend(ch.Id, 0)
+	if err != nil {
+		t.Fatalf("凭据完整的渠道应通过配置校验：%v", err)
+	}
+	if result.Valid || result.Verified || result.Sent {
+		t.Fatalf("无目标校验不得声称有效/已验证/已发送：%+v", result)
+	}
+
+	// 只清组织标识：不再拒绝——自动获取/事件锚定会补上。
+	if err := w.DB.Model(&model.MessageChannel{}).Where("id = ?", ch.Id).Update("org_id", "").Error; err != nil {
+		t.Fatalf("清空组织标识失败：%v", err)
+	}
+	if _, err := w.ChannelTestSend(ch.Id, 0); err != nil {
+		t.Fatalf("组织标识留空必须能通过配置校验（由自动获取/事件锚定补齐），实得：%v", err)
+	}
+
+	// 纯空白同样按「留空」处理（与建连校验的 TrimSpace 语义一致）。
+	if err := w.DB.Model(&model.MessageChannel{}).Where("id = ?", ch.Id).Update("org_id", "   ").Error; err != nil {
+		t.Fatalf("写入空白组织标识失败：%v", err)
+	}
+	if _, err := w.ChannelTestSend(ch.Id, 0); err != nil {
+		t.Fatalf("空白组织标识必须等同留空而不是报错，实得：%v", err)
+	}
+
+	// 反向对照：真正的凭据缺失仍必须拒绝。
+	if err := w.DB.Model(&model.MessageChannel{}).Where("id = ?", ch.Id).Update("app_id", "").Error; err != nil {
+		t.Fatalf("清空应用 ID 失败：%v", err)
+	}
+	if _, err := w.ChannelTestSend(ch.Id, 0); err == nil {
+		t.Fatal("缺少应用 ID 的渠道不能通过配置校验")
+	}
+	if err := w.DB.Model(&model.MessageChannel{}).Where("id = ?", ch.Id).Updates(map[string]any{
+		"app_id": ch.AppId, "app_secret": "",
+	}).Error; err != nil {
+		t.Fatalf("清空应用密钥失败：%v", err)
+	}
+	if _, err := w.ChannelTestSend(ch.Id, 0); err == nil {
+		t.Fatal("缺少应用密钥的渠道不能通过配置校验")
+	}
+	if fake.callCount() != 0 {
+		t.Fatal("配置校验不得触发平台发送")
+	}
+}
+
 // ============================================================
 // F0 密钥安全日志
 // ============================================================
