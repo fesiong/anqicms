@@ -56,6 +56,7 @@ export default {
   'menu.plugin.channel.weapp': '微信小程序',
   'menu.plugin.channel.akismet': 'Akismet/reCAPTCHA',
   'menu.plugin.channel.google': '谷歌授权',
+  'menu.plugin.channels': '消息渠道',
   'menu.plugin.commerce.user': '用户管理',
   'menu.plugin.commerce.group': '用户组VIP',
   'menu.plugin.commerce.order': '订单管理',

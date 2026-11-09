@@ -123,6 +123,34 @@ func (w *Website) InitAkismet() {
 	w.AkismetClient = c
 }
 
+// AkismetOutcome 区分「未配置 / 已检查 / 检查失败」三态。
+// 既有 AkismentCheck 把「未配置」和「检查失败」都返回 (1,false)，
+// 通知链路必须知道两者差别：检查失败时不能把访客内容外发。
+type AkismetOutcome int
+
+const (
+	AkismetOutcomeNotConfigured AkismetOutcome = iota
+	AkismetOutcomeChecked
+	AkismetOutcomeFailed
+)
+
+// AkismetCheckEnabled 判断某类内容是否配置了反垃圾检测。
+// 是 AkismentCheck 内部 needCheck 的唯一事实源，供通知链路复用。
+func (w *Website) AkismetCheckEnabled(checkType int) bool {
+	if w.AkismetClient == nil {
+		return false
+	}
+	if checkType == CheckTypeGuestbook && len(w.AkismetClient.CheckType) == 0 {
+		return true
+	}
+	for _, v := range w.AkismetClient.CheckType {
+		if v == checkType {
+			return true
+		}
+	}
+	return false
+}
+
 // AkismentCheck 垃圾内容检测
 // checkType = 1，2; return status, ok ;status = 1 正常,2 垃圾;ok = true, false,false 表示检测失败或未检测
 // 检测失败或未检测都返回 1, false
@@ -173,19 +201,7 @@ func (w *Website) AkismentCheck(ctx iris.Context, checkType int, data interface{
 	//	}
 	//}
 	// end
-	var needCheck = func(checkType int) bool {
-		if checkType == CheckTypeGuestbook && len(w.AkismetClient.CheckType) == 0 {
-			return true
-		}
-		for _, v := range w.AkismetClient.CheckType {
-			if v == checkType {
-				return true
-			}
-		}
-		return false
-	}
-	ok := needCheck(checkType)
-	if !ok {
+	if !w.AkismetCheckEnabled(checkType) {
 		return 1, false
 	}
 	frontUrl := w.System.BaseUrl

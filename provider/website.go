@@ -501,6 +501,24 @@ func InitWebsite(mw *model.Website) {
 		// AI: 先创建 ai chat service（初始化工具），再创建 mcp server（注册工具）
 		w.NewAiChatService()
 		w.NewMcpServer()
+		// 渠道审批恢复（R62）：重启把 pending/approved 取消、把 executing 标成 unknown，
+		// 不自动重放任何写操作（executing 的结果不确定，只能提示到后台核查）。
+		// 失败只告警：老库可能还没迁移审批表，站点初始化不能被它阻断。
+		if aerr := w.recoverChannelApprovals(); aerr != nil {
+			slog.Warn("恢复渠道审批状态失败", "siteId", w.Id, "error", aerr)
+		}
+		// 渠道长连接管理器：只对已启用渠道建立连接。老库可能还没迁移渠道表，
+		// 管理器内部只记日志，不阻断站点初始化；重复调用是幂等的。
+		// 必须显式开启（bootstrap.Serve 在 InitWebsites 之前调用 EnableChannelManagerOnInit），
+		// 否则测试与命令行工具会拿真实凭据去连平台并写真实租约。
+		if channelManagerOnInit.Load() {
+			startChannelManagerOnInit(&w)
+		}
+		// 通知投递工作者与服务入口同生命周期：只在进程入口显式打开开关后启动，
+		// 测试/命令行不会自动跑后台投递。重复调用是幂等的。
+		if notifyWorkerOnInit.Load() {
+			startNotifyWorkerOnInit(&w)
+		}
 		w.NewMailService()
 		// 初始化索引,异步处理
 		go w.InitFulltext(false)
@@ -509,6 +527,11 @@ func InitWebsite(mw *model.Website) {
 		if w.Id == 1 {
 			w.LoadAiSetting("")
 		}
+	} else {
+		// 站点被置为未初始化（连库失败 / 状态停用 / 路径异常）：停掉残留管理器，
+		// 否则它会继续用旧的 DB 句柄续租、重连。
+		w.StopChannelManager()
+		w.StopNotifyWorker()
 	}
 }
 
@@ -844,6 +867,15 @@ func GetWebsite(siteId uint) *Website {
 }
 
 func RemoveWebsite(siteId uint, removeFile bool) {
+	// 删除前先停掉该站点的渠道长连接与续租：站点从注册表摘除后，
+	// 管理器仍绑着已失效的 *Website/DB 句柄，会继续连平台并写租约。
+	// 通知工作者同理：它每 30 秒扫一次表并 UPDATE 投递行，站点删掉后仍在跑就是空转。
+	// 注意：下面的 GetWebsite 在 Delete 之后返回 nil 是既有行为（DROP DATABASE
+	// 因此不会执行），本任务不改变它，只加停止逻辑。
+	if stopped := GetWebsite(siteId); stopped != nil {
+		stopped.StopChannelManager()
+		stopped.StopNotifyWorker()
+	}
 	websites.Delete(siteId)
 	site := GetWebsite(siteId)
 	if site != nil {

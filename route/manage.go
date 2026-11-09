@@ -719,5 +719,32 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 				shipping.Post("/setting", manageController.PluginSaveShippingSetting)
 			}
 		}
+
+		// 企业 IM 渠道（飞书长连接 / 钉钉 Stream）的连接配置、状态与能力清单。
+		// 用 AdminPermissionRequired 而不是 AdminPermission：后台历史行为对「不在菜单里的
+		// 路径」是放行的，而渠道端点能改平台凭据、能开聊天管理，必须显式授权（规格 §10）。
+		channels := manage.Party("/channels", middleware.ParseAdminToken, middleware.AdminPermissionRequired)
+		{
+			channels.Get("/", manageController.ChannelList)
+			channels.Get("/detail", manageController.ChannelDetail)
+			channels.Post("/detail", manageController.ChannelDetailForm)
+			channels.Post("/delete", manageController.ChannelDelete)
+			channels.Get("/status", manageController.ChannelStatus)
+			channels.Get("/capabilities", manageController.ChannelCapabilities)
+			channels.Post("/test", manageController.ChannelTestSend)
+			channels.Post("/binding/token", manageController.ChannelBindingToken)
+			channels.Get("/bindings", manageController.ChannelBindings)
+			channels.Post("/binding/revoke", manageController.ChannelBindingRevoke)
+			channels.Get("/targets", manageController.ChannelTargets)
+			channels.Post("/target", manageController.ChannelTargetSave)
+			channels.Get("/rules", manageController.ChannelRules)
+			channels.Post("/rule", manageController.ChannelRuleSave)
+			channels.Post("/rule/delete", manageController.ChannelRuleDelete)
+			channels.Get("/templates", manageController.ChannelTemplates)
+			channels.Post("/template", manageController.ChannelTemplateSave)
+			channels.Post("/template/preview", manageController.ChannelTemplatePreview)
+			channels.Get("/records", manageController.ChannelRecords)
+			channels.Post("/delivery/retry", manageController.ChannelDeliveryRetry)
+		}
 	}
 }

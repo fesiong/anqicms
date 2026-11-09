@@ -156,6 +156,12 @@ type AiChatService struct {
 	pendingApprovals   map[string]chan string
 	pendingApprovalsMu sync.Mutex
 
+	// 渠道聊天的审批后端（T6 注入点，T7 实现持久化审批）。
+	// 零值表示没有后端：需要审批的渠道写操作一律拒绝（见 channelChat.go 的 approvalDecision）。
+	// 放在服务级而不是全局，是为了让每个站点/服务实例只拿到自己的审批实现。
+	channelApproval   ChannelApprovalFunc
+	channelApprovalMu sync.RWMutex
+
 	// msgSeq: 全局单调递增序号，保证同一 session 内 DB 消息写入顺序
 	// 解决异步并发写入导致 DB 乱序的问题
 	msgSeq int64
@@ -207,27 +213,22 @@ func (w *Website) NewAiChatService() *AiChatService {
 		svc.telemetryRecorder = NewTelemetryRecorder(w.DB)
 	}
 
+	// 渠道轮次必须自带写门禁后端：渠道的权限边界是 intentGate（曝光/白名单/渠道策略/
+	// 管理员/菜单/cap），confirm 已在 intentGate 更早处产出 Pending；WriteGate 是主会话的
+	// 交互式确认，渠道没有交互层。不注入会让「策略 allow 的写操作」在 nil 后端下恒被拒绝。
+	// 只对渠道轮次生效（channelApprovalBackend 的读取点只有 channelTurnState.approvalDecision），
+	// SetChannelApprovalBackend 的 nil-deny 语义与主会话行为保持不变。
+	svc.SetChannelApprovalBackend(channelPolicyApprovalBackend)
+
 	// E 阶段：AIChat 改用意图内核（与 MCP 共用 IntentCatalog）。
 	// 端点 + 内置 handler 仅作为意图委托的底层能力（caps），不再作为独立工具暴露给模型。
-	endpointTools, endpointHandlers := svc.getEinoTools()
-	builtinTools, builtinHandlers := svc.getBuiltinEinoTools()
-
-	// capHandlers：纯底层能力表（端点 + 内置），供意图委托调用，不含意图 handler，
-	// 以避免同名意图（web_fetch/web_search）经委托再次命中意图 handler 造成递归。
-	capHandlers := make(map[string]toolHandler, len(endpointHandlers)+len(builtinHandlers))
-	for n, h := range endpointHandlers {
-		capHandlers[n] = h
-	}
-	for n, h := range builtinHandlers {
-		capHandlers[n] = h
-	}
+	//
+	// capHandlers：纯底层能力表（端点 + 内置 + api_* 元能力），供意图委托调用，不含意图
+	// handler，以避免同名意图（web_fetch/web_search）经委托再次命中意图 handler 造成递归。
+	// 装配逻辑抽到 assembleCapHandlers（channelPermissions.go）：渠道权限映射的护栏测试
+	// 要遍历真实的 capHandlers，而测试里手抄一份能力清单永远抓不到「新增 cap 漏映射」。
+	capHandlers := svc.assembleCapHandlers()
 	svc.capHandlers = capHandlers
-
-	// G3：通用 REST 调用元能力。仅作为底层 cap 注册（不进模型可见的 Tools），
-	// 由 api_list / api_schema / api_invoke 三个意图委托使用。
-	capHandlers[capAPIList] = svc.capAPIList
-	capHandlers[capAPISchema] = svc.capAPISchema
-	capHandlers[capAPIInvoke] = svc.capAPIInvoke
 
 	// 意图工具：模型面可见的工具集合（意图导向工作流）。
 	intentTools, intentHandlers := svc.GetIntentTools()
@@ -243,7 +244,6 @@ func (w *Website) NewAiChatService() *AiChatService {
 	// 前提是每个内置域意图都带齐对应 cap 的参数契约，否则会在这里造成能力缩水——
 	// 该前提由 TestBuiltinIntentCarriesCapContract 守着。
 	svc.Tools = intentTools
-	_ = builtinTools // 内置工具信息仅用于装配 capHandlers，不再绑定给模型
 
 	// 统一 dispatch 表 = 底层能力 + 意图 handler。
 	// 意图 handler 覆盖同名 cap：dispatch 命中意图 handler 后，由 capInvoker 经 capHandlers 调用真正的 cap。
@@ -255,7 +255,7 @@ func (w *Website) NewAiChatService() *AiChatService {
 		svc.Handlers[n] = h
 	}
 
-	_ = endpointTools // 端点工具信息不再暴露给模型，仅保留底层能力 handler
+	// 端点工具信息不再暴露给模型，仅保留底层能力 handler（装配见 assembleCapHandlers）。
 	svc.Logger.Info("AI tools initialized (intent mode)", "tools", len(svc.Tools), "caps", len(capHandlers))
 
 	// P4a: 激活技能 allowed-tools 约束。skill_get 在加载带 allowed_tools 的技能时，

@@ -223,13 +223,28 @@ func (k *Kernel) IsRegistered(name string) bool {
 	return false
 }
 
-// allowed 依据配置判定意图是否暴露（未知意图默认拒绝）。
-func (k *Kernel) allowed(spec *IntentSpec) bool {
+// IntentAllowed 依据曝光配置判定意图是否开放（未知意图返回 false）。
+//
+// 这是曝光规则的**唯一实现**：Kernel.allowed 也调用它，渠道权限门禁同样调用它，
+// 保证 MCP / Eino / 渠道三条通道看到的是同一套白名单语义。任何一处再抄一份
+// 判定逻辑，迟早会出现「MCP 关了、渠道还开着」这类静默分叉。
+func IntentAllowed(cfg Config, name string) bool {
+	for _, spec := range IntentCatalog {
+		if spec == nil || spec.Name != name {
+			continue
+		}
+		return intentAllowed(cfg, spec)
+	}
+	return false
+}
+
+// intentAllowed 是曝光判定的实现体（按 spec 判定，未知 spec 由调用方处理）。
+func intentAllowed(cfg Config, spec *IntentSpec) bool {
 	// DefaultOff 意图必须在 ExposedIntents 里被显式点名才开放，
 	// 不受"白名单为空即全开"的兜底规则影响。见 IntentSpec.DefaultOff 的说明。
 	if spec.DefaultOff {
-		if len(k.cfg.ExposedIntents) > 0 {
-			for _, p := range k.cfg.ExposedIntents {
+		if len(cfg.ExposedIntents) > 0 {
+			for _, p := range cfg.ExposedIntents {
 				if matchIntentPattern(p, spec) {
 					return true
 				}
@@ -237,23 +252,31 @@ func (k *Kernel) allowed(spec *IntentSpec) bool {
 		}
 		return false
 	}
-	if len(k.cfg.ExposedIntents) > 0 {
-		for _, p := range k.cfg.ExposedIntents {
+	if len(cfg.ExposedIntents) > 0 {
+		for _, p := range cfg.ExposedIntents {
 			if matchIntentPattern(p, spec) {
 				return true
 			}
 		}
 		return false
 	}
-	if len(k.cfg.ExposedTools) > 0 {
+	if len(cfg.ExposedTools) > 0 {
 		for _, c := range spec.Caps {
-			if matchGlob(k.cfg.ExposedTools, c) {
+			if matchGlob(cfg.ExposedTools, c) {
 				return true
 			}
 		}
 		return false
 	}
 	return true
+}
+
+// allowed 依据内核配置判定意图是否暴露。
+func (k *Kernel) allowed(spec *IntentSpec) bool {
+	if spec == nil {
+		return false
+	}
+	return intentAllowed(k.cfg, spec)
 }
 
 func matchIntentPattern(p string, spec *IntentSpec) bool {

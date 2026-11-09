@@ -1590,16 +1590,32 @@ func Restart() error {
 func Shutdown() {
 	sites := GetWebsites()
 	for _, w := range sites {
-		// 关闭数据库
-		if w.DB != nil {
-			db, err := w.DB.DB()
-			if err == nil {
-				_ = db.Close()
-			}
+		shutdownWebsite(w)
+	}
+}
+
+// shutdownWebsite 是单个站点的停机序列：停渠道长连接 → 停通知工作者 → 关库 → 关日志。
+//
+// 顺序不能换：两个后台循环都会周期性读写数据库（续租、扫表、UPDATE 投递行），
+// 关库之后再停就是让它们对着已关闭的连接打空转。
+func shutdownWebsite(w *Website) {
+	if w == nil {
+		return
+	}
+	// 先取消渠道长连接并等待 worker 退出，再关闭数据库：
+	// 反过来 worker 的续租会打到已关闭的连接上。
+	w.StopChannelManager()
+	// 通知工作者与渠道管理器同生命周期，同样必须先停。
+	w.StopNotifyWorker()
+	// 关闭数据库
+	if w.DB != nil {
+		db, err := w.DB.DB()
+		if err == nil {
+			_ = db.Close()
 		}
-		// 关闭日志文件
-		if w.StatisticLog != nil {
-			w.StatisticLog.Close()
-		}
+	}
+	// 关闭日志文件
+	if w.StatisticLog != nil {
+		w.StatisticLog.Close()
 	}
 }
