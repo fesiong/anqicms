@@ -1,10 +1,18 @@
 package route
 
 import (
+	"embed"
 	"testing"
 
 	"github.com/kataras/iris/v12"
 )
+
+// routeTestSystemFiles 是测试用的最小「后台静态资源」内嵌目录。
+// HandleDir 要求传入的 embed.FS 根下恰好有目录（iris 会 fs.Sub 到第一项），
+// 空 FS 会直接 panic，所以必须放一个真实文件。
+//
+//go:embed testdata/embedroot
+var routeTestSystemFiles embed.FS
 
 // 本文件是 IM 渠道后台 API 的「真实路由表」回归锁（T12b R6）。
 //
@@ -20,7 +28,9 @@ import (
 func registeredRoutes(t *testing.T) map[string]bool {
 	t.Helper()
 	app := iris.New()
-	Register(app)
+	// Register 现为双参数签名（bootstrap.go 传 main 包内嵌的 SystemFiles），
+	// 测试里传入本文件内嵌的最小目录即可——本用例只断言路由表，不请求静态资源。
+	Register(app, routeTestSystemFiles)
 	app.Build()
 	routes := map[string]bool{}
 	for _, item := range app.GetRoutes() {
