@@ -8,7 +8,6 @@ import (
 	"path"
 	"sort"
 	"strings"
-	"time"
 
 	"gorm.io/gorm"
 
@@ -22,7 +21,7 @@ import (
 //
 // 设计要点（对应规格 §7）：
 //  1. 每次实际调用取交集：站点曝光（ExposedIntents）、智能体接待白名单、渠道 action 策略、
-//     管理员当前状态与菜单权限。审批不扩大这个交集。
+//     管理员当前状态与菜单权限。
 //  2. 模型可见性过滤与执行前拦截同时存在：只靠提示词约束等于没约束。
 //  3. **默认拒绝**：后台登录（middleware.AdminPermission）对「不在菜单里的路径」是放行的，
 //     渠道必须反过来——无法映射权限的 cap、未登记的 cap、黑名单路径一律拒绝。
@@ -192,67 +191,6 @@ func (w *Website) CheckIntentPermission(ctx context.Context, p ExecutionPrincipa
 	return w.checkIntentPermission(ctx, p, intentName, action, false)
 }
 
-// CheckIntentPermissionApproved 是「审批已通过」后的复核入口：必须先用审批凭据自证，
-// 然后除 confirm 之外的门禁全部照旧生效（曝光/白名单/渠道策略其余取值/管理员状态与菜单权限）。
-//
-// 为什么单独给一个入口：审批通过后 T7 必须再复核一次权限（规格 §8「权限仍允许」），
-// 若仍走 CheckIntentPermission，同一个 confirm 决策会让它再次返回 ErrChannelPolicyNeedsConfirm，
-// 执行器只能二选一——死循环，或者干脆跳过整段复核。后者就是「确认即提权」。
-//
-// 自证的内容（R34 + R58）：approvalId + argsJson + 工具身份（intentName/action）必须对得上
-// 该绑定在此策略修订号下的一条未过期的 approved/executing 记录。**不接收凭据就跳过 confirm
-// 等于把 confirm 整条策略变成无效**——任何调用方只要改调本函数，就能绕过所有确认。
-//
-// R58 为什么必须比对工具身份：只比参数摘要时，两个工具的参数恰好一致（例如都只带
-// {"action":"list","page":1}）就能「确认 seo_keyword、执行 content_article」。审批行本身
-// 就记了 tool/action，它们是「管理员批准了哪一次操作」的身份字段，不是元数据。
-//
-// 边界：审批状态机的推进（消费 approved → executing）仍由 T7 负责，本函数只读复核。
-// 因此 T7 必须先用同一 public_id 把记录条件更新为 executing（消费），再调本函数复核。
-func (w *Website) CheckIntentPermissionApproved(ctx context.Context, p ExecutionPrincipal, approvalId string, argsJson string, intentName, action string) error {
-	if err := w.checkChannelPrincipal(p); err != nil {
-		return err
-	}
-	if err := w.checkChannelApprovalProof(ctx, p, approvalId, argsJson, intentName, action); err != nil {
-		return err
-	}
-	return w.checkIntentPermission(ctx, p, intentName, action, true)
-}
-
-// checkChannelApprovalProof 校验审批凭据确实属于该执行主体，且**工具身份、参数与策略**
-// 都未被改动。
-//
-// 查询必须带 site_id：public_id 是随机串但仍然按站点隔离查询，
-// 免得任何一个站点的记录被另一个站点当成自己批的。任一条件不满足一律
-// ErrChannelApprovalInvalid（不区分「不存在」与「不匹配」，避免把审批单号当探测通道，
-// 也不暴露是哪一条不符）。
-//
-// R58：`tool` / `action` 必须逐字比对审批行。action 用调用方给的**原始值**
-// （即从 ArgsJSON 里解析出的 action，解析不出就是空串），这里不做任何兜底：
-// "*" 是 ChannelPolicy.Decision 内部的策略兜底语义，不是审批单的身份字段——
-// 把空 action 当成 "*" 会让「批准了一个无动作调用」变成「批准了该工具的全部动作」。
-func (w *Website) checkChannelApprovalProof(ctx context.Context, p ExecutionPrincipal, approvalId, argsJson, intentName, action string) error {
-	publicId := strings.TrimSpace(approvalId)
-	if publicId == "" {
-		return fmt.Errorf("%w：缺少审批标识", ErrChannelApprovalInvalid)
-	}
-	argsHash := ChannelArgsHash(argsJson)
-	if argsHash == "" {
-		return fmt.Errorf("%w：审批参数无法解析", ErrChannelApprovalInvalid)
-	}
-	var approval model.ChannelApproval
-	err := w.DB.WithContext(ctx).
-		Where("`site_id` = ? AND `public_id` = ? AND `binding_id` = ? AND `tool` = ? AND `action` = ? AND `status` IN ? AND `expires_at` > ? AND `policy_revision` = ? AND `args_hash` = ?",
-			p.SiteId, publicId, p.BindingId, strings.TrimSpace(intentName), action,
-			[]string{model.ApprovalStatusApproved, model.ApprovalStatusExecuting},
-			time.Now().Unix(), p.PolicyRevision, argsHash).
-		Take(&approval).Error
-	if err != nil {
-		return fmt.Errorf("%w：审批记录不存在、已过期或与本次请求不匹配", ErrChannelApprovalInvalid)
-	}
-	return nil
-}
-
 func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipal, intentName, action string, approved bool) error {
 	if err := w.checkChannelPrincipal(p); err != nil {
 		return err
@@ -289,7 +227,7 @@ func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipa
 // CheckCapPermission 是**每个**底层能力调用前的复核（T6 在 capInvoker 里调用）。
 //
 // 只做三件事：cap 映射（含 api_invoke 的动态解析）→ 管理员有效状态 → 菜单权限。
-// 它不做曝光/白名单/渠道策略（那些属于意图级），也不做审批（属于 T7）。
+// 它不做曝光/白名单/渠道策略（那些属于意图级）。
 // 但它同样要过 channelForPrincipal：渠道停用 / 仅通知 / 智能体对不上必须在
 // 每次 cap 调用前也拒绝——意图级检查发生在会话开始时，中间渠道可能被停用。
 func (w *Website) CheckCapPermission(ctx context.Context, p ExecutionPrincipal, capName, argsJSON string) error {
@@ -495,7 +433,7 @@ func (w *Website) loadChannelAgentWhitelist(ctx context.Context, agentId uint) (
 }
 
 // checkChannelPolicy 校验渠道策略修订号与「意图 + 动作」裁决。
-// approved=true 时 confirm 视为通过（审批后的复核）。
+// approved=true 时 confirm 视为通过（保留给带凭据的复核入口，当前渠道轮次固定传 false）。
 func (w *Website) checkChannelPolicy(ch *model.MessageChannel, p ExecutionPrincipal, intentName, action string, approved bool) error {
 	if int64(ch.Revision) != p.PolicyRevision {
 		return fmt.Errorf("%w：渠道策略修订号 %d 与执行主体 %d 不一致", ErrChannelPolicyStale, ch.Revision, p.PolicyRevision)
@@ -525,7 +463,7 @@ func (w *Website) checkChannelPolicy(ch *model.MessageChannel, p ExecutionPrinci
 func (w *Website) checkChannelAdmin(ctx context.Context, p ExecutionPrincipal, menuPaths []string) error {
 	// 绑定是执行主体的身份凭据：撤销、换绑、换渠道后必须立刻失效（规格 §6）。
 	// 放在这里而不是只信 principal 里的 AdminId——principal 是调用方造的，
-	// 而审批点击（T7）发生在很久之后，期间绑定可能已被撤销。
+	// 绑定可能在主体构造之后才被撤销。
 	if err := w.checkChannelBinding(ctx, p); err != nil {
 		return err
 	}

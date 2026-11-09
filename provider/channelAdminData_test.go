@@ -738,29 +738,6 @@ func TestChannelRecordsProjectionHidesSensitiveFields(t *testing.T) {
 		}
 	})
 
-	approval := &model.ChannelApproval{
-		SiteId:         w.Id,
-		BindingId:      0,
-		SessionId:      0,
-		Tool:           "api",
-		Action:         "invoke",
-		CanonicalArgs:  fmt.Sprintf(`{"secret":"参数哨兵-%s"}`, suffix),
-		ArgsHash:       channelDigest("args-" + suffix),
-		ExpiresAt:      time.Now().Add(time.Minute).Unix(),
-		PolicyRevision: 1,
-		Status:         model.ApprovalStatusPending,
-		ResultSummary:  "结果哨兵-" + suffix,
-		PublicId:       "public-" + channelDataSuffix(),
-	}
-	if err := w.DB.Create(approval).Error; err != nil {
-		t.Fatalf("创建审批失败：%v", err)
-	}
-	t.Cleanup(func() {
-		if err := w.DB.Where("id = ?", approval.Id).Delete(&model.ChannelApproval{}).Error; err != nil {
-			t.Logf("清理审批 %d 失败：%v", approval.Id, err)
-		}
-	})
-
 	audit := &model.ChannelAudit{
 		SiteId:     w.Id,
 		ChannelId:  ch.Id,
@@ -787,7 +764,6 @@ func TestChannelRecordsProjectionHidesSensitiveFields(t *testing.T) {
 	}{
 		{"delivery", "delivery", delivery.Id, []string{"\"platform_message_id\":", "\"attempts\":", "\"next_attempt_at\":"}},
 		{"inbox", "inbox", inbox.Id, []string{"\"event_kind\":", "\"lease_until\":"}},
-		{"approval", "approval", approval.Id, []string{"\"tool\":", "\"policy_revision\":"}},
 		{"audit", "audit", audit.Id, []string{"\"action\":", "\"task_id\":"}},
 	}
 	for _, tc := range cases {

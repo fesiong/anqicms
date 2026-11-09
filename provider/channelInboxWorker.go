@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"log"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -15,7 +14,7 @@ import (
 )
 
 // channelInboxWorker.go 是入站任务的消费侧（T12a）：把 channel_inbox 里的
-// pending 行变成一次渠道轮次（执行 → 回复）或一条审批（确认 → 批准后执行）。
+// pending 行变成一次渠道轮次（执行 → 回复）。
 //
 // 设计边界：
 //   - 抢占只看数据库：status + lease_until + 条件更新，多实例互斥，进程内不再维护队列；
@@ -45,42 +44,13 @@ const (
 	channelInboxReasonAgentUnavailable = "渠道未配置接待智能体"
 	channelInboxReasonLoadFailed       = "读取处理上下文失败"
 	channelInboxReasonTurnFailed       = "渠道轮次执行失败"
-	channelInboxReasonApprovalFailed   = "创建审批失败"
 )
-
-// 审批文本指令（规格 §8 已被控制者裁决为私聊文本，不发卡片）。
-const (
-	channelApprovalDecisionApprove = "approve"
-	channelApprovalDecisionReject  = "reject"
-
-	channelInboxApprovalHandledReply  = "该操作已处理或已失效，请重新发起"
-	channelInboxApprovalRejectedReply = "已拒绝"
-	channelInboxApprovalStaleReply    = "会话已切换，请重新发起"
-	channelInboxApprovalCreatedReply  = "已执行"
-	channelInboxApprovalFailedReply   = "执行失败，请稍后重试或改用后台操作"
-	channelInboxApprovalUnavailable   = "渠道审批暂不可用，请稍后重试"
-	channelInboxApprovalCreateFailed  = "创建确认失败，请稍后重试"
-)
-
-// channelInboxApprovalCommandPattern 只匹配整段指令：`批准|同意|approve|拒绝|reject` + 公开 ID。
-// (?i) 只影响 ASCII，中文动作不受影响；未匹配的普通文本照常进入模型。
-var channelInboxApprovalCommandPattern = regexp.MustCompile(`(?i)^\s*(批准|同意|approve|拒绝|reject)\s+(\S+)\s*$`)
 
 // runChannelTurnForInbox 是消费侧的**包级可替换接缝**。
 // 生产默认实现是 RunChannelTurn；测试替换为 svc.runChannelTurn + 脚本模型。
 // 除测试以外不得改写这个变量（改它会绕开真实的权限校验链路）。
 var runChannelTurnForInbox = func(svc *AiChatService, ctx context.Context, req ChannelTurnRequest) (ChannelTurnResult, error) {
 	return svc.RunChannelTurn(ctx, req)
-}
-
-// channelPolicyApprovalBackend 是渠道轮次的生产写门禁后端。
-//
-// 渠道轮次的权限边界是 intentGate（曝光/白名单/渠道策略/管理员/菜单/cap），
-// confirm 已在 intentGate 更早处产出 Pending；WriteGate 是主会话的交互式确认，
-// 渠道没有交互层。这里不注入的话 nil 后端会让「策略 allow 的写操作」全部被拒。
-// 只对渠道轮次生效：SetChannelApprovalBackend 的读取点只有 channelTurnState.approvalDecision。
-func channelPolicyApprovalBackend(context.Context, ChannelApprovalRequest) (string, string) {
-	return "allow", "渠道策略已放行"
 }
 
 // channelInboxConsumer 串行消费单个渠道的入站任务。
@@ -185,9 +155,8 @@ func (c *channelInboxConsumer) claimNext(ctx context.Context) (*model.ChannelInb
 //  1. 卡片回调 → done（首版不发卡片，防御性忽略）；
 //  2. 未配置接待智能体 / 站点服务缺失 → failed；
 //  3. 未绑定 → done，不回复；
-//  4. 私聊文本指令 → 审批（不进模型）；
-//  5. 其余 → 执行一轮并回复；
-//  6. 成功/忽略 → done，处理错误 → failed。
+//  4. 其余 → 执行一轮并回复；
+//  5. 成功/忽略 → done，处理错误 → failed。
 func (c *channelInboxConsumer) processInbox(ctx context.Context, inbox *model.ChannelInbox) {
 	status, reason := c.consumeInbox(ctx, inbox)
 	c.finishInbox(ctx, inbox.Id, status, reason)
@@ -237,14 +206,6 @@ func (c *channelInboxConsumer) consumeInbox(ctx context.Context, inbox *model.Ch
 	}
 
 	group := strings.TrimSpace(inbox.ChatType) == ChatTypeGroup
-	if !group {
-		if decision, publicId, ok := parseChannelApprovalCommand(inbox.Content); ok {
-			reply := c.handleApprovalCommand(ctx, binding, decision, publicId)
-			c.sendReply(ctx, inbox, binding, reply)
-			return model.InboxStatusDone, ""
-		}
-	}
-
 	req, requestErr := c.turnRequest(ctx, &channel, binding, inbox, group)
 	if requestErr != nil {
 		log.Printf("[channel] 站点 %d 渠道 %d 准备渠道轮次失败：%s",
@@ -272,137 +233,8 @@ func (c *channelInboxConsumer) consumeInbox(ctx context.Context, inbox *model.Ch
 		return model.InboxStatusFailed, channelInboxReasonTurnFailed
 	}
 
-	if result.Pending != nil {
-		return c.createApproval(ctx, &channel, binding, inbox, req, result)
-	}
-
 	c.sendReply(ctx, inbox, binding, result.Reply)
 	return model.InboxStatusDone, ""
-}
-
-// createApproval 把「需要确认」的调用落成持久化审批，并回复只含工具名/动作/公开 ID 的提示。
-func (c *channelInboxConsumer) createApproval(
-	ctx context.Context,
-	channel *model.MessageChannel,
-	binding *model.ChannelBinding,
-	inbox *model.ChannelInbox,
-	req ChannelTurnRequest,
-	result ChannelTurnResult,
-) (string, string) {
-	site := c.site
-	if req.Group {
-		// 群聊永远不建审批：群的可见成员范围不可控，确认只能发生在私聊。
-		c.sendReply(ctx, inbox, binding, ErrChannelGroupRestricted.Error())
-		return model.InboxStatusDone, ErrChannelGroupRestricted.Error()
-	}
-	principal := req.Principal
-	// CreateApproval 按内部 chat 会话字符串反查 channel_sessions.id：
-	// 这里必须用**本轮实际使用的**会话标识，不能再用请求前的旧值。
-	principal.SessionId = result.ChatSessionId
-	approval, err := site.CreateApproval(principal, result.Pending.ToolName, result.Pending.ArgsJSON, channelApprovalDefaultTTL)
-	if err != nil {
-		log.Printf("[channel] 站点 %d 渠道 %d 创建审批失败：%s",
-			site.Id, channel.Id, channelInboxSafeErrorText(err))
-		c.sendReply(ctx, inbox, binding, channelInboxApprovalCreateFailed)
-		if reason := channelInboxDeniedReason(err); reason != "" {
-			return model.InboxStatusDone, reason
-		}
-		return model.InboxStatusFailed, channelInboxReasonApprovalFailed
-	}
-	c.sendReply(ctx, inbox, binding, channelInboxApprovalPrompt(approval.Tool, approval.Action, approval.PublicId))
-	return model.InboxStatusDone, ""
-}
-
-// handleApprovalCommand 处理私聊里的「批准/拒绝 <公开ID>」指令，返回给申请人的安全回执。
-//
-// 单赢家由两层条件更新保证：
-//  1. DecideApproval 的 pending → approved/rejected（并发指令只有一个能改到行）；
-//  2. 执行器 runApprovedCall 的 approved → executing 消费（重复执行被兜住）。
-//
-// 因此这里**不**再调用 MarkApprovalExecuting/CompleteApproval/FailApproval：
-// 执行器已经拥有 approved → executing → succeeded/failed 的全部权责（见 channelChat.go
-// runApprovedCall），重复消费一次只会让合法审批永远无法执行。
-func (c *channelInboxConsumer) handleApprovalCommand(
-	ctx context.Context,
-	binding *model.ChannelBinding,
-	decision string,
-	publicId string,
-) string {
-	site := c.site
-	if site == nil || site.DB == nil || binding == nil || site.AiSrv == nil {
-		return channelInboxApprovalUnavailable
-	}
-	publicId = strings.TrimSpace(publicId)
-	if publicId == "" {
-		return channelInboxApprovalHandledReply
-	}
-
-	if err := site.DecideApproval(publicId, binding.Id, decision); err != nil {
-		if errors.Is(err, ErrChannelPolicyStale) {
-			return channelInboxApprovalStaleReply
-		}
-		log.Printf("[channel] 站点 %d 渠道 %d 审批指令未生效：%s",
-			site.Id, c.channelId, channelInboxSafeErrorText(err))
-		return channelInboxApprovalHandledReply
-	}
-	if decision == channelApprovalDecisionReject {
-		return channelInboxApprovalRejectedReply
-	}
-
-	var approval model.ChannelApproval
-	if err := site.DB.WithContext(ctx).
-		Where("`site_id` = ? AND `public_id` = ?", site.Id, publicId).
-		Take(&approval).Error; err != nil {
-		log.Printf("[channel] 站点 %d 渠道 %d 读取审批失败：%s",
-			site.Id, c.channelId, sanitizePlatformMessage(err.Error()))
-		return channelInboxApprovalHandledReply
-	}
-	principal, channel, err := site.rebuildApprovalPrincipal(ctx, &approval)
-	if err != nil {
-		log.Printf("[channel] 站点 %d 渠道 %d 审批主体失效：%s",
-			site.Id, c.channelId, channelInboxSafeErrorText(err))
-		return channelInboxApprovalFailedReply
-	}
-	// 批准后重跑前再核对一次代次：DecideApproval 与真正执行之间仍可能换绑/切换智能体。
-	generation, ok := c.approvalSessionGeneration(ctx, approval.SessionId)
-	if !ok {
-		return channelInboxApprovalHandledReply
-	}
-	if generation != approval.Generation {
-		c.cancelApprovedApproval(ctx, publicId)
-		return channelInboxApprovalStaleReply
-	}
-
-	result, turnErr := runChannelTurnForInbox(site.AiSrv, ctx, ChannelTurnRequest{
-		Principal:      principal,
-		AgentId:        channel.AgentId,
-		PlatformChatId: approvalChatId(ctx, site, approval.SessionId),
-		// Text 只用于通过执行器的非空校验；grant 路径不调用模型。
-		Text:       "审批执行",
-		Group:      false,
-		Generation: generation,
-		Approval: &ChannelApprovalGrant{
-			ApprovalId: publicId,
-			ToolName:   approval.Tool,
-			ArgsJSON:   approval.CanonicalArgs,
-		},
-	})
-	if turnErr != nil {
-		log.Printf("[channel] 站点 %d 渠道 %d 审批执行失败：%s",
-			site.Id, c.channelId, channelInboxSafeErrorText(turnErr))
-		if errors.Is(turnErr, ErrChannelApprovalInvalid) {
-			// 已被别的实例/点击消费，或凭据已失效：不要再执行、也不谎称成功。
-			return channelInboxApprovalHandledReply
-		}
-		if reply := channelInboxErrorReply(turnErr); reply != "" {
-			return reply
-		}
-		return channelInboxApprovalFailedReply
-	}
-	if reply := strings.TrimSpace(result.Reply); reply != "" {
-		return reply
-	}
-	return channelInboxApprovalCreatedReply
 }
 
 // turnRequest 按「渠道 + 绑定 + 入站任务」构造一次执行请求。
@@ -477,47 +309,6 @@ func (c *channelInboxConsumer) sessionGeneration(
 	return row.Generation
 }
 
-// approvalSessionGeneration 读取审批关联会话的代次；ok=false 表示会话已不可用。
-func (c *channelInboxConsumer) approvalSessionGeneration(ctx context.Context, sessionId uint) (int64, bool) {
-	var row model.ChannelSession
-	if err := c.site.DB.WithContext(ctx).
-		Where("`id` = ? AND `site_id` = ?", sessionId, c.site.Id).
-		Take(&row).Error; err != nil {
-		log.Printf("[channel] 站点 %d 渠道 %d 读取审批会话失败：%s",
-			c.site.Id, c.channelId, sanitizePlatformMessage(err.Error()))
-		return 0, false
-	}
-	return row.Generation, true
-}
-
-// approvalChatId 取审批会话的平台会话标识（私聊回复目标）。
-func approvalChatId(ctx context.Context, site *Website, sessionId uint) string {
-	var row model.ChannelSession
-	if err := site.DB.WithContext(ctx).
-		Where("`id` = ? AND `site_id` = ?", sessionId, site.Id).
-		Take(&row).Error; err != nil {
-		return ""
-	}
-	return row.PlatformChatId
-}
-
-// cancelApprovedApproval 把「已批准但会话已换代」的单收尾为 cancelled。
-//
-// FailApproval 只接受 executing（执行器消费后才会进入该状态），而这里的行还停在
-// approved；直接条件更新为 cancelled 既符合审批状态机，也不会误伤已被消费的行。
-// 与 finishInbox 同理：这是终态写入，不能被调用方已取消的 ctx 吞掉。
-func (c *channelInboxConsumer) cancelApprovedApproval(ctx context.Context, publicId string) {
-	writeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), channelInboxFinishTimeout)
-	defer cancel()
-	res := c.site.DB.WithContext(writeCtx).Model(&model.ChannelApproval{}).
-		Where("`site_id` = ? AND `public_id` = ? AND `status` = ?", c.site.Id, publicId, model.ApprovalStatusApproved).
-		Update("status", model.ApprovalStatusCancelled)
-	if res.Error != nil {
-		log.Printf("[channel] 站点 %d 渠道 %d 取消失效审批失败：%s",
-			c.site.Id, c.channelId, sanitizePlatformMessage(res.Error.Error()))
-	}
-}
-
 // loadBinding 按发送人身份摘要查有效绑定；查不到返回 (nil, nil)。
 func (c *channelInboxConsumer) loadBinding(ctx context.Context, identityHash string) (*model.ChannelBinding, error) {
 	hash := strings.TrimSpace(identityHash)
@@ -587,37 +378,7 @@ func (c *channelInboxConsumer) finishInbox(ctx context.Context, id uint, status,
 	}
 }
 
-// parseChannelApprovalCommand 解析私聊审批指令；返回 decision 与公开 ID。
-func parseChannelApprovalCommand(text string) (string, string, bool) {
-	matches := channelInboxApprovalCommandPattern.FindStringSubmatch(text)
-	if len(matches) != 3 {
-		return "", "", false
-	}
-	action := strings.ToLower(strings.TrimSpace(matches[1]))
-	publicId := strings.TrimSpace(matches[2])
-	if publicId == "" {
-		return "", "", false
-	}
-	switch action {
-	case "批准", "同意", "approve":
-		return channelApprovalDecisionApprove, publicId, true
-	case "拒绝", "reject":
-		return channelApprovalDecisionReject, publicId, true
-	}
-	return "", "", false
-}
-
-// channelInboxApprovalPrompt 是确认提示：只含工具名/动作/公开 ID，不含参数、结果或密钥。
-func channelInboxApprovalPrompt(tool, action, publicId string) string {
-	label := strings.TrimSpace(tool)
-	if trimmed := strings.TrimSpace(action); trimmed != "" {
-		label += "." + trimmed
-	}
-	return "该操作需要确认：" + label + "（10 分钟内有效）\n" +
-		"回复「批准 " + publicId + "」执行，回复「拒绝 " + publicId + "」取消。"
-}
-
-// channelInboxDeniedReason 把权限/审批哨兵映射成可留痕的原因文案。
+// channelInboxDeniedReason 把权限类哨兵映射成可留痕的原因文案。
 // 返回空串表示不是「按规则拒绝」类错误（按处理失败处理）。
 func channelInboxDeniedReason(err error) string {
 	for _, sentinel := range []error{
@@ -636,9 +397,6 @@ func channelInboxDeniedReason(err error) string {
 		ErrChannelDisabled,
 		ErrChannelPrincipalInvalid,
 		ErrChannelAdminInvalid,
-		ErrChannelApprovalUnavailable,
-		ErrChannelApprovalDenied,
-		ErrChannelApprovalInvalid,
 		ErrChannelSiteUnsupported,
 		ErrChannelTurnInvalid,
 		ErrChannelTurnStale,

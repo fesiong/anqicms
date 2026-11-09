@@ -28,7 +28,6 @@ func setupChannelBindingTest(t *testing.T) *Website {
 		&model.ChannelBindingToken{},
 		&model.ChannelBinding{},
 		&model.ChannelTarget{},
-		&model.ChannelApproval{},
 		&model.ChannelInbox{},
 	)
 	if err != nil {
@@ -78,9 +77,6 @@ func cleanupTestChannel(t *testing.T, w *Website, channelId uint) {
 		t.Logf("清理测试渠道 %d 时读取绑定失败：%v", channelId, err)
 	}
 	if len(bindingIds) > 0 {
-		if err := w.DB.Where("binding_id IN ?", bindingIds).Delete(&model.ChannelApproval{}).Error; err != nil {
-			t.Logf("清理测试渠道 %d 的审批失败：%v", channelId, err)
-		}
 		if err := w.DB.Where("binding_id IN ?", bindingIds).Delete(&model.ChannelInbox{}).Error; err != nil {
 			t.Logf("清理测试渠道 %d 的入站任务失败：%v", channelId, err)
 		}
@@ -415,9 +411,9 @@ func TestBindingTokenRejectsExistingBinding(t *testing.T) {
 	}
 }
 
-// TestRevokeBindingCancelsPendingWork 撤销绑定必须同时失效未执行审批与排队任务，
+// TestRevokeBindingCancelsQueuedInbox 撤销绑定必须同时失效排队任务，
 // 且重复撤销幂等；不存在的绑定、非法的操作者必须报错。
-func TestRevokeBindingCancelsPendingWork(t *testing.T) {
+func TestRevokeBindingCancelsQueuedInbox(t *testing.T) {
 	w := setupChannelBindingTest(t)
 	ch := newTestChannel(t, w)
 	admin := activeTestAdmin(t, w)
@@ -432,19 +428,6 @@ func TestRevokeBindingCancelsPendingWork(t *testing.T) {
 		t.Fatalf("绑定失败：%v", err)
 	}
 
-	approval := &model.ChannelApproval{
-		SiteId:         w.Id,
-		BindingId:      binding.Id,
-		Tool:           "archive",
-		Action:         "create",
-		Status:         model.ApprovalStatusPending,
-		ExpiresAt:      time.Now().Unix() + 600,
-		PublicId:       "test-public-" + suffix,
-		PolicyRevision: 1,
-	}
-	if err := w.DB.Create(approval).Error; err != nil {
-		t.Fatalf("插入待确认审批失败：%v", err)
-	}
 	inbox := &model.ChannelInbox{
 		SiteId:    w.Id,
 		ChannelId: ch.Id,
@@ -467,13 +450,6 @@ func TestRevokeBindingCancelsPendingWork(t *testing.T) {
 	}
 	if reloaded.RevokedAt == 0 {
 		t.Fatal("撤销后 revoked_at 仍为 0")
-	}
-	var reloadedApproval model.ChannelApproval
-	if err := w.DB.Where("id = ?", approval.Id).Take(&reloadedApproval).Error; err != nil {
-		t.Fatalf("重读审批失败：%v", err)
-	}
-	if reloadedApproval.Status != model.ApprovalStatusCancelled {
-		t.Fatalf("未执行审批状态应为 cancelled，实际 %q", reloadedApproval.Status)
 	}
 	var reloadedInbox model.ChannelInbox
 	if err := w.DB.Where("id = ?", inbox.Id).Take(&reloadedInbox).Error; err != nil {

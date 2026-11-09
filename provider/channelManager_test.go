@@ -44,7 +44,6 @@ func channelManagerTestSite(t *testing.T) *Website {
 		&model.ChannelBinding{},
 		&model.ChannelBindingToken{},
 		&model.ChannelTarget{},
-		&model.ChannelApproval{},
 	)
 	if err != nil {
 		t.Fatalf("迁移渠道管理器相关表失败：%v", err)
@@ -80,15 +79,6 @@ func newManagerTestChannel(t *testing.T, w *Website, enabled bool) *model.Messag
 	hash := model.ComputeAppIdentityHash(ch.Platform, ch.AppId, ch.OrgId)
 
 	t.Cleanup(func() {
-		var bindingIds []uint
-		if err := w.DB.Model(&model.ChannelBinding{}).Where("channel_id = ?", ch.Id).Pluck("id", &bindingIds).Error; err != nil {
-			t.Logf("清理渠道 %d 时读取绑定失败：%v", ch.Id, err)
-		}
-		if len(bindingIds) > 0 {
-			if err := w.DB.Where("binding_id IN ?", bindingIds).Delete(&model.ChannelApproval{}).Error; err != nil {
-				t.Logf("清理渠道 %d 审批失败：%v", ch.Id, err)
-			}
-		}
 		for _, spec := range []struct {
 			name  string
 			model interface{}

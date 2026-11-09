@@ -153,20 +153,6 @@ type ChannelInboxRecord struct {
 	CreatedTime int64  `json:"created_time"`
 }
 
-// ChannelApprovalRecord 是审批记录的白名单投影
-// （不含 canonical_args/args_hash/public_id/result_summary）。
-type ChannelApprovalRecord struct {
-	Id             uint   `json:"id"`
-	BindingId      uint   `json:"binding_id"`
-	SessionId      uint   `json:"session_id"`
-	Tool           string `json:"tool"`
-	Action         string `json:"action"`
-	Status         string `json:"status"`
-	ExpiresAt      int64  `json:"expires_at"`
-	PolicyRevision int    `json:"policy_revision"`
-	CreatedTime    int64  `json:"created_time"`
-}
-
 // ChannelAuditRecord 是审计记录的白名单投影（不含 target_hash）。
 type ChannelAuditRecord struct {
 	Id          uint   `json:"id"`
@@ -760,34 +746,6 @@ func (w *Website) ChannelRecords(recordType, status string, page, pageSize int) 
 				LastError:   row.LastError,
 				LeaseUntil:  row.LeaseUntil,
 				CreatedTime: row.CreatedTime,
-			})
-		}
-		result.List = list
-	case "approval":
-		query := w.DB.Model(&model.ChannelApproval{}).Where("`site_id` = ?", w.Id)
-		if status != "" {
-			query = query.Where("`status` = ?", status)
-		}
-		if err := query.Count(&result.Total).Error; err != nil {
-			return nil, errChannelRecordsFailed
-		}
-		var rows []model.ChannelApproval
-		if err := query.Order("created_time desc, id desc").Offset(offset).Limit(pageSize).Find(&rows).Error; err != nil {
-			log.Printf("[channel] 站点 %d 读取审批记录失败：%s", w.Id, sanitizePlatformMessage(err.Error()))
-			return nil, errChannelRecordsFailed
-		}
-		list := make([]ChannelApprovalRecord, 0, len(rows))
-		for _, row := range rows {
-			list = append(list, ChannelApprovalRecord{
-				Id:             row.Id,
-				BindingId:      row.BindingId,
-				SessionId:      row.SessionId,
-				Tool:           row.Tool,
-				Action:         row.Action,
-				Status:         row.Status,
-				ExpiresAt:      row.ExpiresAt,
-				PolicyRevision: row.PolicyRevision,
-				CreatedTime:    row.CreatedTime,
 			})
 		}
 		result.List = list

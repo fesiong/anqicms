@@ -30,8 +30,8 @@ func channelPermTestSite(t *testing.T) *Website {
 	}
 	// 接待策略表在当前开发库上尚未建立（T1 的迁移清单里没有它），本任务按需补建。
 	// 其余表（渠道 / 绑定 / 管理员）由 T1、T2 的迁移保证存在。
-	if err := w.DB.AutoMigrate(&model.AgentReceptionPolicy{}, &model.ChannelApproval{}); err != nil {
-		t.Fatalf("迁移接待策略/审批表失败：%v", err)
+	if err := w.DB.AutoMigrate(&model.AgentReceptionPolicy{}); err != nil {
+		t.Fatalf("迁移接待策略表失败：%v", err)
 	}
 	return w
 }
@@ -177,41 +177,6 @@ func permTestPrincipal(w *Website, ch *model.MessageChannel, adminId, bindingId 
 		SessionId:      "perm-sess-" + channelPermSuffix(),
 		PolicyRevision: int64(ch.Revision),
 	}
-}
-
-// newPermTestApproval 建一条审批记录，并在用例结束时按自己的 ID 精确删除。
-// mutate 用于构造过期 / 策略 revision 不符 / 他人绑定 / 参数哈希不符等无效变体；
-// 若 mutate 把 ArgsHash 改了，这里不会再覆盖（保持调用方意图）。
-//
-// Action 与 Tool 一样是审批单的**身份字段**（R58）：action 从 argsJson 里取原始值
-// （T7 落库口径就是 Pending.Action = actionOfArgsJSON(args)），没有 action 键就是空串。
-// 硬编码成某个值会让「审批行 action 与调用 action 是否一致」这条判定在测试里空转。
-func newPermTestApproval(t *testing.T, w *Website, bindingId uint, policyRevision int, argsJson string, mutate func(*model.ChannelApproval)) *model.ChannelApproval {
-	t.Helper()
-	approval := &model.ChannelApproval{
-		SiteId:         w.Id,
-		BindingId:      bindingId,
-		Tool:           "seo_keyword",
-		Action:         actionOfArgsJSON(argsJson),
-		CanonicalArgs:  argsJson,
-		ArgsHash:       ChannelArgsHash(argsJson),
-		ExpiresAt:      time.Now().Unix() + 600,
-		PolicyRevision: policyRevision,
-		Status:         model.ApprovalStatusApproved,
-		PublicId:       "perm-approval-" + channelPermSuffix(),
-	}
-	if mutate != nil {
-		mutate(approval)
-	}
-	if err := w.DB.Create(approval).Error; err != nil {
-		t.Fatalf("创建测试审批失败：%v", err)
-	}
-	t.Cleanup(func() {
-		if err := w.DB.Where("id = ? AND site_id = ?", approval.Id, w.Id).Delete(&model.ChannelApproval{}).Error; err != nil {
-			t.Logf("清理审批 %d 失败：%v", approval.Id, err)
-		}
-	})
-	return approval
 }
 
 // ============================================================
@@ -463,34 +428,6 @@ func TestChannelPolicyDecisionTable(t *testing.T) {
 	}
 }
 
-func TestChannelSwitchNeedsConfirmSentinel(t *testing.T) {
-	w := channelPermTestSite(t)
-	ctx := context.Background()
-	ch := newPermTestChannel(t, w, `{"intents":{"seo_keyword":{"list":"confirm","create":"allow"}}}`, 1)
-	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
-	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
-	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
-	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
-
-	err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list")
-	if !errors.Is(err, ErrChannelPolicyNeedsConfirm) {
-		t.Fatalf("confirm 必须返回可 errors.Is 的 ErrChannelPolicyNeedsConfirm，实际：%v", err)
-	}
-	if errors.Is(err, ErrChannelPolicyDenied) {
-		t.Fatalf("confirm 不能被当成 deny：%v", err)
-	}
-	// 审批通过后的复核：必须带审批凭据自证（R34），除 confirm 外其余门禁照旧生效。
-	argsJson := `{"action":"list","title":"confirm-sentinel"}`
-	approval := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
-	if err := w.CheckIntentPermissionApproved(ctx, p, approval.PublicId, argsJson, "seo_keyword", "list"); err != nil {
-		t.Fatalf("持有效审批的复核应放行，实际：%v", err)
-	}
-	// allow 路径不应被哨兵误伤，也不该要求审批凭据。
-	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "create"); err != nil {
-		t.Fatalf("allow 应放行，实际：%v", err)
-	}
-}
-
 func TestAgentWhitelistFallsBackToSiteExposure(t *testing.T) {
 	w := channelPermTestSite(t)
 	ctx := context.Background()
@@ -725,208 +662,6 @@ func TestAgentPrincipalMustMatchChannel(t *testing.T) {
 		t.Fatalf("缺少执行智能体必须返回 ErrChannelAgentNotAllowed，实际：%v", err)
 	}
 }
-
-// ============================================================
-// 审批自证（R34）
-// ============================================================
-
-// TestApprovalProof 验证 CheckIntentPermissionApproved 是「跳过 confirm」的唯一入口，
-// 且必须自证审批：审批标识、绑定、过期、参数哈希、策略修订号任一不符即拒绝。
-// 同时验证「审批通过」不是总开关：曝光、菜单权限、绑定有效性仍然逐项生效。
-func TestApprovalProof(t *testing.T) {
-	w := channelPermTestSite(t)
-	ctx := context.Background()
-	ch := newPermTestChannel(t, w, `{"intents":{"seo_keyword":{"list":"confirm","create":"allow"}}}`, 1)
-	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword"})
-	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
-	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
-	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
-	// R58：参数里带 action，审批行的 action 由它派生，与调用方传入的 action 逐字比对。
-	argsJson := `{"action":"list","title":"审批自证"}`
-
-	validApproval := func(t *testing.T) *model.ChannelApproval {
-		t.Helper()
-		return newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
-	}
-
-	rejectCases := []struct {
-		name  string
-		setup func(t *testing.T) (publicId string, args string)
-	}{
-		{
-			name:  "无审批标识",
-			setup: func(t *testing.T) (string, string) { return "   ", argsJson },
-		},
-		{
-			name: "审批记录不存在",
-			setup: func(t *testing.T) (string, string) {
-				return "no-such-approval-" + channelPermSuffix(), argsJson
-			},
-		},
-		{
-			name: "参数不是合法 JSON",
-			setup: func(t *testing.T) (string, string) {
-				return validApproval(t).PublicId, `{"title":`
-			},
-		},
-		{
-			name: "参数哈希不符",
-			setup: func(t *testing.T) (string, string) {
-				return validApproval(t).PublicId, `{"title":"被篡改的参数"}`
-			},
-		},
-		{
-			name: "审批属于他人绑定",
-			setup: func(t *testing.T) (string, string) {
-				other := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
-				otherBinding := newPermTestBinding(t, w, ch.Id, other.Id)
-				return newPermTestApproval(t, w, otherBinding.Id, ch.Revision, argsJson, nil).PublicId, argsJson
-			},
-		},
-		{
-			name: "审批已过期",
-			setup: func(t *testing.T) (string, string) {
-				return newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, func(a *model.ChannelApproval) {
-					a.ExpiresAt = time.Now().Unix() - 1
-				}).PublicId, argsJson
-			},
-		},
-		{
-			name: "策略修订号不符",
-			setup: func(t *testing.T) (string, string) {
-				return newPermTestApproval(t, w, binding.Id, ch.Revision+1, argsJson, nil).PublicId, argsJson
-			},
-		},
-		{
-			name: "未批准（pending）",
-			setup: func(t *testing.T) (string, string) {
-				return newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, func(a *model.ChannelApproval) {
-					a.Status = model.ApprovalStatusPending
-				}).PublicId, argsJson
-			},
-		},
-	}
-	for _, tc := range rejectCases {
-		t.Run(tc.name, func(t *testing.T) {
-			publicId, args := tc.setup(t)
-			err := w.CheckIntentPermissionApproved(ctx, p, publicId, args, "seo_keyword", "list")
-			if !errors.Is(err, ErrChannelApprovalInvalid) {
-				t.Fatalf("必须返回 ErrChannelApprovalInvalid，实际：%v", err)
-			}
-		})
-	}
-
-	t.Run("有效审批放行", func(t *testing.T) {
-		if err := w.CheckIntentPermissionApproved(ctx, p, validApproval(t).PublicId, argsJson, "seo_keyword", "list"); err != nil {
-			t.Fatalf("有效审批应放行，实际：%v", err)
-		}
-	})
-
-	t.Run("executing 状态同样有效", func(t *testing.T) {
-		approval := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, func(a *model.ChannelApproval) {
-			a.Status = model.ApprovalStatusExecuting
-		})
-		if err := w.CheckIntentPermissionApproved(ctx, p, approval.PublicId, argsJson, "seo_keyword", "list"); err != nil {
-			t.Fatalf("executing 状态的审批应放行，实际：%v", err)
-		}
-	})
-
-	// 以下三个子用例证明「审批通过」不是总开关：其余门禁仍逐项生效。
-	t.Run("有效审批不能越过站点曝光", func(t *testing.T) {
-		withTestAiSetting(t, w, []string{"content_article"})
-		err := w.CheckIntentPermissionApproved(ctx, p, validApproval(t).PublicId, argsJson, "seo_keyword", "list")
-		if !errors.Is(err, ErrChannelIntentNotExposed) {
-			t.Fatalf("有效审批仍必须受站点曝光门禁约束，实际：%v", err)
-		}
-	})
-
-	t.Run("有效审批不能越过菜单权限", func(t *testing.T) {
-		noMenu := newPermTestAdmin(t, w, []string{"/account/list"}, 1)
-		noMenuBinding := newPermTestBinding(t, w, ch.Id, noMenu.Id)
-		noMenuP := permTestPrincipal(w, ch, noMenu.Id, noMenuBinding.Id)
-		approval := newPermTestApproval(t, w, noMenuBinding.Id, ch.Revision, argsJson, nil)
-		err := w.CheckIntentPermissionApproved(ctx, noMenuP, approval.PublicId, argsJson, "seo_keyword", "list")
-		if !errors.Is(err, ErrChannelPermissionDenied) {
-			t.Fatalf("有效审批仍必须受菜单权限约束，实际：%v", err)
-		}
-	})
-
-	t.Run("有效审批不能越过绑定撤销", func(t *testing.T) {
-		revoked := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
-		revokedBinding := newPermTestBinding(t, w, ch.Id, revoked.Id)
-		approval := newPermTestApproval(t, w, revokedBinding.Id, ch.Revision, argsJson, nil)
-		revokedP := permTestPrincipal(w, ch, revoked.Id, revokedBinding.Id)
-		if err := w.DB.Model(&model.ChannelBinding{}).
-			Where("id = ? AND site_id = ?", revokedBinding.Id, w.Id).
-			Update("revoked_at", time.Now().Unix()).Error; err != nil {
-			t.Fatalf("撤销绑定失败：%v", err)
-		}
-		err := w.CheckIntentPermissionApproved(ctx, revokedP, approval.PublicId, argsJson, "seo_keyword", "list")
-		if !errors.Is(err, ErrChannelPrincipalInvalid) {
-			t.Fatalf("有效审批仍必须受绑定有效性约束，实际：%v", err)
-		}
-	})
-}
-
-// ============================================================
-// 审批自证必须绑定工具身份（R58）
-// ============================================================
-
-// TestApprovalProofBindsToolIdentity 证明审批凭据不是「一张参数哈希票」：
-// 审批行的 tool / action 是「管理员批准了哪一次操作」的身份字段，必须逐字比对。
-//
-// 越权路径（本轮实测）：审批行 tool=seo_keyword、args={"action":"list","page":1}，
-// 复核时传 intentName=content_article + 同样参数 → 只比摘要时摘要一致，于是
-// 「确认一个工具，可以执行另一个工具」。本用例的 exposure / 白名单 / 策略 / 菜单权限
-// 都为 content_article 放行，因此去掉 tool/action 比对后它必然会通过——
-// 失败只可能来自工具身份这一条判定（反向对照有效）。
-func TestApprovalProofBindsToolIdentity(t *testing.T) {
-	w := channelPermTestSite(t)
-	ctx := context.Background()
-	ch := newPermTestChannel(t, w,
-		`{"intents":{"seo_keyword":{"*":"allow"},"content_article":{"*":"allow"}}}`, 1)
-	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"seo_keyword", "content_article"})
-	admin := newPermTestAdmin(t, w, []string{"/"}, 1)
-	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
-	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
-	withTestAiSetting(t, w, []string{"seo_keyword", "content_article"})
-
-	argsJson := `{"action":"list","page":1}`
-	row := newPermTestApproval(t, w, binding.Id, ch.Revision, argsJson, nil)
-
-	// 1) 参数完全一致、工具不同：必须拒绝。
-	if err := w.CheckIntentPermissionApproved(ctx, p, row.PublicId, argsJson, "content_article", "list"); !errors.Is(err, ErrChannelApprovalInvalid) {
-		t.Fatalf("审批行 tool=seo_keyword 时用 content_article 复核必须返回 ErrChannelApprovalInvalid，实际：%v", err)
-	}
-	// 2) 工具一致、action 不同（含空 action）：同样必须拒绝。
-	for _, action := range []string{"create", ""} {
-		if err := w.CheckIntentPermissionApproved(ctx, p, row.PublicId, argsJson, "seo_keyword", action); !errors.Is(err, ErrChannelApprovalInvalid) {
-			t.Fatalf("审批行 action=list 时用 action=%q 复核必须返回 ErrChannelApprovalInvalid，实际：%v", action, err)
-		}
-	}
-	// 3) 完全一致：必须放行（反向对照，否决「一律拒绝」的实现）。
-	if err := w.CheckIntentPermissionApproved(ctx, p, row.PublicId, argsJson, "seo_keyword", "list"); err != nil {
-		t.Fatalf("工具与参数都与审批行一致时必须放行，实际：%v", err)
-	}
-
-	// 4) 空 action 就用空 action 比，**不回落 "*"**：审批行 action 取自 ArgsJSON 原始值，
-	// 无 action 键即空串；拿 "*" 去比必须对不上（否则「批准一个无动作调用」=「批准全部动作」）。
-	noActionArgs := `{"title":"无动作参数"}`
-	noActionRow := newPermTestApproval(t, w, binding.Id, ch.Revision, noActionArgs, nil)
-	if noActionRow.Action != "" {
-		t.Fatalf("ArgsJSON 没有 action 时审批行 action 必须是空串，实际：%q", noActionRow.Action)
-	}
-	if err := w.CheckIntentPermissionApproved(ctx, p, noActionRow.PublicId, noActionArgs, "seo_keyword", ""); err != nil {
-		t.Fatalf("空 action 与审批行空 action 一致时必须放行（策略仍按 * 兜底），实际：%v", err)
-	}
-	if err := w.CheckIntentPermissionApproved(ctx, p, noActionRow.PublicId, noActionArgs, "seo_keyword", "*"); !errors.Is(err, ErrChannelApprovalInvalid) {
-		t.Fatalf("用 \"*\" 复核空 action 的审批行必须被拒（不得回落通配符），实际：%v", err)
-	}
-}
-
-// ============================================================
-// api_invoke 最终路径黑名单
-// ============================================================
 
 func TestAPIInvokeBlocksChannelAdminPaths(t *testing.T) {
 	w := channelPermTestSite(t)

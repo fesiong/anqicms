@@ -156,12 +156,6 @@ type AiChatService struct {
 	pendingApprovals   map[string]chan string
 	pendingApprovalsMu sync.Mutex
 
-	// 渠道聊天的审批后端（T6 注入点，T7 实现持久化审批）。
-	// 零值表示没有后端：需要审批的渠道写操作一律拒绝（见 channelChat.go 的 approvalDecision）。
-	// 放在服务级而不是全局，是为了让每个站点/服务实例只拿到自己的审批实现。
-	channelApproval   ChannelApprovalFunc
-	channelApprovalMu sync.RWMutex
-
 	// msgSeq: 全局单调递增序号，保证同一 session 内 DB 消息写入顺序
 	// 解决异步并发写入导致 DB 乱序的问题
 	msgSeq int64
@@ -212,13 +206,6 @@ func (w *Website) NewAiChatService() *AiChatService {
 	if w.DB != nil {
 		svc.telemetryRecorder = NewTelemetryRecorder(w.DB)
 	}
-
-	// 渠道轮次必须自带写门禁后端：渠道的权限边界是 intentGate（曝光/白名单/渠道策略/
-	// 管理员/菜单/cap），confirm 已在 intentGate 更早处产出 Pending；WriteGate 是主会话的
-	// 交互式确认，渠道没有交互层。不注入会让「策略 allow 的写操作」在 nil 后端下恒被拒绝。
-	// 只对渠道轮次生效（channelApprovalBackend 的读取点只有 channelTurnState.approvalDecision），
-	// SetChannelApprovalBackend 的 nil-deny 语义与主会话行为保持不变。
-	svc.SetChannelApprovalBackend(channelPolicyApprovalBackend)
 
 	// E 阶段：AIChat 改用意图内核（与 MCP 共用 IntentCatalog）。
 	// 端点 + 内置 handler 仅作为意图委托的底层能力（caps），不再作为独立工具暴露给模型。

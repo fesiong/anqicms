@@ -14,29 +14,13 @@ const (
 	ChannelPlatformDingTalk = "dingtalk"
 )
 
-// 审批状态。状态机：
-// pending → approved → executing → succeeded/failed/unknown；
-// pending 也可到 rejected/expired/cancelled。
-// 后续任务只允许引用这些常量，避免两处各写一份字符串漂移。
-const (
-	ApprovalStatusPending   = "pending"
-	ApprovalStatusApproved  = "approved"
-	ApprovalStatusExecuting = "executing"
-	ApprovalStatusSucceeded = "succeeded"
-	ApprovalStatusFailed    = "failed"
-	ApprovalStatusUnknown   = "unknown"
-	ApprovalStatusRejected  = "rejected"
-	ApprovalStatusExpired   = "expired"
-	ApprovalStatusCancelled = "cancelled"
-)
-
 // 入站任务状态。状态机（T12a 消费接线后完整）：
 //
 //	pending    → processing（被某个实例按 lease_until 抢占）
 //	processing → done | failed（处理完成 / 处理出错）
 //	pending    → cancelled（绑定撤销、渠道删除的级联失效）
 //
-// 与审批状态同理：后续任务只允许引用这些常量，避免两处各写一份字符串漂移。
+// 状态值只允许引用这些常量，避免两处各写一份字符串漂移。
 // 语义差异不能合并：done 是「处理完了」（含按规则忽略，原因写 last_error），
 // failed 是「处理过程出错」（不自动重试，留痕给后台看）。
 const (
@@ -208,30 +192,6 @@ type ChannelSession struct {
 	Generation     int64  `json:"generation" gorm:"column:generation;type:bigint(20) not null;default:1;comment:会话代次(切换智能体/新建会话时递增，旧待执行工作失效)"`
 	// SessionHash 为「站点+渠道+平台会话+用户」规范化摘要的 SHA-256，唯一。
 	SessionHash string `json:"session_hash" gorm:"column:session_hash;type:char(64) not null;default:'';uniqueIndex:uk_session_hash;comment:会话隔离维度SHA256"`
-}
-
-// ChannelApproval 聊天管理中的写操作确认。
-// 参数或策略变化、绑定身份变化都必须重新确认；确认消费用条件更新，重复点击不重复执行。
-type ChannelApproval struct {
-	Id             uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime    int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime    int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	SiteId         uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;index:idx_site_id;comment:站点ID"`
-	BindingId      uint   `json:"binding_id" gorm:"column:binding_id;type:int(10) unsigned not null;default:0;index:idx_binding_id;comment:操作者绑定ID"`
-	SessionId      uint   `json:"session_id" gorm:"column:session_id;type:int(10) unsigned not null;default:0;index:idx_session_id;comment:渠道会话ID"`
-	Tool           string `json:"tool" gorm:"column:tool;type:varchar(64) not null;default:'';index:idx_tool;comment:工具/意图名"`
-	Action         string `json:"action" gorm:"column:action;type:varchar(64) not null;default:'';comment:动作名"`
-	CanonicalArgs  string `json:"canonical_args" gorm:"column:canonical_args;type:text;comment:规范化参数JSON"`
-	ArgsHash       string `json:"-" gorm:"column:args_hash;type:char(64) not null;default:'';comment:规范化参数SHA256(不序列化)"`
-	ExpiresAt      int64  `json:"expires_at" gorm:"column:expires_at;type:bigint(20) not null;default:0;index:idx_expires_at;comment:过期时间戳(默认10分钟)"`
-	PolicyRevision int    `json:"policy_revision" gorm:"column:policy_revision;type:int(10) not null;default:0;comment:确认时的渠道策略修订号"`
-	Status         string `json:"status" gorm:"column:status;type:varchar(16) not null;default:'pending';index:idx_status;comment:状态 pending/approved/executing/succeeded/failed/unknown/rejected/expired/cancelled"`
-	ResultSummary  string `json:"result_summary" gorm:"column:result_summary;type:text;comment:执行结果摘要"`
-	// PublicId 是卡片携带的随机公开确认 ID（16 字节随机值），唯一。
-	PublicId string `json:"public_id" gorm:"column:public_id;type:varchar(64) not null;default:'';uniqueIndex:uk_public_id;comment:随机公开确认ID"`
-	// Generation 是创建时的渠道会话代次。批准与执行前都必须与 channel_sessions.generation
-	// 相等：换绑复活、撤销绑定、切换接待智能体都会让旧单失效（规格 §8「权限仍允许」）。
-	Generation int64 `json:"generation" gorm:"column:generation;type:bigint(20) not null;default:0;comment:创建时的会话代次"`
 }
 
 // ChannelLease 平台连接所有权租约。

@@ -2,10 +2,8 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -16,7 +14,7 @@ import (
 )
 
 // ============================================================
-// T12a：入站消费、审批执行、写门禁注入、会话代次。
+// T12a：入站消费、会话代次。
 //
 // 夹具复用 channelChatTestSite / newChannelTurnTestEnv（真实库、随机后缀、
 // 按自己创建的 ID 精确清理）。本文件只补三样：
@@ -179,24 +177,6 @@ func (e *channelInboxTestEnv) reloadInbox(t *testing.T, id uint) *model.ChannelI
 		t.Fatalf("重新读取入站任务 %d 失败：%v", id, err)
 	}
 	return &row
-}
-
-func (e *channelInboxTestEnv) approvalsForBinding(t *testing.T) []model.ChannelApproval {
-	t.Helper()
-	var rows []model.ChannelApproval
-	if err := e.w.DB.Where("site_id = ? AND binding_id = ?", e.w.Id, e.binding.Id).
-		Order("id asc").Find(&rows).Error; err != nil {
-		t.Fatalf("读取审批记录失败：%v", err)
-	}
-	t.Cleanup(func() {
-		for _, row := range rows {
-			if err := e.w.DB.Where("`public_id` = ? AND `site_id` = ?", row.PublicId, e.w.Id).
-				Delete(&model.ChannelApproval{}).Error; err != nil {
-				t.Logf("清理审批 %d 失败：%v", row.Id, err)
-			}
-		}
-	})
-	return rows
 }
 
 // ============================================================
@@ -438,179 +418,6 @@ func TestChannelInboxGroupSenderNeedsOwnBinding(t *testing.T) {
 }
 
 // ============================================================
-// 5. 策略 confirm → 建审批 → 批准执行一次 → 重复批准不重复执行
-// ============================================================
-
-func TestChannelInboxConfirmCreatesApprovalAndApproveExecutesOnce(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"seo_keyword":{"create":"confirm"}}}`,
-		whitelist:   []string{"seo_keyword"},
-		permissions: []string{"/"},
-		exposed:     []string{"seo_keyword"},
-	})
-	env.useScriptedModel(t)
-	executed := stubEndpointCap(t, env.svc)
-	env.model.script = func(round int, in []*schema.Message) *schema.Message {
-		if round > 0 {
-			return schema.AssistantMessage("已暂停，等待确认。", nil)
-		}
-		return schema.AssistantMessage("", []schema.ToolCall{{
-			ID:       "inbox-confirm-1",
-			Type:     "function",
-			Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"action":"create","title":"渠道测试"}`},
-		}})
-	}
-
-	inbox := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "建一个关键词"))
-	if !env.consumer.processNext(context.Background()) {
-		t.Fatal("消费者必须认领这条待处理任务")
-	}
-	if *executed != 0 {
-		t.Fatalf("confirm 的写操作在本轮不得执行，实际 %d 次", *executed)
-	}
-
-	rows := env.approvalsForBinding(t)
-	if len(rows) != 1 {
-		t.Fatalf("confirm 必须落一条审批，实际 %d 条", len(rows))
-	}
-	approval := rows[0]
-	if approval.Status != model.ApprovalStatusPending {
-		t.Fatalf("新建审批必须是 pending，实际 %q", approval.Status)
-	}
-	if approval.Tool != "seo_keyword" || approval.Action != "create" {
-		t.Fatalf("审批必须记录工具与动作，实际 %q/%q", approval.Tool, approval.Action)
-	}
-	if approval.Generation != 1 {
-		t.Fatalf("审批必须记录创建时的会话代次，实际 %d", approval.Generation)
-	}
-	if approval.SessionId == 0 {
-		t.Fatal("审批必须挂在真实会话行上（SessionId 不得为 0）")
-	}
-
-	sends := env.adapter.sends()
-	if len(sends) != 1 {
-		t.Fatalf("建单后必须回复确认提示，实际 %d 次", len(sends))
-	}
-	prompt := sends[0].msg.Text
-	if !strings.Contains(prompt, approval.PublicId) || !strings.Contains(prompt, "批准") {
-		t.Fatalf("确认提示必须给出公开 ID 与批准指令，实际 %q", prompt)
-	}
-	if strings.Contains(prompt, `"title"`) || strings.Contains(prompt, "渠道测试") {
-		t.Fatalf("确认提示不得包含参数原文，实际 %q", prompt)
-	}
-	if after := env.reloadInbox(t, inbox.Id); after.Status != model.InboxStatusDone {
-		t.Fatalf("建单成功应标记 done，实际 %q", after.Status)
-	}
-
-	// 管理员在同一条私聊里回「批准 <公开ID>」。
-	env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "批准 "+approval.PublicId))
-	if !env.consumer.processNext(context.Background()) {
-		t.Fatal("审批指令必须被消费者认领")
-	}
-	if *executed != 1 {
-		t.Fatalf("批准后必须执行且只执行一次，实际 %d 次", *executed)
-	}
-	if calls := env.model.calls(); calls != 1 {
-		// 第一轮模型 1 次（工具调用即进入确认，不再追一轮）；批准执行不调用模型。
-		t.Fatalf("批准执行不得调用模型，实际累计 %d 次", calls)
-	}
-	var afterApprove model.ChannelApproval
-	if err := env.w.DB.Where("`public_id` = ? AND `site_id` = ?", approval.PublicId, env.w.Id).
-		Take(&afterApprove).Error; err != nil {
-		t.Fatalf("读取审批状态失败：%v", err)
-	}
-	if afterApprove.Status != model.ApprovalStatusSucceeded {
-		t.Fatalf("批准执行成功后审批必须是 succeeded，实际 %q", afterApprove.Status)
-	}
-	if sends := env.adapter.sends(); len(sends) != 2 {
-		t.Fatalf("批准后必须把执行结果回复到私聊，实际累计 %d 次", len(sends))
-	}
-
-	// 再发一次同样的批准指令：只能被拒绝，绝不能执行第二次。
-	env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "批准 "+approval.PublicId))
-	if !env.consumer.processNext(context.Background()) {
-		t.Fatal("重复批准指令必须被消费者认领（然后拒绝）")
-	}
-	if *executed != 1 {
-		t.Fatalf("重复批准不得重复执行，实际执行 %d 次", *executed)
-	}
-	sends = env.adapter.sends()
-	if len(sends) != 3 {
-		t.Fatalf("重复批准必须给出一条说明，实际累计 %d 次", len(sends))
-	}
-	if !strings.Contains(sends[2].msg.Text, "已处理") {
-		t.Fatalf("重复批准应回复「已处理」，实际 %q", sends[2].msg.Text)
-	}
-}
-
-// TestChannelInboxConcurrentApproveExecutesOnce：两个并发批准指令只能有一个赢家。
-//
-// 单实例内消费者是串行的，并发只可能来自「两台实例同时收到点击/指令」，
-// 所以这里直接并发调用指令处理函数，验证条件更新确实互斥。
-func TestChannelInboxConcurrentApproveExecutesOnce(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"seo_keyword":{"create":"confirm"}}}`,
-		whitelist:   []string{"seo_keyword"},
-		permissions: []string{"/"},
-		exposed:     []string{"seo_keyword"},
-	})
-	env.useScriptedModel(t)
-	executed := stubEndpointCap(t, env.svc)
-	env.model.script = func(round int, in []*schema.Message) *schema.Message {
-		if round > 0 {
-			return schema.AssistantMessage("已暂停，等待确认。", nil)
-		}
-		return schema.AssistantMessage("", []schema.ToolCall{{
-			ID:       "inbox-concurrent-1",
-			Type:     "function",
-			Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"action":"create","title":"并发测试"}`},
-		}})
-	}
-
-	env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "建一个关键词"))
-	if !env.consumer.processNext(context.Background()) {
-		t.Fatal("消费者必须认领这条待处理任务")
-	}
-	rows := env.approvalsForBinding(t)
-	if len(rows) != 1 {
-		t.Fatalf("confirm 必须落一条审批，实际 %d 条", len(rows))
-	}
-	publicId := rows[0].PublicId
-
-	var wg sync.WaitGroup
-	replies := make([]string, 2)
-	for i := 0; i < 2; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			replies[idx] = env.consumer.handleApprovalCommand(
-				context.Background(), env.binding, channelApprovalDecisionApprove, publicId)
-		}(i)
-	}
-	wg.Wait()
-
-	if *executed != 1 {
-		t.Fatalf("并发批准只能执行一次，实际 %d 次", *executed)
-	}
-	var row model.ChannelApproval
-	if err := env.w.DB.Where("`public_id` = ? AND `site_id` = ?", publicId, env.w.Id).Take(&row).Error; err != nil {
-		t.Fatalf("读取审批状态失败：%v", err)
-	}
-	if row.Status != model.ApprovalStatusSucceeded {
-		t.Fatalf("赢家执行成功后审批必须是 succeeded，实际 %q", row.Status)
-	}
-	nonEmpty := 0
-	for _, reply := range replies {
-		if strings.TrimSpace(reply) != "" {
-			nonEmpty++
-		}
-	}
-	if nonEmpty != 2 {
-		t.Fatalf("两个并发指令都必须有回执（一个成功、一个已处理），实际 %d 条", nonEmpty)
-	}
-}
-
-// ============================================================
 // 6. 绑定在消费前被撤销：不执行、不回复、done 有原因
 // ============================================================
 
@@ -828,111 +635,6 @@ func TestChannelGenerationBumpedOnAgentChange(t *testing.T) {
 	}
 }
 
-// TestChannelApprovalGenerationRecordedAndEnforced：审批落库必须带创建时代次，
-// 代次变化后 DecideApproval 必须拒绝（ErrChannelPolicyStale）。
-func TestChannelApprovalGenerationRecordedAndEnforced(t *testing.T) {
-	env := newApprovalTestEnv(t)
-	session := env.newApprovalSession(t)
-	p := approvalTestPrincipal(env, session)
-
-	argsJSON := `{"action":"list","page":1}`
-	row := createTestApproval(t, env.w, p, "seo_keyword", argsJSON, 10*time.Minute)
-	if row.Generation != session.Generation {
-		t.Fatalf("审批必须记录创建时的会话代次 %d，实际 %d", session.Generation, row.Generation)
-	}
-
-	// 会话代次变化（换绑/切换智能体）后，旧审批必须失效。
-	if err := env.w.DB.Model(&model.ChannelSession{}).
-		Where("id = ? AND site_id = ?", session.Id, env.w.Id).
-		Update("generation", session.Generation+1).Error; err != nil {
-		t.Fatalf("提升会话代次失败：%v", err)
-	}
-	if err := env.w.DecideApproval(row.PublicId, env.binding.Id, "approve"); !errors.Is(err, ErrChannelPolicyStale) {
-		t.Fatalf("代次不符时批准必须返回 ErrChannelPolicyStale，实际：%v", err)
-	}
-
-	// 反向对照：代次恢复一致后同一张单必须能批准，证明上面的拒绝来自代次而非环境。
-	if err := env.w.DB.Model(&model.ChannelSession{}).
-		Where("id = ? AND site_id = ?", session.Id, env.w.Id).
-		Update("generation", session.Generation).Error; err != nil {
-		t.Fatalf("恢复会话代次失败：%v", err)
-	}
-	if err := env.w.DecideApproval(row.PublicId, env.binding.Id, "approve"); err != nil {
-		t.Fatalf("代次一致时批准必须成功，实际：%v", err)
-	}
-}
-
-// ============================================================
-// 8. 写门禁：生产后端让策略 allow 的写操作真正执行
-// ============================================================
-
-// TestChannelPolicyApprovalBackendInjected 锁住接线：站点服务必须自带渠道写门后端，
-// 否则「策略 allow 的写操作」在生产里全部被拒（Critical 2 的同源问题）。
-func TestChannelPolicyApprovalBackendInjected(t *testing.T) {
-	w := channelChatTestSite(t)
-	svc := w.NewAiChatService()
-	if svc == nil {
-		t.Fatal("NewAiChatService 返回 nil")
-	}
-	backend := svc.channelApprovalBackend()
-	if backend == nil {
-		t.Fatal("站点服务必须注入渠道写门审批后端（nil 会让所有写操作恒拒绝）")
-	}
-	decision, reason := backend(context.Background(), ChannelApprovalRequest{})
-	if decision != "allow" {
-		t.Fatalf("生产后端必须返回 allow，实际 %q", decision)
-	}
-	if strings.TrimSpace(reason) == "" {
-		t.Fatal("生产后端必须给出可审计的放行理由")
-	}
-}
-
-// TestChannelAllowedWriteExecutesWithProductionBackend：策略 allow 的写意图
-// 在注入生产后端后必须真正执行；不注入（nil）时仍必须被拒（保留既有语义）。
-func TestChannelAllowedWriteExecutesWithProductionBackend(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"seo_keyword":{"create":"allow"}}}`,
-		whitelist:   []string{"seo_keyword"},
-		permissions: []string{"/"},
-		exposed:     []string{"seo_keyword"},
-	})
-	env.useScriptedModel(t)
-	executed := stubEndpointCap(t, env.svc)
-	// scriptedChannelModel.rounds 是**跨轮次累计**的，不能按 round 判断「本轮第一次调用」：
-	// 这里按「最后一条输入是不是工具结果」区分「本轮已执行过工具」与「本轮刚开始」。
-	// 否则第二次入站的首个模型调用会直接回文本，写操作永远得不到执行（假失败）。
-	env.model.script = func(_ int, in []*schema.Message) *schema.Message {
-		if lastMessageIsToolResult(in) {
-			return schema.AssistantMessage("已处理。", nil)
-		}
-		return schema.AssistantMessage("", []schema.ToolCall{{
-			ID:       "inbox-write-1",
-			Type:     "function",
-			Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"action":"create","title":"写门禁测试"}`},
-		}})
-	}
-
-	// 1) 没有后端（既有夹具语义）→ 写操作被拒，cap 一次都不执行。
-	env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "建一个关键词"))
-	if !env.consumer.processNext(context.Background()) {
-		t.Fatal("消费者必须认领这条待处理任务")
-	}
-	if *executed != 0 {
-		t.Fatalf("没有审批后端时写操作必须被拒，实际执行 %d 次", *executed)
-	}
-
-	// 2) 注入生产后端 → 同一个写操作必须真正执行一次。
-	env.svc.SetChannelApprovalBackend(channelPolicyApprovalBackend)
-	t.Cleanup(func() { env.svc.SetChannelApprovalBackend(nil) })
-	env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "再建一个关键词"))
-	if !env.consumer.processNext(context.Background()) {
-		t.Fatal("消费者必须认领第二条待处理任务")
-	}
-	if *executed != 1 {
-		t.Fatalf("注入生产后端后写操作必须执行一次，实际 %d 次", *executed)
-	}
-}
-
 // ============================================================
 // 9. worker 生命周期：拿到租约后必须启动消费者，Run 返回后不得留下孤儿 goroutine
 // ============================================================
@@ -1014,7 +716,7 @@ func TestChannelWorkerStartsInboxConsumer(t *testing.T) {
 // 消费者用连接租约的 ctx 处理任务；adapter.Run 返回（关机/删站/失租）时
 // channelWorker.inboxCancel() 会取消它。若此时正在处理一条任务，终态写入绝不能
 // 因为 ctx 已取消而失败——否则该行停在 processing，60 秒后被 claimNext 重新认领，
-// 整轮（模型调用、回复、审批提示）重跑一遍，而后台永远显示 processing 且无原因。
+// 整轮（模型调用、回复）重跑一遍，而后台永远显示 processing 且无原因。
 // ============================================================
 
 // TestChannelInboxFinishSurvivesCancelledContext 复现取消发生在模型调用期间：

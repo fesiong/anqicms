@@ -225,7 +225,7 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.PaymentStatistic{},
 			&model.MailPlan{},
 			&model.OrderOptionStock{},
-			// 站点智能体接入飞书/钉钉：渠道、绑定、目标、入站、会话、审批、租约、审计
+			// 站点智能体接入飞书/钉钉：渠道、绑定、目标、入站、会话、租约、审计
 			&model.MessageChannel{},
 			&model.AgentReceptionPolicy{},
 			&model.ChannelBindingToken{},
@@ -233,7 +233,6 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.ChannelTarget{},
 			&model.ChannelInbox{},
 			&model.ChannelSession{},
-			&model.ChannelApproval{},
 			&model.ChannelLease{},
 			&model.ChannelAudit{},
 			// 通知事件、规则、模板与逐目标投递

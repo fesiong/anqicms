@@ -79,7 +79,7 @@ func bindingTargetDigest(siteId, channelId uint, kind, platformTargetId string) 
 
 // bumpChannelSessionGeneration 让「站点 + 渠道 + 平台用户」对应的会话代次递增。
 //
-// 换绑复活与撤销绑定都必须调用：代次是审批行与在途上下文的失效依据，
+// 换绑复活与撤销绑定都必须调用：代次是在途上下文的失效依据，
 // 会话行本身不换主（uk_session_hash 不变），只让旧代次不再匹配新请求。
 func bumpChannelSessionGeneration(tx *gorm.DB, siteId uint, channel *model.MessageChannel, orgId, userId string) error {
 	if tx == nil || channel == nil {
@@ -297,7 +297,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 			// 按 revision 做乐观锁的后续写入会立刻撞失败。
 			existing.Revision++
 			binding = &existing
-			// 换绑复活：同一身份的旧会话代次必须失效，旧审批/旧上下文不能延续到新绑定。
+			// 换绑复活：同一身份的旧会话代次必须失效，旧上下文不能延续到新绑定。
 			if txErr := bumpChannelSessionGeneration(tx, w.Id, &channel, orgId, userId); txErr != nil {
 				return fail("失效渠道会话失败")
 			}
@@ -363,7 +363,7 @@ func (w *Website) ConsumeBindingToken(plain string, ident ChannelPlatformIdentit
 	return binding, nil
 }
 
-// RevokeBinding 撤销一条绑定：标记绑定、失效其未执行审批与排队任务、收回私聊目标授权。
+// RevokeBinding 撤销一条绑定：标记绑定、失效其排队任务、收回私聊目标授权。
 //
 // 幂等：已经撤销过的绑定直接返回 nil。绑定不存在或不属于本站点、操作者不存在
 // 或已停用都报错（R14）——「已经撤销」与「根本不存在」必须是两种结果，
@@ -415,14 +415,6 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 			return nil
 		}
 
-		// 未执行审批失效：pending 尚未确认，approved 已确认但还没开始执行，
-		// 绑定身份变化后都必须重新确认（model.ChannelApproval 注释）。
-		if err := tx.Model(&model.ChannelApproval{}).
-			Where("binding_id = ? AND status IN ?", binding.Id, []string{model.ApprovalStatusPending, model.ApprovalStatusApproved}).
-			Update("status", model.ApprovalStatusCancelled).Error; err != nil {
-			return errors.New("失效未执行审批失败")
-		}
-
 		// 排队中的入站任务失效。executing 等已开跑的状态不在这里处理，由 T4 的租约兜底。
 		if err := tx.Model(&model.ChannelInbox{}).
 			Where("binding_id = ? AND status = ?", binding.Id, model.InboxStatusPending).
@@ -431,7 +423,7 @@ func (w *Website) RevokeBinding(bindingId, operatorAdminId uint) error {
 		}
 
 		// 绑定身份变化：同一平台用户在该渠道的会话代次必须递增，
-		// 让换绑前的旧审批与旧上下文全部失效。
+		// 让换绑前的旧上下文全部失效。
 		var channel model.MessageChannel
 		if txErr := tx.Where("`id` = ? AND `site_id` = ?", binding.ChannelId, w.Id).Take(&channel).Error; txErr != nil {
 			if !errors.Is(txErr, gorm.ErrRecordNotFound) {

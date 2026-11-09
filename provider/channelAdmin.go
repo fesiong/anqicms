@@ -353,7 +353,7 @@ func (w *Website) updateAdminChannel(req *request.Channel, platform, name, appId
 			return nil
 		}
 		// 切换接待智能体等于换执行主体：该渠道全部会话代次递增，
-		// 旧审批与旧上下文立即失效（规格 §8「权限仍允许」）。
+		// 旧上下文立即失效（规格 §8「权限仍允许」）。
 		if existing.AgentId != req.AgentId {
 			if txErr := tx.Model(&model.ChannelSession{}).
 				Where("`site_id` = ? AND `channel_id` = ?", w.Id, req.Id).
@@ -387,7 +387,7 @@ func (w *Website) scheduleChannelRebuild(channelId uint, revision int) *ChannelS
 
 // ChannelAdminDelete 关闭并移除渠道（R86）。
 //
-// 事务内按依赖顺序清理：待处理入站任务 → 未执行审批 → 撤销绑定 → 删目标 → 删渠道行。
+// 事务内按依赖顺序清理：待处理入站任务 → 撤销绑定 → 删目标 → 删渠道行。
 // 审计与投递历史**保留**：它们是「发生过什么」的记录，渠道没了也要能追溯；
 // 投递行在发送前会复核目标/渠道有效性，悬空引用不会导致误发。
 func (w *Website) ChannelAdminDelete(channelId uint) error {
@@ -404,21 +404,6 @@ func (w *Website) ChannelAdminDelete(channelId uint) error {
 			Where("`site_id` = ? AND `channel_id` = ? AND `status` = ?", w.Id, channelId, model.InboxStatusPending).
 			Update("status", model.InboxStatusCancelled).Error; err != nil {
 			return errChannelCancelWork
-		}
-
-		var bindingIds []uint
-		if err := tx.Model(&model.ChannelBinding{}).
-			Where("`site_id` = ? AND `channel_id` = ?", w.Id, channelId).
-			Pluck("id", &bindingIds).Error; err != nil {
-			return errChannelCancelWork
-		}
-		if len(bindingIds) > 0 {
-			if err := tx.Model(&model.ChannelApproval{}).
-				Where("`site_id` = ? AND `binding_id` IN ? AND `status` IN ?", w.Id, bindingIds,
-					[]string{model.ApprovalStatusPending, model.ApprovalStatusApproved}).
-				Update("status", model.ApprovalStatusCancelled).Error; err != nil {
-				return errChannelCancelWork
-			}
 		}
 
 		if err := tx.Model(&model.ChannelBinding{}).

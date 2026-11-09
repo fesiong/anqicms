@@ -27,20 +27,17 @@ import (
 //  2. 默认拒绝：执行主体、渠道状态、绑定、管理员、菜单权限、站点曝光、接待白名单、
 //     渠道动作策略、群安全清单，任一项不满足都拒绝（错误用 errors.Is 可分流）；
 //  3. 双层门禁：模型可见性（R46）与执行前拦截同时存在，只靠提示词约束等于没约束；
-//  4. 审批不继承 Agent 的默认放行（R40）：ToolExecContext.IsAgent 恒为 false，
-//     ApprovalFn 恒非 nil，没有后端或决策不是明确的 allow 时一律拒绝；
-//  5. 会话隔离（R41）：同一 SessionHash 的轮次在进程内串行（R53：等待可被 ctx 取消），
+//  4. 会话隔离（R41）：同一 SessionHash 的轮次在进程内串行（R53：等待可被 ctx 取消），
 //     generation 严格对齐，旧代次的请求直接拒绝，且拒绝发生在调用模型之前；
 //     会话历史存进程内的渠道私有存储（R48），不写 ai_chat_messages，也不进 svc.sessions；
-//  6. 群聊只执行群安全清单内的能力（R39，首版只有 api_schema），其余在**执行前**拒绝，
+//  5. 群聊只执行群安全清单内的能力（R39，首版只有 api_schema），其余在**执行前**拒绝，
 //     不做「先执行再脱敏」——工具副作用无法靠事后脱敏撤销；群聊还必须是
 //     channel_targets 中已批准且开启管理的目标（R47）；
-//  7. 不可信输入（R45/R54）：平台文本、网页抓取与留言/评论内容必须以数据标记
+//  6. 不可信输入（R45/R54）：平台文本、网页抓取与留言/评论内容必须以数据标记
 //     进入模型上下文与渠道历史；
-//  8. 只返回平台回复文本：不发送消息、不写 channel_inbox（发送属于 T8）；
-//  9. 每次工具调用都落一条 model.ChannelAudit（R52），写失败只记日志不改判定结果；
-//  10. 批准后执行（R55）：带审批凭据的请求不调用模型，只执行凭据指向的那一次调用；
-//      assistant(tool_calls) 与 tool 结果必须成对落历史（R56），历史裁剪按整组丢弃（R57）。
+//  7. 只返回平台回复文本：不发送消息、不写 channel_inbox（发送属于 T8）；
+//  8. 每次工具调用都落一条 model.ChannelAudit（R52），写失败只记日志不改判定结果；
+//  9. assistant(tool_calls) 与 tool 结果必须成对落历史（R56），历史裁剪按整组丢弃（R57）。
 
 // channelMainSiteId 是唯一允许执行渠道聊天管理的站点（R49）。
 //
@@ -62,10 +59,6 @@ var (
 	ErrChannelTargetNotApproved = errors.New("该群未获授权执行管理操作")
 	// ErrChannelSiteUnsupported：渠道聊天只在主站点可用（R49）。
 	ErrChannelSiteUnsupported = errors.New("渠道聊天仅在主站点可用")
-	// ErrChannelApprovalUnavailable：渠道执行器没有可用的审批后端（R40）。
-	ErrChannelApprovalUnavailable = errors.New("渠道审批后端不可用，写操作已拒绝")
-	// ErrChannelApprovalDenied：审批明确拒绝，或返回了渠道不接受的决策值。
-	ErrChannelApprovalDenied = errors.New("渠道审批未通过")
 	// ErrChannelToolNotVisible：请求的工具不在本轮的可见工具集合内（R46）。
 	ErrChannelToolNotVisible = errors.New("该工具未在渠道开放")
 )
@@ -88,69 +81,19 @@ type ChannelTurnRequest struct {
 	// Generation 是调用方看到的会话代次。新会话只接受 1；已有会话必须与存储值严格相等。
 	// 0 一律视为过期（调用方还没拿到当前代次），拒绝发生在调用模型之前。
 	Generation int64
-	// Approval 非 nil 表示这是「管理员已批准，现在执行」的请求（R55）：
-	// 本轮**不调用模型**，只执行 grant 指定的那一次工具调用。
-	// 归属/参数摘要/策略修订号/有效期由 CheckIntentPermissionApproved 自证，
-	// 执行器不自己解释审批表（那是 T7 的职责）。
-	Approval *ChannelApprovalGrant
 }
 
-// ChannelApprovalGrant 是「批准后执行」的凭据（R55），由 T7 在管理员点击确认后构造。
-//
-// 三个字段都是必填：ApprovalId 指向 channel_approvals 的 public_id，ToolName 必须是
-// 本轮可见工具之一，ArgsJSON 必须与审批落库时的参数一致（CheckIntentPermissionApproved
-// 会用 ChannelArgsHash 复核）。执行器只把这三项转成一次工具调用，不解释审批状态机。
-type ChannelApprovalGrant struct {
-	ApprovalId string
-	ToolName   string
-	ArgsJSON   string
-}
-
-// ChannelPendingConfirmation 是需要管理员确认的待执行调用（R50）。
-//
-// 出现它时本轮**不执行**该调用，也不再把它只当成工具错误写进消息：
-// 调用方（T7）据此创建审批单并回确认卡片，管理员批准后再带审批凭据重新发起。
-type ChannelPendingConfirmation struct {
-	ToolName string
-	// Action 是从**原始参数**解析出的动作，解析不出就是空串。
-	// 空 action 必须原样落库：审批行的 action 是身份字段，策略查找里的 "*" 兜底
-	// 不属于审批身份——把空串写成 "*" 就等于「批准了该工具的全部动作」。
-	Action string
-	// ArgsJSON 是规范化后的参数 JSON（键序确定、空白归一），可直接用于算审批参数摘要。
-	ArgsJSON string
-	Reason   string
-}
-
-// ChannelTurnResult 是一轮执行的结果。只包含给平台回复的文本、会话标识与
-// 「还需要管理员确认」的调用；不含工具原始结果、审批单号或任何敏感值。
+// ChannelTurnResult 是一轮执行的结果。只包含给平台回复的文本与会话标识；
+// 不含工具原始结果或任何敏感值。
 type ChannelTurnResult struct {
 	Reply         string
 	SessionHash   string
 	ChatSessionId string
 	Generation    int64
-	// Pending 非 nil 表示本轮因「该操作需要管理员确认」提前结束（R50）。
-	Pending *ChannelPendingConfirmation
 	// Truncated 表示本轮达到最大执行轮次、任务可能未完成；同时会返回
 	// ErrChannelTurnTruncated，避免调用方把截断当成正常完成。
 	Truncated bool
 }
-
-// ChannelApprovalRequest 是渠道审批回调收到的请求（R40）。
-// 至少携带执行主体、工具名与参数 JSON，供 T7 落审批单并展示给管理员。
-type ChannelApprovalRequest struct {
-	Principal     ExecutionPrincipal
-	Tool          string
-	Action        string
-	ArgsJSON      string
-	SessionHash   string
-	ChatSessionId string
-}
-
-// ChannelApprovalFunc 是持久化审批（T7）注入的接缝。
-// 返回 decision/reason；执行器只接受 decision == "allow"，其余（含 once_allow、
-// full_control）一律按拒绝处理——渠道会话没有「本会话完全控制」这种语义，
-// 那等于把一次确认放大成永久绕过。
-type ChannelApprovalFunc func(ctx context.Context, req ChannelApprovalRequest) (decision string, reason string)
 
 // channelChatModel 是执行器对模型的最小依赖，便于单测注入脚本模型而不触达真实 LLM。
 type channelChatModel interface {
@@ -180,26 +123,6 @@ func defaultChannelModelFactory(ctx context.Context, tools []*schema.ToolInfo) (
 		return nil, err
 	}
 	return derived, nil
-}
-
-// SetChannelApprovalBackend 注入渠道审批后端（T7）。传 nil 表示没有后端：
-// 所有需要审批的写操作都会被拒绝，但不会影响只读动作。
-func (svc *AiChatService) SetChannelApprovalBackend(fn ChannelApprovalFunc) {
-	if svc == nil {
-		return
-	}
-	svc.channelApprovalMu.Lock()
-	svc.channelApproval = fn
-	svc.channelApprovalMu.Unlock()
-}
-
-func (svc *AiChatService) channelApprovalBackend() ChannelApprovalFunc {
-	if svc == nil {
-		return nil
-	}
-	svc.channelApprovalMu.RLock()
-	defer svc.channelApprovalMu.RUnlock()
-	return svc.channelApproval
 }
 
 // channelGroupSafeCaps 是群聊首版允许的能力清单（R39）。
@@ -259,21 +182,6 @@ type channelTurnState struct {
 
 	exec  *ToolExecContext
 	chain *MiddlewareChain
-
-	// approvalErr 记录本次工具调用被审批层拒绝的原因（供 executeToolCall 转成哨兵错误）。
-	// 同一会话已被互斥串行，不存在并发写。
-	approvalErr error
-	// pending 记录本轮出现的「需要管理员确认」调用（R50）。非 nil 时本轮立即结束。
-	pending *ChannelPendingConfirmation
-	// approvalGrant 非 nil 表示本轮是「批准后执行」（R55）：不调用模型，
-	// 只执行这一条已自证的调用。意图门禁因此改用 CheckIntentPermissionApproved。
-	approvalGrant *ChannelApprovalGrant
-	// approvalAction 是 grant.ArgsJSON 里解析出的**原始** action（R58），
-	// 与 args_hash 同源（同一份规范化后的参数），审批自证时逐字比对审批行的 action 列。
-	// 刻意不回落 "*"：ArgsJSON 里没有 action 就是空串，"*" 只属于
-	// ChannelPolicy.Decision 内部的策略兜底语义。空 action 若被当成 "*"，
-	// 「批准一个无动作调用」就等于「批准该工具的全部动作」。
-	approvalAction string
 
 	releaseGate func()
 	releaseOnce sync.Once
@@ -397,28 +305,16 @@ func (svc *AiChatService) prepareChannelTurn(ctx context.Context, req ChannelTur
 		return nil, err
 	}
 
-	// R55：批准后执行。校验放在这里（模型与工具之前），不满足就整轮拒绝；
-	// 通过后本轮只跑这一条调用，模型完全不参与。
-	if req.Approval != nil {
-		if err := st.applyApprovalGrant(req.Approval); err != nil {
-			return nil, err
-		}
-	}
-
-	// 执行上下文只属于本轮：IsAgent 必须为 false（R40），否则写门会跳过审批；
-	// ApprovalFn 必须非 nil，没有后端时由回调返回拒绝，而不是让 write_gate
-	// 「nil 即放行」的既有语义漏过去。
+	// 执行上下文只属于本轮：IsAgent 必须为 false（R40），渠道轮次不继承 Agent 的默认放行。
 	tuning := svc.Tuning.Normalized()
 	st.exec = &ToolExecContext{
-		SessionID:  st.chatSessionID,
-		IsAgent:    false,
-		ToolName:   "",
-		RootPath:   w.RootPath,
-		ApprovalFn: st.approvalDecision,
+		SessionID: st.chatSessionID,
+		IsAgent:   false,
+		ToolName:  "",
+		RootPath:  w.RootPath,
 	}
 	st.chain = NewMiddlewareChain(
 		&channelGuardMiddleware{state: st},
-		&WriteGateMiddleware{},
 		&ResultTruncatorMiddleware{MaxBytes: tuning.MaxToolResultBytes},
 		&RedactionMiddleware{},
 	)
@@ -707,24 +603,12 @@ func (st *channelTurnState) checkToolPermission(ctx context.Context, name, actio
 	return st.intentGate(ctx, name, action)
 }
 
-// intentGate 是意图级门禁的唯一入口：普通轮次看渠道策略原值，批准后执行
-// 改走 CheckIntentPermissionApproved（自证审批凭据 → 其余门禁照旧）。
-//
-// 为什么不能让两条路径各写一遍：confirm 动作在普通路径必然返回
-// ErrChannelPolicyNeedsConfirm，若批准后的执行仍然走它，就是「批准 → 再要确认」
-// 的死循环；而为了绕开它去跳过整段复核对等于「确认即提权」。
+// intentGate 是意图级门禁的唯一入口：曝光/白名单/策略/管理员/菜单逐层校验。
 func (st *channelTurnState) intentGate(ctx context.Context, name, action string) error {
-	if st != nil && st.approvalGrant != nil {
-		// R58：name 取**本次调用**的工具名（与审批行不符就在自证处拒绝），
-		// action 取 grant.ArgsJSON 派生的原始 action（与 args_hash 同源，
-		// 不接受调用方另传的 action 覆盖），两者都不做 "*" 兜底。
-		return st.w.CheckIntentPermissionApproved(
-			ctx, st.principal, st.approvalGrant.ApprovalId, st.approvalGrant.ArgsJSON, name, st.approvalAction)
-	}
 	return st.w.CheckIntentPermission(ctx, st.principal, name, action)
 }
 
-// channelPermissionSentinels 是「权限/审批」类哨兵。命中这些错误的调用在审计里
+// channelPermissionSentinels 是「权限」类哨兵。命中这些错误的调用在审计里
 // 记 denied，其余错误记 failed（R52 的取值就这三种）。
 var channelPermissionSentinels = []error{
 	ErrChannelGroupRestricted,
@@ -743,9 +627,6 @@ var channelPermissionSentinels = []error{
 	ErrChannelCapBlocked,
 	ErrChannelAPIPathBlocked,
 	ErrChannelDisabled,
-	ErrChannelApprovalUnavailable,
-	ErrChannelApprovalDenied,
-	ErrChannelApprovalInvalid,
 }
 
 // channelSafePermissionText 把权限错误压成「只有哨兵文案」的文本。
@@ -763,7 +644,7 @@ func channelSafePermissionText(err error) string {
 }
 
 // channelSafePermissionError 与 channelSafePermissionText 同口径，但保留哨兵链，
-// 供调用方继续用 errors.Is 分流（例如 T7 识别 confirm）。
+// 供调用方继续用 errors.Is 分流。
 func channelSafePermissionError(err error) error {
 	for _, sentinel := range channelPermissionSentinels {
 		if errors.Is(err, sentinel) {
@@ -795,7 +676,7 @@ func channelSanitizeToolContent(content string) string {
 // executeToolCall 执行一个模型发起的工具调用，并按 R52 写一条审计。
 //
 // 被拒绝时同时返回带 IsError 的结果与哨兵错误：结果用于回灌模型（让它知道为什么
-// 被拒），错误用于调用方分流（群聊/审批/权限各自呈现不同提示）。
+// 被拒），错误用于调用方分流（群聊/权限各自呈现不同提示）。
 func (st *channelTurnState) executeToolCall(ctx context.Context, call *schema.ToolCall) (*ToolExecResult, error) {
 	result, err := st.dispatchToolCall(ctx, call)
 	st.recordToolAudit(ctx, call, result, err)
@@ -832,12 +713,6 @@ func (st *channelTurnState) dispatchToolCall(ctx context.Context, call *schema.T
 		}, fmt.Errorf("%w：%s", ErrChannelToolNotVisible, name)
 	}
 	if err := st.intentGate(ctx, name, action); err != nil {
-		// R50：confirm 不是「工具错误」，而是「本轮暂停、等管理员批准」。
-		// 批准后执行（approvalGrant 非 nil）不可能走到这里：那条路径用的是
-		// CheckIntentPermissionApproved，confirm 被视为已通过，不会再次上浮。
-		if errors.Is(err, ErrChannelPolicyNeedsConfirm) && st.approvalGrant == nil {
-			st.setPending(call, action, err)
-		}
 		// 只回灌哨兵文案（不带内部标识），调用方仍能 errors.Is 分流。
 		safeErr := channelSafePermissionError(err)
 		return &ToolExecResult{
@@ -848,20 +723,12 @@ func (st *channelTurnState) dispatchToolCall(ctx context.Context, call *schema.T
 		}, safeErr
 	}
 
-	st.approvalErr = nil
 	st.exec.ToolName = name
 	result, denied, reason := st.chain.ExecuteTool(ctx, call, handler, st.exec)
 	if result == nil {
 		result = &ToolExecResult{CallID: call.ID, ToolName: name, IsError: true}
 	}
 	if denied {
-		if st.approvalErr != nil {
-			if result.Content == "" {
-				result.Content = st.approvalErr.Error()
-			}
-			result.IsError = true
-			return result, st.approvalErr
-		}
 		if reason == "" {
 			reason = ErrChannelPermissionDenied.Error()
 		}
@@ -874,92 +741,6 @@ func (st *channelTurnState) dispatchToolCall(ctx context.Context, call *schema.T
 	}
 	result.Content = channelSanitizeToolContent(result.Content)
 	return result, nil
-}
-
-// setPending 记录本轮「需要管理员确认」的调用（R50）。
-//
-// ArgsJSON 用与审批摘要同一套规范化（ChannelArgsHash 的 any → Marshal），
-// 保证 T7 落库时算出的摘要与执行前复核（CheckIntentPermissionApproved）一致。
-func (st *channelTurnState) setPending(call *schema.ToolCall, action string, cause error) {
-	if st == nil || call == nil || st.pending != nil {
-		return
-	}
-	st.pending = &ChannelPendingConfirmation{
-		ToolName: strings.TrimSpace(call.Function.Name),
-		Action:   action,
-		ArgsJSON: channelCanonicalArgs(call.Function.Arguments),
-		Reason:   channelSafePermissionText(cause),
-	}
-}
-
-// channelCanonicalArgs 是包内**唯一**的参数归一实现（R65），T6 的 setPending 与
-// T7 的 CreateApproval 都必须用它：两处各写一份归一，就会出现「确认时是 ""、
-// 落库时是 {}」这类批得下、执行不了的漂移。
-//
-// 规则：
-//   - 空串 / 全空白 / 字面 null 一律当成 {}（零参意图的合法调用）；
-//     json.Unmarshal("null") 得到 nil、再序列化回 "null"，摘要算的是字符串 "null"
-//     而不是「没有参数」，与零参调用的 "{}" 对不上。
-//   - 其余走 any → Marshal 规范化（键序确定、空白归一），与 ChannelArgsHash 同源。
-//   - 非法 JSON 原样返回：T7 落审批前的对象/摘要校验要据此拒绝，
-//     不能在这里吞成 {} 把一条无法解析的调用伪装成零参调用。
-func channelCanonicalArgs(argsJSON string) string {
-	raw := strings.TrimSpace(argsJSON)
-	if raw == "" || raw == "null" {
-		return "{}"
-	}
-	var payload any
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return raw
-	}
-	canonical, err := json.Marshal(payload)
-	if err != nil {
-		return raw
-	}
-	return string(canonical)
-}
-
-// applyApprovalGrant 校验并固定本轮的「批准后执行」凭据（R55）。
-//
-// 这里只做三件执行器自己能判断的事：审批标识非空、工具在本轮可见集合内、
-// 参数能解析成 JSON 对象（action 要从它取）。**审批归属、参数摘要、策略修订号、
-// 有效期一律不在这里判断**——那是 channel_approvals 的语义，由
-// CheckIntentPermissionApproved 读库自证（执行器自己解释一遍就会与 T7 的状态机漂移）。
-func (st *channelTurnState) applyApprovalGrant(grant *ChannelApprovalGrant) error {
-	if st == nil || grant == nil {
-		return fmt.Errorf("%w：缺少审批凭据", ErrChannelApprovalInvalid)
-	}
-	approvalId := strings.TrimSpace(grant.ApprovalId)
-	if approvalId == "" {
-		return fmt.Errorf("%w：缺少审批标识", ErrChannelApprovalInvalid)
-	}
-	name := strings.TrimSpace(grant.ToolName)
-	// 可见工具集合是本轮唯一的工具面：不在里面就不执行，避免审批单指向
-	// 本轮已不可见（白名单/曝光/群安全被改）的工具。
-	if name == "" || !st.visible[name] {
-		return fmt.Errorf("%w：%s", ErrChannelToolNotVisible, name)
-	}
-	// 归一与 T6/T7 同一份实现：零参调用的 "" / "null" 在这里也是 "{}"，
-	// 否则「审批落库是 {}、执行侧却报参数为空」，零参意图永远执行不了（R65）。
-	args := channelCanonicalArgs(grant.ArgsJSON)
-	// 参数必须是能解析成 JSON 对象的合法参数：工具参数只有对象这一种形态，
-	// action 也从它派生（与 args_hash 同源）。数组/字符串/数字在这里就拒绝，
-	// 不要等到摘要比对失败——那会把「参数形态不对」伪装成「凭据不符」。
-	// 解析不出 action 就是空串，与审批行的空 action 逐字比对，绝不回落 "*"。
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(args), &payload); err != nil || payload == nil {
-		return fmt.Errorf("%w：审批参数必须是 JSON 对象", ErrChannelApprovalInvalid)
-	}
-	st.approvalGrant = &ChannelApprovalGrant{
-		ApprovalId: approvalId,
-		ToolName:   name,
-		ArgsJSON:   args,
-	}
-	// R58：工具身份的第二半是 action，与 args_hash 取自同一份规范化参数
-	// （actionOfArgsJSON 与 ChannelArgsHash 都按 any → Marshal 规范化后解析）。
-	// 解析不出就是空串，绝不回落 "*"——见 channelTurnState.approvalAction 的说明。
-	st.approvalAction = actionOfArgsJSON(args)
-	return nil
 }
 
 // recordToolAudit 写一条渠道审计（R52）。
@@ -1017,63 +798,6 @@ func (st *channelTurnState) log() *slog.Logger {
 	return slog.Default()
 }
 
-// approvalDecision 是 write_gate 的审批回调（R40）。
-//
-// 只有后端明确返回 "allow" 才放行；"deny"、once_allow、full_control、未知值、
-// 没有后端，全部拒绝。渠道轮次不提供「本会话完全控制」的语义：
-// 那会让一次点击放大成长期绕过，而审批的意义是每次写操作都可追溯。
-func (st *channelTurnState) approvalDecision(ctx context.Context, call *schema.ToolCall, exec *ToolExecContext) (string, string) {
-	if st == nil || st.svc == nil || call == nil {
-		st.setApprovalErr(ErrChannelApprovalUnavailable)
-		return "deny", ErrChannelApprovalUnavailable.Error()
-	}
-	// R55：批准后执行。这条调用已经由 intentGate → CheckIntentPermissionApproved
-	// 按「绑定 + 工具身份（tool/action）+ 策略修订号 + 参数摘要 + 未过期 + 已批准/执行中」
-	// 自证过一次，且 grant 只存在于本次请求内、工具名与参数必须逐字对上。此时再走运行时
-	// 审批回调只会让 T7 新建第二张审批单（批准→再要确认的死循环），所以直接放行这一次。
-	// 注意放行范围：仅限本轮唯一那条已自证的调用，不是「本会话完全控制」——
-	// 同一轮里工具名或参数不同的调用仍然要回到 ChannelApprovalFunc 走完整审批。
-	if st.approvalGrant != nil &&
-		strings.TrimSpace(call.Function.Name) == st.approvalGrant.ToolName &&
-		channelCanonicalArgs(call.Function.Arguments) == st.approvalGrant.ArgsJSON {
-		return "allow", "审批已通过"
-	}
-	backend := st.svc.channelApprovalBackend()
-	if backend == nil {
-		st.setApprovalErr(ErrChannelApprovalUnavailable)
-		return "deny", "渠道审批后端未配置"
-	}
-	action := actionOfArgsJSON(call.Function.Arguments)
-	decision, reason := backend(ctx, ChannelApprovalRequest{
-		Principal:     st.principal,
-		Tool:          call.Function.Name,
-		Action:        action,
-		ArgsJSON:      call.Function.Arguments,
-		SessionHash:   st.sessionHash,
-		ChatSessionId: st.chatSessionID,
-	})
-	switch strings.ToLower(strings.TrimSpace(decision)) {
-	case "allow":
-		return "allow", reason
-	case "deny":
-		st.setApprovalErr(ErrChannelApprovalDenied)
-		return "deny", reason
-	default:
-		// once_allow / full_control / 未知值：渠道不接受，按拒绝处理。
-		st.setApprovalErr(ErrChannelApprovalDenied)
-		return "deny", "渠道不支持的审批决策，已拒绝"
-	}
-}
-
-func (st *channelTurnState) setApprovalErr(err error) {
-	if st == nil || err == nil {
-		return
-	}
-	if st.approvalErr == nil {
-		st.approvalErr = err
-	}
-}
-
 func (st *channelTurnState) release() {
 	if st == nil {
 		return
@@ -1091,10 +815,6 @@ func (st *channelTurnState) run(ctx context.Context, factory channelModelFactory
 		SessionHash:   st.sessionHash,
 		ChatSessionId: st.chatSessionID,
 		Generation:    st.generation,
-	}
-	// R55：批准后执行不经过模型，连模型工厂都不派生（否则「模型调用 0 次」无从保证）。
-	if st.approvalGrant != nil {
-		return st.runApprovedCall(ctx, out)
 	}
 	if factory == nil {
 		factory = defaultChannelModelFactory
@@ -1161,23 +881,6 @@ func (st *channelTurnState) run(ctx context.Context, factory channelModelFactory
 
 		for _, call := range resp.ToolCalls {
 			result, callErr := st.executeToolCall(ctx, &call)
-			// R50/R56：需要管理员确认 → 本轮立即结束，不再执行后续调用，也不把
-			// 「等确认」降级成一条工具错误。
-			if st.pending != nil {
-				channelHistoryAppend(st.sessionHash, ChatMessage{
-					Role:       "tool",
-					Content:    st.pending.Reason + "：本轮已暂停，等待管理员确认。",
-					ToolCallID: call.ID,
-					ToolName:   call.Function.Name,
-				})
-				// R56：assistant 里落了**全部** tool_calls，缺一条 tool 结果就是非法
-				// 消息序列（多数 OpenAI 兼容服务端直接 400），且这条历史会跨轮保留。
-				// 同批其余调用既没执行也不能凭空消失：补占位结果，内容明确说未执行。
-				channelHistoryAppendPendingPlaceholders(st.sessionHash, resp.ToolCalls, call.ID)
-				out.Pending = st.pending
-				out.Reply = channelPendingReply(st.pending)
-				return out, nil
-			}
 			content := ""
 			if result != nil {
 				content = result.Content
@@ -1204,144 +907,6 @@ func (st *channelTurnState) run(ctx context.Context, factory channelModelFactory
 	out.Truncated = true
 	out.Reply = fmt.Sprintf("已达到本轮最大执行轮次（%d），任务可能未完成，请缩小范围后重试。", maxRounds)
 	return out, fmt.Errorf("%w：上限 %d", ErrChannelTurnTruncated, maxRounds)
-}
-
-// channelPendingReply 生成「等管理员确认」的回复文本。只含工具名与动作名——
-// 不含内部标识、参数原文或审批单号（单号由 T7 在创建审批后自行回复）。
-func channelPendingReply(pending *ChannelPendingConfirmation) string {
-	if pending == nil {
-		return ErrChannelPolicyNeedsConfirm.Error()
-	}
-	if pending.Action == "" {
-		return fmt.Sprintf("%s：%s。已暂停执行，等待管理员确认。", ErrChannelPolicyNeedsConfirm.Error(), pending.ToolName)
-	}
-	return fmt.Sprintf("%s：%s.%s。已暂停执行，等待管理员确认。",
-		ErrChannelPolicyNeedsConfirm.Error(), pending.ToolName, pending.Action)
-}
-
-// channelPendingPlaceholderText 是「本轮未执行」的占位工具结果（R56）。
-// 它必须存在：assistant 消息已经落了全部 tool_calls，缺一条结果就是非法序列。
-const channelPendingPlaceholderText = "本轮已中止：其余操作等待确认，未执行。"
-
-// channelHistoryAppendPendingPlaceholders 给同批里**没有**被执行、也没有结果的调用
-// 补一条占位 tool 消息（R56）。answeredID 是已经写入结果的那条调用，跳过它。
-//
-// 多个调用共用同一句占位文本是刻意的：它们都没执行，逐条编不同理由等于假装执行过。
-func channelHistoryAppendPendingPlaceholders(sessionHash string, calls []schema.ToolCall, answeredID string) {
-	for _, call := range calls {
-		if call.ID == answeredID {
-			continue
-		}
-		channelHistoryAppend(sessionHash, ChatMessage{
-			Role:       "tool",
-			Content:    channelPendingPlaceholderText,
-			ToolCallID: call.ID,
-			ToolName:   call.Function.Name,
-		})
-	}
-}
-
-// runApprovedCall 执行一次「已批准」的工具调用（R55）：不调用模型、不落用户消息。
-//
-// 落历史的顺序与普通轮次一致（先 assistant(tool_calls)，再 tool 结果），
-// 这样 R56/R57 的配对与裁剪规则对这条路径同样成立；结果同样经过截断与脱敏，
-// 外部用户内容同样加不可信业务数据边界。
-func (st *channelTurnState) runApprovedCall(ctx context.Context, out ChannelTurnResult) (ChannelTurnResult, error) {
-	grant := st.approvalGrant
-	if grant == nil {
-		return out, fmt.Errorf("%w：缺少审批凭据", ErrChannelApprovalInvalid)
-	}
-	// R64：**先自证，再消费**。自证（CheckIntentPermissionApproved）接受 approved 与
-	// executing 两种状态，所以放在消费之前完全成立；反过来先消费就有个致命缺口：
-	// MarkApprovalExecuting 的 WHERE 只有 site_id + public_id + status + expires_at，
-	// 同站点任意绑定只要知道 public_id 就能把一张合法 approved 单推进 executing，
-	// 随后自证失败再落 failed——审批台账被烧毁且不可回退。
-	// 自证只读库、不写状态：失败时这张单仍保持 approved，真正的主人还能继续批准/执行。
-	if st.w == nil {
-		// 没有站点就自证不了、也消费不了，也就无法保证「只执行一次」：按拒绝处理。
-		return out, fmt.Errorf("%w：缺少站点上下文", ErrChannelApprovalInvalid)
-	}
-	if err := st.w.CheckIntentPermissionApproved(
-		ctx, st.principal, grant.ApprovalId, grant.ArgsJSON, grant.ToolName, st.approvalAction,
-	); err != nil {
-		// 只记日志、只回哨兵：回执里不出现审批单号、参数或失败细节。
-		st.log().Warn("渠道审批自证失败，已拒绝执行", "error", err)
-		return out, channelSafePermissionError(err)
-	}
-	// R60：自证通过后再消费审批（approved → executing）。消费是条件更新，只有赢家能继续；
-	// 两个并发请求都能通过自证，唯一性由这里的 RowsAffected 决出。失败意味着这张单
-	// 已被别人消费 / 已过期 / 从未批准，此时**绝不执行**——否则同一条审批被重放两次
-	// 就会产生两次真实副作用。
-	if err := st.w.MarkApprovalExecuting(grant.ApprovalId); err != nil {
-		// 只记日志、只回哨兵：回执里不出现审批单号、参数或失败细节。
-		st.log().Warn("消费渠道审批失败，已拒绝执行", "error", err)
-		return out, fmt.Errorf("%w", ErrChannelApprovalInvalid)
-	}
-	callID := channelApprovedCallId(st.sessionHash, grant.ApprovalId)
-	call := &schema.ToolCall{
-		ID:   callID,
-		Type: "function",
-		Function: schema.FunctionCall{
-			Name:      grant.ToolName,
-			Arguments: grant.ArgsJSON,
-		},
-	}
-	callsJSON, _ := json.Marshal([]schema.ToolCall{*call})
-	channelHistoryAppend(st.sessionHash, ChatMessage{
-		Role:      "assistant",
-		ToolCalls: string(callsJSON),
-	})
-
-	result, callErr := st.executeToolCall(ctx, call)
-	content := ""
-	if result != nil {
-		content = result.Content
-	}
-	if callErr != nil && strings.TrimSpace(content) == "" {
-		content = channelSafePermissionText(callErr)
-	}
-	if channelToolResultIsUntrusted(call.Function.Name, call.Function.Arguments) && content != "" {
-		content = channelUntrustedToolText(content)
-	}
-	channelHistoryAppend(st.sessionHash, ChatMessage{
-		Role:       "tool",
-		Content:    content,
-		ToolCallID: callID,
-		ToolName:   call.Function.Name,
-	})
-	out.Reply = content
-	// R60 收尾：成功 → succeeded，失败 → failed。收尾调用失败**只记日志**，
-	// 不得反过来把已经发生的调用判成失败：调用方一旦重试就是第二次真实副作用。
-	if st.w != nil {
-		failed := callErr != nil || (result != nil && result.IsError)
-		summary := content
-		if strings.TrimSpace(summary) == "" && callErr != nil {
-			summary = callErr.Error()
-		}
-		var ferr error
-		if failed {
-			ferr = st.w.FailApproval(grant.ApprovalId, summary)
-		} else {
-			ferr = st.w.CompleteApproval(grant.ApprovalId, summary)
-		}
-		if ferr != nil {
-			st.log().Warn("写渠道审批执行结果失败", "error", ferr)
-		}
-	}
-	if callErr != nil {
-		return out, callErr
-	}
-	return out, nil
-}
-
-// channelApprovedCallId 派生一次批准执行的 tool_call_id：只依赖会话与审批单，
-// 同一条审批重复执行也得到同一个 ID（审计与历史里可对照）。
-func channelApprovedCallId(sessionHash, approvalId string) string {
-	digest := channelDigest(sessionHash, strings.TrimSpace(approvalId))
-	if len(digest) > 16 {
-		digest = digest[:16]
-	}
-	return "apv_" + digest
 }
 
 func (st *channelTurnState) currentText() string {

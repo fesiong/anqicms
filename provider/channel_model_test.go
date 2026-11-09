@@ -23,7 +23,6 @@ var channelModels = []interface{}{
 	model.ChannelTarget{},
 	model.ChannelInbox{},
 	model.ChannelSession{},
-	model.ChannelApproval{},
 	model.ChannelLease{},
 	model.ChannelAudit{},
 	model.NotificationRule{},
@@ -566,7 +565,6 @@ func TestChannelUniqueConstraintsDeclared(t *testing.T) {
 		{model.ChannelSession{}, "SessionHash", "uk_session_hash"},
 		{model.NotificationEvent{}, "EventKeyHash", "uk_event_key_hash"},
 		{model.NotificationDelivery{}, "DeliveryHash", "uk_delivery_hash"},
-		{model.ChannelApproval{}, "PublicId", "uk_public_id"},
 	}
 	for _, c := range cases {
 		typ := reflect.TypeOf(c.modelValue)

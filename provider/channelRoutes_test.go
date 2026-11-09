@@ -608,7 +608,7 @@ func TestChannelListIsSiteScoped(t *testing.T) {
 	}
 }
 
-func TestChannelDeleteCancelsPendingWork(t *testing.T) {
+func TestChannelDeleteCancelsQueuedInbox(t *testing.T) {
 	w := channelAdminTestSite(t)
 	ch := newManagerTestChannel(t, w, false)
 	binding := newChannelAdminBinding(t, w, ch)
@@ -629,29 +629,6 @@ func TestChannelDeleteCancelsPendingWork(t *testing.T) {
 	t.Cleanup(func() {
 		if err := w.DB.Where("id = ?", inbox.Id).Delete(&model.ChannelInbox{}).Error; err != nil {
 			t.Logf("清理入站任务 %d 失败：%v", inbox.Id, err)
-		}
-	})
-
-	approvals := make([]*model.ChannelApproval, 0, 2)
-	for _, status := range []string{model.ApprovalStatusPending, model.ApprovalStatusApproved} {
-		approval := &model.ChannelApproval{
-			SiteId:    w.Id,
-			BindingId: binding.Id,
-			Tool:      "channel.test",
-			Status:    status,
-			ExpiresAt: time.Now().Add(10 * time.Minute).Unix(),
-			PublicId:  "admin_delete_" + status + "_" + suffix,
-		}
-		if err := w.DB.Create(approval).Error; err != nil {
-			t.Fatalf("创建审批失败：%v", err)
-		}
-		approvals = append(approvals, approval)
-	}
-	t.Cleanup(func() {
-		for _, approval := range approvals {
-			if err := w.DB.Where("id = ?", approval.Id).Delete(&model.ChannelApproval{}).Error; err != nil {
-				t.Logf("清理审批 %d 失败：%v", approval.Id, err)
-			}
 		}
 	})
 
@@ -709,16 +686,6 @@ func TestChannelDeleteCancelsPendingWork(t *testing.T) {
 	}
 	if reloadedInbox.Status != model.InboxStatusCancelled {
 		t.Fatalf("待处理入站任务未被取消，状态 %q", reloadedInbox.Status)
-	}
-
-	for _, approval := range approvals {
-		var got model.ChannelApproval
-		if err := w.DB.Where("id = ?", approval.Id).Take(&got).Error; err != nil {
-			t.Fatalf("回读审批 %d 失败：%v", approval.Id, err)
-		}
-		if got.Status != model.ApprovalStatusCancelled {
-			t.Fatalf("审批 %d（原 %s）未被取消，状态 %q", approval.Id, approval.Status, got.Status)
-		}
 	}
 
 	var reloadedBinding model.ChannelBinding
