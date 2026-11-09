@@ -301,7 +301,7 @@ export default {
     '防止第三方 AI 过度调用导致服务压力过大，0 表示不限制',
   'setting.ai.mcp-exposed-tools': '允许使用的工具',
   'setting.ai.mcp-exposed-tools-placeholder':
-    '留空即开放全部常用工具；填 * 开放所有工具（含危险工具）；也可只指定其中几个，多个用英文逗号分隔',
+    '留空即开放全部默认可见工具（含 shell_exec、fs_*、web 等主机级能力），渠道聊天会继承这份清单；填 * 连默认关闭的高危工具一起开放；也可只填需要的意图，多个用英文逗号分隔',
   'setting.ai.mcp-exposed-tools-extra':
     '备份、升级、删除等危险工具默认不开放，需要在此手动加入。也可填写分类名（如 content、seo）授权一整类工具',
   'setting.ai.mcp-available-tools':
