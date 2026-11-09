@@ -38,6 +38,26 @@ func TestSplitMarkdownPrefersBlankLine(t *testing.T) {
 	}
 }
 
+// CRLF 正文必须归一：空行优先仍生效、段内无 \r、不产生纯空白段。
+func TestSplitMarkdownNormalizesCRLF(t *testing.T) {
+	text := strings.Repeat("a", 30) + "\r\n\r\n" + strings.Repeat("b", 50)
+	segments := splitMarkdownText(text, 50)
+	if len(segments) < 2 {
+		t.Fatalf("应被分段，实际 %d 段", len(segments))
+	}
+	if !strings.HasSuffix(segments[0], "\n\n") {
+		t.Fatalf("CRLF 正文应仍在空行处切，第一段结尾为 %q", segments[0])
+	}
+	for i, seg := range segments {
+		if strings.ContainsRune(seg, '\r') {
+			t.Fatalf("第 %d 段仍含 \\r：%q", i, seg)
+		}
+		if strings.TrimSpace(seg) == "" {
+			t.Fatalf("第 %d 段是纯空白：%q", i, seg)
+		}
+	}
+}
+
 func TestSplitMarkdownRespectsLimit(t *testing.T) {
 	text := "```go\n" + strings.Repeat("fmt.Println(\"长行\")\n", 60) + "```\n"
 	for _, max := range []int{40, 60, 100} {

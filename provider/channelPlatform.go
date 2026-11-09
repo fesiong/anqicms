@@ -471,6 +471,10 @@ func splitMarkdownText(text string, maxRunes int) []string {
 	if maxRunes <= 0 {
 		return []string{text}
 	}
+	// CRLF 是合法 CommonMark：先归一成 LF，切点识别与段首空白才成立。
+	if strings.ContainsRune(text, '\r') {
+		text = strings.ReplaceAll(text, "\r\n", "\n")
+	}
 	runes := []rune(text)
 	segments := make([]string, 0, len(runes)/maxRunes+1)
 	// prefix 是上一段留下的「重开围栏」，它占用的 rune 数必须从本段预算里扣掉。
