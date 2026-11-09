@@ -2229,11 +2229,39 @@ export default {
     'A reception agent is required when chat management is enabled',
   'plugin.channels.agent.empty':
     'No agent available yet, create one in AI agents first',
-  'plugin.channels.policy-json': 'Capability policy',
-  'plugin.channels.policy-json.description':
-    'Empty means deny all. Format: {"intents":{"intent":{"*":"allow|confirm|deny"}}}',
-  'plugin.channels.policy-json.invalid':
-    'The policy must be a JSON object, not an array, string or null',
+  'plugin.channels.policy': 'Capability policy',
+  'plugin.channels.policy.summary.empty':
+    'Not configured. Every action in chat will be denied.',
+  'plugin.channels.policy.summary.count':
+    'Configured {intents} intent(s): {allow} allowed, {confirm} need confirmation, the rest denied',
+  'plugin.channels.policy.configure': 'Configure',
+  'plugin.channels.policy.title': 'Configure capability policy',
+  'plugin.channels.policy.intro':
+    'Choose what the bot may do, one intent at a time; every action under an intent shares the same decision. Anything not set is denied. "Confirm" asks an admin in private chat before running.',
+  'plugin.channels.policy.search': 'Search intents',
+  'plugin.channels.policy.preset': 'Quick presets',
+  'plugin.channels.policy.preset.deny': 'Deny all',
+  'plugin.channels.policy.preset.readonly': 'Read-only',
+  'plugin.channels.policy.preset.regular': 'Allow regular intents',
+  'plugin.channels.policy.preset.allow': 'Allow all',
+  'plugin.channels.policy.column.intent': 'Intent',
+  'plugin.channels.policy.column.decision': 'Decision',
+  'plugin.channels.policy.decision.deny': 'Deny',
+  'plugin.channels.policy.decision.confirm': 'Confirm',
+  'plugin.channels.policy.decision.allow': 'Allow',
+  'plugin.channels.policy.blocked': 'Blocked',
+  'plugin.channels.policy.default-off': 'Default off',
+  'plugin.channels.policy.default-off.hint':
+    'Not part of the default-open intents; enable it only when you mean to',
+  'plugin.channels.policy.agent-unallowed': 'Not allowed for agent',
+  'plugin.channels.policy.risk.read': 'Read',
+  'plugin.channels.policy.risk.write': 'Write',
+  'plugin.channels.policy.risk.destructive': 'Destructive',
+  'plugin.channels.policy.risk.system': 'System',
+  'plugin.channels.policy.apply': 'Apply',
+  'plugin.channels.policy.cancel': 'Cancel',
+  'plugin.channels.policy.load-failed':
+    'Failed to load capabilities, please try again later',
   'plugin.channels.table.name': 'Name',
   'plugin.channels.table.platform': 'Platform',
   'plugin.channels.table.enabled': 'Enabled',
@@ -2286,7 +2314,7 @@ export default {
   'plugin.channels.capabilities.menu-paths': 'Menu permissions',
   'plugin.channels.capabilities.blocked': 'Blocked',
   'plugin.channels.capabilities.reason': 'Reason',
-  'plugin.channels.capabilities.policy': 'Current policy',
+  'plugin.channels.capabilities.policy': 'Current decision',
   'plugin.channels.capabilities.blocked-builtins': 'Blocked built-in tools',
   'plugin.channels.binding.add': 'Generate binding token',
   'plugin.channels.binding.token': 'Binding token',
