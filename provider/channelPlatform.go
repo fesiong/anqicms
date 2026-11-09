@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"kandaoni.com/anqicms/model"
 )
@@ -579,16 +580,25 @@ func markdownFenceStateAfter(head []rune, inFence bool, fenceLang string) (bool,
 	return inFence, fenceLang
 }
 
-// markdownTitle 取首个非空行做消息标题（钉钉 sampleMarkdown 必须要标题）：
-// 去掉行首的 # / > / - / * / +、有序列表前缀与空白，截断到 markdownTitleMaxRunes。
+// markdownTitle 取首个可作标题的行做消息标题（钉钉 sampleMarkdown 必须要标题）：
+// 跳过空行与整个代码围栏块（围栏行会被钉钉原样当标题显示，围栏内的代码同理），
+// 剥掉行首标记后截断到 markdownTitleMaxRunes。
 // 取不出内容时返回 markdownTitleFallback——平台不接受空标题。
 func markdownTitle(text string) string {
 	line := ""
+	inFence := false
 	for _, candidate := range strings.Split(text, "\n") {
-		if trimmed := strings.TrimSpace(candidate); trimmed != "" {
-			line = trimmed
-			break
+		trimmed := strings.TrimSpace(candidate)
+		if strings.HasPrefix(trimmed, markdownFenceMarker) {
+			// 开围栏行与闭围栏行都翻转状态；围栏内的正文一并跳过。
+			inFence = !inFence
+			continue
 		}
+		if inFence || trimmed == "" {
+			continue
+		}
+		line = trimmed
+		break
 	}
 	line = trimMarkdownTitleMarkers(line)
 	if line == "" {
@@ -600,16 +610,20 @@ func markdownTitle(text string) string {
 	return line
 }
 
-// trimMarkdownTitleMarkers 反复剥掉行首的标题/引用/列表标记，直到不再是标记。
-// 有序列表前缀只认「数字 + . / ) / 、」。
+// trimMarkdownTitleMarkers 按 CommonMark 口径反复剥掉行首标记，直到不再命中。
+// 顺序：成对强调 → 单字符标记 → 有序列表前缀。
 func trimMarkdownTitleMarkers(line string) string {
 	for {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			return ""
 		}
-		if strings.IndexByte(markdownTitleMarkers, trimmed[0]) >= 0 {
-			line = trimmed[1:]
+		if rest, ok := trimMarkdownEmphasisPair(trimmed); ok {
+			line = rest
+			continue
+		}
+		if rest, ok := trimMarkdownMarker(trimmed); ok {
+			line = rest
 			continue
 		}
 		if rest, ok := trimMarkdownOrderedListPrefix(trimmed); ok {
@@ -620,7 +634,58 @@ func trimMarkdownTitleMarkers(line string) string {
 	}
 }
 
+// trimMarkdownEmphasisPair 剥掉行首的成对强调标记：行首是 n 个连续 `*` 且行内
+// 后续存在一段同样长度的连续 `*` 时，同时剥掉行首段与第一个匹配段。
+// 找不到匹配段就不剥——不要留下半对星号（"**粗体**" 剥成 "粗体"，而不是 "粗体**"）。
+func trimMarkdownEmphasisPair(line string) (string, bool) {
+	runes := []rune(line)
+	open := 0
+	for open < len(runes) && runes[open] == '*' {
+		open++
+	}
+	if open == 0 {
+		return line, false
+	}
+	for i := open; i < len(runes); {
+		if runes[i] != '*' {
+			i++
+			continue
+		}
+		closing := 0
+		for i+closing < len(runes) && runes[i+closing] == '*' {
+			closing++
+		}
+		if closing == open {
+			return string(runes[open:i]) + string(runes[i+closing:]), true
+		}
+		i += closing
+	}
+	return line, false
+}
+
+// trimMarkdownMarker 剥掉行首的标题/引用/列表标记（# > - + *）。
+// CommonMark 要求这些标记后接行尾或空白（`#` 允许连写，如 "## 标题"），
+// 因此 "-5 度"、"#tag" 不会被误剥。
+func trimMarkdownMarker(line string) (string, bool) {
+	runes := []rune(line)
+	marker := runes[0]
+	if !strings.ContainsRune(markdownTitleMarkers, marker) {
+		return line, false
+	}
+	end := 0
+	for end < len(runes) && runes[end] == marker {
+		end++
+	}
+	if end < len(runes) && !unicode.IsSpace(runes[end]) {
+		return line, false
+	}
+	return string(runes[end:]), true
+}
+
 // trimMarkdownOrderedListPrefix 去掉 "1. " / "1) " / "1、" 形态的有序列表前缀。
+// 按 CommonMark，`.` 与 `)` 之后必须是行尾或空白（否则 "1.5 亿"、"2026.11 计划"
+// 会被当成有序列表削掉前半截）；中文顿号列表常写成 "1、处理订单" 不带空格，
+// 故 `、` 保持不看后续字符。
 func trimMarkdownOrderedListPrefix(line string) (string, bool) {
 	runes := []rune(line)
 	i := 0
@@ -631,7 +696,12 @@ func trimMarkdownOrderedListPrefix(line string) (string, bool) {
 		return line, false
 	}
 	switch runes[i] {
-	case '.', ')', '、':
+	case '.', ')':
+		if i+1 < len(runes) && !unicode.IsSpace(runes[i+1]) {
+			return line, false
+		}
+		return string(runes[i+1:]), true
+	case '、':
 		return string(runes[i+1:]), true
 	default:
 		return line, false

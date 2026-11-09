@@ -123,6 +123,37 @@ func TestMarkdownTitleExtraction(t *testing.T) {
 	}
 }
 
+// 围栏行（含围栏内的代码正文）不能当标题：钉钉 sampleMarkdown 会把 ```go 当标题显示。
+func TestMarkdownTitleSkipsFenceLines(t *testing.T) {
+	if got := markdownTitle("```go\nfmt.Println(1)\n```\n"); got != markdownTitleFallback {
+		t.Errorf("纯代码块标题 = %q，期望兜底", got)
+	}
+	if got := markdownTitle("```go\nfmt.Println(1)\n```\n## 结果\n正文"); got != "结果" {
+		t.Errorf("围栏后标题 = %q，期望「结果」", got)
+	}
+}
+
+// 剥标记必须按 CommonMark 收紧：成对强调要整对剥、小数点与负号不能被当成列表。
+func TestMarkdownTitleKeepsMeaning(t *testing.T) {
+	cases := map[string]string{
+		"**粗体**":     "粗体",
+		"**粗体** 开头":  "粗体 开头",
+		"*斜体*":       "斜体",
+		"1.5 亿":      "1.5 亿",
+		"2026.11 计划": "2026.11 计划",
+		"-5 度":       "-5 度",
+		"1. 处理订单":    "处理订单",
+		"- 列表项":      "列表项",
+		"> 引用":       "引用",
+		"# 标题":       "标题",
+	}
+	for input, want := range cases {
+		if got := markdownTitle(input); got != want {
+			t.Errorf("markdownTitle(%q) = %q，期望 %q", input, got, want)
+		}
+	}
+}
+
 // 钉钉：Markdown 用 sampleMarkdown + {title,text}；纯文本仍是 sampleText + {content}。
 func TestDingTalkSendMarkdownUsesSampleMarkdown(t *testing.T) {
 	const appId = "ding_markdown"
