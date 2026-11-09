@@ -173,9 +173,15 @@ type TargetRef struct {
 //
 // 首版只支持文本：Card 是预留字段，适配器的 Send 明确忽略它（卡片发送由 T7 决定）。
 // Text 为空而 Card 非空时，Send 返回 permanent 错误而不是「假装支持卡片」。
+//
+// Markdown 表示 Text 是 Markdown 正文：适配器据此选平台自己的富文本形态
+// （飞书 post + md 标签、钉钉 sampleMarkdown）。它只描述**渲染方式**，
+// 不改变分段规则以外的任何语义；错误回执与通知一律 Markdown=false，
+// 否则模型输出里的 * 和 # 会把提示语渲染成半截格式。
 type OutboundMessage struct {
-	Text string
-	Card map[string]any
+	Text     string
+	Markdown bool
+	Card     map[string]any
 }
 
 // SendResult 是发送成功后的回执。PlatformMessageId 是平台消息 ID（可能为空：
@@ -428,6 +434,208 @@ func platformTextBreakIndex(runes []rune, maxRunes int) int {
 		}
 	}
 	return maxRunes
+}
+
+const (
+	// markdownTitleMaxRunes 是钉钉 Markdown 消息标题的 rune 上限。
+	markdownTitleMaxRunes = 20
+	// markdownTitleFallback 是首行取不出标题时的兜底文案。
+	markdownTitleFallback = "通知"
+	// markdownFenceMarker 是代码围栏的定界串（三个反引号）。
+	markdownFenceMarker = "```"
+	// markdownClosingFence 是补齐用的闭合围栏（含前置换行）：长度 4，
+	// 每轮预算无条件预留它，保证「含补齐的段不超过上限」。
+	markdownClosingFence = "\n" + markdownFenceMarker
+	// markdownTitleMarkers 是标题行首需要剥掉的单字符标记（标题/引用/列表）。
+	// 只含 ASCII：多字节字符的首字节不会命中。
+	markdownTitleMarkers = "#>-*+"
+)
+
+// splitMarkdownText 把 Markdown 正文按 rune 上限切成多段，保证**每一段自身仍是合法
+// Markdown**：切点落在代码围栏内时，本段补一个闭合围栏，下一段用同语言围栏重开。
+//
+// 规则（Markdown 回复契约）：
+//   - 空串返回 nil；maxRunes <= 0 视为「不分段」，原样返回一段；
+//   - 切点优先落在空行（\n\n）之后，其次换行之后，再退到句子标点，最后硬切；
+//   - 切点不得把一行「trim 后以 ``` 开头」的围栏行劈成两半（该行位于剩余内容
+//     第一行时无处可退，只能硬切）；
+//   - 每一段（含补齐的围栏）长度都不超过 maxRunes。
+//
+// 与 splitPlatformText 的差别：返回值拼接**不**等于原文（会插入补齐的围栏）。
+// 这是有意的——跨段渲染正确优先于字节还原；需要还原原文的调用方只能用 splitPlatformText。
+func splitMarkdownText(text string, maxRunes int) []string {
+	if text == "" {
+		return nil
+	}
+	if maxRunes <= 0 {
+		return []string{text}
+	}
+	runes := []rune(text)
+	segments := make([]string, 0, len(runes)/maxRunes+1)
+	// prefix 是上一段留下的「重开围栏」，它占用的 rune 数必须从本段预算里扣掉。
+	prefix := ""
+	inFence := false
+	fenceLang := ""
+	for len(runes) > 0 {
+		budget := maxRunes - len([]rune(prefix)) - len(markdownClosingFence)
+		if budget < 1 {
+			// 上限比围栏本身还短时不可能同时满足「合法」与「不超限」，只能先保证前进。
+			budget = 1
+		}
+		cut := len(runes)
+		if cut > budget {
+			cut = markdownCutIndex(runes, budget)
+		}
+		if cut <= 0 || cut > len(runes) {
+			cut = 1
+		}
+		head := runes[:cut]
+		runes = runes[cut:]
+		inFence, fenceLang = markdownFenceStateAfter(head, inFence, fenceLang)
+
+		segment := prefix + string(head)
+		prefix = ""
+		if inFence {
+			segment += markdownClosingFence
+			prefix = markdownFenceMarker + fenceLang + "\n"
+		}
+		segments = append(segments, segment)
+	}
+	return segments
+}
+
+// markdownCutIndex 返回第一段的切点（不包含）：保证 cut <= budget，且不劈开围栏行。
+func markdownCutIndex(runes []rune, budget int) int {
+	if budget >= len(runes) {
+		return len(runes)
+	}
+	window := runes[:budget]
+	cut := 0
+	// 1. 空行优先：切在第二个换行之后，段落边界最干净。
+	for i := len(window) - 2; i >= 0; i-- {
+		if window[i] == '\n' && window[i+1] == '\n' {
+			cut = i + 2
+			break
+		}
+	}
+	// 2. 其次单个换行。
+	if cut == 0 {
+		for i := len(window) - 1; i >= 0; i-- {
+			if window[i] == '\n' {
+				cut = i + 1
+				break
+			}
+		}
+	}
+	// 3. 再退到句子标点（与纯文本分段同口径），最后硬切。
+	if cut == 0 {
+		cut = platformTextBreakIndex(runes, budget)
+	}
+	if cut <= 0 {
+		cut = budget
+	}
+	return markdownFenceSafeCut(runes, cut)
+}
+
+// markdownFenceSafeCut 把落在围栏行**内部**的切点前移到该行行首：
+// 半截反引号在两侧平台都会渲染成坏内容。行首为 0 时无处可退，保持硬切。
+func markdownFenceSafeCut(runes []rune, cut int) int {
+	if cut <= 0 || cut >= len(runes) {
+		return cut
+	}
+	if runes[cut] == '\n' {
+		// 切点正好在行尾：末行是完整行，不存在「半截围栏」。
+		return cut
+	}
+	lineStart := 0
+	for i := cut - 1; i >= 0; i-- {
+		if runes[i] == '\n' {
+			lineStart = i + 1
+			break
+		}
+	}
+	line := strings.TrimSpace(string(runes[lineStart:cut]))
+	if !strings.HasPrefix(line, "`") || lineStart == 0 {
+		return cut
+	}
+	return lineStart
+}
+
+// markdownFenceStateAfter 按行扫描本段内容，返回扫描结束时的围栏状态。
+// 任何 trim 后以 ``` 开头的行都翻转状态：开围栏行的语言取 ``` 之后的文本（可能为空）。
+func markdownFenceStateAfter(head []rune, inFence bool, fenceLang string) (bool, string) {
+	for _, line := range strings.Split(string(head), "\n") {
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, markdownFenceMarker) {
+			continue
+		}
+		if inFence {
+			inFence, fenceLang = false, ""
+			continue
+		}
+		inFence = true
+		fenceLang = strings.TrimSpace(strings.TrimPrefix(trimmed, markdownFenceMarker))
+	}
+	return inFence, fenceLang
+}
+
+// markdownTitle 取首个非空行做消息标题（钉钉 sampleMarkdown 必须要标题）：
+// 去掉行首的 # / > / - / * / +、有序列表前缀与空白，截断到 markdownTitleMaxRunes。
+// 取不出内容时返回 markdownTitleFallback——平台不接受空标题。
+func markdownTitle(text string) string {
+	line := ""
+	for _, candidate := range strings.Split(text, "\n") {
+		if trimmed := strings.TrimSpace(candidate); trimmed != "" {
+			line = trimmed
+			break
+		}
+	}
+	line = trimMarkdownTitleMarkers(line)
+	if line == "" {
+		return markdownTitleFallback
+	}
+	if runes := []rune(line); len(runes) > markdownTitleMaxRunes {
+		line = string(runes[:markdownTitleMaxRunes])
+	}
+	return line
+}
+
+// trimMarkdownTitleMarkers 反复剥掉行首的标题/引用/列表标记，直到不再是标记。
+// 有序列表前缀只认「数字 + . / ) / 、」。
+func trimMarkdownTitleMarkers(line string) string {
+	for {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			return ""
+		}
+		if strings.IndexByte(markdownTitleMarkers, trimmed[0]) >= 0 {
+			line = trimmed[1:]
+			continue
+		}
+		if rest, ok := trimMarkdownOrderedListPrefix(trimmed); ok {
+			line = rest
+			continue
+		}
+		return trimmed
+	}
+}
+
+// trimMarkdownOrderedListPrefix 去掉 "1. " / "1) " / "1、" 形态的有序列表前缀。
+func trimMarkdownOrderedListPrefix(line string) (string, bool) {
+	runes := []rune(line)
+	i := 0
+	for i < len(runes) && runes[i] >= '0' && runes[i] <= '9' {
+		i++
+	}
+	if i == 0 || i >= len(runes) {
+		return line, false
+	}
+	switch runes[i] {
+	case '.', ')', '、':
+		return string(runes[i+1:]), true
+	default:
+		return line, false
+	}
 }
 
 // PlatformIdentityHash 是「站点 + 渠道 + 平台 + 组织 + 平台用户」的身份摘要。

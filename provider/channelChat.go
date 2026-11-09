@@ -889,6 +889,8 @@ func (st *channelTurnState) systemPrompt() string {
 		b.WriteString(strings.TrimSpace(st.agent.Strategy))
 		b.WriteString("\n")
 	}
+	// 输出约定：渠道是按平台富文本渲染的，模型自己决定用什么语法就等于把渲染交给运气。
+	b.WriteString("回复格式：使用飞书与钉钉都支持的 Markdown 子集——标题、列表、粗体、行内代码、代码块、链接；不使用 HTML、图片与表格（钉钉不渲染表格）。\n")
 	return b.String()
 }
 

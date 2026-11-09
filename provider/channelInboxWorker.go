@@ -225,7 +225,7 @@ func (c *channelInboxConsumer) consumeInbox(ctx context.Context, inbox *model.Ch
 		log.Printf("[channel] 站点 %d 渠道 %d 渠道轮次未完成：%s",
 			site.Id, channel.Id, channelInboxSafeErrorText(turnErr))
 		reply := channelInboxErrorReply(turnErr)
-		c.sendReply(ctx, inbox, binding, reply)
+		c.sendReply(ctx, inbox, binding, reply, false)
 		if reason := channelInboxDeniedReason(turnErr); reason != "" {
 			return model.InboxStatusDone, reason
 		}
@@ -240,7 +240,8 @@ func (c *channelInboxConsumer) consumeInbox(ctx context.Context, inbox *model.Ch
 		return model.InboxStatusFailed, channelInboxReasonTurnFailed
 	}
 
-	c.sendReply(ctx, inbox, binding, result.Reply)
+	// 模型回复按 Markdown 渲染：这里是唯一一处 markdown=true。
+	c.sendReply(ctx, inbox, binding, result.Reply, true)
 	return model.InboxStatusDone, ""
 }
 
@@ -337,9 +338,10 @@ func (c *channelInboxConsumer) loadBinding(ctx context.Context, identityHash str
 
 // sendReply 把回执发到私聊（绑定管理员）或群（chat_id）。
 //
+// markdown 只决定渲染方式：模型回复传 true，错误回执/通知传 false。
 // 发送失败只记脱敏日志，不改变任务的处理结果：模型/工具已经执行过，
 // 因回执失败重放会产生第二次真实副作用。
-func (c *channelInboxConsumer) sendReply(ctx context.Context, inbox *model.ChannelInbox, binding *model.ChannelBinding, text string) {
+func (c *channelInboxConsumer) sendReply(ctx context.Context, inbox *model.ChannelInbox, binding *model.ChannelBinding, text string, markdown bool) {
 	text = strings.TrimSpace(text)
 	if text == "" || c.adapter == nil || c.site == nil {
 		return
@@ -354,7 +356,7 @@ func (c *channelInboxConsumer) sendReply(ctx context.Context, inbox *model.Chann
 	}
 	sendCtx, cancel := context.WithTimeout(ctx, channelBindingReplyTimeout)
 	defer cancel()
-	if _, err := c.adapter.Send(sendCtx, target, OutboundMessage{Text: text}); err != nil {
+	if _, err := c.adapter.Send(sendCtx, target, OutboundMessage{Text: text, Markdown: markdown}); err != nil {
 		log.Printf("[channel] 站点 %d 渠道 %d 回执发送失败：%s",
 			c.site.Id, c.channelId, sanitizePlatformMessage(err.Error()))
 	}

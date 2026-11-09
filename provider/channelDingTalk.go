@@ -66,6 +66,9 @@ const (
 	dingTalkCustomTextEmotionBackground = "im_bg_1"
 	// dingTalkTextMsgKey 是文本消息模板键，msgParam 传 {"content":"..."}。
 	dingTalkTextMsgKey = "sampleText"
+	// dingTalkMarkdownMsgKey 是 Markdown 消息模板键，msgParam 传 {"title":"...","text":"..."}。
+	// 标题是必填项（平台不接受空标题），由 markdownTitle 从正文首行推导。
+	dingTalkMarkdownMsgKey = "sampleMarkdown"
 	// dingTalkTokenRefreshSkew 提前这么多时间视为过期，避免边界上用到刚过期的 token。
 	dingTalkTokenRefreshSkew = 60 * time.Second
 	// dingTalkTokenFallbackTTL 平台没给 expireIn 时的保守有效期。
@@ -364,11 +367,12 @@ func dingTalkConnectFatalError(err error) bool {
 	return false
 }
 
-// Send 发送一条文本消息：群聊走 groupMessages/send，单聊走 oToMessages/batchSend。
+// Send 发送一条消息（纯文本或 Markdown）：群聊走 groupMessages/send，单聊走 oToMessages/batchSend。
 //
 // 正文超过 dingTalkMaxTextRunes 时按 rune 分段逐条发送：超长正文会被平台以 4xx 拒绝，
-// 而 4xx 属于 permanent——不分段等于让长通知永久丢失。任一段失败立即返回该段的分类
-// 错误（已发出的段不回收：平台消息无法原子回滚，重发会造成重复）。
+// 而 4xx 属于 permanent——不分段等于让长通知永久丢失。Markdown 走 splitMarkdownText，
+// 每段用 sampleMarkdown 模板发送（msgParam 的标题由 markdownTitle 从该段首行推导）。
+// 任一段失败立即返回该段的分类错误（已发出的段不回收：平台消息无法原子回滚，重发会造成重复）。
 //
 // 发送只需要一次尝试：重试、投递状态与下一步动作属于 T8 的 worker。
 func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg OutboundMessage) (SendResult, error) {
@@ -393,10 +397,27 @@ func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg Outbou
 
 	targetId := strings.TrimSpace(target.PlatformTargetId)
 	result := SendResult{}
-	for _, segment := range splitPlatformText(msg.Text, dingTalkMaxTextRunes) {
-		msgParam, err := json.Marshal(map[string]string{"content": segment})
+	// Markdown 必须走 splitMarkdownText：它会在围栏内补闭合围栏，保证每段都能被渲染。
+	msgKey := dingTalkTextMsgKey
+	segments := splitPlatformText(msg.Text, dingTalkMaxTextRunes)
+	if msg.Markdown {
+		msgKey = dingTalkMarkdownMsgKey
+		segments = splitMarkdownText(msg.Text, dingTalkMaxTextRunes)
+	}
+	for _, segment := range segments {
+		var msgParam []byte
+		var err error
+		if msg.Markdown {
+			// 标题从正文首行推导：平台不接受空标题，且标题不参与正文渲染。
+			msgParam, err = json.Marshal(map[string]string{
+				"title": markdownTitle(segment),
+				"text":  segment,
+			})
+		} else {
+			msgParam, err = json.Marshal(map[string]string{"content": segment})
+		}
 		if err != nil {
-			return SendResult{}, permanentSendError("序列化钉钉文本消息失败：%v", err)
+			return SendResult{}, permanentSendError("序列化钉钉消息失败：%v", err)
 		}
 
 		path := dingTalkPrivateSendEndpoint
@@ -404,7 +425,7 @@ func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg Outbou
 			"robotCode": creds.AppId,
 			// robotCode 即自建应用的 appKey，与 stream 用的 clientId 是同一个值。
 			"userIds":  []string{targetId},
-			"msgKey":   dingTalkTextMsgKey,
+			"msgKey":   msgKey,
 			"msgParam": string(msgParam),
 		}
 		if target.Kind == TargetKindGroup {
@@ -412,7 +433,7 @@ func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg Outbou
 			body = map[string]any{
 				"robotCode":          creds.AppId,
 				"openConversationId": targetId,
-				"msgKey":             dingTalkTextMsgKey,
+				"msgKey":             msgKey,
 				"msgParam":           string(msgParam),
 			}
 		}

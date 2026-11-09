@@ -1274,3 +1274,15 @@ func TestChannelTurnTruncationIsSignalled(t *testing.T) {
 		t.Fatalf("应按 agent.MaxRounds=4 截断，实际调用 %d 次", m.calls())
 	}
 }
+
+func TestChannelSystemPromptDeclaresMarkdownRules(t *testing.T) {
+	w := channelChatTestSite(t)
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{})
+	st := &channelTurnState{principal: ExecutionPrincipal{}, agent: env.agent}
+	prompt := st.systemPrompt()
+	for _, want := range []string{"Markdown", "不使用 HTML", "表格"} {
+		if !strings.Contains(prompt, want) {
+			t.Errorf("系统提示缺少输出约定：%s", want)
+		}
+	}
+}

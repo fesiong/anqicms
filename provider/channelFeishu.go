@@ -64,7 +64,7 @@ const feishuAckEmojiType = "OnIt"
 // feishuCreateReactionFunc 是一次表情回复的参数化入口，便于离线断言消息 ID 与表情类型。
 type feishuCreateReactionFunc func(ctx context.Context, messageId, emojiType string) (*larkim.CreateMessageReactionResp, error)
 
-// feishuSendRequest 是一次文本发送的参数。
+// feishuSendRequest 是一次发送的参数。
 //
 // 不用 *larkim.CreateMessageReq 是因为 SDK 把 receive_id_type 藏在未导出的 apiReq 里，
 // 包外既读不到也断言不了；抽成结构体后测试可以直接验证接收者 ID 类型。
@@ -72,9 +72,41 @@ type feishuSendRequest struct {
 	ReceiveIdType string
 	ReceiveId     string
 	Text          string
+	// Markdown 为 true 时按富文本（post + md 标签）发送，否则仍是纯文本消息。
+	Markdown bool
 }
 
 type feishuCreateMessageFunc func(ctx context.Context, req feishuSendRequest) (*larkim.CreateMessageResp, error)
+
+// feishuOutboundPayload 把一次发送请求翻译成飞书的 msg_type + content。
+//
+// 飞书要求 content 是「JSON 序列化后的字符串」：
+//   - 纯文本：text 消息，content = {"text":"..."}；
+//   - Markdown：post 消息，content = {"zh_cn":{"content":[[{"tag":"md","text":"..."}]]}}。
+//     md 标签是飞书富文本里唯一支持 Markdown 子集的块类型，标题/list/代码块都由飞书渲染。
+//
+// 抽成纯函数是为了能离线断言载荷形状，不必真的发消息。
+func feishuOutboundPayload(req feishuSendRequest) (msgType, content string, err error) {
+	if !req.Markdown {
+		raw, marshalErr := json.Marshal(map[string]string{"text": req.Text})
+		if marshalErr != nil {
+			return "", "", permanentSendError("序列化飞书文本消息失败：%v", marshalErr)
+		}
+		return "text", string(raw), nil
+	}
+	raw, marshalErr := json.Marshal(map[string]any{
+		"zh_cn": map[string]any{
+			"content": [][]map[string]string{
+				{{"tag": "md", "text": req.Text}},
+			},
+		},
+	})
+	if marshalErr != nil {
+		// 只有字符串到 JSON 的编码，理论上不会失败；仍按永久错误处理，不重试。
+		return "", "", permanentSendError("序列化飞书 Markdown 消息失败：%v", marshalErr)
+	}
+	return "post", string(raw), nil
+}
 
 func (a *feishuAdapter) Name() string { return model.ChannelPlatformFeishu }
 
@@ -348,11 +380,13 @@ func feishuEventSenderType(event *larkim.P2MessageReceiveV1) string {
 	return feishuStringValue(event.Event.Sender.SenderType)
 }
 
-// Send 发送一条文本消息。群聊用 chat_id，私聊用 open_id（规格 §12 的用户/群标识口径）。
+// Send 发送一条消息（纯文本或 Markdown）。群聊用 chat_id，私聊用 open_id
+// （规格 §12 的用户/群标识口径）。
 //
 // 正文超过 feishuMaxTextRunes 时按 rune 分段逐条发送：超长正文会被平台以 230020 拒绝，
-// 而 230020 属于 permanent——不分段等于让长通知永久丢失。任一段失败立即返回该段的分类
-// 错误（已发出的段不回收：平台消息无法原子回滚，重发会造成重复）。
+// 而 230020 属于 permanent——不分段等于让长通知永久丢失。Markdown 走 splitMarkdownText，
+// 每段自身都是围栏配对的合法 Markdown。任一段失败立即返回该段的分类错误
+// （已发出的段不回收：平台消息无法原子回滚，重发会造成重复）。
 func (a *feishuAdapter) Send(ctx context.Context, target TargetRef, msg OutboundMessage) (SendResult, error) {
 	if err := validateTargetRef(target); err != nil {
 		return SendResult{}, err
@@ -379,11 +413,18 @@ func (a *feishuAdapter) Send(ctx context.Context, target TargetRef, msg Outbound
 	}
 
 	result := SendResult{}
-	for _, segment := range splitPlatformText(msg.Text, feishuMaxTextRunes) {
+	// 正文超长时按 rune 分段逐条发送：超长正文会被平台以 230020 拒绝。
+	// Markdown 必须走 splitMarkdownText：它会在围栏内补闭合围栏，保证每段都能被渲染。
+	segments := splitPlatformText(msg.Text, feishuMaxTextRunes)
+	if msg.Markdown {
+		segments = splitMarkdownText(msg.Text, feishuMaxTextRunes)
+	}
+	for _, segment := range segments {
 		resp, callErr := createMessage(ctx, feishuSendRequest{
 			ReceiveIdType: receiveIdType,
 			ReceiveId:     receiveId,
 			Text:          segment,
+			Markdown:      msg.Markdown,
 		})
 		if callErr != nil {
 			return SendResult{}, ClassifyPlatformSendError(callErr)
@@ -463,18 +504,16 @@ func defaultFeishuCreateReaction(creds PlatformCredentials) feishuCreateReaction
 // defaultFeishuCreateMessage 是生产路径：把 feishuSendRequest 组装成 SDK 请求并发出。
 func defaultFeishuCreateMessage(creds PlatformCredentials) feishuCreateMessageFunc {
 	return func(ctx context.Context, req feishuSendRequest) (*larkim.CreateMessageResp, error) {
-		// 飞书要求 content 是「JSON 序列化后的字符串」，文本消息形如 {"text":"..."}。
-		content, err := json.Marshal(map[string]string{"text": req.Text})
+		msgType, content, err := feishuOutboundPayload(req)
 		if err != nil {
-			// 只有字符串到 JSON 的编码，理论上不会失败；仍按永久错误处理，不重试。
-			return nil, permanentSendError("序列化飞书文本消息失败：%v", err)
+			return nil, err
 		}
 		sdkReq := larkim.NewCreateMessageReqBuilder().
 			ReceiveIdType(req.ReceiveIdType).
 			Body(larkim.NewCreateMessageReqBodyBuilder().
 				ReceiveId(req.ReceiveId).
-				MsgType("text").
-				Content(string(content)).
+				MsgType(msgType).
+				Content(content).
 				Build()).
 			Build()
 		return feishuClientFor(creds).Im.Message.Create(ctx, sdkReq)

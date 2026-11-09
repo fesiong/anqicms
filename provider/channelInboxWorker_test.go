@@ -782,3 +782,36 @@ func TestChannelInboxTurnInvalidKeepsSpecificReason(t *testing.T) {
 			ErrChannelTurnInvalid.Error(), after.LastError)
 	}
 }
+
+// 模型回复用 Markdown；错误提示保持纯文本（通知/回执不得改变渲染格式）。
+func TestChannelInboxModelReplyIsMarkdown(t *testing.T) {
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{exposed: []string{"seo_keyword"}})
+	env.useScriptedModel(t)
+	inbox := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
+	if status, reason := env.consumer.consumeInbox(context.Background(), inbox); status != model.InboxStatusDone {
+		t.Fatalf("消费失败：status=%s reason=%s", status, reason)
+	}
+	if len(env.adapter.sendCalls) != 1 {
+		t.Fatalf("应发送 1 条回复，实际 %d", len(env.adapter.sendCalls))
+	}
+	if !env.adapter.sendCalls[0].msg.Markdown {
+		t.Fatal("模型回复必须置 Markdown=true")
+	}
+}
+
+func TestChannelInboxErrorReplyIsText(t *testing.T) {
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{exposed: []string{"seo_keyword"}})
+	orig := runChannelTurnForInbox
+	runChannelTurnForInbox = func(*AiChatService, context.Context, ChannelTurnRequest) (ChannelTurnResult, error) {
+		return ChannelTurnResult{}, ErrChannelGroupRestricted
+	}
+	t.Cleanup(func() { runChannelTurnForInbox = orig })
+	inbox := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
+	env.consumer.consumeInbox(context.Background(), inbox)
+	if len(env.adapter.sendCalls) != 1 {
+		t.Fatalf("应发送 1 条错误回执，实际 %d", len(env.adapter.sendCalls))
+	}
+	if env.adapter.sendCalls[0].msg.Markdown {
+		t.Fatal("错误回执必须保持纯文本")
+	}
+}
