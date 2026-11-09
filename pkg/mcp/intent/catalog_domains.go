@@ -1101,8 +1101,8 @@ var gatedDomainIntents = map[string]string{
 // 常用意图已不打 DefaultOff，留空即可得到这份清单描述的内容/结构/SEO/互动/素材/交易/运维能力。
 // 清单刻意不含备份/升级/迁移/多站点/凭证与资金/对外发信这类高危面。
 //
-// 与留空的差异在内置主机级工具（shell_exec、fs_*、web）：它们同为默认可见，
-// 服务的是自我编写 Agent 的场景。纯运营站点显式填入本清单会把它们排除掉——
+// 与留空的差异只在默认可见但不在本清单的工具（当前为 shell_exec、fs_*、skill）：
+// 纯运营站点显式填入本清单会把它们排除掉——
 // 这正是本清单的实际价值：不是"打开能力"，而是"在不重启的前提下收口"。
 func RecommendedExposed() []string {
 	return []string{
