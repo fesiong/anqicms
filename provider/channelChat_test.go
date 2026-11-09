@@ -975,8 +975,20 @@ func TestChannelAuditRecordsToolCalls(t *testing.T) {
 	if err := w.DB.Model(&model.Admin{}).Where("id = ?", env.admin.Id).Update("status", 0).Error; err != nil {
 		t.Fatalf("停用管理员失败：%v", err)
 	}
-	if _, err := st.executeToolCall(ctx, call); !errors.Is(err, ErrChannelAdminInvalid) {
+	resDenied, err := st.executeToolCall(ctx, call)
+	if !errors.Is(err, ErrChannelAdminInvalid) {
 		t.Fatalf("停用后必须被拒，实际：%v", err)
+	}
+	if resDenied == nil || !resDenied.IsError {
+		t.Fatalf("停用后的结果必须标记 IsError，实际：%+v", resDenied)
+	}
+	// 拒绝文案会回灌模型并被平台转发，只能带哨兵文案，不得夹带管理员内部 ID。
+	if resDenied.Content != ErrChannelAdminInvalid.Error() {
+		t.Fatalf("停用管理员的拒绝文案只能回哨兵文案「%s」，实际 %q",
+			ErrChannelAdminInvalid.Error(), resDenied.Content)
+	}
+	if strings.Contains(resDenied.Content, strconv.Itoa(int(env.admin.Id))) {
+		t.Fatalf("拒绝文案不得包含管理员内部 ID（%d），实际 %q", env.admin.Id, resDenied.Content)
 	}
 	st.release()
 
