@@ -28,8 +28,8 @@ type SubscribedUser struct {
 	CreatedTime int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
 	UpdatedTime int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
 	UserId      uint   `json:"user_id" gorm:"column:user_id;type:int(10) unsigned not null;default:0;index"`
-	Openid      string `json:"openid" gorm:"column:openid;type:varchar(128) not null;default:'';index:idx_openid_template_id"`
-	TemplateId  string `json:"template_id" gorm:"column:template_id;type:varchar(64) not null;default:'';index:idx_openid_template_id"`
+	Openid      string `json:"openid" gorm:"column:openid;type:varchar(128) not null;default:'';index"`
+	TemplateId  string `json:"template_id" gorm:"column:template_id;type:varchar(64) not null;default:'';index"`
 }
 
 type WechatMessage struct {
