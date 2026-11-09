@@ -115,18 +115,6 @@ func (e *channelInboxTestEnv) useScriptedModel(t *testing.T) {
 	t.Cleanup(func() { runChannelTurnForInbox = orig })
 }
 
-// lastMessageIsToolResult 报告本次模型调用是否发生在「本轮工具已执行完」之后。
-//
-// scriptedChannelModel.rounds 跨轮次累计，脚本用 round 判断「本轮第一次调用」会在
-// 第二次入站时失效；模型输入里最后一条是 tool 消息才是可靠的「同一轮里已执行过工具」信号
-// （每轮开头最后一条一定是 user 消息，见 channelChat.go 的 messages 构造）。
-func lastMessageIsToolResult(in []*schema.Message) bool {
-	if len(in) == 0 {
-		return false
-	}
-	return in[len(in)-1].Role == schema.Tool
-}
-
 // receiveInbound 走真实入站处理（wk.handleInbound），返回落库后的任务行。
 func (e *channelInboxTestEnv) receiveInbound(t *testing.T, ev InboundEvent) *model.ChannelInbox {
 	t.Helper()
@@ -807,7 +795,13 @@ func TestChannelInboxErrorReplyIsText(t *testing.T) {
 	}
 	t.Cleanup(func() { runChannelTurnForInbox = orig })
 	inbox := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
-	env.consumer.consumeInbox(context.Background(), inbox)
+	status, reason := env.consumer.consumeInbox(context.Background(), inbox)
+	if status != model.InboxStatusDone {
+		t.Fatalf("群限制拒绝应记为 done，实际 status=%s", status)
+	}
+	if reason != ErrChannelGroupRestricted.Error() {
+		t.Fatalf("原因应保留群限制哨兵，实际 %q", reason)
+	}
 	if len(env.adapter.sendCalls) != 1 {
 		t.Fatalf("应发送 1 条错误回执，实际 %d", len(env.adapter.sendCalls))
 	}

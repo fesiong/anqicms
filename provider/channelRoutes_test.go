@@ -820,6 +820,11 @@ func TestChannelCapabilitiesDerivesFromCatalog(t *testing.T) {
 			withActions++
 		}
 	}
+	for _, name := range []string{"seo_keyword", "content_article", "api"} {
+		if _, ok := byName[name]; !ok {
+			t.Fatalf("能力视图缺少意图 %s", name)
+		}
+	}
 	if withActions == 0 {
 		t.Fatal("没有任何意图解析出动作，能力展示对前端无用")
 	}

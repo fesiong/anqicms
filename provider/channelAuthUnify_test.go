@@ -75,6 +75,11 @@ func TestChannelCapabilitiesShowsExposureAndGroup(t *testing.T) {
 	for _, item := range view.Intents {
 		byName[item.Name] = item
 	}
+	for _, name := range []string{"seo_keyword", "content_article", "api"} {
+		if _, ok := byName[name]; !ok {
+			t.Fatalf("能力视图缺少意图 %s", name)
+		}
+	}
 	if !byName["seo_keyword"].Exposed {
 		t.Error("站点曝光内的 seo_keyword 必须标记 exposed=true")
 	}
