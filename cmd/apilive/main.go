@@ -346,7 +346,7 @@ func main() {
 	var before int64
 	db.Raw("SELECT COUNT(*) FROM keywords WHERE title = ?", testKeyword).Scan(&before)
 
-	if _, wErr := k.Execute(ctx, "seo_keyword", fmt.Sprintf(`{"action":"create","title":%q,"link":"/__mcp_test__"}`, testKeyword)); wErr != nil {
+	if _, wErr := k.Execute(ctx, "seo_keyword", fmt.Sprintf(`{"action":"create","title":%q}`, testKeyword)); wErr != nil {
 		logger.Printf("  ✘ seo_keyword create 失败: %v", wErr)
 	} else {
 		// 直接用 DB 定位 id（不依赖 list 返回结构，更稳），再通过意图发起删除，保证可逆。
