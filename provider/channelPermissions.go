@@ -187,11 +187,10 @@ func channelCapHardBlocked(capName string) bool {
 //
 // 返回的 error 都可用 errors.Is 分流（见 channelPrincipal.go 的哨兵）。
 // 判定只读库、不写任何服务级状态。
+//
+// 这是意图门禁的唯一入口：审批入口（CheckIntentPermissionApproved）已随审批子系统删除，
+// 不得再出现「带凭据即可放行 confirm」的第二次入口。
 func (w *Website) CheckIntentPermission(ctx context.Context, p ExecutionPrincipal, intentName, action string) error {
-	return w.checkIntentPermission(ctx, p, intentName, action, false)
-}
-
-func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipal, intentName, action string, approved bool) error {
 	if err := w.checkChannelPrincipal(p); err != nil {
 		return err
 	}
@@ -213,7 +212,7 @@ func (w *Website) checkIntentPermission(ctx context.Context, p ExecutionPrincipa
 	if err := w.checkChannelAgentWhitelist(ctx, p.AgentId, intentName); err != nil {
 		return err
 	}
-	if err := w.checkChannelPolicy(channel, p, intentName, action, approved); err != nil {
+	if err := w.checkChannelPolicy(channel, p, intentName, action); err != nil {
 		return err
 	}
 
@@ -433,8 +432,10 @@ func (w *Website) loadChannelAgentWhitelist(ctx context.Context, agentId uint) (
 }
 
 // checkChannelPolicy 校验渠道策略修订号与「意图 + 动作」裁决。
-// approved=true 时 confirm 视为通过（保留给带凭据的复核入口，当前渠道轮次固定传 false）。
-func (w *Website) checkChannelPolicy(ch *model.MessageChannel, p ExecutionPrincipal, intentName, action string, approved bool) error {
+//
+// confirm 当前即拒绝（ErrChannelPolicyNeedsConfirm）：审批入口已随审批子系统删除，
+// 不存在任何「确认即放行」的旁路；策略层本身由任务 2 移除。
+func (w *Website) checkChannelPolicy(ch *model.MessageChannel, p ExecutionPrincipal, intentName, action string) error {
 	if int64(ch.Revision) != p.PolicyRevision {
 		return fmt.Errorf("%w：渠道策略修订号 %d 与执行主体 %d 不一致", ErrChannelPolicyStale, ch.Revision, p.PolicyRevision)
 	}
@@ -447,9 +448,6 @@ func (w *Website) checkChannelPolicy(ch *model.MessageChannel, p ExecutionPrinci
 	case PolicyDecisionAllow:
 		return nil
 	case PolicyDecisionConfirm:
-		if approved {
-			return nil
-		}
 		return fmt.Errorf("%w：%s.%s", ErrChannelPolicyNeedsConfirm, intentName, action)
 	default:
 		return fmt.Errorf("%w：%s.%s", ErrChannelPolicyDenied, intentName, action)

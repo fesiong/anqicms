@@ -1,8 +1,6 @@
 package provider
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -12,8 +10,7 @@ import (
 // 解析策略 JSON、定义裁决取值与可 errors.Is 的哨兵错误。
 //
 // 真正需要读库的权限判定在 channelPermissions.go。这里刻意保持纯函数/纯类型，
-// 因为策略解析既会出现在执行路径上（T6），也会出现在审批复核路径上（T7），
-// 两边必须用同一份解析结果，而不是各写一份「怎么读这个 JSON」的猜测。
+// 让执行路径与门禁读到同一份解析结果，而不是各写一份「怎么读这个 JSON」的猜测。
 
 // PolicyDecision 是渠道策略对「意图 + 动作」的裁决。
 type PolicyDecision string
@@ -21,7 +18,8 @@ type PolicyDecision string
 const (
 	// PolicyDecisionAllow 直接执行。
 	PolicyDecisionAllow PolicyDecision = "allow"
-	// PolicyDecisionConfirm 需要管理员在聊天中确认后才执行（T7 负责落审批）。
+	// PolicyDecisionConfirm 需要管理员在聊天中确认后才执行。审批子系统已删除，
+	// 当前没有确认入口，因此一律按拒绝处理（策略层由任务 2 移除）。
 	PolicyDecisionConfirm PolicyDecision = "confirm"
 	// PolicyDecisionDeny 直接拒绝。
 	PolicyDecisionDeny PolicyDecision = "deny"
@@ -94,34 +92,6 @@ func (p ChannelPolicy) Decision(intentName, action string) PolicyDecision {
 	return PolicyDecisionDeny
 }
 
-// ChannelArgsHash 计算审批参数的规范化摘要：json.Unmarshal 成 any，再 json.Marshal
-// 规范化（键序确定、空白归一）后取 SHA-256 小写十六进制。
-//
-// 返回空串表示参数不是合法 JSON——调用方必须据此拒绝，不能把空串当成「没有参数」
-// 去和审批记录里的空 args_hash 比对：那会让一条 args_hash 为空的脏记录变成万能审批。
-//
-// 一致性约束：T7 落审批时必须用**本函数**算 args_hash。用别的序列化方式
-// （例如直接 hash 原始请求体）会因为键序/空白差异算出另一个摘要，
-// 表现为「管理员确认真实发生、执行时永远对不上」。
-// 已知边界：走 any 意味着数字统一按 float64 处理，绝对值超过 2^53 的整数会丢精度。
-// 审批参数里没有这种量级的 ID；真要出现，两侧也必须用本函数才能对齐，不能各算各的。
-func ChannelArgsHash(argsJson string) string {
-	raw := strings.TrimSpace(argsJson)
-	if raw == "" {
-		return ""
-	}
-	var payload any
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		return ""
-	}
-	canonical, err := json.Marshal(payload)
-	if err != nil {
-		return ""
-	}
-	sum := sha256.Sum256(canonical)
-	return hex.EncodeToString(sum[:])
-}
-
 // ExecutionPrincipal 是一次渠道请求的执行主体。
 //
 // 只由调用方（T6 的聊天执行器）在请求内构造并逐层传入，**不放 context 全局单例、
@@ -146,8 +116,8 @@ type ExecutionPrincipal struct {
 	InGroup bool
 }
 
-// 渠道门禁哨兵错误。全部用 %w 包装，调用方（T6/T7）用 errors.Is 分流：
-//   - ErrChannelPolicyNeedsConfirm → 创建审批并回复确认卡片，不是失败；
+// 渠道门禁哨兵错误。全部用 %w 包装，调用方用 errors.Is 分流：
+//   - ErrChannelPolicyNeedsConfirm → 当前一律拒绝（审批入口已随审批子系统删除）；
 //   - ErrChannelPolicyStale → 提示重新发起（策略修订号已变）；
 //   - 其余 → 拒绝并回执原因。
 //
@@ -170,7 +140,4 @@ var (
 	// 漏判一次就是「仅通知渠道可执行管理动作」。与 ErrChannelPrincipalInvalid 分开，
 	// 是为了排障时能区分「配置关了聊天」与「主体/绑定对不上」。
 	ErrChannelDisabled = errors.New("渠道已停用或未开启聊天管理")
-	// ErrChannelApprovalInvalid：审批凭据无法自证（不存在、不匹配、已过期、参数或策略已变）。
-	// 文案里不出现任何标识、参数或摘要。
-	ErrChannelApprovalInvalid = errors.New("审批记录无效或已失效，请重新确认")
 )

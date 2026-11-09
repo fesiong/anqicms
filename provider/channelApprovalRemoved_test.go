@@ -6,15 +6,17 @@ import (
 	"testing"
 )
 
-// 渠道执行链不得再出现写门或审批分支。
-// 反向对照：在 channelChat.go 里临时加回 WriteGateMiddleware 或 applyApprovalGrant，本用例变红。
+// 渠道执行链与渠道授权层不得再出现写门、审批分支或审批残留符号。
+// 反向对照：在 channelChat.go 里临时加回 WriteGateMiddleware/applyApprovalGrant，
+// 或在 channelPrincipal.go 里临时加回 ChannelArgsHash/ErrChannelApprovalInvalid，本用例变红。
 func TestChannelChainHasNoWriteGateOrApproval(t *testing.T) {
-	raw, err := os.ReadFile("channelChat.go")
-	if err != nil {
-		t.Fatalf("读取 channelChat.go 失败：%v", err)
+	files := []string{
+		"channelChat.go",
+		// 授权层的纯数据文件：审批哨兵与参数摘要曾定义在这里，
+		// 只扫 channelChat.go 时它们重新长回来不会变红。
+		"channelPrincipal.go",
 	}
-	src := string(raw)
-	for _, forbidden := range []string{
+	forbidden := []string{
 		"WriteGateMiddleware",
 		"ChannelPendingConfirmation",
 		"ChannelApprovalGrant",
@@ -23,9 +25,20 @@ func TestChannelChainHasNoWriteGateOrApproval(t *testing.T) {
 		"channelApprovalBackend",
 		"approvalDecision",
 		"setApprovalErr",
-	} {
-		if strings.Contains(src, forbidden) {
-			t.Errorf("渠道执行链仍包含审批实现：%s", forbidden)
+		// 审批子系统的导出残留：审批删掉后零调用，留着就是给后来者一个可用的旁路口子。
+		"ChannelArgsHash",
+		"ErrChannelApprovalInvalid",
+	}
+	for _, name := range files {
+		raw, err := os.ReadFile(name)
+		if err != nil {
+			t.Fatalf("读取 %s 失败：%v", name, err)
+		}
+		src := string(raw)
+		for _, symbol := range forbidden {
+			if strings.Contains(src, symbol) {
+				t.Errorf("%s 仍包含审批实现：%s", name, symbol)
+			}
 		}
 	}
 }
