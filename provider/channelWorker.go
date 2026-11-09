@@ -429,13 +429,122 @@ func (wk *channelWorker) handleInbound(ctx context.Context, adapter PlatformAdap
 	if err := manager.site.DB.WithContext(ctx).Create(inbox).Error; err != nil {
 		if isDuplicateKeyError(err) {
 			// 平台重投 / 并发重复：唯一键已存在，视为成功。
+			// 不重复回执：首投已经贴过表情，重复贴只会多出一个（或直接被平台拒绝）。
 			return nil
 		}
 		log.Printf("[channel] 站点 %d 渠道 %d 入站事件落库失败：%s",
 			manager.site.Id, channel.Id, sanitizePlatformMessage(err.Error()))
 		return err
 	}
+
+	// 消息已持久化，先给用户一个即时回执，再交给消费侧跑模型与工具。
+	// 异步执行：两个 SDK 都要求回调在数秒内应答，把一次网络往返压在回调路径上
+	// 会让平台判定超时并重投；消费侧在 ≤1s 内开始处理，回执通常仍早于正式答复。
+	go wk.acknowledgeInbound(wk.ctx, adapter, event, bindingId)
 	return nil
+}
+
+// channelAckTimeout 是「收到即回执」的时限。回执在独立 goroutine 里执行，
+// 超时只丢弃这一次回执，不影响消息本身的处理与正式答复。
+const channelAckTimeout = 5 * time.Second
+
+// channelAckGate 判断一条已落库的消息是否值得贴「收到」回执。
+//
+// 判据必须与消费侧（channelInboxConsumer.consumeInbox）一致：未绑定、仅通知渠道、
+// 未配置接待智能体、群目标未获授权的消息在消费侧会被忽略或拒绝，
+// 给它们回执等于向用户承诺一件不会发生的事。
+type channelAckGate struct {
+	SiteId           uint
+	Channel          *model.MessageChannel
+	Event            InboundEvent
+	Bound            bool
+	AiAvailable      bool
+	GroupTargetReady bool
+}
+
+// allowed 是回执的唯一判据：任何一项不满足都静默跳过。
+func (g channelAckGate) allowed() bool {
+	if g.Channel == nil || !g.Bound || !g.AiAvailable {
+		return false
+	}
+	// 渠道聊天只在主站点开放（与 channelChat.go 的 R49 同一条边界）：
+	// 子站点会被执行器直接拒绝，回执只会制造「正在处理」的假象。
+	if g.SiteId != channelMainSiteId {
+		return false
+	}
+	if g.Channel.ChatEnabled != 1 || g.Channel.AgentId == 0 {
+		return false
+	}
+	// 只回执纯文本：图片/卡片等在消费侧拿不到可执行正文，回执没有意义
+	// （钉钉卡片回调更没有会话标识，表情接口按消息 ID 定位也会失败）。
+	if strings.TrimSpace(g.Event.Kind) != InboundKindText || strings.TrimSpace(g.Event.Text) == "" {
+		return false
+	}
+	switch g.Event.ChatType {
+	case ChatTypeP2P:
+		return true
+	case ChatTypeGroup:
+		return g.GroupTargetReady
+	default:
+		return false
+	}
+}
+
+// acknowledgeInbound 在消息落库后给平台消息贴一个轻量回执（表情），
+// 让用户知道消息已经进了处理队列。适配器不支持时直接跳过。
+//
+// 只做一次性尝试：失败仅记脱敏日志。回执是体验优化，
+// 绝不能因为平台限流/权限缺失而影响后续的模型轮次与正式答复。
+func (wk *channelWorker) acknowledgeInbound(ctx context.Context, adapter PlatformAdapter, event InboundEvent, bindingId uint) {
+	ack, ok := adapter.(InboundAcknowledger)
+	if !ok {
+		return
+	}
+	manager := wk.manager
+	if manager == nil || manager.site == nil {
+		return
+	}
+	gate := channelAckGate{
+		SiteId:      manager.site.Id,
+		Channel:     &wk.channel,
+		Event:       event,
+		Bound:       bindingId != 0,
+		AiAvailable: manager.site.AiSrv != nil,
+	}
+	if strings.TrimSpace(event.ChatType) == ChatTypeGroup {
+		gate.GroupTargetReady = wk.groupTargetReady(ctx, event.ChatId)
+	}
+	if !gate.allowed() {
+		return
+	}
+	ackCtx, cancel := context.WithTimeout(ctx, channelAckTimeout)
+	defer cancel()
+	if err := ack.Acknowledge(ackCtx, event); err != nil {
+		log.Printf("[channel] 站点 %d 渠道 %d 收到回执未发出（不影响消息处理）：%s",
+			manager.site.Id, wk.channel.Id, sanitizePlatformMessage(err.Error()))
+	}
+}
+
+// groupTargetReady 判断群目标是否已批准且开启管理。
+// 与消费侧（channelInboxConsumer.turnRequest → RunChannelTurn 的 R47 校验）同一判据：
+// 未批准或仅通知的群，消息会被拒绝执行，提前回执就是骗人。
+func (wk *channelWorker) groupTargetReady(ctx context.Context, chatId string) bool {
+	manager := wk.manager
+	targetId := strings.TrimSpace(chatId)
+	if manager == nil || manager.site == nil || manager.site.DB == nil || targetId == "" {
+		return false
+	}
+	var count int64
+	err := manager.site.DB.WithContext(ctx).Model(&model.ChannelTarget{}).
+		Where("`site_id` = ? AND `channel_id` = ? AND `kind` = ? AND `platform_target_id` = ? AND `approved` = 1 AND `management_enabled` = 1",
+			manager.site.Id, wk.channel.Id, TargetKindGroup, targetId).
+		Count(&count).Error
+	if err != nil {
+		log.Printf("[channel] 站点 %d 渠道 %d 查询群目标失败，跳过收到回执：%s",
+			manager.site.Id, wk.channel.Id, sanitizePlatformMessage(err.Error()))
+		return false
+	}
+	return count > 0
 }
 
 // handleBindingAttempt 处理绑定消息。无论成功失败都回一句固定中文；

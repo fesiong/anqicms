@@ -51,6 +51,18 @@ type PlatformAdapter interface {
 	Send(ctx context.Context, target TargetRef, msg OutboundMessage) (SendResult, error)
 }
 
+// InboundAcknowledger 是适配器的**可选**能力：给「刚收到的这条消息」贴一个轻量回执
+// （平台侧的表情回复），让用户知道消息已经进了处理队列。
+//
+// 不放进 PlatformAdapter 的必需方法：平台能力不同，没有表情接口的适配器只需不实现它，
+// 调用方用类型断言判断即可。回执是体验优化，任何失败都不得影响消息本身的处理与回复。
+//
+// event.EventId 必须是**平台消息 ID**（飞书 message_id / 钉钉 msgId）：表情接口按它定位消息，
+// 退化成事件头 ID 时接口会失败，适配器应返回 permanent 错误而不是重试。
+type InboundAcknowledger interface {
+	Acknowledge(ctx context.Context, event InboundEvent) error
+}
+
 // InboundSink 消费一条已标准化的入站事件。返回错误表示本次处理失败（例如入库失败），
 // 适配器只记录日志，不向平台回调返回错误——是否让平台重投由 T4 的持久化语义决定。
 //

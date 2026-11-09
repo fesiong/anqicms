@@ -38,6 +38,8 @@ type feishuAdapter struct {
 	// createMessage 可注入：默认走 feishuClientFor(creds).Im.Message.Create。
 	// 留出这个钩子是为了在没有真实租户的测试里断言「群聊用 chat_id、私聊用 open_id」。
 	createMessage feishuCreateMessageFunc
+	// createReaction 可注入：默认走 Im.MessageReaction.Create（「收到即回执」）。
+	createReaction feishuCreateReactionFunc
 	// fetchBotOpenId 可注入：默认走 bot/v3/info。测试里替换以免发真实请求。
 	fetchBotOpenId func(ctx context.Context, creds PlatformCredentials) string
 }
@@ -51,6 +53,16 @@ const feishuMaxTextRunes = 3500
 // lark.Client 默认 ReqTimeout=0（等价 http.DefaultClient，没有响应超时），
 // 建连前的同步请求一旦撞上半开连接就会把整条重连循环永久卡住，因此必须自带超时。
 const feishuBotIdentityTimeout = 5 * time.Second
+
+// feishuAckEmojiType 是「已收到」回执使用的表情类型。
+//
+// 取官方表情枚举里的 OnIt（语义为「收到，马上处理」）：它不暗示「已完成」，
+// 避免在最终答复还没发出时给出错误信号。完整枚举见
+// https://open.feishu.cn/document/server-docs/im-v1/message-reaction/emojis-introduce
+const feishuAckEmojiType = "OnIt"
+
+// feishuCreateReactionFunc 是一次表情回复的参数化入口，便于离线断言消息 ID 与表情类型。
+type feishuCreateReactionFunc func(ctx context.Context, messageId, emojiType string) (*larkim.CreateMessageReactionResp, error)
 
 // feishuSendRequest 是一次文本发送的参数。
 //
@@ -397,6 +409,55 @@ func (a *feishuAdapter) Send(ctx context.Context, target TargetRef, msg Outbound
 		result.PlatformMessageId = *resp.Data.MessageId
 	}
 	return result, nil
+}
+
+// Acknowledge 在用户消息下贴一个「已收到」表情，不产生额外的消息气泡。
+//
+// 前置权限：应用需开通 im:message.reactions:write_only（及 im:message）并重新发布版本；
+// 未开通时平台返回业务错误，本方法按分类错误返回，由调用方记日志并继续处理消息。
+// 表情必须由机器人身份添加，因此要求机器人在该会话内——入站事件能到达本身就满足这一点。
+func (a *feishuAdapter) Acknowledge(ctx context.Context, event InboundEvent) error {
+	// 注意：normalizeFeishuInbound 在 message_id 缺失时会退回事件头 ID，
+	// 那不是可定位的消息 ID，表情接口会失败。这里不做二次兜底，直接按本地参数错误返回。
+	messageId := strings.TrimSpace(event.EventId)
+	if messageId == "" {
+		return permanentSendError("飞书回执缺少消息标识")
+	}
+
+	createReaction := a.createReaction
+	if createReaction == nil {
+		createReaction = defaultFeishuCreateReaction(normalizePlatformCredentials(a.creds))
+	}
+	resp, err := createReaction(ctx, messageId, feishuAckEmojiType)
+	if err != nil {
+		return ClassifyPlatformSendError(err)
+	}
+	if resp == nil {
+		return transientSendError("飞书回执未返回响应")
+	}
+	if !resp.Success() {
+		status := 0
+		if resp.ApiResp != nil {
+			status = resp.ApiResp.StatusCode
+		}
+		return ClassifyPlatformSendError(
+			newPlatformResponseError(model.ChannelPlatformFeishu, status, resp.Code, resp.Msg),
+		)
+	}
+	return nil
+}
+
+// defaultFeishuCreateReaction 是生产路径：按消息 ID 添加一个指定类型的表情回复。
+func defaultFeishuCreateReaction(creds PlatformCredentials) feishuCreateReactionFunc {
+	return func(ctx context.Context, messageId, emojiType string) (*larkim.CreateMessageReactionResp, error) {
+		sdkReq := larkim.NewCreateMessageReactionReqBuilder().
+			MessageId(messageId).
+			Body(larkim.NewCreateMessageReactionReqBodyBuilder().
+				ReactionType(larkim.NewEmojiBuilder().EmojiType(emojiType).Build()).
+				Build()).
+			Build()
+		return feishuClientFor(creds).Im.MessageReaction.Create(ctx, sdkReq)
+	}
 }
 
 // defaultFeishuCreateMessage 是生产路径：把 feishuSendRequest 组装成 SDK 请求并发出。

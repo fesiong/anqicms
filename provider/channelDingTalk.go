@@ -53,6 +53,17 @@ const (
 	dingTalkGroupSendEndpoint = "/v1.0/robot/groupMessages/send"
 	// dingTalkPrivateSendEndpoint 机器人批量发送单聊消息。
 	dingTalkPrivateSendEndpoint = "/v1.0/robot/oToMessages/batchSend"
+	// dingTalkEmotionReplyEndpoint 给消息添加自定义文字表情（「收到即回执」）。
+	// 钉钉没有飞书那样的表情回复，只能用自定义文字表情气泡；对齐 cc-connect / yaklang 的实现。
+	dingTalkEmotionReplyEndpoint = "/v1.0/robot/emotion/reply"
+	// dingTalkAckEmotionText 是回执气泡上的文字。
+	// 只表达「已收到」，不写「处理中」：表情会一直留在消息上，最终答复发出后不能被读成仍在处理。
+	dingTalkAckEmotionText = "收到"
+	// dingTalkEmotionTypeCustomText 是自定义文字表情的类型值。
+	dingTalkEmotionTypeCustomText = 2
+	// dingTalkCustomTextEmotionID / dingTalkCustomTextEmotionBackground 是文字表情的样式 ID。
+	dingTalkCustomTextEmotionID         = "2659900"
+	dingTalkCustomTextEmotionBackground = "im_bg_1"
 	// dingTalkTextMsgKey 是文本消息模板键，msgParam 传 {"content":"..."}。
 	dingTalkTextMsgKey = "sampleText"
 	// dingTalkTokenRefreshSkew 提前这么多时间视为过期，避免边界上用到刚过期的 token。
@@ -438,6 +449,78 @@ func (a *dingtalkAdapter) Send(ctx context.Context, target TargetRef, msg Outbou
 	return result, nil
 }
 
+// dingTalkTextEmotion / dingTalkEmotionRequest 是表情回执的请求体。
+// 字段名与取值对齐 cc-connect（platform/dingtalk/dingtalk.go）与 yaklang 的同类实现：
+// 钉钉文档只描述了文字表情的形状，没有给出 Go 结构体，字段名按平台实际接受的 JSON 写。
+type dingTalkTextEmotion struct {
+	EmotionID    string `json:"emotionId"`
+	EmotionName  string `json:"emotionName"`
+	Text         string `json:"text"`
+	BackgroundID string `json:"backgroundId"`
+}
+
+type dingTalkEmotionRequest struct {
+	RobotCode          string              `json:"robotCode"`
+	OpenMsgID          string              `json:"openMsgId"`
+	OpenConversationID string              `json:"openConversationId"`
+	EmotionType        int                 `json:"emotionType"`
+	EmotionName        string              `json:"emotionName"`
+	TextEmotion        dingTalkTextEmotion `json:"textEmotion"`
+}
+
+// Acknowledge 给用户刚发来的消息贴一个「收到」文字表情，不产生额外的消息气泡。
+//
+// openMsgId 必须用回调里的 msgId（InboundEvent.EventId），会话用 conversationId。
+// 失败只作为错误返回，由调用方记日志：回执不是消息处理的前提。
+func (a *dingtalkAdapter) Acknowledge(ctx context.Context, event InboundEvent) error {
+	msgId := strings.TrimSpace(event.EventId)
+	chatId := strings.TrimSpace(event.ChatId)
+	if msgId == "" || chatId == "" {
+		return permanentSendError("钉钉回执缺少消息标识或会话标识")
+	}
+	creds := normalizePlatformCredentials(a.creds)
+	if err := validatePlatformCredentials(creds); err != nil {
+		return permanentSendError("钉钉回执缺少应用凭据")
+	}
+
+	accessToken, tokenErr := a.accessToken(ctx, creds)
+	if tokenErr != nil {
+		return tokenErr
+	}
+	body := dingTalkEmotionRequest{
+		RobotCode:          creds.AppId,
+		OpenMsgID:          msgId,
+		OpenConversationID: chatId,
+		EmotionType:        dingTalkEmotionTypeCustomText,
+		EmotionName:        dingTalkAckEmotionText,
+		TextEmotion: dingTalkTextEmotion{
+			EmotionID:    dingTalkCustomTextEmotionID,
+			EmotionName:  dingTalkAckEmotionText,
+			Text:         dingTalkAckEmotionText,
+			BackgroundID: dingTalkCustomTextEmotionBackground,
+		},
+	}
+
+	var result struct {
+		Success *bool `json:"success"`
+	}
+	_, sendErr := dingTalkPostJSON(ctx, a.httpClientOrDefault(), a.openAPIHostOrDefault(), dingTalkEmotionReplyEndpoint, accessToken, body, &result)
+	if sendErr != nil {
+		var respErr *platformResponseError
+		// 与发送同一处理：401 可能是缓存 token 被提前作废，清缓存后按可重试返回。
+		if errors.As(sendErr, &respErr) && respErr.StatusCode == http.StatusUnauthorized {
+			dingTalkTokenCache.invalidate(creds.AppId)
+			return transientSendError("钉钉访问令牌失效，已清除缓存，可重试（HTTP %d）：%s",
+				respErr.StatusCode, sanitizePlatformMessage(respErr.Message))
+		}
+		return ClassifyPlatformSendError(sendErr)
+	}
+	if result.Success != nil && !*result.Success {
+		return transientSendError("钉钉未接受回执请求")
+	}
+	return nil
+}
+
 // newDingTalkAdapterWithEndpoint 构造指向自定义 OpenAPI 端点与 HTTP 客户端的适配器。
 // 只给测试用（httptest.Server 驱动发送路径）；生产一律走 NewPlatformAdapter。
 func newDingTalkAdapterWithEndpoint(creds PlatformCredentials, host string, httpClient *http.Client) *dingtalkAdapter {
@@ -508,7 +591,9 @@ func dingTalkPostJSON(ctx context.Context, httpClient *http.Client, host, path, 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return retryAfter, newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, dingTalkErrorText(raw))
 	}
-	if out != nil {
+	// 2xx 且响应体为空按成功处理：表情回复接口（emotion/reply）成功时不保证返回 JSON，
+	// 把空体当成解析失败会让一次成功的回执被记成错误（cc-connect 同样以空体为成功）。
+	if out != nil && len(bytes.TrimSpace(raw)) > 0 {
 		if err := json.Unmarshal(raw, out); err != nil {
 			return retryAfter, newPlatformResponseError(model.ChannelPlatformDingTalk, resp.StatusCode, 0, "响应解析失败")
 		}
