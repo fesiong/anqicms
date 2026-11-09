@@ -582,8 +582,6 @@ var channelPermissionSentinels = []error{
 	ErrChannelSiteUnsupported,
 	ErrChannelToolNotVisible,
 	ErrChannelPrincipalInvalid,
-	ErrChannelIntentUnknown,
-	ErrChannelIntentNotExposed,
 	ErrChannelAgentNotAllowed,
 	ErrChannelAdminInvalid,
 	ErrChannelDisabled,

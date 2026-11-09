@@ -36,8 +36,6 @@ type ExecutionPrincipal struct {
 // 文案里不允许出现密钥、token、摘要、管理员/智能体内部 ID 等敏感值（全局约束）。
 var (
 	ErrChannelPrincipalInvalid = errors.New("渠道执行主体无效")
-	ErrChannelIntentUnknown    = errors.New("意图不存在")
-	ErrChannelIntentNotExposed = errors.New("意图未在当前站点开放")
 	ErrChannelAgentNotAllowed  = errors.New("执行智能体与渠道不一致")
 	ErrChannelAdminInvalid     = errors.New("管理员不存在或已停用")
 	// ErrChannelPermissionDenied 只作为安全兜底：身份校验通过后仍被拒绝时统一归到它。

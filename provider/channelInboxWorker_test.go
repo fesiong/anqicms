@@ -745,3 +745,40 @@ func TestChannelInboxFinishInboxWritesWithCancelledContext(t *testing.T) {
 		t.Fatalf("终态必须释放租约（lease_until=0），实际 %d", after.LeaseUntil)
 	}
 }
+
+// ============================================================
+// 11. 轮次非法：failed 但 last_error 必须保留具体原因
+//
+// 「轮次非法」与「代次过期」是两种不同的排障场景，但都落到 failed：
+// 代次过期的文案早已单列，轮次非法不能被通用的「渠道轮次执行失败」吞掉——
+// 否则后台只能看到「执行失败」，看不出是请求本身不合法（例如缺少平台会话标识）。
+// ============================================================
+
+// TestChannelInboxTurnInvalidKeepsSpecificReason 替换包级接缝让整轮返回
+// ErrChannelTurnInvalid，断言终态仍是 failed（不是忽略），且 last_error 落具体哨兵文案。
+func TestChannelInboxTurnInvalidKeepsSpecificReason(t *testing.T) {
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
+
+	// 与 useScriptedModel 同口径：保存原接缝、t.Cleanup 还原。本用例不并行。
+	orig := runChannelTurnForInbox
+	runChannelTurnForInbox = func(svc *AiChatService, ctx context.Context, req ChannelTurnRequest) (ChannelTurnResult, error) {
+		return ChannelTurnResult{}, fmt.Errorf("%w：缺少平台会话标识", ErrChannelTurnInvalid)
+	}
+	t.Cleanup(func() { runChannelTurnForInbox = orig })
+
+	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
+	claimed, ok, err := env.consumer.claimNext(context.Background())
+	if err != nil || !ok || claimed == nil {
+		t.Fatalf("认领任务失败：ok=%v err=%v", ok, err)
+	}
+	env.consumer.processInbox(context.Background(), claimed)
+
+	after := env.reloadInbox(t, row.Id)
+	if after.Status != model.InboxStatusFailed {
+		t.Fatalf("轮次非法的任务必须标记 failed，实际 %q", after.Status)
+	}
+	if after.LastError != ErrChannelTurnInvalid.Error() {
+		t.Fatalf("last_error 必须保留具体原因「%s」，实际 %q",
+			ErrChannelTurnInvalid.Error(), after.LastError)
+	}
+}

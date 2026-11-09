@@ -43,7 +43,9 @@ const (
 	channelInboxReasonUnbound          = "未绑定"
 	channelInboxReasonAgentUnavailable = "渠道未配置接待智能体"
 	channelInboxReasonLoadFailed       = "读取处理上下文失败"
-	channelInboxReasonTurnFailed       = "渠道轮次执行失败"
+	// channelInboxReasonTurnFailed 只覆盖「执行失败」类（模型/工具/上下文取消）；
+	// 轮次非法（ErrChannelTurnInvalid）与代次过期（ErrChannelTurnStale）各自落具体哨兵文案。
+	channelInboxReasonTurnFailed = "渠道轮次执行失败"
 )
 
 // runChannelTurnForInbox 是消费侧的**包级可替换接缝**。
@@ -230,6 +232,11 @@ func (c *channelInboxConsumer) consumeInbox(ctx context.Context, inbox *model.Ch
 		if errors.Is(turnErr, ErrChannelTurnStale) {
 			return model.InboxStatusFailed, ErrChannelTurnStale.Error()
 		}
+		if errors.Is(turnErr, ErrChannelTurnInvalid) {
+			// 请求本身不合法（如缺少平台会话标识）：仍记 failed，但文案要能直接定位，
+			// 否则和「模型/工具执行失败」混成同一条，排障时无从区分。
+			return model.InboxStatusFailed, ErrChannelTurnInvalid.Error()
+		}
 		return model.InboxStatusFailed, channelInboxReasonTurnFailed
 	}
 
@@ -386,8 +393,6 @@ func channelInboxDeniedReason(err error) string {
 		ErrChannelSiteUnsupported,
 		ErrChannelToolNotVisible,
 		ErrChannelPrincipalInvalid,
-		ErrChannelIntentUnknown,
-		ErrChannelIntentNotExposed,
 		ErrChannelAgentNotAllowed,
 		ErrChannelAdminInvalid,
 		ErrChannelDisabled,

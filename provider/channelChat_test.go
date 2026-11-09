@@ -337,6 +337,15 @@ func TestChannelRevokedMidTurnBlocksNextCall(t *testing.T) {
 	if res2 == nil || !res2.IsError {
 		t.Fatalf("被拒绝的调用结果必须标记 IsError，实际：%+v", res2)
 	}
+	// 回灌给模型的文本会被平台适配器转发，只能带哨兵文案：
+	// 底层错误（绑定/管理员校验）可能夹带内部标识，必须先被 channelSafePermissionError 压掉。
+	if res2.Content != ErrChannelPrincipalInvalid.Error() {
+		t.Fatalf("被拒绝的调用只能回灌哨兵文案「%s」，实际 %q",
+			ErrChannelPrincipalInvalid.Error(), res2.Content)
+	}
+	if strings.Contains(res2.Content, strconv.Itoa(int(env.admin.Id))) {
+		t.Fatalf("拒绝文案不得包含管理员内部 ID（%d），实际 %q", env.admin.Id, res2.Content)
+	}
 }
 
 // TestChannelUnexposedIntentStaysInvisible 未曝光的意图既不出现在工具面，也不能被直接派发。
