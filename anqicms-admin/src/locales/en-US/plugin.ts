@@ -429,6 +429,14 @@ export default {
   'plugin.group.shipping_discount.description':
     'Recommended 90%-100%. Users can enjoy a shipping discount when placing orders.',
   'plugin.group.permission': 'Distribution permission settings',
+  'plugin.group.publish_category': 'Postable categories',
+  'plugin.group.publish_category.description':
+    'Only the checked categories can be posted to from the frontend by this user group; posting to any other category is rejected. Checking none means the group cannot post at all (unchecked by default). Parent and child categories must be checked separately.',
+  'plugin.group.publish_category.select_all': 'Select all',
+  'plugin.group.publish_category.loading': 'Loading categories…',
+  'plugin.group.publish_category.empty': 'No postable category yet',
+  'plugin.group.publish_category.load_failed':
+    'Failed to load categories. Saving will not change the posting permission — please refresh and retry.',
   'plugin.group.delete.confirm': 'Are you sure you want to delete this record?',
   'plugin.guestbook.reply.required':
     'Please configure email notifications first; search for "Email Notifications" in the features.',

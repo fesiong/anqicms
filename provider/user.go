@@ -401,6 +401,8 @@ func (w *Website) GetUserGroups() []*model.UserGroup {
 	var groups []*model.UserGroup
 
 	w.DB.Order("level asc,id asc").Find(&groups)
+	// 后台用户组列表就是编辑弹窗的数据源，授权栏目必须一起带出来才能回显。
+	w.AttachUserGroupPublishCategories(groups...)
 
 	return groups
 }
@@ -464,8 +466,37 @@ func (w *Website) SaveUserGroupInfo(req *request.UserGroupRequest) (*model.UserG
 		group.Setting = *req.Setting
 	}
 
-	if err := w.DB.Save(group).Error; err != nil {
+	// 可投稿栏目（关系表 user_group_categories）：
+	//   nil      —— 不动现有授权（PATCH / AI 调用）
+	//   空数组    —— 清空授权，该用户组从此不能在前台投稿
+	//   非空数组  —— 全量替换
+	// 先校验再落库：栏目非法时连 user_groups 那一行都不该被改。
+	var publishCategoryIds []uint
+	if req.PublishCategoryIds != nil {
+		publishCategoryIds = NormalizePublishCategoryIds(*req.PublishCategoryIds)
+		if err := w.validatePublishCategories(publishCategoryIds); err != nil {
+			return nil, err
+		}
+	}
+
+	err := w.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Save(group).Error; err != nil {
+			return err
+		}
+		if req.PublishCategoryIds != nil {
+			return w.replaceUserGroupPublishCategories(tx, group.Id, publishCategoryIds)
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
+	}
+
+	// 回填授权，保存接口直接把 group 返回给前端，前端据此确认落库结果。
+	if req.PublishCategoryIds != nil {
+		group.PublishCategoryIds = publishCategoryIds
+	} else {
+		group.PublishCategoryIds = w.GetUserGroupPublishCategoryIds(group.Id)
 	}
 
 	return group, nil
@@ -510,7 +541,13 @@ func (w *Website) DeleteUserGroup(groupId uint) error {
 		return err
 	}
 
-	err = w.DB.Delete(&group).Error
+	err = w.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Delete(&group).Error; err != nil {
+			return err
+		}
+		// 授权关系跟着用户组一起消失，别留孤儿行（重新建组时会拿到旧授权）。
+		return tx.Where("`group_id` = ?", groupId).Delete(&model.UserGroupCategory{}).Error
+	})
 
 	return err
 }

@@ -75,16 +75,26 @@ type UserPasswordRequest struct {
 // 指针语义同 UserRequest：Status 的 0 是合法业务值（停用），Level 的 0 也是（最低等级），
 // 用值类型就永远写不进去——SaveUserGroupInfo 原本甚至硬编码 Status: 1，
 // 等于用户组一旦创建就无法停用。
+//
+// PublishCategoryIds（可投稿栏目）同样必须是指针，而且是最容易被改坏的一个：
+//
+//	nil     —— 不改动现有授权
+//	空数组  —— 清空授权，该用户组从此不能在前台投稿
+//	非空    —— 全量替换（前端表单提交走这条）
+//
+// 改成值类型会把「没传」和「传了空」混成一件事，于是所有没带这个字段的调用
+// （AI / 老前端 / 第三方集成）都会在保存用户组时顺手抹掉管理员配好的授权。
 type UserGroupRequest struct {
-	Id          uint                    `json:"id"`                 // 用户组 ID
-	Title       *string                 `json:"title"`              // 用户组名称
-	Description *string                 `json:"description"`        // 用户组介绍
-	Level       *int                    `json:"level"`              // group level：0,1,2,3...
-	Price       *int64                  `json:"price"`              // 用户组售价，单位：分，用于VIP
-	Status      *int                    `json:"status"`             // 用户组状态：0=停用，1=启用
-	Setting     *model.UserGroupSetting `json:"setting"`            //用户组配置
-	UpdateAll   bool                    `json:"update_all" ast:"-"` // 全量覆盖：未传字段按零值写入
-	Partial     bool                    `json:"partial" ast:"-"`    // PATCH：只写显式传入的字段
+	Id                 uint                    `json:"id"`                   // 用户组 ID
+	Title              *string                 `json:"title"`                // 用户组名称
+	Description        *string                 `json:"description"`          // 用户组介绍
+	Level              *int                    `json:"level"`                // group level：0,1,2,3...
+	Price              *int64                  `json:"price"`                // 用户组售价，单位：分，用于VIP
+	Status             *int                    `json:"status"`               // 用户组状态：0=停用，1=启用
+	Setting            *model.UserGroupSetting `json:"setting"`              //用户组配置
+	PublishCategoryIds *[]uint                 `json:"publish_category_ids"` // 可投稿栏目 ID 列表（空数组=清空授权）
+	UpdateAll          bool                    `json:"update_all" ast:"-"`   // 全量覆盖：未传字段按零值写入
+	Partial            bool                    `json:"partial" ast:"-"`      // PATCH：只写显式传入的字段
 }
 
 type UserGroupDeleteRequest struct {

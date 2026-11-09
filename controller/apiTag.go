@@ -2,6 +2,7 @@ package controller
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"mime/multipart"
 	"net/url"
@@ -1429,9 +1430,10 @@ func ApiArchivePublish(ctx iris.Context) {
 	// 是否需要审核
 	req.Draft = currentSite.Safe.APIPublish != 1
 	userGroup := ctx.Values().Get("userGroup")
+	var group *model.UserGroup
 	if userGroup != nil {
-		group, ok := userGroup.(*model.UserGroup)
-		if ok && group != nil && group.Setting.ContentNoVerify {
+		group, _ = userGroup.(*model.UserGroup)
+		if group != nil && group.Setting.ContentNoVerify {
 			req.Draft = !group.Setting.ContentNoVerify
 		}
 	}
@@ -1465,8 +1467,21 @@ func ApiArchivePublish(ctx iris.Context) {
 	if !req.Partial {
 		req.UpdateAll = true
 	}
-	archive, err := currentSite.SaveArchive(&req)
+	// 走用户投稿统一入口（内部先做「可投稿栏目」授权校验）。
+	// 别在这里直接调 SaveArchive：那会绕过栏目授权，等于把权限收在注释里。
+	archive, err := currentSite.PublishArchiveAsUser(&req, group)
 	if err != nil {
+		var forbidden *provider.PublishCategoryForbiddenError
+		if errors.As(err, &forbidden) {
+			ctx.JSON(iris.Map{
+				"code": config.StatusNoAccess,
+				"msg":  publishForbiddenMessage(currentSite, forbidden),
+				"data": iris.Map{
+					"category_ids": forbidden.CategoryIds,
+				},
+			})
+			return
+		}
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,
 			"msg":  err.Error(),
@@ -1484,6 +1499,19 @@ func ApiArchivePublish(ctx iris.Context) {
 		"msg":  msg,
 		"data": archive,
 	})
+}
+
+// publishForbiddenMessage 把「没有投稿权限」翻译成人能看懂的提示。
+// 能查到栏目名就点名（语言键带 %s，与 TplTr 的 printf 约定一致），
+// 查不到（栏目已被删除）退回通用文案，避免提示里出现空引号。
+func publishForbiddenMessage(currentSite *provider.Website, err *provider.PublishCategoryForbiddenError) string {
+	if len(err.CategoryIds) > 0 {
+		if category := currentSite.GetCategoryFromCache(err.CategoryIds[0]); category != nil && category.Title != "" {
+			return currentSite.TplTr("%sCannotBePostedTo", category.Title)
+		}
+	}
+
+	return currentSite.TplTr("NoPermissionToPublishInThisCategory")
 }
 
 func ApiReviewList(ctx iris.Context) {

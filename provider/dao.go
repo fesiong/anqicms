@@ -172,10 +172,12 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 
 			&model.User{},
 			&model.UserGroup{},
+			&model.UserGroupCategory{},
 			&model.LoginLog{},
 			&model.UserWechat{},
 			&model.UserWithdraw{},
 			&model.WeappQrcode{},
+			&model.SubscribedUser{},
 			&model.Order{},
 			&model.OrderDetail{},
 			&model.OrderAddress{},
@@ -303,6 +305,8 @@ func (w *Website) InitModelData() {
 	// 老站库的 modules 表没有 kind 列，Automigrate 又只在版本变化时跑，
 	// 所以这里无条件补一次（幂等）。
 	_ = w.ensureModuleKindColumn()
+	// 用户组-可投稿栏目关系表：同样不能只靠 AutoMigrateDB（见 ensureUserGroupCategoryTable）。
+	_ = w.ensureUserGroupCategoryTable()
 	// 商品属性拆表（3.7.1 回填 + 3.8.0 删列），顺序与失败闸门见 initArchiveSchema。
 	w.initArchiveSchema()
 	// 检查默认模型，如果没有，则添加, 默认的模型：1 文章，2 产品

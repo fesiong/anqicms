@@ -395,6 +395,14 @@ export default {
   'plugin.group.shipping_discount.description':
     '建议设置为90%-100%。用户下单时可享受运费折扣。',
   'plugin.group.permission': '分销权限设置',
+  'plugin.group.publish_category': '可投稿栏目',
+  'plugin.group.publish_category.description':
+    '仅勾选的栏目允许该用户组在前台投稿，未勾选的栏目会被投稿接口拒绝。一个都不勾选表示该用户组不能投稿（默认不选中）。父栏目与子栏目需分别勾选。',
+  'plugin.group.publish_category.select_all': '全选',
+  'plugin.group.publish_category.loading': '栏目加载中…',
+  'plugin.group.publish_category.empty': '当前还没有可投稿的栏目',
+  'plugin.group.publish_category.load_failed':
+    '栏目加载失败，本次保存不会修改投稿权限，请刷新页面重试',
   'plugin.group.delete.confirm': '确定要删除该条数据吗？',
   'plugin.guestbook.reply.required':
     '请先进行邮件提醒设置，在功能里搜“邮件提醒”',

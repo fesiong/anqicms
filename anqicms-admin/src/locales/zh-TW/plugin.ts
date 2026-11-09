@@ -397,6 +397,14 @@ export default {
   'plugin.group.shipping_discount.description':
     '建議設定為 90%-100%。使用者下單時可享受運費折扣。',
   'plugin.group.permission': '經銷權限設定',
+  'plugin.group.publish_category': '可投稿欄目',
+  'plugin.group.publish_category.description':
+    '僅勾選的欄目允許該用戶組在前台投稿，未勾選的欄目會被投稿介面拒絕。一個都不勾選表示該用戶組不能投稿（預設不選中）。父欄目與子欄目需分別勾選。',
+  'plugin.group.publish_category.select_all': '全選',
+  'plugin.group.publish_category.loading': '欄目載入中…',
+  'plugin.group.publish_category.empty': '目前還沒有可投稿的欄目',
+  'plugin.group.publish_category.load_failed':
+    '欄目載入失敗，本次儲存不會修改投稿權限，請重新整理頁面後重試',
   'plugin.group.delete.confirm': '確定要刪除該條資料嗎？',
   'plugin.guestbook.reply.required':
     '請先進行郵件提醒設定，在功能裡搜「郵件提醒」',

@@ -484,6 +484,12 @@ func ApiGetUserDetail(ctx iris.Context) {
 		})
 		return
 	}
+	// 带上所属用户组及其「可投稿栏目」，前台投稿页据此只渲染有权限的栏目，
+	// 而不是让用户选完再被打回一个权限错误。
+	if userGroup, err := currentSite.GetUserGroupInfo(user.GroupId); err == nil {
+		currentSite.AttachUserGroupPublishCategories(userGroup)
+		user.Group = userGroup
+	}
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
@@ -625,6 +631,9 @@ func ApiGetUserGroupDetail(ctx iris.Context) {
 			}
 		}
 	}
+	// 与后台详情接口口径一致：默认不查授权（GetUserGroupInfo 在登录中间件热路径上），
+	// 这里是页面要用的详情，补一次。
+	currentSite.AttachUserGroupPublishCategories(group)
 
 	ctx.JSON(iris.Map{
 		"code": config.StatusOK,
