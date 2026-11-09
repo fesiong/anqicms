@@ -384,10 +384,10 @@ func ChannelTemplatePreview(ctx iris.Context) {
 	})
 }
 
-// ChannelRecords 运行记录分页（投递/入站任务/审批/审计），秘密字段已投影剔除（R93）。
+// ChannelRecords 运行记录分页（投递/入站任务/审计），秘密字段已投影剔除（R93）。
 //
 // 参数说明：
-//   - 查询参数 "type": delivery / inbox / approval / audit（必填）
+//   - 查询参数 "type": delivery / inbox / audit（必填）
 //   - 查询参数 "status": 可选状态筛选
 //   - 查询参数 "page": 页码，默认 1
 //   - 查询参数 "page_size": 每页条数，默认 20，上限 100

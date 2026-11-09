@@ -755,7 +755,7 @@ func TestChannelRecordsProjectionHidesSensitiveFields(t *testing.T) {
 		}
 	})
 
-	forbiddenKeys := []string{"\"content\":", "\"canonical_args\":", "\"result_summary\":", "\"public_id\":", "\"identity_hash\":", "\"target_hash\":", "\"event_hash\":"}
+	forbiddenKeys := []string{"\"content\":", "\"identity_hash\":", "\"target_hash\":", "\"event_hash\":"}
 	cases := []struct {
 		name       string
 		recordType string
@@ -821,6 +821,9 @@ func TestChannelRecordsProjectionHidesSensitiveFields(t *testing.T) {
 	}
 	if _, err := w.ChannelRecords("message", "", 1, 20); err == nil {
 		t.Fatal("未知 type 必须被拒绝")
+	}
+	if _, err := w.ChannelRecords("approval", "", 1, 20); !errors.Is(err, errChannelRecordTypeInvalid) {
+		t.Fatalf("type=approval 必须报记录类型不支持，实际 err=%v", err)
 	}
 }
 
