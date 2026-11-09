@@ -3,11 +3,14 @@ package provider
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path"
 	"sort"
 	"strings"
 	"time"
+
+	"gorm.io/gorm"
 
 	"kandaoni.com/anqicms/config"
 	"kandaoni.com/anqicms/model"
@@ -417,7 +420,11 @@ func (w *Website) channelExposureConfig() intent.Config {
 }
 
 // checkChannelAgentWhitelist 校验**本次执行的智能体**（principal.AgentId）是否被授权使用该意图。
-// 无记录 / 空数组 / 解析失败 / 未列名 → 拒绝；**不支持通配符**（不发明 "*"）。
+// **不支持通配符**（不发明 "*"）。
+//
+// 三态语义（2026-11-09 决议）：没有配置行 → 沿用站点曝光（曝光在更早的门禁里已校验）；
+// 有配置行 → 只认列名，空数组 / 解析失败一律拒绝。后台没有「接待白名单」编辑入口，
+// 若继续把「缺策略」当成零能力，任何渠道都永远没有任何工具可用。
 //
 // 按 principal.AgentId 而不是 channel.AgentId 查：两者已被 channelForPrincipal 强制相等，
 // 但用执行主体取值能保证「白名单校验的主体 = 执行主体」这一条在代码上直接可见，
@@ -426,26 +433,65 @@ func (w *Website) checkChannelAgentWhitelist(ctx context.Context, agentId uint, 
 	if agentId == 0 {
 		return fmt.Errorf("%w：渠道未配置接待智能体", ErrChannelAgentNotAllowed)
 	}
+	state, err := w.loadChannelAgentWhitelist(ctx, agentId)
+	if err != nil {
+		return fmt.Errorf("%w：智能体 %d 的接待策略读取失败", ErrChannelAgentNotAllowed, agentId)
+	}
+	if !state.configured {
+		// 没有配置行：不额外收窄，站点曝光就是本层的上界。
+		return nil
+	}
+	if len(state.allowed) == 0 {
+		return fmt.Errorf("%w：智能体 %d 的接待白名单为空或无法解析", ErrChannelAgentNotAllowed, agentId)
+	}
+	if state.allowed[intentName] {
+		return nil
+	}
+	return fmt.Errorf("%w：智能体 %d 不允许 %s", ErrChannelAgentNotAllowed, agentId, intentName)
+}
+
+// channelAgentWhitelist 是接待白名单的读取结果。
+//
+//	configured=false           没有配置行 → 沿用站点曝光（不额外收窄）
+//	configured=true, allowed≠∅ 只认列名的意图（精确匹配，不支持通配符）
+//	configured=true, allowed=∅ 空数组 / 非法 JSON → 显式拒绝（fail closed）
+//
+// 「没有配置」与「配成空」必须分开：前者是后台还没有编辑入口时的正常状态，
+// 后者是明确的「关闭该智能体的全部能力」，不能因为读不懂或配成空就回落到曝光。
+type channelAgentWhitelist struct {
+	configured bool
+	allowed    map[string]bool
+}
+
+func (w *Website) loadChannelAgentWhitelist(ctx context.Context, agentId uint) (channelAgentWhitelist, error) {
+	if w == nil || w.DB == nil || agentId == 0 {
+		return channelAgentWhitelist{configured: true}, nil
+	}
 	var policy model.AgentReceptionPolicy
 	err := w.DB.WithContext(ctx).
 		Where("`site_id` = ? AND `agent_id` = ?", w.Id, agentId).
 		Take(&policy).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return channelAgentWhitelist{configured: false}, nil
+	}
 	if err != nil {
-		return fmt.Errorf("%w：智能体 %d 没有接待策略", ErrChannelAgentNotAllowed, agentId)
+		return channelAgentWhitelist{configured: true}, err
 	}
-	if strings.TrimSpace(policy.AllowedIntents) == "" {
-		return fmt.Errorf("%w：智能体 %d 的接待白名单为空", ErrChannelAgentNotAllowed, agentId)
+	raw := strings.TrimSpace(policy.AllowedIntents)
+	if raw == "" {
+		return channelAgentWhitelist{configured: true}, nil
 	}
-	var allowed []string
-	if err := json.Unmarshal([]byte(policy.AllowedIntents), &allowed); err != nil {
-		return fmt.Errorf("%w：智能体 %d 的接待白名单无法解析", ErrChannelAgentNotAllowed, agentId)
+	var names []string
+	if err := json.Unmarshal([]byte(raw), &names); err != nil {
+		return channelAgentWhitelist{configured: true}, nil
 	}
-	for _, name := range allowed {
-		if strings.TrimSpace(name) == intentName {
-			return nil
+	allowed := make(map[string]bool, len(names))
+	for _, name := range names {
+		if trimmed := strings.TrimSpace(name); trimmed != "" {
+			allowed[trimmed] = true
 		}
 	}
-	return fmt.Errorf("%w：智能体 %d 不允许 %s", ErrChannelAgentNotAllowed, agentId, intentName)
+	return channelAgentWhitelist{configured: true, allowed: allowed}, nil
 }
 
 // checkChannelPolicy 校验渠道策略修订号与「意图 + 动作」裁决。

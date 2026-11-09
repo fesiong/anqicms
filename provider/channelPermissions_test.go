@@ -491,23 +491,40 @@ func TestChannelSwitchNeedsConfirmSentinel(t *testing.T) {
 	}
 }
 
-func TestAgentWhitelistDeniesUnlistedIntent(t *testing.T) {
+func TestAgentWhitelistFallsBackToSiteExposure(t *testing.T) {
 	w := channelPermTestSite(t)
 	ctx := context.Background()
+	withTestAiSetting(t, w, []string{"seo_keyword"})
 	ch := newPermTestChannel(t, w, `{"intents":{"seo_keyword":{"*":"allow"}}}`, 1)
 	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
 	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
 	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
 
-	// 无记录
-	err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list")
-	if !errors.Is(err, ErrChannelAgentNotAllowed) {
-		t.Fatalf("无接待策略必须拒绝，实际：%v", err)
+	// 没有配置行：不再当成零能力，沿用站点曝光（本次曝光含 seo_keyword）。
+	// 反向对照：把它改回「缺策略即拒绝」时这条会红 —— 渠道将永远没有任何工具。
+	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); err != nil {
+		t.Fatalf("未配置接待白名单时应沿用站点曝光，实际：%v", err)
 	}
-	// 空数组
+	// 回落的是曝光面，不是全开：曝光之外仍必须拒绝。
+	withTestAiSetting(t, w, []string{"content_article"})
+	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelIntentNotExposed) {
+		t.Fatalf("回落站点曝光后，曝光面之外的意图仍必须拒绝，实际：%v", err)
+	}
+	withTestAiSetting(t, w, []string{"seo_keyword"})
+
+	// 空数组是「显式关闭」，与「没有配置」必须分开：前者不能偷偷回落到曝光。
 	setPermTestAllowedIntents(t, w, ch.AgentId, nil)
 	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelAgentNotAllowed) {
 		t.Fatalf("空白名单必须拒绝，实际：%v", err)
+	}
+	// 解析失败同样拒绝，不能因为读不懂就放行。
+	if err := w.DB.Model(&model.AgentReceptionPolicy{}).
+		Where("site_id = ? AND agent_id = ?", w.Id, ch.AgentId).
+		Update("allowed_intents", "not-json").Error; err != nil {
+		t.Fatalf("写入非法白名单失败：%v", err)
+	}
+	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelAgentNotAllowed) {
+		t.Fatalf("白名单解析失败必须拒绝，实际：%v", err)
 	}
 	// 未列名
 	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"content_article"})
@@ -523,6 +540,23 @@ func TestAgentWhitelistDeniesUnlistedIntent(t *testing.T) {
 	setPermTestAllowedIntents(t, w, ch.AgentId, []string{"*"})
 	if err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list"); !errors.Is(err, ErrChannelAgentNotAllowed) {
 		t.Fatalf("智能体白名单不支持通配符，实际：%v", err)
+	}
+}
+
+// TestChannelPolicyStillGatesWithoutWhitelist 锁住「回落只跳过白名单这一层」：
+// 没有配置行时，渠道策略与曝光必须照常拦截，不能变成全放行。
+func TestChannelPolicyStillGatesWithoutWhitelist(t *testing.T) {
+	w := channelPermTestSite(t)
+	ctx := context.Background()
+	withTestAiSetting(t, w, []string{"seo_keyword"})
+	ch := newPermTestChannel(t, w, `{"intents":{"seo_keyword":{"*":"deny"}}}`, 1)
+	admin := newPermTestAdmin(t, w, []string{"/plugin/contentops/keyword"}, 1)
+	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
+	p := permTestPrincipal(w, ch, admin.Id, binding.Id)
+
+	err := w.CheckIntentPermission(ctx, p, "seo_keyword", "list")
+	if !errors.Is(err, ErrChannelPolicyDenied) {
+		t.Fatalf("未配置白名单时渠道策略 deny 仍必须生效，实际：%v", err)
 	}
 }
 

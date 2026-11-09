@@ -267,7 +267,7 @@ func TestChannelMenuRegistered(t *testing.T) {
 		if fields == nil {
 			continue
 		}
-		if fields["Path"] == `"/plugin/channels"` {
+		if fields["Path"] == `"/plugin/channel/channels"` {
 			channelsMenu = menu
 			if fields["GroupKey"] != `"plugin"` {
 				t.Errorf("渠道菜单 GroupKey 是 %s，期望 \"plugin\"", fields["GroupKey"])
@@ -281,7 +281,7 @@ func TestChannelMenuRegistered(t *testing.T) {
 		}
 	}
 	if channelsMenu == nil {
-		t.Fatal("config/menu.go 的 plugin 分组里没有 Path=\"/plugin/channels\" 的菜单")
+		t.Fatal("config/menu.go 的 plugin 分组里没有 Path=\"/plugin/channel/channels\" 的菜单")
 	}
 	if len(channelBackendOwners) != 1 {
 		t.Fatalf("Backend=\"/channels\" 的菜单数量为 %d（%v），必须恰好一条，否则菜单权限映射会撞车",
@@ -912,6 +912,22 @@ func TestChannelCapabilitiesDerivesFromCatalog(t *testing.T) {
 		}
 		if item.Name == allowedIntent && !*item.AgentAllowed {
 			t.Fatalf("白名单里的 %s 应为 agent_allowed=true", item.Name)
+		}
+	}
+
+	// 没有配置行时必须回落到站点曝光：agent_allowed 全为 true，与执行侧同口径。
+	// 反向对照：若这里仍按「缺策略即拒绝」，页面会显示「智能体未授权」而执行已放行，
+	// 展示与执行两套结论。
+	if err := w.DB.Where("id = ?", policy.Id).Delete(&model.AgentReceptionPolicy{}).Error; err != nil {
+		t.Fatalf("删除接待策略失败：%v", err)
+	}
+	view, err = w.ChannelCapabilities(agentId)
+	if err != nil {
+		t.Fatalf("无接待策略时读取能力清单失败：%v", err)
+	}
+	for _, item := range view.Intents {
+		if item.AgentAllowed == nil || !*item.AgentAllowed {
+			t.Fatalf("没有接待策略时 %s 应回落为 agent_allowed=true，实际 %v", item.Name, item.AgentAllowed)
 		}
 	}
 }

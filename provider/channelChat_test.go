@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -755,7 +756,7 @@ func TestChannelVisibleToolsFilteredByAgentWhitelist(t *testing.T) {
 			want:      []string{"api"},
 		},
 		{
-			name:      "没有接待策略 → 不给任何工具",
+			name:      "没有接待策略 → 沿用站点曝光",
 			whitelist: []string{"seo_keyword"},
 			mutate: func(t *testing.T, env *channelTurnTestEnv) {
 				if err := w.DB.Where("site_id = ? AND agent_id = ?", w.Id, env.agent.Id).
@@ -763,7 +764,7 @@ func TestChannelVisibleToolsFilteredByAgentWhitelist(t *testing.T) {
 					t.Fatalf("删除接待策略失败：%v", err)
 				}
 			},
-			want: nil,
+			want: []string{"content_article", "seo_keyword", "api"},
 		},
 		{
 			name:      "白名单解析失败 → 不给任何工具",
@@ -807,12 +808,16 @@ func TestChannelVisibleToolsFilteredByAgentWhitelist(t *testing.T) {
 			for _, tool := range st.tools {
 				got = append(got, tool.Name)
 			}
-			if len(got) != len(tc.want) {
-				t.Fatalf("可见工具应为 %v，实际 %v", tc.want, got)
+			// 工具顺序来自意图目录，断言只关心集合（顺序不是契约）。
+			want := append([]string(nil), tc.want...)
+			sort.Strings(got)
+			sort.Strings(want)
+			if len(got) != len(want) {
+				t.Fatalf("可见工具应为 %v，实际 %v", want, got)
 			}
-			for i := range tc.want {
-				if got[i] != tc.want[i] {
-					t.Fatalf("可见工具应为 %v，实际 %v", tc.want, got)
+			for i := range want {
+				if got[i] != want[i] {
+					t.Fatalf("可见工具应为 %v，实际 %v", want, got)
 				}
 			}
 
@@ -827,6 +832,47 @@ func TestChannelVisibleToolsFilteredByAgentWhitelist(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestChannelNoReceptionPolicyToolsetBoundedByExposure 从工具面再确认一次回落边界：
+// 没有配置行时可见工具 = 站点曝光，而不是「全部意图」；执行侧对不可见工具仍然拒绝。
+func TestChannelNoReceptionPolicyToolsetBoundedByExposure(t *testing.T) {
+	w := channelChatTestSite(t)
+	withTestAiSetting(t, w, []string{"content_article"})
+	env := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
+		policy:      `{"intents":{"content_article":{"*":"allow"},"seo_keyword":{"*":"allow"}}}`,
+		whitelist:   []string{"seo_keyword"},
+		permissions: []string{"/"},
+	})
+	if err := w.DB.Where("site_id = ? AND agent_id = ?", w.Id, env.agent.Id).
+		Delete(&model.AgentReceptionPolicy{}).Error; err != nil {
+		t.Fatalf("删除接待策略失败：%v", err)
+	}
+	ctx := context.Background()
+	chatId := "fallback-tools-" + channelPermSuffix()
+	env.cleanupSession(t, env.binding, chatId)
+
+	st, err := env.svc.prepareChannelTurn(ctx, env.request(chatId, "你好", 1, false))
+	if err != nil {
+		t.Fatalf("准备轮次失败：%v", err)
+	}
+	defer st.release()
+
+	names := make([]string, 0, len(st.tools))
+	for _, tool := range st.tools {
+		names = append(names, tool.Name)
+	}
+	if len(names) != 1 || names[0] != "content_article" {
+		t.Fatalf("没有接待策略时可见工具必须等于站点曝光（仅 content_article），实际 %v", names)
+	}
+	// 曝光之外的意图即使渠道策略 allow，也不能落执行。
+	if _, err := st.executeToolCall(ctx, &schema.ToolCall{
+		ID:       "outside-exposure",
+		Type:     "function",
+		Function: schema.FunctionCall{Name: "seo_keyword", Arguments: `{"action":"list"}`},
+	}); !errors.Is(err, ErrChannelToolNotVisible) {
+		t.Fatalf("曝光之外的意图必须返回 ErrChannelToolNotVisible，实际：%v", err)
 	}
 }
 

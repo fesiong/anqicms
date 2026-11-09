@@ -105,7 +105,8 @@ func (m *MessageChannel) BeforeSave(tx *gorm.DB) error {
 }
 
 // AgentReceptionPolicy 接待智能体的管理能力白名单。
-// 无授权配置时默认无管理能力（fail closed）。
+// 没有配置行时沿用站点曝光（后台尚无本表的编辑入口，缺策略不能等于零能力）；
+// 配置了空数组或解析失败则一律拒绝（fail closed），与「未配置」区分开。
 // 每个站点每个智能体只允许一条策略：由 uk_agent_policy 复合唯一索引兜底，
 // 否则并发保存会留下多条互相矛盾的策略，读取时取哪条全看运气。
 type AgentReceptionPolicy struct {

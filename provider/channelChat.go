@@ -393,7 +393,7 @@ func (svc *AiChatService) prepareChannelTurn(ctx context.Context, req ChannelTur
 	principal.SessionId = st.chatSessionID
 	st.principal = principal
 
-	if err := st.buildToolset(); err != nil {
+	if err := st.buildToolset(ctx); err != nil {
 		return nil, err
 	}
 
@@ -530,7 +530,8 @@ func newChannelChatSessionId(sessionHash string) string {
 //   - 内核与 handler 每轮新建，绝不复用 svc.intentHandlers；
 //   - capInvoker 在调用 ResolveCap 之前先过 CheckCapPermission（每次 cap 复核）；
 //   - 可见面 = 站点曝光 ∩ 接待白名单（∩ 群安全清单），执行侧再独立拦截一次（R46）。
-func (st *channelTurnState) buildToolset() error {
+//     接待白名单没有配置行时只受站点曝光约束（见 loadAgentWhitelist 的三态语义）。
+func (st *channelTurnState) buildToolset(ctx context.Context) error {
 	iconf := st.w.channelExposureConfig()
 	// 内核的 audit 传 nil 是刻意的（R52）：审计统一写在 executeToolCall 这个**唯一的
 	// 调用边界**上，它能看到群聊拒绝、可见性拒绝、意图权限拒绝这些内核根本收不到的分支；
@@ -542,9 +543,12 @@ func (st *channelTurnState) buildToolset() error {
 	}
 	st.kernel = kernel
 
-	allowed := st.loadAgentWhitelist()
+	allowed, restricted := st.loadAgentWhitelist(ctx)
 	for _, tool := range allTools {
-		if tool == nil || !allowed[tool.Name] {
+		if tool == nil {
+			continue
+		}
+		if restricted && !allowed[tool.Name] {
 			continue
 		}
 		if st.principal.InGroup && !channelIntentGroupVisible(tool.Name) {
@@ -579,39 +583,30 @@ func (st *channelTurnState) capInvoker(ctx context.Context, name string, args ma
 	return handler(ctx, string(raw))
 }
 
-// loadAgentWhitelist 读取接待智能体的意图白名单。
-// 无记录、空数组、解析失败都返回 nil：调用方据此得到「没有任何工具」，
-// 而不是「没有配置就全开」（R46）。
-func (st *channelTurnState) loadAgentWhitelist() map[string]bool {
-	if st.w == nil || st.w.DB == nil || st.agent == nil {
-		return nil
+// loadAgentWhitelist 读取接待智能体的意图白名单，返回 (allowed, restricted)。
+//
+// 三态语义（2026-11-09 决议，与 checkChannelAgentWhitelist 同源）：
+//   - restricted=false：没有配置行 → 只受站点曝光约束，不再额外收窄；
+//   - restricted=true 且 allowed 非空：只保留列名的意图；
+//   - restricted=true 且 allowed 为空：空数组 / 非法 JSON / 读取失败 → 一个工具都不给。
+//
+// 「没有配置行」不能当成零能力：后台目前没有写 agent_reception_policies 的入口，
+// 按零能力处理会让每个渠道都只能回复「工具接口未开放」。但「配成空」必须仍然全拒，
+// 那是显式关闭，不能借回落偷偷放开。
+func (st *channelTurnState) loadAgentWhitelist(ctx context.Context) (map[string]bool, bool) {
+	if st == nil || st.w == nil || st.w.DB == nil || st.agent == nil {
+		return nil, true
 	}
-	var policy model.AgentReceptionPolicy
-	err := st.w.DB.
-		Where("`site_id` = ? AND `agent_id` = ?", st.w.Id, st.agent.Id).
-		Take(&policy).Error
+	state, err := st.w.loadChannelAgentWhitelist(ctx, st.agent.Id)
 	if err != nil {
-		return nil
+		// 读不到策略时按「有收窄」处理：宁可少给工具，也不在库异常时放开权限。
+		st.log().Warn("读取接待白名单失败，按无可见工具处理", "agent_id", st.agent.Id, "error", err)
+		return nil, true
 	}
-	raw := strings.TrimSpace(policy.AllowedIntents)
-	if raw == "" {
-		return nil
+	if !state.configured {
+		return nil, false
 	}
-	var names []string
-	if err := json.Unmarshal([]byte(raw), &names); err != nil {
-		return nil
-	}
-	allowed := make(map[string]bool, len(names))
-	for _, name := range names {
-		name = strings.TrimSpace(name)
-		if name != "" {
-			allowed[name] = true
-		}
-	}
-	if len(allowed) == 0 {
-		return nil
-	}
-	return allowed
+	return state.allowed, true
 }
 
 // channelIntentGroupVisible 判断一个意图是否可能包含群安全能力（工具可见性）。
