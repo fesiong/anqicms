@@ -227,7 +227,6 @@ func AutoMigrateDB(db *gorm.DB, force bool) error {
 			&model.OrderOptionStock{},
 			// 站点智能体接入飞书/钉钉：渠道、绑定、目标、入站、会话、租约、审计
 			&model.MessageChannel{},
-			&model.AgentReceptionPolicy{},
 			&model.ChannelBindingToken{},
 			&model.ChannelBinding{},
 			&model.ChannelTarget{},

@@ -246,13 +246,12 @@ func (c *channelInboxConsumer) turnRequest(
 	group bool,
 ) (ChannelTurnRequest, error) {
 	principal := ExecutionPrincipal{
-		SiteId:         c.site.Id,
-		AdminId:        binding.AdminId,
-		BindingId:      binding.Id,
-		ChannelId:      channel.Id,
-		AgentId:        channel.AgentId,
-		PolicyRevision: int64(channel.Revision),
-		InGroup:        group,
+		SiteId:    c.site.Id,
+		AdminId:   binding.AdminId,
+		BindingId: binding.Id,
+		ChannelId: channel.Id,
+		AgentId:   channel.AgentId,
+		InGroup:   group,
 	}
 	request := ChannelTurnRequest{
 		Principal:      principal,
@@ -384,22 +383,15 @@ func channelInboxDeniedReason(err error) string {
 	for _, sentinel := range []error{
 		ErrChannelGroupRestricted,
 		ErrChannelTargetNotApproved,
+		ErrChannelSiteUnsupported,
 		ErrChannelToolNotVisible,
+		ErrChannelPrincipalInvalid,
 		ErrChannelIntentUnknown,
 		ErrChannelIntentNotExposed,
 		ErrChannelAgentNotAllowed,
-		ErrChannelPolicyDenied,
-		ErrChannelPolicyNeedsConfirm,
-		ErrChannelPolicyStale,
-		ErrChannelPermissionDenied,
-		ErrChannelCapBlocked,
-		ErrChannelAPIPathBlocked,
-		ErrChannelDisabled,
-		ErrChannelPrincipalInvalid,
 		ErrChannelAdminInvalid,
-		ErrChannelSiteUnsupported,
-		ErrChannelTurnInvalid,
-		ErrChannelTurnStale,
+		ErrChannelDisabled,
+		ErrChannelPermissionDenied,
 	} {
 		if errors.Is(err, sentinel) {
 			return sentinel.Error()

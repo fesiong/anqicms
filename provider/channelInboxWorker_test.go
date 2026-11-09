@@ -25,9 +25,6 @@ import (
 // ============================================================
 
 type channelInboxTestConfig struct {
-	policy      string
-	whitelist   []string
-	permissions []string
 	exposed     []string
 	chatEnabled int
 }
@@ -52,9 +49,6 @@ func newChannelInboxTestEnv(t *testing.T, cfg channelInboxTestConfig) *channelIn
 		chatEnabled = 1
 	}
 	base := newChannelTurnTestEnv(t, w, channelTurnTestConfig{
-		policy:      cfg.policy,
-		whitelist:   cfg.whitelist,
-		permissions: cfg.permissions,
 		enabled:     1,
 		chatEnabled: chatEnabled,
 	})
@@ -187,11 +181,7 @@ func (e *channelInboxTestEnv) reloadInbox(t *testing.T, id uint) *model.ChannelI
 // site/channel/event_kind/content：PlatformChatId / ChatType / IdentityHash / BindingId
 // 是消费侧唯一的身份来源，缺一个就会「不回复」或「回错人」。
 func TestChannelInboxInboundPersistsPlatformIdentity(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "  你好，测试  "))
 
 	if row.PlatformChatId != env.binding.PlatformUserId {
@@ -220,11 +210,7 @@ func TestChannelInboxInboundPersistsPlatformIdentity(t *testing.T) {
 // ============================================================
 
 func TestChannelInboxUnboundMessageIsIgnored(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 
 	stranger := "stranger_" + channelPermSuffix()
@@ -257,11 +243,7 @@ func TestChannelInboxUnboundMessageIsIgnored(t *testing.T) {
 // ============================================================
 
 func TestChannelInboxBoundPrivateReplies(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 
 	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
@@ -296,11 +278,7 @@ func TestChannelInboxBoundPrivateReplies(t *testing.T) {
 // ============================================================
 
 func TestChannelInboxGroupRepliesToChat(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 
 	chatId := "group-chat-" + channelPermSuffix()
@@ -336,11 +314,7 @@ func TestChannelInboxGroupRepliesToChat(t *testing.T) {
 // TestChannelInboxGroupTargetNotApprovedIsIgnored 是群聊的负面用例：
 // 群目标不存在/未批准/未开启管理时不得执行、不得回复，且必须留下去敏原因。
 func TestChannelInboxGroupTargetNotApprovedIsIgnored(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 
 	chatId := "group-unapproved-" + channelPermSuffix()
@@ -374,11 +348,7 @@ func TestChannelInboxGroupTargetNotApprovedIsIgnored(t *testing.T) {
 // 群目标已批准、机器人也已被 @，但发送人自己没有绑定 → 不得借用群主或渠道管理员的身份执行，
 // 也不得回复（回复等于向陌生人确认「机器人在这里」）。
 func TestChannelInboxGroupSenderNeedsOwnBinding(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 	executed := stubEndpointCap(t, env.svc)
 
@@ -424,11 +394,7 @@ func TestChannelInboxGroupSenderNeedsOwnBinding(t *testing.T) {
 // TestChannelInboxRevokedBindingMidFlightIsIgnored 锁住「已认领后绑定被撤销」：
 // 任务已脱离 pending，撤销级联不会再动它，消费侧必须自己重新查绑定。
 func TestChannelInboxRevokedBindingMidFlightIsIgnored(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 
 	env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
@@ -467,11 +433,7 @@ func TestChannelInboxRevokedBindingMidFlightIsIgnored(t *testing.T) {
 // 仍在 pending 的任务由撤销级联直接置 cancelled —— 正因如此，
 // 「消费前撤销」只能靠已认领（processing）的任务来表达。
 func TestChannelInboxRevokeCascadesPendingRows(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
 	if err := env.w.RevokeBinding(env.binding.Id, env.admin.Id); err != nil {
 		t.Fatalf("撤销绑定失败：%v", err)
@@ -501,8 +463,8 @@ type generationTestEnv struct {
 func newGenerationTestEnv(t *testing.T) *generationTestEnv {
 	t.Helper()
 	w := channelChatTestSite(t)
-	ch := newPermTestChannel(t, w, `{"intents":{}}`, 1)
-	admin := newPermTestAdmin(t, w, []string{"/"}, 1)
+	ch := newPermTestChannel(t, w, 1)
+	admin := newPermTestAdmin(t, w, 1)
 
 	suffix := channelPermSuffix()
 	userId := "gen_user_" + suffix
@@ -561,7 +523,7 @@ func TestChannelGenerationBumpedOnRevokeAndRevive(t *testing.T) {
 	}
 
 	// 反向对照：撤销另一条绑定不得影响本会话代次。
-	otherAdmin := newPermTestAdmin(t, env.w, []string{"/"}, 1)
+	otherAdmin := newPermTestAdmin(t, env.w, 1)
 	other := newPermTestBinding(t, env.w, env.channel.Id, otherAdmin.Id)
 	if err := env.w.RevokeBinding(other.Id, otherAdmin.Id); err != nil {
 		t.Fatalf("撤销无关绑定失败：%v", err)
@@ -615,9 +577,8 @@ func TestChannelGenerationBumpedOnAgentChange(t *testing.T) {
 			Enabled:     current.Enabled,
 			ChatEnabled: current.ChatEnabled,
 			AgentId:     agentId,
-			PolicyJson:  current.PolicyJson,
 			Revision:    current.Revision,
-		}, current.Platform, name, current.AppId, current.OrgId, current.PolicyJson)
+		}, current.Platform, name, current.AppId, current.OrgId)
 		if err != nil {
 			t.Fatalf("保存渠道失败：%v", err)
 		}
@@ -722,11 +683,7 @@ func TestChannelWorkerStartsInboxConsumer(t *testing.T) {
 // TestChannelInboxFinishSurvivesCancelledContext 复现取消发生在模型调用期间：
 // 行必须落到 failed 并留下脱敏原因，且租约已释放。
 func TestChannelInboxFinishSurvivesCancelledContext(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	env.useScriptedModel(t)
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -773,11 +730,7 @@ func TestChannelInboxFinishSurvivesCancelledContext(t *testing.T) {
 // TestChannelInboxFinishInboxWritesWithCancelledContext 是最小回归锁：
 // 不依赖模型脚本，直接证明 finishInbox 在已取消的 ctx 下仍能落终态。
 func TestChannelInboxFinishInboxWritesWithCancelledContext(t *testing.T) {
-	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
-	})
+	env := newChannelInboxTestEnv(t, channelInboxTestConfig{})
 	row := env.receiveInbound(t, env.privateEvent(env.binding.PlatformUserId, "你好"))
 
 	ctx, cancel := context.WithCancel(context.Background())

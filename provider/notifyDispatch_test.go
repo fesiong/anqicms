@@ -296,7 +296,7 @@ func TestDeliveryIsIdempotentPerTarget(t *testing.T) {
 func TestRevokedTargetCancelsPendingDelivery(t *testing.T) {
 	w := notifyTestSite(t)
 	ch := newManagerTestChannel(t, w, true)
-	admin := newPermTestAdmin(t, w, nil, 1)
+	admin := newPermTestAdmin(t, w, 1)
 	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
 	target := newNotifyTestPrivateTarget(t, w, ch.Id, binding.Id, 1)
 	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)
@@ -629,7 +629,7 @@ func TestDeliveryStaleSendingBecomesUnknown(t *testing.T) {
 func TestDeliveryCancelOnDisabledAdmin(t *testing.T) {
 	w := notifyTestSite(t)
 	ch := newManagerTestChannel(t, w, true)
-	admin := newPermTestAdmin(t, w, nil, 1)
+	admin := newPermTestAdmin(t, w, 1)
 	binding := newPermTestBinding(t, w, ch.Id, admin.Id)
 	target := newNotifyTestPrivateTarget(t, w, ch.Id, binding.Id, 1)
 	rule := newNotifyTestRule(t, w, NotifyEventOrderPaid, 0, target.Id)

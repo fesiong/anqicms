@@ -293,9 +293,7 @@ func TestDingTalkAcknowledgeErrors(t *testing.T) {
 // 只有「已绑定 + 会被执行」的消息在落库后才回执，其余一律不贴表情。
 func TestChannelWorkerAcknowledgesAfterPersist(t *testing.T) {
 	env := newChannelInboxTestEnv(t, channelInboxTestConfig{
-		policy:      `{"intents":{"api":{"*":"allow"}}}`,
-		whitelist:   []string{"api"},
-		permissions: []string{"/"},
+		exposed: []string{"api"},
 	})
 	ack := &ackRecordingAdapter{}
 	wk := &channelWorker{

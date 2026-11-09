@@ -1,12 +1,9 @@
 package provider
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"log"
 	"os"
-	"sort"
 	"strings"
 	"time"
 
@@ -107,7 +104,6 @@ var (
 	errChannelEnabledInvalid  = errors.New("启用状态只能是 0 或 1")
 	errChannelChatInvalid     = errors.New("聊天管理开关只能是 0 或 1")
 	errChannelAgentRequired   = errors.New("开启聊天管理时必须选择接待智能体")
-	errChannelPolicyInvalid   = errors.New("策略配置必须是 JSON 对象")
 )
 
 // ChannelListItem 是渠道列表项。字段是白名单投影，不是模型序列化：
@@ -127,11 +123,10 @@ type ChannelListItem struct {
 	Revision    int    `json:"revision"`
 }
 
-// ChannelDetailView 在列表项基础上补策略 JSON。
-// 策略里只有「意图+动作 → allow/confirm/deny」，不含任何密钥，可以原样返回。
+// ChannelDetailView 是渠道详情。与列表项同构：不再返回任何策略 JSON
+// （policy_json 列保留在库中仅作历史兼容，Go 结构与接口都不再读写）。
 type ChannelDetailView struct {
 	ChannelListItem
-	PolicyJson string `json:"policy_json"`
 }
 
 // ChannelSaveResult 是保存回执。ConnectionPending 表示保存已成功，
@@ -160,28 +155,24 @@ type ChannelStatusView struct {
 }
 
 // ChannelCapabilityIntent 是单个意图在渠道侧的可配置状态（R88）。
+//
+// 字段固定为执行同源的授权口径：Exposed 来自站点曝光（intent.IntentAllowed），
+// GroupAllowed 来自群安全清单。不再有菜单映射、内置黑名单或策略裁决。
 type ChannelCapabilityIntent struct {
-	Name       string   `json:"name"`
-	Title      string   `json:"title"`
-	Risk       string   `json:"risk"`
-	Domain     string   `json:"domain"`
-	DefaultOff bool     `json:"default_off"`
-	Actions    []string `json:"actions"`
-	MenuPaths  []string `json:"menu_paths"`
-	Blocked    bool     `json:"blocked"`
-	Reason     string   `json:"reason"`
-	// AgentAllowed 只在请求带 agent_id 时出现（nil 会被 omitempty 丢掉）。
-	AgentAllowed *bool `json:"agent_allowed,omitempty"`
-	// Policy 是该意图的缺省裁决（策略里的 "*"，未配置即 deny）。
-	// 动作级差异由渠道策略本身表达，这里不做有损合并。
-	Policy string `json:"policy"`
+	Name         string   `json:"name"`
+	Title        string   `json:"title"`
+	Risk         string   `json:"risk"`
+	Domain       string   `json:"domain"`
+	DefaultOff   bool     `json:"default_off"`
+	Actions      []string `json:"actions"`
+	Exposed      bool     `json:"exposed"`
+	GroupAllowed bool     `json:"group_allowed"`
 }
 
 // ChannelCapabilitiesView 是 /capabilities 的载荷。
 // 不含任何参数 schema（模型不该在后台页面里看到提示词级细节），也不含密钥。
 type ChannelCapabilitiesView struct {
-	Intents         []ChannelCapabilityIntent `json:"intents"`
-	BlockedBuiltins []string                  `json:"blocked_builtins"`
+	Intents []ChannelCapabilityIntent `json:"intents"`
 }
 
 // ChannelAdminList 返回当前站点的渠道列表（密钥掩码）。
@@ -201,7 +192,7 @@ func (w *Website) ChannelAdminList() ([]ChannelListItem, error) {
 	return items, nil
 }
 
-// ChannelAdminDetail 返回渠道详情（含策略 JSON，密钥仍是掩码）。
+// ChannelAdminDetail 返回渠道详情（密钥仍是掩码）。
 func (w *Website) ChannelAdminDetail(channelId uint) (*ChannelDetailView, error) {
 	channel, err := w.channelForAdmin(channelId)
 	if err != nil {
@@ -209,7 +200,6 @@ func (w *Website) ChannelAdminDetail(channelId uint) (*ChannelDetailView, error)
 	}
 	return &ChannelDetailView{
 		ChannelListItem: channelListItemOf(channel),
-		PolicyJson:      channel.PolicyJson,
 	}, nil
 }
 
@@ -248,23 +238,14 @@ func (w *Website) ChannelAdminSave(req *request.Channel) (*ChannelSaveResult, er
 	if req.ChatEnabled == 1 && req.AgentId == 0 {
 		return nil, errChannelAgentRequired
 	}
-	policyJson := strings.TrimSpace(req.PolicyJson)
-	if policyJson != "" {
-		// 只接受 JSON **对象**：数组/标量能落库，但读取侧 ParseChannelPolicy
-		// 会解析失败并按「策略损坏」整条拒绝，表现为保存成功、聊天立刻不可用。
-		var policy map[string]any
-		if err := json.Unmarshal([]byte(policyJson), &policy); err != nil || policy == nil {
-			return nil, errChannelPolicyInvalid
-		}
-	}
 
 	if req.Id == 0 {
-		return w.createAdminChannel(req, platform, name, appId, orgId, policyJson)
+		return w.createAdminChannel(req, platform, name, appId, orgId)
 	}
-	return w.updateAdminChannel(req, platform, name, appId, orgId, policyJson)
+	return w.updateAdminChannel(req, platform, name, appId, orgId)
 }
 
-func (w *Website) createAdminChannel(req *request.Channel, platform, name, appId, orgId, policyJson string) (*ChannelSaveResult, error) {
+func (w *Website) createAdminChannel(req *request.Channel, platform, name, appId, orgId string) (*ChannelSaveResult, error) {
 	secret := req.AppSecret
 	if strings.TrimSpace(secret) == "" || secret == ChannelSecretMask {
 		return nil, errChannelSecretRequired
@@ -279,7 +260,6 @@ func (w *Website) createAdminChannel(req *request.Channel, platform, name, appId
 		AppId:       appId,
 		OrgId:       orgId,
 		AppSecret:   secret,
-		PolicyJson:  policyJson,
 		Revision:    1,
 	}
 	taken, err := w.channelAppIdentityTaken(0, model.ComputeAppIdentityHash(platform, appId, orgId))
@@ -302,7 +282,7 @@ func (w *Website) createAdminChannel(req *request.Channel, platform, name, appId
 	return w.scheduleChannelRebuild(channel.Id, channel.Revision), nil
 }
 
-func (w *Website) updateAdminChannel(req *request.Channel, platform, name, appId, orgId, policyJson string) (*ChannelSaveResult, error) {
+func (w *Website) updateAdminChannel(req *request.Channel, platform, name, appId, orgId string) (*ChannelSaveResult, error) {
 	existing, err := w.channelForAdmin(req.Id)
 	if err != nil {
 		return nil, err
@@ -341,7 +321,6 @@ func (w *Website) updateAdminChannel(req *request.Channel, platform, name, appId
 				"enabled":           req.Enabled,
 				"chat_enabled":      req.ChatEnabled,
 				"agent_id":          req.AgentId,
-				"policy_json":       policyJson,
 				"revision":          gorm.Expr("revision + 1"),
 				"updated_time":      time.Now().Unix(),
 			})
@@ -496,70 +475,35 @@ func (w *Website) countChannelDeliveries(channelId uint) (pending, failed int64,
 	return pending, failed, nil
 }
 
-// ChannelCapabilities 返回能力、动作、权限映射、风险与当前可配置状态（R88）。
+// ChannelCapabilities 返回能力、动作、风险与站点曝光/群聊状态（R88）。
 //
-// 与执行门禁共用同一份声明：菜单映射来自 channelIntentMenuTargets、内置黑名单来自
-// channelBuiltinBlockedCaps —— 另写一份展示用名单，迟早会出现「页面显示可用、执行被拒」
-// 或者更糟的「页面显示关闭、执行其实放行」。
-//
-// agentId>0 时补 agent_allowed，并据此解析当前渠道策略：渠道与智能体是一对一
-// （channel.agent_id），因此按 agent_id 反查本站点渠道；查不到就是空策略（全部 deny）。
-func (w *Website) ChannelCapabilities(agentId uint) (*ChannelCapabilitiesView, error) {
+// 与执行门禁共用同一份口径：Exposed 走 intent.IntentAllowed（站点 ExposedIntents /
+// ExposedTools 与 DefaultOff 判定），GroupAllowed 走群安全清单。另写一份展示用名单，
+// 迟早会出现「页面显示可用、执行被拒」或者更糟的「页面显示关闭、执行其实放行」。
+func (w *Website) ChannelCapabilities() (*ChannelCapabilitiesView, error) {
 	if w == nil || w.DB == nil {
 		return nil, errChannelReadFailed
 	}
-	policy := ChannelPolicy{}
-	if agentId > 0 {
-		var channel model.MessageChannel
-		err := w.DB.Where("`site_id` = ? AND `agent_id` = ?", w.Id, agentId).Order("id desc").Take(&channel).Error
-		if err == nil {
-			// 策略解析失败按空策略处理（Decision 全部 deny），与执行侧一致。
-			policy, _ = ParseChannelPolicy(channel.PolicyJson)
-		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-			log.Printf("[channel] 站点 %d 按智能体 %d 读取渠道失败：%s", w.Id, agentId, sanitizePlatformMessage(err.Error()))
-			return nil, errChannelReadFailed
-		}
-	}
+	exposure := w.channelExposureConfig()
 
 	intents := make([]ChannelCapabilityIntent, 0, len(intent.IntentCatalog))
 	for _, spec := range intent.IntentCatalog {
 		if spec == nil {
 			continue
 		}
-		menuPaths, hardBlocked := channelIntentMenuTargets(spec)
-		item := ChannelCapabilityIntent{
-			Name:       spec.Name,
-			Title:      spec.Title,
-			Risk:       string(spec.Risk),
-			Domain:     string(spec.Domain),
-			DefaultOff: spec.DefaultOff,
-			Actions:    channelIntentActions(spec),
-			MenuPaths:  menuPaths,
-			Blocked:    hardBlocked != "",
-			Reason:     hardBlocked,
-			Policy:     string(policy.Decision(spec.Name, "")),
-		}
-		if menuPaths == nil {
-			item.MenuPaths = []string{}
-		}
-		if agentId > 0 {
-			// 复用执行门禁的白名单判定，不另写一份：展示与执行必须同源。
-			allowed := w.checkChannelAgentWhitelist(context.Background(), agentId, spec.Name) == nil
-			item.AgentAllowed = &allowed
-		}
-		intents = append(intents, item)
+		intents = append(intents, ChannelCapabilityIntent{
+			Name:         spec.Name,
+			Title:        spec.Title,
+			Risk:         string(spec.Risk),
+			Domain:       string(spec.Domain),
+			DefaultOff:   spec.DefaultOff,
+			Actions:      channelIntentActions(spec),
+			Exposed:      intent.IntentAllowed(exposure, spec.Name),
+			GroupAllowed: channelIntentGroupVisible(spec.Name),
+		})
 	}
 
-	blocked := make([]string, 0, len(channelBuiltinBlockedCaps)+len(channelUnmappedBlockedCaps))
-	for name := range channelBuiltinBlockedCaps {
-		blocked = append(blocked, name)
-	}
-	for name := range channelUnmappedBlockedCaps {
-		blocked = append(blocked, name)
-	}
-	sort.Strings(blocked)
-
-	return &ChannelCapabilitiesView{Intents: intents, BlockedBuiltins: blocked}, nil
+	return &ChannelCapabilitiesView{Intents: intents}, nil
 }
 
 // channelIntentActions 取意图的动作枚举（spec.Params["action"].Enum）；没有 action 参数时给空数组。

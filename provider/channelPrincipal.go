@@ -1,96 +1,14 @@
 package provider
 
 import (
-	"encoding/json"
 	"errors"
-	"strings"
 )
 
-// 本文件是渠道聊天的「执行主体 + 渠道策略」纯数据层：
-// 解析策略 JSON、定义裁决取值与可 errors.Is 的哨兵错误。
+// 本文件是渠道聊天的「执行主体 + 身份与生命周期判定」纯数据层：
+// 定义执行主体与可 errors.Is 的哨兵错误。渠道授权只认站点曝光与身份/生命周期，
+// 不再有策略 JSON、接待白名单或后台菜单映射。
 //
-// 真正需要读库的权限判定在 channelPermissions.go。这里刻意保持纯函数/纯类型，
-// 让执行路径与门禁读到同一份解析结果，而不是各写一份「怎么读这个 JSON」的猜测。
-
-// PolicyDecision 是渠道策略对「意图 + 动作」的裁决。
-type PolicyDecision string
-
-const (
-	// PolicyDecisionAllow 直接执行。
-	PolicyDecisionAllow PolicyDecision = "allow"
-	// PolicyDecisionConfirm 需要管理员在聊天中确认后才执行。审批子系统已删除，
-	// 当前没有确认入口，因此一律按拒绝处理（策略层由任务 2 移除）。
-	PolicyDecisionConfirm PolicyDecision = "confirm"
-	// PolicyDecisionDeny 直接拒绝。
-	PolicyDecisionDeny PolicyDecision = "deny"
-)
-
-// ChannelPolicy 是渠道策略的解析结果。
-//
-// 线上格式（R30，T9 写、T6 读）：
-//
-//	{"intents":{"content_article":{"save":"confirm","detail":"allow","*":"deny"}}}
-//
-// 查找顺序：精确 action → "*" → deny。空串/未配置、解析失败、未知取值一律 deny。
-// 未知字段直接忽略；这里不发明意图级通配符——"*" 只作用于 action 维度，
-// 「新增能力自动进入已有策略」正是规格 §7 明确禁止的行为。
-type ChannelPolicy struct {
-	intents map[string]map[string]PolicyDecision
-}
-
-// ParseChannelPolicy 解析渠道策略 JSON。
-//
-// 返回值里的 error 只表示「原文不合法」，供调用方记录与提示；判定语义不受影响——
-// 解析失败的策略其 Decision 仍一律 deny。反过来做（解析失败就当没配置、没配置就放行）
-// 等于让一个格式错误变成权限提升。
-func ParseChannelPolicy(raw string) (ChannelPolicy, error) {
-	if strings.TrimSpace(raw) == "" {
-		return ChannelPolicy{}, nil
-	}
-	var payload struct {
-		Intents map[string]map[string]string `json:"intents"`
-	}
-	if err := json.Unmarshal([]byte(raw), &payload); err != nil {
-		// 返回空策略（全部 deny），同时把解析错误交给调用方。
-		return ChannelPolicy{}, err
-	}
-	intents := make(map[string]map[string]PolicyDecision, len(payload.Intents))
-	for name, actions := range payload.Intents {
-		name = strings.TrimSpace(name)
-		if name == "" || len(actions) == 0 {
-			continue
-		}
-		parsed := make(map[string]PolicyDecision, len(actions))
-		for action, value := range actions {
-			switch PolicyDecision(value) {
-			case PolicyDecisionAllow, PolicyDecisionConfirm, PolicyDecisionDeny:
-				parsed[action] = PolicyDecision(value)
-			default:
-				// 未知取值直接丢弃：读取时落到 deny，不猜测意图。
-			}
-		}
-		if len(parsed) > 0 {
-			intents[name] = parsed
-		}
-	}
-	return ChannelPolicy{intents: intents}, nil
-}
-
-// Decision 返回「意图 + 动作」的裁决：精确 action → "*" → deny。
-// 未配置的意图、未配置的动作、非法取值一律 deny（缺省拒绝）。
-func (p ChannelPolicy) Decision(intentName, action string) PolicyDecision {
-	actions, ok := p.intents[intentName]
-	if !ok {
-		return PolicyDecisionDeny
-	}
-	if d, ok := actions[action]; ok {
-		return d
-	}
-	if d, ok := actions["*"]; ok {
-		return d
-	}
-	return PolicyDecisionDeny
-}
+// 真正需要读库的判定在 channelPermissions.go。
 
 // ExecutionPrincipal 是一次渠道请求的执行主体。
 //
@@ -101,39 +19,29 @@ type ExecutionPrincipal struct {
 	SiteId    uint
 	AdminId   uint
 	BindingId uint
-	// ChannelId 是 R28 追加的字段：没有它就读不到该渠道的策略与接待智能体，
-	// 判定只能退化成「站点默认放行」，与渠道级隔离的初衷正好相反。
+	// ChannelId 是渠道隔离的关键：没有它就读不到该渠道的接待智能体与启用状态，
+	// 判定只能退化成「站点默认放行」。
 	ChannelId uint
 	// AgentId 是**本次实际执行的智能体**（R35），不是渠道配置里那个接待智能体。
-	// 会话切换智能体后，被执行的智能体的接待白名单必须自己参与判定；若这里退化成
-	// 「读 channel.AgentId」，白名单校验的主体与执行主体就不是同一个，切换即绕过。
 	// 门禁要求它非 0 且与渠道配置的接待智能体一致（见 channelForPrincipal）。
-	AgentId        uint
-	SessionId      string
-	PolicyRevision int64
+	AgentId   uint
+	SessionId string
 	// InGroup 标记本条消息来自群聊。首版群聊只允许群安全工具（规格 §7），
-	// 由 T6 的群安全判定消费；权限门禁本身不因群聊而放宽。
+	// 由 T6 的群安全判定消费；身份判定本身不因群聊而放宽。
 	InGroup bool
 }
 
-// 渠道门禁哨兵错误。全部用 %w 包装，调用方用 errors.Is 分流：
-//   - ErrChannelPolicyNeedsConfirm → 当前一律拒绝（审批入口已随审批子系统删除）；
-//   - ErrChannelPolicyStale → 提示重新发起（策略修订号已变）；
-//   - 其余 → 拒绝并回执原因。
+// 渠道门禁哨兵错误。全部用 %w 包装，调用方用 errors.Is 分流。
 //
-// 文案里不允许出现密钥、token、摘要等敏感值（全局约束）。
+// 文案里不允许出现密钥、token、摘要、管理员/智能体内部 ID 等敏感值（全局约束）。
 var (
-	ErrChannelPrincipalInvalid   = errors.New("渠道执行主体无效")
-	ErrChannelIntentUnknown      = errors.New("意图不存在")
-	ErrChannelIntentNotExposed   = errors.New("意图未在当前站点开放")
-	ErrChannelAgentNotAllowed    = errors.New("接待智能体未授权该意图")
-	ErrChannelPolicyDenied       = errors.New("渠道策略拒绝该操作")
-	ErrChannelPolicyNeedsConfirm = errors.New("该操作需要管理员确认")
-	ErrChannelPolicyStale        = errors.New("渠道策略已变更，请重新发起")
-	ErrChannelAdminInvalid       = errors.New("管理员不存在或已停用")
-	ErrChannelPermissionDenied   = errors.New("管理员缺少该操作的后台权限")
-	ErrChannelCapBlocked         = errors.New("底层能力未开放或未映射后台权限")
-	ErrChannelAPIPathBlocked     = errors.New("通用调用禁止访问该后台路径")
+	ErrChannelPrincipalInvalid = errors.New("渠道执行主体无效")
+	ErrChannelIntentUnknown    = errors.New("意图不存在")
+	ErrChannelIntentNotExposed = errors.New("意图未在当前站点开放")
+	ErrChannelAgentNotAllowed  = errors.New("执行智能体与渠道不一致")
+	ErrChannelAdminInvalid     = errors.New("管理员不存在或已停用")
+	// ErrChannelPermissionDenied 只作为安全兜底：身份校验通过后仍被拒绝时统一归到它。
+	ErrChannelPermissionDenied = errors.New("渠道调用未通过权限校验")
 	// ErrChannelDisabled：渠道停用（enabled = 0）或「仅通知」（chat_enabled = 0）。
 	// 「仅通知」渠道只投递通知、不执行管理动作，权限层必须在读渠道时就把这类请求拒掉：
 	// Enabled 由 T4 的 worker 生命周期兜住，ChatEnabled 没有任何其它读取点，

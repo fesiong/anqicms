@@ -33,8 +33,8 @@ import (
 func channelAdminTestSite(t *testing.T) *Website {
 	t.Helper()
 	w := channelManagerTestSite(t)
-	if err := w.DB.AutoMigrate(&model.NotificationDelivery{}, &model.NotificationRule{}, &model.AgentReceptionPolicy{}); err != nil {
-		t.Fatalf("迁移通知/接待策略表失败：%v", err)
+	if err := w.DB.AutoMigrate(&model.NotificationDelivery{}, &model.NotificationRule{}); err != nil {
+		t.Fatalf("迁移通知表失败：%v", err)
 	}
 	return w
 }
@@ -511,7 +511,6 @@ func TestSaveChannelKeepsMaskedSecret(t *testing.T) {
 		{"非法启用值", &request.Channel{Platform: model.ChannelPlatformFeishu, Name: "x", AppId: "x", AppSecret: "x", Enabled: 2}},
 		{"非法聊天开关", &request.Channel{Platform: model.ChannelPlatformFeishu, Name: "x", AppId: "x", AppSecret: "x", ChatEnabled: 3}},
 		{"聊天无智能体", &request.Channel{Platform: model.ChannelPlatformFeishu, Name: "x", AppId: "x", AppSecret: "x", ChatEnabled: 1}},
-		{"策略非对象", &request.Channel{Platform: model.ChannelPlatformFeishu, Name: "x", AppId: "x", AppSecret: "x", PolicyJson: `[]`}},
 	}
 	for _, tc := range invalid {
 		if _, err := w.ChannelAdminSave(tc.req); err == nil {
@@ -797,104 +796,53 @@ func TestChannelStatusReportsRuntime(t *testing.T) {
 
 func TestChannelCapabilitiesDerivesFromCatalog(t *testing.T) {
 	w := channelAdminTestSite(t)
+	withTestAiSetting(t, w, []string{"seo_keyword"})
 
-	view, err := w.ChannelCapabilities(0)
+	view, err := w.ChannelCapabilities()
 	if err != nil {
 		t.Fatalf("读取能力清单失败：%v", err)
 	}
 	if len(view.Intents) == 0 {
 		t.Fatal("能力清单为空")
 	}
-	if len(view.BlockedBuiltins) == 0 {
-		t.Fatal("内置黑名单为空：首版关闭的主机能力必须列出来")
-	}
-	blockedSet := map[string]bool{}
-	for _, name := range view.BlockedBuiltins {
-		blockedSet[name] = true
-	}
-	for _, want := range []string{"bash", "read_file", "write_file", "web_fetch"} {
-		if !blockedSet[want] {
-			t.Errorf("内置黑名单缺少 %s", want)
-		}
-	}
 
 	withActions := 0
+	byName := map[string]ChannelCapabilityIntent{}
 	for _, item := range view.Intents {
+		byName[item.Name] = item
 		if item.Name == "" || item.Title == "" {
 			t.Fatalf("能力条目缺少名称或标题：%+v", item)
 		}
 		if item.Risk == "" || item.Domain == "" {
 			t.Fatalf("%s 缺少风险等级或能力域：%+v", item.Name, item)
 		}
-		if item.Blocked && item.Reason == "" {
-			t.Fatalf("%s 被标记 blocked 却没有原因", item.Name)
-		}
-		if item.Policy == "" {
-			t.Fatalf("%s 缺少策略裁决", item.Name)
-		}
 		if len(item.Actions) > 0 {
 			withActions++
-		}
-		if item.AgentAllowed != nil {
-			t.Fatalf("没传 agent_id 时不应出现 agent_allowed（%s）", item.Name)
 		}
 	}
 	if withActions == 0 {
 		t.Fatal("没有任何意图解析出动作，能力展示对前端无用")
+	}
+	if !byName["seo_keyword"].Exposed {
+		t.Error("曝光清单内的 seo_keyword 必须标记 exposed=true")
+	}
+	if byName["content_article"].Exposed {
+		t.Error("未曝光的 content_article 必须标记 exposed=false")
+	}
+	if !byName["api"].GroupAllowed {
+		t.Error("api_schema 所在意图 api 必须标记 group_allowed=true")
+	}
+	if byName["content_article"].GroupAllowed {
+		t.Error("content_article 在群聊不可用，group_allowed 必须为 false")
 	}
 
 	raw, err := json.Marshal(view)
 	if err != nil {
 		t.Fatalf("序列化能力清单失败：%v", err)
 	}
-	for _, forbidden := range []string{`"properties"`, `"params"`, `"app_secret"`, `"enum"`} {
+	for _, forbidden := range []string{`"properties"`, `"params"`, `"app_secret"`, `"enum"`, `"menu_paths"`, `"blocked_builtins"`, `"agent_allowed"`, `"policy"`, `"reason"`, `"blocked"`} {
 		if strings.Contains(string(raw), forbidden) {
-			t.Fatalf("能力清单泄露了参数 schema 或密钥（含 %s）", forbidden)
-		}
-	}
-
-	// agent_id>0：给出 agent_allowed，并且真实读到接待白名单。
-	agentId := uint(time.Now().UnixNano() & 0x7fffffff)
-	allowedIntent := view.Intents[0].Name
-	policy := &model.AgentReceptionPolicy{
-		SiteId:         w.Id,
-		AgentId:        agentId,
-		AllowedIntents: `["` + allowedIntent + `"]`,
-	}
-	if err := w.DB.Create(policy).Error; err != nil {
-		t.Fatalf("创建接待策略失败：%v", err)
-	}
-	t.Cleanup(func() {
-		if err := w.DB.Where("id = ?", policy.Id).Delete(&model.AgentReceptionPolicy{}).Error; err != nil {
-			t.Logf("清理接待策略 %d 失败：%v", policy.Id, err)
-		}
-	})
-	view, err = w.ChannelCapabilities(agentId)
-	if err != nil {
-		t.Fatalf("带 agent_id 读取能力清单失败：%v", err)
-	}
-	for _, item := range view.Intents {
-		if item.AgentAllowed == nil {
-			t.Fatalf("%s 缺少 agent_allowed", item.Name)
-		}
-		if item.Name == allowedIntent && !*item.AgentAllowed {
-			t.Fatalf("白名单里的 %s 应为 agent_allowed=true", item.Name)
-		}
-	}
-
-	// 没有配置行时必须回落到站点曝光：agent_allowed 全为 true，与执行侧同口径。
-	// 反向对照：若这里仍按「缺策略即拒绝」，页面会显示「智能体未授权」而执行已放行，
-	// 展示与执行两套结论。
-	if err := w.DB.Where("id = ?", policy.Id).Delete(&model.AgentReceptionPolicy{}).Error; err != nil {
-		t.Fatalf("删除接待策略失败：%v", err)
-	}
-	view, err = w.ChannelCapabilities(agentId)
-	if err != nil {
-		t.Fatalf("无接待策略时读取能力清单失败：%v", err)
-	}
-	for _, item := range view.Intents {
-		if item.AgentAllowed == nil || !*item.AgentAllowed {
-			t.Fatalf("没有接待策略时 %s 应回落为 agent_allowed=true，实际 %v", item.Name, item.AgentAllowed)
+			t.Fatalf("能力清单泄露了参数 schema、密钥或已删除字段（含 %s）", forbidden)
 		}
 	}
 }

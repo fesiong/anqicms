@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path"
 	"strings"
 	"sync"
 	"time"
@@ -24,8 +25,8 @@ import (
 // 职责边界（规格 §7 / §8）：
 //  1. 以**实际操作者**身份执行：每一项权限判定都读请求内构造的 ExecutionPrincipal，
 //     绝不改 svc.Tools / svc.Handlers / svc.capHandlers，也不复用主会话的意图缓存；
-//  2. 默认拒绝：执行主体、渠道状态、绑定、管理员、菜单权限、站点曝光、接待白名单、
-//     渠道动作策略、群安全清单，任一项不满足都拒绝（错误用 errors.Is 可分流）；
+//  2. 默认拒绝：执行主体、渠道状态、绑定、管理员状态、站点曝光、群安全清单，
+//     任一项不满足都拒绝（错误用 errors.Is 可分流）；
 //  3. 双层门禁：模型可见性（R46）与执行前拦截同时存在，只靠提示词约束等于没约束；
 //  4. 会话隔离（R41）：同一 SessionHash 的轮次在进程内串行（R53：等待可被 ctx 取消），
 //     generation 严格对齐，旧代次的请求直接拒绝，且拒绝发生在调用模型之前；
@@ -108,7 +109,7 @@ type channelModelFactory func(ctx context.Context, tools []*schema.ToolInfo) (ch
 // defaultChannelModelFactory 用全局 eino 客户端派生带工具的新实例。
 //
 // R51：可见工具为空时**不能**调 WithTools(nil)——eino 会返回 "no tools to bind"，
-// 让「没有接待策略 / 白名单非法 / 群聊没有安全意图」这类正常配置连普通问答都失败。
+// 让「站点曝光里没有任何可用意图 / 群聊没有群安全意图」这类正常配置连普通问答都失败。
 // 此时直接返回未派生的客户端：本轮只能对话，没有任何工具可调用。
 func defaultChannelModelFactory(ctx context.Context, tools []*schema.ToolInfo) (channelChatModel, error) {
 	client, err := aiEino.GetClient()
@@ -173,8 +174,9 @@ type channelTurnState struct {
 	currentRequestText string
 
 	// kernel 是本轮私有的意图内核。执行路径只经 st.handlers 调用，
-	// 保留字段是为了让护栏测试可以直接验证「cap 层独立复核管理员状态」
-	// （TestChannelTurnCapLayerRechecksAdmin），生产路径不得绕过 executeToolCall 直接用它。
+	// 保留字段是为了让护栏测试可以直接验证「每次调用前独立复核身份与曝光」
+	// （TestChannelRevokedMidTurnBlocksNextCall / TestChannelUnexposedIntentStaysInvisible），
+	// 生产路径不得绕过 executeToolCall 直接用它。
 	kernel   *intent.Kernel
 	tools    []*schema.ToolInfo
 	handlers map[string]toolHandler
@@ -242,7 +244,7 @@ func (svc *AiChatService) prepareChannelTurn(ctx context.Context, req ChannelTur
 			targetHash = bindingTargetDigest(w.Id, channel.Id, target.Kind, target.PlatformTargetId)
 		}
 	}
-	if err := w.checkChannelAdmin(ctx, principal, nil); err != nil {
+	if err := w.checkChannelIdentity(ctx, principal); err != nil {
 		return nil, err
 	}
 	binding, err := w.loadChannelBindingForPrincipal(ctx, principal)
@@ -323,7 +325,7 @@ func (svc *AiChatService) prepareChannelTurn(ctx context.Context, req ChannelTur
 }
 
 // loadChannelBindingForPrincipal 读取绑定行以取得平台身份字段（会话摘要要用）。
-// 这里不重复做撤销/归属判定：checkChannelAdmin 已经校验过，本函数只负责取数。
+// 这里不重复做撤销/归属判定：checkChannelIdentity 已经校验过，本函数只负责取数。
 func (w *Website) loadChannelBindingForPrincipal(ctx context.Context, p ExecutionPrincipal) (*model.ChannelBinding, error) {
 	var binding model.ChannelBinding
 	err := w.DB.WithContext(ctx).
@@ -424,9 +426,8 @@ func newChannelChatSessionId(sessionHash string) string {
 // 关键点：
 //   - 曝光配置读本站点（w.LoadAiSetting），不是进程级 GetMcpConfig（R32/R43）；
 //   - 内核与 handler 每轮新建，绝不复用 svc.intentHandlers；
-//   - capInvoker 在调用 ResolveCap 之前先过 CheckCapPermission（每次 cap 复核）；
-//   - 可见面 = 站点曝光 ∩ 接待白名单（∩ 群安全清单），执行侧再独立拦截一次（R46）。
-//     接待白名单没有配置行时只受站点曝光约束（见 loadAgentWhitelist 的三态语义）。
+//   - capInvoker 在调用 ResolveCap 之前先过 checkChannelCall（每次 cap 复核）；
+//   - 可见面 = 站点曝光（内核已按曝光构造工具面）∩ 群安全清单，执行侧再独立拦截一次（R46）。
 func (st *channelTurnState) buildToolset(ctx context.Context) error {
 	iconf := st.w.channelExposureConfig()
 	// 内核的 audit 传 nil 是刻意的（R52）：审计统一写在 executeToolCall 这个**唯一的
@@ -439,12 +440,8 @@ func (st *channelTurnState) buildToolset(ctx context.Context) error {
 	}
 	st.kernel = kernel
 
-	allowed, restricted := st.loadAgentWhitelist(ctx)
 	for _, tool := range allTools {
 		if tool == nil {
-			continue
-		}
-		if restricted && !allowed[tool.Name] {
 			continue
 		}
 		if st.principal.InGroup && !channelIntentGroupVisible(tool.Name) {
@@ -469,7 +466,7 @@ func (st *channelTurnState) capInvoker(ctx context.Context, name string, args ma
 	if err != nil {
 		return "", fmt.Errorf("参数序列化失败：%w", err)
 	}
-	if err := st.w.CheckCapPermission(ctx, st.principal, name, string(raw)); err != nil {
+	if err := st.w.checkChannelCall(ctx, st.principal); err != nil {
 		return "", err
 	}
 	handler, ok := st.svc.ResolveCap(name)
@@ -477,32 +474,6 @@ func (st *channelTurnState) capInvoker(ctx context.Context, name string, args ma
 		return "", fmt.Errorf("底层能力 %s 不存在或未接入", name)
 	}
 	return handler(ctx, string(raw))
-}
-
-// loadAgentWhitelist 读取接待智能体的意图白名单，返回 (allowed, restricted)。
-//
-// 三态语义（2026-11-09 决议，与 checkChannelAgentWhitelist 同源）：
-//   - restricted=false：没有配置行 → 只受站点曝光约束，不再额外收窄；
-//   - restricted=true 且 allowed 非空：只保留列名的意图；
-//   - restricted=true 且 allowed 为空：空数组 / 非法 JSON / 读取失败 → 一个工具都不给。
-//
-// 「没有配置行」不能当成零能力：后台目前没有写 agent_reception_policies 的入口，
-// 按零能力处理会让每个渠道都只能回复「工具接口未开放」。但「配成空」必须仍然全拒，
-// 那是显式关闭，不能借回落偷偷放开。
-func (st *channelTurnState) loadAgentWhitelist(ctx context.Context) (map[string]bool, bool) {
-	if st == nil || st.w == nil || st.w.DB == nil || st.agent == nil {
-		return nil, true
-	}
-	state, err := st.w.loadChannelAgentWhitelist(ctx, st.agent.Id)
-	if err != nil {
-		// 读不到策略时按「有收窄」处理：宁可少给工具，也不在库异常时放开权限。
-		st.log().Warn("读取接待白名单失败，按无可见工具处理", "agent_id", st.agent.Id, "error", err)
-		return nil, true
-	}
-	if !state.configured {
-		return nil, false
-	}
-	return state.allowed, true
 }
 
 // channelIntentGroupVisible 判断一个意图是否可能包含群安全能力（工具可见性）。
@@ -592,7 +563,7 @@ func (m *channelGuardMiddleware) After(ctx context.Context, result *ToolExecResu
 }
 
 // checkToolPermission 是「每次工具调用」的权限复核顺序：
-// 群安全清单 → 意图级门禁（曝光/白名单/策略/管理员/菜单）。
+// 群安全清单 → 身份与生命周期（绑定/管理员状态）。
 // cap 级复核由内核的 capInvoker 在真正委托前完成。
 func (st *channelTurnState) checkToolPermission(ctx context.Context, name, action string) error {
 	if st.principal.InGroup {
@@ -600,12 +571,7 @@ func (st *channelTurnState) checkToolPermission(ctx context.Context, name, actio
 			return err
 		}
 	}
-	return st.intentGate(ctx, name, action)
-}
-
-// intentGate 是意图级门禁的唯一入口：曝光/白名单/策略/管理员/菜单逐层校验。
-func (st *channelTurnState) intentGate(ctx context.Context, name, action string) error {
-	return st.w.CheckIntentPermission(ctx, st.principal, name, action)
+	return st.w.checkChannelIdentity(ctx, st.principal)
 }
 
 // channelPermissionSentinels 是「权限」类哨兵。命中这些错误的调用在审计里
@@ -619,21 +585,15 @@ var channelPermissionSentinels = []error{
 	ErrChannelIntentUnknown,
 	ErrChannelIntentNotExposed,
 	ErrChannelAgentNotAllowed,
-	ErrChannelPolicyDenied,
-	ErrChannelPolicyNeedsConfirm,
-	ErrChannelPolicyStale,
 	ErrChannelAdminInvalid,
-	ErrChannelPermissionDenied,
-	ErrChannelCapBlocked,
-	ErrChannelAPIPathBlocked,
 	ErrChannelDisabled,
+	ErrChannelPermissionDenied,
 }
 
 // channelSafePermissionText 把权限错误压成「只有哨兵文案」的文本。
 //
-// 为什么要压：checkChannelAdmin / checkChannelAgentWhitelist 的错误消息里带
-// 「管理员 12」「智能体 34」这类内部标识，而这段文本会原样回灌模型、并可能被
-// 平台适配器投递到群里。排障细节走服务日志，不进对话。
+// 为什么要压：身份判定等底层错误可能夹带内部标识，而这段文本会原样回灌模型、
+// 并可能被平台适配器投递到群里。排障细节走服务日志，不进对话。
 func channelSafePermissionText(err error) string {
 	for _, sentinel := range channelPermissionSentinels {
 		if errors.Is(err, sentinel) {
@@ -712,7 +672,7 @@ func (st *channelTurnState) dispatchToolCall(ctx context.Context, call *schema.T
 			IsError:  true,
 		}, fmt.Errorf("%w：%s", ErrChannelToolNotVisible, name)
 	}
-	if err := st.intentGate(ctx, name, action); err != nil {
+	if err := st.w.checkChannelIdentity(ctx, st.principal); err != nil {
 		// 只回灌哨兵文案（不带内部标识），调用方仍能 errors.Is 分流。
 		safeErr := channelSafePermissionError(err)
 		return &ToolExecResult{
@@ -963,6 +923,32 @@ var channelUntrustedIntentNames = map[string]bool{
 // /plugin/order/*（订单备注/收货信息由买家填写）、review 相关端点。
 var channelUntrustedInvokeKeywords = []string{"guestbook", "comment", "review", "order"}
 
+// channelNormalizeToolPath 把 api_invoke 的 path 归一成「小写 + /system/api 前缀 + Clean」。
+//
+// 只用于不可信数据分类，不再参与任何权限判定（授权层已删除路径黑名单）。
+// 与 provider/api_tools.go 的 normalizeAPIPath 有两点刻意不同：
+//  1. 前缀判断不区分大小写，避免调用方写 /SYSTEM/API/... 时归类漏判；
+//  2. 结果统一小写，关键词匹配不依赖调用方的大小写写法。
+func channelNormalizeToolPath(raw string) string {
+	p := strings.TrimSpace(raw)
+	if p == "" {
+		return ""
+	}
+	if !strings.HasPrefix(p, "/") {
+		p = "/" + p
+	}
+	lower := strings.ToLower(p)
+	switch {
+	case lower == "/system/api" || strings.HasPrefix(lower, "/system/api/"):
+		// 已带完整前缀
+	case lower == "/api" || strings.HasPrefix(lower, "/api/"):
+		p = "/system" + p
+	default:
+		p = "/system/api" + p
+	}
+	return strings.ToLower(path.Clean(p))
+}
+
 // channelToolResultIsUntrusted 判断一次工具调用的结果是否来自外部用户内容（R54）。
 // argsJSON 用于 api 意图：只看 action=invoke 的最终 path。
 func channelToolResultIsUntrusted(name, argsJSON string) bool {
@@ -992,7 +978,7 @@ func channelToolResultIsUntrusted(name, argsJSON string) bool {
 	if strings.ToLower(strings.TrimSpace(payload.Action)) != "invoke" {
 		return false
 	}
-	path := channelNormalizeInvokePath(payload.Path)
+	path := channelNormalizeToolPath(payload.Path)
 	if path == "" {
 		return false
 	}

@@ -36,7 +36,7 @@ func ChannelList(ctx iris.Context) {
 	})
 }
 
-// ChannelDetail 渠道详情与策略。
+// ChannelDetail 渠道详情。
 //
 // 参数说明：
 //   - 查询参数 "id": 渠道ID
@@ -131,14 +131,10 @@ func ChannelStatus(ctx iris.Context) {
 	})
 }
 
-// ChannelCapabilities 能力、动作、权限映射、风险及当前可配置状态。
-//
-// 参数说明：
-//   - 查询参数 "agent_id": 可选，接待智能体ID；传入时额外给出该智能体是否被授权（agent_allowed）
+// ChannelCapabilities 能力、动作、风险与站点曝光/群聊状态。
 func ChannelCapabilities(ctx iris.Context) {
-	agentId := ctx.URLParamIntDefault("agent_id", 0) // 接待智能体ID（可选）
 	currentSite := provider.CurrentSite(ctx)
-	view, err := currentSite.ChannelCapabilities(uint(agentId))
+	view, err := currentSite.ChannelCapabilities()
 	if err != nil {
 		ctx.JSON(iris.Map{
 			"code": config.StatusFailed,

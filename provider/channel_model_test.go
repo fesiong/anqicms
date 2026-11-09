@@ -17,7 +17,6 @@ import (
 // 不会出现「测试列了 13 个、迁移里只有 12 个」的静默偏差。
 var channelModels = []interface{}{
 	model.MessageChannel{},
-	model.AgentReceptionPolicy{},
 	model.ChannelBindingToken{},
 	model.ChannelBinding{},
 	model.ChannelTarget{},
@@ -381,27 +380,6 @@ func TestMessageChannelHasUniqueAppIdentity(t *testing.T) {
 	}
 }
 
-// TestAgentReceptionPolicyUniquePerAgent 锁定「每站点每智能体只有一条策略」。
-// 两列必须挂同一个索引名：各挂各的单列唯一索引会变成「一个智能体全站只能出现一次」，
-// 那是比缺失约束更糟的错误语义。
-func TestAgentReceptionPolicyUniquePerAgent(t *testing.T) {
-	for _, fieldName := range []string{"SiteId", "AgentId"} {
-		got := uniqueIndexNames(t, model.AgentReceptionPolicy{}, fieldName)
-		if !got["uk_agent_policy"] {
-			t.Errorf("AgentReceptionPolicy.%s 没有 uk_agent_policy 唯一索引：同一智能体可以有互相矛盾的策略（实际唯一索引 %v）", fieldName, got)
-			continue
-		}
-		if len(got) != 1 {
-			t.Errorf("AgentReceptionPolicy.%s 挂了多个唯一索引 %v，复合唯一约束只能是一个索引名", fieldName, got)
-		}
-	}
-
-	// 反向对照：别的模型同名字段不带 uk_agent_policy，证明断言不是恒真。
-	if got := uniqueIndexNames(t, model.MessageChannel{}, "AgentId"); len(got) != 0 {
-		t.Errorf("反向对照失效：MessageChannel.AgentId 没有 uk_agent_policy，解析结果却有 %v", got)
-	}
-}
-
 // TestMessageChannelBeforeSaveSetsAppIdentityHash 锁定「写入口不必手工调摘要函数」。
 // 摘要列是 default:” + 唯一索引：漏算时第一条空摘要能插进去、第二条才炸，
 // 错误信息还会伪装成「该应用已被别的站点占用」。所以 hook 必须自己补算。
@@ -439,7 +417,7 @@ func TestMessageChannelBeforeSaveSkipsEmptyAppId(t *testing.T) {
 		channel model.MessageChannel
 	}{
 		{"完全零值", model.MessageChannel{}},
-		{"只有主键与策略字段（部分更新的典型形态）", model.MessageChannel{Id: 7, Revision: 3, PolicyJson: `{"x":"allow"}`}},
+		{"只有主键与名称字段（部分更新的典型形态）", model.MessageChannel{Id: 7, Revision: 3, Name: "x"}},
 		{"app_id 只有空白", model.MessageChannel{Platform: "feishu", AppId: "   "}},
 	}
 	for _, c := range cases {

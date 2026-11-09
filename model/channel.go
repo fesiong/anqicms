@@ -69,9 +69,10 @@ type MessageChannel struct {
 	// 只用唯一索引而不用 (platform, app_id) 复合唯一，避免长复合索引；摘要不序列化。
 	AppIdentityHash string `json:"-" gorm:"column:app_identity_hash;type:char(64) not null;default:'';uniqueIndex:uk_app_identity_hash;comment:平台+应用ID(+组织)的SHA256(不序列化)"`
 	// AppSecret 为平台应用密钥：不序列化，后台响应不得泄露。
-	AppSecret  string `json:"-" gorm:"column:app_secret;type:varchar(255) not null;default:'';comment:应用密钥(不序列化)"`
-	PolicyJson string `json:"policy_json" gorm:"column:policy_json;type:text;comment:能力动作策略JSON(intent+action → deny/confirm/allow)"`
-	Revision   int    `json:"revision" gorm:"column:revision;type:int(10) not null;default:1;comment:配置修订号(乐观锁)"`
+	AppSecret string `json:"-" gorm:"column:app_secret;type:varchar(255) not null;default:'';comment:应用密钥(不序列化)"`
+	// policy_json 列保留在库中仅作历史兼容：Go 结构不再读写，渠道授权只认站点曝光与身份。
+	// Revision 仅后台保存的乐观锁。
+	Revision int `json:"revision" gorm:"column:revision;type:int(10) not null;default:1;comment:配置修订号(仅后台保存的乐观锁)"`
 }
 
 // BeforeSave 在写入前补算应用身份摘要，避免每个写入口都要记得调 ComputeAppIdentityHash。
@@ -86,20 +87,6 @@ func (m *MessageChannel) BeforeSave(tx *gorm.DB) error {
 	}
 	m.AppIdentityHash = ComputeAppIdentityHash(m.Platform, m.AppId, m.OrgId)
 	return nil
-}
-
-// AgentReceptionPolicy 接待智能体的管理能力白名单。
-// 没有配置行时沿用站点曝光（后台尚无本表的编辑入口，缺策略不能等于零能力）；
-// 配置了空数组或解析失败则一律拒绝（fail closed），与「未配置」区分开。
-// 每个站点每个智能体只允许一条策略：由 uk_agent_policy 复合唯一索引兜底，
-// 否则并发保存会留下多条互相矛盾的策略，读取时取哪条全看运气。
-type AgentReceptionPolicy struct {
-	Id             uint   `json:"id" gorm:"column:id;type:int(10) unsigned not null AUTO_INCREMENT;primaryKey"`
-	CreatedTime    int64  `json:"created_time" gorm:"column:created_time;type:bigint(20);autoCreateTime;index:idx_created_time"`
-	UpdatedTime    int64  `json:"updated_time" gorm:"column:updated_time;type:bigint(20);autoUpdateTime;index:idx_updated_time"`
-	SiteId         uint   `json:"site_id" gorm:"column:site_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_agent_policy,priority:1;comment:站点ID"`
-	AgentId        uint   `json:"agent_id" gorm:"column:agent_id;type:int(10) unsigned not null;default:0;uniqueIndex:uk_agent_policy,priority:2;comment:智能体ID"`
-	AllowedIntents string `json:"allowed_intents" gorm:"column:allowed_intents;type:text;comment:允许的意图JSON数组"`
 }
 
 // ChannelBindingToken 后台管理员生成的一次性绑定 token。

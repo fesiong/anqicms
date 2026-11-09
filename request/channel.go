@@ -17,8 +17,7 @@ type Channel struct {
 	Enabled     int    `json:"enabled"`      // 是否启用连接：1=启用，0=停用
 	ChatEnabled int    `json:"chat_enabled"` // 是否开启聊天管理：1=开启，0=仅通知
 	AgentId     uint   `json:"agent_id"`     // 接待智能体ID，开启聊天管理时必填
-	PolicyJson  string `json:"policy_json"`  // 能力动作策略JSON对象（intent+action → allow/confirm/deny）
-	Revision    int    `json:"revision"`     // 配置修订号（乐观锁），更新时必须与当前值一致
+	Revision    int    `json:"revision"`     // 配置修订号（仅后台保存的乐观锁），更新时必须与当前值一致
 }
 
 // ChannelDeleteRequest 是删除渠道的请求体。
