@@ -2097,7 +2097,7 @@ export default {
   'plugin.channels.status.title': '連接狀態',
   'plugin.channels.delete.confirm': '確認刪除該渠道？',
   'plugin.channels.delete.content':
-    '刪除會關閉連接、取消未執行的綁定與審批，並移除該渠道的會話目標；審計與投遞歷史會保留。',
+    '刪除會關閉連接、取消未執行的綁定，並移除該渠道的會話目標；審計與投遞歷史會保留。',
   'plugin.channels.save.pending': '已儲存，連接將在稍後生效',
   'plugin.channels.save.stale':
     '設定已被修改，已重新載入最新版本，請確認後重新提交',

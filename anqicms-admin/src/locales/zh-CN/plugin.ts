@@ -2132,7 +2132,7 @@ export default {
   'plugin.channels.status.title': '连接状态',
   'plugin.channels.delete.confirm': '确认删除该渠道？',
   'plugin.channels.delete.content':
-    '删除会关闭连接、取消未执行的绑定与审批，并移除该渠道的会话目标；审计与投递历史会保留。',
+    '删除会关闭连接、取消未执行的绑定，并移除该渠道的会话目标；审计与投递历史会保留。',
   'plugin.channels.save.pending': '已保存，连接将在稍后生效',
   'plugin.channels.save.stale':
     '配置已被修改，已刷新为最新版本，请确认后重新提交',

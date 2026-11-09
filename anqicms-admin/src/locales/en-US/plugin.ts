@@ -2251,7 +2251,7 @@ export default {
   'plugin.channels.status.title': 'Connection status',
   'plugin.channels.delete.confirm': 'Delete this channel?',
   'plugin.channels.delete.content':
-    'Deleting closes the connection, cancels pending bindings and approvals and removes its chat targets; audit and delivery history are kept.',
+    'Deleting closes the connection, cancels pending bindings and removes its chat targets; audit and delivery history are kept.',
   'plugin.channels.save.pending':
     'Saved, the connection will take effect shortly',
   'plugin.channels.save.stale':
