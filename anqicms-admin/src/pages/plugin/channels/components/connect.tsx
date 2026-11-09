@@ -22,13 +22,10 @@ import {
 } from '@ant-design/pro-components';
 import { useIntl } from '@umijs/max';
 import {
-  Alert,
   Button,
   Descriptions,
   Drawer,
-  Form,
   Modal,
-  Select,
   Space,
   Spin,
   Tag,
@@ -36,9 +33,6 @@ import {
 } from 'antd';
 import dayjs from 'dayjs';
 import React, { useEffect, useRef, useState } from 'react';
-import { parsePolicy, resolveIntentDecision, summarizePolicyRaw } from '../policy';
-import type { PolicyIntents } from '../policy';
-import ChannelPolicyEditor from './policyEditor';
 
 const timeText = (seconds?: number) => {
   if (!seconds || seconds <= 0) {
@@ -63,19 +57,7 @@ const ChannelConnect: React.FC = () => {
   const [testOptions, setTestOptions] = useState<any[]>([]);
   const [capVisible, setCapVisible] = useState<boolean>(false);
   const [capLoading, setCapLoading] = useState<boolean>(false);
-  const [capAgentId, setCapAgentId] = useState<number>();
-  const [capData, setCapData] = useState<any>({
-    intents: [],
-    blocked_builtins: [],
-  });
-  // 「查看能力」里的当前裁决按动作解析，因此需要渠道的原始策略；
-  // 能力接口只给意图级缺省值，动作级差异必须由 policy_json 补上。
-  const [capPolicyIntents, setCapPolicyIntents] = useState<PolicyIntents>({});
-  // 能力策略在表单外维护：策略编辑器产出 JSON 字符串，保存时随渠道一起提交。
-  // 不使用表单字段是为了让「配置能力」按钮与摘要共享同一份状态，避免隐藏域。
-  const [policyJson, setPolicyJson] = useState<string>('');
-  const [policyVisible, setPolicyVisible] = useState<boolean>(false);
-  const [policyAgentId, setPolicyAgentId] = useState<number>();
+  const [capData, setCapData] = useState<any>({ intents: [] });
 
   // 智能体列表是既有接口（/anqi/ai/agents），接待智能体与分析智能体共用
   const loadAgents = async () => {
@@ -115,15 +97,6 @@ const ChannelConnect: React.FC = () => {
     return platform || '-';
   };
 
-  const decisionLabel = (decision: string) => {
-    if (decision === 'allow' || decision === 'confirm' || decision === 'deny') {
-      return intl.formatMessage({
-        id: `plugin.channels.policy.decision.${decision}`,
-      });
-    }
-    return decision || '-';
-  };
-
   const openCreate = () => {
     setCurrentChannel({
       id: 0,
@@ -132,10 +105,8 @@ const ChannelConnect: React.FC = () => {
       chat_enabled: 0,
       agent_id: 0,
       revision: 0,
-      policy_json: '',
       app_secret: '',
     });
-    setPolicyJson('');
     setEditVisible(true);
   };
 
@@ -146,12 +117,10 @@ const ChannelConnect: React.FC = () => {
       return;
     }
     setCurrentChannel(res.data || {});
-    setPolicyJson(res.data?.policy_json || '');
     setEditVisible(true);
   };
 
   const onSubmitChannel = async (values: any) => {
-    const policyValue = (policyJson || '').trim();
     const payload = {
       id: currentChannel.id || 0,
       platform: values.platform,
@@ -163,8 +132,6 @@ const ChannelConnect: React.FC = () => {
       enabled: values.enabled,
       chat_enabled: values.chat_enabled,
       agent_id: values.chat_enabled === 1 ? values.agent_id || 0 : 0,
-      // 空串按空对象提交，与「全部拒绝」语义一致（R102）
-      policy_json: policyValue === '' ? '{}' : policyValue,
       revision: currentChannel.revision || 0,
     };
     const res = await channelSave(payload);
@@ -178,7 +145,6 @@ const ChannelConnect: React.FC = () => {
           const fresh = detail.data;
           if (fresh.revision !== currentChannel.revision) {
             setCurrentChannel(fresh);
-            setPolicyJson(fresh.policy_json || '');
             formRef.current?.setFieldsValue({
               platform: fresh.platform,
               name: fresh.name,
@@ -325,28 +291,20 @@ const ChannelConnect: React.FC = () => {
     return true;
   };
 
-  const loadCapabilities = async (agentId?: number) => {
+  const loadCapabilities = async () => {
     setCapLoading(true);
-    const res = await channelCapabilities(agentId ? { agent_id: agentId } : {});
+    const res = await channelCapabilities();
     setCapLoading(false);
     if (res.code !== 0) {
       message.error(res.msg);
       return;
     }
-    setCapData(res.data || { intents: [], blocked_builtins: [] });
+    setCapData(res.data || { intents: [] });
   };
 
-  const openCapabilities = async (record: any) => {
-    setCapAgentId(record.agent_id || undefined);
-    setCapData({ intents: [], blocked_builtins: [] });
-    setCapPolicyIntents({});
+  const openCapabilities = () => {
     setCapVisible(true);
-    loadCapabilities(record.agent_id || undefined);
-    // 策略按动作展示，需要详情里的 policy_json；列表项没有这个字段
-    const detail = await channelDetail({ id: record.id });
-    if (detail.code === 0 && detail.data) {
-      setCapPolicyIntents(parsePolicy(detail.data.policy_json || '').intents);
-    }
+    loadCapabilities();
   };
 
   const columns: ProColumns<any>[] = [
@@ -418,11 +376,7 @@ const ChannelConnect: React.FC = () => {
           <Button type="link" size="small" onClick={() => openTest(record)}>
             {intl.formatMessage({ id: 'plugin.channels.action.test' })}
           </Button>
-          <Button
-            type="link"
-            size="small"
-            onClick={() => openCapabilities(record)}
-          >
+          <Button type="link" size="small" onClick={() => openCapabilities()}>
             {intl.formatMessage({ id: 'plugin.channels.action.capabilities' })}
           </Button>
           <Button type="link" size="small" danger onClick={() => handleDelete(record)}>
@@ -433,8 +387,8 @@ const ChannelConnect: React.FC = () => {
     },
   ];
 
-  // 能力抽屉只读：展示意图、风险、动作、菜单映射、拦截原因与当前策略，
-  // 不展示任何参数 schema 或密钥
+  // 能力抽屉只读：展示意图、标题、风险、域、动作，
+  // 以及站点是否开放、群聊是否可用两个只读标记；不展示任何参数 schema 或密钥
   const capColumns: ProColumns<any>[] = [
     {
       title: intl.formatMessage({ id: 'plugin.channels.capabilities.intent' }),
@@ -467,54 +421,43 @@ const ChannelConnect: React.FC = () => {
     },
     {
       title: intl.formatMessage({
-        id: 'plugin.channels.capabilities.menu-paths',
+        id: 'plugin.channels.capabilities.exposed',
       }),
-      dataIndex: 'menu_paths',
+      dataIndex: 'exposed',
       render: (_, record) =>
-        (record.menu_paths || []).length > 0
-          ? (record.menu_paths || []).map((item: string) => (
-              <Tag key={item}>{item}</Tag>
-            ))
-          : '-',
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.capabilities.blocked' }),
-      dataIndex: 'blocked',
-      render: (_, record) =>
-        record.blocked ? (
-          <Space direction="vertical" size={0}>
-            <Tag color="red">
-              {intl.formatMessage({ id: 'plugin.channels.yes' })}
-            </Tag>
-            <span>{record.reason}</span>
-          </Space>
+        record.exposed ? (
+          <Tag color="green">
+            {intl.formatMessage({
+              id: 'plugin.channels.capabilities.exposed.yes',
+            })}
+          </Tag>
         ) : (
-          intl.formatMessage({ id: 'plugin.channels.no' })
+          <Tag>
+            {intl.formatMessage({
+              id: 'plugin.channels.capabilities.exposed.no',
+            })}
+          </Tag>
         ),
     },
     {
-      title: intl.formatMessage({ id: 'plugin.channels.capabilities.policy' }),
-      dataIndex: 'policy',
-      // 授权粒度是意图：一个意图一个裁决；历史按动作展开的策略取最严的一项
-      render: (_, record) => {
-        const decision = resolveIntentDecision(
-          capPolicyIntents,
-          record.name,
-        );
-        return (
-          <Tag
-            color={
-              decision === 'allow'
-                ? 'green'
-                : decision === 'confirm'
-                  ? 'orange'
-                  : undefined
-            }
-          >
-            {decisionLabel(decision)}
+      title: intl.formatMessage({
+        id: 'plugin.channels.capabilities.group-allowed',
+      }),
+      dataIndex: 'group_allowed',
+      render: (_, record) =>
+        record.group_allowed ? (
+          <Tag color="green">
+            {intl.formatMessage({
+              id: 'plugin.channels.capabilities.group-allowed.yes',
+            })}
           </Tag>
-        );
-      },
+        ) : (
+          <Tag>
+            {intl.formatMessage({
+              id: 'plugin.channels.capabilities.group-allowed.no',
+            })}
+          </Tag>
+        ),
     },
   ];
 
@@ -527,26 +470,6 @@ const ChannelConnect: React.FC = () => {
     enabled: currentChannel.enabled || 0,
     chat_enabled: currentChannel.chat_enabled || 0,
     agent_id: currentChannel.agent_id || undefined,
-  };
-
-  // 策略摘要只统计显式配置项；「其余全部拒绝」是运行时缺省值，不写进库。
-  const policySummary = summarizePolicyRaw(policyJson);
-  const policySummaryText =
-    policySummary.intents === 0
-      ? intl.formatMessage({ id: 'plugin.channels.policy.summary.empty' })
-      : intl.formatMessage(
-          { id: 'plugin.channels.policy.summary.count' },
-          {
-            intents: policySummary.intents,
-            allow: policySummary.allow,
-            confirm: policySummary.confirm,
-          },
-        );
-
-  const openPolicy = () => {
-    const agentId = formRef.current?.getFieldValue('agent_id');
-    setPolicyAgentId(agentId ? Number(agentId) : undefined);
-    setPolicyVisible(true);
   };
 
   return (
@@ -731,32 +654,8 @@ const ChannelConnect: React.FC = () => {
               />
             )}
           </ProFormDependency>
-          <Form.Item
-            label={intl.formatMessage({ id: 'plugin.channels.policy' })}
-          >
-            <Space direction="vertical" size={4}>
-              <span style={{ color: 'rgba(0,0,0,0.65)' }}>
-                {policySummaryText}
-              </span>
-              <Button size="small" onClick={openPolicy}>
-                {intl.formatMessage({
-                  id: 'plugin.channels.policy.configure',
-                })}
-              </Button>
-            </Space>
-          </Form.Item>
         </ModalForm>
       )}
-      <ChannelPolicyEditor
-        open={policyVisible}
-        agentId={policyAgentId}
-        value={policyJson}
-        onCancel={() => setPolicyVisible(false)}
-        onApply={(json) => {
-          setPolicyJson(json);
-          setPolicyVisible(false);
-        }}
-      />
       <Modal
         open={statusVisible}
         title={intl.formatMessage({ id: 'plugin.channels.status.title' })}
@@ -849,45 +748,7 @@ const ChannelConnect: React.FC = () => {
         open={capVisible}
         title={intl.formatMessage({ id: 'plugin.channels.capabilities.title' })}
         onClose={() => setCapVisible(false)}
-        extra={
-          <Space>
-            <span>
-              {intl.formatMessage({ id: 'plugin.channels.capabilities.agent' })}
-            </span>
-            <Select
-              style={{ width: 200 }}
-              allowClear
-              value={capAgentId}
-              placeholder={intl.formatMessage({
-                id: 'plugin.channels.capabilities.agent.all',
-              })}
-              options={agentOptions}
-              showSearch
-              optionFilterProp="label"
-              onChange={(value: number) => {
-                setCapAgentId(value);
-                loadCapabilities(value);
-              }}
-            />
-          </Space>
-        }
       >
-        {(capData.blocked_builtins || []).length > 0 && (
-          <Alert
-            style={{ marginBottom: 12 }}
-            type="warning"
-            message={intl.formatMessage({
-              id: 'plugin.channels.capabilities.blocked-builtins',
-            })}
-            description={
-              <Space size={4} wrap>
-                {(capData.blocked_builtins || []).map((item: string) => (
-                  <Tag key={item}>{item}</Tag>
-                ))}
-              </Space>
-            }
-          />
-        )}
         <ProTable<any>
           rowKey="name"
           search={false}

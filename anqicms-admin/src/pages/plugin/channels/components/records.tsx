@@ -13,7 +13,7 @@ const timeText = (seconds?: number) => {
 };
 
 // 每种 type 的固定状态选项（取值与后端状态机常量一致；审计按 result 过滤）
-const RECORD_TYPES = ['delivery', 'inbox', 'approval', 'audit'];
+const RECORD_TYPES = ['delivery', 'inbox', 'audit'];
 
 const STATUS_OPTIONS: Record<string, string[]> = {
   delivery: [
@@ -26,17 +26,6 @@ const STATUS_OPTIONS: Record<string, string[]> = {
     'cancelled',
   ],
   inbox: ['pending', 'processing', 'done', 'failed', 'cancelled'],
-  approval: [
-    'pending',
-    'approved',
-    'executing',
-    'succeeded',
-    'failed',
-    'unknown',
-    'rejected',
-    'expired',
-    'cancelled',
-  ],
   audit: ['ok', 'failed', 'denied'],
 };
 
@@ -52,7 +41,7 @@ const ChannelRecords: React.FC = () => {
       return '-';
     }
     const known = STATUS_OPTIONS.audit
-      .concat(STATUS_OPTIONS.delivery, STATUS_OPTIONS.inbox, STATUS_OPTIONS.approval)
+      .concat(STATUS_OPTIONS.delivery, STATUS_OPTIONS.inbox)
       .includes(value);
     if (!known) {
       return value;
@@ -181,44 +170,6 @@ const ChannelRecords: React.FC = () => {
     },
   ];
 
-  const approvalColumns: ProColumns<any>[] = [
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.binding' }),
-      dataIndex: 'binding_id',
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.session-id' }),
-      dataIndex: 'session_id',
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.tool' }),
-      dataIndex: 'tool',
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.action' }),
-      dataIndex: 'action',
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.status' }),
-      dataIndex: 'status',
-      render: (_, record) => <Tag>{statusLabel(record.status)}</Tag>,
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.expires' }),
-      dataIndex: 'expires_at',
-      render: (_, record) => timeText(record.expires_at),
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.policy-revision' }),
-      dataIndex: 'policy_revision',
-    },
-    {
-      title: intl.formatMessage({ id: 'plugin.channels.records.created-time' }),
-      dataIndex: 'created_time',
-      render: (_, record) => timeText(record.created_time),
-    },
-  ];
-
   const auditColumns: ProColumns<any>[] = [
     {
       title: intl.formatMessage({ id: 'plugin.channels.records.channel' }),
@@ -252,8 +203,6 @@ const ChannelRecords: React.FC = () => {
     switch (type) {
       case 'inbox':
         return inboxColumns;
-      case 'approval':
-        return approvalColumns;
       case 'audit':
         return auditColumns;
       default:
