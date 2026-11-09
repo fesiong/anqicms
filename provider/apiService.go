@@ -293,30 +293,7 @@ func (w *Website) ApiGetArchives(req *request.ApiArchiveListRequest) ([]*model.A
 		}
 
 		if req.Like == "keywords" {
-			archives, _, _ = w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
-				if w.Content.MultiCategory == 1 && (categoryId > 0 || len(req.ExcludeCategoryIds) > 0) {
-					tx = tx.Joins("INNER JOIN archive_categories ON archives.id = archive_categories.archive_id")
-				}
-				if categoryId > 0 {
-					if w.Content.MultiCategory == 1 {
-						tx = tx.Where("archive_categories.category_id = ?", categoryId)
-					} else {
-						tx = tx.Where("`category_id` = ?", categoryId)
-					}
-				}
-				if req.ModuleId > 0 {
-					tx = tx.Where("`module_id` = ?", req.ModuleId)
-				}
-				if len(req.ExcludeCategoryIds) > 0 {
-					if w.Content.MultiCategory == 1 {
-						tx = tx.Where("archive_categories.category_id NOT IN (?)", req.ExcludeCategoryIds)
-					} else {
-						tx = tx.Where("`category_id` NOT IN (?)", req.ExcludeCategoryIds)
-					}
-				}
-				tx = tx.Where("`keywords` like ? AND archives.`id` != ?", "%"+keywords+"%", req.Id)
-				return tx
-			}, "archives.id DESC", 0, req.Limit, req.Offset)
+			archives = w.getRelatedKeywordArchives(req, categoryId, keywords)
 		} else if req.Like == "relation" {
 			if categoryId > 0 || req.ModuleId > 0 || len(req.ExcludeCategoryIds) > 0 {
 				archives, total, _ = w.GetArchiveList(func(tx *gorm.DB) *gorm.DB {
