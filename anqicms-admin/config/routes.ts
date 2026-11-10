@@ -751,6 +751,11 @@ export default [
     access: 'canAdmin',
     routes: [
       {
+        path: '/statistic/archive',
+        name: 'archive',
+        component: '@/pages/statistic/archive',
+      },
+      {
         path: '/statistic/liveview',
         name: 'liveview',
         component: '@/pages/statistic/liveview',

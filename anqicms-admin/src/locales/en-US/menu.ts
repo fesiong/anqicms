@@ -122,6 +122,7 @@ export default {
   'menu.design.ai-design': 'AI template design',
   'menu.design.diy': 'Template content settings',
   'menu.statistic': 'Statistics',
+  'menu.statistic.archive': 'Document statistics',
   'menu.statistic.spider': 'Crawler analytics',
   'menu.statistic.traffic': 'Traffic analytics',
   'menu.statistic.detail': 'Visit log',

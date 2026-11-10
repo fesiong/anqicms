@@ -122,6 +122,7 @@ export default {
   'menu.design.ai-design': 'AI 範本設計',
   'menu.design.diy': '範本內容設定',
   'menu.statistic': '資料',
+  'menu.statistic.archive': '資料統計',
   'menu.statistic.spider': '爬蟲分析',
   'menu.statistic.traffic': '流量分析',
   'menu.statistic.detail': '存取記錄',

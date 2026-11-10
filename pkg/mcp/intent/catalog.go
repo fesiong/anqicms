@@ -74,13 +74,17 @@ var IntentCatalog = []*IntentSpec{
 	{
 		// 统计属数据域而非推广域：它只读取观测数据，不产生任何对外可见的 SEO 动作。
 		Name: "traffic_statistics", Title: "查看统计数据", Domain: DomainTraffic, Risk: RiskRead,
-		Desc: "站点统计。action: dashboard(概览)/spider(蜘蛛)/traffic(流量)。",
+		Desc: "站点统计。action: dashboard(概览)/spider(蜘蛛)/traffic(流量)/archive(文档数，可按 dimension/group/start/end 切片)。",
 		Params: map[string]ParamSpec{
-			"action": {Type: "string", Desc: "操作", Required: true, Enum: []string{"dashboard", "spider", "traffic"}},
+			"action":    {Type: "string", Desc: "操作", Required: true, Enum: []string{"dashboard", "spider", "traffic", "archive"}},
+			"dimension": {Type: "string", Desc: "仅 archive：year 按年 / month 按月，默认 month", Enum: []string{"year", "month"}},
+			"group":     {Type: "string", Desc: "仅 archive：module 按模型 / category 按栏目，默认 module", Enum: []string{"module", "category"}},
+			"start":     {Type: "string", Desc: "仅 archive：起始周期，year 传 2023、month 传 2023-06"},
+			"end":       {Type: "string", Desc: "仅 archive：结束周期，格式同 start"},
 		},
 		Required: []string{"action"},
-		Caps:     []string{"statistic_dashboard", "statistic_spider", "statistic_traffic"},
-		Compose:  switchCompose(map[string]string{"dashboard": "statistic_dashboard", "spider": "statistic_spider", "traffic": "statistic_traffic"}),
+		Caps:     []string{"statistic_dashboard", "statistic_spider", "statistic_traffic", "statistic_archive"},
+		Compose:  switchCompose(map[string]string{"dashboard": "statistic_dashboard", "spider": "statistic_spider", "traffic": "statistic_traffic", "archive": "statistic_archive"}),
 	},
 
 	// ───────────────────────── 系统域（插件/维护，未合并）─────────────────────────

@@ -225,6 +225,7 @@ func manageRoute(app *iris.Application, systemFiles embed.FS) {
 			statistic.Get("/product", manageController.GetStatisticProduct)
 			statistic.Get("/search", manageController.GetStatisticSearch)
 			statistic.Get("/search/detail", manageController.GetStatisticSearchDetail)
+			statistic.Get("/archive", manageController.GetStatisticArchive)
 		}
 
 		design := manage.Party("/design", middleware.ParseAdminToken, middleware.AdminPermission)

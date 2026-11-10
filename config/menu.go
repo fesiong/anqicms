@@ -476,6 +476,11 @@ var DefaultMenuGroups = []*MenuGroup{
 		Name: "数据统计",
 		Menus: []*Menu{
 			{
+				Path:     "/statistic/archive",
+				GroupKey: "statistic",
+				Name:     "数据统计",
+			},
+			{
 				Path:     "/statistic/spider",
 				GroupKey: "statistic",
 				Name:     "蜘蛛统计",

@@ -136,6 +136,8 @@ var capEndpoints = map[string]capEndpoint{
 	"statistic_dashboard": {Method: "GET", Path: "/statistic/summary"},
 	"statistic_spider":    {Method: "GET", Path: "/statistic/spider"},
 	"statistic_traffic":   {Method: "GET", Path: "/statistic/traffic"},
+	// 各模型文档数：dimension/start/end 与端点查询参数同名，不需要 Rename。
+	"statistic_archive": {Method: "GET", Path: "/statistic/archive"},
 
 	// ── 互动：评论 / 留言 ──
 	"comment_list": {Method: "GET", Path: "/plugin/comment/list", Rename: map[string]string{"page": "current", "page_size": "pageSize"}},

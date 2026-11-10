@@ -122,6 +122,7 @@ export default {
   'menu.design.ai-design': 'AI模板设计',
   'menu.design.diy': '模板内容设置',
   'menu.statistic': '数据',
+  'menu.statistic.archive': '数据统计',
   'menu.statistic.spider': '蜘蛛分析',
   'menu.statistic.traffic': '流量分析',
   'menu.statistic.detail': '访问记录',
