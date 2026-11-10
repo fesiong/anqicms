@@ -1,22 +1,68 @@
 # 更新日志
 
-## v3.8.0 `AnQiCMS` `2026-10-31`
+## v3.8.1 `AnQiCMS` `2026-11-10`
 
 ### ⚠️ 破坏性变更
 
-- **`archives` / `archive_drafts` 删除 29 个历史列**（升级时自动执行，不可回滚，升级前请备份）。两类列：① 23 个商城专用列（`brand` `video_url` `need_logistics` `is_free_shipping` `sold_count` `review_count` `average_score` `option_type` `weight` `weight_unit` `length` `width` `height` `volume` `length_unit` `allow_oversold` `order_fields` `min_quantity` `max_quantity` `step_quantity` `product_type` `origin_price` `cost_price`）；② 6 个全仓零引用的死列（`deleted_time` `logo` `sku_type` `rating_count` `is_wholesale` `has_order_fields`）。`price` 与 `stock` 保留在主表——`stock` 有一整套原子表达式写（下单扣减、退单回补、SKU 汇总重算），拆表就无法用一条 UPDATE 完成；`price` 同时承担商品售价与付费阅读门槛两种含义。
+- **`archives` / `archive_drafts` 删除 29 个历史列**。两类列：① 23 个商城专用列（`brand` `video_url` `need_logistics` `is_free_shipping` `sold_count` `review_count` `average_score` `option_type` `weight` `weight_unit` `length` `width` `height` `volume` `length_unit` `allow_oversold` `order_fields` `min_quantity` `max_quantity` `step_quantity` `product_type` `origin_price` `cost_price`）；② 6 个全仓零引用的死列（`deleted_time` `logo` `sku_type` `rating_count` `is_wholesale` `has_order_fields`）。`price` 与 `stock` 保留在主表——`stock` 有一整套原子表达式写（下单扣减、退单回补、SKU 汇总重算），拆表就无法用一条 UPDATE 完成；`price` 同时承担商品售价与付费阅读门槛两种含义。
 - **商品属性迁到 `archive_products` 侧表**：`archive_id` 为主键，与正式稿/草稿共用同一套 ID，发布或撤回只在主表之间搬行，侧表不用跟着搬。只给"配过属性"的商品建行，文章不留空记录。读取由 GORM 的 `Query().After` 回调一次 IN 查询批量补全，写入由 `Archive.AfterSave` 落侧表，`Archive` 结构体上的字段名与 json tag 全部保留，前端与模板契约不变。
 - **升级顺序有硬约束**：先回填、再删列；回填失败则不删列（标记不写，下次启动重试）。同一次启动完成，不需要分版本灰度。
 - **依赖旧列的裸 SQL 会失效**：`WHERE product_type = ?` 这类条件已改为 `LEFT JOIN archive_products` + `IFNULL(...,1)`（保住"普通商品没有侧表行"的情况）。若自行开发过插件直查这些列，需一并调整。
+- **附件上传改为扩展名白名单，默认拒绝**：白名单含图片、视频、音频、文档、压缩包与字体（`.ttf` 是标题配图的硬依赖），`.psd` `.ai` `.apk` 等此前能上传的后缀现在会被拒。判定统一走 `normalizeExt`（去空格、转小写、补前导点），`.PHP5`、`php5`、`"php5 "` 按同一规则拒绝。受影响的入口是附件上传、模板设计导入、水印与标题图插件；需要额外后缀请按需补表。详见「安全修复」。
+- **用户组「可投稿栏目」升级后为空，即升级后不能投稿**：授权为空一律 fail closed，没有「空即全部」的兜底，父子栏目也不继承。「全选」由前端勾满所有节点表达。此前能投稿的用户升级后会立即收到权限错误，需在「用户组 → 可投稿栏目」重新勾选后才能继续投稿。
+- **商城功能默认关闭**：`system.shop_mode` 默认 `0`（普通内容模式），38 条商城前台路由在该模式下统一返回 404，后台仍可管理商城数据（仅菜单隐藏）。要在内容站上开启商城，需在系统设置里切换模式并保存。
+
+### ✨ 新增功能
+
+- **商城能力整体并入主干**：新增 24 个数据模型（SKU、购物车、愿望清单、优惠券、营销活动、批发规则、订单服务、物流运费、询盘沟通订单、商品同步、积分、汇率等，11 个 model 文件 / 13 个 provider 文件 / 12 个 controller 文件）。订单结算补上优惠券、运费、会员价、活动价、分销、发票与物流追踪；配套多币种、Google Places、Google Merchant 商品同步、Brevo 邮件服务商、15 套商城邮件模板（订单/发货/完成/退款/发票/弃单召回/沟通订单等）与一套商城模板。模板标签新增 `archiveSku`、`review`，前台接口与 GraphQL 全面支持商城语义。主干 v3.6.7 的 AI 体系、Partial 语义、SQL 注入加固、支付账户体系全部保留。
+- **普通 / 商城模式切换**：新增 `shop_mode` 配置（0 普通内容站 / 1 商城）。普通模式下商城前台路由由 `ShopModeGuard` 统一挡成 404，管理后台不拦截；模板标签在普通模式下不渲染商城元素。守卫清单由源码级测试双向锁定，挂漏与误删都会变红。
+- **商城端点接入 MCP**：新增四个交易域意图——`commerce_marketing`（优惠券 + 营销活动，15 端点）、`commerce_fulfillment`（运费规则 + 询盘/站内消息，12 端点）、`commerce_review`（评价 + 增值服务，8 端点）、`seo_merchant`（Google Merchant 商品同步，9 端点），共 44 个 action。四个意图全部默认关闭（交易动真金白银，需站点显式开放），并同步登记两份并列名单。
+- **消息渠道：飞书 / 钉钉接入**：企业 IM 走长连接（飞书 oapi-sdk / 钉钉 Stream 模式），不需要公网回调地址，也不需要开放入站端口。做两件事：① 网站产生留言、订单等事件时按通知规则推送到指定群或已绑定管理员的私聊；② 管理员在私聊或获授权的群里直接对话管理站点。包含渠道连接管理、一次性 Token 身份绑定、会话目标与通知规则、运行记录、模板化通知正文。
+- **渠道交互细节**：收到消息先回表情确认（飞书 OnIt 表情、钉钉表情回复），减少等模型与工具时的静默感，且只在会被执行的消息上回执；模型回复在飞书/钉钉按 Markdown 渲染（分段兼容 CRLF，钉钉标题跳过代码围栏并按 CommonMark 剥标记）；组织标识改为调平台接口自动获取并支持首条事件锚定，不再要求站长手填平台后台看不到的值，手工配置始终优先。
+- **新增两个支付渠道**：虎皮椒（MD5 签名按官方 V3 文档实现，回调校验签名 + appid 归属 + `status=OD` + `total_fee` 元→分四舍五入，退款仅支持整单，网关地址可配以便主站故障时切备用域名）、NOWPayments（加密货币，发票模式，`order_id` 固定传 `payment.PaymentId`，IPN 用 HMAC-SHA512 验签，只认 finished/confirmed/sending，无退款 API 时显式报错而不是假装退款成功）。两个渠道均覆盖下单、异步回调、主动查单、退款四条链路。
+- **用户组可投稿栏目授权**：新增关系表 `user_group_categories`（多对多落关系表而非塞进 `user_groups.setting` 的 JSON，否则删除栏目时无法清理授权、也无法按栏目反查），用户组编辑弹窗增加栏目多选（全选/半选状态由 value 推导，不另存 state）。前台投稿按栏目鉴权，未授权整单拒绝并点名栏目；更新已有文档且未传栏目时按库内现有栏目校验，堵住「先投到授权栏目、再原地改内容」绕过后来被撤销的授权。
+- **编辑器与内容录入**：链接对话框支持填写站内相对路径（`input[type=url]` 的浏览器原生校验只认绝对地址，`/about.html`、`../tag/seo` 直接提交不了，改成 text 后 `setLink` 仍会校验协议，不会放进 `javascript:`）；关联文档改用统一选择器（受控组件，支持模块筛选、跨页多选保留、已选按 id 批量回显），六个调用点统一，不再一换页就丢已选。
+- **全文检索增强**：状态接口返回引擎内实际索引文档数（此前只有「重建进度 current/total」，中断、写入被拒、索引被外部清空表现成同一个样子），Elasticsearch / Meilisearch / Zinc / 悟空四个引擎各自实现计数；关键词关联文档优先走全文索引（先按索引取 ID，再用栏目、模块、排除条件回表，按索引排名重排，被过滤太多时继续翻索引页），LIKE 降级路径额外去重、文档量超 10 万改前缀匹配。
 
 ### ⚡ 功能优化
 
+- **零值保存改指针语义**：保存类端点普遍用 `if req.X > 0` / `!= ""` 判断「要不要写这个字段」，造成两类静默失效——一是零值写不进去（库存改 0 表示售罄、价格改 0 表示免费、会员状态改待审核或禁用、清空 SEO 标题，接口回 ok 但库里没变）；二是局部更新反向清空（AI/MCP 只传一个字段时其余被零值覆盖，实测只改会员用户名，status 从 1 变 0、手机号与邀请码一并被清空）。`Archive`、`Category`、`ModuleRequest`、`NavConfig`、`PluginTag`、`UserRequest`、`UserGroupRequest` 的零值敏感字段全部改为指针（nil = 未传保持原值，非 nil = 显式写入含 0/false/空串），新增 `library.Assign` 统一「全量覆盖 / 局部更新」，清空相册、标签、关联统一用「传空数组」表达并删掉四个隐式推断字段。顺带修掉一批硬编码导致的不可达状态：标签与导航永远无法隐藏、改用户组名会清空等级与价格并把停用组强制启用、改模型关键词永不生效。
+- **索引补齐与列长收缩**：给标签双向关联与标题查询补索引；`utf8mb4` 下单列索引前缀上限 767 字节，`varchar(250)` 建索引会直接失败（`Specified key was too long`），带索引的字符串列统一收缩到仓库既有约定 190 字符，`coupon_code.code` 收到 128（足够放兑换码）。
+- **列表性能**：标签列表 `list` 模式跳过 `count(*)`——16 万行的 `tags` 表上，慢日志 974 条里 950 条是同一句全表扫描（0.6~2.0s，并发下 CPU 打满），而 4 个调用方里 3 个从头到尾没读过 total；count 改走 300 秒进程缓存加估算，行数 ≥10 万不再真扫全表。商品批量加载调整回调顺序消除逐条补查，空 AI 配置进缓存并同步失效，避免重复查库与并发回填旧值。
+- **城市站路由与模板兜底收口**：`place` 的 `/{filename}` 规则不再当通用兜底（此前任何未命中的 URL 都被判成城市站详情页，分类页、列表页整站 404），子域名解析不再拿空 token 查库；城市站页面模板缺失时按 404 处理，不再渲染错误页然后把错误页写进缓存（切到商城模板后访问城市站页面的现场问题）。两条都补了护栏。
+- **后端写端点统一入参护栏**：抽出 `payload_guard.go`，对空载荷（`""` / `{}` / `null`）、缺目标、目标不存在统一拒绝并回明确文案，替掉 50 多处重复的 `if` 判断；删除与更新命中 0 行不再静默成功（`RowsAffected` 为 0 报 `ErrRecordNotFound`，但 update 需回查一次，否则「重复设置成同一个值」会被误判成不存在）。
+- **邮件链路**：管理员通知改走 `SendMail` 自动判定格式（此前把已渲染的 HTML 硬编码成纯文本发送，收件箱里全是 `<p>`、`<br>`）；附件不再被丢弃，发票与定时邮件可正常送达；模板注入 `priceFormat`、`stampToDate`，语法错误返回 error 而不是 panic；多收件人错误用 `errors.Join` 聚合，前面收件人的失败不再被后面覆盖；弃单召回邮件改到实际存在的 `/order/checkout` 付款链接。
+- **前端并入主仓**：`anqicms-admin/` 随主仓跟踪（508 个源文件，不含依赖与构建产物），前后端仍只通过 HTTP 契约耦合。新增 `make admin` 目标，`yarn build` 后自动把 `dist` 同步到 `system/`——此前只能靠人手工拷贝，对 OEM 是致命的静默错误（界面照常工作，只有客户截图时才发现品牌没换）。交叉编译时构建期工具显式用宿主平台运行：`make build GOOS=...` 的命令行变量会被 make 自动导出到 recipe 环境，`go run ./cmd/oemgen` 会编出目标平台的可执行文件而在本机执行报 `exec format error`。
+- **依赖升级**：Go 1.26.0 → 1.26.10；eino 0.9.23、MCP go-sdk 1.8.0、goquery 1.13、gopay 1.5.123、meilisearch-go 0.36.3、gomarkdown 等同步升级；随商城与渠道功能引入飞书 oapi-sdk、钉钉 stream-sdk、Brevo SDK 与 google/uuid；mysql 驱动转为直接依赖；清理全仓已无引用的 `go-nowpayments` 与 `eris`（NOWPayments 改为自行实现 IPN 验签，不再依赖第三方 SDK）。
+- **杂项**：重新生成 API 目录（后台端点 482 条，`apicatalog -check` 与源码一致）；补齐 25 个商城写端点摘要与 59 个 URLParam 参数说明（端点表当时 458 条全部有描述）；菜单去掉 `google`、`llms` 的旧顶级入口（两页已分别归入 `/plugin/channel/google` 与 `/plugin/seo/llms`）；后台帮助与模板标签链接迁到 `docs.anqicms.com`；新增 `AGENTS.md` 协作规范与 `.graphifyignore`。
 - **`archives` 清理 4 个冗余索引**：`idx_articles_url_token`（与 `idx_archives_url_token` 同列）、`idx_fixed_link`（与 `idx_archives_fixed_link` 同列）、`idx_category_id`（被 `idx_category_archive_id` 的最左前缀覆盖）、`idx_updated_time`（索引错的列是 `created_time`，与 `idx_created_time` 完全重复）。最后一个不只是删：删掉后在 `updated_time` 列上重建同名索引，因为草稿定时清理与 `timefactor` 都按 `updated_time` 过滤。判断依据是实际索引列而非索引名——`archive_drafts` 的 `idx_updated_time` 索引的正是 `updated_time`，不能一起删。
 - **`apicatalog` 生成器识别取参包装函数**：`readJSONPayload(ctx, &req)` 这类包级函数此前不被识别（只认 `ctx.Xxx()` 形式），重新生成端点清单会把 53 个端点的参数 schema 静默清空，而 MCP 的 `api_invoke` 与意图层参数门禁都读这份数据。
+
+### 🔒 安全修复
+
+- **四个支付渠道的异步回调此前全部静默失效**：微信以为 `VerifySign` 首参是 appId（实际是商户 apiKey），且验签算法写死 MD5，而通知报文不带 `sign_type`、下单用的是 HMAC-SHA256——所有微信支付通知都验签不过；Stripe 用 `evt_` 事件 ID 去查 `payment_id`，必然查不到后直接 return，Iris 默认 200 空响应让 Stripe 认为投递成功不再重试；PayPal 处理函数要求 `?token=`（那是同步 `return_url` 的参数），而注册的 webhook 地址不带参数，回调全被挡在门口；支付宝验签本身正常，但完全不校验 `trade_status`，`WAIT_BUYER_PAY` 也会把订单标成已支付。四条均按根因修复（Stripe 改按 `terrace_id` 定位、`metadata.payment_id` 兜底；PayPal 改由 `VerifyWebhookSignature` 鉴权、验签失败返 400；支付宝补 `trade_status` / `app_id` / `total_amount` 校验），并修掉解析错误被忽略（伪装成 payment-not-found）、`result_code` 非 SUCCESS 仍改单、`total_fee` 与订单金额不一致、`pay_way` 被一律改写成 wechat 等问题。
+- **支付记账加并发闸门**：抽出 `Website.MarkPaymentPaid`（已支付落库 + 财务流水 + 推进订单），用 `paid_time = 0` 的条件更新做闸门——通知重试与模板轮询 `/api/payment/check` 会并发进来，不设闸门就重复记财务流水。
+- **找回密码可被邮箱劫持**：重置凭据原由 `Md5(email + password)` 派生，空密码账号（Google / 公众号 / 验证码注册）会退化成 `Md5(email)`，知道邮箱即可改密登录。改为用站点 `TokenSecret` 共同派生，且发信端与校验端必须调用同一函数（否则正常用户的重置会失败）；同时修掉 `state=reset` 提前清空验证码导致跳转后提交必然失败的问题。
+- **邮箱枚举可轮换绕过限流**：注册、`GET/POST verify/email` 三个端点都能探测「某邮箱是否已注册」，原先各自无限流，攻击者轮换探针即可绕过。三个探针统一挂 `AccountProbeGuard`（20 次 / 10 分钟 / IP，超限 429，9 个语言包同步补文案）；`state=exist` 不再回 `{id, email}`（id 可拼 `/api/comment/list` 反查匿名评论者），只回 `{"exist": true}`，`code` 语义保持不变以免模板分支失效。
+- **附件上传可落地脚本木马**：线上 `public/uploads` 出现 `shell.php5`、`s2.phtml`，根因是只拦 `.php` 与 `.jsp`，而 filetype 认不出的内容还会回落到用户文件名，其余可执行后缀原样落盘。改为默认拒绝的扩展名白名单；水印与标题图上传不再取用户文件名后缀，改由 `image.Decode` 结果决定（挡掉「合法 GIF 尾部追加 PHP 代码、按原名存成 .phtml」这条落地路径）；模板包导入的 `static/` 目录走独立白名单，并修掉整包导入的 Zip Slip（zip 内 `static/../../x.phtml` 不再能写到 `public/` 之外）。
+- **`/aigenerate` 缺鉴权中间件**：`manage` 子组本身只挂了 `ParseAdminUrl`，整组 7 个端点不带 token 即可读取 AI 配置、触发批量生成（实测回「AI生成任务已触发」但计划表、日志表均无变化）。补 `ParseAdminToken` + `AdminPermission`，改后不带 token 统一回 `code=1001`。
+- **MCP 出口泄露明文凭据**：站点库密码与各类 token 此前可随工具结果返回。出口统一脱敏、站点列表改安全视图；写侧用同路径回查还原真值，还原不到就拒绝写入（否则会把哨兵值真的写进库）。同时给 `page_size` 补上限 200——此前一次能吐 6.7MB。
+- **用户名可被串号登录**：`user_name` 同时是「按用户名登录」的凭据，两个同名账号会让人登进别人那里（线上已有 3 条空用户名历史记录）。改为双策略：后台与 AI 创建时空名或重名直接报错（改名撞别人同样拒绝，排除自身）；第三方自动注册（昵称取自平台、用户改不了）走 `uniqueUserName` 加数字后缀，空昵称退化为「用户」并按 rune 截断——拒绝注册等于把第三方登录堵死。
 
 ### 🐛 问题修复
 
 - **端点参数 schema 可能被一次性清空**：同上。已补白名单与两条护栏（一条断言具体 handler 解析出结构体，一条扫描控制器源码，凡"首参是 ctx、名字带 payload/json/bind 却未登记"的调用直接报错）。
+- **锚文本批量更新几乎全部失败**：`CurrentSite` 返回的是摘了请求 ctx 的副本，而 `go currentSite.ReplaceAnchor(nil)` 把这个副本带进了 goroutine，handler 一返回请求 ctx 立刻被 cancel，之后每篇文章都返回 `context canceled`，错误又被 `ReplaceContent` 直接吞掉。实测 3557 篇文章失败 3557 篇（287ms「跑完」），表现为「点了批量更新，只有极少数文章有变化」。新增 `Website.Async()`（摘掉请求 ctx）后 0 失败（3.065 秒），并补「处理 / 失败 / 耗时」汇总日志，任务失败不再是静默的。
+- **锚文本另外三处「设了却没效果」**：新建锚文本后不清 1 小时缓存（预热缓存后新增再发布，正文里没有链接）；密度上限用预填了正文原有 `<a>` 与 markdown 链接文本的 map 计数，链接多的文章配额先被吃光，整篇一个锚文本都加不上；markdown 正文替换后靠 `data-anchor` 正则回填，而 markdown 分支生成的是 `[词](链接)`，导致「替换次数」长期为空。另修默认密度与设置页、配置注释不一致（`<20→200` vs 默认 100），以及批量替换把图片地址改写成本地绝对地址。
+- **优惠券批量发码吞插入错误**：`userId==0` 分支在循环里完全不看 `Create` 的错误，几十张全部插入失败也照样返回成功，后台拿到回执、刷新列表却是空的；绑定会员的三条分支同样忽略错误，会把从没写进库的券码当成领取成功返回给用户。改为逐张检查、整批走事务（要么全落库、要么一张不留，避免半批孤儿码导致管理员重试时重复发放），`count` 小于 1 按 1 处理。
+- **写端点空载荷、缺目标、目标不存在仍回成功**：51 个写端点在请求体为空时照样回「已保存 / 已删除」，24 个在 id 不存在时照样回成功，另有 5 个是 provider 吞了 `RowsAffected`（gorm 删除不存在的行返回的是 nil error）。已按上文入参护栏统一收口。
+- **三个 handler 缺响应或漏 return**：`MakeCouponCode` 成功路径完全不写响应体（前端弹空白成功提示，MCP 侧 `endpointFailure("")` 连失败也判成成功）；`SettingCacheForm` 的 `if req.Update` 分支同样不写响应；`CommunicationOrderSaveImages` 的 `ReadJSON` 失败分支漏 return，弹完 `Invalid Params` 还继续用零值 req 去保存。
+- **全文检索结果被请求里的 `ids` 覆盖**：`req.Ids` 的判断排在检索结果之前，带 ids 参数（列表页翻页、按 id 批量取）的请求一旦开了全文检索，命中的是请求自带的 id 列表而不是检索结果，排序也被打乱。
+- **升级出现「备份再备份」式假成功**：主程序被 rename 成 `xxx.old` 后进程仍跑在旧 inode 上，Linux 会把 `/proc/self/exe` 同步改成 `xxx.old`（备份被删还追加 ` (deleted)`），而旧实现直接拿 `os.Executable()` 当主程序——升级完没重启又点一次升级，就把 `xxx.old` 再备份成 `xxx.old.old`，真正的 `xxx` 一次都没被换，界面却提示成功。新增 `NormalizeExecPath` 折叠 `.old` / `.old.old` / ` (deleted)`，升级前先判定是否跑在备份程序上（是则要求先重启），换主程序失败必返回错误并回滚，前端 `code !== 0` 明确提示失败；升级包里找不到主程序不再静默「成功」。
+- **`ModuleId == 2` 判断「是不是产品」会静默错位**：模块 id 是自增的，删了模型重建或迁移站点后 id 未必是 2——商品页照样能打开，但价格区块、SKU 筛选、Product 结构化数据会一起消失且没有任何报错；反过来把 1 号模型改名成「产品」也不生效；统计里的 `module_id = 2` 更直接让「上新」图表恒为 0。改为读 `modules.kind`，并单独维护这份判定缓存（不能复用只含启用栏目的那份）。
+- **后台菜单与死路由**：插件菜单迁到三级分组后，仪表盘引导、附件替换、素材入口、关键词、留言邮件设置等处仍指向旧的扁平路径，点击落到无匹配路由的空白页；`google`、`llms` 在 `/plugin` 下留了重复入口。
+- **商城端点的两处路由与覆盖缺陷**：`googlemerchant` 的 `account/select` 少了前导斜杠，实际注册成 `/plugin/googlemerchantaccount/select`——清单里能看到该路径，真实调用必然 404；`coupon/detail`、`activity/detail` 的「保存即全量覆盖」补齐保护，避免只改一个字段把其余配置清空。
+- **列表失败结果被缓存、后台任务重复查询**：失败缓存会让一次抖动持续生效，后台任务在每次调度时重复查同一批数据。
 
 ## v3.6.7 `AnQiCMS` `2026-10-20`
 
