@@ -1,0 +1,129 @@
+.login-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: auto;
+  background: #f0f2f5;
+}
+
+.lang {
+  position: absolute;
+  top: 0px;
+  right: 0px;
+}
+.login-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: calc(100vh - 60px);
+}
+.login-modal {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: row;
+  align-items: center;
+  max-width: 1200px;
+  max-height: 600px;
+  margin: 10px;
+  overflow: hidden;
+  background-color: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+}
+.login-bg {
+  flex: 1;
+}
+.login-form {
+  flex: 1;
+}
+.login-bg img {
+  width: 100%;
+  height: 100%;
+}
+
+@media (min-width: 768px) {
+  .login-container {
+    background-image: url('https://gw.alipayobjects.com/zos/rmsportal/TVYTbAXWheQpRcWDaDMu.svg');
+    background-repeat: no-repeat;
+    background-position: center 110px;
+    background-size: 100%;
+  }
+}
+@media (max-width: 1023px) {
+  .login-modal {
+    max-width: 600px;
+  }
+  .login-bg {
+    display: none;
+  }
+  .ant-pro-form-login-header {
+    height: inherit;
+  }
+  .ant-pro-form-login-main {
+    width: 100% !important;
+    min-width: inherit !important;
+  }
+}
+
+.icon {
+  margin-left: 8px;
+  color: rgba(0, 0, 0, 0.2);
+  font-size: 24px;
+  vertical-align: middle;
+  cursor: pointer;
+  transition: color 0.3s;
+
+  &:hover {
+    color: #1890ff;
+  }
+}
+
+.captcha {
+  width: 120px;
+  height: 38px;
+  margin-right: -10px;
+  margin-left: -10px;
+}
+.reset-box {
+  padding: 50px 0 30px;
+}
+
+.reset-tips {
+  margin-top: 10px;
+  color: #777;
+  h3 {
+    margin-bottom: 20px;
+  }
+}
+.choose-items {
+  display: flex;
+}
+.choose-item {
+  flex: 1;
+  padding: 0 20px;
+  text-align: center;
+}
+.copy-item {
+  display: flex;
+  align-items: center;
+  width: 80%;
+}
+.copt-text {
+  flex: 1;
+  margin-right: 10px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid #eee;
+}
+.copy-tips {
+  margin-top: 10px;
+  color: #777;
+}
+.reset-password {
+  width: 80%;
+  margin: 0 auto;
+  .field {
+    margin: 20px 0;
+  }
+}

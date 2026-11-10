@@ -1,0 +1,43 @@
+.editor-container {
+  position: relative;
+  min-height: 560px;
+}
+.aie-container .tippy-box {
+  background: inherit;
+}
+.iframe-wrapper iframe {
+  height: 500px;
+}
+.aieditor__prose {
+  padding: 32px clamp(28px, 5vw, 72px) 46px;
+}
+.tmp-editor {
+  position: absolute;
+  top: 0px;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 910;
+  min-height: 560px;
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+  border: 1px solid #ccc;
+  .html-menus {
+    height: 40px;
+    line-height: 40px;
+    background-color: #fff;
+    border-bottom: 1px solid #eee;
+    .menu-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 40px;
+      height: 40px;
+      text-align: center;
+      cursor: pointer;
+      .icon {
+      }
+    }
+  }
+}

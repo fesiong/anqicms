@@ -1,0 +1,13 @@
+.header-nav {
+  // 允许顶栏菜单随可用宽度收缩：商城模式有 10 个顶级菜单，
+  // 不收缩会把右侧搜索/图标区挤到换行甚至裁掉「重启」。
+  // min-width: 0 是 flex 子项可收缩的前提，antd 水平菜单据此触发「...」折叠。
+  flex: 1 1 auto;
+  min-width: 0;
+  margin-left: 30px;
+}
+@media (max-width: 480px) {
+  .header-nav {
+    display: none;
+  }
+}

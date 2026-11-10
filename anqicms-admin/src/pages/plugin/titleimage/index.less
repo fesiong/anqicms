@@ -1,0 +1,33 @@
+.preview {
+  width: 100%;
+}
+.preview-text {
+  margin-bottom: 20px;
+}
+.insert-image {
+  margin-top: 10px;
+  .image-item {
+    position: relative;
+    width: 104px;
+    height: 104px;
+    margin: 0 8px 8px 0;
+    border: 1px dashed #ccc;
+    .close {
+      position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 40px;
+      color: #fff;
+      line-height: 40px;
+      text-align: center;
+      background: rgba(0, 0, 0, 0.3);
+      visibility: hidden;
+    }
+    &:hover {
+      .close {
+        visibility: inherit;
+      }
+    }
+  }
+}

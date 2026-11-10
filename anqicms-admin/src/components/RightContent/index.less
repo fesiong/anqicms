@@ -1,0 +1,143 @@
+.menu {
+  :global(.anticon) {
+    margin-right: 8px;
+  }
+  :global(.ant-dropdown-menu-item) {
+    min-width: 160px;
+  }
+}
+
+.right {
+  display: flex;
+  float: right;
+  height: 56px;
+  margin-left: auto;
+  overflow: hidden;
+  .action,
+  .restart {
+    display: flex;
+    align-items: center;
+    height: 56px;
+    padding: 0 12px;
+    // 顶栏文字色随站点模式变化，变量在 global.less 中按 body[data-shop-mode] 赋值
+    color: var(--admin-header-fg, #252a3d);
+    line-height: 1.4;
+    // 商城模式顶级菜单多，顶栏空间紧张时不允许「绑定安企账号」折成两行
+    white-space: nowrap;
+    cursor: pointer;
+    transition: all 0.3s;
+    > span {
+      vertical-align: middle;
+    }
+    &:hover {
+      color: var(--admin-header-fg-hover, #252a3d);
+      background-color: rgba(0, 0, 0, 0.025);
+    }
+    &:global(.opened) {
+      background-color: rgba(0, 0, 0, 0.025);
+    }
+  }
+  .search {
+    padding: 0 12px;
+    &:hover {
+      background: transparent;
+    }
+  }
+  .account {
+    height: 56px;
+  }
+}
+.restart {
+  padding: 0 12px;
+  white-space: nowrap;
+  cursor: pointer;
+  &:hover {
+    color: var(--admin-header-fg-hover, #252a3d);
+  }
+}
+.order-control {
+  width: 100%;
+  margin: 20px auto;
+  text-align: center;
+}
+.optional {
+  padding-right: 5px;
+  padding-left: 5px;
+  color: #f40;
+  vertical-align: middle;
+}
+.compare {
+  display: flex;
+}
+.compare .item {
+  flex: 1;
+  padding: 15px;
+}
+.compare .inner {
+  padding: 15px 15px 15px;
+  background-color: #f1f1f1;
+  border-radius: 5px;
+}
+.compare h3 {
+  color: #445f90;
+  text-align: center;
+}
+.compare .vip h3 {
+  color: #f60;
+}
+.compare ul {
+  padding-left: 30px;
+  color: #555;
+  list-style-type: square;
+}
+.compare li {
+  padding: 3px 0;
+}
+.compare .extra {
+  margin-bottom: 5px;
+  color: #999;
+  font-size: 14px;
+}
+.account-info {
+  padding: 15px;
+  background-color: #fff;
+  border-radius: 5px;
+}
+.account-info .item {
+  display: flex;
+  padding: 10px 0;
+  border-bottom: 1px solid #eee;
+}
+.account-info .item > label {
+  width: 150px;
+  margin-right: 10px;
+  color: #666;
+  text-align: right;
+}
+.account-info .item > div {
+  flex: 1;
+}
+
+@media only screen and (max-width: 768px) {
+  :global(.ant-divider-vertical) {
+    vertical-align: unset;
+  }
+  .name {
+    display: none;
+  }
+  .right {
+    position: absolute;
+    top: 0;
+    right: 12px;
+    .account {
+    }
+    .search {
+      display: none;
+    }
+  }
+}
+@media (max-width: 480px) {
+  .site-info-item {
+    display: none !important;
+  }
+}

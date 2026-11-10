@@ -1,0 +1,8 @@
+# graphify 语料过滤：图片资产不进图谱（同 backend/anqicms/.graphifyignore）
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.ico
+*.svg

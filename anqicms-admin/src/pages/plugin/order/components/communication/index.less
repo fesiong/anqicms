@@ -1,0 +1,54 @@
+.message-item {
+  flex-direction: column;
+  > * {
+    width: 100%;
+  }
+  &.message-self {
+    background-color: #f1f6f9;
+    .ant-list-item-meta {
+      flex-direction: row-reverse;
+      text-align: right;
+    }
+    .ant-list-item-meta-avatar {
+      margin-right: 0;
+      margin-left: 16px;
+    }
+    .message-content {
+      text-align: right;
+    }
+  }
+  .quote {
+    display: inline-block;
+    padding: 16px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+  }
+  .ant-list-item-meta-title {
+    color: #888;
+  }
+  .message-content {
+    margin-top: 16px;
+    padding: 0 16px;
+  }
+}
+
+.image-item {
+  position: relative;
+  .delete-icon {
+    position: absolute;
+    top: 0;
+    right: 0;
+    z-index: 1;
+    display: none;
+    padding: 4px;
+    color: white;
+    background: rgba(0, 0, 0, 0.5);
+    border-radius: 5px;
+    cursor: pointer;
+  }
+  &:hover {
+    .delete-icon {
+      display: block;
+    }
+  }
+}
