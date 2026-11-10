@@ -235,7 +235,7 @@ func (s *MeiliSearchService) Search(keyword string, moduleId uint, page int, pag
 }
 
 func (s *MeiliSearchService) Count() (int64, error) {
-	stats, err := s.apiClient.Index(s.indexName).GetStats()
+	stats, err := s.apiClient.Index(s.indexName).GetStats(nil)
 	if err != nil {
 		return 0, err
 	}
