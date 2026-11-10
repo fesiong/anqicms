@@ -243,7 +243,7 @@ var DefaultMenuGroups = []*MenuGroup{
 				// 企业 IM 渠道（飞书长连接 / 钉钉 Stream）的连接配置与策略。
 				// Backend 指向 /channels：middleware.AdminPermissionRequired 用它做
 				// 「URI → 菜单权限」映射，未映射一律拒绝（渠道端点不沿用后台的默认放行）。
-				Path:     "/plugin/channels",
+				Path:     "/plugin/channel/channels",
 				GroupKey: "plugin",
 				Name:     "消息渠道",
 				Backend:  "/channels",

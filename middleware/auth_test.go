@@ -79,8 +79,8 @@ func TestChannelRoutesRequireChannelMenuPermission(t *testing.T) {
 			t.Errorf("生产菜单清单无法映射 %s：严格版权限检查会把它整条拒掉", uri)
 			continue
 		}
-		if front != "/plugin/channels" {
-			t.Errorf("%s 映射到 %s，期望 /plugin/channels", uri, front)
+		if front != "/plugin/channel/channels" {
+			t.Errorf("%s 映射到 %s，期望 /plugin/channel/channels", uri, front)
 		}
 	}
 

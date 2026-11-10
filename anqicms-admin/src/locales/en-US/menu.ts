@@ -56,7 +56,7 @@ export default {
   'menu.plugin.channel.weapp': 'WeChat Mini Program',
   'menu.plugin.channel.akismet': 'Akismet/reCAPTCHA',
   'menu.plugin.channel.google': 'Google authorization',
-  'menu.plugin.channels': 'Message channels',
+  'menu.plugin.channel.channels': 'Message channels',
   'menu.plugin.commerce.user': 'Users',
   'menu.plugin.commerce.group': 'User groups & VIP',
   'menu.plugin.commerce.order': 'Orders',

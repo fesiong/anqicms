@@ -590,16 +590,16 @@ export default [
             component: '@/pages/plugin/google/index',
             icon: 'google',
           },
+          {
+            // path 必须与后端 config/menu.go 的 Menu.Path 逐字一致，
+            // 它同时是管理员分组权限的 KEY。
+            path: '/plugin/channel/channels',
+            name: 'channels',
+            icon: 'message',
+            type: 'normal',
+            component: '@/pages/plugin/channels/index',
+          },
         ],
-      },
-      {
-        // 消息渠道是 /plugin 的直接子项：path 必须与后端 config/menu.go 的
-        // Menu.Path 逐字一致，它同时是管理员分组权限的 KEY。
-        path: '/plugin/channels',
-        name: 'channels',
-        icon: 'message',
-        type: 'normal',
-        component: '@/pages/plugin/channels/index',
       },
       {
         path: '/plugin/system',
