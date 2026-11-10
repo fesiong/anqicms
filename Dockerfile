@@ -24,7 +24,6 @@ RUN mkdir -p -v /app/cache
 RUN mkdir -p -v /app/public
 COPY --from=builder /build/anqicms /app/anqicms
 COPY --from=builder /build/public/static /app/public/static
-COPY --from=builder /build/public/*.xsl /app/public/
 COPY --from=builder /build/template /app/template
 COPY --from=builder /build/locales /app/locales
 COPY --from=builder /build/License /app/License

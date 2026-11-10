@@ -132,7 +132,6 @@ build: $(BUILD_DEPS)
 	mkdir -p -v ./release/$(GOOS)/template
 	mkdir -p -v ./release/$(GOOS)/source
 	cp -r ./public/static/default ./release/$(GOOS)/public/static/
-	cp -r ./public/*.xsl ./release/$(GOOS)/public/ 2>/dev/null || true
 	cp -r ./template/default ./release/$(GOOS)/template/
 	@$(HOST_ENV) $(GO) run ./cmd/oemgen -oem $(OEM) -brand-dir ./release/$(GOOS)/template
 	cp -r ./locales ./release/$(GOOS)/

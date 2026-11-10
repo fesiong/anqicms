@@ -27,7 +27,8 @@ func NewMeiliSearchService(cfg *config.PluginFulltextConfig, indexName string) (
 		apiClient: meilisearch.New(cfg.EngineUrl, meilisearch.WithAPIKey(cfg.EnginePass)),
 	}
 
-	_, err := meili.apiClient.GetStats()
+	// meilisearch-go v0.36.3 起 GetStats 需要显式参数；传 nil 等同于旧的无参调用（源码对 nil 有保护）
+	_, err := meili.apiClient.GetStats(nil)
 	if err != nil {
 		return nil, err
 	}
