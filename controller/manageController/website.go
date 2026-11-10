@@ -355,12 +355,6 @@ func SaveWebsiteInfo(ctx iris.Context) {
 		// 复制基本信息
 		os.MkdirAll(req.RootPath+"cache", os.ModePerm)
 		os.MkdirAll(req.RootPath+"data", os.ModePerm)
-		dstXslFile1 := req.RootPath + "public/anqi-index.xsl"
-		srcXslFile1 := config.ExecPath + "public/anqi-index.xsl"
-		_, _ = library.CopyFile(dstXslFile1, srcXslFile1)
-		dstXslFile2 := req.RootPath + "public/anqi-style.xsl"
-		srcXslFile2 := config.ExecPath + "public/anqi-style.xsl"
-		_, _ = library.CopyFile(dstXslFile2, srcXslFile2)
 		// 创建站点的模板信息
 		copyTemplate := req.Template
 		if copyTemplate == "" {

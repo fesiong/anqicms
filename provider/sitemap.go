@@ -603,7 +603,6 @@ func (g *SitemapGenerator) Save() error {
 				return err
 			}
 			_, err = f.WriteString(xml.Header)
-			_, err = f.WriteString("<?xml-stylesheet type=\"text/xsl\" href=\"" + g.BaseUrl + "/anqi-style.xsl\" ?>\n")
 			_, err = f.Write(output)
 			if err1 := f.Close(); err1 != nil && err == nil {
 				err = err1
@@ -689,7 +688,6 @@ func (s *SitemapIndexGenerator) Save() error {
 				return err
 			}
 			_, err = f.WriteString(xml.Header)
-			_, err = f.WriteString("<?xml-stylesheet type=\"text/xsl\" href=\"" + s.BaseUrl + "/anqi-index.xsl\" ?>\n")
 			_, err = f.Write(output)
 			if err1 := f.Close(); err1 != nil && err == nil {
 				err = err1
