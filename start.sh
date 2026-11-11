@@ -1,8 +1,8 @@
 #!/bin/bash
 ### check 502
 # author fesion
-# the bin name is anqishop
-APP_NAME=anqishop
+# the bin name is anqicms
+APP_NAME=anqicms
 APP_PATH="$( cd "$( dirname "$0"  )" && pwd )"
 
 if pgrep -x "$APP_NAME" >/dev/null

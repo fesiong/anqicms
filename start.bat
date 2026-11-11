@@ -1,11 +1,11 @@
 @echo off
 setlocal EnableDelayedExpansion
-rem ÒÔ¹ÜÀíÔ±·½Ê½ÔËÐÐcmd
+rem ï¿½Ô¹ï¿½ï¿½ï¿½Ô±ï¿½ï¿½Ê½ï¿½ï¿½ï¿½ï¿½cmd
 PUSHD %~DP0 & cd /d "%~dp0"
 %1 %2
 mshta vbscript:createobject("shell.application").shellexecute("%~s0","goto :runas","","runas",1)(window.close)&goto :eof
 :runas
-rem ³¢ÊÔÆô¶¯ AnqiCMS
-start /d "D:\phpstudy_pro\WWW\dev.anqicms.com" anqishop.exe
-rem Æô¶¯·þÎñ
+rem ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ AnqiCMS
+start /d "D:\phpstudy_pro\WWW\dev.anqicms.com" anqicms.exe
+rem ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
 exit
