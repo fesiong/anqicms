@@ -1,13 +1,13 @@
 @echo off
 chcp 65001
 setlocal EnableDelayedExpansion
-rem ÒÔ¹ÜÀí·½Ê½ÔËÐÐcmd
+rem ï¿½Ô¹ï¿½ï¿½ï¿½ï¿½ï¿½Ê½ï¿½ï¿½ï¿½ï¿½cmd
 PUSHD %~DP0 & cd /d "%~dp0"
 %1 %2
 mshta vbscript:createobject("shell.application").shellexecute("%~s0","goto :runas","","runas",1)(window.close)&goto :eof
 :runas
-rem ¹Ø±Õ AnqiCMS
+rem ï¿½Ø±ï¿½ AnqiCMS
 
-taskkill /f /im anqishop.exe
-rem ¹Ø±Õ AnqiCMS
+taskkill /f /im anqicms.exe
+rem ï¿½Ø±ï¿½ AnqiCMS
 pause

@@ -137,7 +137,7 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // CheckVersion 检查当前版本是否为最新版。
 func CheckVersion(ctx iris.Context) {
-	link := "https://www.anqicms.com/downloads/shopversion.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
+	link := "https://www.anqicms.com/downloads/version.json?goos=" + runtime.GOOS + "&goarch=" + runtime.GOARCH + "&type=" + config.VersionType
 	var lastVersion response.LastVersion
 	_, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).Timeout(10 * time.Second).Get(link).EndBytes()
 	if errs != nil {
@@ -199,9 +199,9 @@ func VersionUpgrade(ctx iris.Context) {
 		version = lastVersion.TrialVersion
 	}
 	// 下载压缩包
-	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqishop-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
+	link := fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-v%s.zip", runtime.GOOS, runtime.GOARCH, version)
 	if config.VersionType != "" {
-		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqishop-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
+		link = fmt.Sprintf("https://www.anqicms.com/downloads/anqicms-%s-%s-%s-v%s.zip", config.VersionType, runtime.GOOS, runtime.GOARCH, version)
 	}
 	// 最长等待10分钟
 	resp, body, errs := gorequest.New().SetDoNotClearSuperAgent(true).Timeout(20 * time.Minute).Get(link).EndBytes()
@@ -265,7 +265,7 @@ func VersionUpgrade(ctx iris.Context) {
 			continue
 		}
 		realName := filepath.Join(config.ExecPath, f.Name)
-		if f.Name == "anqishop" || f.Name == "anqishop.exe" {
+		if f.Name == "anqicms" || f.Name == "anqicms.exe" {
 			// 先以临时文件存储
 			realName = tmpExecPath
 		}
@@ -286,8 +286,8 @@ func VersionUpgrade(ctx iris.Context) {
 
 		reader.Close()
 		_ = newFile.Close()
-		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqishop,cwebp
-		if f.Name == "anqishop" || f.Name == "anqishop.exe" || strings.HasPrefix(f.Name, "cwebp_") {
+		// 对于可执行文件，需要赋予可执行权限，可执行文件有：anqicms,cwebp
+		if f.Name == "anqicms" || f.Name == "anqicms.exe" || strings.HasPrefix(f.Name, "cwebp_") {
 			_ = os.Chmod(realName, os.ModePerm)
 		}
 	}
