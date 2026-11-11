@@ -18,7 +18,7 @@ func TestVersionCheckURLCarriesOEM(t *testing.T) {
 		t.Fatal("缺少官方品牌")
 	}
 	got := versionCheckURL(official)
-	if !strings.HasPrefix(got, official.DownloadBase+"/shopversion.json?") {
+	if !strings.HasPrefix(got, official.DownloadBase+"/version.json?") {
 		t.Errorf("地址前缀不对：%s", got)
 	}
 	if !strings.Contains(got, "&oem=anqicms") {
@@ -29,7 +29,7 @@ func TestVersionCheckURLCarriesOEM(t *testing.T) {
 	// 反向对照：若把 brand 换成硬编码官方地址，这里立刻变红。
 	oem := config.OEMBrand{ID: "acme", Name: "AcmeCMS", DownloadBase: "https://dl.acme.test/releases"}
 	got = versionCheckURL(oem)
-	if !strings.HasPrefix(got, "https://dl.acme.test/releases/shopversion.json?") {
+	if !strings.HasPrefix(got, "https://dl.acme.test/releases/version.json?") {
 		t.Errorf("OEM 地址前缀不对：%s", got)
 	}
 	if !strings.Contains(got, "&oem=acme") {

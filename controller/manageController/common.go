@@ -141,10 +141,10 @@ func GetStatisticsDashboard(ctx iris.Context) {
 
 // versionCheckURL 拼出「检查最新版」的请求地址。
 //
-// oem 参数不能省：官网用同一个 shopversion.json 服务所有品牌，
+// oem 参数不能省：官网用同一个 version.json 服务所有品牌，
 // 靠它决定把哪条版本线（以及配套的升级包命名）下发给这个客户端。
 func versionCheckURL(brand config.OEMBrand) string {
-	return brand.DownloadBase + "/shopversion.json?goos=" + runtime.GOOS +
+	return brand.DownloadBase + "/version.json?goos=" + runtime.GOOS +
 		"&goarch=" + runtime.GOARCH + "&type=" + config.VersionType +
 		"&oem=" + url.QueryEscape(brand.ID)
 }
