@@ -35,15 +35,16 @@ type WebsiteDeleteRequest struct {
 //
 // 读接口只声明真正要输出的字段，从结构上杜绝这类误用。
 type WebsiteDetailResponse struct {
-	Id        uint             `json:"id,omitempty"` // 站点ID
-	RootPath  string           `json:"root_path"`    // 站点根目录
-	Name      string           `json:"name"`         // 站点名称
-	Status    uint             `json:"status"`       // 站点状态
-	Mysql     WebsiteMysqlSafe `json:"mysql"`        // 站点数据库配置（密码已脱敏）
-	AdminUser string           `json:"admin_user"`   // 管理员用户名（不含密码）
-	BaseUrl   string           `json:"base_url"`     // 站点网址
-	FrontUrl  string           `json:"front_url"`    // 前台网址（前后端分离的站点可配置）
-	Initialed bool             `json:"initialed"`    // 站点是否已初始化完成
+	Id          uint             `json:"id,omitempty"` // 站点ID
+	RootPath    string           `json:"root_path"`    // 站点根目录
+	Name        string           `json:"name"`         // 站点名称
+	Status      uint             `json:"status"`       // 站点状态
+	Mysql       WebsiteMysqlSafe `json:"mysql"`        // 站点数据库配置（密码已脱敏）
+	AdminUser   string           `json:"admin_user"`   // 管理员用户名（不含密码）
+	BaseUrl     string           `json:"base_url"`     // 站点网址
+	FrontUrl    string           `json:"front_url"`    // 前台网址（前后端分离的站点可配置）
+	Initialed   bool             `json:"initialed"`    // 站点是否已初始化完成
+	CreatedTime int64            `json:"created_time"` // 站点创建时间
 }
 
 // WebsiteMysqlSafe 是**不含密码**的数据库配置，专门用于读接口。
