@@ -16,6 +16,7 @@ import { getSessionStore, getStore } from '@/utils/store';
 import { ArrowLeftOutlined } from '@ant-design/icons';
 import { useIntl } from '@umijs/max';
 import { Button, Input, message, Modal, Space, Spin, Tooltip } from 'antd';
+import { Code, Heading2, Heading3, Images, Layers, Video } from 'lucide';
 import {
   forwardRef,
   lazy,

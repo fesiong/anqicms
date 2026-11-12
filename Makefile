@@ -65,42 +65,41 @@ brand-check:
 # 只想验证后端改动时用 SKIP_ADMIN=1 跳过（约省 5 分钟）。
 ADMIN_DIR := ./anqicms-admin
 ADMIN_NM := $(ADMIN_DIR)/node_modules
-ADMIN_LOCK := $(ADMIN_DIR)/pnpm-lock.yaml
-# 判据是「package.json + pnpm-lock.yaml 的内容指纹」，不是 mtime：
-# pnpm 在依赖未变时既不重写内容也会照跑根项目的 postinstall（max setup，十几秒起步），
-# 按时间戳比较会让每次构建都白跑一次安装。指纹文件放在 node_modules 里，随它一起被删掉。
+# 判据是「package.json + yarn.lock 的内容指纹」，不是 mtime：
+# yarn 在 "Already up-to-date" 时**不会**重写 node_modules/.yarn-integrity，
+# 按时间戳比较会让每次构建都白跑一次 install（还连带跑 postinstall 的 max setup，
+# 十几秒起步）。指纹文件放在 node_modules 里，随它一起被删掉。
 ADMIN_MARK := $(ADMIN_NM)/.anqicms-deps
-# 包管理器统一 pnpm（package.json 的 packageManager 已锁定版本，可用 corepack 自动取用）。
-PNPM ?= pnpm
+YARN ?= yarn
 # 发布构建要可复现，所以有锁文件时默认按锁文件装。改过依赖却没更新锁文件会
-# 直接失败——这是有意的，此时先在 anqicms-admin 里跑一次 pnpm install。
-# 离线打包机：make admin PNPM_FLAGS='--frozen-lockfile --offline'
-ifeq ($(wildcard $(ADMIN_LOCK)),)
-	PNPM_FLAGS ?=
+# 直接失败——这是有意的，此时先在 anqicms-admin 里跑一次 yarn install。
+# 离线打包机：make admin YARN_FLAGS='--frozen-lockfile --offline'
+ifeq ($(wildcard $(ADMIN_DIR)/yarn.lock),)
+	YARN_FLAGS ?=
 else
-	PNPM_FLAGS ?= --frozen-lockfile
+	YARN_FLAGS ?= --frozen-lockfile
 endif
 
-# ⚠️ 打包机常常是干净 clone（没有 node_modules），直接构建会死在
+# ⚠️ 打包机常常是干净 clone（没有 node_modules），直接 yarn build 会死在
 # "Cannot find module '@umijs/max'"。依赖安装是构建的前置条件，不该留给
 # 打包的人自己想起来。
 deps:
-	@want=$$(cat $(ADMIN_DIR)/package.json $(ADMIN_LOCK) 2>/dev/null | cksum | tr -d ' '); \
+	@want=$$(cat $(ADMIN_DIR)/package.json $(ADMIN_DIR)/yarn.lock 2>/dev/null | cksum | tr -d ' '); \
 	have=$$(cat $(ADMIN_MARK) 2>/dev/null); \
 	if [ -d "$(ADMIN_NM)" ] && [ -n "$$have" ] && [ "$$want" = "$$have" ]; then \
-		echo "📦 前端依赖与 package.json/pnpm-lock.yaml 一致，跳过安装"; \
+		echo "📦 前端依赖与 package.json/yarn.lock 一致，跳过安装"; \
 	else \
-		command -v $(PNPM) >/dev/null 2>&1 || { \
-			echo "❌ 未找到 $(PNPM)：前端依赖 umi/max，需要 pnpm（npm i -g pnpm 或 corepack enable pnpm）与 node >= 18"; \
+		command -v $(YARN) >/dev/null 2>&1 || { \
+			echo "❌ 未找到 $(YARN)：前端依赖 umi/max，需要 Yarn 1.x（npm i -g yarn）与 node >= 18"; \
 			exit 1; }; \
 		echo "📦 安装前端依赖（首次约 3~8 分钟，node_modules 约 2.9G）"; \
-		cd $(ADMIN_DIR) && $(PNPM) install $(PNPM_FLAGS) \
+		cd $(ADMIN_DIR) && $(YARN) install $(YARN_FLAGS) \
 			&& echo "$$want" > node_modules/.anqicms-deps; \
 	fi
 
 admin: oem deps
 	@echo "🎨 Building admin for OEM=$(OEM)..."
-	cd $(ADMIN_DIR) && $(PNPM) build
+	cd $(ADMIN_DIR) && $(YARN) build
 	@echo "📁 Sync dist -> system"
 	rm -rf ./system
 	mkdir -p ./system

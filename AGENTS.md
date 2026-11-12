@@ -115,12 +115,7 @@ go run ./cmd/apilive -wire         # MCP 协议层冒烟
 - 该目录内**没有** `.git`，在里面跑 `git rev-parse --show-toplevel` 返回后端根目录 —— 这是正常的。
 - 追踪范围：508 个源文件（`src/` `config/` `public/` + 各类配置文件），**不含**依赖与构建产物。
   `node_modules` / `dist` / `graphify-out` / `.DS_Store` 由 `anqicms-admin/.gitignore` 继承排除。
-- 包管理器**统一 pnpm**（`package.json` 的 `packageManager` 锁版本，`pnpm-lock.yaml` 入库）。
-  `yarn.lock` / `package-lock.json` 被 `.gitignore` 挡着，禁止再引入——两套锁文件并存会让
-  `node_modules` 变成「yarn 平铺 + pnpm store」混合体，传递依赖出现两份物理副本，
-  带 Context 的库（如 `react-intl`）就会出现「Could not find required intl」这类诡异故障。
-  业务代码一律从 `@umijs/max` 导入，**不要裸 `import ... from 'react-intl'`**（umi 生成的
-  `.umi/plugin-locale` 用绝对 `.pnpm` 路径导入，裸导入会解析到另一份副本）。
+  ⚠️ `yarn.lock` 也被那份 `.gitignore` 忽略 → 主仓里没有前端锁文件，clone 后装依赖拿到的是浮动版本。
 - 前端改动与配套后端改动**可以同批提交**，不必再拆仓库。
 - ⚠️ **别再往 `.gitignore` 里写 `anqicms-admin/`**：那会让 graphify 跳过整个前端语料，
   而 `.graphifyignore` 只能额外排除、**无法把 `.gitignore` 排除的内容重新纳入**（见 `.graphifyignore` 顶部说明）。
@@ -131,7 +126,7 @@ go run ./cmd/apilive -wire         # MCP 协议层冒烟
 - React 三元分支**同类型组件不卸载、异类型才真卸载**（实测 rc-field-form 默认 `preserve=true`）。判断"切 tab 丢输入"先看分支两侧组件类型。
 - ⚠️ 前端 `npx tsc --noEmit` 全量在本沙箱**会被 SIGTERM**（umi 类型体系过重）。小改动改用 `./node_modules/.bin/esbuild` 语法校验，或 `--strict` 只查纯逻辑模块。
   ⚠️ 仓库**已有 38 个存量类型错误**（PlaceCascader/bizcharts/CopyToClipboard 等），判断"是否引入新错误"要看是否命中改动文件，**不能看总数**。
-- ⚠️ `pnpm format` 会动全仓，不要为几个文件跑它（噪声）。
+- ⚠️ `npm run format` 会动全仓，不要为几个文件跑它（噪声）。
 - `config/menu.go` 的 `Path` 不只用于导航，还被当**管理员分组权限 KEY** 使用；改前端路由必须同步它。
   `DefaultMenuGroups` 只在首次安装/重建菜单时写库，已运行站点需触发菜单重新同步。
 

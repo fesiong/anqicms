@@ -1,17 +1,6 @@
-# pnpm 专属设置的唯一入口（v11+ 不再读 .npmrc 里的这些项，也不再读 package.json 的 pnpm 字段）。
-# 单包仓库，不声明 packages：只包含根包。
-
-# 依赖构建脚本审批。strictDepBuilds 默认 true —— 只要有一个包「没被表态」，
-# pnpm install 就直接失败（ERR_PNPM_IGNORED_BUILDS），所以这里逐条给结论：
-#
-#   esbuild          true   postinstall 负责校验/链接平台二进制，不放行 bundler 起不来
-#   core-js          false  脚本只打印赞助信息
-#   core-js-pure     false  同上
-#   es5-ext          false  同上
-#   puppeteer-core   false  本项目不用它下载浏览器（真下载会拖垮离线打包机）
 allowBuilds:
-  esbuild: true
-  core-js: false
-  core-js-pure: false
-  es5-ext: false
-  puppeteer-core: false
+  core-js: set this to true or false
+  core-js-pure: set this to true or false
+  es5-ext: set this to true or false
+  esbuild: set this to true or false
+  puppeteer-core: set this to true or false
